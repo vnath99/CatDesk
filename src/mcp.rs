@@ -27,6 +27,7 @@ const CATDESK_WIDGET_HTML: &str = include_str!("widget/catdesk_dashboard.html");
 const WIDGET_RESOURCE_URI_PLACEHOLDER: &str = "__catdeskWidgetResourceUriPlaceholder__";
 const INITIAL_TOKEN_STATS_LAYOUT_PLACEHOLDER: &str =
     "__catdeskInitialTokenStatsLayoutPlaceholder__";
+const INITIAL_TOOL_NAME_PLACEHOLDER: &str = "__catdeskInitialToolNamePlaceholder__";
 const MAX_DIFF_FILES: usize = 16;
 const MAX_DIFF_CHARS_PER_FILE: usize = 12_000;
 const MAX_COMMAND_OUTPUT_CHARS: usize = 24_000;
@@ -245,10 +246,38 @@ fn handle_resources_list(req: &JsonRpcRequest, public_base_url: Option<&str>) ->
 }
 
 fn current_widget_resource_uri() -> String {
+    current_widget_resource_uri_for_tool("")
+}
+
+fn current_widget_resource_uri_for_tool(tool_name: &str) -> String {
+    let token_stats_layout = current_token_stats_layout();
+    if tool_name.is_empty() {
+        return format!(
+            "{UI_TEMPLATE_URI}?tokenStatsLayout={}",
+            token_stats_layout.as_str()
+        );
+    }
     format!(
-        "{UI_TEMPLATE_URI}?tokenStatsLayout={}",
-        current_token_stats_layout().as_str()
+        "{UI_TEMPLATE_URI}?tokenStatsLayout={}&toolName={}",
+        token_stats_layout.as_str(),
+        tool_name
     )
+}
+
+fn query_param_value<'a>(resource_uri: &'a str, key: &str) -> Option<&'a str> {
+    let query = resource_uri.split_once('?')?.1;
+    query.split('&').find_map(|part| {
+        let (param_key, param_value) = part.split_once('=')?;
+        if param_key == key {
+            Some(param_value)
+        } else {
+            None
+        }
+    })
+}
+
+fn initial_tool_name_from_resource_uri(resource_uri: &str) -> &str {
+    query_param_value(resource_uri, "toolName").unwrap_or_default()
 }
 
 fn render_widget_html(resource_uri: &str) -> String {
@@ -257,6 +286,10 @@ fn render_widget_html(resource_uri: &str) -> String {
         .replace(
             INITIAL_TOKEN_STATS_LAYOUT_PLACEHOLDER,
             current_token_stats_layout().as_str(),
+        )
+        .replace(
+            INITIAL_TOOL_NAME_PLACEHOLDER,
+            initial_tool_name_from_resource_uri(resource_uri),
         )
 }
 
@@ -1416,13 +1449,14 @@ fn ensure_tool_descriptor_widget_template(tool: &mut Value) {
     let Some(name) = tool_obj.get("name").and_then(Value::as_str) else {
         return;
     };
-    if !tool_descriptor_should_attach_widget(name) {
+    let name = name.to_string();
+    if !tool_descriptor_should_attach_widget(&name) {
         return;
     }
+    let resource_uri = current_widget_resource_uri_for_tool(&name);
     let meta_value = tool_obj
         .entry("_meta".to_string())
         .or_insert_with(|| json!({}));
-    let resource_uri = current_widget_resource_uri();
     ensure_output_template_meta_with_uri(meta_value, &resource_uri);
 }
 
@@ -2857,6 +2891,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn tools_list_output_templates_include_initial_tool_name() {
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!("req-tools-list")),
+            method: "tools/list".into(),
+            params: json!({}),
+        };
+
+        let response = handle_tools_list(&req, Mode::Both, ToolMode::MultiTools, &None).await;
+        let tools = response
+            .result
+            .as_ref()
+            .and_then(|result| result.get("tools"))
+            .and_then(Value::as_array)
+            .expect("missing tools");
+
+        for tool in tools {
+            let name = tool
+                .get("name")
+                .and_then(Value::as_str)
+                .expect("missing tool name");
+            if !tool_descriptor_should_attach_widget(name) {
+                continue;
+            }
+            let output_template = tool
+                .get("_meta")
+                .and_then(|meta| meta.get("openai/outputTemplate"))
+                .and_then(Value::as_str)
+                .expect("missing output template");
+            assert!(
+                output_template.contains(&format!("toolName={name}")),
+                "output template should include initial tool name for {name}: {output_template}"
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn read_only_tools_list_exposes_only_local_read_tools() {
         let req = JsonRpcRequest {
             jsonrpc: "2.0".into(),
@@ -3957,6 +4028,8 @@ hello world"
         );
         assert!(text.contains("var INITIAL_TOKEN_STATS_LAYOUT ="));
         assert!(!text.contains(INITIAL_TOKEN_STATS_LAYOUT_PLACEHOLDER));
+        assert!(text.contains("var INITIAL_TOOL_NAME = \"\";"));
+        assert!(!text.contains(INITIAL_TOOL_NAME_PLACEHOLDER));
         assert_eq!(
             ui_meta
                 .get("csp")

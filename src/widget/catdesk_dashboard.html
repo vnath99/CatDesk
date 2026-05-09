@@ -2516,6 +2516,7 @@
         var WIDGET_RESOURCE_URI = "__catdeskWidgetResourceUriPlaceholder__";
         var INITIAL_TOKEN_STATS_LAYOUT =
           "__catdeskInitialTokenStatsLayoutPlaceholder__";
+        var INITIAL_TOOL_NAME = "__catdeskInitialToolNamePlaceholder__";
         var WIDGET_PAYLOAD_META_KEY = "catdesk/widgetPayload";
         var TOKEN_STATS_LAYOUT_STORAGE_KEY = "catdesk.tokenStatsLayout";
         var tokenStatsLayoutSetting = initialTokenStatsLayout();
@@ -6856,7 +6857,11 @@
           { passive: true },
         );
 
-        renderLoading("Waiting for tool output...");
+        renderLoading(
+          INITIAL_TOOL_NAME
+            ? "Waiting for " + INITIAL_TOOL_NAME + " output..."
+            : "Waiting for tool output...",
+        );
         var initialToolResponseMetadata = currentToolResponseMetadata();
         if (hasPureMetaPayload(initialToolResponseMetadata)) {
           applyPayload(initialToolResponseMetadata);

@@ -118,6 +118,34 @@ fn request_tool_name(req: &Value) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+fn request_resource_uri(req: &Value) -> Option<&str> {
+    req.get("params")
+        .and_then(|v| v.get("uri"))
+        .and_then(Value::as_str)
+}
+
+fn query_param_value<'a>(uri: &'a str, key: &str) -> Option<&'a str> {
+    let query = uri.split_once('?')?.1;
+    query.split('&').find_map(|part| {
+        let (param_key, param_value) = part.split_once('=')?;
+        if param_key == key {
+            Some(param_value)
+        } else {
+            None
+        }
+    })
+}
+
+fn resource_read_flow_label(req: &Value) -> String {
+    let Some(uri) = request_resource_uri(req) else {
+        return "resources/read:?".to_string();
+    };
+    if let Some(tool_name) = query_param_value(uri, "toolName").filter(|value| !value.is_empty()) {
+        return format!("resources/read:{tool_name}");
+    }
+    "resources/read:base".to_string()
+}
+
 fn request_flow_label(req: &Value) -> String {
     let method = req
         .get("method")
@@ -126,6 +154,9 @@ fn request_flow_label(req: &Value) -> String {
     if method == "tools/call" {
         let tool = request_tool_name(req).unwrap_or_else(|| "?".into());
         return format!("tools/call:{tool}");
+    }
+    if method == "resources/read" {
+        return resource_read_flow_label(req);
     }
     method.to_string()
 }

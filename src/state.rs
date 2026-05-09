@@ -307,6 +307,37 @@ const FLOW_BOOTSTRAP_PHASE_2_STEPS: &[FlowBootstrapStep] = &[
     },
 ];
 
+const FLOW_BOOTSTRAP_WIDGET_READ_STEPS: &[FlowBootstrapStep] = &[
+    FlowBootstrapStep {
+        event: "resources/read:run_command",
+        label: "run_command",
+    },
+    FlowBootstrapStep {
+        event: "resources/read:catdesk_instruction",
+        label: "instruction",
+    },
+    FlowBootstrapStep {
+        event: "resources/read:read",
+        label: "read",
+    },
+    FlowBootstrapStep {
+        event: "resources/read:search",
+        label: "search",
+    },
+    FlowBootstrapStep {
+        event: "resources/read:write",
+        label: "write",
+    },
+    FlowBootstrapStep {
+        event: "resources/read:edit",
+        label: "edit",
+    },
+    FlowBootstrapStep {
+        event: "resources/read:delete",
+        label: "delete",
+    },
+];
+
 const FLOW_BOOTSTRAP_PHASE_3_STEPS: &[FlowBootstrapStep] = &[
     FlowBootstrapStep {
         event: "initialize",
@@ -320,10 +351,13 @@ const FLOW_BOOTSTRAP_PHASE_3_STEPS: &[FlowBootstrapStep] = &[
         event: "notifications/initialized",
         label: "initialized",
     },
-    FlowBootstrapStep {
-        event: "resources/read",
-        label: "dashboard.html",
-    },
+    FLOW_BOOTSTRAP_WIDGET_READ_STEPS[0],
+    FLOW_BOOTSTRAP_WIDGET_READ_STEPS[1],
+    FLOW_BOOTSTRAP_WIDGET_READ_STEPS[2],
+    FLOW_BOOTSTRAP_WIDGET_READ_STEPS[3],
+    FLOW_BOOTSTRAP_WIDGET_READ_STEPS[4],
+    FLOW_BOOTSTRAP_WIDGET_READ_STEPS[5],
+    FLOW_BOOTSTRAP_WIDGET_READ_STEPS[6],
 ];
 
 const FLOW_BOOTSTRAP_PHASE_4_STEPS: &[FlowBootstrapStep] = &[
@@ -343,10 +377,13 @@ const FLOW_BOOTSTRAP_PHASE_4_STEPS: &[FlowBootstrapStep] = &[
         event: "tools/list",
         label: "tools/list",
     },
-    FlowBootstrapStep {
-        event: "resources/read",
-        label: "dashboard.html",
-    },
+    FLOW_BOOTSTRAP_WIDGET_READ_STEPS[0],
+    FLOW_BOOTSTRAP_WIDGET_READ_STEPS[1],
+    FLOW_BOOTSTRAP_WIDGET_READ_STEPS[2],
+    FLOW_BOOTSTRAP_WIDGET_READ_STEPS[3],
+    FLOW_BOOTSTRAP_WIDGET_READ_STEPS[4],
+    FLOW_BOOTSTRAP_WIDGET_READ_STEPS[5],
+    FLOW_BOOTSTRAP_WIDGET_READ_STEPS[6],
 ];
 
 const FLOW_BOOTSTRAP_PHASE_5_STEPS: &[FlowBootstrapStep] = &[
@@ -1472,6 +1509,98 @@ toolCallCount = 0
 
         let flow = app.flows.first().expect("missing flow");
         assert!(flow.bootstrap_status_active);
+
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_dir_all(workspace);
+    }
+
+    #[test]
+    fn record_flow_bootstrap_keeps_five_phases_and_expands_widget_reads() {
+        let (mut app, workspace, config_path) = test_app("catdesk-flow-bootstrap-widgets");
+
+        let sequence = [
+            // Phase 1: Checking tools
+            ("initialize", FlowDirection::Forward),
+            ("initialize", FlowDirection::Backward),
+            ("initialize", FlowDirection::Forward),
+            ("initialize", FlowDirection::Backward),
+            ("notifications/initialized", FlowDirection::Forward),
+            ("tools/list", FlowDirection::Forward),
+            ("tools/list", FlowDirection::Backward),
+            // Phase 2: Checking resources
+            ("initialize", FlowDirection::Forward),
+            ("initialize", FlowDirection::Backward),
+            ("initialize", FlowDirection::Forward),
+            ("initialize", FlowDirection::Backward),
+            ("notifications/initialized", FlowDirection::Forward),
+            ("resources/list", FlowDirection::Forward),
+            ("resources/list", FlowDirection::Backward),
+            // Phase 3: Loading widgets
+            ("initialize", FlowDirection::Forward),
+            ("initialize", FlowDirection::Backward),
+            ("initialize", FlowDirection::Forward),
+            ("initialize", FlowDirection::Backward),
+            ("notifications/initialized", FlowDirection::Forward),
+            ("resources/read:run_command", FlowDirection::Forward),
+            ("resources/read:run_command", FlowDirection::Backward),
+            ("resources/read:catdesk_instruction", FlowDirection::Forward),
+            ("resources/read:catdesk_instruction", FlowDirection::Backward),
+            ("resources/read:read", FlowDirection::Forward),
+            ("resources/read:read", FlowDirection::Backward),
+            ("resources/read:search", FlowDirection::Forward),
+            ("resources/read:search", FlowDirection::Backward),
+            ("resources/read:write", FlowDirection::Forward),
+            ("resources/read:write", FlowDirection::Backward),
+            ("resources/read:edit", FlowDirection::Forward),
+            ("resources/read:edit", FlowDirection::Backward),
+            ("resources/read:delete", FlowDirection::Forward),
+            ("resources/read:delete", FlowDirection::Backward),
+            // Phase 4: Refreshing widgets
+            ("initialize", FlowDirection::Forward),
+            ("initialize", FlowDirection::Backward),
+            ("initialize", FlowDirection::Forward),
+            ("initialize", FlowDirection::Backward),
+            ("notifications/initialized", FlowDirection::Forward),
+            ("tools/list", FlowDirection::Forward),
+            ("tools/list", FlowDirection::Backward),
+            ("resources/read:run_command", FlowDirection::Forward),
+            ("resources/read:run_command", FlowDirection::Backward),
+            ("resources/read:catdesk_instruction", FlowDirection::Forward),
+            ("resources/read:catdesk_instruction", FlowDirection::Backward),
+            ("resources/read:read", FlowDirection::Forward),
+            ("resources/read:read", FlowDirection::Backward),
+            ("resources/read:search", FlowDirection::Forward),
+            ("resources/read:search", FlowDirection::Backward),
+            ("resources/read:write", FlowDirection::Forward),
+            ("resources/read:write", FlowDirection::Backward),
+            ("resources/read:edit", FlowDirection::Forward),
+            ("resources/read:edit", FlowDirection::Backward),
+            ("resources/read:delete", FlowDirection::Forward),
+            ("resources/read:delete", FlowDirection::Backward),
+            // Phase 5: Final resource check
+            ("initialize", FlowDirection::Forward),
+            ("initialize", FlowDirection::Backward),
+            ("initialize", FlowDirection::Forward),
+            ("initialize", FlowDirection::Backward),
+            ("notifications/initialized", FlowDirection::Forward),
+            ("resources/list", FlowDirection::Forward),
+            ("resources/list", FlowDirection::Backward),
+        ];
+
+        for (event, direction) in sequence {
+            app.record_flow("stateless", &[event.to_string()], direction);
+        }
+
+        let flow = app.flows.first().expect("missing flow");
+        assert!(flow.bootstrap_status_active);
+        let phase_step_counts: Vec<usize> = FLOW_BOOTSTRAP_PHASES
+            .iter()
+            .map(|phase| phase.steps.len())
+            .collect();
+        assert_eq!(phase_step_counts, vec![4, 4, 10, 11, 4]);
+        assert_eq!(flow_bootstrap_steps_total(), 33);
+        assert_eq!(flow.bootstrap_completed_steps, flow_bootstrap_steps_total());
+        assert!(flow.bootstrap_pending_steps.is_empty());
 
         let _ = std::fs::remove_file(config_path);
         let _ = std::fs::remove_dir_all(workspace);
