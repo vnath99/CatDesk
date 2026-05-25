@@ -695,62 +695,14 @@ fn clipboard_copy(text: &str) -> bool {
 }
 
 #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-const LINUX_WL_COPY_ARGS: &[&str] = &[];
-#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-const LINUX_XCLIP_COPY_ARGS: &[&str] = &["-selection", "clipboard"];
-
-#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-fn linux_clipboard_copy_command(
-    wayland_display: Option<&str>,
-    display: Option<&str>,
-) -> Option<(&'static str, &'static [&'static str])> {
-    if wayland_display.is_some_and(|value| !value.is_empty()) {
-        Some(("wl-copy", LINUX_WL_COPY_ARGS))
-    } else if display.is_some_and(|value| !value.is_empty()) {
-        Some(("xclip", LINUX_XCLIP_COPY_ARGS))
-    } else {
-        None
-    }
-}
-
-#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
 fn clipboard_copy(text: &str) -> bool {
-    let wayland_display = std::env::var("WAYLAND_DISPLAY").ok();
-    let display = std::env::var("DISPLAY").ok();
-    let Some((program, args)) =
-        linux_clipboard_copy_command(wayland_display.as_deref(), display.as_deref())
-    else {
-        return false;
-    };
+    use base64::Engine as _;
 
-    let mut child = match std::process::Command::new(program)
-        .args(args)
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-    {
-        Ok(child) => child,
-        Err(_) => return false,
-    };
-
-    let Some(mut stdin) = child.stdin.take() else {
-        let _ = child.wait();
-        return false;
-    };
-
-    if stdin.write_all(text.as_bytes()).is_err() {
-        drop(stdin);
-        let _ = child.wait();
-        return false;
-    }
-
-    drop(stdin);
-
-    match child.wait() {
-        Ok(status) => status.success(),
-        Err(_) => false,
-    }
+    let encoded = base64::engine::general_purpose::STANDARD.encode(text.as_bytes());
+    let mut out = stdout();
+    write!(out, "\x1b]52;c;{encoded}\x07")
+        .and_then(|_| out.flush())
+        .is_ok()
 }
 
 #[cfg(target_os = "macos")]
