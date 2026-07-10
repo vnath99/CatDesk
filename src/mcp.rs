@@ -10,6 +10,7 @@ use tokio::sync::Mutex;
 
 use crate::command;
 use crate::devtools::DevtoolsBridge;
+use crate::git_workflow;
 use crate::mascot;
 use crate::project_memory;
 use crate::repo_map;
@@ -511,6 +512,53 @@ async fn handle_tools_list(
                 "annotations": { "readOnlyHint": false, "openWorldHint": true, "destructiveHint": false }
             }));
             tools.push(json!({
+                "name": "git_status_summary",
+                "title": "Git status summary",
+                "description": "Summarize git status and warn when the current branch is main or master.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                },
+                "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false }
+            }));
+            tools.push(json!({
+                "name": "git_create_feature_branch",
+                "title": "Create feature branch",
+                "description": "Create and switch to a new git feature branch.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "branch": { "type": "string", "description": "New branch name" }
+                    },
+                    "required": ["branch"]
+                },
+                "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": false }
+            }));
+            tools.push(json!({
+                "name": "git_diff_summary",
+                "title": "Git diff summary",
+                "description": "Summarize unstaged git diff by file and stat.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                },
+                "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false }
+            }));
+            tools.push(json!({
+                "name": "git_commit_verified",
+                "title": "Commit verified changes",
+                "description": "Run project verification, stage changes, and create a git commit if verification passes. Can be explicitly allowed to commit after failed verification.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "message": { "type": "string", "description": "Commit message" },
+                        "allow_failed_verification": { "type": "boolean", "description": "Allow commit even when verification fails" }
+                    },
+                    "required": ["message"]
+                },
+                "annotations": { "readOnlyHint": false, "openWorldHint": true, "destructiveHint": true }
+            }));
+            tools.push(json!({
                 "name": "write",
                 "title": "Write file",
                 "description": "Create or overwrite a file in workspace.",
@@ -643,6 +691,18 @@ async fn handle_tools_call(
                                 }
                                 "verify_project" => {
                                     handle_verify_project(req, workspace_root).await
+                                }
+                                "git_status_summary" => {
+                                    handle_git_status_summary(req, workspace_root).await
+                                }
+                                "git_create_feature_branch" => {
+                                    handle_git_create_feature_branch(req, workspace_root).await
+                                }
+                                "git_diff_summary" => {
+                                    handle_git_diff_summary(req, workspace_root).await
+                                }
+                                "git_commit_verified" => {
+                                    handle_git_commit_verified(req, workspace_root).await
                                 }
                                 "write" => handle_write_file(req, workspace_root),
                                 "edit" => handle_edit_file(req, workspace_root),
@@ -1620,6 +1680,10 @@ fn tool_descriptor_should_attach_widget(name: &str) -> bool {
             | "session_resume_update"
             | "repo_map_generate"
             | "verify_project"
+            | "git_status_summary"
+            | "git_create_feature_branch"
+            | "git_diff_summary"
+            | "git_commit_verified"
             | "search"
             | "read"
             | "write"
@@ -2713,6 +2777,8 @@ fn is_local_destructive_tool(tool_name: &str) -> bool {
             | "project_memory_update"
             | "session_resume_update"
             | "repo_map_generate"
+            | "git_create_feature_branch"
+            | "git_commit_verified"
             | "write"
             | "edit"
             | "delete"
@@ -2955,6 +3021,106 @@ async fn handle_verify_project(req: &JsonRpcRequest, workspace_root: &str) -> Js
                     "success": output.success,
                     "commands": output.commands,
                     "skipped": output.skipped,
+                }),
+            )
+        }
+        Err(e) => tool_error_response(req, e),
+    }
+}
+
+async fn handle_git_status_summary(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
+    match git_workflow::status_summary(workspace_root).await {
+        Ok(output) => {
+            let text = output.summary.clone();
+            tool_success_response_with_structured(
+                req,
+                text,
+                json!({
+                    "toolName": "git_status_summary",
+                    "branch": output.branch,
+                    "clean": output.clean,
+                    "warnOnMain": output.warn_on_main,
+                    "raw": output.raw,
+                    "summary": output.summary,
+                }),
+            )
+        }
+        Err(e) => tool_error_response(req, e),
+    }
+}
+
+async fn handle_git_create_feature_branch(
+    req: &JsonRpcRequest,
+    workspace_root: &str,
+) -> JsonRpcResponse {
+    let arguments = tool_arguments(req);
+    let branch = match required_string_argument(&arguments, "branch") {
+        Ok(value) => value,
+        Err(e) => return tool_error_response(req, e),
+    };
+    match git_workflow::create_feature_branch(workspace_root, branch).await {
+        Ok(output) => {
+            let text = output.summary.clone();
+            tool_success_response_with_structured(
+                req,
+                text,
+                json!({
+                    "toolName": "git_create_feature_branch",
+                    "success": output.success,
+                    "summary": output.summary,
+                    "stdout": output.stdout,
+                    "stderr": output.stderr,
+                }),
+            )
+        }
+        Err(e) => tool_error_response(req, e),
+    }
+}
+
+async fn handle_git_diff_summary(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
+    match git_workflow::diff_summary(workspace_root).await {
+        Ok(output) => {
+            let text = output.summary.clone();
+            tool_success_response_with_structured(
+                req,
+                text,
+                json!({
+                    "toolName": "git_diff_summary",
+                    "nameStatus": output.name_status,
+                    "stat": output.stat,
+                    "summary": output.summary,
+                }),
+            )
+        }
+        Err(e) => tool_error_response(req, e),
+    }
+}
+
+async fn handle_git_commit_verified(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
+    let arguments = tool_arguments(req);
+    let message = match required_string_argument(&arguments, "message") {
+        Ok(value) => value,
+        Err(e) => return tool_error_response(req, e),
+    };
+    let allow_failed_verification =
+        match optional_bool_argument(&arguments, "allow_failed_verification", false) {
+            Ok(value) => value,
+            Err(e) => return tool_error_response(req, e),
+        };
+    match git_workflow::commit_verified_changes(workspace_root, message, allow_failed_verification)
+        .await
+    {
+        Ok(output) => {
+            let text = output.commit.summary.clone();
+            tool_success_response_with_structured(
+                req,
+                text,
+                json!({
+                    "toolName": "git_commit_verified",
+                    "success": output.success,
+                    "verificationSuccess": output.verification_success,
+                    "verificationSummary": output.verification_summary,
+                    "commit": output.commit,
                 }),
             )
         }
@@ -3395,6 +3561,10 @@ mod tests {
                 "session_resume_update",
                 "repo_map_generate",
                 "verify_project",
+                "git_status_summary",
+                "git_create_feature_branch",
+                "git_diff_summary",
+                "git_commit_verified",
                 "write",
                 "edit",
                 "delete",
@@ -3722,6 +3892,44 @@ mod tests {
                 .and_then(|command| command.get("command"))
                 .and_then(Value::as_str),
             Some("cargo fmt --check")
+        );
+
+        let _ = std::fs::remove_dir_all(workspace_root);
+    }
+
+    #[tokio::test]
+    async fn git_status_summary_warns_on_main_branch() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-git-status-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("create workspace");
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+        let init = command::run_command("git init -b main", &workspace_root, 10_000).await;
+        assert!(init.success, "git init failed: {}", init.stderr);
+
+        let req = tool_call_request("git_status_summary", json!({}));
+        let response = handle_tools_call(
+            &req,
+            &workspace_root_str,
+            1,
+            Mode::Both,
+            ToolMode::MultiTools,
+            false,
+            &None,
+        )
+        .await;
+        assert_no_text_content(&response);
+        let structured = response
+            .result
+            .as_ref()
+            .and_then(|result| result.get("structuredContent"))
+            .expect("missing structured content");
+        assert_eq!(
+            structured.get("toolName").and_then(Value::as_str),
+            Some("git_status_summary")
+        );
+        assert_eq!(
+            structured.get("warnOnMain").and_then(Value::as_bool),
+            Some(true)
         );
 
         let _ = std::fs::remove_dir_all(workspace_root);

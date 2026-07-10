@@ -2,6 +2,7 @@ mod binagotchy_gen;
 mod browser;
 mod command;
 mod devtools;
+mod git_workflow;
 mod macos_terminal;
 mod mascot;
 mod mcp;
