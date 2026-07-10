@@ -12,6 +12,7 @@ use crate::command;
 use crate::devtools::DevtoolsBridge;
 use crate::git_workflow;
 use crate::mascot;
+use crate::planning;
 use crate::project_memory;
 use crate::repo_map;
 use crate::state::{
@@ -414,6 +415,16 @@ async fn handle_tools_list(
             },
             "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false }
         }));
+        tools.push(json!({
+            "name": "plan_read",
+            "title": "Read current plan",
+            "description": "Read .catdesk/current_plan.md if present.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {}
+            },
+            "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false }
+        }));
 
         if tool_mode.write_tools_enabled() {
             tools.push(json!({
@@ -449,6 +460,20 @@ async fn handle_tools_list(
                         }
                     },
                     "required": ["document", "content"]
+                },
+                "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": true }
+            }));
+            tools.push(json!({
+                "name": "plan_update",
+                "title": "Update current plan",
+                "description": "Write .catdesk/current_plan.md with an optional plan_required flag.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "plan": { "type": "string", "description": "Markdown plan content" },
+                        "plan_required": { "type": "boolean", "description": "Whether a plan is required before implementation" }
+                    },
+                    "required": ["plan"]
                 },
                 "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": true }
             }));
@@ -674,6 +699,7 @@ async fn handle_tools_call(
                     "read" => handle_read_file(req, workspace_root),
                     "search" => handle_search_text(req, workspace_root),
                     "project_memory_read" => handle_project_memory_read(req, workspace_root),
+                    "plan_read" => handle_plan_read(req, workspace_root),
                     _ => {
                         if tool_mode.write_tools_enabled() {
                             match tool_name.as_str() {
@@ -683,6 +709,7 @@ async fn handle_tools_call(
                                 "project_memory_update" => {
                                     handle_project_memory_update(req, workspace_root)
                                 }
+                                "plan_update" => handle_plan_update(req, workspace_root),
                                 "session_resume_update" => {
                                     handle_session_resume_update(req, workspace_root)
                                 }
@@ -1382,6 +1409,10 @@ Always specify the branch explicitly when using `git push`."#
         );
         if tool_mode.write_tools_enabled() {
             lines.push(
+                "Use plan_read to check .catdesk/current_plan.md when planning context may exist. If the user requests planning or sets plan_required=true, use plan_update to store the plan before implementation."
+                    .to_string(),
+            );
+            lines.push(
                 "Use session_resume_update before ending a work session to refresh .catdesk/session.md with the session goal, files changed, verification results, remaining work, and resume prompt."
                     .to_string(),
             );
@@ -1677,6 +1708,8 @@ fn tool_descriptor_should_attach_widget(name: &str) -> bool {
             | "project_memory_init"
             | "project_memory_read"
             | "project_memory_update"
+            | "plan_read"
+            | "plan_update"
             | "session_resume_update"
             | "repo_map_generate"
             | "verify_project"
@@ -2775,6 +2808,7 @@ fn is_local_destructive_tool(tool_name: &str) -> bool {
         "run_command"
             | "project_memory_init"
             | "project_memory_update"
+            | "plan_update"
             | "session_resume_update"
             | "repo_map_generate"
             | "git_create_feature_branch"
@@ -2908,6 +2942,53 @@ fn handle_project_memory_update(req: &JsonRpcRequest, workspace_root: &str) -> J
                     "document": output.document,
                     "mode": output.mode,
                     "bytes": output.bytes,
+                }),
+            )
+        }
+        Err(e) => tool_error_response(req, e),
+    }
+}
+
+fn handle_plan_read(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
+    match planning::read(workspace_root) {
+        Ok(output) => {
+            let text = output.render_text();
+            tool_success_response_with_structured(
+                req,
+                text,
+                json!({
+                    "toolName": "plan_read",
+                    "path": output.path,
+                    "planRequired": output.plan_required,
+                    "text": output.text,
+                }),
+            )
+        }
+        Err(e) => tool_error_response(req, e),
+    }
+}
+
+fn handle_plan_update(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
+    let arguments = tool_arguments(req);
+    let plan = match required_string_argument(&arguments, "plan") {
+        Ok(value) => value,
+        Err(e) => return tool_error_response(req, e),
+    };
+    let plan_required = match optional_bool_argument(&arguments, "plan_required", false) {
+        Ok(value) => value,
+        Err(e) => return tool_error_response(req, e),
+    };
+    match planning::update(workspace_root, plan, plan_required) {
+        Ok(output) => {
+            let text = output.render_text();
+            tool_success_response_with_structured(
+                req,
+                text,
+                json!({
+                    "toolName": "plan_update",
+                    "path": output.path,
+                    "planRequired": output.plan_required,
+                    "text": output.text,
                 }),
             )
         }
@@ -3556,8 +3637,10 @@ mod tests {
                 "read",
                 "search",
                 "project_memory_read",
+                "plan_read",
                 "project_memory_init",
                 "project_memory_update",
+                "plan_update",
                 "session_resume_update",
                 "repo_map_generate",
                 "verify_project",
@@ -3636,6 +3719,7 @@ mod tests {
                 "read",
                 "search",
                 "project_memory_read",
+                "plan_read",
             ]
         );
     }
@@ -3712,6 +3796,69 @@ mod tests {
             .expect("missing project memory text");
         assert!(text.contains("## Notes"));
         assert!(text.contains("- Remember important context."));
+
+        let _ = std::fs::remove_dir_all(workspace_root);
+    }
+
+    #[tokio::test]
+    async fn plan_tools_write_and_read_current_plan() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-current-plan-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("create workspace");
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+
+        let update_req = tool_call_request(
+            "plan_update",
+            json!({
+                "plan": "1. Inspect\n2. Implement",
+                "plan_required": true
+            }),
+        );
+        let update_response = handle_tools_call(
+            &update_req,
+            &workspace_root_str,
+            1,
+            Mode::Both,
+            ToolMode::MultiTools,
+            false,
+            &None,
+        )
+        .await;
+        assert_no_text_content(&update_response);
+        assert!(
+            workspace_root
+                .join(".catdesk")
+                .join("current_plan.md")
+                .is_file()
+        );
+
+        let read_req = tool_call_request("plan_read", json!({}));
+        let read_response = handle_tools_call(
+            &read_req,
+            &workspace_root_str,
+            1,
+            Mode::Both,
+            ToolMode::MultiTools,
+            false,
+            &None,
+        )
+        .await;
+        assert_no_text_content(&read_response);
+        let structured = read_response
+            .result
+            .as_ref()
+            .and_then(|result| result.get("structuredContent"))
+            .expect("missing structured content");
+        assert_eq!(
+            structured.get("planRequired").and_then(Value::as_bool),
+            Some(true)
+        );
+        assert!(
+            structured
+                .get("text")
+                .and_then(Value::as_str)
+                .is_some_and(|text| text.contains("1. Inspect"))
+        );
 
         let _ = std::fs::remove_dir_all(workspace_root);
     }

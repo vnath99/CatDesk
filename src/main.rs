@@ -7,6 +7,7 @@ mod macos_terminal;
 mod mascot;
 mod mcp;
 mod ngrok;
+mod planning;
 mod project_memory;
 mod repo_map;
 mod server;
