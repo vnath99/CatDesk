@@ -17,6 +17,7 @@ use crate::state::{
     AgentsPathMode, Mode, ShowDetailMode, TokenStatsLayout, ToolMode, app_config_path,
     load_app_config, user_home_dir,
 };
+use crate::verification;
 use crate::workspace_tools;
 
 const SERVER_NAME: &str = "catdesk";
@@ -500,6 +501,16 @@ async fn handle_tools_list(
                 "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": true }
             }));
             tools.push(json!({
+                "name": "verify_project",
+                "title": "Verify project",
+                "description": "Detect Rust, Python, and Node project surfaces and run their standard verification commands, returning summarized output.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                },
+                "annotations": { "readOnlyHint": false, "openWorldHint": true, "destructiveHint": false }
+            }));
+            tools.push(json!({
                 "name": "write",
                 "title": "Write file",
                 "description": "Create or overwrite a file in workspace.",
@@ -629,6 +640,9 @@ async fn handle_tools_call(
                                 }
                                 "repo_map_generate" => {
                                     handle_repo_map_generate(req, workspace_root)
+                                }
+                                "verify_project" => {
+                                    handle_verify_project(req, workspace_root).await
                                 }
                                 "write" => handle_write_file(req, workspace_root),
                                 "edit" => handle_edit_file(req, workspace_root),
@@ -1605,6 +1619,7 @@ fn tool_descriptor_should_attach_widget(name: &str) -> bool {
             | "project_memory_update"
             | "session_resume_update"
             | "repo_map_generate"
+            | "verify_project"
             | "search"
             | "read"
             | "write"
@@ -2928,6 +2943,25 @@ fn handle_repo_map_generate(req: &JsonRpcRequest, workspace_root: &str) -> JsonR
     }
 }
 
+async fn handle_verify_project(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
+    match verification::verify_project(workspace_root).await {
+        Ok(output) => {
+            let text = output.render_text();
+            tool_success_response_with_structured(
+                req,
+                text,
+                json!({
+                    "toolName": "verify_project",
+                    "success": output.success,
+                    "commands": output.commands,
+                    "skipped": output.skipped,
+                }),
+            )
+        }
+        Err(e) => tool_error_response(req, e),
+    }
+}
+
 fn handle_write_file(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
     let arguments = tool_arguments(req);
     let path = match arguments.get("path").and_then(|v| v.as_str()) {
@@ -3360,6 +3394,7 @@ mod tests {
                 "project_memory_update",
                 "session_resume_update",
                 "repo_map_generate",
+                "verify_project",
                 "write",
                 "edit",
                 "delete",
@@ -3633,6 +3668,60 @@ mod tests {
         assert_eq!(
             structured.get("path").and_then(Value::as_str),
             Some(".catdesk/repo_map.md")
+        );
+
+        let _ = std::fs::remove_dir_all(workspace_root);
+    }
+
+    #[tokio::test]
+    async fn verify_project_runs_detected_project_commands() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-verify-project-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(workspace_root.join("src")).expect("create workspace");
+        std::fs::write(
+            workspace_root.join("Cargo.toml"),
+            "[package]\nname = \"verify_demo\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .expect("write cargo");
+        std::fs::write(
+            workspace_root.join("src").join("lib.rs"),
+            "pub fn demo() -> bool { true }\n",
+        )
+        .expect("write lib");
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+
+        let req = tool_call_request("verify_project", json!({}));
+        let response = handle_tools_call(
+            &req,
+            &workspace_root_str,
+            1,
+            Mode::Both,
+            ToolMode::MultiTools,
+            false,
+            &None,
+        )
+        .await;
+        assert_no_text_content(&response);
+        let structured = response
+            .result
+            .as_ref()
+            .and_then(|result| result.get("structuredContent"))
+            .expect("missing structured content");
+        assert_eq!(
+            structured.get("toolName").and_then(Value::as_str),
+            Some("verify_project")
+        );
+        assert!(structured.get("success").and_then(Value::as_bool).is_some());
+        let commands = structured
+            .get("commands")
+            .and_then(Value::as_array)
+            .expect("missing commands");
+        assert_eq!(
+            commands
+                .first()
+                .and_then(|command| command.get("command"))
+                .and_then(Value::as_str),
+            Some("cargo fmt --check")
         );
 
         let _ = std::fs::remove_dir_all(workspace_root);

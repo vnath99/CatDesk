@@ -11,6 +11,7 @@ mod repo_map;
 mod server;
 mod state;
 mod theme;
+mod verification;
 mod workspace_tools;
 
 use crossterm::{
