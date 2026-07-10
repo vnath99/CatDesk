@@ -19,6 +19,7 @@ use crate::state::{
     AgentsPathMode, Mode, ShowDetailMode, TokenStatsLayout, ToolMode, app_config_path,
     load_app_config, user_home_dir,
 };
+use crate::task_queue;
 use crate::verification;
 use crate::workspace_tools;
 
@@ -425,6 +426,16 @@ async fn handle_tools_list(
             },
             "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false }
         }));
+        tools.push(json!({
+            "name": "task_queue_read",
+            "title": "Read task queue",
+            "description": "Read .catdesk/todo.md as a Markdown checkbox task queue. Automatically initializes the file if missing.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {}
+            },
+            "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false }
+        }));
 
         if tool_mode.write_tools_enabled() {
             tools.push(json!({
@@ -474,6 +485,43 @@ async fn handle_tools_list(
                         "plan_required": { "type": "boolean", "description": "Whether a plan is required before implementation" }
                     },
                     "required": ["plan"]
+                },
+                "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": true }
+            }));
+            tools.push(json!({
+                "name": "task_queue_add",
+                "title": "Add task queue items",
+                "description": "Append one or more open Markdown checkbox tasks to .catdesk/todo.md.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "tasks": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Task descriptions to append as open checkbox items."
+                        }
+                    },
+                    "required": ["tasks"]
+                },
+                "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": true }
+            }));
+            tools.push(json!({
+                "name": "task_queue_set_status",
+                "title": "Set task queue status",
+                "description": "Mark a numbered task in .catdesk/todo.md done or open while preserving Markdown content around the list.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "index": {
+                            "type": "integer",
+                            "description": "1-based task index from task_queue_read."
+                        },
+                        "done": {
+                            "type": "boolean",
+                            "description": "true marks the task done; false marks it open."
+                        }
+                    },
+                    "required": ["index", "done"]
                 },
                 "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": true }
             }));
@@ -700,6 +748,7 @@ async fn handle_tools_call(
                     "search" => handle_search_text(req, workspace_root),
                     "project_memory_read" => handle_project_memory_read(req, workspace_root),
                     "plan_read" => handle_plan_read(req, workspace_root),
+                    "task_queue_read" => handle_task_queue_read(req, workspace_root),
                     _ => {
                         if tool_mode.write_tools_enabled() {
                             match tool_name.as_str() {
@@ -710,6 +759,10 @@ async fn handle_tools_call(
                                     handle_project_memory_update(req, workspace_root)
                                 }
                                 "plan_update" => handle_plan_update(req, workspace_root),
+                                "task_queue_add" => handle_task_queue_add(req, workspace_root),
+                                "task_queue_set_status" => {
+                                    handle_task_queue_set_status(req, workspace_root)
+                                }
                                 "session_resume_update" => {
                                     handle_session_resume_update(req, workspace_root)
                                 }
@@ -1413,6 +1466,10 @@ Always specify the branch explicitly when using `git push`."#
                     .to_string(),
             );
             lines.push(
+                "Use task_queue_read to inspect .catdesk/todo.md. Use task_queue_add for new follow-up work and task_queue_set_status to keep Markdown checkbox tasks current."
+                    .to_string(),
+            );
+            lines.push(
                 "Use session_resume_update before ending a work session to refresh .catdesk/session.md with the session goal, files changed, verification results, remaining work, and resume prompt."
                     .to_string(),
             );
@@ -1710,6 +1767,9 @@ fn tool_descriptor_should_attach_widget(name: &str) -> bool {
             | "project_memory_update"
             | "plan_read"
             | "plan_update"
+            | "task_queue_read"
+            | "task_queue_add"
+            | "task_queue_set_status"
             | "session_resume_update"
             | "repo_map_generate"
             | "verify_project"
@@ -2809,6 +2869,8 @@ fn is_local_destructive_tool(tool_name: &str) -> bool {
             | "project_memory_init"
             | "project_memory_update"
             | "plan_update"
+            | "task_queue_add"
+            | "task_queue_set_status"
             | "session_resume_update"
             | "repo_map_generate"
             | "git_create_feature_branch"
@@ -2990,6 +3052,75 @@ fn handle_plan_update(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResp
                     "planRequired": output.plan_required,
                     "text": output.text,
                 }),
+            )
+        }
+        Err(e) => tool_error_response(req, e),
+    }
+}
+
+fn task_queue_structured(tool_name: &str, output: task_queue::TaskQueueOutput) -> Value {
+    json!({
+        "toolName": tool_name,
+        "path": output.path,
+        "total": output.total,
+        "open": output.open,
+        "done": output.done,
+        "tasks": output.tasks,
+        "text": output.text,
+    })
+}
+
+fn handle_task_queue_read(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
+    match task_queue::read(workspace_root) {
+        Ok(output) => {
+            let text = output.render_text();
+            tool_success_response_with_structured(
+                req,
+                text,
+                task_queue_structured("task_queue_read", output),
+            )
+        }
+        Err(e) => tool_error_response(req, e),
+    }
+}
+
+fn handle_task_queue_add(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
+    let arguments = tool_arguments(req);
+    let tasks = match string_array_argument(&arguments, "tasks") {
+        Ok(value) => value,
+        Err(e) => return tool_error_response(req, e),
+    };
+    match task_queue::add(workspace_root, &tasks) {
+        Ok(output) => {
+            let text = output.render_text();
+            tool_success_response_with_structured(
+                req,
+                text,
+                task_queue_structured("task_queue_add", output),
+            )
+        }
+        Err(e) => tool_error_response(req, e),
+    }
+}
+
+fn handle_task_queue_set_status(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
+    let arguments = tool_arguments(req);
+    let index = match optional_usize_argument(&arguments, "index") {
+        Ok(Some(value)) => value,
+        Ok(None) => return tool_error_response(req, "Missing required parameter: index".into()),
+        Err(e) => return tool_error_response(req, e),
+    };
+    let done = match optional_bool_argument(&arguments, "done", false) {
+        Ok(value) => value,
+        Err(e) => return tool_error_response(req, e),
+    };
+    match task_queue::set_status(workspace_root, index, done) {
+        Ok(output) => {
+            let text = output.render_text();
+            tool_success_response_with_structured(
+                req,
+                text,
+                task_queue_structured("task_queue_set_status", output),
             )
         }
         Err(e) => tool_error_response(req, e),
@@ -3638,9 +3769,12 @@ mod tests {
                 "search",
                 "project_memory_read",
                 "plan_read",
+                "task_queue_read",
                 "project_memory_init",
                 "project_memory_update",
                 "plan_update",
+                "task_queue_add",
+                "task_queue_set_status",
                 "session_resume_update",
                 "repo_map_generate",
                 "verify_project",
@@ -3720,6 +3854,7 @@ mod tests {
                 "search",
                 "project_memory_read",
                 "plan_read",
+                "task_queue_read",
             ]
         );
     }
@@ -3858,6 +3993,78 @@ mod tests {
                 .get("text")
                 .and_then(Value::as_str)
                 .is_some_and(|text| text.contains("1. Inspect"))
+        );
+
+        let _ = std::fs::remove_dir_all(workspace_root);
+    }
+
+    #[tokio::test]
+    async fn task_queue_tools_add_read_and_complete_todo() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-task-queue-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("create workspace");
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+
+        let add_req = tool_call_request(
+            "task_queue_add",
+            json!({
+                "tasks": ["Add task queue MCP test", "Update docs"]
+            }),
+        );
+        let add_response = handle_tools_call(
+            &add_req,
+            &workspace_root_str,
+            1,
+            Mode::Both,
+            ToolMode::MultiTools,
+            false,
+            &None,
+        )
+        .await;
+        assert_no_text_content(&add_response);
+
+        let set_status_req = tool_call_request(
+            "task_queue_set_status",
+            json!({
+                "index": 2,
+                "done": true
+            }),
+        );
+        let set_status_response = handle_tools_call(
+            &set_status_req,
+            &workspace_root_str,
+            1,
+            Mode::Both,
+            ToolMode::MultiTools,
+            false,
+            &None,
+        )
+        .await;
+        assert_no_text_content(&set_status_response);
+
+        let read_req = tool_call_request("task_queue_read", json!({}));
+        let read_response = handle_tools_call(
+            &read_req,
+            &workspace_root_str,
+            1,
+            Mode::Both,
+            ToolMode::MultiTools,
+            false,
+            &None,
+        )
+        .await;
+        assert_no_text_content(&read_response);
+        let structured = read_response
+            .result
+            .as_ref()
+            .and_then(|result| result.get("structuredContent"))
+            .expect("missing structured content");
+        assert_eq!(structured.get("done").and_then(Value::as_u64), Some(1));
+        assert!(
+            structured
+                .get("text")
+                .and_then(Value::as_str)
+                .is_some_and(|text| text.contains("- [x] Add task queue MCP test"))
         );
 
         let _ = std::fs::remove_dir_all(workspace_root);

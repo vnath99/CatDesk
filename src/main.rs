@@ -12,6 +12,7 @@ mod project_memory;
 mod repo_map;
 mod server;
 mod state;
+mod task_queue;
 mod theme;
 mod verification;
 mod workspace_tools;
