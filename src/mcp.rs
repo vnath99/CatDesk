@@ -962,6 +962,13 @@ async fn handle_run_command(
                 "cwd": cwd.to_string_lossy().to_string(),
                 "dryRun": true,
                 "success": true,
+                "exitCode": Value::Null,
+                "summary": {
+                    "status": "dry_run",
+                    "exitCode": Value::Null,
+                    "errors": [],
+                    "keyOutput": [format!("Would execute in {}", cwd.display())],
+                },
             }),
         );
     }
@@ -1015,6 +1022,7 @@ async fn handle_run_command(
     }
 
     let result = command::run_command(&effective_command, &cwd, effective_timeout).await;
+    let summary = command::summarize_result(&result);
     let output = command::format_result(&result);
     let structured = json!({
         "toolName": "run_command",
@@ -1023,7 +1031,9 @@ async fn handle_run_command(
         "stdout": result.stdout,
         "stderr": result.stderr,
         "success": result.success,
+        "exitCode": result.exit_code,
         "elapsedMs": result.elapsed_ms,
+        "summary": command_summary_json(&summary),
     });
 
     if result.success {
@@ -1031,6 +1041,15 @@ async fn handle_run_command(
     } else {
         tool_error_response_with_structured(req, output, structured)
     }
+}
+
+fn command_summary_json(summary: &command::CommandSummary) -> Value {
+    json!({
+        "status": summary.status,
+        "exitCode": summary.exit_code,
+        "errors": summary.errors,
+        "keyOutput": summary.key_output,
+    })
 }
 
 struct ResolvedMovePathIntercept {
@@ -1164,6 +1183,18 @@ fn build_run_command_move_path_structured(
         .canonicalize()
         .map(command::normalize_windows_verbatim_path)
         .unwrap_or_else(|_| PathBuf::from(workspace_root));
+    let exit_code = if success { Some(0) } else { None };
+    let summary_status = if success { "success" } else { "failed" };
+    let errors = if stderr.trim().is_empty() {
+        Vec::<String>::new()
+    } else {
+        vec![stderr.trim().to_string()]
+    };
+    let key_output = if stdout.trim().is_empty() {
+        errors.clone()
+    } else {
+        vec![stdout.trim().to_string()]
+    };
     json!({
         "toolName": "run_command",
         "interceptedToolName": "move_path",
@@ -1172,6 +1203,13 @@ fn build_run_command_move_path_structured(
         "stdout": stdout,
         "stderr": stderr,
         "success": success,
+        "exitCode": exit_code,
+        "summary": {
+            "status": summary_status,
+            "exitCode": exit_code,
+            "errors": errors,
+            "keyOutput": key_output,
+        },
         "from": intercept.from.as_str(),
         "to": intercept.to.as_str(),
         "resolvedFrom": to_relative(&root, &resolved.from),
@@ -1199,6 +1237,13 @@ fn build_run_command_listing_structured(
         "stdout": stdout,
         "stderr": "",
         "success": true,
+        "exitCode": 0,
+        "summary": {
+            "status": "success",
+            "exitCode": 0,
+            "errors": [],
+            "keyOutput": [format!("Listed {} items under {}", listing.item_count, listing.path)],
+        },
         "listPath": listing.path,
         "listItemCount": listing.item_count,
         "listDirectoryCount": listing.directory_count,
@@ -2176,6 +2221,12 @@ fn build_run_command_widget_payload(
     );
     if let Some(elapsed) = structured.get("elapsedMs") {
         payload.insert("elapsedMs".to_string(), elapsed.clone());
+    }
+    if let Some(exit_code) = structured.get("exitCode") {
+        payload.insert("exitCode".to_string(), exit_code.clone());
+    }
+    if let Some(summary) = structured.get("summary") {
+        payload.insert("summary".to_string(), summary.clone());
     }
     attach_widget_changed_files(&mut payload, widget_context);
     Some(Value::Object(payload))
@@ -4483,6 +4534,79 @@ mod tests {
             Some(true)
         );
         assert!(result_text(&response).contains("COMMAND_BLOCKED"));
+
+        let _ = std::fs::remove_dir_all(workspace_root);
+    }
+
+    #[tokio::test]
+    async fn run_command_returns_exit_code_and_summary_for_failures() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-command-summary-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("create workspace");
+        let command = if cfg!(windows) {
+            "Write-Error 'summary boom'; exit 7"
+        } else {
+            "echo 'summary boom' >&2; exit 7"
+        };
+
+        let req = tool_call_request(
+            "run_command",
+            json!({
+                "command": command,
+            }),
+        );
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+        let response = handle_tools_call(
+            &req,
+            &workspace_root_str,
+            1,
+            Mode::Both,
+            ToolMode::MultiTools,
+            false,
+            &None,
+        )
+        .await;
+
+        assert_no_text_content(&response);
+        assert_eq!(
+            response
+                .result
+                .as_ref()
+                .and_then(|result| result.get("isError"))
+                .and_then(Value::as_bool),
+            Some(true)
+        );
+        let structured = response
+            .result
+            .as_ref()
+            .and_then(|result| result.get("structuredContent"))
+            .expect("missing structured content");
+        assert_eq!(structured.get("exitCode").and_then(Value::as_i64), Some(7));
+        let summary = structured.get("summary").expect("missing summary");
+        assert_eq!(
+            summary.get("status").and_then(Value::as_str),
+            Some("failed")
+        );
+        assert!(
+            summary
+                .get("errors")
+                .and_then(Value::as_array)
+                .is_some_and(|errors| errors.iter().any(|line| line
+                    .as_str()
+                    .is_some_and(|line| line.contains("summary boom"))))
+        );
+
+        let widget_payload = response
+            .result
+            .as_ref()
+            .and_then(|result| result.get("_meta"))
+            .and_then(|meta| meta.get(WIDGET_PAYLOAD_META_KEY))
+            .expect("missing widget payload");
+        assert_eq!(
+            widget_payload.get("exitCode").and_then(Value::as_i64),
+            Some(7)
+        );
+        assert!(widget_payload.get("summary").is_some());
 
         let _ = std::fs::remove_dir_all(workspace_root);
     }

@@ -15,7 +15,16 @@ pub struct CommandResult {
     pub stdout: String,
     pub stderr: String,
     pub success: bool,
+    pub exit_code: Option<i32>,
     pub elapsed_ms: u64,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct CommandSummary {
+    pub status: String,
+    pub exit_code: Option<i32>,
+    pub errors: Vec<String>,
+    pub key_output: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -260,6 +269,7 @@ pub async fn run_command(command: &str, cwd: &Path, timeout_ms: u64) -> CommandR
                 stdout,
                 stderr,
                 success: output.status.success(),
+                exit_code: output.status.code(),
                 elapsed_ms,
             }
         }
@@ -267,12 +277,14 @@ pub async fn run_command(command: &str, cwd: &Path, timeout_ms: u64) -> CommandR
             stdout: String::new(),
             stderr: format!("Failed to execute: {e}"),
             success: false,
+            exit_code: None,
             elapsed_ms: start.elapsed().as_millis() as u64,
         },
         Err(_) => CommandResult {
             stdout: String::new(),
             stderr: format!("Command timed out after {timeout_ms} ms"),
             success: false,
+            exit_code: None,
             elapsed_ms: start.elapsed().as_millis() as u64,
         },
     }
@@ -317,6 +329,103 @@ pub fn format_result(r: &CommandResult) -> String {
         out.push_str("(no output)");
     }
     out
+}
+
+pub fn summarize_result(result: &CommandResult) -> CommandSummary {
+    let status = if result.success {
+        "success"
+    } else if result.exit_code.is_none() && result.stderr.starts_with("Command timed out after ") {
+        "timed_out"
+    } else if result.exit_code.is_none() && result.stderr.starts_with("Failed to execute: ") {
+        "execution_error"
+    } else {
+        "failed"
+    };
+    CommandSummary {
+        status: status.to_string(),
+        exit_code: result.exit_code,
+        errors: summarize_errors(result),
+        key_output: summarize_key_output(result),
+    }
+}
+
+fn summarize_errors(result: &CommandResult) -> Vec<String> {
+    let mut errors = summarize_lines(&result.stderr, 8);
+    if errors.is_empty() && !result.success {
+        errors.push(match result.exit_code {
+            Some(code) => format!("Command failed with exit code {code}"),
+            None => "Command failed without an exit code".to_string(),
+        });
+    }
+    errors
+}
+
+fn summarize_key_output(result: &CommandResult) -> Vec<String> {
+    let combined = if result.stderr.is_empty() {
+        result.stdout.clone()
+    } else if result.stdout.is_empty() {
+        result.stderr.clone()
+    } else {
+        format!("{}\n{}", result.stdout, result.stderr)
+    };
+    let all_lines = summarize_lines(&combined, 16);
+    let mut selected = all_lines
+        .iter()
+        .filter(|line| is_signal_output_line(line))
+        .take(8)
+        .cloned()
+        .collect::<Vec<_>>();
+    if selected.len() < 8 {
+        for line in all_lines.iter().rev() {
+            if !selected.contains(line) {
+                selected.push(line.clone());
+            }
+            if selected.len() >= 8 {
+                break;
+            }
+        }
+        selected.reverse();
+    }
+    selected
+}
+
+fn summarize_lines(text: &str, max_lines: usize) -> Vec<String> {
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .take(max_lines)
+        .map(truncate_summary_line)
+        .collect()
+}
+
+fn truncate_summary_line(line: &str) -> String {
+    const MAX_CHARS: usize = 300;
+    let mut out = String::new();
+    for (idx, ch) in line.chars().enumerate() {
+        if idx >= MAX_CHARS {
+            out.push_str("...");
+            return out;
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn is_signal_output_line(line: &str) -> bool {
+    let line = line.to_ascii_lowercase();
+    [
+        "error",
+        "failed",
+        "failure",
+        "panic",
+        "exception",
+        "warning",
+        "test result",
+        "passed",
+        "exit code",
+    ]
+    .iter()
+    .any(|needle| line.contains(needle))
 }
 
 pub fn contains_catdesk_co_author_marker(command: &str) -> bool {
@@ -1101,6 +1210,27 @@ mod tests {
         assert_eq!(result.stdout.trim(), leaf);
 
         let _ = std::fs::remove_dir_all(workspace_root);
+    }
+
+    #[test]
+    fn summarize_result_includes_exit_code_errors_and_key_output() {
+        let summary = summarize_result(&CommandResult {
+            stdout: "running tests\nsummary line\n".to_string(),
+            stderr: "error: expected value\nwarning: retry skipped\n".to_string(),
+            success: false,
+            exit_code: Some(7),
+            elapsed_ms: 42,
+        });
+
+        assert_eq!(summary.status, "failed");
+        assert_eq!(summary.exit_code, Some(7));
+        assert!(summary.errors.iter().any(|line| line.contains("expected")));
+        assert!(
+            summary
+                .key_output
+                .iter()
+                .any(|line| line.contains("warning"))
+        );
     }
 
     #[test]
