@@ -12,6 +12,7 @@ use crate::command;
 use crate::devtools::DevtoolsBridge;
 use crate::mascot;
 use crate::project_memory;
+use crate::repo_map;
 use crate::state::{
     AgentsPathMode, Mode, ShowDetailMode, TokenStatsLayout, ToolMode, app_config_path,
     load_app_config, user_home_dir,
@@ -488,6 +489,16 @@ async fn handle_tools_list(
                 "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": true }
             }));
             tools.push(json!({
+                "name": "repo_map_generate",
+                "title": "Generate repository map",
+                "description": "Scan the workspace and write .catdesk/repo_map.md with languages, frameworks, important folders, entry points, and build/test commands. Generated and vendor directories are ignored.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                },
+                "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": true }
+            }));
+            tools.push(json!({
                 "name": "write",
                 "title": "Write file",
                 "description": "Create or overwrite a file in workspace.",
@@ -610,6 +621,9 @@ async fn handle_tools_call(
                                 }
                                 "session_resume_update" => {
                                     handle_session_resume_update(req, workspace_root)
+                                }
+                                "repo_map_generate" => {
+                                    handle_repo_map_generate(req, workspace_root)
                                 }
                                 "write" => handle_write_file(req, workspace_root),
                                 "edit" => handle_edit_file(req, workspace_root),
@@ -1267,6 +1281,10 @@ Always specify the branch explicitly when using `git push`."#
                 "Use session_resume_update before ending a work session to refresh .catdesk/session.md with the session goal, files changed, verification results, remaining work, and resume prompt."
                     .to_string(),
             );
+            lines.push(
+                "Use repo_map_generate when project structure is unclear or stale; it refreshes .catdesk/repo_map.md with languages, frameworks, important folders, entry points, and build/test commands."
+                    .to_string(),
+            );
         }
         lines.push("Use read to read files and search to search the workspace.".to_string());
         if tool_mode.run_command_enabled() {
@@ -1556,6 +1574,7 @@ fn tool_descriptor_should_attach_widget(name: &str) -> bool {
             | "project_memory_read"
             | "project_memory_update"
             | "session_resume_update"
+            | "repo_map_generate"
             | "search"
             | "read"
             | "write"
@@ -2648,6 +2667,7 @@ fn is_local_destructive_tool(tool_name: &str) -> bool {
             | "project_memory_init"
             | "project_memory_update"
             | "session_resume_update"
+            | "repo_map_generate"
             | "write"
             | "edit"
             | "delete"
@@ -2846,6 +2866,31 @@ fn handle_session_resume_update(req: &JsonRpcRequest, workspace_root: &str) -> J
                     "verificationResults": output.verification_results,
                     "remainingWork": output.remaining_work,
                     "resumePrompt": output.resume_prompt,
+                }),
+            )
+        }
+        Err(e) => tool_error_response(req, e),
+    }
+}
+
+fn handle_repo_map_generate(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
+    match repo_map::generate(workspace_root) {
+        Ok(output) => {
+            let text = output.render_text();
+            tool_success_response_with_structured(
+                req,
+                text,
+                json!({
+                    "toolName": "repo_map_generate",
+                    "path": output.path,
+                    "languages": output.languages,
+                    "frameworks": output.frameworks,
+                    "importantFolders": output.important_folders,
+                    "entryPoints": output.entry_points,
+                    "buildTestCommands": output.build_test_commands,
+                    "filesScanned": output.files_scanned,
+                    "truncated": output.truncated,
+                    "text": output.text,
                 }),
             )
         }
@@ -3171,6 +3216,7 @@ mod tests {
                 "project_memory_init",
                 "project_memory_update",
                 "session_resume_update",
+                "repo_map_generate",
                 "write",
                 "edit",
                 "delete",
@@ -3377,6 +3423,73 @@ mod tests {
         assert_eq!(
             structured.get("sessionGoal").and_then(Value::as_str),
             Some("Ship Task 5")
+        );
+
+        let _ = std::fs::remove_dir_all(workspace_root);
+    }
+
+    #[tokio::test]
+    async fn repo_map_generate_writes_repo_map_markdown() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-repo-map-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(workspace_root.join("src")).expect("create src");
+        std::fs::create_dir_all(workspace_root.join("target")).expect("create target");
+        std::fs::write(
+            workspace_root.join("Cargo.toml"),
+            "[package]\nname = \"demo\"\n[dependencies]\naxum = \"0.8\"\n",
+        )
+        .expect("write cargo");
+        std::fs::write(workspace_root.join("src").join("main.rs"), "fn main() {}\n")
+            .expect("write main");
+        std::fs::write(
+            workspace_root.join("target").join("generated.rs"),
+            "ignored\n",
+        )
+        .expect("write generated");
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+
+        let req = tool_call_request("repo_map_generate", json!({}));
+        let response = handle_tools_call(
+            &req,
+            &workspace_root_str,
+            1,
+            Mode::Both,
+            ToolMode::MultiTools,
+            false,
+            &None,
+        )
+        .await;
+        assert_no_text_content(&response);
+
+        let map_text = std::fs::read_to_string(workspace_root.join(".catdesk").join("repo_map.md"))
+            .expect("read repo map");
+        for heading in [
+            "## Languages",
+            "## Frameworks",
+            "## Important folders",
+            "## Entry points",
+            "## Build/test commands",
+        ] {
+            assert!(map_text.contains(heading), "missing heading {heading}");
+        }
+        assert!(map_text.contains("Rust"));
+        assert!(map_text.contains("Axum"));
+        assert!(map_text.contains("src/main.rs"));
+        assert!(map_text.contains("cargo test"));
+        assert!(!map_text.contains("target/generated.rs"));
+
+        let structured = response
+            .result
+            .as_ref()
+            .and_then(|result| result.get("structuredContent"))
+            .expect("missing structured content");
+        assert_eq!(
+            structured.get("toolName").and_then(Value::as_str),
+            Some("repo_map_generate")
+        );
+        assert_eq!(
+            structured.get("path").and_then(Value::as_str),
+            Some(".catdesk/repo_map.md")
         );
 
         let _ = std::fs::remove_dir_all(workspace_root);
