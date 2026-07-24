@@ -848,7 +848,15 @@ fn advance_bootstrap_progress(
 impl AppState {
     pub fn new(port: u16, workspace_root: String) -> std::io::Result<Self> {
         let config_path = app_config_path()?;
-        Self::from_config_path(port, workspace_root, config_path)
+        Self::from_config_path_with_archive(port, workspace_root, config_path, true)
+    }
+
+    pub(crate) fn new_headless(
+        port: u16,
+        workspace_root: String,
+        config_path: PathBuf,
+    ) -> std::io::Result<Self> {
+        Self::from_config_path_with_archive(port, workspace_root, config_path, false)
     }
 
     #[cfg(test)]
@@ -857,13 +865,23 @@ impl AppState {
         workspace_root: String,
         config_path: PathBuf,
     ) -> std::io::Result<Self> {
-        Self::from_config_path(port, workspace_root, config_path)
+        Self::from_config_path_with_archive(port, workspace_root, config_path, false)
     }
 
+    #[cfg(test)]
     fn from_config_path(
         port: u16,
         workspace_root: String,
         config_path: PathBuf,
+    ) -> std::io::Result<Self> {
+        Self::from_config_path_with_archive(port, workspace_root, config_path, false)
+    }
+
+    fn from_config_path_with_archive(
+        port: u16,
+        workspace_root: String,
+        config_path: PathBuf,
+        _archive_startup_mascot: bool,
     ) -> std::io::Result<Self> {
         let config = AppConfig::load_from_path(&config_path)?;
         let partner_binagotchy_seed = config.partner_binagotchy_seed.clone();
@@ -874,7 +892,7 @@ impl AppState {
         };
         let mascot = mascot::build_workspace_mascot(mascot_seed);
         #[cfg(not(test))]
-        if partner_binagotchy_seed.is_none() {
+        if _archive_startup_mascot && partner_binagotchy_seed.is_none() {
             mascot::archive_startup_mascot(mascot_seed)?;
         }
         Ok(Self {

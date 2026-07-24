@@ -61,6 +61,7 @@ use state::{
     flow_anim_lit_count, load_ngrok_authtoken, save_ngrok_authtoken,
 };
 use std::io::{Write, stdout};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{
@@ -823,10 +824,252 @@ fn drain_server_ui_events(app: &mut AppState, ui_events: &mut UnboundedReceiver<
     }
 }
 
+struct HeadlessMcpOptions {
+    host: String,
+    port: u16,
+    workspace: String,
+    mcp_path: Option<String>,
+    mode: Mode,
+    tool_mode: ToolMode,
+    config_path: PathBuf,
+}
+
+fn parse_headless_mcp_options(
+    args: impl IntoIterator<Item = String>,
+) -> Result<Option<HeadlessMcpOptions>, String> {
+    let args: Vec<String> = args.into_iter().collect();
+    if !args.iter().any(|arg| arg == "--headless-mcp") {
+        return Ok(None);
+    }
+
+    let mut host = "127.0.0.1".to_string();
+    let mut port = std::env::var("PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(3200);
+    let mut workspace = std::env::var("WORKSPACE_ROOT")
+        .ok()
+        .unwrap_or_else(|| ".".to_string());
+    let mut mcp_path = None;
+    let mut mode = Mode::Computer;
+    let mut tool_mode = ToolMode::MultiTools;
+    let mut config_path: Option<PathBuf> = None;
+
+    let mut index = 0;
+    while index < args.len() {
+        let arg = &args[index];
+        match arg.as_str() {
+            "--headless-mcp" | "--no-ngrok" => {
+                index += 1;
+            }
+            "--host" => {
+                host = next_arg(&args, &mut index, "--host")?;
+            }
+            "--port" => {
+                let value = next_arg(&args, &mut index, "--port")?;
+                port = value
+                    .parse::<u16>()
+                    .map_err(|_| format!("invalid --port value `{value}`"))?;
+            }
+            "--workspace" => {
+                workspace = next_arg(&args, &mut index, "--workspace")?;
+            }
+            "--mcp-path" => {
+                mcp_path = Some(validate_headless_mcp_path(&next_arg(
+                    &args,
+                    &mut index,
+                    "--mcp-path",
+                )?)?);
+            }
+            "--mode" => {
+                let value = next_arg(&args, &mut index, "--mode")?;
+                mode = parse_headless_mode(&value)?;
+            }
+            "--tool-mode" => {
+                let value = next_arg(&args, &mut index, "--tool-mode")?;
+                tool_mode = parse_headless_tool_mode(&value)?;
+            }
+            "--config-path" => {
+                config_path = Some(PathBuf::from(next_arg(&args, &mut index, "--config-path")?));
+            }
+            other => return Err(format!("unknown headless MCP option `{other}`")),
+        }
+    }
+
+    validate_loopback_host(&host)?;
+    if mode.browser_enabled() {
+        return Err("headless MCP currently supports --mode computer only".into());
+    }
+    let config_path = config_path.ok_or_else(|| {
+        "headless MCP requires --config-path so tests do not read or write the normal CatDesk config"
+            .to_string()
+    })?;
+
+    Ok(Some(HeadlessMcpOptions {
+        host,
+        port,
+        workspace,
+        mcp_path,
+        mode,
+        tool_mode,
+        config_path,
+    }))
+}
+
+fn next_arg(args: &[String], index: &mut usize, option: &str) -> Result<String, String> {
+    *index += 1;
+    let value = args
+        .get(*index)
+        .ok_or_else(|| format!("{option} requires a value"))?;
+    *index += 1;
+    Ok(value.clone())
+}
+
+fn validate_loopback_host(host: &str) -> Result<(), String> {
+    if host.eq_ignore_ascii_case("localhost") {
+        return Ok(());
+    }
+    let ip = host
+        .parse::<std::net::IpAddr>()
+        .map_err(|_| format!("--host must be a loopback IP or localhost, got `{host}`"))?;
+    if ip.is_loopback() {
+        Ok(())
+    } else {
+        Err(format!("--host must be loopback-only, got `{host}`"))
+    }
+}
+
+fn validate_headless_mcp_path(path: &str) -> Result<String, String> {
+    if !path.starts_with('/') || !path.ends_with("/mcp") {
+        return Err("--mcp-path must start with `/` and end with `/mcp`".into());
+    }
+    if path.contains('\\') || path.contains('?') || path.contains('#') || path.contains("//") {
+        return Err("--mcp-path must be a simple URL path without query, fragment, or `//`".into());
+    }
+    let slug = slug_from_mcp_path(path)?;
+    if slug.is_empty() || slug.chars().any(char::is_whitespace) {
+        return Err("--mcp-path slug must be non-empty and contain no whitespace".into());
+    }
+    Ok(path.to_string())
+}
+
+fn slug_from_mcp_path(path: &str) -> Result<String, String> {
+    let slug = path
+        .strip_prefix('/')
+        .and_then(|value| value.strip_suffix("/mcp"))
+        .ok_or_else(|| "--mcp-path must start with `/` and end with `/mcp`".to_string())?;
+    Ok(slug.trim_matches('/').to_string())
+}
+
+fn parse_headless_mode(value: &str) -> Result<Mode, String> {
+    match value {
+        "computer" => Ok(Mode::Computer),
+        "browser" => Ok(Mode::Browser),
+        "both" => Ok(Mode::Both),
+        _ => Err(format!(
+            "invalid --mode `{value}`; expected computer, browser, or both"
+        )),
+    }
+}
+
+fn parse_headless_tool_mode(value: &str) -> Result<ToolMode, String> {
+    match value {
+        "multi-tools" => Ok(ToolMode::MultiTools),
+        "read-only" => Ok(ToolMode::ReadOnly),
+        _ => Err(format!(
+            "invalid --tool-mode `{value}`; expected multi-tools or read-only"
+        )),
+    }
+}
+
+async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std::error::Error>> {
+    let workspace_root = std::fs::canonicalize(&options.workspace)
+        .unwrap_or_else(|_| PathBuf::from(&options.workspace))
+        .to_string_lossy()
+        .into_owned();
+    let state: SharedState = Arc::new(Mutex::new(AppState::new_headless(
+        options.port,
+        workspace_root.clone(),
+        options.config_path.clone(),
+    )?));
+
+    let mcp_path = {
+        let mut app = state.lock().await;
+        app.mode = options.mode;
+        app.tool_mode = options.tool_mode;
+        if let Some(path) = options.mcp_path.as_deref() {
+            app.mcp_slug = slug_from_mcp_path(path).map_err(std::io::Error::other)?;
+        }
+        app.mcp_path()
+    };
+
+    let (ui_event_tx, mut ui_event_rx) = unbounded_channel();
+    let router = server::router(state.clone(), None, mcp_path.clone(), ui_event_tx);
+    let listener = tokio::net::TcpListener::bind(format!("{}:{}", options.host, options.port))
+        .await
+        .map_err(|error| {
+            std::io::Error::other(format!(
+                "failed to bind headless MCP server on {}:{}: {error}",
+                options.host, options.port
+            ))
+        })?;
+    let local_addr = listener.local_addr()?;
+    {
+        let mut app = state.lock().await;
+        app.port = local_addr.port();
+        app.server_running = true;
+        app.log(
+            "INFO",
+            format!("Headless MCP server started on {local_addr}{mcp_path}"),
+        );
+    }
+
+    let drain_state = state.clone();
+    let drain_handle = tokio::spawn(async move {
+        while let Some(event) = ui_event_rx.recv().await {
+            let mut app = drain_state.lock().await;
+            app.apply_server_ui_event(event);
+        }
+    });
+    let serve_handle = tokio::spawn(async move {
+        let _ = axum::serve(listener, router).await;
+    });
+
+    println!(
+        "{}",
+        serde_json::json!({
+            "status": "ready",
+            "mode": options.mode.label(),
+            "tool_mode": options.tool_mode.label(),
+            "workspace": workspace_root,
+            "config_path": options.config_path,
+            "mcp_url": format!("http://{local_addr}{mcp_path}"),
+        })
+    );
+
+    tokio::signal::ctrl_c().await?;
+    serve_handle.abort();
+    drain_handle.abort();
+    {
+        let mut app = state.lock().await;
+        app.server_running = false;
+    }
+    Ok(())
+}
+
 // ── Main ────────────────────────────────────────────────────
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    match parse_headless_mcp_options(std::env::args().skip(1)) {
+        Ok(Some(options)) => return run_headless_mcp(options).await,
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("CatDesk: {error}");
+            std::process::exit(2);
+        }
+    }
+
     match macos_terminal::maybe_relaunch_in_terminal_profile() {
         Ok(macos_terminal::LaunchAction::Continue) => {}
         #[cfg(target_os = "macos")]
@@ -1401,7 +1644,9 @@ fn render_toast(f: &mut Frame, palette: theme::Palette, msg: &str, pos: (u16, u1
 
 #[cfg(test)]
 mod tests {
-    use super::{key_is_clipboard_paste, normalize_ngrok_authtoken_input};
+    use super::{
+        key_is_clipboard_paste, normalize_ngrok_authtoken_input, parse_headless_mcp_options,
+    };
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     #[test]
@@ -1434,6 +1679,79 @@ mod tests {
             KeyCode::Insert,
             KeyModifiers::SHIFT
         )));
+    }
+
+    #[test]
+    fn parses_headless_mcp_options_with_disposable_config() {
+        let options = parse_headless_mcp_options([
+            "--headless-mcp".to_string(),
+            "--host".to_string(),
+            "127.0.0.1".to_string(),
+            "--port".to_string(),
+            "33200".to_string(),
+            "--workspace".to_string(),
+            "C:\\Temp\\catdesk-disposable".to_string(),
+            "--mcp-path".to_string(),
+            "/t0012/mcp".to_string(),
+            "--mode".to_string(),
+            "computer".to_string(),
+            "--tool-mode".to_string(),
+            "read-only".to_string(),
+            "--config-path".to_string(),
+            ".tmp\\catdesk-headless\\config.toml".to_string(),
+            "--no-ngrok".to_string(),
+        ])
+        .expect("parse headless options")
+        .expect("headless options present");
+
+        assert_eq!(options.host, "127.0.0.1");
+        assert_eq!(options.port, 33200);
+        assert_eq!(options.mcp_path.as_deref(), Some("/t0012/mcp"));
+    }
+
+    #[test]
+    fn rejects_headless_non_loopback_host() {
+        let result = parse_headless_mcp_options([
+            "--headless-mcp".to_string(),
+            "--host".to_string(),
+            "0.0.0.0".to_string(),
+            "--config-path".to_string(),
+            ".tmp\\catdesk-headless\\config.toml".to_string(),
+        ]);
+        let error = match result {
+            Ok(_) => panic!("expected non-loopback host rejection"),
+            Err(error) => error,
+        };
+
+        assert!(error.contains("loopback"));
+    }
+
+    #[test]
+    fn rejects_headless_without_disposable_config_path() {
+        let result = parse_headless_mcp_options(["--headless-mcp".to_string()]);
+        let error = match result {
+            Ok(_) => panic!("expected missing config path rejection"),
+            Err(error) => error,
+        };
+
+        assert!(error.contains("--config-path"));
+    }
+
+    #[test]
+    fn rejects_headless_browser_mode() {
+        let result = parse_headless_mcp_options([
+            "--headless-mcp".to_string(),
+            "--mode".to_string(),
+            "both".to_string(),
+            "--config-path".to_string(),
+            ".tmp\\catdesk-headless\\config.toml".to_string(),
+        ]);
+        let error = match result {
+            Ok(_) => panic!("expected browser mode rejection"),
+            Err(error) => error,
+        };
+
+        assert!(error.contains("computer only"));
     }
 }
 
