@@ -2731,20 +2731,24 @@ fn release_active_lock(lock_path: &Path) {
 }
 
 fn apply_worker_error_outcome(entry: &mut DelegatedRunEntry, run_id: &RunId, error: String) {
-    if entry.cancel_requested.load(Ordering::SeqCst) {
-        entry.status = RegistryRunStatus::Cancelled;
-        let _ = DelegatedJournal::open(&entry.config.journal_root)
-            .and_then(|journal| journal.update_run_state(run_id, RunState::Cancelled));
-        release_active_lock(&entry.active_lock_path);
-    } else if run_has_outcome_unknown(&entry.config.journal_root, run_id).unwrap_or(false) {
-        entry.status = RegistryRunStatus::NeedsSupervisor;
-        let _ = DelegatedJournal::open(&entry.config.journal_root)
-            .and_then(|journal| journal.update_run_state(run_id, RunState::NeedsSupervisor));
-    } else {
-        entry.status = RegistryRunStatus::Failed;
-        let _ = DelegatedJournal::open(&entry.config.journal_root)
-            .and_then(|journal| journal.update_run_state(run_id, RunState::Failed));
-        release_active_lock(&entry.active_lock_path);
+    match run_has_outcome_unknown(&entry.config.journal_root, run_id) {
+        Ok(false) => {
+            if entry.cancel_requested.load(Ordering::SeqCst) {
+                entry.status = RegistryRunStatus::Cancelled;
+                let _ = DelegatedJournal::open(&entry.config.journal_root)
+                    .and_then(|journal| journal.update_run_state(run_id, RunState::Cancelled));
+            } else {
+                entry.status = RegistryRunStatus::Failed;
+                let _ = DelegatedJournal::open(&entry.config.journal_root)
+                    .and_then(|journal| journal.update_run_state(run_id, RunState::Failed));
+            }
+            release_active_lock(&entry.active_lock_path);
+        }
+        Ok(true) | Err(_) => {
+            entry.status = RegistryRunStatus::NeedsSupervisor;
+            let _ = DelegatedJournal::open(&entry.config.journal_root)
+                .and_then(|journal| journal.update_run_state(run_id, RunState::NeedsSupervisor));
+        }
     }
     entry.last_error = Some(error);
 }
@@ -6237,6 +6241,164 @@ mod tests {
         assert_eq!(
             journal.load_run(&run_id).expect("snapshot").state,
             RunState::NeedsSupervisor
+        );
+    }
+
+    #[test]
+    fn cancelled_worker_with_outcome_unknown_persists_needs_supervisor_and_keeps_lock() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-cancel-unknown-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let run_id = RunId::new(format!("run-cancel-unknown-{}", Uuid::new_v4())).expect("run");
+        let contract = delegated_contract(&workspace_root, run_id.as_str());
+        let config = mcp_integrated_config(&workspace_root, &contract, &json!({})).expect("config");
+        let journal = DelegatedJournal::open(&config.journal_root).expect("journal");
+        journal.create_run(&contract).expect("run");
+        let lock_path = workspace_active_lock_path(&workspace_root);
+        std::fs::create_dir_all(lock_path.parent().expect("lock parent")).expect("lock parent");
+        std::fs::write(&lock_path, run_id.as_str()).expect("lock");
+        let tool_call_id = crate::delegated::contracts::ToolCallId::new("tc-cancel-unknown")
+            .expect("tool call id");
+        journal
+            .record_tool_call_requested(crate::delegated::journal::ToolCallRecordV1 {
+                schema_version: crate::delegated::EXECUTION_CONTRACT_SCHEMA_VERSION,
+                run_id: run_id.clone(),
+                tool_call_id: tool_call_id.clone(),
+                tool_name: "patch.apply".into(),
+                request_hash: "sha256:req".into(),
+                arguments_hash: "sha256:args".into(),
+                mutation_kind: crate::delegated::journal::ToolMutationKind::Mutating,
+                status: ToolCallStatus::Requested,
+                result_hash: None,
+                outcome_summary: None,
+            })
+            .expect("record");
+        journal
+            .transition_tool_call(
+                &run_id,
+                &tool_call_id,
+                ToolCallStatus::PolicyAllowed,
+                None,
+                None,
+            )
+            .expect("policy");
+        journal
+            .transition_tool_call(
+                &run_id,
+                &tool_call_id,
+                ToolCallStatus::Executing,
+                None,
+                None,
+            )
+            .expect("executing");
+        journal
+            .transition_tool_call(
+                &run_id,
+                &tool_call_id,
+                ToolCallStatus::OutcomeUnknown,
+                None,
+                Some("interrupted mutation".into()),
+            )
+            .expect("unknown");
+        let mut entry = DelegatedRunEntry {
+            workspace_root: workspace_root.clone(),
+            contract,
+            config,
+            status: RegistryRunStatus::Running,
+            cancel_requested: Arc::new(AtomicBool::new(true)),
+            run_start_approval: None,
+            active_lock_path: lock_path.clone(),
+            final_review: None,
+            last_error: None,
+        };
+
+        apply_worker_error_outcome(&mut entry, &run_id, "worker cancelled".into());
+
+        assert_eq!(entry.status, RegistryRunStatus::NeedsSupervisor);
+        assert!(
+            lock_path.exists(),
+            "cancelled OUTCOME_UNKNOWN must retain lock"
+        );
+        assert_eq!(
+            journal.load_run(&run_id).expect("snapshot").state,
+            RunState::NeedsSupervisor
+        );
+    }
+
+    #[test]
+    fn failed_worker_with_unreadable_tool_calls_persists_needs_supervisor_and_keeps_lock() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-failed-corrupt-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let run_id = RunId::new(format!("run-failed-corrupt-{}", Uuid::new_v4())).expect("run");
+        let contract = delegated_contract(&workspace_root, run_id.as_str());
+        let config = mcp_integrated_config(&workspace_root, &contract, &json!({})).expect("config");
+        let journal = DelegatedJournal::open(&config.journal_root).expect("journal");
+        journal.create_run(&contract).expect("run");
+        let lock_path = workspace_active_lock_path(&workspace_root);
+        std::fs::create_dir_all(lock_path.parent().expect("lock parent")).expect("lock parent");
+        std::fs::write(&lock_path, run_id.as_str()).expect("lock");
+        let tool_calls_path = std::fs::read_dir(&config.journal_root)
+            .expect("journal root")
+            .filter_map(Result::ok)
+            .map(|entry| entry.path().join("tool_calls.json"))
+            .find(|path| path.exists())
+            .expect("tool calls path");
+        std::fs::write(tool_calls_path, b"{not valid json").expect("corrupt tool calls");
+        let mut entry = DelegatedRunEntry {
+            workspace_root: workspace_root.clone(),
+            contract,
+            config,
+            status: RegistryRunStatus::Running,
+            cancel_requested: Arc::new(AtomicBool::new(false)),
+            run_start_approval: None,
+            active_lock_path: lock_path.clone(),
+            final_review: None,
+            last_error: None,
+        };
+
+        apply_worker_error_outcome(&mut entry, &run_id, "worker failed".into());
+
+        assert_eq!(entry.status, RegistryRunStatus::NeedsSupervisor);
+        assert!(lock_path.exists(), "unreadable journal must retain lock");
+        assert_eq!(
+            journal.load_run(&run_id).expect("snapshot").state,
+            RunState::NeedsSupervisor
+        );
+    }
+
+    #[test]
+    fn cancelled_worker_without_outcome_unknown_persists_cancelled_and_releases_lock() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-cancel-clean-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let run_id = RunId::new(format!("run-cancel-clean-{}", Uuid::new_v4())).expect("run");
+        let contract = delegated_contract(&workspace_root, run_id.as_str());
+        let config = mcp_integrated_config(&workspace_root, &contract, &json!({})).expect("config");
+        let journal = DelegatedJournal::open(&config.journal_root).expect("journal");
+        journal.create_run(&contract).expect("run");
+        let lock_path = workspace_active_lock_path(&workspace_root);
+        std::fs::create_dir_all(lock_path.parent().expect("lock parent")).expect("lock parent");
+        std::fs::write(&lock_path, run_id.as_str()).expect("lock");
+        let mut entry = DelegatedRunEntry {
+            workspace_root: workspace_root.clone(),
+            contract,
+            config,
+            status: RegistryRunStatus::Running,
+            cancel_requested: Arc::new(AtomicBool::new(true)),
+            run_start_approval: None,
+            active_lock_path: lock_path.clone(),
+            final_review: None,
+            last_error: None,
+        };
+
+        apply_worker_error_outcome(&mut entry, &run_id, "worker cancelled".into());
+
+        assert_eq!(entry.status, RegistryRunStatus::Cancelled);
+        assert!(!lock_path.exists(), "clean cancellation must release lock");
+        assert_eq!(
+            journal.load_run(&run_id).expect("snapshot").state,
+            RunState::Cancelled
         );
     }
 
