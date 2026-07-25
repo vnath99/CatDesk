@@ -142,14 +142,14 @@ Status: IN_PROGRESS
 Tickets:
 
 - T-0019: local commit to be recorded in Git history after this checkpoint update
-- T-0020: pending
+- T-0020: local commit to be recorded in Git history after this checkpoint update
 
 Required gate evidence:
 
 | Gate condition | Evidence | Status |
 | --- | --- | --- |
 | Simulated provider switch succeeds without duplicate mutation | T-0019 filters completed/failed tool calls out of handoff. | passed |
-| Supervisor can poll, inspect patches/diffs, and resume | Scheduled for T-0020. | pending |
+| Supervisor can poll, inspect patches/diffs, and resume | T-0020 supervisor surface supports event polling, bounded patch/diff inspection, pause, resume, cancel, and final review retrieval. | passed |
 | Remote disclosure policy is enforced | T-0019 blocks remote/browser providers unless disclosure policy allows them. | passed |
 
 Current T-0019 tests:
@@ -158,3 +158,10 @@ Current T-0019 tests:
 - `cargo test delegated::provider_router -- --nocapture`: passed, 6 tests
 - `cargo clippy --all-targets --all-features -- -D warnings`: passed
 - `cargo test`: passed, 171 tests and 1 ignored live Ollama smoke
+
+Current T-0020 tests:
+
+- `cargo fmt --check`: passed
+- `cargo test delegated::supervisor -- --nocapture`: passed, 7 tests
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed
+- `cargo test`: passed, 178 tests and 1 ignored live Ollama smoke

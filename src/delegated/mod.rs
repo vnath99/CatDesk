@@ -9,6 +9,7 @@ pub mod patch_engine;
 pub mod provider_router;
 pub mod runtime;
 pub mod state_machine;
+pub mod supervisor;
 
 pub const EXECUTION_CONTRACT_SCHEMA_VERSION: u32 = 1;
 pub const EXECUTION_PROTOCOL_VERSION: &str = "catdesk.delegated.v1";
