@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T-0013-fixture",
+  "objective": "Add a small delegated protocol fixture without changing repository behavior.",
+  "workspace": "C:\\Users\\Volap\\OneDrive\\Desktop\\Projects\\CatDesk",
+  "featureBranch": "orchestrator/v1-coding-sprint",
+  "allowedPaths": [
+    "src/delegated",
+    "docs/orchestrator",
+    "tests/fixtures/delegated"
+  ],
+  "forbiddenPaths": [
+    ".git",
+    ".catdesk",
+    "target"
+  ],
+  "allowedCommandProfiles": [
+    "cargo-fmt",
+    "cargo-clippy",
+    "cargo-test"
+  ],
+  "orderedSteps": [
+    "define schemas",
+    "validate transitions",
+    "write fixtures",
+    "run tests"
+  ],
+  "acceptanceCriteria": [
+    "invalid transitions fail deterministically",
+    "events have stable sequence ordering",
+    "approvals are bound to one run and request"
+  ],
+  "retryBudget": 2,
+  "maxTurns": 12,
+  "maxToolCalls": 40,
+  "maxElapsedSeconds": 3600,
+  "providerPolicy": {
+    "primaryProviderId": "ollama",
+    "primaryModelId": "qwen3.5:9b",
+    "fallbackProviderIds": [],
+    "requireToolCalls": true,
+    "allowPaidFallbacks": false
+  },
+  "escalationConditions": [
+    "native runtime tool is exposed",
+    "required verification remains failing"
+  ],
+  "approvalRequirements": [
+    {
+      "kind": "RUN_START",
+      "required": true,
+      "reason": "Supervisor must approve starting a delegated run."
+    }
+  ],
+  "expectedArtifacts": [
+    {
+      "kind": "DIFF",
+      "name": "final diff",
+      "required": true
+    },
+    {
+      "kind": "VERIFICATION",
+      "name": "cargo verification",
+      "required": true
+    }
+  ],
+  "verificationProfile": "cargo"
+}

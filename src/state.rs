@@ -457,19 +457,25 @@ impl Mode {
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ToolMode {
-    MultiTools, // codex/claude-style workspace tools
-    ReadOnly,   // read-only safe tools only
+    MultiTools,     // codex/claude-style workspace tools
+    SupervisorOnly, // delegated supervisor tools plus read-only inspection
+    ReadOnly,       // read-only safe tools only
 }
 
 impl ToolMode {
     pub fn all() -> &'static [Self] {
-        const TOOL_MODES: [ToolMode; 2] = [ToolMode::MultiTools, ToolMode::ReadOnly];
+        const TOOL_MODES: [ToolMode; 3] = [
+            ToolMode::MultiTools,
+            ToolMode::SupervisorOnly,
+            ToolMode::ReadOnly,
+        ];
         &TOOL_MODES
     }
 
     pub fn label(self) -> &'static str {
         match self {
             ToolMode::MultiTools => "multi-tools",
+            ToolMode::SupervisorOnly => "supervisor-only",
             ToolMode::ReadOnly => "read-only",
         }
     }
@@ -477,6 +483,9 @@ impl ToolMode {
     pub fn description(self) -> &'static str {
         match self {
             ToolMode::MultiTools => "Expose workspace read/write tools plus run_command.",
+            ToolMode::SupervisorOnly => {
+                "Expose read-only inspection plus delegated supervisor tools."
+            }
             ToolMode::ReadOnly => "Expose safe read-only workspace tools only.",
         }
     }
@@ -489,8 +498,12 @@ impl ToolMode {
         matches!(self, ToolMode::MultiTools)
     }
 
+    pub fn supervisor_tools_enabled(self) -> bool {
+        matches!(self, ToolMode::MultiTools | ToolMode::SupervisorOnly)
+    }
+
     pub fn read_only(self) -> bool {
-        matches!(self, ToolMode::ReadOnly)
+        matches!(self, ToolMode::ReadOnly | ToolMode::SupervisorOnly)
     }
 }
 
@@ -848,7 +861,15 @@ fn advance_bootstrap_progress(
 impl AppState {
     pub fn new(port: u16, workspace_root: String) -> std::io::Result<Self> {
         let config_path = app_config_path()?;
-        Self::from_config_path(port, workspace_root, config_path)
+        Self::from_config_path_with_archive(port, workspace_root, config_path, true)
+    }
+
+    pub(crate) fn new_headless(
+        port: u16,
+        workspace_root: String,
+        config_path: PathBuf,
+    ) -> std::io::Result<Self> {
+        Self::from_config_path_with_archive(port, workspace_root, config_path, false)
     }
 
     #[cfg(test)]
@@ -857,13 +878,23 @@ impl AppState {
         workspace_root: String,
         config_path: PathBuf,
     ) -> std::io::Result<Self> {
-        Self::from_config_path(port, workspace_root, config_path)
+        Self::from_config_path_with_archive(port, workspace_root, config_path, false)
     }
 
+    #[cfg(test)]
     fn from_config_path(
         port: u16,
         workspace_root: String,
         config_path: PathBuf,
+    ) -> std::io::Result<Self> {
+        Self::from_config_path_with_archive(port, workspace_root, config_path, false)
+    }
+
+    fn from_config_path_with_archive(
+        port: u16,
+        workspace_root: String,
+        config_path: PathBuf,
+        _archive_startup_mascot: bool,
     ) -> std::io::Result<Self> {
         let config = AppConfig::load_from_path(&config_path)?;
         let partner_binagotchy_seed = config.partner_binagotchy_seed.clone();
@@ -874,7 +905,7 @@ impl AppState {
         };
         let mascot = mascot::build_workspace_mascot(mascot_seed);
         #[cfg(not(test))]
-        if partner_binagotchy_seed.is_none() {
+        if _archive_startup_mascot && partner_binagotchy_seed.is_none() {
             mascot::archive_startup_mascot(mascot_seed)?;
         }
         Ok(Self {

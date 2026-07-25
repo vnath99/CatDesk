@@ -2,7 +2,7 @@ use axum::{
     Router,
     body::{Body, Bytes},
     extract::{Form, Path, State},
-    http::{Response, StatusCode, header},
+    http::{HeaderMap, Response, StatusCode, header},
     response::Json,
     routing::{delete, get, post},
 };
@@ -27,6 +27,7 @@ struct ServerState {
     app: SharedState,
     devtools: Option<Arc<Mutex<DevtoolsBridge>>>,
     ui_events: UnboundedSender<ServerUiEvent>,
+    mcp_auth_token: Option<String>,
 }
 
 /// Build the axum router.
@@ -35,11 +36,13 @@ pub fn router(
     devtools: Option<Arc<Mutex<DevtoolsBridge>>>,
     mcp_path: String,
     ui_events: UnboundedSender<ServerUiEvent>,
+    mcp_auth_token: Option<String>,
 ) -> Router {
     let state = ServerState {
         app: app_state,
         devtools,
         ui_events,
+        mcp_auth_token,
     };
     Router::new()
         .route("/", get(health))
@@ -102,6 +105,29 @@ fn jsonrpc_error_response(status: StatusCode, code: i64, msg: &str) -> Response<
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body))
         .unwrap()
+}
+
+fn unauthorized_mcp_response() -> Response<Body> {
+    jsonrpc_error_response(
+        StatusCode::UNAUTHORIZED,
+        -32001,
+        "Unauthorized: missing or invalid MCP bearer token",
+    )
+}
+
+fn mcp_authorized(headers: &HeaderMap, expected_token: Option<&str>) -> bool {
+    let Some(expected_token) = expected_token.filter(|token| !token.trim().is_empty()) else {
+        return true;
+    };
+    let Some(header_value) = headers.get(header::AUTHORIZATION) else {
+        return false;
+    };
+    let Ok(value) = header_value.to_str() else {
+        return false;
+    };
+    value
+        .strip_prefix("Bearer ")
+        .is_some_and(|actual| actual == expected_token)
 }
 
 fn request_id(req: &Value) -> String {
@@ -953,10 +979,12 @@ mod tests {
             app: app_state.clone(),
             devtools: None,
             ui_events: ui_tx,
+            mcp_auth_token: None,
         };
 
         let response = post_mcp(
             State(server_state),
+            HeaderMap::new(),
             tool_call_body("run_command", json!({ "command": "find ." })),
         )
         .await;
@@ -1003,11 +1031,195 @@ mod tests {
         let _ = std::fs::remove_dir_all(workspace_root);
         let _ = std::fs::remove_dir_all(config_root);
     }
+
+    #[tokio::test]
+    async fn post_mcp_requires_configured_bearer_token() {
+        let workspace_root = unique_temp_path("catdesk-post-mcp-auth-workspace");
+        let config_root = unique_temp_path("catdesk-post-mcp-auth-config");
+        let config_path = config_root.join("config.toml");
+        std::fs::create_dir_all(&workspace_root).expect("create workspace");
+        std::fs::create_dir_all(&config_root).expect("create config dir");
+
+        let app = AppState::new_for_test(
+            8788,
+            workspace_root.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .expect("create app state");
+        let app_state = Arc::new(Mutex::new(app));
+        let (ui_tx, _ui_rx) = unbounded_channel();
+        let server_state = ServerState {
+            app: app_state,
+            devtools: None,
+            ui_events: ui_tx,
+            mcp_auth_token: Some("catdesk-test-token-1234567890".into()),
+        };
+
+        let rejected = post_mcp(
+            State(server_state.clone()),
+            HeaderMap::new(),
+            Bytes::from(
+                serde_json::to_vec(&json!({
+                    "jsonrpc": "2.0",
+                    "id": "list",
+                    "method": "tools/list",
+                    "params": {}
+                }))
+                .expect("json"),
+            ),
+        )
+        .await;
+        assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            "Bearer catdesk-test-token-1234567890"
+                .parse()
+                .expect("header"),
+        );
+        let accepted = post_mcp(
+            State(server_state),
+            headers,
+            Bytes::from(
+                serde_json::to_vec(&json!({
+                    "jsonrpc": "2.0",
+                    "id": "list",
+                    "method": "tools/list",
+                    "params": {}
+                }))
+                .expect("json"),
+            ),
+        )
+        .await;
+        assert_eq!(accepted.status(), StatusCode::OK);
+
+        let _ = std::fs::remove_dir_all(workspace_root);
+        let _ = std::fs::remove_dir_all(config_root);
+    }
+
+    #[tokio::test]
+    async fn authenticated_network_mcp_lists_schema_and_rejects_malformed_contract() {
+        let workspace_root = unique_temp_path("catdesk-network-mcp-workspace");
+        let config_root = unique_temp_path("catdesk-network-mcp-config");
+        let config_path = config_root.join("config.toml");
+        std::fs::create_dir_all(&workspace_root).expect("create workspace");
+        std::fs::create_dir_all(&config_root).expect("create config dir");
+
+        let mut app = AppState::new_for_test(
+            0,
+            workspace_root.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .expect("create app state");
+        app.mode = Mode::Computer;
+        app.tool_mode = ToolMode::SupervisorOnly;
+        let app_state = Arc::new(Mutex::new(app));
+        let (ui_tx, _ui_rx) = unbounded_channel();
+        let mcp_path = "/network-test/mcp".to_string();
+        let router = router(
+            app_state,
+            None,
+            mcp_path.clone(),
+            ui_tx,
+            Some("catdesk-network-token-1234567890".into()),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let server = tokio::spawn(async move { axum::serve(listener, router).await });
+        let client = reqwest::Client::new();
+        let url = format!("http://{addr}{mcp_path}");
+
+        let unauthorized = client
+            .post(&url)
+            .json(&json!({
+                "jsonrpc": "2.0",
+                "id": "list",
+                "method": "tools/list",
+                "params": {}
+            }))
+            .send()
+            .await
+            .expect("unauthorized response");
+        assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+
+        let list: Value = client
+            .post(&url)
+            .bearer_auth("catdesk-network-token-1234567890")
+            .json(&json!({
+                "jsonrpc": "2.0",
+                "id": "list",
+                "method": "tools/list",
+                "params": {}
+            }))
+            .send()
+            .await
+            .expect("list response")
+            .json()
+            .await
+            .expect("list json");
+        let create = list
+            .get("result")
+            .and_then(|result| result.get("tools"))
+            .and_then(Value::as_array)
+            .expect("tools")
+            .iter()
+            .find(|tool| tool.get("name").and_then(Value::as_str) == Some("delegated_run_create"))
+            .expect("create tool");
+        assert!(
+            create
+                .get("inputSchema")
+                .and_then(|schema| schema.get("properties"))
+                .and_then(|properties| properties.get("contract"))
+                .and_then(|contract| contract.get("properties"))
+                .and_then(|properties| properties.get("providerPolicy"))
+                .is_some()
+        );
+
+        let malformed: Value = client
+            .post(&url)
+            .bearer_auth("catdesk-network-token-1234567890")
+            .json(&json!({
+                "jsonrpc": "2.0",
+                "id": "bad-contract",
+                "method": "tools/call",
+                "params": {
+                    "name": "delegated_run_create",
+                    "arguments": { "contract": { "taskId": "bad" } }
+                }
+            }))
+            .send()
+            .await
+            .expect("malformed response")
+            .json()
+            .await
+            .expect("malformed json");
+        assert_eq!(
+            malformed
+                .get("result")
+                .and_then(|result| result.get("isError"))
+                .and_then(Value::as_bool),
+            Some(true)
+        );
+
+        server.abort();
+        let _ = std::fs::remove_dir_all(workspace_root);
+        let _ = std::fs::remove_dir_all(config_root);
+    }
 }
 
 // ── POST /<slug>/mcp ────────────────────────────────────────
 
-async fn post_mcp(State(s): State<ServerState>, body_bytes: Bytes) -> Response<Body> {
+async fn post_mcp(
+    State(s): State<ServerState>,
+    headers: HeaderMap,
+    body_bytes: Bytes,
+) -> Response<Body> {
+    if !mcp_authorized(&headers, s.mcp_auth_token.as_deref()) {
+        return unauthorized_mcp_response();
+    }
     let body: Value = match serde_json::from_slice(&body_bytes) {
         Ok(v) => v,
         Err(e) => {
@@ -1177,7 +1389,10 @@ async fn post_mcp(State(s): State<ServerState>, body_bytes: Bytes) -> Response<B
 
 // ── GET /<slug>/mcp — pure HTTP mode (no SSE) ───────────────
 
-async fn get_mcp() -> Response<Body> {
+async fn get_mcp(State(s): State<ServerState>, headers: HeaderMap) -> Response<Body> {
+    if !mcp_authorized(&headers, s.mcp_auth_token.as_deref()) {
+        return unauthorized_mcp_response();
+    }
     Response::builder()
         .status(StatusCode::METHOD_NOT_ALLOWED)
         .header(header::CONTENT_TYPE, "application/json")
@@ -1189,7 +1404,10 @@ async fn get_mcp() -> Response<Body> {
 
 // ── DELETE /<slug>/mcp ──────────────────────────────────────
 
-async fn delete_mcp(State(s): State<ServerState>) -> Response<Body> {
+async fn delete_mcp(State(s): State<ServerState>, headers: HeaderMap) -> Response<Body> {
+    if !mcp_authorized(&headers, s.mcp_auth_token.as_deref()) {
+        return unauthorized_mcp_response();
+    }
     let _ = s.ui_events.send(ServerUiEvent::SetRemoteConnected(false));
     let _ = s.ui_events.send(ServerUiEvent::BeginFlowClose {
         flow_id: STATELESS_FLOW_ID.to_string(),

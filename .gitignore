@@ -1,4 +1,7 @@
 /target
+/.tmp
+/review-bundles/T-0012-closure-*
+/review-bundles/T-0012-hardening-*
 /npm/bin
 log.txt
 log_old.txt
