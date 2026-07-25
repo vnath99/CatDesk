@@ -11,5 +11,6 @@ The Codex desktop interface in this session does not expose a per-ticket credit 
 | T-0013A | FAIL_CLOSED | unavailable | 35-60 | Disposable Gateway validation proved auth/RPC/event control but failed the pre-model `tools.effective` CatDesk MCP tool-policy gate. |
 | T-0013B | COMPLETED_VERIFIED | unavailable | 45-75 | CatDesk-owned provider-neutral worker-loop architecture frozen; local commit recorded in Git history. |
 | T-0014 | COMPLETED_VERIFIED | unavailable | 80-125 | Durable JSON/JSONL journal and idempotent tool-call replay protections added; local commit recorded in Git history. |
+| T-0015 | COMPLETED_VERIFIED | unavailable | 80-125 | Bounded context, compaction, redacted inspection, and provider handoff primitives added; local commit recorded in Git history. |
 
 If the UI later exposes exact ticket credit usage, update this ledger without changing ticket scope.

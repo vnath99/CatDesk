@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+pub mod context;
 pub mod contracts;
 pub mod events;
 pub mod journal;

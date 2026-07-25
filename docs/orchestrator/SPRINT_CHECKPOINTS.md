@@ -68,7 +68,7 @@ Status: IN_PROGRESS
 Tickets:
 
 - T-0014: local commit to be recorded in Git history after this checkpoint update
-- T-0015: pending
+- T-0015: local commit to be recorded in Git history after this checkpoint update
 
 Required gate evidence:
 
@@ -76,8 +76,8 @@ Required gate evidence:
 | --- | --- | --- |
 | Journal survives restart | T-0014 journal tests reopen the journal and restore tool, patch, run, and event state. | passed |
 | Mutation replay protections pass | T-0014 rejects duplicate tool calls, completed replay, `OUTCOME_UNKNOWN` replay, and duplicate run overwrite. | passed |
-| Bounded context and compaction tests pass | Not in T-0014 scope; scheduled for T-0015. | pending |
-| Provider-neutral handoff passes | Not in T-0014 scope; scheduled for T-0015/T-0019. | pending |
+| Bounded context and compaction tests pass | T-0015 context tests cover bounded excerpts, output dedupe, compaction, disclosure, and redacted inspection. | passed |
+| Provider-neutral handoff passes | T-0015 builds provider-neutral handoff packets from compact checkpoints. | passed |
 
 Current T-0014 tests:
 
@@ -85,3 +85,10 @@ Current T-0014 tests:
 - `cargo test delegated::journal -- --nocapture`: passed, 9 tests
 - `cargo clippy --all-targets --all-features -- -D warnings`: passed
 - `cargo test`: passed, 138 tests
+
+Current T-0015 tests:
+
+- `cargo fmt --check`: passed
+- `cargo test delegated::context -- --nocapture`: passed, 7 tests
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed
+- `cargo test`: passed, 145 tests
