@@ -2,6 +2,7 @@
 
 pub mod context;
 pub mod contracts;
+pub mod coordinator;
 pub mod events;
 pub mod journal;
 pub mod patch_engine;

@@ -101,7 +101,7 @@ Tickets:
 
 - T-0016: local commit to be recorded in Git history after this checkpoint update
 - T-0017: local commit to be recorded in Git history after this checkpoint update
-- T-0018: pending
+- T-0018: local commit to be recorded in Git history after this checkpoint update
 
 Required gate evidence:
 
@@ -109,7 +109,7 @@ Required gate evidence:
 | --- | --- | --- |
 | Qwen completes a disposable patch-first task | T-0017 includes a deterministic disposable repair cycle and a live Qwen patch-proposal smoke against a bounded excerpt. | passed |
 | Patch revision and comparison work | T-0017 compares a revised child patch against its parent. | passed |
-| One escalation succeeds | Scheduled for T-0018. | pending |
+| One escalation succeeds | T-0018 coordinator builds escalation packets with evidence. | passed |
 | CatDesk remains the only execution boundary | T-0016 providers receive bounded context and CatDesk-owned tool schemas only. | passed |
 
 Current T-0016 tests:
@@ -127,3 +127,10 @@ Current T-0017 tests:
 - `cargo test delegated::patch_engine -- --nocapture`: passed, 6 tests
 - `cargo clippy --all-targets --all-features -- -D warnings`: passed
 - `cargo test`: passed, 157 tests and 1 ignored live Ollama smoke
+
+Current T-0018 tests:
+
+- `cargo fmt --check`: passed
+- `cargo test delegated::coordinator -- --nocapture`: passed, 8 tests
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed
+- `cargo test`: passed, 165 tests and 1 ignored live Ollama smoke
