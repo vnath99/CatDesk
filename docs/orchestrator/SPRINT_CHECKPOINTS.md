@@ -148,6 +148,7 @@ Tickets:
 - T-0023: local commit `2571424`
 - T-0023A: local commit `59d0634`
 - T-0023B: local closure commit recorded in Git history and in the external review bundle
+- T-0023C: pending local review; not pushed or opened as a pull request
 
 Required gate evidence:
 
@@ -160,6 +161,7 @@ Required gate evidence:
 | Setup and release review are documented | T-0023 documents runtime setup, Ollama/Qwen, adapters, disclosure, patch protocol, restart recovery, long jobs, limitations, and a disposable first-run tutorial. | passed |
 | Integrated delegated workflow is composed and tested | T-0023A adds the integrated service, expanded tool dispatcher, MCP transport wiring, setup scripts, live Qwen model-tool-model evidence, and review bundle. | passed |
 | Production delegated-run path is wired and safety-closed | T-0023B adds an autonomous Ollama worker loop, retained provider/tool history, durable integrated state, least-privilege supervisor-only MCP startup, explicit MCP artifact errors, and live Qwen production-loop evidence. | passed |
+| MCP supervisor starts the real worker path | T-0023C requires full execution contracts through `delegated_run_create`, starts `IntegratedDelegatedService` through MCP `delegated_run_start`, polls real status/events/final-review data, safely rejects malformed run IDs, and proves the live Qwen path begins only through MCP. | passed |
 | Remote disclosure policy is enforced | T-0019 blocks remote/browser providers unless disclosure policy allows them. | passed |
 
 Current T-0019 tests:
@@ -215,3 +217,13 @@ Current T-0023B tests:
 - `scripts/start-dev-orchestrator.ps1`: passed bounded start/cleanup with `--tool-mode supervisor-only`
 - `cargo clippy --all-targets --all-features -- -D warnings`: passed
 - `cargo test`: passed, 194 tests and 3 ignored live/opt-in tests
+
+Current T-0023C tests:
+
+- `cargo test supervisor_ -- --nocapture`: passed, including MCP discovery/invocation, malformed run ID handling, and durable journal rehydration.
+- `cargo test delegated::patch_engine -- --nocapture`: passed, 6 tests.
+- `cargo test delegated::integrated -- --nocapture`: passed, 4 tests and 2 ignored live tests.
+- `cargo test live_qwen_delegated_run_starts_and_completes_through_mcp -- --ignored --nocapture`: passed in 72.89s with `CARGO_TARGET_DIR` set to a temporary path; Qwen was started exclusively through MCP create/start and completed with MCP-polled `COMPLETED_VERIFIED` status, journal events, and final review.
+- `cargo fmt --check`: passed.
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed.
+- `cargo test`: passed, 196 tests and 4 ignored live/opt-in tests.

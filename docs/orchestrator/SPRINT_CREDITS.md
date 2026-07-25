@@ -22,5 +22,6 @@ The Codex desktop interface in this session does not expose a per-ticket credit 
 | T-0023 | COMPLETED_VERIFIED | unavailable | 50-85 | Setup, operator tutorial, security limitations, and release-review documentation added; local commit recorded in Git history. |
 | T-0023A | COMPLETED_VERIFIED | unavailable | 170-260 | Integrated delegated service, complete tool dispatcher, MCP supervisor transport wiring, setup scripts, journal durability review, fake restart recovery, and live Qwen closure evidence added; local commit recorded in Git history. |
 | T-0023B | COMPLETED_VERIFIED | unavailable | 190-300 | Production delegated-run loop, provider history, durable integrated recovery, explicit MCP supervisor errors, supervisor-only startup mode, job containment, failure-state hardening, and live Qwen autonomous-loop evidence added; local commit recorded in Git history. |
+| T-0023C | COMPLETED_VERIFIED | unavailable | 220-360 | MCP create/start now drives the production integrated worker, journal-backed registry rehydration was added, malformed run IDs fail safely, final review data comes from real worker state, and live Qwen MCP-to-worker evidence was captured. |
 
 If the UI later exposes exact ticket credit usage, update this ledger without changing ticket scope.

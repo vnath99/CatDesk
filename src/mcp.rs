@@ -5,6 +5,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tiktoken_rs::o200k_base_singleton;
@@ -12,10 +13,14 @@ use tokio::sync::Mutex;
 
 use crate::app_info::CATDESK_VERSION;
 use crate::command;
-use crate::delegated::contracts::{ArtifactId, PatchId, RunId};
-use crate::delegated::events::{EventCursor, EventEnvelopeV1, EventPayloadV1, LifecycleEvent};
-use crate::delegated::patch_engine::stable_text_hash;
-use crate::delegated::supervisor::{SUPERVISOR_TOOL_NAMES, SupervisorSurface};
+use crate::delegated::contracts::{
+    ApprovalRequirementKind, ExecutionContractV1, PatchId, RunId, RunState, validate_contract,
+};
+use crate::delegated::events::EventCursor;
+use crate::delegated::integrated::{IntegratedDelegatedService, IntegratedRunConfigV1};
+use crate::delegated::journal::DelegatedJournal;
+use crate::delegated::patch_engine::compare_patches;
+use crate::delegated::supervisor::SUPERVISOR_TOOL_NAMES;
 use crate::devtools::DevtoolsBridge;
 use crate::git_workflow;
 use crate::mascot;
@@ -48,7 +53,7 @@ const MAX_COMMAND_OUTPUT_CHARS: usize = 24_000;
 const MAX_WATCHED_FILES: usize = 512;
 const MAX_FILE_CAPTURE_BYTES: usize = 128 * 1024;
 const MAX_TEXT_CAPTURE_LINES: usize = 420;
-static SUPERVISOR_MCP_SURFACE: OnceLock<Arc<Mutex<SupervisorSurface>>> = OnceLock::new();
+static DELEGATED_RUN_REGISTRY: OnceLock<Arc<Mutex<DelegatedRunRegistry>>> = OnceLock::new();
 
 // ── JSON-RPC types ──────────────────────────────────────────
 
@@ -1828,10 +1833,49 @@ fn supervisor_mcp_tool_name(name: &str) -> bool {
     SUPERVISOR_TOOL_NAMES.contains(&name)
 }
 
-fn supervisor_mcp_surface() -> Arc<Mutex<SupervisorSurface>> {
-    SUPERVISOR_MCP_SURFACE
-        .get_or_init(|| Arc::new(Mutex::new(SupervisorSurface::new())))
+fn delegated_run_registry() -> Arc<Mutex<DelegatedRunRegistry>> {
+    DELEGATED_RUN_REGISTRY
+        .get_or_init(|| Arc::new(Mutex::new(DelegatedRunRegistry::default())))
         .clone()
+}
+
+#[derive(Default)]
+struct DelegatedRunRegistry {
+    runs: HashMap<String, DelegatedRunEntry>,
+}
+
+#[derive(Clone)]
+struct DelegatedRunEntry {
+    workspace_root: PathBuf,
+    contract: ExecutionContractV1,
+    config: IntegratedRunConfigV1,
+    status: RegistryRunStatus,
+    cancel_requested: Arc<AtomicBool>,
+    final_review: Option<Value>,
+    last_error: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum RegistryRunStatus {
+    Created,
+    AwaitingApproval,
+    Running,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+impl RegistryRunStatus {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Created => "CREATED",
+            Self::AwaitingApproval => "AWAITING_APPROVAL",
+            Self::Running => "RUNNING",
+            Self::Completed => "COMPLETED_VERIFIED",
+            Self::Failed => "FAILED",
+            Self::Cancelled => "CANCELLED",
+        }
+    }
 }
 
 fn supervisor_mcp_tool_schemas() -> Vec<Value> {
@@ -1839,10 +1883,11 @@ fn supervisor_mcp_tool_schemas() -> Vec<Value> {
         .iter()
         .map(|name| {
             let required = match *name {
+                "delegated_run_create" => vec!["contract"],
                 "delegated_run_get_patch" => vec!["patchId"],
-                "delegated_run_get_diff" => vec!["diffHash"],
+                "delegated_run_get_diff" => vec!["runId"],
                 "delegated_run_get_artifact" => vec!["artifactId"],
-                "delegated_run_compare_patches" => vec!["parentPatchId", "candidatePatchId"],
+                "delegated_run_compare_patches" => vec!["runId", "parentPatchId", "candidatePatchId"],
                 "delegated_run_list" => Vec::new(),
                 _ => vec!["runId"],
             };
@@ -1890,193 +1935,454 @@ fn supervisor_mcp_tool_schemas() -> Vec<Value> {
 async fn handle_supervisor_mcp_tool(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
     let tool_name = tool_name_from_request(req);
     let args = tool_arguments(req);
-    let surface = supervisor_mcp_surface();
-    let mut surface = surface.lock().await;
-    let result: Result<Value, crate::delegated::supervisor::SupervisorError> = (|| match tool_name
-        .as_str()
-    {
-        "delegated_run_create" => {
-            let run_id = mcp_run_id(&args);
-            surface.create_run(run_id.clone());
-            let _ = surface.set_checkpoint(
-                &run_id,
-                format!(
-                    "created through MCP for workspace {}",
-                    Path::new(workspace_root).display()
-                ),
-            );
-            Ok(
-                json!({ "toolName": tool_name, "runId": run_id, "created": true, "fabricated": false }),
-            )
-        }
-        "delegated_run_validate" => {
-            let run_id = mcp_run_id(&args);
-            surface
-                .validate_run(&run_id)
-                .map(|_| json!({ "toolName": tool_name, "runId": run_id, "valid": true }))
-        }
-        "delegated_run_start" => {
-            let run_id = mcp_run_id(&args);
-            surface.start_run(&run_id)?;
-            surface.append_event(supervisor_event(
-                &run_id,
-                1,
-                LifecycleEvent::Started,
-                "started",
-            ));
-            Ok(json!({ "toolName": tool_name, "runId": run_id, "state": "RUNNING" }))
-        }
-        "delegated_run_status" => {
-            let run_id = mcp_run_id(&args);
-            let state = surface.status(&run_id)?;
-            Ok(json!({ "toolName": tool_name, "runId": run_id, "state": state }))
-        }
-        "delegated_run_list" => {
-            let runs = surface.list_runs();
-            Ok(json!({ "toolName": tool_name, "runs": runs }))
-        }
-        "delegated_run_events" => {
-            let run_id = mcp_run_id(&args);
-            let after_sequence = args
-                .get("afterSequence")
-                .and_then(Value::as_u64)
-                .unwrap_or(0);
-            let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(20) as usize;
-            let events = surface.events(
-                &run_id,
-                EventCursor {
-                    after_sequence,
-                    limit,
-                },
-            )?;
-            Ok(json!({ "toolName": tool_name, "runId": run_id, "events": events }))
-        }
-        "delegated_run_get_checkpoint" => {
-            let run_id = mcp_run_id(&args);
-            let checkpoint = surface.get_checkpoint(&run_id)?;
-            Ok(json!({ "toolName": tool_name, "runId": run_id, "checkpoint": checkpoint }))
-        }
-        "delegated_run_get_escalation" => {
-            let run_id = mcp_run_id(&args);
-            let escalation = surface.get_escalation(&run_id)?;
-            Ok(json!({ "toolName": tool_name, "runId": run_id, "escalation": escalation }))
-        }
-        "delegated_run_get_artifact" => {
-            let artifact_id = ArtifactId::new(
-                args.get("artifactId")
-                    .and_then(Value::as_str)
-                    .unwrap_or("missing-artifact"),
-            )
-            .map_err(crate::delegated::supervisor::SupervisorError::MissingArtifact)?;
-            let max_bytes = args.get("maxBytes").and_then(Value::as_u64).unwrap_or(4096) as usize;
-            let artifact = surface.get_artifact(&artifact_id, max_bytes)?;
-            Ok(json!({ "toolName": tool_name, "artifact": artifact }))
-        }
-        "delegated_run_get_patch" => {
-            let patch_id = PatchId::new(
-                args.get("patchId")
-                    .and_then(Value::as_str)
-                    .unwrap_or("patch-1"),
-            )
-            .map_err(crate::delegated::supervisor::SupervisorError::MissingPatch)?;
-            let patch = surface.get_patch(&patch_id)?;
-            Ok(json!({ "toolName": tool_name, "patch": patch }))
-        }
-        "delegated_run_compare_patches" => {
-            let parent = PatchId::new(
-                args.get("parentPatchId")
-                    .and_then(Value::as_str)
-                    .unwrap_or("missing-parent"),
-            )
-            .map_err(crate::delegated::supervisor::SupervisorError::MissingPatch)?;
-            let candidate = PatchId::new(
-                args.get("candidatePatchId")
-                    .and_then(Value::as_str)
-                    .unwrap_or("missing-candidate"),
-            )
-            .map_err(crate::delegated::supervisor::SupervisorError::MissingPatch)?;
-            let comparison = surface.compare_patches(&parent, &candidate)?;
-            Ok(json!({ "toolName": tool_name, "comparison": comparison }))
-        }
-        "delegated_run_get_diff" => {
-            let diff_hash = args
-                .get("diffHash")
-                .and_then(Value::as_str)
-                .unwrap_or("fnv1a64:delegatedmcp");
-            let max_bytes = args.get("maxBytes").and_then(Value::as_u64).unwrap_or(4096) as usize;
-            let diff = surface.get_diff(diff_hash, max_bytes)?;
-            Ok(json!({ "toolName": tool_name, "diff": diff }))
-        }
-        "delegated_run_get_final_review" => {
-            let run_id = mcp_run_id(&args);
-            let review = surface.get_final_review(&run_id)?.ok_or_else(|| {
-                crate::delegated::supervisor::SupervisorError::MissingArtifact(format!(
-                    "final review for {}",
-                    run_id.as_str()
-                ))
-            })?;
-            Ok(json!({ "toolName": tool_name, "runId": run_id, "finalReview": review }))
-        }
-        "delegated_run_cancel" => {
-            let run_id = mcp_run_id(&args);
-            surface.cancel(&run_id)?;
-            Ok(json!({ "toolName": tool_name, "runId": run_id, "state": "CANCELLED" }))
-        }
-        "delegated_run_pause" => {
-            let run_id = mcp_run_id(&args);
-            surface.pause(&run_id)?;
-            Ok(json!({ "toolName": tool_name, "runId": run_id, "state": "PAUSED" }))
-        }
-        "delegated_run_resume" => {
-            let run_id = mcp_run_id(&args);
-            surface.resume(&run_id)?;
-            Ok(json!({ "toolName": tool_name, "runId": run_id, "state": "RUNNING" }))
-        }
-        other => Err(
-            crate::delegated::supervisor::SupervisorError::InvalidTransition(format!(
-                "{other} is advertised but not implemented by the MCP supervisor handler"
-            )),
-        ),
-    })();
+    let result = handle_supervisor_registry_tool(&tool_name, args, workspace_root).await;
     match result {
         Ok(structured) => tool_success_response_with_structured(
             req,
             "supervisor operation completed".into(),
             structured,
         ),
-        Err(error) => tool_error_response(req, format!("Supervisor MCP error: {error:?}")),
+        Err(error) => tool_error_response(req, format!("Supervisor MCP error: {error}")),
     }
 }
 
-fn mcp_run_id(args: &Value) -> RunId {
+async fn handle_supervisor_registry_tool(
+    tool_name: &str,
+    args: Value,
+    workspace_root: &str,
+) -> Result<Value, String> {
+    let workspace = Path::new(workspace_root)
+        .canonicalize()
+        .map_err(|error| format!("workspace canonicalization failed: {error}"))?;
+    match tool_name {
+        "delegated_run_create" => {
+            let contract = mcp_contract(&args, &workspace)?;
+            let run_id = RunId::new(contract.task_id.clone())?;
+            let key = registry_key(&workspace, &run_id);
+            let config = mcp_integrated_config(&workspace, &contract, &args);
+            let journal = DelegatedJournal::open(&config.journal_root)
+                .map_err(|error| format!("{error:?}"))?;
+            journal
+                .create_run(&contract)
+                .map_err(|error| format!("{error:?}"))?;
+            let entry = DelegatedRunEntry {
+                workspace_root: workspace.clone(),
+                contract,
+                config,
+                status: RegistryRunStatus::Created,
+                cancel_requested: Arc::new(AtomicBool::new(false)),
+                final_review: None,
+                last_error: None,
+            };
+            let registry = delegated_run_registry();
+            let mut registry = registry.lock().await;
+            if registry.runs.contains_key(&key) {
+                return Err(format!("duplicate delegated run {}", run_id.as_str()));
+            }
+            registry.runs.insert(key, entry);
+            Ok(json!({ "toolName": tool_name, "runId": run_id, "created": true, "durable": true }))
+        }
+        "delegated_run_validate" => {
+            let (run_id, entry) = registry_entry(&workspace, &args).await?;
+            validate_contract(&entry.contract)?;
+            Ok(json!({ "toolName": tool_name, "runId": run_id, "valid": true }))
+        }
+        "delegated_run_start" => {
+            let run_id = mcp_run_id(&args)?;
+            let key = registry_key(&workspace, &run_id);
+            registry_entry(&workspace, &args).await?;
+            let registry = delegated_run_registry();
+            let (workspace_clone, contract, config, cancel_requested) = {
+                let mut registry = registry.lock().await;
+                let entry = registry
+                    .runs
+                    .get_mut(&key)
+                    .ok_or_else(|| format!("unknown delegated run {}", run_id.as_str()))?;
+                if entry.status == RegistryRunStatus::Running {
+                    return Err(format!(
+                        "delegated run {} is already running",
+                        run_id.as_str()
+                    ));
+                }
+                if entry
+                    .contract
+                    .approval_requirements
+                    .iter()
+                    .any(|requirement| {
+                        requirement.required
+                            && requirement.kind == ApprovalRequirementKind::RunStart
+                    })
+                {
+                    entry.status = RegistryRunStatus::AwaitingApproval;
+                    return Err("RunStart approval is required before delegated_run_start".into());
+                }
+                entry.status = RegistryRunStatus::Running;
+                entry.last_error = None;
+                entry.cancel_requested.store(false, Ordering::SeqCst);
+                (
+                    entry.workspace_root.clone(),
+                    entry.contract.clone(),
+                    entry.config.clone(),
+                    entry.cancel_requested.clone(),
+                )
+            };
+            let registry_for_task = registry.clone();
+            let key_for_task = key.clone();
+            tokio::spawn(async move {
+                let outcome = async {
+                    let mut service = IntegratedDelegatedService::recover(
+                        &workspace_clone,
+                        contract.clone(),
+                        config.clone(),
+                    )
+                    .or_else(|_| {
+                        IntegratedDelegatedService::new(
+                            &workspace_clone,
+                            contract.clone(),
+                            config.clone(),
+                        )
+                    })?;
+                    service
+                        .run_ollama_worker_loop_with_cancel(cancel_requested.clone())
+                        .await
+                }
+                .await;
+                let mut registry = registry_for_task.lock().await;
+                if let Some(entry) = registry.runs.get_mut(&key_for_task) {
+                    match outcome {
+                        Ok(review) => {
+                            entry.status = RegistryRunStatus::Completed;
+                            entry.final_review = serde_json::to_value(&review).ok();
+                            entry.last_error = None;
+                        }
+                        Err(error) => {
+                            if entry.cancel_requested.load(Ordering::SeqCst) {
+                                entry.status = RegistryRunStatus::Cancelled;
+                            } else {
+                                entry.status = RegistryRunStatus::Failed;
+                            }
+                            entry.last_error = Some(format!("{error:?}"));
+                        }
+                    }
+                }
+            });
+            Ok(
+                json!({ "toolName": tool_name, "runId": run_id, "state": "RUNNING", "background": true }),
+            )
+        }
+        "delegated_run_status" => {
+            let (run_id, entry) = registry_entry(&workspace, &args).await?;
+            Ok(json!({
+                "toolName": tool_name,
+                "runId": run_id,
+                "state": entry.status.as_str(),
+                "lastError": entry.last_error
+            }))
+        }
+        "delegated_run_list" => {
+            let registry = delegated_run_registry();
+            let registry = registry.lock().await;
+            let runs = registry
+                .runs
+                .values()
+                .filter(|entry| entry.workspace_root == workspace)
+                .map(|entry| {
+                    json!({
+                        "runId": entry.contract.task_id,
+                        "state": entry.status.as_str(),
+                    })
+                })
+                .collect::<Vec<_>>();
+            Ok(json!({ "toolName": tool_name, "runs": runs }))
+        }
+        "delegated_run_events" => {
+            let (run_id, entry) = registry_entry(&workspace, &args).await?;
+            let after_sequence = args
+                .get("afterSequence")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(20) as usize;
+            let journal = DelegatedJournal::open(&entry.config.journal_root)
+                .map_err(|error| format!("{error:?}"))?;
+            let events = journal
+                .poll_events(
+                    &run_id,
+                    EventCursor {
+                        after_sequence,
+                        limit,
+                    },
+                )
+                .map_err(|error| format!("{error:?}"))?;
+            Ok(json!({ "toolName": tool_name, "runId": run_id, "events": events }))
+        }
+        "delegated_run_get_checkpoint" => {
+            let (run_id, entry) = registry_entry(&workspace, &args).await?;
+            let journal = DelegatedJournal::open(&entry.config.journal_root)
+                .map_err(|error| format!("{error:?}"))?;
+            let snapshot = journal
+                .load_run(&run_id)
+                .map_err(|error| format!("{error:?}"))?;
+            Ok(json!({
+                "toolName": tool_name,
+                "runId": run_id,
+                "checkpoint": {
+                    "state": snapshot.state,
+                    "lastEventSequence": snapshot.last_event_sequence,
+                    "active": snapshot.active
+                }
+            }))
+        }
+        "delegated_run_get_patch" => {
+            let patch_id = PatchId::new(
+                args.get("patchId")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "patchId is required".to_string())?,
+            )?;
+            let (_run_id, entry) = registry_entry(&workspace, &args).await?;
+            let service = IntegratedDelegatedService::recover(
+                &entry.workspace_root,
+                entry.contract.clone(),
+                entry.config.clone(),
+            )
+            .map_err(|error| format!("{error:?}"))?;
+            let patch = service
+                .patch_proposal(&patch_id)
+                .ok_or_else(|| format!("missing patch {}", patch_id.as_str()))?;
+            Ok(json!({ "toolName": tool_name, "patch": patch }))
+        }
+        "delegated_run_compare_patches" => {
+            let parent_patch_id = PatchId::new(
+                args.get("parentPatchId")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "parentPatchId is required".to_string())?,
+            )?;
+            let candidate_patch_id = PatchId::new(
+                args.get("candidatePatchId")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "candidatePatchId is required".to_string())?,
+            )?;
+            let (_run_id, entry) = registry_entry(&workspace, &args).await?;
+            let service = IntegratedDelegatedService::recover(
+                &entry.workspace_root,
+                entry.contract.clone(),
+                entry.config.clone(),
+            )
+            .map_err(|error| format!("{error:?}"))?;
+            let parent = service
+                .patch_proposal(&parent_patch_id)
+                .ok_or_else(|| format!("missing patch {}", parent_patch_id.as_str()))?;
+            let candidate = service
+                .patch_proposal(&candidate_patch_id)
+                .ok_or_else(|| format!("missing patch {}", candidate_patch_id.as_str()))?;
+            let comparison = compare_patches(&parent, &candidate);
+            Ok(json!({ "toolName": tool_name, "comparison": comparison }))
+        }
+        "delegated_run_get_diff" => {
+            let (_run_id, entry) = registry_entry(&workspace, &args).await?;
+            let requested = args.get("diffHash").and_then(Value::as_str);
+            let max_bytes = args.get("maxBytes").and_then(Value::as_u64).unwrap_or(4096) as usize;
+            let service = IntegratedDelegatedService::recover(
+                &entry.workspace_root,
+                entry.contract.clone(),
+                entry.config.clone(),
+            )
+            .map_err(|error| format!("{error:?}"))?;
+            let diff = match requested {
+                Some(hash) => service
+                    .actual_diff(hash)
+                    .ok_or_else(|| format!("missing diff {hash}"))?,
+                None => service
+                    .last_actual_diff()
+                    .ok_or_else(|| "no actual diff has been captured".to_string())?,
+            };
+            let mut text = diff.diff.clone();
+            let truncated = text.len() > max_bytes;
+            if truncated {
+                text.truncate(max_bytes);
+                text.push_str("\n[truncated]");
+            }
+            Ok(json!({
+                "toolName": tool_name,
+                "diff": {
+                    "diffHash": diff.diff_hash,
+                    "paths": diff.paths,
+                    "text": text,
+                    "byteCount": diff.diff.len(),
+                    "truncated": truncated
+                }
+            }))
+        }
+        "delegated_run_get_final_review" => {
+            let (run_id, entry) = registry_entry(&workspace, &args).await?;
+            if let Some(review) = entry.final_review {
+                return Ok(
+                    json!({ "toolName": tool_name, "runId": run_id, "finalReview": review }),
+                );
+            }
+            let service = IntegratedDelegatedService::recover(
+                &entry.workspace_root,
+                entry.contract.clone(),
+                entry.config.clone(),
+            )
+            .map_err(|error| format!("{error:?}"))?;
+            let review = service
+                .final_review()
+                .map_err(|error| format!("{error:?}"))?;
+            Ok(json!({ "toolName": tool_name, "runId": run_id, "finalReview": review }))
+        }
+        "delegated_run_cancel" => {
+            let run_id = mcp_run_id(&args)?;
+            let key = registry_key(&workspace, &run_id);
+            let registry = delegated_run_registry();
+            let mut registry = registry.lock().await;
+            let entry = registry
+                .runs
+                .get_mut(&key)
+                .ok_or_else(|| format!("unknown delegated run {}", run_id.as_str()))?;
+            entry.cancel_requested.store(true, Ordering::SeqCst);
+            entry.status = RegistryRunStatus::Cancelled;
+            let _ = DelegatedJournal::open(&entry.config.journal_root)
+                .and_then(|journal| journal.update_run_state(&run_id, RunState::Cancelled));
+            Ok(json!({ "toolName": tool_name, "runId": run_id, "state": "CANCELLED" }))
+        }
+        "delegated_run_pause" => {
+            let run_id = mcp_run_id(&args)?;
+            let key = registry_key(&workspace, &run_id);
+            let registry = delegated_run_registry();
+            let mut registry = registry.lock().await;
+            let entry = registry
+                .runs
+                .get_mut(&key)
+                .ok_or_else(|| format!("unknown delegated run {}", run_id.as_str()))?;
+            if entry.status == RegistryRunStatus::Running {
+                return Err(
+                    "pause is only safe at a worker turn boundary; use cancel for T-0023C".into(),
+                );
+            }
+            Ok(json!({ "toolName": tool_name, "runId": run_id, "state": entry.status.as_str() }))
+        }
+        "delegated_run_resume" => Err(
+            "delegated_run_resume requires an explicit supervisor decision and is deferred".into(),
+        ),
+        "delegated_run_get_escalation" => {
+            Err("no escalation packet is available for this run".into())
+        }
+        "delegated_run_get_artifact" => Err(
+            "generic artifact lookup is not implemented; use patch, diff, or final review tools"
+                .into(),
+        ),
+        other => Err(format!("{other} is not implemented")),
+    }
+}
+
+fn mcp_run_id(args: &Value) -> Result<RunId, String> {
     RunId::new(
         args.get("runId")
             .and_then(Value::as_str)
-            .unwrap_or("run-mcp-supervisor"),
+            .ok_or_else(|| "runId is required".to_string())?,
     )
-    .expect("static/default MCP run id is valid")
 }
 
-fn supervisor_event(
-    run_id: &RunId,
-    sequence: u64,
-    lifecycle_event: LifecycleEvent,
-    text: &str,
-) -> EventEnvelopeV1 {
-    EventEnvelopeV1 {
-        schema_version: 1,
-        event_sequence: sequence,
-        run_id: run_id.clone(),
-        worker_session_id: None,
-        turn_id: None,
-        item_id: None,
-        lifecycle_event,
-        request_hash: stable_text_hash(text),
-        result_hash: None,
-        payload: EventPayloadV1::Delta { text: text.into() },
+fn mcp_contract(args: &Value, workspace_root: &Path) -> Result<ExecutionContractV1, String> {
+    let mut contract: ExecutionContractV1 = serde_json::from_value(
+        args.get("contract")
+            .cloned()
+            .ok_or_else(|| "contract is required".to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+    let contract_workspace = Path::new(&contract.workspace)
+        .canonicalize()
+        .map_err(|error| format!("contract workspace canonicalization failed: {error}"))?;
+    if contract_workspace != workspace_root {
+        return Err("contract workspace must match the MCP workspace".into());
     }
-    .with_result_hash()
-    .expect("MCP supervisor event hashes")
+    contract.workspace = workspace_root.display().to_string();
+    validate_contract(&contract)?;
+    Ok(contract)
+}
+
+fn mcp_integrated_config(
+    workspace_root: &Path,
+    contract: &ExecutionContractV1,
+    args: &Value,
+) -> IntegratedRunConfigV1 {
+    IntegratedRunConfigV1 {
+        journal_root: workspace_root.join(".catdesk/delegated/journal"),
+        job_root: workspace_root.join(".catdesk/delegated/jobs"),
+        ollama_base_url: args
+            .get("ollamaBaseUrl")
+            .and_then(Value::as_str)
+            .unwrap_or("http://127.0.0.1:11434")
+            .into(),
+        model_id: contract.provider_policy.primary_model_id.clone(),
+    }
+}
+
+fn registry_key(workspace_root: &Path, run_id: &RunId) -> String {
+    format!("{}::{}", workspace_root.display(), run_id.as_str())
+}
+
+async fn registry_entry(
+    workspace_root: &Path,
+    args: &Value,
+) -> Result<(RunId, DelegatedRunEntry), String> {
+    let run_id = mcp_run_id(args)?;
+    let key = registry_key(workspace_root, &run_id);
+    let registry = delegated_run_registry();
+    {
+        let registry = registry.lock().await;
+        if let Some(entry) = registry.runs.get(&key).cloned() {
+            return Ok((run_id, entry));
+        }
+    }
+    let entry = rehydrate_registry_entry(workspace_root, &run_id)?;
+    let mut registry = registry.lock().await;
+    registry.runs.insert(key, entry.clone());
+    Ok((run_id, entry))
+}
+
+fn rehydrate_registry_entry(
+    workspace_root: &Path,
+    run_id: &RunId,
+) -> Result<DelegatedRunEntry, String> {
+    let config = IntegratedRunConfigV1 {
+        journal_root: workspace_root.join(".catdesk/delegated/journal"),
+        job_root: workspace_root.join(".catdesk/delegated/jobs"),
+        ollama_base_url: "http://127.0.0.1:11434".into(),
+        model_id: String::new(),
+    };
+    let journal =
+        DelegatedJournal::open(&config.journal_root).map_err(|error| format!("{error:?}"))?;
+    let snapshot = journal
+        .load_run(run_id)
+        .map_err(|_| format!("unknown delegated run {}", run_id.as_str()))?;
+    let contract = journal
+        .load_contract(run_id)
+        .map_err(|error| format!("{error:?}"))?;
+    let mut config = config;
+    config.model_id = contract.provider_policy.primary_model_id.clone();
+    Ok(DelegatedRunEntry {
+        workspace_root: workspace_root.to_path_buf(),
+        contract,
+        config,
+        status: registry_status_from_run_state(&snapshot.state),
+        cancel_requested: Arc::new(AtomicBool::new(false)),
+        final_review: None,
+        last_error: None,
+    })
+}
+
+fn registry_status_from_run_state(state: &RunState) -> RegistryRunStatus {
+    match state {
+        RunState::AwaitingApproval | RunState::NeedsSupervisor => {
+            RegistryRunStatus::AwaitingApproval
+        }
+        RunState::Starting | RunState::Running | RunState::Verifying => RegistryRunStatus::Running,
+        RunState::CompletedVerified => RegistryRunStatus::Completed,
+        RunState::Failed => RegistryRunStatus::Failed,
+        RunState::Cancelled => RegistryRunStatus::Cancelled,
+        RunState::Draft | RunState::Ready | RunState::Paused => RegistryRunStatus::Created,
+    }
 }
 
 fn workspace_agents_path(workspace_root: &str) -> PathBuf {
@@ -4769,6 +5075,20 @@ mod tests {
         }
     }
 
+    fn delegated_contract(root: &std::path::Path, task_id: &str) -> ExecutionContractV1 {
+        let mut contract: ExecutionContractV1 = serde_json::from_str(include_str!(
+            "../tests/fixtures/delegated/execution_contract_v1.json"
+        ))
+        .expect("fixture contract parses");
+        contract.task_id = task_id.into();
+        contract.workspace = root.display().to_string();
+        contract.allowed_paths = vec!["src".into(), "Cargo.toml".into()];
+        contract.forbidden_paths = vec![".git".into(), "target".into()];
+        contract.approval_requirements = Vec::new();
+        contract.provider_policy.primary_model_id = "qwen3.5:9b".into();
+        contract
+    }
+
     fn result_text(response: &JsonRpcResponse) -> &str {
         response
             .result
@@ -4957,11 +5277,12 @@ mod tests {
         }
 
         let run_id = format!("run-mcp-{}", Uuid::new_v4());
+        let contract = delegated_contract(Path::new(&workspace_root), &run_id);
         for (tool, args) in [
-            ("delegated_run_create", json!({ "runId": run_id })),
+            ("delegated_run_create", json!({ "contract": contract })),
             ("delegated_run_validate", json!({ "runId": run_id })),
-            ("delegated_run_start", json!({ "runId": run_id })),
             ("delegated_run_status", json!({ "runId": run_id })),
+            ("delegated_run_list", json!({})),
             (
                 "delegated_run_events",
                 json!({ "runId": run_id, "afterSequence": 0, "limit": 10 }),
@@ -5054,6 +5375,287 @@ mod tests {
                 .expect("error json")
             );
         }
+    }
+
+    #[tokio::test]
+    async fn supervisor_run_status_rehydrates_from_durable_journal() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-rehydrate-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+        let run_id = format!("run-rehydrate-{}", Uuid::new_v4());
+        let contract = delegated_contract(&workspace_root, &run_id);
+
+        let create = handle_tools_call(
+            &tool_call_request("delegated_run_create", json!({ "contract": contract })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_success("create", &create);
+
+        let run_id_typed = RunId::new(run_id.clone()).expect("valid run id");
+        let key = registry_key(
+            &workspace_root.canonicalize().expect("canonical workspace"),
+            &run_id_typed,
+        );
+        delegated_run_registry().lock().await.runs.remove(&key);
+
+        let status = handle_tools_call(
+            &tool_call_request("delegated_run_status", json!({ "runId": run_id })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_success("status", &status);
+        assert_eq!(
+            status
+                .result
+                .as_ref()
+                .and_then(|result| result.get("structuredContent"))
+                .and_then(|structured| structured.get("state"))
+                .and_then(Value::as_str),
+            Some("CREATED")
+        );
+    }
+
+    #[tokio::test]
+    async fn supervisor_malformed_run_id_returns_tool_error_without_panic() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-bad-runid-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let workspace_root = workspace_root.to_string_lossy().into_owned();
+
+        let response = handle_tools_call(
+            &tool_call_request("delegated_run_status", json!({ "runId": "../bad run" })),
+            &workspace_root,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+
+        assert!(
+            response.error.is_some()
+                || response
+                    .result
+                    .as_ref()
+                    .and_then(|result| result.get("isError"))
+                    .and_then(Value::as_bool)
+                    == Some(true),
+            "malformed run id should be reported as an MCP tool error"
+        );
+        println!(
+            "CATDESK_MCP_MALFORMED_RUN_ID={}",
+            serde_json::to_string(&response.result).expect("json")
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "requires local Ollama with qwen3.5:9b and runs the full MCP-to-worker loop"]
+    async fn live_qwen_delegated_run_starts_and_completes_through_mcp() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-qwen-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(workspace_root.join("src")).expect("src");
+        std::fs::create_dir_all(workspace_root.join("tests")).expect("tests");
+        std::fs::write(
+            workspace_root.join("Cargo.toml"),
+            "[package]\nname=\"fixture\"\nversion=\"0.1.0\"\nedition=\"2021\"\n",
+        )
+        .expect("cargo");
+        std::fs::write(
+            workspace_root.join("src/lib.rs"),
+            "/// Return the answer. Hint: the answer should be the next prime after forty-one.\npub fn answer() -> i32 {\n    41\n}\n",
+        )
+        .expect("lib");
+        std::fs::write(
+            workspace_root.join("tests/answer_test.rs"),
+            "#[test]\nfn answer_is_expected_value() {\n    assert_eq!(fixture::answer(), 42);\n}\n",
+        )
+        .expect("test");
+        git(&workspace_root, ["init"]);
+        git(&workspace_root, ["add", "."]);
+        let commit = std::process::Command::new("git")
+            .args([
+                "-c",
+                "user.name=CatDesk Test",
+                "-c",
+                "user.email=catdesk@example.invalid",
+                "commit",
+                "-m",
+                "baseline",
+            ])
+            .current_dir(&workspace_root)
+            .output()
+            .expect("commit");
+        assert!(
+            commit.status.success(),
+            "{}",
+            String::from_utf8_lossy(&commit.stderr)
+        );
+
+        let run_id = format!("run-mcp-qwen-{}", Uuid::new_v4());
+        let mut contract = delegated_contract(&workspace_root, &run_id);
+        contract.objective = "Make the disposable Rust fixture pass cargo test. Inspect src/lib.rs, propose and apply source patches through CatDesk, run verification, revise after any failure, capture diff.actual, and only then complete.".into();
+        contract.ordered_steps = vec![
+            "read src/lib.rs".into(),
+            "preview and apply a source patch".into(),
+            "run verification".into(),
+            "revise source if verification fails".into(),
+            "capture diff.actual after verification passes".into(),
+        ];
+        contract.acceptance_criteria = vec![
+            "cargo verification passes".into(),
+            "src/lib.rs contains the implementation fix".into(),
+            "authoritative diff is captured".into(),
+            "do not add or edit tests".into(),
+        ];
+        contract.max_turns = 18;
+        contract.max_tool_calls = 18;
+        contract.max_elapsed_seconds = 240;
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+
+        let create = handle_tools_call(
+            &tool_call_request("delegated_run_create", json!({ "contract": contract })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_success("create", &create);
+        println!(
+            "CATDESK_MCP_QWEN_CREATE={}",
+            serde_json::to_string(&create.result).expect("json")
+        );
+
+        let start = handle_tools_call(
+            &tool_call_request("delegated_run_start", json!({ "runId": run_id })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_success("start", &start);
+        println!(
+            "CATDESK_MCP_QWEN_START={}",
+            serde_json::to_string(&start.result).expect("json")
+        );
+
+        let mut terminal_state = String::new();
+        for _ in 0..90 {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            let status = handle_tools_call(
+                &tool_call_request("delegated_run_status", json!({ "runId": run_id })),
+                &workspace_root_str,
+                0,
+                Mode::Both,
+                ToolMode::SupervisorOnly,
+                false,
+                &None,
+            )
+            .await;
+            assert_tool_success("status", &status);
+            let state = status
+                .result
+                .as_ref()
+                .and_then(|result| result.get("structuredContent"))
+                .and_then(|structured| structured.get("state"))
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            println!("CATDESK_MCP_QWEN_STATUS={state}");
+            if matches!(
+                state.as_str(),
+                "COMPLETED_VERIFIED" | "FAILED" | "CANCELLED"
+            ) {
+                terminal_state = state;
+                break;
+            }
+        }
+        assert_eq!(terminal_state, "COMPLETED_VERIFIED");
+
+        let events = handle_tools_call(
+            &tool_call_request(
+                "delegated_run_events",
+                json!({ "runId": run_id, "afterSequence": 0, "limit": 200 }),
+            ),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_success("events", &events);
+        println!(
+            "CATDESK_MCP_QWEN_EVENTS={}",
+            serde_json::to_string(&events.result).expect("json")
+        );
+
+        let review = handle_tools_call(
+            &tool_call_request("delegated_run_get_final_review", json!({ "runId": run_id })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_success("final review", &review);
+        println!(
+            "CATDESK_MCP_QWEN_FINAL_REVIEW={}",
+            serde_json::to_string(&review.result).expect("json")
+        );
+    }
+
+    fn assert_tool_success(label: &str, response: &JsonRpcResponse) {
+        assert!(
+            response.error.is_none(),
+            "{label} JSON-RPC error: {:?}",
+            response.error.as_ref().map(|error| &error.message)
+        );
+        assert!(
+            response
+                .result
+                .as_ref()
+                .and_then(|result| result.get("isError"))
+                .and_then(Value::as_bool)
+                != Some(true),
+            "{label} returned MCP tool error: {:?}",
+            response.result
+        );
+    }
+
+    fn git<const N: usize>(root: &std::path::Path, args: [&str; N]) {
+        let output = std::process::Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .expect("git");
+        assert!(
+            output.status.success(),
+            "git failed: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[tokio::test]

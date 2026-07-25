@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -186,8 +188,35 @@ impl IntegratedDelegatedService {
         }
     }
 
+    pub fn run_id(&self) -> Result<RunId, IntegratedError> {
+        RunId::new(self.contract.task_id.clone()).map_err(IntegratedError::Tool)
+    }
+
+    pub fn patch_proposal(&self, patch_id: &PatchId) -> Option<PatchProposalV1> {
+        self.patch_proposals.get(patch_id.as_str()).cloned()
+    }
+
+    pub fn actual_diff(&self, diff_hash: &str) -> Option<ActualDiffArtifactV1> {
+        self.last_diff
+            .as_ref()
+            .filter(|diff| diff.diff_hash == diff_hash)
+            .cloned()
+    }
+
+    pub fn last_actual_diff(&self) -> Option<ActualDiffArtifactV1> {
+        self.last_diff.clone()
+    }
+
     pub async fn run_ollama_worker_loop(
         &mut self,
+    ) -> Result<FinalReviewPackageV1, IntegratedError> {
+        self.run_ollama_worker_loop_with_cancel(Arc::new(AtomicBool::new(false)))
+            .await
+    }
+
+    pub async fn run_ollama_worker_loop_with_cancel(
+        &mut self,
+        cancel_requested: Arc<AtomicBool>,
     ) -> Result<FinalReviewPackageV1, IntegratedError> {
         self.start()?;
         let ollama = OllamaAdapter::new(&self.config.ollama_base_url, Some("5m".into()))?;
@@ -210,6 +239,19 @@ impl IntegratedDelegatedService {
         let started = Instant::now();
         let allowed_tools = self.production_worker_tools();
         for turn in 1..=self.contract.max_turns {
+            if cancel_requested.load(Ordering::SeqCst) {
+                self.journal
+                    .update_run_state(
+                        &RunId::new(self.contract.task_id.clone())
+                            .map_err(IntegratedError::Tool)?,
+                        RunState::Cancelled,
+                    )
+                    .map_err(|e| IntegratedError::Journal(format!("{e:?}")))?;
+                self.persist_durable_state()?;
+                return Err(IntegratedError::Tool(
+                    "run cancelled at turn boundary".into(),
+                ));
+            }
             if started.elapsed() > Duration::from_secs(self.contract.max_elapsed_seconds) {
                 self.journal
                     .update_run_state(

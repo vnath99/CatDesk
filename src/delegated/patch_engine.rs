@@ -185,9 +185,28 @@ impl<'a> PatchEngine<'a> {
             ));
         }
         let diff = String::from_utf8_lossy(&output.stdout).to_string();
+        let mut name_command = Command::new("git");
+        name_command.arg("diff").arg("--name-only").arg("--");
+        for path in paths {
+            name_command.arg(path);
+        }
+        let name_output = name_command
+            .current_dir(self.workspace_root)
+            .output()
+            .map_err(|error| PatchError::Git(error.to_string()))?;
+        if !name_output.status.success() {
+            return Err(PatchError::Git(
+                String::from_utf8_lossy(&name_output.stderr).to_string(),
+            ));
+        }
+        let changed_paths = String::from_utf8_lossy(&name_output.stdout)
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| line.replace('\\', "/"))
+            .collect::<Vec<_>>();
         Ok(ActualDiffArtifactV1 {
             base_ref: "HEAD".into(),
-            paths: paths.to_vec(),
+            paths: changed_paths,
             diff_hash: stable_text_hash(&diff),
             diff,
         })

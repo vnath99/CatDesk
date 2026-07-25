@@ -170,6 +170,10 @@ impl DelegatedJournal {
         read_json(&self.run_dir(run_id)?.join("state.json"))
     }
 
+    pub fn load_contract(&self, run_id: &RunId) -> Result<ExecutionContractV1, JournalError> {
+        read_json(&self.run_dir(run_id)?.join("contract.json"))
+    }
+
     pub fn update_run_state(
         &self,
         run_id: &RunId,
