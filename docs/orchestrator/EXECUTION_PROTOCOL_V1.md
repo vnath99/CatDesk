@@ -1,14 +1,14 @@
 # Execution Protocol V1
 
-CatDesk Delegated Orchestrator v1 uses a small typed protocol between the ChatGPT supervisor, CatDesk, OpenClaw, and the worker model. The protocol is intentionally conservative: CatDesk owns contracts, approvals, local tool policy, durable run state, verification, and audit events. OpenClaw owns the model/tool loop and worker transcript. Worker model output may request work, but it cannot rewrite the original execution contract.
+CatDesk Delegated Orchestrator v1 uses a small typed protocol between the ChatGPT supervisor, CatDesk, provider adapters, and worker models. The protocol is intentionally conservative: CatDesk owns contracts, approvals, the model/tool loop, local tool policy, durable run state, verification, and audit events. Provider adapters own transport to one model surface. Worker model output may request work, but it cannot rewrite the original execution contract or bypass CatDesk policy.
 
 ## Ownership
 
 | Component | Owns | Must not own |
 | --- | --- | --- |
 | ChatGPT Web | objective, architecture, escalation decisions, final review | local file/shell execution |
-| CatDesk | contract validation, MCP tools, approvals, Git safety, verification, event journal | model inference loop |
-| OpenClaw | model turns, tool-call loop, transcript, compaction, provider retry | repository mutation authority |
+| CatDesk | contract validation, tool construction, approvals, Git safety, model/tool loop, verification, event journal | provider-specific transport details |
+| Provider adapter | model transport, streaming normalization, health, cancellation where supported | repository mutation authority, shell access, Git, approvals, verification |
 | Worker model | proposals, tool-call requests, explanations | policy decisions or contract changes |
 | Provider/router | model selection, retry/fallback routing | bypassing CatDesk tool policy |
 | SQLite store | durable run metadata, event cursor, idempotency records | secrets or unredacted credentials |
@@ -94,6 +94,8 @@ Lifecycle events are:
 
 Unknown protocol or schema versions fail closed.
 
-## Current Limitation
+## Current Architecture Decision
 
-T-0012 proved CatDesk can expose a read-only loopback MCP endpoint and OpenClaw can discover the four approved CatDesk MCP tools through disposable config. The installed OpenClaw CLI still does not expose the final worker-visible tool list before a model turn, so integrated worker execution remains gated by that unresolved runtime audit.
+T-0013B moves the required v1 worker loop into CatDesk. T-0012 and T-0013A remain preserved as OpenClaw research evidence, but no required v1 execution contract assumes OpenClaw, OpenClaw MCP warm-up, or OpenClaw event cursors.
+
+CatDesk constructs the complete model-visible tool surface before every provider request. The authoritative event cursor, patch lineage, idempotency records, and verification state are CatDesk-owned.

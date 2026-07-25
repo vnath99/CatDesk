@@ -3,29 +3,30 @@
 Date: 2026-07-25
 Branch: orchestrator/v1-coding-sprint
 
-## Milestone A - Runtime Proof And Core Protocol
+## Milestone A - Architecture Pivot And Core Protocol
 
-Status: HARD_STOP
+Status: PASSED_AFTER_PIVOT
 
 Tickets:
 
 - T-0012: local commit `d0cc25e`
 - T-0013: local commit `53e06a4`
+- T-0013A: local commit `35e23dc`
+- T-0013B: local commit to be recorded in Git history after this checkpoint update
 
 Required gate evidence:
 
 | Gate condition | Evidence | Status |
 | --- | --- | --- |
-| Runtime ownership proven | T-0012 docs show CatDesk headless MCP can run read-only on loopback, and OpenClaw can discover four filtered CatDesk tools through disposable config. | partial |
-| One full local model/tool/model turn demonstrated or hard stop recorded | T-0012 synthetic Qwen/Ollama tool-call probe succeeded, but not through OpenClaw worker plus CatDesk MCP. | partial |
-| Effective worker-visible tool policy verified | T-0012 closure audit found OpenClaw CLI exposes MCP discovery, config policy, and plugin metadata, but not final worker-visible tool definitions before a model turn. | failed |
-| Event access proven | Not proven through OpenClaw worker runtime; T-0013 defines CatDesk-side event protocol only. | failed |
-| Session persistence tested | Not proven through OpenClaw worker runtime; no model worker was run. | failed |
-| Execution and event schemas pass tests | `cargo test delegated -- --nocapture`, clippy, and full `cargo test` passed for T-0013. | passed |
+| CatDesk-owned loop frozen | T-0013B architecture decision removes OpenClaw from the required v1 path. | passed |
+| No required OpenClaw dependency | OpenClaw is deferred optional research and must satisfy the CatDesk provider boundary before reuse. | passed |
+| Provider-neutral runtime and patch contracts defined | T-0013B runtime and patch protocol docs define provider, session, event, checkpoint, handoff, patch, and diff contracts. | passed |
+| Disclosure and network-efficiency policy defined | T-0013B documents local-only versus remote disclosure and bounded context transport. | passed |
+| Execution and event schemas pass tests | `cargo test delegated -- --nocapture`, clippy, and full `cargo test` passed after T-0013B documentation changes. | passed |
 
-Hard-stop condition:
+Historical hard-stop condition:
 
-The sprint roadmap requires a hard stop when CatDesk cannot prove it remains the sole execution and policy boundary, or when OpenClaw cannot expose sufficient session/event control. Current evidence does not prove the effective worker-visible OpenClaw tool list, structured worker event access, or restart/resume control before a model worker run.
+The earlier OpenClaw-centered path required a hard stop when CatDesk could not prove it remained the sole execution and policy boundary. T-0013A recorded that hard stop. The approved architecture pivot makes CatDesk the owner of the model/tool loop, so the base sprint continues without OpenClaw as a required runtime.
 
 Attempts:
 
@@ -35,7 +36,7 @@ Attempts:
 - Captured `openclaw mcp probe`, `openclaw config get tools`, `openclaw config get agents.list`, `openclaw agent --help`, and plugin metadata.
 - Confirmed these commands do not expose the final resolved worker-visible tool definitions before a model request.
 
-Current tests:
+Current tests after T-0013B final verification:
 
 - `cargo fmt --check`: passed
 - `cargo test delegated -- --nocapture`: passed, 9 tests
@@ -56,10 +57,6 @@ Changed files since `d0cc25e`:
 
 Recommendation:
 
-Pause before T-0014. Choose one of these options:
-
-1. Approve a targeted OpenClaw runtime-inspection spike that may run a disposable local model worker with Qwen/Ollama, still with no credentials, no provider setup, no Gateway service install, and no persistent OpenClaw onboarding.
-2. Change the architecture to avoid OpenClaw for v1 worker execution unless its worker-visible tool policy and event cursor can be inspected.
-3. Accept OpenClaw as an unproven orchestration layer and continue protocol/storage tickets only, explicitly deferring integrated worker execution. This changes the Milestone A gate and should be treated as architecture approval.
+Proceed to T-0014 only after T-0013B verification passes and a local T-0013B commit is created. Do not push, open a PR, merge, release, deploy, or publish.
 
 Nothing was pushed, merged, published, released, deployed, or opened as a pull request.
