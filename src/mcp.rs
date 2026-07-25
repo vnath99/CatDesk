@@ -2,8 +2,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::hash::{Hash, Hasher};
+use std::io::Write;
+use std::net::ToSocketAddrs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -1853,6 +1855,7 @@ struct DelegatedRunEntry {
     status: RegistryRunStatus,
     cancel_requested: Arc<AtomicBool>,
     run_start_approval: Option<RunStartApproval>,
+    active_lock_path: PathBuf,
     final_review: Option<Value>,
     last_error: Option<String>,
 }
@@ -1901,7 +1904,6 @@ fn supervisor_mcp_tool_schemas() -> Vec<Value> {
                 "delegated_run_approve_start" => vec!["runId", "approvalId", "decisionHash"],
                 "delegated_run_get_patch" => vec!["patchId"],
                 "delegated_run_get_diff" => vec!["runId"],
-                "delegated_run_get_artifact" => vec!["artifactId"],
                 "delegated_run_compare_patches" => vec!["runId", "parentPatchId", "candidatePatchId"],
                 "delegated_run_list" => Vec::new(),
                 _ => vec!["runId"],
@@ -1939,8 +1941,6 @@ fn supervisor_mcp_tool_schemas() -> Vec<Value> {
                         | "delegated_run_list"
                         | "delegated_run_events"
                         | "delegated_run_get_checkpoint"
-                        | "delegated_run_get_escalation"
-                        | "delegated_run_get_artifact"
                         | "delegated_run_get_patch"
                         | "delegated_run_compare_patches"
                         | "delegated_run_get_diff"
@@ -2113,15 +2113,26 @@ async fn handle_supervisor_registry_tool(
         "delegated_run_create" => {
             let contract = mcp_contract(&args, &workspace)?;
             reject_unsupported_required_approvals(&contract)?;
-            ensure_one_active_run_for_workspace(&workspace).await?;
+            enforce_release_provider_policy(
+                &contract,
+                args.get("ollamaBaseUrl").and_then(Value::as_str),
+            )?;
+            reject_unsupported_acceptance_criteria(&contract)?;
             let run_id = RunId::new(contract.task_id.clone())?;
             let key = registry_key(&workspace, &run_id);
-            let config = mcp_integrated_config(&workspace, &contract, &args);
-            let journal = DelegatedJournal::open(&config.journal_root)
-                .map_err(|error| format!("{error:?}"))?;
-            journal
-                .create_run(&contract)
-                .map_err(|error| format!("{error:?}"))?;
+            let config = mcp_integrated_config(&workspace, &contract, &args)?;
+            let registry = delegated_run_registry();
+            let mut registry = registry.lock().await;
+            let active_lock_path =
+                reserve_active_run_for_workspace(&mut registry, &workspace, &run_id)?;
+            let journal = DelegatedJournal::open(&config.journal_root).map_err(|error| {
+                release_active_lock(&active_lock_path);
+                format!("{error:?}")
+            })?;
+            if let Err(error) = journal.create_run(&contract) {
+                release_active_lock(&active_lock_path);
+                return Err(format!("{error:?}"));
+            }
             let entry = DelegatedRunEntry {
                 workspace_root: workspace.clone(),
                 contract,
@@ -2129,11 +2140,10 @@ async fn handle_supervisor_registry_tool(
                 status: RegistryRunStatus::Created,
                 cancel_requested: Arc::new(AtomicBool::new(false)),
                 run_start_approval: None,
+                active_lock_path,
                 final_review: None,
                 last_error: None,
             };
-            let registry = delegated_run_registry();
-            let mut registry = registry.lock().await;
             if registry.runs.contains_key(&key) {
                 return Err(format!("duplicate delegated run {}", run_id.as_str()));
             }
@@ -2143,6 +2153,8 @@ async fn handle_supervisor_registry_tool(
         "delegated_run_validate" => {
             let (run_id, entry) = registry_entry(&workspace, &args).await?;
             validate_contract(&entry.contract)?;
+            enforce_release_provider_policy(&entry.contract, None)?;
+            reject_unsupported_acceptance_criteria(&entry.contract)?;
             Ok(json!({ "toolName": tool_name, "runId": run_id, "valid": true }))
         }
         "delegated_run_approve_start" => {
@@ -2182,6 +2194,11 @@ async fn handle_supervisor_registry_tool(
                 return Err("decisionHash does not match the pending RunStart request".into());
             }
             approval.consumed = true;
+            DelegatedJournal::open(&entry.config.journal_root)
+                .and_then(|journal| {
+                    journal.write_run_start_approval(&approval.to_journal_record(&run_id))
+                })
+                .map_err(|error| format!("{error:?}"))?;
             entry.status = RegistryRunStatus::Created;
             Ok(json!({
                 "toolName": tool_name,
@@ -2218,9 +2235,12 @@ async fn handle_supervisor_registry_tool(
                             && requirement.kind == ApprovalRequirementKind::RunStart
                     })
                 {
-                    let approval = ensure_run_start_approval(&run_id, entry).clone();
+                    let approval = ensure_run_start_approval(&run_id, entry)?;
                     if !approval.consumed {
                         entry.status = RegistryRunStatus::AwaitingApproval;
+                        let _ = DelegatedJournal::open(&entry.config.journal_root).and_then(
+                            |journal| journal.update_run_state(&run_id, RunState::AwaitingApproval),
+                        );
                         return Err(format!(
                             "RunStart approval is required before delegated_run_start; approvalId={}, decisionHash={}, expiresAtUnix={}",
                             approval.approval_id.as_str(),
@@ -2268,6 +2288,7 @@ async fn handle_supervisor_registry_tool(
                             entry.status = RegistryRunStatus::Completed;
                             entry.final_review = serde_json::to_value(&review).ok();
                             entry.last_error = None;
+                            release_active_lock(&entry.active_lock_path);
                         }
                         Err(error) => {
                             if entry.cancel_requested.load(Ordering::SeqCst) {
@@ -2277,6 +2298,7 @@ async fn handle_supervisor_registry_tool(
                                         journal
                                             .update_run_state(&run_id_for_task, RunState::Cancelled)
                                     });
+                                release_active_lock(&entry.active_lock_path);
                             } else {
                                 entry.status = RegistryRunStatus::Failed;
                             }
@@ -2480,16 +2502,6 @@ async fn handle_supervisor_registry_tool(
             }
             Ok(json!({ "toolName": tool_name, "runId": run_id, "state": entry.status.as_str() }))
         }
-        "delegated_run_resume" => Err(
-            "delegated_run_resume requires an explicit supervisor decision and is deferred".into(),
-        ),
-        "delegated_run_get_escalation" => {
-            Err("no escalation packet is available for this run".into())
-        }
-        "delegated_run_get_artifact" => Err(
-            "generic artifact lookup is not implemented; use patch, diff, or final review tools"
-                .into(),
-        ),
         other => Err(format!("{other} is not implemented")),
     }
 }
@@ -2532,21 +2544,97 @@ fn reject_unsupported_required_approvals(contract: &ExecutionContractV1) -> Resu
     Ok(())
 }
 
+fn enforce_release_provider_policy(
+    contract: &ExecutionContractV1,
+    ollama_base_url: Option<&str>,
+) -> Result<(), String> {
+    if contract.provider_policy.primary_provider_id != "ollama" {
+        return Err("T-0023D-RC1 supports primaryProviderId=ollama only".into());
+    }
+    if !contract.provider_policy.fallback_provider_ids.is_empty() {
+        return Err("T-0023D-RC1 does not support fallbackProviderIds".into());
+    }
+    if contract.provider_policy.allow_paid_fallbacks {
+        return Err("T-0023D-RC1 requires allowPaidFallbacks=false".into());
+    }
+    validate_loopback_ollama_url(ollama_base_url.unwrap_or("http://127.0.0.1:11434"))
+}
+
+fn validate_loopback_ollama_url(value: &str) -> Result<(), String> {
+    let url =
+        reqwest::Url::parse(value).map_err(|error| format!("invalid ollamaBaseUrl: {error}"))?;
+    if url.scheme() != "http" {
+        return Err("ollamaBaseUrl must use http".into());
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err("ollamaBaseUrl must not include userinfo".into());
+    }
+    if url.fragment().is_some() {
+        return Err("ollamaBaseUrl must not include a fragment".into());
+    }
+    if url.port().is_none() {
+        return Err("ollamaBaseUrl must include an explicit port".into());
+    }
+    match url.host_str() {
+        Some("localhost") => {
+            let port = url
+                .port()
+                .ok_or_else(|| "ollamaBaseUrl must include an explicit port".to_string())?;
+            let addrs = ("localhost", port)
+                .to_socket_addrs()
+                .map_err(|error| format!("failed to resolve localhost: {error}"))?
+                .collect::<Vec<_>>();
+            if addrs.is_empty() || addrs.iter().any(|addr| !addr.ip().is_loopback()) {
+                return Err("localhost must resolve only to loopback addresses".into());
+            }
+            Ok(())
+        }
+        Some(host) => host
+            .parse::<std::net::IpAddr>()
+            .map_err(|_| "ollamaBaseUrl host must be loopback".to_string())
+            .and_then(|ip| {
+                if ip.is_loopback() {
+                    Ok(())
+                } else {
+                    Err("ollamaBaseUrl host must be loopback".into())
+                }
+            }),
+        None => Err("ollamaBaseUrl host is required".into()),
+    }
+}
+
+fn reject_unsupported_acceptance_criteria(contract: &ExecutionContractV1) -> Result<(), String> {
+    for criterion in &contract.acceptance_criteria {
+        let lower = criterion.to_ascii_lowercase();
+        let supported = lower.contains("test")
+            || lower.contains("verification")
+            || lower.contains("cargo")
+            || lower.contains("diff");
+        if !supported {
+            return Err(format!(
+                "unsupported v1 acceptance criterion `{criterion}`; use verification/test/diff criteria or path policy"
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn mcp_integrated_config(
     workspace_root: &Path,
     contract: &ExecutionContractV1,
     args: &Value,
-) -> IntegratedRunConfigV1 {
-    IntegratedRunConfigV1 {
+) -> Result<IntegratedRunConfigV1, String> {
+    let ollama_base_url = args
+        .get("ollamaBaseUrl")
+        .and_then(Value::as_str)
+        .unwrap_or("http://127.0.0.1:11434");
+    validate_loopback_ollama_url(ollama_base_url)?;
+    Ok(IntegratedRunConfigV1 {
         journal_root: workspace_root.join(".catdesk/delegated/journal"),
         job_root: workspace_root.join(".catdesk/delegated/jobs"),
-        ollama_base_url: args
-            .get("ollamaBaseUrl")
-            .and_then(Value::as_str)
-            .unwrap_or("http://127.0.0.1:11434")
-            .into(),
+        ollama_base_url: ollama_base_url.into(),
         model_id: contract.provider_policy.primary_model_id.clone(),
-    }
+    })
 }
 
 fn registry_key(workspace_root: &Path, run_id: &RunId) -> String {
@@ -2572,9 +2660,11 @@ async fn registry_entry(
     Ok((run_id, entry))
 }
 
-async fn ensure_one_active_run_for_workspace(workspace_root: &Path) -> Result<(), String> {
-    let registry = delegated_run_registry();
-    let registry = registry.lock().await;
+fn reserve_active_run_for_workspace(
+    registry: &mut DelegatedRunRegistry,
+    workspace_root: &Path,
+    run_id: &RunId,
+) -> Result<PathBuf, String> {
     if registry.runs.values().any(|entry| {
         entry.workspace_root == workspace_root
             && matches!(
@@ -2587,7 +2677,6 @@ async fn ensure_one_active_run_for_workspace(workspace_root: &Path) -> Result<()
     }) {
         return Err("workspace already has an active delegated run".into());
     }
-    drop(registry);
 
     let journal = DelegatedJournal::open(workspace_root.join(".catdesk/delegated/journal"))
         .map_err(|error| format!("{error:?}"))?;
@@ -2600,27 +2689,81 @@ async fn ensure_one_active_run_for_workspace(workspace_root: &Path) -> Result<()
             "workspace has active delegated journal runs requiring supervisor review".into(),
         );
     }
-    Ok(())
+    let lock_path = workspace_active_lock_path(workspace_root);
+    if let Some(parent) = lock_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&lock_path)
+        .map_err(|error| {
+            format!("workspace active-run lock is already present or unavailable: {error}")
+        })?;
+    file.write_all(run_id.as_str().as_bytes())
+        .map_err(|error| error.to_string())?;
+    file.sync_data().map_err(|error| error.to_string())?;
+    Ok(lock_path)
 }
 
-fn ensure_run_start_approval<'a>(
+fn workspace_active_lock_path(workspace_root: &Path) -> PathBuf {
+    workspace_root.join(".catdesk/delegated/active-run.lock")
+}
+
+fn release_active_lock(lock_path: &Path) {
+    let _ = fs::remove_file(lock_path);
+}
+
+fn ensure_run_start_approval(
     run_id: &RunId,
-    entry: &'a mut DelegatedRunEntry,
-) -> &'a RunStartApproval {
+    entry: &mut DelegatedRunEntry,
+) -> Result<RunStartApproval, String> {
     if entry.run_start_approval.is_none() {
         let approval_id = ApprovalId::new(format!("approval-run-start-{}", run_id.as_str()))
             .expect("run id is already conservative");
-        entry.run_start_approval = Some(RunStartApproval {
+        let approval = RunStartApproval {
             request_hash: approval_decision_hash(run_id),
             approval_id,
             expires_at_unix: now_unix_seconds().saturating_add(300),
             consumed: false,
-        });
+        };
+        DelegatedJournal::open(&entry.config.journal_root)
+            .and_then(|journal| {
+                journal.write_run_start_approval(&approval.to_journal_record(run_id))
+            })
+            .map_err(|error| format!("{error:?}"))?;
+        entry.run_start_approval = Some(approval);
     }
-    entry
+    Ok(entry
         .run_start_approval
         .as_ref()
         .expect("approval just initialized")
+        .clone())
+}
+
+impl RunStartApproval {
+    fn to_journal_record(
+        &self,
+        run_id: &RunId,
+    ) -> crate::delegated::journal::RunStartApprovalRecordV1 {
+        crate::delegated::journal::RunStartApprovalRecordV1 {
+            schema_version: crate::delegated::EXECUTION_CONTRACT_SCHEMA_VERSION,
+            run_id: run_id.clone(),
+            approval_id: self.approval_id.clone(),
+            request_hash: self.request_hash.clone(),
+            expires_at_unix: self.expires_at_unix,
+            consumed: self.consumed,
+        }
+    }
+
+    fn from_journal_record(record: crate::delegated::journal::RunStartApprovalRecordV1) -> Self {
+        Self {
+            approval_id: record.approval_id,
+            request_hash: record.request_hash,
+            expires_at_unix: record.expires_at_unix,
+            consumed: record.consumed,
+        }
+    }
 }
 
 fn approval_decision_hash(run_id: &RunId) -> String {
@@ -2658,13 +2801,18 @@ fn rehydrate_registry_entry(
         .map_err(|error| format!("{error:?}"))?;
     let mut config = config;
     config.model_id = contract.provider_policy.primary_model_id.clone();
+    let run_start_approval = journal
+        .load_run_start_approval(run_id)
+        .ok()
+        .map(RunStartApproval::from_journal_record);
     Ok(DelegatedRunEntry {
         workspace_root: workspace_root.to_path_buf(),
         contract,
         config,
         status: registry_status_from_run_state(&state),
         cancel_requested: Arc::new(AtomicBool::new(false)),
-        run_start_approval: None,
+        run_start_approval,
+        active_lock_path: workspace_active_lock_path(workspace_root),
         final_review: None,
         last_error: None,
     })
@@ -5389,6 +5537,10 @@ mod tests {
         contract.workspace = root.display().to_string();
         contract.allowed_paths = vec!["src".into(), "Cargo.toml".into()];
         contract.forbidden_paths = vec![".git".into(), "target".into()];
+        contract.acceptance_criteria = vec![
+            "cargo tests pass".into(),
+            "authoritative diff is captured".into(),
+        ];
         contract.approval_requirements = Vec::new();
         contract.provider_policy.primary_model_id = "qwen3.5:9b".into();
         contract
@@ -5521,13 +5673,9 @@ mod tests {
                 "delegated_run_list",
                 "delegated_run_events",
                 "delegated_run_get_checkpoint",
-                "delegated_run_get_escalation",
-                "delegated_run_get_artifact",
                 "delegated_run_get_patch",
                 "delegated_run_compare_patches",
                 "delegated_run_get_diff",
-                "delegated_run_resume",
-                "delegated_run_pause",
                 "delegated_run_cancel",
                 "delegated_run_get_final_review",
                 "git_status_summary",
@@ -5816,6 +5964,312 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn supervisor_rejects_remote_ollama_url() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-remote-ollama-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+        let run_id = format!("run-remote-{}", Uuid::new_v4());
+        let contract = delegated_contract(&workspace_root, &run_id);
+
+        let response = handle_tools_call(
+            &tool_call_request(
+                "delegated_run_create",
+                json!({
+                    "contract": contract,
+                    "ollamaBaseUrl": "http://192.0.2.10:11434"
+                }),
+            ),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+
+        assert_tool_error("remote ollama", &response);
+    }
+
+    #[tokio::test]
+    async fn supervisor_rejects_non_ollama_or_fallback_policy() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-provider-policy-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+
+        let mut non_ollama =
+            delegated_contract(&workspace_root, &format!("run-provider-{}", Uuid::new_v4()));
+        non_ollama.provider_policy.primary_provider_id = "openai".into();
+        let response = handle_tools_call(
+            &tool_call_request("delegated_run_create", json!({ "contract": non_ollama })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_error("non ollama", &response);
+
+        let mut fallback =
+            delegated_contract(&workspace_root, &format!("run-fallback-{}", Uuid::new_v4()));
+        fallback.provider_policy.fallback_provider_ids = vec!["fake".into()];
+        let response = handle_tools_call(
+            &tool_call_request("delegated_run_create", json!({ "contract": fallback })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_error("fallback provider", &response);
+
+        let mut paid = delegated_contract(&workspace_root, &format!("run-paid-{}", Uuid::new_v4()));
+        paid.provider_policy.allow_paid_fallbacks = true;
+        let response = handle_tools_call(
+            &tool_call_request("delegated_run_create", json!({ "contract": paid })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_error("paid fallback", &response);
+    }
+
+    #[tokio::test]
+    async fn supervisor_concurrent_create_allows_exactly_one_active_run() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-concurrent-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+        let contract_a = delegated_contract(
+            &workspace_root,
+            &format!("run-concurrent-a-{}", Uuid::new_v4()),
+        );
+        let contract_b = delegated_contract(
+            &workspace_root,
+            &format!("run-concurrent-b-{}", Uuid::new_v4()),
+        );
+
+        let request_a =
+            tool_call_request("delegated_run_create", json!({ "contract": contract_a }));
+        let request_b =
+            tool_call_request("delegated_run_create", json!({ "contract": contract_b }));
+        let (left, right) = tokio::join!(
+            handle_tools_call(
+                &request_a,
+                &workspace_root_str,
+                0,
+                Mode::Both,
+                ToolMode::SupervisorOnly,
+                false,
+                &None,
+            ),
+            handle_tools_call(
+                &request_b,
+                &workspace_root_str,
+                0,
+                Mode::Both,
+                ToolMode::SupervisorOnly,
+                false,
+                &None,
+            )
+        );
+
+        let successes = [&left, &right]
+            .into_iter()
+            .filter(|response| {
+                response.error.is_none()
+                    && response
+                        .result
+                        .as_ref()
+                        .and_then(|result| result.get("isError"))
+                        .and_then(Value::as_bool)
+                        != Some(true)
+            })
+            .count();
+        assert_eq!(
+            successes, 1,
+            "exactly one create should reserve the workspace"
+        );
+    }
+
+    #[tokio::test]
+    async fn supervisor_workspace_lock_rejects_second_process_and_stale_lock() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-lock-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(workspace_root.join(".catdesk/delegated")).expect("workspace");
+        std::fs::write(workspace_active_lock_path(&workspace_root), "stale-run")
+            .expect("stale lock");
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+        let run_id = format!("run-lock-{}", Uuid::new_v4());
+        let contract = delegated_contract(&workspace_root, &run_id);
+
+        let response = handle_tools_call(
+            &tool_call_request("delegated_run_create", json!({ "contract": contract })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+
+        assert_tool_error("stale or second-process lock", &response);
+    }
+
+    #[tokio::test]
+    async fn supervisor_runstart_approval_survives_rehydration_and_is_one_time() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-approval-rehydrate-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+        let run_id = format!("run-approval-rehydrate-{}", Uuid::new_v4());
+        let mut contract = delegated_contract(&workspace_root, &run_id);
+        contract.approval_requirements = vec![crate::delegated::contracts::ApprovalRequirementV1 {
+            kind: ApprovalRequirementKind::RunStart,
+            required: true,
+            reason: "operator must approve start".into(),
+        }];
+
+        let create = handle_tools_call(
+            &tool_call_request("delegated_run_create", json!({ "contract": contract })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_success("create", &create);
+
+        let start = handle_tools_call(
+            &tool_call_request("delegated_run_start", json!({ "runId": run_id })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_error("start approval required", &start);
+
+        let run_id_typed = RunId::new(run_id.clone()).expect("run");
+        let key = registry_key(
+            &workspace_root.canonicalize().expect("canonical workspace"),
+            &run_id_typed,
+        );
+        delegated_run_registry().lock().await.runs.remove(&key);
+
+        let approval_id = format!("approval-run-start-{run_id}");
+        let decision_hash = format!("run-start:{run_id}:approved");
+        let approve = handle_tools_call(
+            &tool_call_request(
+                "delegated_run_approve_start",
+                json!({
+                    "runId": run_id,
+                    "approvalId": approval_id,
+                    "decisionHash": decision_hash
+                }),
+            ),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_success("approve after rehydrate", &approve);
+
+        delegated_run_registry().lock().await.runs.remove(&key);
+        let approve_again = handle_tools_call(
+            &tool_call_request(
+                "delegated_run_approve_start",
+                json!({
+                    "runId": run_id,
+                    "approvalId": approval_id,
+                    "decisionHash": decision_hash
+                }),
+            ),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_error("approve again after rehydrate", &approve_again);
+    }
+
+    #[tokio::test]
+    async fn supervisor_rejects_unsupported_acceptance_criterion() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-criteria-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+        let mut contract =
+            delegated_contract(&workspace_root, &format!("run-criteria-{}", Uuid::new_v4()));
+        contract.acceptance_criteria = vec!["make the implementation elegant".into()];
+
+        let response = handle_tools_call(
+            &tool_call_request("delegated_run_create", json!({ "contract": contract })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+
+        assert_tool_error("unsupported criterion", &response);
+    }
+
+    #[tokio::test]
+    async fn supervisor_tools_list_omits_jobs_and_deferred_operations() {
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!("req-tools-list")),
+            method: "tools/list".into(),
+            params: json!({}),
+        };
+
+        let response = handle_tools_list(&req, Mode::Both, ToolMode::MultiTools, &None).await;
+        let names = response
+            .result
+            .as_ref()
+            .and_then(|result| result.get("tools"))
+            .and_then(Value::as_array)
+            .expect("tools")
+            .iter()
+            .filter_map(|tool| tool.get("name").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+
+        assert!(!names.iter().any(|name| name.starts_with("job.")));
+        for deferred in [
+            "delegated_run_resume",
+            "delegated_run_pause",
+            "delegated_run_get_artifact",
+            "delegated_run_get_escalation",
+        ] {
+            assert!(!names.contains(&deferred), "{deferred} must not be exposed");
+        }
+    }
+
+    #[tokio::test]
     async fn supervisor_lifecycle_rejects_terminal_and_orphaned_running_starts() {
         let workspace_root =
             std::env::temp_dir().join(format!("catdesk-mcp-lifecycle-{}", Uuid::new_v4()));
@@ -6029,10 +6483,8 @@ mod tests {
             "capture diff.actual after verification passes".into(),
         ];
         contract.acceptance_criteria = vec![
-            "cargo verification passes".into(),
-            "src/lib.rs contains the implementation fix".into(),
+            "cargo tests pass".into(),
             "authoritative diff is captured".into(),
-            "do not add or edit tests".into(),
         ];
         contract.max_turns = 18;
         contract.max_tool_calls = 18;
@@ -6240,10 +6692,8 @@ mod tests {
             "capture diff.actual after verification passes".into(),
         ];
         contract.acceptance_criteria = vec![
-            "cargo verification passes".into(),
-            "src/lib.rs contains the implementation fix".into(),
+            "cargo tests pass".into(),
             "authoritative diff is captured".into(),
-            "do not add or edit tests".into(),
         ];
         contract.max_turns = 20;
         contract.max_tool_calls = 20;

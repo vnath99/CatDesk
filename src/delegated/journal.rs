@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use super::EXECUTION_CONTRACT_SCHEMA_VERSION;
 use super::contracts::{
-    ArtifactId, ExecutionContractV1, PatchId, RunId, RunState, ToolCallId, TurnId,
+    ApprovalId, ArtifactId, ExecutionContractV1, PatchId, RunId, RunState, ToolCallId, TurnId,
     validate_contract,
 };
 use super::events::{EventCursor, EventEnvelopeV1, poll_events, validate_append_order};
@@ -27,6 +27,17 @@ pub struct RunSnapshotV1 {
     pub contract_hash: String,
     pub last_event_sequence: u64,
     pub active: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunStartApprovalRecordV1 {
+    pub schema_version: u32,
+    pub run_id: RunId,
+    pub approval_id: ApprovalId,
+    pub request_hash: String,
+    pub expires_at_unix: u64,
+    pub consumed: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -172,6 +183,43 @@ impl DelegatedJournal {
 
     pub fn load_contract(&self, run_id: &RunId) -> Result<ExecutionContractV1, JournalError> {
         read_json(&self.run_dir(run_id)?.join("contract.json"))
+    }
+
+    pub fn write_run_start_approval(
+        &self,
+        approval: &RunStartApprovalRecordV1,
+    ) -> Result<(), JournalError> {
+        if approval.schema_version != EXECUTION_CONTRACT_SCHEMA_VERSION {
+            return Err(JournalError::Validation(
+                "unsupported RunStart approval schema_version".into(),
+            ));
+        }
+        ensure_run_dir_exists(&self.run_dir(&approval.run_id)?, &approval.run_id)?;
+        write_json_atomic(
+            &self
+                .run_dir(&approval.run_id)?
+                .join("run_start_approval.json"),
+            approval,
+        )
+    }
+
+    pub fn load_run_start_approval(
+        &self,
+        run_id: &RunId,
+    ) -> Result<RunStartApprovalRecordV1, JournalError> {
+        let approval: RunStartApprovalRecordV1 =
+            read_json(&self.run_dir(run_id)?.join("run_start_approval.json"))?;
+        if approval.schema_version != EXECUTION_CONTRACT_SCHEMA_VERSION {
+            return Err(JournalError::Validation(
+                "unsupported RunStart approval schema_version".into(),
+            ));
+        }
+        if &approval.run_id != run_id {
+            return Err(JournalError::Validation(
+                "RunStart approval belongs to a different run".into(),
+            ));
+        }
+        Ok(approval)
     }
 
     pub fn update_run_state(
@@ -459,26 +507,49 @@ fn read_jsonl<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>, JournalError> 
     if !path.exists() {
         return Ok(Vec::new());
     }
+    repair_torn_jsonl_tail(path)?;
     let file = File::open(path)?;
     let mut values = Vec::new();
-    let lines = BufReader::new(file)
-        .lines()
-        .collect::<Result<Vec<_>, _>>()?;
-    let last_index = lines.len().saturating_sub(1);
-    for (index, line) in lines.into_iter().enumerate() {
+    for line in BufReader::new(file).lines() {
+        let line = line?;
         if line.trim().is_empty() {
             continue;
         }
-        match serde_json::from_str(&line) {
-            Ok(value) => values.push(value),
-            Err(error) if index == last_index => {
-                let _ = error;
-                break;
-            }
-            Err(error) => return Err(error.into()),
-        }
+        values.push(serde_json::from_str(&line)?);
     }
     Ok(values)
+}
+
+fn repair_torn_jsonl_tail(path: &Path) -> Result<(), JournalError> {
+    let bytes = fs::read(path)?;
+    let mut offset = 0usize;
+    while offset < bytes.len() {
+        let relative_newline = bytes[offset..].iter().position(|byte| *byte == b'\n');
+        let (line_end, record_end) = match relative_newline {
+            Some(position) => {
+                let line_end = offset + position;
+                (line_end, line_end + 1)
+            }
+            None => (bytes.len(), bytes.len()),
+        };
+        let line = &bytes[offset..line_end];
+        let is_blank = std::str::from_utf8(line)
+            .map(|text| text.trim().is_empty())
+            .unwrap_or(false);
+        if !is_blank {
+            match serde_json::from_slice::<serde_json::Value>(line) {
+                Ok(_) => {}
+                Err(_error) if record_end == bytes.len() => {
+                    let file = OpenOptions::new().write(true).open(path)?;
+                    file.set_len(offset as u64)?;
+                    return Ok(());
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
+        offset = record_end;
+    }
+    Ok(())
 }
 
 impl From<std::io::Error> for JournalError {
@@ -838,7 +909,7 @@ mod tests {
                 },
             )
             .expect("poll events");
-        assert_eq!(events, vec![event]);
+        assert_eq!(events, vec![event.clone()]);
         assert_eq!(
             reopened
                 .load_run(&run_id)
@@ -849,7 +920,7 @@ mod tests {
     }
 
     #[test]
-    fn torn_final_jsonl_record_is_ignored_during_recovery() {
+    fn torn_final_jsonl_record_is_repaired_before_append() {
         let journal = temp_journal("journal-torn-jsonl");
         let run_id = create_fixture_run(&journal);
         let event = EventEnvelopeV1 {
@@ -890,6 +961,37 @@ mod tests {
             )
             .expect("poll events");
 
-        assert_eq!(events, vec![event]);
+        assert_eq!(events, vec![event.clone()]);
+        let event2 = EventEnvelopeV1 {
+            schema_version: 1,
+            event_sequence: 2,
+            run_id: run_id.clone(),
+            worker_session_id: None,
+            turn_id: None,
+            item_id: None,
+            lifecycle_event: LifecycleEvent::Delta,
+            request_hash: "fnv1a64:req2".into(),
+            result_hash: None,
+            payload: EventPayloadV1::Delta {
+                text: "after repair".into(),
+            },
+        }
+        .with_result_hash()
+        .expect("hash event2");
+        let reopened = DelegatedJournal::open(journal.root.clone()).expect("reopen journal");
+        reopened.append_event(&event2).expect("append after repair");
+
+        let reopened_again = DelegatedJournal::open(journal.root.clone()).expect("reopen again");
+        let events = reopened_again
+            .poll_events(
+                &run_id,
+                EventCursor {
+                    after_sequence: 0,
+                    limit: 10,
+                },
+            )
+            .expect("poll after append");
+
+        assert_eq!(events, vec![event, event2]);
     }
 }

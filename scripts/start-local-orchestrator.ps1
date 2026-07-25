@@ -4,7 +4,7 @@ param(
     [string]$ListenHost = "127.0.0.1",
     [int]$Port = 38765,
     [string]$McpPath = "/catdesk/mcp",
-    [string]$AuthToken = ("catdesk-local-" + [guid]::NewGuid().ToString("N"))
+    [string]$AuthToken
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,6 +25,12 @@ if ($null -eq $catdesk) {
     $catdeskPath = $catdesk.Source
 }
 
+if ([string]::IsNullOrWhiteSpace($AuthToken)) {
+    $AuthToken = "catdesk-local-" + [guid]::NewGuid().ToString("N")
+}
+
+$env:CATDESK_MCP_AUTH_TOKEN = $AuthToken
+
 & $catdeskPath `
     --headless-mcp `
     --workspace $workspacePath.Path `
@@ -32,5 +38,4 @@ if ($null -eq $catdesk) {
     --host $ListenHost `
     --port $Port `
     --mcp-path $McpPath `
-    --tool-mode supervisor-only `
-    --auth-token $AuthToken
+    --tool-mode supervisor-only

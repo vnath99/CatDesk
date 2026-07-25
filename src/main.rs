@@ -1930,6 +1930,17 @@ mod tests {
 
         assert!(error.contains("computer only"));
     }
+
+    #[test]
+    fn startup_scripts_use_environment_based_auth() {
+        for script in [
+            include_str!("../scripts/start-local-orchestrator.ps1"),
+            include_str!("../scripts/start-dev-orchestrator.ps1"),
+        ] {
+            assert!(script.contains("CATDESK_MCP_AUTH_TOKEN"));
+            assert!(!script.contains("--auth-token"));
+        }
+    }
 }
 
 fn centered_rect(percent_x: u16, height: u16, area: Rect) -> Rect {

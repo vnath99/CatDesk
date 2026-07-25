@@ -185,6 +185,9 @@ impl IntegratedDelegatedService {
 
     pub fn tool_definitions(&self) -> Vec<ToolDefinitionV1> {
         catdesk_tool_definitions()
+            .into_iter()
+            .filter(|tool| !tool.name.starts_with("job."))
+            .collect()
     }
 
     pub fn provider_policy(&self) -> ProviderRoutingPolicyV1 {
@@ -313,10 +316,7 @@ impl IntegratedDelegatedService {
                                     "Tool {} failed under CatDesk policy and was journaled. Error: {error:?}. Choose a permitted next CatDesk tool call; do not retry the same invalid request.",
                                     call.tool_name
                                 );
-                                if matches!(
-                                    call.tool_name.as_str(),
-                                    "patch.apply" | "job.start" | "job.cancel"
-                                ) {
+                                if matches!(call.tool_name.as_str(), "patch.apply") {
                                     return Err(IntegratedError::Tool(message));
                                 }
                                 self.provider_history.push(ProviderMessageV1 {
@@ -387,16 +387,7 @@ impl IntegratedDelegatedService {
     }
 
     fn production_worker_tools(&self) -> Vec<ToolDefinitionV1> {
-        let needs_jobs = self.contract.objective.to_ascii_lowercase().contains("job")
-            || self
-                .contract
-                .ordered_steps
-                .iter()
-                .any(|step| step.to_ascii_lowercase().contains("job"));
         self.tool_definitions()
-            .into_iter()
-            .filter(|tool| needs_jobs || !tool.name.starts_with("job."))
-            .collect()
     }
 
     fn compact_provider_history_if_needed(&mut self) -> Result<(), IntegratedError> {
@@ -867,29 +858,6 @@ impl IntegratedDelegatedService {
             return Err(IntegratedError::Tool(
                 "mutating tool requires explicit supervisor approval".into(),
             ));
-        }
-        if call.tool_name == "job.start" {
-            let profile = call
-                .arguments
-                .get("commandProfile")
-                .and_then(Value::as_str)
-                .or_else(|| {
-                    self.contract
-                        .allowed_command_profiles
-                        .first()
-                        .map(String::as_str)
-                })
-                .unwrap_or("default");
-            if !self
-                .contract
-                .allowed_command_profiles
-                .iter()
-                .any(|allowed| allowed == profile)
-            {
-                return Err(IntegratedError::Tool(format!(
-                    "command profile {profile} is not allowed by the execution contract"
-                )));
-            }
         }
         Ok(())
     }
@@ -1767,10 +1735,8 @@ mod tests {
             "capture diff.actual after verification passes".into(),
         ];
         contract.acceptance_criteria = vec![
-            "cargo verification passes".into(),
-            "src/lib.rs contains the implementation fix".into(),
+            "cargo tests pass".into(),
             "authoritative diff is captured".into(),
-            "do not add or edit tests".into(),
         ];
         contract.max_turns = 18;
         contract.max_tool_calls = 18;

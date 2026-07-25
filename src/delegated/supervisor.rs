@@ -10,7 +10,7 @@ use super::patch_engine::{
     ActualDiffArtifactV1, PatchComparisonV1, PatchProposalV1, compare_patches,
 };
 
-pub const SUPERVISOR_TOOL_NAMES: [&str; 17] = [
+pub const SUPERVISOR_TOOL_NAMES: [&str; 13] = [
     "delegated_run_create",
     "delegated_run_validate",
     "delegated_run_approve_start",
@@ -19,13 +19,9 @@ pub const SUPERVISOR_TOOL_NAMES: [&str; 17] = [
     "delegated_run_list",
     "delegated_run_events",
     "delegated_run_get_checkpoint",
-    "delegated_run_get_escalation",
-    "delegated_run_get_artifact",
     "delegated_run_get_patch",
     "delegated_run_compare_patches",
     "delegated_run_get_diff",
-    "delegated_run_resume",
-    "delegated_run_pause",
     "delegated_run_cancel",
     "delegated_run_get_final_review",
 ];
@@ -357,10 +353,12 @@ mod tests {
 
     #[test]
     fn supervisor_tool_surface_lists_required_tools() {
-        assert_eq!(SupervisorSurface::tool_names().len(), 17);
+        assert_eq!(SupervisorSurface::tool_names().len(), 13);
         assert!(SupervisorSurface::tool_names().contains(&"delegated_run_approve_start"));
         assert!(SupervisorSurface::tool_names().contains(&"delegated_run_events"));
         assert!(SupervisorSurface::tool_names().contains(&"delegated_run_cancel"));
+        assert!(!SupervisorSurface::tool_names().contains(&"delegated_run_resume"));
+        assert!(!SupervisorSurface::tool_names().contains(&"delegated_run_get_artifact"));
     }
 
     #[test]
