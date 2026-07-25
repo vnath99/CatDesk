@@ -48,7 +48,7 @@ CatDesk cannot infer worker safety from MCP discovery alone. The v1 architecture
 
 | Component | Owns | Must not own |
 | --- | --- | --- |
-| ChatGPT Web | Objective, execution contract review, escalation decisions, final review, approval to push or release | Local file, shell, Git, or patch execution |
+| Local MCP client / future approved ChatGPT connector | Objective, execution contract review, escalation decisions, final review, approval to push or release | Local file, shell, Git, or patch execution |
 | CatDesk coordinator | Contract validation, run lifecycle, approvals, budgets, cancellation, final verification, final review package | Provider-specific transport details |
 | CatDesk worker runtime | Repeated model/tool loop, context assembly, tool-call normalization, bounded repair loops, checkpoints, provider handoff, worker events | Direct repository mutation without CatDesk policy checks |
 | CatDesk policy and tools | Files, patches, shell profiles, Git staging/commit policy, jobs, tests, memory, repository maps, redaction | Model inference |

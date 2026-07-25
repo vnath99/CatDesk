@@ -1986,9 +1986,17 @@ fn execution_contract_input_schema() -> Value {
             "acceptanceCriteria": {
                 "type": "array",
                 "minItems": 1,
-                "items": { "type": "string", "minLength": 1 }
+                "items": {
+                    "type": "string",
+                    "enum": [
+                        "cargo tests pass",
+                        "cargo verification passes",
+                        "verification passes",
+                        "authoritative diff is captured"
+                    ]
+                }
             },
-            "retryBudget": { "type": "integer", "minimum": 0 },
+            "retryBudget": { "type": "integer", "minimum": 1 },
             "maxTurns": { "type": "integer", "minimum": 1 },
             "maxToolCalls": { "type": "integer", "minimum": 1 },
             "maxElapsedSeconds": { "type": "integer", "minimum": 1 },
@@ -2036,14 +2044,15 @@ fn provider_policy_input_schema() -> Value {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-            "primaryProviderId": { "type": "string", "minLength": 1 },
+            "primaryProviderId": { "type": "string", "const": "ollama" },
             "primaryModelId": { "type": "string", "minLength": 1 },
             "fallbackProviderIds": {
                 "type": "array",
+                "maxItems": 0,
                 "items": { "type": "string", "minLength": 1 }
             },
             "requireToolCalls": { "type": "boolean" },
-            "allowPaidFallbacks": { "type": "boolean" }
+            "allowPaidFallbacks": { "type": "boolean", "const": false }
         },
         "required": [
             "primaryProviderId",
@@ -5999,6 +6008,61 @@ mod tests {
                 .expect("approval kind enum")
                 .iter()
                 .any(|kind| kind.as_str() == Some("RUN_START"))
+        );
+        let contract_properties = contract
+            .get("properties")
+            .and_then(Value::as_object)
+            .expect("contract properties");
+        assert_eq!(
+            contract_properties
+                .get("retryBudget")
+                .and_then(|retry| retry.get("minimum"))
+                .and_then(Value::as_i64),
+            Some(1)
+        );
+        let acceptance_enum = contract_properties
+            .get("acceptanceCriteria")
+            .and_then(|criteria| criteria.get("items"))
+            .and_then(|items| items.get("enum"))
+            .and_then(Value::as_array)
+            .expect("acceptance criteria enum");
+        assert_eq!(
+            acceptance_enum
+                .iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>(),
+            vec![
+                "cargo tests pass",
+                "cargo verification passes",
+                "verification passes",
+                "authoritative diff is captured"
+            ]
+        );
+        let provider_policy = contract_properties
+            .get("providerPolicy")
+            .and_then(|provider| provider.get("properties"))
+            .and_then(Value::as_object)
+            .expect("provider policy properties");
+        assert_eq!(
+            provider_policy
+                .get("primaryProviderId")
+                .and_then(|provider| provider.get("const"))
+                .and_then(Value::as_str),
+            Some("ollama")
+        );
+        assert_eq!(
+            provider_policy
+                .get("fallbackProviderIds")
+                .and_then(|fallbacks| fallbacks.get("maxItems"))
+                .and_then(Value::as_i64),
+            Some(0)
+        );
+        assert_eq!(
+            provider_policy
+                .get("allowPaidFallbacks")
+                .and_then(|paid| paid.get("const"))
+                .and_then(Value::as_bool),
+            Some(false)
         );
     }
 

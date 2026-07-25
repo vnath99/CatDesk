@@ -17,7 +17,7 @@ CatDesk-owned service:
 - patch preview/apply/compare/diff engine;
 - coordinator final-review gate;
 - verification runner;
-- long-running job manager;
+- long-running job manager for CatDesk-controlled internal execution;
 - supervisor event/checkpoint surface.
 
 The provider receives only tool schemas. It does not receive direct filesystem,
@@ -25,7 +25,7 @@ shell, Git, patch, or process authority.
 
 ## Provider-Visible Tools
 
-The closure tool surface is:
+The final v1 provider-visible tool surface is:
 
 - `read`
 - `search`
@@ -34,13 +34,10 @@ The closure tool surface is:
 - `patch.compare`
 - `diff.actual`
 - `verify.run`
-- `job.start`
-- `job.status`
-- `job.poll`
-- `job.cancel`
 
-`job.*` execution flows through the existing CatDesk command safety policy and
-job manager. Verification flows through CatDesk verification detection and
+`job.*` tools remain CatDesk-internal implementation support and deterministic
+test coverage, but they are deliberately filtered out of the v1 model-visible
+tool surface. Verification flows through CatDesk verification detection and
 bounded output summaries.
 
 ## Deterministic CI Path
