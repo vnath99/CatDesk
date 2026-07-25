@@ -852,7 +852,7 @@ fn parse_headless_mcp_options(
         .unwrap_or_else(|| ".".to_string());
     let mut mcp_path = None;
     let mut mode = Mode::Computer;
-    let mut tool_mode = ToolMode::MultiTools;
+    let mut tool_mode = ToolMode::ReadOnly;
     let mut config_path: Option<PathBuf> = None;
 
     let mut index = 0;
@@ -940,15 +940,21 @@ fn validate_loopback_host(host: &str) -> Result<(), String> {
 }
 
 fn validate_headless_mcp_path(path: &str) -> Result<String, String> {
-    if !path.starts_with('/') || !path.ends_with("/mcp") {
-        return Err("--mcp-path must start with `/` and end with `/mcp`".into());
+    let slug = path
+        .strip_prefix('/')
+        .and_then(|value| value.strip_suffix("/mcp"))
+        .ok_or_else(|| "--mcp-path must match /[A-Za-z0-9_-]+/mcp".to_string())?;
+    if slug.is_empty()
+        || slug.contains('/')
+        || slug.contains('\\')
+        || !slug
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+    {
+        return Err("--mcp-path must match /[A-Za-z0-9_-]+/mcp".into());
     }
-    if path.contains('\\') || path.contains('?') || path.contains('#') || path.contains("//") {
-        return Err("--mcp-path must be a simple URL path without query, fragment, or `//`".into());
-    }
-    let slug = slug_from_mcp_path(path)?;
-    if slug.is_empty() || slug.chars().any(char::is_whitespace) {
-        return Err("--mcp-path slug must be non-empty and contain no whitespace".into());
+    if slug == "." || slug == ".." {
+        return Err("--mcp-path slug must not be a traversal segment".into());
     }
     Ok(path.to_string())
 }
@@ -957,8 +963,8 @@ fn slug_from_mcp_path(path: &str) -> Result<String, String> {
     let slug = path
         .strip_prefix('/')
         .and_then(|value| value.strip_suffix("/mcp"))
-        .ok_or_else(|| "--mcp-path must start with `/` and end with `/mcp`".to_string())?;
-    Ok(slug.trim_matches('/').to_string())
+        .ok_or_else(|| "--mcp-path must match /[A-Za-z0-9_-]+/mcp".to_string())?;
+    Ok(slug.to_string())
 }
 
 fn parse_headless_mode(value: &str) -> Result<Mode, String> {
@@ -982,11 +988,23 @@ fn parse_headless_tool_mode(value: &str) -> Result<ToolMode, String> {
     }
 }
 
+fn resolve_headless_workspace(workspace: &str) -> std::io::Result<String> {
+    let workspace_path = std::fs::canonicalize(workspace).map_err(|error| {
+        std::io::Error::other(format!(
+            "headless MCP workspace must exist and be a directory: {workspace}: {error}"
+        ))
+    })?;
+    if !workspace_path.is_dir() {
+        return Err(std::io::Error::other(format!(
+            "headless MCP workspace must be a directory: {}",
+            workspace_path.to_string_lossy()
+        )));
+    }
+    Ok(workspace_path.to_string_lossy().into_owned())
+}
+
 async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std::error::Error>> {
-    let workspace_root = std::fs::canonicalize(&options.workspace)
-        .unwrap_or_else(|_| PathBuf::from(&options.workspace))
-        .to_string_lossy()
-        .into_owned();
+    let workspace_root = resolve_headless_workspace(&options.workspace)?;
     let state: SharedState = Arc::new(Mutex::new(AppState::new_headless(
         options.port,
         workspace_root.clone(),
@@ -1014,6 +1032,12 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
             ))
         })?;
     let local_addr = listener.local_addr()?;
+    if !local_addr.ip().is_loopback() {
+        return Err(std::io::Error::other(format!(
+            "headless MCP listener resolved to non-loopback address: {local_addr}"
+        ))
+        .into());
+    }
     {
         let mut app = state.lock().await;
         app.port = local_addr.port();
@@ -1031,9 +1055,7 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
             app.apply_server_ui_event(event);
         }
     });
-    let serve_handle = tokio::spawn(async move {
-        let _ = axum::serve(listener, router).await;
-    });
+    let mut serve_handle = tokio::spawn(async move { axum::serve(listener, router).await });
 
     println!(
         "{}",
@@ -1047,7 +1069,23 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
         })
     );
 
-    tokio::signal::ctrl_c().await?;
+    tokio::select! {
+        signal = tokio::signal::ctrl_c() => {
+            signal?;
+        }
+        result = &mut serve_handle => {
+            drain_handle.abort();
+            {
+                let mut app = state.lock().await;
+                app.server_running = false;
+            }
+            match result {
+                Ok(Ok(())) => return Err(std::io::Error::other("headless MCP server exited unexpectedly").into()),
+                Ok(Err(error)) => return Err(std::io::Error::other(format!("headless MCP server failed: {error}")).into()),
+                Err(error) => return Err(std::io::Error::other(format!("headless MCP server task failed: {error}")).into()),
+            }
+        }
+    }
     serve_handle.abort();
     drain_handle.abort();
     {
@@ -1645,9 +1683,11 @@ fn render_toast(f: &mut Frame, palette: theme::Palette, msg: &str, pos: (u16, u1
 #[cfg(test)]
 mod tests {
     use super::{
-        key_is_clipboard_paste, normalize_ngrok_authtoken_input, parse_headless_mcp_options,
+        ToolMode, key_is_clipboard_paste, normalize_ngrok_authtoken_input,
+        parse_headless_mcp_options, resolve_headless_workspace, validate_headless_mcp_path,
     };
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use std::time::SystemTime;
 
     #[test]
     fn normalizes_plain_ngrok_token() {
@@ -1707,6 +1747,94 @@ mod tests {
         assert_eq!(options.host, "127.0.0.1");
         assert_eq!(options.port, 33200);
         assert_eq!(options.mcp_path.as_deref(), Some("/t0012/mcp"));
+        assert!(matches!(options.tool_mode, ToolMode::ReadOnly));
+    }
+
+    #[test]
+    fn omitted_headless_tool_mode_defaults_to_read_only() {
+        let options = parse_headless_mcp_options([
+            "--headless-mcp".to_string(),
+            "--config-path".to_string(),
+            ".tmp\\catdesk-headless\\config.toml".to_string(),
+        ])
+        .expect("parse headless options")
+        .expect("headless options present");
+
+        assert!(matches!(options.tool_mode, ToolMode::ReadOnly));
+    }
+
+    #[test]
+    fn explicit_headless_read_only_succeeds() {
+        let options = parse_headless_mcp_options([
+            "--headless-mcp".to_string(),
+            "--tool-mode".to_string(),
+            "read-only".to_string(),
+            "--config-path".to_string(),
+            ".tmp\\catdesk-headless\\config.toml".to_string(),
+        ])
+        .expect("parse read-only headless options")
+        .expect("headless options present");
+
+        assert!(matches!(options.tool_mode, ToolMode::ReadOnly));
+    }
+
+    #[test]
+    fn valid_conservative_headless_mcp_paths_succeed() {
+        for path in ["/t0012/mcp", "/ABC_123-def/mcp"] {
+            assert_eq!(validate_headless_mcp_path(path).as_deref(), Ok(path));
+        }
+    }
+
+    #[test]
+    fn invalid_headless_mcp_paths_are_rejected() {
+        for path in [
+            "t0012/mcp",
+            "/t0012",
+            "/t0012/extra/mcp",
+            "/../mcp",
+            "/.%2e/mcp",
+            "/hello world/mcp",
+            "/hello.world/mcp",
+            "/hello%20world/mcp",
+            "/hello?x=1/mcp",
+            "/hello#mcp/mcp",
+            "/hello/mcp/",
+        ] {
+            assert!(
+                validate_headless_mcp_path(path).is_err(),
+                "expected rejection for {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_missing_headless_workspace() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let missing = std::env::temp_dir().join(format!("catdesk-missing-workspace-{unique}"));
+
+        let error = resolve_headless_workspace(&missing.to_string_lossy())
+            .expect_err("missing workspace should be rejected");
+
+        assert!(error.to_string().contains("must exist"));
+    }
+
+    #[test]
+    fn rejects_non_directory_headless_workspace() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let file_path = std::env::temp_dir().join(format!("catdesk-workspace-file-{unique}.txt"));
+        std::fs::write(&file_path, "not a directory").expect("write temp file");
+
+        let error = resolve_headless_workspace(&file_path.to_string_lossy())
+            .expect_err("file workspace should be rejected");
+
+        assert!(error.to_string().contains("must be a directory"));
+        let _ = std::fs::remove_file(file_path);
     }
 
     #[test]

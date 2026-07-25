@@ -1,6 +1,6 @@
 # T-0012 Runtime Spike Review Log
 
-Date: 2026-07-24
+Date: 2026-07-25
 Branch: orchestrator/t-0012-feasibility
 
 ## Chat Summary
@@ -133,19 +133,24 @@ Minimum nonpersistent test posture:
 
 - Use process-scoped `OPENCLAW_CONFIG_PATH` and `OPENCLAW_STATE_DIR`.
 - Register CatDesk under `mcp.servers.catdesk` only after a deterministic local-only CatDesk MCP endpoint exists.
-- Use `tools.profile: "minimal"` plus `tools.alsoAllow: ["bundle-mcp"]`.
-- Deny OpenClaw-native `group:runtime`, `group:fs`, `group:web`, `group:ui`, and `group:automation`.
+- Use `tools.profile: "minimal"` with an absolute allowlist containing only the four server-qualified CatDesk MCP read-only tools.
+- Deny OpenClaw-native runtime, filesystem, web, UI/browser, automation, exec, applyPatch, elevated, and code-mode capability names.
 - Set `tools.exec.mode: "deny"`, `tools.exec.applyPatch.enabled: false`, `tools.elevated.enabled: false`, and code mode disabled.
-- Do not use `tools.deny: ["bundle-mcp"]`, because that disables configured MCP servers.
+- Disable native command, plugin-management, debug, browser, web, and automation surfaces where the installed schema supports explicit disabling.
 
 ## Headless MCP Implementation Continuation
 
 After review, CatDesk received a constrained experimental `--headless-mcp` startup mode to unblock local orchestration probes without using the TUI, ngrok, browser/devtools, or the default CatDesk config.
 
+Approval record:
+
+- The initial headless source changes were authorized when the operator said, "You should be good to continue," after reviewing the T-0012 runtime-spike notes.
+- The later focused hardening pass was requested before merge or any model-worker run, with explicit instructions not to commit, push, merge, onboard OpenClaw, install a Gateway service, configure a provider, or run a model worker.
+
 Code changes:
 
 - `.gitignore`: ignores `/.tmp` disposable probe state.
-- `src/main.rs`: adds headless option parsing, loopback-only host validation, fixed `--mcp-path` support, required `--config-path`, JSON readiness output, and a headless axum server runner.
+- `src/main.rs`: adds headless option parsing, read-only default tool mode, loopback-only host validation, post-bind loopback verification, conservative `--mcp-path` slug validation, required existing workspace directory validation, required `--config-path`, JSON readiness output, and a headless axum server runner that propagates unexpected axum errors.
 - `src/state.rs`: adds `AppState::new_headless` and skips startup mascot archiving for headless/disposable state.
 
 Focused tests:
@@ -156,8 +161,8 @@ cargo test headless -- --nocapture
 
 Result:
 
-- 4 passed.
-- Covered parsing a valid headless command, rejecting non-loopback host, rejecting missing disposable config path, and rejecting browser/both mode.
+- 10 passed.
+- Covered parsing a valid headless command, omitted tool mode defaulting to read-only, explicit read-only, conservative MCP path acceptance, invalid/traversal MCP path rejection, missing workspace rejection, non-directory workspace rejection, non-loopback host rejection, missing disposable config path rejection, and browser/both mode rejection.
 
 Live CatDesk headless probe:
 
@@ -204,6 +209,41 @@ Result:
   - `catdesk-t0012__search`
 - `openclaw config validate --json` returned `valid: true` with no warnings.
 - No OpenClaw onboarding, Gateway service, provider setup, credential entry, default OpenClaw config mutation, or model worker run was performed.
+- Multi-tools over an unauthenticated loopback endpoint remains unresolved. Read-only mode is the only approved headless posture for the current OpenClaw spike.
+
+## Closure Pass After Headless Hardening Approval
+
+The operator approved the T-0012 headless MCP hardening code and requested one final closure pass before merge or later tickets. No commits, pushes, PRs, merges, OpenClaw onboarding, Gateway service install/start, provider configuration, credential entry, or model worker run were performed.
+
+Commands run for the effective OpenClaw tool-policy audit used only process-scoped disposable paths:
+
+```powershell
+$env:OPENCLAW_CONFIG_PATH = (Join-Path (Resolve-Path '.') '.tmp\openclaw-closure-t0012\openclaw.json')
+$env:OPENCLAW_STATE_DIR = (Join-Path (Resolve-Path '.') '.tmp\openclaw-closure-t0012\state')
+cargo build
+target\debug\catdesk.exe --headless-mcp --host 127.0.0.1 --port 33212 --workspace .tmp\t0012-closure-catdesk\workspace --mcp-path /t0012closure/mcp --mode computer --tool-mode read-only --config-path .tmp\t0012-closure-catdesk\config\config.toml --no-ngrok
+openclaw mcp add catdesk-t0012 --url http://127.0.0.1:33212/t0012closure/mcp --transport streamable-http --include "catdesk_instruction,plan_read,read,search" --connect-timeout 5 --timeout 10 --ssl-verify true
+openclaw config patch --file .tmp\openclaw-closure-t0012\minimal-readonly-policy.patch.json --dry-run --json
+openclaw config patch --file .tmp\openclaw-closure-t0012\minimal-readonly-policy.patch.json
+openclaw config validate --json
+openclaw mcp probe catdesk-t0012 --json
+openclaw config get tools --json
+openclaw config get agents.list --json
+openclaw config get commands --json
+openclaw config get browser --json
+openclaw agent --help
+openclaw plugins list --enabled --json
+openclaw plugins inspect --all --json --runtime
+```
+
+Closure result:
+
+- The disposable OpenClaw config validated successfully.
+- `openclaw mcp probe catdesk-t0012 --json` reported exactly four MCP-discovered CatDesk tools: `catdesk-t0012__catdesk_instruction`, `catdesk-t0012__plan_read`, `catdesk-t0012__read`, and `catdesk-t0012__search`.
+- The configured policy used `tools.profile: "minimal"` and an absolute `tools.allow` list containing only those four tools.
+- The policy denied runtime, filesystem, web, UI/browser, automation, exec, applyPatch, elevated, and code-mode capability names, disabled native command surfaces, set `browser.enabled: false`, set `tools.exec.mode: "deny"`, set `tools.exec.applyPatch.enabled: false`, set `tools.elevated.enabled: false`, and set `tools.codeMode: false`.
+- The installed OpenClaw CLI did not expose the final effective worker-visible tool definitions before a model turn. MCP discovery, config policy, and plugin metadata are distinct evidence and are not a substitute for the resolved worker-visible list.
+- Effective worker tool-list audit remains unresolved. Do not run a model worker until OpenClaw can expose that list before the model request, or until an equivalent local client-authenticated control is designed and reviewed.
 
 ## Files Included In Review Bundle
 
@@ -220,7 +260,8 @@ Result:
 
 - `cargo fmt --check`: passed
 - `cargo clippy --all-targets --all-features -- -D warnings`: passed
-- `cargo test`: passed, 114 tests
+- `cargo test headless -- --nocapture`: passed, 10 tests
+- `cargo test`: passed, 120 tests
 
 ## Recommendation
 

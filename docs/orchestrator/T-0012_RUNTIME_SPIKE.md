@@ -1,12 +1,16 @@
 # T-0012 Runtime Spike
 
-Date: 2026-07-24
+Date: 2026-07-25
 Branch: orchestrator/t-0012-feasibility
 Base commit: 3e4a512
 
 ## Scope
 
 Evaluate whether CatDesk can act as the only file and shell execution authority while an OpenClaw/Ollama worker runtime provides planning, delegation, and model orchestration. The first pass was documentation-only because OpenClaw was not installed locally. On 2026-07-24, Node.js and OpenClaw were installed externally by the operator, so this note was continued with read-only local runtime checks.
+
+## Approval Record
+
+The initial headless source changes were authorized when the operator said, "You should be good to continue," after reviewing the T-0012 runtime-spike notes. A later QA instruction requested this focused hardening pass before merge or any model-worker run. The closure pass was authorized on 2026-07-25 when the operator approved the T-0012 headless MCP hardening code and requested one final closure pass. These passes were performed without committing, pushing, merging, onboarding OpenClaw, installing a Gateway service, configuring a provider, or running a model worker.
 
 ## Boundaries Applied
 
@@ -98,12 +102,16 @@ Initial live HTTP probe status:
 Headless MCP continuation:
 
 - Added an experimental `--headless-mcp` startup path for local orchestration probes.
-- The headless path binds only to a loopback host; non-loopback hosts such as `0.0.0.0` are rejected.
-- The headless path requires `--config-path`, so tests do not read or write the normal CatDesk config.
+- The headless path defaults to `read-only` tool mode so omitted arguments cannot accidentally expose multi-tools.
+- The headless path rejects non-loopback hosts such as `0.0.0.0`, then verifies after binding that `listener.local_addr().ip().is_loopback()`.
+- The headless implementation requires an explicit `--config-path`, so tests can avoid reading or writing the normal CatDesk config.
 - The headless path skips TUI startup, ngrok setup, browser/devtools startup, and startup mascot archiving.
-- The headless path accepts `--workspace`, `--port`, `--mcp-path`, `--mode computer`, and `--tool-mode`.
+- The headless path requires `--workspace` to resolve to an existing directory.
+- The headless path accepts `--workspace`, `--port`, `--mcp-path`, `--mode computer`, and `--tool-mode read-only`.
+- The headless path restricts `--mcp-path` to `/[A-Za-z0-9_-]+/mcp`, rejecting traversal segments, nested paths, percent encoding, whitespace, and unusual punctuation.
 - Browser and both modes are rejected for headless mode in this first implementation because they would start an additional browser/devtools authority.
 - The server prints one JSON readiness line with `status`, `workspace`, `config_path`, and `mcp_url`.
+- Unexpected axum server termination or server errors are propagated through `tokio::select!` instead of being silently discarded.
 
 Live headless probe:
 
@@ -149,28 +157,67 @@ Important OpenClaw constraints observed from docs:
 - OpenClaw's MCP server mode (`openclaw mcp serve`) exposes OpenClaw-routed conversations to an MCP client; OpenClaw's MCP client configuration manages outbound MCP servers.
 - OpenClaw honors `OPENCLAW_CONFIG_PATH` and `OPENCLAW_STATE_DIR`, which is enough to route test config/state into a disposable workspace path without touching the default `~\.openclaw\openclaw.json`.
 - Even read-only config-path checks may initialize SQLite state under `OPENCLAW_STATE_DIR`; use a disposable path and clean it up explicitly after the approved test.
-- OpenClaw-managed MCP servers are exposed under the `bundle-mcp` plugin id. `tools.deny: ["bundle-mcp"]` disables them, so this must not be used for the CatDesk MCP registration test.
-- A minimal CatDesk-MCP test posture should use `tools.profile: "minimal"` plus `tools.alsoAllow: ["bundle-mcp"]`, with `tools.deny` covering at least `group:runtime`, `group:fs`, `group:web`, `group:ui`, and `group:automation`.
-- Host shell execution should also be blocked with `tools.exec.mode: "deny"`, and `tools.exec.applyPatch.enabled: false` should be set because `apply_patch` is separately enabled by default.
+- A minimal CatDesk-MCP test posture should use `tools.profile: "minimal"` with an absolute `tools.allow` list containing only the four server-qualified CatDesk MCP tool names, with `tools.deny` covering runtime, filesystem, web, UI/browser, automation, exec, applyPatch, elevated, and code-mode capability names.
+- Host shell execution should also be blocked with `tools.exec.mode: "deny"`, and `tools.exec.applyPatch.enabled: false` should be set because applyPatch has its own enable switch.
 - OpenClaw code mode should remain disabled for this spike because code mode exposes `exec` and `wait` as the model-facing surface.
+
+OpenClaw closure audit:
+
+- A disposable OpenClaw config was created through process-scoped `OPENCLAW_CONFIG_PATH` and `OPENCLAW_STATE_DIR`.
+- Native command, plugin-management, debug, browser, web, automation, elevated, exec, applyPatch, and code-mode surfaces were explicitly denied or disabled where the installed schema exposed controls.
+- MCP discovery output remained separate from worker-policy output: `openclaw mcp probe catdesk-t0012 --json` returned exactly the four read-only CatDesk MCP tools.
+- The installed OpenClaw CLI did not expose the final effective worker-visible tool definitions before a model turn. `openclaw agent --help`, `openclaw mcp`, `openclaw config`, and plugin inspection commands expose configured policy, MCP discovery, or plugin metadata, but not the resolved worker-visible tool list.
+- This means model-worker safety remains unresolved. Do not infer safety from `openclaw mcp probe` alone.
 
 ## Minimum Nonpersistent OpenClaw Test Configuration
 
-Do not write this into the default OpenClaw config. The next test should run only with process-scoped environment variables:
+Do not write this into the default OpenClaw config. The approved OpenClaw test procedure requires a disposable config path and disposable workspace, supplied only through process-scoped environment variables:
 
 ```powershell
 $env:OPENCLAW_CONFIG_PATH = "$PWD\.tmp\openclaw-t0012\openclaw.json"
 $env:OPENCLAW_STATE_DIR = "$PWD\.tmp\openclaw-t0012\state"
 ```
 
-Candidate disposable config shape, to create only after approval:
+Validated disposable config shape from the closure audit:
 
 ```json
 {
   "tools": {
     "profile": "minimal",
-    "alsoAllow": ["bundle-mcp"],
-    "deny": ["group:runtime", "group:fs", "group:web", "group:ui", "group:automation"],
+    "allow": [
+      "catdesk-t0012__catdesk_instruction",
+      "catdesk-t0012__plan_read",
+      "catdesk-t0012__read",
+      "catdesk-t0012__search"
+    ],
+    "deny": [
+      "runtime",
+      "shell",
+      "exec",
+      "execute",
+      "command",
+      "commands",
+      "applyPatch",
+      "apply_patch",
+      "filesystem",
+      "file",
+      "fs",
+      "write",
+      "edit",
+      "delete",
+      "web",
+      "web_search",
+      "web_fetch",
+      "x_search",
+      "browser",
+      "ui",
+      "automation",
+      "cron",
+      "code_execution",
+      "codeMode",
+      "code_mode",
+      "elevated"
+    ],
     "exec": {
       "mode": "deny",
       "applyPatch": {
@@ -180,10 +227,28 @@ Candidate disposable config shape, to create only after approval:
     "elevated": {
       "enabled": false
     },
-    "codeMode": {
-      "enabled": false
-    },
-    "toolSearch": false
+    "codeMode": false,
+    "web": {
+      "search": { "enabled": false },
+      "fetch": { "enabled": false },
+      "x_search": { "enabled": false }
+    }
+  },
+  "commands": {
+    "native": false,
+    "nativeSkills": false,
+    "text": false,
+    "bash": false,
+    "config": false,
+    "mcp": false,
+    "plugins": false,
+    "debug": false,
+    "restart": false
+  },
+  "browser": {
+    "enabled": false,
+    "evaluateEnabled": false,
+    "attachOnly": true
   },
   "mcp": {
     "servers": {
@@ -191,7 +256,7 @@ Candidate disposable config shape, to create only after approval:
         "url": "http://127.0.0.1:33200/t0012/mcp",
         "transport": "streamable-http",
         "toolFilter": {
-          "include": ["catdesk_instruction", "list_files", "read", "search", "run_command"],
+          "include": ["catdesk_instruction", "plan_read", "read", "search"],
           "exclude": []
         }
       }
@@ -200,7 +265,7 @@ Candidate disposable config shape, to create only after approval:
 }
 ```
 
-The exact CatDesk URL and tool list depend on adding or otherwise exposing a deterministic local-only CatDesk MCP endpoint first. The important OpenClaw property is that configured MCP remains allowed through `bundle-mcp` while OpenClaw-native runtime/file/browser/web/automation tools are denied.
+The exact CatDesk URL and tool list depend on the disposable local-only CatDesk MCP endpoint. The important OpenClaw property is that the configured policy allowlist contains only the server-qualified CatDesk MCP read-only tools while OpenClaw-native runtime/file/browser/web/automation tools are denied or disabled where the installed schema supports it.
 
 Read-only validation steps for the disposable config should be:
 
@@ -208,9 +273,9 @@ Read-only validation steps for the disposable config should be:
 2. `openclaw mcp status --verbose --json`
 3. `openclaw mcp doctor catdesk --json`
 4. `openclaw mcp probe catdesk --json` only after a disposable CatDesk MCP server is already running on `127.0.0.1`.
-5. Inspect the effective worker tool list before any model/provider run.
+5. Inspect the effective worker-visible tool list before any model/provider run.
 
-Stop for approval before creating that disposable config, probing the live CatDesk MCP server, onboarding OpenClaw, starting or installing the Gateway, adding providers, entering credentials, or enabling any native OpenClaw file/shell tools.
+Stop for approval before onboarding OpenClaw, starting or installing the Gateway, adding providers, entering credentials, enabling native OpenClaw file/shell tools, or running any model worker.
 
 ## Command History
 
@@ -305,7 +370,7 @@ Do not onboard or persistently configure OpenClaw yet as part of this spike. The
 - uses a caller-provided or printed local-only MCP path;
 - skips ngrok entirely;
 - supports per-process config/state directories;
-- can start in read-only or multi-tools mode explicitly;
+- defaults to read-only and should be used only in read-only mode for the current OpenClaw spike;
 - exits cleanly after a test window or on stdin/HTTP shutdown.
 
-The next spike should verify OpenClaw's effective worker tool list with native runtime/file/web/browser/automation tools denied and CatDesk MCP explicitly allowed. Do not run a model worker until that effective tool list is inspectable and clean.
+Multi-tools over an unauthenticated loopback endpoint remains unresolved. The next spike should verify OpenClaw's effective worker tool list with native runtime/file/web/browser/automation tools denied and CatDesk MCP explicitly allowed. Do not run a model worker until that effective tool list is inspectable and clean.

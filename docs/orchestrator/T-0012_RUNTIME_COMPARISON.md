@@ -1,6 +1,6 @@
 # T-0012 Runtime Comparison
 
-Date: 2026-07-24
+Date: 2026-07-25
 
 ## Candidates
 
@@ -18,6 +18,7 @@ Weaknesses:
 
 - Browser/devtools headless mode is intentionally unsupported in the first local-MCP implementation.
 - The headless path is experimental and should remain local-only until the delegated runtime design is frozen.
+- Multi-tools over an unauthenticated loopback endpoint is unresolved; read-only mode is the only approved headless posture for the current OpenClaw spike.
 
 ### Ollama with Qwen 3.5 Local Model
 
@@ -48,6 +49,7 @@ Potential strengths:
 - CLI supports process-scoped disposable state/config through `OPENCLAW_STATE_DIR` and `OPENCLAW_CONFIG_PATH`.
 - MCP registry commands can inspect saved servers without connecting, and `probe` can later prove a CatDesk MCP connection.
 - Disposable OpenClaw MCP config successfully registered and probed a headless CatDesk endpoint.
+- A disposable OpenClaw policy validated with only four server-qualified CatDesk MCP tools in `tools.allow` and native runtime/file/web/UI/browser/automation/exec/applyPatch/elevated/code-mode capabilities denied or disabled where the installed schema supports it.
 - Correctly quoted include filters exposed exactly four read-only CatDesk tools.
 
 Blocking uncertainties:
@@ -55,7 +57,7 @@ Blocking uncertainties:
 - OpenClaw's own native file/shell/runtime tools must be disabled or denied before CatDesk can be considered the only execution authority.
 - Documentation shows native runtime and file tools exist in the OpenClaw catalog, so a configured runtime audit is required.
 - The installed runtime has not yet been tested with a model worker using the disposable CatDesk MCP server.
-- Effective worker tool-policy inspection still needs to prove that only CatDesk MCP tools are visible and that OpenClaw-native execution tools are absent or denied.
+- Effective worker tool-policy inspection still needs to prove that only CatDesk MCP tools are visible and that OpenClaw-native execution tools are absent or denied. The installed OpenClaw CLI did not expose the final worker-visible tool definitions before a model turn during the 2026-07-25 closure audit.
 - No OpenClaw model worker turn, session restart, provider fallback, or structured event retrieval was run.
 
 ## Comparison Matrix
@@ -72,4 +74,4 @@ Blocking uncertainties:
 
 ## Feasibility Judgment
 
-The architecture remains plausible, but it is not yet proven. CatDesk has the right safety primitives, local Qwen can emit tool calls, CatDesk can now run a deterministic local MCP endpoint, and OpenClaw can discover filtered CatDesk tools through disposable config/state. The missing proof is whether OpenClaw can be configured so the worker sees only CatDesk MCP tools and cannot use native OpenClaw file/shell/network/browser tools. Until that is verified with effective tool-list inspection before a model turn, OpenClaw must be treated as an unproven orchestration layer rather than a safe execution boundary.
+The architecture remains plausible, but it is not yet proven. CatDesk has the right safety primitives, local Qwen can emit tool calls, CatDesk can now run a deterministic local MCP endpoint, and OpenClaw can discover filtered CatDesk tools through disposable config/state. The closure audit validated a restrictive disposable policy, but the missing proof remains whether OpenClaw can expose the exact worker-visible tool definitions before a model turn. Until that is verified, OpenClaw must be treated as an unproven orchestration layer rather than a safe execution boundary.

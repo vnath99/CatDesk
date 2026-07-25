@@ -1,10 +1,10 @@
 # T-0012 Recommendation
 
-Date: 2026-07-24
+Date: 2026-07-25
 
 ## Decision
 
-Pause OpenClaw integration before onboarding, provider setup, or any model worker run. CatDesk now has a constrained headless local-MCP mode, and OpenClaw can register and probe that endpoint through disposable config/state. The remaining gate is proving OpenClaw's effective worker tool list with native execution tools denied.
+Pause OpenClaw integration before onboarding, provider setup, or any model worker run. CatDesk now has a constrained headless local-MCP mode, and OpenClaw can register and probe that endpoint through disposable config/state. The remaining gate is still proving OpenClaw's effective worker-visible tool list with native execution tools denied.
 
 ## Why
 
@@ -18,18 +18,24 @@ Current behavior:
 
 - Starts without TUI input.
 - Binds only to `127.0.0.1` by default.
+- Verifies after binding that the resolved listener address is loopback.
 - Skips ngrok entirely.
 - Uses a caller-provided local-only MCP path or prints the generated path to stdout in machine-readable JSON.
 - Accepts workspace, port, mode, and tool mode as per-process CLI settings.
-- Requires a disposable `--config-path`.
+- Defaults omitted `--tool-mode` to read-only.
+- Restricts `--mcp-path` to `/[A-Za-z0-9_-]+/mcp`.
+- Requires the workspace to exist and be a directory.
+- Requires an explicit `--config-path`.
 - Exits cleanly when the process receives Ctrl+C or is stopped by the supervisor.
+- Propagates unexpected axum server termination or errors.
 - Does not change existing interactive behavior.
 - Rejects browser/both modes for now so no browser/devtools authority is started.
+- Treats multi-tools over an unauthenticated loopback endpoint as unresolved.
 
 Probe command shape:
 
 ```powershell
-catdesk --headless-mcp --host 127.0.0.1 --port 33200 --workspace C:\Temp\catdesk-disposable --mcp-path /t0012/mcp --mode computer --tool-mode multi-tools --no-ngrok
+catdesk --headless-mcp --host 127.0.0.1 --port 33200 --workspace C:\Temp\catdesk-disposable --mcp-path /t0012/mcp --mode computer --tool-mode read-only --config-path C:\Temp\catdesk-disposable-config\config.toml --no-ngrok
 ```
 
 ## OpenClaw Probe Result
@@ -42,6 +48,17 @@ With process-scoped `OPENCLAW_CONFIG_PATH` and `OPENCLAW_STATE_DIR`, OpenClaw re
 - `catdesk-t0012__search`
 
 `openclaw config validate --json` returned `valid: true` with no warnings. This proves MCP registration and tool discovery, not model-worker safety.
+
+## OpenClaw Closure Audit
+
+On 2026-07-25, the approved closure pass configured a disposable OpenClaw profile using only process-scoped `OPENCLAW_CONFIG_PATH` and `OPENCLAW_STATE_DIR`. The validated policy used `tools.profile: "minimal"`, an absolute `tools.allow` list containing only the four CatDesk MCP tools above, and explicit denies for runtime, filesystem, web, UI/browser, automation, exec, applyPatch, elevated, and code-mode capability names. It also set native command surfaces off, `browser.enabled: false`, `tools.exec.mode: "deny"`, `tools.exec.applyPatch.enabled: false`, `tools.elevated.enabled: false`, and `tools.codeMode: false`.
+
+This closure pass distinguishes two observations:
+
+- MCP server discovery succeeded and returned exactly the four filtered CatDesk tools.
+- Final effective worker-visible tool definitions could not be exposed by the installed OpenClaw CLI before a model turn. `openclaw agent --help`, `openclaw mcp`, `openclaw config`, and plugin inspection commands expose configured policy, MCP discovery, or plugin metadata, but not the resolved tool list that would be sent to an actual worker.
+
+Therefore OpenClaw remains unresolved as a safe model-worker orchestrator. Read-only CatDesk MCP mode is the only approved OpenClaw test posture until local client authentication or an equivalent control is designed and the worker-visible tool list can be audited before any model request.
 
 ## Future OpenClaw Approval Packet
 
@@ -72,7 +89,7 @@ The first command was the only candidate that appeared suitable for a pre-instal
 
 ## Minimum Nonpersistent Test Plan
 
-After CatDesk has a deterministic local-only MCP endpoint, run OpenClaw with process-scoped paths only:
+Run OpenClaw with process-scoped paths only:
 
 ```powershell
 $env:OPENCLAW_CONFIG_PATH = "$PWD\.tmp\openclaw-t0012\openclaw.json"
@@ -82,13 +99,14 @@ $env:OPENCLAW_STATE_DIR = "$PWD\.tmp\openclaw-t0012\state"
 The disposable config should:
 
 - register CatDesk under `mcp.servers.catdesk`;
-- use `tools.profile: "minimal"` plus `tools.alsoAllow: ["bundle-mcp"]`;
-- deny OpenClaw-native `group:runtime`, `group:fs`, `group:web`, `group:ui`, and `group:automation`;
+- expose only read-only CatDesk tools for this spike;
+- use `tools.profile: "minimal"` and an absolute `tools.allow` list containing only the four server-qualified CatDesk MCP tool names;
+- deny OpenClaw-native runtime, filesystem, web, UI/browser, automation, exec, applyPatch, elevated, and code-mode capability names;
 - set `tools.exec.mode: "deny"`;
 - set `tools.exec.applyPatch.enabled: false`;
 - keep `tools.elevated.enabled: false`;
 - keep code mode disabled;
-- avoid `tools.deny: ["bundle-mcp"]`, because that disables configured MCP servers.
+- keep native command, plugin-management, debug, browser, web, and automation surfaces disabled where the installed schema supports explicit disabling.
 
 ## Required Runtime Audit Before Model Worker Run
 
