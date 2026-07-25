@@ -4,6 +4,7 @@ pub mod context;
 pub mod contracts;
 pub mod coordinator;
 pub mod events;
+pub mod fault_injection;
 pub mod job_manager;
 pub mod journal;
 pub mod patch_engine;

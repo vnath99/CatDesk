@@ -143,7 +143,8 @@ Tickets:
 
 - T-0019: local commit `eaf85e5`
 - T-0020: local commit `093055f`
-- T-0021: local commit to be recorded in Git history after this checkpoint update
+- T-0021: local commit `e66ae92`
+- T-0022: local commit to be recorded in Git history after this checkpoint update
 
 Required gate evidence:
 
@@ -152,6 +153,7 @@ Required gate evidence:
 | Simulated provider switch succeeds without duplicate mutation | T-0019 filters completed/failed tool calls out of handoff. | passed |
 | Supervisor can poll, inspect patches/diffs, and resume | T-0020 supervisor surface supports event polling, bounded patch/diff inspection, pause, resume, cancel, and final review retrieval. | passed |
 | Long-running jobs are bounded and recoverable | T-0021 records durable jobs, bounded logs, rotation, cancellation, lost-process recovery, and restart reopening. | passed |
+| Fault-injection and security matrix passes | T-0022 covers malformed tool calls, forbidden operations, stale/conflicting patches, provider switch, disclosure, prompt injection, redaction, staged Git content, and no push/merge final review. | passed |
 | Remote disclosure policy is enforced | T-0019 blocks remote/browser providers unless disclosure policy allows them. | passed |
 
 Current T-0019 tests:
@@ -174,3 +176,10 @@ Current T-0021 tests:
 - `cargo test delegated::job_manager -- --nocapture`: passed, 7 tests
 - `cargo clippy --all-targets --all-features -- -D warnings`: passed
 - `cargo test`: passed, 185 tests and 1 ignored live Ollama smoke
+
+Current T-0022 tests:
+
+- `cargo fmt --check`: passed
+- `cargo test delegated::fault_injection -- --nocapture`: passed, 4 tests
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed
+- `cargo test`: passed, 189 tests and 1 ignored live Ollama smoke
