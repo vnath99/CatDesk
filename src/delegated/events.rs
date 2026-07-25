@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::EXECUTION_CONTRACT_SCHEMA_VERSION;
+use super::advisor::{AdviceRequestV1, AdviceResponseV1};
 use super::contracts::{
     ApprovalId, ArtifactId, EscalationPacketV1, ItemId, RunId, RunState, ToolCallId, TurnId,
     WorkerSessionId, stable_hash,
@@ -59,6 +60,8 @@ pub enum EventPayloadV1 {
     RunStateChanged { state: RunState },
     Delta { text: String },
     Item { item: Box<TurnItemV1> },
+    AdviceRequest { request: Box<AdviceRequestV1> },
+    AdviceResponse { response: Box<AdviceResponseV1> },
     Failed { error: String },
     Cancelled { reason: String },
     OutcomeUnknown { reason: String },
