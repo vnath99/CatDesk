@@ -20,5 +20,6 @@ The Codex desktop interface in this session does not expose a per-ticket credit 
 | T-0021 | COMPLETED_VERIFIED | unavailable | 90-140 | Long-running job manager, durable records, bounded log polling, rotation, restart recovery, cancellation, and command-policy integration added; local commit recorded in Git history. |
 | T-0022 | COMPLETED_VERIFIED | unavailable | 135-210 | Fault-injection and security harness added for patch, journal, context, provider, supervisor final-review, long-job, Git staging, disclosure, and redaction scenarios; local commit recorded in Git history. |
 | T-0023 | COMPLETED_VERIFIED | unavailable | 50-85 | Setup, operator tutorial, security limitations, and release-review documentation added; local commit recorded in Git history. |
+| T-0023A | COMPLETED_VERIFIED | unavailable | 170-260 | Integrated delegated service, complete tool dispatcher, MCP supervisor transport wiring, setup scripts, journal durability review, fake restart recovery, and live Qwen closure evidence added; local commit recorded in Git history. |
 
 If the UI later exposes exact ticket credit usage, update this ledger without changing ticket scope.

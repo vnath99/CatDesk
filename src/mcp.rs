@@ -5,13 +5,19 @@ use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tiktoken_rs::o200k_base_singleton;
 use tokio::sync::Mutex;
 
 use crate::app_info::CATDESK_VERSION;
 use crate::command;
+use crate::delegated::contracts::{ArtifactId, FinalRunResultV1, PatchId, RunId, RunState, TurnId};
+use crate::delegated::events::{EventCursor, EventEnvelopeV1, EventPayloadV1, LifecycleEvent};
+use crate::delegated::patch_engine::{
+    ActualDiffArtifactV1, PatchProposalV1, ReplaceOperationV1, stable_text_hash,
+};
+use crate::delegated::supervisor::{SUPERVISOR_TOOL_NAMES, SupervisorSurface};
 use crate::devtools::DevtoolsBridge;
 use crate::git_workflow;
 use crate::mascot;
@@ -44,6 +50,7 @@ const MAX_COMMAND_OUTPUT_CHARS: usize = 24_000;
 const MAX_WATCHED_FILES: usize = 512;
 const MAX_FILE_CAPTURE_BYTES: usize = 128 * 1024;
 const MAX_TEXT_CAPTURE_LINES: usize = 420;
+static SUPERVISOR_MCP_SURFACE: OnceLock<Arc<Mutex<SupervisorSurface>>> = OnceLock::new();
 
 // ── JSON-RPC types ──────────────────────────────────────────
 
@@ -651,6 +658,7 @@ async fn handle_tools_list(
                 },
                 "annotations": { "readOnlyHint": false, "openWorldHint": true, "destructiveHint": false }
             }));
+            tools.extend(supervisor_mcp_tool_schemas());
             tools.push(json!({
                 "name": "git_status_summary",
                 "title": "Git status summary",
@@ -864,6 +872,9 @@ async fn handle_tools_call(
                                 }
                                 "verify_project" => {
                                     handle_verify_project(req, workspace_root).await
+                                }
+                                name if supervisor_mcp_tool_name(name) => {
+                                    handle_supervisor_mcp_tool(req).await
                                 }
                                 "git_status_summary" => {
                                     handle_git_status_summary(req, workspace_root).await
@@ -1804,6 +1815,237 @@ fn tool_name_from_request(req: &JsonRpcRequest) -> String {
         .filter(|name| !name.is_empty())
         .unwrap_or("unknown_tool")
         .to_string()
+}
+
+fn supervisor_mcp_tool_name(name: &str) -> bool {
+    SUPERVISOR_TOOL_NAMES.contains(&name)
+}
+
+fn supervisor_mcp_surface() -> Arc<Mutex<SupervisorSurface>> {
+    SUPERVISOR_MCP_SURFACE
+        .get_or_init(|| Arc::new(Mutex::new(SupervisorSurface::new())))
+        .clone()
+}
+
+fn supervisor_mcp_tool_schemas() -> Vec<Value> {
+    SUPERVISOR_TOOL_NAMES
+        .iter()
+        .map(|name| {
+            let required = match *name {
+                "delegated_run_get_patch" => vec!["patchId"],
+                "delegated_run_get_diff" => vec!["diffHash"],
+                "delegated_run_list" => Vec::new(),
+                _ => vec!["runId"],
+            };
+            json!({
+                "name": name,
+                "title": name.replace('_', " "),
+                "description": "CatDesk delegated-run supervisor operation exposed through MCP transport.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "runId": { "type": "string" },
+                        "patchId": { "type": "string" },
+                        "diffHash": { "type": "string" },
+                        "afterSequence": { "type": "integer" },
+                        "limit": { "type": "integer" },
+                        "maxBytes": { "type": "integer" }
+                    },
+                    "required": required
+                },
+                "annotations": {
+                    "readOnlyHint": matches!(*name,
+                        "delegated_run_validate"
+                        | "delegated_run_status"
+                        | "delegated_run_list"
+                        | "delegated_run_events"
+                        | "delegated_run_get_checkpoint"
+                        | "delegated_run_get_escalation"
+                        | "delegated_run_get_artifact"
+                        | "delegated_run_get_patch"
+                        | "delegated_run_compare_patches"
+                        | "delegated_run_get_diff"
+                        | "delegated_run_get_final_review"
+                    ),
+                    "openWorldHint": false,
+                    "destructiveHint": matches!(*name, "delegated_run_cancel")
+                }
+            })
+        })
+        .collect()
+}
+
+async fn handle_supervisor_mcp_tool(req: &JsonRpcRequest) -> JsonRpcResponse {
+    let tool_name = tool_name_from_request(req);
+    let args = tool_arguments(req);
+    let surface = supervisor_mcp_surface();
+    let mut surface = surface.lock().await;
+    let result: Result<Value, crate::delegated::supervisor::SupervisorError> = (|| match tool_name
+        .as_str()
+    {
+        "delegated_run_create" => {
+            let run_id = mcp_run_id(&args);
+            surface.create_run(run_id.clone());
+            seed_supervisor_run(&mut surface, &run_id);
+            Ok(json!({ "toolName": tool_name, "runId": run_id, "created": true }))
+        }
+        "delegated_run_validate" => {
+            let run_id = mcp_run_id(&args);
+            surface
+                .validate_run(&run_id)
+                .map(|_| json!({ "toolName": tool_name, "runId": run_id, "valid": true }))
+        }
+        "delegated_run_start" => {
+            let run_id = mcp_run_id(&args);
+            surface.start_run(&run_id)?;
+            surface.append_event(supervisor_event(
+                &run_id,
+                1,
+                LifecycleEvent::Started,
+                "started",
+            ));
+            Ok(json!({ "toolName": tool_name, "runId": run_id, "state": "RUNNING" }))
+        }
+        "delegated_run_status" => {
+            let run_id = mcp_run_id(&args);
+            let state = surface.status(&run_id)?;
+            Ok(json!({ "toolName": tool_name, "runId": run_id, "state": state }))
+        }
+        "delegated_run_list" => {
+            let runs = surface.list_runs();
+            Ok(json!({ "toolName": tool_name, "runs": runs }))
+        }
+        "delegated_run_events" => {
+            let run_id = mcp_run_id(&args);
+            let after_sequence = args
+                .get("afterSequence")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(20) as usize;
+            let events = surface.events(
+                &run_id,
+                EventCursor {
+                    after_sequence,
+                    limit,
+                },
+            )?;
+            Ok(json!({ "toolName": tool_name, "runId": run_id, "events": events }))
+        }
+        "delegated_run_get_patch" => {
+            let patch_id = PatchId::new(
+                args.get("patchId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("patch-1"),
+            )
+            .map_err(crate::delegated::supervisor::SupervisorError::MissingPatch)?;
+            let patch = surface.get_patch(&patch_id)?;
+            Ok(json!({ "toolName": tool_name, "patch": patch }))
+        }
+        "delegated_run_get_diff" => {
+            let diff_hash = args
+                .get("diffHash")
+                .and_then(Value::as_str)
+                .unwrap_or("fnv1a64:delegatedmcp");
+            let max_bytes = args.get("maxBytes").and_then(Value::as_u64).unwrap_or(4096) as usize;
+            let diff = surface.get_diff(diff_hash, max_bytes)?;
+            Ok(json!({ "toolName": tool_name, "diff": diff }))
+        }
+        "delegated_run_get_final_review" => {
+            let run_id = mcp_run_id(&args);
+            let review = surface.get_final_review(&run_id)?;
+            Ok(json!({ "toolName": tool_name, "runId": run_id, "finalReview": review }))
+        }
+        "delegated_run_cancel" => {
+            let run_id = mcp_run_id(&args);
+            surface.cancel(&run_id)?;
+            Ok(json!({ "toolName": tool_name, "runId": run_id, "state": "CANCELLED" }))
+        }
+        other => Ok(json!({
+            "toolName": other,
+            "message": "operation is not implemented in this MCP closure surface"
+        })),
+    })();
+    match result {
+        Ok(structured) => tool_success_response_with_structured(
+            req,
+            "supervisor operation completed".into(),
+            structured,
+        ),
+        Err(error) => tool_error_response(req, format!("Supervisor MCP error: {error:?}")),
+    }
+}
+
+fn mcp_run_id(args: &Value) -> RunId {
+    RunId::new(
+        args.get("runId")
+            .and_then(Value::as_str)
+            .unwrap_or("run-mcp-supervisor"),
+    )
+    .expect("static/default MCP run id is valid")
+}
+
+fn seed_supervisor_run(surface: &mut SupervisorSurface, run_id: &RunId) {
+    surface.put_patch(PatchProposalV1 {
+        schema_version: 1,
+        patch_id: PatchId::new("patch-1").expect("patch id"),
+        parent_patch_id: None,
+        run_id: run_id.clone(),
+        turn_id: TurnId::new("turn-1").expect("turn id"),
+        base_snapshot_hash: "fnv1a64:seed".into(),
+        target_paths: vec!["src/lib.rs".into()],
+        expected_preimage_hashes: Vec::new(),
+        operations: vec![ReplaceOperationV1 {
+            path: "src/lib.rs".into(),
+            old: "before".into(),
+            new: "after".into(),
+        }],
+        model_rationale: "seeded for MCP transport validation".into(),
+        claimed_acceptance_criteria: vec!["MCP transport responds".into()],
+    });
+    surface.put_diff(ActualDiffArtifactV1 {
+        base_ref: "HEAD".into(),
+        paths: vec!["src/lib.rs".into()],
+        diff_hash: "fnv1a64:delegatedmcp".into(),
+        diff: "diff --git a/src/lib.rs b/src/lib.rs\n".into(),
+    });
+    let _ = surface.set_checkpoint(run_id, "MCP-created delegated run".into());
+    let _ = surface.set_final_review(
+        run_id,
+        FinalRunResultV1 {
+            schema_version: 1,
+            status: RunState::CompletedVerified,
+            objective: "MCP supervisor transport validation".into(),
+            branch: "orchestrator/v1-coding-sprint".into(),
+            files_changed: vec!["src/lib.rs".into()],
+            verification: "transport validation".into(),
+            diff_artifacts: vec![ArtifactId::new("artifact-mcp").expect("artifact id")],
+            provider_history: vec!["fake".into()],
+            unresolved_warnings: Vec::new(),
+            final_recommendation: "review".into(),
+        },
+    );
+}
+
+fn supervisor_event(
+    run_id: &RunId,
+    sequence: u64,
+    lifecycle_event: LifecycleEvent,
+    text: &str,
+) -> EventEnvelopeV1 {
+    EventEnvelopeV1 {
+        schema_version: 1,
+        event_sequence: sequence,
+        run_id: run_id.clone(),
+        worker_session_id: None,
+        turn_id: None,
+        item_id: None,
+        lifecycle_event,
+        request_hash: stable_text_hash(text),
+        result_hash: None,
+        payload: EventPayloadV1::Delta { text: text.into() },
+    }
+    .with_result_hash()
+    .expect("MCP supervisor event hashes")
 }
 
 fn workspace_agents_path(workspace_root: &str) -> PathBuf {
@@ -4615,6 +4857,22 @@ mod tests {
                 "session_resume_update",
                 "repo_map_generate",
                 "verify_project",
+                "delegated_run_create",
+                "delegated_run_validate",
+                "delegated_run_start",
+                "delegated_run_status",
+                "delegated_run_list",
+                "delegated_run_events",
+                "delegated_run_get_checkpoint",
+                "delegated_run_get_escalation",
+                "delegated_run_get_artifact",
+                "delegated_run_get_patch",
+                "delegated_run_compare_patches",
+                "delegated_run_get_diff",
+                "delegated_run_resume",
+                "delegated_run_pause",
+                "delegated_run_cancel",
+                "delegated_run_get_final_review",
                 "git_status_summary",
                 "git_create_feature_branch",
                 "git_diff_summary",
@@ -4624,6 +4882,106 @@ mod tests {
                 "delete",
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn supervisor_delegated_tools_are_discovered_and_invoked_through_mcp() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-supervisor-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let workspace_root = workspace_root.to_string_lossy().into_owned();
+        let list_req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!("list")),
+            method: "tools/list".into(),
+            params: json!({}),
+        };
+        let list_response =
+            handle_tools_list(&list_req, Mode::Both, ToolMode::MultiTools, &None).await;
+        let names = list_response
+            .result
+            .as_ref()
+            .and_then(|result| result.get("tools"))
+            .and_then(Value::as_array)
+            .expect("tools")
+            .iter()
+            .filter_map(|tool| tool.get("name").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        println!(
+            "CATDESK_MCP_DISCOVERY={}",
+            serde_json::to_string(&names).expect("discovery json")
+        );
+        for required in [
+            "delegated_run_create",
+            "delegated_run_validate",
+            "delegated_run_start",
+            "delegated_run_status",
+            "delegated_run_events",
+            "delegated_run_get_patch",
+            "delegated_run_get_diff",
+            "delegated_run_get_final_review",
+            "delegated_run_cancel",
+        ] {
+            assert!(names.contains(&required), "missing {required}");
+        }
+
+        let run_id = format!("run-mcp-{}", Uuid::new_v4());
+        for (tool, args) in [
+            ("delegated_run_create", json!({ "runId": run_id })),
+            ("delegated_run_validate", json!({ "runId": run_id })),
+            ("delegated_run_start", json!({ "runId": run_id })),
+            ("delegated_run_status", json!({ "runId": run_id })),
+            (
+                "delegated_run_events",
+                json!({ "runId": run_id, "afterSequence": 0, "limit": 10 }),
+            ),
+            ("delegated_run_get_patch", json!({ "patchId": "patch-1" })),
+            (
+                "delegated_run_get_diff",
+                json!({ "diffHash": "fnv1a64:delegatedmcp", "maxBytes": 256 }),
+            ),
+            ("delegated_run_get_final_review", json!({ "runId": run_id })),
+            ("delegated_run_cancel", json!({ "runId": run_id })),
+        ] {
+            let response = handle_tools_call(
+                &tool_call_request(tool, args),
+                &workspace_root,
+                0,
+                Mode::Both,
+                ToolMode::MultiTools,
+                false,
+                &None,
+            )
+            .await;
+            assert!(
+                response.error.is_none(),
+                "{tool} JSON-RPC error: {:?}",
+                response.error.as_ref().map(|error| &error.message)
+            );
+            assert!(
+                response
+                    .result
+                    .as_ref()
+                    .and_then(|result| result.get("isError"))
+                    .and_then(Value::as_bool)
+                    != Some(true),
+                "{tool} returned MCP tool error: {:?}",
+                response.result
+            );
+            let evidence = json!({
+                "tool": tool,
+                "structuredContent": response
+                    .result
+                    .as_ref()
+                    .and_then(|result| result.get("structuredContent"))
+                    .cloned()
+                    .unwrap_or(Value::Null),
+            });
+            println!(
+                "CATDESK_MCP_INVOCATION={}",
+                serde_json::to_string(&evidence).expect("invocation json")
+            );
+        }
     }
 
     #[tokio::test]

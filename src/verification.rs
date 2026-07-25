@@ -289,11 +289,48 @@ fn summary_lines(result: &command::CommandResult) -> Vec<String> {
             lines.push(line);
         }
     }
+    for line in assertion_detail_lines(result) {
+        if !lines.contains(&line) {
+            lines.push(line);
+        }
+    }
     if lines.is_empty() {
         lines.push("(no output)".into());
     }
     lines.truncate(MAX_SUMMARY_LINES);
     lines
+}
+
+fn assertion_detail_lines(result: &command::CommandResult) -> Vec<String> {
+    let combined = if result.stderr.is_empty() {
+        result.stdout.clone()
+    } else if result.stdout.is_empty() {
+        result.stderr.clone()
+    } else {
+        format!("{}\n{}", result.stdout, result.stderr)
+    };
+    combined
+        .lines()
+        .map(str::trim)
+        .filter(|line| {
+            line.starts_with("left:")
+                || line.starts_with("right:")
+                || line.starts_with("expected:")
+                || line.starts_with("actual:")
+        })
+        .take(6)
+        .map(|line| {
+            let mut out = String::new();
+            for (idx, ch) in line.chars().enumerate() {
+                if idx >= 300 {
+                    out.push_str("...");
+                    return out;
+                }
+                out.push(ch);
+            }
+            out
+        })
+        .collect()
 }
 
 pub async fn verify_project(workspace_root: &str) -> Result<VerifyProjectOutput, String> {

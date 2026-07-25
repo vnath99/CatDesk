@@ -576,9 +576,26 @@ pub fn catdesk_tool_definitions() -> Vec<ToolDefinitionV1> {
                 "type": "object",
                 "properties": {
                     "patchId": { "type": "string" },
-                    "diff": { "type": "string" }
+                    "parentPatchId": { "type": "string" },
+                    "targetPaths": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    },
+                    "operations": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "path": { "type": "string" },
+                                "old": { "type": "string" },
+                                "new": { "type": "string" }
+                            },
+                            "required": ["path", "old", "new"]
+                        }
+                    },
+                    "rationale": { "type": "string" }
                 },
-                "required": ["patchId", "diff"]
+                "required": ["patchId", "operations"]
             }),
             mutation_kind: ToolMutationKind::ReadOnly,
         },
@@ -592,6 +609,102 @@ pub fn catdesk_tool_definitions() -> Vec<ToolDefinitionV1> {
                     "confirmation": { "type": "string" }
                 },
                 "required": ["patchId"]
+            }),
+            mutation_kind: ToolMutationKind::Mutating,
+        },
+        ToolDefinitionV1 {
+            name: "patch.compare".into(),
+            description: "Compare a revised child patch against a parent patch.".into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "parentPatchId": { "type": "string" },
+                    "candidatePatchId": { "type": "string" }
+                },
+                "required": ["parentPatchId", "candidatePatchId"]
+            }),
+            mutation_kind: ToolMutationKind::ReadOnly,
+        },
+        ToolDefinitionV1 {
+            name: "diff.actual".into(),
+            description: "Capture the authoritative Git diff for selected paths.".into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "paths": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    }
+                }
+            }),
+            mutation_kind: ToolMutationKind::ReadOnly,
+        },
+        ToolDefinitionV1 {
+            name: "verify.run".into(),
+            description: "Run CatDesk-controlled verification for the workspace.".into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "timeout": { "type": "integer" }
+                }
+            }),
+            mutation_kind: ToolMutationKind::ReadOnly,
+        },
+        ToolDefinitionV1 {
+            name: "job.start".into(),
+            description:
+                "Start a CatDesk-controlled long-running job after command-policy validation."
+                    .into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "command": { "type": "string" },
+                    "cwd": { "type": "string" },
+                    "maxLogBytes": { "type": "integer" }
+                },
+                "required": ["command"]
+            }),
+            mutation_kind: ToolMutationKind::Mutating,
+        },
+        ToolDefinitionV1 {
+            name: "job.status".into(),
+            description: "Read status for a CatDesk-controlled long-running job.".into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "jobId": { "type": "string" }
+                },
+                "required": ["jobId"]
+            }),
+            mutation_kind: ToolMutationKind::ReadOnly,
+        },
+        ToolDefinitionV1 {
+            name: "job.poll".into(),
+            description: "Read a bounded stdout or stderr slice for a CatDesk-controlled job."
+                .into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "jobId": { "type": "string" },
+                    "stream": { "type": "string", "enum": ["stdout", "stderr"] },
+                    "offset": { "type": "integer" },
+                    "maxBytes": { "type": "integer" }
+                },
+                "required": ["jobId"]
+            }),
+            mutation_kind: ToolMutationKind::ReadOnly,
+        },
+        ToolDefinitionV1 {
+            name: "job.cancel".into(),
+            description:
+                "Cancel a CatDesk-controlled long-running job using process-tree termination."
+                    .into(),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "jobId": { "type": "string" }
+                },
+                "required": ["jobId"]
             }),
             mutation_kind: ToolMutationKind::Mutating,
         },

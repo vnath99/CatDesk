@@ -12,7 +12,7 @@ Tickets:
 - T-0012: local commit `d0cc25e`
 - T-0013: local commit `53e06a4`
 - T-0013A: local commit `35e23dc`
-- T-0013B: local commit to be recorded in Git history after this checkpoint update
+- T-0013B: local commit `bd29103`
 
 Required gate evidence:
 
@@ -63,12 +63,12 @@ Nothing was pushed, merged, published, released, deployed, or opened as a pull r
 
 ## Milestone B - Recovery And Context
 
-Status: IN_PROGRESS
+Status: PASSED
 
 Tickets:
 
-- T-0014: local commit to be recorded in Git history after this checkpoint update
-- T-0015: local commit to be recorded in Git history after this checkpoint update
+- T-0014: local commit `684e9d2`
+- T-0015: local commit `6596392`
 
 Required gate evidence:
 
@@ -95,13 +95,13 @@ Current T-0015 tests:
 
 ## Milestone C - First Integrated Worker
 
-Status: IN_PROGRESS
+Status: PASSED
 
 Tickets:
 
-- T-0016: local commit to be recorded in Git history after this checkpoint update
-- T-0017: local commit to be recorded in Git history after this checkpoint update
-- T-0018: local commit to be recorded in Git history after this checkpoint update
+- T-0016: local commit `d363555`
+- T-0017: local commit `90ab774`
+- T-0018: local commit `060eed8`
 
 Required gate evidence:
 
@@ -137,7 +137,7 @@ Current T-0018 tests:
 
 ## Milestone D - Provider And Supervisor Workflow
 
-Status: IN_PROGRESS
+Status: PASSED_AFTER_T0023A_CLOSURE
 
 Tickets:
 
@@ -145,7 +145,8 @@ Tickets:
 - T-0020: local commit `093055f`
 - T-0021: local commit `e66ae92`
 - T-0022: local commit `4cf4f6e`
-- T-0023: local commit to be recorded in Git history after this checkpoint update
+- T-0023: local commit `2571424`
+- T-0023A: local closure commit recorded in Git history and in the external review bundle
 
 Required gate evidence:
 
@@ -156,6 +157,7 @@ Required gate evidence:
 | Long-running jobs are bounded and recoverable | T-0021 records durable jobs, bounded logs, rotation, cancellation, lost-process recovery, and restart reopening. | passed |
 | Fault-injection and security matrix passes | T-0022 covers malformed tool calls, forbidden operations, stale/conflicting patches, provider switch, disclosure, prompt injection, redaction, staged Git content, and no push/merge final review. | passed |
 | Setup and release review are documented | T-0023 documents runtime setup, Ollama/Qwen, adapters, disclosure, patch protocol, restart recovery, long jobs, limitations, and a disposable first-run tutorial. | passed |
+| Integrated delegated workflow is composed and tested | T-0023A adds the integrated service, expanded tool dispatcher, MCP transport wiring, setup scripts, live Qwen model-tool-model evidence, and review bundle. | passed |
 | Remote disclosure policy is enforced | T-0019 blocks remote/browser providers unless disclosure policy allows them. | passed |
 
 Current T-0019 tests:
@@ -191,3 +193,12 @@ Current T-0023 tests:
 - `cargo fmt --check`: passed
 - `cargo clippy --all-targets --all-features -- -D warnings`: passed
 - `cargo test`: passed, 189 tests and 1 ignored live Ollama smoke
+
+Current T-0023A tests:
+
+- `cargo fmt --check`: passed
+- `cargo test delegated::integrated -- --nocapture`: passed, 2 tests and 1 ignored live Qwen closure
+- `cargo test supervisor_delegated_tools_are_discovered_and_invoked_through_mcp -- --nocapture`: passed, 1 MCP transport test
+- `cargo test delegated::integrated::tests::ollama_qwen_live_model_tool_model_closure -- --ignored --nocapture`: passed with `CARGO_TARGET_DIR` set to a temporary path because Windows Application Control blocked the default target test executable
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed
+- `cargo test`: passed, 192 tests and 2 ignored live/opt-in tests

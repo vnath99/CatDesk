@@ -75,6 +75,7 @@ supervisor action.
 
 ## Limits
 
-This ticket provides the local job-management primitive only. It does not yet
-expose the manager through the T-0020 supervisor MCP surface, and it does not
-implement a full production job scheduler.
+T-0023A wires the job manager into the integrated delegated service tool
+dispatcher through `job.start`, `job.status`, `job.poll`, and `job.cancel`.
+The manager remains a bounded local primitive rather than a full production job
+scheduler.
