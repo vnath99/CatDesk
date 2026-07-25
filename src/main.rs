@@ -982,9 +982,10 @@ fn parse_headless_mode(value: &str) -> Result<Mode, String> {
 fn parse_headless_tool_mode(value: &str) -> Result<ToolMode, String> {
     match value {
         "multi-tools" => Ok(ToolMode::MultiTools),
+        "supervisor-only" => Ok(ToolMode::SupervisorOnly),
         "read-only" => Ok(ToolMode::ReadOnly),
         _ => Err(format!(
-            "invalid --tool-mode `{value}`; expected multi-tools or read-only"
+            "invalid --tool-mode `{value}`; expected multi-tools, supervisor-only, or read-only"
         )),
     }
 }

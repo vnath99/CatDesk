@@ -146,7 +146,8 @@ Tickets:
 - T-0021: local commit `e66ae92`
 - T-0022: local commit `4cf4f6e`
 - T-0023: local commit `2571424`
-- T-0023A: local closure commit recorded in Git history and in the external review bundle
+- T-0023A: local commit `59d0634`
+- T-0023B: local closure commit recorded in Git history and in the external review bundle
 
 Required gate evidence:
 
@@ -158,6 +159,7 @@ Required gate evidence:
 | Fault-injection and security matrix passes | T-0022 covers malformed tool calls, forbidden operations, stale/conflicting patches, provider switch, disclosure, prompt injection, redaction, staged Git content, and no push/merge final review. | passed |
 | Setup and release review are documented | T-0023 documents runtime setup, Ollama/Qwen, adapters, disclosure, patch protocol, restart recovery, long jobs, limitations, and a disposable first-run tutorial. | passed |
 | Integrated delegated workflow is composed and tested | T-0023A adds the integrated service, expanded tool dispatcher, MCP transport wiring, setup scripts, live Qwen model-tool-model evidence, and review bundle. | passed |
+| Production delegated-run path is wired and safety-closed | T-0023B adds an autonomous Ollama worker loop, retained provider/tool history, durable integrated state, least-privilege supervisor-only MCP startup, explicit MCP artifact errors, and live Qwen production-loop evidence. | passed |
 | Remote disclosure policy is enforced | T-0019 blocks remote/browser providers unless disclosure policy allows them. | passed |
 
 Current T-0019 tests:
@@ -202,3 +204,14 @@ Current T-0023A tests:
 - `cargo test delegated::integrated::tests::ollama_qwen_live_model_tool_model_closure -- --ignored --nocapture`: passed with `CARGO_TARGET_DIR` set to a temporary path because Windows Application Control blocked the default target test executable
 - `cargo clippy --all-targets --all-features -- -D warnings`: passed
 - `cargo test`: passed, 192 tests and 2 ignored live/opt-in tests
+
+Current T-0023B tests:
+
+- `cargo fmt --check`: passed
+- `cargo test delegated::integrated -- --nocapture`: passed, 4 tests and 2 ignored live tests
+- `cargo test supervisor_delegated_tools_are_discovered_and_invoked_through_mcp -- --nocapture`: passed, 1 MCP transport test
+- `cargo test delegated::integrated::tests::ollama_qwen_live_production_worker_loop_closure -- --ignored --nocapture`: passed in 67.28s with `CARGO_TARGET_DIR` set to a temporary path; Qwen drove the autonomous production loop through read, patch, failed verification, revised patch, passing verification, diff capture, and completion
+- `scripts/start-local-orchestrator.ps1`: passed bounded start/cleanup with `--tool-mode supervisor-only`
+- `scripts/start-dev-orchestrator.ps1`: passed bounded start/cleanup with `--tool-mode supervisor-only`
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed
+- `cargo test`: passed, 194 tests and 3 ignored live/opt-in tests

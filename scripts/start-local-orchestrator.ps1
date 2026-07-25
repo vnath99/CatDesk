@@ -1,7 +1,7 @@
 param(
     [string]$Workspace = (Get-Location).Path,
-    [string]$ConfigPath = (Join-Path (Get-Location).Path ".tmp\catdesk-local-orchestrator\config.json"),
-    [string]$Host = "127.0.0.1",
+    [string]$ConfigPath = (Join-Path (Get-Location).Path (".tmp\catdesk-local-orchestrator\config-{0}.toml" -f $PID)),
+    [string]$ListenHost = "127.0.0.1",
     [int]$Port = 38765,
     [string]$McpPath = "/catdesk/mcp"
 )
@@ -11,9 +11,6 @@ $ErrorActionPreference = "Stop"
 $workspacePath = Resolve-Path -LiteralPath $Workspace
 $configDir = Split-Path -Parent $ConfigPath
 New-Item -ItemType Directory -Force -Path $configDir | Out-Null
-if (!(Test-Path -LiteralPath $ConfigPath)) {
-    "{}" | Set-Content -LiteralPath $ConfigPath -Encoding UTF8
-}
 
 $catdesk = Get-Command catdesk -ErrorAction SilentlyContinue
 if ($null -eq $catdesk) {
@@ -31,7 +28,7 @@ if ($null -eq $catdesk) {
     --headless-mcp `
     --workspace $workspacePath.Path `
     --config-path $ConfigPath `
-    --host $Host `
+    --host $ListenHost `
     --port $Port `
     --mcp-path $McpPath `
-    --tool-mode multi-tools
+    --tool-mode supervisor-only

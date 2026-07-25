@@ -79,6 +79,15 @@ pub struct ProviderTurnRequestV1 {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProviderMessageV1 {
+    pub role: String,
+    pub content: String,
+    pub tool_call_id: Option<String>,
+    pub tool_name: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProviderTurnResultV1 {
     pub terminal: bool,
     pub output_bytes: usize,
@@ -170,6 +179,17 @@ pub trait CatDeskToolDispatcher {
     fn execute(&mut self, tool_call: &NormalizedToolCallV1) -> Result<String, RuntimeError>;
 }
 
+pub trait ProviderClientV1 {
+    fn provider_id(&self) -> &str;
+    fn create_session(&self, model_id: &str) -> ProviderSessionV1;
+    fn send_turn(
+        &mut self,
+        request: &ProviderTurnRequestV1,
+        allowed_tools: &BTreeSet<String>,
+        history: &[ProviderMessageV1],
+    ) -> Result<ProviderTurnResultV1, RuntimeError>;
+}
+
 #[derive(Clone, Debug)]
 pub enum FakeProviderTurn {
     Text(String),
@@ -256,10 +276,30 @@ impl FakeProvider {
     }
 }
 
-pub struct WorkerRuntimeHarness<'a> {
+impl ProviderClientV1 for FakeProvider {
+    fn provider_id(&self) -> &str {
+        "fake"
+    }
+
+    fn create_session(&self, model_id: &str) -> ProviderSessionV1 {
+        self.create_session(model_id)
+    }
+
+    fn send_turn(
+        &mut self,
+        request: &ProviderTurnRequestV1,
+        allowed_tools: &BTreeSet<String>,
+        _history: &[ProviderMessageV1],
+    ) -> Result<ProviderTurnResultV1, RuntimeError> {
+        self.send_turn(request, allowed_tools)
+    }
+}
+
+pub struct WorkerRuntimeHarness<'a, P = FakeProvider> {
     journal: &'a DelegatedJournal,
-    provider: FakeProvider,
+    provider: P,
     cancelled: bool,
+    history: Vec<ProviderMessageV1>,
 }
 
 impl<'a> WorkerRuntimeHarness<'a> {
@@ -268,11 +308,27 @@ impl<'a> WorkerRuntimeHarness<'a> {
             journal,
             provider,
             cancelled: false,
+            history: Vec::new(),
+        }
+    }
+}
+
+impl<'a, P: ProviderClientV1> WorkerRuntimeHarness<'a, P> {
+    pub fn cancel(&mut self) {
+        self.cancelled = true;
+    }
+
+    pub fn with_provider(journal: &'a DelegatedJournal, provider: P) -> Self {
+        Self {
+            journal,
+            provider,
+            cancelled: false,
+            history: Vec::new(),
         }
     }
 
-    pub fn cancel(&mut self) {
-        self.cancelled = true;
+    pub fn history(&self) -> &[ProviderMessageV1] {
+        &self.history
     }
 
     pub fn run(
@@ -347,7 +403,16 @@ impl<'a> WorkerRuntimeHarness<'a> {
                 tool_definitions: catdesk_tool_definitions(),
                 max_output_bytes: budget.max_output_bytes,
             };
-            let result = self.provider.send_turn(&request, &allowed_tools)?;
+            self.history.push(ProviderMessageV1 {
+                role: "user".into(),
+                content: serde_json::to_string(&request.context_json)
+                    .map_err(|error| RuntimeError::Validation(error.to_string()))?,
+                tool_call_id: None,
+                tool_name: None,
+            });
+            let result = self
+                .provider
+                .send_turn(&request, &allowed_tools, &self.history)?;
             if result.output_bytes > budget.max_output_bytes {
                 return Err(RuntimeError::BudgetExceeded(
                     "output budget exceeded".into(),
@@ -378,7 +443,7 @@ impl<'a> WorkerRuntimeHarness<'a> {
     }
 
     fn record_provider_event(
-        &self,
+        &mut self,
         sequence: u64,
         run_id: &RunId,
         worker_session_id: &WorkerSessionId,
@@ -389,6 +454,13 @@ impl<'a> WorkerRuntimeHarness<'a> {
         match event.kind {
             NormalizedProviderEventKind::TextDelta
             | NormalizedProviderEventKind::CompletionClaim => {
+                let text = event.text.unwrap_or_default();
+                self.history.push(ProviderMessageV1 {
+                    role: "assistant".into(),
+                    content: text.clone(),
+                    tool_call_id: None,
+                    tool_name: None,
+                });
                 self.append_event(
                     sequence,
                     run_id,
@@ -399,7 +471,7 @@ impl<'a> WorkerRuntimeHarness<'a> {
                         item: Box::new(TurnItemV1::AgentMessage(AgentMessageItem {
                             item_id: super::contracts::ItemId::new(format!("item-{sequence}"))
                                 .map_err(RuntimeError::Validation)?,
-                            text: event.text.unwrap_or_default(),
+                            text,
                         })),
                     },
                 )?;
@@ -409,6 +481,11 @@ impl<'a> WorkerRuntimeHarness<'a> {
                 let tool_call = event.tool_call.ok_or_else(|| {
                     RuntimeError::Validation("missing normalized tool call".into())
                 })?;
+                if snapshot.completed_tool_calls == u32::MAX {
+                    return Err(RuntimeError::BudgetExceeded(
+                        "tool call counter overflow".into(),
+                    ));
+                }
                 let request_hash = stable_value_hash(&tool_call.arguments);
                 self.journal
                     .record_tool_call_requested(ToolCallRecordV1 {
@@ -442,7 +519,29 @@ impl<'a> WorkerRuntimeHarness<'a> {
                         None,
                     )
                     .map_err(map_journal_error)?;
-                let tool_result = dispatcher.execute(&tool_call)?;
+                self.history.push(ProviderMessageV1 {
+                    role: "assistant".into(),
+                    content: serde_json::to_string(&tool_call.arguments)
+                        .map_err(|error| RuntimeError::Validation(error.to_string()))?,
+                    tool_call_id: Some(tool_call.tool_call_id.as_str().to_string()),
+                    tool_name: Some(tool_call.tool_name.clone()),
+                });
+                let tool_result = match dispatcher.execute(&tool_call) {
+                    Ok(result) => result,
+                    Err(error) => {
+                        let summary = format!("{error:?}");
+                        self.journal
+                            .transition_tool_call(
+                                run_id,
+                                &tool_call.tool_call_id,
+                                ToolCallStatus::Failed,
+                                None,
+                                Some(summary.clone()),
+                            )
+                            .map_err(map_journal_error)?;
+                        return Err(RuntimeError::Provider(summary));
+                    }
+                };
                 let result_hash = stable_text_hash(&tool_result);
                 self.journal
                     .transition_tool_call(
@@ -453,6 +552,12 @@ impl<'a> WorkerRuntimeHarness<'a> {
                         Some(tool_result.clone()),
                     )
                     .map_err(map_journal_error)?;
+                self.history.push(ProviderMessageV1 {
+                    role: "tool".into(),
+                    content: tool_result.clone(),
+                    tool_call_id: Some(tool_call.tool_call_id.as_str().to_string()),
+                    tool_name: Some(tool_call.tool_name.clone()),
+                });
                 snapshot.completed_tool_calls += 1;
                 self.append_event(
                     sequence,
@@ -660,6 +765,7 @@ pub fn catdesk_tool_definitions() -> Vec<ToolDefinitionV1> {
                 "properties": {
                     "command": { "type": "string" },
                     "cwd": { "type": "string" },
+                    "commandProfile": { "type": "string" },
                     "maxLogBytes": { "type": "integer" }
                 },
                 "required": ["command"]
@@ -822,15 +928,45 @@ impl OllamaAdapter {
         prompt: &str,
         allowed_tools: &[ToolDefinitionV1],
     ) -> Result<ProviderTurnResultV1, RuntimeError> {
+        self.chat_messages_once(
+            model,
+            &[ProviderMessageV1 {
+                role: "user".into(),
+                content: prompt.into(),
+                tool_call_id: None,
+                tool_name: None,
+            }],
+            allowed_tools,
+            TurnId::new("ollama-turn").map_err(RuntimeError::Validation)?,
+        )
+        .await
+    }
+
+    pub async fn chat_messages_once(
+        &self,
+        model: &str,
+        messages: &[ProviderMessageV1],
+        allowed_tools: &[ToolDefinitionV1],
+        turn_id: TurnId,
+    ) -> Result<ProviderTurnResultV1, RuntimeError> {
         let url = self
             .base_url
             .join("/api/chat")
             .map_err(|error| RuntimeError::Provider(error.to_string()))?;
+        let messages = messages
+            .iter()
+            .map(|message| {
+                json!({
+                    "role": message.role,
+                    "content": message.content,
+                })
+            })
+            .collect::<Vec<_>>();
         let body = json!({
             "model": model,
             "stream": false,
             "keep_alive": self.keep_alive,
-            "messages": [{ "role": "user", "content": prompt }],
+            "messages": messages,
             "tools": ollama_tool_definitions(allowed_tools),
         });
         let value: Value = self
@@ -845,10 +981,7 @@ impl OllamaAdapter {
             .json()
             .await
             .map_err(|error| RuntimeError::Provider(error.to_string()))?;
-        normalize_ollama_chat_response(
-            &value,
-            TurnId::new("ollama-turn").map_err(RuntimeError::Validation)?,
-        )
+        normalize_ollama_chat_response(&value, turn_id)
     }
 
     pub async fn chat_stream_text(
@@ -952,6 +1085,29 @@ fn normalize_ollama_chat_response(
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
+    if let Ok(value) = serde_json::from_str::<Value>(text.trim())
+        && let Some(name) = value.get("tool").and_then(Value::as_str)
+    {
+        let arguments = value.get("arguments").cloned().unwrap_or_else(|| json!({}));
+        let tool_call = NormalizedToolCallV1 {
+            tool_call_id: ToolCallId::new("ollama-content-tool-1")
+                .map_err(RuntimeError::Validation)?,
+            tool_name: name.into(),
+            arguments_hash: stable_value_hash(&arguments),
+            arguments,
+        };
+        return Ok(ProviderTurnResultV1 {
+            terminal: false,
+            output_bytes: text.len(),
+            events: vec![NormalizedProviderEventV1 {
+                provider_id: "ollama".into(),
+                turn_id,
+                kind: NormalizedProviderEventKind::ToolCall,
+                text: None,
+                tool_call: Some(tool_call),
+            }],
+        });
+    }
     Ok(provider_text_result("ollama", &turn_id, text, true))
 }
 

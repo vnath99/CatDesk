@@ -12,11 +12,9 @@ use tokio::sync::Mutex;
 
 use crate::app_info::CATDESK_VERSION;
 use crate::command;
-use crate::delegated::contracts::{ArtifactId, FinalRunResultV1, PatchId, RunId, RunState, TurnId};
+use crate::delegated::contracts::{ArtifactId, PatchId, RunId};
 use crate::delegated::events::{EventCursor, EventEnvelopeV1, EventPayloadV1, LifecycleEvent};
-use crate::delegated::patch_engine::{
-    ActualDiffArtifactV1, PatchProposalV1, ReplaceOperationV1, stable_text_hash,
-};
+use crate::delegated::patch_engine::stable_text_hash;
 use crate::delegated::supervisor::{SUPERVISOR_TOOL_NAMES, SupervisorSurface};
 use crate::devtools::DevtoolsBridge;
 use crate::git_workflow;
@@ -770,6 +768,10 @@ async fn handle_tools_list(
     }
 
     // Browser tools — get from devtools bridge
+    if matches!(tool_mode, ToolMode::SupervisorOnly) {
+        tools.extend(supervisor_mcp_tool_schemas());
+    }
+
     if mode.browser_enabled() {
         if let Some(bridge) = devtools {
             if let Some(dt_tools) = fetch_devtools_tools(bridge).await {
@@ -844,6 +846,11 @@ async fn handle_tools_call(
                     "task_queue_read" => handle_task_queue_read(req, workspace_root),
                     "prompt_templates_list" => handle_prompt_templates_list(req, workspace_root),
                     "prompt_template_read" => handle_prompt_template_read(req, workspace_root),
+                    name if tool_mode.supervisor_tools_enabled()
+                        && supervisor_mcp_tool_name(name) =>
+                    {
+                        handle_supervisor_mcp_tool(req, workspace_root).await
+                    }
                     _ => {
                         if tool_mode.write_tools_enabled() {
                             match tool_name.as_str() {
@@ -874,7 +881,7 @@ async fn handle_tools_call(
                                     handle_verify_project(req, workspace_root).await
                                 }
                                 name if supervisor_mcp_tool_name(name) => {
-                                    handle_supervisor_mcp_tool(req).await
+                                    handle_supervisor_mcp_tool(req, workspace_root).await
                                 }
                                 "git_status_summary" => {
                                     handle_git_status_summary(req, workspace_root).await
@@ -1834,6 +1841,8 @@ fn supervisor_mcp_tool_schemas() -> Vec<Value> {
             let required = match *name {
                 "delegated_run_get_patch" => vec!["patchId"],
                 "delegated_run_get_diff" => vec!["diffHash"],
+                "delegated_run_get_artifact" => vec!["artifactId"],
+                "delegated_run_compare_patches" => vec!["parentPatchId", "candidatePatchId"],
                 "delegated_run_list" => Vec::new(),
                 _ => vec!["runId"],
             };
@@ -1846,6 +1855,9 @@ fn supervisor_mcp_tool_schemas() -> Vec<Value> {
                     "properties": {
                         "runId": { "type": "string" },
                         "patchId": { "type": "string" },
+                        "artifactId": { "type": "string" },
+                        "parentPatchId": { "type": "string" },
+                        "candidatePatchId": { "type": "string" },
                         "diffHash": { "type": "string" },
                         "afterSequence": { "type": "integer" },
                         "limit": { "type": "integer" },
@@ -1875,7 +1887,7 @@ fn supervisor_mcp_tool_schemas() -> Vec<Value> {
         .collect()
 }
 
-async fn handle_supervisor_mcp_tool(req: &JsonRpcRequest) -> JsonRpcResponse {
+async fn handle_supervisor_mcp_tool(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
     let tool_name = tool_name_from_request(req);
     let args = tool_arguments(req);
     let surface = supervisor_mcp_surface();
@@ -1886,8 +1898,16 @@ async fn handle_supervisor_mcp_tool(req: &JsonRpcRequest) -> JsonRpcResponse {
         "delegated_run_create" => {
             let run_id = mcp_run_id(&args);
             surface.create_run(run_id.clone());
-            seed_supervisor_run(&mut surface, &run_id);
-            Ok(json!({ "toolName": tool_name, "runId": run_id, "created": true }))
+            let _ = surface.set_checkpoint(
+                &run_id,
+                format!(
+                    "created through MCP for workspace {}",
+                    Path::new(workspace_root).display()
+                ),
+            );
+            Ok(
+                json!({ "toolName": tool_name, "runId": run_id, "created": true, "fabricated": false }),
+            )
         }
         "delegated_run_validate" => {
             let run_id = mcp_run_id(&args);
@@ -1931,6 +1951,27 @@ async fn handle_supervisor_mcp_tool(req: &JsonRpcRequest) -> JsonRpcResponse {
             )?;
             Ok(json!({ "toolName": tool_name, "runId": run_id, "events": events }))
         }
+        "delegated_run_get_checkpoint" => {
+            let run_id = mcp_run_id(&args);
+            let checkpoint = surface.get_checkpoint(&run_id)?;
+            Ok(json!({ "toolName": tool_name, "runId": run_id, "checkpoint": checkpoint }))
+        }
+        "delegated_run_get_escalation" => {
+            let run_id = mcp_run_id(&args);
+            let escalation = surface.get_escalation(&run_id)?;
+            Ok(json!({ "toolName": tool_name, "runId": run_id, "escalation": escalation }))
+        }
+        "delegated_run_get_artifact" => {
+            let artifact_id = ArtifactId::new(
+                args.get("artifactId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("missing-artifact"),
+            )
+            .map_err(crate::delegated::supervisor::SupervisorError::MissingArtifact)?;
+            let max_bytes = args.get("maxBytes").and_then(Value::as_u64).unwrap_or(4096) as usize;
+            let artifact = surface.get_artifact(&artifact_id, max_bytes)?;
+            Ok(json!({ "toolName": tool_name, "artifact": artifact }))
+        }
         "delegated_run_get_patch" => {
             let patch_id = PatchId::new(
                 args.get("patchId")
@@ -1940,6 +1981,22 @@ async fn handle_supervisor_mcp_tool(req: &JsonRpcRequest) -> JsonRpcResponse {
             .map_err(crate::delegated::supervisor::SupervisorError::MissingPatch)?;
             let patch = surface.get_patch(&patch_id)?;
             Ok(json!({ "toolName": tool_name, "patch": patch }))
+        }
+        "delegated_run_compare_patches" => {
+            let parent = PatchId::new(
+                args.get("parentPatchId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("missing-parent"),
+            )
+            .map_err(crate::delegated::supervisor::SupervisorError::MissingPatch)?;
+            let candidate = PatchId::new(
+                args.get("candidatePatchId")
+                    .and_then(Value::as_str)
+                    .unwrap_or("missing-candidate"),
+            )
+            .map_err(crate::delegated::supervisor::SupervisorError::MissingPatch)?;
+            let comparison = surface.compare_patches(&parent, &candidate)?;
+            Ok(json!({ "toolName": tool_name, "comparison": comparison }))
         }
         "delegated_run_get_diff" => {
             let diff_hash = args
@@ -1952,7 +2009,12 @@ async fn handle_supervisor_mcp_tool(req: &JsonRpcRequest) -> JsonRpcResponse {
         }
         "delegated_run_get_final_review" => {
             let run_id = mcp_run_id(&args);
-            let review = surface.get_final_review(&run_id)?;
+            let review = surface.get_final_review(&run_id)?.ok_or_else(|| {
+                crate::delegated::supervisor::SupervisorError::MissingArtifact(format!(
+                    "final review for {}",
+                    run_id.as_str()
+                ))
+            })?;
             Ok(json!({ "toolName": tool_name, "runId": run_id, "finalReview": review }))
         }
         "delegated_run_cancel" => {
@@ -1960,10 +2022,21 @@ async fn handle_supervisor_mcp_tool(req: &JsonRpcRequest) -> JsonRpcResponse {
             surface.cancel(&run_id)?;
             Ok(json!({ "toolName": tool_name, "runId": run_id, "state": "CANCELLED" }))
         }
-        other => Ok(json!({
-            "toolName": other,
-            "message": "operation is not implemented in this MCP closure surface"
-        })),
+        "delegated_run_pause" => {
+            let run_id = mcp_run_id(&args);
+            surface.pause(&run_id)?;
+            Ok(json!({ "toolName": tool_name, "runId": run_id, "state": "PAUSED" }))
+        }
+        "delegated_run_resume" => {
+            let run_id = mcp_run_id(&args);
+            surface.resume(&run_id)?;
+            Ok(json!({ "toolName": tool_name, "runId": run_id, "state": "RUNNING" }))
+        }
+        other => Err(
+            crate::delegated::supervisor::SupervisorError::InvalidTransition(format!(
+                "{other} is advertised but not implemented by the MCP supervisor handler"
+            )),
+        ),
     })();
     match result {
         Ok(structured) => tool_success_response_with_structured(
@@ -1982,48 +2055,6 @@ fn mcp_run_id(args: &Value) -> RunId {
             .unwrap_or("run-mcp-supervisor"),
     )
     .expect("static/default MCP run id is valid")
-}
-
-fn seed_supervisor_run(surface: &mut SupervisorSurface, run_id: &RunId) {
-    surface.put_patch(PatchProposalV1 {
-        schema_version: 1,
-        patch_id: PatchId::new("patch-1").expect("patch id"),
-        parent_patch_id: None,
-        run_id: run_id.clone(),
-        turn_id: TurnId::new("turn-1").expect("turn id"),
-        base_snapshot_hash: "fnv1a64:seed".into(),
-        target_paths: vec!["src/lib.rs".into()],
-        expected_preimage_hashes: Vec::new(),
-        operations: vec![ReplaceOperationV1 {
-            path: "src/lib.rs".into(),
-            old: "before".into(),
-            new: "after".into(),
-        }],
-        model_rationale: "seeded for MCP transport validation".into(),
-        claimed_acceptance_criteria: vec!["MCP transport responds".into()],
-    });
-    surface.put_diff(ActualDiffArtifactV1 {
-        base_ref: "HEAD".into(),
-        paths: vec!["src/lib.rs".into()],
-        diff_hash: "fnv1a64:delegatedmcp".into(),
-        diff: "diff --git a/src/lib.rs b/src/lib.rs\n".into(),
-    });
-    let _ = surface.set_checkpoint(run_id, "MCP-created delegated run".into());
-    let _ = surface.set_final_review(
-        run_id,
-        FinalRunResultV1 {
-            schema_version: 1,
-            status: RunState::CompletedVerified,
-            objective: "MCP supervisor transport validation".into(),
-            branch: "orchestrator/v1-coding-sprint".into(),
-            files_changed: vec!["src/lib.rs".into()],
-            verification: "transport validation".into(),
-            diff_artifacts: vec![ArtifactId::new("artifact-mcp").expect("artifact id")],
-            provider_history: vec!["fake".into()],
-            unresolved_warnings: Vec::new(),
-            final_recommendation: "review".into(),
-        },
-    );
 }
 
 fn supervisor_event(
@@ -4935,12 +4966,7 @@ mod tests {
                 "delegated_run_events",
                 json!({ "runId": run_id, "afterSequence": 0, "limit": 10 }),
             ),
-            ("delegated_run_get_patch", json!({ "patchId": "patch-1" })),
-            (
-                "delegated_run_get_diff",
-                json!({ "diffHash": "fnv1a64:delegatedmcp", "maxBytes": 256 }),
-            ),
-            ("delegated_run_get_final_review", json!({ "runId": run_id })),
+            ("delegated_run_get_checkpoint", json!({ "runId": run_id })),
             ("delegated_run_cancel", json!({ "runId": run_id })),
         ] {
             let response = handle_tools_call(
@@ -4980,6 +5006,52 @@ mod tests {
             println!(
                 "CATDESK_MCP_INVOCATION={}",
                 serde_json::to_string(&evidence).expect("invocation json")
+            );
+        }
+        for (tool, args) in [
+            ("delegated_run_get_patch", json!({ "patchId": "patch-1" })),
+            (
+                "delegated_run_get_diff",
+                json!({ "diffHash": "fnv1a64:delegatedmcp", "maxBytes": 256 }),
+            ),
+            ("delegated_run_get_final_review", json!({ "runId": run_id })),
+        ] {
+            let response = handle_tools_call(
+                &tool_call_request(tool, args),
+                &workspace_root,
+                0,
+                Mode::Both,
+                ToolMode::MultiTools,
+                false,
+                &None,
+            )
+            .await;
+            assert!(
+                response.error.is_some()
+                    || response
+                        .result
+                        .as_ref()
+                        .and_then(|result| result.get("isError"))
+                        .and_then(Value::as_bool)
+                        == Some(true),
+                "{tool} must fail clearly until real run artifacts exist"
+            );
+            println!(
+                "CATDESK_MCP_EXPECTED_ERROR={}",
+                serde_json::to_string(&json!({
+                    "tool": tool,
+                    "error": response
+                        .error
+                        .as_ref()
+                        .map(|error| error.message.clone())
+                        .or_else(|| response
+                            .result
+                            .as_ref()
+                            .and_then(|result| result.get("content"))
+                            .cloned()
+                            .map(|content| content.to_string())),
+                }))
+                .expect("error json")
             );
         }
     }
