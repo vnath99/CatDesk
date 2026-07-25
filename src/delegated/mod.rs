@@ -6,6 +6,7 @@ pub mod coordinator;
 pub mod events;
 pub mod journal;
 pub mod patch_engine;
+pub mod provider_router;
 pub mod runtime;
 pub mod state_machine;
 

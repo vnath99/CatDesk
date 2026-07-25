@@ -134,3 +134,27 @@ Current T-0018 tests:
 - `cargo test delegated::coordinator -- --nocapture`: passed, 8 tests
 - `cargo clippy --all-targets --all-features -- -D warnings`: passed
 - `cargo test`: passed, 165 tests and 1 ignored live Ollama smoke
+
+## Milestone D - Provider And Supervisor Workflow
+
+Status: IN_PROGRESS
+
+Tickets:
+
+- T-0019: local commit to be recorded in Git history after this checkpoint update
+- T-0020: pending
+
+Required gate evidence:
+
+| Gate condition | Evidence | Status |
+| --- | --- | --- |
+| Simulated provider switch succeeds without duplicate mutation | T-0019 filters completed/failed tool calls out of handoff. | passed |
+| Supervisor can poll, inspect patches/diffs, and resume | Scheduled for T-0020. | pending |
+| Remote disclosure policy is enforced | T-0019 blocks remote/browser providers unless disclosure policy allows them. | passed |
+
+Current T-0019 tests:
+
+- `cargo fmt --check`: passed
+- `cargo test delegated::provider_router -- --nocapture`: passed, 6 tests
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed
+- `cargo test`: passed, 171 tests and 1 ignored live Ollama smoke
