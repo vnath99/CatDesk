@@ -1,0 +1,12 @@
+# Sprint Credit Ledger
+
+Date: 2026-07-25
+
+The Codex desktop interface in this session does not expose a per-ticket credit counter. To avoid inventing exact usage, this ledger records the visible value as unavailable and preserves the roadmap planning range for each completed ticket.
+
+| Ticket | Status | Displayed credits used | Planning range | Notes |
+| --- | --- | ---: | ---: | --- |
+| T-0012 | COMPLETED_VERIFIED | unavailable | 55-85 | Completed before sprint branch checkpoint; local commit `d0cc25e`. |
+| T-0013 | COMPLETED_VERIFIED | unavailable | 60-95 | Protocol schemas, events, state machine, docs, and fixtures. |
+
+If the UI later exposes exact ticket credit usage, update this ledger without changing ticket scope.

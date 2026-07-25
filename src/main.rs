@@ -24,6 +24,7 @@ mod app_info;
 mod binagotchy_gen;
 mod browser;
 mod command;
+mod delegated;
 mod devtools;
 mod git_workflow;
 mod macos_terminal;
