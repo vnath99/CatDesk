@@ -3,7 +3,8 @@ param(
     [string]$ConfigPath = (Join-Path (Get-Location).Path (".tmp\catdesk-dev-orchestrator\config-{0}.toml" -f $PID)),
     [string]$ListenHost = "127.0.0.1",
     [int]$Port = 38766,
-    [string]$McpPath = "/catdesk-dev/mcp"
+    [string]$McpPath = "/catdesk-dev/mcp",
+    [string]$AuthToken = ("catdesk-dev-" + [guid]::NewGuid().ToString("N"))
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,4 +21,5 @@ cargo run -- `
     --host $ListenHost `
     --port $Port `
     --mcp-path $McpPath `
-    --tool-mode supervisor-only
+    --tool-mode supervisor-only `
+    --auth-token $AuthToken

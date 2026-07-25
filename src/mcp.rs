@@ -14,7 +14,8 @@ use tokio::sync::Mutex;
 use crate::app_info::CATDESK_VERSION;
 use crate::command;
 use crate::delegated::contracts::{
-    ApprovalRequirementKind, ExecutionContractV1, PatchId, RunId, RunState, validate_contract,
+    ApprovalId, ApprovalRequirementKind, ExecutionContractV1, PatchId, RunId, RunState,
+    validate_contract,
 };
 use crate::delegated::events::EventCursor;
 use crate::delegated::integrated::{IntegratedDelegatedService, IntegratedRunConfigV1};
@@ -1851,8 +1852,17 @@ struct DelegatedRunEntry {
     config: IntegratedRunConfigV1,
     status: RegistryRunStatus,
     cancel_requested: Arc<AtomicBool>,
+    run_start_approval: Option<RunStartApproval>,
     final_review: Option<Value>,
     last_error: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RunStartApproval {
+    approval_id: ApprovalId,
+    request_hash: String,
+    expires_at_unix: u64,
+    consumed: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1860,6 +1870,8 @@ enum RegistryRunStatus {
     Created,
     AwaitingApproval,
     Running,
+    NeedsSupervisor,
+    CancelRequested,
     Completed,
     Failed,
     Cancelled,
@@ -1871,6 +1883,8 @@ impl RegistryRunStatus {
             Self::Created => "CREATED",
             Self::AwaitingApproval => "AWAITING_APPROVAL",
             Self::Running => "RUNNING",
+            Self::NeedsSupervisor => "NEEDS_SUPERVISOR",
+            Self::CancelRequested => "CANCEL_REQUESTED",
             Self::Completed => "COMPLETED_VERIFIED",
             Self::Failed => "FAILED",
             Self::Cancelled => "CANCELLED",
@@ -1884,6 +1898,7 @@ fn supervisor_mcp_tool_schemas() -> Vec<Value> {
         .map(|name| {
             let required = match *name {
                 "delegated_run_create" => vec!["contract"],
+                "delegated_run_approve_start" => vec!["runId", "approvalId", "decisionHash"],
                 "delegated_run_get_patch" => vec!["patchId"],
                 "delegated_run_get_diff" => vec!["runId"],
                 "delegated_run_get_artifact" => vec!["artifactId"],
@@ -1899,11 +1914,18 @@ fn supervisor_mcp_tool_schemas() -> Vec<Value> {
                     "type": "object",
                     "properties": {
                         "runId": { "type": "string" },
+                        "approvalId": { "type": "string" },
+                        "decisionHash": { "type": "string" },
                         "patchId": { "type": "string" },
                         "artifactId": { "type": "string" },
                         "parentPatchId": { "type": "string" },
                         "candidatePatchId": { "type": "string" },
                         "diffHash": { "type": "string" },
+                        "contract": execution_contract_input_schema(),
+                        "ollamaBaseUrl": {
+                            "type": "string",
+                            "description": "Optional loopback Ollama base URL for this run. Defaults to http://127.0.0.1:11434."
+                        },
                         "afterSequence": { "type": "integer" },
                         "limit": { "type": "integer" },
                         "maxBytes": { "type": "integer" }
@@ -1932,6 +1954,139 @@ fn supervisor_mcp_tool_schemas() -> Vec<Value> {
         .collect()
 }
 
+fn execution_contract_input_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "schemaVersion": { "type": "integer", "const": 1 },
+            "taskId": { "type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,120}$" },
+            "objective": { "type": "string", "minLength": 1, "maxLength": 8000 },
+            "workspace": { "type": "string", "minLength": 1 },
+            "featureBranch": { "type": "string", "minLength": 1 },
+            "allowedPaths": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string", "minLength": 1, "maxLength": 260 }
+            },
+            "forbiddenPaths": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1, "maxLength": 260 }
+            },
+            "allowedCommandProfiles": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string", "minLength": 1 }
+            },
+            "orderedSteps": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string", "minLength": 1 }
+            },
+            "acceptanceCriteria": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string", "minLength": 1 }
+            },
+            "retryBudget": { "type": "integer", "minimum": 0 },
+            "maxTurns": { "type": "integer", "minimum": 1 },
+            "maxToolCalls": { "type": "integer", "minimum": 1 },
+            "maxElapsedSeconds": { "type": "integer", "minimum": 1 },
+            "providerPolicy": provider_policy_input_schema(),
+            "escalationConditions": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+            },
+            "approvalRequirements": {
+                "type": "array",
+                "items": approval_requirement_input_schema()
+            },
+            "expectedArtifacts": {
+                "type": "array",
+                "items": expected_artifact_input_schema()
+            },
+            "verificationProfile": { "type": "string", "minLength": 1 }
+        },
+        "required": [
+            "schemaVersion",
+            "taskId",
+            "objective",
+            "workspace",
+            "featureBranch",
+            "allowedPaths",
+            "forbiddenPaths",
+            "allowedCommandProfiles",
+            "orderedSteps",
+            "acceptanceCriteria",
+            "retryBudget",
+            "maxTurns",
+            "maxToolCalls",
+            "maxElapsedSeconds",
+            "providerPolicy",
+            "escalationConditions",
+            "approvalRequirements",
+            "expectedArtifacts",
+            "verificationProfile"
+        ]
+    })
+}
+
+fn provider_policy_input_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "primaryProviderId": { "type": "string", "minLength": 1 },
+            "primaryModelId": { "type": "string", "minLength": 1 },
+            "fallbackProviderIds": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 }
+            },
+            "requireToolCalls": { "type": "boolean" },
+            "allowPaidFallbacks": { "type": "boolean" }
+        },
+        "required": [
+            "primaryProviderId",
+            "primaryModelId",
+            "fallbackProviderIds",
+            "requireToolCalls",
+            "allowPaidFallbacks"
+        ]
+    })
+}
+
+fn approval_requirement_input_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "kind": {
+                "type": "string",
+                "enum": ["RUN_START", "TOOL_EXCEPTION", "UNRESTRICTED_SHELL", "GIT_PUSH", "MERGE"]
+            },
+            "required": { "type": "boolean" },
+            "reason": { "type": "string", "minLength": 1 }
+        },
+        "required": ["kind", "required", "reason"]
+    })
+}
+
+fn expected_artifact_input_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "kind": {
+                "type": "string",
+                "enum": ["DIFF", "VERIFICATION", "ESCALATION", "FINAL_REVIEW", "LOG"]
+            },
+            "name": { "type": "string", "minLength": 1 },
+            "required": { "type": "boolean" }
+        },
+        "required": ["kind", "name", "required"]
+    })
+}
+
 async fn handle_supervisor_mcp_tool(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
     let tool_name = tool_name_from_request(req);
     let args = tool_arguments(req);
@@ -1957,6 +2112,8 @@ async fn handle_supervisor_registry_tool(
     match tool_name {
         "delegated_run_create" => {
             let contract = mcp_contract(&args, &workspace)?;
+            reject_unsupported_required_approvals(&contract)?;
+            ensure_one_active_run_for_workspace(&workspace).await?;
             let run_id = RunId::new(contract.task_id.clone())?;
             let key = registry_key(&workspace, &run_id);
             let config = mcp_integrated_config(&workspace, &contract, &args);
@@ -1971,6 +2128,7 @@ async fn handle_supervisor_registry_tool(
                 config,
                 status: RegistryRunStatus::Created,
                 cancel_requested: Arc::new(AtomicBool::new(false)),
+                run_start_approval: None,
                 final_review: None,
                 last_error: None,
             };
@@ -1987,6 +2145,52 @@ async fn handle_supervisor_registry_tool(
             validate_contract(&entry.contract)?;
             Ok(json!({ "toolName": tool_name, "runId": run_id, "valid": true }))
         }
+        "delegated_run_approve_start" => {
+            let run_id = mcp_run_id(&args)?;
+            let approval_id = ApprovalId::new(
+                args.get("approvalId")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "approvalId is required".to_string())?,
+            )?;
+            let decision_hash = args
+                .get("decisionHash")
+                .and_then(Value::as_str)
+                .filter(|hash| !hash.trim().is_empty())
+                .ok_or_else(|| "decisionHash is required".to_string())?;
+            let key = registry_key(&workspace, &run_id);
+            registry_entry(&workspace, &args).await?;
+            let registry = delegated_run_registry();
+            let mut registry = registry.lock().await;
+            let entry = registry
+                .runs
+                .get_mut(&key)
+                .ok_or_else(|| format!("unknown delegated run {}", run_id.as_str()))?;
+            let approval = entry
+                .run_start_approval
+                .as_mut()
+                .ok_or_else(|| "no RunStart approval request is pending".to_string())?;
+            if approval.consumed {
+                return Err("RunStart approval was already consumed".into());
+            }
+            if approval.approval_id != approval_id {
+                return Err("approvalId does not match the pending RunStart request".into());
+            }
+            if now_unix_seconds() > approval.expires_at_unix {
+                return Err("RunStart approval request expired".into());
+            }
+            if decision_hash != approval.request_hash {
+                return Err("decisionHash does not match the pending RunStart request".into());
+            }
+            approval.consumed = true;
+            entry.status = RegistryRunStatus::Created;
+            Ok(json!({
+                "toolName": tool_name,
+                "runId": run_id,
+                "approvalId": approval_id,
+                "approved": true,
+                "consumed": true
+            }))
+        }
         "delegated_run_start" => {
             let run_id = mcp_run_id(&args)?;
             let key = registry_key(&workspace, &run_id);
@@ -1998,10 +2202,11 @@ async fn handle_supervisor_registry_tool(
                     .runs
                     .get_mut(&key)
                     .ok_or_else(|| format!("unknown delegated run {}", run_id.as_str()))?;
-                if entry.status == RegistryRunStatus::Running {
+                if entry.status != RegistryRunStatus::Created {
                     return Err(format!(
-                        "delegated run {} is already running",
-                        run_id.as_str()
+                        "delegated run {} cannot start from {}",
+                        run_id.as_str(),
+                        entry.status.as_str()
                     ));
                 }
                 if entry
@@ -2013,8 +2218,16 @@ async fn handle_supervisor_registry_tool(
                             && requirement.kind == ApprovalRequirementKind::RunStart
                     })
                 {
-                    entry.status = RegistryRunStatus::AwaitingApproval;
-                    return Err("RunStart approval is required before delegated_run_start".into());
+                    let approval = ensure_run_start_approval(&run_id, entry).clone();
+                    if !approval.consumed {
+                        entry.status = RegistryRunStatus::AwaitingApproval;
+                        return Err(format!(
+                            "RunStart approval is required before delegated_run_start; approvalId={}, decisionHash={}, expiresAtUnix={}",
+                            approval.approval_id.as_str(),
+                            approval.request_hash,
+                            approval.expires_at_unix
+                        ));
+                    }
                 }
                 entry.status = RegistryRunStatus::Running;
                 entry.last_error = None;
@@ -2028,6 +2241,7 @@ async fn handle_supervisor_registry_tool(
             };
             let registry_for_task = registry.clone();
             let key_for_task = key.clone();
+            let run_id_for_task = run_id.clone();
             tokio::spawn(async move {
                 let outcome = async {
                     let mut service = IntegratedDelegatedService::recover(
@@ -2058,6 +2272,11 @@ async fn handle_supervisor_registry_tool(
                         Err(error) => {
                             if entry.cancel_requested.load(Ordering::SeqCst) {
                                 entry.status = RegistryRunStatus::Cancelled;
+                                let _ = DelegatedJournal::open(&entry.config.journal_root)
+                                    .and_then(|journal| {
+                                        journal
+                                            .update_run_state(&run_id_for_task, RunState::Cancelled)
+                                    });
                             } else {
                                 entry.status = RegistryRunStatus::Failed;
                             }
@@ -2240,10 +2459,10 @@ async fn handle_supervisor_registry_tool(
                 .get_mut(&key)
                 .ok_or_else(|| format!("unknown delegated run {}", run_id.as_str()))?;
             entry.cancel_requested.store(true, Ordering::SeqCst);
-            entry.status = RegistryRunStatus::Cancelled;
+            entry.status = RegistryRunStatus::CancelRequested;
             let _ = DelegatedJournal::open(&entry.config.journal_root)
-                .and_then(|journal| journal.update_run_state(&run_id, RunState::Cancelled));
-            Ok(json!({ "toolName": tool_name, "runId": run_id, "state": "CANCELLED" }))
+                .and_then(|journal| journal.update_run_state(&run_id, RunState::CancelRequested));
+            Ok(json!({ "toolName": tool_name, "runId": run_id, "state": "CANCEL_REQUESTED" }))
         }
         "delegated_run_pause" => {
             let run_id = mcp_run_id(&args)?;
@@ -2301,6 +2520,18 @@ fn mcp_contract(args: &Value, workspace_root: &Path) -> Result<ExecutionContract
     Ok(contract)
 }
 
+fn reject_unsupported_required_approvals(contract: &ExecutionContractV1) -> Result<(), String> {
+    for requirement in &contract.approval_requirements {
+        if requirement.required && requirement.kind != ApprovalRequirementKind::RunStart {
+            return Err(format!(
+                "unsupported required approval {:?} fails closed for T-0023D",
+                requirement.kind
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn mcp_integrated_config(
     workspace_root: &Path,
     contract: &ExecutionContractV1,
@@ -2341,6 +2572,61 @@ async fn registry_entry(
     Ok((run_id, entry))
 }
 
+async fn ensure_one_active_run_for_workspace(workspace_root: &Path) -> Result<(), String> {
+    let registry = delegated_run_registry();
+    let registry = registry.lock().await;
+    if registry.runs.values().any(|entry| {
+        entry.workspace_root == workspace_root
+            && matches!(
+                entry.status,
+                RegistryRunStatus::Created
+                    | RegistryRunStatus::AwaitingApproval
+                    | RegistryRunStatus::Running
+                    | RegistryRunStatus::CancelRequested
+            )
+    }) {
+        return Err("workspace already has an active delegated run".into());
+    }
+    drop(registry);
+
+    let journal = DelegatedJournal::open(workspace_root.join(".catdesk/delegated/journal"))
+        .map_err(|error| format!("{error:?}"))?;
+    if !journal
+        .restore_active_runs()
+        .map_err(|error| format!("{error:?}"))?
+        .is_empty()
+    {
+        return Err(
+            "workspace has active delegated journal runs requiring supervisor review".into(),
+        );
+    }
+    Ok(())
+}
+
+fn ensure_run_start_approval<'a>(
+    run_id: &RunId,
+    entry: &'a mut DelegatedRunEntry,
+) -> &'a RunStartApproval {
+    if entry.run_start_approval.is_none() {
+        let approval_id = ApprovalId::new(format!("approval-run-start-{}", run_id.as_str()))
+            .expect("run id is already conservative");
+        entry.run_start_approval = Some(RunStartApproval {
+            request_hash: approval_decision_hash(run_id),
+            approval_id,
+            expires_at_unix: now_unix_seconds().saturating_add(300),
+            consumed: false,
+        });
+    }
+    entry
+        .run_start_approval
+        .as_ref()
+        .expect("approval just initialized")
+}
+
+fn approval_decision_hash(run_id: &RunId) -> String {
+    format!("run-start:{}:approved", run_id.as_str())
+}
+
 fn rehydrate_registry_entry(
     workspace_root: &Path,
     run_id: &RunId,
@@ -2356,6 +2642,17 @@ fn rehydrate_registry_entry(
     let snapshot = journal
         .load_run(run_id)
         .map_err(|_| format!("unknown delegated run {}", run_id.as_str()))?;
+    let state = if matches!(
+        snapshot.state,
+        RunState::Starting | RunState::Running | RunState::Verifying
+    ) {
+        journal
+            .update_run_state(run_id, RunState::NeedsSupervisor)
+            .map_err(|error| format!("{error:?}"))?
+            .state
+    } else {
+        snapshot.state
+    };
     let contract = journal
         .load_contract(run_id)
         .map_err(|error| format!("{error:?}"))?;
@@ -2365,8 +2662,9 @@ fn rehydrate_registry_entry(
         workspace_root: workspace_root.to_path_buf(),
         contract,
         config,
-        status: registry_status_from_run_state(&snapshot.state),
+        status: registry_status_from_run_state(&state),
         cancel_requested: Arc::new(AtomicBool::new(false)),
+        run_start_approval: None,
         final_review: None,
         last_error: None,
     })
@@ -2374,15 +2672,22 @@ fn rehydrate_registry_entry(
 
 fn registry_status_from_run_state(state: &RunState) -> RegistryRunStatus {
     match state {
-        RunState::AwaitingApproval | RunState::NeedsSupervisor => {
-            RegistryRunStatus::AwaitingApproval
-        }
+        RunState::AwaitingApproval => RegistryRunStatus::AwaitingApproval,
+        RunState::NeedsSupervisor => RegistryRunStatus::NeedsSupervisor,
+        RunState::CancelRequested => RegistryRunStatus::CancelRequested,
         RunState::Starting | RunState::Running | RunState::Verifying => RegistryRunStatus::Running,
         RunState::CompletedVerified => RegistryRunStatus::Completed,
         RunState::Failed => RegistryRunStatus::Failed,
         RunState::Cancelled => RegistryRunStatus::Cancelled,
         RunState::Draft | RunState::Ready | RunState::Paused => RegistryRunStatus::Created,
     }
+}
+
+fn now_unix_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }
 
 fn workspace_agents_path(workspace_root: &str) -> PathBuf {
@@ -5210,6 +5515,7 @@ mod tests {
                 "verify_project",
                 "delegated_run_create",
                 "delegated_run_validate",
+                "delegated_run_approve_start",
                 "delegated_run_start",
                 "delegated_run_status",
                 "delegated_run_list",
@@ -5462,6 +5768,214 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn supervisor_create_schema_publishes_execution_contract_shape() {
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!("req-tools-list")),
+            method: "tools/list".into(),
+            params: json!({}),
+        };
+
+        let response = handle_tools_list(&req, Mode::Both, ToolMode::SupervisorOnly, &None).await;
+        let tools = response
+            .result
+            .as_ref()
+            .and_then(|result| result.get("tools"))
+            .and_then(Value::as_array)
+            .expect("tools");
+        let create = tools
+            .iter()
+            .find(|tool| tool.get("name").and_then(Value::as_str) == Some("delegated_run_create"))
+            .expect("create tool");
+        let contract = create
+            .get("inputSchema")
+            .and_then(|schema| schema.get("properties"))
+            .and_then(|properties| properties.get("contract"))
+            .expect("contract schema");
+        assert!(
+            contract
+                .get("required")
+                .and_then(Value::as_array)
+                .expect("required")
+                .iter()
+                .any(|field| field.as_str() == Some("providerPolicy"))
+        );
+        assert!(
+            contract
+                .get("properties")
+                .and_then(|properties| properties.get("approvalRequirements"))
+                .and_then(|approval| approval.get("items"))
+                .and_then(|items| items.get("properties"))
+                .and_then(|properties| properties.get("kind"))
+                .and_then(|kind| kind.get("enum"))
+                .and_then(Value::as_array)
+                .expect("approval kind enum")
+                .iter()
+                .any(|kind| kind.as_str() == Some("RUN_START"))
+        );
+    }
+
+    #[tokio::test]
+    async fn supervisor_lifecycle_rejects_terminal_and_orphaned_running_starts() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-lifecycle-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+        let run_id = format!("run-lifecycle-{}", Uuid::new_v4());
+        let contract = delegated_contract(&workspace_root, &run_id);
+        let create = handle_tools_call(
+            &tool_call_request("delegated_run_create", json!({ "contract": contract })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_success("create", &create);
+
+        let run_id_typed = RunId::new(run_id.clone()).expect("run");
+        let journal = DelegatedJournal::open(workspace_root.join(".catdesk/delegated/journal"))
+            .expect("journal");
+        journal
+            .update_run_state(&run_id_typed, RunState::Running)
+            .expect("running");
+        let key = registry_key(
+            &workspace_root.canonicalize().expect("canonical workspace"),
+            &run_id_typed,
+        );
+        delegated_run_registry().lock().await.runs.remove(&key);
+
+        let status = handle_tools_call(
+            &tool_call_request("delegated_run_status", json!({ "runId": run_id })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_success("status", &status);
+        assert_eq!(
+            structured_field(&status, "state").and_then(Value::as_str),
+            Some("NEEDS_SUPERVISOR")
+        );
+
+        let start = handle_tools_call(
+            &tool_call_request("delegated_run_start", json!({ "runId": run_id })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_error("orphaned start", &start);
+
+        journal
+            .update_run_state(&run_id_typed, RunState::CompletedVerified)
+            .expect("complete");
+        delegated_run_registry().lock().await.runs.remove(&key);
+        let terminal_start = handle_tools_call(
+            &tool_call_request("delegated_run_start", json!({ "runId": run_id })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_error("terminal start", &terminal_start);
+    }
+
+    #[tokio::test]
+    async fn supervisor_runstart_approval_is_expiring_and_one_time() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-approval-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+        let run_id = format!("run-approval-{}", Uuid::new_v4());
+        let mut contract = delegated_contract(&workspace_root, &run_id);
+        contract.approval_requirements = vec![crate::delegated::contracts::ApprovalRequirementV1 {
+            kind: ApprovalRequirementKind::RunStart,
+            required: true,
+            reason: "operator must approve start".into(),
+        }];
+
+        let create = handle_tools_call(
+            &tool_call_request("delegated_run_create", json!({ "contract": contract })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_success("create", &create);
+
+        let start = handle_tools_call(
+            &tool_call_request("delegated_run_start", json!({ "runId": run_id })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_error("start approval required", &start);
+
+        let approval_id = format!("approval-run-start-{run_id}");
+        let decision_hash = format!("run-start:{run_id}:approved");
+        let approve = handle_tools_call(
+            &tool_call_request(
+                "delegated_run_approve_start",
+                json!({
+                    "runId": run_id,
+                    "approvalId": approval_id,
+                    "decisionHash": decision_hash
+                }),
+            ),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_success("approve", &approve);
+        assert_eq!(
+            structured_field(&approve, "consumed").and_then(Value::as_bool),
+            Some(true)
+        );
+
+        let approve_again = handle_tools_call(
+            &tool_call_request(
+                "delegated_run_approve_start",
+                json!({
+                    "runId": run_id,
+                    "approvalId": approval_id,
+                    "decisionHash": decision_hash
+                }),
+            ),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_error("approve again", &approve_again);
+    }
+
+    #[tokio::test]
     #[ignore = "requires local Ollama with qwen3.5:9b and runs the full MCP-to-worker loop"]
     async fn live_qwen_delegated_run_starts_and_completes_through_mcp() {
         let workspace_root =
@@ -5626,6 +6140,236 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    #[ignore = "requires local Ollama with qwen3.5:9b and runs the full network MCP-to-worker loop"]
+    async fn live_qwen_delegated_run_completes_through_network_mcp() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-network-qwen-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(workspace_root.join("src")).expect("src");
+        std::fs::create_dir_all(workspace_root.join("tests")).expect("tests");
+        std::fs::write(
+            workspace_root.join("Cargo.toml"),
+            "[package]\nname=\"fixture\"\nversion=\"0.1.0\"\nedition=\"2021\"\n",
+        )
+        .expect("cargo");
+        std::fs::write(
+            workspace_root.join("src/lib.rs"),
+            "/// Return the answer. Hint: the answer should be the next prime after forty-one.\npub fn answer() -> i32 {\n    41\n}\n",
+        )
+        .expect("lib");
+        std::fs::write(
+            workspace_root.join("tests/answer_test.rs"),
+            "#[test]\nfn answer_is_expected_value() {\n    assert_eq!(fixture::answer(), 42);\n}\n",
+        )
+        .expect("test");
+        git(&workspace_root, ["init"]);
+        git(&workspace_root, ["add", "."]);
+        let commit = std::process::Command::new("git")
+            .args([
+                "-c",
+                "user.name=CatDesk Test",
+                "-c",
+                "user.email=catdesk@example.invalid",
+                "commit",
+                "-m",
+                "baseline",
+            ])
+            .current_dir(&workspace_root)
+            .output()
+            .expect("commit");
+        assert!(
+            commit.status.success(),
+            "{}",
+            String::from_utf8_lossy(&commit.stderr)
+        );
+
+        let config_root =
+            std::env::temp_dir().join(format!("catdesk-network-qwen-config-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&config_root).expect("config root");
+        let mut app = crate::state::AppState::new_for_test(
+            0,
+            workspace_root.to_string_lossy().into_owned(),
+            config_root.join("config.toml"),
+        )
+        .expect("app");
+        app.mode = Mode::Computer;
+        app.tool_mode = ToolMode::SupervisorOnly;
+        let app_state = Arc::new(Mutex::new(app));
+        let (ui_tx, _ui_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mcp_path = "/network-qwen/mcp".to_string();
+        let token = "catdesk-live-network-token-1234567890";
+        let router =
+            crate::server::router(app_state, None, mcp_path.clone(), ui_tx, Some(token.into()));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let server = tokio::spawn(async move { axum::serve(listener, router).await });
+        let client = reqwest::Client::new();
+        let url = format!("http://{addr}{mcp_path}");
+
+        let unauthorized = client
+            .post(&url)
+            .json(&json!({"jsonrpc":"2.0","id":"unauth","method":"tools/list","params":{}}))
+            .send()
+            .await
+            .expect("unauth");
+        assert_eq!(unauthorized.status(), axum::http::StatusCode::UNAUTHORIZED);
+
+        let list = network_mcp_request(
+            &client,
+            &url,
+            token,
+            json!({"jsonrpc":"2.0","id":"list","method":"tools/list","params":{}}),
+        )
+        .await;
+        println!(
+            "CATDESK_NETWORK_MCP_QWEN_LIST={}",
+            serde_json::to_string(&list).expect("json")
+        );
+        assert!(network_tool_names(&list).contains(&"delegated_run_create".to_string()));
+
+        let run_id = format!("run-network-qwen-{}", Uuid::new_v4());
+        let mut contract = delegated_contract(&workspace_root, &run_id);
+        contract.objective = "Make the disposable Rust fixture pass cargo test. Inspect src/lib.rs, propose and apply source patches through CatDesk, run verification, revise after any failure, capture diff.actual, and only then complete with an explicit completion claim.".into();
+        contract.ordered_steps = vec![
+            "read src/lib.rs".into(),
+            "preview and apply a source patch".into(),
+            "run verification".into(),
+            "revise source if verification fails".into(),
+            "capture diff.actual after verification passes".into(),
+        ];
+        contract.acceptance_criteria = vec![
+            "cargo verification passes".into(),
+            "src/lib.rs contains the implementation fix".into(),
+            "authoritative diff is captured".into(),
+            "do not add or edit tests".into(),
+        ];
+        contract.max_turns = 20;
+        contract.max_tool_calls = 20;
+        contract.max_elapsed_seconds = 300;
+
+        let create = network_tool_call(
+            &client,
+            &url,
+            token,
+            "delegated_run_create",
+            json!({ "contract": contract }),
+        )
+        .await;
+        assert_network_tool_success("create", &create);
+        println!(
+            "CATDESK_NETWORK_MCP_QWEN_CREATE={}",
+            serde_json::to_string(&create).expect("json")
+        );
+        let validate = network_tool_call(
+            &client,
+            &url,
+            token,
+            "delegated_run_validate",
+            json!({ "runId": run_id }),
+        )
+        .await;
+        assert_network_tool_success("validate", &validate);
+        let start = network_tool_call(
+            &client,
+            &url,
+            token,
+            "delegated_run_start",
+            json!({ "runId": run_id }),
+        )
+        .await;
+        assert_network_tool_success("start", &start);
+        println!(
+            "CATDESK_NETWORK_MCP_QWEN_START={}",
+            serde_json::to_string(&start).expect("json")
+        );
+
+        let mut terminal_state = String::new();
+        let mut observed_failed_verification = false;
+        let mut observed_passing_verification = false;
+        let mut observed_diff = false;
+        for _ in 0..120 {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            let events = network_tool_call(
+                &client,
+                &url,
+                token,
+                "delegated_run_events",
+                json!({ "runId": run_id, "afterSequence": 0, "limit": 200 }),
+            )
+            .await;
+            assert_network_tool_success("events", &events);
+            let event_text = serde_json::to_string(&events).expect("events json");
+            observed_failed_verification |= event_text.contains("verify.run completed: Failed");
+            observed_passing_verification |= event_text.contains("verify.run completed: Passed");
+            observed_diff |= event_text.contains("diff.actual completed");
+
+            let status = network_tool_call(
+                &client,
+                &url,
+                token,
+                "delegated_run_status",
+                json!({ "runId": run_id }),
+            )
+            .await;
+            assert_network_tool_success("status", &status);
+            let state = network_structured_field(&status, "state")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            println!("CATDESK_NETWORK_MCP_QWEN_STATUS={state}");
+            if matches!(
+                state.as_str(),
+                "COMPLETED_VERIFIED" | "FAILED" | "CANCELLED"
+            ) {
+                terminal_state = state;
+                break;
+            }
+        }
+        assert_eq!(terminal_state, "COMPLETED_VERIFIED");
+        assert!(
+            observed_failed_verification,
+            "expected failed verification event"
+        );
+        assert!(
+            observed_passing_verification,
+            "expected passing verification event"
+        );
+        assert!(observed_diff, "expected diff event");
+
+        let diff = network_tool_call(
+            &client,
+            &url,
+            token,
+            "delegated_run_get_diff",
+            json!({ "runId": run_id, "maxBytes": 4096 }),
+        )
+        .await;
+        assert_network_tool_success("diff", &diff);
+        println!(
+            "CATDESK_NETWORK_MCP_QWEN_DIFF={}",
+            serde_json::to_string(&diff).expect("json")
+        );
+        let review = network_tool_call(
+            &client,
+            &url,
+            token,
+            "delegated_run_get_final_review",
+            json!({ "runId": run_id }),
+        )
+        .await;
+        assert_network_tool_success("final review", &review);
+        println!(
+            "CATDESK_NETWORK_MCP_QWEN_FINAL_REVIEW={}",
+            serde_json::to_string(&review).expect("json")
+        );
+
+        server.abort();
+        let _ = std::fs::remove_dir_all(config_root);
+        let _ = std::fs::remove_dir_all(workspace_root);
+    }
+
     fn assert_tool_success(label: &str, response: &JsonRpcResponse) {
         assert!(
             response.error.is_none(),
@@ -5644,6 +6388,28 @@ mod tests {
         );
     }
 
+    fn assert_tool_error(label: &str, response: &JsonRpcResponse) {
+        assert!(
+            response.error.is_some()
+                || response
+                    .result
+                    .as_ref()
+                    .and_then(|result| result.get("isError"))
+                    .and_then(Value::as_bool)
+                    == Some(true),
+            "{label} should have returned a JSON-RPC or MCP tool error: {:?}",
+            response.result
+        );
+    }
+
+    fn structured_field<'a>(response: &'a JsonRpcResponse, field: &str) -> Option<&'a Value> {
+        response
+            .result
+            .as_ref()
+            .and_then(|result| result.get("structuredContent"))
+            .and_then(|structured| structured.get(field))
+    }
+
     fn git<const N: usize>(root: &std::path::Path, args: [&str; N]) {
         let output = std::process::Command::new("git")
             .args(args)
@@ -5655,6 +6421,81 @@ mod tests {
             "git failed: {}\n{}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    async fn network_mcp_request(
+        client: &reqwest::Client,
+        url: &str,
+        token: &str,
+        body: Value,
+    ) -> Value {
+        client
+            .post(url)
+            .bearer_auth(token)
+            .json(&body)
+            .send()
+            .await
+            .expect("network mcp response")
+            .json()
+            .await
+            .expect("network mcp json")
+    }
+
+    async fn network_tool_call(
+        client: &reqwest::Client,
+        url: &str,
+        token: &str,
+        name: &str,
+        arguments: Value,
+    ) -> Value {
+        network_mcp_request(
+            client,
+            url,
+            token,
+            json!({
+                "jsonrpc": "2.0",
+                "id": format!("call-{name}"),
+                "method": "tools/call",
+                "params": {
+                    "name": name,
+                    "arguments": arguments
+                }
+            }),
+        )
+        .await
+    }
+
+    fn network_tool_names(response: &Value) -> Vec<String> {
+        response
+            .get("result")
+            .and_then(|result| result.get("tools"))
+            .and_then(Value::as_array)
+            .expect("tools")
+            .iter()
+            .filter_map(|tool| tool.get("name").and_then(Value::as_str).map(str::to_string))
+            .collect()
+    }
+
+    fn network_structured_field<'a>(response: &'a Value, field: &str) -> Option<&'a Value> {
+        response
+            .get("result")
+            .and_then(|result| result.get("structuredContent"))
+            .and_then(|structured| structured.get(field))
+    }
+
+    fn assert_network_tool_success(label: &str, response: &Value) {
+        assert!(
+            response.get("error").is_none(),
+            "{label} JSON-RPC error: {response:?}"
+        );
+        assert!(
+            response
+                .get("result")
+                .and_then(|result| result.get("isError"))
+                .and_then(Value::as_bool)
+                != Some(true),
+            "{label} returned MCP tool error: {response:?}"
         );
     }
 

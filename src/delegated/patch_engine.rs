@@ -141,6 +141,11 @@ impl<'a> PatchEngine<'a> {
     pub fn apply(&self, proposal: &PatchProposalV1) -> Result<PatchApplyResultV1, PatchError> {
         self.preview(proposal)?;
         let before_after = self.compute_before_after(proposal)?;
+        if before_after.len() != 1 {
+            return Err(PatchError::Validation(
+                "T-0023D supports one file per patch application".into(),
+            ));
+        }
         let mut before_hashes = Vec::new();
         let mut after_hashes = Vec::new();
         for file in &before_after {
@@ -148,10 +153,7 @@ impl<'a> PatchEngine<'a> {
                 path: file.path.clone(),
                 hash: stable_text_hash(&file.before),
             });
-            fs::write(
-                contained_path(self.workspace_root, &file.path)?,
-                &file.after,
-            )?;
+            atomic_write_contained(self.workspace_root, &file.path, &file.after)?;
             after_hashes.push(FileHashV1 {
                 path: file.path.clone(),
                 hash: stable_text_hash(&file.after),
@@ -184,7 +186,7 @@ impl<'a> PatchEngine<'a> {
                 String::from_utf8_lossy(&output.stderr).to_string(),
             ));
         }
-        let diff = String::from_utf8_lossy(&output.stdout).to_string();
+        let mut diff = String::from_utf8_lossy(&output.stdout).to_string();
         let mut name_command = Command::new("git");
         name_command.arg("diff").arg("--name-only").arg("--");
         for path in paths {
@@ -199,11 +201,38 @@ impl<'a> PatchEngine<'a> {
                 String::from_utf8_lossy(&name_output.stderr).to_string(),
             ));
         }
-        let changed_paths = String::from_utf8_lossy(&name_output.stdout)
+        let mut changed_paths = String::from_utf8_lossy(&name_output.stdout)
             .lines()
             .filter(|line| !line.trim().is_empty())
             .map(|line| line.replace('\\', "/"))
             .collect::<Vec<_>>();
+        let untracked_output = Command::new("git")
+            .args(["ls-files", "--others", "--exclude-standard", "--"])
+            .args(paths)
+            .current_dir(self.workspace_root)
+            .output()
+            .map_err(|error| PatchError::Git(error.to_string()))?;
+        if !untracked_output.status.success() {
+            return Err(PatchError::Git(
+                String::from_utf8_lossy(&untracked_output.stderr).to_string(),
+            ));
+        }
+        for path in String::from_utf8_lossy(&untracked_output.stdout)
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| line.replace('\\', "/"))
+        {
+            if !changed_paths.contains(&path) {
+                changed_paths.push(path.clone());
+            }
+            let text = fs::read_to_string(contained_path(self.workspace_root, &path)?)?;
+            diff.push_str(&format!(
+                "--- /dev/null\n+++ b/{path}\n@@ untracked @@\n+{text}"
+            ));
+            if !diff.ends_with('\n') {
+                diff.push('\n');
+            }
+        }
         Ok(ActualDiffArtifactV1 {
             base_ref: "HEAD".into(),
             paths: changed_paths,
@@ -218,6 +247,11 @@ impl<'a> PatchEngine<'a> {
         }
         if proposal.operations.is_empty() || proposal.target_paths.is_empty() {
             return Err(PatchError::Validation("patch has no operations".into()));
+        }
+        if proposal.target_paths.len() != 1 {
+            return Err(PatchError::Validation(
+                "T-0023D supports one target file per patch".into(),
+            ));
         }
         for path in &proposal.target_paths {
             validate_relative_path(path)?;
@@ -243,7 +277,23 @@ impl<'a> PatchEngine<'a> {
                 return Err(PatchError::StaleBase(expected.path.clone()));
             }
         }
+        let current_base_hash = stable_text_hash(&self.snapshot_text(&proposal.target_paths)?);
+        if proposal.base_snapshot_hash != current_base_hash {
+            return Err(PatchError::StaleBase("base_snapshot_hash".into()));
+        }
         Ok(())
+    }
+
+    fn snapshot_text(&self, paths: &[String]) -> Result<String, PatchError> {
+        let mut snapshot = String::new();
+        for path in paths {
+            let text = fs::read_to_string(contained_path(self.workspace_root, path)?)?;
+            snapshot.push_str(path);
+            snapshot.push('\0');
+            snapshot.push_str(&text);
+            snapshot.push('\0');
+        }
+        Ok(snapshot)
     }
 
     fn compute_before_after(
@@ -410,16 +460,127 @@ fn contained_path(root: &Path, relative_path: &str) -> Result<PathBuf, PatchErro
     if !canonical_parent.starts_with(&root) {
         return Err(PatchError::OutOfScope(relative_path.into()));
     }
+    reject_link_or_reparse_target(&path)?;
     Ok(path)
 }
 
-pub fn stable_text_hash(text: &str) -> String {
-    let mut hash: u64 = 0xcbf29ce484222325;
-    for byte in text.as_bytes() {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x100000001b3);
+fn atomic_write_contained(root: &Path, relative_path: &str, text: &str) -> Result<(), PatchError> {
+    let path = contained_path(root, relative_path)?;
+    let tmp = path.with_extension(format!("catdesk-tmp-{}", std::process::id()));
+    fs::write(&tmp, text)?;
+    fs::rename(&tmp, &path)?;
+    Ok(())
+}
+
+fn reject_link_or_reparse_target(path: &Path) -> Result<(), PatchError> {
+    if !path.exists() {
+        return Ok(());
     }
-    format!("fnv1a64:{hash:016x}")
+    let meta = fs::symlink_metadata(path)?;
+    if meta.file_type().is_symlink() {
+        return Err(PatchError::OutOfScope(format!(
+            "refusing to patch symlink target {}",
+            path.display()
+        )));
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        if meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return Err(PatchError::OutOfScope(format!(
+                "refusing to patch Windows reparse-point target {}",
+                path.display()
+            )));
+        }
+    }
+    Ok(())
+}
+
+pub fn stable_text_hash(text: &str) -> String {
+    format!("sha256:{}", sha256_hex(text.as_bytes()))
+}
+
+fn sha256_hex(input: &[u8]) -> String {
+    const K: [u32; 64] = [
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
+        0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
+        0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f,
+        0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+        0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
+        0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+        0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116,
+        0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
+        0xc67178f2,
+    ];
+    let mut h = [
+        0x6a09e667u32,
+        0xbb67ae85,
+        0x3c6ef372,
+        0xa54ff53a,
+        0x510e527f,
+        0x9b05688c,
+        0x1f83d9ab,
+        0x5be0cd19,
+    ];
+    let bit_len = (input.len() as u64) * 8;
+    let mut data = input.to_vec();
+    data.push(0x80);
+    while (data.len() % 64) != 56 {
+        data.push(0);
+    }
+    data.extend_from_slice(&bit_len.to_be_bytes());
+    for chunk in data.chunks(64) {
+        let mut w = [0u32; 64];
+        for (i, word) in w.iter_mut().take(16).enumerate() {
+            let start = i * 4;
+            *word = u32::from_be_bytes([
+                chunk[start],
+                chunk[start + 1],
+                chunk[start + 2],
+                chunk[start + 3],
+            ]);
+        }
+        for i in 16..64 {
+            let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
+            let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
+            w[i] = w[i - 16]
+                .wrapping_add(s0)
+                .wrapping_add(w[i - 7])
+                .wrapping_add(s1);
+        }
+        let [mut a, mut b, mut c, mut d, mut e, mut f, mut g, mut hh] = h;
+        for i in 0..64 {
+            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
+            let ch = (e & f) ^ ((!e) & g);
+            let temp1 = hh
+                .wrapping_add(s1)
+                .wrapping_add(ch)
+                .wrapping_add(K[i])
+                .wrapping_add(w[i]);
+            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
+            let maj = (a & b) ^ (a & c) ^ (b & c);
+            let temp2 = s0.wrapping_add(maj);
+            hh = g;
+            g = f;
+            f = e;
+            e = d.wrapping_add(temp1);
+            d = c;
+            c = b;
+            b = a;
+            a = temp1.wrapping_add(temp2);
+        }
+        h[0] = h[0].wrapping_add(a);
+        h[1] = h[1].wrapping_add(b);
+        h[2] = h[2].wrapping_add(c);
+        h[3] = h[3].wrapping_add(d);
+        h[4] = h[4].wrapping_add(e);
+        h[5] = h[5].wrapping_add(f);
+        h[6] = h[6].wrapping_add(g);
+        h[7] = h[7].wrapping_add(hh);
+    }
+    h.iter().map(|word| format!("{word:08x}")).collect()
 }
 
 impl From<std::io::Error> for PatchError {
@@ -495,13 +656,14 @@ mod tests {
     ) -> PatchProposalV1 {
         let path = "src/bug.txt";
         let text = fs::read_to_string(root.join(path)).expect("read bug file");
+        let base_snapshot_hash = stable_text_hash(&format!("{path}\0{text}\0"));
         PatchProposalV1 {
             schema_version: 1,
             patch_id: PatchId::new(patch_id).expect("patch id"),
             parent_patch_id: parent,
             run_id: RunId::new("run-t0017").expect("run id"),
             turn_id: TurnId::new("turn-1").expect("turn id"),
-            base_snapshot_hash: stable_text_hash(&text),
+            base_snapshot_hash,
             target_paths: vec![path.into()],
             expected_preimage_hashes: vec![FileHashV1 {
                 path: path.into(),
@@ -564,6 +726,7 @@ mod tests {
             path: "secret.txt".into(),
             hash: stable_text_hash("secret\n"),
         }];
+        proposal.base_snapshot_hash = stable_text_hash("secret.txt\0secret\n\0");
         assert!(matches!(
             engine.preview(&proposal),
             Err(PatchError::OutOfScope(path)) if path == "secret.txt"

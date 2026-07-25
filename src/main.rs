@@ -833,6 +833,7 @@ struct HeadlessMcpOptions {
     mode: Mode,
     tool_mode: ToolMode,
     config_path: PathBuf,
+    auth_token: String,
 }
 
 fn parse_headless_mcp_options(
@@ -855,6 +856,7 @@ fn parse_headless_mcp_options(
     let mut mode = Mode::Computer;
     let mut tool_mode = ToolMode::ReadOnly;
     let mut config_path: Option<PathBuf> = None;
+    let mut auth_token = std::env::var("CATDESK_MCP_AUTH_TOKEN").ok();
 
     let mut index = 0;
     while index < args.len() {
@@ -893,6 +895,9 @@ fn parse_headless_mcp_options(
             "--config-path" => {
                 config_path = Some(PathBuf::from(next_arg(&args, &mut index, "--config-path")?));
             }
+            "--auth-token" => {
+                auth_token = Some(next_arg(&args, &mut index, "--auth-token")?);
+            }
             other => return Err(format!("unknown headless MCP option `{other}`")),
         }
     }
@@ -905,6 +910,12 @@ fn parse_headless_mcp_options(
         "headless MCP requires --config-path so tests do not read or write the normal CatDesk config"
             .to_string()
     })?;
+    let auth_token = auth_token
+        .filter(|token| token.len() >= 24 && !token.chars().any(char::is_whitespace))
+        .ok_or_else(|| {
+            "headless MCP requires a process-scoped --auth-token or CATDESK_MCP_AUTH_TOKEN with at least 24 non-whitespace characters"
+                .to_string()
+        })?;
 
     Ok(Some(HeadlessMcpOptions {
         host,
@@ -914,6 +925,7 @@ fn parse_headless_mcp_options(
         mode,
         tool_mode,
         config_path,
+        auth_token,
     }))
 }
 
@@ -1024,7 +1036,13 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
     };
 
     let (ui_event_tx, mut ui_event_rx) = unbounded_channel();
-    let router = server::router(state.clone(), None, mcp_path.clone(), ui_event_tx);
+    let router = server::router(
+        state.clone(),
+        None,
+        mcp_path.clone(),
+        ui_event_tx,
+        Some(options.auth_token.clone()),
+    );
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", options.host, options.port))
         .await
         .map_err(|error| {
@@ -1068,6 +1086,11 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
             "workspace": workspace_root,
             "config_path": options.config_path,
             "mcp_url": format!("http://{local_addr}{mcp_path}"),
+            "auth": {
+                "scheme": "bearer",
+                "source": "--auth-token|CATDESK_MCP_AUTH_TOKEN",
+                "token_redacted": true
+            },
         })
     );
 
@@ -1741,6 +1764,8 @@ mod tests {
             "read-only".to_string(),
             "--config-path".to_string(),
             ".tmp\\catdesk-headless\\config.toml".to_string(),
+            "--auth-token".to_string(),
+            "catdesk-test-token-1234567890".to_string(),
             "--no-ngrok".to_string(),
         ])
         .expect("parse headless options")
@@ -1750,6 +1775,7 @@ mod tests {
         assert_eq!(options.port, 33200);
         assert_eq!(options.mcp_path.as_deref(), Some("/t0012/mcp"));
         assert!(matches!(options.tool_mode, ToolMode::ReadOnly));
+        assert_eq!(options.auth_token, "catdesk-test-token-1234567890");
     }
 
     #[test]
@@ -1758,6 +1784,8 @@ mod tests {
             "--headless-mcp".to_string(),
             "--config-path".to_string(),
             ".tmp\\catdesk-headless\\config.toml".to_string(),
+            "--auth-token".to_string(),
+            "catdesk-test-token-1234567890".to_string(),
         ])
         .expect("parse headless options")
         .expect("headless options present");
@@ -1773,6 +1801,8 @@ mod tests {
             "read-only".to_string(),
             "--config-path".to_string(),
             ".tmp\\catdesk-headless\\config.toml".to_string(),
+            "--auth-token".to_string(),
+            "catdesk-test-token-1234567890".to_string(),
         ])
         .expect("parse read-only headless options")
         .expect("headless options present");
@@ -1847,6 +1877,8 @@ mod tests {
             "0.0.0.0".to_string(),
             "--config-path".to_string(),
             ".tmp\\catdesk-headless\\config.toml".to_string(),
+            "--auth-token".to_string(),
+            "catdesk-test-token-1234567890".to_string(),
         ]);
         let error = match result {
             Ok(_) => panic!("expected non-loopback host rejection"),
@@ -1865,6 +1897,21 @@ mod tests {
         };
 
         assert!(error.contains("--config-path"));
+    }
+
+    #[test]
+    fn rejects_headless_without_auth_token() {
+        let result = parse_headless_mcp_options([
+            "--headless-mcp".to_string(),
+            "--config-path".to_string(),
+            ".tmp\\catdesk-headless\\config.toml".to_string(),
+        ]);
+        let error = match result {
+            Ok(_) => panic!("expected missing auth token rejection"),
+            Err(error) => error,
+        };
+
+        assert!(error.contains("--auth-token"));
     }
 
     #[test]
@@ -2909,7 +2956,13 @@ async fn start_services(
         let app = state.lock().await;
         app.mcp_path()
     };
-    let router = server::router(state.clone(), devtools_bridge.clone(), mcp_path, ui_events);
+    let router = server::router(
+        state.clone(),
+        devtools_bridge.clone(),
+        mcp_path,
+        ui_events,
+        None,
+    );
     let listener = match tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await {
         Ok(l) => l,
         Err(e) => {

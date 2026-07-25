@@ -10,9 +10,10 @@ use super::patch_engine::{
     ActualDiffArtifactV1, PatchComparisonV1, PatchProposalV1, compare_patches,
 };
 
-pub const SUPERVISOR_TOOL_NAMES: [&str; 16] = [
+pub const SUPERVISOR_TOOL_NAMES: [&str; 17] = [
     "delegated_run_create",
     "delegated_run_validate",
+    "delegated_run_approve_start",
     "delegated_run_start",
     "delegated_run_status",
     "delegated_run_list",
@@ -356,7 +357,8 @@ mod tests {
 
     #[test]
     fn supervisor_tool_surface_lists_required_tools() {
-        assert_eq!(SupervisorSurface::tool_names().len(), 16);
+        assert_eq!(SupervisorSurface::tool_names().len(), 17);
+        assert!(SupervisorSurface::tool_names().contains(&"delegated_run_approve_start"));
         assert!(SupervisorSurface::tool_names().contains(&"delegated_run_events"));
         assert!(SupervisorSurface::tool_names().contains(&"delegated_run_cancel"));
     }

@@ -10,7 +10,8 @@ use serde_json::{Value, json};
 
 use crate::delegated::context::{ContextBudgetPolicyV1, ContextBuilderV1};
 use crate::delegated::contracts::{
-    ApprovalRequirementKind, ExecutionContractV1, PatchId, RunId, RunState, ToolCallId, TurnId,
+    ApprovalRequirementKind, ExecutionContractV1, ItemId, PatchId, RunId, RunState, ToolCallId,
+    TurnId, WorkerSessionId,
 };
 use crate::delegated::coordinator::{
     FinalReviewPackageV1, RunCoordinator, VerificationStatusV1, VerificationSummaryV1,
@@ -116,6 +117,8 @@ pub struct IntegratedDelegatedService {
     provider_history: Vec<ProviderMessageV1>,
     completed_tool_calls: u32,
     next_event_sequence: u64,
+    worker_session_id: WorkerSessionId,
+    current_turn_id: Option<TurnId>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -158,6 +161,7 @@ impl IntegratedDelegatedService {
             availability: ProviderAvailabilityV1::Available,
             credential_env_var: None,
         });
+        let run_id = RunId::new(contract.task_id.clone()).map_err(IntegratedError::Tool)?;
         Ok(Self {
             workspace_root,
             contract,
@@ -173,6 +177,9 @@ impl IntegratedDelegatedService {
             provider_history: Vec::new(),
             completed_tool_calls: 0,
             next_event_sequence: 1,
+            worker_session_id: WorkerSessionId::new(format!("worker-session-{}", run_id.as_str()))
+                .map_err(IntegratedError::Tool)?,
+            current_turn_id: None,
         })
     }
 
@@ -263,6 +270,8 @@ impl IntegratedDelegatedService {
                 return Err(IntegratedError::Tool("elapsed budget exceeded".into()));
             }
             let turn_id = TurnId::new(format!("turn-{turn}")).map_err(IntegratedError::Tool)?;
+            self.current_turn_id = Some(turn_id.clone());
+            self.compact_provider_history_if_needed()?;
             let result = ollama
                 .chat_messages_once(
                     &self.config.model_id,
@@ -297,11 +306,8 @@ impl IntegratedDelegatedService {
                             tool_name: Some(call.tool_name.clone()),
                         });
                         let tool_result = self.execute_tool_call(&call).await;
-                        let content = match tool_result {
-                            Ok(tool_result) => format!(
-                                "Tool result for {}:\n{}",
-                                call.tool_name, tool_result.bounded_text
-                            ),
+                        match tool_result {
+                            Ok(_tool_result) => {}
                             Err(error) => {
                                 let message = format!(
                                     "Tool {} failed under CatDesk policy and was journaled. Error: {error:?}. Choose a permitted next CatDesk tool call; do not retry the same invalid request.",
@@ -313,19 +319,17 @@ impl IntegratedDelegatedService {
                                 ) {
                                     return Err(IntegratedError::Tool(message));
                                 }
-                                message
+                                self.provider_history.push(ProviderMessageV1 {
+                                    role: "user".into(),
+                                    content: message,
+                                    tool_call_id: Some(call.tool_call_id.as_str().to_string()),
+                                    tool_name: Some(call.tool_name.clone()),
+                                });
                             }
                         };
-                        self.provider_history.push(ProviderMessageV1 {
-                            role: "user".into(),
-                            content,
-                            tool_call_id: Some(call.tool_call_id.as_str().to_string()),
-                            tool_name: Some(call.tool_name),
-                        });
                         saw_tool = true;
                     }
-                    NormalizedProviderEventKind::TextDelta
-                    | NormalizedProviderEventKind::CompletionClaim => {
+                    NormalizedProviderEventKind::TextDelta => {
                         let text = event.text.unwrap_or_default();
                         self.provider_history.push(ProviderMessageV1 {
                             role: "assistant".into(),
@@ -333,20 +337,25 @@ impl IntegratedDelegatedService {
                             tool_call_id: None,
                             tool_name: None,
                         });
-                        if self.last_verification.as_ref().is_some_and(|verification| {
-                            verification.status == VerificationStatusV1::Passed
-                        }) && self.last_diff.is_some()
-                        {
-                            self.journal
-                                .update_run_state(
-                                    &RunId::new(self.contract.task_id.clone())
-                                        .map_err(IntegratedError::Tool)?,
-                                    RunState::CompletedVerified,
-                                )
-                                .map_err(|e| IntegratedError::Journal(format!("{e:?}")))?;
-                            self.persist_durable_state()?;
-                            return self.final_review();
-                        }
+                    }
+                    NormalizedProviderEventKind::CompletionClaim => {
+                        let text = event.text.unwrap_or_default();
+                        self.provider_history.push(ProviderMessageV1 {
+                            role: "assistant".into(),
+                            content: text.clone(),
+                            tool_call_id: None,
+                            tool_name: None,
+                        });
+                        self.verify_completion_gate(&text)?;
+                        self.journal
+                            .update_run_state(
+                                &RunId::new(self.contract.task_id.clone())
+                                    .map_err(IntegratedError::Tool)?,
+                                RunState::CompletedVerified,
+                            )
+                            .map_err(|e| IntegratedError::Journal(format!("{e:?}")))?;
+                        self.persist_durable_state()?;
+                        return self.final_review();
                     }
                     NormalizedProviderEventKind::MalformedResponse => {
                         return Err(IntegratedError::Tool(
@@ -388,6 +397,165 @@ impl IntegratedDelegatedService {
             .into_iter()
             .filter(|tool| needs_jobs || !tool.name.starts_with("job."))
             .collect()
+    }
+
+    fn compact_provider_history_if_needed(&mut self) -> Result<(), IntegratedError> {
+        const MAX_PROVIDER_INPUT_BYTES: usize = 48 * 1024;
+        let serialized = serde_json::to_vec(&self.provider_history)?;
+        if serialized.len() <= MAX_PROVIDER_INPUT_BYTES || self.provider_history.len() <= 10 {
+            return Ok(());
+        }
+
+        let mut next = Vec::new();
+        if let Some(system) = self.provider_history.first().cloned() {
+            next.push(system);
+        }
+        if let Some(contract) = self.provider_history.get(1).cloned() {
+            next.push(contract);
+        }
+        next.push(ProviderMessageV1 {
+            role: "user".into(),
+            content: self.context_checkpoint_summary()?,
+            tool_call_id: None,
+            tool_name: None,
+        });
+        let keep = self
+            .provider_history
+            .iter()
+            .rev()
+            .take(8)
+            .cloned()
+            .collect::<Vec<_>>();
+        for message in keep.into_iter().rev() {
+            next.push(message);
+        }
+        self.provider_history = next;
+        let serialized = serde_json::to_vec(&self.provider_history)?;
+        if serialized.len() > MAX_PROVIDER_INPUT_BYTES {
+            return Err(IntegratedError::Tool(format!(
+                "serialized provider input exceeded {MAX_PROVIDER_INPUT_BYTES} bytes after compaction"
+            )));
+        }
+        Ok(())
+    }
+
+    fn context_checkpoint_summary(&self) -> Result<String, IntegratedError> {
+        let latest_patch = self
+            .patch_proposals
+            .keys()
+            .next_back()
+            .cloned()
+            .unwrap_or_else(|| "none".into());
+        let verification = self
+            .last_verification
+            .as_ref()
+            .map(|summary| format!("{:?}", summary.status))
+            .unwrap_or_else(|| "not-run".into());
+        let latest_diff = self
+            .last_diff
+            .as_ref()
+            .map(|diff| diff.diff_hash.clone())
+            .unwrap_or_else(|| "none".into());
+        Ok(format!(
+            "Compacted checkpoint:\nobjective: {}\nallowed_paths: {}\nforbidden_paths: {}\nacceptance_criteria: {}\nlatest_patch: {}\nverification_status: {}\nlatest_diff: {}\nremaining_turn_budget: {}\nremaining_tool_budget: {}",
+            self.contract.objective,
+            self.contract.allowed_paths.join(", "),
+            self.contract.forbidden_paths.join(", "),
+            self.contract.acceptance_criteria.join("; "),
+            latest_patch,
+            verification,
+            latest_diff,
+            self.contract.max_turns,
+            self.contract
+                .max_tool_calls
+                .saturating_sub(self.completed_tool_calls)
+        ))
+    }
+
+    fn verify_completion_gate(&self, claim: &str) -> Result<(), IntegratedError> {
+        let verification = self
+            .last_verification
+            .as_ref()
+            .ok_or_else(|| IntegratedError::Verification("verification has not run".into()))?;
+        let diff = self.last_diff.as_ref().ok_or_else(|| {
+            IntegratedError::Verification("actual diff has not been captured".into())
+        })?;
+        verification_passed_with_diff(claim, verification, diff)?;
+        self.evaluate_acceptance_criteria_v1(verification, diff)?;
+        self.ensure_diff_paths_allowed(diff)?;
+        self.ensure_no_outcome_unknown()?;
+        Ok(())
+    }
+
+    fn evaluate_acceptance_criteria_v1(
+        &self,
+        verification: &VerificationSummaryV1,
+        diff: &ActualDiffArtifactV1,
+    ) -> Result<(), IntegratedError> {
+        for criterion in &self.contract.acceptance_criteria {
+            let lower = criterion.to_ascii_lowercase();
+            if (lower.contains("test") || lower.contains("verification") || lower.contains("cargo"))
+                && verification.status != VerificationStatusV1::Passed
+            {
+                return Err(IntegratedError::Verification(format!(
+                    "acceptance criterion is not satisfied: {criterion}"
+                )));
+            }
+            if lower.contains("diff") && diff.diff.trim().is_empty() {
+                return Err(IntegratedError::Verification(format!(
+                    "acceptance criterion is not satisfied: {criterion}"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    fn ensure_diff_paths_allowed(
+        &self,
+        diff: &ActualDiffArtifactV1,
+    ) -> Result<(), IntegratedError> {
+        for path in &diff.paths {
+            let normalized = path.replace('\\', "/");
+            if self
+                .contract
+                .forbidden_paths
+                .iter()
+                .any(|forbidden| path_is_under_contract_path(&normalized, forbidden))
+            {
+                return Err(IntegratedError::Verification(format!(
+                    "changed forbidden path {path}"
+                )));
+            }
+            if !self
+                .contract
+                .allowed_paths
+                .iter()
+                .any(|allowed| path_is_under_contract_path(&normalized, allowed))
+            {
+                return Err(IntegratedError::Verification(format!(
+                    "changed path outside allowed scope {path}"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    fn ensure_no_outcome_unknown(&self) -> Result<(), IntegratedError> {
+        let run_id = RunId::new(self.contract.task_id.clone()).map_err(IntegratedError::Tool)?;
+        let tool_calls = self
+            .journal
+            .load_tool_calls(&run_id)
+            .map_err(|error| IntegratedError::Journal(format!("{error:?}")))?;
+        if let Some(record) = tool_calls
+            .values()
+            .find(|record| record.status == ToolCallStatus::OutcomeUnknown)
+        {
+            return Err(IntegratedError::Verification(format!(
+                "tool call {} has OUTCOME_UNKNOWN status",
+                record.tool_call_id.as_str()
+            )));
+        }
+        Ok(())
     }
 
     pub fn start(&mut self) -> Result<IntegratedRunSnapshotV1, IntegratedError> {
@@ -784,13 +952,15 @@ impl IntegratedDelegatedService {
         lifecycle_event: LifecycleEvent,
         payload: EventPayloadV1,
     ) -> Result<(), IntegratedError> {
+        let item_id = ItemId::new(format!("item-{}", self.next_event_sequence))
+            .map_err(IntegratedError::Tool)?;
         let event = EventEnvelopeV1 {
             schema_version: EXECUTION_CONTRACT_SCHEMA_VERSION,
             event_sequence: self.next_event_sequence,
             run_id: RunId::new(self.contract.task_id.clone()).map_err(IntegratedError::Tool)?,
-            worker_session_id: None,
-            turn_id: None,
-            item_id: None,
+            worker_session_id: Some(self.worker_session_id.clone()),
+            turn_id: self.current_turn_id.clone(),
+            item_id: Some(item_id),
             lifecycle_event,
             request_hash: "fnv1a64:integrated".into(),
             result_hash: None,
@@ -1190,6 +1360,14 @@ impl IntegratedDelegatedService {
                 })
             })
             .collect::<Result<Vec<_>, IntegratedError>>()?;
+        let mut base_snapshot = String::new();
+        for path in &target_paths {
+            let text = fs::read_to_string(self.workspace_root.join(path))?;
+            base_snapshot.push_str(path);
+            base_snapshot.push('\0');
+            base_snapshot.push_str(&text);
+            base_snapshot.push('\0');
+        }
         Ok(PatchProposalV1 {
             schema_version: EXECUTION_CONTRACT_SCHEMA_VERSION,
             patch_id: PatchId::new(patch_id).map_err(IntegratedError::Tool)?,
@@ -1197,7 +1375,7 @@ impl IntegratedDelegatedService {
             run_id: RunId::new(self.contract.task_id.clone()).map_err(IntegratedError::Tool)?,
             turn_id: TurnId::new(format!("turn-{}", self.next_event_sequence))
                 .map_err(IntegratedError::Tool)?,
-            base_snapshot_hash: stable_text_hash(&serde_json::to_string(&target_paths)?),
+            base_snapshot_hash: stable_text_hash(&base_snapshot),
             target_paths,
             expected_preimage_hashes,
             operations,
@@ -1266,6 +1444,12 @@ fn worker_system_prompt() -> String {
         "Return at most one tool call per turn when a tool is needed.",
     ]
     .join("\n")
+}
+
+fn path_is_under_contract_path(path: &str, scope: &str) -> bool {
+    let path = path.replace('\\', "/");
+    let scope = scope.trim_matches('/').replace('\\', "/");
+    path == scope || path.starts_with(&format!("{scope}/"))
 }
 
 pub fn verification_passed_with_diff(
@@ -1418,6 +1602,30 @@ mod tests {
             .await
             .expect("cancel");
         assert!(cancelled.bounded_text.contains("cancelled"));
+    }
+
+    #[tokio::test]
+    async fn production_loop_acknowledges_cancel_before_provider_turn() {
+        let root = temp_git_workspace("cancel-ack");
+        fs::write(root.join("src/lib.rs"), "pub fn answer() -> i32 { 41 }\n").expect("lib");
+        fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname=\"fixture\"\nversion=\"0.1.0\"\nedition=\"2021\"\n",
+        )
+        .expect("cargo");
+        commit_all(&root);
+        let contract = contract(&root, "run-cancel-ack");
+        let config = config(&root);
+        let cancel = Arc::new(AtomicBool::new(true));
+        let mut service =
+            IntegratedDelegatedService::new(&root, contract.clone(), config).expect("service");
+        let result = service.run_ollama_worker_loop_with_cancel(cancel).await;
+        assert!(
+            matches!(result, Err(IntegratedError::Tool(message)) if message.contains("cancelled"))
+        );
+        let run_id = RunId::new(contract.task_id).expect("run");
+        let snapshot = service.journal.load_run(&run_id).expect("snapshot");
+        assert_eq!(snapshot.state, RunState::Cancelled);
     }
 
     #[tokio::test]

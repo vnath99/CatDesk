@@ -148,7 +148,8 @@ Tickets:
 - T-0023: local commit `2571424`
 - T-0023A: local commit `59d0634`
 - T-0023B: local closure commit recorded in Git history and in the external review bundle
-- T-0023C: pending local review; not pushed or opened as a pull request
+- T-0023C: local commit `5345a1f`
+- T-0023D: functional-release closure commit recorded in Git history and in the external review bundle
 
 Required gate evidence:
 
@@ -162,6 +163,7 @@ Required gate evidence:
 | Integrated delegated workflow is composed and tested | T-0023A adds the integrated service, expanded tool dispatcher, MCP transport wiring, setup scripts, live Qwen model-tool-model evidence, and review bundle. | passed |
 | Production delegated-run path is wired and safety-closed | T-0023B adds an autonomous Ollama worker loop, retained provider/tool history, durable integrated state, least-privilege supervisor-only MCP startup, explicit MCP artifact errors, and live Qwen production-loop evidence. | passed |
 | MCP supervisor starts the real worker path | T-0023C requires full execution contracts through `delegated_run_create`, starts `IntegratedDelegatedService` through MCP `delegated_run_start`, polls real status/events/final-review data, safely rejects malformed run IDs, and proves the live Qwen path begins only through MCP. | passed |
+| Functional release path is closed | T-0023D adds authenticated loopback MCP, bounded `ExecutionContractV1` schemas, RunStart-only approval, lifecycle/cancel/restart hardening, bounded context, completion gates, SHA-256 one-file patch safety, structured event IDs, startup-script auth, and live external MCP-to-Qwen proof. | passed |
 | Remote disclosure policy is enforced | T-0019 blocks remote/browser providers unless disclosure policy allows them. | passed |
 
 Current T-0019 tests:
@@ -227,3 +229,21 @@ Current T-0023C tests:
 - `cargo fmt --check`: passed.
 - `cargo clippy --all-targets --all-features -- -D warnings`: passed.
 - `cargo test`: passed, 196 tests and 4 ignored live/opt-in tests.
+
+Current T-0023D tests:
+
+- `cargo fmt --check`: passed.
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed.
+- `cargo test`: passed, 204 tests and 5 ignored live/opt-in tests.
+- `cargo test headless -- --nocapture`: passed, 11 tests.
+- `cargo test authenticated_network_mcp_lists_schema_and_rejects_malformed_contract -- --nocapture`: passed.
+- `cargo test supervisor_lifecycle_rejects_terminal_and_orphaned_running_starts -- --nocapture`: passed.
+- `cargo test production_loop_acknowledges_cancel_before_provider_turn -- --nocapture`: passed.
+- `cargo test supervisor_runstart_approval_is_expiring_and_one_time -- --nocapture`: passed.
+- `cargo test delegated::fault_injection -- --nocapture`: passed, 4 tests.
+- `cargo test delegated::integrated -- --nocapture`: passed, 5 tests and 2 ignored live tests.
+- `cargo test supervisor_delegated_tools_are_discovered_and_invoked_through_mcp -- --nocapture`: passed.
+- `cargo test live_qwen_delegated_run_completes_through_network_mcp -- --ignored --nocapture`: passed in 44.98s through authenticated network MCP and reached `COMPLETED_VERIFIED`.
+- `cargo build --release`: passed.
+- `scripts/start-local-orchestrator.ps1`: passed bounded ready-output startup and cleanup.
+- `scripts/start-dev-orchestrator.ps1`: passed bounded ready-output startup and cleanup.

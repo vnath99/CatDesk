@@ -461,12 +461,22 @@ fn read_jsonl<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>, JournalError> 
     }
     let file = File::open(path)?;
     let mut values = Vec::new();
-    for line in BufReader::new(file).lines() {
-        let line = line?;
+    let lines = BufReader::new(file)
+        .lines()
+        .collect::<Result<Vec<_>, _>>()?;
+    let last_index = lines.len().saturating_sub(1);
+    for (index, line) in lines.into_iter().enumerate() {
         if line.trim().is_empty() {
             continue;
         }
-        values.push(serde_json::from_str(&line)?);
+        match serde_json::from_str(&line) {
+            Ok(value) => values.push(value),
+            Err(error) if index == last_index => {
+                let _ = error;
+                break;
+            }
+            Err(error) => return Err(error.into()),
+        }
     }
     Ok(values)
 }
@@ -836,5 +846,50 @@ mod tests {
                 .last_event_sequence,
             1
         );
+    }
+
+    #[test]
+    fn torn_final_jsonl_record_is_ignored_during_recovery() {
+        let journal = temp_journal("journal-torn-jsonl");
+        let run_id = create_fixture_run(&journal);
+        let event = EventEnvelopeV1 {
+            schema_version: 1,
+            event_sequence: 1,
+            run_id: run_id.clone(),
+            worker_session_id: None,
+            turn_id: None,
+            item_id: None,
+            lifecycle_event: LifecycleEvent::Started,
+            request_hash: "fnv1a64:req".into(),
+            result_hash: None,
+            payload: EventPayloadV1::RunStateChanged {
+                state: RunState::Running,
+            },
+        }
+        .with_result_hash()
+        .expect("hash event");
+        journal.append_event(&event).expect("append event");
+        let events_path = journal
+            .run_dir(&run_id)
+            .expect("run dir")
+            .join("events.jsonl");
+        let mut file = OpenOptions::new()
+            .append(true)
+            .open(&events_path)
+            .expect("open events");
+        file.write_all(br#"{"schemaVersion":1,"#)
+            .expect("write torn line");
+
+        let events = journal
+            .poll_events(
+                &run_id,
+                EventCursor {
+                    after_sequence: 0,
+                    limit: 10,
+                },
+            )
+            .expect("poll events");
+
+        assert_eq!(events, vec![event]);
     }
 }

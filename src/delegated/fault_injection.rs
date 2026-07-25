@@ -62,20 +62,28 @@ mod tests {
             &root,
             "patch-t0022-child",
             Some(parent.patch_id.clone()),
-            vec![
-                replace("src/math.txt", "answer=43", "answer=42"),
-                replace("src/readme.txt", "expected=41", "expected=42"),
-            ],
+            vec![replace("src/math.txt", "answer=43", "answer=42")],
         );
         let comparison = compare_patches(&parent, &child);
         assert_eq!(comparison.superseded_operations, 0);
-        assert_eq!(comparison.files_added, vec!["src/readme.txt"]);
+        assert_eq!(comparison.files_modified, vec!["src/math.txt"]);
 
         let result = engine.apply(&child).expect("apply child");
         assert_eq!(result.status, PatchApplyStatus::Applied);
         assert_eq!(
             result.actual_paths_changed,
-            vec!["src/math.txt".to_string(), "src/readme.txt".to_string()]
+            vec!["src/math.txt".to_string()]
+        );
+        let readme = proposal(
+            &root,
+            "patch-t0022-readme",
+            Some(child.patch_id.clone()),
+            vec![replace("src/readme.txt", "expected=41", "expected=42")],
+        );
+        let readme_result = engine.apply(&readme).expect("apply readme");
+        assert_eq!(
+            readme_result.actual_paths_changed,
+            vec!["src/readme.txt".to_string()]
         );
         let diff = ActualDiffArtifactV1 {
             base_ref: "HEAD".into(),
@@ -437,10 +445,15 @@ mod tests {
             .iter()
             .map(|operation| operation.path.clone())
             .collect::<Vec<_>>();
+        let mut base_snapshot = String::new();
         let expected_preimage_hashes = target_paths
             .iter()
             .map(|path| {
                 let text = fs::read_to_string(root.join(path)).unwrap_or_default();
+                base_snapshot.push_str(path);
+                base_snapshot.push('\0');
+                base_snapshot.push_str(&text);
+                base_snapshot.push('\0');
                 FileHashV1 {
                     path: path.clone(),
                     hash: stable_text_hash(&text),
@@ -453,7 +466,7 @@ mod tests {
             parent_patch_id,
             run_id: RunId::new("run-t0022-qwen").expect("run id"),
             turn_id: TurnId::new("turn-1").expect("turn id"),
-            base_snapshot_hash: "fnv1a64:t0022".into(),
+            base_snapshot_hash: stable_text_hash(&base_snapshot),
             target_paths,
             expected_preimage_hashes,
             operations,

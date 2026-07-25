@@ -35,10 +35,13 @@ fn is_valid_transition(from: &RunState, to: &RunState) -> bool {
         (AwaitingApproval, Ready | Cancelled) => true,
         (Ready, Starting | Cancelled) => true,
         (Starting, Running | Failed | Cancelled) => true,
-        (Running, Paused | NeedsSupervisor | Verifying | Failed | Cancelled) => true,
-        (Paused, Running | NeedsSupervisor | Cancelled) => true,
-        (NeedsSupervisor, Running | Paused | Failed | Cancelled) => true,
-        (Verifying, CompletedVerified | Running | NeedsSupervisor | Failed | Cancelled) => true,
+        (Running, Paused | NeedsSupervisor | Verifying | Failed | CancelRequested) => true,
+        (Paused, Running | NeedsSupervisor | CancelRequested) => true,
+        (NeedsSupervisor, Running | Paused | Failed | CancelRequested) => true,
+        (CancelRequested, Cancelled | Failed) => true,
+        (Verifying, CompletedVerified | Running | NeedsSupervisor | Failed | CancelRequested) => {
+            true
+        }
         (CompletedVerified | Failed | Cancelled, _) => false,
         _ => false,
     }
@@ -56,6 +59,8 @@ mod tests {
         validate_transition(RunState::Starting, RunState::Running).expect("running");
         validate_transition(RunState::Running, RunState::Verifying).expect("verify");
         validate_transition(RunState::Verifying, RunState::CompletedVerified).expect("complete");
+        validate_transition(RunState::Running, RunState::CancelRequested).expect("cancel request");
+        validate_transition(RunState::CancelRequested, RunState::Cancelled).expect("cancel ack");
     }
 
     #[test]

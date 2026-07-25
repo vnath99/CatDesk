@@ -44,6 +44,7 @@ pub enum RunState {
     Running,
     Paused,
     NeedsSupervisor,
+    CancelRequested,
     Verifying,
     CompletedVerified,
     Failed,

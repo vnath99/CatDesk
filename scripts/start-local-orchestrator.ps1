@@ -3,7 +3,8 @@ param(
     [string]$ConfigPath = (Join-Path (Get-Location).Path (".tmp\catdesk-local-orchestrator\config-{0}.toml" -f $PID)),
     [string]$ListenHost = "127.0.0.1",
     [int]$Port = 38765,
-    [string]$McpPath = "/catdesk/mcp"
+    [string]$McpPath = "/catdesk/mcp",
+    [string]$AuthToken = ("catdesk-local-" + [guid]::NewGuid().ToString("N"))
 )
 
 $ErrorActionPreference = "Stop"
@@ -31,4 +32,5 @@ if ($null -eq $catdesk) {
     --host $ListenHost `
     --port $Port `
     --mcp-path $McpPath `
-    --tool-mode supervisor-only
+    --tool-mode supervisor-only `
+    --auth-token $AuthToken
