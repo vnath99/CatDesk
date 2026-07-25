@@ -32,6 +32,7 @@ id_type!(ItemId);
 id_type!(ToolCallId);
 id_type!(ApprovalId);
 id_type!(ArtifactId);
+id_type!(PatchId);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]

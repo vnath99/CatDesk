@@ -60,3 +60,28 @@ Recommendation:
 Proceed to T-0014 only after T-0013B verification passes and a local T-0013B commit is created. Do not push, open a PR, merge, release, deploy, or publish.
 
 Nothing was pushed, merged, published, released, deployed, or opened as a pull request.
+
+## Milestone B - Recovery And Context
+
+Status: IN_PROGRESS
+
+Tickets:
+
+- T-0014: local commit to be recorded in Git history after this checkpoint update
+- T-0015: pending
+
+Required gate evidence:
+
+| Gate condition | Evidence | Status |
+| --- | --- | --- |
+| Journal survives restart | T-0014 journal tests reopen the journal and restore tool, patch, run, and event state. | passed |
+| Mutation replay protections pass | T-0014 rejects duplicate tool calls, completed replay, `OUTCOME_UNKNOWN` replay, and duplicate run overwrite. | passed |
+| Bounded context and compaction tests pass | Not in T-0014 scope; scheduled for T-0015. | pending |
+| Provider-neutral handoff passes | Not in T-0014 scope; scheduled for T-0015/T-0019. | pending |
+
+Current T-0014 tests:
+
+- `cargo fmt --check`: passed
+- `cargo test delegated::journal -- --nocapture`: passed, 9 tests
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed
+- `cargo test`: passed, 138 tests
