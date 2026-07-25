@@ -4,6 +4,7 @@ pub mod context;
 pub mod contracts;
 pub mod events;
 pub mod journal;
+pub mod runtime;
 pub mod state_machine;
 
 pub const EXECUTION_CONTRACT_SCHEMA_VERSION: u32 = 1;
