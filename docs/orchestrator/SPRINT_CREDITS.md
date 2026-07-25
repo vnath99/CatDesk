@@ -17,5 +17,6 @@ The Codex desktop interface in this session does not expose a per-ticket credit 
 | T-0018 | COMPLETED_VERIFIED | unavailable | 90-145 | Run coordinator readiness, locking, budget, approval, escalation, cancellation, and final-review gates added; local commit recorded in Git history. |
 | T-0019 | COMPLETED_VERIFIED | unavailable | 80-130 | Provider routing, fallback handoff, disclosure enforcement, and fake API/browser validation added; local commit recorded in Git history. |
 | T-0020 | COMPLETED_VERIFIED | unavailable | 65-105 | Supervisor tool surface, event polling, bounded artifact/diff retrieval, patch inspection, and final review lookup added; local commit recorded in Git history. |
+| T-0021 | COMPLETED_VERIFIED | unavailable | 90-140 | Long-running job manager, durable records, bounded log polling, rotation, restart recovery, cancellation, and command-policy integration added; local commit recorded in Git history. |
 
 If the UI later exposes exact ticket credit usage, update this ledger without changing ticket scope.
