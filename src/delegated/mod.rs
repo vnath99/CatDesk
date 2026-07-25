@@ -4,6 +4,7 @@ pub mod context;
 pub mod contracts;
 pub mod events;
 pub mod journal;
+pub mod patch_engine;
 pub mod runtime;
 pub mod state_machine;
 

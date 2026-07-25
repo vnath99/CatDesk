@@ -100,15 +100,15 @@ Status: IN_PROGRESS
 Tickets:
 
 - T-0016: local commit to be recorded in Git history after this checkpoint update
-- T-0017: pending
+- T-0017: local commit to be recorded in Git history after this checkpoint update
 - T-0018: pending
 
 Required gate evidence:
 
 | Gate condition | Evidence | Status |
 | --- | --- | --- |
-| Qwen completes a disposable patch-first task | Scheduled for T-0017 after patch/diff engine integration. | pending |
-| Patch revision and comparison work | Scheduled for T-0017. | pending |
+| Qwen completes a disposable patch-first task | T-0017 includes a deterministic disposable repair cycle and a live Qwen patch-proposal smoke against a bounded excerpt. | passed |
+| Patch revision and comparison work | T-0017 compares a revised child patch against its parent. | passed |
 | One escalation succeeds | Scheduled for T-0018. | pending |
 | CatDesk remains the only execution boundary | T-0016 providers receive bounded context and CatDesk-owned tool schemas only. | passed |
 
@@ -119,3 +119,11 @@ Current T-0016 tests:
 - `cargo test delegated::runtime::tests::ollama_qwen_live_smoke_returns_normalized_response -- --ignored --nocapture`: passed, 1 live Qwen/Ollama smoke
 - `cargo clippy --all-targets --all-features -- -D warnings`: passed
 - `cargo test`: passed, 151 tests and 1 ignored live smoke
+
+Current T-0017 tests:
+
+- Live Qwen proposal smoke: passed
+- `cargo fmt --check`: passed
+- `cargo test delegated::patch_engine -- --nocapture`: passed, 6 tests
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed
+- `cargo test`: passed, 157 tests and 1 ignored live Ollama smoke

@@ -13,5 +13,6 @@ The Codex desktop interface in this session does not expose a per-ticket credit 
 | T-0014 | COMPLETED_VERIFIED | unavailable | 80-125 | Durable JSON/JSONL journal and idempotent tool-call replay protections added; local commit recorded in Git history. |
 | T-0015 | COMPLETED_VERIFIED | unavailable | 80-125 | Bounded context, compaction, redacted inspection, and provider handoff primitives added; local commit recorded in Git history. |
 | T-0016 | COMPLETED_VERIFIED | unavailable | 120-190 | Worker runtime harness, fake provider, strict tool calls, CatDesk tool definitions, and local Ollama adapter added; local commit recorded in Git history. |
+| T-0017 | COMPLETED_VERIFIED | unavailable | 90-145 | Patch preview/apply/compare/diff engine and disposable repair-cycle evidence added; local commit recorded in Git history. |
 
 If the UI later exposes exact ticket credit usage, update this ledger without changing ticket scope.
