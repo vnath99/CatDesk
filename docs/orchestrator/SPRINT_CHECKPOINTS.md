@@ -151,6 +151,7 @@ Tickets:
 - T-0023C: local commit `5345a1f`
 - T-0023D: functional-release closure commit recorded in Git history and in the external review bundle
 - T-0023D-RC1: correction-only release-candidate commit recorded in Git history and in the external review bundle
+- T-0023D-RC1.1: correction-only release-candidate commit recorded in Git history and in the external review bundle
 
 Required gate evidence:
 
@@ -166,6 +167,7 @@ Required gate evidence:
 | MCP supervisor starts the real worker path | T-0023C requires full execution contracts through `delegated_run_create`, starts `IntegratedDelegatedService` through MCP `delegated_run_start`, polls real status/events/final-review data, safely rejects malformed run IDs, and proves the live Qwen path begins only through MCP. | passed |
 | Functional release path is closed | T-0023D adds authenticated loopback MCP, bounded `ExecutionContractV1` schemas, RunStart-only approval, lifecycle/cancel/restart hardening, bounded context, completion gates, SHA-256 one-file patch safety, structured event IDs, startup-script auth, and live external MCP-to-Qwen proof. | passed |
 | Release blockers are corrected | T-0023D-RC1 enforces local Ollama-only policy, atomic active-run reservation, fail-closed workspace lock, JSONL torn-tail repair, durable RunStart approval, supported-only criteria, frozen tool exposure, and environment-based startup auth. | passed |
+| Release-candidate corrections are narrowed | T-0023D-RC1.1 keeps `OUTCOME_UNKNOWN` failures in `NEEDS_SUPERVISOR` with the active lock retained, releases locks on clean failure, uses exact acceptance criteria, and requires explicit startup auth with `finally` cleanup. | passed |
 | Remote disclosure policy is enforced | T-0019 blocks remote/browser providers unless disclosure policy allows them. | passed |
 
 Current T-0019 tests:
@@ -264,3 +266,16 @@ Current T-0023D-RC1 tests:
 - `cargo build --release`: passed.
 - `scripts/start-local-orchestrator.ps1`: passed bounded ready-output startup and cleanup using `CATDESK_MCP_AUTH_TOKEN`.
 - `scripts/start-dev-orchestrator.ps1`: passed bounded ready-output startup and cleanup using `CATDESK_MCP_AUTH_TOKEN`.
+
+Current T-0023D-RC1.1 tests:
+
+- `cargo fmt --check`: passed.
+- `cargo clippy --all-targets --all-features -- -D warnings`: passed.
+- `cargo test`: passed.
+- `cargo build --release`: passed.
+- `cargo test failed_worker_ -- --nocapture`: passed.
+- `cargo test supervisor_rejects_unsupported_acceptance_criterion -- --nocapture`: passed.
+- `cargo test startup_scripts_use_environment_based_auth -- --nocapture`: passed.
+- Startup-script missing-token rejection: passed.
+- Startup-script normal startup: passed for local and dev scripts.
+- `cargo test live_qwen_delegated_run_completes_through_network_mcp -- --ignored --nocapture`: passed through authenticated network MCP and reached `COMPLETED_VERIFIED`.

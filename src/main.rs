@@ -1938,6 +1938,9 @@ mod tests {
             include_str!("../scripts/start-dev-orchestrator.ps1"),
         ] {
             assert!(script.contains("CATDESK_MCP_AUTH_TOKEN"));
+            assert!(script.contains("AuthToken is required"));
+            assert!(script.contains("finally"));
+            assert!(script.contains("Remove-Item Env:\\CATDESK_MCP_AUTH_TOKEN"));
             assert!(!script.contains("--auth-token"));
         }
     }

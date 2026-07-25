@@ -14,16 +14,20 @@ $configDir = Split-Path -Parent $ConfigPath
 New-Item -ItemType Directory -Force -Path $configDir | Out-Null
 
 if ([string]::IsNullOrWhiteSpace($AuthToken)) {
-    $AuthToken = "catdesk-dev-" + [guid]::NewGuid().ToString("N")
+    throw "AuthToken is required. Generate a short-lived token and pass it with -AuthToken."
 }
 
-$env:CATDESK_MCP_AUTH_TOKEN = $AuthToken
-$env:CATDESK_DELEGATED_DEV = "1"
-cargo run -- `
-    --headless-mcp `
-    --workspace $workspacePath.Path `
-    --config-path $ConfigPath `
-    --host $ListenHost `
-    --port $Port `
-    --mcp-path $McpPath `
-    --tool-mode supervisor-only
+try {
+    $env:CATDESK_MCP_AUTH_TOKEN = $AuthToken
+    $env:CATDESK_DELEGATED_DEV = "1"
+    cargo run -- `
+        --headless-mcp `
+        --workspace $workspacePath.Path `
+        --config-path $ConfigPath `
+        --host $ListenHost `
+        --port $Port `
+        --mcp-path $McpPath `
+        --tool-mode supervisor-only
+} finally {
+    Remove-Item Env:\CATDESK_MCP_AUTH_TOKEN -ErrorAction SilentlyContinue
+}

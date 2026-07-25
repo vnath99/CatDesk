@@ -13,6 +13,10 @@ $workspacePath = Resolve-Path -LiteralPath $Workspace
 $configDir = Split-Path -Parent $ConfigPath
 New-Item -ItemType Directory -Force -Path $configDir | Out-Null
 
+if ([string]::IsNullOrWhiteSpace($AuthToken)) {
+    throw "AuthToken is required. Generate a short-lived token and pass it with -AuthToken."
+}
+
 $catdesk = Get-Command catdesk -ErrorAction SilentlyContinue
 if ($null -eq $catdesk) {
     $candidate = Join-Path (Get-Location).Path "target\release\catdesk.exe"
@@ -25,17 +29,17 @@ if ($null -eq $catdesk) {
     $catdeskPath = $catdesk.Source
 }
 
-if ([string]::IsNullOrWhiteSpace($AuthToken)) {
-    $AuthToken = "catdesk-local-" + [guid]::NewGuid().ToString("N")
+try {
+    $env:CATDESK_MCP_AUTH_TOKEN = $AuthToken
+
+    & $catdeskPath `
+        --headless-mcp `
+        --workspace $workspacePath.Path `
+        --config-path $ConfigPath `
+        --host $ListenHost `
+        --port $Port `
+        --mcp-path $McpPath `
+        --tool-mode supervisor-only
+} finally {
+    Remove-Item Env:\CATDESK_MCP_AUTH_TOKEN -ErrorAction SilentlyContinue
 }
-
-$env:CATDESK_MCP_AUTH_TOKEN = $AuthToken
-
-& $catdeskPath `
-    --headless-mcp `
-    --workspace $workspacePath.Path `
-    --config-path $ConfigPath `
-    --host $ListenHost `
-    --port $Port `
-    --mcp-path $McpPath `
-    --tool-mode supervisor-only

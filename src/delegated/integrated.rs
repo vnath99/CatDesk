@@ -484,18 +484,26 @@ impl IntegratedDelegatedService {
         diff: &ActualDiffArtifactV1,
     ) -> Result<(), IntegratedError> {
         for criterion in &self.contract.acceptance_criteria {
-            let lower = criterion.to_ascii_lowercase();
-            if (lower.contains("test") || lower.contains("verification") || lower.contains("cargo"))
-                && verification.status != VerificationStatusV1::Passed
-            {
-                return Err(IntegratedError::Verification(format!(
-                    "acceptance criterion is not satisfied: {criterion}"
-                )));
-            }
-            if lower.contains("diff") && diff.diff.trim().is_empty() {
-                return Err(IntegratedError::Verification(format!(
-                    "acceptance criterion is not satisfied: {criterion}"
-                )));
+            match normalize_acceptance_criterion(criterion).as_str() {
+                "cargo tests pass" | "cargo verification passes" | "verification passes" => {
+                    if verification.status != VerificationStatusV1::Passed {
+                        return Err(IntegratedError::Verification(format!(
+                            "acceptance criterion is not satisfied: {criterion}"
+                        )));
+                    }
+                }
+                "authoritative diff is captured" => {
+                    if diff.diff.trim().is_empty() {
+                        return Err(IntegratedError::Verification(format!(
+                            "acceptance criterion is not satisfied: {criterion}"
+                        )));
+                    }
+                }
+                _ => {
+                    return Err(IntegratedError::Verification(format!(
+                        "unsupported v1 acceptance criterion: {criterion}"
+                    )));
+                }
             }
         }
         Ok(())
@@ -1420,6 +1428,14 @@ fn path_is_under_contract_path(path: &str, scope: &str) -> bool {
     path == scope || path.starts_with(&format!("{scope}/"))
 }
 
+fn normalize_acceptance_criterion(criterion: &str) -> String {
+    criterion
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase()
+}
+
 pub fn verification_passed_with_diff(
     claim: &str,
     verification: &VerificationSummaryV1,
@@ -2024,6 +2040,10 @@ mod tests {
         contract.workspace = root.display().to_string();
         contract.allowed_paths = vec!["src".into(), "Cargo.toml".into()];
         contract.forbidden_paths = vec![".git".into(), "target".into()];
+        contract.acceptance_criteria = vec![
+            "cargo tests pass".into(),
+            "authoritative diff is captured".into(),
+        ];
         contract.approval_requirements = Vec::new();
         contract.verification_profile = "cargo".into();
         contract

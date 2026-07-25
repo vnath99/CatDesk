@@ -21,7 +21,7 @@ use crate::delegated::contracts::{
 };
 use crate::delegated::events::EventCursor;
 use crate::delegated::integrated::{IntegratedDelegatedService, IntegratedRunConfigV1};
-use crate::delegated::journal::DelegatedJournal;
+use crate::delegated::journal::{DelegatedJournal, ToolCallStatus};
 use crate::delegated::patch_engine::compare_patches;
 use crate::delegated::supervisor::SUPERVISOR_TOOL_NAMES;
 use crate::devtools::DevtoolsBridge;
@@ -2291,18 +2291,11 @@ async fn handle_supervisor_registry_tool(
                             release_active_lock(&entry.active_lock_path);
                         }
                         Err(error) => {
-                            if entry.cancel_requested.load(Ordering::SeqCst) {
-                                entry.status = RegistryRunStatus::Cancelled;
-                                let _ = DelegatedJournal::open(&entry.config.journal_root)
-                                    .and_then(|journal| {
-                                        journal
-                                            .update_run_state(&run_id_for_task, RunState::Cancelled)
-                                    });
-                                release_active_lock(&entry.active_lock_path);
-                            } else {
-                                entry.status = RegistryRunStatus::Failed;
-                            }
-                            entry.last_error = Some(format!("{error:?}"));
+                            apply_worker_error_outcome(
+                                entry,
+                                &run_id_for_task,
+                                format!("{error:?}"),
+                            );
                         }
                     }
                 }
@@ -2605,18 +2598,41 @@ fn validate_loopback_ollama_url(value: &str) -> Result<(), String> {
 
 fn reject_unsupported_acceptance_criteria(contract: &ExecutionContractV1) -> Result<(), String> {
     for criterion in &contract.acceptance_criteria {
-        let lower = criterion.to_ascii_lowercase();
-        let supported = lower.contains("test")
-            || lower.contains("verification")
-            || lower.contains("cargo")
-            || lower.contains("diff");
-        if !supported {
+        if !is_supported_v1_acceptance_criterion(criterion) {
             return Err(format!(
                 "unsupported v1 acceptance criterion `{criterion}`; use verification/test/diff criteria or path policy"
             ));
         }
     }
     Ok(())
+}
+
+fn is_supported_v1_acceptance_criterion(criterion: &str) -> bool {
+    matches!(
+        normalize_acceptance_criterion(criterion).as_str(),
+        "cargo tests pass"
+            | "cargo verification passes"
+            | "verification passes"
+            | "authoritative diff is captured"
+    )
+}
+
+fn normalize_acceptance_criterion(criterion: &str) -> String {
+    criterion
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase()
+}
+
+fn run_has_outcome_unknown(journal_root: &Path, run_id: &RunId) -> Result<bool, String> {
+    let journal = DelegatedJournal::open(journal_root).map_err(|error| format!("{error:?}"))?;
+    let tool_calls = journal
+        .load_tool_calls(run_id)
+        .map_err(|error| format!("{error:?}"))?;
+    Ok(tool_calls
+        .values()
+        .any(|record| record.status == ToolCallStatus::OutcomeUnknown))
 }
 
 fn mcp_integrated_config(
@@ -2712,6 +2728,25 @@ fn workspace_active_lock_path(workspace_root: &Path) -> PathBuf {
 
 fn release_active_lock(lock_path: &Path) {
     let _ = fs::remove_file(lock_path);
+}
+
+fn apply_worker_error_outcome(entry: &mut DelegatedRunEntry, run_id: &RunId, error: String) {
+    if entry.cancel_requested.load(Ordering::SeqCst) {
+        entry.status = RegistryRunStatus::Cancelled;
+        let _ = DelegatedJournal::open(&entry.config.journal_root)
+            .and_then(|journal| journal.update_run_state(run_id, RunState::Cancelled));
+        release_active_lock(&entry.active_lock_path);
+    } else if run_has_outcome_unknown(&entry.config.journal_root, run_id).unwrap_or(false) {
+        entry.status = RegistryRunStatus::NeedsSupervisor;
+        let _ = DelegatedJournal::open(&entry.config.journal_root)
+            .and_then(|journal| journal.update_run_state(run_id, RunState::NeedsSupervisor));
+    } else {
+        entry.status = RegistryRunStatus::Failed;
+        let _ = DelegatedJournal::open(&entry.config.journal_root)
+            .and_then(|journal| journal.update_run_state(run_id, RunState::Failed));
+        release_active_lock(&entry.active_lock_path);
+    }
+    entry.last_error = Some(error);
 }
 
 fn ensure_run_start_approval(
@@ -6127,6 +6162,119 @@ mod tests {
         assert_tool_error("stale or second-process lock", &response);
     }
 
+    #[test]
+    fn failed_worker_with_outcome_unknown_persists_needs_supervisor_and_keeps_lock() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-failed-unknown-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let run_id = RunId::new(format!("run-failed-unknown-{}", Uuid::new_v4())).expect("run");
+        let contract = delegated_contract(&workspace_root, run_id.as_str());
+        let config = mcp_integrated_config(&workspace_root, &contract, &json!({})).expect("config");
+        let journal = DelegatedJournal::open(&config.journal_root).expect("journal");
+        journal.create_run(&contract).expect("run");
+        let lock_path = workspace_active_lock_path(&workspace_root);
+        std::fs::create_dir_all(lock_path.parent().expect("lock parent")).expect("lock parent");
+        std::fs::write(&lock_path, run_id.as_str()).expect("lock");
+        let tool_call_id =
+            crate::delegated::contracts::ToolCallId::new("tc-unknown").expect("tool call id");
+        journal
+            .record_tool_call_requested(crate::delegated::journal::ToolCallRecordV1 {
+                schema_version: crate::delegated::EXECUTION_CONTRACT_SCHEMA_VERSION,
+                run_id: run_id.clone(),
+                tool_call_id: tool_call_id.clone(),
+                tool_name: "patch.apply".into(),
+                request_hash: "sha256:req".into(),
+                arguments_hash: "sha256:args".into(),
+                mutation_kind: crate::delegated::journal::ToolMutationKind::Mutating,
+                status: ToolCallStatus::Requested,
+                result_hash: None,
+                outcome_summary: None,
+            })
+            .expect("record");
+        journal
+            .transition_tool_call(
+                &run_id,
+                &tool_call_id,
+                ToolCallStatus::PolicyAllowed,
+                None,
+                None,
+            )
+            .expect("policy");
+        journal
+            .transition_tool_call(
+                &run_id,
+                &tool_call_id,
+                ToolCallStatus::Executing,
+                None,
+                None,
+            )
+            .expect("executing");
+        journal
+            .transition_tool_call(
+                &run_id,
+                &tool_call_id,
+                ToolCallStatus::OutcomeUnknown,
+                None,
+                Some("interrupted mutation".into()),
+            )
+            .expect("unknown");
+        let mut entry = DelegatedRunEntry {
+            workspace_root: workspace_root.clone(),
+            contract,
+            config,
+            status: RegistryRunStatus::Running,
+            cancel_requested: Arc::new(AtomicBool::new(false)),
+            run_start_approval: None,
+            active_lock_path: lock_path.clone(),
+            final_review: None,
+            last_error: None,
+        };
+
+        apply_worker_error_outcome(&mut entry, &run_id, "worker failed".into());
+
+        assert_eq!(entry.status, RegistryRunStatus::NeedsSupervisor);
+        assert!(lock_path.exists(), "OUTCOME_UNKNOWN must retain lock");
+        assert_eq!(
+            journal.load_run(&run_id).expect("snapshot").state,
+            RunState::NeedsSupervisor
+        );
+    }
+
+    #[test]
+    fn failed_worker_without_outcome_unknown_persists_failed_and_releases_lock() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-failed-clean-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let run_id = RunId::new(format!("run-failed-clean-{}", Uuid::new_v4())).expect("run");
+        let contract = delegated_contract(&workspace_root, run_id.as_str());
+        let config = mcp_integrated_config(&workspace_root, &contract, &json!({})).expect("config");
+        let journal = DelegatedJournal::open(&config.journal_root).expect("journal");
+        journal.create_run(&contract).expect("run");
+        let lock_path = workspace_active_lock_path(&workspace_root);
+        std::fs::create_dir_all(lock_path.parent().expect("lock parent")).expect("lock parent");
+        std::fs::write(&lock_path, run_id.as_str()).expect("lock");
+        let mut entry = DelegatedRunEntry {
+            workspace_root: workspace_root.clone(),
+            contract,
+            config,
+            status: RegistryRunStatus::Running,
+            cancel_requested: Arc::new(AtomicBool::new(false)),
+            run_start_approval: None,
+            active_lock_path: lock_path.clone(),
+            final_review: None,
+            last_error: None,
+        };
+
+        apply_worker_error_outcome(&mut entry, &run_id, "worker failed".into());
+
+        assert_eq!(entry.status, RegistryRunStatus::Failed);
+        assert!(!lock_path.exists(), "clean failure must release lock");
+        assert_eq!(
+            journal.load_run(&run_id).expect("snapshot").state,
+            RunState::Failed
+        );
+    }
+
     #[tokio::test]
     async fn supervisor_runstart_approval_survives_rehydration_and_is_one_time() {
         let workspace_root =
@@ -6236,6 +6384,24 @@ mod tests {
         .await;
 
         assert_tool_error("unsupported criterion", &response);
+
+        let mut misleading = delegated_contract(
+            &workspace_root,
+            &format!("run-criteria-misleading-{}", Uuid::new_v4()),
+        );
+        misleading.acceptance_criteria = vec!["Do not modify tests".into()];
+        let response = handle_tools_call(
+            &tool_call_request("delegated_run_create", json!({ "contract": misleading })),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+
+        assert_tool_error("misleading criterion", &response);
     }
 
     #[tokio::test]
