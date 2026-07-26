@@ -18,6 +18,7 @@ import json
 import os
 import re
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Iterable, TextIO
@@ -29,6 +30,10 @@ DEFAULT_MAX_REQUEST_BYTES = 24 * 1024
 DEFAULT_MAX_PROMPT_BYTES = 12 * 1024
 DEFAULT_MAX_RESPONSE_BYTES = 4 * 1024
 REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,120}$")
+TRUSTED_SCHEME = "https"
+TRUSTED_HOST = "chat.deepseek.com"
+TRUSTED_ORIGIN = f"{TRUSTED_SCHEME}://{TRUSTED_HOST}"
+REMOTE_DISCLOSURE_CLASSIFICATION = "REMOTE_ALLOWED"
 
 
 class AdapterState(str, enum.Enum):
@@ -421,6 +426,11 @@ def validate_advice_request(request: Any) -> ValidatedAdviceRequest:
         raise ValueError(f"UNSUPPORTED_REQUEST_KEYS:{','.join(unexpected)}")
     if get_field(request, "schemaversion") != SCHEMA_VERSION:
         raise ValueError("UNSUPPORTED_SCHEMA_VERSION")
+    disclosure_classification = str(
+        get_field(request, "disclosureclassification", "")
+    ).strip()
+    if disclosure_classification != REMOTE_DISCLOSURE_CLASSIFICATION:
+        raise ValueError("DISCLOSURE_DENIED")
 
     request_id = str(get_field(request, "requestid", "")).strip()
     if not REQUEST_ID_RE.match(request_id):
@@ -570,12 +580,15 @@ class DeepSeekWebAdvisorAdapter:
         self._sb_context: Any = None
         self._sb: Any = None
         self.detector = CompletionDetector(selectors)
-        self.cancel_requested = False
+        self.cancel_requested = threading.Event()
 
     def start(self) -> AdapterState:
         self.profile_dir.mkdir(parents=True, exist_ok=True)
         self.state = AdapterState.STARTING
         try:
+            if not self.selector_start_url_is_trusted():
+                self.state = AdapterState.DEGRADED
+                return self.state
             with contextlib.redirect_stdout(sys.stderr):
                 SB = self._import_seleniumbase()
                 self._sb_context = SB(
@@ -589,6 +602,7 @@ class DeepSeekWebAdvisorAdapter:
             return self.refresh_state()
         except Exception as exc:
             sys.stderr.write(f"DeepSeek advisor startup failed: {type(exc).__name__}\n")
+            self._cleanup_browser_context()
             self.state = AdapterState.DEGRADED
             return self.state
 
@@ -599,12 +613,15 @@ class DeepSeekWebAdvisorAdapter:
 
     def stop(self) -> None:
         self.state = AdapterState.STOPPED
+        self._cleanup_browser_context()
+        self.cancel_requested.clear()
+
+    def _cleanup_browser_context(self) -> None:
         if self._sb_context is not None:
-            with contextlib.redirect_stdout(sys.stderr):
+            with contextlib.suppress(Exception), contextlib.redirect_stdout(sys.stderr):
                 self._sb_context.__exit__(None, None, None)
         self._sb_context = None
         self._sb = None
-        self.cancel_requested = False
 
     def refresh_state(self) -> AdapterState:
         if self._sb is None:
@@ -635,38 +652,51 @@ class DeepSeekWebAdvisorAdapter:
 
     @property
     def expected_origin(self) -> str:
+        return TRUSTED_ORIGIN
+
+    def selector_start_url_is_trusted(self) -> bool:
         parsed = urlparse(self.selectors.start_url)
-        return f"{parsed.scheme}://{parsed.netloc}"
+        return (
+            parsed.scheme == TRUSTED_SCHEME
+            and parsed.hostname == TRUSTED_HOST
+            and parsed.username is None
+            and parsed.password is None
+        )
 
     def advise(self, request: dict[str, Any]) -> AdviceResponseV1:
         validated = validate_advice_request(request)
-        if self.refresh_state() != AdapterState.READY:
-            return self.advice_unavailable(validated.request_id)
-        snapshot = self._snapshot()
-        if snapshot.origin != self.expected_origin:
-            self.state = AdapterState.DEGRADED
-            return self.advice_unavailable(validated.request_id)
+        try:
+            if self.refresh_state() != AdapterState.READY:
+                return self.advice_unavailable(validated.request_id)
+            snapshot = self._snapshot()
+            if snapshot.origin != self.expected_origin:
+                self.state = AdapterState.DEGRADED
+                return self.advice_unavailable(validated.request_id)
 
-        prompt = build_advisory_prompt(validated)
-        baseline_texts = snapshot.response_texts(self.selectors.response_container_selectors)
-        baseline_count = len(baseline_texts)
-        prompt_selector = self._find_prompt_selector(snapshot)
-        if prompt_selector is None:
-            self.state = AdapterState.DEGRADED
-            return self.advice_unavailable(validated.request_id)
+            prompt = build_advisory_prompt(validated)
+            baseline_texts = snapshot.response_texts(self.selectors.response_container_selectors)
+            baseline_count = len(baseline_texts)
+            prompt_selector = self._find_prompt_selector(snapshot)
+            if prompt_selector is None:
+                self.state = AdapterState.DEGRADED
+                return self.advice_unavailable(validated.request_id)
 
-        self.cancel_requested = False
-        self.state = AdapterState.SENDING
-        self._type_prompt(prompt_selector, prompt)
-        if not self._click_first(self.selectors.send_button_selectors):
-            self._press_enter(prompt_selector)
-        self.state = AdapterState.WAITING_FOR_RESPONSE
-        return self._wait_for_response(validated, baseline_count)
+            self.cancel_requested.clear()
+            self.state = AdapterState.SENDING
+            self._type_prompt(prompt_selector, prompt)
+            if not self._click_first(self.selectors.send_button_selectors):
+                self._press_enter(prompt_selector)
+            self.state = AdapterState.WAITING_FOR_RESPONSE
+            return self._wait_for_response(validated, baseline_count)
+        except Exception as exc:
+            sys.stderr.write(f"DeepSeek advisor operation failed: {type(exc).__name__}\n")
+            self.state = AdapterState.DEGRADED
+            return self.advice_failure(validated.request_id)
 
     def cancel(self) -> AdviceResponseV1:
-        self.cancel_requested = True
+        self.cancel_requested.set()
         if self.state in {AdapterState.SENDING, AdapterState.WAITING_FOR_RESPONSE}:
-            self._click_first(self.selectors.stop_button_selectors)
+            self._try_click_stop()
         self.state = AdapterState.CANCELLED
         return AdviceResponseV1(
             schema_version=SCHEMA_VERSION,
@@ -690,8 +720,8 @@ class DeepSeekWebAdvisorAdapter:
         last_text = ""
         last_text_change_at = started_at
         while self._now() - started_at <= self.selectors.timeout_seconds:
-            if self.cancel_requested:
-                self._click_first(self.selectors.stop_button_selectors)
+            if self.cancel_requested.is_set():
+                self._try_click_stop()
                 self.state = AdapterState.CANCELLED
                 return normalize_advice_response(
                     request,
@@ -751,6 +781,12 @@ class DeepSeekWebAdvisorAdapter:
         self.state = AdapterState.TIMED_OUT
         return self.advice_unavailable(request.request_id)
 
+    def _try_click_stop(self) -> None:
+        try:
+            self._click_first(self.selectors.stop_button_selectors)
+        except Exception as exc:
+            sys.stderr.write(f"DeepSeek advisor stop control failed: {type(exc).__name__}\n")
+
     def _snapshot(self) -> PageSnapshot:
         if self._sb is None:
             raise RuntimeError("browser not started")
@@ -776,10 +812,42 @@ class DeepSeekWebAdvisorAdapter:
         with contextlib.redirect_stdout(sys.stderr):
             if hasattr(self._sb, "click"):
                 self._sb.click(selector)
+            self._clear_prompt(selector)
+            existing = self._prompt_value(selector)
+            if existing not in {None, ""}:
+                raise RuntimeError("prompt input retained text after clear")
             if hasattr(self._sb, "press_keys"):
                 self._sb.press_keys(selector, prompt)
             elif hasattr(self._sb, "type"):
                 self._sb.type(selector, prompt)
+
+    def _clear_prompt(self, selector: str) -> None:
+        if self._sb is None:
+            raise RuntimeError("browser not started")
+        if hasattr(self._sb, "clear"):
+            self._sb.clear(selector)
+            return
+        if hasattr(self._sb, "clear_text"):
+            self._sb.clear_text(selector)
+            return
+        if hasattr(self._sb, "set_value"):
+            self._sb.set_value(selector, "")
+            return
+        if hasattr(self._sb, "press_keys"):
+            self._sb.press_keys(selector, "\ue009a")
+            self._sb.press_keys(selector, "\ue003")
+
+    def _prompt_value(self, selector: str) -> str | None:
+        if self._sb is None:
+            return None
+        for method_name in ["get_attribute", "get_element_attribute"]:
+            method = getattr(self._sb, method_name, None)
+            if callable(method):
+                with contextlib.suppress(Exception):
+                    value = method(selector, "value")
+                    if value is not None:
+                        return str(value)
+        return None
 
     def _press_enter(self, selector: str) -> None:
         if self._sb is None:
@@ -823,6 +891,20 @@ class DeepSeekWebAdvisorAdapter:
             raw_artifact_reference=None,
         )
 
+    def advice_failure(self, request_id: str) -> AdviceResponseV1:
+        return AdviceResponseV1(
+            schema_version=SCHEMA_VERSION,
+            request_id=request_id,
+            advisor_id=self.advisor_id,
+            status=AdvisorStatus.FAILED.value,
+            diagnosis="DeepSeek web advisor failed during a bounded browser operation.",
+            recommendations=[],
+            risks=["No browser advice was safely obtained."],
+            assumptions_or_questions=[],
+            confidence="LOW",
+            raw_artifact_reference=None,
+        )
+
 
 class JsonLinesAdvisorProtocol:
     def __init__(self, adapter: DeepSeekWebAdvisorAdapter, auth_token: str) -> None:
@@ -830,8 +912,15 @@ class JsonLinesAdvisorProtocol:
             raise ValueError("auth_token must be non-empty")
         self.adapter = adapter
         self.auth_token = auth_token
+        self._lock = threading.Lock()
+        self._active_thread: threading.Thread | None = None
+        self._active_request_id: str | None = None
 
-    def handle(self, message: dict[str, Any]) -> dict[str, Any]:
+    def handle(
+        self,
+        message: dict[str, Any],
+        emit: Any | None = None,
+    ) -> dict[str, Any]:
         if message.get("auth_token") != self.auth_token:
             return {"ok": False, "error": "UNAUTHORIZED"}
         command = message.get("command")
@@ -843,38 +932,121 @@ class JsonLinesAdvisorProtocol:
                 "protocol": "catdesk.advisor.deepseek.jsonl.v1",
             }
         if command == "status":
-            return {"ok": True, "state": self.adapter.refresh_state().value}
+            with self._lock:
+                active = self._thread_is_active_locked()
+                request_id = self._active_request_id
+            state = self.adapter.state.value if active else self.adapter.refresh_state().value
+            return {
+                "ok": True,
+                "state": state,
+                "active": active,
+                "request_id": request_id,
+            }
         if command == "start":
             return {"ok": True, "state": self.adapter.start().value}
         if command == "cancel":
             response = self.adapter.cancel()
-            return {"ok": True, "state": self.adapter.state.value, "response": response.to_dict()}
+            with self._lock:
+                request_id = self._active_request_id
+            return {
+                "ok": True,
+                "state": self.adapter.state.value,
+                "request_id": request_id,
+                "response": response.to_dict(),
+            }
         if command == "shutdown":
+            response = self.adapter.cancel()
+            self._join_active(timeout=5.0)
             self.adapter.stop()
-            return {"ok": True, "state": self.adapter.state.value}
+            return {"ok": True, "state": self.adapter.state.value, "response": response.to_dict()}
         if command == "advise":
             request = message.get("request") or {}
             try:
-                response = self.adapter.advise(request)
+                validated = validate_advice_request(request)
             except ValueError as exc:
                 return {"ok": False, "error": str(exc)}
-            return {"ok": True, "response": response.to_dict()}
+            with self._lock:
+                if self._thread_is_active_locked():
+                    return {
+                        "ok": False,
+                        "error": "ADVICE_ALREADY_ACTIVE",
+                        "request_id": self._active_request_id,
+                    }
+                self._active_request_id = validated.request_id
+                thread = threading.Thread(
+                    target=self._run_advice_worker,
+                    args=(request, validated.request_id, emit),
+                    name=f"deepseek-advice-{validated.request_id}",
+                    daemon=True,
+                )
+                self._active_thread = thread
+                thread.start()
+            return {
+                "ok": True,
+                "accepted": True,
+                "request_id": validated.request_id,
+                "state": self.adapter.state.value,
+            }
         return {"ok": False, "error": "UNKNOWN_COMMAND"}
 
+    def _thread_is_active_locked(self) -> bool:
+        return self._active_thread is not None and self._active_thread.is_alive()
+
+    def _join_active(self, timeout: float) -> None:
+        with self._lock:
+            thread = self._active_thread
+        if thread is not None:
+            thread.join(timeout=timeout)
+
+    def _run_advice_worker(
+        self,
+        request: dict[str, Any],
+        request_id: str,
+        emit: Any | None,
+    ) -> None:
+        try:
+            response = self.adapter.advise(request)
+            event = {
+                "ok": True,
+                "event": "advice_completed",
+                "request_id": request_id,
+                "response": response.to_dict(),
+            }
+        except Exception as exc:
+            event = {
+                "ok": False,
+                "event": "advice_failed",
+                "request_id": request_id,
+                "error": f"FAILED:{type(exc).__name__}",
+            }
+        finally:
+            with self._lock:
+                self._active_request_id = None
+                self._active_thread = None
+        if emit is not None:
+            emit(event)
+
     def serve(self, input_stream: TextIO, output_stream: TextIO) -> None:
+        output_lock = threading.Lock()
+
+        def emit(event: dict[str, Any]) -> None:
+            with output_lock:
+                output_stream.write(json.dumps(event, separators=(",", ":")) + "\n")
+                output_stream.flush()
+
         for line in input_stream:
             if not line.strip():
                 continue
             try:
                 message = json.loads(line)
                 with contextlib.redirect_stdout(sys.stderr):
-                    response = self.handle(message)
+                    response = self.handle(message, emit)
             except ValueError as exc:
                 response = {"ok": False, "error": str(exc)}
             except Exception as exc:
                 response = {"ok": False, "error": f"FAILED:{type(exc).__name__}"}
-            output_stream.write(json.dumps(response, separators=(",", ":")) + "\n")
-            output_stream.flush()
+            emit(response)
+        self._join_active(timeout=5.0)
 
 
 def contains_prohibited_authority(value: Any) -> str | None:
