@@ -1,7 +1,7 @@
 # DeepSeek Web Advisor Adapter
 
-Status: T-0024B.4 experimental standalone live-site submission/extraction correction
-Date: 2026-07-25
+Status: T-0024B mutation-observer workflow correction
+Date: 2026-07-26
 
 ## Purpose
 
@@ -92,19 +92,30 @@ The `advise` command:
 - verifies the fixed DeepSeek origin before typing;
 - builds a bounded advisory prompt;
 - records the existing assistant-response baseline;
+- in the live browser workflow, requires the visible
+  `.ds-virtual-list-visible-items` root before typing and captures direct-turn
+  baseline keys, assistant count, latest assistant key, and latest assistant
+  hash;
+- installs one root `MutationObserver` before submission and, after associating
+  the new assistant turn, one assistant-content observer on
+  `.ds-markdown.ds-assistant-message-main-content`;
 - selects the prompt control from external selector config;
 - clears the prompt control before insertion and fails rather than appending to
   retained draft text;
 - inserts text through paced input-event delivery with bounded randomized
   intervals, longer newline pauses, a total typing timeout, and cancellation
   checks;
-- submits once and requires a submission-confirmation signal before waiting
-  for a response;
-- watches only visible responses newer than the visible baseline;
-- tracks actual text changes and text stability;
+- submits once through the exact composer-local send control and requires a
+  new user turn, new assistant turn, exact stop control, or root-observed
+  generation activity before waiting for a response;
+- watches only the assistant final-answer container associated with the active
+  generation;
+- tracks actual text changes, SHA-256 hashes, mutation counts, and text
+  stability;
 - requires the generation/stop control to be absent, send to be visible and
   enabled, and multiple stable samples;
-- returns exactly the newest bounded assistant response in `diagnosis`;
+- returns exactly the newest bounded assistant final-answer `innerText` in
+  `diagnosis`;
 - rejects old, empty, baseline, or stale responses;
 - returns `LOGIN_REQUIRED`, `TAKEOVER_REQUIRED`, `RATE_LIMITED`, `TIMED_OUT`,
   `CANCELLED`, `DEGRADED`, or `FAILED` without attempting bypasses.
@@ -116,11 +127,17 @@ leave the adapter stuck in `SENDING` or `WAITING_FOR_RESPONSE`.
 
 Completion does not depend on a generated CSS class. The detector combines:
 
-- visible assistant response-container baseline and newest-response text;
+- visible assistant final-answer baseline and newest-response text;
 - stop/generation-control absence;
 - visible and enabled send control;
-- actual text changes across multiple stable samples;
+- actual text changes and SHA-256 hash stability across multiple samples;
 - timeout.
+
+For the mutation-observer live path, completion requires a new/current
+assistant final-answer container associated with the active generation,
+non-empty normalized text, a post-submission text or DOM change, no exact stop
+control, exact send visible and enabled, no assistant-content mutation for at
+least five seconds, and at least three consecutive matching hashes.
 
 Rate limits are detected only through visible provider error/toast selectors,
 not arbitrary matching of page text.
@@ -190,3 +207,22 @@ the prompt was emptied, no visible assistant response, user-message block,
 stop/generation control, or provider rate-limit/error selector was available
 for extraction. The adapter therefore kept the result fail-closed and did not
 return stale page content or the submitted prompt as advice.
+
+## Mutation-Observer Live Evidence
+
+The mutation-observer correction adds a per-generation tracker with a single
+active request, direct-turn baseline keys, root and assistant observers,
+response hashing, virtual-list replacement handling by turn key, exact
+composer-local send checks, and final-answer extraction from
+`.ds-markdown.ds-assistant-message-main-content`. Reasoning content
+`.ds-think-content`, action rows, whole-conversation parents, old assistant
+turns, and submitted user prompts are rejected.
+
+Observed local result for the required headed proof: the adapter reached
+`READY` on `https://chat.deepseek.com`, cookie banner state was `absent`, and
+the exact composer `textarea[placeholder="Message DeepSeek"]` was visible.
+Before typing, the required `.ds-virtual-list-visible-items` root was absent
+(`rootCount: 0`, `visibleRootCount: 0`). The adapter therefore returned
+`DEGRADED` before submitting the prompt, preserved the browser session, and
+captured only redacted structural metadata. No additional broad selectors or
+speculative heuristics were added.

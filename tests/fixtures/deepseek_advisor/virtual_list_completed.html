@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head><title>DeepSeek Chat</title></head>
+  <body>
+    <main>
+      <div class="ds-virtual-list-visible-items">
+        <div data-virtual-list-item-key="old-assistant">
+          <div class="ds-markdown ds-assistant-message-main-content">old answer</div>
+        </div>
+        <div data-virtual-list-item-key="user-new">
+          <div class="ds-message">synthetic user prompt</div>
+        </div>
+        <div data-virtual-list-item-key="assistant-new">
+          <div class="ds-think-content">private reasoning must stay out</div>
+          <div class="ds-markdown ds-assistant-message-main-content">
+            First paragraph of complete advice.
+
+            Second paragraph with nested span text.
+            <ul>
+              <li>first list item</li>
+              <li>second list item</li>
+            </ul>
+            <pre><code>cargo test</code></pre>
+          </div>
+          <button aria-label="Copy">Copy</button>
+          <button aria-label="Share">Share</button>
+        </div>
+      </div>
+      <textarea placeholder="Message DeepSeek"></textarea>
+      <div role="button" class="ds-button ds-button--primary ds-button--filled ds-button--circle">Send</div>
+    </main>
+  </body>
+</html>

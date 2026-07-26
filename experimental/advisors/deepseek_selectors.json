@@ -1,24 +1,28 @@
 {
   "start_url": "https://chat.deepseek.com/",
   "response_container_selectors": [
+    ".ds-markdown.ds-assistant-message-main-content",
     "[data-testid=\"assistant-message\"]",
     "[data-ds-role=\"assistant-response\"]",
     "article[data-role=\"assistant\"]",
     "deepseek:conversation-visible-blocks"
   ],
   "assistant_message_selectors": [
+    ".ds-markdown.ds-assistant-message-main-content",
     "[data-testid=\"assistant-message\"]",
     "[data-ds-role=\"assistant-response\"]",
     "article[data-role=\"assistant\"]",
     "deepseek:conversation-visible-blocks"
   ],
   "user_message_selectors": [
+    ".ds-virtual-list-visible-items > [data-virtual-list-item-key] .ds-message",
     "[data-testid=\"user-message\"]",
     "[data-ds-role=\"user-message\"]",
     "article[data-role=\"user\"]",
     "deepseek:conversation-visible-blocks"
   ],
   "prompt_input_selectors": [
+    "textarea[placeholder=\"Message DeepSeek\"]",
     "textarea.ds-scroll-area",
     "textarea",
     "[contenteditable=\"true\"]"
@@ -87,7 +91,7 @@
     "[data-testid=\"current-chat-title\"]",
     "h1[data-testid=\"chat-title\"]"
   ],
-  "text_stability_seconds": 2.0,
+  "text_stability_seconds": 5.0,
   "stable_sample_count": 3,
   "timeout_seconds": 120.0,
   "submission_confirmation_timeout_seconds": 8.0,

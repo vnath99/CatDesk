@@ -13,6 +13,7 @@ import argparse
 import contextlib
 import dataclasses
 import enum
+import hashlib
 import html.parser
 import json
 import os
@@ -122,56 +123,383 @@ SECRET_PATTERNS = [
 
 DEEPSEEK_COMPOSER_ACTION_AVAILABLE_SCRIPT = r"""
 (() => {
-  const textarea = document.querySelector('textarea');
+  const textarea = document.querySelector('textarea[placeholder="Message DeepSeek"], textarea.ds-scroll-area, textarea');
   if (!textarea) return false;
-  const textareaRect = textarea.getBoundingClientRect();
-  const candidates = Array.from(document.querySelectorAll('button,[role="button"]'))
-    .filter((element) => {
-      const rect = element.getBoundingClientRect();
-      const style = window.getComputedStyle(element);
-      if (rect.width <= 0 || rect.height <= 0) return false;
-      if (style.visibility === 'hidden' || style.display === 'none') return false;
-      if (element.disabled || element.getAttribute('aria-disabled') === 'true') return false;
-      return rect.top >= textareaRect.top - 140
-        && rect.bottom <= textareaRect.bottom + 180
-        && rect.right >= textareaRect.left
-        && rect.left <= window.innerWidth - 24;
-    })
-    .sort((left, right) => {
-      const a = left.getBoundingClientRect();
-      const b = right.getBoundingClientRect();
-      return (a.top - b.top) || (a.left - b.left);
-    });
-  return candidates.length > 0;
+  function visible(element) {
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    return rect.width > 0 && rect.height > 0
+      && style.visibility !== 'hidden' && style.display !== 'none';
+  }
+  function enabled(element) {
+    return !element.disabled
+      && element.getAttribute('aria-disabled') !== 'true'
+      && !String(element.className || '').includes('ds-button--disabled');
+  }
+  let container = textarea;
+  for (let depth = 0; container && depth < 7; depth++, container = container.parentElement) {
+    const candidates = Array.from(container.querySelectorAll('button,[role="button"]'))
+      .filter((element) => visible(element) && enabled(element))
+      .filter((element) => {
+        const classes = String(element.className || '');
+        return classes.includes('ds-button--primary') && classes.includes('ds-button--circle');
+      });
+    if (candidates.length > 0) return true;
+  }
+  return false;
 })()
 """
 
 
 DEEPSEEK_COMPOSER_ACTION_CLICK_SCRIPT = r"""
 (() => {
-  const textarea = document.querySelector('textarea');
+  const textarea = document.querySelector('textarea[placeholder="Message DeepSeek"], textarea.ds-scroll-area, textarea');
   if (!textarea) return false;
-  const textareaRect = textarea.getBoundingClientRect();
-  const candidates = Array.from(document.querySelectorAll('button,[role="button"]'))
-    .filter((element) => {
-      const rect = element.getBoundingClientRect();
-      const style = window.getComputedStyle(element);
-      if (rect.width <= 0 || rect.height <= 0) return false;
-      if (style.visibility === 'hidden' || style.display === 'none') return false;
-      if (element.disabled || element.getAttribute('aria-disabled') === 'true') return false;
-      return rect.top >= textareaRect.top - 140
-        && rect.bottom <= textareaRect.bottom + 180
-        && rect.right >= textareaRect.left
-        && rect.left <= window.innerWidth - 24;
-    })
-    .sort((left, right) => {
-      const a = left.getBoundingClientRect();
-      const b = right.getBoundingClientRect();
-      return (a.top - b.top) || (a.left - b.left);
-    });
-  const target = candidates[candidates.length - 1];
+  function visible(element) {
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    return rect.width > 0 && rect.height > 0
+      && style.visibility !== 'hidden' && style.display !== 'none';
+  }
+  function enabled(element) {
+    return !element.disabled
+      && element.getAttribute('aria-disabled') !== 'true'
+      && !String(element.className || '').includes('ds-button--disabled');
+  }
+  let target = null;
+  let container = textarea;
+  for (let depth = 0; container && depth < 7 && !target; depth++, container = container.parentElement) {
+    const candidates = Array.from(container.querySelectorAll('button,[role="button"]'))
+      .filter((element) => visible(element) && enabled(element))
+      .filter((element) => {
+        const classes = String(element.className || '');
+        return classes.includes('ds-button--primary') && classes.includes('ds-button--circle');
+      })
+      .sort((left, right) => {
+        const a = left.getBoundingClientRect();
+        const b = right.getBoundingClientRect();
+        return (b.left - a.left) || (b.top - a.top);
+      });
+    target = candidates[0] || null;
+  }
   if (!target) return false;
   target.click();
+  return true;
+})()
+"""
+
+
+DEEPSEEK_GENERATION_BOOTSTRAP_SCRIPT = r"""
+(() => {
+  const root = document.querySelector('.ds-virtual-list-visible-items');
+  if (!root) return { rootFound: false };
+  function visible(element) {
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    return rect.width > 0 && rect.height > 0
+      && style.visibility !== 'hidden' && style.display !== 'none';
+  }
+  function norm(text) {
+    return String(text || '').replace(/\r\n/g, '\n')
+      .replace(/[ \t]+\n/g, '\n').replace(/\n[ \t]+/g, '\n')
+      .replace(/\n{3,}/g, '\n\n').trim();
+  }
+  function children() {
+    return Array.from(root.children).filter(visible).map((turn, index) => {
+      const answer = turn.querySelector('.ds-markdown.ds-assistant-message-main-content');
+      const hasAssistant = Boolean(answer);
+      const hasMessage = Boolean(turn.querySelector('.ds-message'));
+      const text = answer ? norm(answer.innerText) : '';
+      return {
+        key: turn.getAttribute('data-virtual-list-item-key') || `identity:${index}`,
+        index,
+        role: hasAssistant ? 'assistant' : (hasMessage ? 'user' : 'other'),
+        hasAssistant,
+        text,
+        textLength: text.length
+      };
+    });
+  }
+  const turns = children();
+  const assistants = turns.filter((turn) => turn.hasAssistant);
+  const latest = assistants[assistants.length - 1] || null;
+  return {
+    rootFound: true,
+    turnKeys: turns.map((turn) => turn.key),
+    assistantCount: assistants.length,
+    latestAssistantKey: latest ? latest.key : null,
+    latestAssistantText: latest ? latest.text : '',
+    turns
+  };
+})()
+"""
+
+
+DEEPSEEK_GENERATION_INSTALL_SCRIPT = r"""
+((generationId, requestId, submittedPromptHash, baselineKeys, baselineAssistantCount, baselineLatestAssistantKey, baselineLatestAssistantHash) => {
+  const root = document.querySelector('.ds-virtual-list-visible-items');
+  if (!root) return { ok: false, error: 'ROOT_NOT_FOUND' };
+  if (window.__catdeskDeepSeekGeneration && window.__catdeskDeepSeekGeneration.disconnect) {
+    window.__catdeskDeepSeekGeneration.disconnect();
+  }
+  const state = {
+    generationId,
+    requestId,
+    submittedPromptHash,
+    startedAt: Date.now(),
+    baselineKeys,
+    baselineAssistantCount,
+    baselineLatestAssistantKey,
+    baselineLatestAssistantHash,
+    detectedUserTurnKey: null,
+    detectedAssistantTurnKey: null,
+    assistantText: '',
+    previousText: '',
+    lastMutationAt: Date.now(),
+    lastTextChangeAt: null,
+    mutationCount: 0,
+    stableSampleCount: 0,
+    sawUserTurn: false,
+    sawAssistantTurn: false,
+    sawAssistantTextChange: false,
+    sawGenerationActive: false,
+    terminalState: null,
+    events: [],
+    rootObserver: null,
+    assistantObserver: null
+  };
+  function visible(element) {
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    return rect.width > 0 && rect.height > 0
+      && style.visibility !== 'hidden' && style.display !== 'none';
+  }
+  function norm(text) {
+    return String(text || '').replace(/\r\n/g, '\n')
+      .replace(/[ \t]+\n/g, '\n').replace(/\n[ \t]+/g, '\n')
+      .replace(/\n{3,}/g, '\n\n').trim();
+  }
+  function turnKey(turn, index) {
+    return turn.getAttribute('data-virtual-list-item-key') || `identity:${index}`;
+  }
+  function classify(turn, index) {
+    const answer = turn.querySelector('.ds-markdown.ds-assistant-message-main-content');
+    const hasAssistant = Boolean(answer);
+    const hasMessage = Boolean(turn.querySelector('.ds-message'));
+    const text = answer ? norm(answer.innerText) : '';
+    return {
+      key: turnKey(turn, index),
+      role: hasAssistant ? 'assistant' : (hasMessage ? 'user' : 'other'),
+      answer,
+      text,
+      textLength: text.length
+    };
+  }
+  function composerReady() {
+    const textarea = document.querySelector('textarea[placeholder="Message DeepSeek"], textarea.ds-scroll-area, textarea');
+    if (!textarea) return { sendVisible: false, sendEnabled: false, stopVisible: false };
+    let sendVisible = false;
+    let sendEnabled = false;
+    let stopVisible = false;
+    let container = textarea;
+    for (let depth = 0; container && depth < 7; depth++, container = container.parentElement) {
+      for (const element of Array.from(container.querySelectorAll('button,[role="button"]'))) {
+        if (!visible(element)) continue;
+        const classes = String(element.className || '');
+        const enabled = !element.disabled
+          && element.getAttribute('aria-disabled') !== 'true'
+          && !classes.includes('ds-button--disabled');
+        if (classes.includes('ds-button--primary') && classes.includes('ds-button--circle')) {
+          sendVisible = true;
+          if (enabled) sendEnabled = true;
+          if (!enabled) stopVisible = true;
+        }
+      }
+      if (sendVisible) break;
+    }
+    return { sendVisible, sendEnabled, stopVisible };
+  }
+  function refresh(reason) {
+    const turns = Array.from(root.children).filter(visible).map(classify);
+    const added = turns.filter((turn) => !baselineKeys.includes(turn.key));
+    const user = added.find((turn) => turn.role === 'user');
+    if (user && !state.detectedUserTurnKey) {
+      state.detectedUserTurnKey = user.key;
+      state.sawUserTurn = true;
+    }
+    const assistant = added.filter((turn) => turn.role === 'assistant').slice(-1)[0]
+      || turns.filter((turn) => turn.role === 'assistant' && turn.key !== baselineLatestAssistantKey && turn.text).slice(-1)[0];
+    if (assistant) {
+      state.detectedAssistantTurnKey = assistant.key;
+      state.sawAssistantTurn = true;
+      if (state.assistantObserver && state.assistantObserver.disconnect) {
+        state.assistantObserver.disconnect();
+      }
+      if (assistant.answer) {
+        state.assistantObserver = new MutationObserver((records) => {
+          state.mutationCount += records.length;
+          state.lastMutationAt = Date.now();
+          refresh('assistant-mutation');
+        });
+        state.assistantObserver.observe(assistant.answer, { subtree: true, childList: true, characterData: true });
+      }
+      if (assistant.text !== state.assistantText) {
+        state.previousText = state.assistantText;
+        state.assistantText = assistant.text;
+        state.lastTextChangeAt = Date.now();
+        state.stableSampleCount = 0;
+        if (assistant.text) state.sawAssistantTextChange = true;
+      }
+    }
+    const controls = composerReady();
+    if (controls.stopVisible || !controls.sendEnabled) {
+      state.sawGenerationActive = true;
+    }
+    state.events.push({
+      type: reason,
+      userKey: state.detectedUserTurnKey,
+      assistantKey: state.detectedAssistantTurnKey,
+      textLength: state.assistantText.length,
+      timestamp: Date.now()
+    });
+    if (state.events.length > 80) state.events.splice(0, state.events.length - 80);
+    return { turns, controls };
+  }
+  state.rootObserver = new MutationObserver((records) => {
+    state.mutationCount += records.length;
+    state.lastMutationAt = Date.now();
+    refresh('root-mutation');
+  });
+  state.rootObserver.observe(root, {
+    subtree: true,
+    childList: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['class', 'style', 'data-virtual-list-item-key', 'aria-disabled', 'disabled']
+  });
+  state.disconnect = () => {
+    if (state.rootObserver) state.rootObserver.disconnect();
+    if (state.assistantObserver) state.assistantObserver.disconnect();
+  };
+  window.__catdeskDeepSeekGeneration = state;
+  refresh('installed');
+  return { ok: true };
+})
+"""
+
+
+DEEPSEEK_GENERATION_STATE_SCRIPT = r"""
+(() => {
+  const state = window.__catdeskDeepSeekGeneration;
+  const root = document.querySelector('.ds-virtual-list-visible-items');
+  if (!state || !root) return { ok: false, error: 'NO_ACTIVE_GENERATION' };
+  function visible(element) {
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+    return rect.width > 0 && rect.height > 0
+      && style.visibility !== 'hidden' && style.display !== 'none';
+  }
+  function norm(text) {
+    return String(text || '').replace(/\r\n/g, '\n')
+      .replace(/[ \t]+\n/g, '\n').replace(/\n[ \t]+/g, '\n')
+      .replace(/\n{3,}/g, '\n\n').trim();
+  }
+  function turnKey(turn, index) {
+    return turn.getAttribute('data-virtual-list-item-key') || `identity:${index}`;
+  }
+  function classify(turn, index) {
+    const answer = turn.querySelector('.ds-markdown.ds-assistant-message-main-content');
+    const hasAssistant = Boolean(answer);
+    const hasMessage = Boolean(turn.querySelector('.ds-message'));
+    const text = answer ? norm(answer.innerText) : '';
+    return { key: turnKey(turn, index), role: hasAssistant ? 'assistant' : (hasMessage ? 'user' : 'other'), answer, text, textLength: text.length };
+  }
+  function composerReady() {
+    const textarea = document.querySelector('textarea[placeholder="Message DeepSeek"], textarea.ds-scroll-area, textarea');
+    if (!textarea) return { sendVisible: false, sendEnabled: false, stopVisible: false };
+    let sendVisible = false;
+    let sendEnabled = false;
+    let stopVisible = false;
+    let container = textarea;
+    for (let depth = 0; container && depth < 7; depth++, container = container.parentElement) {
+      for (const element of Array.from(container.querySelectorAll('button,[role="button"]'))) {
+        if (!visible(element)) continue;
+        const classes = String(element.className || '');
+        const enabled = !element.disabled
+          && element.getAttribute('aria-disabled') !== 'true'
+          && !classes.includes('ds-button--disabled');
+        if (classes.includes('ds-button--primary') && classes.includes('ds-button--circle')) {
+          sendVisible = true;
+          if (enabled) sendEnabled = true;
+          if (!enabled) stopVisible = true;
+        }
+      }
+      if (sendVisible) break;
+    }
+    return { sendVisible, sendEnabled, stopVisible };
+  }
+  const turns = Array.from(root.children).filter(visible).map(classify);
+  const added = turns.filter((turn) => !state.baselineKeys.includes(turn.key));
+  const user = added.find((turn) => turn.role === 'user');
+  if (user && !state.detectedUserTurnKey) {
+    state.detectedUserTurnKey = user.key;
+    state.sawUserTurn = true;
+  }
+  const assistant = added.filter((turn) => turn.role === 'assistant').slice(-1)[0]
+    || turns.filter((turn) => turn.role === 'assistant' && turn.key !== state.baselineLatestAssistantKey && turn.text).slice(-1)[0];
+  if (assistant) {
+    state.detectedAssistantTurnKey = assistant.key;
+    state.sawAssistantTurn = true;
+    if (assistant.answer && (!state.assistantElementKey || state.assistantElementKey !== assistant.key)) {
+      if (state.assistantObserver && state.assistantObserver.disconnect) state.assistantObserver.disconnect();
+      state.assistantObserver = new MutationObserver((records) => {
+        state.mutationCount += records.length;
+        state.lastMutationAt = Date.now();
+      });
+      state.assistantObserver.observe(assistant.answer, { subtree: true, childList: true, characterData: true });
+      state.assistantElementKey = assistant.key;
+    }
+    if (assistant.text !== state.assistantText) {
+      state.previousText = state.assistantText;
+      state.assistantText = assistant.text;
+      state.lastTextChangeAt = Date.now();
+      state.stableSampleCount = 0;
+      if (assistant.text) state.sawAssistantTextChange = true;
+    }
+  }
+  const controls = composerReady();
+  if (controls.stopVisible || !controls.sendEnabled) state.sawGenerationActive = true;
+  return {
+    ok: true,
+    generationId: state.generationId,
+    requestId: state.requestId,
+    detectedUserTurnKey: state.detectedUserTurnKey,
+    detectedAssistantTurnKey: state.detectedAssistantTurnKey,
+    assistantText: state.assistantText,
+    assistantTextLength: state.assistantText.length,
+    lastMutationAt: state.lastMutationAt,
+    lastTextChangeAt: state.lastTextChangeAt,
+    mutationCount: state.mutationCount,
+    stableSampleCount: state.stableSampleCount,
+    sawUserTurn: state.sawUserTurn,
+    sawAssistantTurn: state.sawAssistantTurn,
+    sawAssistantTextChange: state.sawAssistantTextChange,
+    sawGenerationActive: state.sawGenerationActive,
+    controls,
+    turnKeys: turns.map((turn) => turn.key),
+    assistantCount: turns.filter((turn) => turn.role === 'assistant').length,
+    eventTail: state.events.slice(-12)
+  };
+})()
+"""
+
+
+DEEPSEEK_GENERATION_DISCONNECT_SCRIPT = r"""
+(() => {
+  const state = window.__catdeskDeepSeekGeneration;
+  if (!state) return false;
+  if (state.disconnect) state.disconnect();
+  delete window.__catdeskDeepSeekGeneration;
   return true;
 })()
 """
@@ -247,7 +575,7 @@ class SelectorConfig:
     chat_menu_button_selectors: list[str]
     chat_item_selectors: list[str]
     current_chat_title_selectors: list[str]
-    text_stability_seconds: float = 2.0
+    text_stability_seconds: float = 5.0
     stable_sample_count: int = 3
     timeout_seconds: float = 120.0
     submission_confirmation_timeout_seconds: float = 8.0
@@ -317,6 +645,146 @@ class RedactedDiagnostics:
 
     def to_dict(self) -> dict[str, str | None]:
         return dataclasses.asdict(self)
+
+
+@dataclasses.dataclass
+class VirtualTurn:
+    key: str
+    role: str
+    assistant_text: str
+    assistant_hash: str
+    text_length: int
+
+
+@dataclasses.dataclass
+class VirtualListBaseline:
+    root_found: bool
+    turn_keys: list[str]
+    assistant_count: int
+    latest_assistant_key: str | None
+    latest_assistant_hash: str | None
+    turns: list[VirtualTurn]
+
+
+@dataclasses.dataclass
+class GenerationTracker:
+    generation_id: str
+    request_id: str
+    submitted_prompt_hash: str
+    started_at: float
+    baseline_turn_keys: set[str]
+    baseline_assistant_count: int
+    baseline_latest_assistant_key: str | None
+    baseline_latest_assistant_hash: str | None
+    detected_user_turn_key: str | None = None
+    detected_assistant_turn_key: str | None = None
+    assistant_element_identity: str | None = None
+    assistant_text: str = ""
+    assistant_text_hash: str = ""
+    previous_text_hash: str = ""
+    last_mutation_at: float | None = None
+    last_text_change_at: float | None = None
+    mutation_count: int = 0
+    stable_sample_count: int = 0
+    saw_user_turn: bool = False
+    saw_assistant_turn: bool = False
+    saw_assistant_text_change: bool = False
+    saw_generation_active: bool = False
+    terminal_state: str | None = None
+    cancellation_event: threading.Event = dataclasses.field(default_factory=threading.Event)
+
+    def redacted_diagnostics(self) -> dict[str, Any]:
+        return {
+            "generation_id": self.generation_id,
+            "request_id": self.request_id,
+            "baseline_turn_count": len(self.baseline_turn_keys),
+            "baseline_assistant_count": self.baseline_assistant_count,
+            "detected_user_turn_key": self.detected_user_turn_key,
+            "detected_assistant_turn_key": self.detected_assistant_turn_key,
+            "assistant_text_length": len(self.assistant_text),
+            "assistant_text_hash": self.assistant_text_hash,
+            "mutation_count": self.mutation_count,
+            "stable_sample_count": self.stable_sample_count,
+            "saw_user_turn": self.saw_user_turn,
+            "saw_assistant_turn": self.saw_assistant_turn,
+            "saw_assistant_text_change": self.saw_assistant_text_change,
+            "saw_generation_active": self.saw_generation_active,
+            "terminal_state": self.terminal_state,
+        }
+
+
+@dataclasses.dataclass
+class SimpleDomNode:
+    tag: str
+    attrs: dict[str, str]
+    children: list["SimpleDomNode"] = dataclasses.field(default_factory=list)
+    text_parts: list[str] = dataclasses.field(default_factory=list)
+    parent: "SimpleDomNode | None" = None
+
+    def has_class(self, name: str) -> bool:
+        return name in self.attrs.get("class", "").split()
+
+    def visible(self) -> bool:
+        return attrs_are_visible(self.attrs)
+
+    def text(self, *, preserve_lines: bool = False) -> str:
+        parts: list[str] = []
+        for part in self.text_parts:
+            if part.strip():
+                parts.append(part)
+        for child in self.children:
+            child_text = child.text(preserve_lines=preserve_lines)
+            if child_text:
+                parts.append(child_text)
+        joined = "\n".join(parts) if preserve_lines else " ".join(parts)
+        return normalize_response_text(joined) if preserve_lines else normalize_plain_text(joined)
+
+    def descendants(self) -> list["SimpleDomNode"]:
+        output: list[SimpleDomNode] = []
+        for child in self.children:
+            output.append(child)
+            output.extend(child.descendants())
+        return output
+
+    def first_descendant_with_classes(self, classes: set[str]) -> "SimpleDomNode | None":
+        for node in self.descendants():
+            node_classes = set(node.attrs.get("class", "").split())
+            if classes.issubset(node_classes):
+                return node
+        return None
+
+    def has_descendant_with_class(self, class_name: str) -> bool:
+        return any(node.has_class(class_name) for node in self.descendants())
+
+
+class SimpleDomParser(html.parser.HTMLParser):
+    VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.root = SimpleDomNode("document", {})
+        self.stack = [self.root]
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        node = SimpleDomNode(
+            tag.lower(),
+            {key.lower(): value or "" for key, value in attrs},
+            parent=self.stack[-1],
+        )
+        self.stack[-1].children.append(node)
+        if tag.lower() not in self.VOID_TAGS:
+            self.stack.append(node)
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        for index in range(len(self.stack) - 1, 0, -1):
+            if self.stack[index].tag == tag:
+                del self.stack[index:]
+                return
+
+    def handle_data(self, data: str) -> None:
+        if data.strip():
+            self.stack[-1].text_parts.append(data)
 
 
 class MinimalHtml(html.parser.HTMLParser):
@@ -770,6 +1238,7 @@ class DeepSeekWebAdvisorAdapter:
         self.cancel_requested = threading.Event()
         self.cookie_banner_result = "unknown"
         self.last_submission_diagnostics: dict[str, Any] = {}
+        self.active_generation: GenerationTracker | None = None
 
     def start(self) -> AdapterState:
         self.profile_dir.mkdir(parents=True, exist_ok=True)
@@ -891,9 +1360,6 @@ class DeepSeekWebAdvisorAdapter:
                 return self.advice_unavailable(validated.request_id)
 
             prompt = build_advisory_prompt(validated)
-            baseline_texts = self._visible_response_texts(snapshot)
-            baseline_user_count = self._visible_user_message_count(snapshot)
-            baseline_conversation_count = self._visible_conversation_block_count(snapshot)
             prompt_selector = self._first_enabled_visible_selector(
                 snapshot,
                 self.selectors.prompt_input_selectors,
@@ -903,6 +1369,36 @@ class DeepSeekWebAdvisorAdapter:
                 return self.advice_unavailable(validated.request_id)
 
             self.cancel_requested.clear()
+            browser_baseline = self._browser_virtual_list_baseline()
+            use_generation_observer = bool(browser_baseline and browser_baseline.root_found)
+            tracker: GenerationTracker | None = None
+            if use_generation_observer and browser_baseline is not None:
+                tracker = GenerationTracker(
+                    generation_id=f"gen-{validated.request_id}-{int(self._now() * 1000)}",
+                    request_id=validated.request_id,
+                    submitted_prompt_hash=sha256_text(prompt),
+                    started_at=self._now(),
+                    baseline_turn_keys=set(browser_baseline.turn_keys),
+                    baseline_assistant_count=browser_baseline.assistant_count,
+                    baseline_latest_assistant_key=browser_baseline.latest_assistant_key,
+                    baseline_latest_assistant_hash=browser_baseline.latest_assistant_hash,
+                )
+                self.active_generation = tracker
+                if not self._install_generation_observer(tracker):
+                    self.state = AdapterState.DEGRADED
+                    return self.advice_degraded(
+                        validated.request_id,
+                        "DeepSeek virtual-list observer could not be installed before submission.",
+                    )
+            elif self._live_browser_available():
+                self.state = AdapterState.DEGRADED
+                return self.advice_degraded(
+                    validated.request_id,
+                    "DeepSeek virtual-list root was not found before submission.",
+                )
+            baseline_texts = self._visible_response_texts(snapshot)
+            baseline_user_count = self._visible_user_message_count(snapshot)
+            baseline_conversation_count = self._visible_conversation_block_count(snapshot)
             self.state = AdapterState.SENDING
             self._type_prompt(prompt_selector, prompt)
             if self.cancel_requested.is_set():
@@ -917,27 +1413,50 @@ class DeepSeekWebAdvisorAdapter:
             clicked = self._click_first_enabled(self.selectors.send_button_selectors)
             if not clicked:
                 self._press_enter(prompt_selector)
-            if not self._confirm_submission(
-                prompt_selector,
-                baseline_user_count,
-                baseline_conversation_count,
-            ):
+            submission_confirmed = (
+                self._confirm_generation_submission(tracker, prompt_selector)
+                if tracker is not None
+                else self._confirm_submission(
+                    prompt_selector,
+                    baseline_user_count,
+                    baseline_conversation_count,
+                )
+            )
+            if not submission_confirmed:
                 self.state = AdapterState.DEGRADED
                 return self.advice_degraded(
                     validated.request_id,
                     "DeepSeek submission was not confirmed before waiting for a response.",
                 )
             self.state = AdapterState.WAITING_FOR_RESPONSE
+            if tracker is not None:
+                return self._wait_for_generation_response(validated, tracker)
             return self._wait_for_response(validated, baseline_texts)
         except Exception as exc:
             sys.stderr.write(f"DeepSeek advisor operation failed: {type(exc).__name__}\n")
             self.state = AdapterState.DEGRADED
             return self.advice_failure(validated.request_id)
+        finally:
+            if self.active_generation is not None and self.state in {
+                AdapterState.COMPLETED,
+                AdapterState.CANCELLED,
+                AdapterState.TIMED_OUT,
+                AdapterState.RATE_LIMITED,
+                AdapterState.TAKEOVER_REQUIRED,
+                AdapterState.DEGRADED,
+                AdapterState.FAILED,
+            }:
+                self._disconnect_generation_observers()
+                self.active_generation = None
 
     def cancel(self, request_id: str | None = None) -> AdviceResponseV1:
         self.cancel_requested.set()
+        if self.active_generation is not None:
+            self.active_generation.cancellation_event.set()
+            self.active_generation.terminal_state = AdapterState.CANCELLED.value
         if self.state in {AdapterState.SENDING, AdapterState.WAITING_FOR_RESPONSE}:
             self._try_click_stop()
+        self._disconnect_generation_observers()
         self.state = AdapterState.CANCELLED
         return AdviceResponseV1(
             schema_version=SCHEMA_VERSION,
@@ -1031,6 +1550,207 @@ class DeepSeekWebAdvisorAdapter:
         self.state = AdapterState.TIMED_OUT
         return self.advice_unavailable(request.request_id)
 
+    def _wait_for_generation_response(
+        self,
+        request: ValidatedAdviceRequest,
+        tracker: GenerationTracker,
+    ) -> AdviceResponseV1:
+        started_at = self._now()
+        stable_samples = 0
+        last_hash = ""
+        while self._now() - started_at <= self.selectors.timeout_seconds:
+            if self.cancel_requested.is_set() or tracker.cancellation_event.is_set():
+                self._try_click_stop()
+                tracker.terminal_state = AdapterState.CANCELLED.value
+                self.state = AdapterState.CANCELLED
+                return normalize_advice_response(
+                    request,
+                    self.advisor_id,
+                    AdvisorStatus.CANCELLED,
+                    "DeepSeek advisory generation was cancelled.",
+                    confidence="LOW",
+                )
+            snapshot = self._snapshot()
+            if snapshot.origin != self.expected_origin:
+                tracker.terminal_state = AdapterState.DEGRADED.value
+                self.state = AdapterState.DEGRADED
+                return self.advice_unavailable(request.request_id)
+            takeover, _selector = snapshot.any_selector(self.selectors.takeover_required_selectors)
+            if takeover:
+                tracker.terminal_state = AdapterState.TAKEOVER_REQUIRED.value
+                self.state = AdapterState.TAKEOVER_REQUIRED
+                return self.advice_unavailable(request.request_id)
+            login_required, _selector = snapshot.any_selector(self.selectors.login_required_selectors)
+            if login_required:
+                tracker.terminal_state = AdapterState.LOGIN_REQUIRED.value
+                self.state = AdapterState.LOGIN_REQUIRED
+                return self.advice_unavailable(request.request_id)
+            rate_limited, _selector = snapshot.any_selector(self.selectors.rate_limit_selectors)
+            if rate_limited:
+                tracker.terminal_state = AdapterState.RATE_LIMITED.value
+                self.state = AdapterState.RATE_LIMITED
+                return self.advice_unavailable(request.request_id)
+
+            state = self._generation_state()
+            if not state.get("ok"):
+                tracker.terminal_state = AdapterState.DEGRADED.value
+                self.state = AdapterState.DEGRADED
+                return self.advice_degraded(
+                    request.request_id,
+                    "DeepSeek generation observer state was unavailable.",
+                )
+            self._update_tracker_from_browser_state(tracker, state)
+            text = normalize_response_text(str(state.get("assistantText") or ""))
+            text_hash = sha256_text(text) if text else ""
+            if text_hash and text_hash == last_hash:
+                stable_samples += 1
+            elif text_hash:
+                last_hash = text_hash
+                stable_samples = 1
+            controls = state.get("controls") if isinstance(state.get("controls"), dict) else {}
+            stop_visible = bool(controls.get("stopVisible"))
+            send_ready = bool(controls.get("sendVisible")) and bool(controls.get("sendEnabled"))
+            stable_for = (
+                self._now() - (tracker.last_text_change_at or started_at)
+                if tracker.last_text_change_at is not None
+                else 0.0
+            )
+            if (
+                tracker.saw_assistant_turn
+                and text
+                and tracker.saw_assistant_text_change
+                and not stop_visible
+                and send_ready
+                and stable_for >= self.selectors.text_stability_seconds
+                and stable_samples >= max(1, self.selectors.stable_sample_count)
+                and not self._response_is_invalid_for_generation(text, request, tracker)
+            ):
+                tracker.stable_sample_count = stable_samples
+                tracker.terminal_state = AdapterState.COMPLETED.value
+                self.state = AdapterState.COMPLETED
+                return normalize_advice_response(
+                    request,
+                    self.advisor_id,
+                    AdvisorStatus.COMPLETED,
+                    text,
+                )
+            self._sleep(0.5)
+        tracker.terminal_state = AdapterState.TIMED_OUT.value
+        self.state = AdapterState.TIMED_OUT
+        return self.advice_unavailable(request.request_id)
+
+    def _response_is_invalid_for_generation(
+        self,
+        text: str,
+        request: ValidatedAdviceRequest,
+        tracker: GenerationTracker,
+    ) -> bool:
+        normalized = normalize_response_text(text)
+        if not normalized:
+            return True
+        if sha256_text(normalized) == tracker.baseline_latest_assistant_hash:
+            return True
+        if sha256_text(normalized) == tracker.submitted_prompt_hash:
+            return True
+        if normalized == normalize_response_text(request.specific_question):
+            return True
+        if tracker.detected_user_turn_key and tracker.detected_user_turn_key == tracker.detected_assistant_turn_key:
+            return True
+        return False
+
+    def _live_browser_available(self) -> bool:
+        if self._sb is None:
+            return False
+        return any(
+            callable(getattr(self._sb, name, None))
+            for name in ["execute_script", "get_page_source", "get_page_html"]
+        ) or callable(getattr(getattr(self._sb, "cdp", None), "evaluate", None))
+
+    def _browser_virtual_list_baseline(self) -> VirtualListBaseline | None:
+        if not self._live_browser_available():
+            return None
+        value = self._execute_browser_script(DEEPSEEK_GENERATION_BOOTSTRAP_SCRIPT)
+        if not isinstance(value, dict):
+            return VirtualListBaseline(False, [], 0, None, None, [])
+        if not value.get("rootFound"):
+            return VirtualListBaseline(False, [], 0, None, None, [])
+        turns = [
+            VirtualTurn(
+                str(turn.get("key") or f"identity:{index}"),
+                str(turn.get("role") or "other"),
+                normalize_response_text(str(turn.get("text") or "")),
+                sha256_text(normalize_response_text(str(turn.get("text") or ""))),
+                int(turn.get("textLength") or 0),
+            )
+            for index, turn in enumerate(value.get("turns") or [])
+            if isinstance(turn, dict)
+        ]
+        latest_text = normalize_response_text(str(value.get("latestAssistantText") or ""))
+        return VirtualListBaseline(
+            True,
+            [str(key) for key in value.get("turnKeys") or []],
+            int(value.get("assistantCount") or 0),
+            str(value.get("latestAssistantKey")) if value.get("latestAssistantKey") else None,
+            sha256_text(latest_text) if latest_text else None,
+            turns,
+        )
+
+    def _install_generation_observer(self, tracker: GenerationTracker) -> bool:
+        result = self._execute_browser_script(
+            f"{DEEPSEEK_GENERATION_INSTALL_SCRIPT}("
+            f"{json.dumps(tracker.generation_id)},"
+            f"{json.dumps(tracker.request_id)},"
+            f"{json.dumps(tracker.submitted_prompt_hash)},"
+            f"{json.dumps(sorted(tracker.baseline_turn_keys))},"
+            f"{json.dumps(tracker.baseline_assistant_count)},"
+            f"{json.dumps(tracker.baseline_latest_assistant_key)},"
+            f"{json.dumps(tracker.baseline_latest_assistant_hash)}"
+            f")"
+        )
+        return isinstance(result, dict) and bool(result.get("ok"))
+
+    def _generation_state(self) -> dict[str, Any]:
+        value = self._execute_browser_script(DEEPSEEK_GENERATION_STATE_SCRIPT)
+        return value if isinstance(value, dict) else {"ok": False, "error": "INVALID_STATE"}
+
+    def _disconnect_generation_observers(self) -> None:
+        with contextlib.suppress(Exception):
+            self._execute_browser_script(DEEPSEEK_GENERATION_DISCONNECT_SCRIPT)
+
+    def _update_tracker_from_browser_state(
+        self,
+        tracker: GenerationTracker,
+        state: dict[str, Any],
+    ) -> None:
+        now = self._now()
+        text = normalize_response_text(str(state.get("assistantText") or ""))
+        text_hash = sha256_text(text) if text else ""
+        previous_hash = tracker.assistant_text_hash
+        tracker.detected_user_turn_key = (
+            str(state.get("detectedUserTurnKey")) if state.get("detectedUserTurnKey") else None
+        )
+        tracker.detected_assistant_turn_key = (
+            str(state.get("detectedAssistantTurnKey"))
+            if state.get("detectedAssistantTurnKey")
+            else None
+        )
+        tracker.assistant_element_identity = tracker.detected_assistant_turn_key
+        tracker.assistant_text = text
+        tracker.previous_text_hash = previous_hash
+        tracker.assistant_text_hash = text_hash
+        tracker.mutation_count = int(state.get("mutationCount") or 0)
+        tracker.saw_user_turn = bool(state.get("sawUserTurn"))
+        tracker.saw_assistant_turn = bool(state.get("sawAssistantTurn"))
+        tracker.saw_generation_active = bool(state.get("sawGenerationActive"))
+        if text_hash and text_hash != previous_hash:
+            tracker.saw_assistant_text_change = True
+            tracker.last_text_change_at = now
+            tracker.stable_sample_count = 0
+        elif text_hash:
+            tracker.stable_sample_count += 1
+        if state.get("lastMutationAt"):
+            tracker.last_mutation_at = now
+
     def _try_click_stop(self) -> None:
         try:
             self._click_first(self.selectors.stop_button_selectors)
@@ -1082,6 +1802,62 @@ class DeepSeekWebAdvisorAdapter:
                 "stop_visible": stop_visible,
                 "origin": snapshot.origin,
             }
+            self._sleep(0.25)
+        return False
+
+    def _confirm_generation_submission(
+        self,
+        tracker: GenerationTracker | None,
+        prompt_selector: str,
+    ) -> bool:
+        if tracker is None:
+            return False
+        started_at = self._now()
+        self.last_submission_diagnostics = {}
+        while self._now() - started_at <= self.selectors.submission_confirmation_timeout_seconds:
+            if self.cancel_requested.is_set():
+                tracker.cancellation_event.set()
+                return True
+            snapshot = self._snapshot()
+            if snapshot.origin != self.expected_origin:
+                self.last_submission_diagnostics = {"origin": snapshot.origin}
+                return False
+            state = self._generation_state()
+            if not state.get("ok"):
+                self.last_submission_diagnostics = {
+                    "confirmed": False,
+                    "generation_id": tracker.generation_id,
+                    "error": state.get("error"),
+                }
+                return False
+            self._update_tracker_from_browser_state(tracker, state)
+            controls = state.get("controls") if isinstance(state.get("controls"), dict) else {}
+            confirmed = bool(
+                tracker.saw_user_turn
+                or tracker.saw_assistant_turn
+                or bool(controls.get("stopVisible"))
+                or (
+                    tracker.mutation_count > 0
+                    and bool(state.get("turnKeys"))
+                    and set(str(key) for key in state.get("turnKeys", []))
+                    != tracker.baseline_turn_keys
+                )
+            )
+            self.last_submission_diagnostics = {
+                "confirmed": confirmed,
+                "generation_id": tracker.generation_id,
+                "baseline_turn_count": len(tracker.baseline_turn_keys),
+                "saw_user_turn": tracker.saw_user_turn,
+                "saw_assistant_turn": tracker.saw_assistant_turn,
+                "saw_generation_active": tracker.saw_generation_active,
+                "mutation_count": tracker.mutation_count,
+                "stop_visible": bool(controls.get("stopVisible")),
+                "send_visible": bool(controls.get("sendVisible")),
+                "send_enabled": bool(controls.get("sendEnabled")),
+                "prompt_empty": self._prompt_is_empty(prompt_selector),
+            }
+            if confirmed:
+                return True
             self._sleep(0.25)
         return False
 
@@ -1737,6 +2513,89 @@ def call_first(target: Any, names: Iterable[str]) -> Any:
 
 def normalize_plain_text(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
+
+
+def normalize_response_text(value: str) -> str:
+    text = value.replace("\r\n", "\n").replace("\r", "\n")
+    lines = [re.sub(r"[ \t]+$", "", line) for line in text.split("\n")]
+    text = "\n".join(lines)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def parse_simple_dom(html: str) -> SimpleDomNode:
+    parser = SimpleDomParser()
+    parser.feed(html)
+    return parser.root
+
+
+def collect_virtual_list_baseline(snapshot: PageSnapshot) -> VirtualListBaseline:
+    root = parse_simple_dom(snapshot.html)
+    virtual_root = next(
+        (node for node in root.descendants() if node.has_class("ds-virtual-list-visible-items")),
+        None,
+    )
+    if virtual_root is None:
+        return VirtualListBaseline(False, [], 0, None, None, [])
+    turns = []
+    for index, child in enumerate([node for node in virtual_root.children if node.visible()]):
+        turn = classify_virtual_turn(child, index)
+        if turn.role != "other":
+            turns.append(turn)
+    assistants = [turn for turn in turns if turn.role == "assistant"]
+    latest = assistants[-1] if assistants else None
+    return VirtualListBaseline(
+        True,
+        [turn.key for turn in turns],
+        len(assistants),
+        latest.key if latest else None,
+        latest.assistant_hash if latest else None,
+        turns,
+    )
+
+
+def classify_virtual_turn(node: SimpleDomNode, index: int) -> VirtualTurn:
+    key = node.attrs.get("data-virtual-list-item-key") or f"identity:{index}"
+    assistant_node = node.first_descendant_with_classes(
+        {"ds-markdown", "ds-assistant-message-main-content"}
+    )
+    if assistant_node is not None:
+        text = normalize_response_text(assistant_node.text(preserve_lines=True))
+        return VirtualTurn(key, "assistant", text, sha256_text(text), len(text))
+    if node.has_descendant_with_class("ds-message"):
+        return VirtualTurn(key, "user", "", "", 0)
+    return VirtualTurn(key, "other", "", "", 0)
+
+
+def newest_assistant_after_baseline(
+    baseline: VirtualListBaseline,
+    current: VirtualListBaseline,
+) -> VirtualTurn | None:
+    baseline_keys = set(baseline.turn_keys)
+    candidates = [
+        turn
+        for turn in current.turns
+        if turn.role == "assistant"
+        and turn.key not in baseline_keys
+        and turn.key != baseline.latest_assistant_key
+        and turn.assistant_text
+    ]
+    if candidates:
+        return candidates[-1]
+    for turn in reversed(current.turns):
+        if (
+            turn.role == "assistant"
+            and turn.key not in baseline_keys
+            and turn.key != baseline.latest_assistant_key
+            and turn.assistant_text
+            and turn.assistant_hash != baseline.latest_assistant_hash
+        ):
+            return turn
+    return None
 
 
 def newest_new_response_text(

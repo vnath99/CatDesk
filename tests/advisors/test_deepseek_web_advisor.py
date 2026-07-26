@@ -15,9 +15,14 @@ from experimental.advisors.deepseek_web_advisor import (
     AdapterState,
     CompletionDetector,
     DeepSeekWebAdvisorAdapter,
+    GenerationTracker,
     JsonLinesAdvisorProtocol,
     PageSnapshot,
     SelectorConfig,
+    collect_virtual_list_baseline,
+    newest_assistant_after_baseline,
+    normalize_response_text,
+    sha256_text,
 )
 
 
@@ -227,6 +232,26 @@ class StateAdapter(DeepSeekWebAdvisorAdapter):
 
     def refresh_state(self) -> AdapterState:
         return self.state
+
+
+class DisconnectRecordingAdapter(DeepSeekWebAdvisorAdapter):
+    def __init__(self) -> None:
+        super().__init__(selectors(), Path("disconnect-profile"), headed=True)
+        self.disconnected = False
+        self.state = AdapterState.WAITING_FOR_RESPONSE
+        self.active_generation = GenerationTracker(
+            generation_id="gen-cancel",
+            request_id="advice-cancel",
+            submitted_prompt_hash=sha256_text("prompt"),
+            started_at=0.0,
+            baseline_turn_keys=set(),
+            baseline_assistant_count=0,
+            baseline_latest_assistant_key=None,
+            baseline_latest_assistant_hash=None,
+        )
+
+    def _disconnect_generation_observers(self) -> None:
+        self.disconnected = True
 
 
 class CookieAdapter(OfflineAdapter):
@@ -727,6 +752,184 @@ class DeepSeekWebAdvisorTests(unittest.TestCase):
 
         self.assertFalse(other.clicked)
         self.assertTrue(target.clicked)
+
+    def test_virtual_list_baseline_collects_direct_turn_keys(self) -> None:
+        page = snapshot("virtual_list_completed.html")
+
+        baseline = collect_virtual_list_baseline(page)
+
+        self.assertTrue(baseline.root_found)
+        self.assertEqual(baseline.turn_keys, ["old-assistant", "user-new", "assistant-new"])
+        self.assertEqual(baseline.assistant_count, 2)
+        self.assertEqual(baseline.latest_assistant_key, "assistant-new")
+        self.assertTrue(baseline.latest_assistant_hash)
+
+    def test_virtual_list_identifies_new_user_and_assistant_turns(self) -> None:
+        before = inline_snapshot(
+            """
+            <main><div class="ds-virtual-list-visible-items">
+              <div data-virtual-list-item-key="old"><div class="ds-markdown ds-assistant-message-main-content">old</div></div>
+            </div></main>
+            """
+        )
+        after = snapshot("virtual_list_completed.html")
+
+        baseline = collect_virtual_list_baseline(before)
+        current = collect_virtual_list_baseline(after)
+        newest = newest_assistant_after_baseline(baseline, current)
+
+        self.assertIsNotNone(newest)
+        self.assertEqual(newest.key, "assistant-new")
+        self.assertTrue(any(turn.role == "user" and turn.key == "user-new" for turn in current.turns))
+
+    def test_virtual_list_ignores_reasoning_and_action_rows(self) -> None:
+        newest = newest_assistant_after_baseline(
+            collect_virtual_list_baseline(
+                inline_snapshot('<main><div class="ds-virtual-list-visible-items"></div></main>')
+            ),
+            collect_virtual_list_baseline(snapshot("virtual_list_completed.html")),
+        )
+
+        self.assertIsNotNone(newest)
+        self.assertIn("First paragraph", newest.assistant_text)
+        self.assertNotIn("private reasoning", newest.assistant_text)
+        self.assertNotIn("Copy", newest.assistant_text)
+        self.assertNotIn("Share", newest.assistant_text)
+
+    def test_virtual_list_extracts_complete_container_not_last_span(self) -> None:
+        page = inline_snapshot(
+            """
+            <main><div class="ds-virtual-list-visible-items">
+              <div data-virtual-list-item-key="assistant-new">
+                <div class="ds-markdown ds-assistant-message-main-content">
+                  <p>First paragraph.</p>
+                  <p>Second paragraph with <span>last span only</span>.</p>
+                  <pre><code>line one
+line two</code></pre>
+                </div>
+              </div>
+            </div></main>
+            """
+        )
+
+        turn = collect_virtual_list_baseline(page).turns[0]
+
+        self.assertIn("First paragraph.", turn.assistant_text)
+        self.assertIn("Second paragraph", turn.assistant_text)
+        self.assertIn("line one", turn.assistant_text)
+        self.assertNotEqual(turn.assistant_text, "last span only")
+
+    def test_virtual_list_rejects_unchanged_baseline_assistant(self) -> None:
+        baseline = collect_virtual_list_baseline(snapshot("virtual_list_completed.html"))
+        current = collect_virtual_list_baseline(snapshot("virtual_list_completed.html"))
+
+        self.assertIsNone(newest_assistant_after_baseline(baseline, current))
+
+    def test_generation_tracker_hash_updates_for_character_and_child_mutations(self) -> None:
+        adapter = DeepSeekWebAdvisorAdapter(selectors(), Path("tracker-profile"), headed=True)
+        tracker = GenerationTracker(
+            generation_id="gen-1",
+            request_id="advice-1",
+            submitted_prompt_hash=sha256_text("prompt"),
+            started_at=0.0,
+            baseline_turn_keys={"old"},
+            baseline_assistant_count=1,
+            baseline_latest_assistant_key="old",
+            baseline_latest_assistant_hash=sha256_text("old"),
+        )
+
+        adapter._update_tracker_from_browser_state(
+            tracker,
+            {
+                "ok": True,
+                "detectedUserTurnKey": "user-1",
+                "detectedAssistantTurnKey": "assistant-1",
+                "assistantText": "first paragraph",
+                "mutationCount": 1,
+                "sawUserTurn": True,
+                "sawAssistantTurn": True,
+                "sawGenerationActive": True,
+            },
+        )
+        first_hash = tracker.assistant_text_hash
+        adapter._update_tracker_from_browser_state(
+            tracker,
+            {
+                "ok": True,
+                "detectedUserTurnKey": "user-1",
+                "detectedAssistantTurnKey": "assistant-1",
+                "assistantText": "first paragraph\n\nnew code block",
+                "mutationCount": 2,
+                "sawUserTurn": True,
+                "sawAssistantTurn": True,
+                "sawGenerationActive": True,
+            },
+        )
+
+        self.assertNotEqual(first_hash, tracker.assistant_text_hash)
+        self.assertEqual(tracker.mutation_count, 2)
+        self.assertTrue(tracker.saw_assistant_text_change)
+
+    def test_generation_completion_requires_ready_controls_stability_and_hashes(self) -> None:
+        adapter = DeepSeekWebAdvisorAdapter(selectors(), Path("tracker-profile"), headed=True)
+        tracker = GenerationTracker(
+            generation_id="gen-2",
+            request_id="advice-2",
+            submitted_prompt_hash=sha256_text("prompt"),
+            started_at=0.0,
+            baseline_turn_keys={"old"},
+            baseline_assistant_count=1,
+            baseline_latest_assistant_key="old",
+            baseline_latest_assistant_hash=sha256_text("old"),
+        )
+        request = type("Request", (), {"specific_question": "question"})()
+
+        tracker.detected_assistant_turn_key = "assistant-2"
+        tracker.saw_assistant_turn = True
+        tracker.saw_assistant_text_change = True
+        tracker.assistant_text = "complete answer"
+        tracker.assistant_text_hash = sha256_text("complete answer")
+        tracker.last_text_change_at = 0.0
+
+        self.assertFalse(adapter._response_is_invalid_for_generation("complete answer", request, tracker))
+        self.assertTrue(adapter._response_is_invalid_for_generation("question", request, tracker))
+        self.assertTrue(adapter._response_is_invalid_for_generation("old", request, tracker))
+
+    def test_normalize_response_text_preserves_structure(self) -> None:
+        text = normalize_response_text("  Heading\n\n\n- item one\n- item two\n\n```x```  ")
+
+        self.assertEqual(text, "Heading\n\n- item one\n- item two\n\n```x```")
+
+    def test_rate_limit_text_elsewhere_is_ignored_but_visible_toast_is_honored(self) -> None:
+        harmless_text = inline_snapshot(
+            """
+            <main>
+              <section data-ds-role="assistant-response">The words rate limit are documentation only.</section>
+              <button aria-label="Send">Send</button>
+            </main>
+            """
+        )
+        toast = inline_snapshot(
+            """
+            <main>
+              <div data-testid="rate-limit-toast">provider notice</div>
+              <button aria-label="Send">Send</button>
+            </main>
+            """
+        )
+
+        self.assertFalse(harmless_text.any_selector(selectors().rate_limit_selectors)[0])
+        self.assertTrue(toast.any_selector(selectors().rate_limit_selectors)[0])
+
+    def test_cancellation_disconnects_generation_observers_once(self) -> None:
+        adapter = DisconnectRecordingAdapter()
+
+        response = adapter.cancel("advice-cancel")
+
+        self.assertEqual(response.status, "CANCELLED")
+        self.assertTrue(adapter.disconnected)
+        self.assertTrue(adapter.active_generation.cancellation_event.is_set())
+        self.assertEqual(adapter.active_generation.terminal_state, "CANCELLED")
 
     def test_advisory_turn_submits_once_and_extracts_newest_response(self) -> None:
         adapter = OfflineAdapter(
