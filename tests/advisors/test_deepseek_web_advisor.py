@@ -2,6 +2,7 @@ import dataclasses
 import io
 import json
 import os
+import random
 import subprocess
 import sys
 import tempfile
@@ -37,7 +38,12 @@ def selectors() -> SelectorConfig:
     return dataclasses.replace(
         SelectorConfig.from_file(SELECTOR_CONFIG),
         text_stability_seconds=0.5,
+        stable_sample_count=2,
         timeout_seconds=2.0,
+        typing_min_interval_seconds=0.01,
+        typing_max_interval_seconds=0.02,
+        typing_newline_pause_seconds=0.05,
+        typing_timeout_seconds=5.0,
     )
 
 
@@ -69,7 +75,12 @@ def valid_request(**overrides: object) -> dict[str, object]:
 
 class OfflineAdapter(DeepSeekWebAdvisorAdapter):
     def __init__(self, snapshots: list[PageSnapshot]) -> None:
-        super().__init__(selectors(), Path("offline-profile"), headed=True)
+        super().__init__(
+            selectors(),
+            Path("offline-profile"),
+            headed=True,
+            rng=random.Random(7),
+        )
         self._sb = object()
         self.snapshots = snapshots
         self.snapshot_index = 0
@@ -89,6 +100,9 @@ class OfflineAdapter(DeepSeekWebAdvisorAdapter):
             self.cancel_requested.set()
 
     def _click_first(self, selectors_: object) -> bool:
+        return self._click_first_enabled(selectors_)
+
+    def _click_first_enabled(self, selectors_: object) -> bool:
         selector_list = list(selectors_)  # type: ignore[arg-type]
         if selector_list:
             self.clicked_selectors.append(selector_list[0])
@@ -190,6 +204,91 @@ class FailingStopAdapter(OfflineAdapter):
         raise RuntimeError("synthetic stop failure")
 
 
+class StateAdapter(DeepSeekWebAdvisorAdapter):
+    def __init__(self, state: AdapterState) -> None:
+        super().__init__(selectors(), Path("state-profile"), headed=True)
+        self.state = state
+
+    def refresh_state(self) -> AdapterState:
+        return self.state
+
+
+class CookieAdapter(OfflineAdapter):
+    def __init__(self, page: PageSnapshot) -> None:
+        super().__init__([page])
+
+    def _snapshot(self) -> PageSnapshot:
+        return self.snapshots[0]
+
+
+class EnvLoginAdapter(OfflineAdapter):
+    def __init__(self, page: PageSnapshot, *, allow_env_login: bool = True) -> None:
+        DeepSeekWebAdvisorAdapter.__init__(
+            self,
+            selectors(),
+            Path("env-login-profile"),
+            headed=True,
+            allow_env_login=allow_env_login,
+        )
+        self._sb = object()
+        self.snapshots = [page]
+        self.snapshot_index = 0
+        self.typed_fields: list[tuple[str, str]] = []
+        self.clicked_selectors: list[str] = []
+
+    def _snapshot(self) -> PageSnapshot:
+        return self.snapshots[0]
+
+    def _type_login_field(self, selector: str, value: str) -> None:
+        self.typed_fields.append((selector, value))
+
+    def _click_first_enabled(self, selectors_: object) -> bool:
+        selector_list = list(selectors_)  # type: ignore[arg-type]
+        if selector_list:
+            self.clicked_selectors.append(selector_list[0])
+            return True
+        return False
+
+
+class FakeElement:
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.clicked = False
+
+    def is_displayed(self) -> bool:
+        return True
+
+    def click(self) -> None:
+        self.clicked = True
+
+
+class ChatAdapter(OfflineAdapter):
+    def __init__(self, page: PageSnapshot, elements: dict[str, list[FakeElement]]) -> None:
+        super().__init__([page])
+        self.elements = elements
+
+    def _snapshot(self) -> PageSnapshot:
+        return self.snapshots[0]
+
+    def _find_elements(self, selector: str) -> list[object]:
+        return list(self.elements.get(selector, []))
+
+
+class PacedTypingAdapter(DeepSeekWebAdvisorAdapter):
+    def __init__(self) -> None:
+        super().__init__(
+            selectors(),
+            Path("paced-profile"),
+            headed=True,
+            rng=random.Random(3),
+        )
+        self._sb = PromptFakeSb(retained_value="")
+        self.sleeps: list[float] = []
+
+    def _sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+
+
 class PartialContext:
     def __init__(self) -> None:
         self.exited = False
@@ -206,6 +305,10 @@ class PartialContext:
 
 def snapshot(name: str, url: str = "https://chat.deepseek.com/a/chat/synthetic") -> PageSnapshot:
     return PageSnapshot(html=fixture(name), title="DeepSeek Chat", url=url)
+
+
+def inline_snapshot(html: str, url: str = "https://chat.deepseek.com/a/chat/synthetic") -> PageSnapshot:
+    return PageSnapshot(html=html, title="DeepSeek Chat", url=url)
 
 
 class DeepSeekWebAdvisorTests(unittest.TestCase):
@@ -285,6 +388,60 @@ class DeepSeekWebAdvisorTests(unittest.TestCase):
         self.assertEqual(observation.state, AdapterState.LOGIN_REQUIRED)
         self.assertIn("password", observation.diagnostics.failed_selector or "")
 
+    def test_env_login_uses_explicit_selectors_and_stops_for_security_verification(self) -> None:
+        login_page = inline_snapshot(
+            """
+            <main data-testid="login-form">
+              <input type="email" aria-label="Email">
+              <input type="password" aria-label="Password">
+              <button type="submit">Sign in</button>
+            </main>
+            """,
+            url="https://chat.deepseek.com/signin",
+        )
+        adapter = EnvLoginAdapter(login_page)
+        old_email = os.environ.get("CATDESK_ADVISOR_DEEPSEEK_EMAIL")
+        old_password = os.environ.get("CATDESK_ADVISOR_DEEPSEEK_PASSWORD")
+        os.environ["CATDESK_ADVISOR_DEEPSEEK_EMAIL"] = "synthetic@example.invalid"
+        os.environ["CATDESK_ADVISOR_DEEPSEEK_PASSWORD"] = "synthetic-password"
+        try:
+            self.assertTrue(adapter._attempt_env_login())
+        finally:
+            if old_email is None:
+                os.environ.pop("CATDESK_ADVISOR_DEEPSEEK_EMAIL", None)
+            else:
+                os.environ["CATDESK_ADVISOR_DEEPSEEK_EMAIL"] = old_email
+            if old_password is None:
+                os.environ.pop("CATDESK_ADVISOR_DEEPSEEK_PASSWORD", None)
+            else:
+                os.environ["CATDESK_ADVISOR_DEEPSEEK_PASSWORD"] = old_password
+
+        self.assertEqual(
+            adapter.typed_fields,
+            [
+                ("input[type=\"email\"]", "synthetic@example.invalid"),
+                ("input[type=\"password\"]", "synthetic-password"),
+            ],
+        )
+        self.assertEqual(adapter.clicked_selectors, ["button[type=\"submit\"]"])
+
+        os.environ["CATDESK_ADVISOR_DEEPSEEK_EMAIL"] = "synthetic@example.invalid"
+        os.environ["CATDESK_ADVISOR_DEEPSEEK_PASSWORD"] = "synthetic-password"
+        try:
+            security_adapter = EnvLoginAdapter(snapshot("security_challenge.html"))
+            self.assertFalse(security_adapter._attempt_env_login())
+            self.assertEqual(security_adapter.typed_fields, [])
+            self.assertEqual(security_adapter.state, AdapterState.TAKEOVER_REQUIRED)
+        finally:
+            if old_email is None:
+                os.environ.pop("CATDESK_ADVISOR_DEEPSEEK_EMAIL", None)
+            else:
+                os.environ["CATDESK_ADVISOR_DEEPSEEK_EMAIL"] = old_email
+            if old_password is None:
+                os.environ.pop("CATDESK_ADVISOR_DEEPSEEK_PASSWORD", None)
+            else:
+                os.environ["CATDESK_ADVISOR_DEEPSEEK_PASSWORD"] = old_password
+
     def test_rate_limit_fixture(self) -> None:
         detector = CompletionDetector(selectors())
         snapshot = PageSnapshot(
@@ -301,6 +458,48 @@ class DeepSeekWebAdvisorTests(unittest.TestCase):
         )
 
         self.assertEqual(observation.state, AdapterState.RATE_LIMITED)
+
+    def test_rate_limit_requires_visible_provider_selector(self) -> None:
+        detector = CompletionDetector(selectors())
+        snapshot = inline_snapshot(
+            """
+            <main>
+              <section data-ds-role="assistant-response">
+                The words rate limit are only ordinary text. Copy
+              </section>
+              <button aria-label="Send">Send</button>
+            </main>
+            """
+        )
+
+        observation = detector.observe(
+            snapshot,
+            first_seen_at=1.0,
+            last_text_change_at=1.0,
+            now=2.0,
+        )
+
+        self.assertEqual(observation.state, AdapterState.COMPLETED)
+
+    def test_hidden_send_control_does_not_complete(self) -> None:
+        detector = CompletionDetector(selectors())
+        snapshot = inline_snapshot(
+            """
+            <main>
+              <section data-ds-role="assistant-response">new advice Copy</section>
+              <button aria-label="Send" hidden>Send</button>
+            </main>
+            """
+        )
+
+        observation = detector.observe(
+            snapshot,
+            first_seen_at=1.0,
+            last_text_change_at=1.0,
+            now=2.0,
+        )
+
+        self.assertEqual(observation.state, AdapterState.WAITING_FOR_RESPONSE)
 
     def test_timeout_fixture_times_out_without_completion(self) -> None:
         config = dataclasses.replace(selectors(), timeout_seconds=5.0)
@@ -368,7 +567,7 @@ class DeepSeekWebAdvisorTests(unittest.TestCase):
             self.assertFalse(prohibited["ok"])
             self.assertIn("PROHIBITED_AUTHORITY", prohibited["error"])
 
-    def test_jsonl_protocol_returns_unavailable_advice_without_browser_tools(self) -> None:
+    def test_jsonl_protocol_rejects_advice_without_ready_browser(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             adapter = DeepSeekWebAdvisorAdapter(selectors(), Path(temp), headed=True)
             protocol = JsonLinesAdvisorProtocol(adapter, "secret-token")
@@ -388,11 +587,9 @@ class DeepSeekWebAdvisorTests(unittest.TestCase):
             lines = [json.loads(line) for line in output_stream.getvalue().splitlines()]
             response = lines[0]
 
-            self.assertTrue(response["ok"])
-            self.assertTrue(response["accepted"])
-            self.assertEqual(response["request_id"], "advice-42")
-            self.assertEqual(lines[1]["event"], "advice_completed")
-            self.assertEqual(lines[1]["response"]["status"], "UNAVAILABLE")
+            self.assertFalse(response["ok"])
+            self.assertEqual(response["error"], "ADVISOR_NOT_READY:STOPPED")
+            self.assertEqual(len(lines), 1)
             self.assertNotIn("tool_definitions", json.dumps(lines))
 
     def test_request_validation_rejects_missing_schema_and_extra_instruction(self) -> None:
@@ -446,6 +643,20 @@ class DeepSeekWebAdvisorTests(unittest.TestCase):
         ready = OfflineAdapter([snapshot("ready_prompt.html")])
         self.assertEqual(ready.refresh_state(), AdapterState.READY)
 
+        empty_prompt_disabled_send = OfflineAdapter(
+            [
+                inline_snapshot(
+                    """
+                    <main>
+                      <textarea aria-label="Message DeepSeek"></textarea>
+                      <button aria-label="Send" disabled>Send</button>
+                    </main>
+                    """
+                )
+            ]
+        )
+        self.assertEqual(empty_prompt_disabled_send.refresh_state(), AdapterState.READY)
+
         wrong_origin = OfflineAdapter(
             [snapshot("ready_prompt.html", url="https://example.invalid/chat")]
         )
@@ -459,6 +670,23 @@ class DeepSeekWebAdvisorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             adapter = DeepSeekWebAdvisorAdapter(bad_selectors, Path(temp), headed=True)
             self.assertEqual(adapter.start(), AdapterState.DEGRADED)
+
+    def test_chat_selection_uses_exact_configured_chat_name(self) -> None:
+        page = snapshot("ready_prompt.html")
+        target = FakeElement("CatDesk advisor smoke")
+        other = FakeElement("Other chat")
+        adapter = ChatAdapter(
+            page,
+            {
+                "button[data-testid=\"chat-menu\"]": [FakeElement("menu")],
+                "[data-testid=\"chat-history-item\"]": [other, target],
+            },
+        )
+
+        self.assertTrue(adapter._ensure_chat_selected("CatDesk advisor smoke"))
+
+        self.assertFalse(other.clicked)
+        self.assertTrue(target.clicked)
 
     def test_advisory_turn_submits_once_and_extracts_newest_response(self) -> None:
         adapter = OfflineAdapter(
@@ -487,6 +715,29 @@ class DeepSeekWebAdvisorTests(unittest.TestCase):
                 snapshot("baseline_before.html"),
                 snapshot("baseline_before.html"),
                 snapshot("empty_completed.html"),
+            ]
+        )
+
+        response = adapter.advise(valid_request())
+
+        self.assertEqual(response.status, "FAILED")
+
+    def test_advisory_turn_rejects_stale_baseline_response(self) -> None:
+        stale = inline_snapshot(
+            """
+            <main>
+              <section data-ds-role="assistant-response">old response should stay out</section>
+              <section data-ds-role="assistant-response">old response should stay out</section>
+              <textarea aria-label="Message DeepSeek"></textarea>
+              <button aria-label="Send">Send</button>
+            </main>
+            """
+        )
+        adapter = OfflineAdapter(
+            [
+                snapshot("baseline_before.html"),
+                snapshot("baseline_before.html"),
+                stale,
             ]
         )
 
@@ -535,12 +786,81 @@ class DeepSeekWebAdvisorTests(unittest.TestCase):
         clear_index = fake.calls.index("clear:textarea")
         press_index = next(index for index, call in enumerate(fake.calls) if call.startswith("press_keys"))
         self.assertLess(clear_index, press_index)
-        self.assertTrue(any(call.startswith("press_keys:textarea:synthet") for call in fake.calls))
+        typed = "".join(
+            call.split(":", 2)[2]
+            for call in fake.calls
+            if call.startswith("press_keys:textarea:")
+        )
+        self.assertEqual(typed, "synthetic prompt")
 
         retained = PromptFakeSb(retained_value="retained draft")
         adapter._sb = retained
         with self.assertRaises(RuntimeError):
             adapter._type_prompt("textarea", "synthetic prompt")
+
+    def test_cookie_banner_prefers_exact_reject_selector_on_trusted_origin(self) -> None:
+        page = inline_snapshot(
+            """
+            <main>
+              <div id="onetrust-banner-sdk">
+                <button id="onetrust-reject-all-handler">Reject</button>
+                <button id="onetrust-accept-btn-handler">Accept</button>
+              </div>
+            </main>
+            """
+        )
+        adapter = CookieAdapter(page)
+
+        self.assertTrue(adapter._handle_cookie_banner(page))
+
+        self.assertEqual(adapter.clicked_selectors, ["#onetrust-reject-all-handler"])
+
+    def test_cookie_banner_does_not_click_on_untrusted_origin(self) -> None:
+        page = inline_snapshot(
+            """
+            <main>
+              <div id="onetrust-banner-sdk">
+                <button id="onetrust-reject-all-handler">Reject</button>
+              </div>
+            </main>
+            """,
+            url="https://example.invalid",
+        )
+        adapter = CookieAdapter(page)
+
+        self.assertFalse(adapter._handle_cookie_banner(page))
+
+        self.assertEqual(adapter.clicked_selectors, [])
+
+    def test_paced_typing_uses_deterministic_delays_and_checks_cancellation(self) -> None:
+        adapter = PacedTypingAdapter()
+
+        adapter._type_text_paced("textarea", "ab\nc")
+
+        self.assertEqual(len(adapter.sleeps), 4)
+        self.assertEqual(adapter.sleeps[2], selectors().typing_newline_pause_seconds)
+        self.assertTrue(
+            all(
+                selectors().typing_min_interval_seconds <= delay <= selectors().typing_max_interval_seconds
+                for index, delay in enumerate(adapter.sleeps)
+                if index != 2
+            )
+        )
+
+        adapter.cancel_requested.set()
+        before = len(adapter.sleeps)
+        adapter._type_text_paced("textarea", "will-not-type")
+        self.assertEqual(len(adapter.sleeps), before)
+
+    def test_paced_typing_enforces_total_timeout(self) -> None:
+        config = dataclasses.replace(selectors(), typing_timeout_seconds=0.015)
+        adapter = DeepSeekWebAdvisorAdapter(config, Path("timeout-profile"), headed=True)
+        adapter._sb = PromptFakeSb(retained_value="")
+        adapter._sleep = lambda seconds: setattr(adapter, "_forced_time", getattr(adapter, "_forced_time", 0.0) + seconds)  # type: ignore[method-assign]
+        adapter._now = lambda: getattr(adapter, "_forced_time", 0.0)  # type: ignore[method-assign]
+
+        with self.assertRaises(TimeoutError):
+            adapter._type_text_paced("textarea", "abcdef")
 
     def test_browser_exception_returns_bounded_failure(self) -> None:
         adapter = FailingBrowserAdapter(
@@ -589,22 +909,38 @@ class DeepSeekWebAdvisorTests(unittest.TestCase):
             events.append,
         )
         self.assertTrue(cancelled["ok"])
+        self.assertEqual(cancelled["request_id"], "advice-block")
+        self.assertEqual(cancelled["response"]["request_id"], "advice-block")
         protocol._join_active(1.0)
-        self.assertEqual(events[-1]["event"], "advice_completed")
-        self.assertEqual(events[-1]["request_id"], "advice-block")
-        self.assertEqual(events[-1]["response"]["status"], "CANCELLED")
+        self.assertEqual(events, [])
+
+    def test_protocol_rejects_non_ready_states_before_typing(self) -> None:
+        for state in [
+            AdapterState.RATE_LIMITED,
+            AdapterState.CANCELLED,
+            AdapterState.DEGRADED,
+            AdapterState.TAKEOVER_REQUIRED,
+            AdapterState.LOGIN_REQUIRED,
+        ]:
+            with self.subTest(state=state):
+                protocol = JsonLinesAdvisorProtocol(StateAdapter(state), "secret-token")
+                rejected = protocol.handle(
+                    {
+                        "command": "advise",
+                        "auth_token": "secret-token",
+                        "request": valid_request(requestId=f"advice-{state.value.lower()}"),
+                    }
+                )
+                self.assertFalse(rejected["ok"])
+                self.assertEqual(rejected["error"], f"ADVISOR_NOT_READY:{state.value}")
 
     def test_protocol_cancel_handles_stop_button_failure(self) -> None:
         adapter = FailingStopAdapter()
-        protocol = JsonLinesAdvisorProtocol(adapter, "secret-token")
 
-        cancelled = protocol.handle(
-            {"command": "cancel", "auth_token": "secret-token"},
-            None,
-        )
+        cancelled = adapter.cancel("advice-stop-failure")
 
-        self.assertTrue(cancelled["ok"])
-        self.assertEqual(cancelled["response"]["status"], "CANCELLED")
+        self.assertEqual(cancelled.status, "CANCELLED")
+        self.assertEqual(cancelled.request_id, "advice-stop-failure")
         self.assertEqual(adapter.state, AdapterState.CANCELLED)
 
     def test_protocol_shutdown_during_advice_cancels_and_joins(self) -> None:

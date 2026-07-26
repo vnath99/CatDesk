@@ -3,7 +3,8 @@
   "response_container_selectors": [
     "[data-testid=\"assistant-message\"]",
     "[data-ds-role=\"assistant-response\"]",
-    "article[data-role=\"assistant\"]"
+    "article[data-role=\"assistant\"]",
+    "deepseek:conversation-visible-blocks"
   ],
   "prompt_input_selectors": [
     "textarea",
@@ -11,7 +12,8 @@
   ],
   "send_button_selectors": [
     "button[aria-label=\"Send\"]",
-    "button[data-testid=\"send-button\"]"
+    "button[data-testid=\"send-button\"]",
+    "deepseek:composer-send"
   ],
   "stop_button_selectors": [
     "button[aria-label=\"Stop generating\"]",
@@ -21,23 +23,67 @@
     "input[type=\"password\"]",
     "[data-testid=\"login-form\"]"
   ],
+  "login_email_selectors": [
+    "input[type=\"email\"]",
+    "input[name=\"email\"]"
+  ],
+  "login_password_selectors": [
+    "input[type=\"password\"]",
+    "input[name=\"password\"]"
+  ],
+  "login_submit_selectors": [
+    "button[type=\"submit\"]",
+    "button[data-testid=\"login-submit\"]"
+  ],
   "takeover_required_selectors": [
     "[data-testid=\"captcha\"]",
     "[data-testid=\"turnstile\"]",
     "iframe[src*=\"captcha\"]",
     "iframe[src*=\"turnstile\"]"
   ],
-  "rate_limit_markers": [
-    "rate limit",
-    "too many requests",
-    "try again later"
+  "cookie_banner_selectors": [
+    "#onetrust-banner-sdk",
+    "[data-testid=\"cookie-banner\"]",
+    "[role=\"dialog\"][aria-label=\"Cookie consent\"]"
+  ],
+  "cookie_reject_selectors": [
+    "#onetrust-reject-all-handler",
+    "button[data-testid=\"cookie-reject\"]",
+    "button[aria-label=\"Reject non-essential cookies\"]"
+  ],
+  "cookie_accept_selectors": [
+    "#onetrust-accept-btn-handler",
+    "button[data-testid=\"cookie-accept\"]",
+    "button[aria-label=\"Accept cookies\"]"
+  ],
+  "rate_limit_selectors": [
+    "[data-testid=\"rate-limit-toast\"]",
+    "[data-testid=\"provider-error\"]",
+    "[role=\"alert\"][data-ds-error=\"rate-limit\"]"
   ],
   "completion_markers": [
     "regenerate",
     "copy",
     "share"
   ],
+  "chat_menu_button_selectors": [
+    "button[data-testid=\"chat-menu\"]",
+    "button[aria-label=\"Open chat menu\"]"
+  ],
+  "chat_item_selectors": [
+    "[data-testid=\"chat-history-item\"]",
+    "a[data-testid=\"chat-link\"]"
+  ],
+  "current_chat_title_selectors": [
+    "[data-testid=\"current-chat-title\"]",
+    "h1[data-testid=\"chat-title\"]"
+  ],
   "text_stability_seconds": 2.0,
+  "stable_sample_count": 3,
   "timeout_seconds": 120.0,
+  "typing_min_interval_seconds": 0.002,
+  "typing_max_interval_seconds": 0.008,
+  "typing_newline_pause_seconds": 0.04,
+  "typing_timeout_seconds": 90.0,
   "bounded_dom_evidence_bytes": 2048
 }

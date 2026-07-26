@@ -16,6 +16,7 @@ import enum
 import html.parser
 import json
 import os
+import random
 import re
 import sys
 import threading
@@ -34,6 +35,9 @@ TRUSTED_SCHEME = "https"
 TRUSTED_HOST = "chat.deepseek.com"
 TRUSTED_ORIGIN = f"{TRUSTED_SCHEME}://{TRUSTED_HOST}"
 REMOTE_DISCLOSURE_CLASSIFICATION = "REMOTE_ALLOWED"
+DEEPSEEK_COMPOSER_SEND_SELECTOR = "deepseek:composer-send"
+DEEPSEEK_COMPOSER_STOP_SELECTOR = "deepseek:composer-stop"
+DEEPSEEK_CONVERSATION_BLOCKS_SELECTOR = "deepseek:conversation-visible-blocks"
 
 
 class AdapterState(str, enum.Enum):
@@ -115,6 +119,98 @@ SECRET_PATTERNS = [
 ]
 
 
+DEEPSEEK_COMPOSER_ACTION_AVAILABLE_SCRIPT = r"""
+(() => {
+  const textarea = document.querySelector('textarea');
+  if (!textarea) return false;
+  const textareaRect = textarea.getBoundingClientRect();
+  const candidates = Array.from(document.querySelectorAll('button,[role="button"]'))
+    .filter((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      if (rect.width <= 0 || rect.height <= 0) return false;
+      if (style.visibility === 'hidden' || style.display === 'none') return false;
+      if (element.disabled || element.getAttribute('aria-disabled') === 'true') return false;
+      return rect.top >= textareaRect.top - 140
+        && rect.bottom <= textareaRect.bottom + 180
+        && rect.right >= textareaRect.left
+        && rect.left <= window.innerWidth - 24;
+    })
+    .sort((left, right) => {
+      const a = left.getBoundingClientRect();
+      const b = right.getBoundingClientRect();
+      return (a.top - b.top) || (a.left - b.left);
+    });
+  return candidates.length > 0;
+})()
+"""
+
+
+DEEPSEEK_COMPOSER_ACTION_CLICK_SCRIPT = r"""
+(() => {
+  const textarea = document.querySelector('textarea');
+  if (!textarea) return false;
+  const textareaRect = textarea.getBoundingClientRect();
+  const candidates = Array.from(document.querySelectorAll('button,[role="button"]'))
+    .filter((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      if (rect.width <= 0 || rect.height <= 0) return false;
+      if (style.visibility === 'hidden' || style.display === 'none') return false;
+      if (element.disabled || element.getAttribute('aria-disabled') === 'true') return false;
+      return rect.top >= textareaRect.top - 140
+        && rect.bottom <= textareaRect.bottom + 180
+        && rect.right >= textareaRect.left
+        && rect.left <= window.innerWidth - 24;
+    })
+    .sort((left, right) => {
+      const a = left.getBoundingClientRect();
+      const b = right.getBoundingClientRect();
+      return (a.top - b.top) || (a.left - b.left);
+    });
+  const target = candidates[candidates.length - 1];
+  if (!target) return false;
+  target.click();
+  return true;
+})()
+"""
+
+
+DEEPSEEK_VISIBLE_CONVERSATION_BLOCKS_SCRIPT = r"""
+(() => {
+  const textarea = document.querySelector('textarea');
+  if (!textarea) return [];
+  const textareaRect = textarea.getBoundingClientRect();
+  const candidates = Array.from(document.querySelectorAll('main article,main section,main div,main p,main pre'))
+    .filter((element) => {
+      if (element.contains(textarea)) return false;
+      const rect = element.getBoundingClientRect();
+      const style = window.getComputedStyle(element);
+      if (rect.width <= 0 || rect.height <= 0) return false;
+      if (style.visibility === 'hidden' || style.display === 'none') return false;
+      if (rect.bottom >= textareaRect.top - 8) return false;
+      const horizontalOverlap = Math.min(rect.right, textareaRect.right) - Math.max(rect.left, textareaRect.left);
+      if (horizontalOverlap <= Math.min(rect.width, textareaRect.width) * 0.20) return false;
+      const text = (element.innerText || '').replace(/\s+/g, ' ').trim();
+      return text.length >= 12 && text.length <= 6000;
+    })
+    .sort((left, right) => {
+      const a = left.getBoundingClientRect();
+      const b = right.getBoundingClientRect();
+      return (a.top - b.top) || (a.left - b.left);
+    });
+  const output = [];
+  for (const element of candidates) {
+    const text = (element.innerText || '').replace(/\s+/g, ' ').trim();
+    if (!text) continue;
+    if (output.some((existing) => existing === text || existing.includes(text))) continue;
+    output.push(text);
+  }
+  return output.slice(-20);
+})()
+"""
+
+
 @dataclasses.dataclass(frozen=True)
 class SelectorConfig:
     start_url: str
@@ -123,17 +219,47 @@ class SelectorConfig:
     send_button_selectors: list[str]
     stop_button_selectors: list[str]
     login_required_selectors: list[str]
+    login_email_selectors: list[str]
+    login_password_selectors: list[str]
+    login_submit_selectors: list[str]
     takeover_required_selectors: list[str]
-    rate_limit_markers: list[str]
+    cookie_banner_selectors: list[str]
+    cookie_reject_selectors: list[str]
+    cookie_accept_selectors: list[str]
+    rate_limit_selectors: list[str]
     completion_markers: list[str]
+    chat_menu_button_selectors: list[str]
+    chat_item_selectors: list[str]
+    current_chat_title_selectors: list[str]
     text_stability_seconds: float = 2.0
+    stable_sample_count: int = 3
     timeout_seconds: float = 120.0
+    typing_min_interval_seconds: float = 0.002
+    typing_max_interval_seconds: float = 0.008
+    typing_newline_pause_seconds: float = 0.04
+    typing_timeout_seconds: float = 90.0
     bounded_dom_evidence_bytes: int = 2048
 
     @classmethod
     def from_file(cls, path: Path) -> "SelectorConfig":
         with path.open("r", encoding="utf-8") as handle:
             value = json.load(handle)
+        value.setdefault("login_email_selectors", [])
+        value.setdefault("login_password_selectors", [])
+        value.setdefault("login_submit_selectors", [])
+        value.setdefault("cookie_banner_selectors", [])
+        value.setdefault("cookie_reject_selectors", [])
+        value.setdefault("cookie_accept_selectors", [])
+        value.setdefault("rate_limit_selectors", [])
+        value.setdefault("chat_menu_button_selectors", [])
+        value.setdefault("chat_item_selectors", [])
+        value.setdefault("current_chat_title_selectors", [])
+        value.setdefault("stable_sample_count", 3)
+        value.setdefault("typing_min_interval_seconds", 0.002)
+        value.setdefault("typing_max_interval_seconds", 0.008)
+        value.setdefault("typing_newline_pause_seconds", 0.04)
+        value.setdefault("typing_timeout_seconds", 90.0)
+        value.pop("rate_limit_markers", None)
         return cls(**value)
 
 
@@ -197,7 +323,10 @@ class ResponseTextHtml(html.parser.HTMLParser):
         if self._depth > 0:
             self._depth += 1
             return
-        if any(selector_matches(selector, tag.lower(), normalized_attrs) for selector in self.selectors):
+        if (
+            any(selector_matches(selector, tag.lower(), normalized_attrs) for selector in self.selectors)
+            and attrs_are_visible(normalized_attrs)
+        ):
             self._depth = 1
             self._parts = []
 
@@ -236,9 +365,29 @@ class PageSnapshot:
     def selector_count(self, selector: str) -> int:
         return sum(1 for tag, attrs in self.parsed.nodes if selector_matches(selector, tag, attrs))
 
+    def visible_selector_count(self, selector: str) -> int:
+        return sum(
+            1
+            for tag, attrs in self.parsed.nodes
+            if selector_matches(selector, tag, attrs) and attrs_are_visible(attrs)
+        )
+
+    def selector_is_visible(self, selector: str) -> bool:
+        return self.visible_selector_count(selector) > 0
+
+    def selector_is_enabled(self, selector: str) -> bool:
+        for tag, attrs in self.parsed.nodes:
+            if selector_matches(selector, tag, attrs) and attrs_are_visible(attrs):
+                if attrs.get("disabled") is not None:
+                    return False
+                if attrs.get("aria-disabled", "").lower() == "true":
+                    return False
+                return True
+        return False
+
     def any_selector(self, selectors: Iterable[str]) -> tuple[bool, str | None]:
         for selector in selectors:
-            if self.selector_count(selector) > 0:
+            if self.selector_is_visible(selector):
                 return True, selector
         return False, None
 
@@ -276,6 +425,8 @@ def selector_matches(selector: str, tag: str, attrs: dict[str, str]) -> bool:
     selector = selector.strip()
     if not selector:
         return False
+    if selector.startswith("deepseek:"):
+        return False
     tag_match = re.match(r"^([a-zA-Z][a-zA-Z0-9_-]*)", selector)
     wanted_tag = tag_match.group(1).lower() if tag_match else None
     if wanted_tag and wanted_tag != tag:
@@ -298,6 +449,15 @@ def selector_matches(selector: str, tag: str, attrs: dict[str, str]) -> bool:
     return wanted_tag == tag
 
 
+def attrs_are_visible(attrs: dict[str, str]) -> bool:
+    if "hidden" in attrs:
+        return False
+    if attrs.get("aria-hidden", "").lower() == "true":
+        return False
+    style = attrs.get("style", "").lower().replace(" ", "")
+    return "display:none" not in style and "visibility:hidden" not in style
+
+
 class CompletionDetector:
     def __init__(self, selectors: SelectorConfig) -> None:
         self.selectors = selectors
@@ -310,24 +470,20 @@ class CompletionDetector:
         last_text_change_at: float,
         now: float,
     ) -> CompletionObservation:
-        text_lower = snapshot.parsed.text.lower()
         takeover, takeover_selector = snapshot.any_selector(
             self.selectors.takeover_required_selectors
         )
         login_required, login_selector = snapshot.any_selector(
             self.selectors.login_required_selectors
         )
-        rate_limited = any(
-            marker.lower() in text_lower for marker in self.selectors.rate_limit_markers
-        )
-        response_count = sum(
-            snapshot.selector_count(selector)
-            for selector in self.selectors.response_container_selectors
-        )
+        rate_limited, rate_limit_selector = snapshot.any_selector(self.selectors.rate_limit_selectors)
+        response_texts = snapshot.response_texts(self.selectors.response_container_selectors)
+        newest_text = response_texts[-1] if response_texts else ""
+        response_count = len(response_texts)
         stop_visible, stop_selector = snapshot.any_selector(self.selectors.stop_button_selectors)
         send_visible, send_selector = snapshot.any_selector(self.selectors.send_button_selectors)
         marker_seen = any(
-            marker.lower() in text_lower for marker in self.selectors.completion_markers
+            marker.lower() in newest_text.lower() for marker in self.selectors.completion_markers
         )
         stable_for = max(0.0, now - last_text_change_at)
         elapsed = max(0.0, now - first_seen_at)
@@ -341,6 +497,7 @@ class CompletionDetector:
             failed_selector = login_selector
         elif rate_limited:
             state = AdapterState.RATE_LIMITED
+            failed_selector = rate_limit_selector
         elif elapsed >= self.selectors.timeout_seconds:
             state = AdapterState.TIMED_OUT
         elif (
@@ -572,10 +729,16 @@ class DeepSeekWebAdvisorAdapter:
         profile_dir: Path,
         *,
         headed: bool = True,
+        allow_env_login: bool = False,
+        chat_name: str | None = None,
+        rng: random.Random | None = None,
     ) -> None:
         self.selectors = selectors
         self.profile_dir = profile_dir
         self.headed = headed
+        self.allow_env_login = allow_env_login
+        self.chat_name = chat_name.strip() if chat_name else None
+        self.rng = rng or random.Random()
         self.state = AdapterState.STOPPED
         self._sb_context: Any = None
         self._sb: Any = None
@@ -599,6 +762,7 @@ class DeepSeekWebAdvisorAdapter:
                 )
                 self._sb = self._sb_context.__enter__()
                 self._sb.activate_cdp_mode(self.selectors.start_url)
+            self._handle_cookie_banner()
             return self.refresh_state()
         except Exception as exc:
             sys.stderr.write(f"DeepSeek advisor startup failed: {type(exc).__name__}\n")
@@ -635,16 +799,42 @@ class DeepSeekWebAdvisorAdapter:
         if snapshot.origin != self.expected_origin:
             self.state = AdapterState.DEGRADED
             return self.state
+        if self._handle_cookie_banner(snapshot):
+            snapshot = self._snapshot()
         takeover, _selector = snapshot.any_selector(self.selectors.takeover_required_selectors)
         if takeover:
             self.state = AdapterState.TAKEOVER_REQUIRED
             return self.state
         login_required, _selector = snapshot.any_selector(self.selectors.login_required_selectors)
         if login_required:
+            if self.allow_env_login and self._attempt_env_login():
+                snapshot = self._snapshot()
+                login_required, _selector = snapshot.any_selector(
+                    self.selectors.login_required_selectors
+                )
+                takeover, _selector = snapshot.any_selector(
+                    self.selectors.takeover_required_selectors
+                )
+                if takeover:
+                    self.state = AdapterState.TAKEOVER_REQUIRED
+                    return self.state
+                if not login_required:
+                    return self.refresh_state()
             self.state = AdapterState.LOGIN_REQUIRED
             return self.state
-        prompt_ready, _selector = snapshot.any_selector(self.selectors.prompt_input_selectors)
-        if prompt_ready:
+        rate_limited, _selector = snapshot.any_selector(self.selectors.rate_limit_selectors)
+        if rate_limited:
+            self.state = AdapterState.RATE_LIMITED
+            return self.state
+        stop_visible = self._any_visible(snapshot, self.selectors.stop_button_selectors)
+        prompt_ready, _selector = self._any_visible_selector(
+            snapshot,
+            self.selectors.prompt_input_selectors,
+        )
+        if prompt_ready and not stop_visible:
+            if self.chat_name and not self._ensure_chat_selected(self.chat_name):
+                self.state = AdapterState.DEGRADED
+                return self.state
             self.state = AdapterState.READY
             return self.state
         self.state = AdapterState.DEGRADED
@@ -674,9 +864,12 @@ class DeepSeekWebAdvisorAdapter:
                 return self.advice_unavailable(validated.request_id)
 
             prompt = build_advisory_prompt(validated)
-            baseline_texts = snapshot.response_texts(self.selectors.response_container_selectors)
+            baseline_texts = self._visible_response_texts(snapshot)
             baseline_count = len(baseline_texts)
-            prompt_selector = self._find_prompt_selector(snapshot)
+            prompt_selector = self._first_enabled_visible_selector(
+                snapshot,
+                self.selectors.prompt_input_selectors,
+            )
             if prompt_selector is None:
                 self.state = AdapterState.DEGRADED
                 return self.advice_unavailable(validated.request_id)
@@ -684,23 +877,32 @@ class DeepSeekWebAdvisorAdapter:
             self.cancel_requested.clear()
             self.state = AdapterState.SENDING
             self._type_prompt(prompt_selector, prompt)
-            if not self._click_first(self.selectors.send_button_selectors):
+            if self.cancel_requested.is_set():
+                self.state = AdapterState.CANCELLED
+                return normalize_advice_response(
+                    validated,
+                    self.advisor_id,
+                    AdvisorStatus.CANCELLED,
+                    "DeepSeek advisory generation was cancelled.",
+                    confidence="LOW",
+                )
+            if not self._click_first_enabled(self.selectors.send_button_selectors):
                 self._press_enter(prompt_selector)
             self.state = AdapterState.WAITING_FOR_RESPONSE
-            return self._wait_for_response(validated, baseline_count)
+            return self._wait_for_response(validated, baseline_texts)
         except Exception as exc:
             sys.stderr.write(f"DeepSeek advisor operation failed: {type(exc).__name__}\n")
             self.state = AdapterState.DEGRADED
             return self.advice_failure(validated.request_id)
 
-    def cancel(self) -> AdviceResponseV1:
+    def cancel(self, request_id: str | None = None) -> AdviceResponseV1:
         self.cancel_requested.set()
         if self.state in {AdapterState.SENDING, AdapterState.WAITING_FOR_RESPONSE}:
             self._try_click_stop()
         self.state = AdapterState.CANCELLED
         return AdviceResponseV1(
             schema_version=SCHEMA_VERSION,
-            request_id="cancel",
+            request_id=request_id or "cancel",
             advisor_id=self.advisor_id,
             status=AdvisorStatus.CANCELLED.value,
             diagnosis="DeepSeek advisory generation was cancelled.",
@@ -714,11 +916,12 @@ class DeepSeekWebAdvisorAdapter:
     def _wait_for_response(
         self,
         request: ValidatedAdviceRequest,
-        baseline_count: int,
+        baseline_texts: list[str],
     ) -> AdviceResponseV1:
         started_at = self._now()
         last_text = ""
         last_text_change_at = started_at
+        stable_samples = 0
         while self._now() - started_at <= self.selectors.timeout_seconds:
             if self.cancel_requested.is_set():
                 self._try_click_stop()
@@ -742,33 +945,44 @@ class DeepSeekWebAdvisorAdapter:
             if login_required:
                 self.state = AdapterState.LOGIN_REQUIRED
                 return self.advice_unavailable(request.request_id)
-            page_text = snapshot.parsed.text.lower()
-            if any(marker.lower() in page_text for marker in self.selectors.rate_limit_markers):
+            rate_limited, _selector = snapshot.any_selector(self.selectors.rate_limit_selectors)
+            if rate_limited:
                 self.state = AdapterState.RATE_LIMITED
                 return self.advice_unavailable(request.request_id)
 
-            response_texts = snapshot.response_texts(self.selectors.response_container_selectors)
-            newest_text = response_texts[baseline_count] if len(response_texts) > baseline_count else ""
-            newest_text = normalize_plain_text(newest_text)
+            response_texts = self._visible_response_texts(snapshot)
+            newest_text = newest_new_response_text(response_texts, baseline_texts)
             if newest_text != last_text:
                 last_text = newest_text
                 last_text_change_at = self._now()
+                stable_samples = 0
+            elif newest_text:
+                stable_samples += 1
             stable_for = self._now() - last_text_change_at
             stop_visible = self._any_visible(snapshot, self.selectors.stop_button_selectors)
-            send_visible = self._any_visible(snapshot, self.selectors.send_button_selectors)
+            send_ready = self._first_enabled_visible_selector(
+                snapshot,
+                self.selectors.send_button_selectors,
+            ) is not None
+            if not send_ready and not self._any_visible(
+                snapshot,
+                self.selectors.send_button_selectors,
+            ):
+                send_ready = self._any_visible(snapshot, self.selectors.prompt_input_selectors)
             marker_seen = any(
-                marker.lower() in page_text for marker in self.selectors.completion_markers
+                marker.lower() in newest_text.lower() for marker in self.selectors.completion_markers
             )
 
-            if len(response_texts) > baseline_count and not newest_text and not stop_visible:
+            if len(response_texts) > len(baseline_texts) and not newest_text and not stop_visible:
                 self.state = AdapterState.FAILED
                 return self.advice_unavailable(request.request_id)
             if (
                 newest_text
                 and not stop_visible
-                and send_visible
+                and send_ready
                 and marker_seen
                 and stable_for >= self.selectors.text_stability_seconds
+                and stable_samples >= max(1, self.selectors.stable_sample_count)
             ):
                 self.state = AdapterState.COMPLETED
                 return normalize_advice_response(
@@ -802,7 +1016,7 @@ class DeepSeekWebAdvisorAdapter:
 
     def _find_prompt_selector(self, snapshot: PageSnapshot) -> str | None:
         for selector in self.selectors.prompt_input_selectors:
-            if snapshot.selector_count(selector) > 0:
+            if snapshot.selector_is_visible(selector):
                 return selector
         return None
 
@@ -816,10 +1030,26 @@ class DeepSeekWebAdvisorAdapter:
             existing = self._prompt_value(selector)
             if existing not in {None, ""}:
                 raise RuntimeError("prompt input retained text after clear")
-            if hasattr(self._sb, "press_keys"):
-                self._sb.press_keys(selector, prompt)
-            elif hasattr(self._sb, "type"):
-                self._sb.type(selector, prompt)
+        self._type_text_paced(selector, prompt)
+
+    def _type_text_paced(self, selector: str, text: str) -> None:
+        if self._sb is None:
+            raise RuntimeError("browser not started")
+        started_at = self._now()
+        minimum = max(0.0, self.selectors.typing_min_interval_seconds)
+        maximum = max(minimum, self.selectors.typing_max_interval_seconds)
+        for char in text:
+            if self.cancel_requested.is_set():
+                return
+            if self._now() - started_at > self.selectors.typing_timeout_seconds:
+                raise TimeoutError("paced typing timed out")
+            with contextlib.redirect_stdout(sys.stderr):
+                if hasattr(self._sb, "press_keys"):
+                    self._sb.press_keys(selector, char)
+                elif hasattr(self._sb, "type"):
+                    self._sb.type(selector, char)
+            delay = self.selectors.typing_newline_pause_seconds if char == "\n" else self.rng.uniform(minimum, maximum)
+            self._sleep(delay)
 
     def _clear_prompt(self, selector: str) -> None:
         if self._sb is None:
@@ -857,18 +1087,227 @@ class DeepSeekWebAdvisorAdapter:
                 self._sb.press_keys(selector, "\n")
 
     def _click_first(self, selectors: Iterable[str]) -> bool:
+        return self._click_first_enabled(selectors)
+
+    def _click_first_enabled(self, selectors: Iterable[str]) -> bool:
         if self._sb is None:
             return False
         snapshot = self._snapshot()
         for selector in selectors:
-            if snapshot.selector_count(selector) > 0 and hasattr(self._sb, "click"):
+            if selector == DEEPSEEK_COMPOSER_SEND_SELECTOR:
+                if self._click_deepseek_composer_action():
+                    return True
+                continue
+            if (
+                self._selector_is_visible(snapshot, selector)
+                and self._selector_is_enabled(snapshot, selector)
+                and hasattr(self._sb, "click")
+            ):
                 with contextlib.redirect_stdout(sys.stderr):
                     self._sb.click(selector)
                 return True
         return False
 
     def _any_visible(self, snapshot: PageSnapshot, selectors: Iterable[str]) -> bool:
-        return any(snapshot.selector_count(selector) > 0 for selector in selectors)
+        return any(self._selector_is_visible(snapshot, selector) for selector in selectors)
+
+    def _any_visible_selector(
+        self,
+        snapshot: PageSnapshot,
+        selectors: Iterable[str],
+    ) -> tuple[bool, str | None]:
+        for selector in selectors:
+            if self._selector_is_visible(snapshot, selector):
+                return True, selector
+        return False, None
+
+    def _first_enabled_visible_selector(
+        self,
+        snapshot: PageSnapshot,
+        selectors: Iterable[str],
+    ) -> str | None:
+        for selector in selectors:
+            if self._selector_is_visible(snapshot, selector) and self._selector_is_enabled(
+                snapshot,
+                selector,
+            ):
+                return selector
+        return None
+
+    def _selector_is_visible(self, snapshot: PageSnapshot, selector: str) -> bool:
+        if selector in {DEEPSEEK_COMPOSER_SEND_SELECTOR, DEEPSEEK_COMPOSER_STOP_SELECTOR}:
+            return self._deepseek_composer_action_available()
+        if self._sb is not None:
+            method = getattr(self._sb, "is_element_visible", None)
+            if callable(method):
+                with contextlib.suppress(Exception), contextlib.redirect_stdout(sys.stderr):
+                    return bool(method(selector))
+        return snapshot.selector_is_visible(selector)
+
+    def _selector_is_enabled(self, snapshot: PageSnapshot, selector: str) -> bool:
+        if selector in {DEEPSEEK_COMPOSER_SEND_SELECTOR, DEEPSEEK_COMPOSER_STOP_SELECTOR}:
+            return self._deepseek_composer_action_available()
+        if self._sb is not None:
+            method = getattr(self._sb, "is_element_enabled", None)
+            if callable(method):
+                with contextlib.suppress(Exception), contextlib.redirect_stdout(sys.stderr):
+                    return bool(method(selector))
+        return snapshot.selector_is_enabled(selector)
+
+    def _visible_response_texts(self, snapshot: PageSnapshot) -> list[str]:
+        if self._sb is not None:
+            texts: list[str] = []
+            for selector in self.selectors.response_container_selectors:
+                if selector == DEEPSEEK_CONVERSATION_BLOCKS_SELECTOR:
+                    texts.extend(self._deepseek_visible_conversation_blocks())
+                    continue
+                elements = self._find_elements(selector)
+                for element in elements:
+                    if self._element_is_displayed(element):
+                        text = normalize_plain_text(str(getattr(element, "text", "") or ""))
+                        if text:
+                            texts.append(text)
+            if texts:
+                return texts
+        return snapshot.response_texts(self.selectors.response_container_selectors)
+
+    def _find_elements(self, selector: str) -> list[Any]:
+        if self._sb is None:
+            return []
+        for method_name in ["find_elements", "find_visible_elements"]:
+            method = getattr(self._sb, method_name, None)
+            if callable(method):
+                with contextlib.suppress(Exception), contextlib.redirect_stdout(sys.stderr):
+                    result = method(selector)
+                    return list(result or [])
+        driver = getattr(self._sb, "driver", None)
+        method = getattr(driver, "find_elements", None)
+        if callable(method):
+            with contextlib.suppress(Exception):
+                return list(method("css selector", selector) or [])
+        return []
+
+    def _element_is_displayed(self, element: Any) -> bool:
+        method = getattr(element, "is_displayed", None)
+        if callable(method):
+            with contextlib.suppress(Exception):
+                return bool(method())
+        return True
+
+    def _execute_browser_script(self, script: str) -> Any:
+        if self._sb is None:
+            return None
+        cdp = getattr(self._sb, "cdp", None)
+        method = getattr(cdp, "evaluate", None)
+        if callable(method):
+            with contextlib.suppress(Exception), contextlib.redirect_stdout(sys.stderr):
+                return method(script)
+        method = getattr(self._sb, "execute_script", None)
+        if callable(method):
+            with contextlib.suppress(Exception), contextlib.redirect_stdout(sys.stderr):
+                return method(script)
+        driver = getattr(self._sb, "driver", None)
+        method = getattr(driver, "execute_script", None)
+        if callable(method):
+            with contextlib.suppress(Exception):
+                return method(script)
+        return None
+
+    def _deepseek_composer_action_available(self) -> bool:
+        return bool(self._execute_browser_script(DEEPSEEK_COMPOSER_ACTION_AVAILABLE_SCRIPT))
+
+    def _click_deepseek_composer_action(self) -> bool:
+        return bool(self._execute_browser_script(DEEPSEEK_COMPOSER_ACTION_CLICK_SCRIPT))
+
+    def _deepseek_visible_conversation_blocks(self) -> list[str]:
+        value = self._execute_browser_script(DEEPSEEK_VISIBLE_CONVERSATION_BLOCKS_SCRIPT)
+        if not isinstance(value, list):
+            return []
+        return [
+            normalize_plain_text(str(item))
+            for item in value
+            if normalize_plain_text(str(item))
+        ]
+
+    def _handle_cookie_banner(self, snapshot: PageSnapshot | None = None) -> bool:
+        snapshot = snapshot or self._snapshot()
+        if snapshot.origin != self.expected_origin:
+            return False
+        banner_visible = self._any_visible(snapshot, self.selectors.cookie_banner_selectors)
+        if not banner_visible:
+            return False
+        if self._click_first_enabled(self.selectors.cookie_reject_selectors):
+            return True
+        return self._click_first_enabled(self.selectors.cookie_accept_selectors)
+
+    def _attempt_env_login(self) -> bool:
+        email = os.environ.get("CATDESK_ADVISOR_DEEPSEEK_EMAIL", "")
+        password = os.environ.get("CATDESK_ADVISOR_DEEPSEEK_PASSWORD", "")
+        if not email or not password:
+            return False
+        snapshot = self._snapshot()
+        if snapshot.origin != self.expected_origin:
+            return False
+        if snapshot.any_selector(self.selectors.takeover_required_selectors)[0]:
+            self.state = AdapterState.TAKEOVER_REQUIRED
+            return False
+        email_selector = self._first_enabled_visible_selector(
+            snapshot,
+            self.selectors.login_email_selectors,
+        )
+        password_selector = self._first_enabled_visible_selector(
+            snapshot,
+            self.selectors.login_password_selectors,
+        )
+        if email_selector is None or password_selector is None:
+            return False
+        self._type_login_field(email_selector, email)
+        self._type_login_field(password_selector, password)
+        return self._click_first_enabled(self.selectors.login_submit_selectors)
+
+    def _type_login_field(self, selector: str, value: str) -> None:
+        if self._sb is None:
+            return
+        with contextlib.redirect_stdout(sys.stderr):
+            if hasattr(self._sb, "click"):
+                self._sb.click(selector)
+            self._clear_prompt(selector)
+        self._type_text_paced(selector, value)
+
+    def _ensure_chat_selected(self, chat_name: str) -> bool:
+        snapshot = self._snapshot()
+        if snapshot.origin != self.expected_origin:
+            return False
+        if self._visible_text_exact(self.selectors.current_chat_title_selectors, chat_name):
+            return True
+        if not self._click_first_enabled(self.selectors.chat_menu_button_selectors):
+            return False
+        return self._click_exact_text(self.selectors.chat_item_selectors, chat_name)
+
+    def _visible_text_exact(self, selectors: Iterable[str], expected: str) -> bool:
+        expected_normalized = normalize_plain_text(expected)
+        for selector in selectors:
+            for element in self._find_elements(selector):
+                if self._element_is_displayed(element):
+                    text = normalize_plain_text(str(getattr(element, "text", "") or ""))
+                    if text == expected_normalized:
+                        return True
+        return False
+
+    def _click_exact_text(self, selectors: Iterable[str], expected: str) -> bool:
+        expected_normalized = normalize_plain_text(expected)
+        if self._sb is None:
+            return False
+        for selector in selectors:
+            for element in self._find_elements(selector):
+                if not self._element_is_displayed(element):
+                    continue
+                text = normalize_plain_text(str(getattr(element, "text", "") or ""))
+                if text == expected_normalized:
+                    with contextlib.redirect_stdout(sys.stderr):
+                        element.click()
+                    return True
+        return False
 
     def _now(self) -> float:
         return time.monotonic()
@@ -915,6 +1354,7 @@ class JsonLinesAdvisorProtocol:
         self._lock = threading.Lock()
         self._active_thread: threading.Thread | None = None
         self._active_request_id: str | None = None
+        self._cancelled_request_ids: set[str] = set()
 
     def handle(
         self,
@@ -945,9 +1385,12 @@ class JsonLinesAdvisorProtocol:
         if command == "start":
             return {"ok": True, "state": self.adapter.start().value}
         if command == "cancel":
-            response = self.adapter.cancel()
             with self._lock:
                 request_id = self._active_request_id
+                if request_id is None or not self._thread_is_active_locked():
+                    return {"ok": False, "error": "NO_ACTIVE_ADVICE"}
+                self._cancelled_request_ids.add(request_id)
+            response = self.adapter.cancel(request_id)
             return {
                 "ok": True,
                 "state": self.adapter.state.value,
@@ -955,7 +1398,11 @@ class JsonLinesAdvisorProtocol:
                 "response": response.to_dict(),
             }
         if command == "shutdown":
-            response = self.adapter.cancel()
+            with self._lock:
+                request_id = self._active_request_id
+                if request_id is not None:
+                    self._cancelled_request_ids.add(request_id)
+            response = self.adapter.cancel(request_id)
             self._join_active(timeout=5.0)
             self.adapter.stop()
             return {"ok": True, "state": self.adapter.state.value, "response": response.to_dict()}
@@ -972,7 +1419,15 @@ class JsonLinesAdvisorProtocol:
                         "error": "ADVICE_ALREADY_ACTIVE",
                         "request_id": self._active_request_id,
                     }
+                state = self.adapter.refresh_state()
+                if state != AdapterState.READY:
+                    return {
+                        "ok": False,
+                        "error": f"ADVISOR_NOT_READY:{state.value}",
+                        "state": state.value,
+                    }
                 self._active_request_id = validated.request_id
+                self._cancelled_request_ids.discard(validated.request_id)
                 thread = threading.Thread(
                     target=self._run_advice_worker,
                     args=(request, validated.request_id, emit),
@@ -1021,8 +1476,12 @@ class JsonLinesAdvisorProtocol:
             }
         finally:
             with self._lock:
+                was_cancelled = request_id in self._cancelled_request_ids
+                self._cancelled_request_ids.discard(request_id)
                 self._active_request_id = None
                 self._active_thread = None
+        if was_cancelled:
+            return
         if emit is not None:
             emit(event)
 
@@ -1077,6 +1536,22 @@ def normalize_plain_text(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
+def newest_new_response_text(
+    response_texts: list[str],
+    baseline_texts: list[str],
+) -> str:
+    normalized_baseline = [normalize_plain_text(text) for text in baseline_texts]
+    normalized_responses = [normalize_plain_text(text) for text in response_texts]
+    if len(normalized_responses) <= len(normalized_baseline):
+        return ""
+    newest = normalized_responses[-1]
+    if not newest:
+        return ""
+    if newest in normalized_baseline:
+        return ""
+    return newest
+
+
 def redact(value: str) -> str:
     redacted = value
     for pattern in SECRET_PATTERNS:
@@ -1110,6 +1585,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Development only; manual login and security flows must not run headlessly.",
     )
+    parser.add_argument(
+        "--allow-env-login",
+        action="store_true",
+        help="Use CATDESK_ADVISOR_DEEPSEEK_EMAIL/PASSWORD for explicit opt-in login.",
+    )
+    parser.add_argument(
+        "--chat-name",
+        default=None,
+        help="Optional exact chat name to select through configured chat selectors.",
+    )
     args = parser.parse_args(argv)
 
     auth_token = os.environ.get("CATDESK_ADVISOR_AUTH_TOKEN", "")
@@ -1121,6 +1606,8 @@ def main(argv: list[str] | None = None) -> int:
         selectors,
         args.profile_dir,
         headed=not args.unsafe_headless_dev,
+        allow_env_login=args.allow_env_login,
+        chat_name=args.chat_name,
     )
     JsonLinesAdvisorProtocol(adapter, auth_token).serve(sys.stdin, sys.stdout)
     return 0
