@@ -1,0 +1,5 @@
+# Experimental standalone DeepSeek web advisor only.
+# Do not install into the released CatDesk Rust/runtime environment.
+# Source: PyPI package `seleniumbase`; current compatible CDP release reviewed
+# from SeleniumBase GitHub/PyPI metadata on 2026-07-25.
+seleniumbase==4.51.6
