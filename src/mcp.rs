@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
+use std::env;
 use std::fs::{self, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::Write;
@@ -15,12 +16,16 @@ use tokio::sync::Mutex;
 
 use crate::app_info::CATDESK_VERSION;
 use crate::command;
+use crate::delegated::advisor::AdviceDisclosureClassification;
 use crate::delegated::contracts::{
-    ApprovalId, ApprovalRequirementKind, ExecutionContractV1, PatchId, RunId, RunState,
-    validate_contract,
+    AdvisorDisclosureClassificationV1, ApprovalId, ApprovalRequirementKind, ExecutionContractV1,
+    PatchId, RunId, RunState, validate_contract,
 };
 use crate::delegated::events::EventCursor;
-use crate::delegated::integrated::{IntegratedDelegatedService, IntegratedRunConfigV1};
+use crate::delegated::integrated::{
+    IntegratedAdvisorConfigV1, IntegratedAdvisorLocalRuntimeConfigV1, IntegratedDelegatedService,
+    IntegratedRunConfigV1,
+};
 use crate::delegated::journal::{DelegatedJournal, ToolCallStatus};
 use crate::delegated::patch_engine::compare_patches;
 use crate::delegated::supervisor::SUPERVISOR_TOOL_NAMES;
@@ -2001,6 +2006,7 @@ fn execution_contract_input_schema() -> Value {
             "maxToolCalls": { "type": "integer", "minimum": 1 },
             "maxElapsedSeconds": { "type": "integer", "minimum": 1 },
             "providerPolicy": provider_policy_input_schema(),
+            "advisorPolicy": advisor_policy_input_schema(),
             "escalationConditions": {
                 "type": "array",
                 "items": { "type": "string", "minLength": 1 }
@@ -2036,6 +2042,35 @@ fn execution_contract_input_schema() -> Value {
             "expectedArtifacts",
             "verificationProfile"
         ]
+    })
+}
+
+fn advisor_policy_input_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "enabled": { "type": "boolean", "default": false },
+            "advisorId": { "type": "string", "const": "deepseek-web" },
+            "disclosureClassification": {
+                "type": "string",
+                "enum": ["LOCAL_ONLY", "REMOTE_ALLOWED"],
+                "default": "LOCAL_ONLY"
+            },
+            "maximumResponseLength": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 16384,
+                "default": 4096
+            },
+            "maximumConsultationsPerRun": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3,
+                "default": 1
+            },
+            "adviceRequired": { "type": "boolean", "default": false }
+        }
     })
 }
 
@@ -2659,7 +2694,106 @@ fn mcp_integrated_config(
         job_root: workspace_root.join(".catdesk/delegated/jobs"),
         ollama_base_url: ollama_base_url.into(),
         model_id: contract.provider_policy.primary_model_id.clone(),
+        advisor: mcp_advisor_config(contract, args)?,
     })
+}
+
+fn mcp_advisor_config(
+    contract: &ExecutionContractV1,
+    _args: &Value,
+) -> Result<Option<IntegratedAdvisorConfigV1>, String> {
+    let Some(policy) = &contract.advisor_policy else {
+        return Ok(None);
+    };
+    if !policy.enabled {
+        return Ok(None);
+    }
+    if policy.advisor_id != "deepseek-web" {
+        return Err("advisorPolicy.advisorId must be deepseek-web".into());
+    }
+    if policy.disclosure_classification != AdvisorDisclosureClassificationV1::RemoteAllowed {
+        return Err("enabled advisorPolicy requires REMOTE_ALLOWED".into());
+    }
+    Ok(Some(IntegratedAdvisorConfigV1 {
+        enabled: true,
+        advisor_id: policy.advisor_id.clone(),
+        disclosure_classification: AdviceDisclosureClassification::RemoteAllowed,
+        maximum_response_length: policy.maximum_response_length,
+        maximum_consultations_per_run: policy.maximum_consultations_per_run,
+        advice_required: policy.advice_required,
+        local_runtime: operator_advisor_local_runtime()?,
+    }))
+}
+
+fn operator_advisor_local_runtime() -> Result<Option<IntegratedAdvisorLocalRuntimeConfigV1>, String>
+{
+    let python = optional_env_path("CATDESK_DEEPSEEK_ADVISOR_PYTHON");
+    let script = optional_env_path("CATDESK_DEEPSEEK_ADVISOR_SCRIPT");
+    let profile = optional_env_path("CATDESK_DEEPSEEK_ADVISOR_PROFILE");
+    if python.is_none() && script.is_none() && profile.is_none() {
+        return Ok(None);
+    }
+    let python = python.ok_or_else(|| {
+        "CATDESK_DEEPSEEK_ADVISOR_PYTHON is required when DeepSeek advisor runtime is configured"
+            .to_string()
+    })?;
+    let script = script.ok_or_else(|| {
+        "CATDESK_DEEPSEEK_ADVISOR_SCRIPT is required when DeepSeek advisor runtime is configured"
+            .to_string()
+    })?;
+    let profile = profile.ok_or_else(|| {
+        "CATDESK_DEEPSEEK_ADVISOR_PROFILE is required when DeepSeek advisor runtime is configured"
+            .to_string()
+    })?;
+    let selectors = optional_env_path("CATDESK_DEEPSEEK_ADVISOR_SELECTORS")
+        .map(|path| canonical_existing_file("CATDESK_DEEPSEEK_ADVISOR_SELECTORS", path))
+        .transpose()?;
+    fs::create_dir_all(&profile).map_err(|error| {
+        format!("CATDESK_DEEPSEEK_ADVISOR_PROFILE could not be created or opened: {error}")
+    })?;
+    Ok(Some(IntegratedAdvisorLocalRuntimeConfigV1 {
+        python_executable: canonical_existing_file("CATDESK_DEEPSEEK_ADVISOR_PYTHON", python)?,
+        adapter_script: canonical_existing_file("CATDESK_DEEPSEEK_ADVISOR_SCRIPT", script)?,
+        profile_dir: profile
+            .canonicalize()
+            .map_err(|error| format!("CATDESK_DEEPSEEK_ADVISOR_PROFILE is invalid: {error}"))?,
+        selectors_path: selectors,
+        headed: env_bool("CATDESK_DEEPSEEK_ADVISOR_HEADED", true)?,
+        allow_env_login: env_bool("CATDESK_DEEPSEEK_ADVISOR_ALLOW_ENV_LOGIN", false)?,
+    }))
+}
+
+fn optional_env_path(name: &str) -> Option<PathBuf> {
+    env::var_os(name).and_then(|value| {
+        let text = value.to_string_lossy().trim().to_string();
+        if text.is_empty() {
+            None
+        } else {
+            Some(PathBuf::from(text))
+        }
+    })
+}
+
+fn canonical_existing_file(name: &str, path: PathBuf) -> Result<PathBuf, String> {
+    let canonical = path
+        .canonicalize()
+        .map_err(|error| format!("{name} must exist and be canonicalizable: {error}"))?;
+    if !canonical.is_file() {
+        return Err(format!("{name} must point to a file"));
+    }
+    Ok(canonical)
+}
+
+fn env_bool(name: &str, default: bool) -> Result<bool, String> {
+    let Some(value) = env::var(name).ok() else {
+        return Ok(default);
+    };
+    match value.trim().to_ascii_lowercase().as_str() {
+        "" => Ok(default),
+        "1" | "true" | "yes" | "on" => Ok(true),
+        "0" | "false" | "no" | "off" => Ok(false),
+        _ => Err(format!("{name} must be a boolean")),
+    }
 }
 
 fn registry_key(workspace_root: &Path, run_id: &RunId) -> String {
@@ -2740,6 +2874,11 @@ fn release_active_lock(lock_path: &Path) {
 }
 
 fn apply_worker_error_outcome(entry: &mut DelegatedRunEntry, run_id: &RunId, error: String) {
+    if run_is_already_needs_supervisor(&entry.config.journal_root, run_id) {
+        entry.status = RegistryRunStatus::NeedsSupervisor;
+        entry.last_error = Some(error);
+        return;
+    }
     match run_has_outcome_unknown(&entry.config.journal_root, run_id) {
         Ok(false) => {
             if entry.cancel_requested.load(Ordering::SeqCst) {
@@ -2760,6 +2899,13 @@ fn apply_worker_error_outcome(entry: &mut DelegatedRunEntry, run_id: &RunId, err
         }
     }
     entry.last_error = Some(error);
+}
+
+fn run_is_already_needs_supervisor(journal_root: &Path, run_id: &RunId) -> bool {
+    DelegatedJournal::open(journal_root)
+        .and_then(|journal| journal.load_run(run_id))
+        .map(|snapshot| snapshot.state == RunState::NeedsSupervisor)
+        .unwrap_or(false)
 }
 
 fn ensure_run_start_approval(
@@ -2827,6 +2973,7 @@ fn rehydrate_registry_entry(
         job_root: workspace_root.join(".catdesk/delegated/jobs"),
         ollama_base_url: "http://127.0.0.1:11434".into(),
         model_id: String::new(),
+        advisor: None,
     };
     let journal =
         DelegatedJournal::open(&config.journal_root).map_err(|error| format!("{error:?}"))?;
@@ -2849,6 +2996,26 @@ fn rehydrate_registry_entry(
         .map_err(|error| format!("{error:?}"))?;
     let mut config = config;
     config.model_id = contract.provider_policy.primary_model_id.clone();
+    config.advisor = if let Some(policy) = contract.advisor_policy.as_ref() {
+        if policy.enabled
+            && policy.advisor_id == "deepseek-web"
+            && policy.disclosure_classification == AdvisorDisclosureClassificationV1::RemoteAllowed
+        {
+            Some(IntegratedAdvisorConfigV1 {
+                enabled: true,
+                advisor_id: policy.advisor_id.clone(),
+                disclosure_classification: AdviceDisclosureClassification::RemoteAllowed,
+                maximum_response_length: policy.maximum_response_length,
+                maximum_consultations_per_run: policy.maximum_consultations_per_run,
+                advice_required: policy.advice_required,
+                local_runtime: operator_advisor_local_runtime()?,
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     let run_start_approval = journal
         .load_run_start_approval(run_id)
         .ok()
@@ -5551,7 +5718,10 @@ fn validate_generic_file_tool_target(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::OsString;
     use uuid::Uuid;
+
+    static ADVISOR_ENV_TEST_LOCK: OnceLock<std::sync::Mutex<()>> = OnceLock::new();
 
     fn resources_read_request(uri: &str) -> JsonRpcRequest {
         JsonRpcRequest {
@@ -5592,6 +5762,57 @@ mod tests {
         contract.approval_requirements = Vec::new();
         contract.provider_policy.primary_model_id = "qwen3.5:9b".into();
         contract
+    }
+
+    fn with_advisor_runtime_env<T>(
+        values: &[(&str, Option<OsString>)],
+        f: impl FnOnce() -> T,
+    ) -> T {
+        let _guard = ADVISOR_ENV_TEST_LOCK
+            .get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .expect("advisor env lock");
+        let keys = [
+            "CATDESK_DEEPSEEK_ADVISOR_PYTHON",
+            "CATDESK_DEEPSEEK_ADVISOR_SCRIPT",
+            "CATDESK_DEEPSEEK_ADVISOR_PROFILE",
+            "CATDESK_DEEPSEEK_ADVISOR_SELECTORS",
+            "CATDESK_DEEPSEEK_ADVISOR_HEADED",
+            "CATDESK_DEEPSEEK_ADVISOR_ALLOW_ENV_LOGIN",
+        ];
+        let previous = keys
+            .iter()
+            .map(|key| (*key, std::env::var_os(key)))
+            .collect::<Vec<_>>();
+        for key in keys {
+            // SAFETY: this test helper serializes all CatDesk advisor-env mutations
+            // and restores the previous process environment before returning.
+            unsafe {
+                std::env::remove_var(key);
+            }
+        }
+        for (key, value) in values {
+            if let Some(value) = value {
+                // SAFETY: this test helper holds ADVISOR_ENV_TEST_LOCK and restores
+                // the previous value before returning.
+                unsafe {
+                    std::env::set_var(key, value);
+                }
+            }
+        }
+        let result = f();
+        for (key, value) in previous {
+            // SAFETY: this test helper holds ADVISOR_ENV_TEST_LOCK and restores
+            // the previous value before returning.
+            unsafe {
+                if let Some(value) = value {
+                    std::env::set_var(key, value);
+                } else {
+                    std::env::remove_var(key);
+                }
+            }
+        }
+        result
     }
 
     fn result_text(response: &JsonRpcResponse) -> &str {
@@ -6043,6 +6264,14 @@ mod tests {
             .and_then(|provider| provider.get("properties"))
             .and_then(Value::as_object)
             .expect("provider policy properties");
+        assert!(contract_properties.contains_key("advisorPolicy"));
+        assert!(
+            create
+                .get("inputSchema")
+                .and_then(|schema| schema.get("properties"))
+                .and_then(|properties| properties.get("advisorLocalConfig"))
+                .is_none()
+        );
         assert_eq!(
             provider_policy
                 .get("primaryProviderId")
@@ -6093,6 +6322,217 @@ mod tests {
         .await;
 
         assert_tool_error("remote ollama", &response);
+    }
+
+    #[tokio::test]
+    async fn supervisor_create_wires_advisor_policy_and_ignores_mcp_runtime_paths() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-advisor-policy-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let sidecar = workspace_root.join("fake_advisor.py");
+        std::fs::write(&sidecar, "print('fake sidecar')\n").expect("sidecar");
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+        let run_id = format!("run-advisor-policy-{}", Uuid::new_v4());
+        let mut contract = delegated_contract(&workspace_root, &run_id);
+        contract.advisor_policy = Some(crate::delegated::contracts::AdvisorPolicyV1 {
+            enabled: true,
+            advisor_id: "deepseek-web".into(),
+            disclosure_classification:
+                crate::delegated::contracts::AdvisorDisclosureClassificationV1::RemoteAllowed,
+            maximum_response_length: 1024,
+            maximum_consultations_per_run: 1,
+            advice_required: false,
+        });
+
+        let response = handle_tools_call(
+            &tool_call_request(
+                "delegated_run_create",
+                json!({
+                    "contract": contract,
+                    "advisorLocalConfig": {
+                        "pythonExecutable": "python",
+                        "adapterScript": sidecar,
+                        "profileDir": workspace_root.join("advisor-profile"),
+                        "headed": false
+                    }
+                }),
+            ),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_success("advisor create", &response);
+        let run_id = RunId::new(run_id).expect("run id");
+        let canonical_workspace = workspace_root.canonicalize().expect("canonical workspace");
+        let key = registry_key(&canonical_workspace, &run_id);
+        let registry = delegated_run_registry();
+        {
+            let registry = registry.lock().await;
+            let entry = registry.runs.get(&key).expect("registry entry");
+            let advisor = entry.config.advisor.as_ref().expect("advisor config");
+            assert_eq!(advisor.advisor_id, "deepseek-web");
+            assert!(
+                advisor
+                    .local_runtime
+                    .as_ref()
+                    .is_none_or(|runtime| runtime.adapter_script != sidecar),
+                "MCP-supplied advisorLocalConfig must not become executable runtime"
+            );
+        }
+        {
+            let mut registry = registry.lock().await;
+            registry.runs.remove(&key);
+        }
+        let (_run_id, rehydrated) = registry_entry(&canonical_workspace, &json!({"runId": run_id}))
+            .await
+            .expect("rehydrate");
+        let advisor = rehydrated
+            .config
+            .advisor
+            .as_ref()
+            .expect("rehydrated advisor");
+        assert_eq!(advisor.advisor_id, "deepseek-web");
+        assert!(
+            advisor
+                .local_runtime
+                .as_ref()
+                .is_none_or(|runtime| runtime.adapter_script != sidecar),
+            "rehydration must not recover MCP-supplied runtime paths from the journal"
+        );
+        release_active_lock(&workspace_active_lock_path(&canonical_workspace));
+    }
+
+    #[test]
+    fn operator_local_advisor_runtime_attaches_to_new_and_rehydrated_runs() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-advisor-env-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let profile = workspace_root.join("advisor-profile");
+        let executable = std::env::current_exe().expect("current exe");
+        let malicious = workspace_root.join("malicious.py");
+        std::fs::write(&malicious, "print('must not launch')\n").expect("malicious");
+        let run_id = format!("run-advisor-env-{}", Uuid::new_v4());
+        let mut contract = delegated_contract(&workspace_root, &run_id);
+        contract.advisor_policy = Some(crate::delegated::contracts::AdvisorPolicyV1 {
+            enabled: true,
+            advisor_id: "deepseek-web".into(),
+            disclosure_classification:
+                crate::delegated::contracts::AdvisorDisclosureClassificationV1::RemoteAllowed,
+            maximum_response_length: 1024,
+            maximum_consultations_per_run: 1,
+            advice_required: false,
+        });
+
+        with_advisor_runtime_env(
+            &[
+                (
+                    "CATDESK_DEEPSEEK_ADVISOR_PYTHON",
+                    Some(executable.clone().into_os_string()),
+                ),
+                (
+                    "CATDESK_DEEPSEEK_ADVISOR_SCRIPT",
+                    Some(executable.clone().into_os_string()),
+                ),
+                (
+                    "CATDESK_DEEPSEEK_ADVISOR_PROFILE",
+                    Some(profile.clone().into_os_string()),
+                ),
+            ],
+            || {
+                let config = mcp_integrated_config(
+                    &workspace_root,
+                    &contract,
+                    &json!({
+                        "advisorLocalConfig": {
+                            "pythonExecutable": malicious,
+                            "adapterScript": malicious,
+                            "profileDir": workspace_root.join("malicious-profile"),
+                            "headed": false,
+                            "allowEnvLogin": true
+                        }
+                    }),
+                )
+                .expect("config");
+                let runtime = config
+                    .advisor
+                    .as_ref()
+                    .and_then(|advisor| advisor.local_runtime.as_ref())
+                    .expect("operator runtime");
+                assert_eq!(
+                    runtime.adapter_script,
+                    executable.canonicalize().expect("canonical exe")
+                );
+                assert!(runtime.headed);
+                assert!(!runtime.allow_env_login);
+
+                let journal = DelegatedJournal::open(&config.journal_root).expect("journal");
+                journal.create_run(&contract).expect("run");
+                let rehydrated = rehydrate_registry_entry(
+                    &workspace_root.canonicalize().expect("workspace"),
+                    &RunId::new(run_id.clone()).expect("run id"),
+                )
+                .expect("rehydrated");
+                let runtime = rehydrated
+                    .config
+                    .advisor
+                    .as_ref()
+                    .and_then(|advisor| advisor.local_runtime.as_ref())
+                    .expect("rehydrated runtime");
+                assert_eq!(
+                    runtime.adapter_script,
+                    executable.canonicalize().expect("canonical exe")
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn operator_local_advisor_runtime_absent_fails_closed_unavailable() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-advisor-env-absent-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let run_id = format!("run-advisor-env-absent-{}", Uuid::new_v4());
+        let mut contract = delegated_contract(&workspace_root, &run_id);
+        contract.advisor_policy = Some(crate::delegated::contracts::AdvisorPolicyV1 {
+            enabled: true,
+            advisor_id: "deepseek-web".into(),
+            disclosure_classification:
+                crate::delegated::contracts::AdvisorDisclosureClassificationV1::RemoteAllowed,
+            maximum_response_length: 1024,
+            maximum_consultations_per_run: 1,
+            advice_required: false,
+        });
+
+        with_advisor_runtime_env(&[], || {
+            let config =
+                mcp_integrated_config(&workspace_root, &contract, &json!({})).expect("config");
+            assert!(
+                config
+                    .advisor
+                    .as_ref()
+                    .and_then(|advisor| advisor.local_runtime.as_ref())
+                    .is_none()
+            );
+            let journal = DelegatedJournal::open(&config.journal_root).expect("journal");
+            journal.create_run(&contract).expect("run");
+            let rehydrated = rehydrate_registry_entry(
+                &workspace_root.canonicalize().expect("workspace"),
+                &RunId::new(run_id).expect("run id"),
+            )
+            .expect("rehydrated");
+            assert!(
+                rehydrated
+                    .config
+                    .advisor
+                    .as_ref()
+                    .and_then(|advisor| advisor.local_runtime.as_ref())
+                    .is_none()
+            );
+        });
     }
 
     #[tokio::test]
@@ -6302,6 +6742,50 @@ mod tests {
 
         assert_eq!(entry.status, RegistryRunStatus::NeedsSupervisor);
         assert!(lock_path.exists(), "OUTCOME_UNKNOWN must retain lock");
+        assert_eq!(
+            journal.load_run(&run_id).expect("snapshot").state,
+            RunState::NeedsSupervisor
+        );
+    }
+
+    #[test]
+    fn worker_error_preserves_required_advisor_needs_supervisor_and_lock() {
+        let workspace_root = std::env::temp_dir().join(format!(
+            "catdesk-mcp-required-advisor-needs-supervisor-{}",
+            Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let run_id = RunId::new(format!("run-required-advisor-{}", Uuid::new_v4())).expect("run");
+        let contract = delegated_contract(&workspace_root, run_id.as_str());
+        let config = mcp_integrated_config(&workspace_root, &contract, &json!({})).expect("config");
+        let journal = DelegatedJournal::open(&config.journal_root).expect("journal");
+        journal.create_run(&contract).expect("run");
+        journal
+            .update_run_state(&run_id, RunState::NeedsSupervisor)
+            .expect("needs supervisor");
+        let lock_path = workspace_active_lock_path(&workspace_root);
+        std::fs::create_dir_all(lock_path.parent().expect("lock parent")).expect("lock parent");
+        std::fs::write(&lock_path, run_id.as_str()).expect("lock");
+        let mut entry = DelegatedRunEntry {
+            workspace_root: workspace_root.clone(),
+            contract,
+            config,
+            status: RegistryRunStatus::Running,
+            cancel_requested: Arc::new(AtomicBool::new(false)),
+            run_start_approval: None,
+            active_lock_path: lock_path.clone(),
+            final_review: None,
+            last_error: None,
+        };
+
+        apply_worker_error_outcome(
+            &mut entry,
+            &run_id,
+            "required advisor consultation unavailable".into(),
+        );
+
+        assert_eq!(entry.status, RegistryRunStatus::NeedsSupervisor);
+        assert!(lock_path.exists(), "NEEDS_SUPERVISOR must retain lock");
         assert_eq!(
             journal.load_run(&run_id).expect("snapshot").state,
             RunState::NeedsSupervisor
