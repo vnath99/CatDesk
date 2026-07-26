@@ -6,13 +6,27 @@
     "article[data-role=\"assistant\"]",
     "deepseek:conversation-visible-blocks"
   ],
+  "assistant_message_selectors": [
+    "[data-testid=\"assistant-message\"]",
+    "[data-ds-role=\"assistant-response\"]",
+    "article[data-role=\"assistant\"]",
+    "deepseek:conversation-visible-blocks"
+  ],
+  "user_message_selectors": [
+    "[data-testid=\"user-message\"]",
+    "[data-ds-role=\"user-message\"]",
+    "article[data-role=\"user\"]",
+    "deepseek:conversation-visible-blocks"
+  ],
   "prompt_input_selectors": [
+    "textarea.ds-scroll-area",
     "textarea",
     "[contenteditable=\"true\"]"
   ],
   "send_button_selectors": [
     "button[aria-label=\"Send\"]",
     "button[data-testid=\"send-button\"]",
+    "div[role=\"button\"].ds-button.ds-button--primary.ds-button--circle:not(.ds-button--disabled)",
     "deepseek:composer-send"
   ],
   "stop_button_selectors": [
@@ -61,11 +75,6 @@
     "[data-testid=\"provider-error\"]",
     "[role=\"alert\"][data-ds-error=\"rate-limit\"]"
   ],
-  "completion_markers": [
-    "regenerate",
-    "copy",
-    "share"
-  ],
   "chat_menu_button_selectors": [
     "button[data-testid=\"chat-menu\"]",
     "button[aria-label=\"Open chat menu\"]"
@@ -81,9 +90,11 @@
   "text_stability_seconds": 2.0,
   "stable_sample_count": 3,
   "timeout_seconds": 120.0,
-  "typing_min_interval_seconds": 0.002,
-  "typing_max_interval_seconds": 0.008,
-  "typing_newline_pause_seconds": 0.04,
-  "typing_timeout_seconds": 90.0,
+  "submission_confirmation_timeout_seconds": 8.0,
+  "typing_min_interval_seconds": 0.03,
+  "typing_max_interval_seconds": 0.09,
+  "typing_newline_pause_min_seconds": 0.15,
+  "typing_newline_pause_max_seconds": 0.35,
+  "typing_timeout_seconds": 240.0,
   "bounded_dom_evidence_bytes": 2048
 }

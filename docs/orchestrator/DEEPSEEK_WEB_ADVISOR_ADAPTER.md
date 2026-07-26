@@ -1,6 +1,6 @@
 # DeepSeek Web Advisor Adapter
 
-Status: T-0024B.3 experimental standalone live-site reliability correction
+Status: T-0024B.4 experimental standalone live-site submission/extraction correction
 Date: 2026-07-25
 
 ## Purpose
@@ -33,7 +33,9 @@ The preferred login path remains a persistent browser session with manual
 login. T-0024B.3 also adds an explicit `--allow-env-login` option that reads
 `CATDESK_ADVISOR_DEEPSEEK_EMAIL` and `CATDESK_ADVISOR_DEEPSEEK_PASSWORD` only
 from the process environment and uses configured login selectors. Credentials
-are not printed, persisted, or sent anywhere except the DeepSeek login form.
+are removed from the adapter process environment immediately after reading,
+are not printed or persisted, and are sent only to the DeepSeek login form when
+that opt-in path is used.
 
 CAPTCHA, Turnstile, or security verification returns `TAKEOVER_REQUIRED`; the
 adapter does not click or bypass those flows.
@@ -93,14 +95,15 @@ The `advise` command:
 - selects the prompt control from external selector config;
 - clears the prompt control before insertion and fails rather than appending to
   retained draft text;
-- inserts text through paced typing with bounded randomized intervals, longer
-  newline pauses, a total typing timeout, and cancellation checks;
-- submits once;
+- inserts text through paced input-event delivery with bounded randomized
+  intervals, longer newline pauses, a total typing timeout, and cancellation
+  checks;
+- submits once and requires a submission-confirmation signal before waiting
+  for a response;
 - watches only visible responses newer than the visible baseline;
 - tracks actual text changes and text stability;
 - requires the generation/stop control to be absent, send to be visible and
-  enabled, multiple stable samples, and completion markers scoped to the
-  newest response;
+  enabled, and multiple stable samples;
 - returns exactly the newest bounded assistant response in `diagnosis`;
 - rejects old, empty, baseline, or stale responses;
 - returns `LOGIN_REQUIRED`, `TAKEOVER_REQUIRED`, `RATE_LIMITED`, `TIMED_OUT`,
@@ -117,7 +120,6 @@ Completion does not depend on a generated CSS class. The detector combines:
 - stop/generation-control absence;
 - visible and enabled send control;
 - actual text changes across multiple stable samples;
-- provider-specific completion markers scoped to the newest response;
 - timeout.
 
 Rate limits are detected only through visible provider error/toast selectors,
@@ -171,3 +173,20 @@ accepted the first synthetic request, rejected a too-early second request with
 no visible assistant response in the conversation body, so the cancel leg was
 not run. The adapter did not fabricate a completion from stale, empty, or
 baseline page content.
+
+## T-0024B.4 Live Evidence
+
+T-0024B.4 calibrated the live page with redacted structural metadata only:
+element tag, role, aria label, data-testid, stable class tokens, bounded
+ancestor structure, visibility/enabled state, geometry, and text lengths where
+needed. It did not capture prompts, responses, cookies, tokens, credentials, or
+page HTML.
+
+Observed local result: the adapter reached `READY`, cookie banner state was
+`absent`, the configured composer was `textarea.ds-scroll-area`, the configured
+send control became enabled after paced input-event insertion, and a synthetic
+request was accepted. The terminal advisory result remained `TIMED_OUT`: after
+the prompt was emptied, no visible assistant response, user-message block,
+stop/generation control, or provider rate-limit/error selector was available
+for extraction. The adapter therefore kept the result fail-closed and did not
+return stale page content or the submitted prompt as advice.

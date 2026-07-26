@@ -42,8 +42,10 @@ def selectors() -> SelectorConfig:
         timeout_seconds=2.0,
         typing_min_interval_seconds=0.01,
         typing_max_interval_seconds=0.02,
-        typing_newline_pause_seconds=0.05,
+        typing_newline_pause_min_seconds=0.05,
+        typing_newline_pause_max_seconds=0.05,
         typing_timeout_seconds=5.0,
+        submission_confirmation_timeout_seconds=0.5,
     )
 
 
@@ -175,6 +177,15 @@ class PromptFakeSb:
         self.calls.append(f"press_keys:{selector}:{text[:8]}")
 
 
+class PromptScriptFakeSb(PromptFakeSb):
+    def __init__(self) -> None:
+        super().__init__(retained_value="")
+
+    def execute_script(self, script: str) -> bool:
+        self.calls.append(f"execute_script:{len(script)}")
+        return True
+
+
 class PartialStartupAdapter(DeepSeekWebAdvisorAdapter):
     def __init__(self, context: object) -> None:
         super().__init__(selectors(), Path("partial-startup"), headed=True)
@@ -202,6 +213,11 @@ class FailingStopAdapter(OfflineAdapter):
 
     def _click_first(self, selectors_: object) -> bool:
         raise RuntimeError("synthetic stop failure")
+
+
+class PromptClearedAdapter(OfflineAdapter):
+    def _prompt_value(self, selector: str) -> str | None:
+        return ""
 
 
 class StateAdapter(DeepSeekWebAdvisorAdapter):
@@ -406,6 +422,8 @@ class DeepSeekWebAdvisorTests(unittest.TestCase):
         os.environ["CATDESK_ADVISOR_DEEPSEEK_PASSWORD"] = "synthetic-password"
         try:
             self.assertTrue(adapter._attempt_env_login())
+            self.assertNotIn("CATDESK_ADVISOR_DEEPSEEK_EMAIL", os.environ)
+            self.assertNotIn("CATDESK_ADVISOR_DEEPSEEK_PASSWORD", os.environ)
         finally:
             if old_email is None:
                 os.environ.pop("CATDESK_ADVISOR_DEEPSEEK_EMAIL", None)
@@ -466,6 +484,28 @@ class DeepSeekWebAdvisorTests(unittest.TestCase):
             <main>
               <section data-ds-role="assistant-response">
                 The words rate limit are only ordinary text. Copy
+              </section>
+              <button aria-label="Send">Send</button>
+            </main>
+            """
+        )
+
+        observation = detector.observe(
+            snapshot,
+            first_seen_at=1.0,
+            last_text_change_at=1.0,
+            now=2.0,
+        )
+
+        self.assertEqual(observation.state, AdapterState.COMPLETED)
+
+    def test_magic_words_are_not_required_for_completion(self) -> None:
+        detector = CompletionDetector(selectors())
+        snapshot = inline_snapshot(
+            """
+            <main>
+              <section data-ds-role="assistant-response">
+                A stable assistant answer without provider toolbar words.
               </section>
               <button aria-label="Send">Send</button>
             </main>
@@ -709,11 +749,91 @@ class DeepSeekWebAdvisorTests(unittest.TestCase):
         self.assertEqual(len(adapter.typed_prompts), 1)
         self.assertEqual(len([item for item in adapter.clicked_selectors if "Send" in item]), 1)
 
-    def test_advisory_turn_rejects_empty_new_response(self) -> None:
+    def test_submission_not_confirmed_returns_degraded(self) -> None:
+        adapter = OfflineAdapter(
+            [
+                snapshot("ready_prompt.html"),
+                snapshot("ready_prompt.html"),
+                snapshot("ready_prompt.html"),
+                snapshot("ready_prompt.html"),
+                snapshot("ready_prompt.html"),
+            ]
+        )
+
+        response = adapter.advise(valid_request())
+
+        self.assertEqual(response.status, "DEGRADED")
+        self.assertEqual(adapter.state, AdapterState.DEGRADED)
+        self.assertIn("not confirmed", response.diagnosis)
+
+    def test_input_clearing_confirms_submission(self) -> None:
+        adapter = PromptClearedAdapter(
+            [
+                snapshot("baseline_before.html"),
+                snapshot("baseline_before.html"),
+                snapshot("baseline_completed.html"),
+                snapshot("baseline_completed.html"),
+                snapshot("baseline_completed.html"),
+                snapshot("baseline_completed.html"),
+            ]
+        )
+
+        response = adapter.advise(valid_request())
+
+        self.assertEqual(response.status, "COMPLETED")
+        self.assertTrue(adapter.last_submission_diagnostics["prompt_empty"])
+
+    def test_new_user_message_confirms_submission_but_is_not_returned(self) -> None:
+        user_only = inline_snapshot(
+            """
+            <main>
+              <section data-testid="user-message">submitted prompt should not return</section>
+              <textarea aria-label="Message DeepSeek"></textarea>
+              <button aria-label="Send">Send</button>
+            </main>
+            """
+        )
+        adapter = OfflineAdapter(
+            [
+                snapshot("ready_prompt.html"),
+                snapshot("ready_prompt.html"),
+                user_only,
+                user_only,
+                user_only,
+                user_only,
+                user_only,
+            ]
+        )
+
+        response = adapter.advise(valid_request())
+
+        self.assertNotEqual(response.status, "COMPLETED")
+        self.assertNotIn("submitted prompt", response.diagnosis)
+
+    def test_stop_control_confirms_submission(self) -> None:
         adapter = OfflineAdapter(
             [
                 snapshot("baseline_before.html"),
                 snapshot("baseline_before.html"),
+                snapshot("baseline_streaming.html"),
+                snapshot("baseline_completed.html"),
+                snapshot("baseline_completed.html"),
+                snapshot("baseline_completed.html"),
+                snapshot("baseline_completed.html"),
+            ]
+        )
+
+        response = adapter.advise(valid_request())
+
+        self.assertEqual(response.status, "COMPLETED")
+        self.assertTrue(adapter.last_submission_diagnostics["stop_visible"])
+
+    def test_advisory_turn_rejects_empty_new_response(self) -> None:
+        adapter = PromptClearedAdapter(
+            [
+                snapshot("baseline_before.html"),
+                snapshot("baseline_before.html"),
+                snapshot("empty_completed.html"),
                 snapshot("empty_completed.html"),
             ]
         )
@@ -744,6 +864,75 @@ class DeepSeekWebAdvisorTests(unittest.TestCase):
         response = adapter.advise(valid_request())
 
         self.assertEqual(response.status, "FAILED")
+
+    def test_nested_whole_conversation_container_is_rejected(self) -> None:
+        nested = inline_snapshot(
+            """
+            <main>
+              <section data-testid="user-message">submitted prompt should not return</section>
+              <section data-testid="assistant-message">
+                submitted prompt should not return
+                nested answer must not be taken from a parent container
+              </section>
+              <textarea aria-label="Message DeepSeek"></textarea>
+              <button aria-label="Send">Send</button>
+            </main>
+            """
+        )
+        adapter = PromptClearedAdapter(
+            [
+                snapshot("ready_prompt.html"),
+                snapshot("ready_prompt.html"),
+                nested,
+                nested,
+                nested,
+            ]
+        )
+
+        response = adapter.advise(valid_request())
+
+        self.assertNotEqual(response.status, "COMPLETED")
+        self.assertNotIn("submitted prompt", response.diagnosis)
+
+    def test_newest_assistant_element_is_returned(self) -> None:
+        newest = inline_snapshot(
+            """
+            <main>
+              <section data-testid="assistant-message">old assistant response</section>
+              <section data-testid="user-message">synthetic user prompt</section>
+              <section data-testid="assistant-message">first new assistant draft</section>
+              <section data-testid="assistant-message">newest final assistant answer</section>
+              <textarea aria-label="Message DeepSeek"></textarea>
+              <button aria-label="Send">Send</button>
+            </main>
+            """
+        )
+        baseline = inline_snapshot(
+            """
+            <main>
+              <section data-testid="assistant-message">old assistant response</section>
+              <textarea aria-label="Message DeepSeek"></textarea>
+              <button aria-label="Send">Send</button>
+            </main>
+            """
+        )
+        adapter = PromptClearedAdapter(
+            [
+                baseline,
+                baseline,
+                newest,
+                newest,
+                newest,
+                newest,
+            ]
+        )
+
+        response = adapter.advise(valid_request())
+
+        self.assertEqual(response.status, "COMPLETED")
+        self.assertIn("newest final assistant answer", response.diagnosis)
+        self.assertNotIn("first new assistant draft", response.diagnosis)
+        self.assertNotIn("synthetic user prompt", response.diagnosis)
 
     def test_cancel_during_generation_returns_cancelled_without_shutdown(self) -> None:
         adapter = OfflineAdapter(
@@ -798,6 +987,16 @@ class DeepSeekWebAdvisorTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             adapter._type_prompt("textarea", "synthetic prompt")
 
+    def test_paced_typing_prefers_input_event_insertion(self) -> None:
+        adapter = DeepSeekWebAdvisorAdapter(selectors(), Path("prompt-profile"), headed=True)
+        fake = PromptScriptFakeSb()
+        adapter._sb = fake
+
+        adapter._type_prompt("textarea", "abc")
+
+        self.assertTrue(any(call.startswith("execute_script:") for call in fake.calls))
+        self.assertFalse(any(call.startswith("press_keys:") for call in fake.calls))
+
     def test_cookie_banner_prefers_exact_reject_selector_on_trusted_origin(self) -> None:
         page = inline_snapshot(
             """
@@ -838,7 +1037,7 @@ class DeepSeekWebAdvisorTests(unittest.TestCase):
         adapter._type_text_paced("textarea", "ab\nc")
 
         self.assertEqual(len(adapter.sleeps), 4)
-        self.assertEqual(adapter.sleeps[2], selectors().typing_newline_pause_seconds)
+        self.assertEqual(adapter.sleeps[2], selectors().typing_newline_pause_min_seconds)
         self.assertTrue(
             all(
                 selectors().typing_min_interval_seconds <= delay <= selectors().typing_max_interval_seconds
@@ -851,6 +1050,14 @@ class DeepSeekWebAdvisorTests(unittest.TestCase):
         before = len(adapter.sleeps)
         adapter._type_text_paced("textarea", "will-not-type")
         self.assertEqual(len(adapter.sleeps), before)
+
+    def test_paced_typing_default_range_is_slower(self) -> None:
+        config = SelectorConfig.from_file(SELECTOR_CONFIG)
+
+        self.assertGreaterEqual(config.typing_min_interval_seconds, 0.03)
+        self.assertLessEqual(config.typing_max_interval_seconds, 0.09)
+        self.assertGreaterEqual(config.typing_newline_pause_min_seconds, 0.15)
+        self.assertLessEqual(config.typing_newline_pause_max_seconds, 0.35)
 
     def test_paced_typing_enforces_total_timeout(self) -> None:
         config = dataclasses.replace(selectors(), typing_timeout_seconds=0.015)
