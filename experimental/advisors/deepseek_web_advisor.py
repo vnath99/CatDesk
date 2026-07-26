@@ -192,12 +192,23 @@ DEEPSEEK_COMPOSER_ACTION_CLICK_SCRIPT = r"""
 DEEPSEEK_GENERATION_BOOTSTRAP_SCRIPT = r"""
 (() => {
   const root = document.querySelector('.ds-virtual-list-visible-items');
-  if (!root) return { rootFound: false };
   function visible(element) {
     const rect = element.getBoundingClientRect();
     const style = window.getComputedStyle(element);
     return rect.width > 0 && rect.height > 0
       && style.visibility !== 'hidden' && style.display !== 'none';
+  }
+  const composer = document.querySelector('textarea[placeholder="Message DeepSeek"]');
+  if (!root) {
+    return {
+      rootFound: false,
+      validEmptyChat: Boolean(composer && visible(composer)),
+      turnKeys: [],
+      assistantCount: 0,
+      latestAssistantKey: null,
+      latestAssistantText: '',
+      turns: []
+    };
   }
   function norm(text) {
     return String(text || '').replace(/\r\n/g, '\n')
@@ -225,6 +236,7 @@ DEEPSEEK_GENERATION_BOOTSTRAP_SCRIPT = r"""
   const latest = assistants[assistants.length - 1] || null;
   return {
     rootFound: true,
+    validEmptyChat: false,
     turnKeys: turns.map((turn) => turn.key),
     assistantCount: assistants.length,
     latestAssistantKey: latest ? latest.key : null,
@@ -236,9 +248,7 @@ DEEPSEEK_GENERATION_BOOTSTRAP_SCRIPT = r"""
 
 
 DEEPSEEK_GENERATION_INSTALL_SCRIPT = r"""
-((generationId, requestId, submittedPromptHash, baselineKeys, baselineAssistantCount, baselineLatestAssistantKey, baselineLatestAssistantHash) => {
-  const root = document.querySelector('.ds-virtual-list-visible-items');
-  if (!root) return { ok: false, error: 'ROOT_NOT_FOUND' };
+((generationId, requestId, submittedPromptHash, baselineKeys, baselineAssistantCount, baselineLatestAssistantKey, baselineLatestAssistantHash, validEmptyChat) => {
   if (window.__catdeskDeepSeekGeneration && window.__catdeskDeepSeekGeneration.disconnect) {
     window.__catdeskDeepSeekGeneration.disconnect();
   }
@@ -251,8 +261,10 @@ DEEPSEEK_GENERATION_INSTALL_SCRIPT = r"""
     baselineAssistantCount,
     baselineLatestAssistantKey,
     baselineLatestAssistantHash,
+    validEmptyChat,
     detectedUserTurnKey: null,
     detectedAssistantTurnKey: null,
+    assistantElementKey: null,
     assistantText: '',
     previousText: '',
     lastMutationAt: Date.now(),
@@ -264,9 +276,12 @@ DEEPSEEK_GENERATION_INSTALL_SCRIPT = r"""
     sawAssistantTextChange: false,
     sawGenerationActive: false,
     terminalState: null,
+    lifecycle: 'WAITING_FOR_CONVERSATION_ROOT',
     events: [],
     rootObserver: null,
-    assistantObserver: null
+    bootstrapObserver: null,
+    assistantObserver: null,
+    rootAttached: false
   };
   function visible(element) {
     const rect = element.getBoundingClientRect();
@@ -319,7 +334,28 @@ DEEPSEEK_GENERATION_INSTALL_SCRIPT = r"""
     }
     return { sendVisible, sendEnabled, stopVisible };
   }
+  function logEvent(type) {
+    state.events.push({
+      type,
+      lifecycle: state.lifecycle,
+      userKey: state.detectedUserTurnKey,
+      assistantKey: state.detectedAssistantTurnKey,
+      textLength: state.assistantText.length,
+      mutationCount: state.mutationCount,
+      timestamp: Date.now()
+    });
+    if (state.events.length > 80) state.events.splice(0, state.events.length - 80);
+  }
   function refresh(reason) {
+    const root = document.querySelector('.ds-virtual-list-visible-items');
+    if (!root) {
+      state.lifecycle = 'WAITING_FOR_CONVERSATION_ROOT';
+      logEvent(reason);
+      return { turns: [], controls: composerReady(), rootFound: false };
+    }
+    if (!state.rootAttached && state.attachRoot) {
+      state.attachRoot(root);
+    }
     const turns = Array.from(root.children).filter(visible).map(classify);
     const added = turns.filter((turn) => !baselineKeys.includes(turn.key));
     const user = added.find((turn) => turn.role === 'user');
@@ -332,10 +368,11 @@ DEEPSEEK_GENERATION_INSTALL_SCRIPT = r"""
     if (assistant) {
       state.detectedAssistantTurnKey = assistant.key;
       state.sawAssistantTurn = true;
-      if (state.assistantObserver && state.assistantObserver.disconnect) {
-        state.assistantObserver.disconnect();
-      }
-      if (assistant.answer) {
+      if (assistant.answer && state.assistantElementKey !== assistant.key) {
+        if (state.assistantObserver && state.assistantObserver.disconnect) {
+          state.assistantObserver.disconnect();
+        }
+        state.assistantElementKey = assistant.key;
         state.assistantObserver = new MutationObserver((records) => {
           state.mutationCount += records.length;
           state.lastMutationAt = Date.now();
@@ -355,35 +392,63 @@ DEEPSEEK_GENERATION_INSTALL_SCRIPT = r"""
     if (controls.stopVisible || !controls.sendEnabled) {
       state.sawGenerationActive = true;
     }
-    state.events.push({
-      type: reason,
-      userKey: state.detectedUserTurnKey,
-      assistantKey: state.detectedAssistantTurnKey,
-      textLength: state.assistantText.length,
-      timestamp: Date.now()
-    });
-    if (state.events.length > 80) state.events.splice(0, state.events.length - 80);
-    return { turns, controls };
+    if (!state.sawUserTurn) state.lifecycle = 'WAITING_FOR_USER_TURN';
+    else if (!state.sawAssistantTurn) state.lifecycle = 'WAITING_FOR_ASSISTANT_TURN';
+    else if (!state.assistantText) state.lifecycle = 'STREAMING';
+    else if (controls.stopVisible || !controls.sendEnabled) state.lifecycle = 'STREAMING';
+    else state.lifecycle = 'STABILIZING';
+    logEvent(reason);
+    return { turns, controls, rootFound: true };
   }
-  state.rootObserver = new MutationObserver((records) => {
-    state.mutationCount += records.length;
-    state.lastMutationAt = Date.now();
-    refresh('root-mutation');
-  });
-  state.rootObserver.observe(root, {
-    subtree: true,
-    childList: true,
-    characterData: true,
-    attributes: true,
-    attributeFilter: ['class', 'style', 'data-virtual-list-item-key', 'aria-disabled', 'disabled']
-  });
+  state.attachRoot = (root) => {
+    if (!root || state.rootAttached) return false;
+    if (state.bootstrapObserver) {
+      state.bootstrapObserver.disconnect();
+      state.bootstrapObserver = null;
+    }
+    state.rootObserver = new MutationObserver((records) => {
+      state.mutationCount += records.length;
+      state.lastMutationAt = Date.now();
+      refresh('root-mutation');
+    });
+    state.rootObserver.observe(root, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['class', 'style', 'data-virtual-list-item-key', 'aria-disabled', 'disabled']
+    });
+    state.rootAttached = true;
+    refresh('root-attached');
+    return true;
+  };
   state.disconnect = () => {
+    if (state.bootstrapObserver) state.bootstrapObserver.disconnect();
     if (state.rootObserver) state.rootObserver.disconnect();
     if (state.assistantObserver) state.assistantObserver.disconnect();
+    state.bootstrapObserver = null;
+    state.rootObserver = null;
+    state.assistantObserver = null;
   };
   window.__catdeskDeepSeekGeneration = state;
-  refresh('installed');
-  return { ok: true };
+  const root = document.querySelector('.ds-virtual-list-visible-items');
+  if (root) {
+    state.attachRoot(root);
+    return { ok: true, observer: 'root' };
+  }
+  if (!validEmptyChat) return { ok: false, error: 'ROOT_NOT_FOUND' };
+  const appRoot = document.querySelector('#root');
+  if (!appRoot) return { ok: false, error: 'APP_ROOT_NOT_FOUND' };
+  state.bootstrapObserver = new MutationObserver((records) => {
+    state.mutationCount += records.length;
+    state.lastMutationAt = Date.now();
+    const discovered = document.querySelector('.ds-virtual-list-visible-items');
+    if (discovered) state.attachRoot(discovered);
+    else refresh('bootstrap-mutation');
+  });
+  state.bootstrapObserver.observe(appRoot, { subtree: true, childList: true });
+  refresh('bootstrap-installed');
+  return { ok: true, observer: 'bootstrap' };
 })
 """
 
@@ -392,7 +457,7 @@ DEEPSEEK_GENERATION_STATE_SCRIPT = r"""
 (() => {
   const state = window.__catdeskDeepSeekGeneration;
   const root = document.querySelector('.ds-virtual-list-visible-items');
-  if (!state || !root) return { ok: false, error: 'NO_ACTIVE_GENERATION' };
+  if (!state) return { ok: false, error: 'NO_ACTIVE_GENERATION' };
   function visible(element) {
     const rect = element.getBoundingClientRect();
     const style = window.getComputedStyle(element);
@@ -438,6 +503,38 @@ DEEPSEEK_GENERATION_STATE_SCRIPT = r"""
     }
     return { sendVisible, sendEnabled, stopVisible };
   }
+  if (!root) {
+    state.lifecycle = 'WAITING_FOR_CONVERSATION_ROOT';
+    const controls = composerReady();
+    return {
+      ok: true,
+      rootFound: false,
+      lifecycle: state.lifecycle,
+      generationId: state.generationId,
+      requestId: state.requestId,
+      detectedUserTurnKey: state.detectedUserTurnKey,
+      detectedAssistantTurnKey: state.detectedAssistantTurnKey,
+      assistantText: state.assistantText || '',
+      assistantTextLength: String(state.assistantText || '').length,
+      lastMutationAt: state.lastMutationAt,
+      lastTextChangeAt: state.lastTextChangeAt,
+      mutationCount: state.mutationCount,
+      stableSampleCount: state.stableSampleCount,
+      sawUserTurn: state.sawUserTurn,
+      sawAssistantTurn: state.sawAssistantTurn,
+      sawAssistantTextChange: state.sawAssistantTextChange,
+      sawGenerationActive: state.sawGenerationActive,
+      controls,
+      turnKeys: [],
+      assistantCount: 0,
+      bootstrapActive: Boolean(state.bootstrapObserver),
+      rootObserverActive: Boolean(state.rootObserver),
+      eventTail: state.events.slice(-12)
+    };
+  }
+  if (!state.rootAttached && state.attachRoot) {
+    state.attachRoot(root);
+  }
   const turns = Array.from(root.children).filter(visible).map(classify);
   const added = turns.filter((turn) => !state.baselineKeys.includes(turn.key));
   const user = added.find((turn) => turn.role === 'user');
@@ -469,8 +566,15 @@ DEEPSEEK_GENERATION_STATE_SCRIPT = r"""
   }
   const controls = composerReady();
   if (controls.stopVisible || !controls.sendEnabled) state.sawGenerationActive = true;
+  if (!state.sawUserTurn) state.lifecycle = 'WAITING_FOR_USER_TURN';
+  else if (!state.sawAssistantTurn) state.lifecycle = 'WAITING_FOR_ASSISTANT_TURN';
+  else if (!state.assistantText) state.lifecycle = 'STREAMING';
+  else if (controls.stopVisible || !controls.sendEnabled) state.lifecycle = 'STREAMING';
+  else state.lifecycle = 'STABILIZING';
   return {
     ok: true,
+    rootFound: true,
+    lifecycle: state.lifecycle,
     generationId: state.generationId,
     requestId: state.requestId,
     detectedUserTurnKey: state.detectedUserTurnKey,
@@ -488,6 +592,8 @@ DEEPSEEK_GENERATION_STATE_SCRIPT = r"""
     controls,
     turnKeys: turns.map((turn) => turn.key),
     assistantCount: turns.filter((turn) => turn.role === 'assistant').length,
+    bootstrapActive: Boolean(state.bootstrapObserver),
+    rootObserverActive: Boolean(state.rootObserver),
     eventTail: state.events.slice(-12)
   };
 })()
@@ -664,6 +770,7 @@ class VirtualListBaseline:
     latest_assistant_key: str | None
     latest_assistant_hash: str | None
     turns: list[VirtualTurn]
+    valid_empty_chat: bool = False
 
 
 @dataclasses.dataclass
@@ -1273,6 +1380,8 @@ class DeepSeekWebAdvisorAdapter:
 
     def stop(self) -> None:
         self.state = AdapterState.STOPPED
+        self._disconnect_generation_observers()
+        self.active_generation = None
         self._cleanup_browser_context()
         self.cancel_requested.clear()
 
@@ -1370,7 +1479,10 @@ class DeepSeekWebAdvisorAdapter:
 
             self.cancel_requested.clear()
             browser_baseline = self._browser_virtual_list_baseline()
-            use_generation_observer = bool(browser_baseline and browser_baseline.root_found)
+            use_generation_observer = bool(
+                browser_baseline
+                and (browser_baseline.root_found or browser_baseline.valid_empty_chat)
+            )
             tracker: GenerationTracker | None = None
             if use_generation_observer and browser_baseline is not None:
                 tracker = GenerationTracker(
@@ -1394,7 +1506,7 @@ class DeepSeekWebAdvisorAdapter:
                 self.state = AdapterState.DEGRADED
                 return self.advice_degraded(
                     validated.request_id,
-                    "DeepSeek virtual-list root was not found before submission.",
+                    "DeepSeek page was not a usable existing or empty chat before submission.",
                 )
             baseline_texts = self._visible_response_texts(snapshot)
             baseline_user_count = self._visible_user_message_count(snapshot)
@@ -1595,8 +1707,9 @@ class DeepSeekWebAdvisorAdapter:
             if not state.get("ok"):
                 tracker.terminal_state = AdapterState.DEGRADED.value
                 self.state = AdapterState.DEGRADED
-                return self.advice_degraded(
+                return self.advice_unavailable_with_tracker(
                     request.request_id,
+                    tracker,
                     "DeepSeek generation observer state was unavailable.",
                 )
             self._update_tracker_from_browser_state(tracker, state)
@@ -1637,7 +1750,11 @@ class DeepSeekWebAdvisorAdapter:
             self._sleep(0.5)
         tracker.terminal_state = AdapterState.TIMED_OUT.value
         self.state = AdapterState.TIMED_OUT
-        return self.advice_unavailable(request.request_id)
+        return self.advice_unavailable_with_tracker(
+            request.request_id,
+            tracker,
+            "DeepSeek generation did not reach a completed observed assistant response.",
+        )
 
     def _response_is_invalid_for_generation(
         self,
@@ -1673,7 +1790,15 @@ class DeepSeekWebAdvisorAdapter:
         if not isinstance(value, dict):
             return VirtualListBaseline(False, [], 0, None, None, [])
         if not value.get("rootFound"):
-            return VirtualListBaseline(False, [], 0, None, None, [])
+            return VirtualListBaseline(
+                False,
+                [],
+                0,
+                None,
+                None,
+                [],
+                valid_empty_chat=bool(value.get("validEmptyChat")),
+            )
         turns = [
             VirtualTurn(
                 str(turn.get("key") or f"identity:{index}"),
@@ -1693,6 +1818,7 @@ class DeepSeekWebAdvisorAdapter:
             str(value.get("latestAssistantKey")) if value.get("latestAssistantKey") else None,
             sha256_text(latest_text) if latest_text else None,
             turns,
+            valid_empty_chat=bool(value.get("validEmptyChat")),
         )
 
     def _install_generation_observer(self, tracker: GenerationTracker) -> bool:
@@ -1704,7 +1830,8 @@ class DeepSeekWebAdvisorAdapter:
             f"{json.dumps(sorted(tracker.baseline_turn_keys))},"
             f"{json.dumps(tracker.baseline_assistant_count)},"
             f"{json.dumps(tracker.baseline_latest_assistant_key)},"
-            f"{json.dumps(tracker.baseline_latest_assistant_hash)}"
+            f"{json.dumps(tracker.baseline_latest_assistant_hash)},"
+            f"{json.dumps(not tracker.baseline_turn_keys and tracker.baseline_assistant_count == 0)}"
             f")"
         )
         return isinstance(result, dict) and bool(result.get("ok"))
@@ -1833,7 +1960,8 @@ class DeepSeekWebAdvisorAdapter:
             self._update_tracker_from_browser_state(tracker, state)
             controls = state.get("controls") if isinstance(state.get("controls"), dict) else {}
             confirmed = bool(
-                tracker.saw_user_turn
+                (bool(state.get("rootFound")) and not tracker.baseline_turn_keys)
+                or tracker.saw_user_turn
                 or tracker.saw_assistant_turn
                 or bool(controls.get("stopVisible"))
                 or (
@@ -1847,6 +1975,8 @@ class DeepSeekWebAdvisorAdapter:
                 "confirmed": confirmed,
                 "generation_id": tracker.generation_id,
                 "baseline_turn_count": len(tracker.baseline_turn_keys),
+                "root_found": bool(state.get("rootFound")),
+                "lifecycle": state.get("lifecycle"),
                 "saw_user_turn": tracker.saw_user_turn,
                 "saw_assistant_turn": tracker.saw_assistant_turn,
                 "saw_generation_active": tracker.saw_generation_active,
@@ -2290,6 +2420,27 @@ class DeepSeekWebAdvisorAdapter:
             recommendations=[],
             risks=["No browser advice was obtained."],
             assumptions_or_questions=["User may need to complete manual login or verification."],
+            confidence="LOW",
+            raw_artifact_reference=None,
+        )
+
+    def advice_unavailable_with_tracker(
+        self,
+        request_id: str,
+        tracker: GenerationTracker,
+        diagnosis: str,
+    ) -> AdviceResponseV1:
+        status = STATE_TO_STATUS.get(self.state, AdvisorStatus.UNAVAILABLE)
+        details = json.dumps(tracker.redacted_diagnostics(), sort_keys=True)
+        return AdviceResponseV1(
+            schema_version=SCHEMA_VERSION,
+            request_id=request_id,
+            advisor_id=self.advisor_id,
+            status=status.value,
+            diagnosis=bound_text(diagnosis, 512),
+            recommendations=[],
+            risks=["No browser advice was safely obtained."],
+            assumptions_or_questions=[bound_text(redact(details), 1200)],
             confidence="LOW",
             raw_artifact_reference=None,
         )

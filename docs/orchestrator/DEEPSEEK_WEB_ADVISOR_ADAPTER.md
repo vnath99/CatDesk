@@ -1,6 +1,6 @@
 # DeepSeek Web Advisor Adapter
 
-Status: T-0024B mutation-observer workflow correction
+Status: T-0024B empty-chat bootstrap correction
 Date: 2026-07-26
 
 ## Purpose
@@ -226,3 +226,22 @@ Before typing, the required `.ds-virtual-list-visible-items` root was absent
 `DEGRADED` before submitting the prompt, preserved the browser session, and
 captured only redacted structural metadata. No additional broad selectors or
 speculative heuristics were added.
+
+## Empty-Chat Bootstrap Evidence
+
+The empty-chat bootstrap correction treats a missing pre-submission
+`.ds-virtual-list-visible-items` root as a valid blank-chat baseline when the
+DeepSeek origin is trusted, the exact composer is usable, and no login,
+challenge, or rate-limit state is active. In that case the adapter creates the
+same `GenerationTracker`, installs a temporary `#root` bootstrap observer with
+`childList/subtree` only, and waits for the exact virtual-list root to appear
+after submission. The normal root observer is installed as soon as the exact
+root is discovered, including through a bounded exact-root polling fallback.
+
+Observed local result: the adapter reached `READY`, accepted the empty
+baseline, installed the bootstrap observer, submitted one harmless synthetic
+request, and shut down cleanly. The generation still ended `TIMED_OUT`.
+Redacted post-run evidence showed `rootCount: 0` and `turnCount: 0`; the exact
+virtual-list root was still absent, so no user turn, assistant turn, or
+assistant final-answer container could be associated. No second prompt was
+submitted and no broad selector or heuristic expansion was added.

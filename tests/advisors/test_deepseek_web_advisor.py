@@ -14,6 +14,8 @@ from pathlib import Path
 from experimental.advisors.deepseek_web_advisor import (
     AdapterState,
     CompletionDetector,
+    DEEPSEEK_GENERATION_INSTALL_SCRIPT,
+    DEEPSEEK_GENERATION_STATE_SCRIPT,
     DeepSeekWebAdvisorAdapter,
     GenerationTracker,
     JsonLinesAdvisorProtocol,
@@ -252,6 +254,86 @@ class DisconnectRecordingAdapter(DeepSeekWebAdvisorAdapter):
 
     def _disconnect_generation_observers(self) -> None:
         self.disconnected = True
+
+
+class EmptyChatBootstrapAdapter(DeepSeekWebAdvisorAdapter):
+    def __init__(self, states: list[dict[str, object]]) -> None:
+        super().__init__(selectors(), Path("empty-chat-profile"), headed=True, rng=random.Random(7))
+        self._sb = PromptScriptFakeSb()
+        self.state = AdapterState.READY
+        self.clock = 0.0
+        self.states = states
+        self.typed_prompts: list[str] = []
+        self.clicked = False
+        self.installed_script = ""
+        self.disconnected = False
+
+    def refresh_state(self) -> AdapterState:
+        self.state = AdapterState.READY
+        return self.state
+
+    def _snapshot(self) -> PageSnapshot:
+        return inline_snapshot(
+            """
+            <html><body>
+              <div id="root">
+                <textarea placeholder="Message DeepSeek"></textarea>
+                <div role="button" class="ds-button ds-button--primary ds-button--circle">Send</div>
+              </div>
+            </body></html>
+            """
+        )
+
+    def _execute_browser_script(self, script: str) -> object:
+        if "bootstrapObserver.observe(appRoot" in script:
+            self.installed_script = script
+            return {"ok": True, "observer": "bootstrap"}
+        if "rootFound: false" in script and "validEmptyChat" in script:
+            return {
+                "rootFound": False,
+                "validEmptyChat": True,
+                "turnKeys": [],
+                "assistantCount": 0,
+                "latestAssistantKey": None,
+                "latestAssistantText": "",
+                "turns": [],
+            }
+        if "window.__catdeskDeepSeekGeneration" in script and "assistantText" in script:
+            if self.states:
+                return self.states.pop(0)
+            return {
+                "ok": True,
+                "rootFound": True,
+                "lifecycle": "STABILIZING",
+                "detectedUserTurnKey": "user-1",
+                "detectedAssistantTurnKey": "assistant-1",
+                "assistantText": "complete assistant answer",
+                "mutationCount": 3,
+                "sawUserTurn": True,
+                "sawAssistantTurn": True,
+                "sawAssistantTextChange": True,
+                "sawGenerationActive": True,
+                "controls": {"sendVisible": True, "sendEnabled": True, "stopVisible": False},
+                "turnKeys": ["user-1", "assistant-1"],
+                "assistantCount": 1,
+            }
+        if "delete window.__catdeskDeepSeekGeneration" in script:
+            self.disconnected = True
+            return True
+        return True
+
+    def _type_prompt(self, selector: str, prompt: str) -> None:
+        self.typed_prompts.append(prompt)
+
+    def _click_first_enabled(self, selectors_: object) -> bool:
+        self.clicked = True
+        return True
+
+    def _now(self) -> float:
+        return self.clock
+
+    def _sleep(self, seconds: float) -> None:
+        self.clock += seconds
 
 
 class CookieAdapter(OfflineAdapter):
@@ -824,6 +906,173 @@ line two</code></pre>
         current = collect_virtual_list_baseline(snapshot("virtual_list_completed.html"))
 
         self.assertIsNone(newest_assistant_after_baseline(baseline, current))
+
+    def test_empty_chat_bootstrap_script_targets_root_only(self) -> None:
+        self.assertIn("document.querySelector('#root')", DEEPSEEK_GENERATION_INSTALL_SCRIPT)
+        self.assertIn("bootstrapObserver.observe(appRoot, { subtree: true, childList: true })", DEEPSEEK_GENERATION_INSTALL_SCRIPT)
+        self.assertIn("WAITING_FOR_CONVERSATION_ROOT", DEEPSEEK_GENERATION_STATE_SCRIPT)
+
+    def test_blank_chat_valid_empty_baseline_completes_after_root_creation(self) -> None:
+        adapter = EmptyChatBootstrapAdapter(
+            [
+                {
+                    "ok": True,
+                    "rootFound": True,
+                    "lifecycle": "WAITING_FOR_USER_TURN",
+                    "detectedUserTurnKey": "user-1",
+                    "detectedAssistantTurnKey": None,
+                    "assistantText": "",
+                    "mutationCount": 1,
+                    "sawUserTurn": True,
+                    "sawAssistantTurn": False,
+                    "sawAssistantTextChange": False,
+                    "sawGenerationActive": True,
+                    "controls": {"sendVisible": False, "sendEnabled": False, "stopVisible": True},
+                    "turnKeys": ["user-1"],
+                    "assistantCount": 0,
+                },
+                {
+                    "ok": True,
+                    "rootFound": True,
+                    "lifecycle": "STABILIZING",
+                    "detectedUserTurnKey": "user-1",
+                    "detectedAssistantTurnKey": "assistant-1",
+                    "assistantText": "complete assistant answer",
+                    "mutationCount": 3,
+                    "sawUserTurn": True,
+                    "sawAssistantTurn": True,
+                    "sawAssistantTextChange": True,
+                    "sawGenerationActive": True,
+                    "controls": {"sendVisible": True, "sendEnabled": True, "stopVisible": False},
+                    "turnKeys": ["user-1", "assistant-1"],
+                    "assistantCount": 1,
+                },
+                {
+                    "ok": True,
+                    "rootFound": True,
+                    "lifecycle": "STABILIZING",
+                    "detectedUserTurnKey": "user-1",
+                    "detectedAssistantTurnKey": "assistant-1",
+                    "assistantText": "complete assistant answer",
+                    "mutationCount": 3,
+                    "sawUserTurn": True,
+                    "sawAssistantTurn": True,
+                    "sawAssistantTextChange": True,
+                    "sawGenerationActive": True,
+                    "controls": {"sendVisible": True, "sendEnabled": True, "stopVisible": False},
+                    "turnKeys": ["user-1", "assistant-1"],
+                    "assistantCount": 1,
+                },
+            ]
+        )
+
+        response = adapter.advise(valid_request())
+
+        self.assertEqual(response.status, "COMPLETED")
+        self.assertIn("complete assistant answer", response.diagnosis)
+        self.assertEqual(len(adapter.typed_prompts), 1)
+        self.assertTrue(adapter.clicked)
+        self.assertIn("bootstrapObserver.observe(appRoot", adapter.installed_script)
+        self.assertTrue(adapter.disconnected)
+
+    def test_bounded_exact_root_poll_recovers_observer_race(self) -> None:
+        adapter = EmptyChatBootstrapAdapter(
+            [
+                {
+                    "ok": True,
+                    "rootFound": False,
+                    "lifecycle": "WAITING_FOR_CONVERSATION_ROOT",
+                    "assistantText": "",
+                    "mutationCount": 0,
+                    "sawUserTurn": False,
+                    "sawAssistantTurn": False,
+                    "sawAssistantTextChange": False,
+                    "sawGenerationActive": False,
+                    "controls": {"sendVisible": True, "sendEnabled": True, "stopVisible": False},
+                    "turnKeys": [],
+                    "assistantCount": 0,
+                },
+                {
+                    "ok": True,
+                    "rootFound": True,
+                    "lifecycle": "WAITING_FOR_USER_TURN",
+                    "detectedUserTurnKey": "user-race",
+                    "detectedAssistantTurnKey": None,
+                    "assistantText": "",
+                    "mutationCount": 1,
+                    "sawUserTurn": True,
+                    "sawAssistantTurn": False,
+                    "sawAssistantTextChange": False,
+                    "sawGenerationActive": True,
+                    "controls": {"sendVisible": False, "sendEnabled": False, "stopVisible": True},
+                    "turnKeys": ["user-race"],
+                    "assistantCount": 0,
+                },
+            ]
+        )
+        tracker = GenerationTracker(
+            generation_id="gen-race",
+            request_id="advice-race",
+            submitted_prompt_hash=sha256_text("prompt"),
+            started_at=0.0,
+            baseline_turn_keys=set(),
+            baseline_assistant_count=0,
+            baseline_latest_assistant_key=None,
+            baseline_latest_assistant_hash=None,
+        )
+
+        self.assertTrue(adapter._install_generation_observer(tracker))
+        self.assertTrue(adapter._confirm_generation_submission(tracker, "textarea"))
+        self.assertTrue(tracker.saw_user_turn)
+
+    def test_cancellation_before_root_creation_cleans_bootstrap_observer(self) -> None:
+        adapter = EmptyChatBootstrapAdapter([])
+        tracker = GenerationTracker(
+            generation_id="gen-cancel-root",
+            request_id="advice-cancel-root",
+            submitted_prompt_hash=sha256_text("prompt"),
+            started_at=0.0,
+            baseline_turn_keys=set(),
+            baseline_assistant_count=0,
+            baseline_latest_assistant_key=None,
+            baseline_latest_assistant_hash=None,
+        )
+        adapter.active_generation = tracker
+        adapter._install_generation_observer(tracker)
+
+        response = adapter.cancel("advice-cancel-root")
+
+        self.assertEqual(response.status, "CANCELLED")
+        self.assertTrue(adapter.disconnected)
+        self.assertEqual(tracker.terminal_state, "CANCELLED")
+
+    def test_timeout_before_root_creation_cleans_bootstrap_observer(self) -> None:
+        config = dataclasses.replace(selectors(), timeout_seconds=0.75)
+        adapter = EmptyChatBootstrapAdapter(
+            [
+                {
+                    "ok": True,
+                    "rootFound": True,
+                    "lifecycle": "WAITING_FOR_USER_TURN",
+                    "assistantText": "",
+                    "mutationCount": 1,
+                    "sawUserTurn": False,
+                    "sawAssistantTurn": False,
+                    "sawAssistantTextChange": False,
+                    "sawGenerationActive": False,
+                    "controls": {"sendVisible": True, "sendEnabled": True, "stopVisible": False},
+                    "turnKeys": [],
+                    "assistantCount": 0,
+                }
+                for _ in range(8)
+            ]
+        )
+        adapter.selectors = config
+
+        response = adapter.advise(valid_request())
+
+        self.assertEqual(response.status, "TIMED_OUT")
+        self.assertTrue(adapter.disconnected)
 
     def test_generation_tracker_hash_updates_for_character_and_child_mutations(self) -> None:
         adapter = DeepSeekWebAdvisorAdapter(selectors(), Path("tracker-profile"), headed=True)
