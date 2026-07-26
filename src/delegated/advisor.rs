@@ -1,8 +1,13 @@
-use std::time::Duration;
+use std::io::{BufRead, BufReader, Write};
+use std::path::PathBuf;
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::mpsc;
+use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::EXECUTION_CONTRACT_SCHEMA_VERSION;
 use super::context::DisclosurePolicy;
@@ -21,8 +26,11 @@ const MAX_TOTAL_SIZE_REDUCTION_STEPS: usize = 256;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AdviceRequestV1 {
+    #[serde(alias = "schema_version")]
     pub schema_version: u32,
+    #[serde(alias = "request_id")]
     pub request_id: String,
+    #[serde(alias = "run_id")]
     pub run_id: RunId,
     pub objective: String,
     pub current_step: String,
@@ -54,15 +62,20 @@ pub enum AdviceDisclosureClassification {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AdviceResponseV1 {
+    #[serde(alias = "schema_version")]
     pub schema_version: u32,
+    #[serde(alias = "request_id")]
     pub request_id: String,
+    #[serde(alias = "advisor_id")]
     pub advisor_id: String,
     pub status: AdvisorStatus,
     pub diagnosis: String,
     pub recommendations: Vec<String>,
     pub risks: Vec<String>,
+    #[serde(alias = "assumptions_or_questions")]
     pub assumptions_or_questions: Vec<String>,
     pub confidence: AdvisorConfidence,
+    #[serde(alias = "raw_artifact_reference")]
     pub raw_artifact_reference: Option<String>,
 }
 
@@ -107,6 +120,8 @@ impl AdviceTrigger {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AdviceBrokerConfigV1 {
+    pub advisor_enabled: bool,
+    pub allowed_advisor_id: Option<String>,
     pub disclosure_policy: DisclosurePolicy,
     pub max_excerpt_bytes: usize,
     pub max_total_serialized_bytes: usize,
@@ -117,6 +132,8 @@ pub struct AdviceBrokerConfigV1 {
 impl AdviceBrokerConfigV1 {
     pub fn remote_advisory_default() -> Self {
         Self {
+            advisor_enabled: true,
+            allowed_advisor_id: None,
             disclosure_policy: DisclosurePolicy::RemoteAllowed,
             max_excerpt_bytes: DEFAULT_MAX_EXCERPT_BYTES,
             max_total_serialized_bytes: DEFAULT_MAX_TOTAL_SERIALIZED_BYTES,
@@ -127,6 +144,8 @@ impl AdviceBrokerConfigV1 {
 
     pub fn local_only_default() -> Self {
         Self {
+            advisor_enabled: false,
+            allowed_advisor_id: None,
             disclosure_policy: DisclosurePolicy::LocalOnly,
             ..Self::remote_advisory_default()
         }
@@ -164,6 +183,20 @@ pub trait AdvisorAdapter {
         request: &AdviceRequestV1,
         timeout: Duration,
     ) -> Result<AdviceResponseV1, AdvisorError>;
+}
+
+impl<T: AdvisorAdapter + ?Sized> AdvisorAdapter for &mut T {
+    fn advisor_id(&self) -> &str {
+        (**self).advisor_id()
+    }
+
+    fn request_advice(
+        &mut self,
+        request: &AdviceRequestV1,
+        timeout: Duration,
+    ) -> Result<AdviceResponseV1, AdvisorError> {
+        (**self).request_advice(request, timeout)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -276,6 +309,298 @@ impl AdvisorAdapter for FakeAdvisor {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct DeepSeekProcessAdvisorConfig {
+    pub python_executable: PathBuf,
+    pub adapter_script: PathBuf,
+    pub profile_dir: PathBuf,
+    pub selectors_path: Option<PathBuf>,
+    pub headed: bool,
+    pub allow_env_login: bool,
+    pub auth_token: String,
+    pub public_advisor_id: String,
+    pub sidecar_advisor_id: String,
+    pub extra_env: Vec<(String, String)>,
+}
+
+impl DeepSeekProcessAdvisorConfig {
+    pub fn new(
+        python_executable: impl Into<PathBuf>,
+        adapter_script: impl Into<PathBuf>,
+        profile_dir: impl Into<PathBuf>,
+    ) -> Self {
+        Self {
+            python_executable: python_executable.into(),
+            adapter_script: adapter_script.into(),
+            profile_dir: profile_dir.into(),
+            selectors_path: None,
+            headed: true,
+            allow_env_login: false,
+            auth_token: format!("catdesk-advisor-{}", uuid::Uuid::new_v4()),
+            public_advisor_id: "deepseek-web".into(),
+            sidecar_advisor_id: "deepseek-web-advisor-experimental".into(),
+            extra_env: Vec::new(),
+        }
+    }
+}
+
+pub struct DeepSeekProcessAdvisor {
+    config: DeepSeekProcessAdvisorConfig,
+    child: Option<Child>,
+    stdin: Option<ChildStdin>,
+    stdout_rx: Option<mpsc::Receiver<Result<String, String>>>,
+    active_request_id: Option<String>,
+}
+
+impl DeepSeekProcessAdvisor {
+    pub fn new(config: DeepSeekProcessAdvisorConfig) -> Self {
+        Self {
+            config,
+            child: None,
+            stdin: None,
+            stdout_rx: None,
+            active_request_id: None,
+        }
+    }
+
+    fn ensure_started(&mut self, timeout: Duration) -> Result<(), AdvisorError> {
+        if self.child_is_running() {
+            return Ok(());
+        }
+        self.spawn_sidecar()?;
+        let hello = self.send_command("hello", None, timeout)?;
+        let advisor_id = hello
+            .get("advisor_id")
+            .or_else(|| hello.get("advisorId"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        if advisor_id != self.config.sidecar_advisor_id {
+            return Err(AdvisorError::Adapter(format!(
+                "sidecar advisor_id mismatch: {advisor_id}"
+            )));
+        }
+        self.send_command("start", None, timeout)?;
+        let status = self.send_command("status", None, timeout)?;
+        if status.get("state").and_then(Value::as_str) != Some("READY") {
+            return Err(AdvisorError::Adapter("advisor sidecar is not READY".into()));
+        }
+        Ok(())
+    }
+
+    fn child_is_running(&mut self) -> bool {
+        let Some(child) = self.child.as_mut() else {
+            return false;
+        };
+        matches!(child.try_wait(), Ok(None))
+    }
+
+    fn spawn_sidecar(&mut self) -> Result<(), AdvisorError> {
+        let mut command = Command::new(&self.config.python_executable);
+        command
+            .arg(&self.config.adapter_script)
+            .arg("--profile-dir")
+            .arg(&self.config.profile_dir)
+            .env("CATDESK_ADVISOR_AUTH_TOKEN", &self.config.auth_token)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        for (key, value) in &self.config.extra_env {
+            command.env(key, value);
+        }
+        if let Some(selectors) = &self.config.selectors_path {
+            command.arg("--selectors").arg(selectors);
+        }
+        if !self.config.headed {
+            command.arg("--unsafe-headless-dev");
+        }
+        if self.config.allow_env_login {
+            command.arg("--allow-env-login");
+        }
+        let mut child = command
+            .spawn()
+            .map_err(|error| AdvisorError::Adapter(format!("failed to start advisor: {error}")))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| AdvisorError::Adapter("advisor stdout was not piped".into()))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| AdvisorError::Adapter("advisor stderr was not piped".into()))?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| AdvisorError::Adapter("advisor stdin was not piped".into()))?;
+        let (tx, rx) = mpsc::channel();
+        thread::spawn(move || {
+            for line in BufReader::new(stdout).lines() {
+                let _ = tx.send(line.map_err(|error| error.to_string()));
+            }
+        });
+        thread::spawn(move || {
+            for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                eprintln!("deepseek advisor: {line}");
+            }
+        });
+        self.child = Some(child);
+        self.stdin = Some(stdin);
+        self.stdout_rx = Some(rx);
+        Ok(())
+    }
+
+    fn send_command(
+        &mut self,
+        command: &str,
+        request: Option<&AdviceRequestV1>,
+        timeout: Duration,
+    ) -> Result<Value, AdvisorError> {
+        let mut payload = serde_json::Map::new();
+        payload.insert("auth_token".into(), json!(self.config.auth_token));
+        payload.insert("command".into(), json!(command));
+        if let Some(request) = request {
+            payload.insert(
+                "request".into(),
+                serde_json::to_value(request)
+                    .map_err(|error| AdvisorError::Adapter(error.to_string()))?,
+            );
+        }
+        let line = serde_json::to_string(&Value::Object(payload))
+            .map_err(|error| AdvisorError::Adapter(error.to_string()))?;
+        let stdin = self
+            .stdin
+            .as_mut()
+            .ok_or_else(|| AdvisorError::Adapter("advisor stdin is unavailable".into()))?;
+        writeln!(stdin, "{line}")
+            .and_then(|_| stdin.flush())
+            .map_err(|error| AdvisorError::Adapter(format!("advisor write failed: {error}")))?;
+        let value = self.read_jsonl(timeout)?;
+        if value.get("ok").and_then(Value::as_bool) == Some(false) {
+            return Err(AdvisorError::Adapter(
+                value
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("advisor command failed")
+                    .into(),
+            ));
+        }
+        Ok(value)
+    }
+
+    fn read_jsonl(&mut self, timeout: Duration) -> Result<Value, AdvisorError> {
+        let rx = self
+            .stdout_rx
+            .as_ref()
+            .ok_or_else(|| AdvisorError::Adapter("advisor stdout reader is unavailable".into()))?;
+        let line = rx
+            .recv_timeout(timeout)
+            .map_err(|_| AdvisorError::Adapter("advisor response timed out".into()))?
+            .map_err(|error| AdvisorError::Adapter(format!("advisor stdout failed: {error}")))?;
+        serde_json::from_str(&line).map_err(|error| {
+            AdvisorError::MalformedAdvice(format!("malformed advisor JSONL: {error}"))
+        })
+    }
+
+    pub fn cancel(&mut self, timeout: Duration) -> Result<(), AdvisorError> {
+        if self.active_request_id.is_some() && self.child_is_running() {
+            let _ = self.send_command("cancel", None, timeout)?;
+        }
+        self.active_request_id = None;
+        Ok(())
+    }
+
+    pub fn shutdown(&mut self, timeout: Duration) -> Result<(), AdvisorError> {
+        if self.child_is_running() {
+            let _ = self.send_command("shutdown", None, timeout);
+        }
+        if let Some(mut child) = self.child.take() {
+            let started = Instant::now();
+            while started.elapsed() < timeout {
+                if matches!(child.try_wait(), Ok(Some(_))) {
+                    self.stdin = None;
+                    self.stdout_rx = None;
+                    self.active_request_id = None;
+                    return Ok(());
+                }
+                thread::sleep(Duration::from_millis(20));
+            }
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        self.stdin = None;
+        self.stdout_rx = None;
+        self.active_request_id = None;
+        Ok(())
+    }
+}
+
+impl Drop for DeepSeekProcessAdvisor {
+    fn drop(&mut self) {
+        let _ = self.shutdown(Duration::from_secs(2));
+    }
+}
+
+impl AdvisorAdapter for DeepSeekProcessAdvisor {
+    fn advisor_id(&self) -> &str {
+        &self.config.public_advisor_id
+    }
+
+    fn request_advice(
+        &mut self,
+        request: &AdviceRequestV1,
+        timeout: Duration,
+    ) -> Result<AdviceResponseV1, AdvisorError> {
+        if self.active_request_id.is_some() {
+            return Err(AdvisorError::Adapter(
+                "advisor request already active".into(),
+            ));
+        }
+        self.ensure_started(timeout)?;
+        self.active_request_id = Some(request.request_id.clone());
+        let accepted = self.send_command("advise", Some(request), timeout)?;
+        if accepted.get("accepted").and_then(Value::as_bool) != Some(true) {
+            self.active_request_id = None;
+            return Err(AdvisorError::Adapter(
+                "advisor did not accept request".into(),
+            ));
+        }
+        if accepted.get("request_id").and_then(Value::as_str) != Some(request.request_id.as_str()) {
+            self.active_request_id = None;
+            return Err(AdvisorError::MalformedAdvice(
+                "advisor accepted stale or mismatched request".into(),
+            ));
+        }
+        let terminal = self.read_jsonl(timeout)?;
+        self.active_request_id = None;
+        if terminal.get("event").and_then(Value::as_str) != Some("advice_completed") {
+            return Err(AdvisorError::MalformedAdvice(
+                "advisor emitted unexpected terminal event".into(),
+            ));
+        }
+        if terminal.get("request_id").and_then(Value::as_str) != Some(request.request_id.as_str()) {
+            return Err(AdvisorError::MalformedAdvice(
+                "advisor terminal event request_id mismatch".into(),
+            ));
+        }
+        let response_value = terminal.get("response").cloned().ok_or_else(|| {
+            AdvisorError::MalformedAdvice("advisor terminal event omitted response".into())
+        })?;
+        let mut response: AdviceResponseV1 = serde_json::from_value(response_value)
+            .map_err(|error| AdvisorError::MalformedAdvice(error.to_string()))?;
+        if response.request_id != request.request_id {
+            return Err(AdvisorError::MalformedAdvice(
+                "advisor response request_id does not match request".into(),
+            ));
+        }
+        if response.advisor_id != self.config.sidecar_advisor_id {
+            return Err(AdvisorError::MalformedAdvice(
+                "advisor response advisor_id does not match sidecar".into(),
+            ));
+        }
+        response.advisor_id = self.config.public_advisor_id.clone();
+        Ok(response)
+    }
+}
+
 pub struct AdvisorBroker<A: AdvisorAdapter> {
     adapter: A,
     journal: DelegatedJournal,
@@ -355,25 +680,122 @@ impl<A: AdvisorAdapter> AdvisorBroker<A> {
         draft: AdviceRequestDraftV1,
         trigger: AdviceTrigger,
     ) -> Result<AdviceResponseV1, AdvisorError> {
+        let run_id = RunId::new(contract.task_id.clone()).map_err(AdvisorError::Adapter)?;
+        self.append_advisor_event(
+            &run_id,
+            "advice_triggered",
+            Some(&draft.request_id),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )?;
         let request = self.build_request(contract, draft, trigger)?;
+        let request_bytes = serialized_len(&request)?;
+        let request_hash = stable_hash(&request).map_err(AdvisorError::Adapter)?;
+        self.append_advisor_event(
+            &request.run_id,
+            "advice_request_built",
+            Some(&request.request_id),
+            None,
+            Some(request_bytes),
+            None,
+            Some(request_hash.clone()),
+            None,
+        )?;
+        self.append_advisor_event(
+            &request.run_id,
+            "advice_disclosure_approved",
+            Some(&request.request_id),
+            None,
+            Some(request_bytes),
+            None,
+            Some(request_hash.clone()),
+            None,
+        )?;
+        let adapter_id = self.adapter.advisor_id().to_string();
         self.append_advice_event(
             &request.run_id,
             EventPayloadV1::AdviceRequest {
                 request: Box::new(request.clone()),
             },
         )?;
-        let response = self.adapter.request_advice(&request, self.config.timeout)?;
+        self.append_advisor_event(
+            &request.run_id,
+            "advisor_starting",
+            Some(&request.request_id),
+            Some(&adapter_id),
+            Some(request_bytes),
+            None,
+            Some(request_hash.clone()),
+            None,
+        )?;
+        self.append_advisor_event(
+            &request.run_id,
+            "advisor_ready",
+            Some(&request.request_id),
+            Some(&adapter_id),
+            Some(request_bytes),
+            None,
+            Some(request_hash.clone()),
+            None,
+        )?;
+        self.append_advisor_event(
+            &request.run_id,
+            "advice_sent",
+            Some(&request.request_id),
+            Some(&adapter_id),
+            Some(request_bytes),
+            None,
+            Some(request_hash.clone()),
+            None,
+        )?;
+        let response = match self.adapter.request_advice(&request, self.config.timeout) {
+            Ok(response) => response,
+            Err(error) => {
+                self.append_advisor_event(
+                    &request.run_id,
+                    "advice_failed",
+                    Some(&request.request_id),
+                    Some(&adapter_id),
+                    Some(request_bytes),
+                    None,
+                    Some(request_hash),
+                    None,
+                )?;
+                return Err(error);
+            }
+        };
         validate_advice_response(
             &request,
             &response,
-            self.adapter.advisor_id(),
+            &adapter_id,
             self.config.max_total_serialized_bytes,
         )?;
+        let response_bytes = serde_json::to_vec(&response)
+            .map_err(|error| AdvisorError::MalformedAdvice(error.to_string()))?
+            .len();
+        let response_hash = stable_hash(&response).map_err(AdvisorError::Adapter)?;
+        let mut response = response;
+        if response.raw_artifact_reference.is_none() {
+            response.raw_artifact_reference = Some(format!("journal://advice/{response_hash}"));
+        }
         self.append_advice_event(
             &request.run_id,
             EventPayloadV1::AdviceResponse {
                 response: Box::new(response.clone()),
             },
+        )?;
+        self.append_advisor_event(
+            &request.run_id,
+            "advice_completed",
+            Some(&request.request_id),
+            Some(&adapter_id),
+            Some(request_bytes),
+            Some(response_bytes),
+            Some(request_hash),
+            Some(response_hash),
         )?;
         Ok(response)
     }
@@ -410,6 +832,27 @@ impl<A: AdvisorAdapter> AdvisorBroker<A> {
         }
     }
 
+    pub fn record_advice_delivered_to_worker(
+        &mut self,
+        run_id: &RunId,
+        response: &AdviceResponseV1,
+    ) -> Result<(), AdvisorError> {
+        let response_bytes = serde_json::to_vec(response)
+            .map_err(|error| AdvisorError::MalformedAdvice(error.to_string()))?
+            .len();
+        let response_hash = stable_hash(response).map_err(AdvisorError::Adapter)?;
+        self.append_advisor_event(
+            run_id,
+            "advice_delivered_to_worker",
+            Some(&response.request_id),
+            Some(&response.advisor_id),
+            None,
+            Some(response_bytes),
+            None,
+            Some(response_hash),
+        )
+    }
+
     fn enforce_disclosure(
         &self,
         classification: &AdviceDisclosureClassification,
@@ -418,6 +861,19 @@ impl<A: AdvisorAdapter> AdvisorBroker<A> {
             return Err(AdvisorError::DisclosureDenied(
                 "execution contract does not allow remote/browser advisory disclosure".into(),
             ));
+        }
+        if !self.config.advisor_enabled {
+            return Err(AdvisorError::DisclosureDenied(
+                "remote/browser advisor is disabled".into(),
+            ));
+        }
+        if let Some(expected) = &self.config.allowed_advisor_id {
+            if self.adapter.advisor_id() != expected {
+                return Err(AdvisorError::DisclosureDenied(format!(
+                    "advisor {} is not explicitly allowed",
+                    self.adapter.advisor_id()
+                )));
+            }
         }
         if classification != &AdviceDisclosureClassification::RemoteAllowed {
             return Err(AdvisorError::DisclosureDenied(
@@ -499,6 +955,34 @@ impl<A: AdvisorAdapter> AdvisorBroker<A> {
             .append_event(&event)
             .map_err(|error| AdvisorError::Journal(format!("{error:?}")))?;
         Ok(())
+    }
+
+    fn append_advisor_event(
+        &mut self,
+        run_id: &RunId,
+        event_name: &str,
+        request_id: Option<&str>,
+        advisor_id: Option<&str>,
+        request_bytes: Option<usize>,
+        response_bytes: Option<usize>,
+        request_hash: Option<String>,
+        response_hash: Option<String>,
+    ) -> Result<(), AdvisorError> {
+        self.append_advice_event(
+            run_id,
+            EventPayloadV1::AdvisorEvent {
+                event: event_name.into(),
+                request_id: request_id.map(str::to_string),
+                generation_id: request_id.map(|id| format!("advisor-generation-{id}")),
+                advisor_id: advisor_id.map(str::to_string),
+                status: None,
+                request_bytes,
+                response_bytes,
+                request_hash,
+                response_hash,
+                timestamp_unix_ms: timestamp_unix_ms(),
+            },
+        )
     }
 }
 
@@ -664,6 +1148,13 @@ fn advisory_text_len(response: &AdviceResponseV1) -> usize {
             .map_or(0, String::len)
 }
 
+fn timestamp_unix_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64)
+        .unwrap_or(0)
+}
+
 fn sanitize_identifier(value: &str) -> String {
     let mut sanitized = value
         .chars()
@@ -825,6 +1316,89 @@ mod tests {
         (temp, journal, contract)
     }
 
+    fn fake_sidecar(mode: &str) -> (std::path::PathBuf, DeepSeekProcessAdvisor) {
+        let temp =
+            std::env::temp_dir().join(format!("catdesk-advisor-sidecar-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp).expect("tempdir");
+        let script = temp.join("fake_advisor.py");
+        let request_log = temp.join("request.json");
+        std::fs::write(
+            &script,
+            format!(
+                r#"
+import json, os, sys, time
+auth = os.environ.get("CATDESK_ADVISOR_AUTH_TOKEN", "")
+mode = os.environ.get("FAKE_ADVISOR_MODE", "success")
+request_log = r"{request_log}"
+sidecar_id = "deepseek-web-advisor-experimental"
+def emit(value):
+    sys.stdout.write(json.dumps(value, separators=(",", ":")) + "\n")
+    sys.stdout.flush()
+for line in sys.stdin:
+    msg = json.loads(line)
+    if mode == "unauthorized" or msg.get("auth_token") != auth:
+        emit({{"ok": False, "error": "UNAUTHORIZED"}})
+        continue
+    cmd = msg.get("command")
+    if cmd == "hello":
+        emit({{"ok": True, "advisor_id": sidecar_id, "state": "STOPPED", "protocol": "fake"}})
+    elif cmd == "start":
+        emit({{"ok": True, "state": "READY"}})
+    elif cmd == "status":
+        emit({{"ok": True, "state": "READY", "active": False, "request_id": None}})
+    elif cmd == "shutdown":
+        emit({{"ok": True, "state": "STOPPED"}})
+        break
+    elif cmd == "cancel":
+        emit({{"ok": True, "state": "CANCELLED", "request_id": msg.get("request_id")}})
+    elif cmd == "advise":
+        request = msg.get("request", {{}})
+        open(request_log, "w", encoding="utf-8").write(json.dumps(request, sort_keys=True))
+        request_id = request.get("requestId") or request.get("request_id")
+        emit({{"ok": True, "accepted": True, "request_id": request_id, "state": "READY"}})
+        if mode == "timeout":
+            time.sleep(5)
+            continue
+        if mode == "crash":
+            sys.exit(7)
+        if mode == "malformed":
+            sys.stdout.write("{{not-json\n")
+            sys.stdout.flush()
+            continue
+        response_id = "wrong-request" if mode == "wrong_request" else request_id
+        advisor_id = "wrong-advisor" if mode == "wrong_advisor" else sidecar_id
+        response = {{
+            "schema_version": 1,
+            "request_id": response_id,
+            "advisor_id": advisor_id,
+            "status": "COMPLETED",
+            "diagnosis": "bounded sidecar advice",
+            "recommendations": ["inspect locally before patching"],
+            "risks": ["advice is untrusted"],
+            "assumptions_or_questions": [],
+            "confidence": "MEDIUM",
+            "raw_artifact_reference": None,
+        }}
+        emit({{"ok": True, "event": "advice_completed", "request_id": request_id, "response": response}})
+    else:
+        emit({{"ok": False, "error": "UNKNOWN_COMMAND"}})
+"#,
+                request_log = request_log.display().to_string().replace('\\', "\\\\")
+            ),
+        )
+        .expect("script");
+        let mut config = DeepSeekProcessAdvisorConfig::new("python", &script, temp.join("profile"));
+        config.headed = false;
+        config
+            .extra_env
+            .push(("FAKE_ADVISOR_MODE".into(), mode.into()));
+        let mut advisor = DeepSeekProcessAdvisor::new(config);
+        advisor.config.public_advisor_id = "deepseek-web".into();
+        advisor.config.sidecar_advisor_id = "deepseek-web-advisor-experimental".into();
+        advisor.config.adapter_script = script;
+        (temp, advisor)
+    }
+
     #[test]
     fn bounded_request_construction_redacts_and_caps_content() {
         let (_temp, journal, contract) = journal();
@@ -870,6 +1444,85 @@ mod tests {
     }
 
     #[test]
+    fn deepseek_process_advisor_lazy_start_authenticates_and_returns_advice() {
+        let (temp, mut advisor) = fake_sidecar("success");
+        let request = AdvisorBroker::new(
+            FakeAdvisor::success(),
+            journal().1,
+            AdviceBrokerConfigV1::remote_advisory_default(),
+        )
+        .build_request(&contract(), draft(), AdviceTrigger::ExplicitQwenRequest)
+        .expect("request");
+
+        assert!(advisor.child.is_none());
+        let response = advisor
+            .request_advice(&request, Duration::from_secs(5))
+            .expect("advice");
+
+        assert_eq!(advisor.advisor_id(), "deepseek-web");
+        assert_eq!(response.advisor_id, "deepseek-web");
+        assert_eq!(response.request_id, request.request_id);
+        assert_eq!(response.status, AdvisorStatus::Completed);
+        let logged = std::fs::read_to_string(temp.join("request.json")).expect("request log");
+        assert!(!logged.contains("toolDefinitions"));
+        assert!(!logged.contains("tool_definitions"));
+        advisor.shutdown(Duration::from_secs(2)).expect("shutdown");
+        assert!(!advisor.child_is_running());
+    }
+
+    #[test]
+    fn deepseek_process_advisor_rejects_auth_wrong_ids_malformed_timeout_and_crash() {
+        let request = AdvisorBroker::new(
+            FakeAdvisor::success(),
+            journal().1,
+            AdviceBrokerConfigV1::remote_advisory_default(),
+        )
+        .build_request(&contract(), draft(), AdviceTrigger::ExplicitQwenRequest)
+        .expect("request");
+
+        for (mode, expected) in [
+            ("unauthorized", "UNAUTHORIZED"),
+            ("wrong_request", "request_id"),
+            ("wrong_advisor", "advisor_id"),
+            ("malformed", "malformed"),
+            ("timeout", "timed out"),
+            ("crash", "timed out"),
+        ] {
+            let (_temp, mut advisor) = fake_sidecar(mode);
+            let error = advisor
+                .request_advice(&request, Duration::from_millis(500))
+                .expect_err("process error");
+            let text = format!("{error:?}");
+            assert!(
+                text.contains(expected),
+                "mode {mode} expected {expected} in {text}"
+            );
+            let _ = advisor.shutdown(Duration::from_millis(100));
+        }
+    }
+
+    #[test]
+    fn deepseek_process_advisor_allows_one_active_request_and_cancels() {
+        let (_temp, mut advisor) = fake_sidecar("success");
+        advisor.active_request_id = Some("active-request".into());
+        let request = AdvisorBroker::new(
+            FakeAdvisor::success(),
+            journal().1,
+            AdviceBrokerConfigV1::remote_advisory_default(),
+        )
+        .build_request(&contract(), draft(), AdviceTrigger::ExplicitQwenRequest)
+        .expect("request");
+
+        let error = advisor
+            .request_advice(&request, Duration::from_millis(500))
+            .expect_err("already active");
+
+        assert!(format!("{error:?}").contains("already active"));
+        advisor.active_request_id = None;
+        advisor.cancel(Duration::from_millis(100)).expect("cancel");
+    }
+
+    #[test]
     fn fake_advisor_success_is_journaled() {
         let (_temp, journal, contract) = journal();
         let mut broker = AdvisorBroker::new(
@@ -893,15 +1546,26 @@ mod tests {
                 },
             )
             .expect("events");
-        assert_eq!(events.len(), 2);
-        assert!(matches!(
-            events[0].payload,
-            EventPayloadV1::AdviceRequest { .. }
-        ));
-        assert!(matches!(
-            events[1].payload,
-            EventPayloadV1::AdviceResponse { .. }
-        ));
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event.payload, EventPayloadV1::AdviceRequest { .. }))
+        );
+        assert!(
+            events
+                .iter()
+                .any(|event| matches!(event.payload, EventPayloadV1::AdviceResponse { .. }))
+        );
+        let lifecycle_names = events
+            .iter()
+            .filter_map(|event| match &event.payload {
+                EventPayloadV1::AdvisorEvent { event, .. } => Some(event.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert!(lifecycle_names.contains(&"advice_triggered"));
+        assert!(lifecycle_names.contains(&"advisor_ready"));
+        assert!(lifecycle_names.contains(&"advice_completed"));
     }
 
     #[test]
@@ -953,7 +1617,7 @@ mod tests {
                 .iter()
                 .map(|event| event.event_sequence)
                 .collect::<Vec<_>>(),
-            vec![1, 2, 3]
+            (1..=events.len() as u64).collect::<Vec<_>>()
         );
     }
 

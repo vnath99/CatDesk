@@ -2659,6 +2659,7 @@ fn mcp_integrated_config(
         job_root: workspace_root.join(".catdesk/delegated/jobs"),
         ollama_base_url: ollama_base_url.into(),
         model_id: contract.provider_policy.primary_model_id.clone(),
+        advisor: None,
     })
 }
 
@@ -2827,6 +2828,7 @@ fn rehydrate_registry_entry(
         job_root: workspace_root.join(".catdesk/delegated/jobs"),
         ollama_base_url: "http://127.0.0.1:11434".into(),
         model_id: String::new(),
+        advisor: None,
     };
     let journal =
         DelegatedJournal::open(&config.journal_root).map_err(|error| format!("{error:?}"))?;

@@ -1,7 +1,7 @@
 # Web Intelligence Advisor
 
-Status: T-0024A experimental architecture
-Date: 2026-07-25
+Status: T-0024C experimental integration for review
+Date: 2026-07-26
 
 ## Purpose
 
@@ -70,11 +70,20 @@ The standalone DeepSeek browser advisor adapter must:
 - communicate through a narrow authenticated local protocol;
 - expose no repository or execution tools.
 
-T-0024B remains standalone. It is not connected to the `AdvisorBroker`; that is
-reserved for T-0024C after review.
+T-0024B remains the standalone browser adapter boundary. T-0024C connects it
+to CatDesk only through the Rust `DeepSeekProcessAdvisor` JSONL process
+adapter.
 
-## Future T-0024C Guardrails
+## T-0024C Guardrails
 
-T-0024C may integrate advisor consultation into the worker loop, but only as
-untrusted context. It must not modify the released CatDesk worker, patch,
+T-0024C integrates advisor consultation into the worker loop, but only as
+untrusted context. It does not modify the released CatDesk worker, patch,
 journal, MCP, authentication, provider, or verification boundaries.
+
+The web advisor is disabled by default and requires explicit run
+configuration for advisor ID `deepseek-web` plus `REMOTE_ALLOWED` disclosure.
+The Python process receives only a bounded `AdviceRequestV1` over an
+authenticated local JSONL protocol and receives no CatDesk tool definitions or
+execution authority. Returned advice is delimited as untrusted user/context
+data for the next Qwen turn; Qwen must still inspect repository state and act
+through ordinary CatDesk tools.

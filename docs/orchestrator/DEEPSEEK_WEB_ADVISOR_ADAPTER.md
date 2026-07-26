@@ -1,6 +1,6 @@
 # DeepSeek Web Advisor Adapter
 
-Status: T-0024B empty-chat bootstrap correction
+Status: T-0024C process-adapter integration for review
 Date: 2026-07-26
 
 ## Purpose
@@ -9,8 +9,10 @@ The DeepSeek web advisor adapter is an experimental browser bridge for the
 post-v1 intelligence-advisor phase. It is advisory only. It accepts a bounded
 `AdviceRequestV1` and returns an `AdviceResponseV1`-shaped result.
 
-The adapter is not connected to the CatDesk `AdvisorBroker` in T-0024B. That
-integration remains deferred to T-0024C.
+T-0024C connects this standalone adapter to CatDesk through the Rust
+`DeepSeekProcessAdvisor` process adapter. The browser adapter still receives
+only `AdviceRequestV1` JSONL frames and never receives CatDesk tool
+definitions or execution authority.
 
 ## Boundary
 

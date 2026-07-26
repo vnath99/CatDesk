@@ -57,14 +57,42 @@ impl EventEnvelopeV1 {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum EventPayloadV1 {
-    RunStateChanged { state: RunState },
-    Delta { text: String },
-    Item { item: Box<TurnItemV1> },
-    AdviceRequest { request: Box<AdviceRequestV1> },
-    AdviceResponse { response: Box<AdviceResponseV1> },
-    Failed { error: String },
-    Cancelled { reason: String },
-    OutcomeUnknown { reason: String },
+    RunStateChanged {
+        state: RunState,
+    },
+    Delta {
+        text: String,
+    },
+    Item {
+        item: Box<TurnItemV1>,
+    },
+    AdviceRequest {
+        request: Box<AdviceRequestV1>,
+    },
+    AdviceResponse {
+        response: Box<AdviceResponseV1>,
+    },
+    AdvisorEvent {
+        event: String,
+        request_id: Option<String>,
+        generation_id: Option<String>,
+        advisor_id: Option<String>,
+        status: Option<String>,
+        request_bytes: Option<usize>,
+        response_bytes: Option<usize>,
+        request_hash: Option<String>,
+        response_hash: Option<String>,
+        timestamp_unix_ms: u64,
+    },
+    Failed {
+        error: String,
+    },
+    Cancelled {
+        reason: String,
+    },
+    OutcomeUnknown {
+        reason: String,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
