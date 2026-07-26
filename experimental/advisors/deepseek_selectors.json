@@ -1,0 +1,43 @@
+{
+  "start_url": "https://chat.deepseek.com/",
+  "response_container_selectors": [
+    "[data-testid=\"assistant-message\"]",
+    "[data-ds-role=\"assistant-response\"]",
+    "article[data-role=\"assistant\"]"
+  ],
+  "prompt_input_selectors": [
+    "textarea",
+    "[contenteditable=\"true\"]"
+  ],
+  "send_button_selectors": [
+    "button[aria-label=\"Send\"]",
+    "button[data-testid=\"send-button\"]"
+  ],
+  "stop_button_selectors": [
+    "button[aria-label=\"Stop generating\"]",
+    "button[data-testid=\"stop-button\"]"
+  ],
+  "login_required_selectors": [
+    "input[type=\"password\"]",
+    "[data-testid=\"login-form\"]"
+  ],
+  "takeover_required_selectors": [
+    "[data-testid=\"captcha\"]",
+    "[data-testid=\"turnstile\"]",
+    "iframe[src*=\"captcha\"]",
+    "iframe[src*=\"turnstile\"]"
+  ],
+  "rate_limit_markers": [
+    "rate limit",
+    "too many requests",
+    "try again later"
+  ],
+  "completion_markers": [
+    "regenerate",
+    "copy",
+    "share"
+  ],
+  "text_stability_seconds": 2.0,
+  "timeout_seconds": 120.0,
+  "bounded_dom_evidence_bytes": 2048
+}

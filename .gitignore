@@ -5,3 +5,5 @@
 /npm/bin
 log.txt
 log_old.txt
+__pycache__/
+*.pyc

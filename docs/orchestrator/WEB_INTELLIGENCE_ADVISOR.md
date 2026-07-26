@@ -59,9 +59,9 @@ and brittle selectors. None of that behavior is copied.
 plaintext credentials, CAPTCHA automation, hard-coded account or conversation
 data, generated CSS selectors, or infinite keep-alive behavior.
 
-## Future T-0024B Guardrails
+## T-0024B Guardrails
 
-A real browser advisor adapter must:
+The standalone DeepSeek browser advisor adapter must:
 
 - prefer SeleniumBase CDP mode;
 - use a dedicated persistent browser profile;
@@ -69,6 +69,9 @@ A real browser advisor adapter must:
 - return `TAKEOVER_REQUIRED` for CAPTCHA or security verification;
 - communicate through a narrow authenticated local protocol;
 - expose no repository or execution tools.
+
+T-0024B remains standalone. It is not connected to the `AdvisorBroker`; that is
+reserved for T-0024C after review.
 
 ## Future T-0024C Guardrails
 
