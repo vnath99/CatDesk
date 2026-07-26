@@ -110,6 +110,7 @@ class SelectorConfig:
 
 @dataclasses.dataclass(frozen=True)
 class AdviceResponseV1:
+    schema_version: int
     request_id: str
     advisor_id: str
     status: str
@@ -370,6 +371,7 @@ class DeepSeekWebAdvisorAdapter:
     def advice_unavailable(self, request_id: str) -> AdviceResponseV1:
         status = STATE_TO_STATUS.get(self.state, AdvisorStatus.UNAVAILABLE)
         return AdviceResponseV1(
+            schema_version=1,
             request_id=request_id,
             advisor_id=self.advisor_id,
             status=status.value,
