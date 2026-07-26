@@ -120,8 +120,8 @@ The `advise` command:
   generation;
 - tracks actual text changes, SHA-256 hashes, mutation counts, and text
   stability;
-- requires the generation/stop control to be absent, send to be visible and
-  enabled, and multiple stable samples;
+- requires the generation/stop control to be absent, the composer surface to
+  return to a usable post-generation state, and multiple stable samples;
 - returns exactly the newest bounded assistant final-answer `innerText` in
   `diagnosis`;
 - rejects old, empty, baseline, or stale responses;
@@ -137,15 +137,18 @@ Completion does not depend on a generated CSS class. The detector combines:
 
 - visible assistant final-answer baseline and newest-response text;
 - stop/generation-control absence;
-- visible and enabled send control;
+- composer/control readiness after generation;
 - actual text changes and SHA-256 hash stability across multiple samples;
 - timeout.
 
 For the mutation-observer live path, completion requires a new/current
 assistant final-answer container associated with the active generation,
 non-empty normalized text, a post-submission text or DOM change, no exact stop
-control, exact send visible and enabled, no assistant-content mutation for at
-least five seconds, and at least three consecutive matching hashes.
+control, a usable composer/control surface, no assistant-content mutation for
+at least five seconds, and at least three consecutive matching hashes. Send
+must be verified as visible and enabled before submission; it is not a
+post-completion requirement because a blank settled composer may leave Send
+disabled until the next prompt is typed.
 
 Rate limits are detected only through visible provider error/toast selectors,
 not arbitrary matching of page text.
@@ -160,12 +163,14 @@ Ordinary diagnostics include only:
 
 - current state;
 - failed selector;
-- page title with secret-like values redacted;
+- page title with best-effort pattern redaction for secret-like values;
 - URL origin only;
 - bounded DOM tag/attribute evidence.
 
 Diagnostics omit cookies, tokens, prompts, responses, credentials, and full
-page URLs.
+page URLs. Secret filtering is best-effort pattern redaction for common token,
+password, API-key, authorization, and secret assignment formats; it is not a
+guarantee that every possible secret shape is recognized.
 
 ## Testing
 
@@ -245,6 +250,10 @@ same `GenerationTracker`, installs a temporary `#root` bootstrap observer with
 `childList/subtree` only, and waits for the exact virtual-list root to appear
 after submission. The normal root observer is installed as soon as the exact
 root is discovered, including through a bounded exact-root polling fallback.
+The `#root` observer is bootstrap-only: it does not extract message text,
+does not broaden the response selectors, and is disconnected when the exact
+conversation root is found, cancellation occurs, shutdown begins, or the
+submission-confirmation window expires.
 
 Observed local result: the adapter reached `READY`, accepted the empty
 baseline, installed the bootstrap observer, submitted one harmless synthetic
