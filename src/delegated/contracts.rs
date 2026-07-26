@@ -69,10 +69,49 @@ pub struct ExecutionContractV1 {
     pub max_tool_calls: u32,
     pub max_elapsed_seconds: u64,
     pub provider_policy: ProviderPolicyV1,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub advisor_policy: Option<AdvisorPolicyV1>,
     pub escalation_conditions: Vec<String>,
     pub approval_requirements: Vec<ApprovalRequirementV1>,
     pub expected_artifacts: Vec<ExpectedArtifactV1>,
     pub verification_profile: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdvisorPolicyV1 {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_advisor_id")]
+    pub advisor_id: String,
+    #[serde(default)]
+    pub disclosure_classification: AdvisorDisclosureClassificationV1,
+    #[serde(default = "default_maximum_advisor_response_length")]
+    pub maximum_response_length: usize,
+    #[serde(default = "default_maximum_consultations_per_run")]
+    pub maximum_consultations_per_run: u32,
+    #[serde(default)]
+    pub advice_required: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum AdvisorDisclosureClassificationV1 {
+    #[default]
+    LocalOnly,
+    RemoteAllowed,
+}
+
+fn default_advisor_id() -> String {
+    "deepseek-web".into()
+}
+
+fn default_maximum_advisor_response_length() -> usize {
+    4096
+}
+
+fn default_maximum_consultations_per_run() -> u32 {
+    1
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -291,6 +330,9 @@ pub fn validate_contract(contract: &ExecutionContractV1) -> Result<(), String> {
     validate_positive_budget("max_tool_calls", contract.max_tool_calls as u64)?;
     validate_positive_budget("max_elapsed_seconds", contract.max_elapsed_seconds)?;
     contract.provider_policy.validate()?;
+    if let Some(policy) = &contract.advisor_policy {
+        policy.validate()?;
+    }
     for path in &contract.allowed_paths {
         validate_contract_path(path, false)?;
     }
@@ -340,6 +382,42 @@ impl ProviderPolicyV1 {
         validate_non_empty("primary_model_id", &self.primary_model_id)?;
         for provider in &self.fallback_provider_ids {
             validate_non_empty("fallback_provider_id", provider)?;
+        }
+        Ok(())
+    }
+}
+
+impl AdvisorPolicyV1 {
+    pub fn disabled_default() -> Self {
+        Self {
+            enabled: false,
+            advisor_id: default_advisor_id(),
+            disclosure_classification: AdvisorDisclosureClassificationV1::LocalOnly,
+            maximum_response_length: default_maximum_advisor_response_length(),
+            maximum_consultations_per_run: default_maximum_consultations_per_run(),
+            advice_required: false,
+        }
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        if self.advisor_id != "deepseek-web" {
+            return Err("advisorPolicy.advisorId must be deepseek-web".into());
+        }
+        if !self.enabled
+            && self.disclosure_classification != AdvisorDisclosureClassificationV1::LocalOnly
+        {
+            return Err("disabled advisorPolicy must remain LOCAL_ONLY".into());
+        }
+        if self.enabled
+            && self.disclosure_classification != AdvisorDisclosureClassificationV1::RemoteAllowed
+        {
+            return Err("enabled advisorPolicy requires REMOTE_ALLOWED disclosure".into());
+        }
+        if self.maximum_response_length == 0 || self.maximum_response_length > 16 * 1024 {
+            return Err("advisorPolicy.maximumResponseLength must be 1..16384".into());
+        }
+        if self.maximum_consultations_per_run == 0 || self.maximum_consultations_per_run > 3 {
+            return Err("advisorPolicy.maximumConsultationsPerRun must be 1..3".into());
         }
         Ok(())
     }

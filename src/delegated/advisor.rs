@@ -178,6 +178,12 @@ pub enum AdvisorError {
 
 pub trait AdvisorAdapter {
     fn advisor_id(&self) -> &str;
+    fn ensure_ready(&mut self, _timeout: Duration) -> Result<(), AdvisorError> {
+        Ok(())
+    }
+    fn cancel_active(&mut self, _timeout: Duration) -> Result<(), AdvisorError> {
+        Ok(())
+    }
     fn request_advice(
         &mut self,
         request: &AdviceRequestV1,
@@ -188,6 +194,14 @@ pub trait AdvisorAdapter {
 impl<T: AdvisorAdapter + ?Sized> AdvisorAdapter for &mut T {
     fn advisor_id(&self) -> &str {
         (**self).advisor_id()
+    }
+
+    fn ensure_ready(&mut self, timeout: Duration) -> Result<(), AdvisorError> {
+        (**self).ensure_ready(timeout)
+    }
+
+    fn cancel_active(&mut self, timeout: Duration) -> Result<(), AdvisorError> {
+        (**self).cancel_active(timeout)
     }
 
     fn request_advice(
@@ -365,7 +379,11 @@ impl DeepSeekProcessAdvisor {
 
     fn ensure_started(&mut self, timeout: Duration) -> Result<(), AdvisorError> {
         if self.child_is_running() {
-            return Ok(());
+            let status = self.send_command("status", None, timeout)?;
+            if status.get("state").and_then(Value::as_str) == Some("READY") {
+                return Ok(());
+            }
+            let _ = self.shutdown(Duration::from_secs(2));
         }
         self.spawn_sidecar()?;
         let hello = self.send_command("hello", None, timeout)?;
@@ -385,6 +403,11 @@ impl DeepSeekProcessAdvisor {
             return Err(AdvisorError::Adapter("advisor sidecar is not READY".into()));
         }
         Ok(())
+    }
+
+    fn reset_unhealthy_sidecar(&mut self) {
+        self.active_request_id = None;
+        let _ = self.shutdown(Duration::from_secs(2));
     }
 
     fn child_is_running(&mut self) -> bool {
@@ -544,6 +567,20 @@ impl AdvisorAdapter for DeepSeekProcessAdvisor {
         &self.config.public_advisor_id
     }
 
+    fn ensure_ready(&mut self, timeout: Duration) -> Result<(), AdvisorError> {
+        match self.ensure_started(timeout) {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                self.reset_unhealthy_sidecar();
+                Err(error)
+            }
+        }
+    }
+
+    fn cancel_active(&mut self, timeout: Duration) -> Result<(), AdvisorError> {
+        self.cancel(timeout)
+    }
+
     fn request_advice(
         &mut self,
         request: &AdviceRequestV1,
@@ -554,24 +591,50 @@ impl AdvisorAdapter for DeepSeekProcessAdvisor {
                 "advisor request already active".into(),
             ));
         }
-        self.ensure_started(timeout)?;
+        if let Err(error) = self.ensure_started(timeout) {
+            self.reset_unhealthy_sidecar();
+            return Err(error);
+        }
         self.active_request_id = Some(request.request_id.clone());
+        let result = self.request_advice_inner(request, timeout);
+        self.active_request_id = None;
+        if result.is_err() {
+            self.reset_unhealthy_sidecar();
+        }
+        result
+    }
+}
+
+impl DeepSeekProcessAdvisor {
+    fn request_advice_inner(
+        &mut self,
+        request: &AdviceRequestV1,
+        timeout: Duration,
+    ) -> Result<AdviceResponseV1, AdvisorError> {
         let accepted = self.send_command("advise", Some(request), timeout)?;
         if accepted.get("accepted").and_then(Value::as_bool) != Some(true) {
-            self.active_request_id = None;
             return Err(AdvisorError::Adapter(
                 "advisor did not accept request".into(),
             ));
         }
         if accepted.get("request_id").and_then(Value::as_str) != Some(request.request_id.as_str()) {
-            self.active_request_id = None;
             return Err(AdvisorError::MalformedAdvice(
                 "advisor accepted stale or mismatched request".into(),
             ));
         }
         let terminal = self.read_jsonl(timeout)?;
-        self.active_request_id = None;
-        if terminal.get("event").and_then(Value::as_str) != Some("advice_completed") {
+        let terminal_event = terminal.get("event").and_then(Value::as_str);
+        if !matches!(
+            terminal_event,
+            Some(
+                "advice_completed"
+                    | "advice_cancelled"
+                    | "advice_rate_limited"
+                    | "advice_takeover_required"
+                    | "advice_timed_out"
+                    | "advice_failed"
+            )
+        ) {
             return Err(AdvisorError::MalformedAdvice(
                 "advisor emitted unexpected terminal event".into(),
             ));
@@ -690,10 +753,21 @@ impl<A: AdvisorAdapter> AdvisorBroker<A> {
             None,
             None,
             None,
+            Vec::new(),
+            None,
         )?;
         let request = self.build_request(contract, draft, trigger)?;
         let request_bytes = serialized_len(&request)?;
         let request_hash = stable_hash(&request).map_err(AdvisorError::Adapter)?;
+        let selected_source_paths = request
+            .bounded_source_excerpts
+            .iter()
+            .map(|excerpt| excerpt.source.clone())
+            .collect::<Vec<_>>();
+        let request_artifact = self
+            .journal
+            .write_advice_artifact(&request.run_id, "advice-request", &request)
+            .map_err(|error| AdvisorError::Journal(format!("{error:?}")))?;
         self.append_advisor_event(
             &request.run_id,
             "advice_request_built",
@@ -703,6 +777,8 @@ impl<A: AdvisorAdapter> AdvisorBroker<A> {
             None,
             Some(request_hash.clone()),
             None,
+            selected_source_paths.clone(),
+            Some(request_artifact.clone()),
         )?;
         self.append_advisor_event(
             &request.run_id,
@@ -713,14 +789,10 @@ impl<A: AdvisorAdapter> AdvisorBroker<A> {
             None,
             Some(request_hash.clone()),
             None,
+            selected_source_paths.clone(),
+            Some(request_artifact.clone()),
         )?;
         let adapter_id = self.adapter.advisor_id().to_string();
-        self.append_advice_event(
-            &request.run_id,
-            EventPayloadV1::AdviceRequest {
-                request: Box::new(request.clone()),
-            },
-        )?;
         self.append_advisor_event(
             &request.run_id,
             "advisor_starting",
@@ -730,7 +802,24 @@ impl<A: AdvisorAdapter> AdvisorBroker<A> {
             None,
             Some(request_hash.clone()),
             None,
+            selected_source_paths.clone(),
+            Some(request_artifact.clone()),
         )?;
+        if let Err(error) = self.adapter.ensure_ready(self.config.timeout) {
+            self.append_advisor_event(
+                &request.run_id,
+                "advice_failed",
+                Some(&request.request_id),
+                Some(&adapter_id),
+                Some(request_bytes),
+                None,
+                Some(request_hash.clone()),
+                None,
+                selected_source_paths.clone(),
+                Some(request_artifact.clone()),
+            )?;
+            return Err(error);
+        }
         self.append_advisor_event(
             &request.run_id,
             "advisor_ready",
@@ -740,6 +829,8 @@ impl<A: AdvisorAdapter> AdvisorBroker<A> {
             None,
             Some(request_hash.clone()),
             None,
+            selected_source_paths.clone(),
+            Some(request_artifact.clone()),
         )?;
         self.append_advisor_event(
             &request.run_id,
@@ -750,6 +841,8 @@ impl<A: AdvisorAdapter> AdvisorBroker<A> {
             None,
             Some(request_hash.clone()),
             None,
+            selected_source_paths.clone(),
+            Some(request_artifact.clone()),
         )?;
         let response = match self.adapter.request_advice(&request, self.config.timeout) {
             Ok(response) => response,
@@ -761,41 +854,57 @@ impl<A: AdvisorAdapter> AdvisorBroker<A> {
                     Some(&adapter_id),
                     Some(request_bytes),
                     None,
-                    Some(request_hash),
+                    Some(request_hash.clone()),
                     None,
+                    selected_source_paths.clone(),
+                    Some(request_artifact.clone()),
                 )?;
                 return Err(error);
             }
         };
-        validate_advice_response(
+        if let Err(error) = validate_advice_response(
             &request,
             &response,
             &adapter_id,
             self.config.max_total_serialized_bytes,
-        )?;
+        ) {
+            self.append_advisor_event(
+                &request.run_id,
+                "advice_failed",
+                Some(&request.request_id),
+                Some(&adapter_id),
+                Some(request_bytes),
+                None,
+                Some(request_hash.clone()),
+                None,
+                selected_source_paths.clone(),
+                Some(request_artifact.clone()),
+            )?;
+            return Err(error);
+        }
         let response_bytes = serde_json::to_vec(&response)
             .map_err(|error| AdvisorError::MalformedAdvice(error.to_string()))?
             .len();
         let response_hash = stable_hash(&response).map_err(AdvisorError::Adapter)?;
         let mut response = response;
+        let response_artifact = self
+            .journal
+            .write_advice_artifact(&request.run_id, "advice-response", &response)
+            .map_err(|error| AdvisorError::Journal(format!("{error:?}")))?;
         if response.raw_artifact_reference.is_none() {
-            response.raw_artifact_reference = Some(format!("journal://advice/{response_hash}"));
+            response.raw_artifact_reference = Some(response_artifact.clone());
         }
-        self.append_advice_event(
-            &request.run_id,
-            EventPayloadV1::AdviceResponse {
-                response: Box::new(response.clone()),
-            },
-        )?;
         self.append_advisor_event(
             &request.run_id,
-            "advice_completed",
+            advisor_terminal_event_name(&response.status),
             Some(&request.request_id),
             Some(&adapter_id),
             Some(request_bytes),
             Some(response_bytes),
             Some(request_hash),
             Some(response_hash),
+            selected_source_paths,
+            Some(response_artifact),
         )?;
         Ok(response)
     }
@@ -850,6 +959,8 @@ impl<A: AdvisorAdapter> AdvisorBroker<A> {
             Some(response_bytes),
             None,
             Some(response_hash),
+            Vec::new(),
+            response.raw_artifact_reference.clone(),
         )
     }
 
@@ -927,9 +1038,23 @@ impl<A: AdvisorAdapter> AdvisorBroker<A> {
     ) -> Result<(), AdvisorError> {
         let event_sequence = self
             .journal
-            .load_run(run_id)
+            .poll_events(
+                run_id,
+                super::events::EventCursor {
+                    after_sequence: 0,
+                    limit: usize::MAX,
+                },
+            )
             .map_err(|error| AdvisorError::Journal(format!("{error:?}")))?
-            .last_event_sequence
+            .last()
+            .map(|event| event.event_sequence)
+            .or_else(|| {
+                self.journal
+                    .load_run(run_id)
+                    .ok()
+                    .map(|snapshot| snapshot.last_event_sequence)
+            })
+            .unwrap_or(0)
             .saturating_add(1);
         let event = EventEnvelopeV1 {
             schema_version: EXECUTION_CONTRACT_SCHEMA_VERSION,
@@ -967,6 +1092,8 @@ impl<A: AdvisorAdapter> AdvisorBroker<A> {
         response_bytes: Option<usize>,
         request_hash: Option<String>,
         response_hash: Option<String>,
+        selected_source_paths: Vec<String>,
+        artifact_reference: Option<String>,
     ) -> Result<(), AdvisorError> {
         self.append_advice_event(
             run_id,
@@ -975,11 +1102,13 @@ impl<A: AdvisorAdapter> AdvisorBroker<A> {
                 request_id: request_id.map(str::to_string),
                 generation_id: request_id.map(|id| format!("advisor-generation-{id}")),
                 advisor_id: advisor_id.map(str::to_string),
-                status: None,
+                status: Some(event_name.into()),
                 request_bytes,
                 response_bytes,
                 request_hash,
                 response_hash,
+                selected_source_paths: selected_source_paths.into_boxed_slice(),
+                artifact_reference: Box::new(artifact_reference),
                 timestamp_unix_ms: timestamp_unix_ms(),
             },
         )
@@ -1042,6 +1171,21 @@ pub fn validate_advice_response(
         )));
     }
     Ok(())
+}
+
+fn advisor_terminal_event_name(status: &AdvisorStatus) -> &'static str {
+    match status {
+        AdvisorStatus::Completed => "advice_completed",
+        AdvisorStatus::Cancelled => "advice_cancelled",
+        AdvisorStatus::RateLimited => "advice_rate_limited",
+        AdvisorStatus::TakeoverRequired | AdvisorStatus::LoginRequired => {
+            "advice_takeover_required"
+        }
+        AdvisorStatus::TimedOut => "advice_timed_out",
+        AdvisorStatus::Ready | AdvisorStatus::Unavailable | AdvisorStatus::Failed => {
+            "advice_failed"
+        }
+    }
 }
 
 fn serialized_len(value: &AdviceRequestV1) -> Result<usize, AdvisorError> {
@@ -1174,7 +1318,7 @@ fn sanitize_identifier(value: &str) -> String {
     }
 }
 
-fn redact_and_bound(value: &str, max_bytes: usize) -> String {
+pub(crate) fn redact_and_bound(value: &str, max_bytes: usize) -> String {
     bound_text(&redact_secrets(value), max_bytes)
 }
 
@@ -1273,6 +1417,7 @@ mod tests {
                 require_tool_calls: true,
                 allow_paid_fallbacks: false,
             },
+            advisor_policy: None,
             escalation_conditions: vec!["needs human".into()],
             approval_requirements: vec![crate::delegated::contracts::ApprovalRequirementV1 {
                 kind: ApprovalRequirementKind::RunStart,
@@ -1322,6 +1467,8 @@ mod tests {
         std::fs::create_dir_all(&temp).expect("tempdir");
         let script = temp.join("fake_advisor.py");
         let request_log = temp.join("request.json");
+        let mode_file = temp.join("mode.txt");
+        std::fs::write(&mode_file, mode).expect("mode");
         std::fs::write(
             &script,
             format!(
@@ -1329,13 +1476,19 @@ mod tests {
 import json, os, sys, time
 auth = os.environ.get("CATDESK_ADVISOR_AUTH_TOKEN", "")
 mode = os.environ.get("FAKE_ADVISOR_MODE", "success")
+mode_file = os.environ.get("FAKE_ADVISOR_MODE_FILE")
 request_log = r"{request_log}"
 sidecar_id = "deepseek-web-advisor-experimental"
+def current_mode():
+    if mode_file and os.path.exists(mode_file):
+        return open(mode_file, "r", encoding="utf-8").read().strip() or mode
+    return mode
 def emit(value):
     sys.stdout.write(json.dumps(value, separators=(",", ":")) + "\n")
     sys.stdout.flush()
 for line in sys.stdin:
     msg = json.loads(line)
+    mode = current_mode()
     if mode == "unauthorized" or msg.get("auth_token") != auth:
         emit({{"ok": False, "error": "UNAUTHORIZED"}})
         continue
@@ -1392,6 +1545,10 @@ for line in sys.stdin:
         config
             .extra_env
             .push(("FAKE_ADVISOR_MODE".into(), mode.into()));
+        config.extra_env.push((
+            "FAKE_ADVISOR_MODE_FILE".into(),
+            mode_file.display().to_string(),
+        ));
         let mut advisor = DeepSeekProcessAdvisor::new(config);
         advisor.config.public_advisor_id = "deepseek-web".into();
         advisor.config.sidecar_advisor_id = "deepseek-web-advisor-experimental".into();
@@ -1502,6 +1659,37 @@ for line in sys.stdin:
     }
 
     #[test]
+    fn deepseek_process_advisor_recovers_same_adapter_after_failure_modes() {
+        let request = AdvisorBroker::new(
+            FakeAdvisor::success(),
+            journal().1,
+            AdviceBrokerConfigV1::remote_advisory_default(),
+        )
+        .build_request(&contract(), draft(), AdviceTrigger::ExplicitQwenRequest)
+        .expect("request");
+        for mode in [
+            "timeout",
+            "malformed",
+            "wrong_request",
+            "wrong_advisor",
+            "crash",
+        ] {
+            let (temp, mut advisor) = fake_sidecar(mode);
+            let mode_file = temp.join("mode.txt");
+            let first = advisor.request_advice(&request, Duration::from_millis(500));
+            assert!(first.is_err(), "{mode} should fail first");
+            assert!(advisor.active_request_id.is_none());
+            std::fs::write(&mode_file, "success").expect("mode success");
+            let recovered = advisor
+                .request_advice(&request, Duration::from_secs(5))
+                .expect("recovered request");
+            assert_eq!(recovered.status, AdvisorStatus::Completed);
+            assert_eq!(recovered.request_id, request.request_id);
+            advisor.shutdown(Duration::from_secs(2)).expect("shutdown");
+        }
+    }
+
+    #[test]
     fn deepseek_process_advisor_allows_one_active_request_and_cancels() {
         let (_temp, mut advisor) = fake_sidecar("success");
         advisor.active_request_id = Some("active-request".into());
@@ -1546,16 +1734,20 @@ for line in sys.stdin:
                 },
             )
             .expect("events");
-        assert!(
-            events
-                .iter()
-                .any(|event| matches!(event.payload, EventPayloadV1::AdviceRequest { .. }))
-        );
-        assert!(
-            events
-                .iter()
-                .any(|event| matches!(event.payload, EventPayloadV1::AdviceResponse { .. }))
-        );
+        assert!(events.iter().all(|event| !matches!(
+            event.payload,
+            EventPayloadV1::AdviceRequest { .. } | EventPayloadV1::AdviceResponse { .. }
+        )));
+        assert!(events.iter().any(|event| matches!(
+            &event.payload,
+            EventPayloadV1::AdvisorEvent {
+                artifact_reference,
+                ..
+            } if artifact_reference
+                .as_ref()
+                .as_ref()
+                .is_some_and(|reference| reference.starts_with("local-journal-artifact:"))
+        )));
         let lifecycle_names = events
             .iter()
             .filter_map(|event| match &event.payload {

@@ -185,6 +185,42 @@ impl DelegatedJournal {
         read_json(&self.run_dir(run_id)?.join("contract.json"))
     }
 
+    pub fn write_advice_artifact<T: Serialize>(
+        &self,
+        run_id: &RunId,
+        label: &str,
+        value: &T,
+    ) -> Result<String, JournalError> {
+        let run_dir = self.run_dir(run_id)?;
+        ensure_run_dir_exists(&run_dir, run_id)?;
+        let artifacts_dir = run_dir.join("advice_artifacts");
+        fs::create_dir_all(&artifacts_dir)?;
+        let encoded = serde_json::to_vec_pretty(value)
+            .map_err(|error| JournalError::Serde(error.to_string()))?;
+        let hash = stable_bytes_hash(&encoded);
+        let safe_label = label
+            .chars()
+            .map(|ch| {
+                if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
+                    ch
+                } else {
+                    '-'
+                }
+            })
+            .collect::<String>();
+        let safe_hash = hash.replace(':', "_");
+        let file_name = format!("{safe_label}-{safe_hash}.json");
+        let path = artifacts_dir.join(&file_name);
+        let tmp = path.with_extension("tmp");
+        fs::write(&tmp, encoded)?;
+        fs::rename(tmp, &path)?;
+        Ok(format!(
+            "local-journal-artifact:{}/advice_artifacts/{}",
+            run_id.as_str(),
+            file_name
+        ))
+    }
+
     pub fn write_run_start_approval(
         &self,
         approval: &RunStartApprovalRecordV1,
@@ -429,6 +465,15 @@ impl DelegatedJournal {
         let run_id = run_id.ok_or_else(|| JournalError::Validation("missing run_id".into()))?;
         write_json_atomic(&self.run_dir(&run_id)?.join("tool_calls.json"), &calls)
     }
+}
+
+fn stable_bytes_hash(bytes: &[u8]) -> String {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("fnv1a64:{hash:016x}")
 }
 
 fn is_valid_tool_transition(from: &ToolCallStatus, to: &ToolCallStatus) -> bool {

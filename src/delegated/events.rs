@@ -56,6 +56,7 @@ impl EventEnvelopeV1 {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
+#[allow(clippy::large_enum_variant)]
 pub enum EventPayloadV1 {
     RunStateChanged {
         state: RunState,
@@ -82,6 +83,8 @@ pub enum EventPayloadV1 {
         response_bytes: Option<usize>,
         request_hash: Option<String>,
         response_hash: Option<String>,
+        selected_source_paths: Box<[String]>,
+        artifact_reference: Box<Option<String>>,
         timestamp_unix_ms: u64,
     },
     Failed {

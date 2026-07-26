@@ -1,8 +1,10 @@
 use std::collections::BTreeMap;
+#[cfg(test)]
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -10,7 +12,8 @@ use serde_json::{Value, json};
 
 use crate::delegated::advisor::{
     AdviceBrokerConfigV1, AdviceDisclosureClassification, AdviceRequestDraftV1, AdviceResponseV1,
-    AdviceTrigger, AdvisorAdapter, AdvisorBroker, AdvisorStatus, BoundedSourceExcerptV1,
+    AdviceTrigger, AdvisorAdapter, AdvisorBroker, AdvisorError, AdvisorStatus,
+    BoundedSourceExcerptV1, DeepSeekProcessAdvisor, DeepSeekProcessAdvisorConfig, redact_and_bound,
 };
 use crate::delegated::context::{ContextBudgetPolicyV1, ContextBuilderV1};
 use crate::delegated::contracts::{
@@ -34,6 +37,8 @@ use crate::delegated::provider_router::{
     ProviderAvailabilityV1, ProviderConfigV1, ProviderRegistryV1, ProviderRoutingPolicyV1,
     fake_provider_config,
 };
+#[cfg(test)]
+use crate::delegated::runtime::{FakeProvider, ProviderClientV1, ProviderTurnRequestV1};
 use crate::delegated::runtime::{
     NormalizedProviderEventKind, NormalizedToolCallV1, OllamaAdapter, ProviderMessageV1,
     ProviderType, RuntimeError, ToolDefinitionV1, catdesk_tool_definitions,
@@ -95,7 +100,30 @@ pub struct IntegratedRunConfigV1 {
 pub struct IntegratedAdvisorConfigV1 {
     pub enabled: bool,
     pub advisor_id: String,
+    pub disclosure_classification: AdviceDisclosureClassification,
     pub maximum_response_length: usize,
+    pub maximum_consultations_per_run: u32,
+    pub advice_required: bool,
+    #[serde(default)]
+    pub local_runtime: Option<IntegratedAdvisorLocalRuntimeConfigV1>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IntegratedAdvisorLocalRuntimeConfigV1 {
+    pub python_executable: PathBuf,
+    pub adapter_script: PathBuf,
+    pub profile_dir: PathBuf,
+    #[serde(default)]
+    pub selectors_path: Option<PathBuf>,
+    #[serde(default = "default_advisor_headed")]
+    pub headed: bool,
+    #[serde(default)]
+    pub allow_env_login: bool,
+}
+
+fn default_advisor_headed() -> bool {
+    true
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -132,6 +160,9 @@ pub struct IntegratedDelegatedService {
     completed_tool_calls: u32,
     consecutive_failed_verifications: u32,
     advice_consulted_for_current_failure: bool,
+    advisor_consultations_used: u32,
+    recent_read_excerpts: Vec<BoundedSourceExcerptV1>,
+    advisor_process: Option<Arc<Mutex<DeepSeekProcessAdvisor>>>,
     next_event_sequence: u64,
     worker_session_id: WorkerSessionId,
     current_turn_id: Option<TurnId>,
@@ -152,6 +183,10 @@ struct IntegratedDurableStateV1 {
     consecutive_failed_verifications: u32,
     #[serde(default)]
     advice_consulted_for_current_failure: bool,
+    #[serde(default)]
+    advisor_consultations_used: u32,
+    #[serde(default)]
+    recent_read_excerpts: Vec<BoundedSourceExcerptV1>,
     next_event_sequence: u64,
 }
 
@@ -198,6 +233,9 @@ impl IntegratedDelegatedService {
             completed_tool_calls: 0,
             consecutive_failed_verifications: 0,
             advice_consulted_for_current_failure: false,
+            advisor_consultations_used: 0,
+            recent_read_excerpts: Vec::new(),
+            advisor_process: None,
             next_event_sequence: 1,
             worker_session_id: WorkerSessionId::new(format!("worker-session-{}", run_id.as_str()))
                 .map_err(IntegratedError::Tool)?,
@@ -332,7 +370,14 @@ impl IntegratedDelegatedService {
                         });
                         let tool_result = self.execute_tool_call(&call).await;
                         match tool_result {
-                            Ok(_tool_result) => {}
+                            Ok(_tool_result) => {
+                                if call.tool_name == "verify.run" {
+                                    self.maybe_consult_configured_advisor_after_failed_repairs(
+                                        cancel_requested.clone(),
+                                    )
+                                    .await?;
+                                }
+                            }
                             Err(error) => {
                                 let message = format!(
                                     "Tool {} failed under CatDesk policy and was journaled. Error: {error:?}. Choose a permitted next CatDesk tool call; do not retry the same invalid request.",
@@ -410,6 +455,124 @@ impl IntegratedDelegatedService {
 
     fn production_worker_tools(&self) -> Vec<ToolDefinitionV1> {
         self.tool_definitions()
+    }
+
+    #[cfg(test)]
+    async fn run_fake_worker_loop_with_advisor(
+        &mut self,
+        mut provider: FakeProvider,
+        cancel_requested: Arc<AtomicBool>,
+    ) -> Result<FinalReviewPackageV1, IntegratedError> {
+        self.start()?;
+        self.provider_history.clear();
+        self.provider_history.push(ProviderMessageV1 {
+            role: "system".into(),
+            content: worker_system_prompt(),
+            tool_call_id: None,
+            tool_name: None,
+        });
+        self.provider_history.push(ProviderMessageV1 {
+            role: "user".into(),
+            content: format!(
+                "Execution contract:\n{}\nUse CatDesk tools until verify.run passes and diff.actual captures the authoritative diff.",
+                serde_json::to_string_pretty(&self.contract)?
+            ),
+            tool_call_id: None,
+            tool_name: None,
+        });
+        let allowed_tools = self.production_worker_tools();
+        let allowed_names = allowed_tools
+            .iter()
+            .map(|tool| tool.name.clone())
+            .collect::<BTreeSet<_>>();
+        for turn in 1..=self.contract.max_turns {
+            if cancel_requested.load(Ordering::SeqCst) {
+                return Err(IntegratedError::Tool("run cancelled".into()));
+            }
+            self.compact_provider_history_if_needed()?;
+            let turn_id = TurnId::new(format!("turn-{turn}")).map_err(IntegratedError::Tool)?;
+            self.current_turn_id = Some(turn_id.clone());
+            let request = ProviderTurnRequestV1 {
+                run_id: self.run_id()?,
+                worker_session_id: self.worker_session_id.clone(),
+                turn_id: turn_id.clone(),
+                model_id: self.config.model_id.clone(),
+                context_json: json!({ "history": self.provider_history }),
+                tool_definitions: allowed_tools.clone(),
+                max_output_bytes: 16 * 1024,
+            };
+            let result = provider
+                .send_turn(&request, &allowed_names, &self.provider_history)
+                .map_err(IntegratedError::from)?;
+            let mut saw_tool = false;
+            for event in result.events {
+                match event.kind {
+                    NormalizedProviderEventKind::ToolCall => {
+                        let mut call = event.tool_call.ok_or_else(|| {
+                            IntegratedError::Tool("provider omitted tool call payload".into())
+                        })?;
+                        call.tool_call_id = ToolCallId::new(format!("tc-fake-{turn}"))
+                            .map_err(IntegratedError::Tool)?;
+                        call.arguments_hash =
+                            stable_text_hash(&serde_json::to_string(&call.arguments)?);
+                        self.provider_history.push(ProviderMessageV1 {
+                            role: "assistant".into(),
+                            content: serde_json::to_string(&json!({
+                                "tool": call.tool_name,
+                                "arguments": call.arguments.clone(),
+                            }))?,
+                            tool_call_id: Some(call.tool_call_id.as_str().to_string()),
+                            tool_name: Some(call.tool_name.clone()),
+                        });
+                        self.execute_tool_call(&call).await?;
+                        if call.tool_name == "verify.run" {
+                            self.maybe_consult_configured_advisor_after_failed_repairs(
+                                cancel_requested.clone(),
+                            )
+                            .await?;
+                        }
+                        saw_tool = true;
+                    }
+                    NormalizedProviderEventKind::CompletionClaim => {
+                        let text = event.text.unwrap_or_default();
+                        self.provider_history.push(ProviderMessageV1 {
+                            role: "assistant".into(),
+                            content: text.clone(),
+                            tool_call_id: None,
+                            tool_name: None,
+                        });
+                        self.verify_completion_gate(&text)?;
+                        self.journal
+                            .update_run_state(&self.run_id()?, RunState::CompletedVerified)
+                            .map_err(|error| IntegratedError::Journal(format!("{error:?}")))?;
+                        self.persist_durable_state()?;
+                        return self.final_review();
+                    }
+                    NormalizedProviderEventKind::TextDelta => {
+                        self.provider_history.push(ProviderMessageV1 {
+                            role: "assistant".into(),
+                            content: event.text.unwrap_or_default(),
+                            tool_call_id: None,
+                            tool_name: None,
+                        });
+                    }
+                    NormalizedProviderEventKind::MalformedResponse
+                    | NormalizedProviderEventKind::CancelAck
+                    | NormalizedProviderEventKind::TerminalError => {
+                        return Err(IntegratedError::Tool(
+                            event.text.unwrap_or_else(|| "provider error".into()),
+                        ));
+                    }
+                }
+            }
+            if result.terminal && !saw_tool {
+                return Err(IntegratedError::Tool(
+                    "provider stopped before verified completion".into(),
+                ));
+            }
+            self.persist_durable_state()?;
+        }
+        Err(IntegratedError::Tool("turn budget exceeded".into()))
     }
 
     fn compact_provider_history_if_needed(&mut self) -> Result<(), IntegratedError> {
@@ -648,6 +811,8 @@ impl IntegratedDelegatedService {
                 service.consecutive_failed_verifications = state.consecutive_failed_verifications;
                 service.advice_consulted_for_current_failure =
                     state.advice_consulted_for_current_failure;
+                service.advisor_consultations_used = state.advisor_consultations_used;
+                service.recent_read_excerpts = state.recent_read_excerpts;
                 service.next_event_sequence =
                     service.next_event_sequence.max(state.next_event_sequence);
             }
@@ -873,6 +1038,102 @@ impl IntegratedDelegatedService {
         Ok(Some(response))
     }
 
+    async fn maybe_consult_configured_advisor_after_failed_repairs(
+        &mut self,
+        cancel_requested: Arc<AtomicBool>,
+    ) -> Result<(), IntegratedError> {
+        let Some(advisor_config) = self.config.advisor.clone() else {
+            return Ok(());
+        };
+        if !advisor_config.enabled
+            || advisor_config.advisor_id != "deepseek-web"
+            || advisor_config.disclosure_classification
+                != AdviceDisclosureClassification::RemoteAllowed
+            || self.consecutive_failed_verifications < 2
+            || self.advice_consulted_for_current_failure
+            || self.advisor_consultations_used >= advisor_config.maximum_consultations_per_run
+        {
+            return Ok(());
+        }
+
+        self.advice_consulted_for_current_failure = true;
+        self.advisor_consultations_used = self.advisor_consultations_used.saturating_add(1);
+        self.persist_durable_state()?;
+
+        let Some(_runtime) = advisor_config.local_runtime.clone() else {
+            self.record_advisor_unavailable_context(
+                AdvisorStatus::Unavailable,
+                "advisor local sidecar configuration is unavailable",
+                advisor_config.advice_required,
+            )?;
+            return Ok(());
+        };
+
+        let advisor = self.configured_advisor_process()?;
+        let contract = self.contract.clone();
+        let journal = self.journal.clone();
+        let worker_session_id = self.worker_session_id.clone();
+        let draft = self.advice_draft(
+            "Two consecutive bounded verification attempts failed. Provide advisory-only diagnosis and next-step suggestions based only on the bounded context supplied.".into(),
+            advisor_config.maximum_response_length,
+            advisor_config.disclosure_classification.clone(),
+        );
+        let broker_config = AdviceBrokerConfigV1 {
+            advisor_enabled: true,
+            allowed_advisor_id: Some(advisor_config.advisor_id.clone()),
+            default_maximum_response_length: advisor_config.maximum_response_length,
+            timeout: Duration::from_secs(180),
+            ..AdviceBrokerConfigV1::remote_advisory_default()
+        };
+        let advisor_for_task = advisor.clone();
+        let consultation = tokio::task::spawn_blocking(move || {
+            let mut guard = advisor_for_task
+                .lock()
+                .map_err(|_| AdvisorError::Adapter("advisor mutex poisoned".into()))?;
+            let mut broker = AdvisorBroker::new(&mut *guard, journal, broker_config)
+                .with_worker_session_id(worker_session_id);
+            broker.consult(
+                &contract,
+                draft,
+                AdviceTrigger::TwoFailedBoundedRepairAttempts { failed_attempts: 2 },
+            )
+        });
+
+        let response = tokio::select! {
+            result = consultation => {
+                result.map_err(|error| IntegratedError::Tool(format!("advisor task failed: {error}")))?
+            }
+            _ = wait_for_cancel(cancel_requested.clone()) => {
+                let advisor_for_cancel = advisor.clone();
+                let _ = tokio::task::spawn_blocking(move || {
+                    advisor_for_cancel
+                        .lock()
+                        .map_err(|_| AdvisorError::Adapter("advisor mutex poisoned".into()))
+                        .and_then(|mut guard| guard.cancel_active(Duration::from_secs(5)))
+                })
+                .await;
+                self.record_advisor_unavailable_context(
+                    AdvisorStatus::Cancelled,
+                    "advisor consultation was cancelled with the CatDesk run",
+                    advisor_config.advice_required,
+                )?;
+                return Ok(());
+            }
+        };
+
+        match response {
+            Ok(response) => {
+                self.refresh_next_event_sequence()?;
+                self.deliver_advisor_response(response, advisor_config.advice_required)
+            }
+            Err(error) => self.record_advisor_unavailable_context(
+                AdvisorStatus::Failed,
+                &format!("advisor unavailable: {error:?}"),
+                advisor_config.advice_required,
+            ),
+        }
+    }
+
     pub fn consult_advisor<A: AdvisorAdapter>(
         &mut self,
         advisor: &mut A,
@@ -897,6 +1158,7 @@ impl IntegratedDelegatedService {
         let draft = self.advice_draft(
             specific_question.into(),
             advisor_config.maximum_response_length,
+            advisor_config.disclosure_classification.clone(),
         );
         let mut broker = AdvisorBroker::new(
             advisor,
@@ -905,6 +1167,7 @@ impl IntegratedDelegatedService {
                 advisor_enabled: true,
                 allowed_advisor_id: Some(advisor_config.advisor_id.clone()),
                 timeout: Duration::from_secs(180),
+                default_maximum_response_length: advisor_config.maximum_response_length,
                 ..AdviceBrokerConfigV1::remote_advisory_default()
             },
         )
@@ -920,6 +1183,7 @@ impl IntegratedDelegatedService {
                 broker
                     .record_advice_delivered_to_worker(&run_id, &response)
                     .map_err(|error| IntegratedError::Tool(format!("{error:?}")))?;
+                self.refresh_next_event_sequence()?;
             }
             _ => {
                 self.provider_history.push(ProviderMessageV1 {
@@ -937,10 +1201,142 @@ impl IntegratedDelegatedService {
         Ok(response)
     }
 
+    fn configured_advisor_process(
+        &mut self,
+    ) -> Result<Arc<Mutex<DeepSeekProcessAdvisor>>, IntegratedError> {
+        if let Some(advisor) = &self.advisor_process {
+            return Ok(advisor.clone());
+        }
+        let advisor_config =
+            self.config.advisor.as_ref().ok_or_else(|| {
+                IntegratedError::Tool("advisor integration is not configured".into())
+            })?;
+        let runtime = advisor_config.local_runtime.as_ref().ok_or_else(|| {
+            IntegratedError::Tool("advisor local runtime is not configured".into())
+        })?;
+        let mut config = DeepSeekProcessAdvisorConfig::new(
+            runtime.python_executable.clone(),
+            runtime.adapter_script.clone(),
+            runtime.profile_dir.clone(),
+        );
+        config.selectors_path = runtime.selectors_path.clone();
+        config.headed = runtime.headed;
+        config.allow_env_login = runtime.allow_env_login;
+        let advisor = Arc::new(Mutex::new(DeepSeekProcessAdvisor::new(config)));
+        self.advisor_process = Some(advisor.clone());
+        Ok(advisor)
+    }
+
+    fn deliver_advisor_response(
+        &mut self,
+        response: AdviceResponseV1,
+        advice_required: bool,
+    ) -> Result<(), IntegratedError> {
+        match response.status {
+            AdvisorStatus::Completed => {
+                let context =
+                    AdvisorBroker::<DeepSeekProcessAdvisor>::untrusted_context_for_qwen(&response);
+                self.provider_history.push(context);
+                let run_id = self.run_id()?;
+                let mut fake = crate::delegated::advisor::FakeAdvisor::success();
+                let mut broker = AdvisorBroker::new(
+                    &mut fake,
+                    self.journal.clone(),
+                    AdviceBrokerConfigV1::remote_advisory_default(),
+                )
+                .with_worker_session_id(self.worker_session_id.clone());
+                broker
+                    .record_advice_delivered_to_worker(&run_id, &response)
+                    .map_err(|error| IntegratedError::Tool(format!("{error:?}")))?;
+            }
+            status => {
+                self.record_advisor_unavailable_context(
+                    status,
+                    "advisor returned a non-completed terminal status",
+                    advice_required,
+                )?;
+            }
+        }
+        self.persist_durable_state()
+    }
+
+    fn refresh_next_event_sequence(&mut self) -> Result<(), IntegratedError> {
+        let run_id = self.run_id()?;
+        let tail = self
+            .journal
+            .poll_events(
+                &run_id,
+                EventCursor {
+                    after_sequence: 0,
+                    limit: usize::MAX,
+                },
+            )
+            .map_err(|error| IntegratedError::Journal(format!("{error:?}")))?
+            .last()
+            .map(|event| event.event_sequence);
+        let snapshot = self
+            .journal
+            .load_run(&run_id)
+            .map_err(|error| IntegratedError::Journal(format!("{error:?}")))?;
+        self.next_event_sequence = tail
+            .unwrap_or(snapshot.last_event_sequence)
+            .saturating_add(1)
+            .max(1);
+        Ok(())
+    }
+
+    fn record_advisor_unavailable_context(
+        &mut self,
+        status: AdvisorStatus,
+        reason: &str,
+        advice_required: bool,
+    ) -> Result<(), IntegratedError> {
+        self.provider_history.push(ProviderMessageV1 {
+            role: "user".into(),
+            content: format!(
+                "<untrusted_advisor_context>\nAdvisor advice unavailable ({status:?}). {reason}. Continue locally with ordinary CatDesk tools; advice cannot satisfy verification or completion.\n</untrusted_advisor_context>"
+            ),
+            tool_call_id: None,
+            tool_name: None,
+        });
+        self.append_event(
+            LifecycleEvent::Delta,
+            EventPayloadV1::AdvisorEvent {
+                event: advisor_terminal_event_name_for_integrated(&status).into(),
+                request_id: None,
+                generation_id: None,
+                advisor_id: Some("deepseek-web".into()),
+                status: Some(format!("{status:?}")),
+                request_bytes: None,
+                response_bytes: None,
+                request_hash: None,
+                response_hash: None,
+                selected_source_paths: self
+                    .bounded_advisor_source_excerpts()
+                    .into_iter()
+                    .map(|excerpt| excerpt.source)
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+                artifact_reference: Box::new(None),
+                timestamp_unix_ms: timestamp_unix_ms(),
+            },
+        )?;
+        if advice_required {
+            self.journal
+                .update_run_state(&self.run_id()?, RunState::NeedsSupervisor)
+                .map_err(|error| IntegratedError::Journal(format!("{error:?}")))?;
+            return Err(IntegratedError::Tool(format!(
+                "required advisor consultation unavailable: {status:?}"
+            )));
+        }
+        self.persist_durable_state()
+    }
+
     fn advice_draft(
         &self,
         specific_question: String,
         maximum_response_length: usize,
+        disclosure_classification: AdviceDisclosureClassification,
     ) -> AdviceRequestDraftV1 {
         let latest_failure = self
             .last_verification
@@ -973,15 +1369,40 @@ impl IntegratedDelegatedService {
                 ),
             ],
             latest_failure,
-            bounded_source_excerpts: Vec::<BoundedSourceExcerptV1>::new(),
+            bounded_source_excerpts: self.bounded_advisor_source_excerpts(),
             bounded_patch_or_diff_summary,
             verification_summary: self
                 .last_verification
                 .as_ref()
                 .map(|summary| summary.summary.clone()),
-            disclosure_classification: AdviceDisclosureClassification::RemoteAllowed,
+            disclosure_classification,
             maximum_response_length: Some(maximum_response_length),
         }
+    }
+
+    fn bounded_advisor_source_excerpts(&self) -> Vec<BoundedSourceExcerptV1> {
+        const MAX_TOTAL: usize = 6 * 1024;
+        let mut total = 0usize;
+        let mut excerpts = Vec::new();
+        for excerpt in self.recent_read_excerpts.iter().rev() {
+            if excerpts.len() >= 3 {
+                break;
+            }
+            let mut bounded = excerpt.clone();
+            bounded.content = redact_and_bound(&bounded.content, 2 * 1024);
+            let len = bounded.content.len();
+            if total + len > MAX_TOTAL {
+                let remaining = MAX_TOTAL.saturating_sub(total);
+                if remaining == 0 {
+                    break;
+                }
+                bounded.content = redact_and_bound(&bounded.content, remaining);
+            }
+            total += bounded.content.len();
+            excerpts.push(bounded);
+        }
+        excerpts.reverse();
+        excerpts
     }
 
     fn enforce_tool_policy(
@@ -1039,6 +1460,8 @@ impl IntegratedDelegatedService {
             completed_tool_calls: self.completed_tool_calls,
             consecutive_failed_verifications: self.consecutive_failed_verifications,
             advice_consulted_for_current_failure: self.advice_consulted_for_current_failure,
+            advisor_consultations_used: self.advisor_consultations_used,
+            recent_read_excerpts: self.recent_read_excerpts.clone(),
             next_event_sequence: self.next_event_sequence,
         };
         let path = self.durable_state_path()?;
@@ -1086,6 +1509,7 @@ impl IntegratedDelegatedService {
         lifecycle_event: LifecycleEvent,
         payload: EventPayloadV1,
     ) -> Result<(), IntegratedError> {
+        self.refresh_next_event_sequence()?;
         let item_id = ItemId::new(format!("item-{}", self.next_event_sequence))
             .map_err(IntegratedError::Tool)?;
         let event = EventEnvelopeV1 {
@@ -1110,16 +1534,53 @@ impl IntegratedDelegatedService {
         Ok(())
     }
 
-    fn tool_read(&self, args: &Value) -> Result<IntegratedToolResultV1, IntegratedError> {
+    fn tool_read(&mut self, args: &Value) -> Result<IntegratedToolResultV1, IntegratedError> {
         let path = string_arg(args, "path")?;
         let output = workspace_tools::read_file(&self.workspace_root.display().to_string(), &path)
             .map_err(IntegratedError::Tool)?;
+        self.record_recent_read_excerpt(&output.path, &output.text)?;
         Ok(tool_result(
             "read",
             format!("read {} bytes from {}", output.bytes, output.path),
             serde_json::to_value(&output)?,
             output.render_text(),
         ))
+    }
+
+    fn record_recent_read_excerpt(
+        &mut self,
+        path: &str,
+        content: &str,
+    ) -> Result<(), IntegratedError> {
+        let normalized = path.replace('\\', "/");
+        if self
+            .contract
+            .forbidden_paths
+            .iter()
+            .any(|forbidden| path_is_under_contract_path(&normalized, forbidden))
+        {
+            return Ok(());
+        }
+        if !self
+            .contract
+            .allowed_paths
+            .iter()
+            .any(|allowed| path_is_under_contract_path(&normalized, allowed))
+        {
+            return Ok(());
+        }
+        let excerpt = BoundedSourceExcerptV1 {
+            source: normalized.clone(),
+            summary: format!("Recent successful file.read result for {normalized}"),
+            content: redact_and_bound(content, 2 * 1024),
+        };
+        self.recent_read_excerpts
+            .retain(|existing| existing.source != excerpt.source);
+        self.recent_read_excerpts.push(excerpt);
+        while self.recent_read_excerpts.len() > 3 {
+            self.recent_read_excerpts.remove(0);
+        }
+        Ok(())
     }
 
     fn tool_search(&self, args: &Value) -> Result<IntegratedToolResultV1, IntegratedError> {
@@ -1555,6 +2016,37 @@ fn bound_text(mut text: String, max_bytes: usize) -> String {
     text
 }
 
+async fn wait_for_cancel(cancel_requested: Arc<AtomicBool>) {
+    loop {
+        if cancel_requested.load(Ordering::SeqCst) {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+fn timestamp_unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn advisor_terminal_event_name_for_integrated(status: &AdvisorStatus) -> &'static str {
+    match status {
+        AdvisorStatus::Completed => "advice_completed",
+        AdvisorStatus::Cancelled => "advice_cancelled",
+        AdvisorStatus::RateLimited => "advice_rate_limited",
+        AdvisorStatus::TakeoverRequired | AdvisorStatus::LoginRequired => {
+            "advice_takeover_required"
+        }
+        AdvisorStatus::TimedOut => "advice_timed_out",
+        AdvisorStatus::Ready | AdvisorStatus::Unavailable | AdvisorStatus::Failed => {
+            "advice_failed"
+        }
+    }
+}
+
 fn string_arg(args: &Value, name: &str) -> Result<String, IntegratedError> {
     args.get(name)
         .and_then(Value::as_str)
@@ -1620,8 +2112,9 @@ pub fn verification_passed_with_diff(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::delegated::advisor::{DeepSeekProcessAdvisor, DeepSeekProcessAdvisorConfig};
-    use crate::delegated::runtime::{NormalizedProviderEventKind, OllamaAdapter};
+    use crate::delegated::advisor::DeepSeekProcessAdvisorConfig;
+    use crate::delegated::contracts::{AdvisorDisclosureClassificationV1, AdvisorPolicyV1};
+    use crate::delegated::runtime::{FakeProviderTurn, NormalizedProviderEventKind, OllamaAdapter};
     use std::process::Command;
 
     #[tokio::test]
@@ -1911,7 +2404,11 @@ mod tests {
         cfg.advisor = Some(IntegratedAdvisorConfigV1 {
             enabled: true,
             advisor_id: "fake-advisor".into(),
+            disclosure_classification: AdviceDisclosureClassification::RemoteAllowed,
             maximum_response_length: 2048,
+            maximum_consultations_per_run: 1,
+            advice_required: false,
+            local_runtime: None,
         });
         let contract = contract(&root, "run-t0024c-fake-advisor");
         let mut service =
@@ -2010,6 +2507,171 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn autonomous_loop_triggers_one_advisor_consultation_after_two_failed_repairs() {
+        let root = temp_git_workspace("advisor-autonomous-loop");
+        fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname=\"fixture\"\nversion=\"0.1.0\"\nedition=\"2021\"\n",
+        )
+        .expect("cargo");
+        fs::write(
+            root.join("src/lib.rs"),
+            "pub fn answer() -> i32 {\n    41\n}\n",
+        )
+        .expect("lib");
+        fs::create_dir_all(root.join("tests")).expect("tests");
+        fs::write(
+            root.join("tests/answer_test.rs"),
+            "#[test]\nfn answer_is_expected_value() {\n    assert_eq!(fixture::answer(), 42);\n}\n",
+        )
+        .expect("test");
+        commit_all(&root);
+
+        let mut contract = contract(&root, "run-t0024c1-autonomous-advisor");
+        contract.max_turns = 20;
+        contract.max_tool_calls = 40;
+        contract.advisor_policy = Some(AdvisorPolicyV1 {
+            enabled: true,
+            advisor_id: "deepseek-web".into(),
+            disclosure_classification: AdvisorDisclosureClassificationV1::RemoteAllowed,
+            maximum_response_length: 2048,
+            maximum_consultations_per_run: 1,
+            advice_required: false,
+        });
+        let mut cfg = config(&root);
+        cfg.advisor = Some(IntegratedAdvisorConfigV1 {
+            enabled: true,
+            advisor_id: "deepseek-web".into(),
+            disclosure_classification: AdviceDisclosureClassification::RemoteAllowed,
+            maximum_response_length: 2048,
+            maximum_consultations_per_run: 1,
+            advice_required: false,
+            local_runtime: Some(fake_deepseek_sidecar(&root)),
+        });
+        let turns = vec![
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-read-1",
+                "read",
+                json!({"path":"src/lib.rs"}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-preview-1",
+                "patch.preview",
+                json!({
+                    "patchId": "patch-wrong-1",
+                    "operations": [{
+                        "path": "src/lib.rs",
+                        "old": "pub fn answer() -> i32 {\n    41\n}\n",
+                        "new": "pub fn answer() -> i32 {\n    40\n}\n"
+                    }]
+                }),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-apply-1",
+                "patch.apply",
+                json!({"patchId":"patch-wrong-1"}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-verify-1",
+                "verify.run",
+                json!({"timeout": 30000}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-preview-2",
+                "patch.preview",
+                json!({
+                    "patchId": "patch-wrong-2",
+                    "parentPatchId": "patch-wrong-1",
+                    "operations": [{
+                        "path": "src/lib.rs",
+                        "old": "pub fn answer() -> i32 {\n    40\n}\n",
+                        "new": "pub fn answer() -> i32 {\n    43\n}\n"
+                    }]
+                }),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-apply-2",
+                "patch.apply",
+                json!({"patchId":"patch-wrong-2"}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-verify-2",
+                "verify.run",
+                json!({"timeout": 30000}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-read-after-advice",
+                "read",
+                json!({"path":"src/lib.rs"}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-preview-3",
+                "patch.preview",
+                json!({
+                    "patchId": "patch-correct",
+                    "parentPatchId": "patch-wrong-2",
+                    "operations": [{
+                        "path": "src/lib.rs",
+                        "old": "pub fn answer() -> i32 {\n    43\n}\n",
+                        "new": "pub fn answer() -> i32 {\n    42\n}\n"
+                    }]
+                }),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-apply-3",
+                "patch.apply",
+                json!({"patchId":"patch-correct"}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-verify-3",
+                "verify.run",
+                json!({"timeout": 30000}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-diff",
+                "diff.actual",
+                json!({"paths":["src/lib.rs"]}),
+            )),
+            FakeProviderTurn::Complete(
+                "Verification passed and authoritative diff is captured.".into(),
+            ),
+        ];
+        let mut service =
+            IntegratedDelegatedService::new(&root, contract.clone(), cfg).expect("service");
+        let review = service
+            .run_fake_worker_loop_with_advisor(
+                FakeProvider::new(turns),
+                Arc::new(AtomicBool::new(false)),
+            )
+            .await
+            .expect("fake loop completes");
+
+        assert_eq!(review.final_result.status, RunState::CompletedVerified);
+        assert_eq!(service.advisor_consultations_used, 1);
+        assert!(service.provider_history.iter().any(|message| {
+            message.role == "user" && message.content.contains("<untrusted_advisor_context>")
+        }));
+        assert!(service.tool_definitions().iter().all(|tool| {
+            !tool.name.starts_with("advisor.") && !tool.name.starts_with("advice.")
+        }));
+        let advice_index = service
+            .provider_history
+            .iter()
+            .position(|message| message.content.contains("<untrusted_advisor_context>"))
+            .expect("advice context");
+        let later_read = service
+            .provider_history
+            .iter()
+            .enumerate()
+            .any(|(index, message)| {
+                index > advice_index && message.tool_name.as_deref() == Some("read")
+            });
+        assert!(later_read, "worker must inspect source after advice");
+        assert_eq!(service.consecutive_failed_verifications, 0);
+        assert!(!service.advice_consulted_for_current_failure);
+    }
+
+    #[tokio::test]
     #[ignore = "opt-in headed DeepSeek browser advisor integration smoke"]
     async fn live_deepseek_process_advisor_explicit_request_returns_untrusted_context() {
         let root = temp_git_workspace("deepseek-live-advisor-integration");
@@ -2019,7 +2681,11 @@ mod tests {
         cfg.advisor = Some(IntegratedAdvisorConfigV1 {
             enabled: true,
             advisor_id: "deepseek-web".into(),
+            disclosure_classification: AdviceDisclosureClassification::RemoteAllowed,
             maximum_response_length: 512,
+            maximum_consultations_per_run: 1,
+            advice_required: false,
+            local_runtime: None,
         });
         let contract = contract(&root, "run-t0024c-live-deepseek");
         let mut service = IntegratedDelegatedService::new(&root, contract, cfg).expect("service");
@@ -2372,6 +3038,16 @@ mod tests {
             .collect()
     }
 
+    fn tool_envelope(tool_call_id: &str, tool: &str, arguments: Value) -> String {
+        serde_json::to_string(&json!({
+            "schema_version": "catdesk.tool-call.v1",
+            "tool_call_id": tool_call_id,
+            "tool": tool,
+            "arguments": arguments
+        }))
+        .expect("tool envelope")
+    }
+
     fn contract(root: &Path, task_id: &str) -> ExecutionContractV1 {
         let mut contract: ExecutionContractV1 = serde_json::from_str(include_str!(
             "../../tests/fixtures/delegated/execution_contract_v1.json"
@@ -2397,6 +3073,72 @@ mod tests {
             ollama_base_url: "http://127.0.0.1:11434".into(),
             model_id: "qwen3.5:9b".into(),
             advisor: None,
+        }
+    }
+
+    fn fake_deepseek_sidecar(root: &Path) -> IntegratedAdvisorLocalRuntimeConfigV1 {
+        let script = root.join("fake_deepseek_advisor.py");
+        fs::write(
+            &script,
+            r#"
+import json
+import os
+import sys
+
+TOKEN = os.environ.get("CATDESK_ADVISOR_AUTH_TOKEN", "")
+SIDECAR_ID = "deepseek-web-advisor-experimental"
+
+def emit(value):
+    print(json.dumps(value), flush=True)
+
+for line in sys.stdin:
+    frame = json.loads(line)
+    if frame.get("auth_token") != TOKEN:
+        emit({"ok": False, "error": "AUTH_FAILED"})
+        continue
+    command = frame.get("command")
+    if command == "hello":
+        emit({"ok": True, "advisor_id": SIDECAR_ID, "state": "STOPPED"})
+    elif command == "start":
+        emit({"ok": True, "state": "READY"})
+    elif command == "status":
+        emit({"ok": True, "state": "READY"})
+    elif command == "advise":
+        request = frame["request"]
+        emit({"ok": True, "accepted": True, "request_id": request["requestId"]})
+        emit({
+            "event": "advice_completed",
+            "request_id": request["requestId"],
+            "response": {
+                "schemaVersion": 1,
+                "requestId": request["requestId"],
+                "advisorId": SIDECAR_ID,
+                "status": "COMPLETED",
+                "diagnosis": "The second failed verification still points at the answer value.",
+                "recommendations": ["Read src/lib.rs again, then patch the answer to 42 and rerun verification."],
+                "risks": ["Advice is untrusted and must be checked locally."],
+                "assumptionsOrQuestions": ["Assumes the bounded read excerpt is current."],
+                "confidence": "MEDIUM",
+                "rawArtifactReference": None
+            }
+        })
+    elif command == "cancel":
+        emit({"ok": True, "cancelled": True})
+    elif command == "shutdown":
+        emit({"ok": True, "state": "STOPPED"})
+        break
+    else:
+        emit({"ok": False, "error": "UNKNOWN_COMMAND"})
+"#,
+        )
+        .expect("fake sidecar");
+        IntegratedAdvisorLocalRuntimeConfigV1 {
+            python_executable: PathBuf::from("python"),
+            adapter_script: script,
+            profile_dir: root.join("fake-advisor-profile"),
+            selectors_path: None,
+            headed: false,
+            allow_env_login: false,
         }
     }
 

@@ -15,12 +15,16 @@ use tokio::sync::Mutex;
 
 use crate::app_info::CATDESK_VERSION;
 use crate::command;
+use crate::delegated::advisor::AdviceDisclosureClassification;
 use crate::delegated::contracts::{
-    ApprovalId, ApprovalRequirementKind, ExecutionContractV1, PatchId, RunId, RunState,
-    validate_contract,
+    AdvisorDisclosureClassificationV1, ApprovalId, ApprovalRequirementKind, ExecutionContractV1,
+    PatchId, RunId, RunState, validate_contract,
 };
 use crate::delegated::events::EventCursor;
-use crate::delegated::integrated::{IntegratedDelegatedService, IntegratedRunConfigV1};
+use crate::delegated::integrated::{
+    IntegratedAdvisorConfigV1, IntegratedAdvisorLocalRuntimeConfigV1, IntegratedDelegatedService,
+    IntegratedRunConfigV1,
+};
 use crate::delegated::journal::{DelegatedJournal, ToolCallStatus};
 use crate::delegated::patch_engine::compare_patches;
 use crate::delegated::supervisor::SUPERVISOR_TOOL_NAMES;
@@ -1928,6 +1932,7 @@ fn supervisor_mcp_tool_schemas() -> Vec<Value> {
                             "type": "string",
                             "description": "Optional loopback Ollama base URL for this run. Defaults to http://127.0.0.1:11434."
                         },
+                        "advisorLocalConfig": advisor_local_config_input_schema(),
                         "afterSequence": { "type": "integer" },
                         "limit": { "type": "integer" },
                         "maxBytes": { "type": "integer" }
@@ -2001,6 +2006,7 @@ fn execution_contract_input_schema() -> Value {
             "maxToolCalls": { "type": "integer", "minimum": 1 },
             "maxElapsedSeconds": { "type": "integer", "minimum": 1 },
             "providerPolicy": provider_policy_input_schema(),
+            "advisorPolicy": advisor_policy_input_schema(),
             "escalationConditions": {
                 "type": "array",
                 "items": { "type": "string", "minLength": 1 }
@@ -2036,6 +2042,51 @@ fn execution_contract_input_schema() -> Value {
             "expectedArtifacts",
             "verificationProfile"
         ]
+    })
+}
+
+fn advisor_policy_input_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "enabled": { "type": "boolean", "default": false },
+            "advisorId": { "type": "string", "const": "deepseek-web" },
+            "disclosureClassification": {
+                "type": "string",
+                "enum": ["LOCAL_ONLY", "REMOTE_ALLOWED"],
+                "default": "LOCAL_ONLY"
+            },
+            "maximumResponseLength": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 16384,
+                "default": 4096
+            },
+            "maximumConsultationsPerRun": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3,
+                "default": 1
+            },
+            "adviceRequired": { "type": "boolean", "default": false }
+        }
+    })
+}
+
+fn advisor_local_config_input_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "pythonExecutable": { "type": "string", "minLength": 1 },
+            "adapterScript": { "type": "string", "minLength": 1 },
+            "profileDir": { "type": "string", "minLength": 1 },
+            "selectorsPath": { "type": "string", "minLength": 1 },
+            "headed": { "type": "boolean", "default": true },
+            "allowEnvLogin": { "type": "boolean", "default": false }
+        },
+        "required": ["pythonExecutable", "adapterScript", "profileDir"]
     })
 }
 
@@ -2659,8 +2710,75 @@ fn mcp_integrated_config(
         job_root: workspace_root.join(".catdesk/delegated/jobs"),
         ollama_base_url: ollama_base_url.into(),
         model_id: contract.provider_policy.primary_model_id.clone(),
-        advisor: None,
+        advisor: mcp_advisor_config(contract, args)?,
     })
+}
+
+fn mcp_advisor_config(
+    contract: &ExecutionContractV1,
+    args: &Value,
+) -> Result<Option<IntegratedAdvisorConfigV1>, String> {
+    let Some(policy) = &contract.advisor_policy else {
+        return Ok(None);
+    };
+    if !policy.enabled {
+        return Ok(None);
+    }
+    if policy.advisor_id != "deepseek-web" {
+        return Err("advisorPolicy.advisorId must be deepseek-web".into());
+    }
+    if policy.disclosure_classification != AdvisorDisclosureClassificationV1::RemoteAllowed {
+        return Err("enabled advisorPolicy requires REMOTE_ALLOWED".into());
+    }
+    Ok(Some(IntegratedAdvisorConfigV1 {
+        enabled: true,
+        advisor_id: policy.advisor_id.clone(),
+        disclosure_classification: AdviceDisclosureClassification::RemoteAllowed,
+        maximum_response_length: policy.maximum_response_length,
+        maximum_consultations_per_run: policy.maximum_consultations_per_run,
+        advice_required: policy.advice_required,
+        local_runtime: mcp_advisor_local_runtime(args)?,
+    }))
+}
+
+fn mcp_advisor_local_runtime(
+    args: &Value,
+) -> Result<Option<IntegratedAdvisorLocalRuntimeConfigV1>, String> {
+    let Some(value) = args.get("advisorLocalConfig") else {
+        return Ok(None);
+    };
+    let object = value
+        .as_object()
+        .ok_or_else(|| "advisorLocalConfig must be an object".to_string())?;
+    let required_path = |name: &str| -> Result<PathBuf, String> {
+        object
+            .get(name)
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .map(PathBuf::from)
+            .ok_or_else(|| format!("advisorLocalConfig.{name} is required"))
+    };
+    let optional_path = |name: &str| -> Option<PathBuf> {
+        object
+            .get(name)
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .map(PathBuf::from)
+    };
+    Ok(Some(IntegratedAdvisorLocalRuntimeConfigV1 {
+        python_executable: required_path("pythonExecutable")?,
+        adapter_script: required_path("adapterScript")?,
+        profile_dir: required_path("profileDir")?,
+        selectors_path: optional_path("selectorsPath"),
+        headed: object
+            .get("headed")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
+        allow_env_login: object
+            .get("allowEnvLogin")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+    }))
 }
 
 fn registry_key(workspace_root: &Path, run_id: &RunId) -> String {
@@ -2851,6 +2969,24 @@ fn rehydrate_registry_entry(
         .map_err(|error| format!("{error:?}"))?;
     let mut config = config;
     config.model_id = contract.provider_policy.primary_model_id.clone();
+    config.advisor = contract.advisor_policy.as_ref().and_then(|policy| {
+        if policy.enabled
+            && policy.advisor_id == "deepseek-web"
+            && policy.disclosure_classification == AdvisorDisclosureClassificationV1::RemoteAllowed
+        {
+            Some(IntegratedAdvisorConfigV1 {
+                enabled: true,
+                advisor_id: policy.advisor_id.clone(),
+                disclosure_classification: AdviceDisclosureClassification::RemoteAllowed,
+                maximum_response_length: policy.maximum_response_length,
+                maximum_consultations_per_run: policy.maximum_consultations_per_run,
+                advice_required: policy.advice_required,
+                local_runtime: None,
+            })
+        } else {
+            None
+        }
+    });
     let run_start_approval = journal
         .load_run_start_approval(run_id)
         .ok()
@@ -6045,6 +6181,14 @@ mod tests {
             .and_then(|provider| provider.get("properties"))
             .and_then(Value::as_object)
             .expect("provider policy properties");
+        assert!(contract_properties.contains_key("advisorPolicy"));
+        assert!(
+            create
+                .get("inputSchema")
+                .and_then(|schema| schema.get("properties"))
+                .and_then(|properties| properties.get("advisorLocalConfig"))
+                .is_some()
+        );
         assert_eq!(
             provider_policy
                 .get("primaryProviderId")
@@ -6095,6 +6239,79 @@ mod tests {
         .await;
 
         assert_tool_error("remote ollama", &response);
+    }
+
+    #[tokio::test]
+    async fn supervisor_create_wires_advisor_policy_and_rehydrates_without_runtime_paths() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-advisor-policy-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let sidecar = workspace_root.join("fake_advisor.py");
+        std::fs::write(&sidecar, "print('fake sidecar')\n").expect("sidecar");
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+        let run_id = format!("run-advisor-policy-{}", Uuid::new_v4());
+        let mut contract = delegated_contract(&workspace_root, &run_id);
+        contract.advisor_policy = Some(crate::delegated::contracts::AdvisorPolicyV1 {
+            enabled: true,
+            advisor_id: "deepseek-web".into(),
+            disclosure_classification:
+                crate::delegated::contracts::AdvisorDisclosureClassificationV1::RemoteAllowed,
+            maximum_response_length: 1024,
+            maximum_consultations_per_run: 1,
+            advice_required: false,
+        });
+
+        let response = handle_tools_call(
+            &tool_call_request(
+                "delegated_run_create",
+                json!({
+                    "contract": contract,
+                    "advisorLocalConfig": {
+                        "pythonExecutable": "python",
+                        "adapterScript": sidecar,
+                        "profileDir": workspace_root.join("advisor-profile"),
+                        "headed": false
+                    }
+                }),
+            ),
+            &workspace_root_str,
+            0,
+            Mode::Both,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_success("advisor create", &response);
+        let run_id = RunId::new(run_id).expect("run id");
+        let canonical_workspace = workspace_root.canonicalize().expect("canonical workspace");
+        let key = registry_key(&canonical_workspace, &run_id);
+        let registry = delegated_run_registry();
+        {
+            let registry = registry.lock().await;
+            let entry = registry.runs.get(&key).expect("registry entry");
+            let advisor = entry.config.advisor.as_ref().expect("advisor config");
+            assert_eq!(advisor.advisor_id, "deepseek-web");
+            assert!(advisor.local_runtime.is_some());
+        }
+        {
+            let mut registry = registry.lock().await;
+            registry.runs.remove(&key);
+        }
+        let (_run_id, rehydrated) = registry_entry(&canonical_workspace, &json!({"runId": run_id}))
+            .await
+            .expect("rehydrate");
+        let advisor = rehydrated
+            .config
+            .advisor
+            .as_ref()
+            .expect("rehydrated advisor");
+        assert_eq!(advisor.advisor_id, "deepseek-web");
+        assert!(
+            advisor.local_runtime.is_none(),
+            "local runtime paths must not be recovered from remote contract"
+        );
+        release_active_lock(&workspace_active_lock_path(&canonical_workspace));
     }
 
     #[tokio::test]

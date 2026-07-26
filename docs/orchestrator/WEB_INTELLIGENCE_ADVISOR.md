@@ -1,6 +1,6 @@
 # Web Intelligence Advisor
 
-Status: T-0024C experimental integration for review
+Status: T-0024C.1 production-wiring review
 Date: 2026-07-26
 
 ## Purpose
@@ -43,11 +43,13 @@ is introduced in T-0024A.
 
 ## Advisor Triggers
 
-Only these triggers are valid:
+T-0024C.1 implements only the automatic failure trigger:
 
-- explicit Qwen request for advice;
 - at least two failed bounded repair attempts;
-- `NEEDS_SUPERVISOR` when advisory consultation is explicitly allowed.
+
+Explicit structured Qwen advice requests and `NEEDS_SUPERVISOR` advisory
+consultation remain deferred until a real structured mechanism and supervisor
+policy are implemented. CatDesk does not expose model-visible advisor tools.
 
 ## Historical Script Review
 
@@ -80,10 +82,17 @@ T-0024C integrates advisor consultation into the worker loop, but only as
 untrusted context. It does not modify the released CatDesk worker, patch,
 journal, MCP, authentication, provider, or verification boundaries.
 
-The web advisor is disabled by default and requires explicit run
-configuration for advisor ID `deepseek-web` plus `REMOTE_ALLOWED` disclosure.
+The web advisor is disabled by default. The durable contract policy must enable
+advisor ID `deepseek-web` with `REMOTE_ALLOWED` disclosure. Local Python,
+script, selector, and persistent-profile paths are local CatDesk runtime
+configuration supplied outside the execution contract.
+
 The Python process receives only a bounded `AdviceRequestV1` over an
 authenticated local JSONL protocol and receives no CatDesk tool definitions or
 execution authority. Returned advice is delimited as untrusted user/context
 data for the next Qwen turn; Qwen must still inspect repository state and act
 through ordinary CatDesk tools.
+
+Ordinary journal advisor events contain structural metadata only. Bounded
+request and response details are stored as local advice artifacts and referred
+to by artifact reference.
