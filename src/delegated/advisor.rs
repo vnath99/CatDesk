@@ -1,6 +1,7 @@
 use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -189,6 +190,14 @@ pub trait AdvisorAdapter {
         request: &AdviceRequestV1,
         timeout: Duration,
     ) -> Result<AdviceResponseV1, AdvisorError>;
+    fn request_advice_cancellable(
+        &mut self,
+        request: &AdviceRequestV1,
+        timeout: Duration,
+        _cancel_requested: &AtomicBool,
+    ) -> Result<AdviceResponseV1, AdvisorError> {
+        self.request_advice(request, timeout)
+    }
 }
 
 impl<T: AdvisorAdapter + ?Sized> AdvisorAdapter for &mut T {
@@ -210,6 +219,15 @@ impl<T: AdvisorAdapter + ?Sized> AdvisorAdapter for &mut T {
         timeout: Duration,
     ) -> Result<AdviceResponseV1, AdvisorError> {
         (**self).request_advice(request, timeout)
+    }
+
+    fn request_advice_cancellable(
+        &mut self,
+        request: &AdviceRequestV1,
+        timeout: Duration,
+        cancel_requested: &AtomicBool,
+    ) -> Result<AdviceResponseV1, AdvisorError> {
+        (**self).request_advice_cancellable(request, timeout, cancel_requested)
     }
 }
 
@@ -477,25 +495,7 @@ impl DeepSeekProcessAdvisor {
         request: Option<&AdviceRequestV1>,
         timeout: Duration,
     ) -> Result<Value, AdvisorError> {
-        let mut payload = serde_json::Map::new();
-        payload.insert("auth_token".into(), json!(self.config.auth_token));
-        payload.insert("command".into(), json!(command));
-        if let Some(request) = request {
-            payload.insert(
-                "request".into(),
-                serde_json::to_value(request)
-                    .map_err(|error| AdvisorError::Adapter(error.to_string()))?,
-            );
-        }
-        let line = serde_json::to_string(&Value::Object(payload))
-            .map_err(|error| AdvisorError::Adapter(error.to_string()))?;
-        let stdin = self
-            .stdin
-            .as_mut()
-            .ok_or_else(|| AdvisorError::Adapter("advisor stdin is unavailable".into()))?;
-        writeln!(stdin, "{line}")
-            .and_then(|_| stdin.flush())
-            .map_err(|error| AdvisorError::Adapter(format!("advisor write failed: {error}")))?;
+        self.write_command(command, request)?;
         let value = self.read_jsonl(timeout)?;
         if value.get("ok").and_then(Value::as_bool) == Some(false) {
             return Err(AdvisorError::Adapter(
@@ -507,6 +507,38 @@ impl DeepSeekProcessAdvisor {
             ));
         }
         Ok(value)
+    }
+
+    fn write_command(
+        &mut self,
+        command: &str,
+        request: Option<&AdviceRequestV1>,
+    ) -> Result<(), AdvisorError> {
+        let mut payload = serde_json::Map::new();
+        payload.insert("auth_token".into(), json!(self.config.auth_token));
+        payload.insert("command".into(), json!(command));
+        if let Some(request) = request {
+            payload.insert(
+                "request".into(),
+                serde_json::to_value(request)
+                    .map_err(|error| AdvisorError::Adapter(error.to_string()))?,
+            );
+        }
+        if command == "cancel" {
+            if let Some(request_id) = &self.active_request_id {
+                payload.insert("request_id".into(), json!(request_id));
+            }
+        }
+        let line = serde_json::to_string(&Value::Object(payload))
+            .map_err(|error| AdvisorError::Adapter(error.to_string()))?;
+        let stdin = self
+            .stdin
+            .as_mut()
+            .ok_or_else(|| AdvisorError::Adapter("advisor stdin is unavailable".into()))?;
+        writeln!(stdin, "{line}")
+            .and_then(|_| stdin.flush())
+            .map_err(|error| AdvisorError::Adapter(format!("advisor write failed: {error}")))?;
+        Ok(())
     }
 
     fn read_jsonl(&mut self, timeout: Duration) -> Result<Value, AdvisorError> {
@@ -521,6 +553,25 @@ impl DeepSeekProcessAdvisor {
         serde_json::from_str(&line).map_err(|error| {
             AdvisorError::MalformedAdvice(format!("malformed advisor JSONL: {error}"))
         })
+    }
+
+    fn read_jsonl_slice(&mut self, timeout: Duration) -> Result<Option<Value>, AdvisorError> {
+        let rx = self
+            .stdout_rx
+            .as_ref()
+            .ok_or_else(|| AdvisorError::Adapter("advisor stdout reader is unavailable".into()))?;
+        match rx.recv_timeout(timeout) {
+            Ok(Ok(line)) => serde_json::from_str(&line).map(Some).map_err(|error| {
+                AdvisorError::MalformedAdvice(format!("malformed advisor JSONL: {error}"))
+            }),
+            Ok(Err(error)) => Err(AdvisorError::Adapter(format!(
+                "advisor stdout failed: {error}"
+            ))),
+            Err(mpsc::RecvTimeoutError::Timeout) => Ok(None),
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(AdvisorError::Adapter(
+                "advisor stdout reader disconnected".into(),
+            )),
+        }
     }
 
     pub fn cancel(&mut self, timeout: Duration) -> Result<(), AdvisorError> {
@@ -603,6 +654,30 @@ impl AdvisorAdapter for DeepSeekProcessAdvisor {
         }
         result
     }
+
+    fn request_advice_cancellable(
+        &mut self,
+        request: &AdviceRequestV1,
+        timeout: Duration,
+        cancel_requested: &AtomicBool,
+    ) -> Result<AdviceResponseV1, AdvisorError> {
+        if self.active_request_id.is_some() {
+            return Err(AdvisorError::Adapter(
+                "advisor request already active".into(),
+            ));
+        }
+        if let Err(error) = self.ensure_started(timeout) {
+            self.reset_unhealthy_sidecar();
+            return Err(error);
+        }
+        self.active_request_id = Some(request.request_id.clone());
+        let result = self.request_advice_inner_cancellable(request, timeout, cancel_requested);
+        self.active_request_id = None;
+        if result.is_err() {
+            self.reset_unhealthy_sidecar();
+        }
+        result
+    }
 }
 
 impl DeepSeekProcessAdvisor {
@@ -661,6 +736,78 @@ impl DeepSeekProcessAdvisor {
         }
         response.advisor_id = self.config.public_advisor_id.clone();
         Ok(response)
+    }
+
+    fn request_advice_inner_cancellable(
+        &mut self,
+        request: &AdviceRequestV1,
+        timeout: Duration,
+        cancel_requested: &AtomicBool,
+    ) -> Result<AdviceResponseV1, AdvisorError> {
+        let accepted = self.send_command("advise", Some(request), timeout)?;
+        if accepted.get("accepted").and_then(Value::as_bool) != Some(true) {
+            return Err(AdvisorError::Adapter(
+                "advisor did not accept request".into(),
+            ));
+        }
+        if accepted.get("request_id").and_then(Value::as_str) != Some(request.request_id.as_str()) {
+            return Err(AdvisorError::MalformedAdvice(
+                "advisor accepted stale or mismatched request".into(),
+            ));
+        }
+
+        let started = Instant::now();
+        let mut cancel_sent = false;
+        loop {
+            if started.elapsed() >= timeout {
+                return Err(AdvisorError::Adapter("advisor response timed out".into()));
+            }
+            if cancel_requested.load(Ordering::SeqCst) && !cancel_sent {
+                self.write_command("cancel", None)?;
+                cancel_sent = true;
+            }
+            let wait = timeout
+                .saturating_sub(started.elapsed())
+                .min(Duration::from_millis(100));
+            let Some(frame) = self.read_jsonl_slice(wait)? else {
+                continue;
+            };
+            if frame.get("ok").and_then(Value::as_bool) == Some(false) {
+                return Err(AdvisorError::Adapter(
+                    frame
+                        .get("error")
+                        .and_then(Value::as_str)
+                        .unwrap_or("advisor command failed")
+                        .into(),
+                ));
+            }
+            let Some(response_value) = frame.get("response").cloned() else {
+                continue;
+            };
+            let mut response: AdviceResponseV1 = serde_json::from_value(response_value)
+                .map_err(|error| AdvisorError::MalformedAdvice(error.to_string()))?;
+            if frame.get("request_id").and_then(Value::as_str) != Some(request.request_id.as_str())
+                || response.request_id != request.request_id
+            {
+                return Err(AdvisorError::MalformedAdvice(
+                    "advisor terminal event request_id mismatch".into(),
+                ));
+            }
+            if response.advisor_id != self.config.sidecar_advisor_id {
+                return Err(AdvisorError::MalformedAdvice(
+                    "advisor response advisor_id does not match sidecar".into(),
+                ));
+            }
+            response.advisor_id = self.config.public_advisor_id.clone();
+            if cancel_sent || cancel_requested.load(Ordering::SeqCst) {
+                response.status = AdvisorStatus::Cancelled;
+                response.diagnosis = "Advisor consultation was cancelled before delivery.".into();
+                response.recommendations.clear();
+                response.risks = vec!["Cancellation suppressed advisory delivery.".into()];
+                response.assumptions_or_questions.clear();
+            }
+            return Ok(response);
+        }
     }
 }
 
@@ -742,6 +889,26 @@ impl<A: AdvisorAdapter> AdvisorBroker<A> {
         contract: &ExecutionContractV1,
         draft: AdviceRequestDraftV1,
         trigger: AdviceTrigger,
+    ) -> Result<AdviceResponseV1, AdvisorError> {
+        self.consult_inner(contract, draft, trigger, None)
+    }
+
+    pub fn consult_cancellable(
+        &mut self,
+        contract: &ExecutionContractV1,
+        draft: AdviceRequestDraftV1,
+        trigger: AdviceTrigger,
+        cancel_requested: &AtomicBool,
+    ) -> Result<AdviceResponseV1, AdvisorError> {
+        self.consult_inner(contract, draft, trigger, Some(cancel_requested))
+    }
+
+    fn consult_inner(
+        &mut self,
+        contract: &ExecutionContractV1,
+        draft: AdviceRequestDraftV1,
+        trigger: AdviceTrigger,
+        cancel_requested: Option<&AtomicBool>,
     ) -> Result<AdviceResponseV1, AdvisorError> {
         let run_id = RunId::new(contract.task_id.clone()).map_err(AdvisorError::Adapter)?;
         self.append_advisor_event(
@@ -844,12 +1011,26 @@ impl<A: AdvisorAdapter> AdvisorBroker<A> {
             selected_source_paths.clone(),
             Some(request_artifact.clone()),
         )?;
-        let response = match self.adapter.request_advice(&request, self.config.timeout) {
+        let response = match cancel_requested {
+            Some(cancel_requested) => self.adapter.request_advice_cancellable(
+                &request,
+                self.config.timeout,
+                cancel_requested,
+            ),
+            None => self.adapter.request_advice(&request, self.config.timeout),
+        };
+        let response = match response {
             Ok(response) => response,
             Err(error) => {
+                let event_name =
+                    if cancel_requested.is_some_and(|cancel| cancel.load(Ordering::SeqCst)) {
+                        "advice_cancelled"
+                    } else {
+                        "advice_failed"
+                    };
                 self.append_advisor_event(
                     &request.run_id,
-                    "advice_failed",
+                    event_name,
                     Some(&request.request_id),
                     Some(&adapter_id),
                     Some(request_bytes),

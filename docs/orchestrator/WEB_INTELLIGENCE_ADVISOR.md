@@ -1,6 +1,6 @@
 # Web Intelligence Advisor
 
-Status: T-0024C.1 production-wiring review
+Status: T-0024C.2 boundary-hardening review
 Date: 2026-07-26
 
 ## Purpose
@@ -43,7 +43,7 @@ is introduced in T-0024A.
 
 ## Advisor Triggers
 
-T-0024C.1 implements only the automatic failure trigger:
+T-0024C.2 implements only the automatic failure trigger:
 
 - at least two failed bounded repair attempts;
 
@@ -85,7 +85,27 @@ journal, MCP, authentication, provider, or verification boundaries.
 The web advisor is disabled by default. The durable contract policy must enable
 advisor ID `deepseek-web` with `REMOTE_ALLOWED` disclosure. Local Python,
 script, selector, and persistent-profile paths are local CatDesk runtime
-configuration supplied outside the execution contract.
+configuration supplied outside the execution contract and outside MCP request
+arguments.
+
+The MCP surface exposes only `advisorPolicy`. It does not expose
+`advisorLocalConfig`, executable paths, adapter script paths, profile paths,
+selector paths, headed/headless mode, or credential-login behavior. The trusted
+DeepSeek runtime is loaded from operator-local CatDesk startup environment:
+
+- `CATDESK_DEEPSEEK_ADVISOR_PYTHON`;
+- `CATDESK_DEEPSEEK_ADVISOR_SCRIPT`;
+- `CATDESK_DEEPSEEK_ADVISOR_PROFILE`;
+- optional `CATDESK_DEEPSEEK_ADVISOR_SELECTORS`;
+- optional `CATDESK_DEEPSEEK_ADVISOR_HEADED` defaulting to `true`;
+- optional `CATDESK_DEEPSEEK_ADVISOR_ALLOW_ENV_LOGIN` defaulting to `false`.
+
+Configured executable, script, selector, and profile paths are validated and
+canonicalized locally. New and rehydrated runs use this same operator-local
+runtime configuration; runtime paths are never restored from the execution
+contract or journal. If no local runtime is configured, the advisor remains
+unavailable. Optional advice continues locally; required advice escalates to
+`NEEDS_SUPERVISOR`.
 
 The Python process receives only a bounded `AdviceRequestV1` over an
 authenticated local JSONL protocol and receives no CatDesk tool definitions or
@@ -96,3 +116,9 @@ through ordinary CatDesk tools.
 Ordinary journal advisor events contain structural metadata only. Bounded
 request and response details are stored as local advice artifacts and referred
 to by artifact reference.
+
+Cancellation is handled inside the process-adapter owner while waiting for the
+sidecar terminal frame. CatDesk cancellation sends a sidecar `cancel` command
+without waiting for a mutex held by the advice request, joins the consultation
+task, suppresses later advice delivery, and emits one terminal advisor event
+for the active generation.

@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -12,8 +12,8 @@ use serde_json::{Value, json};
 
 use crate::delegated::advisor::{
     AdviceBrokerConfigV1, AdviceDisclosureClassification, AdviceRequestDraftV1, AdviceResponseV1,
-    AdviceTrigger, AdvisorAdapter, AdvisorBroker, AdvisorError, AdvisorStatus,
-    BoundedSourceExcerptV1, DeepSeekProcessAdvisor, DeepSeekProcessAdvisorConfig, redact_and_bound,
+    AdviceTrigger, AdvisorAdapter, AdvisorBroker, AdvisorStatus, BoundedSourceExcerptV1,
+    DeepSeekProcessAdvisor, DeepSeekProcessAdvisorConfig, redact_and_bound,
 };
 use crate::delegated::context::{ContextBudgetPolicyV1, ContextBuilderV1};
 use crate::delegated::contracts::{
@@ -162,7 +162,7 @@ pub struct IntegratedDelegatedService {
     advice_consulted_for_current_failure: bool,
     advisor_consultations_used: u32,
     recent_read_excerpts: Vec<BoundedSourceExcerptV1>,
-    advisor_process: Option<Arc<Mutex<DeepSeekProcessAdvisor>>>,
+    advisor_process: Option<DeepSeekProcessAdvisor>,
     next_event_sequence: u64,
     worker_session_id: WorkerSessionId,
     current_turn_id: Option<TurnId>,
@@ -1069,7 +1069,7 @@ impl IntegratedDelegatedService {
             return Ok(());
         };
 
-        let advisor = self.configured_advisor_process()?;
+        let mut advisor = self.configured_advisor_process()?;
         let contract = self.contract.clone();
         let journal = self.journal.clone();
         let worker_session_id = self.worker_session_id.clone();
@@ -1085,44 +1085,46 @@ impl IntegratedDelegatedService {
             timeout: Duration::from_secs(180),
             ..AdviceBrokerConfigV1::remote_advisory_default()
         };
-        let advisor_for_task = advisor.clone();
+        let cancel_for_task = cancel_requested.clone();
         let consultation = tokio::task::spawn_blocking(move || {
-            let mut guard = advisor_for_task
-                .lock()
-                .map_err(|_| AdvisorError::Adapter("advisor mutex poisoned".into()))?;
-            let mut broker = AdvisorBroker::new(&mut *guard, journal, broker_config)
+            let mut broker = AdvisorBroker::new(&mut advisor, journal, broker_config)
                 .with_worker_session_id(worker_session_id);
-            broker.consult(
+            let result = broker.consult_cancellable(
                 &contract,
                 draft,
                 AdviceTrigger::TwoFailedBoundedRepairAttempts { failed_attempts: 2 },
-            )
+                &cancel_for_task,
+            );
+            if cancel_for_task.load(Ordering::SeqCst) {
+                let _ = advisor.shutdown(Duration::from_secs(5));
+            }
+            (advisor, result)
         });
 
-        let response = tokio::select! {
-            result = consultation => {
-                result.map_err(|error| IntegratedError::Tool(format!("advisor task failed: {error}")))?
-            }
-            _ = wait_for_cancel(cancel_requested.clone()) => {
-                let advisor_for_cancel = advisor.clone();
-                let _ = tokio::task::spawn_blocking(move || {
-                    advisor_for_cancel
-                        .lock()
-                        .map_err(|_| AdvisorError::Adapter("advisor mutex poisoned".into()))
-                        .and_then(|mut guard| guard.cancel_active(Duration::from_secs(5)))
-                })
-                .await;
-                self.record_advisor_unavailable_context(
-                    AdvisorStatus::Cancelled,
-                    "advisor consultation was cancelled with the CatDesk run",
-                    advisor_config.advice_required,
-                )?;
-                return Ok(());
-            }
-        };
+        let (advisor, response) = consultation
+            .await
+            .map_err(|error| IntegratedError::Tool(format!("advisor task failed: {error}")))?;
+        self.advisor_process = Some(advisor);
+        if cancel_requested.load(Ordering::SeqCst) {
+            self.record_advisor_unavailable_context_inner(
+                AdvisorStatus::Cancelled,
+                "advisor consultation was cancelled with the CatDesk run",
+                advisor_config.advice_required,
+                false,
+            )?;
+            return Ok(());
+        }
 
         match response {
             Ok(response) => {
+                if response.status == AdvisorStatus::Cancelled {
+                    return self.record_advisor_unavailable_context_inner(
+                        AdvisorStatus::Cancelled,
+                        "advisor consultation was cancelled with the CatDesk run",
+                        advisor_config.advice_required,
+                        false,
+                    );
+                }
                 self.refresh_next_event_sequence()?;
                 self.deliver_advisor_response(response, advisor_config.advice_required)
             }
@@ -1201,11 +1203,9 @@ impl IntegratedDelegatedService {
         Ok(response)
     }
 
-    fn configured_advisor_process(
-        &mut self,
-    ) -> Result<Arc<Mutex<DeepSeekProcessAdvisor>>, IntegratedError> {
-        if let Some(advisor) = &self.advisor_process {
-            return Ok(advisor.clone());
+    fn configured_advisor_process(&mut self) -> Result<DeepSeekProcessAdvisor, IntegratedError> {
+        if let Some(advisor) = self.advisor_process.take() {
+            return Ok(advisor);
         }
         let advisor_config =
             self.config.advisor.as_ref().ok_or_else(|| {
@@ -1222,9 +1222,7 @@ impl IntegratedDelegatedService {
         config.selectors_path = runtime.selectors_path.clone();
         config.headed = runtime.headed;
         config.allow_env_login = runtime.allow_env_login;
-        let advisor = Arc::new(Mutex::new(DeepSeekProcessAdvisor::new(config)));
-        self.advisor_process = Some(advisor.clone());
-        Ok(advisor)
+        Ok(DeepSeekProcessAdvisor::new(config))
     }
 
     fn deliver_advisor_response(
@@ -1291,6 +1289,16 @@ impl IntegratedDelegatedService {
         reason: &str,
         advice_required: bool,
     ) -> Result<(), IntegratedError> {
+        self.record_advisor_unavailable_context_inner(status, reason, advice_required, true)
+    }
+
+    fn record_advisor_unavailable_context_inner(
+        &mut self,
+        status: AdvisorStatus,
+        reason: &str,
+        advice_required: bool,
+        emit_event: bool,
+    ) -> Result<(), IntegratedError> {
         self.provider_history.push(ProviderMessageV1 {
             role: "user".into(),
             content: format!(
@@ -1299,28 +1307,30 @@ impl IntegratedDelegatedService {
             tool_call_id: None,
             tool_name: None,
         });
-        self.append_event(
-            LifecycleEvent::Delta,
-            EventPayloadV1::AdvisorEvent {
-                event: advisor_terminal_event_name_for_integrated(&status).into(),
-                request_id: None,
-                generation_id: None,
-                advisor_id: Some("deepseek-web".into()),
-                status: Some(format!("{status:?}")),
-                request_bytes: None,
-                response_bytes: None,
-                request_hash: None,
-                response_hash: None,
-                selected_source_paths: self
-                    .bounded_advisor_source_excerpts()
-                    .into_iter()
-                    .map(|excerpt| excerpt.source)
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-                artifact_reference: Box::new(None),
-                timestamp_unix_ms: timestamp_unix_ms(),
-            },
-        )?;
+        if emit_event {
+            self.append_event(
+                LifecycleEvent::Delta,
+                EventPayloadV1::AdvisorEvent {
+                    event: advisor_terminal_event_name_for_integrated(&status).into(),
+                    request_id: None,
+                    generation_id: None,
+                    advisor_id: Some("deepseek-web".into()),
+                    status: Some(format!("{status:?}")),
+                    request_bytes: None,
+                    response_bytes: None,
+                    request_hash: None,
+                    response_hash: None,
+                    selected_source_paths: self
+                        .bounded_advisor_source_excerpts()
+                        .into_iter()
+                        .map(|excerpt| excerpt.source)
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice(),
+                    artifact_reference: Box::new(None),
+                    timestamp_unix_ms: timestamp_unix_ms(),
+                },
+            )?;
+        }
         if advice_required {
             self.journal
                 .update_run_state(&self.run_id()?, RunState::NeedsSupervisor)
@@ -2672,6 +2682,165 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn optional_configured_advisor_failure_continues_locally() {
+        let root = temp_git_workspace("advisor-optional-unavailable");
+        fs::write(root.join("src/lib.rs"), "pub fn answer() -> i32 { 41 }\n").expect("lib");
+        commit_all(&root);
+        let mut cfg = config(&root);
+        cfg.advisor = Some(IntegratedAdvisorConfigV1 {
+            enabled: true,
+            advisor_id: "deepseek-web".into(),
+            disclosure_classification: AdviceDisclosureClassification::RemoteAllowed,
+            maximum_response_length: 1024,
+            maximum_consultations_per_run: 1,
+            advice_required: false,
+            local_runtime: None,
+        });
+        let contract = contract(&root, "run-t0024c2-optional-advisor-unavailable");
+        let mut service =
+            IntegratedDelegatedService::new(&root, contract.clone(), cfg).expect("service");
+        service.start().expect("start");
+        service.consecutive_failed_verifications = 2;
+
+        service
+            .maybe_consult_configured_advisor_after_failed_repairs(Arc::new(AtomicBool::new(false)))
+            .await
+            .expect("optional advisor unavailable continues");
+
+        assert!(service.provider_history.iter().any(|message| {
+            message.content.contains("Advisor advice unavailable")
+                && message.content.contains("Continue locally")
+        }));
+        assert_ne!(
+            service
+                .journal
+                .load_run(&RunId::new(contract.task_id).expect("run"))
+                .expect("snapshot")
+                .state,
+            RunState::NeedsSupervisor
+        );
+    }
+
+    #[tokio::test]
+    async fn required_configured_advisor_failure_persists_needs_supervisor() {
+        let root = temp_git_workspace("advisor-required-unavailable");
+        fs::write(root.join("src/lib.rs"), "pub fn answer() -> i32 { 41 }\n").expect("lib");
+        commit_all(&root);
+        let mut cfg = config(&root);
+        cfg.advisor = Some(IntegratedAdvisorConfigV1 {
+            enabled: true,
+            advisor_id: "deepseek-web".into(),
+            disclosure_classification: AdviceDisclosureClassification::RemoteAllowed,
+            maximum_response_length: 1024,
+            maximum_consultations_per_run: 1,
+            advice_required: true,
+            local_runtime: None,
+        });
+        let contract = contract(&root, "run-t0024c2-required-advisor-unavailable");
+        let mut service =
+            IntegratedDelegatedService::new(&root, contract.clone(), cfg).expect("service");
+        service.start().expect("start");
+        service.consecutive_failed_verifications = 2;
+
+        let result = service
+            .maybe_consult_configured_advisor_after_failed_repairs(Arc::new(AtomicBool::new(false)))
+            .await;
+
+        assert!(
+            matches!(result, Err(IntegratedError::Tool(message)) if message.contains("required advisor consultation unavailable"))
+        );
+        assert_eq!(
+            service
+                .journal
+                .load_run(&RunId::new(contract.task_id).expect("run"))
+                .expect("snapshot")
+                .state,
+            RunState::NeedsSupervisor
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_advisor_cancellation_is_prompt_and_suppresses_delivery() {
+        let root = temp_git_workspace("advisor-cancel-prompt");
+        fs::write(root.join("src/lib.rs"), "pub fn answer() -> i32 { 41 }\n").expect("lib");
+        commit_all(&root);
+        let mut cfg = config(&root);
+        cfg.advisor = Some(IntegratedAdvisorConfigV1 {
+            enabled: true,
+            advisor_id: "deepseek-web".into(),
+            disclosure_classification: AdviceDisclosureClassification::RemoteAllowed,
+            maximum_response_length: 1024,
+            maximum_consultations_per_run: 1,
+            advice_required: false,
+            local_runtime: Some(blocking_until_cancel_deepseek_sidecar(&root)),
+        });
+        let contract = contract(&root, "run-t0024c2-advisor-cancel");
+        let mut service =
+            IntegratedDelegatedService::new(&root, contract.clone(), cfg).expect("service");
+        service.start().expect("start");
+        service.consecutive_failed_verifications = 2;
+        let cancel = Arc::new(AtomicBool::new(false));
+        let cancel_after_start = cancel.clone();
+        let cancel_thread = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(300));
+            cancel_after_start.store(true, Ordering::SeqCst);
+        });
+        let started = Instant::now();
+
+        service
+            .maybe_consult_configured_advisor_after_failed_repairs(cancel)
+            .await
+            .expect("cancelled optional advisor does not fail run");
+        cancel_thread.join().expect("cancel thread");
+
+        assert!(
+            started.elapsed() < Duration::from_secs(5),
+            "advisor cancellation should be bounded and prompt"
+        );
+        assert!(service.provider_history.iter().any(|message| {
+            message.content.contains("Advisor advice unavailable")
+                && message.content.contains("Cancelled")
+        }));
+        assert!(
+            !service.provider_history.iter().any(|message| {
+                message.content.contains("<untrusted_advisor_context>")
+                    && message.content.contains("Recommendations:")
+            }),
+            "cancelled advice must not be delivered as completed context"
+        );
+        let events = service
+            .journal
+            .poll_events(
+                &RunId::new(contract.task_id).expect("run"),
+                EventCursor {
+                    after_sequence: 0,
+                    limit: usize::MAX,
+                },
+            )
+            .expect("events");
+        let advisor_terminal_events = events
+            .iter()
+            .filter_map(|event| match &event.payload {
+                EventPayloadV1::AdvisorEvent { event, .. }
+                    if matches!(
+                        event.as_str(),
+                        "advice_completed"
+                            | "advice_cancelled"
+                            | "advice_failed"
+                            | "advice_rate_limited"
+                            | "advice_takeover_required"
+                            | "advice_timed_out"
+                    ) =>
+                {
+                    Some(event.as_str())
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(advisor_terminal_events, vec!["advice_cancelled"]);
+    }
+
+    #[tokio::test]
     #[ignore = "opt-in headed DeepSeek browser advisor integration smoke"]
     async fn live_deepseek_process_advisor_explicit_request_returns_untrusted_context() {
         let root = temp_git_workspace("deepseek-live-advisor-integration");
@@ -2723,6 +2892,167 @@ mod tests {
             !tool.name.starts_with("advisor.") && !tool.name.starts_with("advice.")
         }));
         advisor.shutdown(Duration::from_secs(5)).expect("shutdown");
+    }
+
+    #[tokio::test]
+    #[ignore = "opt-in headed DeepSeek browser advisor plus deterministic worker-loop smoke"]
+    async fn live_deepseek_combined_autonomous_advisor_worker_proof() {
+        let root = temp_git_workspace("deepseek-live-combined-advisor");
+        fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname=\"fixture\"\nversion=\"0.1.0\"\nedition=\"2021\"\n",
+        )
+        .expect("cargo");
+        fs::write(
+            root.join("src/lib.rs"),
+            "pub fn answer() -> i32 {\n    41\n}\n",
+        )
+        .expect("lib");
+        fs::create_dir_all(root.join("tests")).expect("tests");
+        fs::write(
+            root.join("tests/answer_test.rs"),
+            "#[test]\nfn answer_is_expected_value() {\n    assert_eq!(fixture::answer(), 42);\n}\n",
+        )
+        .expect("test");
+        commit_all(&root);
+
+        let mut contract = contract(&root, "run-t0024c2-live-combined-advisor");
+        contract.max_turns = 20;
+        contract.max_tool_calls = 40;
+        contract.advisor_policy = Some(AdvisorPolicyV1 {
+            enabled: true,
+            advisor_id: "deepseek-web".into(),
+            disclosure_classification: AdvisorDisclosureClassificationV1::RemoteAllowed,
+            maximum_response_length: 1024,
+            maximum_consultations_per_run: 1,
+            advice_required: false,
+        });
+        let mut cfg = config(&root);
+        cfg.advisor = Some(IntegratedAdvisorConfigV1 {
+            enabled: true,
+            advisor_id: "deepseek-web".into(),
+            disclosure_classification: AdviceDisclosureClassification::RemoteAllowed,
+            maximum_response_length: 1024,
+            maximum_consultations_per_run: 1,
+            advice_required: false,
+            local_runtime: Some(live_deepseek_runtime_config()),
+        });
+        let turns = vec![
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-read-1",
+                "read",
+                json!({"path":"src/lib.rs"}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-preview-1",
+                "patch.preview",
+                json!({
+                    "patchId": "patch-wrong-1",
+                    "operations": [{
+                        "path": "src/lib.rs",
+                        "old": "pub fn answer() -> i32 {\n    41\n}\n",
+                        "new": "pub fn answer() -> i32 {\n    40\n}\n"
+                    }]
+                }),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-apply-1",
+                "patch.apply",
+                json!({"patchId":"patch-wrong-1"}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-verify-1",
+                "verify.run",
+                json!({"timeout": 30000}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-preview-2",
+                "patch.preview",
+                json!({
+                    "patchId": "patch-wrong-2",
+                    "parentPatchId": "patch-wrong-1",
+                    "operations": [{
+                        "path": "src/lib.rs",
+                        "old": "pub fn answer() -> i32 {\n    40\n}\n",
+                        "new": "pub fn answer() -> i32 {\n    43\n}\n"
+                    }]
+                }),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-apply-2",
+                "patch.apply",
+                json!({"patchId":"patch-wrong-2"}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-verify-2",
+                "verify.run",
+                json!({"timeout": 30000}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-read-after-advice",
+                "read",
+                json!({"path":"src/lib.rs"}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-preview-3",
+                "patch.preview",
+                json!({
+                    "patchId": "patch-correct",
+                    "parentPatchId": "patch-wrong-2",
+                    "operations": [{
+                        "path": "src/lib.rs",
+                        "old": "pub fn answer() -> i32 {\n    43\n}\n",
+                        "new": "pub fn answer() -> i32 {\n    42\n}\n"
+                    }]
+                }),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-apply-3",
+                "patch.apply",
+                json!({"patchId":"patch-correct"}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-verify-3",
+                "verify.run",
+                json!({"timeout": 30000}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-diff",
+                "diff.actual",
+                json!({"paths":["src/lib.rs"]}),
+            )),
+            FakeProviderTurn::Complete(
+                "Verification passed and authoritative diff is captured.".into(),
+            ),
+        ];
+        let mut service = IntegratedDelegatedService::new(&root, contract, cfg).expect("service");
+        let review = service
+            .run_fake_worker_loop_with_advisor(
+                FakeProvider::new(turns),
+                Arc::new(AtomicBool::new(false)),
+            )
+            .await
+            .expect("combined live advisor proof");
+
+        assert_eq!(review.final_result.status, RunState::CompletedVerified);
+        assert_eq!(service.advisor_consultations_used, 1);
+        let advice_index = service
+            .provider_history
+            .iter()
+            .position(|message| message.content.contains("<untrusted_advisor_context>"))
+            .expect("advice delivered");
+        assert!(
+            service
+                .provider_history
+                .iter()
+                .enumerate()
+                .any(|(index, message)| {
+                    index > advice_index && message.tool_name.as_deref() == Some("read")
+                })
+        );
+        assert!(service.tool_definitions().iter().all(|tool| {
+            !tool.name.starts_with("advisor.") && !tool.name.starts_with("advice.")
+        }));
     }
 
     #[tokio::test]
@@ -3138,6 +3468,101 @@ for line in sys.stdin:
             profile_dir: root.join("fake-advisor-profile"),
             selectors_path: None,
             headed: false,
+            allow_env_login: false,
+        }
+    }
+
+    fn blocking_until_cancel_deepseek_sidecar(
+        root: &Path,
+    ) -> IntegratedAdvisorLocalRuntimeConfigV1 {
+        let script = root.join("blocking_deepseek_advisor.py");
+        fs::write(
+            &script,
+            r#"
+import json
+import os
+import sys
+
+TOKEN = os.environ.get("CATDESK_ADVISOR_AUTH_TOKEN", "")
+SIDECAR_ID = "deepseek-web-advisor-experimental"
+active_request_id = None
+
+def emit(value):
+    print(json.dumps(value), flush=True)
+
+for line in sys.stdin:
+    frame = json.loads(line)
+    if frame.get("auth_token") != TOKEN:
+        emit({"ok": False, "error": "AUTH_FAILED"})
+        continue
+    command = frame.get("command")
+    if command == "hello":
+        emit({"ok": True, "advisor_id": SIDECAR_ID, "state": "STOPPED"})
+    elif command == "start":
+        emit({"ok": True, "state": "READY"})
+    elif command == "status":
+        emit({"ok": True, "state": "READY", "active": active_request_id is not None, "request_id": active_request_id})
+    elif command == "advise":
+        request = frame["request"]
+        active_request_id = request["requestId"]
+        emit({"ok": True, "accepted": True, "request_id": active_request_id})
+    elif command == "cancel":
+        request_id = active_request_id or frame.get("request_id") or "cancelled-request"
+        active_request_id = None
+        emit({
+            "ok": True,
+            "state": "CANCELLED",
+            "request_id": request_id,
+            "response": {
+                "schemaVersion": 1,
+                "requestId": request_id,
+                "advisorId": SIDECAR_ID,
+                "status": "CANCELLED",
+                "diagnosis": "cancelled by test",
+                "recommendations": [],
+                "risks": ["cancelled"],
+                "assumptionsOrQuestions": [],
+                "confidence": "LOW",
+                "rawArtifactReference": None
+            }
+        })
+    elif command == "shutdown":
+        emit({"ok": True, "state": "STOPPED"})
+        break
+    else:
+        emit({"ok": False, "error": "UNKNOWN_COMMAND"})
+"#,
+        )
+        .expect("blocking fake sidecar");
+        IntegratedAdvisorLocalRuntimeConfigV1 {
+            python_executable: PathBuf::from("python"),
+            adapter_script: script,
+            profile_dir: root.join("blocking-advisor-profile"),
+            selectors_path: None,
+            headed: false,
+            allow_env_login: false,
+        }
+    }
+
+    fn live_deepseek_runtime_config() -> IntegratedAdvisorLocalRuntimeConfigV1 {
+        let python = std::env::var("CATDESK_DEEPSEEK_ADVISOR_PYTHON")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(".tmp/deepseek-advisor-venv/Scripts/python.exe"));
+        let script = std::env::var("CATDESK_DEEPSEEK_ADVISOR_SCRIPT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("experimental/advisors/deepseek_web_advisor.py"));
+        let profile = std::env::var("CATDESK_DEEPSEEK_ADVISOR_PROFILE")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(".tmp/deepseek-advisor-profile"));
+        let selectors = std::env::var("CATDESK_DEEPSEEK_ADVISOR_SELECTORS")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("experimental/advisors/deepseek_selectors.json"));
+        IntegratedAdvisorLocalRuntimeConfigV1 {
+            python_executable: python,
+            adapter_script: script,
+            profile_dir: profile,
+            selectors_path: Some(selectors),
+            headed: true,
             allow_env_login: false,
         }
     }

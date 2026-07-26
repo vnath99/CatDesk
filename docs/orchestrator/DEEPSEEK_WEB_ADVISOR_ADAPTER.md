@@ -1,6 +1,6 @@
 # DeepSeek Web Advisor Adapter
 
-Status: T-0024C.1 production-wiring review
+Status: T-0024C.2 boundary-hardening review
 Date: 2026-07-26
 
 ## Purpose
@@ -9,7 +9,7 @@ The DeepSeek web advisor adapter is an experimental browser bridge for the
 post-v1 intelligence-advisor phase. It is advisory only. It accepts a bounded
 `AdviceRequestV1` and returns an `AdviceResponseV1`-shaped result.
 
-T-0024C.1 connects this standalone adapter to the normal CatDesk worker path
+T-0024C.2 connects this standalone adapter to the normal CatDesk worker path
 through the Rust `DeepSeekProcessAdvisor` process adapter and explicit
 `advisorPolicy`. The browser adapter still receives only `AdviceRequestV1`
 JSONL frames and never receives CatDesk tool definitions or execution
@@ -28,9 +28,14 @@ The adapter must not receive or expose:
 
 ## Browser Posture
 
-The live browser path is opt-in and headed. It uses SeleniumBase CDP mode via
+The live browser path is opt-in and headed by CatDesk default. It uses
+SeleniumBase CDP mode via
 `SB(...).activate_cdp_mode(...)` with a dedicated persistent Chrome profile
-directory supplied by the operator.
+directory supplied by the local operator.
+
+CatDesk does not accept browser-adapter process configuration from MCP.
+Executable, adapter script, selector, profile, headed/headless, and
+environment-login settings are operator-local startup configuration only.
 
 The preferred login path remains a persistent browser session with manual
 login. T-0024B.3 also adds an explicit `--allow-env-login` option that reads
