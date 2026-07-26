@@ -305,8 +305,8 @@ class EmptyChatBootstrapAdapter(DeepSeekWebAdvisorAdapter):
             }
         if "window.__catdeskDeepSeekGeneration" in script and "assistantText" in script:
             if self.states:
-                return self.states.pop(0)
-            return {
+                return self._state_with_completion_defaults(self.states.pop(0))
+            return self._state_with_completion_defaults({
                 "ok": True,
                 "rootFound": True,
                 "lifecycle": "STABILIZING",
@@ -321,11 +321,30 @@ class EmptyChatBootstrapAdapter(DeepSeekWebAdvisorAdapter):
                 "controls": {"sendVisible": True, "sendEnabled": True, "stopVisible": False},
                 "turnKeys": ["user-1", "assistant-1"],
                 "assistantCount": 1,
-            }
+                "assistantActionRowVisible": True,
+            })
         if "delete window.__catdeskDeepSeekGeneration" in script:
             self.disconnected = True
             return True
         return True
+
+    def _state_with_completion_defaults(self, state: dict[str, object]) -> dict[str, object]:
+        output = dict(state)
+        controls = dict(output.get("controls") or {})
+        controls.setdefault("composerFound", True)
+        controls.setdefault("composerVisible", True)
+        controls.setdefault("composerEnabled", True)
+        controls.setdefault("composerReadOnly", False)
+        controls.setdefault("composerValueLength", 0)
+        controls.setdefault("sendVisible", True)
+        controls.setdefault("sendEnabled", True)
+        controls.setdefault("stopVisible", False)
+        output["controls"] = controls
+        if output.get("sawAssistantTurn") and output.get("assistantText"):
+            output.setdefault("assistantActionRowVisible", True)
+        else:
+            output.setdefault("assistantActionRowVisible", False)
+        return output
 
     def _type_prompt(self, selector: str, prompt: str) -> None:
         self.typed_prompts.append(prompt)
@@ -461,6 +480,38 @@ def snapshot(name: str, url: str = "https://chat.deepseek.com/a/chat/synthetic")
 
 def inline_snapshot(html: str, url: str = "https://chat.deepseek.com/a/chat/synthetic") -> PageSnapshot:
     return PageSnapshot(html=html, title="DeepSeek Chat", url=url)
+
+
+def completion_tracker() -> GenerationTracker:
+    tracker = GenerationTracker(
+        generation_id="gen-completion",
+        request_id="advice-completion",
+        submitted_prompt_hash=sha256_text("submitted prompt"),
+        started_at=0.0,
+        baseline_turn_keys=set(),
+        baseline_assistant_count=0,
+        baseline_latest_assistant_key=None,
+        baseline_latest_assistant_hash=None,
+    )
+    tracker.saw_user_turn = True
+    tracker.saw_assistant_turn = True
+    tracker.saw_assistant_text_change = True
+    return tracker
+
+
+def completion_controls(**overrides: object) -> dict[str, object]:
+    controls: dict[str, object] = {
+        "composerFound": True,
+        "composerVisible": True,
+        "composerEnabled": True,
+        "composerReadOnly": False,
+        "composerValueLength": 0,
+        "sendVisible": True,
+        "sendEnabled": False,
+        "stopVisible": False,
+    }
+    controls.update(overrides)
+    return controls
 
 
 class DeepSeekWebAdvisorTests(unittest.TestCase):
@@ -1322,6 +1373,205 @@ line two</code></pre>
         self.assertFalse(adapter._response_is_invalid_for_generation("complete answer", request, tracker))
         self.assertTrue(adapter._response_is_invalid_for_generation("question", request, tracker))
         self.assertTrue(adapter._response_is_invalid_for_generation("old", request, tracker))
+
+    def test_completed_stable_response_allows_empty_composer_with_disabled_send(self) -> None:
+        adapter = DeepSeekWebAdvisorAdapter(selectors(), Path("completion-profile"), headed=True)
+        tracker = completion_tracker()
+        tracker.generation_inactive_sample_count = 3
+        request = type("Request", (), {"specific_question": "different question"})()
+        controls = completion_controls(sendEnabled=False, composerValueLength=0)
+
+        self.assertTrue(adapter._composer_usable_for_completion(controls))
+        conditions = adapter._generation_completion_conditions(
+            request,
+            tracker,
+            "finished answer",
+            5.0,
+            3,
+            False,
+            adapter._composer_usable_for_completion(controls),
+            False,
+        )
+
+        self.assertTrue(all(conditions.values()))
+
+    def test_disabled_send_does_not_automatically_mean_generation_active(self) -> None:
+        adapter = DeepSeekWebAdvisorAdapter(selectors(), Path("completion-profile"), headed=True)
+        controls = completion_controls(sendEnabled=False, composerValueLength=0)
+
+        self.assertTrue(adapter._composer_usable_for_completion(controls))
+
+    def test_current_assistant_action_row_confirms_generation_completion(self) -> None:
+        adapter = DeepSeekWebAdvisorAdapter(selectors(), Path("completion-profile"), headed=True)
+        tracker = completion_tracker()
+        request = type("Request", (), {"specific_question": "different question"})()
+
+        conditions = adapter._generation_completion_conditions(
+            request,
+            tracker,
+            "finished answer",
+            5.0,
+            3,
+            False,
+            False,
+            True,
+        )
+
+        self.assertTrue(conditions["generation_inactive_evidence"])
+
+    def test_old_or_external_action_row_does_not_confirm_current_response(self) -> None:
+        adapter = DeepSeekWebAdvisorAdapter(selectors(), Path("completion-profile"), headed=True)
+        tracker = completion_tracker()
+        request = type("Request", (), {"specific_question": "different question"})()
+
+        conditions = adapter._generation_completion_conditions(
+            request,
+            tracker,
+            "finished answer",
+            5.0,
+            3,
+            False,
+            False,
+            False,
+        )
+
+        self.assertFalse(conditions["generation_inactive_evidence"])
+        self.assertIn("turn.querySelectorAll('button,[role=\"button\"]')", DEEPSEEK_GENERATION_STATE_SCRIPT)
+        self.assertIn("compareDocumentPosition", DEEPSEEK_GENERATION_STATE_SCRIPT)
+
+    def test_temporarily_stable_streaming_text_without_inactive_evidence_does_not_complete(self) -> None:
+        adapter = DeepSeekWebAdvisorAdapter(selectors(), Path("completion-profile"), headed=True)
+        tracker = completion_tracker()
+        request = type("Request", (), {"specific_question": "different question"})()
+
+        conditions = adapter._generation_completion_conditions(
+            request,
+            tracker,
+            "draft answer",
+            5.0,
+            3,
+            False,
+            False,
+            False,
+        )
+
+        self.assertFalse(all(conditions.values()))
+        self.assertFalse(conditions["generation_inactive_evidence"])
+
+    def test_three_inactive_composer_samples_complete_without_action_row(self) -> None:
+        adapter = DeepSeekWebAdvisorAdapter(selectors(), Path("completion-profile"), headed=True)
+        tracker = completion_tracker()
+        tracker.generation_inactive_sample_count = 3
+        request = type("Request", (), {"specific_question": "different question"})()
+
+        conditions = adapter._generation_completion_conditions(
+            request,
+            tracker,
+            "finished answer",
+            5.0,
+            3,
+            False,
+            True,
+            False,
+        )
+
+        self.assertTrue(conditions["generation_inactive_evidence"])
+        self.assertTrue(all(conditions.values()))
+
+    def test_completion_requires_five_seconds_and_three_stable_hash_samples(self) -> None:
+        adapter = DeepSeekWebAdvisorAdapter(selectors(), Path("completion-profile"), headed=True)
+        adapter.selectors = dataclasses.replace(
+            adapter.selectors,
+            text_stability_seconds=5.0,
+            stable_sample_count=3,
+        )
+        tracker = completion_tracker()
+        tracker.generation_inactive_sample_count = 3
+        request = type("Request", (), {"specific_question": "different question"})()
+
+        too_early = adapter._generation_completion_conditions(
+            request,
+            tracker,
+            "finished answer",
+            4.9,
+            3,
+            False,
+            True,
+            False,
+        )
+        too_few_samples = adapter._generation_completion_conditions(
+            request,
+            tracker,
+            "finished answer",
+            5.0,
+            2,
+            False,
+            True,
+            False,
+        )
+
+        self.assertFalse(too_early["stable_for_required_seconds"])
+        self.assertFalse(too_few_samples["stable_hash_sample_count"])
+
+    def test_current_live_timeout_diagnostic_shape_reaches_completed_when_inactive(self) -> None:
+        adapter = DeepSeekWebAdvisorAdapter(selectors(), Path("completion-profile"), headed=True)
+        tracker = completion_tracker()
+        tracker.generation_inactive_sample_count = 3
+        tracker.assistant_text = "x" * 68
+        tracker.assistant_text_hash = sha256_text(tracker.assistant_text)
+        tracker.mutation_count = 1075
+        request = type("Request", (), {"specific_question": "different question"})()
+
+        conditions = adapter._generation_completion_conditions(
+            request,
+            tracker,
+            tracker.assistant_text,
+            86.0,
+            172,
+            False,
+            True,
+            False,
+        )
+
+        self.assertTrue(all(conditions.values()))
+
+    def test_timeout_diagnostics_identify_blocked_completion_condition(self) -> None:
+        adapter = EmptyChatBootstrapAdapter(
+            [
+                {
+                    "ok": True,
+                    "rootFound": True,
+                    "lifecycle": "STABILIZING",
+                    "detectedUserTurnKey": "user-timeout",
+                    "detectedAssistantTurnKey": "assistant-timeout",
+                    "assistantText": "stable but still blocked",
+                    "mutationCount": 10,
+                    "sawUserTurn": True,
+                    "sawAssistantTurn": True,
+                    "sawAssistantTextChange": True,
+                    "sawGenerationActive": True,
+                    "controls": completion_controls(composerVisible=False),
+                    "turnKeys": ["user-timeout", "assistant-timeout"],
+                    "assistantCount": 1,
+                    "assistantActionRowVisible": False,
+                }
+                for _ in range(8)
+            ]
+        )
+        adapter.selectors = dataclasses.replace(
+            adapter.selectors,
+            text_stability_seconds=5.0,
+            stable_sample_count=3,
+            timeout_seconds=1.5,
+        )
+
+        response = adapter.advise(valid_request())
+
+        self.assertEqual(response.status, "TIMED_OUT")
+        diagnostics = json.loads(response.assumptions_or_questions[0])
+        self.assertIn("completion_blockers", diagnostics)
+        self.assertFalse(diagnostics["completion_blockers"]["generation_inactive_evidence"])
+        self.assertIn("composer_visible", diagnostics)
 
     def test_normalize_response_text_preserves_structure(self) -> None:
         text = normalize_response_text("  Heading\n\n\n- item one\n- item two\n\n```x```  ")

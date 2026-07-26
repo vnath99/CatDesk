@@ -315,6 +315,7 @@ DEEPSEEK_GENERATION_INSTALL_SCRIPT = r"""
     sawAssistantTurn: false,
     sawAssistantTextChange: false,
     sawGenerationActive: false,
+    assistantActionRowVisible: false,
     terminalState: null,
     lifecycle: 'WAITING_FOR_CONVERSATION_ROOT',
     events: [],
@@ -337,6 +338,15 @@ DEEPSEEK_GENERATION_INSTALL_SCRIPT = r"""
   function turnKey(turn, index) {
     return turn.getAttribute('data-virtual-list-item-key') || `identity:${index}`;
   }
+  function assistantActionRowVisible(turn, answer) {
+    if (!turn || !answer) return false;
+    const controls = Array.from(turn.querySelectorAll('button,[role="button"]'))
+      .filter(visible)
+      .filter((element) => {
+        return Boolean(answer.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING);
+      });
+    return controls.length >= 2;
+  }
   function classify(turn, index) {
     const answer = turn.querySelector('.ds-markdown.ds-assistant-message-main-content');
     const hasAssistant = Boolean(answer);
@@ -346,13 +356,27 @@ DEEPSEEK_GENERATION_INSTALL_SCRIPT = r"""
       key: turnKey(turn, index),
       role: hasAssistant ? 'assistant' : (hasMessage ? 'user' : 'other'),
       answer,
+      actionRowVisible: assistantActionRowVisible(turn, answer),
       text,
       textLength: text.length
     };
   }
   function composerReady() {
     const textarea = document.querySelector('textarea[placeholder="Message DeepSeek"], textarea.ds-scroll-area, textarea');
-    if (!textarea) return { sendVisible: false, sendEnabled: false, sendDisabled: false, stopVisible: false };
+    if (!textarea) return {
+      composerFound: false,
+      composerVisible: false,
+      composerEnabled: false,
+      composerReadOnly: false,
+      composerValueLength: 0,
+      sendVisible: false,
+      sendEnabled: false,
+      sendDisabled: false,
+      stopVisible: false
+    };
+    const textareaVisible = visible(textarea);
+    const textareaEnabled = !textarea.disabled && textarea.getAttribute('aria-disabled') !== 'true';
+    const textareaReadOnly = Boolean(textarea.readOnly) || textarea.getAttribute('readonly') !== null;
     let sendVisible = false;
     let sendEnabled = false;
     let sendDisabled = false;
@@ -372,7 +396,17 @@ DEEPSEEK_GENERATION_INSTALL_SCRIPT = r"""
       }
       if (sendVisible) break;
     }
-    return { sendVisible, sendEnabled, sendDisabled, stopVisible: false };
+    return {
+      composerFound: true,
+      composerVisible: textareaVisible,
+      composerEnabled: textareaEnabled,
+      composerReadOnly: textareaReadOnly,
+      composerValueLength: String(textarea.value ?? textarea.innerText ?? '').length,
+      sendVisible,
+      sendEnabled,
+      sendDisabled,
+      stopVisible: false
+    };
   }
   function logEvent(type) {
     state.events.push({
@@ -427,18 +461,21 @@ DEEPSEEK_GENERATION_INSTALL_SCRIPT = r"""
         state.stableSampleCount = 0;
         if (assistant.text) state.sawAssistantTextChange = true;
       }
+      state.assistantActionRowVisible = Boolean(assistant.actionRowVisible);
     }
     const controls = composerReady();
-    if (state.sawUserTurn && !controls.sendEnabled) {
-      state.sawGenerationActive = true;
-    }
+    const composerUsable = controls.composerFound && controls.composerVisible
+      && controls.composerEnabled && !controls.composerReadOnly
+      && (controls.composerValueLength === 0 || controls.sendEnabled);
+    if (state.sawUserTurn && controls.stopVisible) state.sawGenerationActive = true;
     if (!state.sawUserTurn) state.lifecycle = 'WAITING_FOR_USER_TURN';
     else if (!state.sawAssistantTurn) state.lifecycle = 'WAITING_FOR_ASSISTANT_TURN';
     else if (!state.assistantText) state.lifecycle = 'STREAMING';
-    else if (!controls.sendEnabled) state.lifecycle = 'STREAMING';
+    else if (controls.stopVisible) state.lifecycle = 'STREAMING';
+    else if (state.assistantActionRowVisible || composerUsable) state.lifecycle = 'STABILIZING';
     else state.lifecycle = 'STABILIZING';
     logEvent(reason);
-    return { turns, controls, rootFound: true };
+    return { turns, controls, rootFound: true, assistantActionRowVisible: state.assistantActionRowVisible };
   }
   state.attachRoot = (root) => {
     if (!root || state.rootAttached) return false;
@@ -512,16 +549,45 @@ DEEPSEEK_GENERATION_STATE_SCRIPT = r"""
   function turnKey(turn, index) {
     return turn.getAttribute('data-virtual-list-item-key') || `identity:${index}`;
   }
+  function assistantActionRowVisible(turn, answer) {
+    if (!turn || !answer) return false;
+    const controls = Array.from(turn.querySelectorAll('button,[role="button"]'))
+      .filter(visible)
+      .filter((element) => {
+        return Boolean(answer.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING);
+      });
+    return controls.length >= 2;
+  }
   function classify(turn, index) {
     const answer = turn.querySelector('.ds-markdown.ds-assistant-message-main-content');
     const hasAssistant = Boolean(answer);
     const hasMessage = Boolean(turn.querySelector('.ds-message'));
     const text = answer ? norm(answer.innerText) : '';
-    return { key: turnKey(turn, index), role: hasAssistant ? 'assistant' : (hasMessage ? 'user' : 'other'), answer, text, textLength: text.length };
+    return {
+      key: turnKey(turn, index),
+      role: hasAssistant ? 'assistant' : (hasMessage ? 'user' : 'other'),
+      answer,
+      actionRowVisible: assistantActionRowVisible(turn, answer),
+      text,
+      textLength: text.length
+    };
   }
   function composerReady() {
     const textarea = document.querySelector('textarea[placeholder="Message DeepSeek"], textarea.ds-scroll-area, textarea');
-    if (!textarea) return { sendVisible: false, sendEnabled: false, sendDisabled: false, stopVisible: false };
+    if (!textarea) return {
+      composerFound: false,
+      composerVisible: false,
+      composerEnabled: false,
+      composerReadOnly: false,
+      composerValueLength: 0,
+      sendVisible: false,
+      sendEnabled: false,
+      sendDisabled: false,
+      stopVisible: false
+    };
+    const textareaVisible = visible(textarea);
+    const textareaEnabled = !textarea.disabled && textarea.getAttribute('aria-disabled') !== 'true';
+    const textareaReadOnly = Boolean(textarea.readOnly) || textarea.getAttribute('readonly') !== null;
     let sendVisible = false;
     let sendEnabled = false;
     let sendDisabled = false;
@@ -541,7 +607,17 @@ DEEPSEEK_GENERATION_STATE_SCRIPT = r"""
       }
       if (sendVisible) break;
     }
-    return { sendVisible, sendEnabled, sendDisabled, stopVisible: false };
+    return {
+      composerFound: true,
+      composerVisible: textareaVisible,
+      composerEnabled: textareaEnabled,
+      composerReadOnly: textareaReadOnly,
+      composerValueLength: String(textarea.value ?? textarea.innerText ?? '').length,
+      sendVisible,
+      sendEnabled,
+      sendDisabled,
+      stopVisible: false
+    };
   }
   if (!root) {
     state.lifecycle = 'WAITING_FOR_CONVERSATION_ROOT';
@@ -567,6 +643,7 @@ DEEPSEEK_GENERATION_STATE_SCRIPT = r"""
       controls,
       turnKeys: [],
       assistantCount: 0,
+      assistantActionRowVisible: Boolean(state.assistantActionRowVisible),
       urlPath: window.location.pathname,
       rootCount: document.querySelectorAll('.ds-virtual-list-visible-items').length,
       userTurnCount: document.querySelectorAll('.ds-virtual-list-visible-items > [data-virtual-list-item-key] .ds-message').length,
@@ -606,13 +683,18 @@ DEEPSEEK_GENERATION_STATE_SCRIPT = r"""
       state.stableSampleCount = 0;
       if (assistant.text) state.sawAssistantTextChange = true;
     }
+    state.assistantActionRowVisible = Boolean(assistant.actionRowVisible);
   }
   const controls = composerReady();
-  if (state.sawUserTurn && !controls.sendEnabled) state.sawGenerationActive = true;
+  const composerUsable = controls.composerFound && controls.composerVisible
+    && controls.composerEnabled && !controls.composerReadOnly
+    && (controls.composerValueLength === 0 || controls.sendEnabled);
+  if (state.sawUserTurn && controls.stopVisible) state.sawGenerationActive = true;
   if (!state.sawUserTurn) state.lifecycle = 'WAITING_FOR_USER_TURN';
   else if (!state.sawAssistantTurn) state.lifecycle = 'WAITING_FOR_ASSISTANT_TURN';
   else if (!state.assistantText) state.lifecycle = 'STREAMING';
-  else if (!controls.sendEnabled) state.lifecycle = 'STREAMING';
+  else if (controls.stopVisible) state.lifecycle = 'STREAMING';
+  else if (state.assistantActionRowVisible || composerUsable) state.lifecycle = 'STABILIZING';
   else state.lifecycle = 'STABILIZING';
   return {
     ok: true,
@@ -635,6 +717,7 @@ DEEPSEEK_GENERATION_STATE_SCRIPT = r"""
     controls,
     turnKeys: turns.map((turn) => turn.key),
     assistantCount: turns.filter((turn) => turn.role === 'assistant').length,
+    assistantActionRowVisible: Boolean(state.assistantActionRowVisible),
     urlPath: window.location.pathname,
     rootCount: document.querySelectorAll('.ds-virtual-list-visible-items').length,
     userTurnCount: document.querySelectorAll('.ds-virtual-list-visible-items > [data-virtual-list-item-key] .ds-message').length,
@@ -843,6 +926,19 @@ class GenerationTracker:
     saw_assistant_turn: bool = False
     saw_assistant_text_change: bool = False
     saw_generation_active: bool = False
+    generation_active_now: bool = False
+    generation_inactive_sample_count: int = 0
+    stable_duration_seconds: float = 0.0
+    composer_found: bool = False
+    composer_visible: bool = False
+    composer_enabled: bool = False
+    composer_read_only: bool = False
+    composer_value_length: int = 0
+    send_visible: bool = False
+    send_enabled: bool = False
+    stop_visible: bool = False
+    assistant_action_row_visible: bool = False
+    completion_blockers: dict[str, bool] = dataclasses.field(default_factory=dict)
     terminal_state: str | None = None
     cancellation_event: threading.Event = dataclasses.field(default_factory=threading.Event)
 
@@ -862,6 +958,19 @@ class GenerationTracker:
             "saw_assistant_turn": self.saw_assistant_turn,
             "saw_assistant_text_change": self.saw_assistant_text_change,
             "saw_generation_active": self.saw_generation_active,
+            "generation_active_now": self.generation_active_now,
+            "generation_inactive_sample_count": self.generation_inactive_sample_count,
+            "stable_duration_seconds": round(self.stable_duration_seconds, 3),
+            "composer_found": self.composer_found,
+            "composer_visible": self.composer_visible,
+            "composer_enabled": self.composer_enabled,
+            "composer_read_only": self.composer_read_only,
+            "composer_value_length": self.composer_value_length,
+            "send_visible": self.send_visible,
+            "send_enabled": self.send_enabled,
+            "stop_visible": self.stop_visible,
+            "assistant_action_row_visible": self.assistant_action_row_visible,
+            "completion_blockers": self.completion_blockers,
             "terminal_state": self.terminal_state,
         }
 
@@ -1793,22 +1902,35 @@ class DeepSeekWebAdvisorAdapter:
                 stable_samples = 1
             controls = state.get("controls") if isinstance(state.get("controls"), dict) else {}
             stop_visible = bool(controls.get("stopVisible"))
-            send_ready = bool(controls.get("sendVisible")) and bool(controls.get("sendEnabled"))
+            assistant_action_row_visible = bool(state.get("assistantActionRowVisible"))
+            composer_usable = self._composer_usable_for_completion(controls)
+            generation_inactive_now = bool(
+                not stop_visible and (assistant_action_row_visible or composer_usable)
+            )
+            tracker.generation_active_now = not generation_inactive_now
+            if generation_inactive_now:
+                tracker.generation_inactive_sample_count += 1
+            else:
+                tracker.generation_inactive_sample_count = 0
             stable_for = (
                 self._now() - (tracker.last_text_change_at or started_at)
                 if tracker.last_text_change_at is not None
                 else 0.0
             )
-            if (
-                tracker.saw_assistant_turn
-                and text
-                and tracker.saw_assistant_text_change
-                and not stop_visible
-                and send_ready
-                and stable_for >= self.selectors.text_stability_seconds
-                and stable_samples >= max(1, self.selectors.stable_sample_count)
-                and not self._response_is_invalid_for_generation(text, request, tracker)
-            ):
+            tracker.stable_duration_seconds = stable_for
+            tracker.stable_sample_count = stable_samples
+            completion = self._generation_completion_conditions(
+                request,
+                tracker,
+                text,
+                stable_for,
+                stable_samples,
+                stop_visible,
+                composer_usable,
+                assistant_action_row_visible,
+            )
+            tracker.completion_blockers = completion
+            if all(completion.values()):
                 tracker.stable_sample_count = stable_samples
                 tracker.terminal_state = AdapterState.COMPLETED.value
                 self.state = AdapterState.COMPLETED
@@ -1826,6 +1948,49 @@ class DeepSeekWebAdvisorAdapter:
             tracker,
             "DeepSeek generation did not reach a completed observed assistant response.",
         )
+
+    def _composer_usable_for_completion(self, controls: dict[str, Any]) -> bool:
+        if not bool(controls.get("composerFound")):
+            return False
+        if not bool(controls.get("composerVisible")):
+            return False
+        if not bool(controls.get("composerEnabled")):
+            return False
+        if bool(controls.get("composerReadOnly")):
+            return False
+        value_length = int(controls.get("composerValueLength") or 0)
+        if value_length == 0:
+            return True
+        return bool(controls.get("sendEnabled"))
+
+    def _generation_completion_conditions(
+        self,
+        request: ValidatedAdviceRequest,
+        tracker: GenerationTracker,
+        text: str,
+        stable_for: float,
+        stable_samples: int,
+        stop_visible: bool,
+        composer_usable: bool,
+        assistant_action_row_visible: bool,
+    ) -> dict[str, bool]:
+        return {
+            "current_user_turn_detected": tracker.saw_user_turn,
+            "current_assistant_turn_detected": tracker.saw_assistant_turn,
+            "assistant_text_non_empty": bool(text),
+            "assistant_text_changed_after_submission": tracker.saw_assistant_text_change,
+            "response_not_invalid": not self._response_is_invalid_for_generation(text, request, tracker),
+            "stable_for_required_seconds": stable_for >= self.selectors.text_stability_seconds,
+            "stable_hash_sample_count": stable_samples >= max(1, self.selectors.stable_sample_count),
+            "generation_inactive_evidence": bool(
+                assistant_action_row_visible
+                or (
+                    not stop_visible
+                    and composer_usable
+                    and tracker.generation_inactive_sample_count >= 3
+                )
+            ),
+        }
 
     def _response_is_invalid_for_generation(
         self,
@@ -1940,6 +2105,16 @@ class DeepSeekWebAdvisorAdapter:
         tracker.saw_user_turn = bool(state.get("sawUserTurn"))
         tracker.saw_assistant_turn = bool(state.get("sawAssistantTurn"))
         tracker.saw_generation_active = bool(state.get("sawGenerationActive"))
+        tracker.assistant_action_row_visible = bool(state.get("assistantActionRowVisible"))
+        controls = state.get("controls") if isinstance(state.get("controls"), dict) else {}
+        tracker.composer_found = bool(controls.get("composerFound"))
+        tracker.composer_visible = bool(controls.get("composerVisible"))
+        tracker.composer_enabled = bool(controls.get("composerEnabled"))
+        tracker.composer_read_only = bool(controls.get("composerReadOnly"))
+        tracker.composer_value_length = int(controls.get("composerValueLength") or 0)
+        tracker.send_visible = bool(controls.get("sendVisible"))
+        tracker.send_enabled = bool(controls.get("sendEnabled"))
+        tracker.stop_visible = bool(controls.get("stopVisible"))
         if text_hash and text_hash != previous_hash:
             tracker.saw_assistant_text_change = True
             tracker.last_text_change_at = now
