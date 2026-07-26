@@ -121,10 +121,21 @@ SECRET_PATTERNS = [
 ]
 
 
-DEEPSEEK_COMPOSER_ACTION_AVAILABLE_SCRIPT = r"""
+DEEPSEEK_COMPOSER_SEND_STATE_SCRIPT = r"""
 (() => {
-  const textarea = document.querySelector('textarea[placeholder="Message DeepSeek"], textarea.ds-scroll-area, textarea');
-  if (!textarea) return false;
+  const textarea = document.querySelector('textarea[placeholder="Message DeepSeek"]');
+  const result = {
+    composerFound: Boolean(textarea),
+    value: textarea ? String(textarea.value ?? textarea.innerText ?? '') : '',
+    valueLength: textarea ? String(textarea.value ?? textarea.innerText ?? '').length : 0,
+    sendVisible: false,
+    sendEnabled: false,
+    sendDisabled: false,
+    urlPath: window.location.pathname,
+    rootCount: document.querySelectorAll('.ds-virtual-list-visible-items').length,
+    userTurnCount: document.querySelectorAll('.ds-virtual-list-visible-items > [data-virtual-list-item-key] .ds-message').length
+  };
+  if (!textarea) return result;
   function visible(element) {
     const rect = element.getBoundingClientRect();
     const style = window.getComputedStyle(element);
@@ -139,22 +150,43 @@ DEEPSEEK_COMPOSER_ACTION_AVAILABLE_SCRIPT = r"""
   let container = textarea;
   for (let depth = 0; container && depth < 7; depth++, container = container.parentElement) {
     const candidates = Array.from(container.querySelectorAll('button,[role="button"]'))
-      .filter((element) => visible(element) && enabled(element))
+      .filter((element) => visible(element))
       .filter((element) => {
         const classes = String(element.className || '');
         return classes.includes('ds-button--primary') && classes.includes('ds-button--circle');
+      })
+      .sort((left, right) => {
+        const a = left.getBoundingClientRect();
+        const b = right.getBoundingClientRect();
+        return (b.left - a.left) || (b.top - a.top);
       });
-    if (candidates.length > 0) return true;
+    if (candidates.length > 0) {
+      const target = candidates[0];
+      result.sendVisible = true;
+      result.sendEnabled = enabled(target);
+      result.sendDisabled = !result.sendEnabled;
+      return result;
+    }
   }
-  return false;
+  return result;
 })()
 """
 
 
-DEEPSEEK_COMPOSER_ACTION_CLICK_SCRIPT = r"""
+DEEPSEEK_COMPOSER_SEND_CLICK_SCRIPT = r"""
 (() => {
-  const textarea = document.querySelector('textarea[placeholder="Message DeepSeek"], textarea.ds-scroll-area, textarea');
-  if (!textarea) return false;
+  const textarea = document.querySelector('textarea[placeholder="Message DeepSeek"]');
+  const result = {
+    clicked: false,
+    composerFound: Boolean(textarea),
+    sendVisible: false,
+    sendEnabled: false,
+    sendDisabled: false,
+    urlPath: window.location.pathname,
+    rootCount: document.querySelectorAll('.ds-virtual-list-visible-items').length,
+    userTurnCount: document.querySelectorAll('.ds-virtual-list-visible-items > [data-virtual-list-item-key] .ds-message').length
+  };
+  if (!textarea) return result;
   function visible(element) {
     const rect = element.getBoundingClientRect();
     const style = window.getComputedStyle(element);
@@ -170,7 +202,7 @@ DEEPSEEK_COMPOSER_ACTION_CLICK_SCRIPT = r"""
   let container = textarea;
   for (let depth = 0; container && depth < 7 && !target; depth++, container = container.parentElement) {
     const candidates = Array.from(container.querySelectorAll('button,[role="button"]'))
-      .filter((element) => visible(element) && enabled(element))
+      .filter((element) => visible(element))
       .filter((element) => {
         const classes = String(element.className || '');
         return classes.includes('ds-button--primary') && classes.includes('ds-button--circle');
@@ -182,9 +214,17 @@ DEEPSEEK_COMPOSER_ACTION_CLICK_SCRIPT = r"""
       });
     target = candidates[0] || null;
   }
-  if (!target) return false;
+  if (!target) return result;
+  result.sendVisible = true;
+  result.sendEnabled = enabled(target);
+  result.sendDisabled = !result.sendEnabled;
+  if (!result.sendEnabled) return result;
   target.click();
-  return true;
+  result.clicked = true;
+  result.urlPath = window.location.pathname;
+  result.rootCount = document.querySelectorAll('.ds-virtual-list-visible-items').length;
+  result.userTurnCount = document.querySelectorAll('.ds-virtual-list-visible-items > [data-virtual-list-item-key] .ds-message').length;
+  return result;
 })()
 """
 
@@ -312,10 +352,10 @@ DEEPSEEK_GENERATION_INSTALL_SCRIPT = r"""
   }
   function composerReady() {
     const textarea = document.querySelector('textarea[placeholder="Message DeepSeek"], textarea.ds-scroll-area, textarea');
-    if (!textarea) return { sendVisible: false, sendEnabled: false, stopVisible: false };
+    if (!textarea) return { sendVisible: false, sendEnabled: false, sendDisabled: false, stopVisible: false };
     let sendVisible = false;
     let sendEnabled = false;
-    let stopVisible = false;
+    let sendDisabled = false;
     let container = textarea;
     for (let depth = 0; container && depth < 7; depth++, container = container.parentElement) {
       for (const element of Array.from(container.querySelectorAll('button,[role="button"]'))) {
@@ -327,12 +367,12 @@ DEEPSEEK_GENERATION_INSTALL_SCRIPT = r"""
         if (classes.includes('ds-button--primary') && classes.includes('ds-button--circle')) {
           sendVisible = true;
           if (enabled) sendEnabled = true;
-          if (!enabled) stopVisible = true;
+          if (!enabled) sendDisabled = true;
         }
       }
       if (sendVisible) break;
     }
-    return { sendVisible, sendEnabled, stopVisible };
+    return { sendVisible, sendEnabled, sendDisabled, stopVisible: false };
   }
   function logEvent(type) {
     state.events.push({
@@ -389,13 +429,13 @@ DEEPSEEK_GENERATION_INSTALL_SCRIPT = r"""
       }
     }
     const controls = composerReady();
-    if (controls.stopVisible || !controls.sendEnabled) {
+    if (state.sawUserTurn && !controls.sendEnabled) {
       state.sawGenerationActive = true;
     }
     if (!state.sawUserTurn) state.lifecycle = 'WAITING_FOR_USER_TURN';
     else if (!state.sawAssistantTurn) state.lifecycle = 'WAITING_FOR_ASSISTANT_TURN';
     else if (!state.assistantText) state.lifecycle = 'STREAMING';
-    else if (controls.stopVisible || !controls.sendEnabled) state.lifecycle = 'STREAMING';
+    else if (!controls.sendEnabled) state.lifecycle = 'STREAMING';
     else state.lifecycle = 'STABILIZING';
     logEvent(reason);
     return { turns, controls, rootFound: true };
@@ -481,10 +521,10 @@ DEEPSEEK_GENERATION_STATE_SCRIPT = r"""
   }
   function composerReady() {
     const textarea = document.querySelector('textarea[placeholder="Message DeepSeek"], textarea.ds-scroll-area, textarea');
-    if (!textarea) return { sendVisible: false, sendEnabled: false, stopVisible: false };
+    if (!textarea) return { sendVisible: false, sendEnabled: false, sendDisabled: false, stopVisible: false };
     let sendVisible = false;
     let sendEnabled = false;
-    let stopVisible = false;
+    let sendDisabled = false;
     let container = textarea;
     for (let depth = 0; container && depth < 7; depth++, container = container.parentElement) {
       for (const element of Array.from(container.querySelectorAll('button,[role="button"]'))) {
@@ -496,12 +536,12 @@ DEEPSEEK_GENERATION_STATE_SCRIPT = r"""
         if (classes.includes('ds-button--primary') && classes.includes('ds-button--circle')) {
           sendVisible = true;
           if (enabled) sendEnabled = true;
-          if (!enabled) stopVisible = true;
+          if (!enabled) sendDisabled = true;
         }
       }
       if (sendVisible) break;
     }
-    return { sendVisible, sendEnabled, stopVisible };
+    return { sendVisible, sendEnabled, sendDisabled, stopVisible: false };
   }
   if (!root) {
     state.lifecycle = 'WAITING_FOR_CONVERSATION_ROOT';
@@ -527,6 +567,9 @@ DEEPSEEK_GENERATION_STATE_SCRIPT = r"""
       controls,
       turnKeys: [],
       assistantCount: 0,
+      urlPath: window.location.pathname,
+      rootCount: document.querySelectorAll('.ds-virtual-list-visible-items').length,
+      userTurnCount: document.querySelectorAll('.ds-virtual-list-visible-items > [data-virtual-list-item-key] .ds-message').length,
       bootstrapActive: Boolean(state.bootstrapObserver),
       rootObserverActive: Boolean(state.rootObserver),
       eventTail: state.events.slice(-12)
@@ -565,11 +608,11 @@ DEEPSEEK_GENERATION_STATE_SCRIPT = r"""
     }
   }
   const controls = composerReady();
-  if (controls.stopVisible || !controls.sendEnabled) state.sawGenerationActive = true;
+  if (state.sawUserTurn && !controls.sendEnabled) state.sawGenerationActive = true;
   if (!state.sawUserTurn) state.lifecycle = 'WAITING_FOR_USER_TURN';
   else if (!state.sawAssistantTurn) state.lifecycle = 'WAITING_FOR_ASSISTANT_TURN';
   else if (!state.assistantText) state.lifecycle = 'STREAMING';
-  else if (controls.stopVisible || !controls.sendEnabled) state.lifecycle = 'STREAMING';
+  else if (!controls.sendEnabled) state.lifecycle = 'STREAMING';
   else state.lifecycle = 'STABILIZING';
   return {
     ok: true,
@@ -592,6 +635,9 @@ DEEPSEEK_GENERATION_STATE_SCRIPT = r"""
     controls,
     turnKeys: turns.map((turn) => turn.key),
     assistantCount: turns.filter((turn) => turn.role === 'assistant').length,
+    urlPath: window.location.pathname,
+    rootCount: document.querySelectorAll('.ds-virtual-list-visible-items').length,
+    userTurnCount: document.querySelectorAll('.ds-virtual-list-visible-items > [data-virtual-list-item-key] .ds-message').length,
     bootstrapActive: Boolean(state.bootstrapObserver),
     rootObserverActive: Boolean(state.rootObserver),
     eventTail: state.events.slice(-12)
@@ -1473,6 +1519,15 @@ class DeepSeekWebAdvisorAdapter:
                 snapshot,
                 self.selectors.prompt_input_selectors,
             )
+            if self._live_browser_available():
+                composer_state = self._deepseek_composer_send_state()
+                if not composer_state.get("composerFound"):
+                    self.state = AdapterState.DEGRADED
+                    return self.advice_degraded(
+                        validated.request_id,
+                        "DeepSeek exact composer textarea was not available for live submission.",
+                    )
+                prompt_selector = 'textarea[placeholder="Message DeepSeek"]'
             if prompt_selector is None:
                 self.state = AdapterState.DEGRADED
                 return self.advice_unavailable(validated.request_id)
@@ -1511,8 +1566,15 @@ class DeepSeekWebAdvisorAdapter:
             baseline_texts = self._visible_response_texts(snapshot)
             baseline_user_count = self._visible_user_message_count(snapshot)
             baseline_conversation_count = self._visible_conversation_block_count(snapshot)
+            url_path_before = self._snapshot_path(snapshot)
             self.state = AdapterState.SENDING
             self._type_prompt(prompt_selector, prompt)
+            if self._live_browser_available() and not self._verify_prompt_ready_for_send(prompt):
+                self.state = AdapterState.DEGRADED
+                return self.advice_degraded(
+                    validated.request_id,
+                    "DeepSeek composer did not contain the intended prompt with an enabled Send control.",
+                )
             if self.cancel_requested.is_set():
                 self.state = AdapterState.CANCELLED
                 return normalize_advice_response(
@@ -1522,11 +1584,20 @@ class DeepSeekWebAdvisorAdapter:
                     "DeepSeek advisory generation was cancelled.",
                     confidence="LOW",
                 )
-            clicked = self._click_first_enabled(self.selectors.send_button_selectors)
+            clicked = (
+                self._click_verified_composer_send()
+                if self._live_browser_available()
+                else self._click_first_enabled(self.selectors.send_button_selectors)
+            )
+            self._record_send_click_result(clicked)
             if not clicked:
-                self._press_enter(prompt_selector)
+                self.state = AdapterState.DEGRADED
+                return self.advice_degraded(
+                    validated.request_id,
+                    "DeepSeek exact composer Send control was not clicked.",
+                )
             submission_confirmed = (
-                self._confirm_generation_submission(tracker, prompt_selector)
+                self._confirm_generation_submission(tracker, prompt_selector, url_path_before)
                 if tracker is not None
                 else self._confirm_submission(
                     prompt_selector,
@@ -1884,6 +1955,9 @@ class DeepSeekWebAdvisorAdapter:
         except Exception as exc:
             sys.stderr.write(f"DeepSeek advisor stop control failed: {type(exc).__name__}\n")
 
+    def _snapshot_path(self, snapshot: PageSnapshot) -> str:
+        return urlparse(snapshot.url).path
+
     def _confirm_submission(
         self,
         prompt_selector: str,
@@ -1899,34 +1973,26 @@ class DeepSeekWebAdvisorAdapter:
             if snapshot.origin != self.expected_origin:
                 self.last_submission_diagnostics = {"origin": snapshot.origin}
                 return False
-            prompt_empty = self._prompt_is_empty(prompt_selector)
             user_count = self._visible_user_message_count(snapshot)
             conversation_count = self._visible_conversation_block_count(snapshot)
-            stop_visible = self._any_visible(snapshot, self.selectors.stop_button_selectors)
             if (
-                prompt_empty
-                or user_count > baseline_user_count
-                or stop_visible
+                user_count > baseline_user_count
                 or conversation_count != baseline_conversation_count
             ):
                 self.last_submission_diagnostics = {
                     "confirmed": True,
-                    "prompt_empty": prompt_empty,
                     "user_count_before": baseline_user_count,
                     "user_count_after": user_count,
                     "conversation_count_before": baseline_conversation_count,
                     "conversation_count_after": conversation_count,
-                    "stop_visible": stop_visible,
                 }
                 return True
             self.last_submission_diagnostics = {
                 "confirmed": False,
-                "prompt_empty": prompt_empty,
                 "user_count_before": baseline_user_count,
                 "user_count_after": user_count,
                 "conversation_count_before": baseline_conversation_count,
                 "conversation_count_after": conversation_count,
-                "stop_visible": stop_visible,
                 "origin": snapshot.origin,
             }
             self._sleep(0.25)
@@ -1936,6 +2002,7 @@ class DeepSeekWebAdvisorAdapter:
         self,
         tracker: GenerationTracker | None,
         prompt_selector: str,
+        url_path_before: str = "",
     ) -> bool:
         if tracker is None:
             return False
@@ -1959,32 +2026,37 @@ class DeepSeekWebAdvisorAdapter:
                 return False
             self._update_tracker_from_browser_state(tracker, state)
             controls = state.get("controls") if isinstance(state.get("controls"), dict) else {}
+            url_path_after = str(state.get("urlPath") or self._snapshot_path(snapshot))
+            root_count = int(state.get("rootCount") or (1 if state.get("rootFound") else 0))
+            user_turn_count = int(state.get("userTurnCount") or 0)
+            route_created = (
+                url_path_after != url_path_before
+                and bool(re.fullmatch(r"/a/chat/s/[A-Za-z0-9_-]+", url_path_after))
+                and root_count > 0
+            )
             confirmed = bool(
-                (bool(state.get("rootFound")) and not tracker.baseline_turn_keys)
-                or tracker.saw_user_turn
-                or tracker.saw_assistant_turn
-                or bool(controls.get("stopVisible"))
-                or (
-                    tracker.mutation_count > 0
-                    and bool(state.get("turnKeys"))
-                    and set(str(key) for key in state.get("turnKeys", []))
-                    != tracker.baseline_turn_keys
-                )
+                tracker.saw_user_turn
+                or user_turn_count > 0
+                or route_created
             )
             self.last_submission_diagnostics = {
                 "confirmed": confirmed,
                 "generation_id": tracker.generation_id,
                 "baseline_turn_count": len(tracker.baseline_turn_keys),
                 "root_found": bool(state.get("rootFound")),
+                "root_count": root_count,
+                "user_turn_count": user_turn_count,
+                "url_path_before": url_path_before,
+                "url_path_after": url_path_after,
+                "route_created": route_created,
                 "lifecycle": state.get("lifecycle"),
                 "saw_user_turn": tracker.saw_user_turn,
                 "saw_assistant_turn": tracker.saw_assistant_turn,
                 "saw_generation_active": tracker.saw_generation_active,
                 "mutation_count": tracker.mutation_count,
-                "stop_visible": bool(controls.get("stopVisible")),
+                "bootstrap_mutation_count": tracker.mutation_count,
                 "send_visible": bool(controls.get("sendVisible")),
                 "send_enabled": bool(controls.get("sendEnabled")),
-                "prompt_empty": self._prompt_is_empty(prompt_selector),
             }
             if confirmed:
                 return True
@@ -2022,6 +2094,76 @@ class DeepSeekWebAdvisorAdapter:
                 raise RuntimeError("prompt input retained text after clear")
         self._type_text_paced(selector, prompt)
 
+    def _verify_prompt_ready_for_send(self, prompt: str) -> bool:
+        intended = normalize_response_text(prompt)
+        state = self._deepseek_composer_send_state()
+        dom_value = normalize_response_text(str(state.get("value") or ""))
+        if bool(state.get("composerFound")) and dom_value != intended:
+            self._set_exact_composer_value(prompt)
+            state = self._deepseek_composer_send_state()
+            dom_value = normalize_response_text(str(state.get("value") or ""))
+        diagnostics = dict(self.last_submission_diagnostics)
+        diagnostics.update(
+            {
+                "prompt_intended_length": len(intended),
+                "prompt_intended_hash": sha256_text(intended),
+                "prompt_dom_value_length": len(dom_value),
+                "prompt_dom_value_hash": sha256_text(dom_value),
+                "prompt_value_matches": dom_value == intended,
+                "send_visible": bool(state.get("sendVisible")),
+                "send_enabled": bool(state.get("sendEnabled")),
+                "exact_click_attempted": False,
+                "exact_click_returned": False,
+                "url_path_before": str(state.get("urlPath") or ""),
+                "url_path_after": str(state.get("urlPath") or ""),
+                "conversation_root_count": int(state.get("rootCount") or 0),
+                "user_turn_count": int(state.get("userTurnCount") or 0),
+                "bootstrap_mutation_count": 0,
+            }
+        )
+        self.last_submission_diagnostics = diagnostics
+        return (
+            bool(state.get("composerFound"))
+            and dom_value == intended
+            and bool(state.get("sendVisible"))
+            and bool(state.get("sendEnabled"))
+        )
+
+    def _set_exact_composer_value(self, prompt: str) -> bool:
+        script = f"""
+(() => {{
+  const element = document.querySelector('textarea[placeholder="Message DeepSeek"]');
+  if (!element) return false;
+  element.focus();
+  element.value = {json.dumps(prompt)};
+  element.dispatchEvent(new InputEvent("input", {{
+    bubbles: true,
+    cancelable: true,
+    inputType: "insertText",
+    data: null
+  }}));
+  element.dispatchEvent(new Event("change", {{ bubbles: true }}));
+  return true;
+}})()
+"""
+        with contextlib.suppress(Exception):
+            return bool(self._execute_browser_script(script))
+        return False
+
+    def _record_send_click_result(self, clicked: bool) -> None:
+        state = self._deepseek_composer_send_state()
+        diagnostics = dict(self.last_submission_diagnostics)
+        diagnostics.update(
+            {
+                "exact_click_attempted": True,
+                "exact_click_returned": bool(clicked),
+                "url_path_after": str(state.get("urlPath") or diagnostics.get("url_path_after") or ""),
+                "conversation_root_count": int(state.get("rootCount") or 0),
+                "user_turn_count": int(state.get("userTurnCount") or 0),
+            }
+        )
+        self.last_submission_diagnostics = diagnostics
+
     def _type_text_paced(self, selector: str, text: str) -> None:
         if self._sb is None:
             raise RuntimeError("browser not started")
@@ -2030,23 +2172,44 @@ class DeepSeekWebAdvisorAdapter:
         maximum = max(minimum, self.selectors.typing_max_interval_seconds)
         newline_minimum = max(0.0, self.selectors.typing_newline_pause_min_seconds)
         newline_maximum = max(newline_minimum, self.selectors.typing_newline_pause_max_seconds)
+        native_element = self._first_native_typing_element(selector)
         for char in text:
             if self.cancel_requested.is_set():
                 return
             if self._now() - started_at > self.selectors.typing_timeout_seconds:
                 raise TimeoutError("paced typing timed out")
-            if not self._insert_prompt_character(selector, char):
-                with contextlib.redirect_stdout(sys.stderr):
-                    if hasattr(self._sb, "press_keys"):
-                        self._sb.press_keys(selector, char)
-                    elif hasattr(self._sb, "type"):
-                        self._sb.type(selector, char)
+            if not self._type_character_native(selector, char, native_element):
+                self._insert_prompt_character(selector, char)
             delay = (
                 self.rng.uniform(newline_minimum, newline_maximum)
                 if char == "\n"
                 else self.rng.uniform(minimum, maximum)
             )
             self._sleep(delay)
+
+    def _first_native_typing_element(self, selector: str) -> Any | None:
+        if self._sb is None:
+            return None
+        elements = self._find_elements(selector)
+        return elements[0] if elements else None
+
+    def _type_character_native(self, selector: str, char: str, element: Any | None = None) -> bool:
+        if self._sb is None:
+            return False
+        if element is not None:
+            method = getattr(element, "send_keys", None)
+            if callable(method):
+                with contextlib.suppress(Exception):
+                    method(char)
+                    return True
+        with contextlib.redirect_stdout(sys.stderr):
+            if hasattr(self._sb, "press_keys"):
+                self._sb.press_keys(selector, char)
+                return True
+            if hasattr(self._sb, "type"):
+                self._sb.type(selector, char)
+                return True
+        return False
 
     def _insert_prompt_character(self, selector: str, char: str) -> bool:
         script = f"""
@@ -2135,7 +2298,7 @@ class DeepSeekWebAdvisorAdapter:
         snapshot = self._snapshot()
         for selector in selectors:
             if selector == DEEPSEEK_COMPOSER_SEND_SELECTOR:
-                if self._click_deepseek_composer_action():
+                if self._click_verified_composer_send():
                     return True
                 continue
             if (
@@ -2175,8 +2338,10 @@ class DeepSeekWebAdvisorAdapter:
         return None
 
     def _selector_is_visible(self, snapshot: PageSnapshot, selector: str) -> bool:
-        if selector in {DEEPSEEK_COMPOSER_SEND_SELECTOR, DEEPSEEK_COMPOSER_STOP_SELECTOR}:
-            return self._deepseek_composer_action_available()
+        if selector == DEEPSEEK_COMPOSER_SEND_SELECTOR:
+            return bool(self._deepseek_composer_send_state().get("sendVisible"))
+        if selector == DEEPSEEK_COMPOSER_STOP_SELECTOR:
+            return False
         if self._sb is not None:
             method = getattr(self._sb, "is_element_visible", None)
             if callable(method):
@@ -2185,8 +2350,10 @@ class DeepSeekWebAdvisorAdapter:
         return snapshot.selector_is_visible(selector)
 
     def _selector_is_enabled(self, snapshot: PageSnapshot, selector: str) -> bool:
-        if selector in {DEEPSEEK_COMPOSER_SEND_SELECTOR, DEEPSEEK_COMPOSER_STOP_SELECTOR}:
-            return self._deepseek_composer_action_available()
+        if selector == DEEPSEEK_COMPOSER_SEND_SELECTOR:
+            return bool(self._deepseek_composer_send_state().get("sendEnabled"))
+        if selector == DEEPSEEK_COMPOSER_STOP_SELECTOR:
+            return False
         if self._sb is not None:
             method = getattr(self._sb, "is_element_enabled", None)
             if callable(method):
@@ -2297,11 +2464,25 @@ class DeepSeekWebAdvisorAdapter:
                 return method(script)
         return None
 
-    def _deepseek_composer_action_available(self) -> bool:
-        return bool(self._execute_browser_script(DEEPSEEK_COMPOSER_ACTION_AVAILABLE_SCRIPT))
+    def _deepseek_composer_send_state(self) -> dict[str, Any]:
+        value = self._execute_browser_script(DEEPSEEK_COMPOSER_SEND_STATE_SCRIPT)
+        if isinstance(value, dict):
+            return value
+        return {
+            "composerFound": False,
+            "value": "",
+            "valueLength": 0,
+            "sendVisible": False,
+            "sendEnabled": False,
+            "sendDisabled": False,
+            "urlPath": "",
+            "rootCount": 0,
+            "userTurnCount": 0,
+        }
 
-    def _click_deepseek_composer_action(self) -> bool:
-        return bool(self._execute_browser_script(DEEPSEEK_COMPOSER_ACTION_CLICK_SCRIPT))
+    def _click_verified_composer_send(self) -> bool:
+        value = self._execute_browser_script(DEEPSEEK_COMPOSER_SEND_CLICK_SCRIPT)
+        return isinstance(value, dict) and bool(value.get("clicked"))
 
     def _deepseek_visible_conversation_blocks(self, *, role: str) -> list[str]:
         script = DEEPSEEK_VISIBLE_CONVERSATION_BLOCKS_SCRIPT.replace("__CATDESK_ROLE__", role)

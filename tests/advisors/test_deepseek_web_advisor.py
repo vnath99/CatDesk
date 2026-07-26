@@ -265,6 +265,11 @@ class EmptyChatBootstrapAdapter(DeepSeekWebAdvisorAdapter):
         self.states = states
         self.typed_prompts: list[str] = []
         self.clicked = False
+        self.click_count = 0
+        self.enter_count = 0
+        self.dom_value = ""
+        self.send_enabled = True
+        self.url_path = "/"
         self.installed_script = ""
         self.disconnected = False
 
@@ -324,16 +329,40 @@ class EmptyChatBootstrapAdapter(DeepSeekWebAdvisorAdapter):
 
     def _type_prompt(self, selector: str, prompt: str) -> None:
         self.typed_prompts.append(prompt)
+        self.dom_value = prompt
 
-    def _click_first_enabled(self, selectors_: object) -> bool:
+    def _click_verified_composer_send(self) -> bool:
+        self.click_count += 1
         self.clicked = True
-        return True
+        return self.send_enabled
+
+    def _deepseek_composer_send_state(self) -> dict[str, object]:
+        return {
+            "composerFound": True,
+            "value": self.dom_value,
+            "valueLength": len(self.dom_value),
+            "sendVisible": True,
+            "sendEnabled": self.send_enabled,
+            "sendDisabled": not self.send_enabled,
+            "urlPath": self.url_path,
+            "rootCount": 0,
+            "userTurnCount": 0,
+        }
+
+    def _press_enter(self, selector: str) -> None:
+        self.enter_count += 1
 
     def _now(self) -> float:
         return self.clock
 
     def _sleep(self, seconds: float) -> None:
         self.clock += seconds
+
+
+class MismatchedComposerAdapter(EmptyChatBootstrapAdapter):
+    def _type_prompt(self, selector: str, prompt: str) -> None:
+        self.typed_prompts.append(prompt)
+        self.dom_value = "different prompt"
 
 
 class CookieAdapter(OfflineAdapter):
@@ -975,6 +1004,151 @@ line two</code></pre>
         self.assertIn("bootstrapObserver.observe(appRoot", adapter.installed_script)
         self.assertTrue(adapter.disconnected)
 
+    def test_disabled_composer_send_is_not_classified_as_stop(self) -> None:
+        adapter = EmptyChatBootstrapAdapter([])
+        adapter.send_enabled = False
+
+        page = adapter._snapshot()
+
+        self.assertTrue(adapter._selector_is_visible(page, "deepseek:composer-send"))
+        self.assertFalse(adapter._selector_is_enabled(page, "deepseek:composer-send"))
+        self.assertFalse(adapter._selector_is_visible(page, "deepseek:composer-stop"))
+        self.assertFalse(adapter._selector_is_enabled(page, "deepseek:composer-stop"))
+
+    def test_send_must_be_enabled_after_typing(self) -> None:
+        adapter = EmptyChatBootstrapAdapter([])
+        adapter.send_enabled = False
+
+        response = adapter.advise(valid_request())
+
+        self.assertEqual(response.status, "DEGRADED")
+        self.assertFalse(adapter.clicked)
+        self.assertEqual(adapter.enter_count, 0)
+        self.assertFalse(adapter.last_submission_diagnostics["send_enabled"])
+
+    def test_mismatched_composer_value_fails_before_click(self) -> None:
+        adapter = MismatchedComposerAdapter([])
+
+        response = adapter.advise(valid_request())
+
+        self.assertEqual(response.status, "DEGRADED")
+        self.assertFalse(adapter.clicked)
+        self.assertEqual(adapter.click_count, 0)
+        self.assertFalse(adapter.last_submission_diagnostics["prompt_value_matches"])
+
+    def test_exact_composer_send_click_occurs_once_without_enter_fallback(self) -> None:
+        adapter = EmptyChatBootstrapAdapter(
+            [
+                {
+                    "ok": True,
+                    "rootFound": True,
+                    "lifecycle": "WAITING_FOR_USER_TURN",
+                    "detectedUserTurnKey": "user-once",
+                    "detectedAssistantTurnKey": None,
+                    "assistantText": "",
+                    "mutationCount": 1,
+                    "sawUserTurn": True,
+                    "sawAssistantTurn": False,
+                    "sawAssistantTextChange": False,
+                    "sawGenerationActive": True,
+                    "controls": {"sendVisible": True, "sendEnabled": True, "stopVisible": False},
+                    "turnKeys": ["user-once"],
+                    "assistantCount": 0,
+                    "urlPath": "/a/chat/s/synthetic",
+                    "rootCount": 1,
+                    "userTurnCount": 1,
+                },
+            ]
+        )
+
+        response = adapter.advise(valid_request())
+
+        self.assertEqual(response.status, "COMPLETED")
+        self.assertEqual(adapter.click_count, 1)
+        self.assertEqual(adapter.enter_count, 0)
+
+    def test_disabled_send_does_not_confirm_submission(self) -> None:
+        adapter = EmptyChatBootstrapAdapter(
+            [
+                {
+                    "ok": True,
+                    "rootFound": False,
+                    "lifecycle": "WAITING_FOR_CONVERSATION_ROOT",
+                    "assistantText": "",
+                    "mutationCount": 1,
+                    "sawUserTurn": False,
+                    "sawAssistantTurn": False,
+                    "sawAssistantTextChange": False,
+                    "sawGenerationActive": False,
+                    "controls": {"sendVisible": True, "sendEnabled": False, "sendDisabled": True, "stopVisible": False},
+                    "turnKeys": [],
+                    "assistantCount": 0,
+                    "urlPath": "/",
+                    "rootCount": 0,
+                    "userTurnCount": 0,
+                }
+                for _ in range(4)
+            ]
+        )
+        tracker = GenerationTracker(
+            generation_id="gen-disabled",
+            request_id="advice-disabled",
+            submitted_prompt_hash=sha256_text("prompt"),
+            started_at=0.0,
+            baseline_turn_keys=set(),
+            baseline_assistant_count=0,
+            baseline_latest_assistant_key=None,
+            baseline_latest_assistant_hash=None,
+        )
+        adapter.selectors = dataclasses.replace(
+            adapter.selectors,
+            submission_confirmation_timeout_seconds=0.5,
+        )
+
+        self.assertFalse(adapter._confirm_generation_submission(tracker, "textarea", "/"))
+        self.assertFalse(adapter.last_submission_diagnostics["confirmed"])
+
+    def test_route_change_without_root_or_user_turn_is_insufficient(self) -> None:
+        adapter = EmptyChatBootstrapAdapter(
+            [
+                {
+                    "ok": True,
+                    "rootFound": False,
+                    "lifecycle": "WAITING_FOR_CONVERSATION_ROOT",
+                    "assistantText": "",
+                    "mutationCount": 1,
+                    "sawUserTurn": False,
+                    "sawAssistantTurn": False,
+                    "sawAssistantTextChange": False,
+                    "sawGenerationActive": False,
+                    "controls": {"sendVisible": True, "sendEnabled": True, "stopVisible": False},
+                    "turnKeys": [],
+                    "assistantCount": 0,
+                    "urlPath": "/a/chat/s/created",
+                    "rootCount": 0,
+                    "userTurnCount": 0,
+                }
+                for _ in range(4)
+            ]
+        )
+        tracker = GenerationTracker(
+            generation_id="gen-route",
+            request_id="advice-route",
+            submitted_prompt_hash=sha256_text("prompt"),
+            started_at=0.0,
+            baseline_turn_keys=set(),
+            baseline_assistant_count=0,
+            baseline_latest_assistant_key=None,
+            baseline_latest_assistant_hash=None,
+        )
+        adapter.selectors = dataclasses.replace(
+            adapter.selectors,
+            submission_confirmation_timeout_seconds=0.5,
+        )
+
+        self.assertFalse(adapter._confirm_generation_submission(tracker, "textarea", "/"))
+        self.assertFalse(adapter.last_submission_diagnostics["confirmed"])
+
     def test_bounded_exact_root_poll_recovers_observer_race(self) -> None:
         adapter = EmptyChatBootstrapAdapter(
             [
@@ -1046,8 +1220,12 @@ line two</code></pre>
         self.assertTrue(adapter.disconnected)
         self.assertEqual(tracker.terminal_state, "CANCELLED")
 
-    def test_timeout_before_root_creation_cleans_bootstrap_observer(self) -> None:
-        config = dataclasses.replace(selectors(), timeout_seconds=0.75)
+    def test_no_definitive_submission_signal_degrades_before_response_timeout(self) -> None:
+        config = dataclasses.replace(
+            selectors(),
+            submission_confirmation_timeout_seconds=0.75,
+            timeout_seconds=30.0,
+        )
         adapter = EmptyChatBootstrapAdapter(
             [
                 {
@@ -1071,7 +1249,8 @@ line two</code></pre>
 
         response = adapter.advise(valid_request())
 
-        self.assertEqual(response.status, "TIMED_OUT")
+        self.assertEqual(response.status, "DEGRADED")
+        self.assertLess(adapter.clock, config.timeout_seconds)
         self.assertTrue(adapter.disconnected)
 
     def test_generation_tracker_hash_updates_for_character_and_child_mutations(self) -> None:
@@ -1218,22 +1397,21 @@ line two</code></pre>
         self.assertEqual(adapter.state, AdapterState.DEGRADED)
         self.assertIn("not confirmed", response.diagnosis)
 
-    def test_input_clearing_confirms_submission(self) -> None:
+    def test_input_clearing_alone_does_not_confirm_submission(self) -> None:
         adapter = PromptClearedAdapter(
             [
                 snapshot("baseline_before.html"),
                 snapshot("baseline_before.html"),
-                snapshot("baseline_completed.html"),
-                snapshot("baseline_completed.html"),
-                snapshot("baseline_completed.html"),
-                snapshot("baseline_completed.html"),
+                snapshot("baseline_before.html"),
+                snapshot("baseline_before.html"),
+                snapshot("baseline_before.html"),
             ]
         )
 
         response = adapter.advise(valid_request())
 
-        self.assertEqual(response.status, "COMPLETED")
-        self.assertTrue(adapter.last_submission_diagnostics["prompt_empty"])
+        self.assertEqual(response.status, "DEGRADED")
+        self.assertNotIn("prompt_empty", adapter.last_submission_diagnostics)
 
     def test_new_user_message_confirms_submission_but_is_not_returned(self) -> None:
         user_only = inline_snapshot(
@@ -1262,7 +1440,7 @@ line two</code></pre>
         self.assertNotEqual(response.status, "COMPLETED")
         self.assertNotIn("submitted prompt", response.diagnosis)
 
-    def test_stop_control_confirms_submission(self) -> None:
+    def test_existing_response_flow_does_not_require_stop_signal(self) -> None:
         adapter = OfflineAdapter(
             [
                 snapshot("baseline_before.html"),
@@ -1278,13 +1456,14 @@ line two</code></pre>
         response = adapter.advise(valid_request())
 
         self.assertEqual(response.status, "COMPLETED")
-        self.assertTrue(adapter.last_submission_diagnostics["stop_visible"])
+        self.assertNotIn("stop_visible", adapter.last_submission_diagnostics)
 
     def test_advisory_turn_rejects_empty_new_response(self) -> None:
         adapter = PromptClearedAdapter(
             [
                 snapshot("baseline_before.html"),
                 snapshot("baseline_before.html"),
+                snapshot("baseline_streaming.html"),
                 snapshot("empty_completed.html"),
                 snapshot("empty_completed.html"),
             ]
@@ -1439,15 +1618,15 @@ line two</code></pre>
         with self.assertRaises(RuntimeError):
             adapter._type_prompt("textarea", "synthetic prompt")
 
-    def test_paced_typing_prefers_input_event_insertion(self) -> None:
+    def test_paced_typing_prefers_native_keyboard_input(self) -> None:
         adapter = DeepSeekWebAdvisorAdapter(selectors(), Path("prompt-profile"), headed=True)
         fake = PromptScriptFakeSb()
         adapter._sb = fake
 
         adapter._type_prompt("textarea", "abc")
 
-        self.assertTrue(any(call.startswith("execute_script:") for call in fake.calls))
-        self.assertFalse(any(call.startswith("press_keys:") for call in fake.calls))
+        self.assertFalse(any(call.startswith("execute_script:") for call in fake.calls))
+        self.assertTrue(any(call.startswith("press_keys:") for call in fake.calls))
 
     def test_cookie_banner_prefers_exact_reject_selector_on_trusted_origin(self) -> None:
         page = inline_snapshot(
