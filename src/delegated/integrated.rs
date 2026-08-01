@@ -1,6 +1,4 @@
-use std::collections::BTreeMap;
-#[cfg(test)]
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -42,6 +40,7 @@ use crate::delegated::runtime::{FakeProvider, ProviderClientV1, ProviderTurnRequ
 use crate::delegated::runtime::{
     NormalizedProviderEventKind, NormalizedToolCallV1, OllamaAdapter, ProviderMessageV1,
     ProviderType, RuntimeError, ToolDefinitionV1, catdesk_tool_definitions,
+    ollama_error_indicates_malformed_tool_syntax,
 };
 use crate::delegated::supervisor::SupervisorSurface;
 use crate::{verification, workspace_tools};
@@ -166,6 +165,8 @@ pub struct IntegratedDelegatedService {
     next_event_sequence: u64,
     worker_session_id: WorkerSessionId,
     current_turn_id: Option<TurnId>,
+    corrective_turns_used: u32,
+    json_tool_recovery_turns_remaining: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -188,7 +189,13 @@ struct IntegratedDurableStateV1 {
     #[serde(default)]
     recent_read_excerpts: Vec<BoundedSourceExcerptV1>,
     next_event_sequence: u64,
+    #[serde(default)]
+    corrective_turns_used: u32,
+    #[serde(default)]
+    json_tool_recovery_turns_remaining: u32,
 }
+
+const MAX_CORRECTIVE_TURNS_PER_RUN: u32 = 2;
 
 impl IntegratedDelegatedService {
     pub fn new(
@@ -240,6 +247,8 @@ impl IntegratedDelegatedService {
             worker_session_id: WorkerSessionId::new(format!("worker-session-{}", run_id.as_str()))
                 .map_err(IntegratedError::Tool)?,
             current_turn_id: None,
+            corrective_turns_used: 0,
+            json_tool_recovery_turns_remaining: 0,
         })
     }
 
@@ -335,14 +344,45 @@ impl IntegratedDelegatedService {
             let turn_id = TurnId::new(format!("turn-{turn}")).map_err(IntegratedError::Tool)?;
             self.current_turn_id = Some(turn_id.clone());
             self.compact_provider_history_if_needed()?;
-            let result = ollama
-                .chat_messages_once(
-                    &self.config.model_id,
-                    &self.provider_history,
-                    &allowed_tools,
-                    turn_id,
-                )
-                .await?;
+            let use_json_tool_recovery = self.json_tool_recovery_turns_remaining > 0;
+            let result = match if use_json_tool_recovery {
+                ollama
+                    .chat_messages_once_accepting_json_envelope(
+                        &self.config.model_id,
+                        &self.provider_history,
+                        turn_id,
+                    )
+                    .await
+            } else {
+                ollama
+                    .chat_messages_once(
+                        &self.config.model_id,
+                        &self.provider_history,
+                        &allowed_tools,
+                        turn_id,
+                    )
+                    .await
+            } {
+                Ok(result) => {
+                    if use_json_tool_recovery {
+                        self.json_tool_recovery_turns_remaining = 0;
+                    }
+                    result
+                }
+                Err(error) => {
+                    if use_json_tool_recovery {
+                        self.json_tool_recovery_turns_remaining = 0;
+                    }
+                    match self.push_malformed_tool_syntax_correction(turn, &error) {
+                        Ok(true) => {
+                            self.persist_durable_state()?;
+                            continue;
+                        }
+                        Ok(false) => return Err(IntegratedError::from(error)),
+                        Err(correction_error) => return Err(correction_error),
+                    }
+                }
+            };
             if result.output_bytes > 64 * 1024 {
                 return Err(IntegratedError::Tool(
                     "provider output exceeded CatDesk bound".into(),
@@ -413,7 +453,18 @@ impl IntegratedDelegatedService {
                             tool_call_id: None,
                             tool_name: None,
                         });
-                        self.verify_completion_gate(&text)?;
+                        if let Err(error) = self.verify_completion_gate(&text) {
+                            if self.push_premature_completion_correction(
+                                turn,
+                                &error,
+                                result.stop_reason.as_deref(),
+                                result.prompt_eval_count,
+                            )? {
+                                saw_tool = true;
+                                break;
+                            }
+                            return Err(error);
+                        }
                         self.journal
                             .update_run_state(
                                 &RunId::new(self.contract.task_id.clone())
@@ -444,6 +495,14 @@ impl IntegratedDelegatedService {
                 }
             }
             if !saw_tool && result.terminal {
+                if self.push_premature_stop_correction(
+                    turn,
+                    result.stop_reason.as_deref(),
+                    result.prompt_eval_count,
+                )? {
+                    self.persist_durable_state()?;
+                    continue;
+                }
                 return Err(IntegratedError::Tool(
                     "provider stopped before CatDesk verification and diff completed".into(),
                 ));
@@ -455,6 +514,202 @@ impl IntegratedDelegatedService {
 
     fn production_worker_tools(&self) -> Vec<ToolDefinitionV1> {
         self.tool_definitions()
+    }
+
+    fn push_malformed_tool_syntax_correction(
+        &mut self,
+        turn: u32,
+        error: &RuntimeError,
+    ) -> Result<bool, IntegratedError> {
+        let message = format!("{error:?}");
+        if !ollama_error_indicates_malformed_tool_syntax(&message) {
+            return Ok(false);
+        }
+        let next_action = self
+            .next_required_action_from_persisted_state()?
+            .unwrap_or_else(|| "make a concise final completion claim".into());
+        let instruction = format!(
+            "The previous provider continuation failed because the model emitted malformed native tool-call syntax. The next continuation will use CatDesk JSON-envelope recovery without native Ollama tool definitions. Do not repeat prose, XML, markdown, or multiple calls. Return exactly one JSON object shaped as {{\"tool\":\"tool.name\",\"arguments\":{{...}}}}. CatDesk will validate the tool name and arguments before execution. Continue from the persisted run state; completed tool calls are authoritative and must not be replayed. Required next action: {next_action}"
+        );
+        self.json_tool_recovery_turns_remaining = 1;
+        self.push_corrective_continuation("malformed-tool-call", turn, None, &instruction)
+    }
+
+    fn push_premature_completion_correction(
+        &mut self,
+        turn: u32,
+        error: &IntegratedError,
+        stop_reason: Option<&str>,
+        prompt_eval_count: Option<u64>,
+    ) -> Result<bool, IntegratedError> {
+        let Some(next_action) = self.next_required_action_from_persisted_state()? else {
+            return Ok(false);
+        };
+        let instruction = format!(
+            "The previous response claimed completion before CatDesk accepted the final evidence. Gate error: {}. Required next action: {}",
+            bounded_diagnostic_text(&format!("{error:?}"), 512),
+            next_action
+        );
+        self.push_corrective_continuation(
+            "premature-completion",
+            turn,
+            stop_reason.or_else(|| prompt_eval_count.map(|_| "prompt-eval-count-present")),
+            &instruction,
+        )
+    }
+
+    fn push_premature_stop_correction(
+        &mut self,
+        turn: u32,
+        stop_reason: Option<&str>,
+        prompt_eval_count: Option<u64>,
+    ) -> Result<bool, IntegratedError> {
+        let Some(next_action) = self.next_required_action_from_persisted_state()? else {
+            return Ok(false);
+        };
+        let mut instruction = format!(
+            "The provider stopped without a CatDesk tool call before the run was verified. Required next action: {next_action}"
+        );
+        if let Some(tokens) = prompt_eval_count {
+            instruction.push_str(&format!(" PromptEvalCount={tokens}."));
+        }
+        self.push_corrective_continuation("premature-stop", turn, stop_reason, &instruction)
+    }
+
+    fn push_corrective_continuation(
+        &mut self,
+        kind: &str,
+        turn: u32,
+        stop_reason: Option<&str>,
+        instruction: &str,
+    ) -> Result<bool, IntegratedError> {
+        if self.corrective_turns_used >= MAX_CORRECTIVE_TURNS_PER_RUN {
+            let state = self.persisted_run_state_label()?;
+            return Err(IntegratedError::Tool(format!(
+                "corrective turn budget exhausted after {} corrections; model={}; runId={}; turn={turn}; persistedState={state}; lastCompletedToolCallId={}",
+                self.corrective_turns_used,
+                self.config.model_id,
+                self.run_id()?.as_str(),
+                self.last_completed_tool_call_id()
+                    .unwrap_or_else(|| "none".into())
+            )));
+        }
+        self.corrective_turns_used += 1;
+        let state = self.persisted_run_state_label()?;
+        let history_bytes = serde_json::to_vec(&self.provider_history)?.len();
+        let diagnostic = json!({
+            "kind": kind,
+            "modelId": self.config.model_id,
+            "runId": self.run_id()?.as_str(),
+            "turn": turn,
+            "historyBytes": history_bytes,
+            "correctiveTurnNumber": self.corrective_turns_used,
+            "maxCorrectiveTurns": MAX_CORRECTIVE_TURNS_PER_RUN,
+            "lastCompletedToolCallId": self.last_completed_tool_call_id(),
+            "persistedRunState": state,
+            "stopReason": stop_reason.unwrap_or("unknown"),
+        });
+        self.provider_history.push(ProviderMessageV1 {
+            role: "user".into(),
+            content: format!(
+                "<catdesk_corrective_continuation>\n{}\n{}\n</catdesk_corrective_continuation>",
+                serde_json::to_string_pretty(&diagnostic)?,
+                bounded_diagnostic_text(instruction, 2048)
+            ),
+            tool_call_id: None,
+            tool_name: None,
+        });
+        self.append_event(
+            LifecycleEvent::Delta,
+            EventPayloadV1::Delta {
+                text: format!(
+                    "corrective continuation {kind} issued: {}",
+                    bounded_diagnostic_text(instruction, 256)
+                ),
+            },
+        )?;
+        Ok(true)
+    }
+
+    fn next_required_action_from_persisted_state(&self) -> Result<Option<String>, IntegratedError> {
+        if let Some(patch_id) = self.latest_unapplied_patch_id()? {
+            return Ok(Some(format!(
+                "call patch.apply with patchId {patch_id}, or make one explicit abandonment/escalation tool decision if applying it is no longer safe"
+            )));
+        }
+        match self.last_verification.as_ref().map(|summary| &summary.status) {
+            None => Ok(Some(
+                "call verify.run next if no source mutation is required; otherwise inspect with read/search and use patch.preview before any patch.apply"
+                    .into(),
+            )),
+            Some(VerificationStatusV1::Failed | VerificationStatusV1::NotConfigured) => Ok(Some(
+                "diagnose the failed verifier output, inspect bounded source as needed, then call patch.preview for a corrected child patch within the repair budget"
+                    .into(),
+            )),
+            Some(VerificationStatusV1::Passed) if self.last_diff.is_none() => Ok(Some(
+                "call diff.actual for the contract allowed paths so CatDesk has authoritative diff evidence"
+                    .into(),
+            )),
+            Some(VerificationStatusV1::Passed) => Ok(None),
+        }
+    }
+
+    fn latest_unapplied_patch_id(&self) -> Result<Option<String>, IntegratedError> {
+        let run_id = self.run_id()?;
+        let applications = self
+            .journal
+            .load_patch_applications(&run_id)
+            .map_err(|error| IntegratedError::Journal(format!("{error:?}")))?;
+        let applied_patch_ids = applications
+            .iter()
+            .map(|application| application.patch_id.as_str().to_string())
+            .collect::<BTreeSet<_>>();
+        let proposals = self
+            .journal
+            .load_patch_proposals(&run_id)
+            .map_err(|error| IntegratedError::Journal(format!("{error:?}")))?;
+        Ok(proposals
+            .iter()
+            .rev()
+            .map(|proposal| proposal.patch_id.as_str().to_string())
+            .find(|patch_id| !applied_patch_ids.contains(patch_id)))
+    }
+
+    fn latest_patch_proposal_id(&self) -> Result<Option<String>, IntegratedError> {
+        let run_id = self.run_id()?;
+        let proposals = self
+            .journal
+            .load_patch_proposals(&run_id)
+            .map_err(|error| IntegratedError::Journal(format!("{error:?}")))?;
+        Ok(proposals
+            .last()
+            .map(|proposal| proposal.patch_id.as_str().to_string()))
+    }
+
+    fn persisted_run_state_label(&self) -> Result<String, IntegratedError> {
+        let run_id = self.run_id()?;
+        let applications = self
+            .journal
+            .load_patch_applications(&run_id)
+            .map_err(|error| IntegratedError::Journal(format!("{error:?}")))?;
+        Ok(format!(
+            "patchProposals={}; patchApplications={}; verification={}; diff={}; completedToolCalls={}",
+            self.patch_proposals.len(),
+            applications.len(),
+            self.last_verification
+                .as_ref()
+                .map(|summary| format!("{:?}", summary.status))
+                .unwrap_or_else(|| "not-run".into()),
+            self.last_diff
+                .as_ref()
+                .map(|diff| diff.diff_hash.clone())
+                .unwrap_or_else(|| "none".into()),
+            self.completed_tool_call_ids.len()
+        ))
+    }
+
+    fn last_completed_tool_call_id(&self) -> Option<String> {
+        self.completed_tool_call_ids.last().cloned()
     }
 
     #[cfg(test)]
@@ -501,9 +756,18 @@ impl IntegratedDelegatedService {
                 tool_definitions: allowed_tools.clone(),
                 max_output_bytes: 16 * 1024,
             };
-            let result = provider
-                .send_turn(&request, &allowed_names, &self.provider_history)
-                .map_err(IntegratedError::from)?;
+            let result = match provider.send_turn(&request, &allowed_names, &self.provider_history)
+            {
+                Ok(result) => result,
+                Err(error) => match self.push_malformed_tool_syntax_correction(turn, &error) {
+                    Ok(true) => {
+                        self.persist_durable_state()?;
+                        continue;
+                    }
+                    Ok(false) => return Err(IntegratedError::from(error)),
+                    Err(correction_error) => return Err(correction_error),
+                },
+            };
             let mut saw_tool = false;
             for event in result.events {
                 match event.kind {
@@ -541,7 +805,18 @@ impl IntegratedDelegatedService {
                             tool_call_id: None,
                             tool_name: None,
                         });
-                        self.verify_completion_gate(&text)?;
+                        if let Err(error) = self.verify_completion_gate(&text) {
+                            if self.push_premature_completion_correction(
+                                turn,
+                                &error,
+                                result.stop_reason.as_deref(),
+                                result.prompt_eval_count,
+                            )? {
+                                saw_tool = true;
+                                break;
+                            }
+                            return Err(error);
+                        }
                         self.journal
                             .update_run_state(&self.run_id()?, RunState::CompletedVerified)
                             .map_err(|error| IntegratedError::Journal(format!("{error:?}")))?;
@@ -566,6 +841,14 @@ impl IntegratedDelegatedService {
                 }
             }
             if result.terminal && !saw_tool {
+                if self.push_premature_stop_correction(
+                    turn,
+                    result.stop_reason.as_deref(),
+                    result.prompt_eval_count,
+                )? {
+                    self.persist_durable_state()?;
+                    continue;
+                }
                 return Err(IntegratedError::Tool(
                     "provider stopped before verified completion".into(),
                 ));
@@ -617,10 +900,7 @@ impl IntegratedDelegatedService {
 
     fn context_checkpoint_summary(&self) -> Result<String, IntegratedError> {
         let latest_patch = self
-            .patch_proposals
-            .keys()
-            .next_back()
-            .cloned()
+            .latest_patch_proposal_id()?
             .unwrap_or_else(|| "none".into());
         let verification = self
             .last_verification
@@ -653,6 +933,11 @@ impl IntegratedDelegatedService {
             .last_verification
             .as_ref()
             .ok_or_else(|| IntegratedError::Verification("verification has not run".into()))?;
+        if verification.status != VerificationStatusV1::Passed {
+            return Err(IntegratedError::Verification(
+                "verification has not passed".into(),
+            ));
+        }
         let diff = self.last_diff.as_ref().ok_or_else(|| {
             IntegratedError::Verification("actual diff has not been captured".into())
         })?;
@@ -815,6 +1100,9 @@ impl IntegratedDelegatedService {
                 service.recent_read_excerpts = state.recent_read_excerpts;
                 service.next_event_sequence =
                     service.next_event_sequence.max(state.next_event_sequence);
+                service.corrective_turns_used = state.corrective_turns_used;
+                service.json_tool_recovery_turns_remaining =
+                    state.json_tool_recovery_turns_remaining;
             }
         }
         let _ = service
@@ -939,6 +1227,7 @@ impl IntegratedDelegatedService {
             tool_call_id: Some(call.tool_call_id.as_str().to_string()),
             tool_name: Some(call.tool_name.clone()),
         });
+        self.push_final_reasoning_instruction_after_diff(call)?;
         self.append_event(
             LifecycleEvent::Delta,
             EventPayloadV1::Delta {
@@ -947,6 +1236,31 @@ impl IntegratedDelegatedService {
         )?;
         self.persist_durable_state()?;
         Ok(result)
+    }
+
+    fn push_final_reasoning_instruction_after_diff(
+        &mut self,
+        call: &NormalizedToolCallV1,
+    ) -> Result<(), IntegratedError> {
+        if call.tool_name != "diff.actual" {
+            return Ok(());
+        }
+        if !matches!(
+            self.last_verification
+                .as_ref()
+                .map(|summary| &summary.status),
+            Some(VerificationStatusV1::Passed)
+        ) || self.last_diff.is_none()
+        {
+            return Ok(());
+        }
+        self.provider_history.push(ProviderMessageV1 {
+            role: "user".into(),
+            content: "CatDesk has authoritative evidence: verify.run passed and diff.actual captured the final diff. Do not call another tool. Provide the final concise completion claim now.".into(),
+            tool_call_id: None,
+            tool_name: None,
+        });
+        Ok(())
     }
 
     pub async fn execute_tool(
@@ -1473,6 +1787,8 @@ impl IntegratedDelegatedService {
             advisor_consultations_used: self.advisor_consultations_used,
             recent_read_excerpts: self.recent_read_excerpts.clone(),
             next_event_sequence: self.next_event_sequence,
+            corrective_turns_used: self.corrective_turns_used,
+            json_tool_recovery_turns_remaining: self.json_tool_recovery_turns_remaining,
         };
         let path = self.durable_state_path()?;
         if let Some(parent) = path.parent() {
@@ -2026,6 +2342,10 @@ fn bound_text(mut text: String, max_bytes: usize) -> String {
     text
 }
 
+fn bounded_diagnostic_text(text: &str, max_bytes: usize) -> String {
+    bound_text(redact_and_bound(text, max_bytes), max_bytes)
+}
+
 async fn wait_for_cancel(cancel_requested: Arc<AtomicBool>) {
     loop {
         if cancel_requested.load(Ordering::SeqCst) {
@@ -2124,7 +2444,9 @@ mod tests {
     use super::*;
     use crate::delegated::advisor::DeepSeekProcessAdvisorConfig;
     use crate::delegated::contracts::{AdvisorDisclosureClassificationV1, AdvisorPolicyV1};
-    use crate::delegated::runtime::{FakeProviderTurn, NormalizedProviderEventKind, OllamaAdapter};
+    use crate::delegated::runtime::{
+        FakeProviderTurn, NormalizedProviderEventKind, OllamaAdapter, RuntimeError,
+    };
     use std::process::Command;
 
     #[tokio::test]
@@ -2722,6 +3044,505 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn fake_loop_recovers_malformed_tool_syntax_with_bounded_correction() {
+        let root = temp_git_workspace("malformed-tool-correction");
+        write_answer_fixture(&root, 41, 42);
+        commit_all(&root);
+        let mut contract = contract(&root, "run-malformed-tool-correction");
+        contract.max_turns = 10;
+        contract.max_tool_calls = 10;
+        let mut service =
+            IntegratedDelegatedService::new(&root, contract, config(&root)).expect("service");
+        let turns = vec![
+            FakeProviderTurn::Malformed(
+                "qwen tool call parsing failed: XML syntax error on line 14".into(),
+            ),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-read",
+                "read",
+                json!({"path":"src/lib.rs"}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-preview",
+                "patch.preview",
+                json!({
+                    "patchId": "patch-good",
+                    "operations": [{
+                        "path": "src/lib.rs",
+                        "old": "pub fn answer() -> i32 {\n    41\n}\n",
+                        "new": "pub fn answer() -> i32 {\n    42\n}\n"
+                    }]
+                }),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-apply",
+                "patch.apply",
+                json!({"patchId":"patch-good"}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-verify",
+                "verify.run",
+                json!({"timeout": 30000}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-diff",
+                "diff.actual",
+                json!({"paths":["src/lib.rs"]}),
+            )),
+            FakeProviderTurn::Complete(
+                "verification passed and authoritative diff captured".into(),
+            ),
+        ];
+
+        let review = service
+            .run_fake_worker_loop_with_advisor(
+                FakeProvider::new(turns),
+                Arc::new(AtomicBool::new(false)),
+            )
+            .await
+            .expect("corrected malformed response");
+
+        assert_eq!(review.final_result.status, RunState::CompletedVerified);
+        assert_eq!(service.corrective_turns_used, 1);
+        assert!(service.provider_history.iter().any(|message| {
+            message.content.contains("malformed-tool-call")
+                && message.content.contains("exactly one JSON object")
+        }));
+    }
+
+    #[tokio::test]
+    async fn premature_stop_after_patch_preview_requests_patch_apply_once() {
+        let root = temp_git_workspace("premature-after-preview");
+        write_answer_fixture(&root, 41, 42);
+        commit_all(&root);
+        let mut contract = contract(&root, "run-premature-after-preview");
+        contract.max_turns = 10;
+        contract.max_tool_calls = 10;
+        let turns = vec![
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-preview",
+                "patch.preview",
+                json!({
+                    "patchId": "patch-good",
+                    "operations": [{
+                        "path": "src/lib.rs",
+                        "old": "pub fn answer() -> i32 {\n    41\n}\n",
+                        "new": "pub fn answer() -> i32 {\n    42\n}\n"
+                    }]
+                }),
+            )),
+            FakeProviderTurn::Complete("done early".into()),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-apply",
+                "patch.apply",
+                json!({"patchId":"patch-good"}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-verify",
+                "verify.run",
+                json!({"timeout": 30000}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-diff",
+                "diff.actual",
+                json!({"paths":["src/lib.rs"]}),
+            )),
+            FakeProviderTurn::Complete(
+                "verification passed and authoritative diff captured".into(),
+            ),
+        ];
+        let mut service = IntegratedDelegatedService::new(&root, contract.clone(), config(&root))
+            .expect("service");
+
+        let review = service
+            .run_fake_worker_loop_with_advisor(
+                FakeProvider::new(turns),
+                Arc::new(AtomicBool::new(false)),
+            )
+            .await
+            .expect("completed");
+
+        assert_eq!(review.final_result.status, RunState::CompletedVerified);
+        assert!(service.provider_history.iter().any(|message| {
+            message
+                .content
+                .contains("patch.apply with patchId patch-good")
+        }));
+        let applications = service
+            .journal
+            .load_patch_applications(&RunId::new(contract.task_id).expect("run"))
+            .expect("applications");
+        assert_eq!(applications.len(), 1, "patch.apply must not duplicate");
+    }
+
+    #[tokio::test]
+    async fn premature_stop_after_patch_apply_requests_verification() {
+        let root = temp_git_workspace("premature-after-apply");
+        write_answer_fixture(&root, 41, 42);
+        commit_all(&root);
+        let mut contract = contract(&root, "run-premature-after-apply");
+        contract.max_turns = 10;
+        contract.max_tool_calls = 10;
+        let turns = vec![
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-preview",
+                "patch.preview",
+                json!({
+                    "patchId": "patch-good",
+                    "operations": [{
+                        "path": "src/lib.rs",
+                        "old": "pub fn answer() -> i32 {\n    41\n}\n",
+                        "new": "pub fn answer() -> i32 {\n    42\n}\n"
+                    }]
+                }),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-apply",
+                "patch.apply",
+                json!({"patchId":"patch-good"}),
+            )),
+            FakeProviderTurn::Complete("done early".into()),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-verify",
+                "verify.run",
+                json!({"timeout": 30000}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-diff",
+                "diff.actual",
+                json!({"paths":["src/lib.rs"]}),
+            )),
+            FakeProviderTurn::Complete(
+                "verification passed and authoritative diff captured".into(),
+            ),
+        ];
+        let mut service =
+            IntegratedDelegatedService::new(&root, contract, config(&root)).expect("service");
+
+        service
+            .run_fake_worker_loop_with_advisor(
+                FakeProvider::new(turns),
+                Arc::new(AtomicBool::new(false)),
+            )
+            .await
+            .expect("completed");
+
+        assert!(service.provider_history.iter().any(|message| {
+            message
+                .content
+                .contains("Required next action: call verify.run")
+        }));
+    }
+
+    #[tokio::test]
+    async fn failed_verification_requests_repair_not_completion() {
+        let root = temp_git_workspace("failed-verify-repair");
+        write_answer_fixture(&root, 41, 42);
+        commit_all(&root);
+        let mut contract = contract(&root, "run-failed-verify-repair");
+        contract.max_turns = 12;
+        contract.max_tool_calls = 12;
+        let turns = vec![
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-preview-1",
+                "patch.preview",
+                json!({
+                    "patchId": "patch-wrong",
+                    "operations": [{
+                        "path": "src/lib.rs",
+                        "old": "pub fn answer() -> i32 {\n    41\n}\n",
+                        "new": "pub fn answer() -> i32 {\n    40\n}\n"
+                    }]
+                }),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-apply-1",
+                "patch.apply",
+                json!({"patchId":"patch-wrong"}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-verify-1",
+                "verify.run",
+                json!({"timeout": 30000}),
+            )),
+            FakeProviderTurn::Complete("done early".into()),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-preview-2",
+                "patch.preview",
+                json!({
+                    "patchId": "patch-good",
+                    "parentPatchId": "patch-wrong",
+                    "operations": [{
+                        "path": "src/lib.rs",
+                        "old": "pub fn answer() -> i32 {\n    40\n}\n",
+                        "new": "pub fn answer() -> i32 {\n    42\n}\n"
+                    }]
+                }),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-apply-2",
+                "patch.apply",
+                json!({"patchId":"patch-good"}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-verify-2",
+                "verify.run",
+                json!({"timeout": 30000}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-diff",
+                "diff.actual",
+                json!({"paths":["src/lib.rs"]}),
+            )),
+            FakeProviderTurn::Complete(
+                "verification passed and authoritative diff captured".into(),
+            ),
+        ];
+        let mut service =
+            IntegratedDelegatedService::new(&root, contract, config(&root)).expect("service");
+
+        service
+            .run_fake_worker_loop_with_advisor(
+                FakeProvider::new(turns),
+                Arc::new(AtomicBool::new(false)),
+            )
+            .await
+            .expect("completed");
+
+        assert!(service.provider_history.iter().any(|message| {
+            message
+                .content
+                .contains("diagnose the failed verifier output")
+                && message.content.contains("corrected child patch")
+        }));
+    }
+
+    #[tokio::test]
+    async fn passed_verification_without_diff_requests_diff_actual() {
+        let root = temp_git_workspace("passed-verify-no-diff");
+        write_answer_fixture(&root, 41, 42);
+        commit_all(&root);
+        let mut contract = contract(&root, "run-passed-verify-no-diff");
+        contract.max_turns = 10;
+        contract.max_tool_calls = 10;
+        let turns = vec![
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-preview",
+                "patch.preview",
+                json!({
+                    "patchId": "patch-good",
+                    "operations": [{
+                        "path": "src/lib.rs",
+                        "old": "pub fn answer() -> i32 {\n    41\n}\n",
+                        "new": "pub fn answer() -> i32 {\n    42\n}\n"
+                    }]
+                }),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-apply",
+                "patch.apply",
+                json!({"patchId":"patch-good"}),
+            )),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-verify",
+                "verify.run",
+                json!({"timeout": 30000}),
+            )),
+            FakeProviderTurn::Complete("done early".into()),
+            FakeProviderTurn::ToolCall(tool_envelope(
+                "tc-diff",
+                "diff.actual",
+                json!({"paths":["src/lib.rs"]}),
+            )),
+            FakeProviderTurn::Complete(
+                "verification passed and authoritative diff captured".into(),
+            ),
+        ];
+        let mut service =
+            IntegratedDelegatedService::new(&root, contract, config(&root)).expect("service");
+
+        service
+            .run_fake_worker_loop_with_advisor(
+                FakeProvider::new(turns),
+                Arc::new(AtomicBool::new(false)),
+            )
+            .await
+            .expect("completed");
+
+        assert!(service.provider_history.iter().any(|message| {
+            message.content.contains("call diff.actual")
+                && message.content.contains("authoritative diff evidence")
+        }));
+        assert!(service.provider_history.iter().any(|message| {
+            message
+                .content
+                .contains("Do not call another tool. Provide the final concise completion claim")
+        }));
+    }
+
+    #[tokio::test]
+    async fn repeated_premature_completion_exhausts_correction_budget() {
+        let root = temp_git_workspace("premature-budget");
+        write_answer_fixture(&root, 41, 42);
+        commit_all(&root);
+        let mut contract = contract(&root, "run-premature-budget");
+        contract.max_turns = 6;
+        let mut service =
+            IntegratedDelegatedService::new(&root, contract, config(&root)).expect("service");
+
+        let result = service
+            .run_fake_worker_loop_with_advisor(
+                FakeProvider::new(vec![
+                    FakeProviderTurn::Complete("done early 1".into()),
+                    FakeProviderTurn::Complete("done early 2".into()),
+                    FakeProviderTurn::Complete("done early 3".into()),
+                ]),
+                Arc::new(AtomicBool::new(false)),
+            )
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(IntegratedError::Tool(message))
+                if message.contains("corrective turn budget exhausted")
+        ));
+        assert_eq!(service.corrective_turns_used, MAX_CORRECTIVE_TURNS_PER_RUN);
+    }
+
+    #[tokio::test]
+    async fn latest_unapplied_patch_follows_journal_proposal_chronology() {
+        let root = temp_git_workspace("latest-patch-chronology");
+        write_answer_fixture(&root, 41, 42);
+        commit_all(&root);
+        let contract = contract(&root, "run-latest-patch-chronology");
+        let mut service =
+            IntegratedDelegatedService::new(&root, contract, config(&root)).expect("service");
+        service.start().expect("start");
+
+        for (patch_id, value) in [("patch-9", 40), ("patch-10", 42)] {
+            service
+                .execute_tool(
+                    "patch.preview",
+                    &json!({
+                        "patchId": patch_id,
+                        "operations": [{
+                            "path": "src/lib.rs",
+                            "old": "pub fn answer() -> i32 {\n    41\n}\n",
+                            "new": format!("pub fn answer() -> i32 {{\n    {value}\n}}\n")
+                        }]
+                    }),
+                )
+                .await
+                .expect("preview");
+        }
+
+        let next_action = service
+            .next_required_action_from_persisted_state()
+            .expect("next action")
+            .expect("patch action");
+
+        assert!(next_action.contains("patch.apply with patchId patch-10"));
+        assert!(!next_action.contains("patch.apply with patchId patch-9"));
+    }
+
+    #[tokio::test]
+    async fn malformed_tool_correction_budget_failure_is_propagated() {
+        let root = temp_git_workspace("malformed-budget-propagated");
+        write_answer_fixture(&root, 41, 42);
+        commit_all(&root);
+        let mut contract = contract(&root, "run-malformed-budget-propagated");
+        contract.max_turns = 6;
+        let mut service =
+            IntegratedDelegatedService::new(&root, contract, config(&root)).expect("service");
+
+        let malformed = "Ollama qwen tool call parsing failed: XML syntax error on line 14";
+        let result = service
+            .run_fake_worker_loop_with_advisor(
+                FakeProvider::new(vec![
+                    FakeProviderTurn::Malformed(malformed.into()),
+                    FakeProviderTurn::Malformed(malformed.into()),
+                    FakeProviderTurn::Malformed(malformed.into()),
+                ]),
+                Arc::new(AtomicBool::new(false)),
+            )
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(IntegratedError::Tool(message))
+                if message.contains("corrective turn budget exhausted")
+                    && message.contains("model=qwen3.5:9b")
+        ));
+        assert_eq!(service.corrective_turns_used, MAX_CORRECTIVE_TURNS_PER_RUN);
+    }
+
+    #[tokio::test]
+    async fn no_patch_task_is_not_forced_into_patch_apply() {
+        let root = temp_git_workspace("no-patch-next-action");
+        write_answer_fixture(&root, 42, 42);
+        commit_all(&root);
+        let mut contract = contract(&root, "run-no-patch-next-action");
+        contract.acceptance_criteria = vec!["cargo tests pass".into()];
+        let mut service =
+            IntegratedDelegatedService::new(&root, contract, config(&root)).expect("service");
+        service.start().expect("start");
+
+        let corrected = service
+            .push_premature_completion_correction(
+                1,
+                &IntegratedError::Verification("verification has not run".into()),
+                Some("stop"),
+                Some(256),
+            )
+            .expect("correction");
+
+        assert!(corrected);
+        let correction = service.provider_history.last().expect("correction");
+        assert!(correction.content.contains("call verify.run next"));
+        assert!(!correction.content.contains("patch.apply with patchId"));
+    }
+
+    #[tokio::test]
+    async fn recovered_patch_application_remains_authoritative_after_restart() {
+        let root = temp_git_workspace("persisted-tool-authority");
+        write_answer_fixture(&root, 41, 42);
+        commit_all(&root);
+        let contract = contract(&root, "run-persisted-tool-authority");
+        let config = config(&root);
+        let mut service = IntegratedDelegatedService::new(&root, contract.clone(), config.clone())
+            .expect("service");
+        service.start().expect("start");
+        service
+            .execute_tool(
+                "patch.preview",
+                &json!({
+                    "patchId": "patch-good",
+                    "operations": [{
+                        "path": "src/lib.rs",
+                        "old": "pub fn answer() -> i32 {\n    41\n}\n",
+                        "new": "pub fn answer() -> i32 {\n    42\n}\n"
+                    }]
+                }),
+            )
+            .await
+            .expect("preview");
+        service
+            .execute_tool("patch.apply", &json!({"patchId":"patch-good"}))
+            .await
+            .expect("apply");
+
+        let recovered =
+            IntegratedDelegatedService::recover(&root, contract, config).expect("recover");
+        let next_action = recovered
+            .next_required_action_from_persisted_state()
+            .expect("next action")
+            .expect("next action exists");
+
+        assert!(next_action.contains("verify.run"));
+        assert!(!next_action.contains("patch.apply with patchId patch-good"));
+    }
+
+    #[tokio::test]
     async fn required_configured_advisor_failure_persists_needs_supervisor() {
         let root = temp_git_workspace("advisor-required-unavailable");
         fs::write(root.join("src/lib.rs"), "pub fn answer() -> i32 { 41 }\n").expect("lib");
@@ -3056,7 +3877,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires local Ollama with qwen3.5:9b and runs a full disposable model-tool-model flow"]
+    #[ignore = "requires local Ollama and runs a full disposable model-tool-model flow"]
     async fn ollama_qwen_live_production_worker_loop_closure() {
         let root = temp_git_workspace("qwen-production-loop");
         fs::write(
@@ -3077,7 +3898,9 @@ mod tests {
         .expect("test");
         commit_all(&root);
 
+        let model = live_ollama_model_id();
         let mut contract = contract(&root, "run-t0023b-qwen-production");
+        contract.provider_policy.primary_model_id = model.clone();
         contract.objective = "Make the disposable Rust fixture pass cargo test. You must inspect src/lib.rs, propose and apply patches through CatDesk, run verification, revise after any failure, capture diff.actual, and only then complete.".into();
         contract.ordered_steps = vec![
             "read src/lib.rs".into(),
@@ -3094,8 +3917,9 @@ mod tests {
         contract.max_turns = 18;
         contract.max_tool_calls = 18;
         contract.max_elapsed_seconds = 240;
-        let mut service =
-            IntegratedDelegatedService::new(&root, contract, config(&root)).expect("service");
+        let mut cfg = config(&root);
+        cfg.model_id = model;
+        let mut service = IntegratedDelegatedService::new(&root, contract, cfg).expect("service");
         let result = service.run_ollama_worker_loop().await;
         if result.is_err() {
             println!(
@@ -3126,7 +3950,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires local Ollama with qwen3.5:9b and runs a scripted disposable model-tool-model flow"]
+    #[ignore = "requires local Ollama and runs a scripted disposable model-tool-model flow"]
     async fn ollama_qwen_live_model_tool_model_closure() {
         let root = temp_git_workspace("qwen-live");
         fs::write(
@@ -3147,9 +3971,13 @@ mod tests {
         .expect("test");
         commit_all(&root);
 
-        let contract = contract(&root, "run-t0023a-qwen-live");
-        let mut service = IntegratedDelegatedService::new(&root, contract.clone(), config(&root))
-            .expect("service");
+        let model = live_ollama_model_id();
+        let mut contract = contract(&root, "run-t0023a-qwen-live");
+        contract.provider_policy.primary_model_id = model.clone();
+        let mut cfg = config(&root);
+        cfg.model_id = model.clone();
+        let mut service =
+            IntegratedDelegatedService::new(&root, contract.clone(), cfg).expect("service");
         service.start().expect("start");
         let ollama =
             OllamaAdapter::new("http://127.0.0.1:11434", Some("5m".into())).expect("ollama");
@@ -3158,7 +3986,7 @@ mod tests {
 
         let read_call = qwen_tool_call(
             &ollama,
-            "qwen3.5:9b",
+            &model,
             "You are the delegated CatDesk worker. Call read for src/lib.rs. Return only a tool call.",
             &only_tools(&tools, &["read"]),
             "tc-live-read",
@@ -3178,7 +4006,7 @@ mod tests {
         );
         let mut preview_call = qwen_tool_call(
             &ollama,
-            "qwen3.5:9b",
+            &model,
             &preview_prompt,
             &only_tools(&tools, &["patch.preview"]),
             "tc-live-preview-1",
@@ -3206,7 +4034,7 @@ mod tests {
 
         let verify_call = qwen_tool_call(
             &ollama,
-            "qwen3.5:9b",
+            &model,
             "The patch was applied. Call verify.run now. Return only a tool call.",
             &only_tools(&tools, &["verify.run"]),
             "tc-live-verify-1",
@@ -3239,7 +4067,7 @@ mod tests {
         );
         let mut revise_call = qwen_tool_call(
             &ollama,
-            "qwen3.5:9b",
+            &model,
             &revise_prompt,
             &only_tools(&tools, &["patch.preview"]),
             "tc-live-preview-2",
@@ -3274,7 +4102,7 @@ mod tests {
 
         let verify2_call = qwen_tool_call(
             &ollama,
-            "qwen3.5:9b",
+            &model,
             "The revised child patch was applied. Call verify.run now. Return only a tool call.",
             &only_tools(&tools, &["verify.run"]),
             "tc-live-verify-2",
@@ -3307,6 +4135,170 @@ mod tests {
         println!(
             "CATDESK_QWEN_LIVE_TRANSCRIPT={}",
             serde_json::to_string_pretty(&transcript).expect("transcript")
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "requires local Ollama and exercises JSON-envelope recovery after a simulated native tool parser failure"]
+    async fn ollama_qwen_live_malformed_native_tool_recovery_envelope() {
+        let root = temp_git_workspace("qwen-live-json-recovery");
+        write_answer_fixture(&root, 41, 42);
+        commit_all(&root);
+        let model = live_ollama_model_id();
+        let mut contract = contract(&root, "run-qwen-live-json-recovery");
+        contract.provider_policy.primary_model_id = model.clone();
+        let mut cfg = config(&root);
+        cfg.model_id = model.clone();
+        let mut service = IntegratedDelegatedService::new(&root, contract, cfg).expect("service");
+        service.start().expect("start");
+        service.provider_history.push(ProviderMessageV1 {
+            role: "system".into(),
+            content: worker_system_prompt(),
+            tool_call_id: None,
+            tool_name: None,
+        });
+        service.provider_history.push(ProviderMessageV1 {
+            role: "user".into(),
+            content: "Use JSON-envelope recovery to call read for src/lib.rs. Return no prose."
+                .into(),
+            tool_call_id: None,
+            tool_name: None,
+        });
+        let corrected = service
+            .push_malformed_tool_syntax_correction(
+                1,
+                &RuntimeError::Provider(
+                    "Ollama qwen tool call parsing failed: XML syntax error on line 14".into(),
+                ),
+            )
+            .expect("correction");
+        assert!(corrected);
+        service.persist_durable_state().expect("persist correction");
+        let ollama =
+            OllamaAdapter::new("http://127.0.0.1:11434", Some("5m".into())).expect("ollama");
+        let result = ollama
+            .chat_messages_once_accepting_json_envelope(
+                &model,
+                &service.provider_history,
+                TurnId::new("turn-live-json-recovery").expect("turn id"),
+            )
+            .await
+            .expect("recovery chat");
+        let mut tool_call = result.events[0]
+            .tool_call
+            .clone()
+            .expect("json-envelope tool call");
+        tool_call.tool_call_id = ToolCallId::new("tc-live-json-recovery-read").expect("tool id");
+        tool_call.arguments_hash =
+            stable_text_hash(&serde_json::to_string(&tool_call.arguments).expect("args"));
+        assert_eq!(tool_call.tool_name, "read");
+        let tool_result = service
+            .execute_tool_call(&tool_call)
+            .await
+            .expect("execute recovered read");
+        println!(
+            "CATDESK_QWEN_JSON_RECOVERY={}",
+            serde_json::to_string_pretty(&json!({
+                "model": model,
+                "runId": service.run_id().expect("run id").as_str(),
+                "tool": tool_call.tool_name,
+                "arguments": tool_call.arguments,
+                "retryCount": 0,
+                "correctiveCount": service.corrective_turns_used,
+                "result": tool_result.summary,
+            }))
+            .expect("json")
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "requires local Ollama and proves qwen continuation after recovering a persisted patch application"]
+    async fn ollama_qwen_live_restart_resume_after_persisted_patch_application() {
+        let root = temp_git_workspace("qwen-live-restart-resume");
+        write_answer_fixture(&root, 41, 42);
+        commit_all(&root);
+        let model = live_ollama_model_id();
+        let mut contract = contract(&root, "run-qwen-live-restart-resume");
+        contract.provider_policy.primary_model_id = model.clone();
+        contract.max_tool_calls = 10;
+        contract.max_turns = 10;
+        let cfg = config(&root);
+        let mut service =
+            IntegratedDelegatedService::new(&root, contract.clone(), cfg.clone()).expect("service");
+        service.start().expect("start");
+        service
+            .execute_tool(
+                "patch.preview",
+                &json!({
+                    "patchId": "patch-restart-good",
+                    "operations": [{
+                        "path": "src/lib.rs",
+                        "old": "pub fn answer() -> i32 {\n    41\n}\n",
+                        "new": "pub fn answer() -> i32 {\n    42\n}\n"
+                    }]
+                }),
+            )
+            .await
+            .expect("preview");
+        service
+            .execute_tool("patch.apply", &json!({"patchId": "patch-restart-good"}))
+            .await
+            .expect("apply");
+        drop(service);
+
+        let mut recovered =
+            IntegratedDelegatedService::recover(&root, contract, cfg).expect("recover");
+        recovered.config.model_id = model.clone();
+        let ollama =
+            OllamaAdapter::new("http://127.0.0.1:11434", Some("5m".into())).expect("ollama");
+        let tools = recovered.tool_definitions();
+        let mut verify_call = qwen_tool_call(
+            &ollama,
+            &model,
+            "A CatDesk patch.apply completed before restart. Continue from recovered state and call verify.run now. Return only a tool call.",
+            &only_tools(&tools, &["verify.run"]),
+            "tc-live-restart-verify",
+        )
+        .await;
+        verify_call.arguments["timeout"] = json!(120000);
+        verify_call.arguments_hash =
+            stable_text_hash(&serde_json::to_string(&verify_call.arguments).expect("verify args"));
+        assert_eq!(verify_call.tool_name, "verify.run");
+        let verify = recovered
+            .execute_tool_call(&verify_call)
+            .await
+            .expect("verify");
+        assert_eq!(verify.summary, "Passed");
+        let diff_call = qwen_tool_call(
+            &ollama,
+            &model,
+            "Verification passed after restart. Call diff.actual for src/lib.rs now. Return only a tool call.",
+            &only_tools(&tools, &["diff.actual"]),
+            "tc-live-restart-diff",
+        )
+        .await;
+        assert_eq!(diff_call.tool_name, "diff.actual");
+        let diff = recovered.execute_tool_call(&diff_call).await.expect("diff");
+        let review = recovered.final_review().expect("review");
+        assert_eq!(review.final_result.status, RunState::CompletedVerified);
+        let applications = recovered
+            .journal
+            .load_patch_applications(&recovered.run_id().expect("run id"))
+            .expect("applications");
+        assert_eq!(applications.len(), 1);
+        println!(
+            "CATDESK_QWEN_RESTART_RESUME={}",
+            serde_json::to_string_pretty(&json!({
+                "model": model,
+                "runId": recovered.run_id().expect("run id").as_str(),
+                "toolSequence": ["patch.preview", "patch.apply", "recover", verify_call.tool_name, diff_call.tool_name],
+                "patchIds": ["patch-restart-good"],
+                "patchApplicationCount": applications.len(),
+                "verification": verify.summary,
+                "diffCapture": diff.summary,
+                "finalState": review.final_result.status,
+            }))
+            .expect("json")
         );
     }
 
@@ -3396,6 +4388,27 @@ mod tests {
         contract
     }
 
+    fn write_answer_fixture(root: &Path, answer: i32, expected: i32) {
+        fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname=\"fixture\"\nversion=\"0.1.0\"\nedition=\"2021\"\n",
+        )
+        .expect("cargo");
+        fs::write(
+            root.join("src/lib.rs"),
+            format!("pub fn answer() -> i32 {{\n    {answer}\n}}\n"),
+        )
+        .expect("lib");
+        fs::create_dir_all(root.join("tests")).expect("tests");
+        fs::write(
+            root.join("tests/answer_test.rs"),
+            format!(
+                "#[test]\nfn answer_is_expected_value() {{\n    assert_eq!(fixture::answer(), {expected});\n}}\n"
+            ),
+        )
+        .expect("test");
+    }
+
     fn config(root: &Path) -> IntegratedRunConfigV1 {
         IntegratedRunConfigV1 {
             journal_root: root.join(".catdesk-test/journal"),
@@ -3404,6 +4417,10 @@ mod tests {
             model_id: "qwen3.5:9b".into(),
             advisor: None,
         }
+    }
+
+    fn live_ollama_model_id() -> String {
+        std::env::var("CATDESK_LIVE_OLLAMA_MODEL").unwrap_or_else(|_| "qwen3.5:9b".into())
     }
 
     fn fake_deepseek_sidecar(root: &Path) -> IntegratedAdvisorLocalRuntimeConfigV1 {

@@ -91,6 +91,10 @@ pub struct ProviderMessageV1 {
 pub struct ProviderTurnResultV1 {
     pub terminal: bool,
     pub output_bytes: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stop_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_eval_count: Option<u64>,
     pub events: Vec<NormalizedProviderEventV1>,
 }
 
@@ -240,6 +244,8 @@ impl FakeProvider {
             return Ok(ProviderTurnResultV1 {
                 terminal: true,
                 output_bytes: 0,
+                stop_reason: Some("fake-exhausted".into()),
+                prompt_eval_count: None,
                 events: vec![NormalizedProviderEventV1 {
                     provider_id: "fake".into(),
                     turn_id: request.turn_id.clone(),
@@ -262,6 +268,8 @@ impl FakeProvider {
                 Ok(ProviderTurnResultV1 {
                     terminal: false,
                     output_bytes: text.len(),
+                    stop_reason: None,
+                    prompt_eval_count: None,
                     events: vec![NormalizedProviderEventV1 {
                         provider_id: "fake".into(),
                         turn_id: request.turn_id.clone(),
@@ -876,6 +884,9 @@ pub struct OllamaAdapter {
     keep_alive: Option<String>,
 }
 
+const MAX_OLLAMA_CONTINUATION_HTTP_500_RETRIES: usize = 1;
+const OLLAMA_ERROR_BODY_LIMIT: usize = 2048;
+
 impl OllamaAdapter {
     pub fn new(base_url: &str, keep_alive: Option<String>) -> Result<Self, RuntimeError> {
         Ok(Self {
@@ -953,35 +964,138 @@ impl OllamaAdapter {
             .base_url
             .join("/api/chat")
             .map_err(|error| RuntimeError::Provider(error.to_string()))?;
-        let messages = messages
-            .iter()
-            .map(|message| {
-                json!({
-                    "role": message.role,
-                    "content": message.content,
-                })
-            })
-            .collect::<Vec<_>>();
-        let body = json!({
-            "model": model,
-            "stream": false,
-            "keep_alive": self.keep_alive,
-            "messages": messages,
-            "tools": ollama_tool_definitions(allowed_tools),
-        });
-        let value: Value = self
-            .client
-            .post(url)
-            .json(&body)
-            .send()
-            .await
+        let messages_json = serialize_ollama_history(messages);
+        let history_bytes = serde_json::to_vec(&messages_json)
             .map_err(|error| RuntimeError::Provider(error.to_string()))?
-            .error_for_status()
-            .map_err(|error| RuntimeError::Provider(error.to_string()))?
-            .json()
-            .await
+            .len();
+        let mut disable_thinking = true;
+        let mut retried_unsupported_thinking = false;
+        let mut retry = 0usize;
+        let value = loop {
+            let body = ollama_chat_body(
+                model,
+                &self.keep_alive,
+                &messages_json,
+                allowed_tools,
+                disable_thinking,
+            );
+            let request_bytes = serde_json::to_vec(&body)
+                .map_err(|error| RuntimeError::Provider(error.to_string()))?
+                .len();
+            let response = self
+                .client
+                .post(url.clone())
+                .json(&body)
+                .send()
+                .await
+                .map_err(|error| RuntimeError::Provider(error.to_string()))?;
+            let status = response.status();
+            if status.is_success() {
+                break response
+                    .json::<Value>()
+                    .await
+                    .map_err(|error| RuntimeError::Provider(error.to_string()))?;
+            }
+            let error_body = response
+                .text()
+                .await
+                .unwrap_or_else(|error| format!("failed to read Ollama error body: {error}"));
+            if disable_thinking
+                && !retried_unsupported_thinking
+                && status == reqwest::StatusCode::BAD_REQUEST
+                && ollama_error_indicates_unsupported_thinking(&error_body)
+            {
+                disable_thinking = false;
+                retried_unsupported_thinking = true;
+                continue;
+            }
+            if status.is_server_error() && retry < MAX_OLLAMA_CONTINUATION_HTTP_500_RETRIES {
+                retry += 1;
+                continue;
+            }
+            return Err(RuntimeError::Provider(ollama_error_summary(
+                model,
+                &turn_id,
+                history_bytes,
+                request_bytes,
+                status.as_u16(),
+                retry,
+                &error_body,
+            )));
+        };
+        normalize_ollama_chat_response(&value, turn_id, false)
+    }
+
+    pub async fn chat_messages_once_accepting_json_envelope(
+        &self,
+        model: &str,
+        messages: &[ProviderMessageV1],
+        turn_id: TurnId,
+    ) -> Result<ProviderTurnResultV1, RuntimeError> {
+        let url = self
+            .base_url
+            .join("/api/chat")
             .map_err(|error| RuntimeError::Provider(error.to_string()))?;
-        normalize_ollama_chat_response(&value, turn_id)
+        let messages_json = serialize_ollama_history(messages);
+        let history_bytes = serde_json::to_vec(&messages_json)
+            .map_err(|error| RuntimeError::Provider(error.to_string()))?
+            .len();
+        let mut disable_thinking = true;
+        let mut retried_unsupported_thinking = false;
+        let mut retry = 0usize;
+        let value = loop {
+            let body = ollama_chat_body(
+                model,
+                &self.keep_alive,
+                &messages_json,
+                &[],
+                disable_thinking,
+            );
+            let request_bytes = serde_json::to_vec(&body)
+                .map_err(|error| RuntimeError::Provider(error.to_string()))?
+                .len();
+            let response = self
+                .client
+                .post(url.clone())
+                .json(&body)
+                .send()
+                .await
+                .map_err(|error| RuntimeError::Provider(error.to_string()))?;
+            let status = response.status();
+            if status.is_success() {
+                break response
+                    .json::<Value>()
+                    .await
+                    .map_err(|error| RuntimeError::Provider(error.to_string()))?;
+            }
+            let error_body = response
+                .text()
+                .await
+                .unwrap_or_else(|error| format!("failed to read Ollama error body: {error}"));
+            if disable_thinking
+                && !retried_unsupported_thinking
+                && status == reqwest::StatusCode::BAD_REQUEST
+                && ollama_error_indicates_unsupported_thinking(&error_body)
+            {
+                disable_thinking = false;
+                retried_unsupported_thinking = true;
+                continue;
+            }
+            if status.is_server_error() && retry < MAX_OLLAMA_CONTINUATION_HTTP_500_RETRIES {
+                retry += 1;
+                continue;
+            }
+            return Err(RuntimeError::Provider(ollama_error_summary(
+                model,
+                &turn_id,
+                history_bytes,
+                request_bytes,
+                status.as_u16(),
+                retry,
+                &error_body,
+            )));
+        };
+        normalize_ollama_chat_response(&value, turn_id, true)
     }
 
     pub async fn chat_stream_text(
@@ -1042,7 +1156,14 @@ impl OllamaAdapter {
 fn normalize_ollama_chat_response(
     value: &Value,
     turn_id: TurnId,
+    allow_json_content_tool: bool,
 ) -> Result<ProviderTurnResultV1, RuntimeError> {
+    let stop_reason = value
+        .get("done_reason")
+        .or_else(|| value.get("stop_reason"))
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned);
+    let prompt_eval_count = value.get("prompt_eval_count").and_then(Value::as_u64);
     let message = value
         .get("message")
         .ok_or_else(|| RuntimeError::MalformedOutput("missing Ollama message".into()))?;
@@ -1071,6 +1192,8 @@ fn normalize_ollama_chat_response(
             output_bytes: serde_json::to_string(value)
                 .map_err(|error| RuntimeError::MalformedOutput(error.to_string()))?
                 .len(),
+            stop_reason,
+            prompt_eval_count,
             events: vec![NormalizedProviderEventV1 {
                 provider_id: "ollama".into(),
                 turn_id,
@@ -1085,7 +1208,8 @@ fn normalize_ollama_chat_response(
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
-    if let Ok(value) = serde_json::from_str::<Value>(text.trim())
+    if allow_json_content_tool
+        && let Ok(value) = serde_json::from_str::<Value>(text.trim())
         && let Some(name) = value.get("tool").and_then(Value::as_str)
     {
         let arguments = value.get("arguments").cloned().unwrap_or_else(|| json!({}));
@@ -1099,6 +1223,8 @@ fn normalize_ollama_chat_response(
         return Ok(ProviderTurnResultV1 {
             terminal: false,
             output_bytes: text.len(),
+            stop_reason,
+            prompt_eval_count,
             events: vec![NormalizedProviderEventV1 {
                 provider_id: "ollama".into(),
                 turn_id,
@@ -1108,7 +1234,14 @@ fn normalize_ollama_chat_response(
             }],
         });
     }
-    Ok(provider_text_result("ollama", &turn_id, text, true))
+    Ok(provider_text_result_with_metadata(
+        "ollama",
+        &turn_id,
+        text,
+        true,
+        stop_reason,
+        prompt_eval_count,
+    ))
 }
 
 fn provider_text_result(
@@ -1117,9 +1250,22 @@ fn provider_text_result(
     text: String,
     terminal: bool,
 ) -> ProviderTurnResultV1 {
+    provider_text_result_with_metadata(provider_id, turn_id, text, terminal, None, None)
+}
+
+fn provider_text_result_with_metadata(
+    provider_id: &str,
+    turn_id: &TurnId,
+    text: String,
+    terminal: bool,
+    stop_reason: Option<String>,
+    prompt_eval_count: Option<u64>,
+) -> ProviderTurnResultV1 {
     ProviderTurnResultV1 {
         terminal,
         output_bytes: text.len(),
+        stop_reason,
+        prompt_eval_count,
         events: vec![NormalizedProviderEventV1 {
             provider_id: provider_id.into(),
             turn_id: turn_id.clone(),
@@ -1132,6 +1278,137 @@ fn provider_text_result(
             tool_call: None,
         }],
     }
+}
+
+fn serialize_ollama_history(messages: &[ProviderMessageV1]) -> Vec<Value> {
+    messages.iter().map(ollama_message_json).collect()
+}
+
+fn ollama_message_json(message: &ProviderMessageV1) -> Value {
+    if message.role == "assistant"
+        && let Some(tool_name) = message.tool_name.as_deref()
+        && let Some(arguments) = assistant_tool_arguments(message)
+    {
+        return json!({
+            "role": "assistant",
+            "content": message.content,
+            "tool_calls": [{
+                "function": {
+                    "name": tool_name,
+                    "arguments": arguments,
+                }
+            }]
+        });
+    }
+    if message.role == "tool" {
+        let mut value = json!({
+            "role": "tool",
+            "content": message.content,
+        });
+        if let Some(tool_name) = message.tool_name.as_deref() {
+            value["tool_name"] = json!(tool_name);
+        }
+        return value;
+    }
+    json!({
+        "role": message.role,
+        "content": message.content,
+    })
+}
+
+fn assistant_tool_arguments(message: &ProviderMessageV1) -> Option<Value> {
+    let value = serde_json::from_str::<Value>(message.content.trim()).ok()?;
+    let content_tool = value.get("tool").and_then(Value::as_str)?;
+    if Some(content_tool) != message.tool_name.as_deref() {
+        return None;
+    }
+    Some(value.get("arguments").cloned().unwrap_or_else(|| json!({})))
+}
+
+fn ollama_chat_body(
+    model: &str,
+    keep_alive: &Option<String>,
+    messages: &[Value],
+    allowed_tools: &[ToolDefinitionV1],
+    disable_thinking: bool,
+) -> Value {
+    let mut body = json!({
+        "model": model,
+        "stream": false,
+        "keep_alive": keep_alive,
+        "messages": messages,
+        "options": {
+            "temperature": 0.0
+        }
+    });
+    if !allowed_tools.is_empty() {
+        body["tools"] = ollama_tool_definitions(allowed_tools);
+    }
+    if disable_thinking {
+        body["think"] = json!(false);
+    }
+    body
+}
+
+fn ollama_error_indicates_unsupported_thinking(body: &str) -> bool {
+    let lowered = body.to_ascii_lowercase();
+    lowered.contains("think") && (lowered.contains("unsupported") || lowered.contains("unknown"))
+}
+
+pub(crate) fn ollama_error_indicates_malformed_tool_syntax(body: &str) -> bool {
+    let lowered = body.to_ascii_lowercase();
+    (lowered.contains("tool call parsing failed")
+        || lowered.contains("xml syntax error")
+        || lowered.contains("malformed tool"))
+        && (lowered.contains("ollama")
+            || lowered.contains("qwen")
+            || lowered.contains("function")
+            || lowered.contains("tool"))
+}
+
+fn ollama_error_summary(
+    model: &str,
+    turn_id: &TurnId,
+    history_bytes: usize,
+    request_bytes: usize,
+    http_status: u16,
+    retry: usize,
+    body: &str,
+) -> String {
+    format!(
+        "Ollama continuation failed: model={model}; turn={}; historyBytes={history_bytes}; requestBytes={request_bytes}; httpStatus={http_status}; retry={retry}; body={}",
+        turn_id.as_str(),
+        redact_bounded_ollama_body(body)
+    )
+}
+
+fn redact_bounded_ollama_body(body: &str) -> String {
+    let mut bounded = body
+        .chars()
+        .take(OLLAMA_ERROR_BODY_LIMIT)
+        .collect::<String>();
+    if body.chars().count() > bounded.chars().count() {
+        bounded.push_str("[truncated]");
+    }
+    let secret_markers = ["token", "password", "secret", "authorization", "api_key"];
+    for marker in secret_markers {
+        bounded = redact_marker_value(&bounded, marker);
+    }
+    bounded
+}
+
+fn redact_marker_value(input: &str, marker: &str) -> String {
+    let mut output = String::with_capacity(input.len());
+    for line in input.lines() {
+        if line.to_ascii_lowercase().contains(marker) {
+            output.push_str(marker);
+            output.push_str("=[REDACTED]\n");
+        } else {
+            output.push_str(line);
+            output.push('\n');
+        }
+    }
+    output.trim_end().to_string()
 }
 
 fn ollama_tool_definitions(tools: &[ToolDefinitionV1]) -> Value {
@@ -1186,6 +1463,11 @@ impl From<super::context::ContextError> for RuntimeError {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::thread;
 
     use super::*;
 
@@ -1221,6 +1503,72 @@ mod tests {
             max_input_bytes: 64 * 1024,
             max_output_bytes: 16 * 1024,
         }
+    }
+
+    fn only_tools(tools: &[ToolDefinitionV1], names: &[&str]) -> Vec<ToolDefinitionV1> {
+        tools
+            .iter()
+            .filter(|tool| names.contains(&tool.name.as_str()))
+            .cloned()
+            .collect()
+    }
+
+    fn mock_ollama_chat_server(responses: Vec<(u16, String)>) -> (String, Arc<AtomicUsize>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("mock bind");
+        let addr = listener.local_addr().expect("mock addr");
+        let count = Arc::new(AtomicUsize::new(0));
+        let thread_count = count.clone();
+        thread::spawn(move || {
+            for (status, body) in responses {
+                let (mut stream, _) = listener.accept().expect("mock accept");
+                let mut request = [0u8; 8192];
+                let _ = stream.read(&mut request);
+                thread_count.fetch_add(1, Ordering::SeqCst);
+                let reason = if status == 200 { "OK" } else { "ERROR" };
+                let response = format!(
+                    "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .expect("mock response");
+            }
+        });
+        (format!("http://{addr}"), count)
+    }
+
+    fn mock_ollama_chat_server_recording(
+        responses: Vec<(u16, String)>,
+    ) -> (String, Arc<AtomicUsize>, Arc<Mutex<Vec<Value>>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("mock bind");
+        let addr = listener.local_addr().expect("mock addr");
+        let count = Arc::new(AtomicUsize::new(0));
+        let thread_count = count.clone();
+        let bodies = Arc::new(Mutex::new(Vec::new()));
+        let thread_bodies = bodies.clone();
+        thread::spawn(move || {
+            for (status, body) in responses {
+                let (mut stream, _) = listener.accept().expect("mock accept");
+                let mut request = [0u8; 16384];
+                let read = stream.read(&mut request).expect("mock read");
+                let request_text = String::from_utf8_lossy(&request[..read]);
+                if let Some((_, body_text)) = request_text.split_once("\r\n\r\n")
+                    && let Ok(value) = serde_json::from_str::<Value>(body_text)
+                {
+                    thread_bodies.lock().expect("bodies").push(value);
+                }
+                thread_count.fetch_add(1, Ordering::SeqCst);
+                let reason = if status == 200 { "OK" } else { "ERROR" };
+                let response = format!(
+                    "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .expect("mock response");
+            }
+        });
+        (format!("http://{addr}"), count, bodies)
     }
 
     #[test]
@@ -1313,9 +1661,12 @@ mod tests {
             },
             "done": true
         });
-        let result =
-            normalize_ollama_chat_response(&value, TurnId::new("turn-ollama").expect("turn id"))
-                .expect("normalize");
+        let result = normalize_ollama_chat_response(
+            &value,
+            TurnId::new("turn-ollama").expect("turn id"),
+            false,
+        )
+        .expect("normalize");
         assert_eq!(result.events[0].kind, NormalizedProviderEventKind::ToolCall);
         assert_eq!(
             result.events[0]
@@ -1325,6 +1676,235 @@ mod tests {
                 .tool_name,
             "read"
         );
+        assert_eq!(result.stop_reason.as_deref(), None);
+    }
+
+    #[test]
+    fn normal_json_prose_is_not_executed_as_tool_call() {
+        let value = json!({
+            "message": {
+                "role": "assistant",
+                "content": r#"{"tool":"read","arguments":{"path":"src/lib.rs"}}"#
+            },
+            "done": true
+        });
+        let result = normalize_ollama_chat_response(
+            &value,
+            TurnId::new("turn-json-prose").expect("turn id"),
+            false,
+        )
+        .expect("normalize");
+
+        assert_eq!(
+            result.events[0].kind,
+            NormalizedProviderEventKind::CompletionClaim
+        );
+        assert!(result.events[0].tool_call.is_none());
+    }
+
+    #[test]
+    fn json_envelope_is_accepted_only_in_recovery_mode() {
+        let value = json!({
+            "message": {
+                "role": "assistant",
+                "content": r#"{"tool":"read","arguments":{"path":"src/lib.rs"}}"#
+            },
+            "done": true
+        });
+        let result = normalize_ollama_chat_response(
+            &value,
+            TurnId::new("turn-json-recovery").expect("turn id"),
+            true,
+        )
+        .expect("normalize");
+
+        assert_eq!(result.events[0].kind, NormalizedProviderEventKind::ToolCall);
+        assert_eq!(
+            result.events[0]
+                .tool_call
+                .as_ref()
+                .expect("tool call")
+                .tool_name,
+            "read"
+        );
+    }
+
+    #[tokio::test]
+    async fn continuation_history_preserves_native_tool_call_and_tool_result_name() {
+        let success = json!({
+            "message": {
+                "role": "assistant",
+                "content": "done"
+            },
+            "done": true
+        })
+        .to_string();
+        let (base_url, count, bodies) = mock_ollama_chat_server_recording(vec![(200, success)]);
+        let adapter = OllamaAdapter::new(&base_url, Some("30m".into())).expect("adapter");
+        let history = vec![
+            ProviderMessageV1 {
+                role: "system".into(),
+                content: "system policy".into(),
+                tool_call_id: None,
+                tool_name: None,
+            },
+            ProviderMessageV1 {
+                role: "user".into(),
+                content: "inspect source".into(),
+                tool_call_id: None,
+                tool_name: None,
+            },
+            ProviderMessageV1 {
+                role: "assistant".into(),
+                content: r#"{"tool":"read","arguments":{"path":"src/lib.rs"}}"#.into(),
+                tool_call_id: Some("tc-read".into()),
+                tool_name: Some("read".into()),
+            },
+            ProviderMessageV1 {
+                role: "tool".into(),
+                content: "bounded file content".into(),
+                tool_call_id: Some("tc-read".into()),
+                tool_name: Some("read".into()),
+            },
+        ];
+
+        adapter
+            .chat_messages_once(
+                "qwen3.6:35b-a3b",
+                &history,
+                &only_tools(&catdesk_tool_definitions(), &["read"]),
+                TurnId::new("turn-history").expect("turn id"),
+            )
+            .await
+            .expect("chat");
+
+        assert_eq!(count.load(Ordering::SeqCst), 1);
+        let bodies = bodies.lock().expect("bodies");
+        let messages = bodies[0]
+            .get("messages")
+            .and_then(Value::as_array)
+            .expect("messages");
+        assert_eq!(
+            messages[0],
+            json!({"role":"system","content":"system policy"})
+        );
+        assert_eq!(
+            messages[1],
+            json!({"role":"user","content":"inspect source"})
+        );
+        assert_eq!(
+            messages[2]["tool_calls"][0]["function"],
+            json!({"name":"read","arguments":{"path":"src/lib.rs"}})
+        );
+        assert_eq!(messages[3]["role"], "tool");
+        assert_eq!(messages[3]["tool_name"], "read");
+        assert_eq!(messages[3]["content"], "bounded file content");
+    }
+
+    #[tokio::test]
+    async fn json_recovery_request_omits_native_tools_field() {
+        let success = json!({
+            "message": {
+                "role": "assistant",
+                "content": r#"{"tool":"read","arguments":{"path":"src/lib.rs"}}"#
+            },
+            "done": true
+        })
+        .to_string();
+        let (base_url, count, bodies) = mock_ollama_chat_server_recording(vec![(200, success)]);
+        let adapter = OllamaAdapter::new(&base_url, Some("30m".into())).expect("adapter");
+        let history = vec![ProviderMessageV1 {
+            role: "user".into(),
+            content: "return one JSON envelope".into(),
+            tool_call_id: None,
+            tool_name: None,
+        }];
+
+        let result = adapter
+            .chat_messages_once_accepting_json_envelope(
+                "qwen3.6:35b-a3b",
+                &history,
+                TurnId::new("turn-json-recovery-http").expect("turn id"),
+            )
+            .await
+            .expect("chat");
+
+        assert_eq!(count.load(Ordering::SeqCst), 1);
+        assert_eq!(result.events[0].kind, NormalizedProviderEventKind::ToolCall);
+        assert!(
+            bodies.lock().expect("bodies")[0].get("tools").is_none(),
+            "recovery request must omit native Ollama tool definitions"
+        );
+    }
+
+    #[tokio::test]
+    async fn ollama_transient_http_500_is_retried_safely() {
+        let success = json!({
+            "message": {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{
+                    "function": {
+                        "name": "read",
+                        "arguments": { "path": "src/lib.rs" }
+                    }
+                }]
+            },
+            "done": true,
+            "done_reason": "stop",
+            "prompt_eval_count": 128
+        })
+        .to_string();
+        let (base_url, count) = mock_ollama_chat_server(vec![
+            (500, r#"{"error":"temporary backend failure"}"#.into()),
+            (200, success),
+        ]);
+        let adapter = OllamaAdapter::new(&base_url, Some("30m".into())).expect("adapter");
+        let result = adapter
+            .chat_once(
+                "qwen3.6:35b-a3b",
+                "call read",
+                &only_tools(&catdesk_tool_definitions(), &["read"]),
+            )
+            .await
+            .expect("retried response");
+
+        assert_eq!(count.load(Ordering::SeqCst), 2);
+        assert_eq!(result.events[0].kind, NormalizedProviderEventKind::ToolCall);
+        assert_eq!(result.stop_reason.as_deref(), Some("stop"));
+        assert_eq!(result.prompt_eval_count, Some(128));
+    }
+
+    #[tokio::test]
+    async fn ollama_http_500_retry_exhaustion_fails_clearly() {
+        let (base_url, count) = mock_ollama_chat_server(vec![
+            (
+                500,
+                r#"{"error":"qwen tool call parsing failed: XML syntax error on line 14"}"#.into(),
+            ),
+            (
+                500,
+                r#"{"error":"qwen tool call parsing failed: XML syntax error on line 14"}"#.into(),
+            ),
+        ]);
+        let adapter = OllamaAdapter::new(&base_url, Some("30m".into())).expect("adapter");
+        let error = adapter
+            .chat_once(
+                "qwen3.6:35b-a3b",
+                "call read",
+                &only_tools(&catdesk_tool_definitions(), &["read"]),
+            )
+            .await
+            .expect_err("retry exhaustion");
+
+        assert_eq!(count.load(Ordering::SeqCst), 2);
+        assert!(matches!(
+            error,
+            RuntimeError::Provider(ref message)
+                if message.contains("httpStatus=500")
+                    && message.contains("retry=1")
+                    && ollama_error_indicates_malformed_tool_syntax(message)
+        ));
     }
 
     #[tokio::test]
