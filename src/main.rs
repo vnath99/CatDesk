@@ -1195,6 +1195,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(handle) = app.ngrok_task.take() {
             handle.abort();
         }
+        if let Some(handle) = app.openai_tunnel_monitor_task.take() {
+            handle.abort();
+        }
         if let Some(child) = app.remote_browser_child.as_mut() {
             let _ = child.start_kill();
         }

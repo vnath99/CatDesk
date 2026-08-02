@@ -231,6 +231,10 @@ impl AppConfig {
         let config = toml::from_str::<Self>(&text).map_err(std::io::Error::other)?;
         let config = config.normalized();
         validate_transport(&config.mcp, &config.tunnel).map_err(std::io::Error::other)?;
+        config
+            .openai_tunnel
+            .validate()
+            .map_err(std::io::Error::other)?;
         Ok(config)
     }
 
@@ -783,6 +787,7 @@ pub struct AppState {
     config_path: PathBuf,
     pub server_handle: Option<tokio::task::JoinHandle<()>>,
     pub ngrok_task: Option<tokio::task::JoinHandle<()>>,
+    pub openai_tunnel_monitor_task: Option<tokio::task::JoinHandle<()>>,
     pub remote_browser_child: Option<tokio::process::Child>,
     pub devtools_child: Option<tokio::process::Child>,
     pub openai_tunnel_child: Option<ManagedTunnelProcess>,
@@ -1212,6 +1217,7 @@ impl AppState {
             config_path,
             server_handle: None,
             ngrok_task: None,
+            openai_tunnel_monitor_task: None,
             remote_browser_child: None,
             devtools_child: None,
             openai_tunnel_child: None,
@@ -1303,6 +1309,18 @@ impl AppState {
         serde_json::json!({
             "toolName": "catdesk_transport_status",
             "transportMode": self.tunnel_config.mode.as_str(),
+            "openaiTunnel": {
+                "processMode": self.openai_tunnel_config.process_mode.as_str(),
+                "runtimeAliasFingerprint": crate::tunnel::connection_fingerprint(&self.openai_tunnel_config.runtime_alias),
+                "profileFingerprint": crate::tunnel::connection_fingerprint(&self.openai_tunnel_config.profile_name),
+                "autoConnect": self.openai_tunnel_config.auto_connect,
+                "autoRecover": self.openai_tunnel_config.auto_recover,
+                "healthPollSeconds": self.openai_tunnel_config.health_poll_seconds,
+                "failureThreshold": self.openai_tunnel_config.failure_threshold,
+                "recoveryCooldownSeconds": self.openai_tunnel_config.recovery_cooldown_seconds,
+                "keepRuntimeOnCatdeskExit": self.openai_tunnel_config.keep_runtime_on_catdesk_exit,
+                "monitorRunning": self.openai_tunnel_monitor_task.is_some(),
+            },
             "transportHealth": self.transport_health.health.as_str(),
             "localMcp": self.transport_health.local_mcp.clone(),
             "remoteCheckEnabled": self.tunnel_config.remote_self_check,
@@ -1563,15 +1581,39 @@ mod tests {
             "tunnel-client"
         });
         if cfg!(windows) {
+            let ps1 = dir.join("fake-tunnel-client.ps1");
+            std::fs::write(
+                &ps1,
+                r#"$joined = $args -join ' '
+if ($joined -eq '--version') { 'tunnel-client v0.0.7'; exit 0 }
+if ($joined -eq '--help') { 'Tunnel client for the OpenAI MCP control plane.'; exit 0 }
+if ($joined -eq 'help quickstart') { 'tunnel-client quickstart --mcp-server-url doctor /ui profile runtimes'; exit 0 }
+if ($joined -eq 'runtimes connect --help') { 'runtimes connect --alias --tunnel-id --runtime-api-key --mcp-server-url'; exit 0 }
+if ($joined -eq 'runtimes status --help') { 'runtimes status --json'; exit 0 }
+if ($joined -eq 'runtimes stop --help') { 'runtimes stop'; exit 0 }
+if ($joined -eq 'runtimes rm --help') { 'runtimes rm'; exit 0 }
+if ($joined -eq 'runtimes status catdesk-local --json') { '{"status":"ready","running":true,"healthy":true,"ready":true,"ui_url":"http://127.0.0.1:9900/ui"}'; exit 0 }
+if ($joined -eq 'runtimes status catdesk-local') { '{"status":"ready","running":true,"healthy":true,"ready":true,"ui_url":"http://127.0.0.1:9900/ui"}'; exit 0 }
+if ($joined -eq 'runtimes --help') { 'connect status stop rm'; exit 0 }
+if ($joined -eq 'runtimes') { 'connect status stop rm'; exit 0 }
+if ($joined -eq 'doctor --help') { 'doctor --profile --explain'; exit 0 }
+if ($joined -like 'doctor*') { 'doctor ok'; exit 0 }
+if ($joined -eq 'health --help') { 'health --url-file /readyz /healthz'; exit 0 }
+if ($joined -like 'run --profile*') { Start-Sleep -Seconds 60; exit 0 }
+'unsupported'
+exit 1
+"#,
+            )
+            .expect("write fake openai powershell client");
             std::fs::write(
                 &path,
-                "@echo off\r\nif \"%1\"==\"--version\" (echo tunnel-client v0.0.7 & exit /b 0)\r\nif \"%1 %2\"==\"help quickstart\" (echo tunnel-client quickstart --mcp-server-url doctor /ui init profile run & exit /b 0)\r\nif \"%1 %2 %4\"==\"doctor --profile --explain\" (echo doctor ok & exit /b 0)\r\nif \"%1 %2\"==\"run --profile\" (powershell -NoProfile -Command \"Start-Sleep -Seconds 60\" & exit /b 0)\r\necho unsupported\r\nexit /b 1\r\n",
+                "@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -File \"%~dp0fake-tunnel-client.ps1\" %*\r\nexit /b %ERRORLEVEL%\r\n",
             )
             .expect("write fake openai client");
         } else {
             std::fs::write(
                 &path,
-                "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo tunnel-client v0.0.7; exit 0; fi\nif [ \"$1 $2\" = \"help quickstart\" ]; then echo 'tunnel-client quickstart --mcp-server-url doctor /ui init profile run'; exit 0; fi\nif [ \"$1 $2 $4\" = \"doctor --profile --explain\" ]; then echo doctor ok; exit 0; fi\nif [ \"$1 $2\" = \"run --profile\" ]; then sleep 60; exit 0; fi\necho unsupported\nexit 1\n",
+                "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo tunnel-client v0.0.7; exit 0; fi\nif [ \"$1 $2\" = \"help quickstart\" ]; then echo 'tunnel-client quickstart --mcp-server-url doctor /ui profile runtimes'; exit 0; fi\nif [ \"$1\" = \"runtimes\" ]; then echo 'connect status stop rm'; exit 0; fi\nif [ \"$1 $2 $3\" = \"runtimes connect --help\" ]; then echo 'runtimes connect --alias --tunnel-id --runtime-api-key --mcp-server-url'; exit 0; fi\nif [ \"$1 $2 $3\" = \"runtimes status --help\" ]; then echo 'runtimes status --json'; exit 0; fi\nif [ \"$1 $2 $3\" = \"runtimes stop --help\" ]; then echo 'runtimes stop'; exit 0; fi\nif [ \"$1 $2 $3\" = \"runtimes rm --help\" ]; then echo 'runtimes rm'; exit 0; fi\nif [ \"$1 $2 $3\" = \"runtimes status catdesk-local\" ]; then echo '{\"status\":\"ready\",\"running\":true,\"healthy\":true,\"ready\":true,\"ui_url\":\"http://127.0.0.1:9900/ui\"}'; exit 0; fi\nif [ \"$1 $2\" = \"doctor --help\" ]; then echo 'doctor --profile --explain'; exit 0; fi\nif [ \"$1\" = \"doctor\" ]; then echo doctor ok; exit 0; fi\nif [ \"$1 $2\" = \"health --help\" ]; then echo 'health --url-file /readyz /healthz'; exit 0; fi\nif [ \"$1 $2\" = \"run --profile\" ]; then sleep 60; exit 0; fi\necho unsupported\nexit 1\n",
             )
             .expect("write fake openai client");
         }
@@ -1590,15 +1632,37 @@ mod tests {
             "tunnel-client"
         });
         if cfg!(windows) {
+            let ps1 = dir.join("fake-tunnel-client.ps1");
+            std::fs::write(
+                &ps1,
+                r#"$joined = $args -join ' '
+if ($joined -eq '--version') { 'tunnel-client v0.0.7'; exit 0 }
+if ($joined -eq '--help') { 'Tunnel client for the OpenAI MCP control plane.'; exit 0 }
+if ($joined -eq 'help quickstart') { 'tunnel-client quickstart --mcp-server-url doctor /ui profile runtimes'; exit 0 }
+if ($joined -eq 'runtimes connect --help') { 'runtimes connect --alias --tunnel-id --runtime-api-key --mcp-server-url'; exit 0 }
+if ($joined -eq 'runtimes status --help') { 'runtimes status --json'; exit 0 }
+if ($joined -eq 'runtimes stop --help') { 'runtimes stop'; exit 0 }
+if ($joined -eq 'runtimes rm --help') { 'runtimes rm'; exit 0 }
+if ($joined -eq 'runtimes --help') { 'connect status stop rm'; exit 0 }
+if ($joined -eq 'runtimes') { 'connect status stop rm'; exit 0 }
+if ($joined -eq 'doctor --help') { 'doctor --profile --explain'; exit 0 }
+if ($joined -like 'doctor*') { 'doctor ok'; exit 0 }
+if ($joined -eq 'health --help') { 'health --url-file /readyz /healthz'; exit 0 }
+if ($joined -like 'run --profile*') { 'synthetic runtime credential failure'; exit 7 }
+'unsupported'
+exit 1
+"#,
+            )
+            .expect("write fake openai powershell client");
             std::fs::write(
                 &path,
-                "@echo off\r\nif \"%1\"==\"--version\" (echo tunnel-client v0.0.7 & exit /b 0)\r\nif \"%1 %2\"==\"help quickstart\" (echo tunnel-client quickstart --mcp-server-url doctor /ui init profile run & exit /b 0)\r\nif \"%1 %2 %4\"==\"doctor --profile --explain\" (echo doctor ok & exit /b 0)\r\nif \"%1 %2\"==\"run --profile\" (echo CONTROL_PLANE_API_KEY=synthetic-secret & exit /b 7)\r\necho unsupported\r\nexit /b 1\r\n",
+                "@echo off\r\npowershell -NoProfile -ExecutionPolicy Bypass -File \"%~dp0fake-tunnel-client.ps1\" %*\r\nexit /b %ERRORLEVEL%\r\n",
             )
             .expect("write fake openai client");
         } else {
             std::fs::write(
                 &path,
-                "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo tunnel-client v0.0.7; exit 0; fi\nif [ \"$1 $2\" = \"help quickstart\" ]; then echo 'tunnel-client quickstart --mcp-server-url doctor /ui init profile run'; exit 0; fi\nif [ \"$1 $2 $4\" = \"doctor --profile --explain\" ]; then echo doctor ok; exit 0; fi\nif [ \"$1 $2\" = \"run --profile\" ]; then echo CONTROL_PLANE_API_KEY=synthetic-secret; exit 7; fi\necho unsupported\nexit 1\n",
+                "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo tunnel-client v0.0.7; exit 0; fi\nif [ \"$1 $2\" = \"help quickstart\" ]; then echo 'tunnel-client quickstart --mcp-server-url doctor /ui profile runtimes'; exit 0; fi\nif [ \"$1\" = \"runtimes\" ]; then echo 'connect status stop rm'; exit 0; fi\nif [ \"$1 $2 $3\" = \"runtimes connect --help\" ]; then echo 'runtimes connect --alias --tunnel-id --runtime-api-key --mcp-server-url'; exit 0; fi\nif [ \"$1 $2 $3\" = \"runtimes status --help\" ]; then echo 'runtimes status --json'; exit 0; fi\nif [ \"$1 $2 $3\" = \"runtimes stop --help\" ]; then echo 'runtimes stop'; exit 0; fi\nif [ \"$1 $2 $3\" = \"runtimes rm --help\" ]; then echo 'runtimes rm'; exit 0; fi\nif [ \"$1 $2\" = \"doctor --help\" ]; then echo 'doctor --profile --explain'; exit 0; fi\nif [ \"$1\" = \"doctor\" ]; then echo doctor ok; exit 0; fi\nif [ \"$1 $2\" = \"health --help\" ]; then echo 'health --url-file /readyz /healthz'; exit 0; fi\nif [ \"$1 $2\" = \"run --profile\" ]; then echo synthetic runtime credential failure; exit 7; fi\necho unsupported\nexit 1\n",
             )
             .expect("write fake openai client");
         }
@@ -2311,6 +2375,92 @@ toolCallCount = 0
         }
         server.abort();
         let _ = std::fs::remove_dir_all(workspace);
+    }
+
+    #[tokio::test]
+    async fn openai_official_runtime_reuses_ready_alias_without_duplicate_process() {
+        let _guard = OPENAI_TUNNEL_ENV_TEST_LOCK.lock().await;
+        let previous_key = std::env::var_os("CONTROL_PLANE_API_KEY");
+        let previous_tunnel = std::env::var_os("CATDESK_OPENAI_TUNNEL_ID");
+        unsafe {
+            std::env::remove_var("CONTROL_PLANE_API_KEY");
+            std::env::remove_var("CATDESK_OPENAI_TUNNEL_ID");
+        }
+
+        let (workspace, config_path) = temp_config_workspace("catdesk-openai-official-runtime");
+        let client_dir = temp_config_workspace("catdesk-openai-client-official-runtime").0;
+        let client_path = fake_openai_tunnel_client(&client_dir);
+        std::fs::write(
+            &config_path,
+            format!(
+                r#"
+theme = "concise"
+mode = "computer"
+toolMode = "multiTools"
+
+[tunnel]
+mode = "openai_secure_tunnel"
+manage_process = false
+
+[openai_tunnel]
+client_path = "{}"
+profile_name = "catdesk-local"
+runtime_alias = "catdesk-local"
+process_mode = "official_runtime"
+auto_connect = true
+
+[usageTotals]
+inputTokens = 0
+outputTokens = 0
+totalTokens = 0
+toolCallCount = 0
+"#,
+                client_path.to_string_lossy().replace('\\', "\\\\")
+            ),
+        )
+        .expect("write openai official config");
+        let app = AppState::from_config_path(
+            8787,
+            workspace.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .expect("load openai app");
+        let state = Arc::new(tokio::sync::Mutex::new(app));
+
+        crate::ngrok::start_transport(state.clone())
+            .await
+            .expect("official runtime attaches");
+        let mut app = state.lock().await;
+        assert_eq!(
+            app.transport_health.health,
+            crate::tunnel::TransportHealth::ConnectedVerified
+        );
+        assert!(app.openai_tunnel_child.is_none());
+        assert!(app.openai_tunnel_monitor_task.is_some());
+        assert!(
+            app.logs
+                .iter()
+                .all(|entry| !entry.message.contains("CONTROL_PLANE_API_KEY"))
+        );
+        if let Some(handle) = app.openai_tunnel_monitor_task.take() {
+            handle.abort();
+        }
+        drop(app);
+
+        unsafe {
+            if let Some(value) = previous_key {
+                std::env::set_var("CONTROL_PLANE_API_KEY", value);
+            } else {
+                std::env::remove_var("CONTROL_PLANE_API_KEY");
+            }
+            if let Some(value) = previous_tunnel {
+                std::env::set_var("CATDESK_OPENAI_TUNNEL_ID", value);
+            } else {
+                std::env::remove_var("CATDESK_OPENAI_TUNNEL_ID");
+            }
+        }
+        let _ = std::fs::remove_dir_all(workspace);
+        let _ = std::fs::remove_dir_all(client_dir);
     }
 
     #[tokio::test]

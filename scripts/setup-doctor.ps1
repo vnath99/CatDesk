@@ -39,6 +39,7 @@ function Command-Candidates {
         if ($TunnelClientPath) {
             $paths.Add($TunnelClientPath)
         }
+        $paths.Add((Join-Path $homeDir ".catdesk\tools\tunnel-client\current\tunnel-client.exe"))
         $paths.Add((Join-Path $homeDir ".catdesk\tools\tunnel-client\tunnel-client.exe"))
         $paths.Add((Join-Path $homeDir ".catdesk\tools\tunnel-client\tunnel-client"))
     }

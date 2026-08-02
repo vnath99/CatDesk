@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::io::AsyncReadExt;
 use tokio::process::{Child, Command};
 use tokio::task::JoinHandle;
@@ -18,22 +18,62 @@ const MAX_CHILD_OUTPUT_BYTES: usize = 64 * 1024;
 const MAX_DOWNLOAD_BYTES: u64 = 128 * 1024 * 1024;
 const OFFICIAL_LATEST_RELEASE_API: &str =
     "https://api.github.com/repos/openai/tunnel-client/releases/latest";
+const OFFICIAL_RELEASES_API: &str = "https://api.github.com/repos/openai/tunnel-client/releases";
 const OFFICIAL_RELEASES_PAGE: &str = "https://github.com/openai/tunnel-client/releases/latest";
+const DEFAULT_RUNTIME_ALIAS: &str = "catdesk-local";
+const DEFAULT_HEALTH_POLL_SECONDS: u64 = 5;
+const DEFAULT_FAILURE_THRESHOLD: u8 = 3;
+const DEFAULT_RECOVERY_COOLDOWN_SECONDS: u64 = 60;
+const DEFAULT_KEEP_RUNTIME_ON_EXIT: bool = true;
+const DEFAULT_AUTO_CONNECT: bool = true;
+const DEFAULT_AUTO_RECOVER: bool = true;
+const MIN_HEALTH_POLL_SECONDS: u64 = 2;
+const MAX_HEALTH_POLL_SECONDS: u64 = 60;
+const MIN_FAILURE_THRESHOLD: u8 = 1;
+const MAX_FAILURE_THRESHOLD: u8 = 10;
+const MIN_RECOVERY_COOLDOWN_SECONDS: u64 = 30;
+const MAX_RECOVERY_COOLDOWN_SECONDS: u64 = 600;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OpenaiTunnelProcessMode {
     #[default]
+    OfficialRuntime,
+    ExternalForeground,
+    LegacyDirectManaged,
+    #[serde(alias = "external")]
     External,
+    #[serde(alias = "managed")]
     Managed,
 }
 
 impl OpenaiTunnelProcessMode {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::External => "external",
-            Self::Managed => "managed",
+            Self::OfficialRuntime => "official_runtime",
+            Self::ExternalForeground | Self::External => "external_foreground",
+            Self::LegacyDirectManaged | Self::Managed => "legacy_direct_managed",
         }
+    }
+
+    pub fn normalized(self) -> Self {
+        match self {
+            Self::External => Self::ExternalForeground,
+            Self::Managed => Self::LegacyDirectManaged,
+            other => other,
+        }
+    }
+
+    pub fn uses_official_runtime(self) -> bool {
+        matches!(self.normalized(), Self::OfficialRuntime)
+    }
+
+    pub fn uses_legacy_direct_managed(self) -> bool {
+        matches!(self.normalized(), Self::LegacyDirectManaged)
+    }
+
+    pub fn is_external_foreground(self) -> bool {
+        matches!(self.normalized(), Self::ExternalForeground)
     }
 }
 
@@ -48,6 +88,20 @@ pub struct OpenaiTunnelConfig {
     pub process_mode: OpenaiTunnelProcessMode,
     #[serde(default)]
     pub admin_ui_url: Option<String>,
+    #[serde(default = "default_runtime_alias")]
+    pub runtime_alias: String,
+    #[serde(default = "default_auto_connect")]
+    pub auto_connect: bool,
+    #[serde(default = "default_auto_recover")]
+    pub auto_recover: bool,
+    #[serde(default = "default_health_poll_seconds")]
+    pub health_poll_seconds: u64,
+    #[serde(default = "default_failure_threshold")]
+    pub failure_threshold: u8,
+    #[serde(default = "default_recovery_cooldown_seconds")]
+    pub recovery_cooldown_seconds: u64,
+    #[serde(default = "default_keep_runtime_on_exit")]
+    pub keep_runtime_on_catdesk_exit: bool,
 }
 
 impl Default for OpenaiTunnelConfig {
@@ -55,8 +109,15 @@ impl Default for OpenaiTunnelConfig {
         Self {
             client_path: None,
             profile_name: default_profile_name(),
-            process_mode: OpenaiTunnelProcessMode::External,
+            process_mode: OpenaiTunnelProcessMode::OfficialRuntime,
             admin_ui_url: None,
+            runtime_alias: default_runtime_alias(),
+            auto_connect: default_auto_connect(),
+            auto_recover: default_auto_recover(),
+            health_poll_seconds: default_health_poll_seconds(),
+            failure_threshold: default_failure_threshold(),
+            recovery_cooldown_seconds: default_recovery_cooldown_seconds(),
+            keep_runtime_on_catdesk_exit: default_keep_runtime_on_exit(),
         }
     }
 }
@@ -68,8 +129,28 @@ impl OpenaiTunnelConfig {
         if self.profile_name.is_empty() {
             self.profile_name = default_profile_name();
         }
+        self.process_mode = self.process_mode.normalized();
         self.admin_ui_url = normalize_optional_string(self.admin_ui_url.take());
+        self.runtime_alias = self.runtime_alias.trim().to_string();
+        if self.runtime_alias.is_empty() {
+            self.runtime_alias = default_runtime_alias();
+        }
+        self.health_poll_seconds = self
+            .health_poll_seconds
+            .clamp(MIN_HEALTH_POLL_SECONDS, MAX_HEALTH_POLL_SECONDS);
+        self.failure_threshold = self
+            .failure_threshold
+            .clamp(MIN_FAILURE_THRESHOLD, MAX_FAILURE_THRESHOLD);
+        self.recovery_cooldown_seconds = self
+            .recovery_cooldown_seconds
+            .clamp(MIN_RECOVERY_COOLDOWN_SECONDS, MAX_RECOVERY_COOLDOWN_SECONDS);
         self
+    }
+
+    pub fn validate(&self) -> Result<(), OpenaiTunnelError> {
+        validate_safe_alias(&self.profile_name, "profile name")?;
+        validate_safe_alias(&self.runtime_alias, "runtime alias")?;
+        Ok(())
     }
 }
 
@@ -92,6 +173,23 @@ pub struct TunnelClientMetadata {
     pub supports_doctor: bool,
     pub supports_admin_ui: bool,
     pub supported_profile_operations: Vec<String>,
+    pub capabilities: TunnelClientCapabilities,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TunnelClientCapabilities {
+    pub version: String,
+    pub supports_profiles: bool,
+    pub supports_http_mcp: bool,
+    pub supports_doctor: bool,
+    pub supports_health_command: bool,
+    pub supports_runtime_connect: bool,
+    pub supports_runtime_status_json: bool,
+    pub supports_runtime_stop: bool,
+    pub supports_runtime_remove: bool,
+    pub supports_admin_ui: bool,
+    pub supports_health_url_file: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -111,6 +209,7 @@ pub struct TunnelClientReleasePlan {
     pub windows_asset: TunnelClientReleaseAsset,
     pub checksum_available: bool,
     pub warning: Option<String>,
+    pub checksum_asset_url: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -173,6 +272,79 @@ pub struct OpenaiTunnelReadiness {
     pub redacted_reason: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OfficialRuntimeStatus {
+    pub alias: String,
+    pub process_running: bool,
+    pub healthy: bool,
+    pub ready: bool,
+    pub admin_ui_url: Option<String>,
+    pub pid_fingerprint: Option<String>,
+    pub tunnel_fingerprint: Option<String>,
+    pub redacted_reason: Option<String>,
+}
+
+impl OfficialRuntimeStatus {
+    pub fn stopped(alias: &str, reason: impl Into<String>) -> Self {
+        Self {
+            alias: alias.to_string(),
+            process_running: false,
+            healthy: false,
+            ready: false,
+            admin_ui_url: None,
+            pid_fingerprint: None,
+            tunnel_fingerprint: None,
+            redacted_reason: Some(reason.into()),
+        }
+    }
+
+    pub fn fully_ready(&self) -> bool {
+        self.process_running && self.healthy && self.ready
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeConnectCommand {
+    pub program: PathBuf,
+    pub args: Vec<String>,
+    pub redacted_display: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RuntimeMonitorConfig {
+    pub poll_interval: Duration,
+    pub degraded_interval: Duration,
+    pub command_timeout: Duration,
+    pub failure_threshold: u8,
+    pub recovery_cooldown: Duration,
+    pub max_recovery_attempts: u8,
+    pub recovery_window: Duration,
+}
+
+impl RuntimeMonitorConfig {
+    pub fn from_openai_config(config: &OpenaiTunnelConfig) -> Self {
+        Self {
+            poll_interval: Duration::from_secs(config.health_poll_seconds),
+            degraded_interval: Duration::from_secs(2),
+            command_timeout: COMMAND_TIMEOUT,
+            failure_threshold: config.failure_threshold,
+            recovery_cooldown: Duration::from_secs(config.recovery_cooldown_seconds),
+            max_recovery_attempts: 3,
+            recovery_window: Duration::from_secs(600),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct RuntimeMonitorState {
+    pub consecutive_failures: u8,
+    pub recovery_attempts: Vec<Instant>,
+    pub last_success: Option<Instant>,
+    pub last_failure: Option<Instant>,
+    pub last_recovery_attempt: Option<Instant>,
+}
+
 #[derive(Debug)]
 pub enum OpenaiTunnelError {
     NotFound,
@@ -208,12 +380,44 @@ pub fn default_profile_name() -> String {
     DEFAULT_PROFILE_NAME.to_string()
 }
 
+pub fn default_runtime_alias() -> String {
+    DEFAULT_RUNTIME_ALIAS.to_string()
+}
+
+fn default_auto_connect() -> bool {
+    DEFAULT_AUTO_CONNECT
+}
+
+fn default_auto_recover() -> bool {
+    DEFAULT_AUTO_RECOVER
+}
+
+fn default_health_poll_seconds() -> u64 {
+    DEFAULT_HEALTH_POLL_SECONDS
+}
+
+fn default_failure_threshold() -> u8 {
+    DEFAULT_FAILURE_THRESHOLD
+}
+
+fn default_recovery_cooldown_seconds() -> u64 {
+    DEFAULT_RECOVERY_COOLDOWN_SECONDS
+}
+
+fn default_keep_runtime_on_exit() -> bool {
+    DEFAULT_KEEP_RUNTIME_ON_EXIT
+}
+
 pub fn default_user_tools_dir(home: &Path) -> PathBuf {
     home.join(".catdesk").join("tools").join("tunnel-client")
 }
 
 pub fn official_latest_release_api_url() -> &'static str {
     OFFICIAL_LATEST_RELEASE_API
+}
+
+pub fn official_releases_api_url() -> &'static str {
+    OFFICIAL_RELEASES_API
 }
 
 pub fn official_releases_page_url() -> &'static str {
@@ -283,33 +487,158 @@ pub async fn validate_client_candidate(
         }
     }
     let version_output = run_client_command(path, ["--version"]).await?;
-    if !version_output
-        .to_ascii_lowercase()
-        .contains("tunnel-client")
-    {
-        return Err(OpenaiTunnelError::Unsupported(
-            "version output did not identify tunnel-client".into(),
-        ));
-    }
-    let quickstart_output = run_client_command(path, ["help", "quickstart"]).await?;
+    let capabilities = inspect_tunnel_client_capabilities(path).await?;
+    require_supported_client(&capabilities)?;
+    let quickstart_output = run_client_command(path, ["help", "quickstart"])
+        .await
+        .unwrap_or_default();
     Ok(TunnelClientMetadata {
         path: canonical,
         source: "discovered".into(),
         version_output: bounded_line(&version_output),
-        supports_http_mcp: quickstart_output.contains("--mcp-server-url")
-            || quickstart_output.contains("mcp.server-url"),
-        supports_doctor: quickstart_output.contains("doctor"),
-        supports_admin_ui: quickstart_output.contains("/ui")
-            || quickstart_output.to_ascii_lowercase().contains("admin ui"),
+        supports_http_mcp: capabilities.supports_http_mcp,
+        supports_doctor: capabilities.supports_doctor,
+        supports_admin_ui: capabilities.supports_admin_ui,
         supported_profile_operations: supported_profile_operations(&quickstart_output),
+        capabilities,
     })
+}
+
+pub async fn inspect_tunnel_client_capabilities(
+    path: &Path,
+) -> Result<TunnelClientCapabilities, OpenaiTunnelError> {
+    let version = run_client_command(path, ["--version"]).await?;
+    let root_help = run_client_command(path, ["--help"])
+        .await
+        .unwrap_or_default();
+    if !version_output_or_help_identifies_client(&version, &root_help) {
+        return Err(OpenaiTunnelError::Unsupported(
+            "version/help output did not identify the official tunnel-client".into(),
+        ));
+    }
+    let quickstart = run_client_command(path, ["help", "quickstart"])
+        .await
+        .unwrap_or_default();
+    let plugin = run_client_command(path, ["help", "plugin"])
+        .await
+        .unwrap_or_default();
+    let runtimes = run_client_command(path, ["runtimes", "--help"])
+        .await
+        .unwrap_or_default();
+    let connect = run_client_command(path, ["runtimes", "connect", "--help"])
+        .await
+        .unwrap_or_default();
+    let status = run_client_command(path, ["runtimes", "status", "--help"])
+        .await
+        .unwrap_or_default();
+    let stop = run_client_command(path, ["runtimes", "stop", "--help"])
+        .await
+        .unwrap_or_default();
+    let remove = match run_client_command(path, ["runtimes", "rm", "--help"]).await {
+        Ok(output) => output,
+        Err(_) => run_client_command(path, ["runtimes", "remove", "--help"])
+            .await
+            .unwrap_or_default(),
+    };
+    let doctor = run_client_command(path, ["doctor", "--help"])
+        .await
+        .unwrap_or_default();
+    let health = run_client_command(path, ["health", "--help"])
+        .await
+        .unwrap_or_default();
+    Ok(capabilities_from_help_outputs(
+        bounded_line(&version),
+        &root_help,
+        &quickstart,
+        &plugin,
+        &runtimes,
+        &connect,
+        &status,
+        &stop,
+        &remove,
+        &doctor,
+        &health,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn capabilities_from_help_outputs(
+    version: String,
+    root_help: &str,
+    quickstart: &str,
+    plugin: &str,
+    runtimes: &str,
+    connect: &str,
+    status: &str,
+    stop: &str,
+    remove: &str,
+    doctor: &str,
+    health: &str,
+) -> TunnelClientCapabilities {
+    let combined = [
+        root_help, quickstart, plugin, runtimes, connect, status, stop, remove, doctor, health,
+    ]
+    .join("\n")
+    .to_ascii_lowercase();
+    TunnelClientCapabilities {
+        version,
+        supports_profiles: combined.contains("profile") || combined.contains("--profile"),
+        supports_http_mcp: combined.contains("--mcp-server-url")
+            || combined.contains("mcp.server-url")
+            || combined.contains("mcp server url"),
+        supports_doctor: !doctor.trim().is_empty() || combined.contains("doctor"),
+        supports_health_command: !health.trim().is_empty() || combined.contains("health"),
+        supports_runtime_connect: runtimes.to_ascii_lowercase().contains("connect")
+            || !connect.trim().is_empty(),
+        supports_runtime_status_json: status.to_ascii_lowercase().contains("--json")
+            || status.to_ascii_lowercase().contains("json"),
+        supports_runtime_stop: runtimes.to_ascii_lowercase().contains("stop")
+            || !stop.trim().is_empty(),
+        supports_runtime_remove: runtimes.to_ascii_lowercase().contains("rm")
+            || runtimes.to_ascii_lowercase().contains("remove")
+            || !remove.trim().is_empty(),
+        supports_admin_ui: combined.contains("/ui") || combined.contains("admin ui"),
+        supports_health_url_file: health.to_ascii_lowercase().contains("--url-file"),
+    }
+}
+
+pub fn require_supported_client(
+    capabilities: &TunnelClientCapabilities,
+) -> Result<(), OpenaiTunnelError> {
+    if capabilities.version.to_ascii_lowercase().contains("pre")
+        || capabilities.version.to_ascii_lowercase().contains("rc")
+    {
+        return Err(OpenaiTunnelError::Unsupported(
+            "prerelease tunnel-client versions are not supported".into(),
+        ));
+    }
+    if !capabilities.supports_http_mcp {
+        return Err(OpenaiTunnelError::Unsupported(
+            "client help does not expose HTTP MCP configuration".into(),
+        ));
+    }
+    if !capabilities.supports_doctor {
+        return Err(OpenaiTunnelError::Unsupported(
+            "client help does not expose doctor support".into(),
+        ));
+    }
+    if !capabilities.supports_runtime_connect
+        || !capabilities.supports_runtime_status_json
+        || !capabilities.supports_runtime_stop
+        || !capabilities.supports_runtime_remove
+    {
+        return Err(OpenaiTunnelError::Unsupported(
+            "BLOCKED_UNSUPPORTED_CLIENT: native runtime supervision commands are missing".into(),
+        ));
+    }
+    Ok(())
 }
 
 pub async fn latest_official_release_plan(
     client: &reqwest::Client,
 ) -> Result<TunnelClientReleasePlan, OpenaiTunnelError> {
     let response = client
-        .get(OFFICIAL_LATEST_RELEASE_API)
+        .get(OFFICIAL_RELEASES_API)
         .header("user-agent", "CatDesk tunnel-client discovery")
         .send()
         .await
@@ -324,7 +653,36 @@ pub async fn latest_official_release_plan(
         .json()
         .await
         .map_err(|_| OpenaiTunnelError::Release("release metadata was not valid JSON".into()))?;
-    release_plan_from_github_json(&value)
+    release_plan_from_github_releases_json(&value)
+}
+
+pub fn release_plan_from_github_releases_json(
+    value: &Value,
+) -> Result<TunnelClientReleasePlan, OpenaiTunnelError> {
+    let releases = value
+        .as_array()
+        .ok_or_else(|| OpenaiTunnelError::Release("release metadata was not an array".into()))?;
+    let stable = releases
+        .iter()
+        .filter(|release| {
+            !release
+                .get("draft")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+                && !release
+                    .get("prerelease")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+        })
+        .max_by_key(|release| {
+            release
+                .get("tag_name")
+                .and_then(Value::as_str)
+                .and_then(semantic_version_key)
+                .unwrap_or_default()
+        })
+        .ok_or_else(|| OpenaiTunnelError::Release("no stable official release found".into()))?;
+    release_plan_from_github_json(stable)
 }
 
 pub fn release_plan_from_github_json(
@@ -354,6 +712,7 @@ pub fn release_plan_from_github_json(
         .and_then(Value::as_array)
         .ok_or_else(|| OpenaiTunnelError::Release("release assets missing".into()))?;
     let windows_asset = select_windows_asset(assets)?;
+    let checksum_asset_url = select_checksum_asset_url(assets)?;
     let checksum_available = windows_asset.sha256.is_some();
     let warning = if checksum_available {
         None
@@ -366,6 +725,7 @@ pub fn release_plan_from_github_json(
         windows_asset,
         checksum_available,
         warning,
+        checksum_asset_url,
     })
 }
 
@@ -521,6 +881,10 @@ pub fn credential_environment_present(env_lookup: impl Fn(&str) -> Option<OsStri
     env_lookup("CONTROL_PLANE_API_KEY").is_some()
 }
 
+pub fn tunnel_id_environment_present(env_lookup: impl Fn(&str) -> Option<OsString>) -> bool {
+    env_lookup("CATDESK_OPENAI_TUNNEL_ID").is_some()
+}
+
 pub async fn run_tunnel_client_doctor(
     path: &Path,
     profile_name: &str,
@@ -530,7 +894,254 @@ pub async fn run_tunnel_client_doctor(
             "OpenAI tunnel profile name is missing".into(),
         ));
     }
-    run_client_command(path, ["doctor", "--profile", profile_name, "--explain"]).await
+    match run_client_command(path, ["doctor", "--profile", profile_name, "--explain"]).await {
+        Ok(output) => Ok(output),
+        Err(_) => run_client_command(path, ["doctor"]).await,
+    }
+}
+
+pub fn select_checksum_asset_url(assets: &[Value]) -> Result<Option<String>, OpenaiTunnelError> {
+    for asset in assets {
+        let name = asset
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if name == "sha256sums.txt" || name == "sha256sum.txt" || name == "checksums.txt" {
+            let url = asset
+                .get("browser_download_url")
+                .and_then(Value::as_str)
+                .ok_or_else(|| OpenaiTunnelError::Release("checksum asset URL missing".into()))?;
+            validate_official_download_url(url)?;
+            return Ok(Some(url.to_string()));
+        }
+    }
+    Ok(None)
+}
+
+pub fn checksum_for_asset(checksums_text: &str, asset_name: &str) -> Option<String> {
+    for line in checksums_text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut parts = line.split_whitespace();
+        let digest = parts.next()?;
+        let name = parts
+            .next_back()
+            .or_else(|| parts.next())
+            .unwrap_or_default()
+            .trim_start_matches('*');
+        if name.ends_with(asset_name) {
+            return parse_sha256_digest(digest);
+        }
+    }
+    None
+}
+
+pub fn build_runtime_connect_command(
+    path: &Path,
+    alias: &str,
+    tunnel_id: &str,
+    local_mcp_url: &str,
+) -> Result<RuntimeConnectCommand, OpenaiTunnelError> {
+    validate_safe_alias(alias, "runtime alias")?;
+    if tunnel_id.trim().is_empty()
+        || tunnel_id
+            .chars()
+            .any(|ch| ch.is_whitespace() || ch.is_control())
+    {
+        return Err(OpenaiTunnelError::Unsupported(
+            "runtime connect requires a non-empty tunnel ID".into(),
+        ));
+    }
+    validate_local_mcp_url_for_runtime(local_mcp_url)?;
+    let args = vec![
+        "runtimes".to_string(),
+        "connect".to_string(),
+        "--alias".to_string(),
+        alias.to_string(),
+        "--tunnel-id".to_string(),
+        tunnel_id.to_string(),
+        "--runtime-api-key".to_string(),
+        "env:CONTROL_PLANE_API_KEY".to_string(),
+        "--mcp-server-url".to_string(),
+        local_mcp_url.to_string(),
+    ];
+    Ok(RuntimeConnectCommand {
+        program: path.to_path_buf(),
+        redacted_display: format!(
+            "tunnel-client runtimes connect --alias \"{alias}\" --tunnel-id <redacted> --runtime-api-key env:CONTROL_PLANE_API_KEY --mcp-server-url <redacted-local-mcp-url>"
+        ),
+        args,
+    })
+}
+
+pub async fn connect_official_runtime(
+    path: &Path,
+    alias: &str,
+    tunnel_id: &str,
+    local_mcp_url: &str,
+) -> Result<String, OpenaiTunnelError> {
+    if !credential_environment_present(|name| std::env::var_os(name)) {
+        return Err(OpenaiTunnelError::Unsupported(
+            "CONTROL_PLANE_API_KEY is not present in the process environment".into(),
+        ));
+    }
+    let command = build_runtime_connect_command(path, alias, tunnel_id, local_mcp_url)?;
+    run_client_command_vec(path, &command.args).await
+}
+
+pub async fn official_runtime_status(
+    path: &Path,
+    alias: &str,
+) -> Result<OfficialRuntimeStatus, OpenaiTunnelError> {
+    validate_safe_alias(alias, "runtime alias")?;
+    let output = run_client_command_vec(
+        path,
+        &[
+            "runtimes".into(),
+            "status".into(),
+            alias.into(),
+            "--json".into(),
+        ],
+    )
+    .await?;
+    parse_runtime_status_json(alias, &output)
+}
+
+pub async fn stop_official_runtime(path: &Path, alias: &str) -> Result<String, OpenaiTunnelError> {
+    validate_safe_alias(alias, "runtime alias")?;
+    run_client_command_vec(
+        path,
+        &[
+            "runtimes".into(),
+            "stop".into(),
+            alias.into(),
+            "--yes".into(),
+        ],
+    )
+    .await
+}
+
+pub async fn remove_official_runtime(
+    path: &Path,
+    alias: &str,
+) -> Result<String, OpenaiTunnelError> {
+    validate_safe_alias(alias, "runtime alias")?;
+    run_client_command_vec(
+        path,
+        &["runtimes".into(), "rm".into(), alias.into(), "--yes".into()],
+    )
+    .await
+}
+
+pub fn parse_runtime_status_json(
+    alias: &str,
+    text: &str,
+) -> Result<OfficialRuntimeStatus, OpenaiTunnelError> {
+    let value: Value = serde_json::from_str(text)
+        .map_err(|_| OpenaiTunnelError::Command("runtime status was not valid JSON".into()))?;
+    let object = value.as_object().ok_or_else(|| {
+        OpenaiTunnelError::Command("runtime status JSON was not an object".into())
+    })?;
+    let lookup_bool = |names: &[&str]| -> bool {
+        names
+            .iter()
+            .any(|name| object.get(*name).and_then(Value::as_bool).unwrap_or(false))
+    };
+    let status_text = object
+        .get("status")
+        .or_else(|| object.get("state"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let process_running = lookup_bool(&["process_running", "processRunning", "running"])
+        || matches!(status_text.as_str(), "running" | "ready" | "connected");
+    let healthy = lookup_bool(&["healthy", "health_ok", "healthOk"])
+        || matches!(status_text.as_str(), "healthy" | "ready" | "connected");
+    let ready =
+        lookup_bool(&["ready", "isReady"]) || matches!(status_text.as_str(), "ready" | "connected");
+    let admin_ui_url = first_string(object, &["admin_ui_url", "adminUiUrl", "ui_url", "uiUrl"])
+        .and_then(|url| {
+            normalize_admin_base_url(url)
+                .ok()
+                .map(|url| url.to_string())
+        });
+    let pid_fingerprint = first_string(object, &["pid", "process_id", "processId"])
+        .map(|value| fingerprint_safe_value("pid", value));
+    let tunnel_fingerprint = first_string(object, &["tunnel_id", "tunnelId", "tunnel"])
+        .map(|value| fingerprint_safe_value("tunnel", value));
+    let redacted_reason = first_string(object, &["error", "last_error", "lastError", "message"])
+        .map(redact_tunnel_output)
+        .filter(|value| !value.trim().is_empty());
+    Ok(OfficialRuntimeStatus {
+        alias: alias.to_string(),
+        process_running,
+        healthy,
+        ready,
+        admin_ui_url,
+        pid_fingerprint,
+        tunnel_fingerprint,
+        redacted_reason,
+    })
+}
+
+pub fn should_attempt_recovery(
+    state: &mut RuntimeMonitorState,
+    config: &RuntimeMonitorConfig,
+    now: Instant,
+) -> bool {
+    state
+        .recovery_attempts
+        .retain(|attempt| now.duration_since(*attempt) <= config.recovery_window);
+    if state.recovery_attempts.len() >= usize::from(config.max_recovery_attempts) {
+        return false;
+    }
+    if state
+        .last_recovery_attempt
+        .is_some_and(|last| now.duration_since(last) < config.recovery_cooldown)
+    {
+        return false;
+    }
+    state.recovery_attempts.push(now);
+    state.last_recovery_attempt = Some(now);
+    true
+}
+
+pub fn monitor_health_from_status(
+    runtime: &OfficialRuntimeStatus,
+    local_mcp_ready: bool,
+    monitor: &mut RuntimeMonitorState,
+    config: &RuntimeMonitorConfig,
+    now: Instant,
+) -> (crate::tunnel::TransportHealth, Option<String>) {
+    if runtime.fully_ready() && local_mcp_ready {
+        monitor.consecutive_failures = 0;
+        monitor.last_success = Some(now);
+        return (crate::tunnel::TransportHealth::ConnectedVerified, None);
+    }
+    monitor.consecutive_failures = monitor.consecutive_failures.saturating_add(1);
+    monitor.last_failure = Some(now);
+    if !runtime.process_running {
+        return (
+            crate::tunnel::TransportHealth::Disconnected,
+            Some("official runtime is not running".into()),
+        );
+    }
+    if monitor.consecutive_failures >= config.failure_threshold {
+        return (
+            crate::tunnel::TransportHealth::Degraded,
+            runtime
+                .redacted_reason
+                .clone()
+                .or_else(|| Some("official runtime is not ready".into())),
+        );
+    }
+    (
+        crate::tunnel::TransportHealth::Connecting,
+        runtime.redacted_reason.clone(),
+    )
 }
 
 pub fn spawn_tunnel_client_run(
@@ -542,10 +1153,13 @@ pub fn spawn_tunnel_client_run(
             "OpenAI tunnel profile name is missing".into(),
         ));
     }
-    let mut child = Command::new(path)
-        .arg("run")
-        .arg("--profile")
-        .arg(profile_name)
+    let mut command = command_for_path(path);
+    append_client_args(
+        &mut command,
+        path,
+        ["run", "--profile", profile_name].into_iter(),
+    );
+    let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -687,21 +1301,172 @@ async fn run_client_command<const N: usize>(
     path: &Path,
     args: [&str; N],
 ) -> Result<String, OpenaiTunnelError> {
-    let output = tokio::time::timeout(COMMAND_TIMEOUT, Command::new(path).args(args).output())
+    let mut command = command_for_path(path);
+    append_client_args(&mut command, path, args.iter().copied());
+    let output = tokio::time::timeout(COMMAND_TIMEOUT, command.output())
         .await
         .map_err(|_| OpenaiTunnelError::Command("client command timed out".into()))?
         .map_err(|error| OpenaiTunnelError::Command(error.to_string()))?;
+    command_output_to_string(output)
+}
+
+async fn run_client_command_vec(path: &Path, args: &[String]) -> Result<String, OpenaiTunnelError> {
+    let mut command = command_for_path(path);
+    append_client_args(&mut command, path, args.iter().map(String::as_str));
+    let output = tokio::time::timeout(COMMAND_TIMEOUT, command.output())
+        .await
+        .map_err(|_| OpenaiTunnelError::Command("client command timed out".into()))?
+        .map_err(|error| OpenaiTunnelError::Command(error.to_string()))?;
+    command_output_to_string(output)
+}
+
+fn command_for_path(path: &Path) -> Command {
+    if cfg!(windows)
+        && path
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(), "cmd" | "bat"))
+    {
+        let mut command = Command::new("cmd.exe");
+        command.arg("/C");
+        command
+    } else {
+        Command::new(path)
+    }
+}
+
+fn append_client_args<'a>(command: &mut Command, path: &Path, args: impl Iterator<Item = &'a str>) {
+    if cfg!(windows)
+        && path
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(), "cmd" | "bat"))
+    {
+        command.arg(windows_batch_path_arg(path));
+    }
+    command.args(args);
+}
+
+fn windows_batch_path_arg(path: &Path) -> OsString {
+    let text = path.as_os_str().to_string_lossy();
+    if let Some(stripped) = text.strip_prefix(r"\\?\") {
+        OsString::from(stripped)
+    } else {
+        path.as_os_str().to_os_string()
+    }
+}
+
+fn command_output_to_string(output: std::process::Output) -> Result<String, OpenaiTunnelError> {
     if !output.status.success() {
-        return Err(OpenaiTunnelError::Command(format!(
+        let stdout = redact_tunnel_output(&String::from_utf8_lossy(&output.stdout));
+        let stderr = redact_tunnel_output(&String::from_utf8_lossy(&output.stderr));
+        let mut details = format!(
             "client exited with status {}",
             output.status.code().unwrap_or(-1)
-        )));
+        );
+        if !stdout.trim().is_empty() {
+            details.push_str("; stdout: ");
+            details.push_str(stdout.trim());
+        }
+        if !stderr.trim().is_empty() {
+            details.push_str("; stderr: ");
+            details.push_str(stderr.trim());
+        }
+        return Err(OpenaiTunnelError::Command(redact_tunnel_output(&details)));
     }
     let mut text = String::from_utf8_lossy(&output.stdout).to_string();
     if text.trim().is_empty() {
         text = String::from_utf8_lossy(&output.stderr).to_string();
     }
     Ok(text)
+}
+
+fn validate_safe_alias(value: &str, label: &str) -> Result<(), OpenaiTunnelError> {
+    let value = value.trim();
+    if value.is_empty()
+        || value.len() > 64
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+    {
+        return Err(OpenaiTunnelError::Unsupported(format!(
+            "{label} must use only A-Z, a-z, 0-9, `_`, `-`, or `.`"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_local_mcp_url_for_runtime(value: &str) -> Result<(), OpenaiTunnelError> {
+    let parsed = reqwest::Url::parse(value)
+        .map_err(|_| OpenaiTunnelError::Unsupported("local MCP URL was invalid".into()))?;
+    if parsed.scheme() != "http"
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+    {
+        return Err(OpenaiTunnelError::Unsupported(
+            "local MCP URL must be a credential-free http loopback URL".into(),
+        ));
+    }
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| OpenaiTunnelError::Unsupported("local MCP URL host missing".into()))?;
+    if !crate::tunnel::is_loopback_bind_host(host) {
+        return Err(OpenaiTunnelError::Unsupported(
+            "local MCP URL must target loopback".into(),
+        ));
+    }
+    if !parsed.path().starts_with('/') || !parsed.path().ends_with("/mcp") {
+        return Err(OpenaiTunnelError::Unsupported(
+            "local MCP URL must point to the configured MCP route".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn first_string<'a>(object: &'a serde_json::Map<String, Value>, names: &[&str]) -> Option<&'a str> {
+    for name in names {
+        if let Some(value) = object.get(*name) {
+            if let Some(text) = value.as_str() {
+                return Some(text);
+            }
+            if value.is_number() || value.is_boolean() {
+                return Some("");
+            }
+        }
+    }
+    None
+}
+
+fn fingerprint_safe_value(label: &str, value: &str) -> String {
+    let text = if value.is_empty() { label } else { value };
+    format!("{}:{}", label, crate::tunnel::connection_fingerprint(text))
+}
+
+fn semantic_version_key(value: &str) -> Option<(u64, u64, u64)> {
+    let clean = value.trim().trim_start_matches('v');
+    let mut parts = clean.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next().unwrap_or("0").parse().ok()?;
+    let patch_text = parts.next().unwrap_or("0");
+    let patch = patch_text
+        .split(|ch: char| !ch.is_ascii_digit())
+        .next()
+        .unwrap_or("0")
+        .parse()
+        .ok()?;
+    Some((major, minor, patch))
+}
+
+fn version_output_or_help_identifies_client(version: &str, root_help: &str) -> bool {
+    version.to_ascii_lowercase().contains("tunnel-client")
+        || root_help
+            .to_ascii_lowercase()
+            .contains("tunnel client for the openai mcp control plane")
+        || root_help
+            .to_ascii_lowercase()
+            .contains("openai mcp control plane")
 }
 
 fn executable_names() -> &'static [&'static str] {
@@ -897,13 +1662,13 @@ mod tests {
         if cfg!(windows) {
             std::fs::write(
                 &path,
-                "@echo off\r\nif \"%1\"==\"--version\" (echo tunnel-client v0.0.7 & exit /b 0)\r\nif \"%1 %2\"==\"help quickstart\" (echo tunnel-client quickstart --mcp-server-url doctor /ui init profile run & exit /b 0)\r\necho unsupported\r\nexit /b 1\r\n",
+                "@echo off\r\nif \"%1\"==\"--version\" (echo tunnel-client v0.0.7 & exit /b 0)\r\nif \"%1\"==\"--help\" (echo Tunnel client for the OpenAI MCP control plane. & exit /b 0)\r\nif \"%1 %2\"==\"help quickstart\" (echo tunnel-client quickstart --mcp-server-url doctor /ui profile runtimes & exit /b 0)\r\nif \"%1 %2 %3\"==\"runtimes connect --help\" (echo runtimes connect --alias --tunnel-id --runtime-api-key --mcp-server-url & exit /b 0)\r\nif \"%1 %2 %3\"==\"runtimes status --help\" (echo runtimes status --json & exit /b 0)\r\nif \"%1 %2 %3\"==\"runtimes stop --help\" (echo runtimes stop & exit /b 0)\r\nif \"%1 %2 %3\"==\"runtimes rm --help\" (echo runtimes rm & exit /b 0)\r\nif \"%1\"==\"runtimes\" (echo connect status stop rm & exit /b 0)\r\nif \"%1 %2\"==\"doctor --help\" (echo doctor --profile --explain & exit /b 0)\r\nif \"%1 %2\"==\"health --help\" (echo health --url-file /readyz /healthz & exit /b 0)\r\necho unsupported\r\nexit /b 1\r\n",
             )
             .expect("write fake client");
         } else {
             std::fs::write(
                 &path,
-                "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo tunnel-client v0.0.7; exit 0; fi\nif [ \"$1 $2\" = \"help quickstart\" ]; then echo 'tunnel-client quickstart --mcp-server-url doctor /ui init profile run'; exit 0; fi\necho unsupported\nexit 1\n",
+                "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo tunnel-client v0.0.7; exit 0; fi\nif [ \"$1\" = \"--help\" ]; then echo 'Tunnel client for the OpenAI MCP control plane.'; exit 0; fi\nif [ \"$1 $2\" = \"help quickstart\" ]; then echo 'tunnel-client quickstart --mcp-server-url doctor /ui profile runtimes'; exit 0; fi\nif [ \"$1\" = \"runtimes\" ]; then echo 'connect status stop rm'; exit 0; fi\nif [ \"$1 $2 $3\" = \"runtimes connect --help\" ]; then echo 'runtimes connect --alias --tunnel-id --runtime-api-key --mcp-server-url'; exit 0; fi\nif [ \"$1 $2 $3\" = \"runtimes status --help\" ]; then echo 'runtimes status --json'; exit 0; fi\nif [ \"$1 $2 $3\" = \"runtimes stop --help\" ]; then echo 'runtimes stop'; exit 0; fi\nif [ \"$1 $2 $3\" = \"runtimes rm --help\" ]; then echo 'runtimes rm'; exit 0; fi\nif [ \"$1 $2\" = \"doctor --help\" ]; then echo 'doctor --profile --explain'; exit 0; fi\nif [ \"$1 $2\" = \"health --help\" ]; then echo 'health --url-file /readyz /healthz'; exit 0; fi\necho unsupported\nexit 1\n",
             )
             .expect("write fake client");
         }
@@ -1010,6 +1775,43 @@ mod tests {
     }
 
     #[test]
+    fn latest_stable_release_ignores_prereleases_and_drafts() {
+        let arch = windows_arch_asset_token().expect("supported arch");
+        let value = serde_json::json!([
+            {
+                "tag_name": "v9.0.0-rc1",
+                "html_url": "https://github.com/openai/tunnel-client/releases/tag/v9.0.0-rc1",
+                "prerelease": true,
+                "draft": false,
+                "assets": []
+            },
+            {
+                "tag_name": "v1.2.3",
+                "html_url": "https://github.com/openai/tunnel-client/releases/tag/v1.2.3",
+                "prerelease": false,
+                "draft": false,
+                "assets": [
+                    {
+                        "name": format!("tunnel-client-v1.2.3-windows-{arch}.zip"),
+                        "browser_download_url": format!("https://github.com/openai/tunnel-client/releases/download/v1.2.3/tunnel-client-v1.2.3-windows-{arch}.zip"),
+                        "size": 123,
+                        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    },
+                    {
+                        "name": "SHA256SUMS.txt",
+                        "browser_download_url": "https://github.com/openai/tunnel-client/releases/download/v1.2.3/SHA256SUMS.txt",
+                        "size": 64
+                    }
+                ]
+            }
+        ]);
+        let plan = release_plan_from_github_releases_json(&value).expect("stable plan");
+        assert_eq!(plan.release_tag, "v1.2.3");
+        assert!(plan.checksum_available);
+        assert!(plan.checksum_asset_url.is_some());
+    }
+
+    #[test]
     fn prerelease_release_metadata_is_rejected() {
         let value = serde_json::json!({
             "tag_name": "v0.0.8-rc1",
@@ -1054,6 +1856,16 @@ mod tests {
         let bytes = b"not the artifact";
         let error = verify_archive_checksum(bytes, &"0".repeat(64)).unwrap_err();
         assert!(error.to_string().contains("SHA-256"));
+    }
+
+    #[test]
+    fn checksum_file_entry_is_matched_by_asset_name() {
+        let text = "abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd  tunnel-client-v0.0.10-windows-amd64.zip\n";
+        assert_eq!(
+            checksum_for_asset(text, "tunnel-client-v0.0.10-windows-amd64.zip").as_deref(),
+            Some("abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd")
+        );
+        assert!(checksum_for_asset(text, "missing.zip").is_none());
     }
 
     #[test]
@@ -1118,6 +1930,10 @@ mod tests {
             Some(OsString::from("present"))
         }));
         assert!(!credential_environment_present(|_| None));
+        assert!(tunnel_id_environment_present(|name| {
+            assert_eq!(name, "CATDESK_OPENAI_TUNNEL_ID");
+            Some(OsString::from("present"))
+        }));
     }
 
     #[test]
@@ -1127,9 +1943,27 @@ mod tests {
             profile_name: "  ".into(),
             process_mode: OpenaiTunnelProcessMode::External,
             admin_ui_url: Some("  http://127.0.0.1:9900/ui  ".into()),
+            runtime_alias: "  catdesk.local  ".into(),
+            auto_connect: true,
+            auto_recover: true,
+            health_poll_seconds: 999,
+            failure_threshold: 99,
+            recovery_cooldown_seconds: 1,
+            keep_runtime_on_catdesk_exit: true,
         }
         .normalized();
         assert_eq!(config.profile_name, DEFAULT_PROFILE_NAME);
+        assert_eq!(config.runtime_alias, "catdesk.local");
+        assert_eq!(
+            config.process_mode,
+            OpenaiTunnelProcessMode::ExternalForeground
+        );
+        assert_eq!(config.health_poll_seconds, MAX_HEALTH_POLL_SECONDS);
+        assert_eq!(config.failure_threshold, MAX_FAILURE_THRESHOLD);
+        assert_eq!(
+            config.recovery_cooldown_seconds,
+            MIN_RECOVERY_COOLDOWN_SECONDS
+        );
         assert_eq!(
             config.client_path.as_deref(),
             Some("C:/tools/tunnel-client.exe")
@@ -1198,5 +2032,148 @@ mod tests {
     fn tunnel_output_is_bounded() {
         let output = redact_tunnel_output(&"x".repeat(MAX_CHILD_OUTPUT_BYTES + 1024));
         assert_eq!(output.len(), MAX_CHILD_OUTPUT_BYTES);
+    }
+
+    #[test]
+    fn full_modern_capability_output_is_supported() {
+        let capabilities = capabilities_from_help_outputs(
+            "tunnel-client v0.0.10".into(),
+            "Tunnel client for the OpenAI MCP control plane.",
+            "quickstart --mcp-server-url /ui profile runtimes",
+            "plugin",
+            "connect status stop rm",
+            "connect --alias --tunnel-id --runtime-api-key --mcp-server-url",
+            "status --json",
+            "stop",
+            "rm",
+            "doctor --profile --explain",
+            "health --url-file",
+        );
+        require_supported_client(&capabilities).expect("modern client supported");
+        assert!(capabilities.supports_runtime_connect);
+        assert!(capabilities.supports_runtime_status_json);
+        assert!(capabilities.supports_health_url_file);
+    }
+
+    #[test]
+    fn missing_runtime_commands_block_client() {
+        let capabilities = capabilities_from_help_outputs(
+            "tunnel-client v0.0.1".into(),
+            "Tunnel client for the OpenAI MCP control plane.",
+            "quickstart --mcp-server-url doctor",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "doctor",
+            "health",
+        );
+        let error = require_supported_client(&capabilities).expect_err("runtime commands missing");
+        assert!(error.to_string().contains("BLOCKED_UNSUPPORTED_CLIENT"));
+    }
+
+    #[test]
+    fn runtime_connect_command_redacts_sensitive_values() {
+        let path = PathBuf::from("tunnel-client.exe");
+        let command = build_runtime_connect_command(
+            &path,
+            "catdesk-local",
+            "tunnel-secret-id",
+            "http://127.0.0.1:3200/AbCdEf123456789012345678/mcp",
+        )
+        .expect("command");
+        assert!(
+            command
+                .args
+                .contains(&"env:CONTROL_PLANE_API_KEY".to_string())
+        );
+        assert!(!command.redacted_display.contains("tunnel-secret-id"));
+        assert!(!command.redacted_display.contains("AbCdEf"));
+        assert!(
+            command
+                .redacted_display
+                .contains("<redacted-local-mcp-url>")
+        );
+    }
+
+    #[test]
+    fn runtime_status_json_is_parsed_without_exposing_ids() {
+        let status = parse_runtime_status_json(
+            "catdesk-local",
+            r#"{
+                "status": "ready",
+                "running": true,
+                "healthy": true,
+                "ready": true,
+                "ui_url": "http://127.0.0.1:9900/ui",
+                "pid": 1234,
+                "tunnel_id": "tun_secret"
+            }"#,
+        )
+        .expect("status");
+        assert!(status.fully_ready());
+        assert_eq!(
+            status.admin_ui_url.as_deref(),
+            Some("http://127.0.0.1:9900/")
+        );
+        assert!(!status.tunnel_fingerprint.unwrap().contains("tun_secret"));
+    }
+
+    #[test]
+    fn monitor_debounces_and_limits_recovery() {
+        let config = RuntimeMonitorConfig {
+            poll_interval: Duration::from_secs(5),
+            degraded_interval: Duration::from_secs(2),
+            command_timeout: Duration::from_secs(5),
+            failure_threshold: 2,
+            recovery_cooldown: Duration::from_secs(30),
+            max_recovery_attempts: 2,
+            recovery_window: Duration::from_secs(600),
+        };
+        let mut tracker = RuntimeMonitorState::default();
+        let now = Instant::now();
+        let status = OfficialRuntimeStatus {
+            alias: "catdesk-local".into(),
+            process_running: true,
+            healthy: false,
+            ready: false,
+            admin_ui_url: None,
+            pid_fingerprint: None,
+            tunnel_fingerprint: None,
+            redacted_reason: Some("not ready".into()),
+        };
+        let (health, _) = monitor_health_from_status(&status, true, &mut tracker, &config, now);
+        assert_eq!(health, crate::tunnel::TransportHealth::Connecting);
+        let (health, _) = monitor_health_from_status(
+            &status,
+            true,
+            &mut tracker,
+            &config,
+            now + Duration::from_secs(5),
+        );
+        assert_eq!(health, crate::tunnel::TransportHealth::Degraded);
+
+        assert!(should_attempt_recovery(
+            &mut tracker,
+            &config,
+            now + Duration::from_secs(60)
+        ));
+        assert!(!should_attempt_recovery(
+            &mut tracker,
+            &config,
+            now + Duration::from_secs(61)
+        ));
+        assert!(should_attempt_recovery(
+            &mut tracker,
+            &config,
+            now + Duration::from_secs(120)
+        ));
+        assert!(!should_attempt_recovery(
+            &mut tracker,
+            &config,
+            now + Duration::from_secs(180)
+        ));
     }
 }

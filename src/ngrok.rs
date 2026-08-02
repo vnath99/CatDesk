@@ -1,7 +1,10 @@
 use crate::openai_tunnel::{
-    OPENAI_TUNNEL_READINESS_TIMEOUT, OpenaiTunnelProcessMode, TunnelClientDiscoveryOptions,
-    credential_environment_present, default_user_tools_dir, discover_tunnel_client,
-    probe_tunnel_client_readiness, run_tunnel_client_doctor, spawn_tunnel_client_run,
+    OPENAI_TUNNEL_READINESS_TIMEOUT, OfficialRuntimeStatus, RuntimeMonitorConfig,
+    RuntimeMonitorState, TunnelClientDiscoveryOptions, build_runtime_connect_command,
+    connect_official_runtime, credential_environment_present, default_user_tools_dir,
+    discover_tunnel_client, monitor_health_from_status, official_runtime_status,
+    probe_tunnel_client_readiness, run_tunnel_client_doctor, should_attempt_recovery,
+    spawn_tunnel_client_run, tunnel_id_environment_present,
 };
 use crate::state::{SharedState, load_ngrok_authtoken, user_home_dir};
 use crate::tunnel::{
@@ -11,6 +14,7 @@ use crate::tunnel::{
 use ngrok::prelude::*;
 use reqwest::Url;
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 pub async fn start_transport(state: SharedState) -> Result<(), String> {
     let mode = {
@@ -42,7 +46,7 @@ async fn configure_openai_secure_tunnel(state: SharedState) -> Result<(), String
         .await;
         return Err("openai_secure_tunnel requires openai_tunnel.profile_name".into());
     }
-    if matches!(config.process_mode, OpenaiTunnelProcessMode::External) {
+    if config.process_mode.is_external_foreground() {
         let mut app = state.lock().await;
         app.ngrok_running = false;
         app.ngrok_url = None;
@@ -62,10 +66,21 @@ async fn configure_openai_secure_tunnel(state: SharedState) -> Result<(), String
     }
 
     let home = user_home_dir().map_err(|error| error.to_string())?;
+    let explicit_client_path = config.client_path.as_ref().map(PathBuf::from);
     let discovery = TunnelClientDiscoveryOptions {
-        explicit_path: config.client_path.as_ref().map(PathBuf::from),
-        path_var: std::env::var_os("PATH"),
-        user_tools_dir: default_user_tools_dir(&home),
+        explicit_path: explicit_client_path.clone(),
+        path_var: if explicit_client_path.is_some() {
+            None
+        } else {
+            std::env::var_os("PATH")
+        },
+        user_tools_dir: if explicit_client_path.is_some() {
+            home.join(".catdesk")
+                .join("tools")
+                .join("__explicit_client_path_only__")
+        } else {
+            default_user_tools_dir(&home)
+        },
         known_paths: Vec::new(),
         forbidden_roots: vec![PathBuf::from(&workspace_root)],
     };
@@ -81,32 +96,37 @@ async fn configure_openai_secure_tunnel(state: SharedState) -> Result<(), String
             return Err(error.to_string());
         }
     };
-    if !credential_environment_present(|name| std::env::var_os(name)) {
-        set_transport_health(
-            &state,
-            TransportHealth::BlockedMissingCredential,
-            "CONTROL_PLANE_API_KEY is not present in the CatDesk process environment",
-        )
-        .await;
-        return Err(
-            "openai_secure_tunnel requires CONTROL_PLANE_API_KEY in the process environment".into(),
-        );
-    }
-    if let Err(error) = run_tunnel_client_doctor(&metadata.path, &config.profile_name).await {
-        set_transport_health(
-            &state,
-            TransportHealth::Failed,
-            "tunnel-client doctor failed; inspect the operator-owned profile",
-        )
-        .await;
-        return Err(error.to_string());
-    }
 
     match config.process_mode {
-        OpenaiTunnelProcessMode::External => {
+        mode if mode.is_external_foreground() => {
             unreachable!("external mode returned before discovery")
         }
-        OpenaiTunnelProcessMode::Managed => {
+        mode if mode.uses_official_runtime() => {
+            configure_official_runtime_mode(state, metadata.path).await
+        }
+        mode if mode.uses_legacy_direct_managed() => {
+            if !credential_environment_present(|name| std::env::var_os(name)) {
+                set_transport_health(
+                    &state,
+                    TransportHealth::BlockedMissingCredential,
+                    "CONTROL_PLANE_API_KEY is not present in the CatDesk process environment",
+                )
+                .await;
+                return Err(
+                    "openai_secure_tunnel requires CONTROL_PLANE_API_KEY in the process environment"
+                        .into(),
+                );
+            }
+            if let Err(error) = run_tunnel_client_doctor(&metadata.path, &config.profile_name).await
+            {
+                set_transport_health(
+                    &state,
+                    TransportHealth::Failed,
+                    "tunnel-client doctor failed; inspect the operator-owned profile",
+                )
+                .await;
+                return Err(error.to_string());
+            }
             let child = match spawn_tunnel_client_run(&metadata.path, &config.profile_name) {
                 Ok(child) => child,
                 Err(error) => {
@@ -139,7 +159,266 @@ async fn configure_openai_secure_tunnel(state: SharedState) -> Result<(), String
             refresh_openai_readiness_from_admin_url(&state).await;
             Ok(())
         }
+        _ => Err("unsupported OpenAI tunnel process mode".into()),
     }
+}
+
+async fn configure_official_runtime_mode(
+    state: SharedState,
+    client_path: PathBuf,
+) -> Result<(), String> {
+    let (alias, profile, auto_connect, local_mcp_url) = {
+        let app = state.lock().await;
+        (
+            app.openai_tunnel_config.runtime_alias.clone(),
+            app.openai_tunnel_config.profile_name.clone(),
+            app.openai_tunnel_config.auto_connect,
+            format!(
+                "http://{}:{}{}",
+                app.mcp_bind_host,
+                app.port,
+                app.mcp_path()
+            ),
+        )
+    };
+    match official_runtime_status(&client_path, &alias).await {
+        Ok(status) if status.fully_ready() => {
+            let mut app = state.lock().await;
+            app.ngrok_running = false;
+            app.ngrok_url = None;
+            app.openai_tunnel_config.admin_ui_url = status.admin_ui_url.clone();
+            app.transport_health =
+                TransportHealthSnapshot::configured_unverified(app.tunnel_config.remote_self_check);
+            app.transport_health.health = TransportHealth::ConnectedVerified;
+            app.transport_health.local_mcp = "NOT_CHECKED".into();
+            app.transport_health.redacted_reason = None;
+            app.transport_health.warnings.push(
+                "Official tunnel-client runtime was already ready; CatDesk attached monitoring without creating a duplicate"
+                    .into(),
+            );
+            app.log(
+                "INFO",
+                "OpenAI Secure MCP official runtime already ready".into(),
+            );
+        }
+        Ok(status) if status.process_running => {
+            let mut app = state.lock().await;
+            app.ngrok_running = false;
+            app.ngrok_url = None;
+            app.openai_tunnel_config.admin_ui_url = status.admin_ui_url.clone();
+            app.transport_health =
+                TransportHealthSnapshot::configured_unverified(app.tunnel_config.remote_self_check);
+            app.transport_health.health = TransportHealth::Connecting;
+            app.transport_health.redacted_reason = status.redacted_reason.clone();
+            app.transport_health.warnings.push(
+                "Official tunnel-client runtime exists but is not ready; CatDesk will monitor it"
+                    .into(),
+            );
+        }
+        Ok(_) | Err(_) => {
+            if !auto_connect {
+                set_transport_health(
+                    &state,
+                    TransportHealth::ConfiguredUnverified,
+                    "official runtime is absent and auto_connect is disabled",
+                )
+                .await;
+            } else if !tunnel_id_environment_present(|name| std::env::var_os(name)) {
+                set_transport_health(
+                    &state,
+                    TransportHealth::BlockedMissingTunnelId,
+                    "CATDESK_OPENAI_TUNNEL_ID is not present in the CatDesk process environment",
+                )
+                .await;
+            } else if !credential_environment_present(|name| std::env::var_os(name)) {
+                set_transport_health(
+                    &state,
+                    TransportHealth::BlockedMissingCredential,
+                    "CONTROL_PLANE_API_KEY is not present in the CatDesk process environment",
+                )
+                .await;
+            } else {
+                let tunnel_id = std::env::var("CATDESK_OPENAI_TUNNEL_ID")
+                    .map_err(|_| "CATDESK_OPENAI_TUNNEL_ID is missing".to_string())?;
+                let command =
+                    build_runtime_connect_command(&client_path, &alias, &tunnel_id, &local_mcp_url)
+                        .map_err(|error| error.to_string())?;
+                {
+                    let mut app = state.lock().await;
+                    app.log(
+                        "INFO",
+                        format!("Starting official runtime: {}", command.redacted_display),
+                    );
+                    app.transport_health = TransportHealthSnapshot::configured_unverified(
+                        app.tunnel_config.remote_self_check,
+                    );
+                    app.transport_health.health = TransportHealth::Connecting;
+                }
+                connect_official_runtime(&client_path, &alias, &tunnel_id, &local_mcp_url)
+                    .await
+                    .map_err(|error| error.to_string())?;
+            }
+        }
+    }
+    start_openai_runtime_monitor_if_needed(state, client_path, alias, profile).await;
+    Ok(())
+}
+
+async fn start_openai_runtime_monitor_if_needed(
+    state: SharedState,
+    client_path: PathBuf,
+    alias: String,
+    profile: String,
+) {
+    let config = {
+        let mut app = state.lock().await;
+        if app.openai_tunnel_monitor_task.is_some() {
+            return;
+        }
+        let config = RuntimeMonitorConfig::from_openai_config(&app.openai_tunnel_config);
+        app.log(
+            "INFO",
+            format!(
+                "OpenAI Secure MCP runtime monitor armed for alias <redacted> using profile <redacted>; poll {}s",
+                config.poll_interval.as_secs()
+            ),
+        );
+        config
+    };
+    let monitor_state = state.clone();
+    let handle = tokio::spawn(async move {
+        let mut state_tracker = RuntimeMonitorState::default();
+        let mut interval = tokio::time::interval(Duration::from_secs(1));
+        loop {
+            interval.tick().await;
+            let should_continue = {
+                let app = monitor_state.lock().await;
+                matches!(app.tunnel_config.mode, TunnelMode::OpenaiSecureTunnel)
+                    && app
+                        .openai_tunnel_config
+                        .process_mode
+                        .uses_official_runtime()
+            };
+            if !should_continue {
+                break;
+            }
+            let runtime = official_runtime_status(&client_path, &alias)
+                .await
+                .unwrap_or_else(|error| OfficialRuntimeStatus::stopped(&alias, error.to_string()));
+            let (local_endpoint, admin_url, auto_recover) = {
+                let app = monitor_state.lock().await;
+                (
+                    format!(
+                        "http://{}:{}{}",
+                        app.mcp_bind_host,
+                        app.port,
+                        app.mcp_path()
+                    ),
+                    runtime
+                        .admin_ui_url
+                        .clone()
+                        .or_else(|| app.openai_tunnel_config.admin_ui_url.clone()),
+                    app.openai_tunnel_config.auto_recover,
+                )
+            };
+            let local_mcp_ready = crate::tunnel::run_mcp_endpoint_self_check(
+                &local_endpoint,
+                None,
+                crate::tunnel::MCP_SELF_CHECK_TIMEOUT,
+                false,
+            )
+            .await
+            .is_ok();
+            let readyz_ready = if let Some(admin_url) = admin_url.as_deref() {
+                probe_tunnel_client_readiness(admin_url, OPENAI_TUNNEL_READINESS_TIMEOUT)
+                    .await
+                    .map(|report| report.ready)
+                    .unwrap_or(false)
+            } else {
+                runtime.ready
+            };
+            let mut runtime_for_health = runtime.clone();
+            runtime_for_health.ready = runtime_for_health.ready && readyz_ready;
+            let (health, reason) = monitor_health_from_status(
+                &runtime_for_health,
+                local_mcp_ready,
+                &mut state_tracker,
+                &config,
+                Instant::now(),
+            );
+            {
+                let mut app = monitor_state.lock().await;
+                app.transport_health.health = health;
+                app.transport_health.local_mcp = if local_mcp_ready {
+                    "READY".into()
+                } else {
+                    "FAILED".into()
+                };
+                app.transport_health.redacted_reason = reason.clone();
+                app.transport_health.last_checked_at = Some(crate::tunnel::current_startup_time());
+                if let Some(ui_url) = runtime.admin_ui_url.clone() {
+                    app.openai_tunnel_config.admin_ui_url = Some(ui_url);
+                }
+            }
+            if matches!(health, TransportHealth::Disconnected)
+                && auto_recover
+                && credential_environment_present(|name| std::env::var_os(name))
+                && tunnel_id_environment_present(|name| std::env::var_os(name))
+                && local_mcp_ready
+                && should_attempt_recovery(&mut state_tracker, &config, Instant::now())
+            {
+                if let Ok(tunnel_id) = std::env::var("CATDESK_OPENAI_TUNNEL_ID") {
+                    let command = build_runtime_connect_command(
+                        &client_path,
+                        &alias,
+                        &tunnel_id,
+                        &local_endpoint,
+                    );
+                    match command {
+                        Ok(command) => {
+                            monitor_state.lock().await.log(
+                                "WARN",
+                                format!(
+                                    "Attempting bounded official runtime recovery: {}",
+                                    command.redacted_display
+                                ),
+                            );
+                            let _ = connect_official_runtime(
+                                &client_path,
+                                &alias,
+                                &tunnel_id,
+                                &local_endpoint,
+                            )
+                            .await;
+                        }
+                        Err(error) => {
+                            monitor_state.lock().await.log(
+                                "ERROR",
+                                format!("Official runtime recovery blocked: {error}"),
+                            );
+                        }
+                    }
+                }
+            }
+            let sleep_for = match health {
+                TransportHealth::ConnectedVerified => config.poll_interval,
+                TransportHealth::Degraded | TransportHealth::Disconnected => {
+                    config.degraded_interval
+                }
+                _ => config.poll_interval,
+            };
+            tokio::time::sleep(sleep_for).await;
+        }
+        let mut app = monitor_state.lock().await;
+        app.log(
+            "INFO",
+            "OpenAI Secure MCP runtime monitor stopped; official runtime was not stopped by CatDesk"
+                .into(),
+        );
+        app.openai_tunnel_monitor_task = None;
+        let _ = profile;
+    });
+    state.lock().await.openai_tunnel_monitor_task = Some(handle);
 }
 
 pub async fn refresh_openai_readiness_from_admin_url(state: &SharedState) {
