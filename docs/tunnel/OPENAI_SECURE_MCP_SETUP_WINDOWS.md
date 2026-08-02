@@ -71,9 +71,17 @@ Then create an official profile with operator-provided values:
 
 ```powershell
 $env:CONTROL_PLANE_API_KEY = "<runtime-api-key>"
-tunnel-client init --profile "<profile-name>"
+tunnel-client init `
+  --profile "<profile-name>" `
+  --tunnel-id "<tunnel-id>" `
+  --mcp-server-url "http://127.0.0.1:<port>/<persistent-route>/mcp"
 tunnel-client doctor --profile "<profile-name>" --explain
 ```
+
+Use the exact HTTP MCP binding syntax shown by your installed
+`tunnel-client init --help` or `tunnel-client help quickstart`. The command
+above is a placeholder template and must not be copied into review artifacts
+with the real route.
 
 Do not put the runtime API key in CatDesk config, command-line arguments, logs,
 review bundles, or shell profile files.
@@ -100,7 +108,8 @@ admin_ui_url = ""
 ```
 
 Use `process_mode = "external"` first. In this mode, the operator starts and
-owns the `tunnel-client` process. CatDesk will not stop it.
+owns the `tunnel-client` process. CatDesk will not stop it, will not inspect
+`CONTROL_PLANE_API_KEY`, and will not run `doctor` automatically.
 
 Managed mode is available for later controlled use:
 
@@ -109,7 +118,9 @@ process_mode = "managed"
 ```
 
 Managed mode starts only the verified configured client and stops only the child
-process handle that CatDesk created in the current process.
+process handle that CatDesk created in the current process. Managed mode
+requires the runtime key to be present in the CatDesk process environment, but
+CatDesk does not log or persist the value.
 
 ## Start Order
 
@@ -132,6 +143,10 @@ Managed mode:
 $env:CONTROL_PLANE_API_KEY = "<runtime-api-key>"
 target\release\catdesk.exe
 ```
+
+For either mode, configure `openai_tunnel.admin_ui_url` only with a loopback
+admin/health base URL. CatDesk checks `/healthz` for liveness and `/readyz` for
+readiness; only `/readyz` success can produce `CONNECTED_VERIFIED`.
 
 ## ChatGPT Connector
 

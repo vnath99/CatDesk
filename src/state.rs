@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::browser::DetectedBrowser;
 use crate::mascot::{self, MascotPack};
-use crate::openai_tunnel::OpenaiTunnelConfig;
+use crate::openai_tunnel::{ManagedTunnelProcess, OpenaiTunnelConfig};
 use crate::theme;
 use crate::tunnel::{
     AtomicWritePlan, ConfigSaveOutcome, McpTransportConfig, TransportHealthSnapshot,
@@ -765,6 +765,7 @@ pub struct AppState {
     pub remote_connected: bool,
     pub last_remote_activity_ms: Option<u128>,
     pub devtools_running: bool,
+    pub mcp_bind_host: String,
     pub port: u16,
     pub workspace_root: String,
     pub mascot_seed: u64,
@@ -784,7 +785,7 @@ pub struct AppState {
     pub ngrok_task: Option<tokio::task::JoinHandle<()>>,
     pub remote_browser_child: Option<tokio::process::Child>,
     pub devtools_child: Option<tokio::process::Child>,
-    pub openai_tunnel_child: Option<tokio::process::Child>,
+    pub openai_tunnel_child: Option<ManagedTunnelProcess>,
 }
 
 pub type SharedState = Arc<Mutex<AppState>>;
@@ -1164,6 +1165,11 @@ impl AppState {
         if _archive_startup_mascot && partner_binagotchy_seed.is_none() {
             mascot::archive_startup_mascot(mascot_seed)?;
         }
+        let runtime_port = if port == crate::tunnel::DEFAULT_MCP_PORT {
+            config.mcp.port
+        } else {
+            port
+        };
         let mut state = Self {
             theme: config.theme,
             mode: config.mode,
@@ -1188,7 +1194,8 @@ impl AppState {
             remote_connected: false,
             last_remote_activity_ms: None,
             devtools_running: false,
-            port,
+            mcp_bind_host: config.mcp.bind_host.clone(),
+            port: runtime_port,
             mascot_seed,
             partner_binagotchy_seed,
             set_catdesk_as_co_author: config.set_catdesk_as_co_author,
@@ -1251,6 +1258,8 @@ impl AppState {
         config.usage_totals = self.usage_totals.clone().normalized();
         config.selected_browser = self.selected_browser.clone();
         config.tunnel = self.tunnel_config.clone();
+        config.mcp.bind_host = self.mcp_bind_host.clone();
+        config.mcp.port = self.port;
         config.openai_tunnel = self.openai_tunnel_config.clone();
         config.identity = self.transport_identity.clone();
         config.identity.installation_id = Some(self.installation_id.clone());
@@ -1574,6 +1583,57 @@ mod tests {
         path
     }
 
+    fn fake_openai_tunnel_client_exits(dir: &Path) -> PathBuf {
+        let path = dir.join(if cfg!(windows) {
+            "tunnel-client.cmd"
+        } else {
+            "tunnel-client"
+        });
+        if cfg!(windows) {
+            std::fs::write(
+                &path,
+                "@echo off\r\nif \"%1\"==\"--version\" (echo tunnel-client v0.0.7 & exit /b 0)\r\nif \"%1 %2\"==\"help quickstart\" (echo tunnel-client quickstart --mcp-server-url doctor /ui init profile run & exit /b 0)\r\nif \"%1 %2 %4\"==\"doctor --profile --explain\" (echo doctor ok & exit /b 0)\r\nif \"%1 %2\"==\"run --profile\" (echo CONTROL_PLANE_API_KEY=synthetic-secret & exit /b 7)\r\necho unsupported\r\nexit /b 1\r\n",
+            )
+            .expect("write fake openai client");
+        } else {
+            std::fs::write(
+                &path,
+                "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo tunnel-client v0.0.7; exit 0; fi\nif [ \"$1 $2\" = \"help quickstart\" ]; then echo 'tunnel-client quickstart --mcp-server-url doctor /ui init profile run'; exit 0; fi\nif [ \"$1 $2 $4\" = \"doctor --profile --explain\" ]; then echo doctor ok; exit 0; fi\nif [ \"$1 $2\" = \"run --profile\" ]; then echo CONTROL_PLANE_API_KEY=synthetic-secret; exit 7; fi\necho unsupported\nexit 1\n",
+            )
+            .expect("write fake openai client");
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).expect("chmod");
+        }
+        path
+    }
+
+    async fn fake_tunnel_readiness_server(ready: bool) -> (String, tokio::task::JoinHandle<()>) {
+        use axum::{Router, http::StatusCode, routing::get};
+        let app = Router::new()
+            .route("/healthz", get(|| async { (StatusCode::OK, "live") }))
+            .route(
+                "/readyz",
+                get(move || async move {
+                    if ready {
+                        (StatusCode::OK, "ready")
+                    } else {
+                        (StatusCode::SERVICE_UNAVAILABLE, "not ready")
+                    }
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind fake readiness");
+        let addr = listener.local_addr().expect("addr");
+        let handle = tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        (format!("http://{addr}"), handle)
+    }
+
     fn temp_config_files(workspace: &Path) -> Vec<PathBuf> {
         std::fs::read_dir(workspace)
             .expect("read temp workspace")
@@ -1631,6 +1691,7 @@ toolCallCount = 7
             crate::tunnel::TunnelMode::ManagedEphemeralNgrok
         ));
         assert!(!app.installation_id.is_empty());
+        assert_eq!(app.mcp_bind_host, crate::tunnel::DEFAULT_MCP_BIND_HOST);
 
         let _ = std::fs::remove_file(config_path);
         let _ = std::fs::remove_dir(workspace);
@@ -2000,7 +2061,7 @@ manage_process = false
 [openai_tunnel]
 client_path = "Z:\\missing\\tunnel-client.exe"
 profile_name = "catdesk-local"
-process_mode = "external"
+process_mode = "managed"
 
 [usageTotals]
 inputTokens = 0
@@ -2066,7 +2127,7 @@ manage_process = false
 [openai_tunnel]
 client_path = "{}"
 profile_name = "catdesk-local"
-process_mode = "external"
+process_mode = "managed"
 
 [usageTotals]
 inputTokens = 0
@@ -2088,7 +2149,7 @@ toolCallCount = 0
 
         let error = crate::ngrok::start_transport(state.clone())
             .await
-            .expect_err("missing credential blocks");
+            .expect_err("managed mode missing credential blocks");
         assert!(error.contains("CONTROL_PLANE_API_KEY"));
         let app = state.lock().await;
         assert_eq!(
@@ -2112,22 +2173,19 @@ toolCallCount = 0
     }
 
     #[tokio::test]
-    async fn openai_secure_tunnel_external_mode_launches_nothing() {
+    async fn openai_secure_tunnel_external_mode_launches_nothing_without_catdesk_key() {
         let _guard = OPENAI_TUNNEL_ENV_TEST_LOCK.lock().await;
         let previous = std::env::var_os("CONTROL_PLANE_API_KEY");
         // SAFETY: this test holds OPENAI_TUNNEL_ENV_TEST_LOCK and restores the
         // process environment before returning.
         unsafe {
-            std::env::set_var("CONTROL_PLANE_API_KEY", "test-runtime-key-redacted");
+            std::env::remove_var("CONTROL_PLANE_API_KEY");
         }
 
         let (workspace, config_path) = temp_config_workspace("catdesk-openai-external");
-        let client_dir = temp_config_workspace("catdesk-openai-client-external").0;
-        let client_path = fake_openai_tunnel_client(&client_dir);
         std::fs::write(
             &config_path,
-            format!(
-                r#"
+            r#"
 theme = "concise"
 mode = "computer"
 toolMode = "multiTools"
@@ -2137,7 +2195,7 @@ mode = "openai_secure_tunnel"
 manage_process = false
 
 [openai_tunnel]
-client_path = "{}"
+client_path = "Z:\\missing\\tunnel-client.exe"
 profile_name = "catdesk-local"
 process_mode = "external"
 
@@ -2147,8 +2205,6 @@ outputTokens = 0
 totalTokens = 0
 toolCallCount = 0
 "#,
-                client_path.to_string_lossy().replace('\\', "\\\\")
-            ),
         )
         .expect("write openai config");
         let app = AppState::from_config_path(
@@ -2176,7 +2232,7 @@ toolCallCount = 0
             .map(|entry| entry.message.as_str())
             .collect::<Vec<_>>()
             .join("\n");
-        assert!(!logs.contains("test-runtime-key-redacted"));
+        assert!(!logs.contains("CONTROL_PLANE_API_KEY"));
         drop(app);
 
         // SAFETY: this test holds OPENAI_TUNNEL_ENV_TEST_LOCK and restores the
@@ -2189,7 +2245,72 @@ toolCallCount = 0
             }
         }
         let _ = std::fs::remove_dir_all(workspace);
-        let _ = std::fs::remove_dir_all(client_dir);
+    }
+
+    #[tokio::test]
+    async fn openai_external_readiness_uses_readyz_when_admin_url_configured() {
+        let _guard = OPENAI_TUNNEL_ENV_TEST_LOCK.lock().await;
+        let previous = std::env::var_os("CONTROL_PLANE_API_KEY");
+        unsafe {
+            std::env::remove_var("CONTROL_PLANE_API_KEY");
+        }
+        let (admin_url, server) = fake_tunnel_readiness_server(true).await;
+        let (workspace, config_path) = temp_config_workspace("catdesk-openai-external-ready");
+        std::fs::write(
+            &config_path,
+            format!(
+                r#"
+theme = "concise"
+mode = "computer"
+toolMode = "multiTools"
+
+[tunnel]
+mode = "openai_secure_tunnel"
+manage_process = false
+
+[openai_tunnel]
+profile_name = "catdesk-local"
+process_mode = "external"
+admin_ui_url = "{}"
+
+[usageTotals]
+inputTokens = 0
+outputTokens = 0
+totalTokens = 0
+toolCallCount = 0
+"#,
+                admin_url
+            ),
+        )
+        .expect("write openai config");
+        let app = AppState::from_config_path(
+            8787,
+            workspace.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .expect("load openai app");
+        let state = Arc::new(tokio::sync::Mutex::new(app));
+
+        crate::ngrok::start_transport(state.clone())
+            .await
+            .expect("external openai ready configures");
+        let app = state.lock().await;
+        assert_eq!(
+            app.transport_health.health,
+            crate::tunnel::TransportHealth::ConnectedVerified
+        );
+        assert!(app.openai_tunnel_child.is_none());
+        drop(app);
+
+        unsafe {
+            if let Some(value) = previous {
+                std::env::set_var("CONTROL_PLANE_API_KEY", value);
+            } else {
+                std::env::remove_var("CONTROL_PLANE_API_KEY");
+            }
+        }
+        server.abort();
+        let _ = std::fs::remove_dir_all(workspace);
     }
 
     #[tokio::test]
@@ -2270,6 +2391,81 @@ toolCallCount = 0
         let _ = std::fs::remove_dir_all(client_dir);
     }
 
+    #[tokio::test]
+    async fn openai_managed_child_exit_updates_transport_status_and_redacts_output() {
+        let _guard = OPENAI_TUNNEL_ENV_TEST_LOCK.lock().await;
+        let previous = std::env::var_os("CONTROL_PLANE_API_KEY");
+        unsafe {
+            std::env::set_var("CONTROL_PLANE_API_KEY", "test-runtime-key-redacted");
+        }
+
+        let (workspace, config_path) = temp_config_workspace("catdesk-openai-managed-exit");
+        let client_dir = temp_config_workspace("catdesk-openai-client-managed-exit").0;
+        let client_path = fake_openai_tunnel_client_exits(&client_dir);
+        std::fs::write(
+            &config_path,
+            format!(
+                r#"
+theme = "concise"
+mode = "computer"
+toolMode = "multiTools"
+
+[tunnel]
+mode = "openai_secure_tunnel"
+manage_process = false
+
+[openai_tunnel]
+client_path = "{}"
+profile_name = "catdesk-local"
+process_mode = "managed"
+
+[usageTotals]
+inputTokens = 0
+outputTokens = 0
+totalTokens = 0
+toolCallCount = 0
+"#,
+                client_path.to_string_lossy().replace('\\', "\\\\")
+            ),
+        )
+        .expect("write openai config");
+        let app = AppState::from_config_path(
+            8787,
+            workspace.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .expect("load openai app");
+        let state = Arc::new(tokio::sync::Mutex::new(app));
+
+        crate::ngrok::start_transport(state.clone())
+            .await
+            .expect("managed openai starts exiting fake client");
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        crate::ngrok::refresh_openai_child_exit_status(&state).await;
+        let mut app = state.lock().await;
+        assert_eq!(
+            app.transport_health.health,
+            crate::tunnel::TransportHealth::Failed
+        );
+        let output = if let Some(child) = app.openai_tunnel_child.as_mut() {
+            child.collect_output().await
+        } else {
+            String::new()
+        };
+        assert!(!output.contains("synthetic-secret"));
+        drop(app);
+
+        unsafe {
+            if let Some(value) = previous {
+                std::env::set_var("CONTROL_PLANE_API_KEY", value);
+            } else {
+                std::env::remove_var("CONTROL_PLANE_API_KEY");
+            }
+        }
+        let _ = std::fs::remove_dir_all(workspace);
+        let _ = std::fs::remove_dir_all(client_dir);
+    }
+
     #[test]
     fn invalid_transport_config_is_rejected() {
         let unique = SystemTime::now()
@@ -2288,7 +2484,7 @@ mode = "computer"
 toolMode = "multiTools"
 
 [mcp]
-port = 22
+            port = 0
 
 [usageTotals]
 inputTokens = 0
@@ -2346,6 +2542,59 @@ toolCallCount = 0
 
         let _ = std::fs::remove_file(config_path);
         let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[test]
+    fn configured_mcp_port_and_default_bind_host_are_honored() {
+        let (workspace, config_path) = temp_config_workspace("catdesk-configured-port");
+        std::fs::write(
+            &config_path,
+            r#"
+theme = "concise"
+mode = "computer"
+toolMode = "multiTools"
+
+[mcp]
+port = 43210
+
+[usageTotals]
+inputTokens = 0
+outputTokens = 0
+totalTokens = 0
+toolCallCount = 0
+"#,
+        )
+        .expect("write config");
+        let app = AppState::from_config_path(
+            crate::tunnel::DEFAULT_MCP_PORT,
+            workspace.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .expect("load config");
+        assert_eq!(app.mcp_bind_host, crate::tunnel::DEFAULT_MCP_BIND_HOST);
+        assert_eq!(app.port, 43210);
+        let _ = std::fs::remove_dir_all(workspace);
+    }
+
+    #[test]
+    fn private_transport_rejects_non_loopback_bind_host() {
+        let mut mcp = crate::tunnel::McpTransportConfig {
+            bind_host: "0.0.0.0".into(),
+            ..Default::default()
+        };
+        let tunnel = crate::tunnel::TunnelConfig {
+            mode: crate::tunnel::TunnelMode::OpenaiSecureTunnel,
+            manage_process: false,
+            ..Default::default()
+        };
+        let error = crate::tunnel::validate_transport(&mcp, &tunnel)
+            .expect_err("private mode must reject wildcard bind");
+        assert!(error.contains("loopback"));
+
+        mcp.bind_host = "::".into();
+        let error = crate::tunnel::validate_transport(&mcp, &tunnel)
+            .expect_err("private mode must reject ipv6 wildcard");
+        assert!(error.contains("loopback"));
     }
 
     #[test]

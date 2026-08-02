@@ -7,10 +7,15 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
+use tokio::io::AsyncReadExt;
 use tokio::process::{Child, Command};
+use tokio::task::JoinHandle;
 
 const DEFAULT_PROFILE_NAME: &str = "catdesk-local";
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
+pub const OPENAI_TUNNEL_READINESS_TIMEOUT: Duration = Duration::from_secs(10);
+const MAX_CHILD_OUTPUT_BYTES: usize = 64 * 1024;
+const MAX_DOWNLOAD_BYTES: u64 = 128 * 1024 * 1024;
 const OFFICIAL_LATEST_RELEASE_API: &str =
     "https://api.github.com/repos/openai/tunnel-client/releases/latest";
 const OFFICIAL_RELEASES_PAGE: &str = "https://github.com/openai/tunnel-client/releases/latest";
@@ -113,6 +118,59 @@ pub struct TunnelClientInstallOutcome {
     pub installed_path: PathBuf,
     pub previous_backup_path: Option<PathBuf>,
     pub checksum_verified: bool,
+}
+
+pub struct ManagedTunnelProcess {
+    child: Child,
+    stdout_task: Option<JoinHandle<String>>,
+    stderr_task: Option<JoinHandle<String>>,
+}
+
+impl ManagedTunnelProcess {
+    pub fn id(&self) -> Option<u32> {
+        self.child.id()
+    }
+
+    pub fn start_kill(&mut self) -> std::io::Result<()> {
+        self.child.start_kill()
+    }
+
+    pub async fn wait_with_timeout(&mut self, timeout: Duration) -> std::io::Result<bool> {
+        match tokio::time::timeout(timeout, self.child.wait()).await {
+            Ok(result) => result.map(|_| true),
+            Err(_) => Ok(false),
+        }
+    }
+
+    pub async fn wait(&mut self) -> std::io::Result<std::process::ExitStatus> {
+        self.child.wait().await
+    }
+
+    pub fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>> {
+        self.child.try_wait()
+    }
+
+    pub async fn collect_output(&mut self) -> String {
+        let mut output = String::new();
+        if let Some(task) = self.stdout_task.take()
+            && let Ok(text) = task.await
+        {
+            output.push_str(&text);
+        }
+        if let Some(task) = self.stderr_task.take()
+            && let Ok(text) = task.await
+        {
+            output.push_str(&text);
+        }
+        redact_tunnel_output(&output)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OpenaiTunnelReadiness {
+    pub ready: bool,
+    pub health_live: bool,
+    pub redacted_reason: Option<String>,
 }
 
 #[derive(Debug)]
@@ -272,6 +330,15 @@ pub async fn latest_official_release_plan(
 pub fn release_plan_from_github_json(
     value: &Value,
 ) -> Result<TunnelClientReleasePlan, OpenaiTunnelError> {
+    if value
+        .get("prerelease")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return Err(OpenaiTunnelError::Release(
+            "latest official release metadata pointed to a prerelease".into(),
+        ));
+    }
     let release_tag = value
         .get("tag_name")
         .and_then(Value::as_str)
@@ -305,13 +372,17 @@ pub fn release_plan_from_github_json(
 pub fn select_windows_asset(
     assets: &[Value],
 ) -> Result<TunnelClientReleaseAsset, OpenaiTunnelError> {
+    let required_arch = windows_arch_asset_token()?;
     for asset in assets {
         let name = asset
             .get("name")
             .and_then(Value::as_str)
             .unwrap_or_default();
         let lower = name.to_ascii_lowercase();
-        if lower.contains("windows") && (lower.ends_with(".zip") || lower.ends_with(".exe")) {
+        if lower.contains("windows")
+            && lower.contains(required_arch)
+            && (lower.ends_with(".zip") || lower.ends_with(".exe"))
+        {
             let download_url = asset
                 .get("browser_download_url")
                 .and_then(Value::as_str)
@@ -319,10 +390,16 @@ pub fn select_windows_asset(
                     OpenaiTunnelError::Release("Windows asset download URL missing".into())
                 })?
                 .to_string();
+            validate_official_download_url(&download_url)?;
             let size = asset
                 .get("size")
                 .and_then(Value::as_u64)
                 .unwrap_or_default();
+            if size == 0 || size > MAX_DOWNLOAD_BYTES {
+                return Err(OpenaiTunnelError::Release(
+                    "Windows asset size was missing or outside CatDesk bounds".into(),
+                ));
+            }
             let sha256 = asset
                 .get("digest")
                 .and_then(Value::as_str)
@@ -342,7 +419,7 @@ pub fn select_windows_asset(
         }
     }
     Err(OpenaiTunnelError::Release(
-        "release did not include a Windows tunnel-client artifact".into(),
+        "release did not include a Windows tunnel-client artifact for this architecture".into(),
     ))
 }
 
@@ -373,8 +450,17 @@ pub fn install_client_archive_bytes(
     expected_sha256: Option<&str>,
     install_dir: &Path,
 ) -> Result<TunnelClientInstallOutcome, OpenaiTunnelError> {
+    if archive_bytes.is_empty() || archive_bytes.len() as u64 > MAX_DOWNLOAD_BYTES {
+        return Err(OpenaiTunnelError::Archive(
+            "archive size was missing or outside CatDesk bounds".into(),
+        ));
+    }
     if let Some(expected) = expected_sha256 {
         verify_archive_checksum(archive_bytes, expected)?;
+    } else {
+        return Err(OpenaiTunnelError::Checksum(
+            "official SHA-256 verification is required for unattended install".into(),
+        ));
     }
     let parent = install_dir
         .parent()
@@ -425,7 +511,10 @@ pub fn install_client_archive_bytes(
 }
 
 pub fn startup_never_downloads_client(config: &OpenaiTunnelConfig) -> bool {
-    config.client_path.is_some() || config.client_path.is_none()
+    !config
+        .client_path
+        .as_deref()
+        .is_some_and(|value| value.starts_with("https://"))
 }
 
 pub fn credential_environment_present(env_lookup: impl Fn(&str) -> Option<OsString>) -> bool {
@@ -447,21 +536,151 @@ pub async fn run_tunnel_client_doctor(
 pub fn spawn_tunnel_client_run(
     path: &Path,
     profile_name: &str,
-) -> Result<Child, OpenaiTunnelError> {
+) -> Result<ManagedTunnelProcess, OpenaiTunnelError> {
     if profile_name.trim().is_empty() {
         return Err(OpenaiTunnelError::Unsupported(
             "OpenAI tunnel profile name is missing".into(),
         ));
     }
-    Command::new(path)
+    let mut child = Command::new(path)
         .arg("run")
         .arg("--profile")
         .arg(profile_name)
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
-        .map_err(|error| OpenaiTunnelError::Command(error.to_string()))
+        .map_err(|error| OpenaiTunnelError::Command(error.to_string()))?;
+    let stdout_task = child.stdout.take().map(read_bounded_child_output);
+    let stderr_task = child.stderr.take().map(read_bounded_child_output);
+    Ok(ManagedTunnelProcess {
+        child,
+        stdout_task,
+        stderr_task,
+    })
+}
+
+pub async fn probe_tunnel_client_readiness(
+    admin_base_url: &str,
+    timeout: Duration,
+) -> Result<OpenaiTunnelReadiness, OpenaiTunnelError> {
+    let base = normalize_admin_base_url(admin_base_url)?;
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(2))
+        .build()
+        .map_err(|error| OpenaiTunnelError::Network(redact_network_error(&error.to_string())))?;
+    let started = std::time::Instant::now();
+    let health_url = base
+        .join("healthz")
+        .map_err(|_| OpenaiTunnelError::InvalidPath("health endpoint was invalid".into()))?;
+    let ready_url = base
+        .join("readyz")
+        .map_err(|_| OpenaiTunnelError::InvalidPath("ready endpoint was invalid".into()))?;
+
+    let mut health_live = false;
+    let mut last_reason = None;
+    while started.elapsed() < timeout {
+        match client.get(health_url.clone()).send().await {
+            Ok(response) if response.status().is_success() => health_live = true,
+            Ok(response) if response.status().is_redirection() => {
+                return Err(OpenaiTunnelError::Network(
+                    "health endpoint redirected; refusing readiness inference".into(),
+                ));
+            }
+            Ok(_) | Err(_) => {}
+        }
+
+        match client.get(ready_url.clone()).send().await {
+            Ok(response) if response.status().is_success() => {
+                return Ok(OpenaiTunnelReadiness {
+                    ready: true,
+                    health_live,
+                    redacted_reason: None,
+                });
+            }
+            Ok(response) if response.status().is_redirection() => {
+                return Err(OpenaiTunnelError::Network(
+                    "ready endpoint redirected; refusing readiness inference".into(),
+                ));
+            }
+            Ok(response) => {
+                last_reason = Some(format!(
+                    "readyz returned HTTP {}",
+                    response.status().as_u16()
+                ));
+            }
+            Err(error) => {
+                last_reason = Some(redact_network_error(&error.to_string()));
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    Ok(OpenaiTunnelReadiness {
+        ready: false,
+        health_live,
+        redacted_reason: last_reason,
+    })
+}
+
+pub fn normalize_admin_base_url(value: &str) -> Result<reqwest::Url, OpenaiTunnelError> {
+    let trimmed = value.trim().trim_end_matches('/');
+    let without_ui = trimmed.strip_suffix("/ui").unwrap_or(trimmed);
+    let mut url = reqwest::Url::parse(without_ui).map_err(|_| {
+        OpenaiTunnelError::InvalidPath("admin health URL must be a valid loopback URL".into())
+    })?;
+    if url.scheme() != "http" {
+        return Err(OpenaiTunnelError::InvalidPath(
+            "admin health URL must use http on loopback".into(),
+        ));
+    }
+    if !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(OpenaiTunnelError::InvalidPath(
+            "admin health URL must not include credentials, query, or fragment".into(),
+        ));
+    }
+    let host = url.host_str().ok_or_else(|| {
+        OpenaiTunnelError::InvalidPath("admin health URL must include a host".into())
+    })?;
+    let is_loopback = host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|addr| addr.is_loopback());
+    if !is_loopback {
+        return Err(OpenaiTunnelError::InvalidPath(
+            "admin health URL must be loopback-only".into(),
+        ));
+    }
+    url.set_path("/");
+    Ok(url)
+}
+
+fn read_bounded_child_output<R>(mut reader: R) -> JoinHandle<String>
+where
+    R: tokio::io::AsyncRead + Unpin + Send + 'static,
+{
+    tokio::spawn(async move {
+        let mut output = Vec::new();
+        let mut buf = [0_u8; 1024];
+        loop {
+            match reader.read(&mut buf).await {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    let remaining = MAX_CHILD_OUTPUT_BYTES.saturating_sub(output.len());
+                    if remaining == 0 {
+                        break;
+                    }
+                    output.extend_from_slice(&buf[..n.min(remaining)]);
+                }
+            }
+        }
+        redact_tunnel_output(&String::from_utf8_lossy(&output))
+    })
 }
 
 async fn run_client_command<const N: usize>(
@@ -545,6 +764,50 @@ fn parse_sha256_digest(value: &str) -> Option<String> {
         return Some(value.to_ascii_lowercase());
     }
     None
+}
+
+fn windows_arch_asset_token() -> Result<&'static str, OpenaiTunnelError> {
+    match std::env::consts::ARCH {
+        "x86_64" => Ok("amd64"),
+        "aarch64" => Ok("arm64"),
+        _ => Err(OpenaiTunnelError::Release(
+            "unsupported Windows tunnel-client architecture".into(),
+        )),
+    }
+}
+
+fn validate_official_download_url(url: &str) -> Result<(), OpenaiTunnelError> {
+    let parsed = reqwest::Url::parse(url)
+        .map_err(|_| OpenaiTunnelError::Release("download URL was invalid".into()))?;
+    if parsed.scheme() != "https"
+        || parsed.host_str() != Some("github.com")
+        || !parsed
+            .path()
+            .starts_with("/openai/tunnel-client/releases/download/")
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+    {
+        return Err(OpenaiTunnelError::Release(
+            "download URL was not an official openai/tunnel-client release asset".into(),
+        ));
+    }
+    Ok(())
+}
+
+pub fn redact_tunnel_output(text: &str) -> String {
+    let patterns = [
+        regex::Regex::new(r"sk-[A-Za-z0-9_-]{12,}").expect("regex"),
+        regex::Regex::new(r"(?i)(CONTROL_PLANE_API_KEY=)[^\s]+").expect("regex"),
+        regex::Regex::new(r"(?i)(authorization:\s*bearer\s+)[^\s]+").expect("regex"),
+        regex::Regex::new(r"https?://[^\s]+/[A-Za-z0-9_-]{16,}/mcp").expect("regex"),
+    ];
+    let mut redacted = text.to_string();
+    for pattern in patterns {
+        redacted = pattern.replace_all(&redacted, "<redacted>").to_string();
+    }
+    redacted.chars().take(MAX_CHILD_OUTPUT_BYTES).collect()
 }
 
 fn redact_path_error(error: std::io::Error) -> String {
@@ -733,6 +996,7 @@ mod tests {
         let value = serde_json::json!({
             "tag_name": "v0.0.7",
             "html_url": "https://github.com/openai/tunnel-client/releases/tag/v0.0.7",
+            "prerelease": false,
             "assets": [{
                 "name": "tunnel-client-windows-amd64.zip",
                 "browser_download_url": "https://github.com/openai/tunnel-client/releases/download/v0.0.7/tunnel-client-windows-amd64.zip",
@@ -743,6 +1007,46 @@ mod tests {
         assert_eq!(plan.release_tag, "v0.0.7");
         assert!(!plan.checksum_available);
         assert!(plan.warning.is_some());
+    }
+
+    #[test]
+    fn prerelease_release_metadata_is_rejected() {
+        let value = serde_json::json!({
+            "tag_name": "v0.0.8-rc1",
+            "html_url": "https://github.com/openai/tunnel-client/releases/tag/v0.0.8-rc1",
+            "prerelease": true,
+            "assets": []
+        });
+        let error = release_plan_from_github_json(&value).expect_err("prerelease rejected");
+        assert!(error.to_string().contains("prerelease"));
+    }
+
+    #[test]
+    fn windows_asset_must_match_current_architecture_and_size_bounds() {
+        let wrong_arch = if std::env::consts::ARCH == "x86_64" {
+            "tunnel-client-windows-arm64.zip"
+        } else {
+            "tunnel-client-windows-amd64.zip"
+        };
+        let assets = vec![serde_json::json!({
+            "name": wrong_arch,
+            "browser_download_url": "https://github.com/openai/tunnel-client/releases/download/v0.0.7/tunnel-client.zip",
+            "size": 123
+        })];
+        let error = select_windows_asset(&assets).expect_err("wrong architecture rejected");
+        assert!(error.to_string().contains("architecture"));
+    }
+
+    #[test]
+    fn windows_asset_download_url_must_be_official_release_url() {
+        let arch = windows_arch_asset_token().expect("supported arch");
+        let assets = vec![serde_json::json!({
+            "name": format!("tunnel-client-windows-{arch}.zip"),
+            "browser_download_url": "https://example.invalid/openai/tunnel-client/releases/download/v0.0.7/tunnel-client.zip",
+            "size": 123
+        })];
+        let error = select_windows_asset(&assets).expect_err("unofficial URL rejected");
+        assert!(error.to_string().contains("official"));
     }
 
     #[test]
@@ -765,6 +1069,7 @@ mod tests {
         std::fs::write(&binary, "previous").expect("previous");
         let result = install_client_archive_bytes(b"not a zip", None, &install_dir);
         assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("SHA-256"));
         assert_eq!(
             std::fs::read_to_string(&binary).expect("previous"),
             "previous"
@@ -803,6 +1108,11 @@ mod tests {
     fn startup_policy_does_not_download_or_mutate_path_or_credentials() {
         let config = OpenaiTunnelConfig::default();
         assert!(startup_never_downloads_client(&config));
+        let network_config = OpenaiTunnelConfig {
+            client_path: Some("https://github.com/openai/tunnel-client/releases/latest".into()),
+            ..OpenaiTunnelConfig::default()
+        };
+        assert!(!startup_never_downloads_client(&network_config));
         assert!(credential_environment_present(|name| {
             assert_eq!(name, "CONTROL_PLANE_API_KEY");
             Some(OsString::from("present"))
@@ -828,5 +1138,65 @@ mod tests {
             config.admin_ui_url.as_deref(),
             Some("http://127.0.0.1:9900/ui")
         );
+    }
+
+    #[test]
+    fn admin_base_url_requires_loopback_and_strips_ui_path() {
+        let url = normalize_admin_base_url("http://127.0.0.1:9900/ui").expect("loopback");
+        assert_eq!(url.as_str(), "http://127.0.0.1:9900/");
+        let error = normalize_admin_base_url("http://192.168.1.10:9900/ui")
+            .expect_err("non-loopback rejected");
+        assert!(error.to_string().contains("loopback"));
+        let error = normalize_admin_base_url("http://127.0.0.1:9900/ui?token=secret")
+            .expect_err("query rejected");
+        assert!(error.to_string().contains("query"));
+    }
+
+    #[tokio::test]
+    async fn readiness_probe_uses_readyz_not_only_healthz() {
+        use axum::{Router, http::StatusCode, routing::get};
+        let app = Router::new()
+            .route("/healthz", get(|| async { (StatusCode::OK, "live") }))
+            .route(
+                "/readyz",
+                get(|| async { (StatusCode::SERVICE_UNAVAILABLE, "not ready") }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let server = tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let report =
+            probe_tunnel_client_readiness(&format!("http://{addr}"), Duration::from_millis(500))
+                .await
+                .expect("probe");
+        assert!(report.health_live);
+        assert!(!report.ready);
+        assert!(
+            report
+                .redacted_reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("503"))
+        );
+        server.abort();
+    }
+
+    #[test]
+    fn tunnel_output_redacts_credentials_and_routes() {
+        let output = redact_tunnel_output(
+            "CONTROL_PLANE_API_KEY=secret-value\nAuthorization: Bearer sk-secret-secret-secret\nhttps://example.ngrok-free.app/AbCdEfGhIjKlMnOpQrStUvWx/mcp",
+        );
+        assert!(!output.contains("secret-value"));
+        assert!(!output.contains("sk-secret"));
+        assert!(!output.contains("AbCdEfGhIjKlMnOpQrStUvWx"));
+        assert!(output.contains("<redacted>"));
+    }
+
+    #[test]
+    fn tunnel_output_is_bounded() {
+        let output = redact_tunnel_output(&"x".repeat(MAX_CHILD_OUTPUT_BYTES + 1024));
+        assert_eq!(output.len(), MAX_CHILD_OUTPUT_BYTES);
     }
 }

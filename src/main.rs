@@ -1201,14 +1201,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(child) = app.devtools_child.as_mut() {
             let _ = child.start_kill();
         }
-        if let Some(child) = app.openai_tunnel_child.as_mut() {
-            let _ = child.start_kill();
-        }
+        let openai_tunnel_child = app.openai_tunnel_child.take();
         app.server_running = false;
         app.ngrok_running = false;
         app.ngrok_url = None;
         app.remote_connected = false;
         app.last_remote_activity_ms = None;
+        drop(app);
+        if let Some(mut child) = openai_tunnel_child {
+            let _ = child.start_kill();
+            let _ = child.wait_with_timeout(Duration::from_secs(3)).await;
+        }
     }
 
     result
@@ -1722,10 +1725,13 @@ fn render_toast(f: &mut Frame, palette: theme::Palette, msg: &str, pos: (u16, u1
 #[cfg(test)]
 mod tests {
     use super::{
-        ToolMode, key_is_clipboard_paste, normalize_ngrok_authtoken_input,
-        parse_headless_mcp_options, resolve_headless_workspace, validate_headless_mcp_path,
+        ToolMode, key_is_clipboard_paste, loopback_http_origin, normalize_ngrok_authtoken_input,
+        parse_headless_mcp_options, resolve_headless_workspace, safe_bind_identity,
+        validate_headless_mcp_path,
     };
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
+    use std::time::Duration;
     use std::time::SystemTime;
 
     #[test]
@@ -1957,6 +1963,52 @@ mod tests {
             assert!(script.contains("Remove-Item Env:\\CATDESK_MCP_AUTH_TOKEN"));
             assert!(!script.contains("--auth-token"));
         }
+    }
+
+    #[test]
+    fn default_runtime_bind_identity_is_loopback_and_port_exclusive() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind loopback");
+        let addr = listener.local_addr().expect("addr");
+        assert!(addr.ip().is_loopback());
+        assert_eq!(
+            safe_bind_identity(&addr),
+            format!("loopback:{}", addr.port())
+        );
+        assert!(TcpListener::bind(("127.0.0.1", addr.port())).is_err());
+    }
+
+    #[test]
+    fn loopback_listener_is_not_reachable_on_lan_interface() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind loopback");
+        let port = listener.local_addr().expect("addr").port();
+        let Some(lan_ip) = discover_best_effort_lan_ip() else {
+            return;
+        };
+        let lan_addr = SocketAddr::new(lan_ip, port);
+        assert!(
+            TcpStream::connect_timeout(&lan_addr, Duration::from_millis(150)).is_err(),
+            "loopback-only listener unexpectedly accepted LAN connection"
+        );
+    }
+
+    #[test]
+    fn loopback_http_origin_handles_ipv4_hostname_and_ipv6() {
+        assert_eq!(
+            loopback_http_origin("127.0.0.1", 3201),
+            "http://127.0.0.1:3201"
+        );
+        assert_eq!(
+            loopback_http_origin("localhost", 3201),
+            "http://localhost:3201"
+        );
+        assert_eq!(loopback_http_origin("::1", 3201), "http://[::1]:3201");
+    }
+
+    fn discover_best_effort_lan_ip() -> Option<std::net::IpAddr> {
+        let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
+        socket.connect("8.8.8.8:80").ok()?;
+        let ip = socket.local_addr().ok()?.ip();
+        (!ip.is_loopback()).then_some(ip)
     }
 }
 
@@ -2845,10 +2897,9 @@ async fn start_services(
     state: SharedState,
     ui_events: UnboundedSender<ServerUiEvent>,
 ) -> Option<Arc<Mutex<DevtoolsBridge>>> {
-    let (port, mode, mut detected_browsers, mut selected_browser) = {
+    let (mode, mut detected_browsers, mut selected_browser) = {
         let app = state.lock().await;
         (
-            app.port,
             app.mode,
             app.detected_browsers.clone(),
             app.selected_browser.clone(),
@@ -2980,27 +3031,49 @@ async fn start_services(
         None
     };
 
-    let mcp_path = {
+    let (mcp_path, bind_host, bind_port) = {
         let app = state.lock().await;
-        app.mcp_path()
+        (app.mcp_path(), app.mcp_bind_host.clone(), app.port)
     };
     let router = server::router(
         state.clone(),
         devtools_bridge.clone(),
-        mcp_path,
+        mcp_path.clone(),
         ui_events,
         None,
     );
-    let listener = match tokio::net::TcpListener::bind(format!("0.0.0.0:{port}")).await {
+    let bind_identity = format!("{bind_host}:{bind_port}");
+    let listener = match tokio::net::TcpListener::bind(&bind_identity).await {
         Ok(l) => l,
         Err(e) => {
-            state
-                .lock()
-                .await
-                .log("ERROR", format!("Failed to bind port {port}: {e}"));
+            state.lock().await.log(
+                "ERROR",
+                format!("Failed to bind MCP listener {bind_identity}: {e}"),
+            );
             return devtools_bridge;
         }
     };
+    let local_addr = match listener.local_addr() {
+        Ok(addr) => addr,
+        Err(e) => {
+            state.lock().await.log(
+                "ERROR",
+                format!("Failed to inspect MCP listener address: {e}"),
+            );
+            return devtools_bridge;
+        }
+    };
+    if !local_addr.ip().is_loopback()
+        && crate::tunnel::requires_loopback(state.lock().await.tunnel_config.mode)
+    {
+        state.lock().await.log(
+            "ERROR",
+            format!(
+                "Refusing private transport MCP listener on non-loopback address: {local_addr}"
+            ),
+        );
+        return devtools_bridge;
+    }
 
     let handle = tokio::spawn(async move {
         let _ = axum::serve(listener, router).await;
@@ -3010,7 +3083,11 @@ async fn start_services(
         let mut app = state.lock().await;
         app.server_running = true;
         app.server_handle = Some(handle);
-        app.log("INFO", format!("MCP Server started on port {port}"));
+        app.port = local_addr.port();
+        app.log(
+            "INFO",
+            format!("MCP Server started on {}", safe_bind_identity(&local_addr)),
+        );
     }
 
     // Start ngrok
@@ -3025,16 +3102,28 @@ async fn start_services(
 // ── Phase 2: Main TUI ──────────────────────────────────────
 
 async fn refresh_transport_health(state: SharedState) {
-    let (port, mcp_path, remote_check_enabled, remote_mcp_url) = {
+    crate::ngrok::refresh_openai_child_exit_status(&state).await;
+    let (
+        bind_host,
+        port,
+        mcp_path,
+        remote_check_enabled,
+        remote_mcp_url,
+        tunnel_mode,
+        current_health,
+    ) = {
         let app = state.lock().await;
         (
+            app.mcp_bind_host.clone(),
             app.port,
             app.mcp_path(),
             app.tunnel_config.remote_self_check,
             app.public_mcp_url(),
+            app.tunnel_config.mode,
+            app.transport_health.clone(),
         )
     };
-    let local_endpoint = format!("http://127.0.0.1:{port}{mcp_path}");
+    let local_endpoint = format!("{}{}", loopback_http_origin(&bind_host, port), mcp_path);
     let mut snapshot =
         crate::tunnel::TransportHealthSnapshot::configured_unverified(remote_check_enabled);
     snapshot.last_checked_at = Some(crate::tunnel::current_startup_time());
@@ -3078,7 +3167,22 @@ async fn refresh_transport_health(state: SharedState) {
                     );
                 }
             } else {
-                snapshot.health = crate::tunnel::TransportHealth::LocalReady;
+                snapshot.health =
+                    if matches!(tunnel_mode, crate::tunnel::TunnelMode::OpenaiSecureTunnel) {
+                        match current_health.health {
+                            crate::tunnel::TransportHealth::Connecting
+                            | crate::tunnel::TransportHealth::ConnectedVerified
+                            | crate::tunnel::TransportHealth::Disconnected
+                            | crate::tunnel::TransportHealth::Failed => current_health.health,
+                            _ => crate::tunnel::TransportHealth::ConfiguredUnverified,
+                        }
+                    } else {
+                        crate::tunnel::TransportHealth::LocalReady
+                    };
+                if matches!(tunnel_mode, crate::tunnel::TunnelMode::OpenaiSecureTunnel) {
+                    snapshot.redacted_reason = current_health.redacted_reason.clone();
+                    snapshot.warnings.extend(current_health.warnings.clone());
+                }
             }
             snapshot.warnings.push(format!(
                 "Local MCP self-check passed with {} tools; endpoint fingerprint {}",
@@ -3086,7 +3190,12 @@ async fn refresh_transport_health(state: SharedState) {
             ));
         }
         Err(error) => {
-            snapshot.health = crate::tunnel::TransportHealth::Failed;
+            snapshot.health =
+                if matches!(tunnel_mode, crate::tunnel::TunnelMode::OpenaiSecureTunnel) {
+                    crate::tunnel::TransportHealth::BlockedLocalMcpUnavailable
+                } else {
+                    crate::tunnel::TransportHealth::Failed
+                };
             snapshot.local_mcp = "FAILED".into();
             snapshot.redacted_reason = Some(error);
         }
@@ -3096,6 +3205,22 @@ async fn refresh_transport_health(state: SharedState) {
     let health = snapshot.health.as_str();
     app.transport_health = snapshot;
     app.log("INFO", format!("Transport health: {health}"));
+}
+
+fn loopback_http_origin(host: &str, port: u16) -> String {
+    if host.contains(':') && !host.starts_with('[') {
+        format!("http://[{host}]:{port}")
+    } else {
+        format!("http://{host}:{port}")
+    }
+}
+
+fn safe_bind_identity(addr: &std::net::SocketAddr) -> String {
+    if addr.ip().is_loopback() {
+        format!("loopback:{}", addr.port())
+    } else {
+        format!("non-loopback:{}", addr.port())
+    }
 }
 
 async fn run_tui(

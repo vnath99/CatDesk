@@ -58,7 +58,8 @@ The doctor reports:
 - tunnel-client discovery
 - whether `CONTROL_PLANE_API_KEY` is present
 
-It redacts profile names and never prints credential values.
+It redacts profile names and never prints credential values. External OpenAI
+tunnel mode does not require the key to be present in CatDesk's process.
 
 ## Setup Wizard
 
@@ -75,7 +76,8 @@ safe to run repeatedly because it performs no mutations.
 
 1. Start the official `tunnel-client` with the operator-owned profile.
 2. Start CatDesk.
-3. Confirm `catdesk_transport_status` reports a truthful health state.
+3. If a loopback admin URL is configured, confirm `/readyz`-based status reaches
+   `CONNECTED_VERIFIED`; otherwise expect `CONFIGURED_UNVERIFIED`.
 4. In ChatGPT, call read-only tools first.
 5. Start delegated runs only after the connector is confirmed.
 
@@ -85,7 +87,8 @@ safe to run repeatedly because it performs no mutations.
 2. Start CatDesk.
 3. CatDesk runs `tunnel-client doctor`.
 4. CatDesk starts one verified tunnel-client child process.
-5. CatDesk stops only that child process during shutdown.
+5. CatDesk checks `/readyz` when a loopback admin URL is configured.
+6. CatDesk stops only that child process during shutdown.
 
 ## Restart Behavior
 

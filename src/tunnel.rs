@@ -2,6 +2,7 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use rand::{RngCore, rngs::OsRng};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::net::IpAddr;
 use std::path::Path;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -445,6 +446,16 @@ pub fn requires_loopback(mode: TunnelMode) -> bool {
     requires_persistent_route(mode)
 }
 
+pub fn is_loopback_bind_host(host: &str) -> bool {
+    let normalized = host.trim();
+    if normalized.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    normalized
+        .parse::<IpAddr>()
+        .is_ok_and(|addr| addr.is_loopback())
+}
+
 #[allow(dead_code)]
 pub fn manages_tunnel_process(mode: TunnelMode) -> bool {
     matches!(
@@ -454,18 +465,21 @@ pub fn manages_tunnel_process(mode: TunnelMode) -> bool {
 }
 
 pub fn validate_transport(mcp: &McpTransportConfig, tunnel: &TunnelConfig) -> Result<(), String> {
-    if mcp.port != DEFAULT_MCP_PORT {
-        return Err(format!(
-            "mcp.port is reserved for T-0025C and must remain {DEFAULT_MCP_PORT}"
-        ));
+    if mcp.port == 0 {
+        return Err("mcp.port must be between 1 and 65535".into());
     }
-    if mcp.bind_host != DEFAULT_MCP_BIND_HOST {
-        return Err(format!(
-            "mcp.bind_host is reserved for T-0025C and must remain {DEFAULT_MCP_BIND_HOST}"
-        ));
+    if mcp.bind_host.trim().is_empty()
+        || mcp
+            .bind_host
+            .chars()
+            .any(|ch| ch.is_whitespace() || ch.is_control())
+    {
+        return Err(
+            "mcp.bind_host must not be empty or contain whitespace/control characters".into(),
+        );
     }
-    if requires_loopback(tunnel.mode) && mcp.bind_host != DEFAULT_MCP_BIND_HOST {
-        return Err("stable transport modes must bind to 127.0.0.1".into());
+    if requires_loopback(tunnel.mode) && !is_loopback_bind_host(&mcp.bind_host) {
+        return Err("private transport modes must bind to a loopback address".into());
     }
     if tunnel.manage_process != manages_tunnel_process(tunnel.mode) {
         return Err(format!(
@@ -1234,9 +1248,9 @@ mod tests {
     }
 
     #[test]
-    fn invalid_port_and_non_loopback_stable_bind_are_rejected() {
+    fn zero_port_and_non_loopback_stable_bind_are_rejected() {
         let mut mcp = McpTransportConfig {
-            port: 22,
+            port: 0,
             ..McpTransportConfig::default()
         };
         let tunnel = TunnelConfig::default();

@@ -30,8 +30,8 @@ Create the profile through official client commands only.
 
 ## BLOCKED_MISSING_CREDENTIAL
 
-`CONTROL_PLANE_API_KEY` was not present for the process that needs to run
-`tunnel-client`.
+`CONTROL_PLANE_API_KEY` was not present for the CatDesk process in managed
+OpenAI tunnel mode. External mode does not require CatDesk to inspect this key.
 
 Actions:
 

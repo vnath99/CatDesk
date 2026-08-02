@@ -1,8 +1,9 @@
 param(
     [string]$Workspace = (Get-Location).Path,
     [string]$Model = "qwen3.6:35b-a3b",
-    [string]$McpHost = "127.0.0.1",
-    [int]$McpPort = 38765,
+    [string]$McpHost = "",
+    [int]$McpPort = 0,
+    [string]$ConfigPath = "",
     [string]$TransportMode = "",
     [string]$TunnelClientPath = "",
     [string]$OpenAiTunnelProfile = ""
@@ -93,6 +94,46 @@ function Optional-Provider {
 }
 
 $workspacePath = Resolve-Path -LiteralPath $Workspace -ErrorAction SilentlyContinue
+$homeDir = [Environment]::GetFolderPath("UserProfile")
+if (-not $ConfigPath) {
+    $ConfigPath = Join-Path $homeDir ".catdesk\config.toml"
+}
+
+function Read-CatDeskMcpConfig {
+    param([string]$Path)
+    $result = [ordered]@{
+        BindHost = "127.0.0.1"
+        Port = 3200
+        Found = $false
+    }
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return [pscustomobject]$result
+    }
+    $result.Found = $true
+    $section = ""
+    foreach ($line in (Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue)) {
+        $trimmed = $line.Trim()
+        if ($trimmed -match '^\[(.+)\]$') {
+            $section = $Matches[1]
+            continue
+        }
+        if ($section -eq "mcp" -and $trimmed -match '^bind_host\s*=\s*"([^"]+)"') {
+            $result.BindHost = $Matches[1]
+        }
+        if ($section -eq "mcp" -and $trimmed -match '^port\s*=\s*(\d+)') {
+            $result.Port = [int]$Matches[1]
+        }
+    }
+    [pscustomobject]$result
+}
+
+$mcpConfig = Read-CatDeskMcpConfig -Path $ConfigPath
+if (-not $McpHost) {
+    $McpHost = $mcpConfig.BindHost
+}
+if ($McpPort -eq 0) {
+    $McpPort = $mcpConfig.Port
+}
 $cargo = Command-Info "cargo"
 $rustc = Command-Info "rustc"
 $git = Command-Info "git"
@@ -138,6 +179,7 @@ $report = [pscustomobject][ordered]@{
         Host = $McpHost
         Port = $McpPort
         LoopbackOnly = ($McpHost -eq "127.0.0.1" -or $McpHost -eq "localhost" -or $McpHost -eq "::1")
+        Source = if ($mcpConfig.Found) { "CatDesk config" } else { "default" }
     }
     Transport = [pscustomobject][ordered]@{
         Mode = if ($TransportMode) { $TransportMode } else { "(not supplied)" }

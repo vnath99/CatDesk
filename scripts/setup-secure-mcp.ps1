@@ -3,6 +3,7 @@ param(
     [string]$TransportMode = "openai_secure_tunnel",
     [string]$TunnelClientPath = "",
     [string]$ProfileName = "catdesk-local",
+    [string]$LocalMcpUrlPlaceholder = "http://127.0.0.1:<port>/<persistent-route>/mcp",
     [switch]$Managed
 )
 
@@ -52,6 +53,10 @@ function Client-Help-Line {
 
 $clientPath = Find-TunnelClient -ExplicitPath $TunnelClientPath
 $processMode = if ($Managed) { "managed" } else { "external" }
+$quickstartHelp = Client-Help-Line -Path $clientPath -Args @("help", "quickstart")
+$initHelp = Client-Help-Line -Path $clientPath -Args @("init", "--help")
+$runHelp = Client-Help-Line -Path $clientPath -Args @("run", "--help")
+$supportsMcpServerUrl = (($quickstartHelp -match "--mcp-server-url") -or ($initHelp -match "--mcp-server-url") -or ($runHelp -match "--mcp-server-url"))
 
 $commands = @()
 if ($TransportMode -eq "openai_secure_tunnel") {
@@ -60,7 +65,11 @@ if ($TransportMode -eq "openai_secure_tunnel") {
     $commands += "tunnel-client doctor --help"
     $commands += "tunnel-client run --help"
     $commands += '$env:CONTROL_PLANE_API_KEY = "<runtime-api-key>"'
-    $commands += 'tunnel-client init --profile "<profile-name>"'
+    if ($supportsMcpServerUrl) {
+        $commands += "tunnel-client init --profile `"<profile-name>`" --tunnel-id `"<tunnel-id>`" --mcp-server-url `"$LocalMcpUrlPlaceholder`""
+    } else {
+        $commands += "Install/inspect tunnel-client help, then initialize profile with tunnel ID and HTTP MCP server URL using the syntax supported by that version."
+    }
     $commands += 'tunnel-client doctor --profile "<profile-name>" --explain'
     if ($Managed) {
         $commands += "target\release\catdesk.exe"
@@ -78,9 +87,11 @@ $report = [pscustomobject][ordered]@{
         Found = [bool]$clientPath
         Path = if ($clientPath) { "<redacted-user-path>" } else { $null }
         VersionOrHelp = Client-Help-Line -Path $clientPath -Args @("--version")
-        InitHelp = Client-Help-Line -Path $clientPath -Args @("init", "--help")
+        QuickstartHelp = $quickstartHelp
+        InitHelp = $initHelp
         DoctorHelp = Client-Help-Line -Path $clientPath -Args @("doctor", "--help")
-        RunHelp = Client-Help-Line -Path $clientPath -Args @("run", "--help")
+        RunHelp = $runHelp
+        SupportsMcpServerUrl = $supportsMcpServerUrl
     }
     Profile = [pscustomobject][ordered]@{
         Supplied = -not [string]::IsNullOrWhiteSpace($ProfileName)

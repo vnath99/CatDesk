@@ -17,7 +17,10 @@ operator-gated.
   support.
 - `openai_secure_tunnel` runtime mode with external and managed process
   ownership.
-- Credential presence check through process environment only.
+- Credential presence check through process environment only for managed mode.
+- External OpenAI mode does not require a CatDesk-held runtime API key.
+- `/readyz`-based OpenAI tunnel readiness when a loopback admin URL is
+  configured.
 - No credential persistence or logging.
 - No fallback from OpenAI Secure MCP to ngrok.
 - MCP request-size hardening.
@@ -44,7 +47,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 PASS
 
 cargo test
-PASS: 315 passed, 9 ignored
+PASS: 329 passed, 9 ignored
 
 cargo build --release
 PASS

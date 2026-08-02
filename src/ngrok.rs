@@ -1,7 +1,7 @@
 use crate::openai_tunnel::{
-    OpenaiTunnelProcessMode, TunnelClientDiscoveryOptions, credential_environment_present,
-    default_user_tools_dir, discover_tunnel_client, run_tunnel_client_doctor,
-    spawn_tunnel_client_run,
+    OPENAI_TUNNEL_READINESS_TIMEOUT, OpenaiTunnelProcessMode, TunnelClientDiscoveryOptions,
+    credential_environment_present, default_user_tools_dir, discover_tunnel_client,
+    probe_tunnel_client_readiness, run_tunnel_client_doctor, spawn_tunnel_client_run,
 };
 use crate::state::{SharedState, load_ngrok_authtoken, user_home_dir};
 use crate::tunnel::{
@@ -33,6 +33,34 @@ async fn configure_openai_secure_tunnel(state: SharedState) -> Result<(), String
         let app = state.lock().await;
         (app.openai_tunnel_config.clone(), app.workspace_root.clone())
     };
+    if config.profile_name.trim().is_empty() {
+        set_transport_health(
+            &state,
+            TransportHealth::BlockedMissingProfile,
+            "OpenAI tunnel profile name is missing",
+        )
+        .await;
+        return Err("openai_secure_tunnel requires openai_tunnel.profile_name".into());
+    }
+    if matches!(config.process_mode, OpenaiTunnelProcessMode::External) {
+        let mut app = state.lock().await;
+        app.ngrok_running = false;
+        app.ngrok_url = None;
+        app.transport_health =
+            TransportHealthSnapshot::configured_unverified(app.tunnel_config.remote_self_check);
+        app.transport_health.warnings.push(
+            "OpenAI Secure MCP Tunnel external mode configured; CatDesk did not launch tunnel-client or inspect credentials"
+                .into(),
+        );
+        app.log(
+            "INFO",
+            "OpenAI Secure MCP Tunnel external mode configured; operator owns tunnel-client".into(),
+        );
+        drop(app);
+        refresh_openai_readiness_from_admin_url(&state).await;
+        return Ok(());
+    }
+
     let home = user_home_dir().map_err(|error| error.to_string())?;
     let discovery = TunnelClientDiscoveryOptions {
         explicit_path: config.client_path.as_ref().map(PathBuf::from),
@@ -53,15 +81,6 @@ async fn configure_openai_secure_tunnel(state: SharedState) -> Result<(), String
             return Err(error.to_string());
         }
     };
-    if config.profile_name.trim().is_empty() {
-        set_transport_health(
-            &state,
-            TransportHealth::BlockedMissingProfile,
-            "OpenAI tunnel profile name is missing",
-        )
-        .await;
-        return Err("openai_secure_tunnel requires openai_tunnel.profile_name".into());
-    }
     if !credential_environment_present(|name| std::env::var_os(name)) {
         set_transport_health(
             &state,
@@ -85,21 +104,7 @@ async fn configure_openai_secure_tunnel(state: SharedState) -> Result<(), String
 
     match config.process_mode {
         OpenaiTunnelProcessMode::External => {
-            let mut app = state.lock().await;
-            app.ngrok_running = false;
-            app.ngrok_url = None;
-            app.transport_health =
-                TransportHealthSnapshot::configured_unverified(app.tunnel_config.remote_self_check);
-            app.transport_health.warnings.push(
-                "OpenAI Secure MCP Tunnel is external-process mode; CatDesk did not launch tunnel-client"
-                    .into(),
-            );
-            app.log(
-                "INFO",
-                "OpenAI Secure MCP Tunnel external mode configured; operator owns tunnel-client"
-                    .into(),
-            );
-            Ok(())
+            unreachable!("external mode returned before discovery")
         }
         OpenaiTunnelProcessMode::Managed => {
             let child = match spawn_tunnel_client_run(&metadata.path, &config.profile_name) {
@@ -130,7 +135,77 @@ async fn configure_openai_secure_tunnel(state: SharedState) -> Result<(), String
                 "OpenAI Secure MCP Tunnel managed process started with redacted profile identity"
                     .into(),
             );
+            drop(app);
+            refresh_openai_readiness_from_admin_url(&state).await;
             Ok(())
+        }
+    }
+}
+
+pub async fn refresh_openai_readiness_from_admin_url(state: &SharedState) {
+    let admin_url = {
+        let app = state.lock().await;
+        app.openai_tunnel_config.admin_ui_url.clone()
+    };
+    let Some(admin_url) = admin_url else {
+        return;
+    };
+    {
+        let mut app = state.lock().await;
+        if app.transport_health.health != TransportHealth::ConnectedVerified {
+            app.transport_health.health = TransportHealth::Connecting;
+        }
+    }
+    match probe_tunnel_client_readiness(&admin_url, OPENAI_TUNNEL_READINESS_TIMEOUT).await {
+        Ok(report) if report.ready => {
+            let mut app = state.lock().await;
+            app.transport_health.health = TransportHealth::ConnectedVerified;
+            app.transport_health.redacted_reason = None;
+            app.transport_health.last_checked_at = Some(crate::tunnel::current_startup_time());
+            app.transport_health
+                .warnings
+                .push("OpenAI tunnel-client /readyz returned ready".into());
+        }
+        Ok(report) => {
+            let mut app = state.lock().await;
+            if app.transport_health.health != TransportHealth::Disconnected {
+                app.transport_health.health = TransportHealth::Connecting;
+            }
+            app.transport_health.redacted_reason = report.redacted_reason;
+            app.transport_health.last_checked_at = Some(crate::tunnel::current_startup_time());
+        }
+        Err(error) => {
+            let mut app = state.lock().await;
+            app.transport_health.health = TransportHealth::Failed;
+            app.transport_health.redacted_reason = Some(error.to_string());
+            app.transport_health.last_checked_at = Some(crate::tunnel::current_startup_time());
+        }
+    }
+}
+
+pub async fn refresh_openai_child_exit_status(state: &SharedState) {
+    let mut app = state.lock().await;
+    let Some(child) = app.openai_tunnel_child.as_mut() else {
+        return;
+    };
+    match child.try_wait() {
+        Ok(Some(status)) => {
+            app.transport_health.health = if status.success() {
+                TransportHealth::Disconnected
+            } else {
+                TransportHealth::Failed
+            };
+            app.transport_health.redacted_reason = Some(format!(
+                "managed tunnel-client exited with status {}",
+                status.code().unwrap_or(-1)
+            ));
+            app.openai_tunnel_child = None;
+        }
+        Ok(None) => {}
+        Err(_) => {
+            app.transport_health.health = TransportHealth::Failed;
+            app.transport_health.redacted_reason =
+                Some("managed tunnel-client status could not be inspected".into());
         }
     }
 }
@@ -217,16 +292,23 @@ pub async fn start(state: SharedState) -> Result<(), String> {
 
     {
         let mut app = state.lock().await;
+        let public_mcp_url = format!("{url}{mcp_path}");
+        let fingerprint = connection_fingerprint(&public_mcp_url);
         app.ngrok_task = Some(watcher);
         app.ngrok_running = true;
         app.ngrok_url = Some(url.clone());
+        app.transport_identity.last_connection_fingerprint = Some(fingerprint.clone());
         app.transport_health.health = TransportHealth::ConnectedVerified;
         app.transport_health.local_mcp = "NOT_CHECKED".into();
         app.transport_health.remote_check_enabled = false;
         app.transport_health.last_checked_at = Some(crate::tunnel::current_startup_time());
         app.log("INFO", "ngrok SDK tunnel started".into());
-        app.log("INFO", format!("ngrok URL: {url}"));
-        app.log("INFO", format!("MCP Server URL: {url}{mcp_path}"));
+        app.log("INFO", format!("ngrok URL: {}", redact_full_mcp_url(&url)));
+        app.log(
+            "INFO",
+            format!("MCP Server URL: {}", redact_full_mcp_url(&public_mcp_url)),
+        );
+        app.log("INFO", format!("Connection fingerprint: {fingerprint}"));
     }
 
     Ok(())
