@@ -31,6 +31,7 @@ mod macos_terminal;
 mod mascot;
 mod mcp;
 mod ngrok;
+mod openai_tunnel;
 mod planning;
 mod project_memory;
 mod prompt_templates;

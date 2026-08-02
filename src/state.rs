@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::browser::DetectedBrowser;
 use crate::mascot::{self, MascotPack};
+use crate::openai_tunnel::OpenaiTunnelConfig;
 use crate::theme;
 use crate::tunnel::{
     AtomicWritePlan, ConfigSaveOutcome, McpTransportConfig, TransportHealthSnapshot,
@@ -143,6 +144,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub tunnel: TunnelConfig,
     #[serde(default)]
+    pub openai_tunnel: OpenaiTunnelConfig,
+    #[serde(default)]
     pub security: TransportSecurityConfig,
     #[serde(default)]
     pub identity: TransportIdentityConfig,
@@ -169,6 +172,7 @@ impl Default for AppConfig {
             ngrok_authtoken: None,
             mcp: McpTransportConfig::default(),
             tunnel: TunnelConfig::default(),
+            openai_tunnel: OpenaiTunnelConfig::default(),
             security: TransportSecurityConfig::default(),
             identity: TransportIdentityConfig::default(),
             agents_path_mode: AgentsPathMode::Default,
@@ -203,6 +207,7 @@ impl AppConfig {
             crate::tunnel::normalize_optional_string(self.tunnel.ngrok_domain.take());
         self.tunnel.ngrok_config_path =
             crate::tunnel::normalize_optional_string(self.tunnel.ngrok_config_path.take());
+        self.openai_tunnel = self.openai_tunnel.normalized();
         self.identity.installation_id =
             crate::tunnel::normalize_optional_string(self.identity.installation_id.take());
         self.identity.last_connection_fingerprint = crate::tunnel::normalize_optional_string(
