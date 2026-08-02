@@ -388,6 +388,16 @@ async fn handle_tools_list(
             "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false }
         }));
         tools.push(json!({
+            "name": "catdesk_transport_status",
+            "title": "Read transport status",
+            "description": "Return redacted CatDesk MCP transport health, build identity, and connection fingerprints. Never returns the complete endpoint, route slug, token, or credentials.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {}
+            },
+            "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false }
+        }));
+        tools.push(json!({
             "name": "read",
             "title": "Read file",
             "description": "Read a text file from workspace.",
@@ -5917,6 +5927,7 @@ mod tests {
             vec![
                 "run_command",
                 "catdesk_instruction",
+                "catdesk_transport_status",
                 "read",
                 "search",
                 "project_memory_read",
@@ -7886,6 +7897,7 @@ mod tests {
             names,
             vec![
                 "catdesk_instruction",
+                "catdesk_transport_status",
                 "read",
                 "search",
                 "project_memory_read",

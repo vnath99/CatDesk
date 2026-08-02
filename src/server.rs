@@ -21,6 +21,8 @@ use crate::state::{
 
 const STATELESS_FLOW_ID: &str = "stateless";
 const STATELESS_FLOW_LABEL: &str = "stateless";
+const CATDESK_SELF_CHECK_HEADER: &str = "catdesk-self-check";
+const TRANSPORT_STATUS_TOOL: &str = "catdesk_transport_status";
 
 #[derive(Clone)]
 struct ServerState {
@@ -1099,6 +1101,100 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn transport_status_tool_returns_redacted_status() {
+        let workspace_root = unique_temp_path("catdesk-transport-status-workspace");
+        let config_root = unique_temp_path("catdesk-transport-status-config");
+        let config_path = config_root.join("config.toml");
+        std::fs::create_dir_all(&workspace_root).expect("create workspace");
+        std::fs::create_dir_all(&config_root).expect("create config dir");
+
+        let mut app = AppState::new_for_test(
+            8789,
+            workspace_root.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .expect("create app state");
+        app.mcp_slug = "AbCdEfGhIjKlMnOpQrStUvWx".into();
+        app.ngrok_url = Some("https://example.ngrok-free.app".into());
+        app.transport_identity.last_connection_fingerprint = Some(
+            crate::tunnel::connection_fingerprint(&app.public_mcp_url().unwrap()),
+        );
+        let app_state = Arc::new(Mutex::new(app));
+        let (ui_tx, _ui_rx) = unbounded_channel();
+        let server_state = ServerState {
+            app: app_state,
+            devtools: None,
+            ui_events: ui_tx,
+            mcp_auth_token: None,
+        };
+
+        let listed = post_mcp(
+            State(server_state.clone()),
+            HeaderMap::new(),
+            Bytes::from(
+                serde_json::to_vec(&json!({
+                    "jsonrpc": "2.0",
+                    "id": "list",
+                    "method": "tools/list",
+                    "params": {}
+                }))
+                .expect("json"),
+            ),
+        )
+        .await;
+        assert_eq!(listed.status(), StatusCode::OK);
+        let listed_body = to_bytes(listed.into_body(), usize::MAX)
+            .await
+            .expect("read tools/list");
+        let listed_payload: Value = serde_json::from_slice(&listed_body).expect("list json");
+        let has_status = listed_payload
+            .get("result")
+            .and_then(|result| result.get("tools"))
+            .and_then(Value::as_array)
+            .expect("tools")
+            .iter()
+            .any(|tool| {
+                tool.get("name").and_then(Value::as_str) == Some("catdesk_transport_status")
+                    && tool
+                        .get("annotations")
+                        .and_then(|annotations| annotations.get("readOnlyHint"))
+                        .and_then(Value::as_bool)
+                        == Some(true)
+            });
+        assert!(has_status);
+
+        let response = post_mcp(
+            State(server_state),
+            HeaderMap::new(),
+            tool_call_body("catdesk_transport_status", json!({})),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("read response");
+        let payload: Value = serde_json::from_slice(&body).expect("status json");
+        let text = serde_json::to_string(&payload).expect("status text");
+        assert!(text.contains("\"catdesk_transport_status\""));
+        assert!(!text.contains("AbCdEfGhIjKlMnOpQrStUvWx"));
+        assert!(!text.contains("https://example.ngrok-free.app"));
+
+        let status = payload
+            .get("result")
+            .and_then(|result| result.get("structuredContent"))
+            .expect("structured status");
+        assert_eq!(
+            status.get("transportMode").and_then(Value::as_str),
+            Some("managed_ephemeral_ngrok")
+        );
+        assert!(status.get("installationFingerprint").is_some());
+        assert!(status.get("serverInstanceFingerprint").is_some());
+
+        let _ = std::fs::remove_dir_all(workspace_root);
+        let _ = std::fs::remove_dir_all(config_root);
+    }
+
+    #[tokio::test]
     async fn authenticated_network_mcp_lists_schema_and_rejects_malformed_contract() {
         let workspace_root = unique_temp_path("catdesk-network-mcp-workspace");
         let config_root = unique_temp_path("catdesk-network-mcp-config");
@@ -1238,8 +1334,14 @@ async fn post_mcp(
         );
     }
 
-    let _ = s.ui_events.send(ServerUiEvent::IncrementRequestCount);
-    let _ = s.ui_events.send(ServerUiEvent::SetRemoteConnected(true));
+    let is_self_check = headers
+        .get(CATDESK_SELF_CHECK_HEADER)
+        .and_then(|value| value.to_str().ok())
+        == Some("1");
+    if !is_self_check {
+        let _ = s.ui_events.send(ServerUiEvent::IncrementRequestCount);
+        let _ = s.ui_events.send(ServerUiEvent::SetRemoteConnected(true));
+    }
 
     let has_method = body.get("method").and_then(Value::as_str).is_some();
     if !has_method {
@@ -1300,18 +1402,33 @@ async fn post_mcp(
         )
     };
 
-    let mut response_json: Option<Value> = None;
-    if let Some(resp) = mcp::handle_request(
-        &req,
-        &workspace_root,
-        mascot_seed,
-        ngrok_url.as_deref(),
-        mode,
-        tool_mode,
-        set_catdesk_as_co_author,
-        &s.devtools,
-    )
-    .await
+    let mut response_json: Option<Value> = if is_transport_status_tool_call(&req) {
+        let payload = {
+            let app = s.app.lock().await;
+            app.transport_status_payload()
+        };
+        Some(
+            serde_json::to_value(mcp::JsonRpcResponse::success(
+                req.id.clone(),
+                transport_status_tool_result(payload),
+            ))
+            .unwrap(),
+        )
+    } else {
+        None
+    };
+    if response_json.is_none()
+        && let Some(resp) = mcp::handle_request(
+            &req,
+            &workspace_root,
+            mascot_seed,
+            ngrok_url.as_deref(),
+            mode,
+            tool_mode,
+            set_catdesk_as_co_author,
+            &s.devtools,
+        )
+        .await
     {
         let mut resp = resp;
         if req.method == "tools/call" {
@@ -1388,6 +1505,25 @@ async fn post_mcp(
 }
 
 // ── GET /<slug>/mcp — pure HTTP mode (no SSE) ───────────────
+
+fn is_transport_status_tool_call(req: &JsonRpcRequest) -> bool {
+    req.method == "tools/call"
+        && req
+            .params
+            .get("name")
+            .and_then(Value::as_str)
+            .is_some_and(|name| name == TRANSPORT_STATUS_TOOL)
+}
+
+fn transport_status_tool_result(payload: Value) -> Value {
+    json!({
+        "content": [{
+            "type": "text",
+            "text": "CatDesk transport status returned as redacted structured content."
+        }],
+        "structuredContent": payload
+    })
+}
 
 async fn get_mcp(State(s): State<ServerState>, headers: HeaderMap) -> Response<Body> {
     if !mcp_authorized(&headers, s.mcp_auth_token.as_deref()) {

@@ -3013,11 +3013,86 @@ async fn start_services(
     if let Err(e) = ngrok::start_transport(state.clone()).await {
         state.lock().await.log("ERROR", format!("transport: {e}"));
     }
+    refresh_transport_health(state.clone()).await;
 
     devtools_bridge
 }
 
 // ── Phase 2: Main TUI ──────────────────────────────────────
+
+async fn refresh_transport_health(state: SharedState) {
+    let (port, mcp_path, remote_check_enabled, remote_mcp_url) = {
+        let app = state.lock().await;
+        (
+            app.port,
+            app.mcp_path(),
+            app.tunnel_config.remote_self_check,
+            app.public_mcp_url(),
+        )
+    };
+    let local_endpoint = format!("http://127.0.0.1:{port}{mcp_path}");
+    let mut snapshot =
+        crate::tunnel::TransportHealthSnapshot::configured_unverified(remote_check_enabled);
+    snapshot.last_checked_at = Some(crate::tunnel::current_startup_time());
+
+    match crate::tunnel::run_mcp_endpoint_self_check(
+        &local_endpoint,
+        None,
+        crate::tunnel::MCP_SELF_CHECK_TIMEOUT,
+        false,
+    )
+    .await
+    {
+        Ok(report) => {
+            snapshot.local_mcp = "READY".into();
+            if remote_check_enabled {
+                if let Some(remote_endpoint) = remote_mcp_url.as_deref() {
+                    match crate::tunnel::run_mcp_endpoint_self_check(
+                        remote_endpoint,
+                        None,
+                        crate::tunnel::MCP_SELF_CHECK_TIMEOUT,
+                        true,
+                    )
+                    .await
+                    {
+                        Ok(_) => {
+                            snapshot.health = crate::tunnel::TransportHealth::ConnectedVerified;
+                        }
+                        Err(error) => {
+                            snapshot.health = crate::tunnel::TransportHealth::Degraded;
+                            snapshot.redacted_reason = Some(error);
+                            snapshot.warnings.push(
+                                "Remote MCP self-check failed; no fallback transport was started"
+                                    .into(),
+                            );
+                        }
+                    }
+                } else {
+                    snapshot.health = crate::tunnel::TransportHealth::Disconnected;
+                    snapshot.redacted_reason = Some(
+                        "remote self-check enabled but no public endpoint is configured".into(),
+                    );
+                }
+            } else {
+                snapshot.health = crate::tunnel::TransportHealth::LocalReady;
+            }
+            snapshot.warnings.push(format!(
+                "Local MCP self-check passed with {} tools; endpoint fingerprint {}",
+                report.tool_count, report.endpoint_fingerprint
+            ));
+        }
+        Err(error) => {
+            snapshot.health = crate::tunnel::TransportHealth::Failed;
+            snapshot.local_mcp = "FAILED".into();
+            snapshot.redacted_reason = Some(error);
+        }
+    }
+
+    let mut app = state.lock().await;
+    let health = snapshot.health.as_str();
+    app.transport_health = snapshot;
+    app.log("INFO", format!("Transport health: {health}"));
+}
 
 async fn run_tui(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
@@ -3156,6 +3231,10 @@ async fn run_tui(
                         KeyCode::End => {
                             log_follow_tail = true;
                             log_scroll = last_log_max_scroll;
+                        }
+                        KeyCode::Char('h') => {
+                            refresh_transport_health(state.clone()).await;
+                            toast = Some(("Transport health checked", (2, 2), Instant::now()));
                         }
                         _ => {}
                     }
@@ -3442,6 +3521,24 @@ fn draw_ui(
                     palette.success_fg
                 } else {
                     palette.danger_fg
+                }),
+            ),
+        ]),
+        Line::from(vec![
+            status_label("Transport:"),
+            Span::styled(
+                format!(
+                    "{} / {}",
+                    app.transport_health.health.as_str(),
+                    app.transport_health.local_mcp
+                ),
+                Style::default().fg(match app.transport_health.health {
+                    crate::tunnel::TransportHealth::ConnectedVerified
+                    | crate::tunnel::TransportHealth::LocalReady => palette.success_fg,
+                    crate::tunnel::TransportHealth::ConfiguredUnverified
+                    | crate::tunnel::TransportHealth::Connecting => palette.info_fg,
+                    crate::tunnel::TransportHealth::Disabled => palette.muted_fg,
+                    _ => palette.danger_fg,
                 }),
             ),
         ]),

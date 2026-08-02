@@ -14,10 +14,11 @@ use crate::browser::DetectedBrowser;
 use crate::mascot::{self, MascotPack};
 use crate::theme;
 use crate::tunnel::{
-    AtomicWritePlan, ConfigSaveOutcome, McpTransportConfig, TransportIdentityConfig,
-    TransportIdentitySnapshot, TransportSecurityConfig, TunnelConfig, build_identity_snapshot,
-    current_startup_time, ensure_installation_id, ensure_persistent_route_if_required,
-    promote_pending_route_after_restart, tmp_path_for_atomic_write, validate_transport,
+    AtomicWritePlan, ConfigSaveOutcome, McpTransportConfig, TransportHealthSnapshot,
+    TransportIdentityConfig, TransportIdentitySnapshot, TransportSecurityConfig, TunnelConfig,
+    build_identity_snapshot, current_startup_time, dirty_build_state, ensure_installation_id,
+    ensure_persistent_route_if_required, promote_pending_route_after_restart,
+    tmp_path_for_atomic_write, validate_transport,
 };
 
 /// Log entry displayed in the TUI.
@@ -751,6 +752,7 @@ pub struct AppState {
     pub startup_time: String,
     pub tunnel_config: TunnelConfig,
     pub transport_identity: TransportIdentityConfig,
+    pub transport_health: TransportHealthSnapshot,
     pub server_running: bool,
     pub ngrok_running: bool,
     pub ngrok_url: Option<String>,
@@ -1167,8 +1169,11 @@ impl AppState {
             installation_id,
             server_instance_id: Uuid::new_v4().to_string(),
             startup_time: current_startup_time(),
-            tunnel_config: config.tunnel,
+            tunnel_config: config.tunnel.clone(),
             transport_identity: config.identity,
+            transport_health: TransportHealthSnapshot::configured_unverified(
+                config.tunnel.remote_self_check,
+            ),
             server_running: false,
             ngrok_running: false,
             ngrok_url: None,
@@ -1272,6 +1277,33 @@ impl AppState {
             self.tunnel_config.mode,
             self.public_mcp_url().as_deref(),
         )
+    }
+
+    pub fn transport_status_payload(&self) -> serde_json::Value {
+        let identity = self.transport_identity_snapshot();
+        serde_json::json!({
+            "toolName": "catdesk_transport_status",
+            "transportMode": self.tunnel_config.mode.as_str(),
+            "transportHealth": self.transport_health.health.as_str(),
+            "localMcp": self.transport_health.local_mcp.clone(),
+            "remoteCheckEnabled": self.tunnel_config.remote_self_check,
+            "lastCheckedAt": self.transport_health.last_checked_at.clone(),
+            "installationFingerprint": crate::tunnel::connection_fingerprint(&self.installation_id),
+            "serverInstanceFingerprint": crate::tunnel::connection_fingerprint(&self.server_instance_id),
+            "connectionFingerprint": self.transport_identity.last_connection_fingerprint.clone(),
+            "buildState": dirty_build_state(),
+            "warnings": self.transport_health.warnings.clone(),
+            "redactedReason": self.transport_health.redacted_reason.clone(),
+            "identity": {
+                "gitCommit": identity.git_commit,
+                "dirtyBuild": identity.dirty_build,
+                "binaryFingerprint": identity.binary_fingerprint,
+                "startupTime": identity.startup_time,
+                "workspaceHash": identity.workspace_hash,
+                "transportMode": identity.transport_mode,
+                "connectionFingerprint": identity.connection_fingerprint,
+            }
+        })
     }
 
     pub fn record_turn_usage(&mut self, input_tokens: u64, output_tokens: u64) {

@@ -1,14 +1,20 @@
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use rand::{RngCore, rngs::OsRng};
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use std::path::Path;
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 pub const DEFAULT_MCP_BIND_HOST: &str = "127.0.0.1";
 pub const DEFAULT_MCP_PORT: u16 = 3200;
+pub const MCP_SELF_CHECK_MAX_RESPONSE_BYTES: usize = 512 * 1024;
+pub const MCP_SELF_CHECK_TIMEOUT: Duration = Duration::from_secs(5);
 const MIN_ROUTE_LEN: usize = 24;
 const MAX_ROUTE_LEN: usize = 96;
+const REQUIRED_BASELINE_TOOL: &str = "catdesk_instruction";
+const REQUIRED_SUPERVISOR_TOOL: &str = "delegated_run_list";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -138,6 +144,103 @@ pub struct TransportIdentityConfig {
     pub installation_id: Option<String>,
     #[serde(default)]
     pub last_connection_fingerprint: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum TransportHealth {
+    #[default]
+    Disabled,
+    ConfiguredUnverified,
+    LocalReady,
+    Connecting,
+    ConnectedVerified,
+    Degraded,
+    Disconnected,
+    BlockedMissingClient,
+    BlockedMissingProfile,
+    BlockedMissingCredential,
+    BlockedMissingTunnelId,
+    BlockedInvalidConfiguration,
+    BlockedLocalMcpUnavailable,
+    BlockedRemoteEndpointUnavailable,
+    BlockedPermissionUnknown,
+    BlockedUnsupported,
+    Failed,
+}
+
+impl TransportHealth {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Disabled => "DISABLED",
+            Self::ConfiguredUnverified => "CONFIGURED_UNVERIFIED",
+            Self::LocalReady => "LOCAL_READY",
+            Self::Connecting => "CONNECTING",
+            Self::ConnectedVerified => "CONNECTED_VERIFIED",
+            Self::Degraded => "DEGRADED",
+            Self::Disconnected => "DISCONNECTED",
+            Self::BlockedMissingClient => "BLOCKED_MISSING_CLIENT",
+            Self::BlockedMissingProfile => "BLOCKED_MISSING_PROFILE",
+            Self::BlockedMissingCredential => "BLOCKED_MISSING_CREDENTIAL",
+            Self::BlockedMissingTunnelId => "BLOCKED_MISSING_TUNNEL_ID",
+            Self::BlockedInvalidConfiguration => "BLOCKED_INVALID_CONFIGURATION",
+            Self::BlockedLocalMcpUnavailable => "BLOCKED_LOCAL_MCP_UNAVAILABLE",
+            Self::BlockedRemoteEndpointUnavailable => "BLOCKED_REMOTE_ENDPOINT_UNAVAILABLE",
+            Self::BlockedPermissionUnknown => "BLOCKED_PERMISSION_UNKNOWN",
+            Self::BlockedUnsupported => "BLOCKED_UNSUPPORTED",
+            Self::Failed => "FAILED",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransportHealthSnapshot {
+    pub health: TransportHealth,
+    pub local_mcp: String,
+    pub remote_check_enabled: bool,
+    pub last_checked_at: Option<String>,
+    pub warnings: Vec<String>,
+    pub redacted_reason: Option<String>,
+}
+
+impl TransportHealthSnapshot {
+    pub fn disabled() -> Self {
+        Self {
+            health: TransportHealth::Disabled,
+            local_mcp: "NOT_CHECKED".into(),
+            remote_check_enabled: false,
+            last_checked_at: None,
+            warnings: Vec::new(),
+            redacted_reason: None,
+        }
+    }
+
+    pub fn configured_unverified(remote_check_enabled: bool) -> Self {
+        Self {
+            health: TransportHealth::ConfiguredUnverified,
+            local_mcp: "NOT_CHECKED".into(),
+            remote_check_enabled,
+            last_checked_at: None,
+            warnings: Vec::new(),
+            redacted_reason: None,
+        }
+    }
+}
+
+impl Default for TransportHealthSnapshot {
+    fn default() -> Self {
+        Self::disabled()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct McpSelfCheckReport {
+    pub endpoint_fingerprint: String,
+    pub initialize_ok: bool,
+    pub tools_list_ok: bool,
+    pub required_tools_present: bool,
+    pub tool_count: usize,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -381,9 +484,6 @@ pub fn validate_transport(mcp: &McpTransportConfig, tunnel: &TunnelConfig) -> Re
                 .into(),
         );
     }
-    if tunnel.remote_self_check {
-        return Err("tunnel.remote_self_check is reserved for T-0025C".into());
-    }
     if tunnel.ngrok_config_path.is_some() {
         return Err("tunnel.ngrok_config_path is reserved for T-0025C".into());
     }
@@ -526,6 +626,173 @@ pub fn current_startup_time() -> String {
         .unwrap_or_else(|_| "unix:0".into())
 }
 
+pub fn validate_remote_mcp_endpoint(url: &str) -> Result<(), String> {
+    reject_whitespace_or_control(url, "remote MCP endpoint")?;
+    let parsed = reqwest::Url::parse(url)
+        .map_err(|_| "remote MCP endpoint must be a valid URL".to_string())?;
+    if parsed.scheme() != "https" {
+        return Err("remote MCP endpoint must use https".into());
+    }
+    if !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+    {
+        return Err(
+            "remote MCP endpoint must not contain credentials, query strings, or fragments".into(),
+        );
+    }
+    let Some(host) = parsed.host_str() else {
+        return Err("remote MCP endpoint must include a hostname".into());
+    };
+    normalize_hostname(host, "remote MCP endpoint hostname")?;
+    if parsed.path() == "/" || !parsed.path().ends_with("/mcp") {
+        return Err("remote MCP endpoint path must end with /mcp".into());
+    }
+    Ok(())
+}
+
+pub fn validate_required_mcp_tools(value: &Value) -> Result<usize, String> {
+    let tools = value
+        .get("result")
+        .and_then(|result| result.get("tools"))
+        .and_then(Value::as_array)
+        .ok_or_else(|| "tools/list response did not contain result.tools".to_string())?;
+    let mut has_baseline = false;
+    let mut has_supervisor = false;
+    for tool in tools {
+        match tool.get("name").and_then(Value::as_str) {
+            Some(REQUIRED_BASELINE_TOOL) => has_baseline = true,
+            Some(REQUIRED_SUPERVISOR_TOOL) => has_supervisor = true,
+            _ => {}
+        }
+    }
+    if !has_baseline {
+        return Err("tools/list did not include required catdesk_instruction tool".into());
+    }
+    if !has_supervisor {
+        return Err("tools/list did not include required delegated_run_list tool".into());
+    }
+    Ok(tools.len())
+}
+
+pub async fn run_mcp_endpoint_self_check(
+    endpoint: &str,
+    auth_token: Option<&str>,
+    timeout: Duration,
+    require_https: bool,
+) -> Result<McpSelfCheckReport, String> {
+    if require_https {
+        validate_remote_mcp_endpoint(endpoint)?;
+    }
+    let parsed = reqwest::Url::parse(endpoint)
+        .map_err(|_| "MCP self-check endpoint must be a valid URL".to_string())?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("MCP self-check endpoint must use http or https".into());
+    }
+    if !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+    {
+        return Err(
+            "MCP self-check endpoint must not contain credentials, query strings, or fragments"
+                .into(),
+        );
+    }
+
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(timeout)
+        .build()
+        .map_err(|_| "failed to build bounded MCP self-check client".to_string())?;
+
+    let initialize = json!({
+        "jsonrpc": "2.0",
+        "id": "catdesk-self-check-initialize",
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-03-26",
+            "capabilities": {},
+            "clientInfo": { "name": "catdesk-self-check", "version": "1" }
+        }
+    });
+    let initialize_value = send_bounded_mcp_request(&client, endpoint, auth_token, &initialize)
+        .await
+        .map_err(|error| format!("initialize failed: {error}"))?;
+    if initialize_value.get("error").is_some()
+        || initialize_value
+            .get("result")
+            .and_then(|result| result.get("serverInfo"))
+            .is_none()
+    {
+        return Err("initialize response did not include a valid server identity".into());
+    }
+
+    let tools_list = json!({
+        "jsonrpc": "2.0",
+        "id": "catdesk-self-check-tools",
+        "method": "tools/list",
+        "params": {}
+    });
+    let tools_value = send_bounded_mcp_request(&client, endpoint, auth_token, &tools_list)
+        .await
+        .map_err(|error| format!("tools/list failed: {error}"))?;
+    let tool_count = validate_required_mcp_tools(&tools_value)?;
+    Ok(McpSelfCheckReport {
+        endpoint_fingerprint: connection_fingerprint(endpoint),
+        initialize_ok: true,
+        tools_list_ok: true,
+        required_tools_present: true,
+        tool_count,
+    })
+}
+
+async fn send_bounded_mcp_request(
+    client: &reqwest::Client,
+    endpoint: &str,
+    auth_token: Option<&str>,
+    body: &Value,
+) -> Result<Value, String> {
+    let mut request = client
+        .post(endpoint)
+        .header("catdesk-self-check", "1")
+        .json(body);
+    if let Some(token) = auth_token {
+        request = request.bearer_auth(token);
+    }
+    let response = request
+        .send()
+        .await
+        .map_err(|error| redacted_network_error(&error.to_string()))?;
+    let status = response.status();
+    if status.is_redirection() {
+        return Err("endpoint returned a redirect; refusing cross-origin MCP self-check".into());
+    }
+    if !status.is_success() {
+        return Err(format!("endpoint returned HTTP {}", status.as_u16()));
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|error| redacted_network_error(&error.to_string()))?;
+    if bytes.len() > MCP_SELF_CHECK_MAX_RESPONSE_BYTES {
+        return Err("endpoint response exceeded MCP self-check size limit".into());
+    }
+    serde_json::from_slice::<Value>(&bytes)
+        .map_err(|_| "endpoint returned malformed JSON-RPC".to_string())
+}
+
+fn redacted_network_error(error: &str) -> String {
+    let first = error.lines().next().unwrap_or("network error");
+    first
+        .replace("http://", "<scheme>://")
+        .replace("https://", "<scheme>://")
+        .chars()
+        .take(240)
+        .collect()
+}
+
 #[allow(dead_code)]
 pub fn git_commit() -> String {
     option_env!("GIT_COMMIT")
@@ -611,6 +878,9 @@ pub fn tmp_path_for_atomic_write(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::post};
+    use serde_json::json;
+    use tokio::task::JoinHandle;
 
     #[test]
     fn every_documented_tunnel_mode_parses() {
@@ -653,6 +923,192 @@ mod tests {
         assert!(!route.contains('/'));
         assert!(!route.contains('+'));
         assert!(!route.contains('='));
+    }
+
+    #[test]
+    fn remote_mcp_endpoint_requires_https_without_credentials_or_query() {
+        let host = "example.ngrok-free.app";
+        let path = "/AbCd/mcp";
+        assert!(validate_remote_mcp_endpoint(&format!("https://{host}{path}")).is_ok());
+        for endpoint in [
+            format!("http://{host}{path}"),
+            format!("https://user@{host}{path}"),
+            format!("https://{host}{path}?q=1"),
+            format!("https://{host}{path}#fragment"),
+            format!("https://{host}/"),
+        ] {
+            assert!(
+                validate_remote_mcp_endpoint(&endpoint).is_err(),
+                "{endpoint}"
+            );
+        }
+    }
+
+    #[test]
+    fn required_mcp_tools_are_validated_from_tools_list_result() {
+        let response = json!({
+            "jsonrpc": "2.0",
+            "id": "tools",
+            "result": {
+                "tools": [
+                    { "name": "catdesk_instruction" },
+                    { "name": "delegated_run_list" }
+                ]
+            }
+        });
+        assert_eq!(validate_required_mcp_tools(&response).expect("tools"), 2);
+
+        let missing = json!({
+            "jsonrpc": "2.0",
+            "id": "tools",
+            "result": { "tools": [{ "name": "catdesk_instruction" }] }
+        });
+        assert!(validate_required_mcp_tools(&missing).is_err());
+    }
+
+    async fn ok_mcp(Json(body): Json<Value>) -> Json<Value> {
+        match body.get("method").and_then(Value::as_str) {
+            Some("initialize") => Json(json!({
+                "jsonrpc": "2.0",
+                "id": body.get("id").cloned().unwrap_or(Value::Null),
+                "result": {
+                    "protocolVersion": "2025-03-26",
+                    "serverInfo": { "name": "catdesk", "version": "test" }
+                }
+            })),
+            Some("tools/list") => Json(json!({
+                "jsonrpc": "2.0",
+                "id": body.get("id").cloned().unwrap_or(Value::Null),
+                "result": {
+                    "tools": [
+                        { "name": "catdesk_instruction" },
+                        { "name": "delegated_run_list" }
+                    ]
+                }
+            })),
+            _ => Json(json!({
+                "jsonrpc": "2.0",
+                "id": body.get("id").cloned().unwrap_or(Value::Null),
+                "error": { "code": -32601, "message": "method not found" }
+            })),
+        }
+    }
+
+    async fn missing_tools_mcp(Json(body): Json<Value>) -> Json<Value> {
+        match body.get("method").and_then(Value::as_str) {
+            Some("initialize") => Json(json!({
+                "jsonrpc": "2.0",
+                "id": body.get("id").cloned().unwrap_or(Value::Null),
+                "result": { "serverInfo": { "name": "catdesk", "version": "test" } }
+            })),
+            Some("tools/list") => Json(json!({
+                "jsonrpc": "2.0",
+                "id": body.get("id").cloned().unwrap_or(Value::Null),
+                "result": { "tools": [{ "name": "catdesk_instruction" }] }
+            })),
+            _ => Json(
+                json!({ "jsonrpc": "2.0", "id": body.get("id").cloned().unwrap_or(Value::Null), "result": {} }),
+            ),
+        }
+    }
+
+    async fn malformed_mcp() -> impl IntoResponse {
+        (StatusCode::OK, "not json")
+    }
+
+    async fn oversized_mcp(Json(body): Json<Value>) -> impl IntoResponse {
+        if body.get("method").and_then(Value::as_str) == Some("initialize") {
+            return Json(json!({
+                "jsonrpc": "2.0",
+                "id": body.get("id").cloned().unwrap_or(Value::Null),
+                "result": { "serverInfo": { "name": "catdesk", "version": "test" } }
+            }))
+            .into_response();
+        }
+        Json(json!({
+            "jsonrpc": "2.0",
+            "id": body.get("id").cloned().unwrap_or(Value::Null),
+            "result": { "padding": "x".repeat(MCP_SELF_CHECK_MAX_RESPONSE_BYTES + 1) }
+        }))
+        .into_response()
+    }
+
+    async fn redirect_mcp() -> impl IntoResponse {
+        (
+            StatusCode::TEMPORARY_REDIRECT,
+            [(
+                "location",
+                format!("https://{}{}", "other.example.invalid", "/route/mcp"),
+            )],
+            "",
+        )
+    }
+
+    async fn start_fake_mcp(router: Router) -> (String, JoinHandle<()>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router).await.expect("serve");
+        });
+        (format!("http://{addr}{}", "/route/mcp"), server)
+    }
+
+    #[tokio::test]
+    async fn local_mcp_self_check_succeeds_for_initialize_and_tools_list() {
+        let (url, server) = start_fake_mcp(Router::new().route("/route/mcp", post(ok_mcp))).await;
+        let report = run_mcp_endpoint_self_check(&url, None, Duration::from_secs(2), false)
+            .await
+            .expect("self-check");
+        assert!(report.initialize_ok);
+        assert!(report.tools_list_ok);
+        assert!(report.required_tools_present);
+        assert_eq!(report.tool_count, 2);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn mcp_self_check_rejects_missing_required_tool() {
+        let (url, server) =
+            start_fake_mcp(Router::new().route("/route/mcp", post(missing_tools_mcp))).await;
+        let error = run_mcp_endpoint_self_check(&url, None, Duration::from_secs(2), false)
+            .await
+            .unwrap_err();
+        assert!(error.contains("delegated_run_list"));
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn mcp_self_check_rejects_malformed_json_and_oversized_response() {
+        let (malformed_url, malformed_server) =
+            start_fake_mcp(Router::new().route("/route/mcp", post(malformed_mcp))).await;
+        let malformed =
+            run_mcp_endpoint_self_check(&malformed_url, None, Duration::from_secs(2), false)
+                .await
+                .unwrap_err();
+        assert!(malformed.contains("malformed JSON-RPC"));
+        malformed_server.abort();
+
+        let (oversized_url, oversized_server) =
+            start_fake_mcp(Router::new().route("/route/mcp", post(oversized_mcp))).await;
+        let oversized =
+            run_mcp_endpoint_self_check(&oversized_url, None, Duration::from_secs(2), false)
+                .await
+                .unwrap_err();
+        assert!(oversized.contains("size limit"));
+        oversized_server.abort();
+    }
+
+    #[tokio::test]
+    async fn mcp_self_check_rejects_redirects() {
+        let (url, server) =
+            start_fake_mcp(Router::new().route("/route/mcp", post(redirect_mcp))).await;
+        let error = run_mcp_endpoint_self_check(&url, None, Duration::from_secs(2), false)
+            .await
+            .unwrap_err();
+        assert!(error.contains("redirect"));
+        server.abort();
     }
 
     #[test]

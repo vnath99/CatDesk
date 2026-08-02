@@ -1,7 +1,7 @@
 use crate::state::{SharedState, load_ngrok_authtoken};
 use crate::tunnel::{
-    TunnelMode, connection_fingerprint, external_public_mcp_url, public_no_auth_warning,
-    redact_full_mcp_url,
+    TransportHealth, TransportHealthSnapshot, TunnelMode, connection_fingerprint,
+    external_public_mcp_url, public_no_auth_warning, redact_full_mcp_url,
 };
 use ngrok::prelude::*;
 use reqwest::Url;
@@ -36,6 +36,8 @@ async fn configure_external_tunnel(state: SharedState) -> Result<(), String> {
     app.ngrok_running = false;
     app.ngrok_url = Some(base_url);
     app.transport_identity.last_connection_fingerprint = Some(fingerprint.clone());
+    app.transport_health =
+        TransportHealthSnapshot::configured_unverified(app.tunnel_config.remote_self_check);
     app.log(
         "INFO",
         "External tunnel mode active; CatDesk did not launch ngrok".into(),
@@ -98,6 +100,10 @@ pub async fn start(state: SharedState) -> Result<(), String> {
         app.ngrok_task = Some(watcher);
         app.ngrok_running = true;
         app.ngrok_url = Some(url.clone());
+        app.transport_health.health = TransportHealth::ConnectedVerified;
+        app.transport_health.local_mcp = "NOT_CHECKED".into();
+        app.transport_health.remote_check_enabled = false;
+        app.transport_health.last_checked_at = Some(crate::tunnel::current_startup_time());
         app.log("INFO", "ngrok SDK tunnel started".into());
         app.log("INFO", format!("ngrok URL: {url}"));
         app.log("INFO", format!("MCP Server URL: {url}{mcp_path}"));
