@@ -60,6 +60,17 @@ The doctor reports:
 
 It redacts profile names and never prints credential values.
 
+## Setup Wizard
+
+Run:
+
+```powershell
+.\scripts\setup-secure-mcp.ps1 -TransportMode openai_secure_tunnel
+```
+
+The wizard emits operator steps and command templates with placeholders. It is
+safe to run repeatedly because it performs no mutations.
+
 ## Normal External-Mode Procedure
 
 1. Start the official `tunnel-client` with the operator-owned profile.

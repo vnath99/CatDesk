@@ -43,6 +43,19 @@ CatDesk discovery order:
 
 CatDesk does not modify system PATH.
 
+## Read-Only Setup Wizard
+
+Run the CatDesk setup wizard to generate a redacted operator checklist:
+
+```powershell
+.\scripts\setup-secure-mcp.ps1 `
+  -TransportMode openai_secure_tunnel `
+  -ProfileName "<profile-name>"
+```
+
+The wizard is read-only. It does not install software, initialize a profile,
+start the tunnel client, automate ChatGPT, or store credentials.
+
 ## Create the Official Profile
 
 Use the official client help for exact syntax on your installed version:

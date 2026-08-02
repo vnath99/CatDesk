@@ -22,6 +22,7 @@ operator-gated.
 - No fallback from OpenAI Secure MCP to ngrok.
 - MCP request-size hardening.
 - Setup doctor transport reporting.
+- Read-only Secure MCP setup wizard.
 - Windows setup, operations, troubleshooting, rollback, and security docs.
 
 ## Live-Unverified
@@ -51,6 +52,9 @@ PASS
 scripts/setup-doctor.ps1
 PASS: redacted transport fields reported; tunnel-client absent; runtime
 credential absent; exact Qwen model present.
+
+scripts/setup-secure-mcp.ps1
+PASS: emitted read-only redacted operator plan.
 ```
 
 No live OpenAI Secure MCP tunnel test was run because Codex was not supplied a
