@@ -1,8 +1,11 @@
 param(
     [string]$Workspace = (Get-Location).Path,
-    [string]$Model = "qwen3.5:9b",
+    [string]$Model = "qwen3.6:35b-a3b",
     [string]$McpHost = "127.0.0.1",
-    [int]$McpPort = 38765
+    [int]$McpPort = 38765,
+    [string]$TransportMode = "",
+    [string]$TunnelClientPath = "",
+    [string]$OpenAiTunnelProfile = ""
 )
 
 $ErrorActionPreference = "Continue"
@@ -31,6 +34,13 @@ function Command-Candidates {
         $paths.Add((Join-Path (Get-Location).Path "target\release\catdesk.exe"))
         $paths.Add((Join-Path (Get-Location).Path "target\debug\catdesk.exe"))
     }
+    if ($Name -eq "tunnel-client") {
+        if ($TunnelClientPath) {
+            $paths.Add($TunnelClientPath)
+        }
+        $paths.Add((Join-Path $homeDir ".catdesk\tools\tunnel-client\tunnel-client.exe"))
+        $paths.Add((Join-Path $homeDir ".catdesk\tools\tunnel-client\tunnel-client"))
+    }
     $paths | Select-Object -Unique
 }
 
@@ -55,6 +65,12 @@ function Command-Info {
     try {
         if ($Name -in @("cargo", "rustc", "git", "ollama")) {
             $version = (& $path --version 2>$null) -join "`n"
+        }
+        if ($Name -eq "tunnel-client") {
+            $version = (& $path --version 2>$null) -join "`n"
+            if (-not $version) {
+                $version = (& $path --help 2>$null | Select-Object -First 1) -join "`n"
+            }
         }
     } catch {
         $version = "version check failed"
@@ -82,6 +98,7 @@ $rustc = Command-Info "rustc"
 $git = Command-Info "git"
 $ollama = Command-Info "ollama"
 $catdesk = Command-Info "catdesk"
+$tunnelClient = Command-Info "tunnel-client"
 
 $ollamaModels = @()
 if ($ollama.Found) {
@@ -121,6 +138,20 @@ $report = [pscustomobject][ordered]@{
         Host = $McpHost
         Port = $McpPort
         LoopbackOnly = ($McpHost -eq "127.0.0.1" -or $McpHost -eq "localhost" -or $McpHost -eq "::1")
+    }
+    Transport = [pscustomobject][ordered]@{
+        Mode = if ($TransportMode) { $TransportMode } else { "(not supplied)" }
+        TunnelClient = $tunnelClient
+        OpenAiTunnelProfile = [pscustomobject][ordered]@{
+            Supplied = [bool]$OpenAiTunnelProfile
+            Value = if ($OpenAiTunnelProfile) { "<redacted>" } else { $null }
+        }
+        RuntimeCredential = [pscustomobject][ordered]@{
+            Name = "CONTROL_PLANE_API_KEY"
+            Present = [bool][Environment]::GetEnvironmentVariable("CONTROL_PLANE_API_KEY")
+            Value = "<redacted>"
+        }
+        LiveOpenAiTunnel = "not checked by setup-doctor"
     }
     OptionalProviders = @(
         Optional-Provider "CATDESK_REMOTE_API_KEY"
