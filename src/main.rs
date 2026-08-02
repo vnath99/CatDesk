@@ -1201,6 +1201,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(child) = app.devtools_child.as_mut() {
             let _ = child.start_kill();
         }
+        if let Some(child) = app.openai_tunnel_child.as_mut() {
+            let _ = child.start_kill();
+        }
         app.server_running = false;
         app.ngrok_running = false;
         app.ngrok_url = None;

@@ -38,11 +38,10 @@ impl TunnelMode {
 
     pub fn unimplemented_message(self) -> Option<String> {
         match self {
-            Self::ManagedEphemeralNgrok | Self::ManagedStableNgrok | Self::ExternalTunnel => None,
-            Self::OpenaiSecureTunnel => Some(
-                "tunnel mode `openai_secure_tunnel` is parsed but runtime behavior is not implemented until T-0025D"
-                    .to_string(),
-            ),
+            Self::ManagedEphemeralNgrok
+            | Self::ManagedStableNgrok
+            | Self::ExternalTunnel
+            | Self::OpenaiSecureTunnel => None,
         }
     }
 }

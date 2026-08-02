@@ -5,8 +5,9 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::time::Duration;
-use tokio::process::Command;
+use tokio::process::{Child, Command};
 
 const DEFAULT_PROFILE_NAME: &str = "catdesk-local";
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
@@ -429,6 +430,38 @@ pub fn startup_never_downloads_client(config: &OpenaiTunnelConfig) -> bool {
 
 pub fn credential_environment_present(env_lookup: impl Fn(&str) -> Option<OsString>) -> bool {
     env_lookup("CONTROL_PLANE_API_KEY").is_some()
+}
+
+pub async fn run_tunnel_client_doctor(
+    path: &Path,
+    profile_name: &str,
+) -> Result<String, OpenaiTunnelError> {
+    if profile_name.trim().is_empty() {
+        return Err(OpenaiTunnelError::Unsupported(
+            "OpenAI tunnel profile name is missing".into(),
+        ));
+    }
+    run_client_command(path, ["doctor", "--profile", profile_name, "--explain"]).await
+}
+
+pub fn spawn_tunnel_client_run(
+    path: &Path,
+    profile_name: &str,
+) -> Result<Child, OpenaiTunnelError> {
+    if profile_name.trim().is_empty() {
+        return Err(OpenaiTunnelError::Unsupported(
+            "OpenAI tunnel profile name is missing".into(),
+        ));
+    }
+    Command::new(path)
+        .arg("run")
+        .arg("--profile")
+        .arg(profile_name)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| OpenaiTunnelError::Command(error.to_string()))
 }
 
 async fn run_client_command<const N: usize>(

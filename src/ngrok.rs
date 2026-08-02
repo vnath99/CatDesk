@@ -1,10 +1,16 @@
-use crate::state::{SharedState, load_ngrok_authtoken};
+use crate::openai_tunnel::{
+    OpenaiTunnelProcessMode, TunnelClientDiscoveryOptions, credential_environment_present,
+    default_user_tools_dir, discover_tunnel_client, run_tunnel_client_doctor,
+    spawn_tunnel_client_run,
+};
+use crate::state::{SharedState, load_ngrok_authtoken, user_home_dir};
 use crate::tunnel::{
     TransportHealth, TransportHealthSnapshot, TunnelMode, connection_fingerprint,
     external_public_mcp_url, public_no_auth_warning, redact_full_mcp_url,
 };
 use ngrok::prelude::*;
 use reqwest::Url;
+use std::path::PathBuf;
 
 pub async fn start_transport(state: SharedState) -> Result<(), String> {
     let mode = {
@@ -18,10 +24,124 @@ pub async fn start_transport(state: SharedState) -> Result<(), String> {
                 .into(),
         ),
         TunnelMode::ExternalTunnel => configure_external_tunnel(state).await,
-        TunnelMode::OpenaiSecureTunnel => {
-            Err("openai_secure_tunnel is unavailable until T-0025D feasibility passes".into())
+        TunnelMode::OpenaiSecureTunnel => configure_openai_secure_tunnel(state).await,
+    }
+}
+
+async fn configure_openai_secure_tunnel(state: SharedState) -> Result<(), String> {
+    let (config, workspace_root) = {
+        let app = state.lock().await;
+        (app.openai_tunnel_config.clone(), app.workspace_root.clone())
+    };
+    let home = user_home_dir().map_err(|error| error.to_string())?;
+    let discovery = TunnelClientDiscoveryOptions {
+        explicit_path: config.client_path.as_ref().map(PathBuf::from),
+        path_var: std::env::var_os("PATH"),
+        user_tools_dir: default_user_tools_dir(&home),
+        known_paths: Vec::new(),
+        forbidden_roots: vec![PathBuf::from(&workspace_root)],
+    };
+    let metadata = match discover_tunnel_client(&discovery).await {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            set_transport_health(
+                &state,
+                TransportHealth::BlockedMissingClient,
+                "official tunnel-client not found or not runnable",
+            )
+            .await;
+            return Err(error.to_string());
+        }
+    };
+    if config.profile_name.trim().is_empty() {
+        set_transport_health(
+            &state,
+            TransportHealth::BlockedMissingProfile,
+            "OpenAI tunnel profile name is missing",
+        )
+        .await;
+        return Err("openai_secure_tunnel requires openai_tunnel.profile_name".into());
+    }
+    if !credential_environment_present(|name| std::env::var_os(name)) {
+        set_transport_health(
+            &state,
+            TransportHealth::BlockedMissingCredential,
+            "CONTROL_PLANE_API_KEY is not present in the CatDesk process environment",
+        )
+        .await;
+        return Err(
+            "openai_secure_tunnel requires CONTROL_PLANE_API_KEY in the process environment".into(),
+        );
+    }
+    if let Err(error) = run_tunnel_client_doctor(&metadata.path, &config.profile_name).await {
+        set_transport_health(
+            &state,
+            TransportHealth::Failed,
+            "tunnel-client doctor failed; inspect the operator-owned profile",
+        )
+        .await;
+        return Err(error.to_string());
+    }
+
+    match config.process_mode {
+        OpenaiTunnelProcessMode::External => {
+            let mut app = state.lock().await;
+            app.ngrok_running = false;
+            app.ngrok_url = None;
+            app.transport_health =
+                TransportHealthSnapshot::configured_unverified(app.tunnel_config.remote_self_check);
+            app.transport_health.warnings.push(
+                "OpenAI Secure MCP Tunnel is external-process mode; CatDesk did not launch tunnel-client"
+                    .into(),
+            );
+            app.log(
+                "INFO",
+                "OpenAI Secure MCP Tunnel external mode configured; operator owns tunnel-client"
+                    .into(),
+            );
+            Ok(())
+        }
+        OpenaiTunnelProcessMode::Managed => {
+            let child = match spawn_tunnel_client_run(&metadata.path, &config.profile_name) {
+                Ok(child) => child,
+                Err(error) => {
+                    set_transport_health(
+                        &state,
+                        TransportHealth::Failed,
+                        "failed to start CatDesk-owned tunnel-client process",
+                    )
+                    .await;
+                    return Err(error.to_string());
+                }
+            };
+            let mut app = state.lock().await;
+            app.ngrok_running = false;
+            app.ngrok_url = None;
+            app.openai_tunnel_child = Some(child);
+            app.transport_health =
+                TransportHealthSnapshot::configured_unverified(app.tunnel_config.remote_self_check);
+            app.transport_health.health = TransportHealth::Connecting;
+            app.transport_health.warnings.push(
+                "CatDesk started tunnel-client in managed mode and will stop only this child process"
+                    .into(),
+            );
+            app.log(
+                "INFO",
+                "OpenAI Secure MCP Tunnel managed process started with redacted profile identity"
+                    .into(),
+            );
+            Ok(())
         }
     }
+}
+
+async fn set_transport_health(state: &SharedState, health: TransportHealth, reason: &str) {
+    let mut app = state.lock().await;
+    app.transport_health = TransportHealthSnapshot::configured_unverified(false);
+    app.transport_health.health = health;
+    app.transport_health.local_mcp = "NOT_CHECKED".into();
+    app.transport_health.redacted_reason = Some(reason.into());
+    app.log("ERROR", format!("Transport health: {}", health.as_str()));
 }
 
 async fn configure_external_tunnel(state: SharedState) -> Result<(), String> {
