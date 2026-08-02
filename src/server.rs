@@ -23,6 +23,7 @@ const STATELESS_FLOW_ID: &str = "stateless";
 const STATELESS_FLOW_LABEL: &str = "stateless";
 const CATDESK_SELF_CHECK_HEADER: &str = "catdesk-self-check";
 const TRANSPORT_STATUS_TOOL: &str = "catdesk_transport_status";
+const MAX_MCP_REQUEST_BYTES: usize = 2 * 1024 * 1024;
 
 #[derive(Clone)]
 struct ServerState {
@@ -1195,6 +1196,119 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn post_mcp_rejects_oversized_request_before_parsing() {
+        let workspace_root = unique_temp_path("catdesk-post-mcp-large-workspace");
+        let config_root = unique_temp_path("catdesk-post-mcp-large-config");
+        let config_path = config_root.join("config.toml");
+        std::fs::create_dir_all(&workspace_root).expect("create workspace");
+        std::fs::create_dir_all(&config_root).expect("create config dir");
+
+        let app = AppState::new_for_test(
+            8790,
+            workspace_root.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .expect("create app state");
+        let app_state = Arc::new(Mutex::new(app));
+        let (ui_tx, _ui_rx) = unbounded_channel();
+        let server_state = ServerState {
+            app: app_state,
+            devtools: None,
+            ui_events: ui_tx,
+            mcp_auth_token: None,
+        };
+
+        let response = post_mcp(
+            State(server_state),
+            HeaderMap::new(),
+            Bytes::from(vec![b' '; MAX_MCP_REQUEST_BYTES + 1]),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("read response");
+        let payload: Value = serde_json::from_slice(&body).expect("json response");
+        assert_eq!(
+            payload.get("error").and_then(|error| error.get("code")),
+            Some(&json!(-32600))
+        );
+        assert!(
+            payload
+                .get("error")
+                .and_then(|error| error.get("message"))
+                .and_then(Value::as_str)
+                .is_some_and(|message| message.contains("size limit"))
+        );
+        assert!(body.len() < 512);
+
+        let _ = std::fs::remove_dir_all(workspace_root);
+        let _ = std::fs::remove_dir_all(config_root);
+    }
+
+    #[tokio::test]
+    async fn self_check_post_does_not_mark_remote_activity() {
+        let workspace_root = unique_temp_path("catdesk-post-mcp-self-check-workspace");
+        let config_root = unique_temp_path("catdesk-post-mcp-self-check-config");
+        let config_path = config_root.join("config.toml");
+        std::fs::create_dir_all(&workspace_root).expect("create workspace");
+        std::fs::create_dir_all(&config_root).expect("create config dir");
+
+        let app = AppState::new_for_test(
+            8791,
+            workspace_root.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .expect("create app state");
+        let app_state = Arc::new(Mutex::new(app));
+        let (ui_tx, mut ui_rx) = unbounded_channel();
+        let server_state = ServerState {
+            app: app_state.clone(),
+            devtools: None,
+            ui_events: ui_tx,
+            mcp_auth_token: None,
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(CATDESK_SELF_CHECK_HEADER, "1".parse().expect("header"));
+
+        let response = post_mcp(
+            State(server_state),
+            headers,
+            Bytes::from(
+                serde_json::to_vec(&json!({
+                    "jsonrpc": "2.0",
+                    "id": "list",
+                    "method": "tools/list",
+                    "params": {}
+                }))
+                .expect("json"),
+            ),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let app = app_state.lock().await;
+        assert_eq!(app.request_count, 0);
+        assert!(!app.remote_connected);
+        drop(app);
+
+        let mut saw_increment = false;
+        let mut saw_remote_connected = false;
+        while let Ok(event) = ui_rx.try_recv() {
+            match event {
+                ServerUiEvent::IncrementRequestCount => saw_increment = true,
+                ServerUiEvent::SetRemoteConnected(true) => saw_remote_connected = true,
+                _ => {}
+            }
+        }
+        assert!(!saw_increment);
+        assert!(!saw_remote_connected);
+
+        let _ = std::fs::remove_dir_all(workspace_root);
+        let _ = std::fs::remove_dir_all(config_root);
+    }
+
+    #[tokio::test]
     async fn authenticated_network_mcp_lists_schema_and_rejects_malformed_contract() {
         let workspace_root = unique_temp_path("catdesk-network-mcp-workspace");
         let config_root = unique_temp_path("catdesk-network-mcp-config");
@@ -1315,6 +1429,13 @@ async fn post_mcp(
 ) -> Response<Body> {
     if !mcp_authorized(&headers, s.mcp_auth_token.as_deref()) {
         return unauthorized_mcp_response();
+    }
+    if body_bytes.len() > MAX_MCP_REQUEST_BYTES {
+        return jsonrpc_error_response(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            -32600,
+            "Invalid request: MCP request body exceeds CatDesk size limit",
+        );
     }
     let body: Value = match serde_json::from_slice(&body_bytes) {
         Ok(v) => v,

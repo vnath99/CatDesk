@@ -458,8 +458,8 @@ pub fn spawn_tunnel_client_run(
         .arg("--profile")
         .arg(profile_name)
         .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .spawn()
         .map_err(|error| OpenaiTunnelError::Command(error.to_string()))
 }
