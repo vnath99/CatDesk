@@ -529,7 +529,7 @@ fn active_bootstrap_status_flow<'a>(app: &'a AppState, now_millis: u128) -> Opti
 }
 
 fn should_show_connect_guide(app: &AppState, now_millis: u128) -> bool {
-    let both_running = app.server_running && app.ngrok_running;
+    let both_running = app.server_running && public_transport_available(app);
     let has_url = app.ngrok_url.is_some();
     let visible_flow_count = app
         .flows
@@ -545,6 +545,15 @@ fn should_show_connect_guide(app: &AppState, now_millis: u128) -> bool {
         && !app.remote_connected
         && visible_flow_count == 0
         && !within_connect_grace
+}
+
+fn public_transport_available(app: &AppState) -> bool {
+    app.ngrok_url.is_some()
+        && (app.ngrok_running
+            || matches!(
+                app.tunnel_config.mode,
+                crate::tunnel::TunnelMode::ExternalTunnel
+            ))
 }
 
 fn flow_bootstrap_status_lines(
@@ -649,7 +658,7 @@ fn build_animation_snapshot(app: &AppState) -> Vec<String> {
         let closing = flow.closing_started_ms.is_some();
         let lane_active = closing
             || !flow.anim_queue.is_empty()
-            || (app.server_running && app.ngrok_running && app.remote_connected);
+            || (app.server_running && public_transport_available(app) && app.remote_connected);
         let direction = Some(flow_direction(Some(flow), now_millis)).filter(|_| lane_active);
         let phase = flow_phase(flow, now_millis);
         let lit = flow_lit_count(Some(flow), now_millis, FLOW_ROW_CELLS);
@@ -3001,8 +3010,8 @@ async fn start_services(
     }
 
     // Start ngrok
-    if let Err(e) = ngrok::start(state.clone()).await {
-        state.lock().await.log("ERROR", format!("ngrok: {e}"));
+    if let Err(e) = ngrok::start_transport(state.clone()).await {
+        state.lock().await.log("ERROR", format!("transport: {e}"));
     }
 
     devtools_bridge
@@ -3571,7 +3580,9 @@ fn draw_ui(
                 let closing = flow.closing_started_ms.is_some();
                 let lane_active = closing
                     || !flow.anim_queue.is_empty()
-                    || (app.server_running && app.ngrok_running && app.remote_connected);
+                    || (app.server_running
+                        && public_transport_available(app)
+                        && app.remote_connected);
                 let lane = lane_for(lane_active, Some(flow));
                 let mut row = vec![
                     Span::styled("    ", Style::default().fg(palette.muted_fg)),

@@ -1159,7 +1159,11 @@ impl AppState {
             theme: config.theme,
             mode: config.mode,
             tool_mode: config.tool_mode,
-            mcp_slug: generate_mcp_slug(),
+            mcp_slug: config
+                .mcp
+                .route_id
+                .clone()
+                .unwrap_or_else(generate_mcp_slug),
             installation_id,
             server_instance_id: Uuid::new_v4().to_string(),
             startup_time: current_startup_time(),
@@ -1750,13 +1754,12 @@ toolCallCount = 0
     }
 
     #[test]
-    fn unimplemented_tunnel_mode_fails_explicitly_without_fallback() {
+    fn external_tunnel_mode_loads_with_persistent_route_without_process_ownership() {
         let unique = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        let workspace =
-            std::env::temp_dir().join(format!("catdesk-transport-unimplemented-{unique}"));
+        let workspace = std::env::temp_dir().join(format!("catdesk-transport-external-{unique}"));
         std::fs::create_dir_all(&workspace).expect("create temp config dir");
         let config_path = workspace.join(APP_CONFIG_FILE_NAME);
         std::fs::write(
@@ -1780,23 +1783,132 @@ toolCallCount = 0
         )
         .expect("write external config");
 
-        let error = match AppState::from_config_path(
+        let app = AppState::from_config_path(
             8787,
             workspace.to_string_lossy().into_owned(),
             config_path.clone(),
-        ) {
-            Ok(_) => panic!("external mode is not implemented"),
-            Err(error) => error,
-        };
-        assert!(error.to_string().contains("not implemented until T-0025C"));
+        )
+        .expect("external mode loads");
 
         let saved = AppConfig::load_from_path(&config_path).expect("load saved config");
         assert!(matches!(
             saved.tunnel.mode,
             crate::tunnel::TunnelMode::ExternalTunnel
         ));
+        assert!(!saved.tunnel.manage_process);
+        assert_eq!(saved.mcp.route_id.as_deref(), Some(app.mcp_slug.as_str()));
+        assert!(app.ngrok_url.is_none());
 
         let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_file(workspace.join("config.toml.pre-t0025b-backup"));
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[tokio::test]
+    async fn external_tunnel_start_sets_public_identity_without_launching_ngrok() {
+        let (workspace, config_path) = temp_config_workspace("catdesk-external-start");
+        std::fs::write(
+            &config_path,
+            r#"
+theme = "concise"
+mode = "computer"
+toolMode = "multiTools"
+
+[tunnel]
+mode = "external_tunnel"
+public_base_url = "https://example.invalid"
+manage_process = false
+
+[usageTotals]
+inputTokens = 0
+outputTokens = 0
+totalTokens = 0
+toolCallCount = 0
+"#,
+        )
+        .expect("write external config");
+        let app = AppState::from_config_path(
+            8787,
+            workspace.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .expect("load external app");
+        let route = app.mcp_slug.clone();
+        let state = Arc::new(tokio::sync::Mutex::new(app));
+
+        crate::ngrok::start_transport(state.clone())
+            .await
+            .expect("external transport starts");
+
+        let app = state.lock().await;
+        assert!(!app.ngrok_running);
+        assert_eq!(app.ngrok_url.as_deref(), Some("https://example.invalid"));
+        assert!(
+            app.transport_identity
+                .last_connection_fingerprint
+                .as_deref()
+                .is_some_and(|value| !value.is_empty())
+        );
+        let full_route = format!("https://example.invalid/{route}/mcp");
+        let log_text = app
+            .logs
+            .iter()
+            .map(|entry| entry.message.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(!log_text.contains(&full_route));
+        assert!(log_text.contains("External tunnel mode active"));
+        assert!(log_text.contains("PUBLIC DEVELOPMENT ENDPOINT"));
+        drop(app);
+
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_file(workspace.join("config.toml.pre-t0025b-backup"));
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[tokio::test]
+    async fn managed_stable_ngrok_start_fails_without_ephemeral_fallback() {
+        let (workspace, config_path) = temp_config_workspace("catdesk-stable-start-blocked");
+        std::fs::write(
+            &config_path,
+            r#"
+theme = "concise"
+mode = "computer"
+toolMode = "multiTools"
+
+[tunnel]
+mode = "managed_stable_ngrok"
+ngrok_domain = "example.ngrok-free.app"
+
+[usageTotals]
+inputTokens = 0
+outputTokens = 0
+totalTokens = 0
+toolCallCount = 0
+"#,
+        )
+        .expect("write stable config");
+        let app = AppState::from_config_path(
+            8787,
+            workspace.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .expect("load stable app");
+        let state = Arc::new(tokio::sync::Mutex::new(app));
+
+        let error = crate::ngrok::start_transport(state.clone())
+            .await
+            .expect_err("stable start is blocked until C0 passes");
+        assert!(error.contains("T-0025C0"));
+        assert!(error.contains("no ephemeral fallback"));
+
+        let app = state.lock().await;
+        assert!(!app.ngrok_running);
+        assert!(app.ngrok_url.is_none());
+        drop(app);
+
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_file(workspace.join("config.toml.pre-t0025b-backup"));
         let _ = std::fs::remove_dir(workspace);
     }
 

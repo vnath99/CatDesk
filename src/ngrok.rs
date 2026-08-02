@@ -1,6 +1,54 @@
 use crate::state::{SharedState, load_ngrok_authtoken};
+use crate::tunnel::{
+    TunnelMode, connection_fingerprint, external_public_mcp_url, public_no_auth_warning,
+    redact_full_mcp_url,
+};
 use ngrok::prelude::*;
 use reqwest::Url;
+
+pub async fn start_transport(state: SharedState) -> Result<(), String> {
+    let mode = {
+        let app = state.lock().await;
+        app.tunnel_config.mode
+    };
+    match mode {
+        TunnelMode::ManagedEphemeralNgrok => start(state).await,
+        TunnelMode::ManagedStableNgrok => Err(
+            "managed_stable_ngrok is unavailable because T-0025C0 did not prove an account-assigned stable domain; no ephemeral fallback was started"
+                .into(),
+        ),
+        TunnelMode::ExternalTunnel => configure_external_tunnel(state).await,
+        TunnelMode::OpenaiSecureTunnel => {
+            Err("openai_secure_tunnel is unavailable until T-0025D feasibility passes".into())
+        }
+    }
+}
+
+async fn configure_external_tunnel(state: SharedState) -> Result<(), String> {
+    let mut app = state.lock().await;
+    let base_url = app
+        .tunnel_config
+        .public_base_url
+        .clone()
+        .ok_or_else(|| "external_tunnel requires tunnel.public_base_url".to_string())?;
+    let public_mcp_url = external_public_mcp_url(&base_url, &app.mcp_path())?;
+    let fingerprint = connection_fingerprint(&public_mcp_url);
+    app.ngrok_running = false;
+    app.ngrok_url = Some(base_url);
+    app.transport_identity.last_connection_fingerprint = Some(fingerprint.clone());
+    app.log(
+        "INFO",
+        "External tunnel mode active; CatDesk did not launch ngrok".into(),
+    );
+    app.log(
+        "INFO",
+        format!("MCP Server URL: {}", redact_full_mcp_url(&public_mcp_url)),
+    );
+    app.log("INFO", format!("Connection fingerprint: {fingerprint}"));
+    app.log("WARN", public_no_auth_warning().into());
+    app.persist_state_with_log();
+    Ok(())
+}
 
 /// Start an ngrok HTTP tunnel using the embedded Rust SDK.
 pub async fn start(state: SharedState) -> Result<(), String> {

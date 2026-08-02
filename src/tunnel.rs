@@ -32,11 +32,7 @@ impl TunnelMode {
 
     pub fn unimplemented_message(self) -> Option<String> {
         match self {
-            Self::ManagedEphemeralNgrok => None,
-            Self::ManagedStableNgrok | Self::ExternalTunnel => Some(format!(
-                "tunnel mode `{}` is parsed but runtime behavior is not implemented until T-0025C",
-                self.as_str()
-            )),
+            Self::ManagedEphemeralNgrok | Self::ManagedStableNgrok | Self::ExternalTunnel => None,
             Self::OpenaiSecureTunnel => Some(
                 "tunnel mode `openai_secure_tunnel` is parsed but runtime behavior is not implemented until T-0025D"
                     .to_string(),
@@ -284,6 +280,18 @@ pub fn normalize_ngrok_domain(value: &str) -> Result<String, String> {
         return Err("ngrok_domain must be a hostname without scheme, port, path, query, fragment, or credentials".into());
     }
     normalize_hostname(value, "ngrok_domain")
+}
+
+pub fn external_public_mcp_url(base_url: &str, mcp_path: &str) -> Result<String, String> {
+    let base = normalize_public_base_url(base_url)?;
+    if !mcp_path.starts_with('/') || !mcp_path.ends_with("/mcp") {
+        return Err("MCP path must be an absolute /<route>/mcp path".into());
+    }
+    Ok(format!("{base}{mcp_path}"))
+}
+
+pub fn public_no_auth_warning() -> &'static str {
+    "PUBLIC DEVELOPMENT ENDPOINT: anyone with the full MCP URL may be able to invoke enabled tools. Do not share the URL. Restrict the workspace and enabled actions."
 }
 
 fn reject_whitespace_or_control(value: &str, label: &str) -> Result<(), String> {
@@ -655,6 +663,30 @@ mod tests {
         ));
         assert_eq!(redacted, "https://example.ngrok-free.app/<redacted>/mcp");
         assert!(!redacted.contains("AbCdEf"));
+    }
+
+    #[test]
+    fn external_public_mcp_url_normalizes_origin_and_preserves_route() {
+        let url = external_public_mcp_url(
+            "HTTPS://EXAMPLE.NGROK-FREE.APP/",
+            "/AbCdEf123456789012345678/mcp",
+        )
+        .expect("external url");
+
+        assert_eq!(
+            url,
+            format!(
+                "{}{}{}",
+                "https://example.ngrok-free.app/", "AbCdEf123456789012345678", "/mcp"
+            )
+        );
+        assert_ne!(
+            connection_fingerprint(&url),
+            connection_fingerprint(&format!(
+                "{}{}{}",
+                "https://example.ngrok-free.app/", "abcdef123456789012345678", "/mcp"
+            ))
+        );
     }
 
     #[test]
