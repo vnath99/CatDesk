@@ -4,6 +4,8 @@ use std::collections::{HashMap, VecDeque};
 use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+#[cfg(not(test))]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 use tokio::sync::Mutex;
 use uuid::Uuid;
@@ -11,6 +13,12 @@ use uuid::Uuid;
 use crate::browser::DetectedBrowser;
 use crate::mascot::{self, MascotPack};
 use crate::theme;
+use crate::tunnel::{
+    AtomicWritePlan, ConfigSaveOutcome, McpTransportConfig, TransportIdentityConfig,
+    TransportIdentitySnapshot, TransportSecurityConfig, TunnelConfig, build_identity_snapshot,
+    current_startup_time, ensure_installation_id, ensure_persistent_route_if_required,
+    promote_pending_route_after_restart, tmp_path_for_atomic_write, validate_transport,
+};
 
 /// Log entry displayed in the TUI.
 #[derive(Clone)]
@@ -44,6 +52,14 @@ pub struct FlowBootstrapProgress {
 
 const APP_CONFIG_DIR_NAME: &str = ".catdesk";
 const APP_CONFIG_FILE_NAME: &str = "config.toml";
+const DEFERRED_ACL_WARNING: &str =
+    "owner-only config ACL mutation is disabled pending a SID-based T-0025 hardening pass";
+#[cfg(not(test))]
+static ACL_WARNING_PRESENTED: AtomicBool = AtomicBool::new(false);
+#[cfg(test)]
+thread_local! {
+    static ACL_WARNING_PRESENTED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -122,6 +138,14 @@ impl ShowDetailMode {
 pub struct AppConfig {
     pub ngrok_authtoken: Option<String>,
     #[serde(default)]
+    pub mcp: McpTransportConfig,
+    #[serde(default)]
+    pub tunnel: TunnelConfig,
+    #[serde(default)]
+    pub security: TransportSecurityConfig,
+    #[serde(default)]
+    pub identity: TransportIdentityConfig,
+    #[serde(default)]
     pub agents_path_mode: AgentsPathMode,
     #[serde(default)]
     pub token_stats_layout: TokenStatsLayout,
@@ -142,6 +166,10 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             ngrok_authtoken: None,
+            mcp: McpTransportConfig::default(),
+            tunnel: TunnelConfig::default(),
+            security: TransportSecurityConfig::default(),
+            identity: TransportIdentityConfig::default(),
             agents_path_mode: AgentsPathMode::Default,
             token_stats_layout: TokenStatsLayout::Right,
             show_detail_mode: ShowDetailMode::Expanded,
@@ -163,6 +191,22 @@ impl AppConfig {
             .take()
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty());
+        self.mcp.bind_host = self.mcp.bind_host.trim().to_string();
+        self.mcp.route_id = crate::tunnel::normalize_optional_string(self.mcp.route_id.take());
+        self.mcp.route_rotation.pending_route_id = crate::tunnel::normalize_optional_string(
+            self.mcp.route_rotation.pending_route_id.take(),
+        );
+        self.tunnel.public_base_url =
+            crate::tunnel::normalize_optional_string(self.tunnel.public_base_url.take());
+        self.tunnel.ngrok_domain =
+            crate::tunnel::normalize_optional_string(self.tunnel.ngrok_domain.take());
+        self.tunnel.ngrok_config_path =
+            crate::tunnel::normalize_optional_string(self.tunnel.ngrok_config_path.take());
+        self.identity.installation_id =
+            crate::tunnel::normalize_optional_string(self.identity.installation_id.take());
+        self.identity.last_connection_fingerprint = crate::tunnel::normalize_optional_string(
+            self.identity.last_connection_fingerprint.take(),
+        );
         self.partner_binagotchy_seed = self
             .partner_binagotchy_seed
             .take()
@@ -179,11 +223,55 @@ impl AppConfig {
             Err(e) => return Err(e),
         };
         let config = toml::from_str::<Self>(&text).map_err(std::io::Error::other)?;
-        Ok(config.normalized())
+        let config = config.normalized();
+        validate_transport(&config.mcp, &config.tunnel).map_err(std::io::Error::other)?;
+        Ok(config)
+    }
+
+    #[allow(dead_code)]
+    fn load_or_initialize_from_path(path: &Path) -> std::io::Result<Self> {
+        Self::load_or_initialize_from_path_with_warnings(path).map(|(config, _warnings)| config)
+    }
+
+    fn load_or_initialize_from_path_with_warnings(
+        path: &Path,
+    ) -> std::io::Result<(Self, Vec<String>)> {
+        let existing_config = path.exists();
+        let mut config = Self::load_from_path(path)?;
+        let mut changed = false;
+        let mut warnings = Vec::new();
+        changed |= ensure_installation_id(&mut config.identity);
+        changed |= promote_pending_route_after_restart(&mut config.mcp);
+        changed |= ensure_persistent_route_if_required(&mut config.mcp, &config.tunnel);
+        validate_transport(&config.mcp, &config.tunnel).map_err(std::io::Error::other)?;
+        if changed {
+            if existing_config {
+                warnings.extend(create_one_time_migration_backup(path)?);
+            }
+            warnings.extend(config.save_to_path_checked(path)?.warnings);
+        }
+        Ok((config, warnings))
     }
 
     fn save_to_path(&self, path: &Path) -> std::io::Result<()> {
+        self.save_to_path_checked(path).map(|_| ())
+    }
+
+    fn save_to_path_checked(&self, path: &Path) -> std::io::Result<ConfigSaveOutcome> {
+        self.save_to_path_with_plan(path, &AtomicWritePlan::default(), || Ok(()))
+    }
+
+    fn save_to_path_with_plan<F>(
+        &self,
+        path: &Path,
+        plan: &AtomicWritePlan,
+        before_replace: F,
+    ) -> std::io::Result<ConfigSaveOutcome>
+    where
+        F: FnOnce() -> std::io::Result<()>,
+    {
         let config = self.clone().normalized();
+        validate_transport(&config.mcp, &config.tunnel).map_err(std::io::Error::other)?;
         let parent = path.parent().ok_or_else(|| {
             std::io::Error::other("failed to resolve config directory for config.toml")
         })?;
@@ -202,17 +290,160 @@ impl AppConfig {
             use std::os::unix::fs::OpenOptionsExt;
             options.mode(0o600);
         }
-        let mut file = options.open(path)?;
-        use std::io::Write as _;
-        file.write_all(text.as_bytes())?;
-        file.flush()?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+        let tmp_path = tmp_path_for_atomic_write(path, plan)?;
+        let write_result = (|| {
+            let mut file = options.open(&tmp_path)?;
+            use std::io::Write as _;
+            file.write_all(text.as_bytes())?;
+            file.flush()?;
+            file.sync_all()?;
+            drop(file);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&tmp_path, fs::Permissions::from_mode(0o600))?;
+            }
+            #[cfg(test)]
+            if let Some(message) = plan.fail_after_tmp_created {
+                return Err(std::io::Error::other(message));
+            }
+            Ok(())
+        })();
+        if let Err(error) = write_result {
+            cleanup_tmp_path_preserving_error(&tmp_path, error, plan)?;
         }
-        Ok(())
+        if let Err(error) = before_replace() {
+            cleanup_tmp_path_preserving_error(&tmp_path, error, plan)?;
+        }
+        #[cfg(test)]
+        if let Some(message) = plan.fail_replace_with {
+            cleanup_tmp_path_preserving_error(&tmp_path, std::io::Error::other(message), plan)?;
+        }
+        if let Err(error) = replace_config_file(&tmp_path, path) {
+            cleanup_tmp_path_preserving_error(&tmp_path, error, plan)?;
+        }
+        let warnings = harden_config_permissions(path);
+        Ok(ConfigSaveOutcome { warnings })
     }
+}
+
+fn cleanup_tmp_path_preserving_error(
+    tmp_path: &Path,
+    error: std::io::Error,
+    _plan: &AtomicWritePlan,
+) -> std::io::Result<()> {
+    #[cfg(test)]
+    let cleanup_result = if let Some(message) = _plan.fail_cleanup_with {
+        Err(std::io::Error::other(message))
+    } else {
+        fs::remove_file(tmp_path)
+    };
+    #[cfg(not(test))]
+    let cleanup_result = fs::remove_file(tmp_path);
+
+    match cleanup_result {
+        Ok(()) => {}
+        Err(cleanup_error) if cleanup_error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(cleanup_error) => {
+            return Err(std::io::Error::other(format!(
+                "config save failed: {error}; additionally failed to remove temporary config file (<redacted config temp>): {cleanup_error}"
+            )));
+        }
+    }
+    Err(error)
+}
+
+fn create_one_time_migration_backup(path: &Path) -> std::io::Result<Vec<String>> {
+    let backup_path = path.with_file_name(format!("{APP_CONFIG_FILE_NAME}.pre-t0025b-backup"));
+    if backup_path.exists() {
+        return Ok(Vec::new());
+    }
+    fs::copy(path, &backup_path)?;
+    Ok(harden_config_permissions(&backup_path))
+}
+
+#[cfg(not(windows))]
+fn replace_config_file(tmp_path: &Path, path: &Path) -> std::io::Result<()> {
+    fs::rename(tmp_path, path)
+}
+
+#[cfg(windows)]
+fn replace_config_file(tmp_path: &Path, path: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+
+    #[link(name = "Kernel32")]
+    unsafe extern "system" {
+        fn MoveFileExW(existing: *const u16, new: *const u16, flags: u32) -> i32;
+    }
+
+    const MOVEFILE_REPLACE_EXISTING: u32 = 0x0000_0001;
+    const MOVEFILE_WRITE_THROUGH: u32 = 0x0000_0008;
+
+    fn wide(path: &Path) -> Vec<u16> {
+        path.as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
+    }
+
+    let existing = wide(tmp_path);
+    let new = wide(path);
+    let ok = unsafe {
+        MoveFileExW(
+            existing.as_ptr(),
+            new.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if ok == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+fn harden_config_permissions(_path: &Path) -> Vec<String> {
+    #[cfg(windows)]
+    {
+        vec![DEFERRED_ACL_WARNING.into()]
+    }
+    #[cfg(not(windows))]
+    {
+        Vec::new()
+    }
+}
+
+fn presentation_warnings(warnings: Vec<String>) -> Vec<String> {
+    let mut presented = Vec::new();
+    for warning in warnings {
+        if warning == DEFERRED_ACL_WARNING {
+            if mark_acl_warning_presented() {
+                continue;
+            }
+            presented.push(DEFERRED_ACL_WARNING.to_string());
+        } else {
+            presented.push(warning);
+        }
+    }
+    presented
+}
+
+#[cfg(not(test))]
+fn mark_acl_warning_presented() -> bool {
+    ACL_WARNING_PRESENTED.swap(true, Ordering::Relaxed)
+}
+
+#[cfg(test)]
+fn mark_acl_warning_presented() -> bool {
+    ACL_WARNING_PRESENTED.with(|presented| {
+        let was_presented = presented.get();
+        presented.set(true);
+        was_presented
+    })
+}
+
+#[cfg(test)]
+fn reset_presentation_warning_dedupe_for_test() {
+    ACL_WARNING_PRESENTED.with(|presented| presented.set(false));
 }
 
 /// Direction for flow animation.
@@ -513,6 +744,13 @@ pub struct AppState {
     pub mode: Mode,
     pub tool_mode: ToolMode,
     pub mcp_slug: String,
+    pub installation_id: String,
+    #[allow(dead_code)]
+    pub server_instance_id: String,
+    #[allow(dead_code)]
+    pub startup_time: String,
+    pub tunnel_config: TunnelConfig,
+    pub transport_identity: TransportIdentityConfig,
     pub server_running: bool,
     pub ngrok_running: bool,
     pub ngrok_url: Option<String>,
@@ -896,7 +1134,16 @@ impl AppState {
         config_path: PathBuf,
         _archive_startup_mascot: bool,
     ) -> std::io::Result<Self> {
-        let config = AppConfig::load_from_path(&config_path)?;
+        let (config, startup_warnings) =
+            AppConfig::load_or_initialize_from_path_with_warnings(&config_path)?;
+        if let Some(message) = config.tunnel.mode.unimplemented_message() {
+            return Err(std::io::Error::other(message));
+        }
+        let installation_id = config
+            .identity
+            .installation_id
+            .clone()
+            .ok_or_else(|| std::io::Error::other("missing CatDesk installationId"))?;
         let partner_binagotchy_seed = config.partner_binagotchy_seed.clone();
         let mascot_seed = if let Some(seed) = partner_binagotchy_seed.as_deref() {
             parse_seed_hex(seed)?
@@ -908,11 +1155,16 @@ impl AppState {
         if _archive_startup_mascot && partner_binagotchy_seed.is_none() {
             mascot::archive_startup_mascot(mascot_seed)?;
         }
-        Ok(Self {
+        let mut state = Self {
             theme: config.theme,
             mode: config.mode,
             tool_mode: config.tool_mode,
             mcp_slug: generate_mcp_slug(),
+            installation_id,
+            server_instance_id: Uuid::new_v4().to_string(),
+            startup_time: current_startup_time(),
+            tunnel_config: config.tunnel,
+            transport_identity: config.identity,
             server_running: false,
             ngrok_running: false,
             ngrok_url: None,
@@ -938,7 +1190,11 @@ impl AppState {
             ngrok_task: None,
             remote_browser_child: None,
             devtools_child: None,
-        })
+        };
+        for warning in presentation_warnings(startup_warnings) {
+            state.log("WARN", warning);
+        }
+        Ok(state)
     }
 
     pub fn current_theme(&self) -> &'static theme::ThemeDef {
@@ -976,6 +1232,9 @@ impl AppState {
         config.tool_mode = self.tool_mode;
         config.usage_totals = self.usage_totals.clone().normalized();
         config.selected_browser = self.selected_browser.clone();
+        config.tunnel = self.tunnel_config.clone();
+        config.identity = self.transport_identity.clone();
+        config.identity.installation_id = Some(self.installation_id.clone());
         Ok(config.normalized())
     }
 
@@ -984,9 +1243,31 @@ impl AppState {
     }
 
     pub fn persist_state_with_log(&mut self) {
-        if let Err(e) = self.persist_state() {
-            self.log("WARN", format!("Failed to persist app state: {e}"));
+        match self
+            .app_config()
+            .and_then(|config| config.save_to_path_checked(&self.config_path))
+        {
+            Ok(outcome) => {
+                for warning in presentation_warnings(outcome.warnings) {
+                    self.log("WARN", warning);
+                }
+            }
+            Err(e) => {
+                self.log("WARN", format!("Failed to persist app state: {e}"));
+            }
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn transport_identity_snapshot(&self) -> TransportIdentitySnapshot {
+        build_identity_snapshot(
+            self.installation_id.clone(),
+            self.server_instance_id.clone(),
+            self.startup_time.clone(),
+            &self.workspace_root,
+            self.tunnel_config.mode,
+            self.public_mcp_url().as_deref(),
+        )
     }
 
     pub fn record_turn_usage(&mut self, input_tokens: u64, output_tokens: u64) {
@@ -1180,6 +1461,15 @@ fn generate_mcp_slug() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, MutexGuard};
+
+    #[cfg(windows)]
+    fn acl_warning_test_guard() -> MutexGuard<'static, ()> {
+        static ACL_WARNING_TEST_LOCK: Mutex<()> = Mutex::new(());
+        let guard = ACL_WARNING_TEST_LOCK.lock().expect("acl warning test lock");
+        reset_presentation_warning_dedupe_for_test();
+        guard
+    }
 
     fn test_app(name: &str) -> (AppState, PathBuf, PathBuf) {
         let unique = SystemTime::now()
@@ -1196,6 +1486,30 @@ mod tests {
         )
         .expect("create app state");
         (app, workspace, config_path)
+    }
+
+    fn temp_config_workspace(name: &str) -> (PathBuf, PathBuf) {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let workspace = std::env::temp_dir().join(format!("{name}-{unique}"));
+        std::fs::create_dir_all(&workspace).expect("create temp workspace");
+        let config_path = workspace.join(APP_CONFIG_FILE_NAME);
+        (workspace, config_path)
+    }
+
+    fn temp_config_files(workspace: &Path) -> Vec<PathBuf> {
+        std::fs::read_dir(workspace)
+            .expect("read temp workspace")
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.contains(".tmp"))
+            })
+            .collect()
     }
 
     #[test]
@@ -1237,6 +1551,11 @@ toolCallCount = 7
         assert_eq!(app.usage_totals.total_tokens, 154);
         assert_eq!(app.usage_totals.tool_call_count, 7);
         assert_eq!(app.session_usage_totals, UsageTotals::default());
+        assert!(matches!(
+            app.tunnel_config.mode,
+            crate::tunnel::TunnelMode::ManagedEphemeralNgrok
+        ));
+        assert!(!app.installation_id.is_empty());
 
         let _ = std::fs::remove_file(config_path);
         let _ = std::fs::remove_dir(workspace);
@@ -1374,6 +1693,703 @@ toolCallCount = 7
 
         let saved = AppConfig::load_from_path(&config_path).expect("load config");
         assert!(matches!(saved.show_detail_mode, ShowDetailMode::Collapsed));
+
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[test]
+    fn transport_config_generates_persistent_route_once_and_installation_survives_reload() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let workspace = std::env::temp_dir().join(format!("catdesk-transport-route-{unique}"));
+        std::fs::create_dir_all(&workspace).expect("create temp config dir");
+        let config_path = workspace.join(APP_CONFIG_FILE_NAME);
+        std::fs::write(
+            &config_path,
+            r#"
+theme = "concise"
+mode = "computer"
+toolMode = "multiTools"
+
+[tunnel]
+mode = "managed_stable_ngrok"
+ngrok_domain = "example.ngrok-free.app"
+
+[usageTotals]
+inputTokens = 0
+outputTokens = 0
+totalTokens = 0
+toolCallCount = 0
+"#,
+        )
+        .expect("write stable config");
+
+        let first = AppConfig::load_or_initialize_from_path(&config_path)
+            .expect("load and initialize route");
+        let first_route = first.mcp.route_id.clone().expect("route");
+        let first_installation = first
+            .identity
+            .installation_id
+            .clone()
+            .expect("installation");
+        crate::tunnel::validate_route_id(&first_route).expect("valid route");
+
+        let second = AppConfig::load_or_initialize_from_path(&config_path)
+            .expect("reload initialized route");
+        assert_eq!(second.mcp.route_id.as_deref(), Some(first_route.as_str()));
+        assert_eq!(
+            second.identity.installation_id.as_deref(),
+            Some(first_installation.as_str())
+        );
+
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[test]
+    fn unimplemented_tunnel_mode_fails_explicitly_without_fallback() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let workspace =
+            std::env::temp_dir().join(format!("catdesk-transport-unimplemented-{unique}"));
+        std::fs::create_dir_all(&workspace).expect("create temp config dir");
+        let config_path = workspace.join(APP_CONFIG_FILE_NAME);
+        std::fs::write(
+            &config_path,
+            r#"
+theme = "concise"
+mode = "computer"
+toolMode = "multiTools"
+
+[tunnel]
+mode = "external_tunnel"
+public_base_url = "https://example.invalid"
+manage_process = false
+
+[usageTotals]
+inputTokens = 0
+outputTokens = 0
+totalTokens = 0
+toolCallCount = 0
+"#,
+        )
+        .expect("write external config");
+
+        let error = match AppState::from_config_path(
+            8787,
+            workspace.to_string_lossy().into_owned(),
+            config_path.clone(),
+        ) {
+            Ok(_) => panic!("external mode is not implemented"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("not implemented until T-0025C"));
+
+        let saved = AppConfig::load_from_path(&config_path).expect("load saved config");
+        assert!(matches!(
+            saved.tunnel.mode,
+            crate::tunnel::TunnelMode::ExternalTunnel
+        ));
+
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[test]
+    fn invalid_transport_config_is_rejected() {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let workspace = std::env::temp_dir().join(format!("catdesk-transport-invalid-{unique}"));
+        std::fs::create_dir_all(&workspace).expect("create temp config dir");
+        let config_path = workspace.join(APP_CONFIG_FILE_NAME);
+
+        std::fs::write(
+            &config_path,
+            r#"
+theme = "concise"
+mode = "computer"
+toolMode = "multiTools"
+
+[mcp]
+port = 22
+
+[usageTotals]
+inputTokens = 0
+outputTokens = 0
+totalTokens = 0
+toolCallCount = 0
+"#,
+        )
+        .expect("write invalid port config");
+        assert!(AppConfig::load_from_path(&config_path).is_err());
+
+        std::fs::write(
+            &config_path,
+            r#"
+theme = "concise"
+mode = "computer"
+toolMode = "multiTools"
+
+[mcp]
+bind_host = "0.0.0.0"
+
+[tunnel]
+mode = "managed_stable_ngrok"
+ngrok_domain = "example.ngrok-free.app"
+
+[usageTotals]
+inputTokens = 0
+outputTokens = 0
+totalTokens = 0
+toolCallCount = 0
+"#,
+        )
+        .expect("write invalid bind config");
+        assert!(AppConfig::load_from_path(&config_path).is_err());
+
+        std::fs::write(
+            &config_path,
+            r#"
+theme = "concise"
+mode = "computer"
+toolMode = "multiTools"
+
+[mcp]
+route_id = "../bad-route-that-is-long-enough"
+
+[usageTotals]
+inputTokens = 0
+outputTokens = 0
+totalTokens = 0
+toolCallCount = 0
+"#,
+        )
+        .expect("write invalid route config");
+        assert!(AppConfig::load_from_path(&config_path).is_err());
+
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[test]
+    fn route_rotation_marks_restart_required() {
+        let mut config = AppConfig::default();
+        crate::tunnel::rotate_route_restart_required(&mut config.mcp);
+        assert!(config.mcp.route_rotation.restart_required);
+        assert!(config.mcp.route_rotation.pending_route_id.is_some());
+    }
+
+    #[test]
+    fn interrupted_atomic_write_keeps_prior_valid_config() {
+        let (workspace, config_path) = temp_config_workspace("catdesk-atomic-config");
+        let original = AppConfig {
+            theme: "concise".into(),
+            ..AppConfig::default()
+        };
+        original.save_to_path(&config_path).expect("save original");
+
+        let replacement = AppConfig {
+            theme: "neon".into(),
+            ..AppConfig::default()
+        };
+        let plan = AtomicWritePlan {
+            tmp_path_suffix: ".forced-interrupt".into(),
+            fail_after_tmp_created: None,
+            fail_replace_with: None,
+            fail_cleanup_with: None,
+        };
+        let error = replacement
+            .save_to_path_with_plan(&config_path, &plan, || {
+                Err(std::io::Error::other("forced interruption"))
+            })
+            .expect_err("interrupted save fails");
+        assert!(error.to_string().contains("forced interruption"));
+
+        let saved = AppConfig::load_from_path(&config_path).expect("load prior config");
+        assert_eq!(saved.theme, "concise");
+        assert!(temp_config_files(&workspace).is_empty());
+
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[test]
+    fn temp_cleanup_preserves_error_before_replacement() {
+        let (workspace, config_path) = temp_config_workspace("catdesk-atomic-before-replace");
+        let original = AppConfig {
+            theme: "concise".into(),
+            ..AppConfig::default()
+        };
+        original.save_to_path(&config_path).expect("save original");
+        let replacement = AppConfig {
+            theme: "neon".into(),
+            ..AppConfig::default()
+        };
+        let plan = AtomicWritePlan {
+            tmp_path_suffix: ".before-replace".into(),
+            fail_after_tmp_created: None,
+            fail_replace_with: None,
+            fail_cleanup_with: None,
+        };
+
+        let error = replacement
+            .save_to_path_with_plan(&config_path, &plan, || {
+                Err(std::io::Error::other("original before-replace error"))
+            })
+            .expect_err("save should fail");
+
+        assert_eq!(error.to_string(), "original before-replace error");
+        assert_eq!(
+            AppConfig::load_from_path(&config_path)
+                .expect("load original")
+                .theme,
+            "concise"
+        );
+        assert!(temp_config_files(&workspace).is_empty());
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[test]
+    fn temp_cleanup_preserves_error_after_temp_created() {
+        let (workspace, config_path) = temp_config_workspace("catdesk-atomic-write-failure");
+        let original = AppConfig {
+            theme: "concise".into(),
+            ..AppConfig::default()
+        };
+        original.save_to_path(&config_path).expect("save original");
+        let replacement = AppConfig {
+            theme: "neon".into(),
+            ..AppConfig::default()
+        };
+        let plan = AtomicWritePlan {
+            tmp_path_suffix: ".write-failure".into(),
+            fail_after_tmp_created: Some("original write/sync error"),
+            fail_replace_with: None,
+            fail_cleanup_with: None,
+        };
+
+        let error = replacement
+            .save_to_path_with_plan(&config_path, &plan, || Ok(()))
+            .expect_err("save should fail");
+
+        assert_eq!(error.to_string(), "original write/sync error");
+        assert_eq!(
+            AppConfig::load_from_path(&config_path)
+                .expect("load original")
+                .theme,
+            "concise"
+        );
+        assert!(temp_config_files(&workspace).is_empty());
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[test]
+    fn successful_temp_cleanup_returns_original_error_unchanged() {
+        let (workspace, config_path) = temp_config_workspace("catdesk-cleanup-original-error");
+        let original = AppConfig {
+            theme: "concise".into(),
+            ..AppConfig::default()
+        };
+        original.save_to_path(&config_path).expect("save original");
+        let replacement = AppConfig {
+            ngrok_authtoken: Some("secret-token-that-must-not-leak".into()),
+            theme: "neon".into(),
+            ..AppConfig::default()
+        };
+        let plan = AtomicWritePlan {
+            tmp_path_suffix: ".cleanup-success".into(),
+            fail_after_tmp_created: Some("original save error"),
+            fail_replace_with: None,
+            fail_cleanup_with: None,
+        };
+
+        let error = replacement
+            .save_to_path_with_plan(&config_path, &plan, || Ok(()))
+            .expect_err("save should fail");
+
+        assert_eq!(error.to_string(), "original save error");
+        assert!(
+            !error
+                .to_string()
+                .contains("secret-token-that-must-not-leak")
+        );
+        assert!(temp_config_files(&workspace).is_empty());
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[test]
+    fn failed_temp_cleanup_reports_original_and_cleanup_error_without_config_contents() {
+        let (workspace, config_path) = temp_config_workspace("catdesk-cleanup-failure");
+        let original = AppConfig {
+            theme: "concise".into(),
+            ..AppConfig::default()
+        };
+        original.save_to_path(&config_path).expect("save original");
+        let replacement = AppConfig {
+            ngrok_authtoken: Some("secret-token-that-must-not-leak".into()),
+            theme: "neon".into(),
+            ..AppConfig::default()
+        };
+        let plan = AtomicWritePlan {
+            tmp_path_suffix: ".cleanup-failure".into(),
+            fail_after_tmp_created: Some("original save error"),
+            fail_replace_with: None,
+            fail_cleanup_with: Some("cleanup remove error"),
+        };
+
+        let error = replacement
+            .save_to_path_with_plan(&config_path, &plan, || Ok(()))
+            .expect_err("save should fail");
+        let message = error.to_string();
+
+        assert!(message.contains("original save error"));
+        assert!(message.contains("cleanup remove error"));
+        assert!(message.contains("<redacted config temp>"));
+        assert!(!message.contains("secret-token-that-must-not-leak"));
+        assert!(!message.contains("ngrok_authtoken"));
+        assert_eq!(
+            AppConfig::load_from_path(&config_path)
+                .expect("load original")
+                .theme,
+            "concise"
+        );
+        for tmp in temp_config_files(&workspace) {
+            let _ = std::fs::remove_file(tmp);
+        }
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[test]
+    fn temp_cleanup_preserves_error_on_replacement_failure() {
+        let (workspace, config_path) = temp_config_workspace("catdesk-atomic-replace-failure");
+        let original = AppConfig {
+            theme: "concise".into(),
+            ..AppConfig::default()
+        };
+        original.save_to_path(&config_path).expect("save original");
+        let replacement = AppConfig {
+            theme: "neon".into(),
+            ..AppConfig::default()
+        };
+        let plan = AtomicWritePlan {
+            tmp_path_suffix: ".replace-failure".into(),
+            fail_after_tmp_created: None,
+            fail_replace_with: Some("original replace error"),
+            fail_cleanup_with: None,
+        };
+
+        let error = replacement
+            .save_to_path_with_plan(&config_path, &plan, || Ok(()))
+            .expect_err("save should fail");
+
+        assert_eq!(error.to_string(), "original replace error");
+        assert_eq!(
+            AppConfig::load_from_path(&config_path)
+                .expect("load original")
+                .theme,
+            "concise"
+        );
+        assert!(temp_config_files(&workspace).is_empty());
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[test]
+    fn existing_config_replacement_writes_new_config_without_temp_files() {
+        let (workspace, config_path) = temp_config_workspace("catdesk-existing-replace");
+        let original = AppConfig {
+            theme: "concise".into(),
+            ..AppConfig::default()
+        };
+        original.save_to_path(&config_path).expect("save original");
+        let replacement = AppConfig {
+            theme: "neon".into(),
+            ..AppConfig::default()
+        };
+
+        replacement
+            .save_to_path_with_plan(&config_path, &AtomicWritePlan::default(), || {
+                assert!(config_path.exists());
+                assert_eq!(
+                    AppConfig::load_from_path(&config_path)
+                        .expect("load original during replacement")
+                        .theme,
+                    "concise"
+                );
+                Ok(())
+            })
+            .expect("replace existing config");
+
+        assert_eq!(
+            AppConfig::load_from_path(&config_path)
+                .expect("load replacement")
+                .theme,
+            "neon"
+        );
+        assert!(temp_config_files(&workspace).is_empty());
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[test]
+    fn ordinary_successful_save_remains_unchanged() {
+        let (workspace, config_path) = temp_config_workspace("catdesk-ordinary-save");
+        let config = AppConfig {
+            ngrok_authtoken: Some("test-token-123".into()),
+            theme: "neon".into(),
+            ..AppConfig::default()
+        };
+
+        config.save_to_path(&config_path).expect("save config");
+        let saved = AppConfig::load_from_path(&config_path).expect("load config");
+
+        assert_eq!(saved.theme, "neon");
+        assert_eq!(saved.ngrok_authtoken.as_deref(), Some("test-token-123"));
+        assert!(temp_config_files(&workspace).is_empty());
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[test]
+    fn route_promotion_after_restart_persists_pending_route() {
+        let (workspace, config_path) = temp_config_workspace("catdesk-route-promotion");
+        std::fs::write(
+            &config_path,
+            r#"
+theme = "concise"
+mode = "computer"
+toolMode = "multiTools"
+
+[mcp]
+route_id = "oldrouteoldrouteoldroute12"
+
+[mcp.route_rotation]
+pending_route_id = "newroutenewroutenewroute12"
+restart_required = true
+
+[tunnel]
+mode = "managed_stable_ngrok"
+ngrok_domain = "example.ngrok-free.app"
+
+[usageTotals]
+inputTokens = 0
+outputTokens = 0
+totalTokens = 0
+toolCallCount = 0
+"#,
+        )
+        .expect("write pending route config");
+
+        let config =
+            AppConfig::load_or_initialize_from_path(&config_path).expect("promote pending route");
+        assert_eq!(
+            config.mcp.route_id.as_deref(),
+            Some("newroutenewroutenewroute12")
+        );
+        assert!(config.mcp.route_rotation.pending_route_id.is_none());
+        assert!(!config.mcp.route_rotation.restart_required);
+
+        let saved = AppConfig::load_from_path(&config_path).expect("reload promoted route");
+        assert_eq!(
+            saved.mcp.route_id.as_deref(),
+            Some("newroutenewroutenewroute12")
+        );
+        assert!(
+            !std::fs::read_to_string(&config_path)
+                .expect("read promoted config")
+                .contains("oldrouteoldrouteoldroute12")
+        );
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_file(workspace.join("config.toml.pre-t0025b-backup"));
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[test]
+    fn migration_backup_created_once_before_automatic_rewrite() {
+        let (workspace, config_path) = temp_config_workspace("catdesk-migration-backup");
+        std::fs::write(
+            &config_path,
+            r#"theme = "concise"
+mode = "computer"
+toolMode = "multiTools"
+
+[usageTotals]
+inputTokens = 0
+outputTokens = 0
+totalTokens = 0
+toolCallCount = 0
+"#,
+        )
+        .expect("write pre-t0025b config");
+        let backup_path = workspace.join("config.toml.pre-t0025b-backup");
+
+        AppConfig::load_or_initialize_from_path(&config_path).expect("initialize config");
+        assert!(backup_path.exists());
+        let backup_text = std::fs::read_to_string(&backup_path).expect("read backup");
+        assert!(!backup_text.contains("installation_id"));
+        let saved = std::fs::read_to_string(&config_path).expect("read migrated config");
+        assert!(saved.contains("installation_id"));
+
+        std::fs::write(&backup_path, "sentinel").expect("mark backup");
+        AppConfig::load_or_initialize_from_path(&config_path).expect("reload migrated config");
+        assert_eq!(
+            std::fs::read_to_string(&backup_path).expect("read backup"),
+            "sentinel"
+        );
+
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_file(backup_path);
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn initial_migration_makes_deferred_acl_warning_observable() {
+        let _guard = acl_warning_test_guard();
+        let (workspace, config_path) = temp_config_workspace("catdesk-acl-warning-observable");
+        std::fs::write(
+            &config_path,
+            r#"theme = "concise"
+mode = "computer"
+toolMode = "multiTools"
+
+[usageTotals]
+inputTokens = 0
+outputTokens = 0
+totalTokens = 0
+toolCallCount = 0
+"#,
+        )
+        .expect("write pre-t0025b config");
+
+        let app = AppState::from_config_path(
+            8787,
+            workspace.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .expect("migrate config");
+
+        let acl_warnings: Vec<_> = app
+            .logs
+            .iter()
+            .filter(|entry| entry.message == DEFERRED_ACL_WARNING)
+            .collect();
+        assert_eq!(acl_warnings.len(), 1);
+        assert!(!acl_warnings[0].message.contains("config.toml"));
+        assert!(!acl_warnings[0].message.contains("ngrok"));
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_file(workspace.join("config.toml.pre-t0025b-backup"));
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn repeated_persistence_does_not_repeat_deferred_acl_warning() {
+        let _guard = acl_warning_test_guard();
+        let (workspace, config_path) = temp_config_workspace("catdesk-acl-warning-dedupe");
+        std::fs::write(
+            &config_path,
+            r#"theme = "concise"
+mode = "computer"
+toolMode = "multiTools"
+
+[usageTotals]
+inputTokens = 0
+outputTokens = 0
+totalTokens = 0
+toolCallCount = 0
+"#,
+        )
+        .expect("write pre-t0025b config");
+
+        let mut app = AppState::from_config_path(
+            8787,
+            workspace.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .expect("migrate config");
+        app.persist_state_with_log();
+        app.persist_state_with_log();
+
+        let acl_warning_count = app
+            .logs
+            .iter()
+            .filter(|entry| entry.message == DEFERRED_ACL_WARNING)
+            .count();
+        assert_eq!(acl_warning_count, 1);
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_file(workspace.join("config.toml.pre-t0025b-backup"));
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn backup_creation_cannot_consume_only_deferred_acl_warning() {
+        let _guard = acl_warning_test_guard();
+        let (workspace, config_path) = temp_config_workspace("catdesk-acl-warning-backup");
+        std::fs::write(
+            &config_path,
+            r#"theme = "concise"
+mode = "computer"
+toolMode = "multiTools"
+
+[usageTotals]
+inputTokens = 0
+outputTokens = 0
+totalTokens = 0
+toolCallCount = 0
+"#,
+        )
+        .expect("write pre-t0025b config");
+
+        let app = AppState::from_config_path(
+            8787,
+            workspace.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .expect("migrate config");
+
+        assert!(workspace.join("config.toml.pre-t0025b-backup").exists());
+        assert_eq!(
+            app.logs
+                .iter()
+                .filter(|entry| entry.message == DEFERRED_ACL_WARNING)
+                .count(),
+            1
+        );
+        let _ = std::fs::remove_file(config_path);
+        let _ = std::fs::remove_file(workspace.join("config.toml.pre-t0025b-backup"));
+        let _ = std::fs::remove_dir(workspace);
+    }
+
+    #[test]
+    fn server_instance_id_changes_between_process_state_instances() {
+        let (first, workspace, config_path) = test_app("catdesk-identity-first");
+        let second = AppState::from_config_path(
+            8787,
+            workspace.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .expect("reload app state");
+        assert_eq!(first.installation_id, second.installation_id);
+        assert_ne!(first.server_instance_id, second.server_instance_id);
+
+        let snapshot = second.transport_identity_snapshot();
+        assert_eq!(snapshot.installation_id, second.installation_id);
+        assert_eq!(snapshot.server_instance_id, second.server_instance_id);
+        assert_eq!(snapshot.transport_mode, "managed_ephemeral_ngrok");
+        assert!(!snapshot.workspace_hash.is_empty());
 
         let _ = std::fs::remove_file(config_path);
         let _ = std::fs::remove_dir(workspace);

@@ -39,6 +39,7 @@ mod server;
 mod state;
 mod task_queue;
 mod theme;
+mod tunnel;
 mod verification;
 mod workspace_tools;
 

@@ -1,0 +1,852 @@
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use rand::{RngCore, rngs::OsRng};
+use serde::{Deserialize, Serialize};
+use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
+
+pub const DEFAULT_MCP_BIND_HOST: &str = "127.0.0.1";
+pub const DEFAULT_MCP_PORT: u16 = 3200;
+const MIN_ROUTE_LEN: usize = 24;
+const MAX_ROUTE_LEN: usize = 96;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TunnelMode {
+    #[default]
+    ManagedEphemeralNgrok,
+    ManagedStableNgrok,
+    ExternalTunnel,
+    OpenaiSecureTunnel,
+}
+
+impl TunnelMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ManagedEphemeralNgrok => "managed_ephemeral_ngrok",
+            Self::ManagedStableNgrok => "managed_stable_ngrok",
+            Self::ExternalTunnel => "external_tunnel",
+            Self::OpenaiSecureTunnel => "openai_secure_tunnel",
+        }
+    }
+
+    pub fn unimplemented_message(self) -> Option<String> {
+        match self {
+            Self::ManagedEphemeralNgrok => None,
+            Self::ManagedStableNgrok | Self::ExternalTunnel => Some(format!(
+                "tunnel mode `{}` is parsed but runtime behavior is not implemented until T-0025C",
+                self.as_str()
+            )),
+            Self::OpenaiSecureTunnel => Some(
+                "tunnel mode `openai_secure_tunnel` is parsed but runtime behavior is not implemented until T-0025D"
+                    .to_string(),
+            ),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct McpTransportConfig {
+    #[serde(default = "default_bind_host")]
+    pub bind_host: String,
+    #[serde(default = "default_port")]
+    pub port: u16,
+    #[serde(default)]
+    pub route_id: Option<String>,
+    #[serde(default)]
+    pub display_full_url: bool,
+    #[serde(default)]
+    pub require_auth_token: bool,
+    #[serde(default)]
+    pub route_rotation: RouteRotationState,
+}
+
+impl Default for McpTransportConfig {
+    fn default() -> Self {
+        Self {
+            bind_host: default_bind_host(),
+            port: default_port(),
+            route_id: None,
+            display_full_url: false,
+            require_auth_token: false,
+            route_rotation: RouteRotationState::default(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct RouteRotationState {
+    #[serde(default)]
+    pub pending_route_id: Option<String>,
+    #[serde(default)]
+    pub restart_required: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct TunnelConfig {
+    #[serde(default)]
+    pub mode: TunnelMode,
+    #[serde(default)]
+    pub public_base_url: Option<String>,
+    #[serde(default)]
+    pub ngrok_domain: Option<String>,
+    #[serde(default)]
+    pub ngrok_config_path: Option<String>,
+    #[serde(default = "default_manage_process")]
+    pub manage_process: bool,
+    #[serde(default)]
+    pub remote_self_check: bool,
+}
+
+impl Default for TunnelConfig {
+    fn default() -> Self {
+        Self {
+            mode: TunnelMode::ManagedEphemeralNgrok,
+            public_base_url: None,
+            ngrok_domain: None,
+            ngrok_config_path: None,
+            manage_process: true,
+            remote_self_check: false,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct TransportSecurityConfig {
+    #[serde(default = "default_warn_on_public_no_auth")]
+    pub warn_on_public_no_auth: bool,
+    #[serde(default = "default_redact_connection_url")]
+    pub redact_connection_url: bool,
+    #[serde(default = "default_allow_one_time_reveal")]
+    pub allow_one_time_reveal: bool,
+}
+
+impl Default for TransportSecurityConfig {
+    fn default() -> Self {
+        Self {
+            warn_on_public_no_auth: true,
+            redact_connection_url: true,
+            allow_one_time_reveal: true,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct TransportIdentityConfig {
+    #[serde(default)]
+    pub installation_id: Option<String>,
+    #[serde(default)]
+    pub last_connection_fingerprint: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct TransportIdentitySnapshot {
+    pub installation_id: String,
+    pub server_instance_id: String,
+    pub git_commit: String,
+    pub dirty_build: String,
+    pub binary_fingerprint: String,
+    pub startup_time: String,
+    pub workspace_hash: String,
+    pub transport_mode: String,
+    pub connection_fingerprint: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConfigSaveOutcome {
+    pub warnings: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AtomicWritePlan {
+    pub tmp_path_suffix: String,
+    #[cfg(test)]
+    pub fail_after_tmp_created: Option<&'static str>,
+    #[cfg(test)]
+    pub fail_replace_with: Option<&'static str>,
+    #[cfg(test)]
+    pub fail_cleanup_with: Option<&'static str>,
+}
+
+impl Default for AtomicWritePlan {
+    fn default() -> Self {
+        Self {
+            tmp_path_suffix: format!(".tmp-{}", Uuid::new_v4()),
+            #[cfg(test)]
+            fail_after_tmp_created: None,
+            #[cfg(test)]
+            fail_replace_with: None,
+            #[cfg(test)]
+            fail_cleanup_with: None,
+        }
+    }
+}
+
+fn default_bind_host() -> String {
+    DEFAULT_MCP_BIND_HOST.to_string()
+}
+
+fn default_port() -> u16 {
+    DEFAULT_MCP_PORT
+}
+
+fn default_manage_process() -> bool {
+    true
+}
+
+fn default_warn_on_public_no_auth() -> bool {
+    true
+}
+
+fn default_redact_connection_url() -> bool {
+    true
+}
+
+fn default_allow_one_time_reveal() -> bool {
+    true
+}
+
+pub fn generate_persistent_route_id() -> String {
+    let mut bytes = [0_u8; 24];
+    OsRng.fill_bytes(&mut bytes);
+    URL_SAFE_NO_PAD.encode(bytes)
+}
+
+pub fn validate_route_id(route: &str) -> Result<(), String> {
+    if route.len() < MIN_ROUTE_LEN || route.len() > MAX_ROUTE_LEN {
+        return Err(format!(
+            "MCP route id must be between {MIN_ROUTE_LEN} and {MAX_ROUTE_LEN} characters"
+        ));
+    }
+    if matches!(route, "." | "..") {
+        return Err("MCP route id must not be a traversal segment".into());
+    }
+    if !route
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        return Err("MCP route id must use only A-Z, a-z, 0-9, `_`, and `-`".into());
+    }
+    Ok(())
+}
+
+pub fn normalize_optional_string(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+pub fn normalize_public_base_url(value: &str) -> Result<String, String> {
+    reject_whitespace_or_control(value, "public_base_url")?;
+    let trimmed = value.trim_end_matches('/');
+    let parsed = reqwest::Url::parse(trimmed)
+        .map_err(|_| "public_base_url must be a valid https origin".to_string())?;
+    if parsed.scheme() != "https" {
+        return Err("public_base_url must be an https origin".into());
+    }
+    if !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.path() != "/"
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+    {
+        return Err(
+            "public_base_url must be an https origin without path, query, or credentials".into(),
+        );
+    }
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| "public_base_url must include a hostname".to_string())?;
+    let normalized_host = normalize_hostname(host, "public_base_url hostname")?;
+    let port = parsed
+        .port()
+        .map(|port| format!(":{port}"))
+        .unwrap_or_default();
+    Ok(format!("https://{normalized_host}{port}"))
+}
+
+pub fn normalize_ngrok_domain(value: &str) -> Result<String, String> {
+    reject_whitespace_or_control(value, "ngrok_domain")?;
+    if value.contains("://")
+        || value.contains('/')
+        || value.contains('?')
+        || value.contains('#')
+        || value.contains('@')
+        || value.contains(':')
+    {
+        return Err("ngrok_domain must be a hostname without scheme, port, path, query, fragment, or credentials".into());
+    }
+    normalize_hostname(value, "ngrok_domain")
+}
+
+fn reject_whitespace_or_control(value: &str, label: &str) -> Result<(), String> {
+    if value.is_empty()
+        || value
+            .chars()
+            .any(|ch| ch.is_whitespace() || ch.is_control())
+    {
+        return Err(format!(
+            "{label} must not contain whitespace or control characters"
+        ));
+    }
+    Ok(())
+}
+
+fn normalize_hostname(value: &str, label: &str) -> Result<String, String> {
+    let host = value.to_ascii_lowercase();
+    if host.is_empty() || host.len() > 253 || host.starts_with('.') || host.ends_with('.') {
+        return Err(format!("{label} must be a valid hostname"));
+    }
+    if host.contains("..") || !host.contains('.') {
+        return Err(format!("{label} must contain valid DNS labels"));
+    }
+    for label_part in host.split('.') {
+        if label_part.is_empty()
+            || label_part.len() > 63
+            || label_part.starts_with('-')
+            || label_part.ends_with('-')
+            || !label_part
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        {
+            return Err(format!("{label} contains an invalid DNS label"));
+        }
+    }
+    Ok(host)
+}
+
+pub fn requires_persistent_route(mode: TunnelMode) -> bool {
+    matches!(
+        mode,
+        TunnelMode::ManagedStableNgrok
+            | TunnelMode::ExternalTunnel
+            | TunnelMode::OpenaiSecureTunnel
+    )
+}
+
+pub fn requires_loopback(mode: TunnelMode) -> bool {
+    requires_persistent_route(mode)
+}
+
+#[allow(dead_code)]
+pub fn manages_tunnel_process(mode: TunnelMode) -> bool {
+    matches!(
+        mode,
+        TunnelMode::ManagedEphemeralNgrok | TunnelMode::ManagedStableNgrok
+    )
+}
+
+pub fn validate_transport(mcp: &McpTransportConfig, tunnel: &TunnelConfig) -> Result<(), String> {
+    if mcp.port != DEFAULT_MCP_PORT {
+        return Err(format!(
+            "mcp.port is reserved for T-0025C and must remain {DEFAULT_MCP_PORT}"
+        ));
+    }
+    if mcp.bind_host != DEFAULT_MCP_BIND_HOST {
+        return Err(format!(
+            "mcp.bind_host is reserved for T-0025C and must remain {DEFAULT_MCP_BIND_HOST}"
+        ));
+    }
+    if requires_loopback(tunnel.mode) && mcp.bind_host != DEFAULT_MCP_BIND_HOST {
+        return Err("stable transport modes must bind to 127.0.0.1".into());
+    }
+    if tunnel.manage_process != manages_tunnel_process(tunnel.mode) {
+        return Err(format!(
+            "tunnel.manage_process={} is not supported for tunnel mode `{}`",
+            tunnel.manage_process,
+            tunnel.mode.as_str()
+        ));
+    }
+    if mcp.display_full_url {
+        return Err("mcp.display_full_url is reserved and must remain false".into());
+    }
+    if mcp.require_auth_token {
+        return Err(
+            "mcp.require_auth_token is reserved until compatible ChatGPT authentication is proven"
+                .into(),
+        );
+    }
+    if tunnel.remote_self_check {
+        return Err("tunnel.remote_self_check is reserved for T-0025C".into());
+    }
+    if tunnel.ngrok_config_path.is_some() {
+        return Err("tunnel.ngrok_config_path is reserved for T-0025C".into());
+    }
+    if let Some(route) = mcp.route_id.as_deref() {
+        validate_route_id(route)?;
+    }
+    if let Some(route) = mcp.route_rotation.pending_route_id.as_deref() {
+        validate_route_id(route)?;
+    }
+    if mcp.route_rotation.pending_route_id.is_some() != mcp.route_rotation.restart_required {
+        return Err(
+            "mcp.route_rotation.pending_route_id must be present exactly when restart_required is true"
+                .into(),
+        );
+    }
+    if matches!(tunnel.mode, TunnelMode::ManagedStableNgrok) {
+        let domain = tunnel
+            .ngrok_domain
+            .as_deref()
+            .ok_or_else(|| "managed_stable_ngrok requires tunnel.ngrok_domain".to_string())?;
+        normalize_ngrok_domain(domain)?;
+    } else if tunnel.ngrok_domain.is_some() {
+        return Err("tunnel.ngrok_domain is only supported with managed_stable_ngrok".into());
+    }
+    if matches!(tunnel.mode, TunnelMode::ExternalTunnel) {
+        let base_url = tunnel
+            .public_base_url
+            .as_deref()
+            .ok_or_else(|| "external_tunnel requires tunnel.public_base_url".to_string())?;
+        normalize_public_base_url(base_url)?;
+    } else if tunnel.public_base_url.is_some() {
+        return Err("tunnel.public_base_url is only supported with external_tunnel".into());
+    }
+    Ok(())
+}
+
+pub fn ensure_persistent_route_if_required(
+    mcp: &mut McpTransportConfig,
+    tunnel: &TunnelConfig,
+) -> bool {
+    if requires_persistent_route(tunnel.mode) && mcp.route_id.as_deref().is_none_or(str::is_empty) {
+        mcp.route_id = Some(generate_persistent_route_id());
+        return true;
+    }
+    false
+}
+
+#[allow(dead_code)]
+pub fn rotate_route_restart_required(mcp: &mut McpTransportConfig) {
+    mcp.route_rotation.pending_route_id = Some(generate_persistent_route_id());
+    mcp.route_rotation.restart_required = true;
+}
+
+pub fn promote_pending_route_after_restart(mcp: &mut McpTransportConfig) -> bool {
+    if !mcp.route_rotation.restart_required {
+        return false;
+    }
+    let Some(pending) = mcp.route_rotation.pending_route_id.take() else {
+        return false;
+    };
+    mcp.route_id = Some(pending);
+    mcp.route_rotation.restart_required = false;
+    true
+}
+
+pub fn ensure_installation_id(identity: &mut TransportIdentityConfig) -> bool {
+    if identity
+        .installation_id
+        .as_deref()
+        .is_none_or(|value| value.trim().is_empty())
+    {
+        identity.installation_id = Some(Uuid::new_v4().to_string());
+        return true;
+    }
+    false
+}
+
+#[allow(dead_code)]
+pub fn redact_full_mcp_url(url: &str) -> String {
+    let Some((base, _route)) = url.rsplit_once('/') else {
+        return "<redacted>".into();
+    };
+    let Some((origin, _slug)) = base.rsplit_once('/') else {
+        return "<redacted>".into();
+    };
+    format!("{origin}/<redacted>/mcp")
+}
+
+#[allow(dead_code)]
+pub fn connection_fingerprint(url: &str) -> String {
+    let normalized = normalize_endpoint_for_fingerprint(url).unwrap_or_else(|| {
+        url.trim()
+            .trim_end_matches('/')
+            .replace('\\', "/")
+            .to_string()
+    });
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in normalized.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x1000_0000_01b3);
+    }
+    format!("{hash:016x}")
+}
+
+fn normalize_endpoint_for_fingerprint(value: &str) -> Option<String> {
+    let parsed = reqwest::Url::parse(value.trim()).ok()?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return None;
+    }
+    if !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+    {
+        return None;
+    }
+    let host = parsed.host_str()?.to_ascii_lowercase();
+    let port = parsed
+        .port()
+        .map(|port| format!(":{port}"))
+        .unwrap_or_default();
+    let path = parsed.path().trim_end_matches('/');
+    let path = if path.is_empty() { "/" } else { path };
+    Some(format!(
+        "{}://{host}{port}{path}",
+        parsed.scheme().to_ascii_lowercase()
+    ))
+}
+
+#[allow(dead_code)]
+pub fn workspace_fingerprint(path: &str) -> String {
+    let normalized = path.replace('\\', "/").to_ascii_lowercase();
+    connection_fingerprint(&normalized)
+}
+
+pub fn current_startup_time() -> String {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| format!("unix:{}", duration.as_secs()))
+        .unwrap_or_else(|_| "unix:0".into())
+}
+
+#[allow(dead_code)]
+pub fn git_commit() -> String {
+    option_env!("GIT_COMMIT")
+        .or(option_env!("VERGEN_GIT_SHA"))
+        .unwrap_or("unknown")
+        .to_string()
+}
+
+#[allow(dead_code)]
+pub fn dirty_build_state() -> String {
+    option_env!("GIT_DIRTY")
+        .map(|value| {
+            if matches!(value, "1" | "true" | "TRUE" | "dirty") {
+                "dirty"
+            } else if matches!(value, "0" | "false" | "FALSE" | "clean") {
+                "clean"
+            } else {
+                "unknown"
+            }
+        })
+        .unwrap_or("unknown")
+        .to_string()
+}
+
+#[allow(dead_code)]
+pub fn binary_fingerprint() -> String {
+    let Ok(exe) = std::env::current_exe() else {
+        return "unknown".into();
+    };
+    let Ok(metadata) = std::fs::metadata(&exe) else {
+        return connection_fingerprint(&exe.to_string_lossy());
+    };
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default();
+    connection_fingerprint(&format!(
+        "{}:{}:{}",
+        exe.to_string_lossy(),
+        metadata.len(),
+        modified
+    ))
+}
+
+#[allow(dead_code)]
+pub fn build_identity_snapshot(
+    installation_id: String,
+    server_instance_id: String,
+    startup_time: String,
+    workspace_root: &str,
+    tunnel_mode: TunnelMode,
+    connection_url: Option<&str>,
+) -> TransportIdentitySnapshot {
+    TransportIdentitySnapshot {
+        installation_id,
+        server_instance_id,
+        git_commit: git_commit(),
+        dirty_build: dirty_build_state(),
+        binary_fingerprint: binary_fingerprint(),
+        startup_time,
+        workspace_hash: workspace_fingerprint(workspace_root),
+        transport_mode: tunnel_mode.as_str().to_string(),
+        connection_fingerprint: connection_url.map(connection_fingerprint),
+    }
+}
+
+pub fn tmp_path_for_atomic_write(
+    path: &Path,
+    plan: &AtomicWritePlan,
+) -> std::io::Result<std::path::PathBuf> {
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| std::io::Error::other("config path has no file name"))?;
+    Ok(path.with_file_name(format!(
+        "{}{}",
+        file_name.to_string_lossy(),
+        plan.tmp_path_suffix
+    )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_documented_tunnel_mode_parses() {
+        for mode in [
+            "managed_ephemeral_ngrok",
+            "managed_stable_ngrok",
+            "external_tunnel",
+            "openai_secure_tunnel",
+        ] {
+            let parsed: TunnelMode = toml::from_str(&format!("mode = \"{mode}\""))
+                .map(|table: TunnelConfig| table.mode)
+                .expect("parse mode");
+            assert_eq!(parsed.as_str(), mode);
+        }
+    }
+
+    #[test]
+    fn unknown_tunnel_mode_is_rejected() {
+        let error = toml::from_str::<TunnelConfig>("mode = \"surprise\"").unwrap_err();
+        assert!(error.to_string().contains("unknown variant"));
+    }
+
+    #[test]
+    fn route_traversal_and_unsafe_characters_are_rejected() {
+        for route in [
+            "../mcp",
+            "hello/world/with/slash-and-long-enough",
+            "hello%20world_with_enough_chars",
+            "hello world with enough characters",
+            "dot.segment.with.enough.characters",
+        ] {
+            assert!(validate_route_id(route).is_err(), "{route}");
+        }
+    }
+
+    #[test]
+    fn generated_route_uses_conservative_url_safe_alphabet() {
+        let route = generate_persistent_route_id();
+        validate_route_id(&route).expect("generated route is valid");
+        assert!(!route.contains('/'));
+        assert!(!route.contains('+'));
+        assert!(!route.contains('='));
+    }
+
+    #[test]
+    fn diagnostics_redact_route_and_endpoint() {
+        let redacted = redact_full_mcp_url(&format!(
+            "{}{}{}",
+            "https://example.ngrok-free.app/", "AbCdEf123456789012345678", "/mcp"
+        ));
+        assert_eq!(redacted, "https://example.ngrok-free.app/<redacted>/mcp");
+        assert!(!redacted.contains("AbCdEf"));
+    }
+
+    #[test]
+    fn connection_fingerprint_is_stable_for_same_normalized_endpoint() {
+        let a = connection_fingerprint(&format!(
+            "{}{}{}",
+            "HTTPS://EXAMPLE.NGROK-FREE.APP/", "AbCd", "/mcp"
+        ));
+        let b = connection_fingerprint(&format!(
+            "{}{}{}",
+            "https://example.ngrok-free.app/", "AbCd", "/mcp"
+        ));
+        assert_eq!(a, b);
+        assert_eq!(
+            a,
+            connection_fingerprint(&format!(
+                "{}{}{}",
+                "https://example.ngrok-free.app/", "AbCd", "/mcp"
+            ))
+        );
+    }
+
+    #[test]
+    fn connection_fingerprint_preserves_route_path_casing() {
+        let mixed = connection_fingerprint(&format!(
+            "{}{}{}",
+            "https://example.ngrok-free.app/", "AbCd", "/mcp"
+        ));
+        let lower = connection_fingerprint(&format!(
+            "{}{}{}",
+            "https://example.ngrok-free.app/", "abcd", "/mcp"
+        ));
+        assert_ne!(mixed, lower);
+    }
+
+    #[test]
+    fn connection_fingerprint_ignores_optional_final_trailing_slash() {
+        let without = connection_fingerprint(&format!(
+            "{}{}{}",
+            "https://example.ngrok-free.app/", "AbCd", "/mcp"
+        ));
+        let with = connection_fingerprint(&format!(
+            "{}{}{}",
+            "https://example.ngrok-free.app/", "AbCd", "/mcp/"
+        ));
+        assert_eq!(without, with);
+    }
+
+    #[test]
+    fn route_rotation_marks_restart_required() {
+        let mut mcp = McpTransportConfig::default();
+        rotate_route_restart_required(&mut mcp);
+        assert!(mcp.route_rotation.restart_required);
+        assert!(mcp.route_rotation.pending_route_id.is_some());
+    }
+
+    #[test]
+    fn route_rotation_state_invariants_are_enforced() {
+        let tunnel = TunnelConfig::default();
+        validate_transport(&McpTransportConfig::default(), &tunnel)
+            .expect("inactive route rotation is valid");
+
+        let pending = "abcdefghijklmnopqrstuvwxyz012345";
+        let mcp = McpTransportConfig {
+            route_rotation: RouteRotationState {
+                pending_route_id: Some(pending.into()),
+                restart_required: true,
+            },
+            ..McpTransportConfig::default()
+        };
+        validate_transport(&mcp, &tunnel).expect("pending restart state is valid");
+
+        let mcp = McpTransportConfig {
+            route_rotation: RouteRotationState {
+                pending_route_id: None,
+                restart_required: true,
+            },
+            ..McpTransportConfig::default()
+        };
+        assert!(validate_transport(&mcp, &tunnel).is_err());
+
+        let mcp = McpTransportConfig {
+            route_rotation: RouteRotationState {
+                pending_route_id: Some(pending.into()),
+                restart_required: false,
+            },
+            ..McpTransportConfig::default()
+        };
+        assert!(validate_transport(&mcp, &tunnel).is_err());
+    }
+
+    #[test]
+    fn invalid_port_and_non_loopback_stable_bind_are_rejected() {
+        let mut mcp = McpTransportConfig {
+            port: 22,
+            ..McpTransportConfig::default()
+        };
+        let tunnel = TunnelConfig::default();
+        assert!(validate_transport(&mcp, &tunnel).is_err());
+
+        mcp.port = DEFAULT_MCP_PORT;
+        mcp.bind_host = "0.0.0.0".into();
+        let tunnel = TunnelConfig {
+            mode: TunnelMode::ManagedStableNgrok,
+            ngrok_domain: Some("example.ngrok-free.app".into()),
+            ..TunnelConfig::default()
+        };
+        assert!(validate_transport(&mcp, &tunnel).is_err());
+    }
+
+    #[test]
+    fn malformed_public_base_url_and_ngrok_domain_are_rejected() {
+        assert!(normalize_public_base_url("http://example.com").is_err());
+        assert!(normalize_public_base_url("https://example.com/path").is_err());
+        assert!(normalize_public_base_url("https://user:pass@example.com").is_err());
+        assert!(normalize_public_base_url("https://example..com").is_err());
+        assert!(normalize_public_base_url("https://-example.com").is_err());
+        assert!(normalize_public_base_url("https://example.com:bad").is_err());
+        assert!(normalize_ngrok_domain("https://example.ngrok-free.app/path").is_err());
+        assert!(normalize_ngrok_domain("not-a-domain").is_err());
+        assert!(normalize_ngrok_domain("example..ngrok-free.app").is_err());
+        assert!(normalize_ngrok_domain("-example.ngrok-free.app").is_err());
+        assert!(normalize_ngrok_domain("example.ngrok-free.app:443").is_err());
+    }
+
+    #[test]
+    fn mode_classification_is_explicit() {
+        assert!(!requires_persistent_route(
+            TunnelMode::ManagedEphemeralNgrok
+        ));
+        assert!(requires_persistent_route(TunnelMode::ManagedStableNgrok));
+        assert!(requires_persistent_route(TunnelMode::ExternalTunnel));
+        assert!(requires_persistent_route(TunnelMode::OpenaiSecureTunnel));
+        assert!(!requires_loopback(TunnelMode::ManagedEphemeralNgrok));
+        assert!(requires_loopback(TunnelMode::OpenaiSecureTunnel));
+        assert!(manages_tunnel_process(TunnelMode::ManagedStableNgrok));
+        assert!(!manages_tunnel_process(TunnelMode::ExternalTunnel));
+    }
+
+    #[test]
+    fn process_ownership_combinations_are_validated() {
+        let mcp = McpTransportConfig {
+            route_id: Some("abcdefghijklmnopqrstuvwxyz012345".into()),
+            ..McpTransportConfig::default()
+        };
+        let external = TunnelConfig {
+            mode: TunnelMode::ExternalTunnel,
+            public_base_url: Some("https://example.invalid".into()),
+            manage_process: true,
+            ..TunnelConfig::default()
+        };
+        assert!(validate_transport(&mcp, &external).is_err());
+
+        let external = TunnelConfig {
+            manage_process: false,
+            ..external
+        };
+        validate_transport(&mcp, &external).expect("external tunnel is externally owned");
+    }
+
+    #[test]
+    fn openai_secure_tunnel_requires_route_and_loopback_classification() {
+        assert!(requires_persistent_route(TunnelMode::OpenaiSecureTunnel));
+        assert!(requires_loopback(TunnelMode::OpenaiSecureTunnel));
+
+        let mut mcp = McpTransportConfig::default();
+        let tunnel = TunnelConfig {
+            mode: TunnelMode::OpenaiSecureTunnel,
+            manage_process: false,
+            ..TunnelConfig::default()
+        };
+        assert!(ensure_persistent_route_if_required(&mut mcp, &tunnel));
+        assert!(mcp.route_id.is_some());
+        validate_transport(&mcp, &tunnel).expect("openai mode foundation validates");
+    }
+
+    #[test]
+    fn identity_snapshot_serializes_unknown_dirty_build_state() {
+        let snapshot = build_identity_snapshot(
+            "installation".into(),
+            "server".into(),
+            "unix:1".into(),
+            "C:/workspace",
+            TunnelMode::ManagedEphemeralNgrok,
+            None,
+        );
+        let value = serde_json::to_value(snapshot).expect("serialize identity");
+        assert_eq!(value["dirtyBuild"], "unknown");
+        assert!(
+            value["binaryFingerprint"]
+                .as_str()
+                .is_some_and(|v| !v.is_empty())
+        );
+    }
+}
