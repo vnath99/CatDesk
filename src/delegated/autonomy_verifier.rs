@@ -91,11 +91,22 @@ impl ContractVerifierV1 {
 impl AutonomousVerifierV1 for ContractVerifierV1 {
     fn verify(&mut self) -> Result<(VerificationSummaryV1, String), RuntimeError> {
         let mut summaries = Vec::new();
+        let mut passed = true;
         for profile in &self.policy.contract().verification_policy.required_commands {
-            summaries.push(self.execute_profile(profile)?);
+            match self.execute_profile(profile) {
+                Ok(summary) => summaries.push(summary),
+                Err(error) => {
+                    passed = false;
+                    summaries.push(format!("verification failure: {error:?}"));
+                }
+            }
         }
         let verification = VerificationSummaryV1 {
-            status: VerificationStatusV1::Passed,
+            status: if passed {
+                VerificationStatusV1::Passed
+            } else {
+                VerificationStatusV1::Failed
+            },
             command: "contract-approved verification profiles".into(),
             summary: bounded_text(&summaries.join("\n"), 2_048),
         };

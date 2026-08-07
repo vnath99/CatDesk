@@ -195,7 +195,13 @@ impl<P: WorkerProviderV1, V: AutonomousVerifierV1> AutonomousControllerV1<P, V> 
                 reply.constraints.join("; ")
             )
         } else if is_repair {
-            "Independent verification did not pass. Repair only the unmet criteria, then wait for CatDesk verification and diff capture.".into()
+            format!(
+                "Independent verification did not pass. Bounded verifier evidence:\n{}\nRepair only the unmet criteria, then wait for CatDesk verification and diff capture.",
+                snapshot
+                    .last_verification_summary
+                    .as_deref()
+                    .unwrap_or("no bounded verifier detail was persisted")
+            )
         } else {
             format!(
                 "Approved objective:\n{}\n\nOrdered work:\n{}\n\nExecute only task {} inside the approved workspace. Do not change Git branches, publish Git changes, access credentials, or modify files outside the contract. CatDesk independently verifies completion.",
@@ -302,7 +308,7 @@ impl<P: WorkerProviderV1, V: AutonomousVerifierV1> AutonomousControllerV1<P, V> 
         let (verification, diff) = self.verifier.verify()?;
         if verification.status != VerificationStatusV1::Passed || diff.trim().is_empty() {
             self.repair_attempts = self.repair_attempts.saturating_add(1);
-            self.mark_task_ready_for_repair()?;
+            self.mark_task_ready_for_repair(&verification.summary)?;
             return self.stop(
                 AutonomousSessionStateV1::Queued,
                 "verification_or_diff_incomplete",
@@ -488,7 +494,7 @@ impl<P: WorkerProviderV1, V: AutonomousVerifierV1> AutonomousControllerV1<P, V> 
         })
     }
 
-    fn mark_task_ready_for_repair(&self) -> Result<(), RuntimeError> {
+    fn mark_task_ready_for_repair(&self, verification_summary: &str) -> Result<(), RuntimeError> {
         let mut queue = self
             .store
             .load_queue(&self.session_id)
@@ -515,6 +521,8 @@ impl<P: WorkerProviderV1, V: AutonomousVerifierV1> AutonomousControllerV1<P, V> 
             .load_session(&self.session_id)
             .map_err(RuntimeError::from)?;
         snapshot.repair_attempts = self.repair_attempts;
+        snapshot.last_verification_summary =
+            Some(bounded_contract_text(verification_summary, 2_048));
         self.store
             .save_session(&snapshot)
             .map_err(RuntimeError::from)

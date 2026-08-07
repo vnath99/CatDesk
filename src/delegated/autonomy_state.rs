@@ -94,6 +94,8 @@ pub struct AutonomousSessionSnapshotV1 {
     #[serde(default)]
     pub repair_attempts: u32,
     #[serde(default)]
+    pub last_verification_summary: Option<String>,
+    #[serde(default)]
     pub provider_turn_count: u32,
     #[serde(default)]
     pub retry_not_before_unix: Option<u64>,
@@ -301,6 +303,7 @@ impl AutonomousStateStoreV1 {
             provider_handle_id: None,
             provider_event_cursor: 0,
             repair_attempts: 0,
+            last_verification_summary: None,
             provider_turn_count: 0,
             retry_not_before_unix: None,
             rate_limited_since_unix: None,
