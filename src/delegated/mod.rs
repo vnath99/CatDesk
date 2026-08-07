@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 pub mod advisor;
+pub mod autonomous_contract;
 pub mod autonomy_state;
 pub mod codex_cli;
 pub mod context;
