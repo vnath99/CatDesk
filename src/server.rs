@@ -2,8 +2,8 @@ use axum::{
     Router,
     body::{Body, Bytes},
     extract::{Form, Path, State},
-    http::{HeaderMap, Response, StatusCode, header},
-    response::Json,
+    http::{HeaderMap, Response, StatusCode, Uri, header},
+    response::{IntoResponse, Json},
     routing::{delete, get, post},
 };
 use serde_json::{Value, json};
@@ -41,6 +41,7 @@ pub fn router(
     ui_events: UnboundedSender<ServerUiEvent>,
     mcp_auth_token: Option<String>,
 ) -> Router {
+    let oauth_protected_resource_path = format!("/.well-known/oauth-protected-resource{mcp_path}");
     let state = ServerState {
         app: app_state,
         devtools,
@@ -75,10 +76,36 @@ pub fn router(
             "/layout/show-detail",
             post(post_show_detail_mode).options(options_show_detail_mode),
         )
+        .route(
+            &oauth_protected_resource_path,
+            get(get_oauth_protected_resource_metadata),
+        )
         .route(&mcp_path, post(post_mcp))
         .route(&mcp_path, get(get_mcp))
         .route(&mcp_path, delete(delete_mcp))
         .with_state(state)
+}
+
+async fn get_oauth_protected_resource_metadata(
+    State(s): State<ServerState>,
+    uri: Uri,
+) -> Response<Body> {
+    // The official tunnel client probes this exact path before it starts its
+    // no-auth MCP runtime. Query-bearing requests are outside that probe.
+    if uri.query().is_some() {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+
+    let resource = {
+        let app = s.app.lock().await;
+        format!(
+            "http://{}:{}{}",
+            app.mcp_bind_host,
+            app.port,
+            app.mcp_path()
+        )
+    };
+    Json(json!({ "resource": resource })).into_response()
 }
 
 fn with_widget_action_cors(
@@ -1097,6 +1124,131 @@ mod tests {
         .await;
         assert_eq!(accepted.status(), StatusCode::OK);
 
+        let _ = std::fs::remove_dir_all(workspace_root);
+        let _ = std::fs::remove_dir_all(config_root);
+    }
+
+    #[tokio::test]
+    async fn oauth_protected_resource_metadata_is_exact_and_does_not_require_mcp_auth() {
+        let workspace_root = unique_temp_path("catdesk-oauth-discovery-workspace");
+        let config_root = unique_temp_path("catdesk-oauth-discovery-config");
+        let config_path = config_root.join("config.toml");
+        std::fs::create_dir_all(&workspace_root).expect("create workspace");
+        std::fs::create_dir_all(&config_root).expect("create config dir");
+
+        let mut app = AppState::new_for_test(
+            8798,
+            workspace_root.to_string_lossy().into_owned(),
+            config_path,
+        )
+        .expect("create app state");
+        app.mcp_slug = "network-test".into();
+        let app_state = Arc::new(Mutex::new(app));
+        let (ui_tx, _ui_rx) = unbounded_channel();
+        let mcp_path = "/network-test/mcp".to_string();
+        let router = router(
+            app_state,
+            None,
+            mcp_path.clone(),
+            ui_tx,
+            Some("catdesk-network-token-1234567890".into()),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let server = tokio::spawn(async move { axum::serve(listener, router).await });
+        let client = reqwest::Client::new();
+        let discovery_path = format!("/.well-known/oauth-protected-resource{mcp_path}");
+        let discovery_url = format!("http://{addr}{discovery_path}");
+
+        let metadata = client
+            .get(&discovery_url)
+            .send()
+            .await
+            .expect("metadata response");
+        assert_eq!(metadata.status(), StatusCode::OK);
+        assert_eq!(
+            metadata
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok()),
+            Some("application/json")
+        );
+        assert!(metadata.headers().get(header::WWW_AUTHENTICATE).is_none());
+        let metadata: Value = metadata.json().await.expect("metadata json");
+        assert_eq!(
+            metadata,
+            json!({ "resource": format!("http://127.0.0.1:8798{mcp_path}") })
+        );
+        assert!(metadata.get("authorization_servers").is_none());
+
+        let malformed = client
+            .get(format!("{discovery_url}?unexpected=1"))
+            .send()
+            .await
+            .expect("malformed response");
+        assert_eq!(malformed.status(), StatusCode::NOT_FOUND);
+
+        let mcp_url = format!("http://{addr}{mcp_path}");
+        let unauthorized = client
+            .post(&mcp_url)
+            .json(&json!({
+                "jsonrpc": "2.0",
+                "id": "list",
+                "method": "tools/list",
+                "params": {}
+            }))
+            .send()
+            .await
+            .expect("unauthorized response");
+        assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+
+        let initialized: Value = client
+            .post(&mcp_url)
+            .bearer_auth("catdesk-network-token-1234567890")
+            .json(&json!({
+                "jsonrpc": "2.0",
+                "id": "initialize",
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": { "name": "test", "version": "1" }
+                }
+            }))
+            .send()
+            .await
+            .expect("initialize response")
+            .json()
+            .await
+            .expect("initialize json");
+        assert!(initialized.get("result").is_some());
+
+        let tools: Value = client
+            .post(&mcp_url)
+            .bearer_auth("catdesk-network-token-1234567890")
+            .json(&json!({
+                "jsonrpc": "2.0",
+                "id": "list",
+                "method": "tools/list",
+                "params": {}
+            }))
+            .send()
+            .await
+            .expect("tools/list response")
+            .json()
+            .await
+            .expect("tools/list json");
+        assert!(
+            tools
+                .get("result")
+                .and_then(|result| result.get("tools"))
+                .and_then(Value::as_array)
+                .is_some_and(|tools| !tools.is_empty())
+        );
+
+        server.abort();
         let _ = std::fs::remove_dir_all(workspace_root);
         let _ = std::fs::remove_dir_all(config_root);
     }
