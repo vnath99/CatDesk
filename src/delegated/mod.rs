@@ -3,8 +3,10 @@
 pub mod advisor;
 pub mod autonomous_contract;
 pub mod autonomous_controller;
+pub mod autonomy_runtime;
 pub mod autonomy_state;
 pub mod autonomy_supervisor;
+pub mod autonomy_verifier;
 pub mod codex_cli;
 pub mod context;
 pub mod contracts;

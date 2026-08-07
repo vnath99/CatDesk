@@ -17,6 +17,11 @@ use tokio::sync::Mutex;
 use crate::app_info::CATDESK_VERSION;
 use crate::command;
 use crate::delegated::advisor::AdviceDisclosureClassification;
+use crate::delegated::autonomy_runtime::{
+    cancel_owned_turn as cancel_autonomy_owned_turn,
+    operator_configuration_available as autonomy_operator_configuration_available,
+    start_or_tick as start_or_tick_autonomy,
+};
 use crate::delegated::autonomy_supervisor::{
     handle_tool as handle_autonomy_mcp_tool, is_autonomy_mcp_tool,
     tool_schemas as autonomy_mcp_tool_schemas,
@@ -877,7 +882,7 @@ async fn handle_tools_call(
                     "prompt_templates_list" => handle_prompt_templates_list(req, workspace_root),
                     "prompt_template_read" => handle_prompt_template_read(req, workspace_root),
                     name if tool_mode.supervisor_tools_enabled() && is_autonomy_mcp_tool(name) => {
-                        handle_autonomy_supervisor_mcp_tool(req, workspace_root)
+                        handle_autonomy_supervisor_mcp_tool(req, workspace_root).await
                     }
                     name if tool_mode.supervisor_tools_enabled()
                         && supervisor_mcp_tool_name(name) =>
@@ -914,7 +919,7 @@ async fn handle_tools_call(
                                     handle_verify_project(req, workspace_root).await
                                 }
                                 name if is_autonomy_mcp_tool(name) => {
-                                    handle_autonomy_supervisor_mcp_tool(req, workspace_root)
+                                    handle_autonomy_supervisor_mcp_tool(req, workspace_root).await
                                 }
                                 name if supervisor_mcp_tool_name(name) => {
                                     handle_supervisor_mcp_tool(req, workspace_root).await
@@ -2154,12 +2159,61 @@ fn expected_artifact_input_schema() -> Value {
     })
 }
 
-fn handle_autonomy_supervisor_mcp_tool(
+async fn handle_autonomy_supervisor_mcp_tool(
     req: &JsonRpcRequest,
     workspace_root: &str,
 ) -> JsonRpcResponse {
     let tool_name = tool_name_from_request(req);
     let args = tool_arguments(req);
+    if tool_name == "autonomy_session_start" {
+        let session_id = match args.get("sessionId").and_then(Value::as_str) {
+            Some(value) => value,
+            None => {
+                return tool_error_response(
+                    req,
+                    "Autonomy MCP error: sessionId is required".into(),
+                );
+            }
+        };
+        let workspace = Path::new(workspace_root);
+        let model_id = match autonomy_contract_model_id(workspace, session_id) {
+            Ok(value) => value,
+            Err(error) => return tool_error_response(req, format!("Autonomy MCP error: {error}")),
+        };
+        if let Err(error) = autonomy_operator_configuration_available(workspace, model_id) {
+            return tool_error_response(req, format!("Autonomy MCP error: {error:?}"));
+        }
+        if let Err(error) = handle_autonomy_mcp_tool(&tool_name, args.clone(), workspace) {
+            return tool_error_response(req, format!("Autonomy MCP error: {error}"));
+        }
+        return match start_or_tick_autonomy(workspace, session_id).await {
+            Ok(outcome) => tool_success_response_with_structured(
+                req,
+                "autonomy controller tick completed".into(),
+                json!({"state":outcome.state,"providerEvents":outcome.provider_events}),
+            ),
+            Err(error) => tool_error_response(req, format!("Autonomy MCP error: {error:?}")),
+        };
+    }
+    if tool_name == "autonomy_session_cancel" {
+        let session_id = args
+            .get("sessionId")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let result = handle_autonomy_mcp_tool(&tool_name, args, Path::new(workspace_root));
+        if result.is_ok() && !session_id.is_empty() {
+            let _ = cancel_autonomy_owned_turn(Path::new(workspace_root), &session_id).await;
+        }
+        return match result {
+            Ok(structured) => tool_success_response_with_structured(
+                req,
+                "autonomy session cancelled".into(),
+                structured,
+            ),
+            Err(error) => tool_error_response(req, format!("Autonomy MCP error: {error}")),
+        };
+    }
     match handle_autonomy_mcp_tool(&tool_name, args, Path::new(workspace_root)) {
         Ok(structured) => tool_success_response_with_structured(
             req,
@@ -2168,6 +2222,21 @@ fn handle_autonomy_supervisor_mcp_tool(
         ),
         Err(error) => tool_error_response(req, format!("Autonomy MCP error: {error}")),
     }
+}
+
+fn autonomy_contract_model_id(workspace: &Path, session_id: &str) -> Result<String, String> {
+    let workspace = workspace
+        .canonicalize()
+        .map_err(|_| "workspace canonicalization failed".to_string())?;
+    let store = crate::delegated::autonomy_state::AutonomousStateStoreV1::open(
+        workspace.join(".catdesk").join("autonomy"),
+    )
+    .map_err(|_| "autonomy state store is unavailable".to_string())?;
+    Ok(store
+        .load_contract(session_id)
+        .map_err(|_| "autonomy contract is unavailable".to_string())?
+        .provider_policy
+        .primary_model)
 }
 
 async fn handle_supervisor_mcp_tool(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {

@@ -248,7 +248,7 @@ impl AutonomousSupervisorV1 {
             }
             // The controller tick is deliberately started by CatDesk's local runtime,
             // not by MCP-provided executable or environment values.
-            snapshot.state = AutonomousSessionStateV1::WaitingForUser;
+            snapshot.state = AutonomousSessionStateV1::Queued;
             snapshot.active = true;
             Ok(())
         })
@@ -608,10 +608,7 @@ mod tests {
             &root,
         )
         .expect("start");
-        assert_eq!(
-            start.get("state").and_then(Value::as_str),
-            Some("WAITING_FOR_USER")
-        );
+        assert_eq!(start.get("state").and_then(Value::as_str), Some("QUEUED"));
         let list = handle_tool("autonomy_session_list", json!({}), &root).expect("list");
         assert_eq!(
             list.get("sessions")
