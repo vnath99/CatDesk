@@ -198,8 +198,22 @@ impl<P: WorkerProviderV1, V: AutonomousVerifierV1> AutonomousControllerV1<P, V> 
             "Independent verification did not pass. Repair only the unmet criteria, then wait for CatDesk verification and diff capture.".into()
         } else {
             format!(
-                "Execute only approved task {}. CatDesk independently verifies completion.",
-                task.task_id
+                "Approved objective:\n{}\n\nOrdered work:\n{}\n\nExecute only task {} inside the approved workspace. Do not change Git branches, publish Git changes, access credentials, or modify files outside the contract. CatDesk independently verifies completion.",
+                bounded_contract_text(&self.policy.contract().objective, 4_096),
+                self.policy
+                    .contract()
+                    .ordered_steps
+                    .iter()
+                    .take(20)
+                    .enumerate()
+                    .map(|(index, step)| format!(
+                        "{}. {}",
+                        index + 1,
+                        bounded_contract_text(step, 512)
+                    ))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+                task.task_id,
             )
         };
         let request = WorkerProviderTurnRequestV1 {
@@ -545,6 +559,14 @@ fn is_rate_limit_event(event: &super::runtime::NormalizedProviderEventV1) -> boo
             || text.contains("too many requests")
             || text.contains("http 429")
             || text.contains("status 429"))
+}
+
+fn bounded_contract_text(value: &str, limit: usize) -> String {
+    let mut end = value.len().min(limit);
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    value[..end].to_string()
 }
 
 #[cfg(test)]
