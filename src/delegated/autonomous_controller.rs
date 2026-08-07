@@ -167,6 +167,11 @@ impl<P: WorkerProviderV1, V: AutonomousVerifierV1> AutonomousControllerV1<P, V> 
             max_output_bytes: 16 * 1024,
         };
         let is_repair = snapshot.provider_thread_id.is_some();
+        if snapshot.provider_turn_count
+            >= self.policy.contract().autonomy_lease.maximum_provider_turns
+        {
+            return self.escalate("provider_turn_budget_exhausted");
+        }
         if is_repair
             && self.repair_attempts > self.policy.contract().verification_policy.max_repair_cycles
         {
@@ -379,6 +384,7 @@ impl<P: WorkerProviderV1, V: AutonomousVerifierV1> AutonomousControllerV1<P, V> 
         snapshot.retry_not_before_unix = None;
         snapshot.rate_limited_since_unix = None;
         snapshot.repair_attempts = self.repair_attempts;
+        snapshot.provider_turn_count = snapshot.provider_turn_count.saturating_add(1);
         snapshot.state = AutonomousSessionStateV1::Running;
         self.store
             .save_session(&snapshot)
@@ -995,6 +1001,31 @@ mod tests {
                 .expect("follow-up")
                 .task_id,
             "follow-up"
+        );
+    }
+
+    #[tokio::test]
+    async fn persisted_provider_turn_budget_blocks_a_new_launch() {
+        let mut controller = setup(VerificationStatusV1::Passed, "diff --git");
+        let mut snapshot = controller.store.load_session("session-1").expect("state");
+        snapshot.provider_turn_count = controller
+            .policy
+            .contract()
+            .autonomy_lease
+            .maximum_provider_turns;
+        controller.store.save_session(&snapshot).expect("persist");
+        assert_eq!(
+            controller.run_once(10).await.expect("budget").state,
+            AutonomousSessionStateV1::WaitingForChatgpt
+        );
+        assert_eq!(controller.handles.len(), 0);
+        assert_eq!(
+            controller
+                .store
+                .load_escalation("session-1")
+                .expect("escalation")
+                .reason,
+            "provider_turn_budget_exhausted"
         );
     }
 }
