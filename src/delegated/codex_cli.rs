@@ -693,22 +693,18 @@ impl CodexCliProviderV1 {
 }
 
 fn autonomous_prompt(request: &WorkerProviderTurnRequestV1) -> Result<String, RuntimeError> {
-    let history = request
+    let context = serde_json::to_string(&request.turn.context_json).map_err(|error| {
+        RuntimeError::Validation(format!("failed to serialize Codex task context: {error}"))
+    })?;
+    let instructions = request
         .history
         .iter()
-        .map(|message| serde_json::json!({"role": message.role, "content": message.content}))
+        .map(|message| format!("{}:\n{}", message.role, message.content))
         .collect::<Vec<_>>();
-    let prompt = serde_json::to_string(&serde_json::json!({
-        "protocol": "catdesk.autonomous.v1",
-        "contract": request.turn.context_json,
-        "messages": history,
-        "restrictions": [
-            "Do not use CatDesk MCP tools or receive CatDesk tool definitions.",
-            "Operate only within the already approved workspace and stop when the task is complete.",
-            "Treat verification as CatDesk-controlled and do not claim verified completion."
-        ]
-    }))
-    .map_err(|error| RuntimeError::Validation(format!("failed to serialize Codex autonomous prompt: {error}")))?;
+    let prompt = format!(
+        "You are the coding worker for an approved CatDesk autonomous task. Work directly in the current workspace now.\n\nApproved task context: {context}\n\nInstructions:\n{}\n\nHard boundaries:\n- Do not use CatDesk MCP tools; none are available to you.\n- Operate only in the current approved workspace.\n- Do not change Git branches, publish Git changes, access credentials, or use a fallback provider.\n- Perform the requested repository work before replying.\n- CatDesk independently runs verification; do not claim verified completion.",
+        instructions.join("\n\n")
+    );
     if prompt.len() > MAX_PROMPT_BYTES {
         return Err(RuntimeError::BudgetExceeded(
             "Codex autonomous prompt exceeds bounded adapter input".into(),
