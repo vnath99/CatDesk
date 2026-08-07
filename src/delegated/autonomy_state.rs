@@ -5,7 +5,7 @@
 //! controller must validate continuity and policy before it takes any action.
 
 use std::cmp::Reverse;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use uuid::Uuid;
 
+use super::autonomous_contract::AutonomousDevelopmentContractV1;
 use super::runtime::RuntimeError;
 
 pub const AUTONOMY_STATE_SCHEMA_VERSION: u32 = 1;
@@ -99,6 +100,10 @@ pub struct AutonomousSessionSnapshotV1 {
     pub rate_limited_since_unix: Option<u64>,
     #[serde(default)]
     pub cancellation_requested: bool,
+    #[serde(default)]
+    pub approved_contract_hash: Option<String>,
+    #[serde(default)]
+    pub consumed_idempotency_keys: BTreeMap<String, String>,
     pub last_event_sequence: u64,
     pub active: bool,
 }
@@ -272,6 +277,8 @@ impl AutonomousStateStoreV1 {
             retry_not_before_unix: None,
             rate_limited_since_unix: None,
             cancellation_requested: false,
+            approved_contract_hash: None,
+            consumed_idempotency_keys: BTreeMap::new(),
             last_event_sequence: 0,
             active: true,
         };
@@ -311,6 +318,34 @@ impl AutonomousStateStoreV1 {
             read_json(&self.session_dir(session_id)?.join("queue.json"))?;
         queue.validate().map_err(runtime_validation_error)?;
         Ok(queue)
+    }
+
+    pub fn save_contract(
+        &self,
+        session_id: &str,
+        contract: &AutonomousDevelopmentContractV1,
+    ) -> Result<(), AutonomyStateError> {
+        self.ensure_session_exists(session_id)?;
+        contract
+            .validate()
+            .map_err(|_| AutonomyStateError::Validation("autonomous contract is invalid".into()))?;
+        write_json_atomic(
+            &self.session_dir(session_id)?.join("contract.json"),
+            contract,
+        )
+    }
+
+    pub fn load_contract(
+        &self,
+        session_id: &str,
+    ) -> Result<AutonomousDevelopmentContractV1, AutonomyStateError> {
+        self.ensure_session_exists(session_id)?;
+        let contract: AutonomousDevelopmentContractV1 =
+            read_json(&self.session_dir(session_id)?.join("contract.json"))?;
+        contract
+            .validate()
+            .map_err(|_| AutonomyStateError::Validation("autonomous contract is invalid".into()))?;
+        Ok(contract)
     }
 
     pub fn save_queue(
@@ -474,6 +509,22 @@ impl AutonomousStateStoreV1 {
             }
         }
         Ok(recovered)
+    }
+
+    pub fn list_sessions(&self) -> Result<Vec<AutonomousSessionSnapshotV1>, AutonomyStateError> {
+        let mut sessions = Vec::new();
+        for entry in fs::read_dir(&self.root).map_err(io_error)? {
+            let entry = entry.map_err(io_error)?;
+            if !entry.file_type().map_err(io_error)?.is_dir() {
+                continue;
+            }
+            let session_id = entry.file_name().to_string_lossy().into_owned();
+            if let Ok(snapshot) = self.load_session(&session_id) {
+                sessions.push(snapshot);
+            }
+        }
+        sessions.sort_by(|left, right| left.session_id.cmp(&right.session_id));
+        Ok(sessions)
     }
 
     fn ensure_session_exists(&self, session_id: &str) -> Result<(), AutonomyStateError> {

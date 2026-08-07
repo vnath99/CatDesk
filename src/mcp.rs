@@ -17,6 +17,10 @@ use tokio::sync::Mutex;
 use crate::app_info::CATDESK_VERSION;
 use crate::command;
 use crate::delegated::advisor::AdviceDisclosureClassification;
+use crate::delegated::autonomy_supervisor::{
+    handle_tool as handle_autonomy_mcp_tool, is_autonomy_mcp_tool,
+    tool_schemas as autonomy_mcp_tool_schemas,
+};
 use crate::delegated::contracts::{
     AdvisorDisclosureClassificationV1, ApprovalId, ApprovalRequirementKind, ExecutionContractV1,
     PatchId, RunId, RunState, validate_contract,
@@ -357,6 +361,9 @@ async fn handle_tools_list(
 
     // Computer tools
     if mode.computer_enabled() {
+        if tool_mode.supervisor_tools_enabled() {
+            tools.extend(autonomy_mcp_tool_schemas());
+        }
         if tool_mode.run_command_enabled() {
             tools.push(json!({
                 "name": "run_command",
@@ -869,6 +876,9 @@ async fn handle_tools_call(
                     "task_queue_read" => handle_task_queue_read(req, workspace_root),
                     "prompt_templates_list" => handle_prompt_templates_list(req, workspace_root),
                     "prompt_template_read" => handle_prompt_template_read(req, workspace_root),
+                    name if tool_mode.supervisor_tools_enabled() && is_autonomy_mcp_tool(name) => {
+                        handle_autonomy_supervisor_mcp_tool(req, workspace_root)
+                    }
                     name if tool_mode.supervisor_tools_enabled()
                         && supervisor_mcp_tool_name(name) =>
                     {
@@ -902,6 +912,9 @@ async fn handle_tools_call(
                                 }
                                 "verify_project" => {
                                     handle_verify_project(req, workspace_root).await
+                                }
+                                name if is_autonomy_mcp_tool(name) => {
+                                    handle_autonomy_supervisor_mcp_tool(req, workspace_root)
                                 }
                                 name if supervisor_mcp_tool_name(name) => {
                                     handle_supervisor_mcp_tool(req, workspace_root).await
@@ -2139,6 +2152,22 @@ fn expected_artifact_input_schema() -> Value {
         },
         "required": ["kind", "name", "required"]
     })
+}
+
+fn handle_autonomy_supervisor_mcp_tool(
+    req: &JsonRpcRequest,
+    workspace_root: &str,
+) -> JsonRpcResponse {
+    let tool_name = tool_name_from_request(req);
+    let args = tool_arguments(req);
+    match handle_autonomy_mcp_tool(&tool_name, args, Path::new(workspace_root)) {
+        Ok(structured) => tool_success_response_with_structured(
+            req,
+            "autonomy supervisor operation completed".into(),
+            structured,
+        ),
+        Err(error) => tool_error_response(req, format!("Autonomy MCP error: {error}")),
+    }
 }
 
 async fn handle_supervisor_mcp_tool(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
@@ -5925,6 +5954,24 @@ mod tests {
         assert_eq!(
             names,
             vec![
+                "autonomy_contract_create",
+                "autonomy_contract_validate",
+                "autonomy_contract_approve",
+                "autonomy_session_start",
+                "autonomy_session_status",
+                "autonomy_session_events",
+                "autonomy_session_reply",
+                "autonomy_session_pause",
+                "autonomy_session_resume",
+                "autonomy_session_cancel",
+                "autonomy_session_renew_lease",
+                "autonomy_session_get_checkpoint",
+                "autonomy_session_get_diff",
+                "autonomy_session_get_escalation",
+                "autonomy_session_get_final_review",
+                "autonomy_session_list",
+                "provider_status",
+                "autonomy_queue_status",
                 "run_command",
                 "catdesk_instruction",
                 "catdesk_transport_status",
