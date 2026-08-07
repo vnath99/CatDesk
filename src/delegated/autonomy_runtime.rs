@@ -4,12 +4,13 @@
 //! name a persisted session but cannot select the executable, sandbox, or
 //! authentication source.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use tokio::sync::Mutex;
+use tokio::time::{Duration, interval};
 
 use super::autonomous_contract::AutonomousPolicyEngineV1;
 use super::autonomous_controller::{AutonomousControllerOutcomeV1, AutonomousControllerV1};
@@ -22,9 +23,15 @@ type LiveController = AutonomousControllerV1<CodexCliProviderV1, ContractVerifie
 type RuntimeRegistry = BTreeMap<String, LiveController>;
 
 static RUNTIME_REGISTRY: OnceLock<Arc<Mutex<RuntimeRegistry>>> = OnceLock::new();
+static REVIEWER_WAKEUPS: OnceLock<Arc<Mutex<BTreeSet<String>>>> = OnceLock::new();
+const REVIEWER_WAKEUP_SECONDS: u64 = 30;
 
 fn registry() -> &'static Arc<Mutex<RuntimeRegistry>> {
     RUNTIME_REGISTRY.get_or_init(|| Arc::new(Mutex::new(BTreeMap::new())))
+}
+
+fn reviewer_wakeups() -> &'static Arc<Mutex<BTreeSet<String>>> {
+    REVIEWER_WAKEUPS.get_or_init(|| Arc::new(Mutex::new(BTreeSet::new())))
 }
 
 pub async fn start_or_tick(
@@ -56,11 +63,52 @@ pub async fn start_or_tick(
             AutonomousControllerV1::new(policy, store, provider, verifier, session_id.into()),
         );
     }
-    registry
+    let outcome = registry
         .get_mut(&key)
         .expect("controller was inserted")
         .run_once(now_unix())
-        .await
+        .await?;
+    drop(registry);
+    ensure_reviewer_wakeup(key);
+    Ok(outcome)
+}
+
+fn ensure_reviewer_wakeup(key: String) {
+    tokio::spawn(async move {
+        {
+            let mut wakeups = reviewer_wakeups().lock().await;
+            if !wakeups.insert(key.clone()) {
+                return;
+            }
+        }
+        let mut ticker = interval(Duration::from_secs(REVIEWER_WAKEUP_SECONDS));
+        ticker.tick().await;
+        loop {
+            ticker.tick().await;
+            let outcome = {
+                let mut registry = registry().lock().await;
+                let Some(controller) = registry.get_mut(&key) else {
+                    break;
+                };
+                controller.run_once(now_unix()).await
+            };
+            match outcome {
+                Ok(outcome)
+                    if outcome.state.is_terminal()
+                        || matches!(
+                            outcome.state,
+                            super::autonomy_state::AutonomousSessionStateV1::WaitingForChatgpt
+                                | super::autonomy_state::AutonomousSessionStateV1::WaitingForUser
+                        ) =>
+                {
+                    break;
+                }
+                Ok(_) => {}
+                Err(_) => break,
+            }
+        }
+        reviewer_wakeups().lock().await.remove(&key);
+    });
 }
 
 pub async fn cancel_owned_turn(workspace: &Path, session_id: &str) -> Result<bool, RuntimeError> {
