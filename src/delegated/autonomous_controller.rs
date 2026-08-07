@@ -104,6 +104,11 @@ impl<P: WorkerProviderV1, V: AutonomousVerifierV1> AutonomousControllerV1<P, V> 
                 final_review: None,
             });
         }
+        if snapshot.state == AutonomousSessionStateV1::RecoveringAfterRestart
+            && snapshot.provider_thread_id.is_none()
+        {
+            return self.escalate("restart_session_continuity_missing");
+        }
         if !self.policy.contract().autonomy_lease.valid_at(now_unix) {
             return self.stop(AutonomousSessionStateV1::LeaseExpired, "lease_expired");
         }
@@ -178,25 +183,42 @@ impl<P: WorkerProviderV1, V: AutonomousVerifierV1> AutonomousControllerV1<P, V> 
             return self.escalate("repair_budget_exhausted");
         }
         let provider_session_id = session.provider_session_id.clone();
+        let planner_reply = self
+            .store
+            .load_planner_reply(&self.session_id)
+            .ok()
+            .filter(|reply| !reply.consumed);
+        let worker_instruction = if let Some(reply) = &planner_reply {
+            format!(
+                "A persisted planner decision applies to this turn. Decision: {}\nConstraints: {}\nResume only the existing approved task and preserve CatDesk verification requirements.",
+                reply.decision,
+                reply.constraints.join("; ")
+            )
+        } else if is_repair {
+            "Independent verification did not pass. Repair only the unmet criteria, then wait for CatDesk verification and diff capture.".into()
+        } else {
+            format!(
+                "Execute only approved task {}. CatDesk independently verifies completion.",
+                task.task_id
+            )
+        };
         let request = WorkerProviderTurnRequestV1 {
             provider_session: session,
             turn: turn.clone(),
             history: vec![ProviderMessageV1 {
                 role: "user".into(),
-                content: if is_repair {
-                    "Independent verification did not pass. Repair only the unmet criteria, then wait for CatDesk verification and diff capture.".into()
-                } else {
-                    format!(
-                        "Execute only approved task {}. CatDesk independently verifies completion.",
-                        task.task_id
-                    )
-                },
+                content: worker_instruction,
                 tool_call_id: None,
                 tool_name: None,
             }],
             json_envelope_recovery: false,
         };
         self.prepare_turn(&task.task_id, &provider_session_id)?;
+        if planner_reply.is_some() {
+            self.store
+                .mark_planner_reply_consumed(&self.session_id)
+                .map_err(RuntimeError::from)?;
+        }
         self.transition(
             AutonomousSessionStateV1::Running,
             if is_repair {
@@ -296,6 +318,9 @@ impl<P: WorkerProviderV1, V: AutonomousVerifierV1> AutonomousControllerV1<P, V> 
                 "final_review_missing",
             );
         }
+        self.store
+            .write_completion_artifacts(&self.session_id, &verification, &diff, &final_review)
+            .map_err(RuntimeError::from)?;
         self.transition(
             AutonomousSessionStateV1::CompletedVerified,
             "completed_verified",
@@ -809,6 +834,14 @@ mod tests {
         assert_eq!(
             success.run_once(10).await.expect("run").state,
             AutonomousSessionStateV1::CompletedVerified
+        );
+        assert_eq!(
+            success
+                .store
+                .load_completion_artifacts("session-1")
+                .expect("completion evidence")
+                .authoritative_diff,
+            "diff --git"
         );
         let mut failed = setup(VerificationStatusV1::Failed, "");
         assert_eq!(

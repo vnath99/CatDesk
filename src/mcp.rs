@@ -2203,7 +2203,16 @@ async fn handle_autonomy_supervisor_mcp_tool(
             .to_string();
         let result = handle_autonomy_mcp_tool(&tool_name, args, Path::new(workspace_root));
         if result.is_ok() && !session_id.is_empty() {
-            let _ = cancel_autonomy_owned_turn(Path::new(workspace_root), &session_id).await;
+            if let Err(error) =
+                cancel_autonomy_owned_turn(Path::new(workspace_root), &session_id).await
+            {
+                return tool_error_response(
+                    req,
+                    format!(
+                        "Autonomy MCP error: cancellation was persisted but the owned provider stop could not be confirmed: {error:?}"
+                    ),
+                );
+            }
         }
         return match result {
             Ok(structured) => tool_success_response_with_structured(

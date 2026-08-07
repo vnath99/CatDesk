@@ -68,6 +68,7 @@ pub fn tool_schemas() -> Vec<Value> {
                         "expectedStateVersion": { "type": "integer", "minimum": 0 },
                         "idempotencyKey": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
                         "approvalId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
+                        "escalationId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$" },
                         "decisionHash": { "type": "string", "minLength": 1, "maxLength": 256 },
                         "afterSequence": { "type": "integer", "minimum": 0 },
                         "limit": { "type": "integer", "minimum": 1, "maximum": 100 },
@@ -144,15 +145,16 @@ pub fn handle_tool(name: &str, args: Value, workspace: &Path) -> Result<Value, S
         ),
         "autonomy_session_get_checkpoint" => supervisor.status(session_id(&args)?),
         "autonomy_session_get_escalation" => supervisor.escalation(session_id(&args)?),
-        "autonomy_session_get_diff" | "autonomy_session_get_final_review" => Ok(json!({
-            "available": false,
-            "reason": "artifact is unavailable until the controller reaches verified completion"
-        })),
+        "autonomy_session_get_diff" => supervisor.diff(session_id(&args)?),
+        "autonomy_session_get_final_review" => supervisor.final_review(session_id(&args)?),
         "autonomy_session_reply" => supervisor.reply(
             session_id(&args)?,
             expected_state_version(&args)?,
             required_str(&args, "idempotencyKey")?,
+            required_str(&args, "escalationId")?,
             required_str(&args, "decisionHash")?,
+            required_str(&args, "decision")?,
+            string_list(&args, "constraints")?,
         ),
         "autonomy_session_list" => supervisor.list(),
         "autonomy_queue_status" => supervisor.queue(session_id(&args)?),
@@ -243,7 +245,10 @@ impl AutonomousSupervisorV1 {
             {
                 return Err("start approval is required for this autonomous contract".into());
             }
-            if snapshot.state != AutonomousSessionStateV1::Queued {
+            if !matches!(
+                snapshot.state,
+                AutonomousSessionStateV1::Queued | AutonomousSessionStateV1::RecoveringAfterRestart
+            ) {
                 return Err("autonomy session is not ready to start".into());
             }
             // The controller tick is deliberately started by CatDesk's local runtime,
@@ -355,11 +360,37 @@ impl AutonomousSupervisorV1 {
         session_id: &str,
         expected: u64,
         key: &str,
+        escalation_id: &str,
         decision_hash: &str,
+        decision: &str,
+        constraints: Vec<String>,
     ) -> Result<Value, String> {
-        if decision_hash.trim().is_empty() {
-            return Err("planner decision hash is required".into());
+        if !valid_slug(key) {
+            return Err("idempotency key is invalid".into());
         }
+        let snapshot = self.snapshot(session_id)?;
+        let action_hash = format!("planner_reply:{expected}");
+        if let Some(existing) = snapshot.consumed_idempotency_keys.get(key) {
+            if existing == &action_hash {
+                return self.status(session_id);
+            }
+            return Err("idempotency key was previously used for a different action".into());
+        }
+        if snapshot.last_event_sequence != expected {
+            return Err("expected state version does not match persisted state".into());
+        }
+        if snapshot.state != AutonomousSessionStateV1::WaitingForChatgpt {
+            return Err("autonomy session is not awaiting a planner reply".into());
+        }
+        self.store
+            .write_planner_reply(
+                session_id,
+                escalation_id,
+                decision_hash,
+                decision,
+                &constraints,
+            )
+            .map_err(|_| "bounded planner reply could not be persisted".to_string())?;
         self.mutate(session_id, expected, key, "planner_reply", |snapshot| {
             if snapshot.state != AutonomousSessionStateV1::WaitingForChatgpt {
                 return Err("autonomy session is not awaiting a planner reply".into());
@@ -376,6 +407,45 @@ impl AutonomousSupervisorV1 {
                 serde_json::to_value(packet).map_err(|_| "escalation serialization failed".into())
             }
             Err(_) => Ok(json!({"available":false})),
+        }
+    }
+
+    fn diff(&self, session_id: &str) -> Result<Value, String> {
+        if self.snapshot(session_id)?.state != AutonomousSessionStateV1::CompletedVerified {
+            return Ok(json!({
+                "available": false,
+                "reason": "authoritative diff is unavailable until verified completion"
+            }));
+        }
+        match self.store.load_completion_artifacts(session_id) {
+            Ok(artifacts) => Ok(bounded_artifact_response(
+                "authoritativeDiff",
+                &artifacts.authoritative_diff,
+            )),
+            Err(_) => Ok(json!({
+                "available": false,
+                "reason": "authoritative diff is unavailable until verified completion"
+            })),
+        }
+    }
+
+    fn final_review(&self, session_id: &str) -> Result<Value, String> {
+        if self.snapshot(session_id)?.state != AutonomousSessionStateV1::CompletedVerified {
+            return Ok(json!({
+                "available": false,
+                "reason": "final review is unavailable until verified completion"
+            }));
+        }
+        match self.store.load_completion_artifacts(session_id) {
+            Ok(artifacts) => Ok(json!({
+                "available": true,
+                "finalReview": artifacts.final_review,
+                "verification": artifacts.verification
+            })),
+            Err(_) => Ok(json!({
+                "available": false,
+                "reason": "final review is unavailable until verified completion"
+            })),
         }
     }
 
@@ -480,6 +550,38 @@ fn required_u64(args: &Value, name: &str) -> Result<u64, String> {
 }
 fn optional_u64(args: &Value, name: &str) -> Option<u64> {
     args.get(name).and_then(Value::as_u64)
+}
+fn string_list(args: &Value, name: &str) -> Result<Vec<String>, String> {
+    let Some(value) = args.get(name) else {
+        return Ok(Vec::new());
+    };
+    let values = value
+        .as_array()
+        .ok_or_else(|| format!("{name} must be an array"))?;
+    if values.len() > 20 {
+        return Err(format!("{name} exceeds the bounded item count"));
+    }
+    values
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .filter(|value| !value.trim().is_empty() && value.len() <= 512)
+                .map(str::to_string)
+                .ok_or_else(|| format!("{name} contains an invalid item"))
+        })
+        .collect()
+}
+fn bounded_artifact_response(name: &str, value: &str) -> Value {
+    const MAX_RESPONSE_BYTES: usize = 24_000;
+    let mut bounded = value.to_string();
+    let truncated = if bounded.len() > MAX_RESPONSE_BYTES {
+        bounded.truncate(MAX_RESPONSE_BYTES);
+        true
+    } else {
+        false
+    };
+    json!({"available":true, name:bounded, "truncated":truncated})
 }
 fn session_id(args: &Value) -> Result<&str, String> {
     let value = required_str(args, "sessionId")?;
@@ -616,6 +718,88 @@ mod tests {
                 .expect("sessions")
                 .len(),
             1
+        );
+    }
+
+    #[test]
+    fn planner_reply_is_persisted_and_completion_artifacts_are_bounded_for_mcp() {
+        let root = std::env::temp_dir().join(format!("catdesk-autonomy-mcp-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("src")).expect("workspace");
+        handle_tool(
+            "autonomy_contract_create",
+            json!({"contract":contract(&root)}),
+            &root,
+        )
+        .expect("create");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk").join("autonomy")).expect("store");
+        let mut snapshot = store.load_session("session-1").expect("snapshot");
+        snapshot.state = AutonomousSessionStateV1::WaitingForChatgpt;
+        snapshot.active = true;
+        store.save_session(&snapshot).expect("waiting state");
+        let escalation = store
+            .write_escalation(
+                "session-1",
+                AutonomousSessionStateV1::WaitingForChatgpt,
+                "provider_terminal_error",
+            )
+            .expect("escalation");
+        handle_tool(
+            "autonomy_session_reply",
+            json!({
+                "sessionId":"session-1",
+                "expectedStateVersion":1,
+                "idempotencyKey":"reply-1",
+                "escalationId":escalation.escalation_id,
+                "decisionHash":"decision-hash",
+                "decision":"choose the bounded repair",
+                "constraints":["preserve policy"]
+            }),
+            &root,
+        )
+        .expect("reply");
+        assert_eq!(
+            store
+                .load_planner_reply("session-1")
+                .expect("stored reply")
+                .decision,
+            "choose the bounded repair"
+        );
+
+        let verification = crate::delegated::coordinator::VerificationSummaryV1 {
+            status: crate::delegated::coordinator::VerificationStatusV1::Passed,
+            command: "cargo test".into(),
+            summary: "passed".into(),
+        };
+        store
+            .write_completion_artifacts(
+                "session-1",
+                &verification,
+                &format!("{}tail", "d".repeat(24_100)),
+                "final review",
+            )
+            .expect("artifacts");
+        let mut completed = store.load_session("session-1").expect("queued state");
+        completed.state = AutonomousSessionStateV1::CompletedVerified;
+        completed.active = false;
+        store.save_session(&completed).expect("completed state");
+        let diff = handle_tool(
+            "autonomy_session_get_diff",
+            json!({"sessionId":"session-1"}),
+            &root,
+        )
+        .expect("diff");
+        assert_eq!(diff.get("available").and_then(Value::as_bool), Some(true));
+        assert_eq!(diff.get("truncated").and_then(Value::as_bool), Some(true));
+        let review = handle_tool(
+            "autonomy_session_get_final_review",
+            json!({"sessionId":"session-1"}),
+            &root,
+        )
+        .expect("review");
+        assert_eq!(
+            review.get("finalReview").and_then(Value::as_str),
+            Some("final review")
         );
     }
 }

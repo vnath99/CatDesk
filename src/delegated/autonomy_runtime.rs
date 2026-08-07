@@ -46,6 +46,11 @@ pub async fn start_or_tick(
     if !registry.contains_key(&key) {
         let store = AutonomousStateStoreV1::open(workspace.join(".catdesk").join("autonomy"))
             .map_err(RuntimeError::from)?;
+        // This process owns no previous child process. Mark any durable
+        // in-flight state for continuity validation before rehydrating it.
+        store
+            .recover_interrupted_sessions()
+            .map_err(RuntimeError::from)?;
         let contract = store
             .load_contract(session_id)
             .map_err(RuntimeError::from)?;

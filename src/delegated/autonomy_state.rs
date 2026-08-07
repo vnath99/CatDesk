@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use uuid::Uuid;
 
 use super::autonomous_contract::AutonomousDevelopmentContractV1;
+use super::coordinator::VerificationSummaryV1;
 use super::runtime::RuntimeError;
 
 pub const AUTONOMY_STATE_SCHEMA_VERSION: u32 = 1;
@@ -208,9 +209,36 @@ pub struct AutonomousEventV1 {
 pub struct AutonomousEscalationPacketV1 {
     pub schema_version: u32,
     pub session_id: String,
+    pub escalation_id: String,
     pub state: AutonomousSessionStateV1,
     pub reason: String,
     pub repair_attempts: u32,
+}
+
+/// A bounded answer to a persisted escalation. The controller consumes the
+/// answer exactly once before it resumes the existing provider session.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutonomousPlannerReplyV1 {
+    pub schema_version: u32,
+    pub session_id: String,
+    pub escalation_id: String,
+    pub decision_hash: String,
+    pub decision: String,
+    pub constraints: Vec<String>,
+    pub consumed: bool,
+}
+
+/// CatDesk-owned evidence required before verified completion. It is written
+/// before the terminal transition and exposed only through bounded readers.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutonomousCompletionArtifactsV1 {
+    pub schema_version: u32,
+    pub session_id: String,
+    pub verification: VerificationSummaryV1,
+    pub authoritative_diff: String,
+    pub final_review: String,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -417,6 +445,7 @@ impl AutonomousStateStoreV1 {
         let packet = AutonomousEscalationPacketV1 {
             schema_version: AUTONOMY_STATE_SCHEMA_VERSION,
             session_id: session_id.into(),
+            escalation_id: format!("esc-{}", snapshot.last_event_sequence.saturating_add(1)),
             state,
             reason: reason.into(),
             repair_attempts: snapshot.repair_attempts,
@@ -443,13 +472,162 @@ impl AutonomousStateStoreV1 {
                 .join("escalation.json"),
         )?;
         validate_slug(&packet.reason, "autonomous escalation reason").map_err(validation_error)?;
-        if packet.schema_version != AUTONOMY_STATE_SCHEMA_VERSION || packet.session_id != session_id
+        if packet.schema_version != AUTONOMY_STATE_SCHEMA_VERSION
+            || packet.session_id != session_id
+            || validate_slug(&packet.escalation_id, "autonomous escalation id").is_err()
         {
             return Err(AutonomyStateError::Validation(
                 "autonomous escalation packet is invalid for this session".into(),
             ));
         }
         Ok(packet)
+    }
+
+    pub fn write_planner_reply(
+        &self,
+        session_id: &str,
+        escalation_id: &str,
+        decision_hash: &str,
+        decision: &str,
+        constraints: &[String],
+    ) -> Result<AutonomousPlannerReplyV1, AutonomyStateError> {
+        self.ensure_session_exists(session_id)?;
+        validate_slug(escalation_id, "autonomous escalation id").map_err(validation_error)?;
+        if decision_hash.trim().is_empty()
+            || decision.trim().is_empty()
+            || decision.len() > 4096
+            || constraints.len() > 20
+            || constraints
+                .iter()
+                .any(|constraint| constraint.trim().is_empty() || constraint.len() > 512)
+        {
+            return Err(AutonomyStateError::Validation(
+                "autonomous planner reply is outside bounded policy".into(),
+            ));
+        }
+        let packet = self.load_escalation(session_id)?;
+        if packet.escalation_id != escalation_id {
+            return Err(AutonomyStateError::Validation(
+                "autonomous planner reply does not match the current escalation".into(),
+            ));
+        }
+        let reply = AutonomousPlannerReplyV1 {
+            schema_version: AUTONOMY_STATE_SCHEMA_VERSION,
+            session_id: session_id.into(),
+            escalation_id: escalation_id.into(),
+            decision_hash: decision_hash.into(),
+            decision: decision.into(),
+            constraints: constraints.to_vec(),
+            consumed: false,
+        };
+        write_json_atomic(
+            &self
+                .session_dir(session_id)?
+                .join("artifacts")
+                .join("planner-reply.json"),
+            &reply,
+        )?;
+        Ok(reply)
+    }
+
+    pub fn load_planner_reply(
+        &self,
+        session_id: &str,
+    ) -> Result<AutonomousPlannerReplyV1, AutonomyStateError> {
+        self.ensure_session_exists(session_id)?;
+        let reply: AutonomousPlannerReplyV1 = read_json(
+            &self
+                .session_dir(session_id)?
+                .join("artifacts")
+                .join("planner-reply.json"),
+        )?;
+        if reply.schema_version != AUTONOMY_STATE_SCHEMA_VERSION
+            || reply.session_id != session_id
+            || validate_slug(&reply.escalation_id, "autonomous escalation id").is_err()
+            || reply.decision_hash.trim().is_empty()
+            || reply.decision.trim().is_empty()
+            || reply.decision.len() > 4096
+            || reply.constraints.len() > 20
+            || reply
+                .constraints
+                .iter()
+                .any(|constraint| constraint.trim().is_empty() || constraint.len() > 512)
+        {
+            return Err(AutonomyStateError::Validation(
+                "autonomous planner reply is invalid for this session".into(),
+            ));
+        }
+        Ok(reply)
+    }
+
+    pub fn mark_planner_reply_consumed(&self, session_id: &str) -> Result<(), AutonomyStateError> {
+        let mut reply = self.load_planner_reply(session_id)?;
+        reply.consumed = true;
+        write_json_atomic(
+            &self
+                .session_dir(session_id)?
+                .join("artifacts")
+                .join("planner-reply.json"),
+            &reply,
+        )
+    }
+
+    pub fn write_completion_artifacts(
+        &self,
+        session_id: &str,
+        verification: &VerificationSummaryV1,
+        authoritative_diff: &str,
+        final_review: &str,
+    ) -> Result<(), AutonomyStateError> {
+        self.ensure_session_exists(session_id)?;
+        if authoritative_diff.trim().is_empty()
+            || final_review.trim().is_empty()
+            || authoritative_diff.len() > 512 * 1024
+            || final_review.len() > 24 * 1024
+        {
+            return Err(AutonomyStateError::Validation(
+                "autonomous completion artifact exceeds bounded storage".into(),
+            ));
+        }
+        let artifacts = AutonomousCompletionArtifactsV1 {
+            schema_version: AUTONOMY_STATE_SCHEMA_VERSION,
+            session_id: session_id.into(),
+            verification: verification.clone(),
+            authoritative_diff: authoritative_diff.into(),
+            final_review: final_review.into(),
+        };
+        write_json_atomic(
+            &self
+                .session_dir(session_id)?
+                .join("artifacts")
+                .join("completion.json"),
+            &artifacts,
+        )
+    }
+
+    pub fn load_completion_artifacts(
+        &self,
+        session_id: &str,
+    ) -> Result<AutonomousCompletionArtifactsV1, AutonomyStateError> {
+        self.ensure_session_exists(session_id)?;
+        let artifacts: AutonomousCompletionArtifactsV1 = read_json(
+            &self
+                .session_dir(session_id)?
+                .join("artifacts")
+                .join("completion.json"),
+        )?;
+        if artifacts.schema_version != AUTONOMY_STATE_SCHEMA_VERSION
+            || artifacts.session_id != session_id
+            || artifacts.authoritative_diff.trim().is_empty()
+            || artifacts.final_review.trim().is_empty()
+            || artifacts.authoritative_diff.len() > 512 * 1024
+            || artifacts.final_review.len() > 24 * 1024
+        {
+            return Err(AutonomyStateError::Validation(
+                "autonomous completion artifact is invalid for this session".into(),
+            ));
+        }
+        Ok(artifacts)
     }
 
     pub fn acquire_lock(
@@ -843,6 +1021,65 @@ mod tests {
                 )
                 .is_err()
         );
+    }
+
+    #[test]
+    fn planner_reply_and_completion_artifacts_round_trip_durably() {
+        let (_root, store) = store("artifacts");
+        store
+            .create_session("session-one", queue())
+            .expect("session");
+        let escalation = store
+            .write_escalation(
+                "session-one",
+                AutonomousSessionStateV1::WaitingForChatgpt,
+                "provider_terminal_error",
+            )
+            .expect("escalation");
+        let constraints = vec!["preserve policy".into()];
+        store
+            .write_planner_reply(
+                "session-one",
+                &escalation.escalation_id,
+                "decision-hash",
+                "select the bounded repair",
+                &constraints,
+            )
+            .expect("planner reply");
+        assert!(
+            !store
+                .load_planner_reply("session-one")
+                .expect("reply")
+                .consumed
+        );
+        store
+            .mark_planner_reply_consumed("session-one")
+            .expect("consume reply");
+        assert!(
+            store
+                .load_planner_reply("session-one")
+                .expect("consumed reply")
+                .consumed
+        );
+
+        let verification = VerificationSummaryV1 {
+            status: super::super::coordinator::VerificationStatusV1::Passed,
+            command: "cargo test".into(),
+            summary: "passed".into(),
+        };
+        store
+            .write_completion_artifacts(
+                "session-one",
+                &verification,
+                "diff --git a/src/lib.rs b/src/lib.rs",
+                "independent final review passed",
+            )
+            .expect("completion artifacts");
+        let artifacts = store
+            .load_completion_artifacts("session-one")
+            .expect("load completion artifacts");
+        assert_eq!(artifacts.verification, verification);
+        assert!(artifacts.authoritative_diff.starts_with("diff --git"));
     }
 
     #[test]
