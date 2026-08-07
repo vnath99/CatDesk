@@ -6,8 +6,11 @@
 //! later controller work will persist its handles and choose when to invoke it.
 
 use std::collections::BTreeMap;
+use std::fs::{self, File};
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::OnceLock;
+use std::time::Instant;
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -29,6 +32,23 @@ use super::worker_provider::{
 const DEFAULT_MAX_EVENT_BYTES: usize = 64 * 1024;
 const DEFAULT_MAX_DIAGNOSTIC_BYTES: usize = 8 * 1024;
 const MAX_PROMPT_BYTES: usize = 24 * 1024;
+const DIAGNOSTIC_SCHEMA_VERSION: u32 = 1;
+const MAX_DIAGNOSTIC_EVENTS: usize = 64;
+const MAX_DIAGNOSTIC_EVENT_TEXT_BYTES: usize = 2 * 1024;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum CodexCliApprovalPolicyV1 {
+    Never,
+}
+
+impl CodexCliApprovalPolicyV1 {
+    const fn as_flag_value(&self) -> &'static str {
+        match self {
+            Self::Never => "never",
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -53,8 +73,12 @@ pub struct CodexCliConfigV1 {
     pub working_directory: PathBuf,
     pub model_id: Option<String>,
     pub sandbox: CodexCliSandboxV1,
+    pub approval_policy: CodexCliApprovalPolicyV1,
     pub max_event_bytes: usize,
     pub max_diagnostic_bytes: usize,
+    /// Optional operator-local location for redacted autonomous-turn evidence.
+    /// This is intentionally not an MCP-selectable path.
+    pub diagnostic_root: Option<PathBuf>,
 }
 
 impl CodexCliConfigV1 {
@@ -64,8 +88,10 @@ impl CodexCliConfigV1 {
             working_directory,
             model_id: None,
             sandbox: CodexCliSandboxV1::WorkspaceWrite,
+            approval_policy: CodexCliApprovalPolicyV1::Never,
             max_event_bytes: DEFAULT_MAX_EVENT_BYTES,
             max_diagnostic_bytes: DEFAULT_MAX_DIAGNOSTIC_BYTES,
+            diagnostic_root: None,
         };
         config.validate()?;
         Ok(config)
@@ -253,6 +279,34 @@ struct ActiveCodexTurn {
     exited: Option<std::process::ExitStatus>,
     cancelled: bool,
     cancel_event_emitted: bool,
+    started_at: Instant,
+    diagnostic: CodexCliExecutionDiagnosticV1,
+    diagnostic_persisted: bool,
+}
+
+/// Bounded evidence for an autonomous provider turn. It records process
+/// configuration and provider-visible output, never authentication values.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexCliExecutionDiagnosticV1 {
+    pub schema_version: u32,
+    pub executable: String,
+    pub cli_version: String,
+    pub argv: Vec<String>,
+    pub cwd: String,
+    pub canonical_working_directory: String,
+    pub sandbox: CodexCliSandboxV1,
+    pub approval_policy: CodexCliApprovalPolicyV1,
+    pub model_id: Option<String>,
+    pub codex_thread_id: Option<String>,
+    pub catdesk_session_id: String,
+    pub catdesk_turn_id: String,
+    pub invocation_id: String,
+    pub environment_variable_names: Vec<String>,
+    pub process_exit_code: Option<i32>,
+    pub elapsed_millis: u128,
+    pub stderr: String,
+    pub events: Vec<CodexCliEventV1>,
 }
 
 pub struct CodexCliProviderV1 {
@@ -328,17 +382,22 @@ impl CodexCliProviderV1 {
     ) -> Result<CodexCliTurnHandleV1, RuntimeError> {
         let mut command = Command::new(&self.config.executable);
         command.current_dir(&self.config.working_directory);
+        // These are documented global CLI controls. `--ignore-user-config`
+        // made the Windows CLI fall back to a read-only sandbox despite an
+        // explicit workspace-write request, so we retain user configuration
+        // but prevent project exec-policy rules from changing this turn.
+        command
+            .arg("--sandbox")
+            .arg(self.config.sandbox.as_flag_value())
+            .arg("--ask-for-approval")
+            .arg(self.config.approval_policy.as_flag_value());
         command.arg("exec");
         if let Some(thread_id) = resume_thread_id {
             command.arg("resume").arg(thread_id);
         }
-        command.arg("--json").arg("--ignore-user-config");
+        command.arg("--json").arg("--ignore-rules");
         if resume_thread_id.is_none() {
-            command
-                .arg("--sandbox")
-                .arg(self.config.sandbox.as_flag_value())
-                .arg("--color")
-                .arg("never");
+            command.arg("--color").arg("never");
         }
         if let Some(model_id) = &self.config.model_id {
             command.arg("--model").arg(model_id);
@@ -366,8 +425,16 @@ impl CodexCliProviderV1 {
         let (sender, receiver) = mpsc::channel(256);
         spawn_stdout_reader(stdout, sender.clone(), self.config.max_event_bytes);
         spawn_stderr_reader(stderr, sender, self.config.max_diagnostic_bytes);
+        let handle_id = format!("codex-cli-turn-{}", self.next_handle_sequence);
+        let mut diagnostic = execution_diagnostic(
+            &self.config,
+            &self.capabilities.cli_version,
+            &request,
+            resume_thread_id,
+        );
+        diagnostic.invocation_id = handle_id.clone();
         let handle = CodexCliTurnHandleV1 {
-            handle_id: format!("codex-cli-turn-{}", self.next_handle_sequence),
+            handle_id,
             worker_session_id: request.worker_session_id,
             turn_id: request.turn_id,
             resumed_thread_id: resume_thread_id.map(ToOwned::to_owned),
@@ -385,6 +452,9 @@ impl CodexCliProviderV1 {
                 exited: None,
                 cancelled: false,
                 cancel_event_emitted: false,
+                started_at: Instant::now(),
+                diagnostic,
+                diagnostic_persisted: false,
             },
         );
         Ok(handle)
@@ -437,6 +507,9 @@ impl CodexCliProviderV1 {
             normalized_events.push(normalized);
         }
         let state = active_turn_state(active);
+        if !matches!(state, CodexCliTurnStateV1::Running) {
+            persist_execution_diagnostic(&self.config, active)?;
+        }
         Ok(CodexCliEventBatchV1 {
             events,
             normalized_events,
@@ -505,6 +578,145 @@ impl CodexCliProviderV1 {
         self.active_turns
             .get(&handle.handle_id)
             .map(|active| active.stderr.as_str())
+    }
+}
+
+fn execution_diagnostic(
+    config: &CodexCliConfigV1,
+    cli_version: &str,
+    request: &CodexCliTurnRequestV1,
+    resume_thread_id: Option<&str>,
+) -> CodexCliExecutionDiagnosticV1 {
+    let canonical = config
+        .working_directory
+        .canonicalize()
+        .unwrap_or_else(|_| config.working_directory.clone());
+    let mut environment_variable_names = std::env::vars_os()
+        .filter_map(|(name, _)| name.into_string().ok())
+        .filter(|name| {
+            let normalized = name.to_ascii_uppercase();
+            normalized.starts_with("CODEX_")
+                || normalized.starts_with("OPENAI_")
+                || normalized.starts_with("CATDESK_")
+                || normalized == "HTTP_PROXY"
+                || normalized == "HTTPS_PROXY"
+                || normalized == "NO_PROXY"
+        })
+        .collect::<Vec<_>>();
+    environment_variable_names.sort();
+    environment_variable_names.dedup();
+    let mut argv = vec![
+        "--sandbox".into(),
+        config.sandbox.as_flag_value().into(),
+        "--ask-for-approval".into(),
+        config.approval_policy.as_flag_value().into(),
+        "exec".into(),
+    ];
+    if resume_thread_id.is_some() {
+        argv.extend(["resume".into(), "<captured-thread-id>".into()]);
+    }
+    argv.extend(["--json".into(), "--ignore-rules".into()]);
+    if resume_thread_id.is_none() {
+        argv.extend(["--color".into(), "never".into()]);
+    }
+    if config.model_id.is_some() {
+        argv.extend(["--model".into(), "<configured-model>".into()]);
+    }
+    argv.push("<bounded-prompt-omitted>".into());
+    CodexCliExecutionDiagnosticV1 {
+        schema_version: DIAGNOSTIC_SCHEMA_VERSION,
+        executable: config.executable.to_string_lossy().into_owned(),
+        cli_version: cli_version.into(),
+        argv,
+        cwd: config.working_directory.to_string_lossy().into_owned(),
+        canonical_working_directory: canonical.to_string_lossy().into_owned(),
+        sandbox: config.sandbox.clone(),
+        approval_policy: config.approval_policy.clone(),
+        model_id: config.model_id.clone(),
+        codex_thread_id: None,
+        catdesk_session_id: request.worker_session_id.as_str().into(),
+        catdesk_turn_id: request.turn_id.as_str().into(),
+        invocation_id: String::new(),
+        environment_variable_names,
+        process_exit_code: None,
+        elapsed_millis: 0,
+        stderr: String::new(),
+        events: Vec::new(),
+    }
+}
+
+fn persist_execution_diagnostic(
+    config: &CodexCliConfigV1,
+    active: &mut ActiveCodexTurn,
+) -> Result<(), RuntimeError> {
+    if active.diagnostic_persisted {
+        return Ok(());
+    }
+    active.diagnostic.codex_thread_id = active.thread_id.clone();
+    active.diagnostic.process_exit_code = active.exited.and_then(|status| status.code());
+    active.diagnostic.elapsed_millis = active.started_at.elapsed().as_millis();
+    active.diagnostic.stderr = bounded_redacted_text(&active.stderr, config.max_diagnostic_bytes);
+    active.diagnostic.events = active
+        .events
+        .iter()
+        .take(MAX_DIAGNOSTIC_EVENTS)
+        .map(bounded_diagnostic_event)
+        .collect();
+    if let Some(root) = &config.diagnostic_root {
+        fs::create_dir_all(root).map_err(|error| {
+            RuntimeError::Provider(format!(
+                "failed to create Codex diagnostic directory: {error}"
+            ))
+        })?;
+        let path = root.join(format!(
+            "codex-{}-{}.json",
+            active.diagnostic.catdesk_session_id, active.diagnostic.invocation_id
+        ));
+        let temporary = root.join(format!(
+            ".{}.tmp",
+            path.file_name().unwrap_or_default().to_string_lossy()
+        ));
+        let mut file = File::create(&temporary).map_err(|error| {
+            RuntimeError::Provider(format!(
+                "failed to create bounded Codex diagnostic: {error}"
+            ))
+        })?;
+        serde_json::to_writer_pretty(&mut file, &active.diagnostic).map_err(|error| {
+            RuntimeError::Provider(format!(
+                "failed to serialize bounded Codex diagnostic: {error}"
+            ))
+        })?;
+        file.write_all(b"\n").map_err(|error| {
+            RuntimeError::Provider(format!("failed to write bounded Codex diagnostic: {error}"))
+        })?;
+        file.sync_all().map_err(|error| {
+            RuntimeError::Provider(format!("failed to sync bounded Codex diagnostic: {error}"))
+        })?;
+        drop(file);
+        fs::rename(&temporary, &path).map_err(|error| {
+            RuntimeError::Provider(format!(
+                "failed to persist bounded Codex diagnostic: {error}"
+            ))
+        })?;
+    }
+    active.diagnostic_persisted = true;
+    Ok(())
+}
+
+fn bounded_diagnostic_event(event: &CodexCliEventV1) -> CodexCliEventV1 {
+    CodexCliEventV1 {
+        event_type: event.event_type.clone(),
+        thread_id: event.thread_id.clone(),
+        item_type: event.item_type.clone(),
+        text: event
+            .text
+            .as_deref()
+            .map(|text| bounded_redacted_text(text, MAX_DIAGNOSTIC_EVENT_TEXT_BYTES)),
+        retry_after_seconds: event.retry_after_seconds,
+        bounded_summary: bounded_redacted_text(
+            &event.bounded_summary,
+            MAX_DIAGNOSTIC_EVENT_TEXT_BYTES,
+        ),
     }
 }
 
@@ -940,9 +1152,22 @@ pub fn parse_codex_jsonl_event(
         .get("retry_after")
         .or_else(|| value.get("retryAfter"))
         .and_then(Value::as_u64);
+    let item_status = item
+        .and_then(|item| item.get("status"))
+        .and_then(Value::as_str)
+        .unwrap_or("<none>");
+    let item_command = item
+        .and_then(|item| item.get("command"))
+        .and_then(Value::as_str)
+        .map(|command| bounded_redacted_text(command, 2_048))
+        .unwrap_or_else(|| "<none>".into());
+    let change_count = item
+        .and_then(|item| item.get("changes"))
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
     let bounded_summary = bounded_redacted_text(
         &format!(
-            "Codex event type={event_type}; itemType={}; retryAfter={}",
+            "Codex event type={event_type}; itemType={}; itemStatus={item_status}; changeCount={change_count}; command={item_command}; retryAfter={}",
             item_type.as_deref().unwrap_or("<none>"),
             retry_after_seconds
                 .map(|value| value.to_string())
@@ -1218,8 +1443,10 @@ mod tests {
             working_directory: directory.clone(),
             model_id: None,
             sandbox: CodexCliSandboxV1::ReadOnly,
+            approval_policy: CodexCliApprovalPolicyV1::Never,
             max_event_bytes: 1,
             max_diagnostic_bytes: 1,
+            diagnostic_root: None,
         };
         assert!(shim.validate().is_err());
         let mut invalid = config();
@@ -1245,5 +1472,51 @@ mod tests {
             .validate()
             .is_err()
         );
+    }
+
+    #[test]
+    fn diagnostic_records_the_effective_safe_invocation_without_user_config_bypass() {
+        let request = CodexCliTurnRequestV1 {
+            worker_session_id: WorkerSessionId::new("codex-worker").expect("worker"),
+            turn_id: TurnId::new("codex-turn").expect("turn"),
+            prompt: "bounded prompt".into(),
+        };
+        let diagnostic = execution_diagnostic(&config(), "codex-cli 0.146.1", &request, None);
+        assert_eq!(diagnostic.sandbox, CodexCliSandboxV1::WorkspaceWrite);
+        assert_eq!(diagnostic.approval_policy, CodexCliApprovalPolicyV1::Never);
+        assert!(
+            diagnostic
+                .argv
+                .windows(2)
+                .any(|pair| { pair == ["--sandbox".to_string(), "workspace-write".to_string()] })
+        );
+        assert!(diagnostic.argv.contains(&"--ignore-rules".to_string()));
+        assert!(
+            !diagnostic
+                .argv
+                .contains(&"--ignore-user-config".to_string())
+        );
+        assert!(!diagnostic.argv.join(" ").contains("bounded prompt"));
+    }
+
+    #[test]
+    fn structured_diagnostic_summary_preserves_command_kind_and_redacts_values() {
+        let sensitive_command = format!("echo {}={}", "token", "diagnostic-secret");
+        let event = parse_codex_jsonl_event(
+            &serde_json::json!({
+                "type": "item.completed",
+                "item": {
+                    "type": "command_execution",
+                    "status": "completed",
+                    "command": sensitive_command,
+                }
+            })
+            .to_string(),
+            4096,
+        )
+        .expect("command event");
+        assert_eq!(event.item_type.as_deref(), Some("command_execution"));
+        assert!(event.bounded_summary.contains("itemStatus=completed"));
+        assert!(!event.bounded_summary.contains("diagnostic-secret"));
     }
 }

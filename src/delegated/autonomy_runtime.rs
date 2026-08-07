@@ -148,6 +148,12 @@ fn operator_config(workspace: &Path, model_id: String) -> Result<CodexCliConfigV
     // alias. Omitting `--model` preserves the authenticated CLI default.
     config.model_id = (model_id != "installed-default").then_some(model_id);
     config.sandbox = CodexCliSandboxV1::WorkspaceWrite;
+    config.diagnostic_root = Some(
+        workspace
+            .join(".catdesk")
+            .join("autonomy")
+            .join("diagnostics"),
+    );
     Ok(config)
 }
 
