@@ -144,7 +144,9 @@ fn operator_config(workspace: &Path, model_id: String) -> Result<CodexCliConfigV
         )
     })?;
     let mut config = CodexCliConfigV1::new(executable.into(), workspace.into())?;
-    config.model_id = Some(model_id);
+    // `installed-default` is an explicit contract selector, not a model
+    // alias. Omitting `--model` preserves the authenticated CLI default.
+    config.model_id = (model_id != "installed-default").then_some(model_id);
     config.sandbox = CodexCliSandboxV1::WorkspaceWrite;
     Ok(config)
 }

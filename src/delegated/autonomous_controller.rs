@@ -299,6 +299,14 @@ impl<P: WorkerProviderV1, V: AutonomousVerifierV1> AutonomousControllerV1<P, V> 
             .iter()
             .any(|event| event.kind == NormalizedProviderEventKind::TerminalError)
         {
+            let diagnostic = bounded_provider_diagnostic(&batch.events);
+            self.store
+                .append_event(
+                    &self.session_id,
+                    "provider_terminal_diagnostic",
+                    &diagnostic,
+                )
+                .map_err(RuntimeError::from)?;
             return self.escalate("provider_terminal_error");
         }
         self.transition(
@@ -575,6 +583,31 @@ fn bounded_contract_text(value: &str, limit: usize) -> String {
         end -= 1;
     }
     value[..end].to_string()
+}
+
+fn bounded_provider_diagnostic(events: &[super::runtime::NormalizedProviderEventV1]) -> String {
+    let detail = events
+        .iter()
+        .filter(|event| event.kind == NormalizedProviderEventKind::TerminalError)
+        .filter_map(|event| event.text.as_deref())
+        .next()
+        .unwrap_or("provider reported a terminal error without bounded detail");
+    let lower = detail.to_ascii_lowercase();
+    if [
+        "token",
+        "password",
+        "secret",
+        "authorization",
+        "api_key",
+        "apikey",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker))
+    {
+        "provider terminal error detail redacted".into()
+    } else {
+        bounded_contract_text(detail, 2_048)
+    }
 }
 
 #[cfg(test)]
@@ -877,6 +910,21 @@ mod tests {
         assert_eq!(
             failed.run_once(10).await.expect("run").state,
             AutonomousSessionStateV1::Queued
+        );
+    }
+
+    #[test]
+    fn terminal_provider_diagnostic_is_bounded_and_redacts_sensitive_text() {
+        let event = NormalizedProviderEventV1 {
+            provider_id: "fake".into(),
+            turn_id: TurnId::new("turn-1").expect("turn"),
+            kind: NormalizedProviderEventKind::TerminalError,
+            text: Some("provider failure token=synthetic".into()),
+            tool_call: None,
+        };
+        assert_eq!(
+            bounded_provider_diagnostic(&[event]),
+            "provider terminal error detail redacted"
         );
     }
 

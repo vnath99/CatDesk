@@ -332,15 +332,13 @@ impl CodexCliProviderV1 {
         if let Some(thread_id) = resume_thread_id {
             command.arg("resume").arg(thread_id);
         }
-        command
-            .arg("--json")
-            .arg("--ignore-user-config")
-            .arg("--color")
-            .arg("never");
+        command.arg("--json").arg("--ignore-user-config");
         if resume_thread_id.is_none() {
             command
                 .arg("--sandbox")
-                .arg(self.config.sandbox.as_flag_value());
+                .arg(self.config.sandbox.as_flag_value())
+                .arg("--color")
+                .arg("never");
         }
         if let Some(model_id) = &self.config.model_id {
             command.arg("--model").arg(model_id);
@@ -596,11 +594,18 @@ impl WorkerProviderV1 for CodexCliProviderV1 {
                     .iter()
                     .any(|event| event.kind == NormalizedProviderEventKind::TerminalError)
             {
+                let stderr = self
+                    .active_turns
+                    .get(&codex_handle.handle_id)
+                    .map(|active| active.stderr.as_str())
+                    .filter(|text| !text.trim().is_empty())
+                    .map(|text| bounded_redacted_text(text, self.config.max_diagnostic_bytes))
+                    .unwrap_or_else(|| "Codex CLI turn failed without structured error".into());
                 batch.normalized_events.push(NormalizedProviderEventV1 {
                     provider_id: self.provider_id().as_str().into(),
                     turn_id: handle.turn_id.clone(),
                     kind: NormalizedProviderEventKind::TerminalError,
-                    text: Some("Codex CLI turn failed without structured error".into()),
+                    text: Some(stderr),
                     tool_call: None,
                 });
             }
