@@ -2,6 +2,7 @@
 
 pub mod advisor;
 pub mod autonomous_contract;
+pub mod autonomous_controller;
 pub mod autonomy_state;
 pub mod codex_cli;
 pub mod context;

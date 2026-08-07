@@ -85,6 +85,18 @@ pub struct AutonomousSessionSnapshotV1 {
     pub state: AutonomousSessionStateV1,
     pub current_task_id: Option<String>,
     pub provider_thread_id: Option<String>,
+    #[serde(default)]
+    pub provider_handle_id: Option<String>,
+    #[serde(default)]
+    pub provider_event_cursor: u64,
+    #[serde(default)]
+    pub repair_attempts: u32,
+    #[serde(default)]
+    pub retry_not_before_unix: Option<u64>,
+    #[serde(default)]
+    pub rate_limited_since_unix: Option<u64>,
+    #[serde(default)]
+    pub cancellation_requested: bool,
     pub last_event_sequence: u64,
     pub active: bool,
 }
@@ -182,6 +194,18 @@ pub struct AutonomousEventV1 {
     pub summary: String,
 }
 
+/// Bounded, operator-visible decision request. It contains no provider
+/// transcript, credential, endpoint, or unbounded diagnostics.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutonomousEscalationPacketV1 {
+    pub schema_version: u32,
+    pub session_id: String,
+    pub state: AutonomousSessionStateV1,
+    pub reason: String,
+    pub repair_attempts: u32,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum AutonomyStateError {
     Io(String),
@@ -239,6 +263,12 @@ impl AutonomousStateStoreV1 {
             state: AutonomousSessionStateV1::Draft,
             current_task_id: None,
             provider_thread_id: None,
+            provider_handle_id: None,
+            provider_event_cursor: 0,
+            repair_attempts: 0,
+            retry_not_before_unix: None,
+            rate_limited_since_unix: None,
+            cancellation_requested: false,
             last_event_sequence: 0,
             active: true,
         };
@@ -335,6 +365,53 @@ impl AutonomousStateStoreV1 {
             .into_iter()
             .filter(|event: &AutonomousEventV1| event.sequence > after_sequence)
             .collect())
+    }
+
+    pub fn write_escalation(
+        &self,
+        session_id: &str,
+        state: AutonomousSessionStateV1,
+        reason: &str,
+    ) -> Result<AutonomousEscalationPacketV1, AutonomyStateError> {
+        self.ensure_session_exists(session_id)?;
+        validate_slug(reason, "autonomous escalation reason").map_err(validation_error)?;
+        let snapshot = self.load_session(session_id)?;
+        let packet = AutonomousEscalationPacketV1 {
+            schema_version: AUTONOMY_STATE_SCHEMA_VERSION,
+            session_id: session_id.into(),
+            state,
+            reason: reason.into(),
+            repair_attempts: snapshot.repair_attempts,
+        };
+        write_json_atomic(
+            &self
+                .session_dir(session_id)?
+                .join("artifacts")
+                .join("escalation.json"),
+            &packet,
+        )?;
+        Ok(packet)
+    }
+
+    pub fn load_escalation(
+        &self,
+        session_id: &str,
+    ) -> Result<AutonomousEscalationPacketV1, AutonomyStateError> {
+        self.ensure_session_exists(session_id)?;
+        let packet: AutonomousEscalationPacketV1 = read_json(
+            &self
+                .session_dir(session_id)?
+                .join("artifacts")
+                .join("escalation.json"),
+        )?;
+        validate_slug(&packet.reason, "autonomous escalation reason").map_err(validation_error)?;
+        if packet.schema_version != AUTONOMY_STATE_SCHEMA_VERSION || packet.session_id != session_id
+        {
+            return Err(AutonomyStateError::Validation(
+                "autonomous escalation packet is invalid for this session".into(),
+            ));
+        }
+        Ok(packet)
     }
 
     pub fn acquire_lock(
@@ -685,6 +762,32 @@ mod tests {
                 .expect("load")
                 .last_event_sequence,
             2
+        );
+    }
+
+    #[test]
+    fn escalation_packet_is_bounded_and_round_trips() {
+        let (_root, store) = store("escalation");
+        store
+            .create_session("session-one", queue())
+            .expect("session");
+        let packet = store
+            .write_escalation(
+                "session-one",
+                AutonomousSessionStateV1::WaitingForChatgpt,
+                "provider_terminal_error",
+            )
+            .expect("packet");
+        assert_eq!(packet.reason, "provider_terminal_error");
+        assert_eq!(store.load_escalation("session-one").expect("read"), packet);
+        assert!(
+            store
+                .write_escalation(
+                    "session-one",
+                    AutonomousSessionStateV1::WaitingForChatgpt,
+                    "contains spaces",
+                )
+                .is_err()
         );
     }
 

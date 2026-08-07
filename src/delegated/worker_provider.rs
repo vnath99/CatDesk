@@ -71,6 +71,9 @@ pub struct ProviderEventBatchV1 {
     pub events: Vec<NormalizedProviderEventV1>,
     pub next_cursor: u64,
     pub terminal: bool,
+    /// A provider-captured continuity identifier, if it became available
+    /// while polling. CatDesk persists it before any later resume attempt.
+    pub provider_session_id: Option<String>,
 }
 
 pub trait WorkerProviderV1: Send {
@@ -233,6 +236,7 @@ impl WorkerProviderV1 for OllamaWorkerProviderV1 {
                 events,
                 next_cursor: result.events.len() as u64,
                 terminal: result.terminal,
+                provider_session_id: Some(handle.provider_session_id.clone()),
             })
         })
     }
@@ -363,6 +367,7 @@ impl WorkerProviderV1 for FakeWorkerProviderV1 {
                     }],
                     next_cursor: after_cursor.saturating_add(1),
                     terminal: true,
+                    provider_session_id: Some(handle.provider_session_id.clone()),
                 });
             }
             let result = self.completed_turns.get(&handle.handle_id).ok_or_else(|| {
@@ -376,6 +381,7 @@ impl WorkerProviderV1 for FakeWorkerProviderV1 {
                 events,
                 next_cursor: result.events.len() as u64,
                 terminal: result.terminal,
+                provider_session_id: Some(handle.provider_session_id.clone()),
             })
         })
     }

@@ -30,6 +30,7 @@ pub struct AutonomousDevelopmentContractV1 {
     pub git_policy: AutonomousGitPolicyV1,
     pub provider_policy: AutonomousProviderPolicyV1,
     pub verification_policy: AutonomousVerificationPolicyV1,
+    pub rate_limit_policy: AutonomousRateLimitPolicyV1,
     pub autonomy_lease: AutonomyLeaseV1,
     pub hard_stop_conditions: Vec<AutonomousHardStopV1>,
 }
@@ -112,6 +113,19 @@ pub struct AutonomousVerificationPolicyV1 {
     pub max_repair_cycles: u32,
     pub require_authoritative_diff: bool,
     pub require_final_review: bool,
+}
+
+/// Bounded, persisted behavior for a provider capacity pause. This is a
+/// control-plane delay, never a provider fallback or a new worker session.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutonomousRateLimitPolicyV1 {
+    pub automatic_pause: bool,
+    pub automatic_resume: bool,
+    pub initial_backoff_seconds: u64,
+    pub maximum_backoff_seconds: u64,
+    pub maximum_rate_limited_seconds: u64,
+    pub honor_provider_retry_after: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -288,6 +302,18 @@ impl AutonomousDevelopmentContractV1 {
         {
             return Err(ContractPolicyError::Validation(
                 "autonomy lease budgets are invalid".into(),
+            ));
+        }
+        if !self.rate_limit_policy.automatic_pause
+            || !self.rate_limit_policy.automatic_resume
+            || self.rate_limit_policy.initial_backoff_seconds == 0
+            || self.rate_limit_policy.maximum_backoff_seconds
+                < self.rate_limit_policy.initial_backoff_seconds
+            || self.rate_limit_policy.maximum_rate_limited_seconds
+                < self.rate_limit_policy.initial_backoff_seconds
+        {
+            return Err(ContractPolicyError::Validation(
+                "autonomous rate-limit policy is invalid".into(),
             ));
         }
         let profiles = self
@@ -536,6 +562,14 @@ mod tests {
                 max_repair_cycles: 1,
                 require_authoritative_diff: true,
                 require_final_review: true,
+            },
+            rate_limit_policy: AutonomousRateLimitPolicyV1 {
+                automatic_pause: true,
+                automatic_resume: true,
+                initial_backoff_seconds: 60,
+                maximum_backoff_seconds: 300,
+                maximum_rate_limited_seconds: 600,
+                honor_provider_retry_after: true,
             },
             autonomy_lease: AutonomyLeaseV1 {
                 start_approval_required: true,

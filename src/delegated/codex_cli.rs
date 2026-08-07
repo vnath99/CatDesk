@@ -17,8 +17,14 @@ use tokio::process::{Child, Command};
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
 use super::contracts::{TurnId, WorkerSessionId};
-use super::runtime::{NormalizedProviderEventKind, NormalizedProviderEventV1, RuntimeError};
-use super::worker_provider::ProviderIdV1;
+use super::runtime::{
+    NormalizedProviderEventKind, NormalizedProviderEventV1, ProviderCapabilitiesV1,
+    ProviderHealthStatus, ProviderHealthV1, ProviderSessionV1, ProviderType, RuntimeError,
+};
+use super::worker_provider::{
+    ProviderEventBatchV1, ProviderFuture, ProviderIdV1, ProviderTurnHandleV1,
+    WorkerProviderTurnRequestV1, WorkerProviderV1,
+};
 
 const DEFAULT_MAX_EVENT_BYTES: usize = 64 * 1024;
 const DEFAULT_MAX_DIAGNOSTIC_BYTES: usize = 8 * 1024;
@@ -253,6 +259,7 @@ pub struct CodexCliProviderV1 {
     config: CodexCliConfigV1,
     capabilities: CodexCliCapabilitiesV1,
     active_turns: BTreeMap<String, ActiveCodexTurn>,
+    worker_handles: BTreeMap<String, CodexCliTurnHandleV1>,
     next_handle_sequence: u64,
 }
 
@@ -279,6 +286,7 @@ impl CodexCliProviderV1 {
             config,
             capabilities,
             active_turns: BTreeMap::new(),
+            worker_handles: BTreeMap::new(),
             next_handle_sequence: 1,
         })
     }
@@ -500,6 +508,208 @@ impl CodexCliProviderV1 {
             .get(&handle.handle_id)
             .map(|active| active.stderr.as_str())
     }
+}
+
+impl WorkerProviderV1 for CodexCliProviderV1 {
+    fn provider_id(&self) -> ProviderIdV1 {
+        ProviderIdV1::CodexCli
+    }
+
+    fn capabilities(&self) -> ProviderCapabilitiesV1 {
+        ProviderCapabilitiesV1 {
+            provider_id: self.provider_id().as_str().into(),
+            provider_type: ProviderType::LocalApi,
+            supports_streaming: true,
+            supports_native_tool_calls: false,
+            supports_session_continuity: self.capabilities.supports_resume,
+            supports_cancellation: self.capabilities.supports_owned_process_cancellation,
+            context_limit: MAX_PROMPT_BYTES,
+            output_limit: self.config.max_event_bytes,
+        }
+    }
+
+    fn create_session(
+        &self,
+        model_id: &str,
+        worker_session_id: &WorkerSessionId,
+    ) -> ProviderSessionV1 {
+        ProviderSessionV1 {
+            provider_id: self.provider_id().as_str().into(),
+            provider_session_id: format!("codex-unbound-{}", worker_session_id.as_str()),
+            model_id: model_id.into(),
+            keep_alive: None,
+        }
+    }
+
+    fn start_turn<'a>(
+        &'a mut self,
+        request: WorkerProviderTurnRequestV1,
+    ) -> ProviderFuture<'a, ProviderTurnHandleV1> {
+        Box::pin(async move { self.start_worker_turn(request, None).await })
+    }
+
+    fn resume_turn<'a>(
+        &'a mut self,
+        request: WorkerProviderTurnRequestV1,
+    ) -> ProviderFuture<'a, ProviderTurnHandleV1> {
+        Box::pin(async move {
+            let thread_id = request.provider_session.provider_session_id.clone();
+            if thread_id.starts_with("codex-unbound-") {
+                return Err(RuntimeError::Validation(
+                    "Codex continuation requires a captured provider thread id".into(),
+                ));
+            }
+            self.start_worker_turn(request, Some(thread_id)).await
+        })
+    }
+
+    fn poll_events<'a>(
+        &'a mut self,
+        handle: &'a ProviderTurnHandleV1,
+        after_cursor: u64,
+    ) -> ProviderFuture<'a, ProviderEventBatchV1> {
+        Box::pin(async move {
+            let codex_handle = self
+                .worker_handles
+                .get(&handle.handle_id)
+                .cloned()
+                .ok_or_else(|| RuntimeError::Validation("unknown Codex worker handle".into()))?;
+            let mut batch =
+                CodexCliProviderV1::poll_events(self, &codex_handle, after_cursor).await?;
+            if matches!(batch.state, CodexCliTurnStateV1::RateLimited)
+                && !batch
+                    .normalized_events
+                    .iter()
+                    .any(|event| event.kind == NormalizedProviderEventKind::TerminalError)
+            {
+                batch.normalized_events.push(NormalizedProviderEventV1 {
+                    provider_id: self.provider_id().as_str().into(),
+                    turn_id: handle.turn_id.clone(),
+                    kind: NormalizedProviderEventKind::TerminalError,
+                    text: Some("Codex CLI rate limited".into()),
+                    tool_call: None,
+                });
+            }
+            if matches!(batch.state, CodexCliTurnStateV1::Failed)
+                && !batch
+                    .normalized_events
+                    .iter()
+                    .any(|event| event.kind == NormalizedProviderEventKind::TerminalError)
+            {
+                batch.normalized_events.push(NormalizedProviderEventV1 {
+                    provider_id: self.provider_id().as_str().into(),
+                    turn_id: handle.turn_id.clone(),
+                    kind: NormalizedProviderEventKind::TerminalError,
+                    text: Some("Codex CLI turn failed without structured error".into()),
+                    tool_call: None,
+                });
+            }
+            Ok(ProviderEventBatchV1 {
+                events: batch.normalized_events,
+                next_cursor: batch.next_cursor,
+                terminal: batch.terminal,
+                provider_session_id: batch.thread_id.or(codex_handle.resumed_thread_id),
+            })
+        })
+    }
+
+    fn cancel<'a>(&'a mut self, handle: &'a ProviderTurnHandleV1) -> ProviderFuture<'a, ()> {
+        Box::pin(async move {
+            let codex_handle = self
+                .worker_handles
+                .get(&handle.handle_id)
+                .cloned()
+                .ok_or_else(|| RuntimeError::Validation("unknown Codex worker handle".into()))?;
+            CodexCliProviderV1::cancel(self, &codex_handle).await
+        })
+    }
+
+    fn status<'a>(&'a self) -> ProviderFuture<'a, ProviderHealthV1> {
+        Box::pin(async move {
+            Ok(ProviderHealthV1 {
+                provider_id: self.provider_id().as_str().into(),
+                status: ProviderHealthStatus::Available,
+                available_models: self.config.model_id.iter().cloned().collect(),
+                detail: "Codex CLI capabilities were discovered before controller launch".into(),
+            })
+        })
+    }
+}
+
+impl CodexCliProviderV1 {
+    async fn start_worker_turn(
+        &mut self,
+        request: WorkerProviderTurnRequestV1,
+        resume_thread_id: Option<String>,
+    ) -> Result<ProviderTurnHandleV1, RuntimeError> {
+        if request.provider_session.provider_id != self.provider_id().as_str()
+            || !request.turn.tool_definitions.is_empty()
+        {
+            return Err(RuntimeError::Validation(
+                "Codex autonomous turns require a matching session and no CatDesk tool definitions"
+                    .into(),
+            ));
+        }
+        if self
+            .config
+            .model_id
+            .as_deref()
+            .is_some_and(|configured| configured != request.turn.model_id)
+        {
+            return Err(RuntimeError::Validation(
+                "Codex worker model does not match the discovered local configuration".into(),
+            ));
+        }
+        let prompt = autonomous_prompt(&request)?;
+        let cli_request = CodexCliTurnRequestV1 {
+            worker_session_id: request.turn.worker_session_id.clone(),
+            turn_id: request.turn.turn_id.clone(),
+            prompt,
+        };
+        let codex_handle = match resume_thread_id.as_deref() {
+            Some(thread_id) => {
+                CodexCliProviderV1::resume_turn(self, thread_id, cli_request).await?
+            }
+            None => CodexCliProviderV1::start_turn(self, cli_request).await?,
+        };
+        let handle = ProviderTurnHandleV1 {
+            provider_id: self.provider_id(),
+            handle_id: codex_handle.handle_id.clone(),
+            provider_session_id: resume_thread_id.unwrap_or_else(|| {
+                format!("codex-unbound-{}", request.turn.worker_session_id.as_str())
+            }),
+            worker_session_id: request.turn.worker_session_id,
+            turn_id: request.turn.turn_id,
+        };
+        self.worker_handles
+            .insert(handle.handle_id.clone(), codex_handle);
+        Ok(handle)
+    }
+}
+
+fn autonomous_prompt(request: &WorkerProviderTurnRequestV1) -> Result<String, RuntimeError> {
+    let history = request
+        .history
+        .iter()
+        .map(|message| serde_json::json!({"role": message.role, "content": message.content}))
+        .collect::<Vec<_>>();
+    let prompt = serde_json::to_string(&serde_json::json!({
+        "protocol": "catdesk.autonomous.v1",
+        "contract": request.turn.context_json,
+        "messages": history,
+        "restrictions": [
+            "Do not use CatDesk MCP tools or receive CatDesk tool definitions.",
+            "Operate only within the already approved workspace and stop when the task is complete.",
+            "Treat verification as CatDesk-controlled and do not claim verified completion."
+        ]
+    }))
+    .map_err(|error| RuntimeError::Validation(format!("failed to serialize Codex autonomous prompt: {error}")))?;
+    if prompt.len() > MAX_PROMPT_BYTES {
+        return Err(RuntimeError::BudgetExceeded(
+            "Codex autonomous prompt exceeds bounded adapter input".into(),
+        ));
+    }
+    Ok(prompt)
 }
 
 #[derive(Clone, Debug)]
@@ -848,6 +1058,9 @@ fn is_rate_limit_text(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::delegated::contracts::RunId;
+    use crate::delegated::journal::ToolMutationKind;
+    use crate::delegated::runtime::{ProviderMessageV1, ProviderTurnRequestV1, ToolDefinitionV1};
 
     fn direct_executable() -> PathBuf {
         std::env::current_exe().expect("test executable")
@@ -859,6 +1072,44 @@ mod tests {
             std::env::current_dir().expect("working directory"),
         )
         .expect("config")
+    }
+
+    #[test]
+    fn autonomous_prompt_is_bounded_and_never_serializes_tool_definitions() {
+        let worker_session_id = WorkerSessionId::new("codex-worker").expect("worker");
+        let request = WorkerProviderTurnRequestV1 {
+            provider_session: ProviderSessionV1 {
+                provider_id: "codex-cli".into(),
+                provider_session_id: "codex-unbound-codex-worker".into(),
+                model_id: "default".into(),
+                keep_alive: None,
+            },
+            turn: ProviderTurnRequestV1 {
+                run_id: RunId::new("run-1").expect("run"),
+                worker_session_id: worker_session_id.clone(),
+                turn_id: TurnId::new("turn-1").expect("turn"),
+                model_id: "default".into(),
+                context_json: serde_json::json!({"contractHash":"abc"}),
+                tool_definitions: vec![ToolDefinitionV1 {
+                    name: "should-not-reach-codex".into(),
+                    description: "test only".into(),
+                    input_schema: serde_json::json!({"type":"object"}),
+                    mutation_kind: ToolMutationKind::ReadOnly,
+                }],
+                max_output_bytes: 1024,
+            },
+            history: vec![ProviderMessageV1 {
+                role: "user".into(),
+                content: "bounded autonomous task".into(),
+                tool_call_id: None,
+                tool_name: None,
+            }],
+            json_envelope_recovery: false,
+        };
+        let prompt = autonomous_prompt(&request).expect("prompt");
+        assert!(prompt.len() <= MAX_PROMPT_BYTES);
+        assert!(!prompt.contains("should-not-reach-codex"));
+        assert!(prompt.contains("bounded autonomous task"));
     }
 
     #[test]
