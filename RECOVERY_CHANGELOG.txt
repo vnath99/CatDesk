@@ -1,0 +1,136 @@
+CatDesk recovery and version-handoff change log
+Updated: 2026-09-06
+
+Purpose
+-------
+Keep a human-readable record of the recovery work performed in this workspace.
+Routine recovery remains the public command:
+
+  .\catdesk.ps1 recover
+
+The external official Secure MCP runtime is intentionally not managed by these
+changes.
+
+Confirmed implementation changes
+-------------------------------
+1. Runtime verification now returns bounded, redacted gate codes instead of
+   collapsing every external-runtime observation problem into a generic false
+   result. A healthy canonical daemon is not restarted merely because the
+   external runtime is temporarily difficult to observe.
+2. Tunnel-client status subprocesses are bounded and are terminated if their
+   deadline expires; the ordinary MCP tool catalog size is accepted within the
+   bounded response cap.
+3. Public `catdesk.ps1 recover` reports the fixed
+   `TRANSPORT_VERIFICATION_FAILED` state and a redacted gate when appropriate.
+4. The autostart supervisor recognizes that fixed state. It invokes public
+   recovery once, reports `EXTERNAL_RUNTIME_PENDING`, then resumes normal
+   status polling instead of cycling the local daemon or attempting to recreate
+   a tunnel.
+5. The supervisor now has a black-box fixture that invokes a temporary public
+   `catdesk.ps1` facade. It proves the exact public sequence:
+
+     status -> recover -> status
+
+   for a temporary external-runtime verification failure.
+6. Reviewed version promotion remains the only new-binary authority. After
+   `PROMOTED_CANONICAL_READY`, a ChatGPT Web task uses the single public command
+   shown above to verify the promoted daemon and re-adopt the existing runtime.
+7. Autostart persistence now resolves an absolute `powershell.exe` path before
+   comparing or registering the project-scoped task/Run-key entry. This fixes a
+   false `AUTOSTART_CONFLICT` caused by comparing an existing absolute Windows
+   PowerShell path with the ambiguous fallback string `powershell.exe`.
+8. Stale-daemon discovery now scans up to 64 `catdesk.exe` process rows before
+   applying daemon/path/hash identity checks. It reads one extra row and fails
+   closed above that bound. Previously, an arbitrary first-eight-row truncation
+   could silently miss the exact stale canonical daemon on a busy host. The
+   bootstrap fixture explicitly proves the 65th row is rejected as ambiguous.
+9. `scripts/test-stale-canonical-daemon-recovery.ps1` is a disposable,
+   loopback-only integration harness. It builds a tiny test fixture, copies it
+   to a temporary canonical `catdesk.exe`, creates one alive/no-listener daemon
+   shape, proves production process discovery finds that exact path/hash row,
+   and proves production stale recovery stops it before a normal replacement
+   binds the temporary listener. It never accesses the active daemon, runtime,
+   connector, or tunnel.
+
+Confirmed verification
+----------------------
+- `scripts/test-catdesk-autostart-supervisor.ps1` passed.
+- `scripts/test-catdesk-lifecycle.ps1` passed.
+- `scripts/test-start-catdesk-stack.ps1` passed.
+- `scripts/test-promote-reviewed-catdesk-build.ps1` passed.
+- `cargo test --test recovery_powershell -- --nocapture` passed (2 tests).
+- PowerShell parser checks for the lifecycle and supervisor scripts passed.
+- `git diff --check` passed (the repository emitted pre-existing line-ending
+  warnings only).
+- Public host `status` returned `READY`.
+- Public host `recover` returned `CONNECTED_VERIFIED`.
+- Public `autostart status` initially exposed `AUTOSTART_CONFLICT`; after the
+  absolute-PowerShell identity repair it returned `AUTOSTART_ENABLED`.
+- Public `autostart enable` returned `AUTOSTART_ENABLED` and the current host
+  returned `READY`.
+- One public local-only `stop` cycle was followed by watchdog-only recovery to
+  `READY`, without a manual `recover` invocation.
+- A second public `stop` cycle started from public `READY` and
+  `AUTOSTART_ENABLED`; its immediate public status was again `READY` with one
+  local listener owner and one project-scoped supervisor. No manual `recover`
+  was invoked between the stop and the verification.
+- `scripts/test-stale-canonical-daemon-recovery.ps1` passed.
+- The Rust `recovery_powershell` integration suite now executes the stale
+  process and autostart-supervisor fixtures; it passed with both tests green.
+
+Open acceptance work
+--------------------
+T-0319 remains open until the separately defined stale/wedged-daemon shape is
+captured with complete evidence and the resulting record receives its required
+review. Do not manually stop, recreate, or reconfigure the external Secure MCP
+runtime during that work.
+
+The exact stale/wedged decision is covered by the deterministic recovery
+fixture: one exact canonical daemon without a listener is stopped and replaced;
+foreign or multiple candidates fail closed. The disposable real-process harness
+is the separately scoped fault-injection mechanism; it avoids fabricating that
+shape on the active control path.
+
+Review handoff
+--------------
+The T-0319 evidence and reviewer checklist are in:
+
+  docs/orchestrator/review_bundles/T-0319_WATCHDOG_AND_STALE_DAEMON_RECOVERY_ACCEPTANCE_REVIEW_BUNDLE.md
+
+That bundle requests independent review; it is not itself an approval.
+
+Production-acceptance preflight checkpoint — 2026-09-07
+--------------------------------------------------------
+1. `scripts/catdesk-production-acceptance.ps1` now resolves its default
+   workspace only after PowerShell initializes the script root. This restores
+   no-argument execution on hosts where parameter-default evaluation observes
+   an empty `$PSScriptRoot`.
+2. The canonical-listener gate now uses the bootstrap engine's exact canonical
+   daemon identity (path, hash, daemon mode, and listener PID), rather than
+   treating every process named `catdesk` as an ambiguity. Unrelated GUI or
+   foreign same-name processes can no longer produce a false negative, while
+   zero, multiple, foreign, or listener-mismatched daemon candidates still fail
+   closed.
+3. `scripts/test-catdesk-production-acceptance.ps1` checks both source-level
+   safeguards and passed on 2026-09-07.
+4. A live read-only no-argument preflight recorded PASS for canonical release,
+   public lifecycle, lifecycle status (`READY`), autostart ownership,
+   persistent supervisor, retention evidence, external-runtime ownership, and
+   canonical listener instance. `WAKE_RUNTIME_PRESENCE` and
+   `WAKE_TARGET_BINDING` remain FAIL because the separately owned wake bridge
+   has not been configured; no browser, ChatGPT target, connector, credential,
+   daemon, or tunnel was changed by this checkpoint.
+5. From a fresh project-root PowerShell, the exact public command
+   `./catdesk.ps1 recover` returned `CONNECTED_VERIFIED` in 3.4 seconds on
+   2026-09-07. It verified the existing canonical local daemon and the existing
+   external runtime; no manual PID, hash, sidecar, LKG, or tunnel work occurred.
+6. The isolated canonical bootstrap behavioral fixture passed again on
+   2026-09-07. `docs/orchestrator/RECOVERY_ACCEPTANCE_TRACEABILITY.md` now
+   records the recovery requirements, implementation boundaries, evidence, and
+   remaining non-recovery-owned acceptance gates for future iterations.
+7. The production-acceptance listener gate now has a behavioral fixture, not
+   only a source-text assertion. It proves that one exact canonical daemon
+   candidate matching the listener PID produces a fingerprint, while a
+   mismatched PID or multiple exact candidates fails closed. That fixture is
+   now part of `tests/recovery_powershell.rs`, so it runs with the ordinary
+   recovery PowerShell integration suite.

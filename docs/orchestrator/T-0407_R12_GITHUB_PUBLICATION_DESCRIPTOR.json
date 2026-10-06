@@ -1,0 +1,19 @@
+{
+    "schemaVersion":  1,
+    "purpose":  "GITHUB_RECOVERY_RECONSTRUCTION_PUBLICATION",
+    "projectId":  "catdesk",
+    "manifestPath":  "docs/orchestrator/T-0407_R12_GITHUB_RECOVERY_SNAPSHOT_MANIFEST.json",
+    "manifestSha256":  "6c8ea66d1ac14ef4eb923040a4e71296baab788357103c3025e580e6ff353597",
+    "includeCount":  949,
+    "archivalExclusionCount":  12,
+    "runtimeGeneratedExclusionCount":  1,
+    "gitIdentity":  {
+                        "originSha256":  "ad0fe55abd1661a15106f8aa635ec753b0579bdc0266def9eb51232b80171cd8",
+                        "currentBranch":  "orchestrator/chatgpt-codex-autonomous-loop",
+                        "headCommit":  "b958eb9fff4522168ebb1ae4a726209896a27451"
+                    },
+    "supplementalReviewedArtifactPaths":  [
+                                              "docs/orchestrator/T-0407_R12_GITHUB_PUBLICATION_DESCRIPTOR.json",
+                                              "docs/orchestrator/review_bundles/T-0407_R12_POST_R11_GITHUB_RECOVERY_SNAPSHOT.md"
+                                          ]
+}

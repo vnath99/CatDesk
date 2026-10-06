@@ -1,0 +1,14 @@
+{
+    "schemaVersion":  1,
+    "purpose":  "GITHUB_RECOVERY_RECONSTRUCTION_PUBLICATION",
+    "projectId":  "catdesk",
+    "manifestPath":  "docs/orchestrator/T-0407_R7_GITHUB_RECOVERY_SNAPSHOT_MANIFEST.json",
+    "manifestSha256":  "d7c78e3500c167287c463df9a8df2c01454b91de25ae9c7970ae79a65eadf753",
+    "includeCount":  937,
+    "archivalExclusionCount":  12,
+    "runtimeGeneratedExclusionCount":  1,
+    "supplementalReviewedArtifactPaths":  [
+                                              "docs/orchestrator/T-0407_R7_GITHUB_PUBLICATION_DESCRIPTOR.json",
+                                              "docs/orchestrator/review_bundles/T-0407_R7_GITHUB_PUBLICATION_PROVENANCE_CLOSURE.md"
+                                          ]
+}

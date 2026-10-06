@@ -32,7 +32,7 @@ Node/npm initial pass:
 
 - `Get-Command node` and `Get-Command npm` returned no system executable.
 - Common locations under `%APPDATA%`, `%LOCALAPPDATA%`, Program Files, Scoop, Volta, and nvm-style paths did not reveal a separate user/system Node/npm install.
-- Codex's bundled runtime does include an isolated Node executable at `C:\Users\Volap\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe`, reporting `v24.14.0`, and a bundled pnpm reporting `11.9.0`. These were not used to install OpenClaw.
+- Codex's bundled runtime does include an isolated Node executable at `<USER_PROFILE>\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe`, reporting `v24.14.0`, and a bundled pnpm reporting `11.9.0`. These were not used to install OpenClaw.
 
 Node/npm/OpenClaw continuation check after operator install:
 
@@ -41,9 +41,9 @@ Node/npm/OpenClaw continuation check after operator install:
 - `where.exe node` resolved `C:\Program Files\nodejs\node.exe`.
 - `where.exe npm` resolved both `C:\Program Files\nodejs\npm` and `C:\Program Files\nodejs\npm.cmd`.
 - `openclaw --version` reported `OpenClaw 2026.7.1-2 (0790d9f)`.
-- `where.exe openclaw` resolved both `C:\Users\Volap\AppData\Roaming\npm\openclaw` and `C:\Users\Volap\AppData\Roaming\npm\openclaw.cmd`.
+- `where.exe openclaw` resolved both `<USER_PROFILE>\AppData\Roaming\npm\openclaw` and `<USER_PROFILE>\AppData\Roaming\npm\openclaw.cmd`.
 - `openclaw config file` reported `~\.openclaw\openclaw.json`.
-- `openclaw mcp status --verbose --json` reported path `C:\Users\Volap\.openclaw\openclaw.json` and an empty `servers` array.
+- `openclaw mcp status --verbose --json` reported path `<USER_PROFILE>\.openclaw\openclaw.json` and an empty `servers` array.
 - Setting process-only `OPENCLAW_CONFIG_PATH` and `OPENCLAW_STATE_DIR` made `openclaw config file` resolve to `~\OneDrive\Desktop\Projects\CatDesk\.tmp\openclaw-t0012\openclaw.json`; no config file was created, but OpenClaw did create disposable workspace-local SQLite state at `.tmp\openclaw-t0012\state\state\openclaw.sqlite`.
 
 `openclaw doctor` result after operator install:
@@ -59,7 +59,7 @@ Node/npm/OpenClaw continuation check after operator install:
 
 Ollama:
 
-- `Get-Command ollama` found `C:\Users\Volap\AppData\Local\Programs\Ollama\ollama.exe`.
+- `Get-Command ollama` found `<USER_PROFILE>\AppData\Local\Programs\Ollama\ollama.exe`.
 - `ollama --version` reported `ollama version is 0.24.0`.
 - `ollama list` showed multiple installed local models, including `qwen3.5:9b`.
 - `ollama show qwen3.5:9b` reported a Qwen 3.5 9.7B Q4_K_M model with 262144 context length and capabilities including completion, vision, tools, and thinking.
@@ -298,12 +298,12 @@ Get-Command openclaw -ErrorAction SilentlyContinue
 Get-Command ollama -ErrorAction SilentlyContinue
 Get-Command node -ErrorAction SilentlyContinue
 Get-Command npm -ErrorAction SilentlyContinue
-Get-ChildItem -Path C:\Users\Volap -Recurse -Filter openclaw* -ErrorAction SilentlyContinue
-& 'C:\Users\Volap\AppData\Local\Programs\Ollama\ollama.exe' --version
-& 'C:\Users\Volap\AppData\Local\Programs\Ollama\ollama.exe' list
-& 'C:\Users\Volap\AppData\Local\Programs\Ollama\ollama.exe' show qwen3.5:9b
-& 'C:\Users\Volap\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe' --version
-& 'C:\Users\Volap\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin\fallback\pnpm.cmd' --version
+Get-ChildItem -Path <USER_PROFILE>
+& '<USER_PROFILE>\AppData\Local\Programs\Ollama\ollama.exe' --version
+& '<USER_PROFILE>\AppData\Local\Programs\Ollama\ollama.exe' list
+& '<USER_PROFILE>\AppData\Local\Programs\Ollama\ollama.exe' show qwen3.5:9b
+& '<USER_PROFILE>\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe' --version
+& '<USER_PROFILE>\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin\fallback\pnpm.cmd' --version
 node --version
 npm --version
 where.exe node

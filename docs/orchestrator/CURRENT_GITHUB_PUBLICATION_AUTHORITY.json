@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "purpose": "GITHUB_RECOVERY_RECONSTRUCTION_PUBLICATION_AUTHORITY",
+  "projectId": "catdesk",
+  "state": "BOUND",
+  "descriptorPath": "docs/orchestrator/T-0407_R17_GITHUB_PUBLICATION_DESCRIPTOR.json",
+  "descriptorSha256": "45ef2042ba68262b9b8d238f79832e30929d5b745e6099924da00a9b0289e761"
+}

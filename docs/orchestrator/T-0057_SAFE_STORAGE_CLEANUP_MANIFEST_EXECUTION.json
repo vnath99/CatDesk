@@ -1,0 +1,132 @@
+﻿[
+    {
+        "path":  ".catdesk\\reload-target",
+        "status":  "REMOVED",
+        "bytes":  3011977480
+    },
+    {
+        "path":  ".catdesk\\t0046b-accept-target",
+        "status":  "REMOVED",
+        "bytes":  3013011602
+    },
+    {
+        "path":  ".catdesk\\t0047b-final-target",
+        "status":  "REMOVED",
+        "bytes":  3015809233
+    },
+    {
+        "path":  ".catdesk\\t0047d-final-auth-runtime-a",
+        "status":  "REMOVED",
+        "bytes":  3023578400
+    },
+    {
+        "path":  ".catdesk\\t0047d-final-auth-runtime-b",
+        "status":  "REMOVED",
+        "bytes":  3023594874
+    },
+    {
+        "path":  ".catdesk\\t0047d-verified-daemon",
+        "status":  "REMOVED",
+        "bytes":  3020765254
+    },
+    {
+        "path":  ".catdesk\\t0047e-safe-forward-daemon",
+        "status":  "REMOVED",
+        "bytes":  3023536048
+    },
+    {
+        "path":  ".catdesk\\t0047-final-target",
+        "status":  "REMOVED",
+        "bytes":  3016288106
+    },
+    {
+        "path":  ".catdesk\\t0048b-server-owned-reload",
+        "status":  "REMOVED",
+        "bytes":  3016114908
+    },
+    {
+        "path":  ".catdesk\\t0048c-bootstrap-relay",
+        "status":  "REMOVED",
+        "bytes":  1724598792
+    },
+    {
+        "path":  ".catdesk\\t0048c-headless-daemon",
+        "status":  "REMOVED",
+        "bytes":  3020686280
+    },
+    {
+        "path":  ".catdesk\\t0048d-native-reload",
+        "status":  "REMOVED",
+        "bytes":  3020694129
+    },
+    {
+        "path":  ".catdesk\\t0048e-bootstrap-watchdog",
+        "status":  "REMOVED",
+        "bytes":  1723967093
+    },
+    {
+        "path":  ".catdesk\\t0048e-exact-pid-reload",
+        "status":  "REMOVED",
+        "bytes":  3020855609
+    },
+    {
+        "path":  ".catdesk\\t0048-final-proven",
+        "status":  "REMOVED",
+        "bytes":  3023252087
+    },
+    {
+        "path":  ".catdesk\\t0048g-listener-table",
+        "status":  "REMOVED",
+        "bytes":  3022820159
+    },
+    {
+        "path":  ".catdesk\\t0048h-windows-teardown",
+        "status":  "REMOVED",
+        "bytes":  3023003672
+    },
+    {
+        "path":  ".catdesk\\t0048i-windows-release-window",
+        "status":  "REMOVED",
+        "bytes":  3022989296
+    },
+    {
+        "path":  ".catdesk\\t0048j-noninheritable-listener",
+        "status":  "REMOVED",
+        "bytes":  3023258324
+    },
+    {
+        "path":  ".catdesk\\t0048-native-reload-bootstrap",
+        "status":  "REMOVED",
+        "bytes":  3629356663
+    },
+    {
+        "path":  ".catdesk\\t0048-native-reload-proof",
+        "status":  "REMOVED",
+        "bytes":  3635729653
+    },
+    {
+        "path":  "target\\t0040-r7-final",
+        "status":  "REMOVED",
+        "bytes":  1084192170
+    },
+    {
+        "path":  "target\\t0051-deploy",
+        "status":  "REMOVED",
+        "bytes":  1084163467
+    },
+    {
+        "path":  "target\\t0051-r2-release",
+        "status":  "REMOVED",
+        "bytes":  1084292748
+    },
+    {
+        "path":  "target\\t0053-deploy",
+        "status":  "REMOVED",
+        "bytes":  1084199318
+    },
+    {
+        "path":  "target\\t0054-final",
+        "status":  "REMOVED",
+        "bytes":  1084190470
+    }
+]

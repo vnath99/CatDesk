@@ -1,0 +1,294 @@
+﻿{
+    "schemaVersion":  1,
+    "workspaceFingerprint":  "7af48f8fda93bb15b786d59b5a7d0aee9daeed739f87a52dedfb712717993adb",
+    "entries":  [
+                    {
+                        "path":  ".catdesk\\reload-target",
+                        "bytes":  3011977480,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0046b-accept-target",
+                        "bytes":  3013011602,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0047b-final-target",
+                        "bytes":  3015809233,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0047d-final-auth-runtime-a",
+                        "bytes":  3023578400,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0047d-final-auth-runtime-b",
+                        "bytes":  3023594874,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0047d-verified-daemon",
+                        "bytes":  3020765254,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0047e-safe-forward-daemon",
+                        "bytes":  3023536048,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0047-final-target",
+                        "bytes":  3016288106,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0048b-server-owned-reload",
+                        "bytes":  3016114908,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0048c-bootstrap-relay",
+                        "bytes":  1724598792,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0048c-headless-daemon",
+                        "bytes":  3020686280,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0048d-native-reload",
+                        "bytes":  3020694129,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0048e-bootstrap-watchdog",
+                        "bytes":  1723967093,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0048e-exact-pid-reload",
+                        "bytes":  3020855609,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0048-final-proven",
+                        "bytes":  3023252087,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0048g-listener-table",
+                        "bytes":  3022820159,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0048h-windows-teardown",
+                        "bytes":  3023003672,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0048i-windows-release-window",
+                        "bytes":  3022989296,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0048j-noninheritable-listener",
+                        "bytes":  3023258324,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0048-native-reload-bootstrap",
+                        "bytes":  3629356663,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  ".catdesk\\t0048-native-reload-proof",
+                        "bytes":  3635729653,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "debug"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  "target\\t0040-r7-final",
+                        "bytes":  1084192170,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "release"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  "target\\t0051-deploy",
+                        "bytes":  1084163467,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "release"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  "target\\t0051-r2-release",
+                        "bytes":  1084292748,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "release"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  "target\\t0053-deploy",
+                        "bytes":  1084199318,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "release"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    },
+                    {
+                        "path":  "target\\t0054-final",
+                        "bytes":  1084190470,
+                        "signatures":  [
+                                           "CACHEDIR.TAG",
+                                           ".rustc_info.json",
+                                           "release"
+                                       ],
+                        "classification":  "REBUILDABLE",
+                        "rationale":  "Multiple Cargo/build signatures; no reparse point, protected marker, or live CatDesk runtime."
+                    }
+                ],
+    "digest":  "6c21a60136d6eb7bde0fd115781547fb50535eb043f5bcd2c4e0c7519adfbae4",
+    "confirmToken":  "T0057-6c21a60136d6eb7b"
+}

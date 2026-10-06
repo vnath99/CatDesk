@@ -2,6 +2,19 @@
 
 An open-source tool that turns ChatGPT Web into a coding agent. No reverse engineering, no API, no Codex. A ChatGPT Plus subscription is enough.
 
+## Current project handoff
+
+For the current accepted milestone state, operational ownership boundaries, and
+the safe procedure for resuming work in a new ChatGPT conversation, start with
+[the canonical project handoff](docs/orchestrator/CATDESK_PROJECT_HANDOFF.md).
+It reconciles the durable [milestone tracker](CATDESK_MILESTONES.md),
+[current plan](.catdesk/current_plan.md), and [work queue](.catdesk/todo.md).
+Those sources take precedence over historical review bundles and this README's
+general product documentation.
+
+For the current trust, ownership, and document-status map, see the
+[canonical architecture and security model](docs/orchestrator/CANONICAL_CURRENT_ARCHITECTURE.md).
+
 <p align="center">
   <img src="docs/images/catdesk_preview.gif" alt="CatDesk in ChatGPT Web"><br>
   <em>CatDesk in ChatGPT Web</em>
@@ -81,6 +94,105 @@ I tried this with GPT-5.2 before, and the results were poor. However, **GPT-5.4 
 
 # Quickstart
 
+## Consumer lifecycle (Windows)
+
+For the provisioned Windows release, the supported routine lifecycle is the
+single repository-root facade:
+
+```powershell
+./catdesk.ps1 install
+./catdesk.ps1 start
+./catdesk.ps1 status
+./catdesk.ps1 recover
+./catdesk.ps1 stop
+```
+
+`install` validates/prepares local prerequisites without compiling, logging in,
+or creating connector resources. `start` and `recover` use only the fingerprinted
+`target/release/catdesk.exe`; they do not build a release. `status` is
+non-mutating and redacted. `stop` acts only on a positively verified local
+CatDesk daemon and never stops or removes the externally owned official Secure
+MCP tunnel runtime.
+
+One-time operator work remains separate: authenticate the current-user Codex
+CLI and complete the official Secure MCP tunnel/ChatGPT connector binding. The
+facade reports an actionable redacted state when that attention is needed; do
+not run internal bootstrap, setup, provisioning, or manual daemon commands for
+routine lifecycle use.
+
+### Optional Windows autostart
+
+Autostart is optional and remains per-user/least-privilege. Enable it only if
+you want CatDesk to check itself after sign-in:
+
+```powershell
+./catdesk.ps1 autostart enable
+./catdesk.ps1 autostart status
+./catdesk.ps1 autostart disable
+```
+
+The registered task runs a persistent project-local supervisor which uses only
+the public `status` and `recover` lifecycle operations. It retains no
+credentials, never builds a release, and never owns the external official Secure
+MCP runtime. It monitors at a low frequency, uses bounded recovery bursts and a
+cooldown, and can be disabled with the same facade. If the local daemon is
+healthy but the official runtime is temporarily unverified, it performs one
+public recovery attempt and then resumes normal polling; it does not cycle the
+daemon or try to recreate the tunnel. Do not create or edit Scheduled Tasks
+manually for normal use.
+
+### Maintainer production acceptance
+
+`scripts/catdesk-production-acceptance.ps1` is an internal, read-only
+maintainer preflight harness, not a routine lifecycle command. The planned live
+acceptance sequence is: enable autostart; prove CatDesk-only self-healing; have
+the operator reboot/login; compare post-reboot preflight evidence; run one
+bounded Codex task; then verify the normal exact-conversation wake. The harness
+does not register tasks, restart CatDesk, launch a browser, or manage the
+external official Secure MCP runtime. Comparison accepts only complete measured
+preflight snapshots: final PASS requires unchanged build, a new canonical
+instance, READY, and PASS for every fixed post-preflight gate.
+
+When CatDesk is connected through MCP with its normal allowlisted shell mode,
+the `run_command` tool may invoke only these exact public lifecycle forms from
+the workspace root: `.\catdesk.ps1 status`, `start`, `recover`, `stop`, and
+`.\catdesk.ps1 autostart status|enable|disable`. CatDesk invokes the canonical
+facade directly; it does not enable unrestricted shell access. Any flags,
+workspace/path overrides, scripts, pipes, chaining, redirection, or extra
+tokens remain blocked. MCP `stop` is acknowledged asynchronously so its
+response can flush before the facade verifies and stops only the canonical
+local daemon.
+
+### Maintainer reviewed-build promotion
+
+Reviewed promotion is intentionally **not** a normal operator PowerShell step.
+The promotion script has a read-only plan mode, but its mutating `-Execute` path
+requires a short-lived protected CatDesk authorization bound to the exact
+independently reviewed record, candidate SHA-256, prior canonical SHA-256, and
+one transaction identity. Direct/manual `-Execute` without that protected
+authorization returns `REVIEWED_PROMOTION_AUTHORIZATION_REQUIRED` before
+canonical mutation. Do not work around that refusal by copying binaries,
+passing hand-made tokens, or editing `.catdesk` promotion/recovery state.
+
+When the reviewed-promotion control plane has positively authorized and
+completed the handoff, it atomically promotes the binary+fingerprint pair,
+preserves the externally owned Secure MCP runtime, and retains rollback material
+only from reviewed authority. Runtime health by itself is not allowed to mint or
+advance LKG rollback authority.
+
+After the protected promotion reports `PROMOTED_CANONICAL_READY`, the ChatGPT
+Web task can use its normal allowlisted lifecycle command once:
+
+```powershell
+.\catdesk.ps1 recover
+```
+
+That command verifies the newly promoted canonical daemon and re-adopts the
+existing official runtime; it does not compile, change connector settings, or
+create a replacement tunnel. If the runtime is still coming back, leave the
+autostart supervisor enabled and let its bounded status polling converge rather
+than debugging tunnel processes manually.
+
 > [!CAUTION]
 > This tool is very powerful and can potentially wipe your whole disk or produce unexpected results.
 > Run it inside a VM or container (DevContainer is a good option).
@@ -100,7 +212,7 @@ I tried this with GPT-5.2 before, and the results were poor. However, **GPT-5.4 
    catdesk
    ```
 
-   By default, CatDesk listens on port `3200`, as defined in [`main()`](/home/xeift/Desktop/CatDesk/src/main.rs#L325). You can override it with `PORT`. The workspace root defaults to the current working directory and can be overridden with `WORKSPACE_ROOT`, also in [`main()`](/home/xeift/Desktop/CatDesk/src/main.rs#L325).
+   By default, CatDesk listens on port `3200`, as defined in [`main()`](src/main.rs#L325). You can override it with `PORT`. The workspace root defaults to the current working directory and can be overridden with `WORKSPACE_ROOT`, also in [`main()`](src/main.rs#L325).
 
    On macOS Terminal.app, CatDesk manages a dedicated `CatDesk` Terminal profile automatically. If the current Terminal tab is not already using that profile, CatDesk applies it, closes any temporary helper window, and asks you to run the same command again in that tab. It only starts immediately when the current tab is already using `CatDesk`. Set `CATDESK_SKIP_MACOS_TERMINAL_PROFILE=1` if you want to keep the current Terminal session untouched.
 
@@ -116,7 +228,7 @@ I tried this with GPT-5.2 before, and the results were poor. However, **GPT-5.4 
    - MCP Server URL: the full URL shown by CatDesk
    - Authentication: `None`
 
-   These values come directly from the in-app guide in [`guide_lines`](/home/xeift/Desktop/CatDesk/src/main.rs#L2150).
+   These values come directly from the in-app guide in [`guide_lines`](src/main.rs#L2150).
 
 7. Click `I understand and want to continue`.
 

@@ -1,10 +1,41 @@
-/target
-/.tmp
-/review-bundles/T-0012-closure-*
-/review-bundles/T-0012-hardening-*
-/npm/bin
-log.txt
-log_old.txt
+# Rust / generated build outputs
+/target/
+/target-verify/
+/target-debug/
+/target-debug-*/
+/wake/target/
+/wake/target-*/
+
+# CatDesk local runtime, provider, browser and control-plane state
+/.catdesk/
+/.codex/
+/latest_logs/
+/.pytest_cache/
+
+# Python generated artifacts
 __pycache__/
 *.pyc
+
+# Download/cache material
 downloaded_files/
+/npm/bin
+
+# Local diagnostics and transient handoff outputs
+/catdesk-recovery-diagnostic.json
+/catdesk-startup-diagnostic.json
+/catdesk-startup.err.log
+/catdesk-startup.out.log
+/r30-*.json
+/r30-*.txt
+/t0374-*/
+
+# Historical editor/repair backups are local evidence, not repository source
+*.bak-before-*
+
+# Legacy temporary review bundle roots
+/review-bundles/T-0012-closure-*
+/review-bundles/T-0012-hardening-*
+
+# Legacy logs
+log.txt
+log_old.txt

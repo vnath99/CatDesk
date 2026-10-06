@@ -40,8 +40,8 @@ Evidence:
 - Official: https://docs.openclaw.ai/gateway/external-apps
 - Official: https://docs.openclaw.ai/gateway/protocol
 - Local package docs:
-  - `C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\docs\gateway\external-apps.md`
-  - `C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\docs\gateway\protocol.md`
+  - `<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\docs\gateway\external-apps.md`
+  - `<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\docs\gateway\protocol.md`
 
 Relevant documented Gateway methods:
 
@@ -101,9 +101,9 @@ Evidence:
 
 - Official: https://docs.openclaw.ai/plugins/sdk-overview
 - Local declarations:
-  - `C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\dist\plugin-sdk\agent-runtime.d.ts`
-  - `C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\dist\plugin-sdk\gateway-method-runtime.d.ts`
-  - `C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\dist\plugin-sdk\session-store-runtime.d.ts`
+  - `<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\dist\plugin-sdk\agent-runtime.d.ts`
+  - `<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\dist\plugin-sdk\gateway-method-runtime.d.ts`
+  - `<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\dist\plugin-sdk\session-store-runtime.d.ts`
 
 The SDK exports generic planner helpers including `buildToolPlan` and `toToolProtocolDescriptors`, but I did not find a stable external SDK call that resolves a configured agent plus MCP runtime into final worker-visible tool definitions without Gateway participation.
 
@@ -111,11 +111,11 @@ The SDK exports generic planner helpers including `buildToolPlan` and `toToolPro
 
 These exist but should not be treated as stable CatDesk dependencies:
 
-- `C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\dist\agent-runtime-BatklvVX.d.ts`
-- `C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\dist\agent-runtime-JUjSgUZE.js`
-- `C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\dist\agent-bundle-mcp-types-dLCU1Xhs.d.ts`
-- `C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\dist\agent-bundle-mcp-materialize-D9l-gQ5S.js`
-- `C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\dist\acp-cli-BXc5GttU.js`
+- `<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\dist\agent-runtime-BatklvVX.d.ts`
+- `<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\dist\agent-runtime-JUjSgUZE.js`
+- `<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\dist\agent-bundle-mcp-types-dLCU1Xhs.d.ts`
+- `<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\dist\agent-bundle-mcp-materialize-D9l-gQ5S.js`
+- `<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\dist\acp-cli-BXc5GttU.js`
 
 Private findings:
 
@@ -130,12 +130,12 @@ These are useful for understanding behavior, but their hashed filenames and plac
 
 Inspected paths:
 
-- `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk\.tmp\openclaw-closure-t0012\openclaw.json`
-- `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk\.tmp\openclaw-closure-t0012\minimal-readonly-policy.patch.json`
-- `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk\.tmp\openclaw-closure-t0012\state\state\openclaw.sqlite`
-- `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk\.tmp\openclaw-headless-t0012\state\state\openclaw.sqlite`
-- `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk\.tmp\openclaw-t0012\state\state\openclaw.sqlite`
-- `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk\.tmp\T-0012-closure-review-20260725-085428-payload\review-bundles\T-0012-closure-openclaw-mcp-probe.json`
+- `<USER_PROFILE>\OneDrive\Desktop\Projects\CatDesk\.tmp\openclaw-closure-t0012\openclaw.json`
+- `<USER_PROFILE>\OneDrive\Desktop\Projects\CatDesk\.tmp\openclaw-closure-t0012\minimal-readonly-policy.patch.json`
+- `<USER_PROFILE>\OneDrive\Desktop\Projects\CatDesk\.tmp\openclaw-closure-t0012\state\state\openclaw.sqlite`
+- `<USER_PROFILE>\OneDrive\Desktop\Projects\CatDesk\.tmp\openclaw-headless-t0012\state\state\openclaw.sqlite`
+- `<USER_PROFILE>\OneDrive\Desktop\Projects\CatDesk\.tmp\openclaw-t0012\state\state\openclaw.sqlite`
+- `<USER_PROFILE>\OneDrive\Desktop\Projects\CatDesk\.tmp\T-0012-closure-review-20260725-085428-payload\review-bundles\T-0012-closure-openclaw-mcp-probe.json`
 
 The T-0012 policy configured:
 
@@ -193,19 +193,19 @@ Package and source inspection commands:
 
 ```powershell
 where.exe openclaw
-Get-Content -Raw "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\package.json"
-Get-Content "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\openclaw.mjs" -TotalCount 120
-Get-ChildItem "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\docs" -Recurse -File
-Get-Content "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\dist\plugin-sdk\agent-runtime.d.ts" -TotalCount 260
-Get-Content "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\dist\plugin-sdk\gateway-method-runtime.d.ts" -TotalCount 260
-Get-Content "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\dist\plugin-sdk\session-store-runtime.d.ts" -TotalCount 260
-Get-Content "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\dist\agent-runtime-BatklvVX.d.ts" -TotalCount 430
-Get-Content "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\dist\agent-bundle-mcp-types-dLCU1Xhs.d.ts" -TotalCount 160
-Get-Content "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\dist\agent-bundle-mcp-materialize-D9l-gQ5S.js" -TotalCount 230
-rg -n "buildToolPlan|toToolProtocolDescriptors|ToolPlan|ToolDescriptor|tool.*descriptor|mcp.*catalog|tool.*catalog" "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\dist" -g "*.d.ts" -g "*.js"
-rg -n "agent.wait|agent\.|chat\.send|chat\.abort|sessions\.|tasks\.|models\.|tools\.|events|tool-events|effective|visible|tool" "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\docs\gateway\protocol.md" "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\docs\gateway\external-apps.md" "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\docs\gateway\cli-backends.md" "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\docs\cli\agent.md" "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\docs\cli\mcp.md"
-rg -n "audit|cursor|sequence|metadata_only|tool.action|agent.run|sessionKey|run_id|tool_name" "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\docs\cli\audit.md"
-rg -n "resume|session-id|session-key|restart|cancel|pause|status|SIGTERM|SIGINT|chat.abort|in_flight" "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\docs\cli\agent.md" "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\docs\cli\tasks.md" "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\docs\gateway\protocol.md" "C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\docs\gateway\external-apps.md"
+Get-Content -Raw "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\package.json"
+Get-Content "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\openclaw.mjs" -TotalCount 120
+Get-ChildItem "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\docs" -Recurse -File
+Get-Content "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\dist\plugin-sdk\agent-runtime.d.ts" -TotalCount 260
+Get-Content "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\dist\plugin-sdk\gateway-method-runtime.d.ts" -TotalCount 260
+Get-Content "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\dist\plugin-sdk\session-store-runtime.d.ts" -TotalCount 260
+Get-Content "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\dist\agent-runtime-BatklvVX.d.ts" -TotalCount 430
+Get-Content "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\dist\agent-bundle-mcp-types-dLCU1Xhs.d.ts" -TotalCount 160
+Get-Content "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\dist\agent-bundle-mcp-materialize-D9l-gQ5S.js" -TotalCount 230
+rg -n "buildToolPlan|toToolProtocolDescriptors|ToolPlan|ToolDescriptor|tool.*descriptor|mcp.*catalog|tool.*catalog" "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\dist" -g "*.d.ts" -g "*.js"
+rg -n "agent.wait|agent\.|chat\.send|chat\.abort|sessions\.|tasks\.|models\.|tools\.|events|tool-events|effective|visible|tool" "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\docs\gateway\protocol.md" "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\docs\gateway\external-apps.md" "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\docs\gateway\cli-backends.md" "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\docs\cli\agent.md" "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\docs\cli\mcp.md"
+rg -n "audit|cursor|sequence|metadata_only|tool.action|agent.run|sessionKey|run_id|tool_name" "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\docs\cli\audit.md"
+rg -n "resume|session-id|session-key|restart|cancel|pause|status|SIGTERM|SIGINT|chat.abort|in_flight" "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\docs\cli\agent.md" "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\docs\cli\tasks.md" "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\docs\gateway\protocol.md" "<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\docs\gateway\external-apps.md"
 ```
 
 SQLite inspection command:
@@ -372,6 +372,6 @@ Keep **D. implement a minimal CatDesk-controlled worker loop** as the fallback i
 - Official OpenClaw MCP CLI docs: https://docs.openclaw.ai/cli/mcp
 - Official OpenClaw agent CLI docs: https://docs.openclaw.ai/cli/agent
 - Official OpenClaw audit history: https://docs.openclaw.ai/gateway/audit
-- Installed package metadata: `C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\package.json`
-- Installed package docs: `C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\docs`
-- Installed package declarations/runtime chunks under `C:\Users\Volap\AppData\Roaming\npm\node_modules\openclaw\dist`
+- Installed package metadata: `<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\package.json`
+- Installed package docs: `<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\docs`
+- Installed package declarations/runtime chunks under `<USER_PROFILE>\AppData\Roaming\npm\node_modules\openclaw\dist`

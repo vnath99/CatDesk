@@ -69,6 +69,66 @@ All provider-specific behavior sits behind one adapter boundary. The coordinator
 
 Provider adapters receive only the bounded provider request selected by CatDesk. They never receive direct filesystem, shell, patch, Git, job, or verification authority.
 
+## T-0030 Phase 1: Codex-first local continuation
+
+The autonomous route is now deliberately narrower than the general provider
+registry: `codex-cli` is preferred and `ollama` with the contract-selected
+Qwen model is the sole automatic continuation candidate. An explicit Codex
+plan/usage/credit exhaustion diagnostic persists `CODEX_CREDITS_EXHAUSTED`
+plus a redacted handoff and the provider-advertised allowance-reset timestamp,
+then activates Qwen only after a loopback health/model check. A transient 429
+persists `CODEX_TRANSIENT_RATE_LIMITED` and resumes the same Codex session
+after normal backoff; it does not fall back.
+
+### Core exhaustion/reset routing invariant
+
+This is a product-level orchestration rule, not a per-ticket preference:
+
+1. Confirmed Codex allowance exhaustion includes semantically equivalent provider
+   diagnostics such as `You've hit your usage limit`, `usage limit reached`,
+   `credits exhausted`, `plan limit reached`, or another normalized provider
+   exhaustion event. These are not generic terminal errors.
+2. If the provider supplies a reset/retry timestamp, CatDesk persists that exact
+   boundary as `codex_eligible_after_unix` in the provider handoff. If no exact
+   reset is supplied, CatDesk may use only its documented conservative fallback
+   window; it must not fabricate an earlier Codex eligibility time.
+3. When local loopback Qwen is healthy and the contract permits the local
+   fallback, the **same logical autonomous ticket/session** continues on Qwen.
+   CatDesk does not allocate a replacement ticket, replay the exhausted Codex
+   turn, or require ChatGPT/operator intervention merely because Codex quota is
+   exhausted.
+4. While `now < codex_eligible_after_unix`, `QWEN_FALLBACK_ACTIVE` is sticky:
+   CatDesk must not probe, retry, or switch back to Codex. Qwen remains the
+   execution provider through safe turn/task boundaries during that interval.
+5. At or after `codex_eligible_after_unix`, CatDesk may switch back to Codex only
+   at a safe provider turn/task boundary. It must restore the preserved Codex
+   continuity/thread from the durable handoff rather than silently starting an
+   unrelated thread. If Codex still reports exhaustion, CatDesk persists the new
+   reset boundary and immediately returns to/continues Qwen.
+6. If local Qwen is unavailable or unhealthy after confirmed Codex exhaustion,
+   CatDesk fails closed to `WAITING_FOR_CHATGPT`; there is no automatic cloud,
+   paid API, browser, or unrelated-provider fallback.
+7. Transient Codex rate limiting remains distinct from quota exhaustion: normal
+   backoff stays on Codex and does not activate Qwen.
+
+```text
+CODEX_PREFERRED -- transient 429 --> CODEX_TRANSIENT_RATE_LIMITED -- retry --> CODEX_PREFERRED
+CODEX_PREFERRED -- confirmed allowance exhaustion --> CODEX_CREDITS_EXHAUSTED
+CODEX_CREDITS_EXHAUSTED -- local Qwen healthy --> QWEN_FALLBACK_ACTIVE
+CODEX_CREDITS_EXHAUSTED -- local Qwen unavailable --> WAITING_FOR_CHATGPT
+QWEN_FALLBACK_ACTIVE -- before advertised reset --> QWEN_FALLBACK_ACTIVE
+QWEN_FALLBACK_ACTIVE -- reset elapsed + safe boundary --> CODEX_PREFERRED
+CODEX_PREFERRED -- still exhausted after reset --> CODEX_CREDITS_EXHAUSTED --> QWEN_FALLBACK_ACTIVE
+```
+
+The durable handoff is intentionally limited to task/contract provenance,
+bounded progress, budgets, the opaque preserved Codex thread ID, reset/eligibility
+metadata, and verifier/diff references. It excludes credentials, cookies,
+browser state, environment values, and raw transcripts. No OpenAI API, cloud,
+paid, browser, or other fallback candidate is present in this route. CatDesk
+remains the verification and final-review authority after either worker
+completes.
+
 ## Required V1 Baseline
 
 The first live provider is local Ollama/Qwen because it is a documented loopback transport suitable for proving CatDesk's own loop, journal, patch, idempotency, and verification behavior. Qwen is a baseline executor and test worker, not the permanent reasoning ceiling.
