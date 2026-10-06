@@ -1,0 +1,11 @@
+CATDESK_REVIEWED_MAIN_IMAGE_ENVELOPE_V1
+product=CatDesk
+purpose=reviewed-main-image-rotation
+root_id=catdesk-main-image-root
+root_version=1
+epoch=2
+policy_sha256=c477d5bc486002e2034324b3a40b07d8e87c149cf5f2dab9b12aafee92816705
+payload_sha256=552cb917998d283e7d901593ffed5a9ceaa108223654aa69349fa7e567c21482
+payload_length=25172480
+review_id=review-t0217-main-image-rotation-20260822
+build_id=build-t0217-rotation-552cb917

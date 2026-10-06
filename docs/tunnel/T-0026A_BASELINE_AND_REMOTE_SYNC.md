@@ -14,7 +14,7 @@ T-0026 branch and worktree were created from the synchronized T-0025 checkpoint.
 - Parent branch: `infra/stable-mcp-transport`
 - Parent checkpoint: `fabcfffedb8bd66488adb071a1b055c1169f3eef`
 - T-0026 branch: `infra/openai-secure-mcp-tunnel`
-- T-0026 worktree: `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-secure-mcp`
+- T-0026 worktree: `<USER_PROFILE>\OneDrive\Desktop\Projects\CatDesk-secure-mcp`
 
 ## Sync Evidence
 
@@ -27,11 +27,11 @@ T-0026 branch and worktree were created from the synchronized T-0025 checkpoint.
 
 ## Worktree Inventory
 
-- `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk`: protected Qwen
+- `<USER_PROFILE>\OneDrive\Desktop\Projects\CatDesk`: protected Qwen
   stabilization worktree.
-- `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-stable-mcp`: protected
+- `<USER_PROFILE>\OneDrive\Desktop\Projects\CatDesk-stable-mcp`: protected
   T-0025 transport worktree.
-- `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-secure-mcp`: active T-0026
+- `<USER_PROFILE>\OneDrive\Desktop\Projects\CatDesk-secure-mcp`: active T-0026
   worktree.
 
 ## Architecture Inventory

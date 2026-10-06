@@ -1,0 +1,3 @@
+# Dedicated local wake-bridge environment only. Never install into CatDesk's
+# Rust/runtime environment or use it as an alternate provider.
+seleniumbase==4.51.5

@@ -39,12 +39,12 @@ Get-Command openclaw -ErrorAction SilentlyContinue
 Get-Command ollama -ErrorAction SilentlyContinue
 Get-Command node -ErrorAction SilentlyContinue
 Get-Command npm -ErrorAction SilentlyContinue
-Get-ChildItem -Path C:\Users\Volap -Recurse -Filter openclaw* -ErrorAction SilentlyContinue
-& 'C:\Users\Volap\AppData\Local\Programs\Ollama\ollama.exe' --version
-& 'C:\Users\Volap\AppData\Local\Programs\Ollama\ollama.exe' list
-& 'C:\Users\Volap\AppData\Local\Programs\Ollama\ollama.exe' show qwen3.5:9b
-& 'C:\Users\Volap\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe' --version
-& 'C:\Users\Volap\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin\fallback\pnpm.cmd' --version
+Get-ChildItem -Path <USER_PROFILE>
+& '<USER_PROFILE>\AppData\Local\Programs\Ollama\ollama.exe' --version
+& '<USER_PROFILE>\AppData\Local\Programs\Ollama\ollama.exe' list
+& '<USER_PROFILE>\AppData\Local\Programs\Ollama\ollama.exe' show qwen3.5:9b
+& '<USER_PROFILE>\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe' --version
+& '<USER_PROFILE>\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin\fallback\pnpm.cmd' --version
 ```
 
 Ollama probes:
@@ -122,9 +122,9 @@ Observed versions and paths:
 
 - Node.js: `v24.18.0` at `C:\Program Files\nodejs\node.exe`.
 - npm: `11.16.0` at `C:\Program Files\nodejs\npm` and `C:\Program Files\nodejs\npm.cmd`.
-- OpenClaw: `OpenClaw 2026.7.1-2 (0790d9f)` at `C:\Users\Volap\AppData\Roaming\npm\openclaw` and `C:\Users\Volap\AppData\Roaming\npm\openclaw.cmd`.
+- OpenClaw: `OpenClaw 2026.7.1-2 (0790d9f)` at `<USER_PROFILE>\AppData\Roaming\npm\openclaw` and `<USER_PROFILE>\AppData\Roaming\npm\openclaw.cmd`.
 - Default OpenClaw config path: `~\.openclaw\openclaw.json`.
-- OpenClaw MCP registry: empty `servers` array at `C:\Users\Volap\.openclaw\openclaw.json`.
+- OpenClaw MCP registry: empty `servers` array at `<USER_PROFILE>\.openclaw\openclaw.json`.
 - Disposable env path check: `OPENCLAW_CONFIG_PATH` redirected config lookup to `~\OneDrive\Desktop\Projects\CatDesk\.tmp\openclaw-t0012\openclaw.json`; no config file was created, but OpenClaw initialized SQLite state under `.tmp\openclaw-t0012\state\state\openclaw.sqlite`.
 
 `openclaw doctor` reported Gateway mode/auth/command owner/state are unconfigured, Gateway service is not installed, plugins loaded without errors, and status failed with `GatewayCredentialsRequiredError` because gateway credentials are not configured.

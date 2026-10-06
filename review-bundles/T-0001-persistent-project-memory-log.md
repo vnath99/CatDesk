@@ -24,8 +24,8 @@ Add tools to initialize, read, and update these files. Missing files are initial
 ```powershell
 Get-Command cargo
 Get-Command rustc
-& 'C:\Users\Volap\.cargo\bin\cargo.exe' --version
-Get-Content 'C:\Users\Volap\Downloads\CatDeskPlus_README.md'
+& '<USER_PROFILE>\.cargo\bin\cargo.exe' --version
+Get-Content '<USER_PROFILE>\Downloads\CatDeskPlus_README.md'
 git status --short --branch
 rg -n "pub async fn handle_request|fn handle_initialize|async fn handle_tools_list|async fn handle_tools_call|fn handle_resources_list|fn handle_resources_read|fn handle_catdesk_instruction|fn catdesk_instruction_text|fn handle_read_file|fn handle_write_file|fn handle_edit_file|fn handle_search_text|fn handle_delete_path|async fn handle_run_command" src\mcp.rs
 rg -n "pub fn router|async fn post_mcp|async fn get_mcp|async fn delete_mcp|async fn health|attach_history_usage|attach_catdesk_instruction_actions" src\server.rs

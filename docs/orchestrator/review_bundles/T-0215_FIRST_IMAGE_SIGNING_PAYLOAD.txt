@@ -1,0 +1,11 @@
+CATDESK_REVIEWED_MAIN_IMAGE_ENVELOPE_V1
+product=CatDesk
+purpose=reviewed-main-image-bootstrap
+root_id=catdesk-main-image-root
+root_version=1
+epoch=1
+policy_sha256=a89cccc440eabe56997dab3fa064f62c1d5b11a9704c50286e506d9dfdd51efb
+payload_sha256=2421a90aeb9ad7775ec9927f8dfbe294faa3cbfe11ec7a071a1ed554eee28459
+payload_length=25134592
+review_id=review-t0215-trust-root-activation-20260822
+build_id=build-t0215-root-3bc6a210-2421a90a

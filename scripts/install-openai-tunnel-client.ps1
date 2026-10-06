@@ -27,7 +27,7 @@ function Redact-UserPath {
 }
 
 function Get-OsArchToken {
-    $arch = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+    $arch = if (($env:PROCESSOR_ARCHITEW6432 + $env:PROCESSOR_ARCHITECTURE) -match "ARM64") { "arm64" } else { "x64" }
     switch ($arch) {
         "x64" { "amd64"; break }
         "arm64" { "arm64"; break }
@@ -53,8 +53,8 @@ function Assert-OfficialUrl {
 function Select-ReleaseAssets {
     param($Release)
     $arch = Get-OsArchToken
-    $assetNamePattern = "windows-$arch.zip"
-    $archive = $Release.assets | Where-Object { $_.name.ToLowerInvariant().EndsWith($assetNamePattern) } | Select-Object -First 1
+    $assetNamePattern = "tunnel-client-$($Release.tag_name)-windows-$arch.zip"
+    $archive = $Release.assets | Where-Object { $_.name -eq $assetNamePattern } | Select-Object -First 1
     $checksum = $Release.assets | Where-Object { $_.name -eq "SHA256SUMS.txt" } | Select-Object -First 1
     if (-not $archive) { throw "No Windows $arch tunnel-client archive found in latest stable release" }
     if (-not $checksum) { throw "No SHA256SUMS.txt asset found; refusing unattended install" }

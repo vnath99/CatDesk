@@ -19,7 +19,7 @@ Goal: Add a Markdown TODO list workflow backed by `.catdesk/todo.md`.
 ```powershell
 Get-Content src\project_memory.rs
 rg -n "project_memory|plan_|session_resume|repo_map" src\mcp.rs
-Get-Content C:\Users\Volap\Downloads\CatDeskPlus_README.md
+Get-Content <USER_PROFILE>\Downloads\CatDeskPlus_README.md
 Get-Content src\mcp.rs | Select-Object -First 35
 Get-Content src\mcp.rs | Select-Object -Skip 390 -First 150
 Get-Content src\mcp.rs | Select-Object -Skip 2860 -First 240

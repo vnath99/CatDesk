@@ -4,7 +4,7 @@ Ticket: T-0025A
 Status: architecture and implementation plan only  
 Base commit: d9843f5d43a9fa86a99cb0c2c8a33da27c74d73d  
 Branch: infra/stable-mcp-transport  
-Worktree: C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-stable-mcp
+Worktree: <USER_PROFILE>\OneDrive\Desktop\Projects\CatDesk-stable-mcp
 
 ## Goal
 

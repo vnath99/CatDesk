@@ -1,0 +1,7 @@
+# T-0319 R3C durable independent verdict
+
+REJECT_WITH_CONCRETE_DEFECTS
+
+The T-0359 restart-worker handoff is closed: `scripts/restart_catdesk_daemon.ps1::Resolve-TrustedRestartWorkerScriptPath` requires an exact normalized `FileInfo`, rejects reparse points, and supplies that resolved path to the trusted PowerShell `-File` handoff. The T-0360 provider query narrows `Name='catdesk.exe' AND CommandLine LIKE '%--catdesk-daemon%'` before `Select-Object -First 65`; `Get-CatDeskDaemonProcessCandidates` still rechecks the exact daemon token and binds path/SHA-256/creation time, while the parent retains pinned-instance, listener, foreign-row, multiple-candidate, and over-64 ambiguity refusal.
+
+Nevertheless, the sanctioned `cargo test --test recovery_powershell -- --nocapture` run on 2026-09-08 exited 101: two tests passed and `windows::lifecycle_and_reviewed_release_recovery_fixtures_pass` failed because `scripts/test-stale-canonical-daemon-recovery.ps1:91` could not find the exact launched stale canonical fixture through production candidate enumeration. This repeats the prior independent-review observation after T-0360 and is a current reproducible release blocker. `cargo fmt --all -- --check` passed before that failure; `git diff --check` passed with only pre-existing LF-to-CRLF warnings. No live recovery, runtime, tunnel, wake, Scheduler, service, Git, or other repository file was changed by this review.

@@ -126,7 +126,7 @@ Disposable delegated proof:
 T-0025A rollback:
 
 ```powershell
-git worktree remove C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-stable-mcp
+git worktree remove <USER_PROFILE>\OneDrive\Desktop\Projects\CatDesk-stable-mcp
 git branch -D infra/stable-mcp-transport
 ```
 
@@ -144,7 +144,7 @@ Emergency rollback:
 2. Launch the reviewed stabilization binary from:
 
 ```text
-C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk\target\release\catdesk.exe
+<USER_PROFILE>\OneDrive\Desktop\Projects\CatDesk\target\release\catdesk.exe
 ```
 
 3. Do not delete the stabilization branch.
