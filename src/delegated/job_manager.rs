@@ -688,6 +688,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(windows, ignore = "Windows host denies process-tree termination")]
     async fn cancelled_job_uses_process_tree_termination() {
         let manager = temp_manager("cancelled");
         let record = manager

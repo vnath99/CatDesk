@@ -35,6 +35,8 @@ const MAX_PROMPT_BYTES: usize = 24 * 1024;
 const DIAGNOSTIC_SCHEMA_VERSION: u32 = 1;
 const MAX_DIAGNOSTIC_EVENTS: usize = 64;
 const MAX_DIAGNOSTIC_EVENT_TEXT_BYTES: usize = 2 * 1024;
+const CATDESK_REQUIRED_CODEX_MODEL: &str = "gpt-5.6-terra";
+const CATDESK_REQUIRED_CODEX_REASONING_EFFORT: &str = "high";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -71,6 +73,10 @@ impl CodexCliSandboxV1 {
 pub struct CodexCliConfigV1 {
     pub executable: PathBuf,
     pub working_directory: PathBuf,
+    /// Optional operator-local Codex config root. Child Codex processes see
+    /// this only as `CODEX_HOME`; CatDesk never reads or serializes its
+    /// contents and MCP cannot select it.
+    pub operator_codex_home: Option<PathBuf>,
     pub model_id: Option<String>,
     pub sandbox: CodexCliSandboxV1,
     pub approval_policy: CodexCliApprovalPolicyV1,
@@ -86,6 +92,7 @@ impl CodexCliConfigV1 {
         let config = Self {
             executable,
             working_directory,
+            operator_codex_home: None,
             model_id: None,
             sandbox: CodexCliSandboxV1::WorkspaceWrite,
             approval_policy: CodexCliApprovalPolicyV1::Never,
@@ -118,6 +125,13 @@ impl CodexCliConfigV1 {
             return Err(RuntimeError::Validation(
                 "Codex CLI working directory must be an existing directory".into(),
             ));
+        }
+        if let Some(codex_home) = &self.operator_codex_home {
+            if !codex_home.is_dir() {
+                return Err(RuntimeError::Validation(
+                    "operator-local Codex config root must be an existing directory".into(),
+                ));
+            }
         }
         if self.max_event_bytes == 0 || self.max_diagnostic_bytes == 0 {
             return Err(RuntimeError::Validation(
@@ -250,6 +264,218 @@ pub enum CodexCliTurnStateV1 {
     RateLimited,
 }
 
+/// Bounded availability classification for the autonomous provider route.
+/// Explicit plan/credit language wins over a coincident HTTP 429; an
+/// ambiguous terminal error never authorizes fallback.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CodexAvailabilityFailureV1 {
+    TransientRateLimited,
+    CreditsExhausted,
+}
+
+/// Host-local time captured at the same boundary as a provider-attested
+/// exhaustion diagnostic.  The parser accepts this closed value rather than a
+/// caller-selected timezone or date.  Unix time remains the durable form.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct CodexTrustedLocalClockV1 {
+    pub observed_at_unix: u64,
+    pub year: u16,
+    pub month: u16,
+    pub day: u16,
+    pub hour: u16,
+    pub minute: u16,
+    pub second: u16,
+}
+
+/// Parses exactly one provider-attested `try again at h:mm AM/PM` phrase, with
+/// an optional explicit provider-local `Mon 2nd, 2026` date.
+/// This is deliberately available only after explicit credit-exhaustion
+/// classification; absence, malformed text, or multiple phrases leaves the
+/// route in fail-closed Qwen stickiness rather than inventing eligibility.
+pub(crate) fn parse_codex_credits_reset_after(
+    diagnostic: &str,
+    clock: CodexTrustedLocalClockV1,
+) -> Option<u64> {
+    if classify_codex_availability_failure(diagnostic)
+        != Some(CodexAvailabilityFailureV1::CreditsExhausted)
+        || !valid_trusted_local_clock(clock)
+    {
+        return None;
+    }
+    static RESET_PHRASE: OnceLock<regex::Regex> = OnceLock::new();
+    let matcher = RESET_PHRASE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)(?:^|[^[:alpha:]])try again at (?:(?<month>jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec) (?<day>[1-9]|[12][0-9]|3[01])(?<ordinal>st|nd|rd|th), (?<year>[0-9]{4}) )?(?<hour>[1-9]|1[0-2]):(?<minute>[0-5][0-9]) (?<meridiem>AM|PM)(?:$|[^[:alnum:]])",
+        )
+        .expect("fixed Codex reset phrase regex")
+    });
+    let mut matches = matcher.captures_iter(diagnostic);
+    let captures = matches.next()?;
+    if matches.next().is_some() {
+        return None;
+    }
+    let hour: u16 = captures.name("hour")?.as_str().parse().ok()?;
+    let minute: u16 = captures.name("minute")?.as_str().parse().ok()?;
+    let meridiem = captures.name("meridiem")?.as_str();
+    let hour_24 = match (hour, meridiem.eq_ignore_ascii_case("AM")) {
+        (12, true) => 0,
+        (12, false) => 12,
+        (hour, true) => hour,
+        (hour, false) => hour.checked_add(12)?,
+    };
+    let reset_seconds = u64::from(hour_24) * 3_600 + u64::from(minute) * 60;
+    if let Some(month) = captures.name("month") {
+        let year: u16 = captures.name("year")?.as_str().parse().ok()?;
+        let day: u16 = captures.name("day")?.as_str().parse().ok()?;
+        let month = month_number(month.as_str())?;
+        valid_calendar_date(year, month, day).then_some(())?;
+        valid_ordinal(day, captures.name("ordinal")?.as_str()).then_some(())?;
+        let observed_day = days_since_unix_epoch(clock.year, clock.month, clock.day)?;
+        let reset_day = days_since_unix_epoch(year, month, day)?;
+        let day_delta = reset_day.checked_sub(observed_day)?;
+        let observed_seconds =
+            u64::from(clock.hour) * 3_600 + u64::from(clock.minute) * 60 + u64::from(clock.second);
+        let delta_seconds = day_delta
+            .checked_mul(86_400)?
+            .checked_add(i64::try_from(reset_seconds).ok()?)?
+            .checked_sub(i64::try_from(observed_seconds).ok()?)?;
+        return (delta_seconds > 0).then(|| {
+            clock
+                .observed_at_unix
+                .checked_add(u64::try_from(delta_seconds).ok()?)
+        })?;
+    }
+    let observed_seconds =
+        u64::from(clock.hour) * 3_600 + u64::from(clock.minute) * 60 + u64::from(clock.second);
+    let delta = if reset_seconds > observed_seconds {
+        reset_seconds - observed_seconds
+    } else {
+        86_400 - observed_seconds + reset_seconds
+    };
+    clock.observed_at_unix.checked_add(delta)
+}
+
+fn month_number(value: &str) -> Option<u16> {
+    match value.to_ascii_lowercase().as_str() {
+        "jan" => Some(1),
+        "feb" => Some(2),
+        "mar" => Some(3),
+        "apr" => Some(4),
+        "may" => Some(5),
+        "jun" => Some(6),
+        "jul" => Some(7),
+        "aug" => Some(8),
+        "sep" => Some(9),
+        "oct" => Some(10),
+        "nov" => Some(11),
+        "dec" => Some(12),
+        _ => None,
+    }
+}
+
+fn valid_calendar_date(year: u16, month: u16, day: u16) -> bool {
+    year >= 1970 && (1..=12).contains(&month) && (1..=days_in_month(year, month)).contains(&day)
+}
+
+fn valid_ordinal(day: u16, ordinal: &str) -> bool {
+    let expected = match day % 100 {
+        11..=13 => "th",
+        _ => match day % 10 {
+            1 => "st",
+            2 => "nd",
+            3 => "rd",
+            _ => "th",
+        },
+    };
+    ordinal.eq_ignore_ascii_case(expected)
+}
+
+fn days_since_unix_epoch(year: u16, month: u16, day: u16) -> Option<i64> {
+    valid_calendar_date(year, month, day).then_some(())?;
+    let prior_year_days = (1970..year).try_fold(0_i64, |days, current_year| {
+        days.checked_add(if days_in_month(current_year, 2) == 29 {
+            366
+        } else {
+            365
+        })
+    })?;
+    let prior_month_days = (1..month).try_fold(0_i64, |days, current_month| {
+        days.checked_add(i64::from(days_in_month(year, current_month)))
+    })?;
+    prior_year_days
+        .checked_add(prior_month_days)?
+        .checked_add(i64::from(day.checked_sub(1)?))
+}
+
+fn valid_trusted_local_clock(clock: CodexTrustedLocalClockV1) -> bool {
+    valid_calendar_date(clock.year, clock.month, clock.day)
+        && clock.hour < 24
+        && clock.minute < 60
+        && clock.second < 60
+}
+
+const fn days_in_month(year: u16, month: u16) -> u16 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if year.is_multiple_of(400) || (year.is_multiple_of(4) && !year.is_multiple_of(100)) => {
+            29
+        }
+        2 => 28,
+        _ => 0,
+    }
+}
+
+/// The production parser obtains local civil time from the host OS.  The
+/// session's `now_unix` is the durable instant; the local date/time only
+/// resolves the provider's 12-hour clock phrase and deterministic rollover.
+#[cfg(windows)]
+pub(crate) fn trusted_host_local_clock(now_unix: u64) -> Option<CodexTrustedLocalClockV1> {
+    #[repr(C)]
+    struct SystemTime {
+        year: u16,
+        month: u16,
+        day_of_week: u16,
+        day: u16,
+        hour: u16,
+        minute: u16,
+        second: u16,
+        milliseconds: u16,
+    }
+    #[link(name = "Kernel32")]
+    unsafe extern "system" {
+        fn GetLocalTime(system_time: *mut SystemTime);
+    }
+    let mut system_time = SystemTime {
+        year: 0,
+        month: 0,
+        day_of_week: 0,
+        day: 0,
+        hour: 0,
+        minute: 0,
+        second: 0,
+        milliseconds: 0,
+    };
+    // `GetLocalTime` fills the caller-owned fixed-size SYSTEMTIME and has no
+    // failure return; validate every field before treating it as trusted.
+    unsafe { GetLocalTime(&mut system_time) };
+    let clock = CodexTrustedLocalClockV1 {
+        observed_at_unix: now_unix,
+        year: system_time.year,
+        month: system_time.month,
+        day: system_time.day,
+        hour: system_time.hour,
+        minute: system_time.minute,
+        second: system_time.second,
+    };
+    valid_trusted_local_clock(clock).then_some(clock)
+}
+
+#[cfg(not(windows))]
+pub(crate) fn trusted_host_local_clock(_now_unix: u64) -> Option<CodexTrustedLocalClockV1> {
+    None
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexCliEventBatchV1 {
@@ -264,6 +490,10 @@ pub struct CodexCliEventBatchV1 {
 #[derive(Debug)]
 enum StreamMessage {
     Event(CodexCliEventV1),
+    /// A provider JSONL line exceeded CatDesk's bounded event size. The body
+    /// is deliberately discarded without parsing or logging it; the turn may
+    /// continue and provider process exit status remains authoritative.
+    OversizedEvent(usize),
     ParseError(String),
     Stderr(String),
 }
@@ -382,6 +612,7 @@ impl CodexCliProviderV1 {
     ) -> Result<CodexCliTurnHandleV1, RuntimeError> {
         let mut command = Command::new(&self.config.executable);
         command.current_dir(&self.config.working_directory);
+        apply_operator_codex_context(&mut command, &self.config);
         // These are documented global CLI controls. `--ignore-user-config`
         // made the Windows CLI fall back to a read-only sandbox despite an
         // explicit workspace-write request, so we retain user configuration
@@ -401,6 +632,11 @@ impl CodexCliProviderV1 {
         }
         if let Some(model_id) = &self.config.model_id {
             command.arg("--model").arg(model_id);
+            if model_id == CATDESK_REQUIRED_CODEX_MODEL {
+                command.arg("-c").arg(format!(
+                    "model_reasoning_effort={CATDESK_REQUIRED_CODEX_REASONING_EFFORT}"
+                ));
+            }
         }
         command
             .arg(&request.prompt)
@@ -619,8 +855,14 @@ fn execution_diagnostic(
     if resume_thread_id.is_none() {
         argv.extend(["--color".into(), "never".into()]);
     }
-    if config.model_id.is_some() {
+    if let Some(model_id) = &config.model_id {
         argv.extend(["--model".into(), "<configured-model>".into()]);
+        if model_id == CATDESK_REQUIRED_CODEX_MODEL {
+            argv.extend([
+                "-c".into(),
+                "model_reasoning_effort=<configured-reasoning-effort>".into(),
+            ]);
+        }
     }
     argv.push("<bounded-prompt-omitted>".into());
     CodexCliExecutionDiagnosticV1 {
@@ -935,10 +1177,13 @@ async fn run_bounded_command<const N: usize>(
     arguments: [&str; N],
     max_bytes: usize,
 ) -> Result<CommandOutputV1, RuntimeError> {
-    let output = Command::new(&config.executable)
+    let mut command = Command::new(&config.executable);
+    command
         .args(arguments)
         .current_dir(&config.working_directory)
-        .stdin(std::process::Stdio::null())
+        .stdin(std::process::Stdio::null());
+    apply_operator_codex_context(&mut command, config);
+    let output = command
         .output()
         .await
         .map_err(|error| RuntimeError::Provider(format!("failed to execute Codex CLI: {error}")))?;
@@ -951,6 +1196,15 @@ async fn run_bounded_command<const N: usize>(
         )));
     }
     Ok(CommandOutputV1 { stdout })
+}
+
+/// Copies the operator-selected config-root path into the documented Codex
+/// child-process environment. The path was validated at configuration time;
+/// this helper never opens, enumerates, or exports files below that root.
+fn apply_operator_codex_context(command: &mut Command, config: &CodexCliConfigV1) {
+    if let Some(codex_home) = &config.operator_codex_home {
+        command.env("CODEX_HOME", codex_home);
+    }
 }
 
 fn spawn_stdout_reader(
@@ -971,11 +1225,9 @@ fn spawn_stdout_reader(
                         return;
                     }
                 }
-                Ok(Some(_)) => {
+                Ok(Some(line)) => {
                     if sender
-                        .send(StreamMessage::ParseError(
-                            "Codex JSONL event exceeded configured byte limit".into(),
-                        ))
+                        .send(StreamMessage::OversizedEvent(line.len()))
                         .await
                         .is_err()
                     {
@@ -1039,6 +1291,28 @@ async fn drain_active_turn(
                 active
                     .normalized_events
                     .push(normalize_codex_event(&event, turn_id));
+                active.events.push(event);
+            }
+            Ok(StreamMessage::OversizedEvent(byte_count)) => {
+                let summary = format!(
+                    "Codex JSONL event body omitted because it exceeded the configured byte limit ({} bytes)",
+                    byte_count
+                );
+                let event = CodexCliEventV1 {
+                    event_type: "oversized.event".into(),
+                    thread_id: active.thread_id.clone(),
+                    item_type: None,
+                    text: None,
+                    retry_after_seconds: None,
+                    bounded_summary: bounded_redacted_text(&summary, max_diagnostic_bytes),
+                };
+                active.normalized_events.push(NormalizedProviderEventV1 {
+                    provider_id: ProviderIdV1::CodexCli.as_str().into(),
+                    turn_id: turn_id.clone(),
+                    kind: NormalizedProviderEventKind::TextDelta,
+                    text: Some(event.bounded_summary.clone()),
+                    tool_call: None,
+                });
                 active.events.push(event);
             }
             Ok(StreamMessage::ParseError(error)) => {
@@ -1281,6 +1555,29 @@ fn is_rate_limit_text(value: &str) -> bool {
         || value.contains("status 429")
 }
 
+pub fn classify_codex_availability_failure(value: &str) -> Option<CodexAvailabilityFailureV1> {
+    let value = bounded_redacted_text(value, DEFAULT_MAX_DIAGNOSTIC_BYTES).to_ascii_lowercase();
+    if [
+        "usage limit reached",
+        "you've hit your usage limit",
+        "you have hit your usage limit",
+        "credits exhausted",
+        "insufficient credits",
+        "plan limit reached",
+        "plan allowance exhausted",
+        "codex allowance exhausted",
+    ]
+    .iter()
+    .any(|signal| value.contains(signal))
+    {
+        Some(CodexAvailabilityFailureV1::CreditsExhausted)
+    } else if is_rate_limit_text(&value) {
+        Some(CodexAvailabilityFailureV1::TransientRateLimited)
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1410,6 +1707,25 @@ mod tests {
     }
 
     #[test]
+    fn oversized_event_placeholder_is_non_terminal_and_contains_no_body() {
+        let event = CodexCliEventV1 {
+            event_type: "oversized.event".into(),
+            thread_id: Some("thread-1".into()),
+            item_type: None,
+            text: None,
+            retry_after_seconds: None,
+            bounded_summary:
+                "Codex JSONL event body omitted because it exceeded the configured byte limit (70000 bytes)"
+                    .into(),
+        };
+        let turn_id = TurnId::new("turn-oversized").expect("turn");
+        let normalized = normalize_codex_event(&event, &turn_id);
+        assert_eq!(normalized.kind, NormalizedProviderEventKind::TextDelta);
+        assert!(event.text.is_none());
+        assert!(event.bounded_summary.contains("body omitted"));
+    }
+
+    #[test]
     fn malformed_or_oversized_jsonl_is_rejected() {
         assert!(parse_codex_jsonl_event("not json", 64).is_err());
         assert!(parse_codex_jsonl_event(r#"{"type":"thread.started"}"#, 4).is_err());
@@ -1436,11 +1752,125 @@ mod tests {
     }
 
     #[test]
+    fn credit_exhaustion_classifier_is_conservative_and_precedes_429() {
+        assert_eq!(
+            classify_codex_availability_failure("HTTP 429: usage limit reached; try later"),
+            Some(CodexAvailabilityFailureV1::CreditsExhausted)
+        );
+        assert_eq!(
+            classify_codex_availability_failure("HTTP 429 too many requests"),
+            Some(CodexAvailabilityFailureV1::TransientRateLimited)
+        );
+        assert_eq!(classify_codex_availability_failure("limit reached"), None);
+        assert_eq!(
+            classify_codex_availability_failure(
+                "You've hit your usage limit. Try again at 10:54 AM."
+            ),
+            Some(CodexAvailabilityFailureV1::CreditsExhausted)
+        );
+        assert_eq!(
+            classify_codex_availability_failure("your usage limit setting was read successfully"),
+            None,
+            "a settings/status sentence is not an exhaustion diagnostic"
+        );
+        assert_eq!(
+            classify_codex_availability_failure("secret=not-for-handoff credits exhausted"),
+            Some(CodexAvailabilityFailureV1::CreditsExhausted)
+        );
+    }
+
+    fn reset_clock(hour: u16, minute: u16, second: u16) -> CodexTrustedLocalClockV1 {
+        CodexTrustedLocalClockV1 {
+            observed_at_unix: 1_000_000,
+            year: 2026,
+            month: 8,
+            day: 28,
+            hour,
+            minute,
+            second,
+        }
+    }
+
+    #[test]
+    fn credit_exhaustion_reset_parser_handles_12_hour_edges_and_next_day_rollover() {
+        let dated_clock = CodexTrustedLocalClockV1 {
+            observed_at_unix: 2_000_000,
+            year: 2026,
+            month: 9,
+            day: 1,
+            hour: 23,
+            minute: 59,
+            second: 45,
+        };
+        assert_eq!(
+            parse_codex_credits_reset_after(
+                "You've hit your usage limit. Try again at Sep 2nd, 2026 12:50 AM.",
+                dated_clock,
+            ),
+            Some(2_003_015),
+            "the live provider date is resolved against the trusted local date without rollover invention"
+        );
+        assert_eq!(
+            parse_codex_credits_reset_after(
+                "You've hit your usage limit. Try again at 12:00 AM.",
+                reset_clock(23, 59, 45),
+            ),
+            Some(1_000_015)
+        );
+        assert_eq!(
+            parse_codex_credits_reset_after(
+                "credits exhausted; try again at 12:00 PM.",
+                reset_clock(11, 59, 59),
+            ),
+            Some(1_000_001)
+        );
+        assert_eq!(
+            parse_codex_credits_reset_after(
+                "usage limit reached; try again at 10:54 AM.",
+                reset_clock(10, 53, 45),
+            ),
+            Some(1_000_015)
+        );
+        assert_eq!(
+            parse_codex_credits_reset_after(
+                "usage limit reached; try again at 10:54 AM.",
+                reset_clock(10, 54, 0),
+            ),
+            Some(1_086_400),
+            "a passed or exactly-current clock rolls to the deterministic next local day"
+        );
+    }
+
+    #[test]
+    fn credit_exhaustion_reset_parser_rejects_unattested_malformed_or_ambiguous_phrases() {
+        let clock = reset_clock(10, 0, 0);
+        for value in [
+            "HTTP 429. Try again at 10:54 AM.",
+            "usage limit reached",
+            "usage limit reached; try again at 0:54 AM.",
+            "usage limit reached; try again at 10:60 AM.",
+            "usage limit reached; try again at 10:54 AM; try again at 11:00 AM.",
+            "usage limit reached; try again at 10:54 AMish.",
+            "usage limit reached; try again at Sep 31st, 2026 10:54 AM.",
+            "usage limit reached; try again at Sep 2th, 2026 10:54 AM.",
+            "usage limit reached; try again at Sep 2nd, 2026 10:54 AM; try again at 11:00 AM.",
+            "usage limit reached; try again at Aug 27th, 2026 10:54 AM.",
+        ] {
+            assert_eq!(
+                parse_codex_credits_reset_after(value, clock),
+                None,
+                "{value}"
+            );
+        }
+    }
+
+    #[test]
     fn shell_shims_and_invalid_directories_are_rejected() {
         let directory = std::env::current_dir().expect("working directory");
         let shim = CodexCliConfigV1 {
             executable: PathBuf::from("C:\\temp\\codex.cmd"),
             working_directory: directory.clone(),
+            operator_codex_home: None,
             model_id: None,
             sandbox: CodexCliSandboxV1::ReadOnly,
             approval_policy: CodexCliApprovalPolicyV1::Never,
@@ -1497,6 +1927,60 @@ mod tests {
                 .contains(&"--ignore-user-config".to_string())
         );
         assert!(!diagnostic.argv.join(" ").contains("bounded prompt"));
+    }
+
+    #[test]
+    fn cli_resume_diagnostic_uses_only_the_captured_canonical_thread_slot() {
+        let request = CodexCliTurnRequestV1 {
+            worker_session_id: WorkerSessionId::new("codex-worker").expect("worker"),
+            turn_id: TurnId::new("codex-turn").expect("turn"),
+            prompt: "bounded prompt".into(),
+        };
+        let diagnostic = execution_diagnostic(
+            &config(),
+            "codex-cli 0.146.1",
+            &request,
+            Some("existing-gui-visible-thread"),
+        );
+        assert!(
+            diagnostic
+                .argv
+                .windows(2)
+                .any(|pair| { pair == ["resume".to_string(), "<captured-thread-id>".to_string()] })
+        );
+        assert!(
+            !diagnostic.argv.contains(&"--color".to_string()),
+            "resume must not create a new color-configured exec session"
+        );
+        assert!(
+            !diagnostic
+                .argv
+                .join(" ")
+                .contains("existing-gui-visible-thread"),
+            "diagnostics retain only the captured-thread slot, not a raw GUI history id"
+        );
+    }
+
+    #[test]
+    fn terra_model_diagnostic_records_required_high_reasoning_override() {
+        let request = CodexCliTurnRequestV1 {
+            worker_session_id: WorkerSessionId::new("codex-worker").expect("worker"),
+            turn_id: TurnId::new("codex-turn").expect("turn"),
+            prompt: "bounded prompt".into(),
+        };
+        let mut terra = config();
+        terra.model_id = Some(CATDESK_REQUIRED_CODEX_MODEL.into());
+        let diagnostic = execution_diagnostic(&terra, "codex-cli 0.146.1", &request, None);
+        assert_eq!(
+            diagnostic.model_id.as_deref(),
+            Some(CATDESK_REQUIRED_CODEX_MODEL)
+        );
+        assert!(diagnostic.argv.windows(2).any(|pair| {
+            pair == [
+                "-c".to_string(),
+                "model_reasoning_effort=<configured-reasoning-effort>".to_string(),
+            ]
+        }));
     }
 
     #[test]

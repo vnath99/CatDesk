@@ -822,6 +822,37 @@ mod tests {
     }
 
     #[test]
+    fn daemon_reload_exit_is_scheduled_only_for_execute_calls() {
+        let request = |name: &str, dry_run: bool| -> JsonRpcRequest {
+            serde_json::from_value(json!({
+                "jsonrpc":"2.0",
+                "id":"reload-test",
+                "method":"tools/call",
+                "params":{"name":name,"arguments":{"dryRun":dry_run}}
+            }))
+            .expect("request")
+        };
+
+        assert!(is_daemon_reload_execute_call(&request(
+            "catdesk_daemon_reload",
+            false
+        )));
+        assert!(!is_daemon_reload_execute_call(&request(
+            "catdesk_daemon_reload",
+            true
+        )));
+        let compatibility = serde_json::from_value(json!({
+            "jsonrpc":"2.0",
+            "id":"recovery-test",
+            "method":"tools/call",
+            "params":{"name":"catdesk_daemon_reload","arguments":{"decision":"CATDESK_CANONICAL_RECOVERY","dryRun":false}}
+        }))
+        .expect("compatibility request");
+        assert!(!is_daemon_reload_execute_call(&compatibility));
+        assert!(!is_daemon_reload_execute_call(&request("read", false)));
+    }
+
+    #[test]
     fn extract_turn_token_usage_reads_widget_payload_meta() {
         let result = json!({
             "structuredContent": {
@@ -1260,6 +1291,26 @@ mod tests {
         let config_path = config_root.join("config.toml");
         std::fs::create_dir_all(&workspace_root).expect("create workspace");
         std::fs::create_dir_all(&config_root).expect("create config dir");
+        std::fs::create_dir_all(workspace_root.join(".catdesk").join("autonomy"))
+            .expect("create canonical inbox root");
+        std::fs::write(
+            workspace_root
+                .join(".catdesk")
+                .join("autonomy")
+                .join("review-inbox.json"),
+            br#"[{"schemaVersion":1,"recordId":"review_1","projectId":"catdesk","sessionId":"session_1","state":"COMPLETED_VERIFIED","nextAction":"independent_final_review","reference":"artifacts/completion.json","createdAtUnix":1,"unread":true}]"#,
+        )
+        .expect("write canonical inbox");
+        std::fs::create_dir_all(workspace_root.join(".catdesk").join("wake-bridge"))
+            .expect("create protected target root");
+        std::fs::write(
+            workspace_root
+                .join(".catdesk")
+                .join("wake-bridge")
+                .join("config.json"),
+            br#"{"conversation_url":"https://chatgpt.com/c/exact-thread","profile_dir":".catdesk/wake-bridge/browser-profile"}"#,
+        )
+        .expect("write protected target config");
 
         let mut app = AppState::new_for_test(
             8789,
@@ -1339,6 +1390,22 @@ mod tests {
         assert_eq!(
             status.get("transportMode").and_then(Value::as_str),
             Some("managed_ephemeral_ngrok")
+        );
+        let stable_wake = status.get("stableWake").expect("stable wake status");
+        assert_eq!(
+            stable_wake
+                .get("discoveryAvailable")
+                .and_then(Value::as_bool),
+            Some(true),
+            "canonical inbox is a bounded read-only readiness result"
+        );
+        assert_eq!(
+            stable_wake.get("targetAvailable").and_then(Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            stable_wake.get("pendingCount").and_then(Value::as_u64),
+            Some(1)
         );
         assert!(status.get("installationFingerprint").is_some());
         assert!(status.get("serverInstanceFingerprint").is_some());
@@ -1769,12 +1836,45 @@ async fn post_mcp(
         );
     };
     let response_body = serde_json::to_string(&response_json).unwrap();
+    let schedule_reload_exit =
+        response_json.get("error").is_none() && is_daemon_reload_execute_call(&req);
 
-    Response::builder()
+    let response = Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(response_body))
-        .unwrap()
+        .unwrap();
+
+    if schedule_reload_exit {
+        // The HTTP server process owns the loopback listener, so only this
+        // layer is allowed to schedule the final daemon exit. The reload
+        // helper is already detached at this point; the delay lets this
+        // successful JSON-RPC response flush before port 3200 is released.
+        crate::daemon_reload::schedule_server_exit_after_response();
+    }
+
+    response
+}
+
+fn is_daemon_reload_execute_call(req: &JsonRpcRequest) -> bool {
+    req.method == "tools/call"
+        && req
+            .params
+            .get("name")
+            .and_then(Value::as_str)
+            .is_some_and(|name| name == "catdesk_daemon_reload")
+        && req
+            .params
+            .get("arguments")
+            .and_then(Value::as_object)
+            .is_some_and(|arguments| !arguments.contains_key("decision"))
+        && req
+            .params
+            .get("arguments")
+            .and_then(Value::as_object)
+            .and_then(|arguments| arguments.get("dryRun"))
+            .and_then(Value::as_bool)
+            == Some(false)
 }
 
 // ── GET /<slug>/mcp — pure HTTP mode (no SSE) ───────────────

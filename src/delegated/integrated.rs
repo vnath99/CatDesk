@@ -28,8 +28,8 @@ use crate::delegated::journal::{
     ToolCallRecordV1, ToolCallStatus, ToolMutationKind,
 };
 use crate::delegated::patch_engine::{
-    ActualDiffArtifactV1, FileHashV1, PatchEngine, PatchError, PatchProposalV1, ReplaceOperationV1,
-    compare_patches, stable_text_hash, verify_model_completion_claim,
+    ActualDiffArtifactV1, PatchEngine, PatchError, PatchProposalV1, ReplaceOperationV1,
+    capture_patch_preimage, compare_patches, stable_text_hash, verify_model_completion_claim,
 };
 use crate::delegated::provider_router::{
     ProviderAvailabilityV1, ProviderConfigV1, ProviderRegistryV1, ProviderRoutingPolicyV1,
@@ -196,6 +196,9 @@ struct IntegratedDurableStateV1 {
 }
 
 const MAX_CORRECTIVE_TURNS_PER_RUN: u32 = 2;
+const MAX_QWEN_RECONNAISSANCE_CALLS_BEFORE_PATCH_PREVIEW: usize = 4;
+const CATDESK_READ_ONLY_MARKER: &str = "[CATDESK_READ_ONLY]";
+const CATDESK_NO_OP_MARKER: &str = "[CATDESK_NO_OP]";
 
 impl IntegratedDelegatedService {
     pub fn new(
@@ -257,6 +260,26 @@ impl IntegratedDelegatedService {
             .into_iter()
             .filter(|tool| !tool.name.starts_with("job."))
             .collect()
+    }
+
+    /// Durable conversation evidence for an external controller that reuses
+    /// this service's bounded tool dispatcher.
+    pub fn provider_history(&self) -> Vec<ProviderMessageV1> {
+        self.provider_history.clone()
+    }
+
+    pub fn record_provider_message(
+        &mut self,
+        message: ProviderMessageV1,
+    ) -> Result<(), IntegratedError> {
+        self.provider_history.push(message);
+        self.persist_durable_state()
+    }
+
+    /// Gate a model completion without changing the run state.  The caller's
+    /// independent verifier/final review remains authoritative.
+    pub fn completion_gate(&self, claim: &str) -> Result<(), IntegratedError> {
+        self.verify_completion_gate(claim)
     }
 
     pub fn provider_policy(&self) -> ProviderRoutingPolicyV1 {
@@ -638,10 +661,13 @@ impl IntegratedDelegatedService {
             )));
         }
         match self.last_verification.as_ref().map(|summary| &summary.status) {
-            None => Ok(Some(
-                "call verify.run next if no source mutation is required; otherwise inspect with read/search and use patch.preview before any patch.apply"
-                    .into(),
-            )),
+            None if self.contract_requires_attributable_mutation() && !self.has_applied_patch()? => {
+                Ok(Some(
+                    "this is a mutation-required implementation contract and no CatDesk-applied patch exists yet; use only the bounded source context still needed, then call patch.preview for the smallest permitted implementation change. verify.run or diff.actual alone cannot satisfy completion"
+                        .into(),
+                ))
+            }
+            None => Ok(Some("call verify.run next for this explicitly read-only/no-op contract".into())),
             Some(VerificationStatusV1::Failed | VerificationStatusV1::NotConfigured) => Ok(Some(
                 "diagnose the failed verifier output, inspect bounded source as needed, then call patch.preview for a corrected child patch within the repair budget"
                     .into(),
@@ -684,6 +710,72 @@ impl IntegratedDelegatedService {
         Ok(proposals
             .last()
             .map(|proposal| proposal.patch_id.as_str().to_string()))
+    }
+
+    fn contract_requires_attributable_mutation(&self) -> bool {
+        contract_requires_attributable_mutation(&self.contract)
+    }
+
+    fn has_applied_patch(&self) -> Result<bool, IntegratedError> {
+        let run_id = self.run_id()?;
+        Ok(self
+            .journal
+            .load_patch_applications(&run_id)
+            .map_err(|error| IntegratedError::Journal(format!("{error:?}")))?
+            .iter()
+            .any(|application| application.status == PatchApplicationStatus::Applied))
+    }
+
+    fn completed_reconnaissance_calls(&self) -> Result<usize, IntegratedError> {
+        let run_id = self.run_id()?;
+        Ok(self
+            .journal
+            .load_tool_calls(&run_id)
+            .map_err(|error| IntegratedError::Journal(format!("{error:?}")))?
+            .values()
+            .filter(|record| {
+                record.status == ToolCallStatus::Completed
+                    && matches!(record.tool_name.as_str(), "read" | "search")
+            })
+            .count())
+    }
+
+    fn ensure_attributable_mutation_if_required(
+        &self,
+        diff: &ActualDiffArtifactV1,
+    ) -> Result<(), IntegratedError> {
+        if !self.contract_requires_attributable_mutation() {
+            return Ok(());
+        }
+        let run_id = self.run_id()?;
+        let applications = self
+            .journal
+            .load_patch_applications(&run_id)
+            .map_err(|error| IntegratedError::Journal(format!("{error:?}")))?;
+        let applied_paths = applications
+            .iter()
+            .filter(|application| application.status == PatchApplicationStatus::Applied)
+            .flat_map(|application| application.actual_paths_changed.iter())
+            .map(|path| normalized_progress_path(path))
+            .collect::<BTreeSet<_>>();
+        if applied_paths.is_empty() {
+            return Err(IntegratedError::Verification(
+                "mutation-required contract has no attributable CatDesk patch.apply; verification or a pre-existing dirty-workspace diff cannot satisfy completion"
+                    .into(),
+            ));
+        }
+        let diff_paths = diff
+            .paths
+            .iter()
+            .map(|path| normalized_progress_path(path))
+            .collect::<BTreeSet<_>>();
+        if applied_paths.is_disjoint(&diff_paths) {
+            return Err(IntegratedError::Verification(
+                "authoritative diff contains no path attributable to this run's CatDesk-applied patches"
+                    .into(),
+            ));
+        }
+        Ok(())
     }
 
     fn persisted_run_state_label(&self) -> Result<String, IntegratedError> {
@@ -942,6 +1034,7 @@ impl IntegratedDelegatedService {
             IntegratedError::Verification("actual diff has not been captured".into())
         })?;
         verification_passed_with_diff(claim, verification, diff)?;
+        self.ensure_attributable_mutation_if_required(diff)?;
         self.evaluate_acceptance_criteria_v1(verification, diff)?;
         self.ensure_diff_paths_allowed(diff)?;
         self.ensure_no_outcome_unknown()?;
@@ -1144,6 +1237,36 @@ impl IntegratedDelegatedService {
             )));
         }
         let run_id = RunId::new(self.contract.task_id.clone()).map_err(IntegratedError::Tool)?;
+        if matches!(call.tool_name.as_str(), "read" | "search") {
+            let prior_calls = self
+                .journal
+                .load_tool_calls(&run_id)
+                .map_err(|e| IntegratedError::Journal(format!("{e:?}")))?;
+            if prior_calls.values().any(|prior| {
+                prior.status == ToolCallStatus::Completed
+                    && prior.tool_name == call.tool_name
+                    && prior.arguments_hash == call.arguments_hash
+            }) {
+                let guidance = format!(
+                    "duplicate completed {} request suppressed without re-execution; change the bounded arguments if more context is needed",
+                    call.tool_name
+                );
+                self.provider_history.push(ProviderMessageV1 {
+                    role: "tool".into(),
+                    content: guidance.clone(),
+                    tool_call_id: Some(call.tool_call_id.as_str().to_string()),
+                    tool_name: Some(call.tool_name.clone()),
+                });
+                self.push_qwen38_tool_continuation_after_success(call);
+                self.persist_durable_state()?;
+                return Ok(tool_result(
+                    &call.tool_name,
+                    "duplicate read-only request suppressed".into(),
+                    json!({ "duplicateSuppressed": true }),
+                    guidance,
+                ));
+            }
+        }
         let mutation_kind = self
             .tool_definitions()
             .into_iter()
@@ -1227,6 +1350,7 @@ impl IntegratedDelegatedService {
             tool_call_id: Some(call.tool_call_id.as_str().to_string()),
             tool_name: Some(call.tool_name.clone()),
         });
+        self.push_qwen38_tool_continuation_after_success(call);
         self.push_final_reasoning_instruction_after_diff(call)?;
         self.append_event(
             LifecycleEvent::Delta,
@@ -1236,6 +1360,29 @@ impl IntegratedDelegatedService {
         )?;
         self.persist_durable_state()?;
         Ok(result)
+    }
+
+    fn push_qwen38_tool_continuation_after_success(&mut self, call: &NormalizedToolCallV1) {
+        if !model_requires_explicit_tool_continuation_user(&self.config.model_id) {
+            return;
+        }
+        let final_diff_ready = call.tool_name == "diff.actual"
+            && matches!(
+                self.last_verification
+                    .as_ref()
+                    .map(|summary| &summary.status),
+                Some(VerificationStatusV1::Passed)
+            )
+            && self.last_diff.is_some();
+        if final_diff_ready {
+            return;
+        }
+        self.provider_history.push(ProviderMessageV1 {
+            role: "user".into(),
+            content: "<catdesk_tool_continuation>\nContinue the existing approved execution contract using the completed CatDesk tool result immediately above. This continuation adds no authority, does not change allowed tools, paths, or budgets, and must not cause any completed tool call to be replayed. Choose exactly one permitted next CatDesk tool call if work remains; otherwise follow CatDesk's existing completion gate.\n</catdesk_tool_continuation>".into(),
+            tool_call_id: None,
+            tool_name: None,
+        });
     }
 
     fn push_final_reasoning_instruction_after_diff(
@@ -1254,9 +1401,22 @@ impl IntegratedDelegatedService {
         {
             return Ok(());
         }
+        let diff = self.last_diff.as_ref().expect("checked above");
+        if let Err(error) = self.ensure_attributable_mutation_if_required(diff) {
+            self.provider_history.push(ProviderMessageV1 {
+                role: "user".into(),
+                content: format!(
+                    "<catdesk_progress_gate>\nverify.run passed and diff.actual captured repository state, but this mutation-required run still cannot complete. {} Stop verification/diff-only cycling. Use patch.preview and patch.apply for the smallest permitted implementation change, then rerun verification and diff.actual.\n</catdesk_progress_gate>",
+                    bounded_diagnostic_text(&format!("{error:?}"), 512)
+                ),
+                tool_call_id: None,
+                tool_name: None,
+            });
+            return Ok(());
+        }
         self.provider_history.push(ProviderMessageV1 {
             role: "user".into(),
-            content: "CatDesk has authoritative evidence: verify.run passed and diff.actual captured the final diff. Do not call another tool. Provide the final concise completion claim now.".into(),
+            content: "CatDesk has authoritative evidence: verify.run passed, diff.actual captured the final diff, and any required mutation is attributable to this run. Do not call another tool. Provide the final concise completion claim now.".into(),
             tool_call_id: None,
             tool_name: None,
         });
@@ -1293,6 +1453,7 @@ impl IntegratedDelegatedService {
         let diff = self.last_diff.as_ref().ok_or_else(|| {
             IntegratedError::Verification("actual diff has not been captured".into())
         })?;
+        self.ensure_attributable_mutation_if_required(diff)?;
         let result = crate::delegated::contracts::FinalRunResultV1 {
             schema_version: EXECUTION_CONTRACT_SCHEMA_VERSION,
             status: RunState::CompletedVerified,
@@ -1734,6 +1895,18 @@ impl IntegratedDelegatedService {
         call: &NormalizedToolCallV1,
         mutation_kind: &ToolMutationKind,
     ) -> Result<(), IntegratedError> {
+        if model_requires_explicit_tool_continuation_user(&self.config.model_id)
+            && self.contract_requires_attributable_mutation()
+            && matches!(call.tool_name.as_str(), "read" | "search")
+            && self.latest_patch_proposal_id()?.is_none()
+        {
+            let reconnaissance_calls = self.completed_reconnaissance_calls()?;
+            if reconnaissance_calls >= MAX_QWEN_RECONNAISSANCE_CALLS_BEFORE_PATCH_PREVIEW {
+                return Err(IntegratedError::Tool(format!(
+                    "Qwen reconnaissance budget exhausted after {reconnaissance_calls} successful read/search calls without a patch.preview. Stop gathering context and call patch.preview for the smallest permitted implementation change. If the contract was intended to be read-only, the supervisor must explicitly mark it with {CATDESK_READ_ONLY_MARKER} or {CATDESK_NO_OP_MARKER}; do not self-declare read-only intent."
+                )));
+            }
+        }
         if self.completed_tool_calls >= self.contract.max_tool_calls {
             return Err(IntegratedError::Tool(format!(
                 "tool-call budget exceeded: {} >= {}",
@@ -1861,15 +2034,75 @@ impl IntegratedDelegatedService {
     }
 
     fn tool_read(&mut self, args: &Value) -> Result<IntegratedToolResultV1, IntegratedError> {
+        const DEFAULT_READ_LINES: usize = 120;
+        const MAX_READ_LINES: usize = 200;
+        const MAX_READ_BYTES: usize = 8 * 1024;
+
         let path = string_arg(args, "path")?;
         let output = workspace_tools::read_file(&self.workspace_root.display().to_string(), &path)
             .map_err(IntegratedError::Tool)?;
-        self.record_recent_read_excerpt(&output.path, &output.text)?;
+        let total_lines = output.text.lines().count();
+        let start_line = args
+            .get("startLine")
+            .and_then(Value::as_u64)
+            .unwrap_or(1)
+            .max(1) as usize;
+        let requested_end = args
+            .get("endLine")
+            .and_then(Value::as_u64)
+            .map(|value| value as usize)
+            .unwrap_or_else(|| start_line.saturating_add(DEFAULT_READ_LINES - 1));
+        if requested_end < start_line {
+            return Err(IntegratedError::Tool(
+                "read endLine must be greater than or equal to startLine".into(),
+            ));
+        }
+        let end_line = requested_end.min(start_line.saturating_add(MAX_READ_LINES - 1));
+        let mut excerpt = output
+            .text
+            .lines()
+            .skip(start_line.saturating_sub(1))
+            .take(end_line.saturating_sub(start_line).saturating_add(1))
+            .collect::<Vec<_>>()
+            .join("\n");
+        if excerpt.len() > MAX_READ_BYTES {
+            let mut boundary = MAX_READ_BYTES;
+            while boundary > 0 && !excerpt.is_char_boundary(boundary) {
+                boundary -= 1;
+            }
+            excerpt.truncate(boundary);
+        }
+        let returned_lines = excerpt.lines().count();
+        let last_returned_line = if returned_lines == 0 {
+            start_line.saturating_sub(1)
+        } else {
+            start_line.saturating_add(returned_lines - 1)
+        };
+        let truncated = last_returned_line < total_lines;
+        let next_start_line = truncated.then_some(last_returned_line.saturating_add(1));
+        self.record_recent_read_excerpt(&output.path, &excerpt)?;
+        let bounded = json!({
+            "path": output.path.clone(),
+            "text": excerpt,
+            "totalBytes": output.bytes,
+            "totalLines": total_lines,
+            "startLine": start_line,
+            "endLine": last_returned_line,
+            "nextStartLine": next_start_line,
+            "truncated": truncated
+        });
         Ok(tool_result(
             "read",
-            format!("read {} bytes from {}", output.bytes, output.path),
-            serde_json::to_value(&output)?,
-            output.render_text(),
+            format!(
+                "read lines {}-{} of {} from {}{}",
+                start_line,
+                last_returned_line,
+                total_lines,
+                output.path,
+                if truncated { "; more available" } else { "" }
+            ),
+            bounded.clone(),
+            serde_json::to_string_pretty(&bounded)?,
         ))
     }
 
@@ -1937,7 +2170,7 @@ impl IntegratedDelegatedService {
             "search",
             format!("{} matches for {}", output.match_count, output.pattern),
             serde_json::to_value(&output)?,
-            output.render_text(),
+            redact_and_bound(&output.render_text(), 8 * 1024),
         ))
     }
 
@@ -2074,11 +2307,21 @@ impl IntegratedDelegatedService {
         &mut self,
         args: &Value,
     ) -> Result<IntegratedToolResultV1, IntegratedError> {
-        let timeout = args
+        let requested_timeout = args
             .get("timeout")
             .and_then(Value::as_u64)
-            .unwrap_or(120_000)
-            .clamp(30_000, 300_000);
+            .unwrap_or(120_000);
+        // Qwen 3.8 frequently emits a 30s verify timeout even for repositories whose
+        // healthy full verification legitimately takes longer. Treat that model-provided
+        // value as a hint, not authority: CatDesk owns verification policy and guarantees
+        // enough time for a normal full project pass while remaining bounded.
+        let minimum_timeout =
+            if model_requires_explicit_tool_continuation_user(&self.config.model_id) {
+                120_000
+            } else {
+                30_000
+            };
+        let timeout = requested_timeout.clamp(minimum_timeout, 300_000);
         let output = verification::verify_project_with_timeout(
             &self.workspace_root.display().to_string(),
             timeout,
@@ -2281,24 +2524,8 @@ impl IntegratedDelegatedService {
                 paths.dedup();
                 paths
             });
-        let expected_preimage_hashes = target_paths
-            .iter()
-            .map(|path| {
-                let text = fs::read_to_string(self.workspace_root.join(path))?;
-                Ok(FileHashV1 {
-                    path: path.clone(),
-                    hash: stable_text_hash(&text),
-                })
-            })
-            .collect::<Result<Vec<_>, IntegratedError>>()?;
-        let mut base_snapshot = String::new();
-        for path in &target_paths {
-            let text = fs::read_to_string(self.workspace_root.join(path))?;
-            base_snapshot.push_str(path);
-            base_snapshot.push('\0');
-            base_snapshot.push_str(&text);
-            base_snapshot.push('\0');
-        }
+        let (base_snapshot_hash, expected_preimage_hashes) =
+            capture_patch_preimage(&self.workspace_root, &target_paths)?;
         Ok(PatchProposalV1 {
             schema_version: EXECUTION_CONTRACT_SCHEMA_VERSION,
             patch_id: PatchId::new(patch_id).map_err(IntegratedError::Tool)?,
@@ -2306,7 +2533,7 @@ impl IntegratedDelegatedService {
             run_id: RunId::new(self.contract.task_id.clone()).map_err(IntegratedError::Tool)?,
             turn_id: TurnId::new(format!("turn-{}", self.next_event_sequence))
                 .map_err(IntegratedError::Tool)?,
-            base_snapshot_hash: stable_text_hash(&base_snapshot),
+            base_snapshot_hash,
             target_paths,
             expected_preimage_hashes,
             operations,
@@ -2397,16 +2624,38 @@ fn string_array_arg(args: &Value, name: &str) -> Result<Vec<String>, IntegratedE
         .collect()
 }
 
+fn model_requires_explicit_tool_continuation_user(model_id: &str) -> bool {
+    model_id
+        .split(':')
+        .next()
+        .is_some_and(|family| family.eq_ignore_ascii_case("qwen3.8"))
+}
+
+fn contract_requires_attributable_mutation(contract: &ExecutionContractV1) -> bool {
+    let objective = contract.objective.to_ascii_uppercase();
+    !objective.contains(CATDESK_READ_ONLY_MARKER) && !objective.contains(CATDESK_NO_OP_MARKER)
+}
+
+fn normalized_progress_path(path: &str) -> String {
+    path.replace('\\', "/")
+        .trim_start_matches("./")
+        .to_ascii_lowercase()
+}
+
 fn worker_system_prompt() -> String {
     [
         "You are the delegated CatDesk worker.",
         "You have no direct filesystem, shell, Git, patch, process, browser, or network authority.",
         "Use only the CatDesk tool schemas provided by the host.",
         "Keep using tools until the execution contract is satisfied.",
+        "Treat delegated contracts as implementation/mutation-required unless the supervisor put the exact marker [CATDESK_READ_ONLY] or [CATDESK_NO_OP] in the objective. You may not invent either marker yourself.",
+        "For a mutation-required task, reconnaissance is bounded: inspect only enough source to identify the smallest safe change, then use patch.preview and patch.apply. Do not spend turns rereading or searching once the implementation target is clear.",
+        "For patch.preview, every operations item must contain path, old, and new. targetPaths never substitutes for operation.path.",
+        "A passing verifier or an existing dirty-workspace diff is not evidence that you implemented the task. Mutation-required completion needs a CatDesk-applied patch and a final diff path attributable to that run.",
         "When verification fails, inspect the bounded failure and propose a revised child patch.",
         "Verifier output is authoritative and overrides source comments or earlier assumptions.",
         "Do not add or edit tests unless the execution contract explicitly allows test paths.",
-        "Do not claim completion until verify.run passes and diff.actual captures the authoritative diff.",
+        "Do not claim completion until verify.run passes and diff.actual captures the authoritative diff, and do not claim implementation completion without an attributable patch when mutation is required.",
         "Return at most one tool call per turn when a tool is needed.",
     ]
     .join("\n")
@@ -2415,7 +2664,7 @@ fn worker_system_prompt() -> String {
 fn path_is_under_contract_path(path: &str, scope: &str) -> bool {
     let path = path.replace('\\', "/");
     let scope = scope.trim_matches('/').replace('\\', "/");
-    path == scope || path.starts_with(&format!("{scope}/"))
+    scope == "." || path == scope || path.starts_with(&format!("{scope}/"))
 }
 
 fn normalize_acceptance_criterion(criterion: &str) -> String {
@@ -2551,6 +2800,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(windows, ignore = "Windows host denies process-tree termination")]
     async fn integrated_job_tools_start_poll_and_cancel() {
         let root = temp_git_workspace("job-tools");
         let contract = contract(&root, "run-t0023a-jobs");
@@ -2604,6 +2854,511 @@ mod tests {
         let run_id = RunId::new(contract.task_id).expect("run");
         let snapshot = service.journal.load_run(&run_id).expect("snapshot");
         assert_eq!(snapshot.state, RunState::Cancelled);
+    }
+
+    #[test]
+    fn qwen38_family_requires_explicit_tool_continuation_user() {
+        assert!(model_requires_explicit_tool_continuation_user(
+            "qwen3.8:27b"
+        ));
+        assert!(model_requires_explicit_tool_continuation_user(
+            "QWEN3.8:27B"
+        ));
+        assert!(!model_requires_explicit_tool_continuation_user(
+            "qwen3.5:9b"
+        ));
+        assert!(!model_requires_explicit_tool_continuation_user(
+            "qwen3.6:35b-a3b"
+        ));
+        assert!(!model_requires_explicit_tool_continuation_user(
+            "other:latest"
+        ));
+    }
+
+    #[tokio::test]
+    async fn qwen38_successful_tool_result_gets_non_authority_user_continuation() {
+        let root = temp_git_workspace("qwen38-tool-continuation");
+        fs::write(root.join("src/lib.rs"), "pub fn answer() -> i32 { 42 }\n").expect("lib");
+        commit_all(&root);
+        let contract = contract(&root, "run-qwen38-tool-continuation");
+        let mut cfg = config(&root);
+        cfg.model_id = "qwen3.8:27b".into();
+        let mut service = IntegratedDelegatedService::new(&root, contract, cfg).expect("service");
+        service.start().expect("start");
+        service
+            .execute_tool_call(&NormalizedToolCallV1 {
+                tool_call_id: ToolCallId::new("tc-qwen38-read").expect("tool id"),
+                tool_name: "read".into(),
+                arguments_hash: "fnv1a64:qwen38-read".into(),
+                arguments: json!({"path":"src/lib.rs"}),
+            })
+            .await
+            .expect("read");
+
+        let history = service.provider_history();
+        assert!(history.len() >= 2);
+        let tool = &history[history.len() - 2];
+        let continuation = history.last().expect("continuation");
+        assert_eq!(tool.role, "tool");
+        assert_eq!(tool.tool_call_id.as_deref(), Some("tc-qwen38-read"));
+        assert_eq!(continuation.role, "user");
+        assert!(continuation.content.contains("<catdesk_tool_continuation>"));
+        assert!(continuation.content.contains("adds no authority"));
+        assert!(
+            continuation
+                .content
+                .contains("must not cause any completed tool call to be replayed")
+        );
+        assert!(continuation.tool_call_id.is_none());
+        assert!(continuation.tool_name.is_none());
+    }
+
+    #[tokio::test]
+    async fn qwen38_bounded_reads_suppress_duplicate_replay_and_compact_under_limit() {
+        let root = temp_git_workspace("qwen38-bounded-read-history");
+        let large_source = (1..=900)
+            .map(|line| format!("// line {line:04} {}", "x".repeat(96)))
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(root.join("src/lib.rs"), large_source).expect("large source");
+        commit_all(&root);
+        let mut contract = contract(&root, "run-qwen38-bounded-read-history");
+        contract.objective = format!(
+            "{CATDESK_READ_ONLY_MARKER} Exercise bounded Qwen read history without source mutation."
+        );
+        let mut cfg = config(&root);
+        cfg.model_id = "qwen3.8:27b".into();
+        let mut service = IntegratedDelegatedService::new(&root, contract, cfg).expect("service");
+        service.start().expect("start");
+        service.provider_history.push(ProviderMessageV1 {
+            role: "system".into(),
+            content: worker_system_prompt(),
+            tool_call_id: None,
+            tool_name: None,
+        });
+        service.provider_history.push(ProviderMessageV1 {
+            role: "user".into(),
+            content: "genuine bounded qwen task query".into(),
+            tool_call_id: None,
+            tool_name: None,
+        });
+
+        let first_args = json!({"path":"src/lib.rs","startLine":1,"endLine":120});
+        let first_hash = stable_text_hash(&serde_json::to_string(&first_args).expect("args"));
+        let first = service
+            .execute_tool_call(&NormalizedToolCallV1 {
+                tool_call_id: ToolCallId::new("tc-bounded-read-1").expect("tool id"),
+                tool_name: "read".into(),
+                arguments: first_args.clone(),
+                arguments_hash: first_hash.clone(),
+            })
+            .await
+            .expect("bounded read");
+        assert!(first.bounded_text.len() < 9 * 1024);
+        assert_eq!(first.payload["startLine"], 1);
+        assert_eq!(first.payload["truncated"], true);
+        assert!(first.payload["nextStartLine"].as_u64().is_some());
+
+        let duplicate = service
+            .execute_tool_call(&NormalizedToolCallV1 {
+                tool_call_id: ToolCallId::new("tc-bounded-read-duplicate").expect("tool id"),
+                tool_name: "read".into(),
+                arguments: first_args,
+                arguments_hash: first_hash,
+            })
+            .await
+            .expect("duplicate is suppressed without re-execution");
+        assert_eq!(duplicate.payload["duplicateSuppressed"], true);
+        assert!(
+            duplicate
+                .bounded_text
+                .contains("suppressed without re-execution")
+        );
+
+        for index in 1..=6usize {
+            let start = 1 + index * 120;
+            let end = start + 119;
+            let args = json!({"path":"src/lib.rs","startLine":start,"endLine":end});
+            let hash = stable_text_hash(&serde_json::to_string(&args).expect("args"));
+            service
+                .execute_tool_call(&NormalizedToolCallV1 {
+                    tool_call_id: ToolCallId::new(format!("tc-bounded-read-{}", index + 1))
+                        .expect("tool id"),
+                    tool_name: "read".into(),
+                    arguments: args,
+                    arguments_hash: hash,
+                })
+                .await
+                .expect("sequential bounded read");
+        }
+        service
+            .compact_provider_history_if_needed()
+            .expect("bounded history compacts below provider limit");
+        let serialized = serde_json::to_vec(&service.provider_history).expect("history json");
+        assert!(serialized.len() <= 48 * 1024);
+        assert!(service.provider_history.iter().any(|message| {
+            message.role == "user" && message.content.contains("genuine bounded qwen task query")
+        }));
+        assert!(service.provider_history.iter().any(|message| {
+            message.role == "tool" && message.tool_name.as_deref() == Some("read")
+        }));
+    }
+
+    #[tokio::test]
+    async fn mutation_required_completion_rejects_dirty_diff_without_run_patch() {
+        let root = temp_git_workspace("mutation-required-dirty-diff");
+        write_answer_fixture(&root, 42, 42);
+        commit_all(&root);
+        fs::write(
+            root.join("src/lib.rs"),
+            "pub fn answer() -> i32 {\n    42\n}\n// unrelated pre-existing dirty workspace change\n",
+        )
+        .expect("dirty source");
+        let contract = contract(&root, "run-mutation-required-dirty-diff");
+        let mut service =
+            IntegratedDelegatedService::new(&root, contract, config(&root)).expect("service");
+        service.start().expect("start");
+        let verification = service
+            .execute_tool("verify.run", &json!({"timeout": 30000}))
+            .await
+            .expect("verify");
+        assert_eq!(verification.summary, "Passed");
+        service
+            .execute_tool("diff.actual", &json!({"paths":["src/lib.rs"]}))
+            .await
+            .expect("diff");
+
+        let gate = service.completion_gate("verification passed and authoritative diff captured");
+        assert!(matches!(
+            gate,
+            Err(IntegratedError::Verification(message))
+                if message.contains("no attributable CatDesk patch.apply")
+        ));
+        assert!(matches!(
+            service.final_review(),
+            Err(IntegratedError::Verification(message))
+                if message.contains("no attributable CatDesk patch.apply")
+        ));
+    }
+
+    #[tokio::test]
+    async fn mutation_required_diff_must_intersect_run_applied_patch_paths() {
+        let root = temp_git_workspace("mutation-required-diff-attribution");
+        write_answer_fixture(&root, 41, 41);
+        commit_all(&root);
+        let contract = contract(&root, "run-mutation-required-diff-attribution");
+        let mut service =
+            IntegratedDelegatedService::new(&root, contract, config(&root)).expect("service");
+        service.start().expect("start");
+        service
+            .execute_tool(
+                "patch.preview",
+                &json!({
+                    "patchId": "patch-attributed-source",
+                    "operations": [{
+                        "path": "src/lib.rs",
+                        "old": "pub fn answer() -> i32 {\n    41\n}\n",
+                        "new": "pub fn answer() -> i32 {\n    42\n}\n"
+                    }]
+                }),
+            )
+            .await
+            .expect("preview");
+        service
+            .execute_tool("patch.apply", &json!({"patchId":"patch-attributed-source"}))
+            .await
+            .expect("apply");
+
+        fs::write(
+            root.join("src/lib.rs"),
+            "pub fn answer() -> i32 {\n    41\n}\n",
+        )
+        .expect("restore source externally");
+        let cargo = fs::read_to_string(root.join("Cargo.toml")).expect("cargo");
+        fs::write(
+            root.join("Cargo.toml"),
+            format!("{cargo}\n# unrelated dirty workspace change\n"),
+        )
+        .expect("dirty cargo");
+        let verification = service
+            .execute_tool("verify.run", &json!({"timeout": 30000}))
+            .await
+            .expect("verify");
+        assert_eq!(verification.summary, "Passed");
+        service
+            .execute_tool("diff.actual", &json!({"paths":["Cargo.toml"]}))
+            .await
+            .expect("diff");
+
+        let gate = service.completion_gate("verification passed and authoritative diff captured");
+        assert!(matches!(
+            gate,
+            Err(IntegratedError::Verification(message))
+                if message.contains("no path attributable")
+        ));
+    }
+
+    #[tokio::test]
+    async fn qwen38_mutation_task_blocks_fifth_reconnaissance_before_patch_preview() {
+        let root = temp_git_workspace("qwen38-reconnaissance-budget");
+        let large_source = (1..=80)
+            .map(|line| format!("// context line {line}\n"))
+            .collect::<String>()
+            + "pub fn answer() -> i32 { 41 }\n";
+        fs::write(root.join("src/lib.rs"), large_source).expect("source");
+        commit_all(&root);
+        let contract = contract(&root, "run-qwen38-reconnaissance-budget");
+        let mut cfg = config(&root);
+        cfg.model_id = "qwen3.8:27b".into();
+        let mut service = IntegratedDelegatedService::new(&root, contract, cfg).expect("service");
+        service.start().expect("start");
+
+        for index in 0..MAX_QWEN_RECONNAISSANCE_CALLS_BEFORE_PATCH_PREVIEW {
+            let start = 1 + index * 10;
+            let args = json!({"path":"src/lib.rs","startLine":start,"endLine":start + 4});
+            service
+                .execute_tool_call(&NormalizedToolCallV1 {
+                    tool_call_id: ToolCallId::new(format!("tc-qwen38-recon-{index}"))
+                        .expect("tool id"),
+                    tool_name: "read".into(),
+                    arguments_hash: stable_text_hash(
+                        &serde_json::to_string(&args).expect("read args"),
+                    ),
+                    arguments: args,
+                })
+                .await
+                .expect("bounded reconnaissance");
+        }
+
+        let fifth_args = json!({"path":"src/lib.rs","startLine":50,"endLine":55});
+        let fifth = service
+            .execute_tool_call(&NormalizedToolCallV1 {
+                tool_call_id: ToolCallId::new("tc-qwen38-recon-blocked").expect("tool id"),
+                tool_name: "read".into(),
+                arguments_hash: stable_text_hash(
+                    &serde_json::to_string(&fifth_args).expect("read args"),
+                ),
+                arguments: fifth_args,
+            })
+            .await;
+        assert!(matches!(
+            fifth,
+            Err(IntegratedError::Tool(message))
+                if message.contains("reconnaissance budget exhausted")
+                    && message.contains("patch.preview")
+        ));
+
+        let source = fs::read_to_string(root.join("src/lib.rs")).expect("source");
+        service
+            .execute_tool_call(&NormalizedToolCallV1 {
+                tool_call_id: ToolCallId::new("tc-qwen38-recon-preview").expect("tool id"),
+                tool_name: "patch.preview".into(),
+                arguments_hash: "fnv1a64:qwen38-recon-preview".into(),
+                arguments: json!({
+                    "patchId": "patch-after-recon",
+                    "operations": [{
+                        "path": "src/lib.rs",
+                        "old": source,
+                        "new": format!("{}\n// proposed implementation marker\n", source.trim_end())
+                    }]
+                }),
+            })
+            .await
+            .expect("preview after reconnaissance");
+
+        let later_args = json!({"path":"src/lib.rs","startLine":60,"endLine":65});
+        service
+            .execute_tool_call(&NormalizedToolCallV1 {
+                tool_call_id: ToolCallId::new("tc-qwen38-recon-after-preview").expect("tool id"),
+                tool_name: "read".into(),
+                arguments_hash: stable_text_hash(
+                    &serde_json::to_string(&later_args).expect("read args"),
+                ),
+                arguments: later_args,
+            })
+            .await
+            .expect("read permitted after patch preview");
+    }
+
+    #[tokio::test]
+    async fn qwen38_verify_diff_without_patch_gets_progress_gate_not_finalize() {
+        let root = temp_git_workspace("qwen38-progress-gate-no-patch");
+        write_answer_fixture(&root, 42, 42);
+        commit_all(&root);
+        fs::write(
+            root.join("src/lib.rs"),
+            "pub fn answer() -> i32 {\n    42\n}\n// dirty before delegated work\n",
+        )
+        .expect("dirty source");
+        let contract = contract(&root, "run-qwen38-progress-gate-no-patch");
+        let mut cfg = config(&root);
+        cfg.model_id = "qwen3.8:27b".into();
+        let mut service = IntegratedDelegatedService::new(&root, contract, cfg).expect("service");
+        service.start().expect("start");
+        service
+            .execute_tool_call(&NormalizedToolCallV1 {
+                tool_call_id: ToolCallId::new("tc-qwen38-progress-verify").expect("tool id"),
+                tool_name: "verify.run".into(),
+                arguments_hash: "fnv1a64:qwen38-progress-verify".into(),
+                arguments: json!({"timeout":30000}),
+            })
+            .await
+            .expect("verify");
+        service
+            .execute_tool_call(&NormalizedToolCallV1 {
+                tool_call_id: ToolCallId::new("tc-qwen38-progress-diff").expect("tool id"),
+                tool_name: "diff.actual".into(),
+                arguments_hash: "fnv1a64:qwen38-progress-diff".into(),
+                arguments: json!({"paths":["src/lib.rs"]}),
+            })
+            .await
+            .expect("diff");
+
+        let history = service.provider_history();
+        let last = history.last().expect("progress instruction");
+        assert_eq!(last.role, "user");
+        assert!(last.content.contains("<catdesk_progress_gate>"));
+        assert!(last.content.contains("patch.preview"));
+        assert!(last.content.contains("patch.apply"));
+        assert!(
+            !last
+                .content
+                .contains("Provide the final concise completion claim")
+        );
+    }
+
+    #[tokio::test]
+    async fn legacy_qwen_successful_tool_result_keeps_existing_history_shape() {
+        let root = temp_git_workspace("legacy-qwen-tool-history");
+        fs::write(root.join("src/lib.rs"), "pub fn answer() -> i32 { 42 }\n").expect("lib");
+        commit_all(&root);
+        let contract = contract(&root, "run-legacy-qwen-tool-history");
+        let mut cfg = config(&root);
+        cfg.model_id = "qwen3.5:9b".into();
+        let mut service = IntegratedDelegatedService::new(&root, contract, cfg).expect("service");
+        service.start().expect("start");
+        service
+            .execute_tool_call(&NormalizedToolCallV1 {
+                tool_call_id: ToolCallId::new("tc-qwen35-read").expect("tool id"),
+                tool_name: "read".into(),
+                arguments_hash: "fnv1a64:qwen35-read".into(),
+                arguments: json!({"path":"src/lib.rs"}),
+            })
+            .await
+            .expect("read");
+
+        let history = service.provider_history();
+        let last = history.last().expect("tool result");
+        assert_eq!(last.role, "tool");
+        assert_eq!(last.tool_call_id.as_deref(), Some("tc-qwen35-read"));
+        assert!(
+            !history
+                .iter()
+                .any(|message| message.content.contains("<catdesk_tool_continuation>"))
+        );
+    }
+
+    #[tokio::test]
+    async fn qwen38_verified_final_diff_uses_existing_final_reasoning_instruction_only() {
+        let root = temp_git_workspace("qwen38-final-diff-continuation");
+        fs::write(root.join("src/lib.rs"), "pub fn answer() -> i32 { 41 }\n").expect("lib");
+        commit_all(&root);
+        fs::write(root.join("src/lib.rs"), "pub fn answer() -> i32 { 42 }\n").expect("modify");
+        let mut contract = contract(&root, "run-qwen38-final-diff-continuation");
+        contract.objective = format!(
+            "{CATDESK_READ_ONLY_MARKER} Exercise final-diff reasoning guidance without a worker mutation."
+        );
+        let mut cfg = config(&root);
+        cfg.model_id = "qwen3.8:27b".into();
+        let mut service = IntegratedDelegatedService::new(&root, contract, cfg).expect("service");
+        service.start().expect("start");
+        service.last_verification = Some(VerificationSummaryV1 {
+            status: VerificationStatusV1::Passed,
+            command: "verify_project".into(),
+            summary: "passed".into(),
+        });
+        service
+            .execute_tool_call(&NormalizedToolCallV1 {
+                tool_call_id: ToolCallId::new("tc-qwen38-diff").expect("tool id"),
+                tool_name: "diff.actual".into(),
+                arguments_hash: "fnv1a64:qwen38-diff".into(),
+                arguments: json!({"paths":["src/lib.rs"]}),
+            })
+            .await
+            .expect("diff");
+
+        let history = service.provider_history();
+        let last = history.last().expect("final reasoning instruction");
+        assert_eq!(last.role, "user");
+        assert!(
+            last.content
+                .contains("Do not call another tool. Provide the final concise completion claim")
+        );
+        assert_eq!(
+            history
+                .iter()
+                .filter(|message| message.content.contains("<catdesk_tool_continuation>"))
+                .count(),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn create_only_preview_survives_restart_and_applies_once() {
+        let root = temp_git_workspace("recover-create-patch");
+        fs::write(root.join("src/lib.rs"), "pub fn answer() -> i32 { 42 }\n").expect("lib");
+        commit_all(&root);
+        let contract = contract(&root, "run-t0144-create-patch-recovery");
+        let config = config(&root);
+        let mut service = IntegratedDelegatedService::new(&root, contract.clone(), config.clone())
+            .expect("service");
+        service.start().expect("start");
+        service
+            .execute_tool_call(&NormalizedToolCallV1 {
+                tool_call_id: ToolCallId::new("tc-create-preview").expect("tool id"),
+                tool_name: "patch.preview".into(),
+                arguments_hash: "fnv1a64:create-preview".into(),
+                arguments: json!({
+                    "patchId": "patch-create-restored",
+                    "operations": [{
+                        "path": "src/new-review.md",
+                        "old": "",
+                        "new": "# Restored create patch\n"
+                    }]
+                }),
+            })
+            .await
+            .expect("preview create patch");
+        assert!(!root.join("src/new-review.md").exists());
+        drop(service);
+
+        let mut recovered =
+            IntegratedDelegatedService::recover(&root, contract, config).expect("recover");
+        let restored = recovered
+            .patch_proposals
+            .get("patch-create-restored")
+            .expect("restored create proposal");
+        assert!(restored.expected_preimage_hashes.is_empty());
+        assert_eq!(restored.operations.len(), 1);
+        assert!(restored.operations[0].old.is_empty());
+        recovered
+            .execute_tool_call(&NormalizedToolCallV1 {
+                tool_call_id: ToolCallId::new("tc-create-apply").expect("tool id"),
+                tool_name: "patch.apply".into(),
+                arguments_hash: "fnv1a64:create-apply".into(),
+                arguments: json!({ "patchId": "patch-create-restored" }),
+            })
+            .await
+            .expect("apply restored create patch");
+        assert_eq!(
+            fs::read_to_string(root.join("src/new-review.md")).expect("created file"),
+            "# Restored create patch\n"
+        );
+        let applications = recovered
+            .journal
+            .load_patch_applications(&recovered.run_id().expect("run id"))
+            .expect("applications");
+        assert_eq!(applications.len(), 1);
     }
 
     #[tokio::test]
@@ -3482,6 +4237,8 @@ mod tests {
         write_answer_fixture(&root, 42, 42);
         commit_all(&root);
         let mut contract = contract(&root, "run-no-patch-next-action");
+        contract.objective =
+            format!("{CATDESK_READ_ONLY_MARKER} Verify the fixture without changing source files.");
         contract.acceptance_criteria = vec!["cargo tests pass".into()];
         let mut service =
             IntegratedDelegatedService::new(&root, contract, config(&root)).expect("service");
@@ -3581,6 +4338,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(windows, ignore = "requires a Python test interpreter on Windows")]
     async fn configured_advisor_cancellation_is_prompt_and_suppresses_delivery() {
         let root = temp_git_workspace("advisor-cancel-prompt");
         fs::write(root.join("src/lib.rs"), "pub fn answer() -> i32 { 41 }\n").expect("lib");
@@ -4420,7 +5178,7 @@ mod tests {
     }
 
     fn live_ollama_model_id() -> String {
-        std::env::var("CATDESK_LIVE_OLLAMA_MODEL").unwrap_or_else(|_| "qwen3.5:9b".into())
+        std::env::var("CATDESK_LIVE_OLLAMA_MODEL").unwrap_or_else(|_| "qwen3.8:27b".into())
     }
 
     fn fake_deepseek_sidecar(root: &Path) -> IntegratedAdvisorLocalRuntimeConfigV1 {

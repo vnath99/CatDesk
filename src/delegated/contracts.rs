@@ -449,6 +449,11 @@ fn validate_contract_path(path: &str, allow_forbidden_protected_path: bool) -> R
     if trimmed.is_empty() || trimmed.len() > MAX_PATH_CHARS {
         return Err(format!("invalid contract path `{path}`"));
     }
+    // `.` is the canonical contract representation of the workspace root.
+    // It is allowed only as the complete path, never as a path component.
+    if trimmed == "." {
+        return Ok(());
+    }
     if trimmed.starts_with('-')
         || trimmed.starts_with('/')
         || trimmed.starts_with('\\')
@@ -556,6 +561,17 @@ mod tests {
 
         let mut contract = fixture_contract();
         contract.feature_branch = "bad branch".into();
+        assert!(validate_contract(&contract).is_err());
+    }
+
+    #[test]
+    fn workspace_root_scope_uses_dot_without_allowing_dot_components() {
+        let mut contract = fixture_contract();
+        contract.allowed_paths = vec![".".into()];
+        contract.forbidden_paths = vec![".git".into()];
+        validate_contract(&contract).expect("workspace root scope is valid");
+
+        contract.allowed_paths = vec!["./src".into()];
         assert!(validate_contract(&contract).is_err());
     }
 

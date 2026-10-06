@@ -657,7 +657,7 @@ pub fn catdesk_tool_definitions() -> Vec<ToolDefinitionV1> {
     vec![
         ToolDefinitionV1 {
             name: "read".into(),
-            description: "Read a bounded file excerpt through CatDesk.".into(),
+            description: "Read a bounded file excerpt through CatDesk. Use startLine/endLine to advance through large files; omitted bounds return a small default window with continuation metadata.".into(),
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -699,8 +699,8 @@ pub fn catdesk_tool_definitions() -> Vec<ToolDefinitionV1> {
                         "items": {
                             "type": "object",
                             "properties": {
-                                "path": { "type": "string" },
-                                "old": { "type": "string" },
+                                "path": { "type": "string", "description": "Required on every operation, even when targetPaths contains the same file; targetPaths never substitutes for operation.path." },
+                                "old": { "type": "string", "description": "Exact existing text to replace. Use an empty string only for a single create-only operation targeting a positively absent approved file; create-only never overwrites an existing target." },
                                 "new": { "type": "string" }
                             },
                             "required": ["path", "old", "new"]
@@ -1337,9 +1337,7 @@ fn ollama_chat_body(
         "stream": false,
         "keep_alive": keep_alive,
         "messages": messages,
-        "options": {
-            "temperature": 0.0
-        }
+        "options": ollama_options_for_model(model, disable_thinking)
     });
     if !allowed_tools.is_empty() {
         body["tools"] = ollama_tool_definitions(allowed_tools);
@@ -1348,6 +1346,39 @@ fn ollama_chat_body(
         body["think"] = json!(false);
     }
     body
+}
+
+fn ollama_options_for_model(model: &str, disable_thinking: bool) -> Value {
+    if qwen38_model_family(model) {
+        if disable_thinking {
+            return json!({
+                "temperature": 0.7,
+                "top_p": 0.8,
+                "top_k": 20,
+                "min_p": 0.0,
+                "presence_penalty": 1.5,
+                "repeat_penalty": 1.0,
+                "num_ctx": 16384
+            });
+        }
+        return json!({
+            "temperature": 1.0,
+            "top_p": 0.95,
+            "top_k": 20,
+            "min_p": 0.0,
+            "presence_penalty": 0.0,
+            "repeat_penalty": 1.0,
+            "num_ctx": 16384
+        });
+    }
+    json!({ "temperature": 0.0 })
+}
+
+fn qwen38_model_family(model: &str) -> bool {
+    model
+        .split(':')
+        .next()
+        .is_some_and(|family| family.eq_ignore_ascii_case("qwen3.8"))
 }
 
 fn ollama_error_indicates_unsupported_thinking(body: &str) -> bool {
@@ -1644,6 +1675,38 @@ mod tests {
                 && !tool.name.contains("exec")
                 && !tool.description.to_ascii_lowercase().contains("provider")
         }));
+    }
+
+    #[test]
+    fn qwen38_non_thinking_request_uses_model_recommended_sampling_and_context_floor() {
+        let body = ollama_chat_body("qwen3.8:27b", &Some("30m".into()), &[], &[], true);
+        assert_eq!(body["think"], json!(false));
+        assert_eq!(body["options"]["temperature"], json!(0.7));
+        assert_eq!(body["options"]["top_p"], json!(0.8));
+        assert_eq!(body["options"]["top_k"], json!(20));
+        assert_eq!(body["options"]["min_p"], json!(0.0));
+        assert_eq!(body["options"]["presence_penalty"], json!(1.5));
+        assert_eq!(body["options"]["repeat_penalty"], json!(1.0));
+        assert_eq!(body["options"]["num_ctx"], json!(16384));
+    }
+
+    #[test]
+    fn qwen38_thinking_fallback_uses_model_recommended_thinking_sampling() {
+        let body = ollama_chat_body("QWEN3.8:27B", &None, &[], &[], false);
+        assert!(body.get("think").is_none());
+        assert_eq!(body["options"]["temperature"], json!(1.0));
+        assert_eq!(body["options"]["top_p"], json!(0.95));
+        assert_eq!(body["options"]["top_k"], json!(20));
+        assert_eq!(body["options"]["presence_penalty"], json!(0.0));
+        assert_eq!(body["options"]["repeat_penalty"], json!(1.0));
+        assert_eq!(body["options"]["num_ctx"], json!(16384));
+    }
+
+    #[test]
+    fn legacy_ollama_models_keep_existing_deterministic_sampling() {
+        let body = ollama_chat_body("qwen3.5:9b", &None, &[], &[], true);
+        assert_eq!(body["options"], json!({"temperature": 0.0}));
+        assert_eq!(body["think"], json!(false));
     }
 
     #[test]

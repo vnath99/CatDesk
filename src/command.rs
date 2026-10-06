@@ -68,6 +68,57 @@ pub struct InterceptedMovePathRequest {
     pub overwrite: bool,
 }
 
+/// The only public lifecycle operations that may bypass allowlisted shell mode.
+/// This is intentionally a typed, closed set: callers never supply a script
+/// path, workspace, flag, or arbitrary PowerShell expression.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LifecycleFacadeOperation {
+    Status,
+    Start,
+    Recover,
+    Stop,
+    AutostartStatus,
+    AutostartEnable,
+    AutostartDisable,
+}
+
+impl LifecycleFacadeOperation {
+    pub fn command_tokens(self) -> &'static [&'static str] {
+        match self {
+            Self::Status => &["status"],
+            Self::Start => &["start"],
+            Self::Recover => &["recover"],
+            Self::Stop => &["stop"],
+            Self::AutostartStatus => &["autostart", "status"],
+            Self::AutostartEnable => &["autostart", "enable"],
+            Self::AutostartDisable => &["autostart", "disable"],
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Status => "status",
+            Self::Start => "start",
+            Self::Recover => "recover",
+            Self::Stop => "stop",
+            Self::AutostartStatus => "autostart status",
+            Self::AutostartEnable => "autostart enable",
+            Self::AutostartDisable => "autostart disable",
+        }
+    }
+
+    pub fn facade_command(self) -> &'static str {
+        match self {
+            Self::AutostartStatus | Self::AutostartEnable | Self::AutostartDisable => "autostart",
+            _ => self.command_tokens()[0],
+        }
+    }
+
+    pub fn is_read_only(self) -> bool {
+        matches!(self, Self::Status | Self::AutostartStatus)
+    }
+}
+
 /// Clamp timeout to [1, MAX_TIMEOUT_MS].
 pub fn clamp_timeout(t: Option<u64>) -> u64 {
     match t {
@@ -202,6 +253,77 @@ pub fn detect_list_files_intercept(command: &str) -> Option<InterceptedListFiles
 pub fn detect_move_path_intercept(command: &str) -> Option<InterceptedMovePathRequest> {
     let words = parse_word_only_shell_command(command)?;
     detect_move_path_intercept_from_words(&words)
+}
+
+/// Recognize only an exact root-relative public lifecycle facade invocation.
+/// We deliberately do not use the more permissive shell parser here: quoted
+/// forms, assignments, control syntax, and every extra token must remain on
+/// the normal allowlist path where they are blocked.
+pub fn detect_lifecycle_facade_intercept(command: &str) -> Option<LifecycleFacadeOperation> {
+    let command = command.trim();
+    if command.is_empty()
+        || command.bytes().any(|byte| {
+            !byte.is_ascii()
+                || (byte.is_ascii_whitespace() && byte != b' ')
+                || matches!(
+                    byte,
+                    b'\''
+                        | b'"'
+                        | b';'
+                        | b'|'
+                        | b'&'
+                        | b'<'
+                        | b'>'
+                        | b'`'
+                        | b'$'
+                        | b'='
+                        | b'('
+                        | b')'
+                )
+        })
+    {
+        return None;
+    }
+    let words = command.split_ascii_whitespace().collect::<Vec<_>>();
+    let (script, args) = words.split_first()?;
+    if !matches_root_lifecycle_script(script) {
+        return None;
+    }
+    match *args {
+        [operation] if operation.eq_ignore_ascii_case("status") => {
+            Some(LifecycleFacadeOperation::Status)
+        }
+        [operation] if operation.eq_ignore_ascii_case("start") => {
+            Some(LifecycleFacadeOperation::Start)
+        }
+        [operation] if operation.eq_ignore_ascii_case("recover") => {
+            Some(LifecycleFacadeOperation::Recover)
+        }
+        [operation] if operation.eq_ignore_ascii_case("stop") => {
+            Some(LifecycleFacadeOperation::Stop)
+        }
+        [group, action]
+            if group.eq_ignore_ascii_case("autostart") && action.eq_ignore_ascii_case("status") =>
+        {
+            Some(LifecycleFacadeOperation::AutostartStatus)
+        }
+        [group, action]
+            if group.eq_ignore_ascii_case("autostart") && action.eq_ignore_ascii_case("enable") =>
+        {
+            Some(LifecycleFacadeOperation::AutostartEnable)
+        }
+        [group, action]
+            if group.eq_ignore_ascii_case("autostart")
+                && action.eq_ignore_ascii_case("disable") =>
+        {
+            Some(LifecycleFacadeOperation::AutostartDisable)
+        }
+        _ => None,
+    }
+}
+
+fn matches_root_lifecycle_script(value: &str) -> bool {
+    value.eq_ignore_ascii_case(r".\catdesk.ps1") || value.eq_ignore_ascii_case("./catdesk.ps1")
 }
 
 pub fn validate_shell_safety(command: &str) -> Result<(), String> {
@@ -1445,5 +1567,45 @@ mod tests {
     fn detect_move_path_intercept_rejects_multi_source_or_unsupported_flags() {
         assert_eq!(detect_move_path_intercept("mv a b c"), None);
         assert_eq!(detect_move_path_intercept("mv -r a b"), None);
+    }
+
+    #[test]
+    fn detect_lifecycle_facade_intercept_accepts_only_the_fixed_public_shapes() {
+        use LifecycleFacadeOperation::*;
+
+        for (input, expected) in [
+            (r".\catdesk.ps1 status", Status),
+            (r"./catdesk.ps1 start", Start),
+            (r".\CATDESK.PS1 recover", Recover),
+            (r".\catdesk.ps1 stop", Stop),
+            (r".\catdesk.ps1 autostart status", AutostartStatus),
+            (r".\catdesk.ps1 autostart enable", AutostartEnable),
+            (r".\catdesk.ps1 autostart disable", AutostartDisable),
+        ] {
+            assert_eq!(detect_lifecycle_facade_intercept(input), Some(expected));
+        }
+    }
+
+    #[test]
+    fn detect_lifecycle_facade_intercept_rejects_paths_flags_and_shell_syntax() {
+        for input in [
+            r".\catdesk.ps1 status -Workspace .",
+            r".\scripts\catdesk.ps1 status",
+            r"C:\work\catdesk.ps1 status",
+            r"..\catdesk.ps1 status",
+            r"catdesk.ps1 status",
+            r".\catdesk.ps1 status; whoami",
+            r".\catdesk.ps1 status && whoami",
+            r".\catdesk.ps1 status | Out-File x",
+            r".\catdesk.ps1 status > out.txt",
+            ".\\catdesk.ps1 status\nwhoami",
+            r"X=1 .\catdesk.ps1 status",
+            r".\catdesk.ps1 'status'",
+            r".\catdesk.ps1 $(whoami)",
+            r".\catdesk.ps1 autostart status extra",
+            r".\catdesk.ps1 restart",
+        ] {
+            assert_eq!(detect_lifecycle_facade_intercept(input), None, "{input}");
+        }
     }
 }

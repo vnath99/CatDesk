@@ -1,13 +1,18 @@
 //! Versioned autonomous-development contract and fail-closed policy checks.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
+
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 
 use super::contracts::stable_hash;
 
 pub const AUTONOMOUS_DEVELOPMENT_CONTRACT_SCHEMA_VERSION: u32 = 1;
+pub const AUTONOMOUS_RUNTIME_CAPABILITY_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,6 +38,28 @@ pub struct AutonomousDevelopmentContractV1 {
     pub rate_limit_policy: AutonomousRateLimitPolicyV1,
     pub autonomy_lease: AutonomyLeaseV1,
     pub hard_stop_conditions: Vec<AutonomousHardStopV1>,
+    /// Exact task-attributable outputs for the historical single-task form.
+    /// Omission preserves the serialized/hash-compatible legacy contract.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub completion_artifact_ids: Vec<String>,
+    /// Optional approved execution DAG. Empty preserves the historical
+    /// one-task contract bytes and behavior.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub task_graph: Vec<AutonomousTaskSpecV1>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutonomousTaskSpecV1 {
+    pub task_id: String,
+    pub priority: u32,
+    #[serde(default)]
+    pub depends_on: Vec<String>,
+    pub acceptance_criteria: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planner_gate: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub completion_artifact_ids: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -42,12 +69,28 @@ pub enum AutonomousCommandProfileV1 {
     CargoClippy,
     CargoTest,
     CargoBuildRelease,
+    CargoBuildReleaseIsolated,
     GitStatus,
     GitDiff,
     ApprovedProjectTests,
 }
 
 impl AutonomousCommandProfileV1 {
+    /// The one authoritative command-profile catalog. Capability discovery and
+    /// policy matching both derive from this type rather than a second list.
+    pub const fn catalog() -> &'static [Self] {
+        &[
+            Self::CargoFmt,
+            Self::CargoClippy,
+            Self::CargoTest,
+            Self::CargoBuildRelease,
+            Self::CargoBuildReleaseIsolated,
+            Self::GitStatus,
+            Self::GitDiff,
+            Self::ApprovedProjectTests,
+        ]
+    }
+
     pub fn exact_argv(&self) -> &'static [&'static str] {
         match self {
             Self::CargoFmt => &["cargo", "fmt", "--check"],
@@ -62,11 +105,46 @@ impl AutonomousCommandProfileV1 {
             ],
             Self::CargoTest => &["cargo", "test"],
             Self::CargoBuildRelease => &["cargo", "build", "--release"],
+            // This workspace-relative directory is product-defined verification
+            // output only. It is not contract input or deployment authority.
+            Self::CargoBuildReleaseIsolated => &[
+                "cargo",
+                "build",
+                "--release",
+                "--locked",
+                "--target-dir",
+                ".catdesk/verification-targets/autonomy-release",
+            ],
             Self::GitStatus => &["git", "status", "--short"],
             Self::GitDiff => &["git", "diff", "--check"],
-            Self::ApprovedProjectTests => &[],
+            Self::ApprovedProjectTests => &[
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                "scripts/test-start-catdesk-stack.ps1",
+            ],
         }
     }
+}
+
+/// Fixed, bounded, non-secret runtime capability data. It is derived directly
+/// from the command-profile catalog and grants no contract/session authority.
+pub fn runtime_capability_manifest() -> Value {
+    let command_profiles = AutonomousCommandProfileV1::catalog()
+        .iter()
+        .map(|profile| {
+            serde_json::to_value(profile)
+                .expect("AutonomousCommandProfileV1 serialization is infallible")
+        })
+        .collect::<Vec<_>>();
+    json!({
+        "schemaVersion": AUTONOMOUS_RUNTIME_CAPABILITY_SCHEMA_VERSION,
+        "product": "CatDesk",
+        "contractSchemaVersion": AUTONOMOUS_DEVELOPMENT_CONTRACT_SCHEMA_VERSION,
+        "commandProfiles": command_profiles,
+    })
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -253,8 +331,10 @@ impl AutonomousDevelopmentContractV1 {
         ] {
             validate_slug(value, label)?;
         }
-        if self.mode != "chatgpt_web_codex_autonomous"
-            || self.objective.trim().is_empty()
+        if !matches!(
+            self.mode.as_str(),
+            "chatgpt_web_codex_autonomous" | "chatgpt_web_qwen_autonomous"
+        ) || self.objective.trim().is_empty()
             || self.objective.len() > 8_000
         {
             return Err(ContractPolicyError::Validation(
@@ -294,6 +374,11 @@ impl AutonomousDevelopmentContractV1 {
                 "autonomous contract provider selection is unsupported".into(),
             ));
         }
+        if self.provider_policy.primary_model != "gpt-5.6-terra" {
+            return Err(ContractPolicyError::Validation(
+                "autonomous Codex implementation work requires gpt-5.6-terra".into(),
+            ));
+        }
         if self.autonomy_lease.expires_at_unix <= self.autonomy_lease.issued_at_unix
             || self.autonomy_lease.maximum_total_elapsed_seconds == 0
             || self.autonomy_lease.maximum_provider_turns == 0
@@ -327,12 +412,226 @@ impl AutonomousDevelopmentContractV1 {
                 "autonomous command profiles must be non-empty and unique".into(),
             ));
         }
+        validate_task_graph(&self.task_graph)?;
+        validate_completion_artifact_ids(
+            &self.workspace,
+            &self.allowed_paths,
+            &self.completion_artifact_ids,
+        )?;
+        for task in &self.task_graph {
+            validate_completion_artifact_ids(
+                &self.workspace,
+                &self.allowed_paths,
+                &task.completion_artifact_ids,
+            )?;
+        }
         Ok(())
+    }
+
+    pub fn starts_on_routine_provider(&self) -> bool {
+        self.mode == "chatgpt_web_qwen_autonomous"
     }
 
     pub fn decision_hash(&self) -> Result<String, ContractPolicyError> {
         stable_hash(self).map_err(ContractPolicyError::Validation)
     }
+}
+
+/// Completion artifacts are authority-bearing exact workspace-relative file
+/// IDs. Existing files are inspected only for safe file identity; absence is
+/// intentionally allowed because a provider may be required to create one.
+fn validate_completion_artifact_ids(
+    workspace: &Path,
+    allowed_paths: &[PathBuf],
+    artifact_ids: &[String],
+) -> Result<(), ContractPolicyError> {
+    if artifact_ids.len() > 64 {
+        return Err(ContractPolicyError::Validation(
+            "completion artifact list is oversized".into(),
+        ));
+    }
+    let mut normalized = BTreeSet::new();
+    for artifact_id in artifact_ids {
+        if artifact_id.is_empty()
+            || artifact_id.len() > 512
+            || artifact_id.contains('\0')
+            || artifact_id.to_ascii_lowercase().contains("authorization:")
+        {
+            return Err(ContractPolicyError::Validation(
+                "completion artifact id is unsafe".into(),
+            ));
+        }
+        let relative = Path::new(artifact_id);
+        if relative.is_absolute()
+            || relative
+                .components()
+                .any(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err(ContractPolicyError::Validation(
+                "completion artifact must be a normalized workspace-relative file path".into(),
+            ));
+        }
+        let normalized_id = relative.to_string_lossy().replace('\\', "/");
+        if !normalized.insert(normalized_id) {
+            return Err(ContractPolicyError::Validation(
+                "completion artifact ids must be unique after normalization".into(),
+            ));
+        }
+        let candidate = workspace.join(relative);
+        if !candidate.starts_with(workspace)
+            || !allowed_paths
+                .iter()
+                .any(|allowed| candidate.starts_with(allowed))
+        {
+            return Err(ContractPolicyError::Validation(
+                "completion artifact is outside approved paths".into(),
+            ));
+        }
+        let mut cursor = workspace.to_path_buf();
+        for component in relative.components() {
+            let Component::Normal(part) = component else {
+                unreachable!()
+            };
+            cursor.push(part);
+            if cursor.exists() {
+                let metadata = std::fs::symlink_metadata(&cursor).map_err(|_| {
+                    ContractPolicyError::Validation(
+                        "completion artifact metadata is unavailable".into(),
+                    )
+                })?;
+                if has_unsafe_link_or_reparse(&metadata)
+                    || (cursor == candidate && !metadata.file_type().is_file())
+                {
+                    return Err(ContractPolicyError::Validation(
+                        "completion artifact has an unsafe filesystem identity".into(),
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn has_unsafe_link_or_reparse(metadata: &std::fs::Metadata) -> bool {
+    metadata.file_type().is_symlink() || {
+        #[cfg(windows)]
+        {
+            metadata.file_attributes() & 0x400 != 0
+        }
+        #[cfg(not(windows))]
+        {
+            false
+        }
+    }
+}
+
+fn validate_task_graph(graph: &[AutonomousTaskSpecV1]) -> Result<(), ContractPolicyError> {
+    if graph.is_empty() {
+        return Ok(());
+    }
+    if graph.len() > 128 {
+        return Err(ContractPolicyError::Validation(
+            "autonomous task graph is oversized".into(),
+        ));
+    }
+    let ids = graph
+        .iter()
+        .map(|task| task.task_id.as_str())
+        .collect::<BTreeSet<_>>();
+    if ids.len() != graph.len() {
+        return Err(ContractPolicyError::Validation(
+            "autonomous task graph ids must be unique".into(),
+        ));
+    }
+    for task in graph {
+        validate_slug(&task.task_id, "autonomous graph task id")?;
+        if task.priority == 0
+            || task.acceptance_criteria.is_empty()
+            || task.acceptance_criteria.len() > 32
+            || task.depends_on.len() > 64
+        {
+            return Err(ContractPolicyError::Validation(
+                "autonomous task graph task shape is invalid".into(),
+            ));
+        }
+        let dependencies = task
+            .depends_on
+            .iter()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>();
+        if dependencies.len() != task.depends_on.len()
+            || dependencies.contains(task.task_id.as_str())
+            || !dependencies
+                .iter()
+                .all(|dependency| ids.contains(dependency))
+        {
+            return Err(ContractPolicyError::Validation(
+                "autonomous task graph dependencies are invalid".into(),
+            ));
+        }
+        for dependency in &task.depends_on {
+            validate_slug(dependency, "autonomous graph dependency")?;
+        }
+        if task
+            .acceptance_criteria
+            .iter()
+            .any(|value| !safe_task_text(value))
+            || task
+                .planner_gate
+                .as_deref()
+                .is_some_and(|value| !safe_task_text(value))
+        {
+            return Err(ContractPolicyError::Validation(
+                "autonomous task graph text is unsafe".into(),
+            ));
+        }
+    }
+    let mut remaining = graph
+        .iter()
+        .map(|task| {
+            (
+                task.task_id.as_str(),
+                task.depends_on
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<BTreeSet<_>>(),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    let mut complete = BTreeSet::new();
+    loop {
+        let ready = remaining
+            .iter()
+            .filter(|(_, dependencies)| {
+                dependencies
+                    .iter()
+                    .all(|dependency| complete.contains(dependency))
+            })
+            .map(|(id, _)| *id)
+            .collect::<Vec<_>>();
+        if ready.is_empty() {
+            break;
+        }
+        for id in ready {
+            remaining.remove(id);
+            complete.insert(id);
+        }
+    }
+    if !remaining.is_empty() {
+        return Err(ContractPolicyError::Validation(
+            "autonomous task graph must be acyclic".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn safe_task_text(value: &str) -> bool {
+    let lowered = value.to_ascii_lowercase();
+    !value.trim().is_empty()
+        && value.len() <= 1024
+        && !lowered.contains("api_key")
+        && !lowered.contains("authorization:")
+        && !value.contains("-----BEGIN")
 }
 
 impl AutonomousPolicyEngineV1 {
@@ -550,7 +849,7 @@ mod tests {
             },
             provider_policy: AutonomousProviderPolicyV1 {
                 primary_provider: "codex-cli".into(),
-                primary_model: "default".into(),
+                primary_model: "gpt-5.6-terra".into(),
                 routine_provider: "ollama".into(),
                 routine_model: "qwen3.6:35b-a3b".into(),
                 allow_paid_fallback: false,
@@ -583,6 +882,8 @@ mod tests {
                 maximum_repair_cycles: 1,
             },
             hard_stop_conditions: vec![AutonomousHardStopV1::CancellationRequested],
+            completion_artifact_ids: Vec::new(),
+            task_graph: Vec::new(),
         }
     }
 
@@ -596,6 +897,96 @@ mod tests {
         let mut prohibited = contract.clone();
         prohibited.provider_policy.allow_cloud_fallback = true;
         assert!(prohibited.validate().is_err());
+    }
+
+    #[test]
+    fn provider_start_mode_is_explicit_backward_compatible_and_fail_closed() {
+        let codex = contract();
+        assert_eq!(codex.mode, "chatgpt_web_codex_autonomous");
+        assert!(!codex.starts_on_routine_provider());
+        codex
+            .validate()
+            .expect("historical Codex mode remains valid");
+
+        let mut qwen = codex.clone();
+        qwen.mode = "chatgpt_web_qwen_autonomous".into();
+        qwen.validate()
+            .expect("explicit local routine-provider mode is valid");
+        assert!(qwen.starts_on_routine_provider());
+
+        let mut unknown = codex;
+        unknown.mode = "chatgpt_web_unknown_autonomous".into();
+        assert!(unknown.validate().is_err());
+    }
+
+    #[test]
+    fn empty_task_graph_preserves_legacy_contract_serialization() {
+        let contract = contract();
+        let json = serde_json::to_value(&contract).expect("serialize");
+        assert!(json.get("taskGraph").is_none());
+        let restored: AutonomousDevelopmentContractV1 =
+            serde_json::from_value(json).expect("legacy deserialize");
+        assert!(restored.task_graph.is_empty());
+        assert_eq!(
+            contract.decision_hash().expect("hash"),
+            restored.decision_hash().expect("hash")
+        );
+    }
+
+    #[test]
+    fn completion_artifact_ids_are_optional_but_path_safe_and_exact() {
+        let mut contract = contract();
+        contract.completion_artifact_ids = vec!["src/output.txt".into()];
+        assert!(contract.validate().is_ok());
+        for invalid in [
+            "/absolute.txt",
+            "../escape.txt",
+            "src/../output.txt",
+            "outside.txt",
+        ] {
+            let mut invalid_contract = contract.clone();
+            invalid_contract.completion_artifact_ids = vec![invalid.into()];
+            assert!(invalid_contract.validate().is_err(), "{invalid}");
+        }
+        let mut duplicate = contract.clone();
+        duplicate.completion_artifact_ids = vec!["src/output.txt".into(), "src\\output.txt".into()];
+        assert!(duplicate.validate().is_err());
+        let existing_directory = contract.workspace.join("src/existing-dir");
+        std::fs::create_dir_all(&existing_directory).expect("directory");
+        let mut unsafe_type = contract;
+        unsafe_type.completion_artifact_ids = vec!["src/existing-dir".into()];
+        assert!(unsafe_type.validate().is_err());
+    }
+
+    #[test]
+    fn task_graph_rejects_duplicate_missing_self_and_cycles() {
+        let mut contract = contract();
+        contract.task_graph = vec![
+            AutonomousTaskSpecV1 {
+                task_id: "a".into(),
+                priority: 1,
+                depends_on: vec![],
+                acceptance_criteria: vec!["bounded A".into()],
+                planner_gate: None,
+                completion_artifact_ids: Vec::new(),
+            },
+            AutonomousTaskSpecV1 {
+                task_id: "b".into(),
+                priority: 1,
+                depends_on: vec!["a".into()],
+                acceptance_criteria: vec!["bounded B".into()],
+                planner_gate: Some("choose architecture".into()),
+                completion_artifact_ids: Vec::new(),
+            },
+        ];
+        assert!(contract.validate().is_ok());
+        contract.task_graph[1].depends_on = vec!["missing".into()];
+        assert!(contract.validate().is_err());
+        contract.task_graph[1].depends_on = vec!["b".into()];
+        assert!(contract.validate().is_err());
+        contract.task_graph[1].depends_on = vec!["a".into()];
+        contract.task_graph[0].depends_on = vec!["b".into()];
+        assert!(contract.validate().is_err());
     }
     #[test]
     fn paths_commands_and_git_are_fail_closed() {
@@ -625,6 +1016,134 @@ mod tests {
             engine
                 .permit_git_action(AutonomousGitActionV1::ForcePush)
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn isolated_release_profile_is_closed_world_and_legacy_release_is_unchanged() {
+        let isolated = AutonomousCommandProfileV1::CargoBuildReleaseIsolated;
+        let legacy = AutonomousCommandProfileV1::CargoBuildRelease;
+        assert_eq!(
+            legacy.exact_argv(),
+            &["cargo", "build", "--release"],
+            "CARGO_BUILD_RELEASE must remain backwards compatible"
+        );
+        assert_eq!(
+            serde_json::to_string(&legacy).expect("serialize legacy profile"),
+            "\"CARGO_BUILD_RELEASE\""
+        );
+        assert_eq!(
+            isolated.exact_argv(),
+            &[
+                "cargo",
+                "build",
+                "--release",
+                "--locked",
+                "--target-dir",
+                ".catdesk/verification-targets/autonomy-release",
+            ]
+        );
+        assert_ne!(isolated.exact_argv(), legacy.exact_argv());
+        let target = std::path::Path::new(isolated.exact_argv()[5]);
+        assert!(target.is_relative());
+        assert!(
+            !target
+                .components()
+                .any(|part| matches!(part, Component::ParentDir))
+        );
+        assert_ne!(target, std::path::Path::new("target/release"));
+        assert_eq!(
+            serde_json::to_string(&isolated).expect("serialize profile"),
+            "\"CARGO_BUILD_RELEASE_ISOLATED\""
+        );
+        assert_eq!(
+            serde_json::from_str::<AutonomousCommandProfileV1>("\"CARGO_BUILD_RELEASE_ISOLATED\"")
+                .expect("deserialize isolated profile"),
+            isolated
+        );
+        assert!(
+            serde_json::from_str::<AutonomousCommandProfileV1>(
+                "\"CARGO_BUILD_RELEASE_ISOLATED:/caller/path\""
+            )
+            .is_err()
+        );
+
+        let mut selected = contract();
+        selected.allowed_command_profiles = vec![isolated.clone()];
+        selected.verification_policy.required_commands = vec![isolated.clone()];
+        let engine = AutonomousPolicyEngineV1::new(selected).expect("isolated policy");
+        let exact = isolated
+            .exact_argv()
+            .iter()
+            .map(|part| (*part).to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            engine.permit_command(&exact).expect("exact isolated argv"),
+            isolated
+        );
+        let mut caller_selected = exact;
+        caller_selected[5] = ".catdesk/verification-targets/caller-selected".into();
+        assert!(engine.permit_command(&caller_selected).is_err());
+    }
+
+    #[test]
+    fn runtime_capability_manifest_is_catalog_derived_bounded_and_stable() {
+        let manifest = runtime_capability_manifest();
+        assert_eq!(
+            manifest.get("schemaVersion").and_then(Value::as_u64),
+            Some(1)
+        );
+        assert_eq!(
+            manifest.get("product").and_then(Value::as_str),
+            Some("CatDesk")
+        );
+        assert_eq!(
+            manifest
+                .get("contractSchemaVersion")
+                .and_then(Value::as_u64),
+            Some(AUTONOMOUS_DEVELOPMENT_CONTRACT_SCHEMA_VERSION as u64)
+        );
+        let profiles = manifest
+            .get("commandProfiles")
+            .and_then(Value::as_array)
+            .expect("bounded profile catalog")
+            .iter()
+            .map(|value| value.as_str().expect("serialized profile").to_string())
+            .collect::<Vec<_>>();
+        let expected = AutonomousCommandProfileV1::catalog()
+            .iter()
+            .map(|profile| {
+                serde_json::to_value(profile)
+                    .expect("profile serialization")
+                    .as_str()
+                    .expect("profile name")
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(profiles, expected);
+        assert_eq!(
+            profiles,
+            vec![
+                "CARGO_FMT",
+                "CARGO_CLIPPY",
+                "CARGO_TEST",
+                "CARGO_BUILD_RELEASE",
+                "CARGO_BUILD_RELEASE_ISOLATED",
+                "GIT_STATUS",
+                "GIT_DIFF",
+                "APPROVED_PROJECT_TESTS",
+            ]
+        );
+        assert_eq!(
+            profiles.iter().collect::<BTreeSet<_>>().len(),
+            profiles.len(),
+            "catalog must not contain duplicate advertised profiles"
+        );
+        assert!(
+            serde_json::to_string(&manifest)
+                .expect("manifest serialization")
+                .len()
+                <= 2_048
         );
     }
     #[test]

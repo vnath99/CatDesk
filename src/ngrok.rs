@@ -1,10 +1,12 @@
 use crate::openai_tunnel::{
-    OPENAI_TUNNEL_READINESS_TIMEOUT, OfficialRuntimeStatus, RuntimeMonitorConfig,
-    RuntimeMonitorState, TunnelClientDiscoveryOptions, build_runtime_connect_command,
+    OPENAI_TUNNEL_READINESS_TIMEOUT, OfficialRuntimeRecoveryStateV1, OfficialRuntimeStatus,
+    RuntimeMonitorConfig, RuntimeMonitorState, TunnelClientDiscoveryOptions,
+    build_runtime_connect_command, classify_official_runtime_recovery_state,
     connect_official_runtime, credential_environment_present, default_user_tools_dir,
     discover_tunnel_client, monitor_health_from_status, official_runtime_status,
     probe_tunnel_client_readiness, run_tunnel_client_doctor, should_attempt_recovery,
-    spawn_tunnel_client_run, tunnel_id_environment_present,
+    spawn_tunnel_client_run, trusted_tunnel_client_executable_fingerprint,
+    tunnel_id_environment_present, verified_official_runtime_recovery_identity,
 };
 use crate::state::{SharedState, load_ngrok_authtoken, user_home_dir};
 use crate::tunnel::{
@@ -15,6 +17,28 @@ use ngrok::prelude::*;
 use reqwest::Url;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
+
+const EXISTING_RUNTIME_NOT_READY_WARNING: &str =
+    "Official tunnel-client runtime exists but is not ready; CatDesk will monitor it";
+
+fn recovery_is_eligible_for_official_runtime(
+    health: TransportHealth,
+    runtime_is_running: bool,
+    local_mcp_ready: bool,
+    auto_recover: bool,
+    credential_present: bool,
+    tunnel_id_present: bool,
+) -> bool {
+    if !auto_recover || !local_mcp_ready || !credential_present || !tunnel_id_present {
+        return false;
+    }
+    matches!(health, TransportHealth::Disconnected)
+        || (matches!(health, TransportHealth::Degraded) && runtime_is_running)
+}
+
+fn clear_existing_runtime_not_ready_warning(warnings: &mut Vec<String>) {
+    warnings.retain(|warning| warning != EXISTING_RUNTIME_NOT_READY_WARNING);
+}
 
 pub async fn start_transport(state: SharedState) -> Result<(), String> {
     let mode = {
@@ -60,8 +84,9 @@ async fn configure_openai_secure_tunnel(state: SharedState) -> Result<(), String
             "INFO",
             "OpenAI Secure MCP Tunnel external mode configured; operator owns tunnel-client".into(),
         );
+        // External foreground ownership has no authoritative runtime status
+        // surface.  Do not infer readiness from a legacy configured admin URL.
         drop(app);
-        refresh_openai_readiness_from_admin_url(&state).await;
         return Ok(());
     }
 
@@ -167,12 +192,13 @@ async fn configure_official_runtime_mode(
     state: SharedState,
     client_path: PathBuf,
 ) -> Result<(), String> {
-    let (alias, profile, auto_connect, local_mcp_url) = {
+    let (alias, profile, auto_connect, auto_recover, local_mcp_url) = {
         let app = state.lock().await;
         (
             app.openai_tunnel_config.runtime_alias.clone(),
             app.openai_tunnel_config.profile_name.clone(),
             app.openai_tunnel_config.auto_connect,
+            app.openai_tunnel_config.auto_recover,
             format!(
                 "http://{}:{}{}",
                 app.mcp_bind_host,
@@ -181,19 +207,25 @@ async fn configure_official_runtime_mode(
             ),
         )
     };
+    let trusted_client_identity = trusted_tunnel_client_executable_fingerprint(&client_path)
+        .map_err(|_| "trusted official runtime client identity is unavailable".to_string())?;
     match official_runtime_status(&client_path, &alias).await {
-        Ok(status) if status.fully_ready() => {
+        Ok(status) if status.fully_ready() && status.health_base_url.is_some() => {
             let mut app = state.lock().await;
             app.ngrok_running = false;
             app.ngrok_url = None;
             app.openai_tunnel_config.admin_ui_url = status.admin_ui_url.clone();
             app.transport_health =
                 TransportHealthSnapshot::configured_unverified(app.tunnel_config.remote_self_check);
-            app.transport_health.health = TransportHealth::ConnectedVerified;
+            // The monitor is the sole place that may promote this to
+            // CONNECTED_VERIFIED after dynamic /healthz, /readyz, and local MCP
+            // checks all pass.
+            app.transport_health.health = TransportHealth::Connecting;
             app.transport_health.local_mcp = "NOT_CHECKED".into();
-            app.transport_health.redacted_reason = None;
+            app.transport_health.redacted_reason =
+                Some("awaiting authoritative dynamic health and local MCP readiness".into());
             app.transport_health.warnings.push(
-                "Official tunnel-client runtime was already ready; CatDesk attached monitoring without creating a duplicate"
+                "Official tunnel-client runtime was already running; CatDesk attached monitoring without creating a duplicate"
                     .into(),
             );
             app.log(
@@ -202,6 +234,22 @@ async fn configure_official_runtime_mode(
             );
         }
         Ok(status) if status.process_running => {
+            let local_mcp_ready = crate::tunnel::run_mcp_endpoint_self_check(
+                &local_mcp_url,
+                None,
+                crate::tunnel::MCP_SELF_CHECK_TIMEOUT,
+                false,
+            )
+            .await
+            .is_ok();
+            let recovery_identity = verified_official_runtime_recovery_identity(
+                &client_path,
+                &trusted_client_identity,
+                &alias,
+                &profile,
+                &status,
+            )
+            .ok();
             let mut app = state.lock().await;
             app.ngrok_running = false;
             app.ngrok_url = None;
@@ -209,11 +257,48 @@ async fn configure_official_runtime_mode(
             app.transport_health =
                 TransportHealthSnapshot::configured_unverified(app.tunnel_config.remote_self_check);
             app.transport_health.health = TransportHealth::Connecting;
-            app.transport_health.redacted_reason = status.redacted_reason.clone();
-            app.transport_health.warnings.push(
-                "Official tunnel-client runtime exists but is not ready; CatDesk will monitor it"
-                    .into(),
-            );
+            app.transport_health.redacted_reason = Some(if !local_mcp_ready {
+                "OFFICIAL_RUNTIME_REATTACH_WAITING_LOCAL_MCP".into()
+            } else if !auto_recover {
+                "OFFICIAL_RUNTIME_REATTACH_DISABLED".into()
+            } else if recovery_identity.is_none() {
+                "OFFICIAL_RUNTIME_IDENTITY_UNAVAILABLE".into()
+            } else if !tunnel_id_environment_present(|name| std::env::var_os(name)) {
+                "OFFICIAL_RUNTIME_TUNNEL_REFERENCE_UNAVAILABLE".into()
+            } else if !credential_environment_present(|name| std::env::var_os(name)) {
+                "OFFICIAL_RUNTIME_CREDENTIAL_REFERENCE_UNAVAILABLE".into()
+            } else {
+                "OFFICIAL_RUNTIME_REATTACH_PENDING".into()
+            });
+            app.transport_health
+                .warnings
+                .push(EXISTING_RUNTIME_NOT_READY_WARNING.into());
+            let reconnect_now = local_mcp_ready
+                && auto_recover
+                && recovery_identity.is_some()
+                && tunnel_id_environment_present(|name| std::env::var_os(name))
+                && credential_environment_present(|name| std::env::var_os(name));
+            if reconnect_now {
+                app.log(
+                    "WARN",
+                    "Attempting bounded official runtime reattach through the configured alias"
+                        .into(),
+                );
+            }
+            drop(app);
+            if reconnect_now {
+                if let Ok(tunnel_id) = std::env::var("CATDESK_OPENAI_TUNNEL_ID") {
+                    if connect_official_runtime(&client_path, &alias, &tunnel_id, &local_mcp_url)
+                        .await
+                        .is_err()
+                    {
+                        let mut app = state.lock().await;
+                        app.transport_health.health = TransportHealth::Degraded;
+                        app.transport_health.redacted_reason =
+                            Some("OFFICIAL_RUNTIME_REATTACH_FAILED".into());
+                    }
+                }
+            }
         }
         Ok(_) | Err(_) => {
             if !auto_connect {
@@ -238,6 +323,40 @@ async fn configure_official_runtime_mode(
                 )
                 .await;
             } else {
+                let local_mcp_ready = crate::tunnel::run_mcp_endpoint_self_check(
+                    &local_mcp_url,
+                    None,
+                    crate::tunnel::MCP_SELF_CHECK_TIMEOUT,
+                    false,
+                )
+                .await
+                .is_ok();
+                if !local_mcp_ready {
+                    let mut app = state.lock().await;
+                    app.transport_health = TransportHealthSnapshot::configured_unverified(
+                        app.tunnel_config.remote_self_check,
+                    );
+                    app.transport_health.health = TransportHealth::Connecting;
+                    app.transport_health.local_mcp = "FAILED".into();
+                    app.transport_health.redacted_reason = Some(
+                        "waiting for local CatDesk MCP readiness before official runtime connect"
+                            .into(),
+                    );
+                    app.log(
+                        "INFO",
+                        "Official runtime connect deferred until local CatDesk MCP is ready".into(),
+                    );
+                    drop(app);
+                    start_openai_runtime_monitor_if_needed(
+                        state,
+                        client_path,
+                        alias,
+                        profile,
+                        trusted_client_identity,
+                    )
+                    .await;
+                    return Ok(());
+                }
                 let tunnel_id = std::env::var("CATDESK_OPENAI_TUNNEL_ID")
                     .map_err(|_| "CATDESK_OPENAI_TUNNEL_ID is missing".to_string())?;
                 let command =
@@ -260,7 +379,14 @@ async fn configure_official_runtime_mode(
             }
         }
     }
-    start_openai_runtime_monitor_if_needed(state, client_path, alias, profile).await;
+    start_openai_runtime_monitor_if_needed(
+        state,
+        client_path,
+        alias,
+        profile,
+        trusted_client_identity,
+    )
+    .await;
     Ok(())
 }
 
@@ -269,6 +395,7 @@ async fn start_openai_runtime_monitor_if_needed(
     client_path: PathBuf,
     alias: String,
     profile: String,
+    trusted_client_identity: String,
 ) {
     let config = {
         let mut app = state.lock().await;
@@ -305,7 +432,7 @@ async fn start_openai_runtime_monitor_if_needed(
             let runtime = official_runtime_status(&client_path, &alias)
                 .await
                 .unwrap_or_else(|error| OfficialRuntimeStatus::stopped(&alias, error.to_string()));
-            let (local_endpoint, admin_url, auto_recover) = {
+            let (local_endpoint, health_base_url, auto_recover) = {
                 let app = monitor_state.lock().await;
                 (
                     format!(
@@ -314,10 +441,7 @@ async fn start_openai_runtime_monitor_if_needed(
                         app.port,
                         app.mcp_path()
                     ),
-                    runtime
-                        .admin_ui_url
-                        .clone()
-                        .or_else(|| app.openai_tunnel_config.admin_ui_url.clone()),
+                    runtime.health_base_url.clone(),
                     app.openai_tunnel_config.auto_recover,
                 )
             };
@@ -329,16 +453,47 @@ async fn start_openai_runtime_monitor_if_needed(
             )
             .await
             .is_ok();
-            let readyz_ready = if let Some(admin_url) = admin_url.as_deref() {
-                probe_tunnel_client_readiness(admin_url, OPENAI_TUNNEL_READINESS_TIMEOUT)
+            let readiness = if let Some(health_base_url) = health_base_url.as_deref() {
+                probe_tunnel_client_readiness(health_base_url, OPENAI_TUNNEL_READINESS_TIMEOUT)
                     .await
-                    .map(|report| report.ready)
-                    .unwrap_or(false)
+                    .ok()
             } else {
-                runtime.ready
+                None
             };
             let mut runtime_for_health = runtime.clone();
-            runtime_for_health.ready = runtime_for_health.ready && readyz_ready;
+            runtime_for_health.healthy = runtime_for_health.healthy
+                && readiness.as_ref().is_some_and(|report| report.health_live);
+            runtime_for_health.ready =
+                runtime_for_health.ready && readiness.as_ref().is_some_and(|report| report.ready);
+            if readiness.is_none() && runtime_for_health.redacted_reason.is_none() {
+                runtime_for_health.redacted_reason = Some(
+                    "authoritative official runtime health URL was unavailable or rejected".into(),
+                );
+            }
+            let existing_runtime_identity = if runtime_for_health.process_running {
+                verified_official_runtime_recovery_identity(
+                    &client_path,
+                    &trusted_client_identity,
+                    &alias,
+                    &profile,
+                    &runtime_for_health,
+                )
+                .ok()
+            } else {
+                None
+            };
+            let recovery_state = classify_official_runtime_recovery_state(
+                local_mcp_ready,
+                &runtime_for_health,
+                existing_runtime_identity.is_some(),
+            );
+            if matches!(
+                recovery_state,
+                OfficialRuntimeRecoveryStateV1::AmbiguousOrMismatchedRuntime
+            ) {
+                runtime_for_health.redacted_reason =
+                    Some("OFFICIAL_RUNTIME_IDENTITY_UNAVAILABLE".into());
+            }
             let (health, reason) = monitor_health_from_status(
                 &runtime_for_health,
                 local_mcp_ready,
@@ -356,15 +511,21 @@ async fn start_openai_runtime_monitor_if_needed(
                 };
                 app.transport_health.redacted_reason = reason.clone();
                 app.transport_health.last_checked_at = Some(crate::tunnel::current_startup_time());
+                if matches!(health, TransportHealth::ConnectedVerified) {
+                    clear_existing_runtime_not_ready_warning(&mut app.transport_health.warnings);
+                }
                 if let Some(ui_url) = runtime.admin_ui_url.clone() {
                     app.openai_tunnel_config.admin_ui_url = Some(ui_url);
                 }
             }
-            if matches!(health, TransportHealth::Disconnected)
-                && auto_recover
-                && credential_environment_present(|name| std::env::var_os(name))
-                && tunnel_id_environment_present(|name| std::env::var_os(name))
-                && local_mcp_ready
+            if recovery_is_eligible_for_official_runtime(
+                health,
+                runtime_for_health.process_running,
+                local_mcp_ready,
+                auto_recover,
+                credential_environment_present(|name| std::env::var_os(name)),
+                tunnel_id_environment_present(|name| std::env::var_os(name)),
+            ) && (!runtime_for_health.process_running || existing_runtime_identity.is_some())
                 && should_attempt_recovery(&mut state_tracker, &config, Instant::now())
             {
                 if let Ok(tunnel_id) = std::env::var("CATDESK_OPENAI_TUNNEL_ID") {
@@ -441,9 +602,11 @@ pub async fn refresh_openai_readiness_from_admin_url(state: &SharedState) {
             app.transport_health.health = TransportHealth::ConnectedVerified;
             app.transport_health.redacted_reason = None;
             app.transport_health.last_checked_at = Some(crate::tunnel::current_startup_time());
-            app.transport_health
-                .warnings
-                .push("OpenAI tunnel-client /readyz returned ready".into());
+            clear_existing_runtime_not_ready_warning(&mut app.transport_health.warnings);
+            let ready_warning = "OpenAI tunnel-client /readyz returned ready".to_string();
+            if !app.transport_health.warnings.contains(&ready_warning) {
+                app.transport_health.warnings.push(ready_warning);
+            }
         }
         Ok(report) => {
             let mut app = state.lock().await;
@@ -591,4 +754,111 @@ pub async fn start(state: SharedState) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn monitor_config() -> RuntimeMonitorConfig {
+        RuntimeMonitorConfig {
+            poll_interval: Duration::from_secs(5),
+            degraded_interval: Duration::from_secs(2),
+            command_timeout: Duration::from_secs(5),
+            failure_threshold: 2,
+            recovery_cooldown: Duration::from_secs(30),
+            max_recovery_attempts: 2,
+            recovery_window: Duration::from_secs(600),
+        }
+    }
+
+    #[test]
+    fn existing_degraded_runtime_recovery_requires_every_safety_gate_and_budget() {
+        let config = monitor_config();
+        let now = Instant::now();
+        let mut tracker = RuntimeMonitorState::default();
+
+        assert!(recovery_is_eligible_for_official_runtime(
+            TransportHealth::Degraded,
+            true,
+            true,
+            true,
+            true,
+            true,
+        ));
+        assert!(should_attempt_recovery(&mut tracker, &config, now));
+        assert!(!should_attempt_recovery(
+            &mut tracker,
+            &config,
+            now + Duration::from_secs(1),
+        ));
+
+        for (auto_recover, credential_present, tunnel_id_present, local_mcp_ready) in [
+            (false, true, true, true),
+            (true, false, true, true),
+            (true, true, false, true),
+            (true, true, true, false),
+        ] {
+            assert!(!recovery_is_eligible_for_official_runtime(
+                TransportHealth::Degraded,
+                true,
+                local_mcp_ready,
+                auto_recover,
+                credential_present,
+                tunnel_id_present,
+            ));
+        }
+        assert!(!recovery_is_eligible_for_official_runtime(
+            TransportHealth::Degraded,
+            false,
+            true,
+            true,
+            true,
+            true,
+        ));
+        assert!(!recovery_is_eligible_for_official_runtime(
+            TransportHealth::Connecting,
+            true,
+            true,
+            true,
+            true,
+            true,
+        ));
+        assert!(recovery_is_eligible_for_official_runtime(
+            TransportHealth::Disconnected,
+            false,
+            true,
+            true,
+            true,
+            true,
+        ));
+    }
+
+    #[test]
+    fn existing_runtime_recovery_command_never_stops_removes_or_creates_a_runtime() {
+        let command = build_runtime_connect_command(
+            &PathBuf::from("tunnel-client.exe"),
+            "catdesk-local",
+            "tunnel-id",
+            "http://127.0.0.1:3200/AbCdEf123456789012345678/mcp",
+        )
+        .expect("connect command");
+        assert_eq!(command.args[0..2], ["runtimes", "connect"]);
+        assert!(
+            !command
+                .args
+                .iter()
+                .any(|argument| matches!(argument.as_str(), "stop" | "remove" | "rm" | "create"))
+        );
+    }
+
+    #[test]
+    fn connected_verified_clears_only_the_stale_existing_runtime_warning() {
+        let mut warnings = vec![
+            EXISTING_RUNTIME_NOT_READY_WARNING.to_string(),
+            "unrelated operator warning".to_string(),
+        ];
+        clear_existing_runtime_not_ready_warning(&mut warnings);
+        assert_eq!(warnings, vec!["unrelated operator warning"]);
+    }
 }

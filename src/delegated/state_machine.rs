@@ -38,7 +38,7 @@ fn is_valid_transition(from: &RunState, to: &RunState) -> bool {
         (Running, Paused | NeedsSupervisor | Verifying | Failed | CancelRequested) => true,
         (Paused, Running | NeedsSupervisor | CancelRequested) => true,
         (NeedsSupervisor, Running | Paused | Failed | CancelRequested) => true,
-        (CancelRequested, Cancelled | Failed) => true,
+        (CancelRequested, Cancelled | Failed | NeedsSupervisor) => true,
         (Verifying, CompletedVerified | Running | NeedsSupervisor | Failed | CancelRequested) => {
             true
         }
@@ -61,6 +61,8 @@ mod tests {
         validate_transition(RunState::Verifying, RunState::CompletedVerified).expect("complete");
         validate_transition(RunState::Running, RunState::CancelRequested).expect("cancel request");
         validate_transition(RunState::CancelRequested, RunState::Cancelled).expect("cancel ack");
+        validate_transition(RunState::CancelRequested, RunState::NeedsSupervisor)
+            .expect("cancel uncertainty escalation");
     }
 
     #[test]

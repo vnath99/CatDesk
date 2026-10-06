@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -153,7 +154,11 @@ impl<'a> PatchEngine<'a> {
                 path: file.path.clone(),
                 hash: stable_text_hash(&file.before),
             });
-            atomic_write_contained(self.workspace_root, &file.path, &file.after)?;
+            if file.was_absent {
+                atomic_create_contained(self.workspace_root, &file.path, &file.after)?;
+            } else {
+                atomic_write_contained(self.workspace_root, &file.path, &file.after)?;
+            }
             after_hashes.push(FileHashV1 {
                 path: file.path.clone(),
                 hash: stable_text_hash(&file.after),
@@ -270,30 +275,38 @@ impl<'a> PatchEngine<'a> {
                 ));
             }
         }
-        for expected in &proposal.expected_preimage_hashes {
-            let text = fs::read_to_string(contained_path(self.workspace_root, &expected.path)?)?;
-            let actual = stable_text_hash(&text);
-            if actual != expected.hash {
-                return Err(PatchError::StaleBase(expected.path.clone()));
+        let create_only = proposal
+            .operations
+            .iter()
+            .any(|operation| operation.old.is_empty());
+        if create_only {
+            if proposal.operations.len() != 1 || !proposal.expected_preimage_hashes.is_empty() {
+                return Err(PatchError::Validation(
+                    "create-only patch must contain one operation and no preimage hashes".into(),
+                ));
+            }
+            let target = &proposal.target_paths[0];
+            if read_patch_text(self.workspace_root, target)?.is_some() {
+                return Err(PatchError::StaleBase(format!(
+                    "create target already exists: {target}"
+                )));
+            }
+        } else {
+            for expected in &proposal.expected_preimage_hashes {
+                let text = read_patch_text(self.workspace_root, &expected.path)?
+                    .ok_or_else(|| PatchError::StaleBase(expected.path.clone()))?;
+                let actual = stable_text_hash(&text);
+                if actual != expected.hash {
+                    return Err(PatchError::StaleBase(expected.path.clone()));
+                }
             }
         }
-        let current_base_hash = stable_text_hash(&self.snapshot_text(&proposal.target_paths)?);
+        let (current_base_hash, _) =
+            capture_patch_preimage(self.workspace_root, &proposal.target_paths)?;
         if proposal.base_snapshot_hash != current_base_hash {
             return Err(PatchError::StaleBase("base_snapshot_hash".into()));
         }
         Ok(())
-    }
-
-    fn snapshot_text(&self, paths: &[String]) -> Result<String, PatchError> {
-        let mut snapshot = String::new();
-        for path in paths {
-            let text = fs::read_to_string(contained_path(self.workspace_root, path)?)?;
-            snapshot.push_str(path);
-            snapshot.push('\0');
-            snapshot.push_str(&text);
-            snapshot.push('\0');
-        }
-        Ok(snapshot)
     }
 
     fn compute_before_after(
@@ -302,9 +315,25 @@ impl<'a> PatchEngine<'a> {
     ) -> Result<Vec<FileBeforeAfter>, PatchError> {
         let mut files = Vec::new();
         for path in &proposal.target_paths {
-            let mut text = fs::read_to_string(contained_path(self.workspace_root, path)?)?;
+            let current = read_patch_text(self.workspace_root, path)?;
+            let was_absent = current.is_none();
+            let mut text = current.unwrap_or_default();
             let before = text.clone();
             for operation in proposal.operations.iter().filter(|op| &op.path == path) {
+                if operation.old.is_empty() {
+                    if !was_absent || proposal.operations.len() != 1 {
+                        return Err(PatchError::Conflict(format!(
+                            "create-only operation requires an absent target: {path}"
+                        )));
+                    }
+                    text = operation.new.clone();
+                    continue;
+                }
+                if was_absent {
+                    return Err(PatchError::Conflict(format!(
+                        "replace operation requires an existing target: {path}"
+                    )));
+                }
                 let count = text.matches(&operation.old).count();
                 if count != 1 {
                     return Err(PatchError::Conflict(format!(
@@ -318,6 +347,7 @@ impl<'a> PatchEngine<'a> {
                 path: path.clone(),
                 before,
                 after: text,
+                was_absent,
             });
         }
         Ok(files)
@@ -413,6 +443,7 @@ struct FileBeforeAfter {
     path: String,
     before: String,
     after: String,
+    was_absent: bool,
 }
 
 fn render_preview_diff(files: &[FileBeforeAfter]) -> String {
@@ -428,7 +459,7 @@ fn render_preview_diff(files: &[FileBeforeAfter]) -> String {
 
 fn path_is_under(path: &str, root: &str) -> bool {
     let root = root.replace('\\', "/");
-    path == root || path.starts_with(&format!("{root}/"))
+    root == "." || path == root || path.starts_with(&format!("{root}/"))
 }
 
 fn validate_relative_path(path: &str) -> Result<(), PatchError> {
@@ -464,6 +495,65 @@ fn contained_path(root: &Path, relative_path: &str) -> Result<PathBuf, PatchErro
     Ok(path)
 }
 
+pub fn capture_patch_preimage(
+    root: &Path,
+    paths: &[String],
+) -> Result<(String, Vec<FileHashV1>), PatchError> {
+    let mut snapshot = String::new();
+    let mut hashes = Vec::new();
+    for path in paths {
+        validate_relative_path(path)?;
+        snapshot.push_str(path);
+        snapshot.push('\0');
+        match read_patch_text(root, path)? {
+            Some(text) => {
+                snapshot.push_str(&text);
+                hashes.push(FileHashV1 {
+                    path: path.clone(),
+                    hash: stable_text_hash(&text),
+                });
+            }
+            None => snapshot.push_str("ABSENT"),
+        }
+        snapshot.push('\0');
+    }
+    Ok((stable_text_hash(&snapshot), hashes))
+}
+
+fn read_patch_text(root: &Path, relative_path: &str) -> Result<Option<String>, PatchError> {
+    let path = contained_path(root, relative_path)?;
+    match fs::read_to_string(path) {
+        Ok(text) => Ok(Some(text)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(PatchError::Io(error.to_string())),
+    }
+}
+
+fn atomic_create_contained(root: &Path, relative_path: &str, text: &str) -> Result<(), PatchError> {
+    let path = contained_path(root, relative_path)?;
+    match fs::symlink_metadata(&path) {
+        Ok(_) => {
+            return Err(PatchError::StaleBase(format!(
+                "create target already exists: {relative_path}"
+            )));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(PatchError::Io(error.to_string())),
+    }
+    let tmp = path.with_extension(format!("catdesk-create-tmp-{}", std::process::id()));
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&tmp)?;
+    file.write_all(text.as_bytes())?;
+    file.sync_all()?;
+    drop(file);
+    let link_result = fs::hard_link(&tmp, &path);
+    let _ = fs::remove_file(&tmp);
+    link_result.map_err(|error| PatchError::StaleBase(error.to_string()))?;
+    Ok(())
+}
+
 fn atomic_write_contained(root: &Path, relative_path: &str, text: &str) -> Result<(), PatchError> {
     let path = contained_path(root, relative_path)?;
     let tmp = path.with_extension(format!("catdesk-tmp-{}", std::process::id()));
@@ -473,10 +563,11 @@ fn atomic_write_contained(root: &Path, relative_path: &str, text: &str) -> Resul
 }
 
 fn reject_link_or_reparse_target(path: &Path) -> Result<(), PatchError> {
-    if !path.exists() {
-        return Ok(());
-    }
-    let meta = fs::symlink_metadata(path)?;
+    let meta = match fs::symlink_metadata(path) {
+        Ok(meta) => meta,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(PatchError::Io(error.to_string())),
+    };
     if meta.file_type().is_symlink() {
         return Err(PatchError::OutOfScope(format!(
             "refusing to patch symlink target {}",
@@ -493,6 +584,12 @@ fn reject_link_or_reparse_target(path: &Path) -> Result<(), PatchError> {
                 path.display()
             )));
         }
+    }
+    if !meta.is_file() {
+        return Err(PatchError::OutOfScope(format!(
+            "refusing to patch non-regular target {}",
+            path.display()
+        )));
     }
     Ok(())
 }
@@ -677,6 +774,84 @@ mod tests {
             model_rationale: "fix disposable bug".into(),
             claimed_acceptance_criteria: vec!["test passes".into()],
         }
+    }
+
+    fn create_proposal(root: &Path, patch_id: &str, path: &str, new: &str) -> PatchProposalV1 {
+        let paths = vec![path.to_string()];
+        let (base_snapshot_hash, expected_preimage_hashes) =
+            capture_patch_preimage(root, &paths).expect("capture absent preimage");
+        PatchProposalV1 {
+            schema_version: 1,
+            patch_id: PatchId::new(patch_id).expect("patch id"),
+            parent_patch_id: None,
+            run_id: RunId::new("run-t0017").expect("run id"),
+            turn_id: TurnId::new("turn-1").expect("turn id"),
+            base_snapshot_hash,
+            target_paths: paths,
+            expected_preimage_hashes,
+            operations: vec![ReplaceOperationV1 {
+                path: path.into(),
+                old: String::new(),
+                new: new.into(),
+            }],
+            model_rationale: "create bounded artifact".into(),
+            claimed_acceptance_criteria: vec!["artifact exists".into()],
+        }
+    }
+
+    #[test]
+    fn create_only_patch_previews_applies_and_records_untracked_diff() {
+        let root = temp_workspace("create");
+        let contract = contract(&root);
+        let engine = PatchEngine::new(&root, &contract).expect("engine");
+        let proposal = create_proposal(&root, "patch-create", "src/new.txt", "hello\n");
+        assert!(proposal.expected_preimage_hashes.is_empty());
+        let preview = engine.preview(&proposal).expect("preview create");
+        assert_eq!(preview.status, PatchPreviewStatus::Accepted);
+        assert!(preview.preview_diff.contains("hello"));
+        let result = engine.apply(&proposal).expect("apply create");
+        assert_eq!(result.status, PatchApplyStatus::Applied);
+        assert_eq!(
+            fs::read_to_string(root.join("src/new.txt")).unwrap(),
+            "hello\n"
+        );
+        assert!(result.actual_diff.contains("+++ b/src/new.txt"));
+        assert_eq!(result.actual_paths_changed, vec!["src/new.txt"]);
+    }
+
+    #[test]
+    fn create_only_patch_rejects_existing_or_raced_target() {
+        let root = temp_workspace("create-race");
+        let contract = contract(&root);
+        let engine = PatchEngine::new(&root, &contract).expect("engine");
+        let proposal = create_proposal(&root, "patch-create-race", "src/new.txt", "hello\n");
+        engine.preview(&proposal).expect("preview while absent");
+        fs::write(root.join("src/new.txt"), "racer\n").expect("create raced target");
+        assert!(matches!(
+            engine.apply(&proposal),
+            Err(PatchError::StaleBase(_))
+        ));
+        assert_eq!(
+            fs::read_to_string(root.join("src/new.txt")).unwrap(),
+            "racer\n"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn create_only_patch_rejects_dangling_symlink_target() {
+        use std::os::unix::fs::symlink;
+
+        let root = temp_workspace("create-dangling-link");
+        symlink(root.join("missing-target"), root.join("src/new.txt")).expect("symlink");
+        let contract = contract(&root);
+        let engine = PatchEngine::new(&root, &contract).expect("engine");
+        let paths = vec!["src/new.txt".to_string()];
+        assert!(matches!(
+            capture_patch_preimage(&root, &paths),
+            Err(PatchError::OutOfScope(_))
+        ));
+        let _ = engine;
     }
 
     #[test]

@@ -1,5 +1,8 @@
+use reqwest::Url;
+use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::env;
@@ -7,9 +10,11 @@ use std::fs::{self, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::net::ToSocketAddrs;
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tiktoken_rs::o200k_base_singleton;
 use tokio::sync::Mutex;
@@ -19,7 +24,10 @@ use crate::command;
 use crate::delegated::advisor::AdviceDisclosureClassification;
 use crate::delegated::autonomy_runtime::{
     cancel_owned_turn as cancel_autonomy_owned_turn,
+    claim_direct_chatgpt_work as claim_direct_autonomy_work,
+    finalize_direct_chatgpt_work as finalize_direct_autonomy_work,
     operator_configuration_available as autonomy_operator_configuration_available,
+    rearm_accepted_queued_session as rearm_accepted_autonomy_session,
     start_or_tick as start_or_tick_autonomy,
 };
 use crate::delegated::autonomy_supervisor::{
@@ -37,6 +45,7 @@ use crate::delegated::integrated::{
 };
 use crate::delegated::journal::{DelegatedJournal, ToolCallStatus};
 use crate::delegated::patch_engine::compare_patches;
+use crate::delegated::runtime::OllamaAdapter;
 use crate::delegated::supervisor::SUPERVISOR_TOOL_NAMES;
 use crate::devtools::DevtoolsBridge;
 use crate::git_workflow;
@@ -45,6 +54,7 @@ use crate::planning;
 use crate::project_memory;
 use crate::prompt_templates;
 use crate::repo_map;
+use crate::stable_wake_owner_mode::{WakeOwnerMode, selected_owner};
 use crate::state::{
     AgentsPathMode, Mode, ShowDetailMode, TokenStatsLayout, ToolMode, app_config_path,
     load_app_config, user_home_dir,
@@ -70,6 +80,35 @@ const MAX_COMMAND_OUTPUT_CHARS: usize = 24_000;
 const MAX_WATCHED_FILES: usize = 512;
 const MAX_FILE_CAPTURE_BYTES: usize = 128 * 1024;
 const MAX_TEXT_CAPTURE_LINES: usize = 420;
+const MAX_LIFECYCLE_FACADE_OUTPUT_BYTES: usize = 8 * 1024;
+const OLLAMA_MODEL_PROBE_BASE_URL: &str = "http://127.0.0.1:11434";
+const MAX_OLLAMA_MODEL_PROBE_MODELS: usize = 64;
+const MAX_OLLAMA_MODEL_ID_BYTES: usize = 256;
+const OLLAMA_MODEL_PROBE_TIMEOUT_SECONDS: u64 = 5;
+const MAX_WAKE_BRIDGE_SCRIPT_BYTES: u64 = 256 * 1024;
+const MAX_WAKE_CONFIG_BYTES: u64 = 16 * 1024;
+const MAX_WAKE_TARGET_BYTES: usize = 512;
+const STABLE_SUPERVISOR_LIFECYCLE_STATUS_TOOL: &str = "catdesk_stable_supervisor_status";
+const STABLE_SUPERVISOR_LIFECYCLE_PREFLIGHT_TOOL: &str = "catdesk_stable_supervisor_preflight";
+const STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL: &str = "catdesk_stable_supervisor_activate";
+static WAKE_TARGET_SET_LOCK: OnceLock<StdMutex<()>> = OnceLock::new();
+static TURN_TIMER_NONCE: AtomicU64 = AtomicU64::new(0);
+const MAX_PRODUCTION_ACCEPTANCE_OUTPUT_BYTES: usize = 16 * 1024;
+const PRODUCTION_ACCEPTANCE_EVIDENCE_DIRECTORY: &str = ".catdesk/production-acceptance";
+const PRODUCTION_ACCEPTANCE_PRE_SNAPSHOT: &str = "pre.json";
+const PRODUCTION_ACCEPTANCE_POST_SNAPSHOT: &str = "post.json";
+const PRODUCTION_ACCEPTANCE_GATE_IDS: [&str; 10] = [
+    "CANONICAL_RELEASE",
+    "PUBLIC_LIFECYCLE",
+    "LIFECYCLE_STATUS",
+    "AUTOSTART_OWNERSHIP",
+    "PERSISTENT_SUPERVISOR",
+    "WAKE_RUNTIME_PRESENCE",
+    "WAKE_TARGET_BINDING",
+    "RETENTION_EVIDENCE",
+    "EXTERNAL_RUNTIME_OWNERSHIP",
+    "CANONICAL_LISTENER_INSTANCE",
+];
 static DELEGATED_RUN_REGISTRY: OnceLock<Arc<Mutex<DelegatedRunRegistry>>> = OnceLock::new();
 
 // ── JSON-RPC types ──────────────────────────────────────────
@@ -368,6 +407,7 @@ async fn handle_tools_list(
     if mode.computer_enabled() {
         if tool_mode.supervisor_tools_enabled() {
             tools.extend(autonomy_mcp_tool_schemas());
+            tools.extend(stable_supervisor_lifecycle_mcp_tool_schemas());
         }
         if tool_mode.run_command_enabled() {
             tools.push(json!({
@@ -406,6 +446,19 @@ async fn handle_tools_list(
             "inputSchema": {
                 "type": "object",
                 "properties": {}
+            },
+            "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false }
+        }));
+        tools.push(json!({
+            "name": "ollama_model_probe",
+            "title": "Probe local Ollama models",
+            "description": "Read the bounded local Ollama model inventory from the fixed loopback API and optionally prove one exact model ID. Returns only model IDs and bounded availability evidence.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "exactModelId": { "type": "string", "minLength": 1, "maxLength": 256, "description": "Optional exact Ollama model ID/tag to prove, for example qwen3.8:27b." }
+                }
             },
             "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false }
         }));
@@ -509,6 +562,20 @@ async fn handle_tools_list(
         }));
 
         if tool_mode.write_tools_enabled() {
+            tools.push(json!({
+                "name": "catdesk_production_acceptance",
+                "title": "Run measured production acceptance",
+                "description": "Run the fixed CatDesk production-acceptance preflight or compare workflow. capture_pre and capture_post persist only bounded redacted evidence under the configured workspace.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "action": { "type": "string", "enum": ["preflight", "capture_pre", "capture_post", "compare"] },
+                        "expectedWakeTargetSha256": { "type": "string", "description": "Opaque 64-hex wake-target SHA-256; required except for compare." }
+                    },
+                    "required": ["action"]
+                },
+                "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": false }
+            }));
             tools.push(json!({
                 "name": "project_memory_init",
                 "title": "Initialize project memory",
@@ -691,6 +758,94 @@ async fn handle_tools_list(
                 },
                 "annotations": { "readOnlyHint": false, "openWorldHint": true, "destructiveHint": false }
             }));
+            tools.push(json!({
+                "name": "catdesk_wake_bridge_run_once",
+                "title": "Run dedicated CatDesk wake bridge once",
+                "description": "Run only the fixed project-local wake adapter once for one exact unread actionable review record. Requires confirm=true. Fresh clients may provide recordId explicitly; cached clients that omit it are resolved only through the exact active WAITING_FOR_CHATGPT session and its newest actionable review. Does not create events, configure a profile, or use an alternate provider.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "confirm": { "type": "boolean", "description": "Must be true to permit the one browser wake attempt." },
+                        "recordId": { "type": "string", "description": "Optional exact unread actionable CatDesk review record ID. When omitted for cached-schema compatibility, CatDesk resolves only the exact active WAITING_FOR_CHATGPT session's newest actionable record and fails closed otherwise." },
+                        "timeout_ms": { "type": "integer", "description": "Optional bounded timeout in milliseconds (1000..60000; default 45000)." },
+                        "dry_run": { "type": "boolean", "description": "Validate the fixed invocation shape without starting the bridge." }
+                    },
+                    "required": ["confirm"]
+                },
+                "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": true }
+            }));
+            tools.push(json!({
+                "name": "catdesk_wake_target_set",
+                "title": "Set the exact CatDesk wake conversation",
+                "description": "Update only the fixed project-local wake bridge conversation target. Accepts one credential-free HTTPS ChatGPT /c/<conversation-id> URL and an optional current-target SHA-256 compare-and-swap guard. It never launches a browser or reads profile, state, inbox, or credentials.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "conversationUrl": { "type": "string", "description": "Exact credential-free HTTPS ChatGPT conversation URL: https://chatgpt.com/c/<conversation-id>." },
+                        "expectedCurrentTargetSha256": { "type": "string", "description": "Optional opaque 64-hex SHA-256 of the currently configured normalized wake target." }
+                    },
+                    "required": ["conversationUrl"]
+                },
+                "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": true }
+            }));
+            tools.push(json!({
+                "name": "catdesk_wake_restart_installed",
+                "title": "Restart the registered independent WakeHost",
+                "description": "Stop the currently running independent WakeHost, wait for its host lease to release, then start only the immutable package registered by current.json through the existing hash-verified start_installed path. Requires confirm=true and accepts no target, executable, migration, browser, or shell arguments.",
+                "inputSchema": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "confirm": { "type": "boolean", "description": "Must be true to restart the registered immutable WakeHost." }
+                    },
+                    "required": ["confirm"]
+                },
+                "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": true }
+            }));
+            tools.push(json!({
+                "name": "catdesk_wake_delivery_status",
+                "title": "Read one Wake delivery record",
+                "description": "Read the validated durable Wake delivery state for one exact event ID. Returns only bounded delivery/receipt binding evidence and never exposes store paths, browser profile data, credentials, or arbitrary files.",
+                "inputSchema": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "eventId": { "type": "string", "minLength": 1, "maxLength": 200, "description": "Exact existing Wake event ID." }
+                    },
+                    "required": ["eventId"]
+                },
+                "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false }
+            }));
+            tools.push(json!({
+                "name": "catdesk_turn_timer",
+                "title": "Manage one bounded CatDesk turn timer",
+                "description": "Use the independent Wake TurnTimer store for ordinary ChatGPT work and Wake-event timer inspection. START creates one server-generated manual timer on the exact current CatDesk wake target. STATUS reads one manual or Wake-event timer. STOP completes only a manual timer. The 18-minute soft checkpoint and 20-minute deadline are fixed and shared with Wake; callers cannot select a target, generation, digest, duration, path, executable, browser profile, or credentials.",
+                "inputSchema": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "action": { "type": "string", "enum": ["START", "STATUS", "STOP"] },
+                        "timerId": { "type": "string", "minLength": 1, "maxLength": 200, "description": "Timer handle returned by START, or an exact existing Wake-event timer ID for STATUS. Required for STATUS and STOP; forbidden for START." }
+                    },
+                    "required": ["action"]
+                },
+                "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": false }
+            }));
+            tools.push(json!({
+                "name": "catdesk_binagotchy_command",
+                "title": "Run one bounded Binagotchy Wake command",
+                "description": "Execute one non-interactive independent WakeHost command using the same lifecycle/store semantics as the Binagotchy CLI. Supported commands: status, start, pause, resume, stop, queue, test, retire. No arbitrary shell, executable, browser profile, or credential input is accepted.",
+                "inputSchema": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "command": { "type": "string", "enum": ["status","start","pause","resume","stop","queue","test","retire"] },
+                        "eventId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$", "description": "Required only for retire." }
+                    },
+                    "required": ["command"]
+                },
+                "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": true }
+            }));
             tools.extend(supervisor_mcp_tool_schemas());
             tools.push(json!({
                 "name": "git_status_summary",
@@ -865,6 +1020,8 @@ async fn handle_tools_call(
                 } else {
                     tool_error_response(req, format!("Unknown tool: {tool_name}"))
                 }
+            } else if tool_name == "catdesk_production_acceptance" {
+                handle_production_acceptance(req, workspace_root, tool_mode).await
             } else {
                 match tool_name.as_str() {
                     "catdesk_instruction" => handle_catdesk_instruction(
@@ -874,6 +1031,7 @@ async fn handle_tools_call(
                         mode,
                         tool_mode,
                     ),
+                    "ollama_model_probe" => handle_ollama_model_probe(req).await,
                     "read" => handle_read_file(req, workspace_root),
                     "search" => handle_search_text(req, workspace_root),
                     "project_memory_read" => handle_project_memory_read(req, workspace_root),
@@ -881,6 +1039,11 @@ async fn handle_tools_call(
                     "task_queue_read" => handle_task_queue_read(req, workspace_root),
                     "prompt_templates_list" => handle_prompt_templates_list(req, workspace_root),
                     "prompt_template_read" => handle_prompt_template_read(req, workspace_root),
+                    name if tool_mode.supervisor_tools_enabled()
+                        && stable_supervisor_lifecycle_mcp_tool_name(name) =>
+                    {
+                        handle_stable_supervisor_lifecycle_mcp_tool(req)
+                    }
                     name if tool_mode.supervisor_tools_enabled() && is_autonomy_mcp_tool(name) => {
                         handle_autonomy_supervisor_mcp_tool(req, workspace_root).await
                     }
@@ -918,6 +1081,18 @@ async fn handle_tools_call(
                                 "verify_project" => {
                                     handle_verify_project(req, workspace_root).await
                                 }
+                                "catdesk_wake_bridge_run_once" => {
+                                    handle_wake_bridge_run_once(req, workspace_root).await
+                                }
+                                "catdesk_wake_target_set" => {
+                                    handle_wake_target_set(req, workspace_root)
+                                }
+                                "catdesk_wake_restart_installed" => {
+                                    handle_wake_restart_installed(req)
+                                }
+                                "catdesk_wake_delivery_status" => handle_wake_delivery_status(req),
+                                "catdesk_turn_timer" => handle_turn_timer(req),
+                                "catdesk_binagotchy_command" => handle_binagotchy_command(req),
                                 name if is_autonomy_mcp_tool(name) => {
                                     handle_autonomy_supervisor_mcp_tool(req, workspace_root).await
                                 }
@@ -1105,6 +1280,21 @@ async fn handle_run_command(
         cmd.to_string()
     };
 
+    // A closed, direct-process intercept keeps the public lifecycle available
+    // in allowlist mode without treating PowerShell text as an approved shell.
+    // Explicit cwd is intentionally not accepted here: the canonical facade is
+    // always resolved from the configured workspace root, never MCP input.
+    if let Some(operation) = command::detect_lifecycle_facade_intercept(&effective_command) {
+        if cwd_input.is_some() {
+            return tool_error_response(
+                req,
+                "code: LIFECYCLE_COMMAND_REJECTED\nmessage: lifecycle facade commands do not accept a cwd override"
+                    .into(),
+            );
+        }
+        return handle_lifecycle_facade_intercept(req, workspace_root, operation, dry_run).await;
+    }
+
     if dry_run {
         return tool_success_response_with_structured(
             req,
@@ -1212,6 +1402,2217 @@ async fn handle_run_command(
     } else {
         tool_error_response_with_structured(req, output, structured)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LifecycleFacadeInvocation {
+    program: String,
+    args: Vec<String>,
+    workspace: PathBuf,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ProductionAcceptanceAction {
+    Preflight,
+    CapturePre,
+    CapturePost,
+    Compare,
+}
+
+impl ProductionAcceptanceAction {
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "preflight" => Some(Self::Preflight),
+            "capture_pre" => Some(Self::CapturePre),
+            "capture_post" => Some(Self::CapturePost),
+            "compare" => Some(Self::Compare),
+            _ => None,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Preflight => "preflight",
+            Self::CapturePre => "capture_pre",
+            Self::CapturePost => "capture_post",
+            Self::Compare => "compare",
+        }
+    }
+
+    fn captures_evidence(self) -> bool {
+        matches!(self, Self::CapturePre | Self::CapturePost)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ProductionAcceptanceRequest {
+    action: ProductionAcceptanceAction,
+    expected_wake_target_sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ProductionAcceptanceInvocation {
+    program: String,
+    args: Vec<String>,
+    workspace: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+struct ProductionAcceptanceEvidencePaths {
+    pre: PathBuf,
+    post: PathBuf,
+}
+
+fn parse_production_acceptance_request(
+    arguments: &Value,
+) -> Result<ProductionAcceptanceRequest, String> {
+    let object = arguments
+        .as_object()
+        .ok_or_else(|| "production acceptance arguments are invalid".to_string())?;
+    let action = object
+        .get("action")
+        .and_then(Value::as_str)
+        .and_then(ProductionAcceptanceAction::parse)
+        .ok_or_else(|| "production acceptance action is invalid".to_string())?;
+    let expected = object
+        .get("expectedWakeTargetSha256")
+        .and_then(Value::as_str);
+    let expected = match (action, expected) {
+        (ProductionAcceptanceAction::Compare, None) if object.len() == 1 => None,
+        (ProductionAcceptanceAction::Compare, _) => {
+            return Err("production acceptance compare accepts no additional arguments".into());
+        }
+        (_, Some(value)) if object.len() == 2 && is_sha256_hex(value) => {
+            Some(value.to_ascii_lowercase())
+        }
+        _ => {
+            return Err(
+                "production acceptance requires only an opaque 64-hex wake-target hash".into(),
+            );
+        }
+    };
+    Ok(ProductionAcceptanceRequest {
+        action,
+        expected_wake_target_sha256: expected,
+    })
+}
+
+fn is_sha256_hex(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn canonical_production_acceptance_workspace(workspace_root: &str) -> Result<PathBuf, String> {
+    Path::new(workspace_root)
+        .canonicalize()
+        .map(command::normalize_windows_verbatim_path)
+        .map_err(|_| "canonical workspace is unavailable".to_string())
+}
+
+fn production_acceptance_invocation(
+    workspace_root: &str,
+    request: &ProductionAcceptanceRequest,
+) -> Result<ProductionAcceptanceInvocation, String> {
+    let workspace = canonical_production_acceptance_workspace(workspace_root)?;
+    let expected_script = workspace
+        .join("scripts")
+        .join("catdesk-production-acceptance.ps1");
+    let script = expected_script
+        .canonicalize()
+        .map(command::normalize_windows_verbatim_path)
+        .map_err(|_| "production acceptance script is unavailable".to_string())?;
+    if script != expected_script || !script.is_file() {
+        return Err("production acceptance script is unavailable".into());
+    }
+    let mut args = vec![
+        "-NoProfile".to_string(),
+        "-NonInteractive".to_string(),
+        "-ExecutionPolicy".to_string(),
+        "Bypass".to_string(),
+        "-File".to_string(),
+        script.to_string_lossy().into_owned(),
+    ];
+    match request.action {
+        ProductionAcceptanceAction::Compare => {
+            let paths = production_acceptance_evidence_paths(&workspace, false)?;
+            args.extend([
+                "-Mode".to_string(),
+                "compare".to_string(),
+                "-Workspace".to_string(),
+                workspace.to_string_lossy().into_owned(),
+                "-PreSnapshotPath".to_string(),
+                paths.pre.to_string_lossy().into_owned(),
+                "-PostSnapshotPath".to_string(),
+                paths.post.to_string_lossy().into_owned(),
+            ]);
+        }
+        _ => {
+            args.extend([
+                "-Mode".to_string(),
+                "preflight".to_string(),
+                "-Workspace".to_string(),
+                workspace.to_string_lossy().into_owned(),
+                "-ExpectedWakeTargetSha256".to_string(),
+                request
+                    .expected_wake_target_sha256
+                    .as_ref()
+                    .expect("validated wake hash")
+                    .clone(),
+            ]);
+        }
+    }
+    Ok(ProductionAcceptanceInvocation {
+        program: "powershell.exe".into(),
+        args,
+        workspace,
+    })
+}
+
+fn path_is_reparse_or_symlink(metadata: &fs::Metadata) -> bool {
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    }
+    #[cfg(not(windows))]
+    false
+}
+
+fn checked_acceptance_directory(path: &Path, create: bool) -> Result<(), String> {
+    if !path.exists() && create {
+        fs::create_dir(path)
+            .map_err(|_| "production acceptance evidence location is unavailable".to_string())?;
+    }
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|_| "production acceptance evidence location is unavailable".to_string())?;
+    if !metadata.is_dir() || path_is_reparse_or_symlink(&metadata) {
+        return Err("production acceptance evidence location is unsafe".into());
+    }
+    Ok(())
+}
+
+fn production_acceptance_evidence_paths(
+    workspace: &Path,
+    create: bool,
+) -> Result<ProductionAcceptanceEvidencePaths, String> {
+    let canonical_workspace = workspace
+        .canonicalize()
+        .map(command::normalize_windows_verbatim_path)
+        .map_err(|_| "canonical workspace is unavailable".to_string())?;
+    let evidence_relative = Path::new(PRODUCTION_ACCEPTANCE_EVIDENCE_DIRECTORY);
+    let control = canonical_workspace.join(
+        evidence_relative
+            .parent()
+            .expect("fixed evidence directory has a parent"),
+    );
+    if control.exists() || create {
+        checked_acceptance_directory(&control, create)?;
+    }
+    let directory = control.join("production-acceptance");
+    if directory.exists() || create {
+        checked_acceptance_directory(&directory, create)?;
+    }
+    let directory = if directory.exists() {
+        directory
+            .canonicalize()
+            .map(command::normalize_windows_verbatim_path)
+            .map_err(|_| "production acceptance evidence location is unavailable".to_string())?
+    } else {
+        directory
+    };
+    if !directory.starts_with(&canonical_workspace) {
+        return Err("production acceptance evidence location is unsafe".into());
+    }
+    Ok(ProductionAcceptanceEvidencePaths {
+        pre: directory.join(PRODUCTION_ACCEPTANCE_PRE_SNAPSHOT),
+        post: directory.join(PRODUCTION_ACCEPTANCE_POST_SNAPSHOT),
+    })
+}
+
+fn validate_acceptance_snapshot(value: &Value) -> Result<(), String> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| "production acceptance output is invalid".to_string())?;
+    let required = [
+        "schemaVersion",
+        "stage",
+        "overallState",
+        "capturedAtUtc",
+        "canonicalBuildFingerprint",
+        "lifecycleState",
+        "instanceFingerprint",
+        "gates",
+    ];
+    if object.len() != required.len() || required.iter().any(|name| !object.contains_key(*name)) {
+        return Err("production acceptance output is invalid".into());
+    }
+    if object.get("schemaVersion").and_then(Value::as_i64) != Some(1)
+        || object.get("stage").and_then(Value::as_str) != Some("PRE_REBOOT_PREFLIGHT")
+        || !matches!(
+            object.get("overallState").and_then(Value::as_str),
+            Some("PASS" | "ATTENTION" | "FAIL")
+        )
+        || !matches!(
+            object.get("lifecycleState").and_then(Value::as_str),
+            Some(
+                "READY"
+                    | "LOCAL_READY_EXTERNAL_RUNTIME_PENDING"
+                    | "LOCAL_DAEMON_PENDING"
+                    | "STATUS_UNAVAILABLE"
+            )
+        )
+        || !object
+            .get("canonicalBuildFingerprint")
+            .and_then(Value::as_str)
+            .is_some_and(is_sha256_hex)
+        || !object
+            .get("instanceFingerprint")
+            .and_then(Value::as_str)
+            .is_some_and(|value| {
+                value.len() == 24 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+            })
+        || !object
+            .get("capturedAtUtc")
+            .and_then(Value::as_str)
+            .is_some_and(|value| !value.is_empty() && value.len() <= 64 && value.is_ascii())
+    {
+        return Err("production acceptance output is invalid".into());
+    }
+    let gates = object
+        .get("gates")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "production acceptance output is invalid".to_string())?;
+    if gates.len() != PRODUCTION_ACCEPTANCE_GATE_IDS.len() {
+        return Err("production acceptance output is invalid".into());
+    }
+    for (gate, expected_id) in gates.iter().zip(PRODUCTION_ACCEPTANCE_GATE_IDS) {
+        let Some(gate) = gate.as_object() else {
+            return Err("production acceptance output is invalid".into());
+        };
+        if gate.len() != 2
+            || gate.get("id").and_then(Value::as_str) != Some(expected_id)
+            || !matches!(
+                gate.get("state").and_then(Value::as_str),
+                Some("PASS" | "ATTENTION" | "FAIL")
+            )
+        {
+            return Err("production acceptance output is invalid".into());
+        }
+    }
+    Ok(())
+}
+
+fn validate_acceptance_comparison(value: &Value) -> Result<(), String> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| "production acceptance output is invalid".to_string())?;
+    let required = [
+        "schemaVersion",
+        "stage",
+        "overallState",
+        "canonicalBuildUnchanged",
+        "newCatDeskInstance",
+        "externalRuntimePending",
+        "postLifecycleState",
+    ];
+    if object.len() != required.len()
+        || required.iter().any(|name| !object.contains_key(*name))
+        || object.get("schemaVersion").and_then(Value::as_i64) != Some(1)
+        || object.get("stage").and_then(Value::as_str) != Some("POST_REBOOT_COMPARISON")
+        || !matches!(
+            object.get("overallState").and_then(Value::as_str),
+            Some("PASS" | "ATTENTION" | "FAIL")
+        )
+        || !matches!(
+            object.get("postLifecycleState").and_then(Value::as_str),
+            Some("READY" | "LOCAL_READY_EXTERNAL_RUNTIME_PENDING" | "UNAVAILABLE")
+        )
+        || [
+            "canonicalBuildUnchanged",
+            "newCatDeskInstance",
+            "externalRuntimePending",
+        ]
+        .iter()
+        .any(|name| !object.get(*name).is_some_and(Value::is_boolean))
+    {
+        return Err("production acceptance output is invalid".into());
+    }
+    Ok(())
+}
+
+fn parse_production_acceptance_output(
+    action: ProductionAcceptanceAction,
+    result: &command::CommandResult,
+) -> Result<Value, String> {
+    if !result.success
+        || !result.stderr.trim().is_empty()
+        || result.stdout.len() > MAX_PRODUCTION_ACCEPTANCE_OUTPUT_BYTES
+        || result.stderr.len() > MAX_PRODUCTION_ACCEPTANCE_OUTPUT_BYTES
+    {
+        return Err("production acceptance did not return a valid bounded result".into());
+    }
+    let value = serde_json::from_str::<Value>(result.stdout.trim())
+        .map_err(|_| "production acceptance did not return a valid bounded result".to_string())?;
+    let validated = match action {
+        ProductionAcceptanceAction::Compare => validate_acceptance_comparison(&value),
+        _ => validate_acceptance_snapshot(&value),
+    };
+    validated
+        .map_err(|_| "production acceptance did not return a valid bounded result".to_string())?;
+    Ok(value)
+}
+
+fn checked_acceptance_file(path: &Path) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|_| "production acceptance evidence is unavailable".to_string())?;
+    if !metadata.is_file()
+        || path_is_reparse_or_symlink(&metadata)
+        || metadata.len() > MAX_PRODUCTION_ACCEPTANCE_OUTPUT_BYTES as u64
+    {
+        return Err("production acceptance evidence is unsafe".into());
+    }
+    Ok(())
+}
+
+fn write_acceptance_snapshot_atomic(path: &Path, snapshot: &Value) -> Result<(), String> {
+    let bytes = serde_json::to_vec(snapshot)
+        .map_err(|_| "production acceptance evidence is invalid".to_string())?;
+    if bytes.len() > MAX_PRODUCTION_ACCEPTANCE_OUTPUT_BYTES {
+        return Err("production acceptance evidence is invalid".into());
+    }
+    if path.exists() {
+        checked_acceptance_file(path)?;
+    }
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "production acceptance evidence is unsafe".to_string())?;
+    let temporary = path.with_file_name(format!(".{file_name}.{}.tmp", std::process::id()));
+    if temporary.exists() {
+        return Err("production acceptance evidence temporary state is unsafe".into());
+    }
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .map_err(|_| "production acceptance evidence could not be written".to_string())?;
+    file.write_all(&bytes)
+        .and_then(|_| file.sync_all())
+        .map_err(|_| "production acceptance evidence could not be written".to_string())?;
+    drop(file);
+    fs::rename(&temporary, path)
+        .map_err(|_| "production acceptance evidence could not be written".to_string())?;
+    checked_acceptance_file(path)
+}
+
+fn persist_production_acceptance_snapshot(
+    workspace: &Path,
+    action: ProductionAcceptanceAction,
+    snapshot: &Value,
+) -> Result<(), String> {
+    validate_acceptance_snapshot(snapshot)?;
+    if action == ProductionAcceptanceAction::CapturePre
+        && snapshot.get("overallState").and_then(Value::as_str) != Some("PASS")
+    {
+        return Err("production acceptance pre-capture requires a passing preflight".into());
+    }
+    let paths = production_acceptance_evidence_paths(workspace, true)?;
+    let target = match action {
+        ProductionAcceptanceAction::CapturePre => &paths.pre,
+        ProductionAcceptanceAction::CapturePost => &paths.post,
+        _ => return Err("production acceptance action cannot persist evidence".into()),
+    };
+    write_acceptance_snapshot_atomic(target, snapshot)
+}
+
+async fn handle_production_acceptance(
+    req: &JsonRpcRequest,
+    workspace_root: &str,
+    tool_mode: ToolMode,
+) -> JsonRpcResponse {
+    if !tool_mode.write_tools_enabled() {
+        return read_only_blocked_response(req, "catdesk_production_acceptance");
+    }
+    let request = match parse_production_acceptance_request(&tool_arguments(req)) {
+        Ok(request) => request,
+        Err(_) => return tool_error_response(req, "code: PRODUCTION_ACCEPTANCE_REQUEST_REJECTED\nmessage: production acceptance accepts only its fixed action and required opaque hash".into()),
+    };
+    let invocation = match production_acceptance_invocation(workspace_root, &request) {
+        Ok(invocation) => invocation,
+        Err(_) => return tool_error_response(req, "code: PRODUCTION_ACCEPTANCE_UNAVAILABLE\nmessage: fixed production acceptance boundary is unavailable".into()),
+    };
+    let args = invocation
+        .args
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let result =
+        command::run_program(&invocation.program, &args, &invocation.workspace, 30_000).await;
+    let snapshot = match parse_production_acceptance_output(request.action, &result) {
+        Ok(value) => value,
+        Err(_) => return tool_error_response(req, "code: PRODUCTION_ACCEPTANCE_FAILED\nmessage: fixed production acceptance did not return a valid bounded redacted result".into()),
+    };
+    if request.action.captures_evidence()
+        && persist_production_acceptance_snapshot(&invocation.workspace, request.action, &snapshot)
+            .is_err()
+    {
+        return tool_error_response(req, "code: PRODUCTION_ACCEPTANCE_CAPTURE_REJECTED\nmessage: production acceptance evidence could not be safely persisted".into());
+    }
+    tool_success_response_with_structured(
+        req,
+        format!(
+            "CatDesk production acceptance {} completed.",
+            request.action.as_str()
+        ),
+        json!({
+            "toolName": "catdesk_production_acceptance",
+            "action": request.action.as_str(),
+            "captured": request.action.captures_evidence(),
+            "result": snapshot,
+            "success": true,
+            "elapsedMs": result.elapsed_ms,
+        }),
+    )
+}
+
+fn lifecycle_facade_invocation(
+    workspace_root: &str,
+    operation: command::LifecycleFacadeOperation,
+) -> Result<LifecycleFacadeInvocation, String> {
+    let workspace = Path::new(workspace_root)
+        .canonicalize()
+        .map(command::normalize_windows_verbatim_path)
+        .map_err(|_| "canonical workspace is unavailable".to_string())?;
+    let expected_script = workspace.join("catdesk.ps1");
+    let script = expected_script
+        .canonicalize()
+        .map(command::normalize_windows_verbatim_path)
+        .map_err(|_| "canonical lifecycle facade is unavailable".to_string())?;
+    if script != expected_script || !script.is_file() {
+        return Err("canonical lifecycle facade is unavailable".into());
+    }
+    let mut args = vec![
+        "-NoProfile".to_string(),
+        "-NonInteractive".to_string(),
+        "-ExecutionPolicy".to_string(),
+        "Bypass".to_string(),
+        "-File".to_string(),
+        script.to_string_lossy().into_owned(),
+    ];
+    args.extend(
+        operation
+            .command_tokens()
+            .iter()
+            .map(|token| (*token).to_string()),
+    );
+    Ok(LifecycleFacadeInvocation {
+        program: "powershell.exe".into(),
+        args,
+        workspace,
+    })
+}
+
+fn lifecycle_facade_timeout_ms(operation: command::LifecycleFacadeOperation) -> u64 {
+    match operation {
+        command::LifecycleFacadeOperation::Status
+        | command::LifecycleFacadeOperation::AutostartStatus => 15_000,
+        command::LifecycleFacadeOperation::Start | command::LifecycleFacadeOperation::Recover => {
+            120_000
+        }
+        command::LifecycleFacadeOperation::AutostartEnable
+        | command::LifecycleFacadeOperation::AutostartDisable => 30_000,
+        command::LifecycleFacadeOperation::Stop => 5_000,
+    }
+}
+
+fn parse_lifecycle_facade_state(
+    operation: command::LifecycleFacadeOperation,
+    result: &command::CommandResult,
+) -> Option<String> {
+    if !result.success
+        || !result.stderr.trim().is_empty()
+        || result.stdout.len() > MAX_LIFECYCLE_FACADE_OUTPUT_BYTES
+        || result.stderr.len() > MAX_LIFECYCLE_FACADE_OUTPUT_BYTES
+    {
+        return None;
+    }
+    let value = serde_json::from_str::<Value>(result.stdout.trim()).ok()?;
+    let object = value.as_object()?;
+    if object.len() != 3
+        || !object.contains_key("command")
+        || !object.contains_key("state")
+        || !object.contains_key("detail")
+        || object.get("command").and_then(Value::as_str) != Some(operation.facade_command())
+    {
+        return None;
+    }
+    let state = object.get("state").and_then(Value::as_str)?;
+    let detail = object.get("detail").and_then(Value::as_str)?;
+    if !is_expected_lifecycle_state(operation, state)
+        || !is_expected_lifecycle_detail(operation, state, detail)
+    {
+        return None;
+    }
+    Some(state.to_string())
+}
+
+fn is_expected_lifecycle_detail(
+    operation: command::LifecycleFacadeOperation,
+    state: &str,
+    detail: &str,
+) -> bool {
+    if detail == "redacted" {
+        return true;
+    }
+    match (operation, state, detail) {
+        (
+            command::LifecycleFacadeOperation::Status,
+            "READY",
+            "local daemon and external runtime verified",
+        ) => true,
+        (
+            command::LifecycleFacadeOperation::Start | command::LifecycleFacadeOperation::Recover,
+            "CONNECTED_VERIFIED",
+            "canonical local daemon and external runtime verified",
+        ) => true,
+        (command::LifecycleFacadeOperation::Status, "STATUS_UNAVAILABLE", detail) => {
+            matches!(
+                detail,
+                "stage=CANONICAL_IDENTITY"
+                    | "stage=CANONICAL_WORKSPACE_RESOLVE"
+                    | "stage=CANONICAL_BINARY_MISSING"
+                    | "stage=CANONICAL_FINGERPRINT_MISSING"
+                    | "stage=CANONICAL_FINGERPRINT_INVALID"
+                    | "stage=CANONICAL_HASH_MISMATCH"
+                    | "stage=CANONICAL_IDENTITY_INTERNAL"
+                    | "stage=LOCAL_MCP_CONFIG"
+                    | "stage=LOCAL_MCP_READINESS"
+                    | "stage=OFFICIAL_RUNTIME"
+                    | "stage=LIFECYCLE_INITIALIZATION"
+            )
+        }
+        _ => false,
+    }
+}
+
+fn is_expected_lifecycle_state(operation: command::LifecycleFacadeOperation, state: &str) -> bool {
+    match operation {
+        command::LifecycleFacadeOperation::Status => matches!(
+            state,
+            "READY"
+                | "LOCAL_READY_EXTERNAL_RUNTIME_PENDING"
+                | "LOCAL_DAEMON_PENDING"
+                | "STATUS_UNAVAILABLE"
+                | "ACTION_REQUIRED"
+        ),
+        command::LifecycleFacadeOperation::Start | command::LifecycleFacadeOperation::Recover => {
+            matches!(state, "CONNECTED_VERIFIED" | "ACTION_REQUIRED")
+        }
+        command::LifecycleFacadeOperation::AutostartStatus
+        | command::LifecycleFacadeOperation::AutostartEnable
+        | command::LifecycleFacadeOperation::AutostartDisable => matches!(
+            state,
+            "AUTOSTART_ENABLED"
+                | "AUTOSTART_DISABLED"
+                | "AUTOSTART_CONFLICT"
+                | "AUTOSTART_UNAVAILABLE"
+                | "ACTION_REQUIRED"
+        ),
+        command::LifecycleFacadeOperation::Stop => false,
+    }
+}
+
+async fn handle_lifecycle_facade_intercept(
+    req: &JsonRpcRequest,
+    workspace_root: &str,
+    operation: command::LifecycleFacadeOperation,
+    dry_run: bool,
+) -> JsonRpcResponse {
+    let invocation = match lifecycle_facade_invocation(workspace_root, operation) {
+        Ok(value) => value,
+        Err(_) => {
+            return tool_error_response(
+                req,
+                "code: LIFECYCLE_FACADE_UNAVAILABLE\nmessage: canonical public lifecycle facade is unavailable"
+                    .into(),
+            );
+        }
+    };
+    if dry_run {
+        return tool_success_response_with_structured(
+            req,
+            format!(
+                "Validated CatDesk lifecycle {} direct invocation; dry run did not execute it.",
+                operation.as_str()
+            ),
+            json!({
+                "toolName": "run_command",
+                "interceptedCommandName": "catdesk_lifecycle",
+                "lifecycleOperation": operation.as_str(),
+                "readOnly": operation.is_read_only(),
+                "dryRun": true,
+                "success": true,
+            }),
+        );
+    }
+    if operation == command::LifecycleFacadeOperation::Stop {
+        return match crate::daemon_reload::spawn_lifecycle_stop_helper(&invocation.workspace) {
+            Ok(()) => tool_success_response_with_structured(
+                req,
+                "CatDesk stop acknowledged; the verified local lifecycle helper will run after this response flushes.".into(),
+                json!({
+                    "toolName": "run_command",
+                    "interceptedCommandName": "catdesk_lifecycle",
+                    "lifecycleOperation": operation.as_str(),
+                    "readOnly": false,
+                    "asynchronous": true,
+                    "state": "STOP_ACKNOWLEDGED",
+                    "success": true,
+                }),
+            ),
+            Err(_) => tool_error_response(
+                req,
+                "code: LIFECYCLE_STOP_UNAVAILABLE\nmessage: canonical local stop could not be scheduled".into(),
+            ),
+        };
+    }
+
+    let args = invocation
+        .args
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let result = command::run_program(
+        &invocation.program,
+        &args,
+        &invocation.workspace,
+        lifecycle_facade_timeout_ms(operation),
+    )
+    .await;
+    let Some(state) = parse_lifecycle_facade_state(operation, &result) else {
+        let reason = if !result.success {
+            if result.exit_code.is_none() && result.stderr.starts_with("Command timed out after ") {
+                "PROCESS_TIMEOUT"
+            } else if result.exit_code.is_none() && result.stderr.starts_with("Failed to execute: ")
+            {
+                "PROCESS_EXECUTION_ERROR"
+            } else {
+                "PROCESS_FAILED"
+            }
+        } else if result.stdout.len() > MAX_LIFECYCLE_FACADE_OUTPUT_BYTES
+            || result.stderr.len() > MAX_LIFECYCLE_FACADE_OUTPUT_BYTES
+        {
+            "OUTPUT_OVERSIZED"
+        } else if !result.stderr.trim().is_empty() {
+            "STDERR_NONEMPTY"
+        } else if serde_json::from_str::<serde_json::Value>(result.stdout.trim()).is_err() {
+            "STDOUT_NOT_JSON"
+        } else {
+            "JSON_CONTRACT_REJECTED"
+        };
+        return tool_error_response(
+            req,
+            format!(
+                "code: LIFECYCLE_FACADE_FAILED\nreason: {reason}\nmessage: public lifecycle facade did not return a valid bounded redacted result"
+            ),
+        );
+    };
+    tool_success_response_with_structured(
+        req,
+        format!(
+            "CatDesk lifecycle {} completed with state {}.",
+            operation.as_str(),
+            state
+        ),
+        json!({
+            "toolName": "run_command",
+            "interceptedCommandName": "catdesk_lifecycle",
+            "lifecycleOperation": operation.as_str(),
+            "readOnly": operation.is_read_only(),
+            "state": state,
+            "success": true,
+            "elapsedMs": result.elapsed_ms,
+        }),
+    )
+}
+
+fn validate_ollama_exact_model_id(value: &str) -> Result<(), String> {
+    if value.is_empty()
+        || value.len() > MAX_OLLAMA_MODEL_ID_BYTES
+        || !value.is_ascii()
+        || value
+            .bytes()
+            .any(|byte| byte.is_ascii_control() || byte.is_ascii_whitespace())
+    {
+        return Err("model id is invalid".into());
+    }
+    Ok(())
+}
+
+fn bounded_ollama_model_inventory(
+    models: Vec<String>,
+) -> Result<(Vec<String>, usize, bool), String> {
+    if models
+        .iter()
+        .any(|model| validate_ollama_exact_model_id(model).is_err())
+    {
+        return Err("ollama model inventory is invalid".into());
+    }
+    let total = models.len();
+    let mut bounded = models;
+    bounded.sort();
+    bounded.dedup();
+    let truncated = bounded.len() > MAX_OLLAMA_MODEL_PROBE_MODELS;
+    bounded.truncate(MAX_OLLAMA_MODEL_PROBE_MODELS);
+    Ok((bounded, total, truncated))
+}
+
+async fn handle_ollama_model_probe(req: &JsonRpcRequest) -> JsonRpcResponse {
+    let arguments = tool_arguments(req);
+    let Some(object) = arguments.as_object() else {
+        return tool_error_response(
+            req,
+            "code: OLLAMA_MODEL_PROBE_REQUEST_REJECTED\nmessage: model probe arguments are invalid"
+                .into(),
+        );
+    };
+    if object.len() > 1 || object.keys().any(|key| key != "exactModelId") {
+        return tool_error_response(req, "code: OLLAMA_MODEL_PROBE_REQUEST_REJECTED\nmessage: model probe accepts only optional exactModelId".into());
+    }
+    let exact_model_id = match object.get("exactModelId") {
+        None => None,
+        Some(Value::String(value)) if validate_ollama_exact_model_id(value).is_ok() => Some(value.clone()),
+        _ => return tool_error_response(req, "code: OLLAMA_MODEL_PROBE_REQUEST_REJECTED\nmessage: exactModelId must be one bounded exact local model ID".into()),
+    };
+    let adapter = match OllamaAdapter::new(OLLAMA_MODEL_PROBE_BASE_URL, None) {
+        Ok(adapter) => adapter,
+        Err(_) => return tool_error_response(req, "code: OLLAMA_MODEL_PROBE_UNAVAILABLE\nmessage: fixed loopback Ollama probe is unavailable".into()),
+    };
+    let models = match tokio::time::timeout(
+        std::time::Duration::from_secs(OLLAMA_MODEL_PROBE_TIMEOUT_SECONDS),
+        adapter.list_models(),
+    )
+    .await
+    {
+        Ok(Ok(models)) => models,
+        _ => return tool_error_response(req, "code: OLLAMA_MODEL_PROBE_UNAVAILABLE\nmessage: local Ollama did not return a bounded model inventory".into()),
+    };
+    let exact_match_count = exact_model_id
+        .as_ref()
+        .map(|expected| models.iter().filter(|model| *model == expected).count())
+        .unwrap_or(0);
+    if exact_model_id.is_some() && exact_match_count > 1 {
+        return tool_error_response(
+            req,
+            "code: OLLAMA_MODEL_PROBE_AMBIGUOUS\nmessage: exact model identity was not unique"
+                .into(),
+        );
+    }
+    let (bounded_models, total_model_count, truncated) = match bounded_ollama_model_inventory(models) {
+        Ok(result) => result,
+        Err(_) => return tool_error_response(req, "code: OLLAMA_MODEL_PROBE_INVALID_RESPONSE\nmessage: local Ollama returned an invalid model inventory".into()),
+    };
+    let exact_match = exact_model_id.is_none() || exact_match_count == 1;
+    tool_success_response_with_structured(
+        req,
+        "Local Ollama model inventory probed through the fixed loopback API.".into(),
+        json!({
+            "toolName": "ollama_model_probe",
+            "providerId": "ollama",
+            "available": true,
+            "models": bounded_models,
+            "totalModelCount": total_model_count,
+            "truncated": truncated,
+            "exactModelId": exact_model_id,
+            "exactMatch": exact_match,
+            "exactMatchCount": exact_match_count,
+        }),
+    )
+}
+
+fn resolve_cached_wake_record_id(workspace: &Path) -> Result<String, (&'static str, &'static str)> {
+    use crate::delegated::autonomy_projects::{
+        AutonomousProjectRegistryStoreV1, canonical_project_chat_target, project_chat_target_digest,
+    };
+    use crate::delegated::autonomy_state::{AutonomousSessionStateV1, AutonomousStateStoreV1};
+
+    let workspace = workspace.canonicalize().map_err(|_| {
+        (
+            "WAKE_CONTEXT_UNAVAILABLE",
+            "canonical CatDesk workspace could not be resolved",
+        )
+    })?;
+    let state = AutonomousStateStoreV1::open(workspace.join(".catdesk").join("autonomy")).map_err(
+        |_| {
+            (
+                "WAKE_CONTEXT_UNAVAILABLE",
+                "autonomy state store could not be opened",
+            )
+        },
+    )?;
+    let sessions = state.list_sessions().map_err(|_| {
+        (
+            "WAKE_CONTEXT_UNAVAILABLE",
+            "autonomy session state could not be read",
+        )
+    })?;
+    let mut candidates = sessions.iter().filter(|session| {
+        session.active && matches!(session.state, AutonomousSessionStateV1::WaitingForChatgpt)
+    });
+    let session = candidates.next().ok_or((
+        "WAKE_CONTEXT_UNAVAILABLE",
+        "no exact active WAITING_FOR_CHATGPT session is available for cached-schema wake resolution",
+    ))?;
+    if candidates.next().is_some() {
+        return Err((
+            "WAKE_CONTEXT_AMBIGUOUS",
+            "multiple active WAITING_FOR_CHATGPT sessions prevent cached-schema wake resolution",
+        ));
+    }
+    let record = state
+        .latest_actionable_review_for_session(&session.session_id)
+        .map_err(|_| {
+            (
+                "WAKE_REVIEW_UNAVAILABLE",
+                "latest actionable review could not be resolved for the active session",
+            )
+        })?
+        .ok_or((
+            "WAKE_REVIEW_UNAVAILABLE",
+            "active WAITING_FOR_CHATGPT session has no unread actionable review record",
+        ))?;
+    if record.state != AutonomousSessionStateV1::WaitingForChatgpt
+        || record.next_action != "chatgpt_decision_required"
+        || record.session_id != session.session_id
+    {
+        return Err((
+            "WAKE_REVIEW_MISMATCH",
+            "resolved review does not match the exact active ChatGPT handoff",
+        ));
+    }
+
+    let projects =
+        AutonomousProjectRegistryStoreV1::open(workspace.join(".catdesk").join("projects"))
+            .and_then(|store| store.load_registry())
+            .map_err(|_| {
+                (
+                    "WAKE_PROJECT_UNAVAILABLE",
+                    "project registry could not be read for cached-schema wake resolution",
+                )
+            })?;
+    let mut matching_projects = projects.projects.iter().filter(|project| {
+        project.project_id == record.project_id && project.workspace == workspace
+    });
+    let project = matching_projects.next().ok_or((
+        "WAKE_PROJECT_MISMATCH",
+        "resolved review is not bound to the canonical MCP workspace project",
+    ))?;
+    if matching_projects.next().is_some() {
+        return Err((
+            "WAKE_PROJECT_MISMATCH",
+            "multiple project bindings match the resolved wake context",
+        ));
+    }
+    let target = project.chatgpt_target_url.as_deref().ok_or((
+        "WAKE_TARGET_UNAVAILABLE",
+        "resolved project has no ChatGPT wake target",
+    ))?;
+    let canonical_target = canonical_project_chat_target(target).map_err(|_| {
+        (
+            "WAKE_TARGET_INVALID",
+            "resolved project ChatGPT target is not canonical",
+        )
+    })?;
+    if canonical_target != target
+        || project.chatgpt_target_sha256.as_deref()
+            != Some(project_chat_target_digest(&canonical_target).as_str())
+    {
+        return Err((
+            "WAKE_TARGET_INVALID",
+            "resolved project ChatGPT target binding failed integrity validation",
+        ));
+    }
+    Ok(record.record_id)
+}
+
+async fn handle_wake_bridge_run_once(
+    req: &JsonRpcRequest,
+    workspace_root: &str,
+) -> JsonRpcResponse {
+    let arguments = tool_arguments(req);
+    if arguments.get("confirm").and_then(Value::as_bool) != Some(true) {
+        return tool_error_response(
+            req,
+            "code: EXPLICIT_CONFIRMATION_REQUIRED\nmessage: catdesk_wake_bridge_run_once requires confirm=true".into(),
+        );
+    }
+    let explicit_record_id = match arguments.get("recordId") {
+        None => None,
+        Some(Value::String(value))
+            if !value.is_empty()
+                && value.len() <= 200
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')) =>
+        {
+            Some(value.clone())
+        }
+        Some(_) => {
+            return tool_error_response(
+                req,
+                "code: INVALID_RECORD_ID\nmessage: recordId must be a conservative exact review record ID".into(),
+            );
+        }
+    };
+    let timeout_ms = match arguments.get("timeout_ms") {
+        None => 45_000,
+        Some(value) => match value.as_u64() {
+            Some(value @ 1_000..=60_000) => value,
+            _ => {
+                return tool_error_response(
+                    req,
+                    "code: INVALID_TIMEOUT\nmessage: timeout_ms must be an integer from 1000 through 60000".into(),
+                );
+            }
+        },
+    };
+    let root = match command::resolve_workspace_path(workspace_root, None) {
+        Ok(root) => root,
+        Err(error) => {
+            return tool_error_response(
+                req,
+                format!("code: PATH_OUTSIDE_WORKSPACE\nmessage: {error}"),
+            );
+        }
+    };
+    match selected_owner(&root) {
+        Ok(WakeOwnerMode::LegacyPython) => {}
+        Ok(WakeOwnerMode::Rust) => {
+            return tool_error_response(
+                req,
+                "code: WAKE_OWNER_RUST_SELECTED\nmessage: the legacy wake bridge is disabled while the Rust owner is selected".into(),
+            );
+        }
+        Err(_) => {
+            return tool_error_response(
+                req,
+                "code: WAKE_OWNER_SELECTION_INVALID\nmessage: browser ownership selection is unavailable or invalid".into(),
+            );
+        }
+    }
+    let record_id = match explicit_record_id {
+        Some(record_id) => record_id,
+        None => match resolve_cached_wake_record_id(&root) {
+            Ok(record_id) => record_id,
+            Err((code, message)) => {
+                return tool_error_response(req, format!("code: {code}\nmessage: {message}"));
+            }
+        },
+    };
+    let wake_root = root.join(".catdesk").join("wake-bridge");
+    let python = wake_root.join("venv").join("Scripts").join("python.exe");
+    let config = wake_root.join("config.json");
+    let bridge = root.join("scripts").join("wake_bridge.py");
+    for (path, label) in [
+        (&python, "project-local wake Python"),
+        (&config, "wake configuration"),
+        (&bridge, "wake bridge script"),
+    ] {
+        if !path.is_file() {
+            return tool_error_response(
+                req,
+                format!("code: WAKE_BRIDGE_NOT_READY\nmessage: {label} is not available"),
+            );
+        }
+    }
+    let bridge_sha256 = match authoritative_wake_bridge_sha256(&bridge) {
+        Some(value) => value,
+        None => return tool_error_response(
+            req,
+            "code: WAKE_BRIDGE_NOT_READY\nmessage: wake bridge script is not a bounded regular file".into(),
+        ),
+    };
+    let invocation = json!({
+        "program": python.to_string_lossy(),
+        "args": [
+            bridge.to_string_lossy(),
+            "--workspace",
+            root.to_string_lossy(),
+            "--config",
+            config.to_string_lossy(),
+            "--record-id",
+            record_id.as_str(),
+            "--bridge-sha256",
+            bridge_sha256,
+        ],
+        "timeoutMs": timeout_ms,
+    });
+    if arguments
+        .get("dry_run")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return tool_success_response_with_structured(
+            req,
+            "Dedicated wake bridge invocation validated; dry run did not start a browser.".into(),
+            json!({
+                "toolName": "catdesk_wake_bridge_run_once",
+                "success": true,
+                "dryRun": true,
+                "invocation": invocation,
+            }),
+        );
+    }
+    let python_arg = python.to_string_lossy().into_owned();
+    let bridge_arg = bridge.to_string_lossy().into_owned();
+    let root_arg = root.to_string_lossy().into_owned();
+    let config_arg = config.to_string_lossy().into_owned();
+    let result = command::run_program(
+        &python_arg,
+        &[
+            &bridge_arg,
+            "--workspace",
+            &root_arg,
+            "--config",
+            &config_arg,
+            "--record-id",
+            record_id.as_str(),
+            "--bridge-sha256",
+            &bridge_sha256,
+        ],
+        &root,
+        timeout_ms,
+    )
+    .await;
+    let summary = command::summarize_result(&result);
+    let structured = json!({
+        "toolName": "catdesk_wake_bridge_run_once",
+        "success": result.success,
+        "exitCode": result.exit_code,
+        "elapsedMs": result.elapsed_ms,
+        "dryRun": false,
+        "invocation": invocation,
+        "summary": command_summary_json(&summary),
+    });
+    let output = format!(
+        "Dedicated wake bridge completed with status {} and exit code {}.",
+        summary.status,
+        summary
+            .exit_code
+            .map(|code| code.to_string())
+            .unwrap_or_else(|| "none".to_string())
+    );
+    if result.success {
+        tool_success_response_with_structured(req, output, structured)
+    } else {
+        tool_error_response_with_structured(req, output, structured)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WakeTargetSetRequest {
+    conversation_url: String,
+    expected_current_target_sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WakeTargetSetResult {
+    pub(crate) target_sha256: String,
+    pub(crate) host_path_identity: String,
+}
+
+struct StrictWakeConfigObject(Map<String, Value>);
+
+impl<'de> Deserialize<'de> for StrictWakeConfigObject {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct ObjectVisitor;
+        impl<'de> Visitor<'de> for ObjectVisitor {
+            type Value = StrictWakeConfigObject;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("an unambiguous JSON object")
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let mut values = Map::new();
+                while let Some((name, value)) = map.next_entry::<String, Value>()? {
+                    if values.insert(name.clone(), value).is_some() {
+                        return Err(de::Error::custom("duplicate wake configuration field"));
+                    }
+                }
+                Ok(StrictWakeConfigObject(values))
+            }
+        }
+        deserializer.deserialize_map(ObjectVisitor)
+    }
+}
+
+fn parse_wake_target_set_request(arguments: &Value) -> Result<WakeTargetSetRequest, String> {
+    let object = arguments
+        .as_object()
+        .ok_or_else(|| "wake target request is invalid".to_string())?;
+    if (object.len() != 1 && object.len() != 2)
+        || object
+            .keys()
+            .any(|name| name != "conversationUrl" && name != "expectedCurrentTargetSha256")
+    {
+        return Err("wake target request is invalid".into());
+    }
+    let conversation_url = object
+        .get("conversationUrl")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "wake target request is invalid".to_string())?;
+    let expected_current_target_sha256 = match object.get("expectedCurrentTargetSha256") {
+        None => None,
+        Some(Value::String(value)) if is_sha256_hex(value) => Some(value.to_ascii_lowercase()),
+        _ => return Err("wake target request is invalid".into()),
+    };
+    Ok(WakeTargetSetRequest {
+        conversation_url: canonical_wake_target(conversation_url)?,
+        expected_current_target_sha256,
+    })
+}
+
+pub(crate) fn canonical_wake_target(value: &str) -> Result<String, String> {
+    if value.is_empty()
+        || value.len() > MAX_WAKE_TARGET_BYTES
+        || !value.is_ascii()
+        || value.bytes().any(|byte| byte.is_ascii_control())
+    {
+        return Err("wake target is invalid".into());
+    }
+    let parsed = Url::parse(value).map_err(|_| "wake target is invalid".to_string())?;
+    if parsed.scheme() != "https"
+        || !matches!(parsed.host_str(), Some("chatgpt.com" | "chat.openai.com"))
+        || parsed.username() != ""
+        || parsed.password().is_some()
+        || parsed.port().is_some()
+        || parsed.query().is_some()
+        || parsed.fragment().is_some()
+    {
+        return Err("wake target is invalid".into());
+    }
+    let segments = parsed
+        .path_segments()
+        .ok_or_else(|| "wake target is invalid".to_string())?
+        .collect::<Vec<_>>();
+    let valid_id = |value: &str| {
+        !value.is_empty()
+            && value.len() <= 200
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    };
+    let valid_conversation_id = |value: &str| {
+        valid_id(value) || (value.len() <= 200 && value.strip_prefix("WEB:").is_some_and(valid_id))
+    };
+    let path = match segments.as_slice() {
+        ["c", conversation] if valid_conversation_id(conversation) => {
+            format!("/c/{conversation}")
+        }
+        ["g", project, "c", conversation]
+            if valid_id(project) && valid_conversation_id(conversation) =>
+        {
+            format!("/g/{project}/c/{conversation}")
+        }
+        _ => return Err("wake target is invalid".into()),
+    };
+    let host = parsed.host_str().expect("validated host");
+    Ok(format!("https://{host}{path}"))
+}
+
+fn wake_target_sha256(target: &str) -> String {
+    format!("{:x}", Sha256::digest(target.as_bytes()))
+}
+
+fn checked_wake_directory(path: &Path) -> Result<(), String> {
+    let metadata =
+        fs::symlink_metadata(path).map_err(|_| "wake configuration is unavailable".to_string())?;
+    if !metadata.is_dir() || path_is_reparse_or_symlink(&metadata) {
+        return Err("wake configuration is unsafe".into());
+    }
+    Ok(())
+}
+
+fn wake_config_path(workspace: &Path) -> Result<PathBuf, String> {
+    let workspace = workspace
+        .canonicalize()
+        .map(command::normalize_windows_verbatim_path)
+        .map_err(|_| "wake configuration is unavailable".to_string())?;
+    let control = workspace.join(".catdesk");
+    let wake_root = control.join("wake-bridge");
+    checked_wake_directory(&control)?;
+    checked_wake_directory(&wake_root)?;
+    let expected = wake_root.join("config.json");
+    let metadata = fs::symlink_metadata(&expected)
+        .map_err(|_| "wake configuration is unavailable".to_string())?;
+    if !metadata.is_file()
+        || path_is_reparse_or_symlink(&metadata)
+        || metadata.len() > MAX_WAKE_CONFIG_BYTES
+    {
+        return Err("wake configuration is unsafe".into());
+    }
+    let canonical = expected
+        .canonicalize()
+        .map(command::normalize_windows_verbatim_path)
+        .map_err(|_| "wake configuration is unavailable".to_string())?;
+    if canonical != expected {
+        return Err("wake configuration is unsafe".into());
+    }
+    Ok(expected)
+}
+
+fn parse_wake_config(bytes: &[u8]) -> Result<Map<String, Value>, String> {
+    if bytes.len() > MAX_WAKE_CONFIG_BYTES as usize {
+        return Err("wake configuration is invalid".into());
+    }
+    let object = serde_json::from_slice::<StrictWakeConfigObject>(bytes)
+        .ok()
+        .map(|value| value.0)
+        .ok_or_else(|| "wake configuration is invalid".to_string())?;
+    if object.is_empty()
+        || !object
+            .get("profile_dir")
+            .and_then(Value::as_str)
+            .is_some_and(|value| {
+                !value.is_empty()
+                    && value.len() <= 1024
+                    && !value.bytes().any(|byte| byte.is_ascii_control())
+            })
+    {
+        return Err("wake configuration is invalid".into());
+    }
+    let current = object
+        .get("conversation_url")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "wake configuration is invalid".to_string())?;
+    canonical_wake_target(current).map_err(|_| "wake configuration is invalid".to_string())?;
+    for name in [
+        "ui_ready_timeout_seconds",
+        "send_confirmation_timeout_seconds",
+        "ui_poll_interval_seconds",
+        "debounce_seconds",
+    ] {
+        if let Some(value) = object.get(name) {
+            if !value
+                .as_f64()
+                .is_some_and(|value| value.is_finite() && value > 0.0 && value <= 3_600.0)
+            {
+                return Err("wake configuration is invalid".into());
+            }
+        }
+    }
+    Ok(object)
+}
+
+fn write_wake_config_atomic(path: &Path, config: &Map<String, Value>) -> Result<(), String> {
+    let bytes = serde_json::to_vec_pretty(config)
+        .map_err(|_| "wake configuration is invalid".to_string())?;
+    if bytes.len() > MAX_WAKE_CONFIG_BYTES as usize {
+        return Err("wake configuration is invalid".into());
+    }
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "wake configuration is unsafe".to_string())?;
+    let temporary = path.with_file_name(format!(".{file_name}.{}.tmp", std::process::id()));
+    if temporary.exists() {
+        return Err("wake configuration temporary state is unsafe".into());
+    }
+    let result = (|| {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+            .map_err(|_| "wake configuration could not be written".to_string())?;
+        file.write_all(&bytes)
+            .and_then(|_| file.write_all(b"\n"))
+            .and_then(|_| file.sync_all())
+            .map_err(|_| "wake configuration could not be written".to_string())?;
+        drop(file);
+        fs::rename(&temporary, path)
+            .map_err(|_| "wake configuration could not be written".to_string())?;
+        Ok(())
+    })();
+    if temporary.exists() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
+fn set_wake_target(
+    workspace: &Path,
+    request: &WakeTargetSetRequest,
+) -> Result<WakeTargetSetResult, String> {
+    let _guard = WAKE_TARGET_SET_LOCK
+        .get_or_init(|| StdMutex::new(()))
+        .lock()
+        .map_err(|_| "wake target update is unavailable".to_string())?;
+    set_wake_target_locked(workspace, request)
+}
+
+fn independent_wake_target(
+    workspace: &Path,
+) -> Result<Option<(catdesk_wake::store::Store, catdesk_wake::protocol::Target)>, String> {
+    if !crate::wake_protocol_client::selected(workspace) {
+        return Ok(None);
+    }
+    let root = catdesk_wake::runtime::default_root()?;
+    let store = catdesk_wake::store::Store::open(&root)?;
+    let config = store.config()?;
+    let target = config
+        .targets
+        .get(crate::delegated::autonomy_projects::CATDESK_PROJECT_ID_V1)
+        .cloned()
+        .ok_or_else(|| "independent wake target is unavailable".to_string())?;
+    let canonical = canonical_wake_target(&target.url)
+        .map_err(|_| "independent wake target is invalid".to_string())?;
+    if canonical != target.url || wake_target_sha256(&canonical) != target.digest {
+        return Err("independent wake target is invalid".into());
+    }
+    Ok(Some((store, target)))
+}
+
+fn effective_wake_target_locked(workspace: &Path) -> Result<String, String> {
+    if let Some((_store, target)) = independent_wake_target(workspace)? {
+        return Ok(target.url);
+    }
+    let config_path = wake_config_path(workspace)?;
+    let bytes =
+        fs::read(&config_path).map_err(|_| "wake configuration is unavailable".to_string())?;
+    let config = parse_wake_config(&bytes)?;
+    canonical_wake_target(
+        config
+            .get("conversation_url")
+            .and_then(Value::as_str)
+            .expect("validated conversation target"),
+    )
+    .map_err(|_| "wake configuration is invalid".to_string())
+}
+
+/// The caller holds `WAKE_TARGET_SET_LOCK`. Keeping the write mechanics in a
+/// separate helper lets the designated-chat transaction serialize both the
+/// effective wake target and the project binding without exposing a file
+/// writer to its caller. Once the independent owner is selected, its durable
+/// per-user Store is the effective wake authority; the retired workspace
+/// config is no longer mutated by target changes.
+fn set_wake_target_locked(
+    workspace: &Path,
+    request: &WakeTargetSetRequest,
+) -> Result<WakeTargetSetResult, String> {
+    if let Some((store, previous)) = independent_wake_target(workspace)? {
+        if request
+            .expected_current_target_sha256
+            .as_deref()
+            .is_some_and(|expected| expected != wake_target_sha256(&previous.url))
+        {
+            return Err("wake target compare-and-swap did not match".into());
+        }
+        let updated = store.set_target(
+            crate::delegated::autonomy_projects::CATDESK_PROJECT_ID_V1,
+            previous.generation,
+            &request.conversation_url,
+        )?;
+        return Ok(WakeTargetSetResult {
+            target_sha256: updated.digest,
+            host_path_identity: updated
+                .url
+                .strip_prefix("https://")
+                .expect("canonical HTTPS wake target")
+                .to_string(),
+        });
+    }
+    let config_path = wake_config_path(workspace)?;
+    let original =
+        fs::read(&config_path).map_err(|_| "wake configuration is unavailable".to_string())?;
+    let mut config = parse_wake_config(&original)?;
+    let current = canonical_wake_target(
+        config
+            .get("conversation_url")
+            .and_then(Value::as_str)
+            .expect("validated conversation target"),
+    )
+    .map_err(|_| "wake configuration is invalid".to_string())?;
+    if request
+        .expected_current_target_sha256
+        .as_deref()
+        .is_some_and(|expected| expected != wake_target_sha256(&current))
+    {
+        return Err("wake target compare-and-swap did not match".into());
+    }
+    config.insert(
+        "conversation_url".into(),
+        Value::String(request.conversation_url.clone()),
+    );
+    write_wake_config_atomic(&config_path, &config)?;
+    Ok(WakeTargetSetResult {
+        target_sha256: wake_target_sha256(&request.conversation_url),
+        host_path_identity: request
+            .conversation_url
+            .strip_prefix("https://")
+            .expect("canonical HTTPS wake target")
+            .to_string(),
+    })
+}
+
+/// The designated-chat transaction is an explicit operator rollover boundary.
+/// When independent Wake owns delivery state, one historical SUBMITTING record
+/// may remain quarantined on its immutable retained target while authority moves
+/// to a later generation. Ordinary catdesk_wake_target_set continues to call
+/// set_wake_target_locked() and therefore remains fail-closed on SUBMITTING.
+fn set_wake_target_locked_quarantining_submitting(
+    workspace: &Path,
+    request: &WakeTargetSetRequest,
+) -> Result<WakeTargetSetResult, String> {
+    if let Some((store, previous)) = independent_wake_target(workspace)? {
+        if request
+            .expected_current_target_sha256
+            .as_deref()
+            .is_some_and(|expected| expected != wake_target_sha256(&previous.url))
+        {
+            return Err("wake target compare-and-swap did not match".into());
+        }
+        let updated = store.set_target_quarantining_submitting(
+            crate::delegated::autonomy_projects::CATDESK_PROJECT_ID_V1,
+            previous.generation,
+            &request.conversation_url,
+        )?;
+        return Ok(WakeTargetSetResult {
+            target_sha256: updated.digest,
+            host_path_identity: updated
+                .url
+                .strip_prefix("https://")
+                .expect("canonical HTTPS wake target")
+                .to_string(),
+        });
+    }
+    set_wake_target_locked(workspace, request)
+}
+
+pub(crate) fn operator_set_wake_target(
+    workspace: &Path,
+    conversation_url: &str,
+    expected_current_target_sha256: Option<&str>,
+) -> Result<WakeTargetSetResult, String> {
+    let request = WakeTargetSetRequest {
+        conversation_url: canonical_wake_target(conversation_url)?,
+        expected_current_target_sha256: match expected_current_target_sha256 {
+            None => None,
+            Some(value) if is_sha256_hex(value) => Some(value.to_ascii_lowercase()),
+            Some(_) => return Err("wake target request is invalid".into()),
+        },
+    };
+    set_wake_target(workspace, &request)
+}
+
+/// Read-only, redacted identity of the one current CatDesk control-chat
+/// target. The URL itself is intentionally operator-visible; callers receive
+/// no browser profile, cookie, route, or configuration-path information.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DesignatedChatTargetV1 {
+    pub(crate) url: String,
+    pub(crate) sha256: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DesignatedChatTargetErrorV1 {
+    InvalidUrl,
+    Stale,
+    ProtectedStateMismatch,
+    SynchronizationFailure,
+    Unavailable,
+}
+
+fn designated_chat_target_readback_locked(
+    workspace: &Path,
+) -> Result<DesignatedChatTargetV1, DesignatedChatTargetErrorV1> {
+    use crate::delegated::autonomy_projects::{
+        AutonomousProjectRegistryStoreV1, canonical_project_chat_target, project_chat_target_digest,
+    };
+
+    let workspace = workspace
+        .canonicalize()
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let configured = effective_wake_target_locked(&workspace)
+        .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+
+    let store = AutonomousProjectRegistryStoreV1::open_read_only(
+        workspace.join(".catdesk").join("projects"),
+    )
+    .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let registry = store
+        .load_registry()
+        .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+    let mut matching = registry
+        .projects
+        .iter()
+        .filter(|project| project.workspace == workspace);
+    let project = matching
+        .next()
+        .ok_or(DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+    if matching.next().is_some() {
+        return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
+    }
+    let target = project
+        .chatgpt_target_url
+        .as_deref()
+        .ok_or(DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+    let target = canonical_project_chat_target(target)
+        .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+    let digest = project_chat_target_digest(&target);
+    if project.chatgpt_target_url.as_deref() != Some(target.as_str())
+        || project.chatgpt_target_sha256.as_deref() != Some(digest.as_str())
+        || target != configured
+    {
+        return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
+    }
+    Ok(DesignatedChatTargetV1 {
+        url: target,
+        sha256: digest,
+    })
+}
+
+pub(crate) fn operator_read_designated_chat_target(
+    workspace: &Path,
+) -> Result<DesignatedChatTargetV1, DesignatedChatTargetErrorV1> {
+    let _guard = WAKE_TARGET_SET_LOCK
+        .get_or_init(|| StdMutex::new(()))
+        .lock()
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    designated_chat_target_readback_locked(workspace)
+}
+
+/// Updates the central project target and its effective wake target as one
+/// narrow transaction. Both prior values must be coherent and match the
+/// displayed digest before the first write. If the second accepted CAS fails,
+/// the exact wake target is compensated under the same lock; a compensation
+/// ambiguity is surfaced as a fixed synchronization failure rather than
+/// presenting a partially updated authority as ready.
+pub(crate) fn operator_update_designated_chat_target(
+    workspace: &Path,
+    target_url: &str,
+    expected_current_target_sha256: &str,
+) -> Result<DesignatedChatTargetV1, DesignatedChatTargetErrorV1> {
+    use crate::delegated::autonomy_projects::{
+        AutonomousProjectRegistryStoreV1, canonical_project_chat_target,
+    };
+
+    let target = canonical_project_chat_target(target_url)
+        .map_err(|_| DesignatedChatTargetErrorV1::InvalidUrl)?;
+    canonical_wake_target(&target).map_err(|_| DesignatedChatTargetErrorV1::InvalidUrl)?;
+    if !is_sha256_hex(expected_current_target_sha256) {
+        return Err(DesignatedChatTargetErrorV1::Stale);
+    }
+    let _guard = WAKE_TARGET_SET_LOCK
+        .get_or_init(|| StdMutex::new(()))
+        .lock()
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let workspace = workspace
+        .canonicalize()
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let before = designated_chat_target_readback_locked(&workspace)?;
+    if before.sha256 != expected_current_target_sha256 {
+        return Err(DesignatedChatTargetErrorV1::Stale);
+    }
+    if before.url == target {
+        return Ok(before);
+    }
+    let store = AutonomousProjectRegistryStoreV1::open_read_only(
+        workspace.join(".catdesk").join("projects"),
+    )
+    .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let registry = store
+        .load_registry()
+        .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+    let mut matching = registry
+        .projects
+        .iter()
+        .filter(|project| project.workspace == workspace);
+    let project = matching
+        .next()
+        .ok_or(DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+    if matching.next().is_some()
+        || project.chatgpt_target_sha256.as_deref() != Some(before.sha256.as_str())
+    {
+        return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
+    }
+    let request = WakeTargetSetRequest {
+        conversation_url: target.clone(),
+        expected_current_target_sha256: Some(before.sha256.clone()),
+    };
+    let mut wake_staged = false;
+    let registry_result = store.bind_project_chat_target_after(
+        &project.project_id,
+        &target,
+        Some(&before.sha256),
+        || {
+            set_wake_target_locked_quarantining_submitting(&workspace, &request).map_err(|_| {
+                crate::delegated::runtime::RuntimeError::Validation(
+                    "designated chat target wake update was rejected".into(),
+                )
+            })?;
+            wake_staged = true;
+            Ok(())
+        },
+    );
+    if registry_result.is_err() {
+        if !wake_staged {
+            return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
+        }
+        let rollback = set_wake_target_locked_quarantining_submitting(
+            &workspace,
+            &WakeTargetSetRequest {
+                conversation_url: before.url.clone(),
+                expected_current_target_sha256: Some(project_chat_target_digest_for_wake(&target)),
+            },
+        );
+        if rollback.is_err() || designated_chat_target_readback_locked(&workspace).is_err() {
+            return Err(DesignatedChatTargetErrorV1::SynchronizationFailure);
+        }
+        return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
+    }
+    designated_chat_target_readback_locked(&workspace).and_then(|after| {
+        (after.url == target)
+            .then_some(after)
+            .ok_or(DesignatedChatTargetErrorV1::SynchronizationFailure)
+    })
+}
+
+fn project_chat_target_digest_for_wake(target: &str) -> String {
+    wake_target_sha256(target)
+}
+
+fn handle_wake_target_set(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
+    let request = match parse_wake_target_set_request(&tool_arguments(req)) {
+        Ok(request) => request,
+        Err(_) => return tool_error_response(req, "code: WAKE_TARGET_REQUEST_REJECTED\nmessage: provide only a credential-free HTTPS ChatGPT /c/<conversation-id> URL and optional opaque current-target hash".into()),
+    };
+    let workspace = match command::resolve_workspace_path(workspace_root, None) {
+        Ok(workspace) => workspace,
+        Err(_) => return tool_error_response(req, "code: WAKE_TARGET_UNAVAILABLE\nmessage: fixed project-local wake configuration is unavailable".into()),
+    };
+    match set_wake_target(&workspace, &request) {
+        Ok(result) => tool_success_response_with_structured(
+            req,
+            "CatDesk wake target updated without launching a browser.".into(),
+            json!({
+                "toolName": "catdesk_wake_target_set",
+                "success": true,
+                "targetSha256": result.target_sha256,
+                "hostPathIdentity": result.host_path_identity,
+            }),
+        ),
+        Err(_) => tool_error_response(req, "code: WAKE_TARGET_UPDATE_REJECTED\nmessage: wake target update was rejected without modifying protected wake state".into()),
+    }
+}
+
+fn handle_wake_restart_installed(req: &JsonRpcRequest) -> JsonRpcResponse {
+    let arguments = tool_arguments(req);
+    let Some(object) = arguments.as_object() else {
+        return tool_error_response(
+            req,
+            "code: WAKE_RESTART_REQUEST_REJECTED\nmessage: restart arguments are invalid".into(),
+        );
+    };
+    if object.get("confirm").and_then(Value::as_bool) != Some(true)
+        || object
+            .keys()
+            .any(|key| !matches!(key.as_str(), "confirm" | "allow_without_plan"))
+    {
+        return tool_error_response(
+            req,
+            "code: WAKE_RESTART_CONFIRMATION_REQUIRED\nmessage: restart accepts only confirm=true"
+                .into(),
+        );
+    }
+
+    let root = match catdesk_wake::runtime::default_root() {
+        Ok(root) => root,
+        Err(_) => {
+            return tool_error_response(
+                req,
+                "code: WAKE_RESTART_UNAVAILABLE\nmessage: independent WakeHost root is unavailable"
+                    .into(),
+            );
+        }
+    };
+    let store = match catdesk_wake::store::Store::open(&root) {
+        Ok(store) => store,
+        Err(_) => {
+            return tool_error_response(
+                req,
+                "code: WAKE_RESTART_UNAVAILABLE\nmessage: independent WakeHost store is unavailable"
+                    .into(),
+            );
+        }
+    };
+    if store.config().is_err_and(|_| true)
+        || store.config().is_ok_and(|config| config.targets.is_empty())
+    {
+        return tool_error_response(
+            req,
+            "code: WAKE_RESTART_TARGET_REQUIRED\nmessage: independent WakeHost has no configured target"
+                .into(),
+        );
+    }
+    if catdesk_wake::runtime::control(&store, "STOPPED").is_err() {
+        return tool_error_response(
+            req,
+            "code: WAKE_RESTART_STOP_FAILED\nmessage: existing WakeHost could not be asked to stop"
+                .into(),
+        );
+    }
+
+    let mut stopped = false;
+    for _ in 0..50 {
+        match catdesk_wake::runtime::status(&store) {
+            Ok(status) if status.host == "STOPPED" => {
+                stopped = true;
+                break;
+            }
+            Ok(_) => std::thread::sleep(std::time::Duration::from_millis(100)),
+            Err(_) => {
+                return tool_error_response(
+                    req,
+                    "code: WAKE_RESTART_STATUS_FAILED\nmessage: WakeHost stop state could not be verified"
+                        .into(),
+                );
+            }
+        }
+    }
+    if !stopped {
+        return tool_error_response(
+            req,
+            "code: WAKE_RESTART_STOP_TIMEOUT\nmessage: existing WakeHost did not release its host lease in time"
+                .into(),
+        );
+    }
+    if catdesk_wake::runtime::start_installed(&store).is_err() {
+        return tool_error_response(
+            req,
+            "code: WAKE_RESTART_START_FAILED\nmessage: registered immutable WakeHost failed hash-verified startup"
+                .into(),
+        );
+    }
+    let status = match catdesk_wake::runtime::status(&store) {
+        Ok(status) => status,
+        Err(_) => {
+            return tool_error_response(
+                req,
+                "code: WAKE_RESTART_STATUS_FAILED\nmessage: restarted WakeHost status could not be read"
+                    .into(),
+            );
+        }
+    };
+    tool_success_response_with_structured(
+        req,
+        "registered immutable WakeHost restarted through the hash-verified lifecycle path".into(),
+        json!({
+            "toolName": "catdesk_wake_restart_installed",
+            "version": status.version,
+            "host": status.host,
+            "pid": status.pid,
+            "browser": status.browser,
+            "login": status.login,
+            "submission": status.submission,
+            "attention": status.attention,
+            "queueDepth": status.queue_depth,
+            "staleCount": status.stale_count,
+        }),
+    )
+}
+
+fn handle_wake_delivery_status(req: &JsonRpcRequest) -> JsonRpcResponse {
+    let arguments = tool_arguments(req);
+    let Some(object) = arguments.as_object() else {
+        return tool_error_response(
+            req,
+            "WAKE_DELIVERY_STATUS_INVALID_REQUEST: arguments must be an object".into(),
+        );
+    };
+    if object.len() != 1 || object.keys().any(|key| key != "eventId") {
+        return tool_error_response(
+            req,
+            "WAKE_DELIVERY_STATUS_INVALID_REQUEST: only eventId is accepted".into(),
+        );
+    }
+    let event_id = object
+        .get("eventId")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && value.len() <= 200);
+    let Some(event_id) = event_id else {
+        return tool_error_response(req, "WAKE_DELIVERY_STATUS_INVALID_REQUEST: eventId must be one exact non-empty ID of at most 200 bytes".into());
+    };
+    let root = match catdesk_wake::runtime::default_root() {
+        Ok(root) => root,
+        Err(error) => {
+            return tool_error_response(
+                req,
+                format!("WAKE_DELIVERY_STATUS_STORE_UNAVAILABLE: {error}"),
+            );
+        }
+    };
+    let store = match catdesk_wake::store::Store::open(&root) {
+        Ok(store) => store,
+        Err(error) => {
+            return tool_error_response(
+                req,
+                format!("WAKE_DELIVERY_STATUS_STORE_UNAVAILABLE: {error}"),
+            );
+        }
+    };
+    let delivery = match store.delivery(event_id) {
+        Ok(Some(delivery)) => delivery,
+        Ok(None) => {
+            return tool_error_response(req, format!("WAKE_DELIVERY_STATUS_NOT_FOUND: {event_id}"));
+        }
+        Err(error) => {
+            return tool_error_response(req, format!("WAKE_DELIVERY_STATUS_READ_FAILED: {error}"));
+        }
+    };
+    let receipt = delivery.receipt.as_ref();
+    tool_success_response_with_structured(
+        req,
+        "Validated Wake delivery state returned.".into(),
+        json!({
+            "toolName": "catdesk_wake_delivery_status",
+            "eventId": delivery.event.event_id,
+            "phase": format!("{:?}", delivery.phase).to_uppercase(),
+            "updatedUtc": delivery.updated_utc,
+            "hasReceipt": receipt.is_some(),
+            "receiptEvidence": receipt.map(|value| value.evidence.clone()),
+            "receiptTargetGeneration": receipt.map(|value| value.target_generation),
+            "receiptTargetDigest": receipt.map(|value| value.target_digest.clone()),
+            "receiptMessageDigest": receipt.map(|value| value.message_digest.clone()),
+            "sentUtc": receipt.map(|value| value.sent_utc),
+        }),
+    )
+}
+
+fn handle_turn_timer(req: &JsonRpcRequest) -> JsonRpcResponse {
+    use crate::delegated::autonomy_projects::CATDESK_PROJECT_ID_V1;
+
+    let arguments = tool_arguments(req);
+    let Some(object) = arguments.as_object() else {
+        return tool_error_response(
+            req,
+            "code: TURN_TIMER_INVALID_REQUEST\nmessage: turn timer arguments must be an object"
+                .into(),
+        );
+    };
+    if object
+        .keys()
+        .any(|key| !matches!(key.as_str(), "action" | "timerId" | "allow_without_plan"))
+    {
+        return tool_error_response(
+            req,
+            "code: TURN_TIMER_INVALID_REQUEST\nmessage: only action, timerId, and allow_without_plan are accepted"
+                .into(),
+        );
+    }
+    let Some(action) = object.get("action").and_then(Value::as_str) else {
+        return tool_error_response(
+            req,
+            "code: TURN_TIMER_INVALID_REQUEST\nmessage: action is required".into(),
+        );
+    };
+    let timer_id = object.get("timerId").and_then(Value::as_str);
+    if action == "START" && timer_id.is_some() {
+        return tool_error_response(
+            req,
+            "code: TURN_TIMER_INVALID_REQUEST\nmessage: START generates its own timerId".into(),
+        );
+    }
+    if matches!(action, "STATUS" | "STOP")
+        && timer_id.is_none_or(|id| !catdesk_wake::protocol::valid_id(id))
+    {
+        return tool_error_response(
+            req,
+            "code: TURN_TIMER_INVALID_REQUEST\nmessage: STATUS and STOP require one exact valid timerId"
+                .into(),
+        );
+    }
+    if !matches!(action, "START" | "STATUS" | "STOP") {
+        return tool_error_response(
+            req,
+            "code: TURN_TIMER_INVALID_REQUEST\nmessage: action must be START, STATUS, or STOP"
+                .into(),
+        );
+    }
+
+    let result: Result<catdesk_wake::store::TurnTimer, String> = (|| {
+        let root = catdesk_wake::runtime::default_root()?;
+        let store = catdesk_wake::store::Store::open(&root)?;
+        let config = store.config()?;
+        let target = config
+            .targets
+            .get(CATDESK_PROJECT_ID_V1)
+            .cloned()
+            .ok_or_else(|| "TURN_TIMER_TARGET_UNAVAILABLE".to_string())?;
+
+        match action {
+            "START" => {
+                let id = format!(
+                    "{}{}-{}-{}",
+                    catdesk_wake::store::MANUAL_TURN_PREFIX,
+                    catdesk_wake::store::now(),
+                    std::process::id(),
+                    TURN_TIMER_NONCE.fetch_add(1, Ordering::Relaxed)
+                );
+                store.start_manual_turn_timer(&id, CATDESK_PROJECT_ID_V1, &target)
+            }
+            "STATUS" => store
+                .timer(timer_id.expect("validated STATUS timerId"))?
+                .ok_or_else(|| "TURN_TIMER_MISSING".to_string()),
+            "STOP" => store.complete_manual_turn_timer(
+                timer_id.expect("validated STOP timerId"),
+                CATDESK_PROJECT_ID_V1,
+                &target,
+            ),
+            _ => unreachable!("validated timer action"),
+        }
+    })();
+
+    match result {
+        Ok(timer) => {
+            let origin = if timer
+                .event_id
+                .starts_with(catdesk_wake::store::MANUAL_TURN_PREFIX)
+            {
+                "MANUAL_WORK"
+            } else {
+                "WAKE_EVENT"
+            };
+            let status =
+                catdesk_wake::runtime::turn_timer_status(timer, catdesk_wake::store::now());
+            let (delivery_read_state, delivery) = if origin == "WAKE_EVENT" && action == "STATUS" {
+                match catdesk_wake::runtime::default_root()
+                    .and_then(|root| catdesk_wake::store::Store::open(&root))
+                    .and_then(|store| store.delivery(&status.event_id))
+                {
+                    Ok(Some(delivery)) => ("PRESENT", Some(delivery)),
+                    Ok(None) => ("MISSING", None),
+                    Err(_) => ("READ_FAILED", None),
+                }
+            } else {
+                ("NOT_APPLICABLE", None)
+            };
+            let receipt = delivery.as_ref().and_then(|value| value.receipt.as_ref());
+            tool_success_response_with_structured(
+                req,
+                "CatDesk turn timer state returned from the shared Wake timer store.".into(),
+                json!({
+                    "toolName": "catdesk_turn_timer",
+                    "action": action,
+                    "timerId": status.event_id,
+                    "origin": origin,
+                    "state": status.response_state,
+                    "startedUtc": status.started_utc,
+                    "elapsedSeconds": status.elapsed_seconds,
+                    "remainingSeconds": status.remaining_seconds,
+                    "softCheckpointReached": status.soft_checkpoint_reached,
+                    "deadlineReached": status.deadline_reached,
+                    "deliveryReadState": delivery_read_state,
+                    "deliveryPhase": delivery.as_ref().map(|value| format!("{:?}", value.phase).to_uppercase()),
+                    "deliveryUpdatedUtc": delivery.as_ref().map(|value| value.updated_utc),
+                    "deliveryHasReceipt": receipt.is_some(),
+                    "receiptEvidence": receipt.map(|value| value.evidence.clone()),
+                    "receiptTargetGeneration": receipt.map(|value| value.target_generation),
+                    "receiptTargetDigest": receipt.map(|value| value.target_digest.clone()),
+                    "receiptMessageDigest": receipt.map(|value| value.message_digest.clone()),
+                    "sentUtc": receipt.map(|value| value.sent_utc),
+                }),
+            )
+        }
+        Err(error) => {
+            tool_error_response(req, format!("code: TURN_TIMER_REJECTED\nmessage: {error}"))
+        }
+    }
+}
+
+fn handle_binagotchy_command(req: &JsonRpcRequest) -> JsonRpcResponse {
+    let arguments = tool_arguments(req);
+    let Some(object) = arguments.as_object() else {
+        return tool_error_response(
+            req,
+            "code: BINAGOTCHY_COMMAND_REJECTED\nmessage: command arguments are invalid".into(),
+        );
+    };
+    if object
+        .keys()
+        .any(|key| !matches!(key.as_str(), "command" | "eventId" | "allow_without_plan"))
+    {
+        return tool_error_response(
+            req,
+            "code: BINAGOTCHY_COMMAND_REJECTED\nmessage: unsupported command argument".into(),
+        );
+    }
+    let Some(command) = object.get("command").and_then(Value::as_str) else {
+        return tool_error_response(
+            req,
+            "code: BINAGOTCHY_COMMAND_REJECTED\nmessage: command is required".into(),
+        );
+    };
+    if command == "retire" {
+        if object.get("eventId").and_then(Value::as_str).is_none() {
+            return tool_error_response(
+                req,
+                "code: BINAGOTCHY_EVENT_REQUIRED\nmessage: retire requires one eventId".into(),
+            );
+        }
+    } else if object.contains_key("eventId") {
+        return tool_error_response(
+            req,
+            "code: BINAGOTCHY_COMMAND_REJECTED\nmessage: eventId is accepted only for retire"
+                .into(),
+        );
+    }
+
+    let root = match catdesk_wake::runtime::default_root() {
+        Ok(root) => root,
+        Err(_) => {
+            return tool_error_response(
+                req,
+                "code: BINAGOTCHY_UNAVAILABLE\nmessage: independent WakeHost root is unavailable"
+                    .into(),
+            );
+        }
+    };
+    let store = match catdesk_wake::store::Store::open(&root) {
+        Ok(store) => store,
+        Err(_) => {
+            return tool_error_response(
+                req,
+                "code: BINAGOTCHY_UNAVAILABLE\nmessage: independent WakeHost store is unavailable"
+                    .into(),
+            );
+        }
+    };
+
+    let result: Result<Value, String> = (|| match command {
+        "status" => {
+            let status = catdesk_wake::runtime::status(&store)?;
+            Ok(json!({
+                "command": "status",
+                "version": status.version,
+                "host": status.host,
+                "pid": status.pid,
+                "browser": status.browser,
+                "login": status.login,
+                "submission": status.submission,
+                "attention": status.attention,
+                "queueDepth": status.queue_depth,
+                "staleCount": status.stale_count,
+                "lastEventId": status.last_event_id,
+                "lastReceipt": status.last_receipt,
+                "lastSuccessUtc": status.last_success_utc,
+                "hostRecoveryCount": status.host_recovery_count,
+                "lastHostError": status.last_host_error,
+                "lastHostErrorUtc": status.last_host_error_utc,
+            }))
+        }
+        "start" => {
+            catdesk_wake::runtime::start_installed(&store)?;
+            let mut status = catdesk_wake::runtime::status(&store)?;
+            for _ in 0..20 {
+                if status.host == "RUNNING" {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                status = catdesk_wake::runtime::status(&store)?;
+            }
+            Ok(json!({
+                "command": "start",
+                "version": status.version,
+                "host": status.host,
+                "pid": status.pid,
+                "queueDepth": status.queue_depth,
+                "attention": status.attention,
+            }))
+        }
+        "pause" => {
+            catdesk_wake::runtime::control(&store, "PAUSED")?;
+            Ok(json!({"command":"pause","state":"PAUSED"}))
+        }
+        "resume" => {
+            if store.config()?.targets.is_empty() {
+                return Err("TARGET_NOT_CONFIGURED".into());
+            }
+            catdesk_wake::runtime::control(&store, "RUNNING")?;
+            catdesk_wake::runtime::start_installed(&store)?;
+            Ok(json!({"command":"resume","state":"RUNNING"}))
+        }
+        "stop" => {
+            catdesk_wake::runtime::control(&store, "STOPPED")?;
+            Ok(json!({"command":"stop","state":"STOPPED"}))
+        }
+        "queue" => {
+            let events = store.events()?;
+            Ok(json!({
+                "command": "queue",
+                "queueDepth": events.len(),
+                "events": events,
+            }))
+        }
+        "test" => {
+            let millis = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|_| "CLOCK_UNAVAILABLE".to_string())?
+                .as_millis();
+            let event_id = format!("manual-wake-mcp-{millis}");
+            let message = format!(
+                "MANUAL WAKE DEBUG — Binagotchy MCP test {event_id} — NOT natural acceptance."
+            );
+            let event = store.produce(&event_id, "catdesk", "test", &message)?;
+            Ok(json!({
+                "command": "test",
+                "event": event,
+                "naturalAcceptance": false,
+            }))
+        }
+        "retire" => {
+            let event_id = object
+                .get("eventId")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "EVENT_ID_REQUIRED".to_string())?;
+            store.retire_stale(event_id)?;
+            Ok(json!({"command":"retire","eventId":event_id,"state":"RETIRED"}))
+        }
+        _ => Err("BINAGOTCHY_COMMAND_UNSUPPORTED".into()),
+    })();
+
+    match result {
+        Ok(value) => tool_success_response_with_structured(
+            req,
+            format!("Binagotchy command {command} completed."),
+            json!({
+                "toolName": "catdesk_binagotchy_command",
+                "success": true,
+                "result": value,
+            }),
+        ),
+        Err(error) => tool_error_response(
+            req,
+            format!("code: BINAGOTCHY_COMMAND_FAILED\nmessage: {error}"),
+        ),
+    }
+}
+
+fn authoritative_wake_bridge_sha256(path: &Path) -> Option<String> {
+    let metadata = fs::metadata(path).ok()?;
+    if !metadata.is_file() || metadata.len() > MAX_WAKE_BRIDGE_SCRIPT_BYTES {
+        return None;
+    }
+    Some(format!("{:x}", Sha256::digest(fs::read(path).ok()?)))
 }
 
 fn command_summary_json(summary: &command::CommandSummary) -> Value {
@@ -1420,6 +3821,27 @@ fn validate_allowlisted_shell(
             Err("allowlist shell mode rejects nested shells and interpreters".into())
         }
         "cargo" => Ok(()),
+        "install.ps1" => {
+            if words.len() != 1 {
+                return Err("allowlist shell mode permits the Wake installer only with its fixed zero-argument invocation".into());
+            }
+            let requested = root
+                .join(command_name)
+                .canonicalize()
+                .map(command::normalize_windows_verbatim_path)
+                .map_err(|_| "Wake installer path is unavailable".to_string())?;
+            let expected = root
+                .join("wake")
+                .join("install.ps1")
+                .canonicalize()
+                .map(command::normalize_windows_verbatim_path)
+                .map_err(|_| "reviewed Wake installer is unavailable".to_string())?;
+            if requested == expected {
+                Ok(())
+            } else {
+                Err("allowlist shell mode permits only the reviewed wake/install.ps1 script".into())
+            }
+        }
         "npm" | "pnpm" | "yarn" | "bun" => Ok(()),
         "pytest" | "ruff" | "mypy" => Ok(()),
         "git" => match words.get(1).map(String::as_str) {
@@ -1768,6 +4190,12 @@ fn plan_guard_applies(tool_name: &str) -> bool {
             | "session_resume_update"
             | "repo_map_generate"
             | "verify_project"
+            | "catdesk_wake_bridge_run_once"
+            | "catdesk_wake_target_set"
+            | "catdesk_wake_restart_installed"
+            | "catdesk_wake_delivery_status"
+            | "catdesk_turn_timer"
+            | "catdesk_binagotchy_command"
             | "task_queue_add"
             | "task_queue_set_status"
             | "prompt_templates_init"
@@ -1867,6 +4295,108 @@ fn tool_name_from_request(req: &JsonRpcRequest) -> String {
 
 fn supervisor_mcp_tool_name(name: &str) -> bool {
     SUPERVISOR_TOOL_NAMES.contains(&name)
+}
+
+fn stable_supervisor_lifecycle_mcp_tool_name(name: &str) -> bool {
+    matches!(
+        name,
+        STABLE_SUPERVISOR_LIFECYCLE_STATUS_TOOL
+            | STABLE_SUPERVISOR_LIFECYCLE_PREFLIGHT_TOOL
+            | STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL
+    )
+}
+
+/// The stable supervisor lifecycle is intentionally separate from delegated
+/// run supervision. These tools have no caller-selected authority and dispatch
+/// only the pre-existing closed lifecycle composition.
+fn stable_supervisor_lifecycle_mcp_tool_schemas() -> Vec<Value> {
+    vec![
+        json!({
+            "name": STABLE_SUPERVISOR_LIFECYCLE_STATUS_TOOL,
+            "title": "Read stable supervisor status",
+            "description": "Read only fixed stable-supervisor lifecycle status. It accepts no arguments and never launches, probes, or mutates a supervisor.",
+            "inputSchema": { "type": "object", "additionalProperties": false, "properties": {} },
+            "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false }
+        }),
+        json!({
+            "name": STABLE_SUPERVISOR_LIFECYCLE_PREFLIGHT_TOOL,
+            "title": "Read stable supervisor preflight",
+            "description": "Read only fixed stable-supervisor lifecycle preflight. It accepts no arguments and preserves fixed principal, reviewed-image, startup, and receipt checks.",
+            "inputSchema": { "type": "object", "additionalProperties": false, "properties": {} },
+            "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false }
+        }),
+        json!({
+            "name": STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL,
+            "title": "Activate stable supervisor",
+            "description": "Run only the fixed stable-supervisor activation transaction. Requires confirm: true; it never accepts a path, image, hash, endpoint, principal, task, tunnel, or shell command and never auto-elevates.",
+            "inputSchema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": { "confirm": { "type": "boolean", "const": true } },
+                "required": ["confirm"]
+            },
+            "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": true }
+        }),
+    ]
+}
+
+fn stable_supervisor_lifecycle_action(
+    tool_name: &str,
+    arguments: &Value,
+) -> Result<crate::supervisor_lifecycle::SupervisorOperatorActionV1, &'static str> {
+    let object = arguments.as_object().ok_or("arguments must be an object")?;
+    match tool_name {
+        STABLE_SUPERVISOR_LIFECYCLE_STATUS_TOOL if object.is_empty() => {
+            Ok(crate::supervisor_lifecycle::SupervisorOperatorActionV1::Status)
+        }
+        STABLE_SUPERVISOR_LIFECYCLE_PREFLIGHT_TOOL if object.is_empty() => {
+            Ok(crate::supervisor_lifecycle::SupervisorOperatorActionV1::Preflight)
+        }
+        STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL
+            if object.len() == 1
+                && object.get("confirm").and_then(Value::as_bool) == Some(true) =>
+        {
+            Ok(crate::supervisor_lifecycle::SupervisorOperatorActionV1::Activate)
+        }
+        STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL => Err("activation requires only confirm: true"),
+        STABLE_SUPERVISOR_LIFECYCLE_STATUS_TOOL | STABLE_SUPERVISOR_LIFECYCLE_PREFLIGHT_TOOL => {
+            Err("read-only lifecycle tools accept no arguments")
+        }
+        _ => Err("unknown stable supervisor lifecycle tool"),
+    }
+}
+
+fn dispatch_stable_supervisor_lifecycle_action<F>(
+    tool_name: &str,
+    arguments: &Value,
+    execute: F,
+) -> Result<Value, &'static str>
+where
+    F: FnOnce(crate::supervisor_lifecycle::SupervisorOperatorActionV1) -> Value,
+{
+    Ok(execute(stable_supervisor_lifecycle_action(
+        tool_name, arguments,
+    )?))
+}
+
+fn handle_stable_supervisor_lifecycle_mcp_tool(req: &JsonRpcRequest) -> JsonRpcResponse {
+    let tool_name = tool_name_from_request(req);
+    let result = dispatch_stable_supervisor_lifecycle_action(
+        &tool_name,
+        &tool_arguments(req),
+        crate::supervisor_lifecycle::execute_supervisor_operator_action,
+    );
+    match result {
+        Ok(lifecycle) => tool_success_response_with_structured(
+            req,
+            "fixed stable-supervisor lifecycle operation completed".into(),
+            json!({ "toolName": tool_name, "lifecycle": lifecycle }),
+        ),
+        Err(message) => tool_error_response(
+            req,
+            format!("code: STABLE_SUPERVISOR_LIFECYCLE_REQUEST_REJECTED\nmessage: {message}"),
+        ),
+    }
 }
 
 fn delegated_run_registry() -> Arc<Mutex<DelegatedRunRegistry>> {
@@ -2167,7 +4697,7 @@ async fn handle_autonomy_supervisor_mcp_tool(
     let args = tool_arguments(req);
     if tool_name == "autonomy_session_start" {
         let session_id = match args.get("sessionId").and_then(Value::as_str) {
-            Some(value) => value,
+            Some(value) => value.to_owned(),
             None => {
                 return tool_error_response(
                     req,
@@ -2176,7 +4706,7 @@ async fn handle_autonomy_supervisor_mcp_tool(
             }
         };
         let workspace = Path::new(workspace_root);
-        let model_id = match autonomy_contract_model_id(workspace, session_id) {
+        let model_id = match autonomy_contract_model_id(workspace, &session_id) {
             Ok(value) => value,
             Err(error) => return tool_error_response(req, format!("Autonomy MCP error: {error}")),
         };
@@ -2186,7 +4716,7 @@ async fn handle_autonomy_supervisor_mcp_tool(
         if let Err(error) = handle_autonomy_mcp_tool(&tool_name, args.clone(), workspace) {
             return tool_error_response(req, format!("Autonomy MCP error: {error}"));
         }
-        return match start_or_tick_autonomy(workspace, session_id).await {
+        return match start_or_tick_autonomy(workspace, &session_id).await {
             Ok(outcome) => tool_success_response_with_structured(
                 req,
                 "autonomy controller tick completed".into(),
@@ -2223,6 +4753,163 @@ async fn handle_autonomy_supervisor_mcp_tool(
             Err(error) => tool_error_response(req, format!("Autonomy MCP error: {error}")),
         };
     }
+    if tool_name == "autonomy_session_claim_direct_work" {
+        let session_id = match args.get("sessionId").and_then(Value::as_str) {
+            Some(value) => value.to_owned(),
+            None => {
+                return tool_error_response(
+                    req,
+                    "Autonomy MCP error: sessionId is required".into(),
+                );
+            }
+        };
+        // Persist the idempotent approved-QUEUED request before CatDesk
+        // captures direct-work ownership. No provider discovery or launch is
+        // permitted on this path.
+        let mut structured =
+            match handle_autonomy_mcp_tool(&tool_name, args, Path::new(workspace_root)) {
+                Ok(structured) => structured,
+                Err(error) => {
+                    return tool_error_response(req, format!("Autonomy MCP error: {error}"));
+                }
+            };
+        let claim = if structured.get("state").and_then(Value::as_str) != Some("QUEUED") {
+            json!({
+                "status":"ALREADY_CLAIMED",
+                "state":structured.get("state").cloned().unwrap_or(Value::Null)
+            })
+        } else {
+            match claim_direct_autonomy_work(Path::new(workspace_root), &session_id).await {
+                Ok(outcome) => json!({
+                    "status":"CLAIMED",
+                    "state":outcome.state,
+                    "providerEvents":outcome.provider_events
+                }),
+                Err(error) => json!({
+                    "status":"PENDING_RECOVERY",
+                    "recoverable":true,
+                    "reason":bounded_autonomy_continuation_error(&format!("{error:?}"))
+                }),
+            }
+        };
+        if let Some(object) = structured.as_object_mut() {
+            object.insert("claim".into(), claim);
+        } else {
+            structured = json!({"result":structured,"claim":claim});
+        }
+        return tool_success_response_with_structured(
+            req,
+            "direct ChatGPT work claim processed".into(),
+            structured,
+        );
+    }
+    if tool_name == "autonomy_session_finalize_direct_work" {
+        let session_id = match args.get("sessionId").and_then(Value::as_str) {
+            Some(value) => value.to_owned(),
+            None => {
+                return tool_error_response(
+                    req,
+                    "Autonomy MCP error: sessionId is required".into(),
+                );
+            }
+        };
+        // Persist the exact WAITING_FOR_CHATGPT + idempotency boundary before
+        // verification. Direct ChatGPT work receives no provider-launch
+        // authority from this request.
+        let mut structured =
+            match handle_autonomy_mcp_tool(&tool_name, args, Path::new(workspace_root)) {
+                Ok(structured) => structured,
+                Err(error) => {
+                    return tool_error_response(req, format!("Autonomy MCP error: {error}"));
+                }
+            };
+        let finalization =
+            if structured.get("state").and_then(Value::as_str) != Some("WAITING_FOR_CHATGPT") {
+                // A matching idempotent replay can arrive after the first request
+                // already advanced the task. Never re-run verification in that
+                // case; the durable session state is authoritative.
+                json!({
+                    "status":"ALREADY_FINALIZED",
+                    "state":structured.get("state").cloned().unwrap_or(Value::Null)
+                })
+            } else {
+                match finalize_direct_autonomy_work(Path::new(workspace_root), &session_id).await {
+                    Ok(outcome) => json!({
+                        "status":"FINALIZED",
+                        "state":outcome.state,
+                        "providerEvents":outcome.provider_events
+                    }),
+                    // The request is already durable. A process interruption or
+                    // verifier-runtime failure is recoverable and must never be
+                    // represented as a rolled-back provider action.
+                    Err(error) => json!({
+                        "status":"PENDING_RECOVERY",
+                        "recoverable":true,
+                        "reason":bounded_autonomy_continuation_error(&format!("{error:?}"))
+                    }),
+                }
+            };
+        if let Some(object) = structured.as_object_mut() {
+            object.insert("finalization".into(), finalization);
+        } else {
+            structured = json!({"result":structured,"finalization":finalization});
+        }
+        return tool_success_response_with_structured(
+            req,
+            "direct ChatGPT work finalization processed".into(),
+            structured,
+        );
+    }
+    if matches!(
+        tool_name.as_str(),
+        "autonomy_session_reply" | "autonomy_session_resume"
+    ) {
+        let session_id = match args.get("sessionId").and_then(Value::as_str) {
+            Some(value) => value.to_owned(),
+            None => {
+                return tool_error_response(
+                    req,
+                    "Autonomy MCP error: sessionId is required".into(),
+                );
+            }
+        };
+        // The supervisor owns the durable, locked validation and commit.  Do
+        // not inspect local provider configuration or touch the runtime until
+        // that operation has completed successfully.
+        let mut structured =
+            match handle_autonomy_mcp_tool(&tool_name, args, Path::new(workspace_root)) {
+                Ok(structured) => structured,
+                Err(error) => {
+                    return tool_error_response(req, format!("Autonomy MCP error: {error}"));
+                }
+            };
+        let continuation =
+            match rearm_accepted_autonomy_session(Path::new(workspace_root), &session_id).await {
+                Ok(outcome) => json!({
+                    "status":"TICKED",
+                    "state":outcome.state,
+                    "providerEvents":outcome.provider_events
+                }),
+                // The reply/resume is already durable.  Surface a bounded,
+                // recoverable result rather than treating it as rolled back or
+                // exposing operator-local runtime details through MCP.
+                Err(error) => json!({
+                    "status":"PENDING_RECOVERY",
+                    "recoverable":true,
+                    "reason":bounded_autonomy_continuation_error(&format!("{error:?}"))
+                }),
+            };
+        if let Some(object) = structured.as_object_mut() {
+            object.insert("continuation".into(), continuation);
+        } else {
+            structured = json!({"result":structured,"continuation":continuation});
+        }
+        return tool_success_response_with_structured(
+            req,
+            "autonomy session control-plane operation completed".into(),
+            structured,
+        );
+    }
     match handle_autonomy_mcp_tool(&tool_name, args, Path::new(workspace_root)) {
         Ok(structured) => tool_success_response_with_structured(
             req,
@@ -2231,6 +4918,13 @@ async fn handle_autonomy_supervisor_mcp_tool(
         ),
         Err(error) => tool_error_response(req, format!("Autonomy MCP error: {error}")),
     }
+}
+
+fn bounded_autonomy_continuation_error(value: &str) -> String {
+    const MAX_BYTES: usize = 240;
+    let mut bounded = value.replace(['\r', '\n'], " ");
+    bounded.truncate(MAX_BYTES);
+    bounded
 }
 
 fn autonomy_contract_model_id(workspace: &Path, session_id: &str) -> Result<String, String> {
@@ -2424,7 +5118,7 @@ async fn handle_supervisor_registry_tool(
             let key_for_task = key.clone();
             let run_id_for_task = run_id.clone();
             tokio::spawn(async move {
-                let outcome = async {
+                let outcome: Result<_, crate::delegated::integrated::IntegratedError> = async {
                     let mut service = IntegratedDelegatedService::recover(
                         &workspace_clone,
                         contract.clone(),
@@ -2437,26 +5131,68 @@ async fn handle_supervisor_registry_tool(
                             config.clone(),
                         )
                     })?;
-                    service
+                    let review = service
                         .run_ollama_worker_loop_with_cancel(cancel_requested.clone())
-                        .await
+                        .await?;
+                    let diff_hash = service
+                        .last_actual_diff()
+                        .ok_or_else(|| {
+                            crate::delegated::integrated::IntegratedError::Verification(
+                                "completed delegated run is missing authoritative diff evidence"
+                                    .into(),
+                            )
+                        })?
+                        .diff_hash
+                        .clone();
+                    Ok((review, diff_hash))
                 }
                 .await;
-                let mut registry = registry_for_task.lock().await;
-                if let Some(entry) = registry.runs.get_mut(&key_for_task) {
-                    match outcome {
-                        Ok(review) => {
-                            entry.status = RegistryRunStatus::Completed;
-                            entry.final_review = serde_json::to_value(&review).ok();
-                            entry.last_error = None;
-                            release_active_lock(&entry.active_lock_path);
+                let handoff = {
+                    let mut registry = registry_for_task.lock().await;
+                    registry
+                        .runs
+                        .get_mut(&key_for_task)
+                        .and_then(|entry| match outcome {
+                            Ok((review, diff_hash)) => {
+                                let review_json = serde_json::to_value(&review).ok()?;
+                                entry.status = RegistryRunStatus::Completed;
+                                entry.final_review = Some(review_json);
+                                entry.last_error = None;
+                                release_active_lock(&entry.active_lock_path);
+                                Some((
+                                    entry.workspace_root.clone(),
+                                    entry.contract.task_id.as_str().to_string(),
+                                    review,
+                                    diff_hash,
+                                ))
+                            }
+                            Err(error) => {
+                                apply_worker_error_outcome(
+                                    entry,
+                                    &run_id_for_task,
+                                    format!("{error:?}"),
+                                );
+                                None
+                            }
+                        })
+                };
+                if let Some((workspace, run_id, review, diff_hash)) = handoff {
+                    match persist_delegated_terminal_review_handoff(
+                        &workspace, &run_id, &review, &diff_hash,
+                    ) {
+                        Ok(()) => {
+                            crate::delegated::autonomy_runtime::dispatch_delegated_review_wake(
+                                workspace, run_id,
+                            )
+                            .await;
                         }
                         Err(error) => {
-                            apply_worker_error_outcome(
-                                entry,
-                                &run_id_for_task,
-                                format!("{error:?}"),
-                            );
+                            let mut registry = registry_for_task.lock().await;
+                            if let Some(entry) = registry.runs.get_mut(&key_for_task) {
+                                entry.last_error = Some(format!(
+                                    "completed final-review handoff is pending durable replay: {error}"
+                                ));
+                            }
                         }
                     }
                 }
@@ -2634,7 +5370,50 @@ async fn handle_supervisor_registry_tool(
                 .runs
                 .get_mut(&key)
                 .ok_or_else(|| format!("unknown delegated run {}", run_id.as_str()))?;
+
+            if matches!(
+                entry.status,
+                RegistryRunStatus::Completed
+                    | RegistryRunStatus::Failed
+                    | RegistryRunStatus::Cancelled
+                    | RegistryRunStatus::NeedsSupervisor
+            ) {
+                return Ok(json!({
+                    "toolName": tool_name,
+                    "runId": run_id,
+                    "state": entry.status.as_str()
+                }));
+            }
+
             entry.cancel_requested.store(true, Ordering::SeqCst);
+
+            if !entry.active_lock_path.exists() {
+                match run_has_outcome_unknown(&entry.config.journal_root, &run_id) {
+                    Ok(false) => {
+                        entry.status = RegistryRunStatus::Cancelled;
+                        let _ = DelegatedJournal::open(&entry.config.journal_root).and_then(
+                            |journal| journal.update_run_state(&run_id, RunState::Cancelled),
+                        );
+                        return Ok(json!({
+                            "toolName": tool_name,
+                            "runId": run_id,
+                            "state": "CANCELLED"
+                        }));
+                    }
+                    Ok(true) | Err(_) => {
+                        entry.status = RegistryRunStatus::NeedsSupervisor;
+                        let _ = DelegatedJournal::open(&entry.config.journal_root).and_then(
+                            |journal| journal.update_run_state(&run_id, RunState::NeedsSupervisor),
+                        );
+                        return Ok(json!({
+                            "toolName": tool_name,
+                            "runId": run_id,
+                            "state": "NEEDS_SUPERVISOR"
+                        }));
+                    }
+                }
+            }
+
             entry.status = RegistryRunStatus::CancelRequested;
             let _ = DelegatedJournal::open(&entry.config.journal_root)
                 .and_then(|journal| journal.update_run_state(&run_id, RunState::CancelRequested));
@@ -2930,10 +5709,82 @@ async fn registry_entry(
             return Ok((run_id, entry));
         }
     }
-    let entry = rehydrate_registry_entry(workspace_root, &run_id)?;
+    let mut entry = rehydrate_registry_entry(workspace_root, &run_id)?;
+    if entry.status == RegistryRunStatus::Completed {
+        match persist_rehydrated_delegated_terminal_review_handoff(&entry, &run_id) {
+            Ok(()) => {
+                let dispatch_workspace = entry.workspace_root.clone();
+                let dispatch_run_id = run_id.as_str().to_string();
+                tokio::spawn(async move {
+                    crate::delegated::autonomy_runtime::dispatch_delegated_review_wake(
+                        dispatch_workspace,
+                        dispatch_run_id,
+                    )
+                    .await;
+                });
+            }
+            Err(error) => {
+                entry.last_error = Some(format!(
+                    "completed final-review handoff is pending durable replay: {error}"
+                ));
+            }
+        }
+    }
     let mut registry = registry.lock().await;
     registry.runs.insert(key, entry.clone());
     Ok((run_id, entry))
+}
+
+/// Persist the delegated final-review identity through the same bounded inbox
+/// primitive used by the autonomous reviewer. A completed delegated run is not
+/// independently reviewable until this succeeds; replay is safe because the
+/// state-store record id is deterministically bound to the run identity.
+fn persist_delegated_terminal_review_handoff(
+    workspace: &Path,
+    run_id: &str,
+    review: &crate::delegated::coordinator::FinalReviewPackageV1,
+    diff_hash: &str,
+) -> Result<(), String> {
+    let review_bytes = serde_json::to_vec(review).map_err(|error| error.to_string())?;
+    let final_review_sha256 = format!("{:x}", Sha256::digest(&review_bytes));
+    crate::delegated::autonomy_runtime::emit_delegated_review_inbox(
+        workspace,
+        run_id,
+        &final_review_sha256,
+        diff_hash,
+    )
+    .map(|_| ())
+    .map_err(|error| format!("{error:?}"))
+}
+
+/// Reconstruct evidence only from the completed delegated journal before
+/// replaying a handoff interrupted after terminal persistence. It never accepts
+/// caller-supplied review or diff data and never changes a project target.
+fn persist_rehydrated_delegated_terminal_review_handoff(
+    entry: &DelegatedRunEntry,
+    run_id: &RunId,
+) -> Result<(), String> {
+    let service = IntegratedDelegatedService::recover(
+        &entry.workspace_root,
+        entry.contract.clone(),
+        entry.config.clone(),
+    )
+    .map_err(|error| format!("completed delegated run recovery failed: {error:?}"))?;
+    let review = service
+        .final_review()
+        .map_err(|error| format!("completed delegated final review is unavailable: {error:?}"))?;
+    let diff_hash = service
+        .last_actual_diff()
+        .ok_or_else(|| {
+            "completed delegated run is missing authoritative diff evidence".to_string()
+        })?
+        .diff_hash;
+    persist_delegated_terminal_review_handoff(
+        &entry.workspace_root,
+        run_id.as_str(),
+        &review,
+        &diff_hash,
+    )
 }
 
 fn reserve_active_run_for_workspace(
@@ -3105,6 +5956,26 @@ fn rehydrate_registry_entry(
             .update_run_state(run_id, RunState::NeedsSupervisor)
             .map_err(|error| format!("{error:?}"))?
             .state
+    } else if snapshot.state == RunState::CancelRequested {
+        // Rehydration occurs in a new CatDesk process, so no worker from the
+        // prior process can still own this run. Reconcile the durable cancel
+        // request from journal evidence instead of preserving a stale lock
+        // forever. Any uncertain mutation remains supervisor-owned.
+        match run_has_outcome_unknown(&config.journal_root, run_id) {
+            Ok(false) => {
+                let updated = journal
+                    .update_run_state(run_id, RunState::Cancelled)
+                    .map_err(|error| format!("{error:?}"))?;
+                release_active_lock(&workspace_active_lock_path(workspace_root));
+                updated.state
+            }
+            Ok(true) | Err(_) => {
+                journal
+                    .update_run_state(run_id, RunState::NeedsSupervisor)
+                    .map_err(|error| format!("{error:?}"))?
+                    .state
+            }
+        }
     } else {
         snapshot.state
     };
@@ -3677,6 +6548,8 @@ fn tool_descriptor_should_attach_widget(name: &str) -> bool {
             | "prompt_template_write"
             | "session_resume_update"
             | "repo_map_generate"
+            | "catdesk_wake_bridge_run_once"
+            | "catdesk_wake_target_set"
             | "verify_project"
             | "git_status_summary"
             | "git_create_feature_branch"
@@ -5838,6 +8711,1075 @@ mod tests {
     use std::ffi::OsString;
     use uuid::Uuid;
 
+    fn fixture_acceptance_snapshot(overall: &str) -> Value {
+        json!({
+            "schemaVersion": 1,
+            "stage": "PRE_REBOOT_PREFLIGHT",
+            "overallState": overall,
+            "capturedAtUtc": "2026-08-12T00:00:00Z",
+            "canonicalBuildFingerprint": "a".repeat(64),
+            "lifecycleState": "READY",
+            "instanceFingerprint": "b".repeat(24),
+            "gates": PRODUCTION_ACCEPTANCE_GATE_IDS.iter().map(|id| json!({"id": id, "state": if overall == "PASS" { "PASS" } else { "FAIL" }})).collect::<Vec<_>>(),
+        })
+    }
+
+    #[test]
+    fn dedicated_wake_wrapper_hashes_only_a_bounded_regular_bridge_file() {
+        let root = std::env::temp_dir().join(format!("catdesk-wake-mcp-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("wake fixture root");
+        let bridge = root.join("wake_bridge.py");
+        fs::write(&bridge, b"print('authoritative')\n").expect("wake fixture bridge");
+        let first = authoritative_wake_bridge_sha256(&bridge).expect("bridge hash");
+        fs::write(&bridge, b"print('changed')\n").expect("wake fixture rewrite");
+        assert_ne!(
+            first,
+            authoritative_wake_bridge_sha256(&bridge).expect("changed hash")
+        );
+        fs::write(
+            &bridge,
+            vec![b'x'; (MAX_WAKE_BRIDGE_SCRIPT_BYTES + 1) as usize],
+        )
+        .expect("oversized bridge");
+        assert!(authoritative_wake_bridge_sha256(&bridge).is_none());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn production_acceptance_request_is_closed_and_hash_bound() {
+        let hash = "A".repeat(64);
+        assert_eq!(
+            parse_production_acceptance_request(
+                &json!({"action": "preflight", "expectedWakeTargetSha256": hash})
+            )
+            .expect("preflight")
+            .action,
+            ProductionAcceptanceAction::Preflight
+        );
+        assert!(parse_production_acceptance_request(&json!({"action": "preflight"})).is_err());
+        assert!(
+            parse_production_acceptance_request(
+                &json!({"action": "compare", "expectedWakeTargetSha256": "a".repeat(64)})
+            )
+            .is_err()
+        );
+        assert!(
+            parse_production_acceptance_request(
+                &json!({"action": "compare", "workspace": "C:/escape"})
+            )
+            .is_err()
+        );
+        assert!(parse_production_acceptance_request(&json!({"action": "capture_pre", "expectedWakeTargetSha256": "a".repeat(64), "command": "x"})).is_err());
+        assert!(
+            parse_production_acceptance_request(
+                &json!({"action": "preflight", "expectedWakeTargetSha256": "not-a-hash"})
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn production_acceptance_invocation_uses_only_fixed_direct_arguments() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-acceptance-invocation-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("scripts")).expect("scripts");
+        std::fs::write(
+            root.join("scripts/catdesk-production-acceptance.ps1"),
+            "# fixture",
+        )
+        .expect("script");
+        let preflight = ProductionAcceptanceRequest {
+            action: ProductionAcceptanceAction::Preflight,
+            expected_wake_target_sha256: Some("a".repeat(64)),
+        };
+        let invocation =
+            production_acceptance_invocation(root.to_string_lossy().as_ref(), &preflight)
+                .expect("preflight invocation");
+        assert_eq!(invocation.program, "powershell.exe");
+        assert_eq!(
+            invocation.args[..5],
+            [
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File"
+            ]
+        );
+        assert!(
+            invocation
+                .args
+                .windows(2)
+                .any(|window| window == ["-Mode", "preflight"])
+        );
+        assert!(
+            invocation
+                .args
+                .windows(2)
+                .any(|window| window == ["-ExpectedWakeTargetSha256", &"a".repeat(64)])
+        );
+        assert!(
+            !invocation
+                .args
+                .iter()
+                .any(|arg| arg.contains(';') || arg.contains("-Command"))
+        );
+        let compare = ProductionAcceptanceRequest {
+            action: ProductionAcceptanceAction::Compare,
+            expected_wake_target_sha256: None,
+        };
+        let comparison =
+            production_acceptance_invocation(root.to_string_lossy().as_ref(), &compare)
+                .expect("compare invocation");
+        let paths = production_acceptance_evidence_paths(&comparison.workspace, false)
+            .expect("fixed paths");
+        assert!(
+            comparison
+                .args
+                .windows(2)
+                .any(|window| window == ["-Mode", "compare"])
+        );
+        assert!(comparison.args.windows(2).any(|window| {
+            window == ["-PreSnapshotPath", paths.pre.to_string_lossy().as_ref()]
+        }));
+        assert!(
+            !comparison
+                .args
+                .iter()
+                .any(|arg| arg == "-ExpectedWakeTargetSha256")
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn production_acceptance_output_is_bounded_structural_and_redacted() {
+        let snapshot = fixture_acceptance_snapshot("PASS");
+        let valid = command::CommandResult {
+            stdout: serde_json::to_string(&snapshot).expect("json"),
+            stderr: String::new(),
+            success: true,
+            exit_code: Some(0),
+            elapsed_ms: 1,
+        };
+        assert_eq!(
+            parse_production_acceptance_output(ProductionAcceptanceAction::Preflight, &valid)
+                .expect("snapshot"),
+            snapshot
+        );
+        let malformed = command::CommandResult {
+            stdout: "{}".into(),
+            ..valid
+        };
+        assert!(
+            parse_production_acceptance_output(ProductionAcceptanceAction::Preflight, &malformed)
+                .is_err()
+        );
+        let oversized = command::CommandResult {
+            stdout: "x".repeat(MAX_PRODUCTION_ACCEPTANCE_OUTPUT_BYTES + 1),
+            stderr: String::new(),
+            success: true,
+            exit_code: Some(0),
+            elapsed_ms: 1,
+        };
+        assert!(
+            parse_production_acceptance_output(ProductionAcceptanceAction::Preflight, &oversized)
+                .is_err()
+        );
+        let comparison = json!({"schemaVersion": 1, "stage": "POST_REBOOT_COMPARISON", "overallState": "FAIL", "canonicalBuildUnchanged": false, "newCatDeskInstance": false, "externalRuntimePending": false, "postLifecycleState": "UNAVAILABLE"});
+        let valid_compare = command::CommandResult {
+            stdout: serde_json::to_string(&comparison).expect("json"),
+            stderr: String::new(),
+            success: true,
+            exit_code: Some(0),
+            elapsed_ms: 1,
+        };
+        assert_eq!(
+            parse_production_acceptance_output(ProductionAcceptanceAction::Compare, &valid_compare)
+                .expect("comparison"),
+            comparison
+        );
+    }
+
+    #[test]
+    fn production_acceptance_capture_is_atomic_pass_gated_and_contained() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-acceptance-capture-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("workspace");
+        let passing = fixture_acceptance_snapshot("PASS");
+        persist_production_acceptance_snapshot(
+            &root,
+            ProductionAcceptanceAction::CapturePre,
+            &passing,
+        )
+        .expect("pre capture");
+        let paths = production_acceptance_evidence_paths(&root, false).expect("paths");
+        checked_acceptance_file(&paths.pre).expect("stored pre");
+        assert_eq!(
+            serde_json::from_slice::<Value>(&std::fs::read(&paths.pre).expect("read pre"))
+                .expect("parse pre"),
+            passing
+        );
+        let mut replacement = fixture_acceptance_snapshot("PASS");
+        replacement["capturedAtUtc"] = json!("2026-08-12T00:00:01Z");
+        persist_production_acceptance_snapshot(
+            &root,
+            ProductionAcceptanceAction::CapturePre,
+            &replacement,
+        )
+        .expect("atomic pre replacement");
+        assert_eq!(
+            serde_json::from_slice::<Value>(&std::fs::read(&paths.pre).expect("read replacement"))
+                .expect("parse replacement"),
+            replacement
+        );
+        let failing = fixture_acceptance_snapshot("FAIL");
+        assert!(
+            persist_production_acceptance_snapshot(
+                &root,
+                ProductionAcceptanceAction::CapturePre,
+                &failing
+            )
+            .is_err()
+        );
+        persist_production_acceptance_snapshot(
+            &root,
+            ProductionAcceptanceAction::CapturePost,
+            &failing,
+        )
+        .expect("post capture");
+        assert_eq!(
+            serde_json::from_slice::<Value>(&std::fs::read(&paths.post).expect("read post"))
+                .expect("parse post"),
+            failing
+        );
+        let unsafe_root =
+            std::env::temp_dir().join(format!("catdesk-acceptance-unsafe-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&unsafe_root).expect("unsafe workspace");
+        std::fs::write(unsafe_root.join(".catdesk"), "not a directory").expect("unsafe control");
+        assert!(production_acceptance_evidence_paths(&unsafe_root, true).is_err());
+        let _ = std::fs::remove_dir_all(root);
+        let _ = std::fs::remove_dir_all(unsafe_root);
+    }
+
+    #[tokio::test]
+    async fn t0060d_production_acceptance_tool_is_fixed_and_redacts_rejected_input() {
+        let list = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!("t0060d-list")),
+            method: "tools/list".into(),
+            params: json!({}),
+        };
+        let listed = handle_tools_list(&list, Mode::Both, ToolMode::MultiTools, &None).await;
+        let tool = listed
+            .result
+            .as_ref()
+            .and_then(|result| result.get("tools"))
+            .and_then(Value::as_array)
+            .and_then(|tools| {
+                tools.iter().find(|tool| {
+                    tool.get("name").and_then(Value::as_str)
+                        == Some("catdesk_production_acceptance")
+                })
+            })
+            .expect("production acceptance tool schema");
+        assert_eq!(
+            tool.pointer("/inputSchema/required/0")
+                .and_then(Value::as_str),
+            Some("action")
+        );
+        let root =
+            std::env::temp_dir().join(format!("catdesk-acceptance-request-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("workspace");
+        let rejected = tool_call_request(
+            "catdesk_production_acceptance",
+            json!({"action": "compare", "workspace": "C:/secret-path"}),
+        );
+        let response = handle_tools_call(
+            &rejected,
+            root.to_string_lossy().as_ref(),
+            1,
+            Mode::Both,
+            ToolMode::MultiTools,
+            false,
+            &None,
+        )
+        .await;
+        assert!(result_text(&response).contains("PRODUCTION_ACCEPTANCE_REQUEST_REJECTED"));
+        assert!(!result_text(&response).contains("secret-path"));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn lifecycle_facade_invocation_uses_only_fixed_direct_arguments() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-lifecycle-invocation-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("workspace");
+        std::fs::write(root.join("catdesk.ps1"), "# fixture").expect("facade");
+        let invocation = lifecycle_facade_invocation(
+            root.to_string_lossy().as_ref(),
+            command::LifecycleFacadeOperation::AutostartEnable,
+        )
+        .expect("invocation");
+        assert_eq!(invocation.program, "powershell.exe");
+        assert_eq!(
+            invocation.args[..5],
+            [
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File"
+            ]
+        );
+        assert_eq!(invocation.args[6..], ["autostart", "enable"]);
+        assert!(!invocation.args.iter().any(|arg| arg.contains(";")));
+        assert!(!invocation.args.iter().any(|arg| arg.contains("-Workspace")));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn lifecycle_facade_result_requires_small_redacted_json_contract() {
+        let valid = command::CommandResult {
+            stdout: r#"{"command":"status","state":"READY","detail":"redacted"}"#.into(),
+            stderr: String::new(),
+            success: true,
+            exit_code: Some(0),
+            elapsed_ms: 1,
+        };
+        assert_eq!(
+            parse_lifecycle_facade_state(command::LifecycleFacadeOperation::Status, &valid),
+            Some("READY".into())
+        );
+        let unavailable = command::CommandResult {
+            stdout: r#"{"command":"status","state":"STATUS_UNAVAILABLE","detail":"stage=CANONICAL_BINARY_MISSING"}"#.into(),
+            stderr: String::new(),
+            success: true,
+            exit_code: Some(0),
+            elapsed_ms: 1,
+        };
+        assert_eq!(
+            parse_lifecycle_facade_state(command::LifecycleFacadeOperation::Status, &unavailable),
+            Some("STATUS_UNAVAILABLE".into())
+        );
+        let connected = command::CommandResult {
+            stdout: r#"{"command":"recover","state":"CONNECTED_VERIFIED","detail":"canonical local daemon and external runtime verified"}"#.into(),
+            stderr: String::new(),
+            success: true,
+            exit_code: Some(0),
+            elapsed_ms: 1,
+        };
+        assert_eq!(
+            parse_lifecycle_facade_state(command::LifecycleFacadeOperation::Recover, &connected),
+            Some("CONNECTED_VERIFIED".into())
+        );
+        for hostile_detail in [
+            "stage=C:\\secret",
+            "stage=CANONICAL_BINARY_MISSING;whoami",
+            "stage=https://example.invalid",
+            "path=CANONICAL_BINARY_MISSING",
+            "stage=UNKNOWN",
+            "stage=CANONICAL_BINARY_MISSING\nextra",
+        ] {
+            let hostile = command::CommandResult {
+                stdout: serde_json::to_string(&json!({
+                    "command": "status",
+                    "state": "STATUS_UNAVAILABLE",
+                    "detail": hostile_detail,
+                }))
+                .expect("hostile lifecycle fixture"),
+                stderr: String::new(),
+                success: true,
+                exit_code: Some(0),
+                elapsed_ms: 1,
+            };
+            assert!(
+                parse_lifecycle_facade_state(command::LifecycleFacadeOperation::Status, &hostile)
+                    .is_none(),
+                "hostile detail must be rejected: {hostile_detail}"
+            );
+        }
+        let wrong_operation_state = command::CommandResult {
+            stdout: r#"{"command":"status","state":"AUTOSTART_ENABLED","detail":"redacted"}"#
+                .into(),
+            stderr: String::new(),
+            success: true,
+            exit_code: Some(0),
+            elapsed_ms: 1,
+        };
+        assert!(
+            parse_lifecycle_facade_state(
+                command::LifecycleFacadeOperation::Status,
+                &wrong_operation_state
+            )
+            .is_none()
+        );
+        let malformed = command::CommandResult {
+            stdout: "not json".into(),
+            ..valid
+        };
+        assert!(
+            parse_lifecycle_facade_state(command::LifecycleFacadeOperation::Status, &malformed)
+                .is_none()
+        );
+        let nonzero = command::CommandResult {
+            stdout: r#"{"command":"status","state":"READY","detail":"redacted"}"#.into(),
+            stderr: String::new(),
+            success: false,
+            exit_code: Some(1),
+            elapsed_ms: 1,
+        };
+        assert!(
+            parse_lifecycle_facade_state(command::LifecycleFacadeOperation::Status, &nonzero)
+                .is_none()
+        );
+        let oversized = command::CommandResult {
+            stdout: "x".repeat(MAX_LIFECYCLE_FACADE_OUTPUT_BYTES + 1),
+            stderr: String::new(),
+            success: true,
+            exit_code: Some(0),
+            elapsed_ms: 1,
+        };
+        assert!(
+            parse_lifecycle_facade_state(command::LifecycleFacadeOperation::Status, &oversized)
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn lifecycle_facade_dry_run_accepts_only_fixed_operations_without_shell_execution() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-lifecycle-dry-run-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("workspace");
+        std::fs::write(root.join("catdesk.ps1"), "# fixture").expect("facade");
+        let root_text = root.to_string_lossy().into_owned();
+        for command_text in [
+            r".\catdesk.ps1 status",
+            r".\catdesk.ps1 start",
+            r".\catdesk.ps1 recover",
+            r".\catdesk.ps1 stop",
+            r".\catdesk.ps1 autostart status",
+            r".\catdesk.ps1 autostart enable",
+            r".\catdesk.ps1 autostart disable",
+        ] {
+            let req = tool_call_request(
+                "run_command",
+                json!({ "command": command_text, "dry_run": true }),
+            );
+            let response = handle_tools_call(
+                &req,
+                &root_text,
+                1,
+                Mode::Both,
+                ToolMode::MultiTools,
+                false,
+                &None,
+            )
+            .await;
+            assert!(response.error.is_none(), "{command_text}");
+            let structured = response
+                .result
+                .as_ref()
+                .and_then(|value| value.get("structuredContent"))
+                .expect("structured lifecycle response");
+            assert_eq!(
+                structured
+                    .get("interceptedCommandName")
+                    .and_then(Value::as_str),
+                Some("catdesk_lifecycle")
+            );
+        }
+        let cwd_override = tool_call_request(
+            "run_command",
+            json!({ "command": r".\catdesk.ps1 status", "cwd": ".", "dry_run": true }),
+        );
+        let cwd_response = handle_tools_call(
+            &cwd_override,
+            &root_text,
+            1,
+            Mode::Both,
+            ToolMode::MultiTools,
+            false,
+            &None,
+        )
+        .await;
+        assert!(result_text(&cwd_response).contains("LIFECYCLE_COMMAND_REJECTED"));
+        assert!(validate_allowlisted_shell(&root_text, &root, "Write-Output unrelated").is_err());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn t0040_dedicated_wake_tool_is_registered() {
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!("t0040-tools-list")),
+            method: "tools/list".into(),
+            params: json!({}),
+        };
+
+        let response = handle_tools_list(&req, Mode::Both, ToolMode::MultiTools, &None).await;
+        let names = response
+            .result
+            .as_ref()
+            .and_then(|result| result.get("tools"))
+            .and_then(Value::as_array)
+            .expect("missing tools")
+            .iter()
+            .filter_map(|tool| tool.get("name").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+
+        assert!(
+            names.contains(&"catdesk_wake_bridge_run_once"),
+            "T-0040 requires the dedicated catdesk_wake_bridge_run_once MCP tool"
+        );
+        let wake_tool = response
+            .result
+            .as_ref()
+            .and_then(|result| result.get("tools"))
+            .and_then(Value::as_array)
+            .and_then(|tools| {
+                tools.iter().find(|tool| {
+                    tool.get("name").and_then(Value::as_str) == Some("catdesk_wake_bridge_run_once")
+                })
+            })
+            .expect("wake tool schema");
+        let required = wake_tool
+            .pointer("/inputSchema/required")
+            .and_then(Value::as_array)
+            .expect("wake tool required parameters");
+        assert!(required.iter().any(|value| value == "confirm"));
+        assert!(!required.iter().any(|value| value == "recordId"));
+    }
+
+    #[tokio::test]
+    async fn shared_turn_timer_tool_schema_is_closed_and_bounded() {
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!("turn-timer-tools-list")),
+            method: "tools/list".into(),
+            params: json!({}),
+        };
+        let response = handle_tools_list(&req, Mode::Both, ToolMode::MultiTools, &None).await;
+        let timer_tool = response
+            .result
+            .as_ref()
+            .and_then(|result| result.get("tools"))
+            .and_then(Value::as_array)
+            .and_then(|tools| {
+                tools.iter().find(|tool| {
+                    tool.get("name").and_then(Value::as_str) == Some("catdesk_turn_timer")
+                })
+            })
+            .expect("turn timer tool");
+        assert_eq!(
+            timer_tool
+                .pointer("/inputSchema/additionalProperties")
+                .and_then(Value::as_bool),
+            Some(false)
+        );
+        assert_eq!(
+            timer_tool
+                .pointer("/inputSchema/required/0")
+                .and_then(Value::as_str),
+            Some("action")
+        );
+        assert_eq!(
+            timer_tool
+                .pointer("/inputSchema/properties/action/enum")
+                .and_then(Value::as_array)
+                .expect("action enum")
+                .iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>(),
+            vec!["START", "STATUS", "STOP"]
+        );
+        assert!(
+            timer_tool
+                .pointer("/inputSchema/properties/duration")
+                .is_none()
+        );
+        assert!(
+            timer_tool
+                .pointer("/inputSchema/properties/target")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn shared_turn_timer_rejects_caller_selected_start_id_before_store_access() {
+        let req = tool_call_request(
+            "catdesk_turn_timer",
+            json!({"action":"START","timerId":"manual-turn-caller-selected"}),
+        );
+        let response = handle_turn_timer(&req);
+        let text = result_text(&response);
+        assert!(text.contains("TURN_TIMER_INVALID_REQUEST"));
+        assert!(text.contains("START generates its own timerId"));
+    }
+
+    #[test]
+    fn shared_turn_timer_accepts_advertised_plan_override_argument() {
+        let req = tool_call_request(
+            "catdesk_turn_timer",
+            json!({"action":"STATUS","allow_without_plan":true}),
+        );
+        let response = handle_turn_timer(&req);
+        let text = result_text(&response);
+        assert!(text.contains("TURN_TIMER_INVALID_REQUEST"));
+        assert!(text.contains("STATUS and STOP require one exact valid timerId"));
+        assert!(!text.contains("only action, timerId, and allow_without_plan are accepted"));
+    }
+
+    #[tokio::test]
+    async fn t0040_dedicated_wake_tool_requires_explicit_confirmation() {
+        let root = std::env::temp_dir().join(format!("catdesk-t0040-wake-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("workspace");
+        let req = tool_call_request("catdesk_wake_bridge_run_once", json!({"confirm": false}));
+        let response = handle_wake_bridge_run_once(&req, root.to_string_lossy().as_ref()).await;
+        assert!(
+            response
+                .result
+                .as_ref()
+                .and_then(|result| result.get("isError"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            "wake bridge must reject an unconfirmed invocation"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn t0254_rust_owner_selection_disables_legacy_bridge_before_launch() {
+        let root = std::env::temp_dir().join(format!("catdesk-t0254-owner-{}", Uuid::new_v4()));
+        let wake_root = root.join(".catdesk").join("wake-bridge");
+        std::fs::create_dir_all(&wake_root).expect("wake root");
+        std::fs::write(
+            wake_root.join("owner.json"),
+            br#"{"schemaVersion":1,"owner":"rust"}"#,
+        )
+        .expect("selector");
+        let req = tool_call_request(
+            "catdesk_wake_bridge_run_once",
+            json!({"confirm": true, "recordId": "review-owner", "dry_run": true}),
+        );
+        let response = handle_wake_bridge_run_once(&req, root.to_string_lossy().as_ref()).await;
+        let text = result_text(&response);
+        assert!(text.contains("WAKE_OWNER_RUST_SELECTED"));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn dedicated_wake_dry_run_binds_the_project_local_bridge_hash() {
+        let root = std::env::temp_dir().join(format!("catdesk-wake-bound-{}", Uuid::new_v4()));
+        let wake_root = root.join(".catdesk").join("wake-bridge");
+        let python = wake_root.join("venv").join("Scripts").join("python.exe");
+        let config = wake_root.join("config.json");
+        let bridge = root.join("scripts").join("wake_bridge.py");
+        std::fs::create_dir_all(python.parent().expect("python parent")).expect("wake root");
+        std::fs::create_dir_all(bridge.parent().expect("bridge parent")).expect("bridge root");
+        std::fs::write(&python, b"").expect("python fixture");
+        std::fs::write(&config, b"{}").expect("config fixture");
+        std::fs::write(&bridge, b"print('bound bridge')\n").expect("bridge fixture");
+        let expected = authoritative_wake_bridge_sha256(&bridge).expect("bridge hash");
+        let req = tool_call_request(
+            "catdesk_wake_bridge_run_once",
+            json!({"confirm": true, "recordId": "review-bound", "dry_run": true}),
+        );
+        let response = handle_wake_bridge_run_once(&req, root.to_string_lossy().as_ref()).await;
+        let args = response
+            .result
+            .as_ref()
+            .and_then(|result| result.pointer("/structuredContent/invocation/args"))
+            .and_then(Value::as_array)
+            .expect("bound dry-run arguments");
+        assert!(args.iter().any(|value| value == "--bridge-sha256"));
+        assert!(args.iter().any(|value| value == &expected));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    fn wake_target_fixture(label: &str) -> (PathBuf, PathBuf) {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-wake-target-{label}-{}", Uuid::new_v4()));
+        let wake_root = root.join(".catdesk").join("wake-bridge");
+        std::fs::create_dir_all(&wake_root).expect("wake fixture root");
+        let config = wake_root.join("config.json");
+        std::fs::write(
+            &config,
+            serde_json::to_vec_pretty(&json!({
+                "schema_version": 4,
+                "conversation_url": "https://chatgpt.com/c/previous-thread",
+                "profile_dir": ".catdesk/wake-bridge/browser-profile",
+                "ui_ready_timeout_seconds": 20.0,
+                "send_confirmation_timeout_seconds": 15.0,
+                "ui_poll_interval_seconds": 0.25,
+                "debounce_seconds": 1,
+                "unrelated": {"retained": [1, 2, 3]}
+            }))
+            .expect("wake fixture config"),
+        )
+        .expect("wake config write");
+        (root, config)
+    }
+
+    fn designated_chat_target_fixture(label: &str) -> (PathBuf, PathBuf) {
+        use crate::delegated::autonomy_projects::{
+            AutonomousProjectRegistryStoreV1, AutonomousProjectV1, project_chat_target_digest,
+        };
+
+        let (root, config) = wake_target_fixture(label);
+        let workspace = root.canonicalize().expect("canonical fixture workspace");
+        let initial = "https://chatgpt.com/c/previous-thread";
+        let store = AutonomousProjectRegistryStoreV1::open(root.join(".catdesk/projects"))
+            .expect("project registry");
+        store.initialize(1, 1).expect("project registry initialize");
+        store
+            .register_project(AutonomousProjectV1 {
+                project_id: "catdesk".into(),
+                workspace,
+                git_identity: "fixture-git".into(),
+                verification_profile: "rust_full".into(),
+                codex_thread_id: Some("fixture-thread".into()),
+                chatgpt_target_url: Some(initial.into()),
+                chatgpt_target_sha256: Some(project_chat_target_digest(initial)),
+            })
+            .expect("project register");
+        (root, config)
+    }
+
+    #[test]
+    fn designated_chat_target_readback_and_guarded_update_keep_project_and_wake_coherent() {
+        let (root, config_path) = designated_chat_target_fixture("designated-success");
+        let before = operator_read_designated_chat_target(&root).expect("readback");
+        assert_eq!(before.url, "https://chatgpt.com/c/previous-thread");
+        let after = operator_update_designated_chat_target(
+            &root,
+            "https://chatgpt.com/c/updated-thread",
+            &before.sha256,
+        )
+        .expect("guarded update");
+        assert_eq!(after.url, "https://chatgpt.com/c/updated-thread");
+        assert_eq!(
+            operator_read_designated_chat_target(&root).expect("readback after"),
+            after
+        );
+        let config: Value =
+            serde_json::from_slice(&fs::read(&config_path).expect("config")).expect("config json");
+        assert_eq!(
+            config["conversation_url"],
+            "https://chatgpt.com/c/updated-thread"
+        );
+        let unchanged = operator_update_designated_chat_target(
+            &root,
+            "https://chatgpt.com/c/updated-thread",
+            &after.sha256,
+        )
+        .expect("same-value update");
+        assert_eq!(unchanged, after);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn designated_chat_transaction_quarantines_submitting_and_commits_paired_target() {
+        use crate::delegated::autonomy_projects::{
+            AutonomousProjectRegistryStoreV1, project_chat_target_digest,
+        };
+        use crate::delegated::runtime::RuntimeError;
+        use catdesk_wake::store::{Phase, Store};
+
+        let (root, _config_path) = designated_chat_target_fixture("designated-submitting-rollover");
+        let before = operator_read_designated_chat_target(&root).expect("initial readback");
+        let wake_root = root.join("independent-wake-store");
+        let wake_store = Store::open_scoped_for_test(&wake_root, &root).expect("wake store");
+        wake_store.initialize().expect("wake initialize");
+        let prior = wake_store
+            .set_target("catdesk", 0, &before.url)
+            .expect("initial wake target");
+        let event = wake_store
+            .produce(
+                "review-rollover",
+                "catdesk",
+                "review_ready",
+                "CatDesk review-rollover is ready for review.",
+            )
+            .expect("wake event");
+        let lease = wake_store.host_lock().expect("wake lease");
+        let claimed = wake_store.claim(&event, &lease).expect("wake claim");
+        assert_eq!(claimed.target, prior);
+        wake_store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                Some("SUBMIT_CLEARED_NO_APPEND".into()),
+            )
+            .expect("submitting");
+        drop(lease);
+
+        let registry = AutonomousProjectRegistryStoreV1::open(root.join(".catdesk/projects"))
+            .expect("registry");
+        let target = "https://chatgpt.com/c/updated-thread";
+        let bound = registry
+            .bind_project_chat_target_after("catdesk", target, Some(&before.sha256), || {
+                wake_store
+                    .set_target_quarantining_submitting("catdesk", prior.generation, target)
+                    .map(|_| ())
+                    .map_err(RuntimeError::Validation)
+            })
+            .expect("paired target transaction");
+
+        assert_eq!(bound.chatgpt_target_url.as_deref(), Some(target));
+        assert_eq!(
+            bound.chatgpt_target_sha256.as_deref(),
+            Some(project_chat_target_digest(target).as_str())
+        );
+        let wake_after = wake_store.config().expect("wake config").targets["catdesk"].clone();
+        assert_eq!(wake_after.generation, prior.generation + 1);
+        assert_eq!(wake_after.url, target);
+        assert_eq!(wake_after.digest, project_chat_target_digest(target));
+
+        let quarantined = wake_store
+            .delivery(&event.event_id)
+            .expect("delivery read")
+            .expect("delivery present");
+        assert_eq!(quarantined.phase, Phase::Submitting);
+        assert_eq!(quarantined.target, prior);
+        assert_eq!(
+            quarantined.reason.as_deref(),
+            Some("SUBMIT_CLEARED_NO_APPEND")
+        );
+        assert!(quarantined.receipt.is_none());
+        assert_eq!(wake_store.events().expect("queue"), vec![event]);
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn designated_chat_target_rejects_stale_or_preexisting_divergence_before_wake_mutation() {
+        let (root, config_path) = designated_chat_target_fixture("designated-refusal");
+        let original = fs::read(&config_path).expect("original config");
+        assert_eq!(
+            operator_update_designated_chat_target(
+                &root,
+                "https://chatgpt.com/c/updated-thread",
+                &"0".repeat(64),
+            ),
+            Err(DesignatedChatTargetErrorV1::Stale)
+        );
+        assert_eq!(fs::read(&config_path).expect("stale unchanged"), original);
+
+        use crate::delegated::autonomy_projects::AutonomousProjectRegistryStoreV1;
+        let store = AutonomousProjectRegistryStoreV1::open(root.join(".catdesk/projects"))
+            .expect("registry");
+        let prior = operator_read_designated_chat_target(&root).expect("prior");
+        store
+            .bind_project_chat_target(
+                "catdesk",
+                "https://chatgpt.com/c/concurrent-thread",
+                Some(&prior.sha256),
+            )
+            .expect("concurrent registry update");
+        assert_eq!(
+            operator_update_designated_chat_target(
+                &root,
+                "https://chatgpt.com/c/updated-thread",
+                &prior.sha256,
+            ),
+            Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch)
+        );
+        assert_eq!(
+            fs::read(&config_path).expect("divergence unchanged"),
+            original
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn wake_target_set_updates_only_the_exact_target_and_preserves_config_values() {
+        let (root, config_path) = wake_target_fixture("success");
+        let original =
+            serde_json::from_slice::<Value>(&std::fs::read(&config_path).expect("original config"))
+                .expect("original config json");
+        let result = set_wake_target(
+            &root,
+            &WakeTargetSetRequest {
+                conversation_url: canonical_wake_target("https://chatgpt.com/c/current-thread")
+                    .expect("target"),
+                expected_current_target_sha256: Some(wake_target_sha256(
+                    "https://chatgpt.com/c/previous-thread",
+                )),
+            },
+        )
+        .expect("target update");
+        let updated =
+            serde_json::from_slice::<Value>(&std::fs::read(&config_path).expect("updated config"))
+                .expect("updated config json");
+        assert_eq!(
+            updated["conversation_url"],
+            "https://chatgpt.com/c/current-thread"
+        );
+        for field in [
+            "profile_dir",
+            "ui_ready_timeout_seconds",
+            "send_confirmation_timeout_seconds",
+            "ui_poll_interval_seconds",
+            "debounce_seconds",
+            "unrelated",
+        ] {
+            assert_eq!(updated[field], original[field], "preserve {field}");
+        }
+        assert_eq!(result.host_path_identity, "chatgpt.com/c/current-thread");
+        assert_eq!(
+            result.target_sha256,
+            wake_target_sha256("https://chatgpt.com/c/current-thread")
+        );
+        assert!(
+            !root
+                .join(".catdesk")
+                .join("wake-bridge")
+                .join("state.json")
+                .exists()
+        );
+        assert!(
+            !root
+                .join(".catdesk")
+                .join("autonomy")
+                .join("review-inbox.json")
+                .exists()
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn wake_target_set_rejects_invalid_urls_without_mutating_config() {
+        let (root, config_path) = wake_target_fixture("invalid");
+        let original = std::fs::read(&config_path).expect("original config");
+        let web_target = "https://chatgpt.com/c/WEB:1229263e-88d1-41a1-8ce2-b4aa97fbcb0f";
+        assert_eq!(
+            canonical_wake_target(web_target).expect("WEB-prefixed wake target"),
+            web_target
+        );
+        for invalid in [
+            "https://chatgpt.com/c/WEB:",
+            "https://chatgpt.com/c/web:thread",
+            "https://chatgpt.com/c/WEB:thread:extra",
+            "https://chatgpt.com/g/WEB:project/c/thread",
+            "http://chatgpt.com/c/thread",
+            "https://user@chatgpt.com/c/thread",
+            "https://chatgpt.com:444/c/thread",
+            "https://chatgpt.com/c/thread?query=value",
+            "https://chatgpt.com/c/thread#fragment",
+            "https://example.com/c/thread",
+            "https://chatgpt.com/share/thread",
+            "https://chatgpt.com/c/thread/",
+            "https://chatgpt.com/c/encoded%2Fthread",
+            "https://chatgpt.com/c/",
+        ] {
+            assert!(canonical_wake_target(invalid).is_err(), "{invalid}");
+        }
+        assert!(
+            parse_wake_target_set_request(
+                &json!({"conversationUrl": "https://chatgpt.com/c/thread", "unexpected": true})
+            )
+            .is_err()
+        );
+        assert_eq!(
+            std::fs::read(&config_path).expect("unchanged config"),
+            original
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn wake_target_set_cas_and_atomic_failures_leave_original_config_intact() {
+        let (root, config_path) = wake_target_fixture("cas");
+        let original = std::fs::read(&config_path).expect("original config");
+        let request = WakeTargetSetRequest {
+            conversation_url: canonical_wake_target("https://chatgpt.com/c/current-thread")
+                .expect("target"),
+            expected_current_target_sha256: Some("0".repeat(64)),
+        };
+        assert!(set_wake_target(&root, &request).is_err());
+        assert_eq!(
+            std::fs::read(&config_path).expect("cas unchanged"),
+            original
+        );
+        let temp = config_path.with_file_name(format!(".config.json.{}.tmp", std::process::id()));
+        std::fs::write(&temp, b"collision").expect("temporary collision");
+        let request = WakeTargetSetRequest {
+            conversation_url: canonical_wake_target("https://chatgpt.com/c/current-thread")
+                .expect("target"),
+            expected_current_target_sha256: None,
+        };
+        assert!(set_wake_target(&root, &request).is_err());
+        assert_eq!(
+            std::fs::read(&config_path).expect("atomic unchanged"),
+            original
+        );
+        let _ = std::fs::remove_file(temp);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn wake_target_set_rejects_malformed_oversized_and_unsafe_config() {
+        let (root, config_path) = wake_target_fixture("unsafe");
+        std::fs::write(&config_path, b"[]").expect("malformed config");
+        let request = WakeTargetSetRequest {
+            conversation_url: canonical_wake_target("https://chatgpt.com/c/current-thread")
+                .expect("target"),
+            expected_current_target_sha256: None,
+        };
+        assert!(set_wake_target(&root, &request).is_err());
+        assert_eq!(
+            std::fs::read(&config_path).expect("malformed untouched"),
+            b"[]"
+        );
+        let duplicate = br#"{"conversation_url":"https://chatgpt.com/c/one","conversation_url":"https://chatgpt.com/c/two","profile_dir":".catdesk/wake-bridge/browser-profile"}"#;
+        std::fs::write(&config_path, duplicate).expect("ambiguous config");
+        assert!(set_wake_target(&root, &request).is_err());
+        assert_eq!(
+            std::fs::read(&config_path).expect("ambiguous untouched"),
+            duplicate
+        );
+        std::fs::write(&config_path, vec![b'x'; MAX_WAKE_CONFIG_BYTES as usize + 1])
+            .expect("oversized config");
+        assert!(set_wake_target(&root, &request).is_err());
+        std::fs::remove_file(&config_path).expect("remove config fixture");
+        std::fs::create_dir(&config_path).expect("unsafe config directory");
+        assert!(set_wake_target(&root, &request).is_err());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn wake_target_set_mcp_returns_only_bounded_target_evidence() {
+        let (root, _config_path) = wake_target_fixture("mcp");
+        let request = tool_call_request(
+            "catdesk_wake_target_set",
+            json!({"conversationUrl": "https://chatgpt.com/c/current-thread"}),
+        );
+        let response = handle_wake_target_set(&request, root.to_string_lossy().as_ref());
+        let structured = response
+            .result
+            .as_ref()
+            .and_then(|value| value.get("structuredContent"))
+            .expect("setter response");
+        assert_eq!(
+            structured["hostPathIdentity"],
+            "chatgpt.com/c/current-thread"
+        );
+        assert!(
+            structured["targetSha256"]
+                .as_str()
+                .is_some_and(is_sha256_hex)
+        );
+        assert!(
+            serde_json::to_string(structured)
+                .expect("structured json")
+                .len()
+                < 512
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
     static ADVISOR_ENV_TEST_LOCK: OnceLock<std::sync::Mutex<()>> = OnceLock::new();
 
     fn resources_read_request(uri: &str) -> JsonRpcRequest {
@@ -5991,6 +9933,51 @@ mod tests {
     }
 
     #[test]
+    fn shell_allowlist_permits_only_exact_zero_argument_wake_installer() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-wake-installer-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(workspace_root.join("wake")).expect("create wake directory");
+        std::fs::write(
+            workspace_root.join("wake").join("install.ps1"),
+            "# reviewed wake installer\n",
+        )
+        .expect("write wake installer");
+        std::fs::write(
+            workspace_root.join("install.ps1"),
+            "# unrelated installer\n",
+        )
+        .expect("write unrelated installer");
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+
+        assert!(
+            validate_allowlisted_shell(&workspace_root_str, &workspace_root, r".\wake\install.ps1")
+                .is_ok()
+        );
+        assert!(
+            validate_allowlisted_shell(
+                &workspace_root_str,
+                &workspace_root,
+                r".\wake\install.ps1 -BuildOnly"
+            )
+            .is_err()
+        );
+        assert!(
+            validate_allowlisted_shell(&workspace_root_str, &workspace_root, r".\install.ps1")
+                .is_err()
+        );
+        assert!(
+            validate_allowlisted_shell(
+                &workspace_root_str,
+                &workspace_root,
+                r"powershell -File .\wake\install.ps1"
+            )
+            .is_err()
+        );
+
+        let _ = std::fs::remove_dir_all(workspace_root);
+    }
+
+    #[test]
     fn generic_file_tools_reject_protected_paths() {
         let workspace_root =
             std::env::temp_dir().join(format!("catdesk-mcp-protected-path-{}", Uuid::new_v4()));
@@ -6034,11 +10021,14 @@ mod tests {
             vec![
                 "autonomy_contract_create",
                 "autonomy_contract_validate",
+                "autonomy_runtime_capabilities",
                 "autonomy_contract_approve",
                 "autonomy_session_start",
                 "autonomy_session_status",
                 "autonomy_session_events",
                 "autonomy_session_reply",
+                "autonomy_session_claim_direct_work",
+                "autonomy_session_finalize_direct_work",
                 "autonomy_session_pause",
                 "autonomy_session_resume",
                 "autonomy_session_cancel",
@@ -6050,9 +10040,34 @@ mod tests {
                 "autonomy_session_list",
                 "provider_status",
                 "autonomy_queue_status",
+                "autonomy_execution_accounting",
+                "autonomy_work_time_report",
+                "autonomy_wake_policy_get",
+                "autonomy_wake_policy_set",
+                "autonomy_ticket_audit",
+                "autonomy_session_supersede",
+                "autonomy_review_inbox_list",
+                "autonomy_review_inbox_ack",
+                "autonomy_project_registry_read",
+                "autonomy_project_registry_bind",
+                "autonomy_project_registry_preflight",
+                "autonomy_project_registry_confirm",
+                "autonomy_project_registry_chat_target_bind",
+                "autonomy_project_thread_adoption_preflight",
+                "autonomy_project_thread_adoption_confirm",
+                "catdesk_codex_goal_resume",
+                "catdesk_daemon_reload",
+                "catdesk_release_recovery",
+                "catdesk_reviewed_build",
+                "catdesk_reviewed_build_promotion",
+                "catdesk_github_publication",
+                "catdesk_stable_supervisor_status",
+                "catdesk_stable_supervisor_preflight",
+                "catdesk_stable_supervisor_activate",
                 "run_command",
                 "catdesk_instruction",
                 "catdesk_transport_status",
+                "ollama_model_probe",
                 "read",
                 "search",
                 "project_memory_read",
@@ -6060,6 +10075,7 @@ mod tests {
                 "task_queue_read",
                 "prompt_templates_list",
                 "prompt_template_read",
+                "catdesk_production_acceptance",
                 "project_memory_init",
                 "project_memory_update",
                 "plan_update",
@@ -6070,6 +10086,12 @@ mod tests {
                 "session_resume_update",
                 "repo_map_generate",
                 "verify_project",
+                "catdesk_wake_bridge_run_once",
+                "catdesk_wake_target_set",
+                "catdesk_wake_restart_installed",
+                "catdesk_wake_delivery_status",
+                "catdesk_turn_timer",
+                "catdesk_binagotchy_command",
                 "delegated_run_create",
                 "delegated_run_validate",
                 "delegated_run_approve_start",
@@ -7121,6 +11143,132 @@ mod tests {
         );
     }
 
+    #[test]
+    fn cancel_requested_rehydration_reaps_read_only_stranded_run_and_stale_lock() {
+        let workspace_root = std::env::temp_dir().join(format!(
+            "catdesk-mcp-cancel-rehydrate-safe-{}",
+            Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let run_id =
+            RunId::new(format!("run-cancel-rehydrate-safe-{}", Uuid::new_v4())).expect("run id");
+        let contract = delegated_contract(&workspace_root, run_id.as_str());
+        let config = mcp_integrated_config(&workspace_root, &contract, &json!({})).expect("config");
+        let journal = DelegatedJournal::open(&config.journal_root).expect("journal");
+        journal.create_run(&contract).expect("create run");
+        journal
+            .update_run_state(&run_id, RunState::Ready)
+            .expect("ready");
+        journal
+            .update_run_state(&run_id, RunState::Starting)
+            .expect("starting");
+        journal
+            .update_run_state(&run_id, RunState::Running)
+            .expect("running");
+        journal
+            .update_run_state(&run_id, RunState::CancelRequested)
+            .expect("cancel requested");
+        let lock_path = workspace_active_lock_path(&workspace_root);
+        std::fs::create_dir_all(lock_path.parent().expect("lock parent")).expect("lock parent");
+        std::fs::write(&lock_path, run_id.as_str()).expect("stale lock");
+
+        let rehydrated = rehydrate_registry_entry(
+            &workspace_root.canonicalize().expect("canonical workspace"),
+            &run_id,
+        )
+        .expect("safe rehydration");
+
+        assert_eq!(rehydrated.status, RegistryRunStatus::Cancelled);
+        assert_eq!(
+            journal.load_run(&run_id).expect("snapshot").state,
+            RunState::Cancelled
+        );
+        assert!(
+            !lock_path.exists(),
+            "read-only stranded cancellation must release stale ownership on restart"
+        );
+        let _ = std::fs::remove_dir_all(workspace_root);
+    }
+
+    #[test]
+    fn cancel_requested_rehydration_with_unknown_mutation_escalates_and_keeps_lock() {
+        let workspace_root = std::env::temp_dir().join(format!(
+            "catdesk-mcp-cancel-rehydrate-unknown-{}",
+            Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&workspace_root).expect("workspace");
+        let run_id =
+            RunId::new(format!("run-cancel-rehydrate-unknown-{}", Uuid::new_v4())).expect("run id");
+        let contract = delegated_contract(&workspace_root, run_id.as_str());
+        let config = mcp_integrated_config(&workspace_root, &contract, &json!({})).expect("config");
+        let journal = DelegatedJournal::open(&config.journal_root).expect("journal");
+        journal.create_run(&contract).expect("create run");
+        journal
+            .update_run_state(&run_id, RunState::Ready)
+            .expect("ready");
+        journal
+            .update_run_state(&run_id, RunState::Starting)
+            .expect("starting");
+        journal
+            .update_run_state(&run_id, RunState::Running)
+            .expect("running");
+        let tool_call_id = crate::delegated::contracts::ToolCallId::new("tc-rehydrate-unknown")
+            .expect("tool call id");
+        journal
+            .record_tool_call_requested(crate::delegated::journal::ToolCallRecordV1 {
+                schema_version: crate::delegated::EXECUTION_CONTRACT_SCHEMA_VERSION,
+                run_id: run_id.clone(),
+                tool_call_id: tool_call_id.clone(),
+                tool_name: "patch.apply".into(),
+                request_hash: "sha256:req".into(),
+                arguments_hash: "sha256:args".into(),
+                mutation_kind: crate::delegated::journal::ToolMutationKind::Mutating,
+                status: ToolCallStatus::Requested,
+                result_hash: None,
+                outcome_summary: None,
+            })
+            .expect("record tool call");
+        for status in [
+            ToolCallStatus::PolicyAllowed,
+            ToolCallStatus::Executing,
+            ToolCallStatus::OutcomeUnknown,
+        ] {
+            let is_outcome_unknown = status == ToolCallStatus::OutcomeUnknown;
+            journal
+                .transition_tool_call(
+                    &run_id,
+                    &tool_call_id,
+                    status,
+                    None,
+                    is_outcome_unknown.then(|| "interrupted mutation".to_string()),
+                )
+                .expect("tool call transition");
+        }
+        journal
+            .update_run_state(&run_id, RunState::CancelRequested)
+            .expect("cancel requested");
+        let lock_path = workspace_active_lock_path(&workspace_root);
+        std::fs::create_dir_all(lock_path.parent().expect("lock parent")).expect("lock parent");
+        std::fs::write(&lock_path, run_id.as_str()).expect("stale lock");
+
+        let rehydrated = rehydrate_registry_entry(
+            &workspace_root.canonicalize().expect("canonical workspace"),
+            &run_id,
+        )
+        .expect("uncertain rehydration");
+
+        assert_eq!(rehydrated.status, RegistryRunStatus::NeedsSupervisor);
+        assert_eq!(
+            journal.load_run(&run_id).expect("snapshot").state,
+            RunState::NeedsSupervisor
+        );
+        assert!(
+            lock_path.exists(),
+            "unknown mutation must retain stale ownership for supervisor reconciliation"
+        );
+        let _ = std::fs::remove_dir_all(workspace_root);
+    }
+
     #[tokio::test]
     async fn supervisor_runstart_approval_survives_rehydration_and_is_one_time() {
         let workspace_root =
@@ -7998,6 +12146,68 @@ mod tests {
         }
     }
 
+    #[test]
+    fn ollama_model_probe_inventory_is_bounded_and_exact_identity_is_strict() {
+        assert!(validate_ollama_exact_model_id("qwen3.8:27b").is_ok());
+        assert!(validate_ollama_exact_model_id("").is_err());
+        assert!(validate_ollama_exact_model_id("qwen 3.8:27b").is_err());
+        assert!(
+            validate_ollama_exact_model_id(&"x".repeat(MAX_OLLAMA_MODEL_ID_BYTES + 1)).is_err()
+        );
+
+        let models = (0..(MAX_OLLAMA_MODEL_PROBE_MODELS + 5))
+            .map(|index| format!("model:{index}"))
+            .collect::<Vec<_>>();
+        let (bounded, total, truncated) =
+            bounded_ollama_model_inventory(models).expect("bounded inventory");
+        assert_eq!(total, MAX_OLLAMA_MODEL_PROBE_MODELS + 5);
+        assert_eq!(bounded.len(), MAX_OLLAMA_MODEL_PROBE_MODELS);
+        assert!(truncated);
+        assert!(bounded_ollama_model_inventory(vec!["bad model".into()]).is_err());
+    }
+
+    #[tokio::test]
+    async fn ollama_model_probe_is_registered_as_closed_read_only_tool() {
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!("ollama-probe-list")),
+            method: "tools/list".into(),
+            params: json!({}),
+        };
+        let response = handle_tools_list(&req, Mode::Both, ToolMode::ReadOnly, &None).await;
+        let tool = response
+            .result
+            .as_ref()
+            .and_then(|result| result.get("tools"))
+            .and_then(Value::as_array)
+            .and_then(|tools| {
+                tools.iter().find(|tool| {
+                    tool.get("name").and_then(Value::as_str) == Some("ollama_model_probe")
+                })
+            })
+            .expect("ollama model probe schema");
+        assert_eq!(
+            tool.pointer("/annotations/readOnlyHint")
+                .and_then(Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            tool.pointer("/annotations/openWorldHint")
+                .and_then(Value::as_bool),
+            Some(false)
+        );
+        assert_eq!(
+            tool.pointer("/inputSchema/additionalProperties")
+                .and_then(Value::as_bool),
+            Some(false)
+        );
+        assert_eq!(
+            tool.pointer("/inputSchema/properties/exactModelId/maxLength")
+                .and_then(Value::as_u64),
+            Some(MAX_OLLAMA_MODEL_ID_BYTES as u64)
+        );
+    }
+
     #[tokio::test]
     async fn read_only_tools_list_exposes_only_local_read_tools() {
         let req = JsonRpcRequest {
@@ -8023,6 +12233,7 @@ mod tests {
             vec![
                 "catdesk_instruction",
                 "catdesk_transport_status",
+                "ollama_model_probe",
                 "read",
                 "search",
                 "project_memory_read",
@@ -10289,5 +14500,261 @@ hello world"
             Some("deadbeef")
         );
         assert!(widget_payload.get("widgetMascot").is_some());
+    }
+
+    #[tokio::test]
+    async fn stable_supervisor_lifecycle_tools_are_discoverable_only_in_supervisor_modes() {
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!("stable-supervisor-list")),
+            method: "tools/list".into(),
+            params: json!({}),
+        };
+        for mode in [ToolMode::MultiTools, ToolMode::SupervisorOnly] {
+            let response = handle_tools_list(&request, Mode::Both, mode, &None).await;
+            let tools = response
+                .result
+                .as_ref()
+                .and_then(|value| value.get("tools"))
+                .and_then(Value::as_array)
+                .expect("tools");
+            for name in [
+                STABLE_SUPERVISOR_LIFECYCLE_STATUS_TOOL,
+                STABLE_SUPERVISOR_LIFECYCLE_PREFLIGHT_TOOL,
+                STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL,
+            ] {
+                assert!(
+                    tools
+                        .iter()
+                        .any(|tool| tool.get("name").and_then(Value::as_str) == Some(name)),
+                    "{name} must be listed in {} mode",
+                    mode.label()
+                );
+            }
+            assert!(tools.iter().any(|tool| {
+                tool.get("name").and_then(Value::as_str) == Some("delegated_run_create")
+            }));
+        }
+        let read_only = handle_tools_list(&request, Mode::Both, ToolMode::ReadOnly, &None).await;
+        let names = read_only
+            .result
+            .as_ref()
+            .and_then(|value| value.get("tools"))
+            .and_then(Value::as_array)
+            .expect("read-only tools")
+            .iter()
+            .filter_map(|tool| tool.get("name").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        assert!(!names.contains(&STABLE_SUPERVISOR_LIFECYCLE_STATUS_TOOL));
+        assert!(!names.contains(&STABLE_SUPERVISOR_LIFECYCLE_PREFLIGHT_TOOL));
+        assert!(!names.contains(&STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL));
+    }
+
+    #[test]
+    fn stable_supervisor_lifecycle_schemas_have_no_caller_authority() {
+        let schemas = stable_supervisor_lifecycle_mcp_tool_schemas();
+        let status = schemas
+            .iter()
+            .find(|tool| {
+                tool.get("name").and_then(Value::as_str)
+                    == Some(STABLE_SUPERVISOR_LIFECYCLE_STATUS_TOOL)
+            })
+            .expect("status schema");
+        let preflight = schemas
+            .iter()
+            .find(|tool| {
+                tool.get("name").and_then(Value::as_str)
+                    == Some(STABLE_SUPERVISOR_LIFECYCLE_PREFLIGHT_TOOL)
+            })
+            .expect("preflight schema");
+        let activate = schemas
+            .iter()
+            .find(|tool| {
+                tool.get("name").and_then(Value::as_str)
+                    == Some(STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL)
+            })
+            .expect("activation schema");
+        for tool in [status, preflight] {
+            assert_eq!(
+                tool.pointer("/inputSchema/additionalProperties")
+                    .and_then(Value::as_bool),
+                Some(false)
+            );
+            assert!(
+                tool.pointer("/inputSchema/properties")
+                    .and_then(Value::as_object)
+                    .expect("properties")
+                    .is_empty()
+            );
+            assert_eq!(
+                tool.pointer("/annotations/readOnlyHint")
+                    .and_then(Value::as_bool),
+                Some(true)
+            );
+        }
+        assert_eq!(
+            activate
+                .pointer("/inputSchema/properties/confirm/const")
+                .and_then(Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            activate
+                .pointer("/inputSchema/additionalProperties")
+                .and_then(Value::as_bool),
+            Some(false)
+        );
+        assert_eq!(
+            activate
+                .pointer("/annotations/openWorldHint")
+                .and_then(Value::as_bool),
+            Some(false)
+        );
+        assert_eq!(
+            activate
+                .pointer("/annotations/destructiveHint")
+                .and_then(Value::as_bool),
+            Some(true)
+        );
+        let properties = activate
+            .pointer("/inputSchema/properties")
+            .and_then(Value::as_object)
+            .expect("activation properties");
+        assert_eq!(properties.keys().collect::<Vec<_>>(), vec!["confirm"]);
+    }
+
+    #[test]
+    fn stable_supervisor_lifecycle_dispatches_only_the_shared_fixed_actions() {
+        use crate::supervisor_lifecycle::SupervisorOperatorActionV1;
+
+        for (tool, args, expected) in [
+            (
+                STABLE_SUPERVISOR_LIFECYCLE_STATUS_TOOL,
+                json!({}),
+                SupervisorOperatorActionV1::Status,
+            ),
+            (
+                STABLE_SUPERVISOR_LIFECYCLE_PREFLIGHT_TOOL,
+                json!({}),
+                SupervisorOperatorActionV1::Preflight,
+            ),
+            (
+                STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL,
+                json!({"confirm": true}),
+                SupervisorOperatorActionV1::Activate,
+            ),
+        ] {
+            let mut observed = None;
+            let result = dispatch_stable_supervisor_lifecycle_action(tool, &args, |action| {
+                observed = Some(action);
+                json!({"sharedAction": format!("{action:?}")})
+            })
+            .expect("closed dispatch");
+            assert_eq!(observed, Some(expected));
+            assert!(result.get("sharedAction").is_some());
+        }
+
+        for (tool, args) in [
+            (
+                STABLE_SUPERVISOR_LIFECYCLE_STATUS_TOOL,
+                json!({"path":"C:/attacker"}),
+            ),
+            (
+                STABLE_SUPERVISOR_LIFECYCLE_PREFLIGHT_TOOL,
+                json!({"port":3201}),
+            ),
+            (STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL, json!({})),
+            (
+                STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL,
+                json!({"confirm":false}),
+            ),
+            (
+                STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL,
+                json!({"confirm":true,"pipe":"x"}),
+            ),
+            (
+                STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL,
+                json!({"confirm":true,"hash":"a".repeat(64)}),
+            ),
+            (STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL, json!([true])),
+        ] {
+            let mut invoked = false;
+            assert!(
+                dispatch_stable_supervisor_lifecycle_action(tool, &args, |_| {
+                    invoked = true;
+                    json!({})
+                })
+                .is_err()
+            );
+            assert!(
+                !invoked,
+                "rejected input must fail before lifecycle dispatch"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn stable_supervisor_lifecycle_mcp_status_and_rejections_are_side_effect_free() {
+        let workspace =
+            std::env::temp_dir().join(format!("catdesk-stable-supervisor-mcp-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace).expect("workspace");
+        let workspace_text = workspace.to_string_lossy().into_owned();
+        for (tool, action) in [
+            (STABLE_SUPERVISOR_LIFECYCLE_STATUS_TOOL, "supervisor_status"),
+            (
+                STABLE_SUPERVISOR_LIFECYCLE_PREFLIGHT_TOOL,
+                "supervisor_preflight",
+            ),
+        ] {
+            let response = handle_tools_call(
+                &tool_call_request(tool, json!({})),
+                &workspace_text,
+                1,
+                Mode::Both,
+                ToolMode::SupervisorOnly,
+                false,
+                &None,
+            )
+            .await;
+            assert!(response.error.is_none());
+            assert_eq!(
+                response
+                    .result
+                    .as_ref()
+                    .and_then(|value| value.get("structuredContent"))
+                    .and_then(|value| value.pointer("/lifecycle/action"))
+                    .and_then(Value::as_str),
+                Some(action)
+            );
+        }
+        for arguments in [
+            json!({}),
+            json!({"confirm":false}),
+            json!({"confirm":true,"session":1}),
+        ] {
+            let activation = handle_tools_call(
+                &tool_call_request(STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL, arguments),
+                &workspace_text,
+                1,
+                Mode::Both,
+                ToolMode::SupervisorOnly,
+                false,
+                &None,
+            )
+            .await;
+            assert!(
+                result_text(&activation).contains("STABLE_SUPERVISOR_LIFECYCLE_REQUEST_REJECTED")
+            );
+        }
+        assert!(!workspace.join(".catdesk").exists());
+        assert!(
+            validate_allowlisted_shell(
+                &workspace_text,
+                &workspace,
+                r"target\release\catdesk.exe operator supervisor status"
+            )
+            .is_err()
+        );
+        let _ = std::fs::remove_dir_all(workspace);
     }
 }

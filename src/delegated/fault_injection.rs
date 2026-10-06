@@ -274,6 +274,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(windows, ignore = "Windows host denies process-tree termination")]
     async fn provider_switch_disclosure_long_job_cancel_git_staging_and_no_push_merge_are_guarded()
     {
         let root = temp_git_workspace("routing-jobs-git");

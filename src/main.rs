@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 #![allow(
     clippy::collapsible_if,
     clippy::collapsible_match,
@@ -21,9 +22,19 @@
 )]
 
 mod app_info;
+mod binagotchy_cli;
 mod binagotchy_gen;
 mod browser;
 mod command;
+#[allow(dead_code)] // R1 foundation; host installer/bridge activation is R2.
+mod control_plane_supervisor;
+mod core_host_acceptance_preflight;
+#[allow(dead_code)] // T-0311 authority primitive; T-0312 owns evaluator integration.
+mod core_host_gate_approval;
+#[allow(dead_code)] // T-0312 ledger; fixed capture remains the later T-0313 boundary.
+mod core_host_gate_evidence;
+mod daemon_reload;
+mod daemon_reload_approval;
 mod delegated;
 mod devtools;
 mod git_workflow;
@@ -32,16 +43,41 @@ mod mascot;
 mod mcp;
 mod ngrok;
 mod openai_tunnel;
+mod operator_facade;
+#[allow(dead_code)] // T-0381 fixed reviewed artifact reader; bootstrap remains separate.
+mod ordinary_worker_artifact_provider;
+#[allow(dead_code)] // T-0387 typed review authority; pair provisioning remains separate.
+mod ordinary_worker_pair_approval;
 mod planning;
 mod project_memory;
 mod prompt_templates;
 mod repo_map;
+mod reviewed_build;
+mod reviewed_source_snapshot;
 mod server;
+mod stable_wake_adapter_runtime;
+mod stable_wake_bootstrap;
+mod stable_wake_core;
+#[allow(dead_code)] // R1B-R1 durable transition foundation; browser owner cutover is deferred.
+mod stable_wake_delivery;
+#[allow(dead_code)] // T-0253 source-only dormant owner; activation is T-0254.
+mod stable_wake_owner;
+mod stable_wake_owner_mode;
 mod state;
+mod supervisor_lifecycle;
 mod task_queue;
 mod theme;
 mod tunnel;
+#[allow(dead_code)] // T-0374 foundation; host-adapter cutover remains separate.
+mod user_worker_release;
 mod verification;
+mod wake_protocol_client;
+mod windows_gui;
+mod windows_protected_fs;
+#[allow(dead_code)]
+mod windows_supervisor_control_pipe;
+#[allow(dead_code)]
+mod windows_supervisor_startup;
 mod workspace_tools;
 
 use crossterm::{
@@ -52,6 +88,7 @@ use crossterm::{
     },
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use delegated::autonomy_observability::read_snapshot as read_autonomy_snapshot;
 use devtools::DevtoolsBridge;
 use mascot::{TUI_MASCOT_BLOCK_HEIGHT, TUI_MASCOT_BLOCK_WIDTH, render_tui_lines};
 use ratatui::{
@@ -76,7 +113,8 @@ const FLOW_ROW_CELLS: usize = FLOW_ANIM_CELLS;
 const FLOW_LANE_LEFT_LABEL: &str = "Your computer ";
 const REMOTE_CONNECT_UI_GRACE_MS: u128 = 8_000;
 const UI_POLL_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / 60);
-const STATUS_PANEL_HEIGHT: u16 = TUI_MASCOT_BLOCK_HEIGHT + 6;
+const AUTONOMY_REFRESH_INTERVAL: Duration = Duration::from_millis(750);
+const STATUS_PANEL_HEIGHT: u16 = TUI_MASCOT_BLOCK_HEIGHT + 13;
 const STATUS_LABEL_WIDTH: usize = 19;
 const GPT55_INPUT_USD_PER_1M: f64 = 5.0;
 const GPT55_OUTPUT_USD_PER_1M: f64 = 30.0;
@@ -247,6 +285,17 @@ fn trim_line(text: &str, max_chars: usize) -> String {
         .iter()
         .collect::<String>();
     format!("{kept}...")
+}
+
+fn compact_duration(millis: u128) -> String {
+    let seconds = millis / 1_000;
+    if seconds >= 3_600 {
+        format!("{}h{:02}m", seconds / 3_600, (seconds % 3_600) / 60)
+    } else if seconds >= 60 {
+        format!("{}m{:02}s", seconds / 60, seconds % 60)
+    } else {
+        format!("{seconds}s")
+    }
 }
 
 fn format_token_compact(value: u64) -> String {
@@ -940,6 +989,37 @@ fn parse_headless_mcp_options(
     }))
 }
 
+fn parse_auto_start_computer(args: &[String]) -> Result<bool, String> {
+    let count = args
+        .iter()
+        .filter(|arg| arg.as_str() == "--auto-start-computer")
+        .count();
+    if count > 1 {
+        return Err("--auto-start-computer may only be supplied once".into());
+    }
+    Ok(count == 1)
+}
+
+fn parse_native_daemon_mode(args: &[String]) -> Result<bool, String> {
+    let count = args
+        .iter()
+        .filter(|arg| arg.as_str() == daemon_reload::DAEMON_MODE_FLAG)
+        .count();
+    if count > 1 {
+        return Err(format!(
+            "{} may only be supplied once",
+            daemon_reload::DAEMON_MODE_FLAG
+        ));
+    }
+    if count == 1 && args.len() != 1 {
+        return Err(format!(
+            "{} does not accept additional command-line arguments",
+            daemon_reload::DAEMON_MODE_FLAG
+        ));
+    }
+    Ok(count == 1)
+}
+
 fn next_arg(args: &[String], index: &mut usize, option: &str) -> Result<String, String> {
     *index += 1;
     let value = args
@@ -1062,6 +1142,7 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
                 options.host, options.port
             ))
         })?;
+    daemon_reload::make_listener_non_inheritable(&listener).map_err(std::io::Error::other)?;
     let local_addr = listener.local_addr()?;
     if !local_addr.ip().is_loopback() {
         return Err(std::io::Error::other(format!(
@@ -1131,11 +1212,272 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
     Ok(())
 }
 
+async fn run_native_daemon() -> Result<(), Box<dyn std::error::Error>> {
+    let port = crate::control_plane_supervisor::FIXED_LOCAL_BACKEND_PORT;
+    let workspace_root = match std::env::var("WORKSPACE_ROOT") {
+        Ok(path) => path,
+        Err(_) => std::env::current_dir()?.to_string_lossy().into_owned(),
+    };
+    binagotchy_cli::launch_associated(std::path::Path::new(&workspace_root));
+    let state: SharedState = Arc::new(Mutex::new(AppState::new(port, workspace_root)?));
+    {
+        let mut app = state.lock().await;
+        if app.port != crate::control_plane_supervisor::FIXED_LOCAL_BACKEND_PORT
+            || app.mcp_bind_host != crate::control_plane_supervisor::FIXED_SUPERVISOR_LOOPBACK_HOST
+        {
+            return Err(std::io::Error::other(
+                "native CatDesk daemon refuses non-canonical supervisor backend listener",
+            )
+            .into());
+        }
+        app.mode = Mode::Computer;
+        app.log("INFO", "Native headless daemon mode".into());
+        app.persist_state_with_log();
+    }
+
+    let (ui_event_tx, mut ui_event_rx) = unbounded_channel();
+    let _devtools = start_services(state.clone(), ui_event_tx).await;
+    if !state.lock().await.server_running {
+        return Err(
+            std::io::Error::other("native CatDesk daemon failed to start local MCP").into(),
+        );
+    }
+
+    let drain_state = state.clone();
+    tokio::spawn(async move {
+        while let Some(event) = ui_event_rx.recv().await {
+            let mut app = drain_state.lock().await;
+            app.apply_server_ui_event(event);
+        }
+    });
+
+    loop {
+        tokio::time::sleep(Duration::from_secs(30)).await;
+        if !state.lock().await.server_running {
+            return Err(std::io::Error::other("native CatDesk daemon local MCP stopped").into());
+        }
+    }
+}
+
 // ── Main ────────────────────────────────────────────────────
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    match parse_headless_mcp_options(std::env::args().skip(1)) {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match operator_facade::parse_operator_action(args.clone()) {
+        Ok(Some(action)) => {
+            let workspace = std::env::current_dir()?;
+            match operator_facade::execute_operator_action(action, &workspace).await {
+                Ok(result) => {
+                    println!("{result}");
+                    return Ok(());
+                }
+                Err(_) => {
+                    println!("{{\"status\":\"attention\"}}");
+                    std::process::exit(2);
+                }
+            }
+        }
+        Ok(None) => {}
+        Err(_) => {
+            println!("{{\"status\":\"attention\"}}");
+            std::process::exit(2);
+        }
+    }
+    match binagotchy_cli::parse_binagotchy_cli_mode(&args) {
+        Ok(true) => {
+            let workspace = std::env::current_dir()?;
+            if let Err(error) = binagotchy_cli::run_cli(&workspace) {
+                eprintln!("CatDesk Binagotchy: {error}");
+                std::process::exit(2);
+            }
+            return Ok(());
+        }
+        Ok(false) => {}
+        Err(error) => {
+            eprintln!("CatDesk Binagotchy: {error}");
+            std::process::exit(2);
+        }
+    }
+    // Retain the native Win32 surface only as explicit legacy/debug
+    // compatibility. Normal CatDesk launches use the console companion above.
+    match windows_gui::parse_binagotchy_gui_mode(&args) {
+        Ok(true) => {
+            let workspace = std::env::current_dir()?;
+            if let Err(error) = windows_gui::run_gui(&workspace) {
+                eprintln!("CatDesk Binagotchy legacy GUI: {error}");
+                std::process::exit(2);
+            }
+            return Ok(());
+        }
+        Ok(false) => {}
+        Err(error) => {
+            eprintln!("CatDesk Binagotchy legacy GUI: {error}");
+            std::process::exit(2);
+        }
+    }
+    match reviewed_build::parse_dedicated_producer_service_args(&args) {
+        Ok(true) => match reviewed_build::run_dedicated_producer_service_command() {
+            Ok(()) => return Ok(()),
+            Err(error) => {
+                eprintln!("CatDesk dedicated producer service: {error}");
+                std::process::exit(2);
+            }
+        },
+        Ok(false) => {}
+        Err(error) => {
+            eprintln!("CatDesk dedicated producer service: {error}");
+            std::process::exit(2);
+        }
+    }
+    match reviewed_build::parse_reviewed_main_image_rotate_args(&args) {
+        Ok(true) => match reviewed_build::run_reviewed_main_image_rotate_command() {
+            Ok(result) => {
+                println!("{result}");
+                return Ok(());
+            }
+            Err(error) => {
+                eprintln!("CatDesk reviewed main-image rotation: {error}");
+                std::process::exit(2);
+            }
+        },
+        Ok(false) => {}
+        Err(error) => {
+            eprintln!("CatDesk reviewed main-image rotation: {error}");
+            std::process::exit(2);
+        }
+    }
+    match reviewed_build::parse_reviewed_main_image_bootstrap_install_args(&args) {
+        Ok(true) => match reviewed_build::run_reviewed_main_image_bootstrap_install_command() {
+            Ok(result) => {
+                println!("{result}");
+                return Ok(());
+            }
+            Err(error) => {
+                eprintln!("CatDesk reviewed main-image bootstrap: {error}");
+                std::process::exit(2);
+            }
+        },
+        Ok(false) => {}
+        Err(error) => {
+            eprintln!("CatDesk reviewed main-image bootstrap: {error}");
+            std::process::exit(2);
+        }
+    }
+    match reviewed_build::parse_dedicated_producer_admin_provision_args(&args) {
+        Ok(true) => match reviewed_build::run_dedicated_producer_admin_provision_command() {
+            Ok(result) => {
+                println!("{result}");
+                return Ok(());
+            }
+            Err(error) => {
+                eprintln!("CatDesk dedicated producer provisioning: {error}");
+                std::process::exit(2);
+            }
+        },
+        Ok(false) => {}
+        Err(error) => {
+            eprintln!("CatDesk dedicated producer provisioning: {error}");
+            std::process::exit(2);
+        }
+    }
+    match daemon_reload::parse_lifecycle_stop_worker_args(&args) {
+        Ok(Some(worker)) => {
+            if let Err(error) = daemon_reload::run_lifecycle_stop_worker(worker) {
+                eprintln!("CatDesk lifecycle stop helper: {error}");
+                std::process::exit(1);
+            }
+            return Ok(());
+        }
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("CatDesk lifecycle stop helper: {error}");
+            std::process::exit(2);
+        }
+    }
+    match daemon_reload::parse_canonical_recovery_worker_args(&args) {
+        Ok(Some(worker)) => {
+            if let Err(error) = daemon_reload::run_canonical_recovery_worker(worker) {
+                eprintln!("CatDesk canonical recovery helper: {error}");
+                std::process::exit(1);
+            }
+            return Ok(());
+        }
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("CatDesk canonical recovery helper: {error}");
+            std::process::exit(2);
+        }
+    }
+    match daemon_reload::parse_reviewed_promotion_worker_args(&args) {
+        Ok(Some(worker)) => {
+            if let Err(error) = daemon_reload::run_reviewed_promotion_worker(worker) {
+                eprintln!("CatDesk reviewed promotion helper: {error}");
+                std::process::exit(1);
+            }
+            return Ok(());
+        }
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("CatDesk reviewed promotion helper: {error}");
+            std::process::exit(2);
+        }
+    }
+    match reviewed_build::parse_reviewed_build_worker_args(&args) {
+        Ok(Some((workspace, attempt, owner))) => {
+            if let Err(error) =
+                reviewed_build::run_reviewed_build_worker(&workspace, &attempt, &owner)
+            {
+                eprintln!("CatDesk reviewed build helper: {error}");
+                std::process::exit(1);
+            }
+            return Ok(());
+        }
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("CatDesk reviewed build helper: {error}");
+            std::process::exit(2);
+        }
+    }
+    match daemon_reload::parse_reload_worker_args(&args) {
+        Ok(Some(worker)) => {
+            if let Err(error) = daemon_reload::run_reload_worker(worker) {
+                eprintln!("CatDesk reload helper: {error}");
+                std::process::exit(1);
+            }
+            return Ok(());
+        }
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("CatDesk reload helper: {error}");
+            std::process::exit(2);
+        }
+    }
+    match control_plane_supervisor::parse_fixed_stable_supervisor_runtime_args(&args) {
+        Ok(true) => {
+            if let Err(reason) =
+                control_plane_supervisor::run_fixed_stable_supervisor_runtime().await
+            {
+                eprintln!("CatDesk stable supervisor: {}", reason.as_str());
+                std::process::exit(1);
+            }
+            return Ok(());
+        }
+        Ok(false) => {}
+        Err(error) => {
+            eprintln!("CatDesk: {error}");
+            std::process::exit(2);
+        }
+    }
+    match parse_native_daemon_mode(&args) {
+        Ok(true) => return run_native_daemon().await,
+        Ok(false) => {}
+        Err(error) => {
+            eprintln!("CatDesk: {error}");
+            std::process::exit(2);
+        }
+    }
+    match parse_headless_mcp_options(args.clone()) {
         Ok(Some(options)) => return run_headless_mcp(options).await,
         Ok(None) => {}
         Err(error) => {
@@ -1143,6 +1485,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::process::exit(2);
         }
     }
+
+    // On Windows, a normal interactive launch is presentation-only. The
+    // canonical daemon is owned by the lifecycle/recovery path and Binagotchy
+    // is a separate singleton companion, so a bare catdesk.exe must never
+    // construct a second AppState and race the daemon for 127.0.0.1:3200.
+    // Explicit daemon/headless modes above remain unchanged; legacy TUI use is
+    // still available through its explicit arguments rather than double-click
+    // or a bare command invocation.
+    #[cfg(target_os = "windows")]
+    if args.is_empty() {
+        let workspace_root = match std::env::var("WORKSPACE_ROOT") {
+            Ok(path) => path,
+            Err(_) => std::env::current_dir()?.to_string_lossy().into_owned(),
+        };
+        binagotchy_cli::launch_associated(std::path::Path::new(&workspace_root));
+        return Ok(());
+    }
+
+    let auto_start_computer = match parse_auto_start_computer(&args) {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("CatDesk: {error}");
+            std::process::exit(2);
+        }
+    };
 
     match macos_terminal::maybe_relaunch_in_terminal_profile() {
         Ok(macos_terminal::LaunchAction::Continue) => {}
@@ -1170,6 +1537,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(_) => std::env::current_dir()?.to_string_lossy().into_owned(),
     };
 
+    binagotchy_cli::launch_associated(std::path::Path::new(&workspace_root));
     let state: SharedState = Arc::new(Mutex::new(AppState::new(port, workspace_root)?));
 
     enable_raw_mode()?;
@@ -1179,7 +1547,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let backend = CrosstermBackend::new(stdout());
     let mut terminal = Terminal::new(backend)?;
 
-    let result = run_app(&mut terminal, state.clone()).await;
+    let result = run_app(&mut terminal, state.clone(), auto_start_computer).await;
 
     stdout().execute(DisableBracketedPaste)?;
     stdout().execute(DisableMouseCapture)?;
@@ -1225,40 +1593,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 async fn run_app(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     state: SharedState,
+    auto_start_computer: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Draw mode selection screen
-    loop {
-        let (current_theme, current_tool_mode) = {
-            let app = state.lock().await;
-            (app.current_theme(), app.tool_mode)
-        };
-        terminal.draw(|f| draw_mode_select(f, current_theme, current_tool_mode))?;
+    let mode = if auto_start_computer {
+        Mode::Computer
+    } else {
+        // Draw mode selection screen.
+        loop {
+            let (current_theme, current_tool_mode) = {
+                let app = state.lock().await;
+                (app.current_theme(), app.tool_mode)
+            };
+            terminal.draw(|f| draw_mode_select(f, current_theme, current_tool_mode))?;
 
-        if event::poll(UI_POLL_INTERVAL)? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind != KeyEventKind::Press {
-                    continue;
-                }
-                let mode = match key.code {
-                    KeyCode::Char('1') => Mode::Computer,
-                    KeyCode::Char('2') => Mode::Browser,
-                    KeyCode::Char('3') => Mode::Both,
-                    KeyCode::Char('q') => return Ok(()),
-                    KeyCode::Char('s') => {
-                        run_settings(terminal, state.clone()).await?;
+            if event::poll(UI_POLL_INTERVAL)? {
+                if let Event::Key(key) = event::read()? {
+                    if key.kind != KeyEventKind::Press {
                         continue;
                     }
-                    _ => continue,
-                };
-                {
-                    let mut app = state.lock().await;
-                    app.mode = mode;
-                    app.log("INFO", format!("Mode: {}", mode.label()));
-                    app.persist_state_with_log();
+                    let mode = match key.code {
+                        KeyCode::Char('1') => Mode::Computer,
+                        KeyCode::Char('2') => Mode::Browser,
+                        KeyCode::Char('3') => Mode::Both,
+                        KeyCode::Char('q') => return Ok(()),
+                        KeyCode::Char('s') => {
+                            run_settings(terminal, state.clone()).await?;
+                            continue;
+                        }
+                        _ => continue,
+                    };
+                    break mode;
                 }
-                break;
             }
         }
+    };
+
+    {
+        let mut app = state.lock().await;
+        app.mode = mode;
+        app.log("INFO", format!("Mode: {}", mode.label()));
+        app.persist_state_with_log();
     }
 
     if mode_is_browser_enabled(state.clone()).await {
@@ -1728,13 +2102,94 @@ fn render_toast(f: &mut Frame, palette: theme::Palette, msg: &str, pos: (u16, u1
 #[cfg(test)]
 mod tests {
     use super::{
-        ToolMode, key_is_clipboard_paste, loopback_http_origin, normalize_ngrok_authtoken_input,
-        parse_headless_mcp_options, resolve_headless_workspace, safe_bind_identity,
-        validate_headless_mcp_path,
+        ToolMode, is_canonical_production_worker_listener, key_is_clipboard_paste,
+        loopback_http_origin, normalize_ngrok_authtoken_input, parse_auto_start_computer,
+        parse_headless_mcp_options, parse_native_daemon_mode, resolve_headless_workspace,
+        safe_bind_identity, validate_headless_mcp_path,
     };
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
     use std::time::Duration;
+
+    #[test]
+    fn auto_start_computer_is_explicit_and_singleton() {
+        assert_eq!(
+            parse_auto_start_computer(&["--auto-start-computer".to_string()]),
+            Ok(true)
+        );
+        assert_eq!(parse_auto_start_computer(&[]), Ok(false));
+        assert!(
+            parse_auto_start_computer(&[
+                "--auto-start-computer".to_string(),
+                "--auto-start-computer".to_string(),
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn native_daemon_mode_is_explicit_bounded_and_terminal_free() {
+        assert_eq!(
+            parse_native_daemon_mode(&[crate::daemon_reload::DAEMON_MODE_FLAG.to_string()]),
+            Ok(true)
+        );
+        assert_eq!(parse_native_daemon_mode(&[]), Ok(false));
+        assert!(
+            parse_native_daemon_mode(&[
+                crate::daemon_reload::DAEMON_MODE_FLAG.to_string(),
+                "--auto-start-computer".to_string(),
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn fixed_supervisor_registration_is_limited_to_the_canonical_worker_listener() {
+        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+        assert!(is_canonical_production_worker_listener(&SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            crate::control_plane_supervisor::FIXED_LOCAL_BACKEND_PORT,
+        )));
+        assert!(!is_canonical_production_worker_listener(&SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::LOCALHOST),
+            3202,
+        )));
+        assert!(!is_canonical_production_worker_listener(&SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+            crate::control_plane_supervisor::FIXED_LOCAL_BACKEND_PORT,
+        )));
+        let source = include_str!("main.rs");
+        assert!(source.contains("register_fixed_ready_worker_listener("));
+        assert!(source.contains("verified_current_reviewed_main_image_digest"));
+        assert!(source.contains("is_canonical_production_worker_listener(&local_addr)"));
+        assert!(
+            !source.contains(&["register_fixed_ready_worker_listener", "(&TcpListener"].concat())
+        );
+    }
+
+    #[test]
+    fn production_argument_routing_references_the_native_gui_mode() {
+        let source = include_str!("main.rs");
+        assert!(source.contains("mod windows_gui;"));
+        assert!(source.contains("windows_gui::parse_binagotchy_gui_mode(&args)"));
+        assert!(source.contains("windows_gui::run_gui(&workspace)"));
+    }
+
+    #[test]
+    fn windows_bare_launch_is_presentation_only_before_legacy_app_state() {
+        let source = include_str!("main.rs");
+        let bare_launch = source
+            .find("#[cfg(target_os = \"windows\")]\n    if args.is_empty()")
+            .expect("Windows bare-launch routing");
+        let legacy_state = bare_launch
+            + source[bare_launch..]
+                .find("let state: SharedState = Arc::new(Mutex::new(AppState::new(port, workspace_root)?));")
+                .expect("legacy TUI AppState construction after bare-launch routing");
+        let route = &source[bare_launch..legacy_state];
+        assert!(route.contains("binagotchy_cli::launch_associated"));
+        assert!(route.contains("return Ok(())"));
+    }
     use std::time::SystemTime;
 
     #[test]
@@ -3056,6 +3511,13 @@ async fn start_services(
             return devtools_bridge;
         }
     };
+    if let Err(error) = daemon_reload::make_listener_non_inheritable(&listener) {
+        state.lock().await.log(
+            "ERROR",
+            format!("Failed to secure MCP listener inheritance: {error}"),
+        );
+        return devtools_bridge;
+    }
     let local_addr = match listener.local_addr() {
         Ok(addr) => addr,
         Err(e) => {
@@ -3078,6 +3540,33 @@ async fn start_services(
         return devtools_bridge;
     }
 
+    // The fixed control-pipe client is deliberately reachable only after the
+    // production listener has bound, had inheritance cleared, and proved its
+    // compiled 127.0.0.1:3200 identity. A missing/refusing supervisor leaves
+    // this local worker untouched; it never writes supervisor state directly.
+    #[cfg(windows)]
+    if is_canonical_production_worker_listener(&local_addr) {
+        let registered = match crate::reviewed_build::verified_current_reviewed_main_image_digest()
+        {
+            Ok(manifest) => {
+                crate::windows_supervisor_control_pipe::register_fixed_ready_worker_listener(
+                    &listener, &manifest,
+                )
+                .await
+            }
+            Err(_) => Err(
+                crate::control_plane_supervisor::ControlPlaneSupervisorError::InvalidRegistration,
+            ),
+        };
+        if registered.is_err() {
+            state.lock().await.log(
+                "WARN",
+                "Fixed control-plane supervisor registration evidence refused or unavailable"
+                    .into(),
+            );
+        }
+    }
+
     let handle = tokio::spawn(async move {
         let _ = axum::serve(listener, router).await;
     });
@@ -3098,6 +3587,26 @@ async fn start_services(
         state.lock().await.log("ERROR", format!("transport: {e}"));
     }
     refresh_transport_health(state.clone()).await;
+
+    // Reviewer/wake ownership is process-local, while WAITING_FOR_CHATGPT and
+    // its actionable review are durable. Recreate only that out-of-band wake
+    // responsibility after services are healthy; never resume provider work
+    // from startup here.
+    let wake_workspace = {
+        let app = state.lock().await;
+        PathBuf::from(&app.workspace_root)
+    };
+    match delegated::autonomy_runtime::rehydrate_persisted_waiting_wakes(&wake_workspace) {
+        Ok(count) if count > 0 => state.lock().await.log(
+            "INFO",
+            format!("Rehydrated {count} persisted ChatGPT wake handoff(s)"),
+        ),
+        Ok(_) => {}
+        Err(_) => state.lock().await.log(
+            "WARN",
+            "Persisted ChatGPT wake handoff rehydration failed closed".into(),
+        ),
+    }
 
     devtools_bridge
 }
@@ -3210,6 +3719,38 @@ async fn refresh_transport_health(state: SharedState) {
     app.log("INFO", format!("Transport health: {health}"));
 }
 
+/// Publishes a UI-only autonomy snapshot after bounded local reads. No AppState
+/// lock is held while accessing durable state, and no MCP self-call is made.
+async fn refresh_autonomy_observability(state: SharedState) {
+    let (workspace, transport) = {
+        let app = state.lock().await;
+        (
+            PathBuf::from(&app.workspace_root),
+            format!(
+                "{} / {}",
+                app.transport_health.health.as_str(),
+                app.transport_health.local_mcp
+            ),
+        )
+    };
+    let fallback_transport = transport.clone();
+    let snapshot =
+        tokio::task::spawn_blocking(move || read_autonomy_snapshot(&workspace, &transport))
+            .await
+            .unwrap_or_else(|_| {
+                crate::delegated::autonomy_observability::AutonomyObservabilitySnapshotV1::unknown(
+                    &fallback_transport,
+                    "autonomy refresh failed",
+                )
+            });
+    state.lock().await.autonomy_observability = snapshot;
+}
+
+fn is_canonical_production_worker_listener(address: &std::net::SocketAddr) -> bool {
+    address.ip() == std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
+        && address.port() == crate::control_plane_supervisor::FIXED_LOCAL_BACKEND_PORT
+}
+
 fn loopback_http_origin(host: &str, port: u16) -> String {
     if host.contains(':') && !host.starts_with('[') {
         format!("http://[{host}]:{port}")
@@ -3244,8 +3785,15 @@ async fn run_tui(
     let mut last_animation_snapshot = String::new();
     #[allow(unused_assignments)]
     let mut last_mcp_url: Option<String> = None;
+    let mut last_autonomy_refresh = Instant::now()
+        .checked_sub(AUTONOMY_REFRESH_INTERVAL)
+        .unwrap_or_else(Instant::now);
 
     loop {
+        if last_autonomy_refresh.elapsed() >= AUTONOMY_REFRESH_INTERVAL {
+            refresh_autonomy_observability(state.clone()).await;
+            last_autonomy_refresh = Instant::now();
+        }
         {
             let mut app = state.lock().await;
             drain_server_ui_events(&mut app, &mut ui_events);
@@ -3728,6 +4276,88 @@ fn draw_ui(
             &palette,
         ),
     ];
+
+    // This is deliberately distinct from the MCP flow animation above: the
+    // flow only visualizes connector traffic, while this panel consumes the
+    // redacted, authoritative autonomy snapshot.
+    let autonomy = &app.autonomy_observability;
+    let autonomy_state = if autonomy.stale {
+        format!("{} (STALE)", autonomy.overall.label())
+    } else {
+        autonomy.overall.label().into()
+    };
+    status_lines.extend([
+        Line::from(vec![
+            status_label("Autonomy:"),
+            Span::styled(
+                autonomy_state,
+                Style::default()
+                    .fg(palette.info_fg)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  Actor: "),
+            Span::styled(
+                autonomy.actor.label(),
+                Style::default().fg(palette.secondary_fg),
+            ),
+        ]),
+        Line::from(vec![
+            status_label("Ticket / session:"),
+            Span::styled(
+                trim_line(
+                    &format!(
+                        "{} / {} / {}",
+                        autonomy.project_id, autonomy.task_id, autonomy.session_id
+                    ),
+                    72,
+                ),
+                Style::default().fg(palette.title_fg),
+            ),
+        ]),
+        Line::from(vec![
+            status_label("Model / reasoning:"),
+            Span::styled(
+                trim_line(&format!("{} / {}", autonomy.model, autonomy.reasoning), 72),
+                Style::default().fg(palette.secondary_fg),
+            ),
+        ]),
+        Line::from(vec![
+            status_label("Time:"),
+            Span::styled(
+                format!(
+                    "active {} | wall {} | waiting {} | evidence {}",
+                    compact_duration(autonomy.timing.known_active_millis),
+                    compact_duration(autonomy.timing.wall_millis),
+                    compact_duration(autonomy.timing.known_waiting_millis),
+                    autonomy.timing.evidence_completeness,
+                ),
+                Style::default().fg(palette.info_fg),
+            ),
+        ]),
+        Line::from(vec![
+            status_label("Last / next:"),
+            Span::styled(
+                trim_line(
+                    &format!("{} / {}", autonomy.last_step, autonomy.next_action),
+                    72,
+                ),
+                Style::default().fg(palette.secondary_fg),
+            ),
+        ]),
+        Line::from(vec![
+            status_label("Wake / review:"),
+            Span::styled(
+                trim_line(
+                    &format!(
+                        "{} / {} unread ({})",
+                        autonomy.wake, autonomy.unread_review_count, autonomy.review_attention
+                    ),
+                    72,
+                ),
+                Style::default().fg(palette.info_fg),
+            ),
+        ]),
+    ]);
 
     if !show_guide {
         status_lines.push(Line::from(vec![

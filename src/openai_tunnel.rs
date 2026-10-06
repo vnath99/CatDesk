@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::ffi::OsString;
+use std::fs::File;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::{Duration, Instant};
@@ -15,6 +17,7 @@ const DEFAULT_PROFILE_NAME: &str = "catdesk-local";
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 pub const OPENAI_TUNNEL_READINESS_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_CHILD_OUTPUT_BYTES: usize = 64 * 1024;
+const MAX_TUNNEL_CLIENT_IDENTITY_BYTES: u64 = 128 * 1024 * 1024;
 const MAX_DOWNLOAD_BYTES: u64 = 128 * 1024 * 1024;
 const OFFICIAL_LATEST_RELEASE_API: &str =
     "https://api.github.com/repos/openai/tunnel-client/releases/latest";
@@ -279,10 +282,56 @@ pub struct OfficialRuntimeStatus {
     pub process_running: bool,
     pub healthy: bool,
     pub ready: bool,
+    /// Authoritative loopback base supplied by the official runtime.  This is
+    /// intentionally never surfaced through the MCP status payload.
+    pub health_base_url: Option<String>,
     pub admin_ui_url: Option<String>,
     pub pid_fingerprint: Option<String>,
     pub tunnel_fingerprint: Option<String>,
     pub redacted_reason: Option<String>,
+}
+
+/// Non-secret evidence required before reconnecting an already-running
+/// official runtime. The client fingerprint binds recovery to the exact
+/// previously validated executable rather than a process name or PID alone.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OfficialRuntimeRecoveryIdentity {
+    pub client_executable_fingerprint: String,
+    pub runtime_alias_fingerprint: String,
+    pub profile_fingerprint: String,
+    pub pid_fingerprint: String,
+    pub tunnel_fingerprint: String,
+}
+
+/// Bounded monitor states used after daemon handoff. They deliberately
+/// distinguish listener readiness from connector/runtime attachment.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OfficialRuntimeRecoveryStateV1 {
+    LocalMcpAndRuntimeHealthy,
+    LocalMcpRuntimeStale,
+    OrphanedRuntime,
+    RuntimeAbsent,
+    AmbiguousOrMismatchedRuntime,
+}
+
+pub fn classify_official_runtime_recovery_state(
+    local_mcp_ready: bool,
+    runtime: &OfficialRuntimeStatus,
+    trusted_identity_present: bool,
+) -> OfficialRuntimeRecoveryStateV1 {
+    if !runtime.process_running {
+        return OfficialRuntimeRecoveryStateV1::RuntimeAbsent;
+    }
+    if !trusted_identity_present {
+        return OfficialRuntimeRecoveryStateV1::AmbiguousOrMismatchedRuntime;
+    }
+    if local_mcp_ready && runtime.fully_ready() && runtime.health_base_url.is_some() {
+        return OfficialRuntimeRecoveryStateV1::LocalMcpAndRuntimeHealthy;
+    }
+    if !local_mcp_ready {
+        return OfficialRuntimeRecoveryStateV1::OrphanedRuntime;
+    }
+    OfficialRuntimeRecoveryStateV1::LocalMcpRuntimeStale
 }
 
 impl OfficialRuntimeStatus {
@@ -292,6 +341,7 @@ impl OfficialRuntimeStatus {
             process_running: false,
             healthy: false,
             ready: false,
+            health_base_url: None,
             admin_ui_url: None,
             pid_fingerprint: None,
             tunnel_fingerprint: None,
@@ -302,6 +352,78 @@ impl OfficialRuntimeStatus {
     pub fn fully_ready(&self) -> bool {
         self.process_running && self.healthy && self.ready
     }
+}
+
+/// Revalidates the only supported authority for reconnecting a stale existing
+/// runtime. It intentionally does not enumerate, signal, stop, or kill any
+/// process; unavailable or ambiguous status evidence simply blocks recovery.
+pub fn verified_official_runtime_recovery_identity(
+    client_path: &Path,
+    expected_client_executable_fingerprint: &str,
+    alias: &str,
+    profile: &str,
+    runtime: &OfficialRuntimeStatus,
+) -> Result<OfficialRuntimeRecoveryIdentity, OpenaiTunnelError> {
+    validate_safe_alias(alias, "runtime alias")?;
+    validate_safe_alias(profile, "profile name")?;
+    if !runtime.process_running || runtime.alias != alias {
+        return Err(OpenaiTunnelError::Unsupported(
+            "official runtime identity is unavailable".into(),
+        ));
+    }
+    let Some(pid_fingerprint) = runtime.pid_fingerprint.as_deref() else {
+        return Err(OpenaiTunnelError::Unsupported(
+            "official runtime process identity is unavailable".into(),
+        ));
+    };
+    let Some(tunnel_fingerprint) = runtime.tunnel_fingerprint.as_deref() else {
+        return Err(OpenaiTunnelError::Unsupported(
+            "official runtime tunnel identity is unavailable".into(),
+        ));
+    };
+    let client_executable_fingerprint = trusted_tunnel_client_executable_fingerprint(client_path)?;
+    if client_executable_fingerprint != expected_client_executable_fingerprint {
+        return Err(OpenaiTunnelError::Unsupported(
+            "trusted tunnel-client identity drifted".into(),
+        ));
+    }
+    Ok(OfficialRuntimeRecoveryIdentity {
+        client_executable_fingerprint,
+        runtime_alias_fingerprint: fingerprint_safe_value("runtime", alias),
+        profile_fingerprint: fingerprint_safe_value("profile", profile),
+        pid_fingerprint: pid_fingerprint.into(),
+        tunnel_fingerprint: tunnel_fingerprint.into(),
+    })
+}
+
+pub fn trusted_tunnel_client_executable_fingerprint(
+    path: &Path,
+) -> Result<String, OpenaiTunnelError> {
+    let canonical = std::fs::canonicalize(path).map_err(|_| {
+        OpenaiTunnelError::InvalidPath("trusted tunnel-client path is unavailable".into())
+    })?;
+    let metadata = std::fs::metadata(&canonical).map_err(|_| {
+        OpenaiTunnelError::InvalidPath("trusted tunnel-client metadata is unavailable".into())
+    })?;
+    if !metadata.is_file() || metadata.len() > MAX_TUNNEL_CLIENT_IDENTITY_BYTES {
+        return Err(OpenaiTunnelError::InvalidPath(
+            "trusted tunnel-client identity is invalid".into(),
+        ));
+    }
+    let mut file = File::open(&canonical)
+        .map_err(|_| OpenaiTunnelError::Io("trusted tunnel-client could not be read".into()))?;
+    let mut digest = Sha256::new();
+    let mut buffer = [0_u8; 8192];
+    loop {
+        let read = file.read(&mut buffer).map_err(|_| {
+            OpenaiTunnelError::Io("trusted tunnel-client identity read failed".into())
+        })?;
+        if read == 0 {
+            break;
+        }
+        digest.update(&buffer[..read]);
+    }
+    Ok(format!("client:{:x}", digest.finalize()))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -435,6 +557,9 @@ pub fn find_tunnel_client_candidates(options: &TunnelClientDiscoveryOptions) -> 
                 candidates.push(dir.join(file_name));
             }
         }
+    }
+    for file_name in executable_names() {
+        candidates.push(options.user_tools_dir.join("current").join(file_name));
     }
     for file_name in executable_names() {
         candidates.push(options.user_tools_dir.join(file_name));
@@ -1007,7 +1132,11 @@ pub async fn official_runtime_status(
         ],
     )
     .await?;
-    parse_runtime_status_json(alias, &output)
+    let mut status = parse_runtime_status_json(alias, &output)?;
+    if status.health_base_url.is_none() {
+        status.health_base_url = runtime_health_url_from_file(alias, &output)?;
+    }
+    Ok(status)
 }
 
 pub async fn stop_official_runtime(path: &Path, alias: &str) -> Result<String, OpenaiTunnelError> {
@@ -1045,6 +1174,13 @@ pub fn parse_runtime_status_json(
     let object = value.as_object().ok_or_else(|| {
         OpenaiTunnelError::Command("runtime status JSON was not an object".into())
     })?;
+    if let Some(reported_alias) = first_string(object, &["alias", "runtime_alias", "runtimeAlias"])
+        && reported_alias != alias
+    {
+        return Err(OpenaiTunnelError::Command(
+            "runtime status alias did not match the configured alias".into(),
+        ));
+    }
     let lookup_bool = |names: &[&str]| -> bool {
         names
             .iter()
@@ -1062,6 +1198,20 @@ pub fn parse_runtime_status_json(
         || matches!(status_text.as_str(), "healthy" | "ready" | "connected");
     let ready =
         lookup_bool(&["ready", "isReady"]) || matches!(status_text.as_str(), "ready" | "connected");
+    let health_base_url = first_string(
+        object,
+        &[
+            "health_url",
+            "healthUrl",
+            "health_base_url",
+            "healthBaseUrl",
+            "runtime_health_url",
+            "runtimeHealthUrl",
+        ],
+    )
+    .map(normalize_authoritative_health_base_url)
+    .transpose()?
+    .map(|url| url.to_string());
     let admin_ui_url = first_string(object, &["admin_ui_url", "adminUiUrl", "ui_url", "uiUrl"])
         .and_then(|url| {
             normalize_admin_base_url(url)
@@ -1080,6 +1230,7 @@ pub fn parse_runtime_status_json(
         process_running,
         healthy,
         ready,
+        health_base_url,
         admin_ui_url,
         pid_fingerprint,
         tunnel_fingerprint,
@@ -1116,7 +1267,7 @@ pub fn monitor_health_from_status(
     config: &RuntimeMonitorConfig,
     now: Instant,
 ) -> (crate::tunnel::TransportHealth, Option<String>) {
-    if runtime.fully_ready() && local_mcp_ready {
+    if runtime.fully_ready() && runtime.health_base_url.is_some() && local_mcp_ready {
         monitor.consecutive_failures = 0;
         monitor.last_success = Some(now);
         return (crate::tunnel::TransportHealth::ConnectedVerified, None);
@@ -1206,12 +1357,15 @@ pub async fn probe_tunnel_client_readiness(
         }
 
         match client.get(ready_url.clone()).send().await {
-            Ok(response) if response.status().is_success() => {
+            Ok(response) if response.status().is_success() && health_live => {
                 return Ok(OpenaiTunnelReadiness {
                     ready: true,
                     health_live,
                     redacted_reason: None,
                 });
+            }
+            Ok(response) if response.status().is_success() => {
+                last_reason = Some("healthz did not return success".into());
             }
             Ok(response) if response.status().is_redirection() => {
                 return Err(OpenaiTunnelError::Network(
@@ -1274,6 +1428,21 @@ pub fn normalize_admin_base_url(value: &str) -> Result<reqwest::Url, OpenaiTunne
     Ok(url)
 }
 
+/// The fixed legacy admin port is not a source of truth for an
+/// `official_runtime`.  Only a dynamic URL advertised by its status JSON or
+/// approved URL file is eligible for readiness checks.
+pub fn normalize_authoritative_health_base_url(
+    value: &str,
+) -> Result<reqwest::Url, OpenaiTunnelError> {
+    let url = normalize_admin_base_url(value)?;
+    if url.port_or_known_default() == Some(3220) {
+        return Err(OpenaiTunnelError::InvalidPath(
+            "official runtime health URL must not use the legacy fixed admin port".into(),
+        ));
+    }
+    Ok(url)
+}
+
 fn read_bounded_child_output<R>(mut reader: R) -> JoinHandle<String>
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
@@ -1321,7 +1490,7 @@ async fn run_client_command_vec(path: &Path, args: &[String]) -> Result<String, 
 }
 
 fn command_for_path(path: &Path) -> Command {
-    if cfg!(windows)
+    let mut command = if cfg!(windows)
         && path
             .extension()
             .and_then(|value| value.to_str())
@@ -1332,7 +1501,12 @@ fn command_for_path(path: &Path) -> Command {
         command
     } else {
         Command::new(path)
-    }
+    };
+    // `tokio::time::timeout` drops the `output()` future on expiry. Make that
+    // drop terminate only this short-lived client command instead of leaving a
+    // status/doctor child orphaned beside the externally owned tunnel runtime.
+    command.kill_on_drop(true);
+    command
 }
 
 fn append_client_args<'a>(command: &mut Command, path: &Path, args: impl Iterator<Item = &'a str>) {
@@ -1417,12 +1591,113 @@ fn validate_local_mcp_url_for_runtime(value: &str) -> Result<(), OpenaiTunnelErr
             "local MCP URL must target loopback".into(),
         ));
     }
-    if !parsed.path().starts_with('/') || !parsed.path().ends_with("/mcp") {
+    let segments = parsed
+        .path_segments()
+        .ok_or_else(|| OpenaiTunnelError::Unsupported("local MCP URL path was invalid".into()))?
+        .collect::<Vec<_>>();
+    if segments.len() != 2 || segments[1] != "mcp" {
         return Err(OpenaiTunnelError::Unsupported(
             "local MCP URL must point to the configured MCP route".into(),
         ));
     }
+    if is_redacted_or_placeholder_route(segments[0])
+        || crate::tunnel::validate_route_id(segments[0]).is_err()
+    {
+        return Err(OpenaiTunnelError::Unsupported(
+            "local MCP URL route is missing, redacted, or invalid".into(),
+        ));
+    }
     Ok(())
+}
+
+fn is_redacted_or_placeholder_route(value: &str) -> bool {
+    let mut decoded = value.trim().to_ascii_lowercase();
+    for _ in 0..4 {
+        let next = percent_decode_once(&decoded).unwrap_or_else(|| decoded.clone());
+        if next == decoded {
+            break;
+        }
+        decoded = next;
+    }
+    decoded.is_empty()
+        || decoded.contains("<redacted>")
+        || decoded.contains("<persistent-route>")
+        || decoded.contains("placeholder")
+        || decoded.contains("redacted")
+}
+
+fn percent_decode_once(value: &str) -> Option<String> {
+    let bytes = value.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    let mut changed = false;
+    while index < bytes.len() {
+        if bytes[index] == b'%' && index + 2 < bytes.len() {
+            let high = (bytes[index + 1] as char).to_digit(16)?;
+            let low = (bytes[index + 2] as char).to_digit(16)?;
+            decoded.push((high * 16 + low) as u8);
+            index += 3;
+            changed = true;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    changed.then(|| String::from_utf8_lossy(&decoded).to_ascii_lowercase())
+}
+
+fn runtime_health_url_from_file(
+    alias: &str,
+    status_json: &str,
+) -> Result<Option<String>, OpenaiTunnelError> {
+    let value: Value = serde_json::from_str(status_json)
+        .map_err(|_| OpenaiTunnelError::Command("runtime status was not valid JSON".into()))?;
+    let object = value.as_object().ok_or_else(|| {
+        OpenaiTunnelError::Command("runtime status JSON was not an object".into())
+    })?;
+    let Some(path) = first_string(
+        object,
+        &[
+            "health_url_file",
+            "healthUrlFile",
+            "runtime_health_url_file",
+            "runtimeHealthUrlFile",
+        ],
+    ) else {
+        return Ok(None);
+    };
+    let path = Path::new(path);
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    let approved_names = [format!("{alias}.health-url"), format!("{alias}.health_url")];
+    let health_parent = path
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case("health"));
+    let alias_url_file = file_name.eq_ignore_ascii_case(&format!("{alias}.url"));
+    if !(approved_names.iter().any(|name| name == file_name) || (alias_url_file && health_parent)) {
+        return Err(OpenaiTunnelError::InvalidPath(
+            "official runtime health URL file was not an approved alias health file".into(),
+        ));
+    }
+    let metadata = std::fs::metadata(path).map_err(|_| {
+        OpenaiTunnelError::InvalidPath("official runtime health URL file was unavailable".into())
+    })?;
+    if !metadata.is_file() || metadata.len() > 4096 {
+        return Err(OpenaiTunnelError::InvalidPath(
+            "official runtime health URL file was invalid".into(),
+        ));
+    }
+    let contents = std::fs::read_to_string(path).map_err(|_| {
+        OpenaiTunnelError::InvalidPath("official runtime health URL file could not be read".into())
+    })?;
+    let value = contents.lines().next().unwrap_or_default();
+    Ok(Some(
+        normalize_authoritative_health_base_url(value)?.to_string(),
+    ))
 }
 
 fn first_string<'a>(object: &'a serde_json::Map<String, Value>, names: &[&str]) -> Option<&'a str> {
@@ -1737,6 +2012,54 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
 
+    #[test]
+    fn discovery_candidates_prefer_managed_current_before_legacy_tools_path() {
+        let tools = PathBuf::from("C:/synthetic/.catdesk/tools/tunnel-client");
+        let options = TunnelClientDiscoveryOptions {
+            explicit_path: None,
+            path_var: None,
+            user_tools_dir: tools.clone(),
+            known_paths: Vec::new(),
+            forbidden_roots: Vec::new(),
+        };
+        let candidates = find_tunnel_client_candidates(&options);
+        let current = tools.join("current").join(executable_names()[0]);
+        let legacy = tools.join(executable_names()[0]);
+        assert!(
+            candidates.iter().position(|path| path == &current)
+                < candidates.iter().position(|path| path == &legacy)
+        );
+    }
+
+    #[tokio::test]
+    async fn discovery_selects_managed_current_before_valid_legacy_client() {
+        let root = temp_dir("managed-current-discovery");
+        let tools_dir = root.join("tools");
+        let current_dir = tools_dir.join("current");
+        std::fs::create_dir_all(&current_dir).expect("current dir");
+        std::fs::create_dir_all(&tools_dir).expect("tools dir");
+        let name = if cfg!(windows) {
+            "tunnel-client.cmd"
+        } else {
+            "tunnel-client"
+        };
+        let current = fake_client(&current_dir, name);
+        fake_client(&tools_dir, name);
+        let options = TunnelClientDiscoveryOptions {
+            explicit_path: None,
+            path_var: None,
+            user_tools_dir: tools_dir,
+            known_paths: Vec::new(),
+            forbidden_roots: Vec::new(),
+        };
+        let metadata = discover_tunnel_client(&options).await.expect("discover");
+        assert_eq!(
+            metadata.path,
+            std::fs::canonicalize(current).expect("canonical")
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
     #[tokio::test]
     async fn invalid_or_unsupported_executable_is_rejected() {
         let root = temp_dir("invalid");
@@ -1984,6 +2307,81 @@ mod tests {
         let error = normalize_admin_base_url("http://127.0.0.1:9900/ui?token=secret")
             .expect_err("query rejected");
         assert!(error.to_string().contains("query"));
+        let error = normalize_authoritative_health_base_url("http://127.0.0.1:3220")
+            .expect_err("legacy fixed port rejected");
+        assert!(error.to_string().contains("legacy fixed admin port"));
+    }
+
+    #[test]
+    fn runtime_status_requires_a_valid_dynamic_loopback_health_url() {
+        let status = parse_runtime_status_json(
+            "catdesk-local",
+            r#"{
+                "status": "ready",
+                "running": true,
+                "healthy": true,
+                "ready": true,
+                "health_url": "http://127.0.0.1:49123/runtime"
+            }"#,
+        )
+        .expect("dynamic loopback URL accepted");
+        assert_eq!(
+            status.health_base_url.as_deref(),
+            Some("http://127.0.0.1:49123/")
+        );
+        for url in [
+            "http://127.0.0.1:3220",
+            "http://192.168.1.10:49123",
+            "https://127.0.0.1:49123",
+            "http://127.0.0.1:49123/?token=secret",
+        ] {
+            let text = format!(r#"{{"status":"ready","health_url":"{url}"}}"#);
+            assert!(
+                parse_runtime_status_json("catdesk-local", &text).is_err(),
+                "{url}"
+            );
+        }
+    }
+
+    #[test]
+    fn runtime_health_url_file_is_bounded_alias_scoped_and_redaction_safe() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-health-url-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("temp root");
+        let file = root.join("catdesk-local.health-url");
+        std::fs::write(&file, "http://127.0.0.1:49123\n").expect("health URL file");
+        let status = serde_json::json!({ "health_url_file": file });
+        let value = runtime_health_url_from_file("catdesk-local", &status.to_string())
+            .expect("approved health URL file")
+            .expect("health URL");
+        assert_eq!(value, "http://127.0.0.1:49123/");
+        let health_dir = root.join("health");
+        std::fs::create_dir_all(&health_dir).expect("health directory");
+        let observed_file = health_dir.join("catdesk-local.url");
+        std::fs::write(&observed_file, "http://127.0.0.1:49124\n")
+            .expect("observed health URL file");
+        let observed_status = serde_json::json!({ "health_url_file": observed_file });
+        let observed = runtime_health_url_from_file("catdesk-local", &observed_status.to_string())
+            .expect("observed alias URL file")
+            .expect("health URL");
+        assert_eq!(observed, "http://127.0.0.1:49124/");
+        let wrong_parent = root.join("catdesk-local.url");
+        std::fs::write(&wrong_parent, "http://127.0.0.1:49125\n").expect("wrong parent URL file");
+        let wrong_parent_status = serde_json::json!({ "health_url_file": wrong_parent });
+        assert!(
+            runtime_health_url_from_file("catdesk-local", &wrong_parent_status.to_string())
+                .is_err(),
+            "alias .url outside health directory must be rejected"
+        );
+        let hostile = serde_json::json!({ "health_url_file": root.join("not-an-alias-file") });
+        let error = runtime_health_url_from_file("catdesk-local", &hostile.to_string())
+            .expect_err("unapproved file rejected");
+        assert!(
+            !error
+                .to_string()
+                .contains(&root.to_string_lossy().to_string())
+        );
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[tokio::test]
@@ -2014,6 +2412,28 @@ mod tests {
                 .as_deref()
                 .is_some_and(|reason| reason.contains("503"))
         );
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn readiness_probe_requires_both_dynamic_health_endpoints() {
+        use axum::{Router, http::StatusCode, routing::get};
+        let app = Router::new()
+            .route("/healthz", get(|| async { (StatusCode::OK, "live") }))
+            .route("/readyz", get(|| async { (StatusCode::OK, "ready") }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let server = tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        let report =
+            probe_tunnel_client_readiness(&format!("http://{addr}"), Duration::from_millis(500))
+                .await
+                .expect("probe");
+        assert!(report.health_live);
+        assert!(report.ready);
         server.abort();
     }
 
@@ -2096,6 +2516,20 @@ mod tests {
                 .redacted_display
                 .contains("<redacted-local-mcp-url>")
         );
+        for route in [
+            "<redacted>",
+            "%3Credacted%3E",
+            "%253Credacted%253E",
+            "<persistent-route>",
+            "placeholder-route-placeholder",
+            "",
+        ] {
+            let url = format!("http://127.0.0.1:3200/{route}/mcp");
+            assert!(
+                build_runtime_connect_command(&path, "catdesk-local", "tunnel-id", &url).is_err(),
+                "redacted route must never become --mcp-server-url target: {route}"
+            );
+        }
     }
 
     #[test]
@@ -2119,6 +2553,102 @@ mod tests {
             Some("http://127.0.0.1:9900/")
         );
         assert!(!status.tunnel_fingerprint.unwrap().contains("tun_secret"));
+        assert!(
+            parse_runtime_status_json("catdesk-local", r#"{"alias":"other","status":"ready"}"#,)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn stale_runtime_reconnect_requires_exact_client_alias_and_runtime_identity() {
+        let path =
+            std::env::temp_dir().join(format!("catdesk-client-{}.exe", uuid::Uuid::new_v4()));
+        std::fs::write(&path, b"trusted tunnel client fixture").expect("fixture executable");
+        let client_fingerprint =
+            trusted_tunnel_client_executable_fingerprint(&path).expect("fingerprint");
+        let runtime = OfficialRuntimeStatus {
+            alias: "catdesk-local".into(),
+            process_running: true,
+            healthy: false,
+            ready: false,
+            health_base_url: None,
+            admin_ui_url: None,
+            pid_fingerprint: Some("pid:fixture".into()),
+            tunnel_fingerprint: Some("tunnel:fixture".into()),
+            redacted_reason: None,
+        };
+        let identity = verified_official_runtime_recovery_identity(
+            &path,
+            &client_fingerprint,
+            "catdesk-local",
+            "catdesk-local",
+            &runtime,
+        )
+        .expect("complete identity");
+        assert_eq!(identity.client_executable_fingerprint, client_fingerprint);
+        assert!(
+            verified_official_runtime_recovery_identity(
+                &path,
+                "client:wrong",
+                "catdesk-local",
+                "catdesk-local",
+                &runtime,
+            )
+            .is_err()
+        );
+        let mut missing = runtime.clone();
+        missing.tunnel_fingerprint = None;
+        assert!(
+            verified_official_runtime_recovery_identity(
+                &path,
+                &client_fingerprint,
+                "catdesk-local",
+                "catdesk-local",
+                &missing,
+            )
+            .is_err()
+        );
+        std::fs::write(&path, b"replaced tunnel client fixture").expect("replace fixture");
+        assert!(
+            verified_official_runtime_recovery_identity(
+                &path,
+                &client_fingerprint,
+                "catdesk-local",
+                "catdesk-local",
+                &runtime,
+            )
+            .is_err()
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn recovery_state_distinguishes_local_readiness_runtime_staleness_and_identity() {
+        let mut runtime = OfficialRuntimeStatus::stopped("catdesk-local", "absent");
+        assert_eq!(
+            classify_official_runtime_recovery_state(true, &runtime, false),
+            OfficialRuntimeRecoveryStateV1::RuntimeAbsent
+        );
+        runtime.process_running = true;
+        assert_eq!(
+            classify_official_runtime_recovery_state(true, &runtime, false),
+            OfficialRuntimeRecoveryStateV1::AmbiguousOrMismatchedRuntime
+        );
+        assert_eq!(
+            classify_official_runtime_recovery_state(false, &runtime, true),
+            OfficialRuntimeRecoveryStateV1::OrphanedRuntime
+        );
+        assert_eq!(
+            classify_official_runtime_recovery_state(true, &runtime, true),
+            OfficialRuntimeRecoveryStateV1::LocalMcpRuntimeStale
+        );
+        runtime.healthy = true;
+        runtime.ready = true;
+        runtime.health_base_url = Some("http://127.0.0.1:9900".into());
+        assert_eq!(
+            classify_official_runtime_recovery_state(true, &runtime, true),
+            OfficialRuntimeRecoveryStateV1::LocalMcpAndRuntimeHealthy
+        );
     }
 
     #[test]
@@ -2139,6 +2669,7 @@ mod tests {
             process_running: true,
             healthy: false,
             ready: false,
+            health_base_url: None,
             admin_ui_url: None,
             pid_fingerprint: None,
             tunnel_fingerprint: None,
@@ -2175,5 +2706,46 @@ mod tests {
             &config,
             now + Duration::from_secs(180)
         ));
+    }
+
+    #[test]
+    fn connected_verified_requires_runtime_flags_dynamic_health_and_local_mcp() {
+        let config = RuntimeMonitorConfig {
+            poll_interval: Duration::from_secs(5),
+            degraded_interval: Duration::from_secs(2),
+            command_timeout: Duration::from_secs(5),
+            failure_threshold: 3,
+            recovery_cooldown: Duration::from_secs(30),
+            max_recovery_attempts: 3,
+            recovery_window: Duration::from_secs(600),
+        };
+        let runtime = OfficialRuntimeStatus {
+            alias: "catdesk-local".into(),
+            process_running: true,
+            healthy: true,
+            ready: true,
+            health_base_url: Some("http://127.0.0.1:49123/".into()),
+            admin_ui_url: None,
+            pid_fingerprint: None,
+            tunnel_fingerprint: None,
+            redacted_reason: None,
+        };
+        let now = Instant::now();
+        let (health, _) = monitor_health_from_status(
+            &runtime,
+            false,
+            &mut RuntimeMonitorState::default(),
+            &config,
+            now,
+        );
+        assert_ne!(health, crate::tunnel::TransportHealth::ConnectedVerified);
+        let (health, _) = monitor_health_from_status(
+            &runtime,
+            true,
+            &mut RuntimeMonitorState::default(),
+            &config,
+            now,
+        );
+        assert_eq!(health, crate::tunnel::TransportHealth::ConnectedVerified);
     }
 }

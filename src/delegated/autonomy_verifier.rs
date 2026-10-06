@@ -57,7 +57,7 @@ impl ContractVerifierV1 {
         } else {
             Err(RuntimeError::Provider(format!(
                 "approved verification command failed: {}",
-                bounded_text(&text, 512)
+                bounded_failure_text(&text, 512)
             )))
         }
     }
@@ -90,17 +90,23 @@ impl ContractVerifierV1 {
 
 impl AutonomousVerifierV1 for ContractVerifierV1 {
     fn verify(&mut self) -> Result<(VerificationSummaryV1, String), RuntimeError> {
-        let mut summaries = Vec::new();
-        let mut passed = true;
+        let mut successful_summaries = Vec::new();
+        let mut failure_summaries = Vec::new();
         for profile in &self.policy.contract().verification_policy.required_commands {
             match self.execute_profile(profile) {
-                Ok(summary) => summaries.push(summary),
+                Ok(summary) => successful_summaries.push(summary),
                 Err(error) => {
-                    passed = false;
-                    summaries.push(format!("verification failure: {error:?}"));
+                    // A failed profile must be diagnosable even when preceding
+                    // successful profiles emitted enough bounded output to fill
+                    // the durable summary. The profile identity is a closed
+                    // enum serialization, and `execute_profile` has already
+                    // redacted and bounded command output in `error`.
+                    failure_summaries.push(failure_summary(profile, &error));
                 }
             }
         }
+        let (passed, summary) =
+            bounded_verification_summary(failure_summaries, successful_summaries);
         let verification = VerificationSummaryV1 {
             status: if passed {
                 VerificationStatusV1::Passed
@@ -108,7 +114,7 @@ impl AutonomousVerifierV1 for ContractVerifierV1 {
                 VerificationStatusV1::Failed
             },
             command: "contract-approved verification profiles".into(),
-            summary: bounded_text(&summaries.join("\n"), 2_048),
+            summary,
         };
         let diff = self.authoritative_diff()?;
         self.last_verification = Some(verification.clone());
@@ -136,6 +142,21 @@ impl AutonomousVerifierV1 for ContractVerifierV1 {
         }))
         .map_err(|_| RuntimeError::Validation("final review serialization failed".into()))
     }
+}
+
+fn failure_summary(profile: &AutonomousCommandProfileV1, error: &RuntimeError) -> String {
+    let profile_name =
+        serde_json::to_string(profile).expect("command-profile serialization is infallible");
+    format!("verification failure [{profile_name}]: {error:?}")
+}
+
+fn bounded_verification_summary(
+    mut failure_summaries: Vec<String>,
+    successful_summaries: Vec<String>,
+) -> (bool, String) {
+    let passed = failure_summaries.is_empty();
+    failure_summaries.extend(successful_summaries);
+    (passed, bounded_text(&failure_summaries.join("\n"), 2_048))
 }
 
 fn verify_git_identity(policy: &AutonomousPolicyEngineV1) -> Result<(), RuntimeError> {
@@ -209,6 +230,27 @@ fn bounded_text(value: &str, limit: usize) -> String {
     text
 }
 
+fn bounded_failure_text(value: &str, limit: usize) -> String {
+    if value.len() <= limit {
+        return value.to_string();
+    }
+    const MARKER: &str = "\n...<verification output omitted>...\n";
+    let available = limit.saturating_sub(MARKER.len());
+    let head_budget = available / 3;
+    let tail_budget = available.saturating_sub(head_budget);
+
+    let mut head_end = head_budget.min(value.len());
+    while !value.is_char_boundary(head_end) {
+        head_end -= 1;
+    }
+    let mut tail_start = value.len().saturating_sub(tail_budget);
+    while tail_start < value.len() && !value.is_char_boundary(tail_start) {
+        tail_start += 1;
+    }
+
+    format!("{}{}{}", &value[..head_end], MARKER, &value[tail_start..])
+}
+
 fn redact_text(value: &str) -> String {
     value
         .lines()
@@ -244,5 +286,51 @@ mod tests {
             "<redacted-sensitive-output>"
         );
         assert_eq!(redact_text("ordinary output"), "ordinary output");
+    }
+
+    #[test]
+    fn failure_summary_precedes_large_successful_output_before_truncation() {
+        let large_success = "successful profile output\n".repeat(256);
+        let failure = failure_summary(
+            &AutonomousCommandProfileV1::GitDiff,
+            &RuntimeError::Provider("exact late failure".into()),
+        );
+        let (passed, summary) = bounded_verification_summary(vec![failure], vec![large_success]);
+
+        assert!(!passed);
+        assert!(
+            summary.starts_with(
+                "verification failure [\"GIT_DIFF\"]: Provider(\"exact late failure\")"
+            )
+        );
+        assert!(summary.len() <= 2_051, "the bounded summary remains capped");
+        assert!(summary.ends_with("..."), "large success remains truncated");
+    }
+
+    #[test]
+    fn failed_profile_output_retains_bounded_head_and_tail() {
+        let value = format!(
+            "head:{}{}tail:failures: exact_late_test\n",
+            "a".repeat(400),
+            "é".repeat(200)
+        );
+        let bounded = bounded_failure_text(&value, 512);
+
+        assert!(bounded.starts_with("head:"));
+        assert!(bounded.contains("...<verification output omitted>..."));
+        assert!(bounded.ends_with("tail:failures: exact_late_test\n"));
+        assert!(bounded.len() <= 512);
+        assert!(std::str::from_utf8(bounded.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn successful_profile_summaries_retain_their_original_order() {
+        let (passed, summary) = bounded_verification_summary(
+            Vec::new(),
+            vec!["fmt passed".to_string(), "test passed".to_string()],
+        );
+
+        assert!(passed);
+        assert_eq!(summary, "fmt passed\ntest passed");
     }
 }

@@ -9,6 +9,7 @@ use std::pin::Pin;
 
 use serde::{Deserialize, Serialize};
 
+use super::autonomy_state::AutonomousProviderRouteV1;
 use super::contracts::{TurnId, WorkerSessionId};
 use super::runtime::{
     FakeProvider, NormalizedProviderEventKind, NormalizedProviderEventV1, OllamaAdapter,
@@ -99,6 +100,18 @@ pub trait WorkerProviderV1: Send {
     ) -> ProviderFuture<'a, ProviderEventBatchV1>;
     fn cancel<'a>(&'a mut self, handle: &'a ProviderTurnHandleV1) -> ProviderFuture<'a, ()>;
     fn status<'a>(&'a self) -> ProviderFuture<'a, ProviderHealthV1>;
+}
+
+/// Control-plane capability for the only permitted autonomous failover:
+/// Codex CLI to local Ollama/Qwen. Providers that do not offer this route
+/// return false, which makes the controller wait for ChatGPT rather than
+/// trying an implicit remote or paid provider.
+pub trait LocalQwenFallbackProviderV1: WorkerProviderV1 {
+    fn provider_route(&self) -> AutonomousProviderRouteV1;
+    fn activate_local_qwen<'a>(&'a mut self, model_id: &'a str) -> ProviderFuture<'a, bool>;
+    /// Safe task boundaries may prefer Codex again. This never interrupts an
+    /// active Qwen turn and does not claim allowance has been restored.
+    fn prefer_codex_at_task_boundary(&mut self) -> bool;
 }
 
 pub struct OllamaWorkerProviderV1 {
@@ -260,6 +273,155 @@ impl WorkerProviderV1 for OllamaWorkerProviderV1 {
     }
 }
 
+/// A deliberately narrow two-provider adapter. It reuses each provider's
+/// native session/turn implementation and dispatches exclusively by the
+/// persisted handle provider id; no cloud/API candidate exists in this type.
+pub struct CodexQwenWorkerProviderV1<C, Q> {
+    codex: C,
+    qwen: Q,
+    route: AutonomousProviderRouteV1,
+}
+
+impl<C, Q> CodexQwenWorkerProviderV1<C, Q> {
+    pub fn new(codex: C, qwen: Q) -> Self {
+        Self {
+            codex,
+            qwen,
+            route: AutonomousProviderRouteV1::CodexPreferred,
+        }
+    }
+}
+
+impl<C: WorkerProviderV1, Q: WorkerProviderV1> WorkerProviderV1
+    for CodexQwenWorkerProviderV1<C, Q>
+{
+    fn provider_id(&self) -> ProviderIdV1 {
+        match self.route {
+            AutonomousProviderRouteV1::QwenFallbackActive => self.qwen.provider_id(),
+            _ => self.codex.provider_id(),
+        }
+    }
+
+    fn capabilities(&self) -> ProviderCapabilitiesV1 {
+        match self.route {
+            AutonomousProviderRouteV1::QwenFallbackActive => self.qwen.capabilities(),
+            _ => self.codex.capabilities(),
+        }
+    }
+
+    fn create_session(
+        &self,
+        model_id: &str,
+        worker_session_id: &WorkerSessionId,
+    ) -> ProviderSessionV1 {
+        match self.route {
+            AutonomousProviderRouteV1::QwenFallbackActive => {
+                self.qwen.create_session(model_id, worker_session_id)
+            }
+            _ => self.codex.create_session(model_id, worker_session_id),
+        }
+    }
+
+    fn start_turn<'a>(
+        &'a mut self,
+        request: WorkerProviderTurnRequestV1,
+    ) -> ProviderFuture<'a, ProviderTurnHandleV1> {
+        match request.provider_session.provider_id.as_str() {
+            "codex-cli" => self.codex.start_turn(request),
+            "ollama" if self.route == AutonomousProviderRouteV1::QwenFallbackActive => {
+                self.qwen.start_turn(request)
+            }
+            _ => Box::pin(async {
+                Err(RuntimeError::Validation(
+                    "provider route rejected an unapproved turn target".into(),
+                ))
+            }),
+        }
+    }
+
+    fn resume_turn<'a>(
+        &'a mut self,
+        request: WorkerProviderTurnRequestV1,
+    ) -> ProviderFuture<'a, ProviderTurnHandleV1> {
+        match request.provider_session.provider_id.as_str() {
+            "codex-cli" => self.codex.resume_turn(request),
+            "ollama" if self.route == AutonomousProviderRouteV1::QwenFallbackActive => {
+                self.qwen.resume_turn(request)
+            }
+            _ => Box::pin(async {
+                Err(RuntimeError::Validation(
+                    "provider route rejected an unapproved resume target".into(),
+                ))
+            }),
+        }
+    }
+
+    fn poll_events<'a>(
+        &'a mut self,
+        handle: &'a ProviderTurnHandleV1,
+        after_cursor: u64,
+    ) -> ProviderFuture<'a, ProviderEventBatchV1> {
+        match handle.provider_id {
+            ProviderIdV1::CodexCli => self.codex.poll_events(handle, after_cursor),
+            ProviderIdV1::Ollama => self.qwen.poll_events(handle, after_cursor),
+            _ => Box::pin(async {
+                Err(RuntimeError::Validation(
+                    "provider route received a non-local/non-Codex handle".into(),
+                ))
+            }),
+        }
+    }
+
+    fn cancel<'a>(&'a mut self, handle: &'a ProviderTurnHandleV1) -> ProviderFuture<'a, ()> {
+        match handle.provider_id {
+            ProviderIdV1::CodexCli => self.codex.cancel(handle),
+            ProviderIdV1::Ollama => self.qwen.cancel(handle),
+            _ => Box::pin(async {
+                Err(RuntimeError::Validation(
+                    "provider route received an unknown handle".into(),
+                ))
+            }),
+        }
+    }
+
+    fn status<'a>(&'a self) -> ProviderFuture<'a, ProviderHealthV1> {
+        match self.route {
+            AutonomousProviderRouteV1::QwenFallbackActive => self.qwen.status(),
+            _ => self.codex.status(),
+        }
+    }
+}
+
+impl<C: WorkerProviderV1, Q: WorkerProviderV1> LocalQwenFallbackProviderV1
+    for CodexQwenWorkerProviderV1<C, Q>
+{
+    fn provider_route(&self) -> AutonomousProviderRouteV1 {
+        self.route.clone()
+    }
+
+    fn activate_local_qwen<'a>(&'a mut self, model_id: &'a str) -> ProviderFuture<'a, bool> {
+        Box::pin(async move {
+            let health = self.qwen.status().await?;
+            let healthy = health.status == ProviderHealthStatus::Available
+                && health
+                    .available_models
+                    .iter()
+                    .any(|available| available == model_id);
+            self.route = if healthy {
+                AutonomousProviderRouteV1::QwenFallbackActive
+            } else {
+                AutonomousProviderRouteV1::QwenUnavailable
+            };
+            Ok(healthy)
+        })
+    }
+
+    fn prefer_codex_at_task_boundary(&mut self) -> bool {
+        self.route = AutonomousProviderRouteV1::CodexPreferred;
+        true
+    }
+}
+
 pub struct FakeWorkerProviderV1 {
     provider: FakeProvider,
     completed_turns: BTreeMap<String, ProviderTurnResultV1>,
@@ -409,6 +571,20 @@ impl WorkerProviderV1 for FakeWorkerProviderV1 {
                 detail: "deterministic fake provider available".into(),
             })
         })
+    }
+}
+
+impl LocalQwenFallbackProviderV1 for FakeWorkerProviderV1 {
+    fn provider_route(&self) -> AutonomousProviderRouteV1 {
+        AutonomousProviderRouteV1::CodexPreferred
+    }
+
+    fn activate_local_qwen<'a>(&'a mut self, _model_id: &'a str) -> ProviderFuture<'a, bool> {
+        Box::pin(async { Ok(false) })
+    }
+
+    fn prefer_codex_at_task_boundary(&mut self) -> bool {
+        false
     }
 }
 

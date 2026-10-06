@@ -11,6 +11,7 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::browser::DetectedBrowser;
+use crate::delegated::autonomy_observability::AutonomyObservabilitySnapshotV1;
 use crate::mascot::{self, MascotPack};
 use crate::openai_tunnel::{ManagedTunnelProcess, OpenaiTunnelConfig};
 use crate::theme;
@@ -784,6 +785,8 @@ pub struct AppState {
     pub request_count: u64,
     pub usage_totals: UsageTotals,
     pub session_usage_totals: UsageTotals,
+    /// T-0056 read-only cache populated outside the AppState mutex.
+    pub autonomy_observability: AutonomyObservabilitySnapshotV1,
     config_path: PathBuf,
     pub server_handle: Option<tokio::task::JoinHandle<()>>,
     pub ngrok_task: Option<tokio::task::JoinHandle<()>>,
@@ -1214,6 +1217,10 @@ impl AppState {
             request_count: 0,
             usage_totals: config.usage_totals,
             session_usage_totals: UsageTotals::default(),
+            autonomy_observability: AutonomyObservabilitySnapshotV1::unknown(
+                "UNKNOWN",
+                "autonomy refresh pending",
+            ),
             config_path,
             server_handle: None,
             ngrok_task: None,
@@ -1306,6 +1313,59 @@ impl AppState {
 
     pub fn transport_status_payload(&self) -> serde_json::Value {
         let identity = self.transport_identity_snapshot();
+        // This is intentionally a read-only observation.  Stable wake discovery
+        // neither uses nor changes transport, daemon, release, or browser state.
+        let stable_wake =
+            crate::stable_wake_bootstrap::workspace_readiness(Path::new(&self.workspace_root));
+        let independent_wake = (|| -> serde_json::Value {
+            let root = match catdesk_wake::runtime::default_root() {
+                Ok(root) => root,
+                Err(error) => {
+                    return serde_json::json!({
+                        "available": false,
+                        "reason": error.to_string(),
+                    });
+                }
+            };
+            let status_path = root.join("status.json");
+            let metadata = match fs::symlink_metadata(&status_path) {
+                Ok(metadata) => metadata,
+                Err(_) => {
+                    return serde_json::json!({
+                        "available": false,
+                        "reason": "INDEPENDENT_WAKE_STATUS_UNAVAILABLE",
+                    });
+                }
+            };
+            if !metadata.is_file()
+                || metadata.file_type().is_symlink()
+                || metadata.len() > 64 * 1024
+            {
+                return serde_json::json!({
+                    "available": false,
+                    "reason": "INDEPENDENT_WAKE_STATUS_INVALID",
+                });
+            }
+            let bytes = match fs::read(&status_path) {
+                Ok(bytes) => bytes,
+                Err(_) => {
+                    return serde_json::json!({
+                        "available": false,
+                        "reason": "INDEPENDENT_WAKE_STATUS_UNREADABLE",
+                    });
+                }
+            };
+            match serde_json::from_slice::<catdesk_wake::runtime::Status>(&bytes) {
+                Ok(status) => serde_json::json!({
+                    "available": true,
+                    "status": status,
+                }),
+                Err(_) => serde_json::json!({
+                    "available": false,
+                    "reason": "INDEPENDENT_WAKE_STATUS_INVALID_JSON",
+                }),
+            }
+        })();
         serde_json::json!({
             "toolName": "catdesk_transport_status",
             "transportMode": self.tunnel_config.mode.as_str(),
@@ -1331,6 +1391,13 @@ impl AppState {
             "buildState": dirty_build_state(),
             "warnings": self.transport_health.warnings.clone(),
             "redactedReason": self.transport_health.redacted_reason.clone(),
+            "stableWake": {
+                "discoveryAvailable": stable_wake.discovery_available,
+                "targetAvailable": stable_wake.target_available,
+                "pendingCount": stable_wake.pending_count,
+                "staleCount": stable_wake.stale_count,
+            },
+            "independentWake": independent_wake,
             "identity": {
                 "gitCommit": identity.git_commit,
                 "dirtyBuild": identity.dirty_build,
@@ -2312,7 +2379,7 @@ toolCallCount = 0
     }
 
     #[tokio::test]
-    async fn openai_external_readiness_uses_readyz_when_admin_url_configured() {
+    async fn openai_external_mode_does_not_infer_readiness_from_configured_admin_url() {
         let _guard = OPENAI_TUNNEL_ENV_TEST_LOCK.lock().await;
         let previous = std::env::var_os("CONTROL_PLANE_API_KEY");
         unsafe {
@@ -2361,7 +2428,7 @@ toolCallCount = 0
         let app = state.lock().await;
         assert_eq!(
             app.transport_health.health,
-            crate::tunnel::TransportHealth::ConnectedVerified
+            crate::tunnel::TransportHealth::ConfiguredUnverified
         );
         assert!(app.openai_tunnel_child.is_none());
         drop(app);
@@ -2433,7 +2500,7 @@ toolCallCount = 0
         let mut app = state.lock().await;
         assert_eq!(
             app.transport_health.health,
-            crate::tunnel::TransportHealth::ConnectedVerified
+            crate::tunnel::TransportHealth::Connecting
         );
         assert!(app.openai_tunnel_child.is_none());
         assert!(app.openai_tunnel_monitor_task.is_some());
@@ -2590,8 +2657,16 @@ toolCallCount = 0
         crate::ngrok::start_transport(state.clone())
             .await
             .expect("managed openai starts exiting fake client");
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-        crate::ngrok::refresh_openai_child_exit_status(&state).await;
+        let exit_deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            crate::ngrok::refresh_openai_child_exit_status(&state).await;
+            if state.lock().await.openai_tunnel_child.is_none()
+                || tokio::time::Instant::now() >= exit_deadline
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
         let mut app = state.lock().await;
         assert_eq!(
             app.transport_health.health,

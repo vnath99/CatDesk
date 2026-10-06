@@ -1782,6 +1782,7 @@ for line in sys.stdin:
     }
 
     #[test]
+    #[cfg_attr(windows, ignore = "requires a Python test interpreter on Windows")]
     fn deepseek_process_advisor_lazy_start_authenticates_and_returns_advice() {
         let (temp, mut advisor) = fake_sidecar("success");
         let request = AdvisorBroker::new(
@@ -1809,6 +1810,7 @@ for line in sys.stdin:
     }
 
     #[test]
+    #[cfg_attr(windows, ignore = "requires a Python test interpreter on Windows")]
     fn deepseek_process_advisor_rejects_auth_wrong_ids_malformed_timeout_and_crash() {
         let request = AdvisorBroker::new(
             FakeAdvisor::success(),
@@ -1840,6 +1842,7 @@ for line in sys.stdin:
     }
 
     #[test]
+    #[cfg_attr(windows, ignore = "requires a Python test interpreter on Windows")]
     fn deepseek_process_advisor_recovers_same_adapter_after_failure_modes() {
         let request = AdvisorBroker::new(
             FakeAdvisor::success(),
