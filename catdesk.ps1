@@ -79,7 +79,7 @@ function New-LifecycleDiagnosticLayer {
     $allowedLayers = @(
         'LIFECYCLE_ENGINE', 'CANONICAL_RELEASE', 'RECOVERY_AUTHORITY',
         'LOCAL_MCP_CONFIG', 'LOCAL_DAEMON', 'LOCAL_MCP_PROTOCOL',
-        'WAKE_RUNTIME', 'OFFICIAL_RUNTIME'
+        'WAKE_RUNTIME', 'OFFICIAL_RUNTIME', 'CODEX_CLI'
     )
     $allowedStates = @('READY', 'DEGRADED', 'FAILED', 'NOT_REQUIRED')
     if ($Layer -notin $allowedLayers -or $State -notin $allowedStates -or
@@ -102,7 +102,7 @@ function Write-LifecycleDiagnosis {
     if ($PrimaryLayer -notin @(
         'NONE', 'LIFECYCLE_ENGINE', 'CANONICAL_RELEASE', 'RECOVERY_AUTHORITY',
         'LOCAL_MCP_CONFIG', 'LOCAL_DAEMON', 'LOCAL_MCP_PROTOCOL',
-        'WAKE_RUNTIME', 'OFFICIAL_RUNTIME'
+        'WAKE_RUNTIME', 'OFFICIAL_RUNTIME', 'CODEX_CLI'
     )) { throw 'lifecycle diagnosis primary layer is invalid' }
     if ($NextAction -notin @('NONE', 'RUN_RECOVER', 'RUN_INSTALL', 'OPERATOR_ATTENTION')) {
         throw 'lifecycle diagnosis next action is invalid'
@@ -186,6 +186,40 @@ function Get-LifecycleOfficialRuntimeVerificationResult {
         return [pscustomobject]@{ Verified = $false; Gate = 'RUNTIME_CLIENT_UNAVAILABLE' }
     }
     return Get-OfficialRuntimeVerification -Root $Workspace -TimeoutSeconds 5 -Alias $alias -ClientPath $client
+}
+
+function Get-LifecycleCodexCliVerificationResult {
+    if ($script:LifecycleSeams.ContainsKey('CodexStatus')) {
+        $observed = & $script:LifecycleSeams['CodexStatus']
+        if ($observed -is [bool]) {
+            return [pscustomobject]@{
+                Ready = [bool]$observed
+                Gate = if ($observed) { 'READY' } else { 'CODEX_CLI_UNAVAILABLE' }
+            }
+        }
+        if ($null -eq $observed -or $null -eq $observed.PSObject.Properties['Ready'] -or
+            $null -eq $observed.PSObject.Properties['Gate']) {
+            throw 'Codex CLI verification result is invalid'
+        }
+        $gate = [string]$observed.Gate
+        if ($gate -notin @(
+            'READY', 'CODEX_CLI_UNAVAILABLE', 'CODEX_CLI_NOT_RUNNABLE',
+            'CODEX_AUTH_UNAVAILABLE', 'CODEX_CLI_CHECK_UNAVAILABLE'
+        )) { throw 'Codex CLI verification gate is invalid' }
+        return [pscustomobject]@{ Ready = [bool]$observed.Ready; Gate = $gate }
+    }
+    try {
+        Test-CodexOnDemandPrerequisites
+        return [pscustomobject]@{ Ready = $true; Gate = 'READY' }
+    } catch {
+        $gate = switch ([string]$_.Exception.Message) {
+            'Codex CLI is unavailable' { 'CODEX_CLI_UNAVAILABLE' }
+            'Codex CLI is not runnable' { 'CODEX_CLI_NOT_RUNNABLE' }
+            'Codex current-user authentication is unavailable' { 'CODEX_AUTH_UNAVAILABLE' }
+            default { 'CODEX_CLI_CHECK_UNAVAILABLE' }
+        }
+        return [pscustomobject]@{ Ready = $false; Gate = $gate }
+    }
 }
 
 function Get-LifecycleCanonicalIdentity {
@@ -820,6 +854,17 @@ function Invoke-LayeredDiagnosis {
         [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'OFFICIAL_RUNTIME' -State 'FAILED' -Gate $runtimeGate))
     }
 
+    $codexReady = $false
+    $codexGate = 'CODEX_CLI_CHECK_UNAVAILABLE'
+    try {
+        $codex = Get-LifecycleCodexCliVerificationResult
+        $codexReady = [bool]$codex.Ready
+        $codexGate = [string]$codex.Gate
+        [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'CODEX_CLI' -State $(if ($codexReady) { 'READY' } else { 'FAILED' }) -Gate $codexGate))
+    } catch {
+        [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'CODEX_CLI' -State 'FAILED' -Gate $codexGate))
+    }
+
     if (-not $localDaemonReady) {
         Write-LifecycleDiagnosis -State 'DEGRADED' -PrimaryLayer 'LOCAL_DAEMON' -NextAction 'RUN_RECOVER' -Layers $layers
         return
@@ -835,6 +880,10 @@ function Invoke-LayeredDiagnosis {
     if (-not $runtimeReady) {
         $next = if ($runtimeGate -eq 'RUNTIME_CLIENT_UNAVAILABLE') { 'RUN_INSTALL' } elseif ($runtimeGate -eq 'RUNTIME_VERIFICATION_UNAVAILABLE') { 'OPERATOR_ATTENTION' } else { 'RUN_RECOVER' }
         Write-LifecycleDiagnosis -State 'DEGRADED' -PrimaryLayer 'OFFICIAL_RUNTIME' -NextAction $next -Layers $layers
+        return
+    }
+    if (-not $codexReady) {
+        Write-LifecycleDiagnosis -State 'DEGRADED' -PrimaryLayer 'CODEX_CLI' -NextAction 'OPERATOR_ATTENTION' -Layers $layers
         return
     }
 
