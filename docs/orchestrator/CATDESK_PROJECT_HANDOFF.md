@@ -15,7 +15,7 @@ This section supersedes older operating-picture text below when the two disagree
 - Git and Codex are functionally live through CatDesk: direct `git` commands execute and `codex --version` reports `codex-cli 0.160.0`. The remaining daemon `identity.gitCommit=unknown` / reviewed-reload `INVALID_ARGUMENT` issue is provenance/control-plane hardening, not evidence that the Git/Codex deployment failed.
 - Five local untracked diagnostic/review artifacts remain intentionally preserved; consult `.catdesk/current_plan.md` before deleting or publishing anything.
 - Immediate gate: before recovery implementation, the operator connects the ChatGPT GitHub connector and ChatGPT verifies private off-host repo access. Then proceed in order: runtime/recovery convergence -> current Wake selector/reconciliation attention -> Binagotchy CLI/TUI + one-command diagnostics -> multi-project scheduling/wake fairness.
-- Every substantive turn uses the first-class Wake TurnTimer; checkpoint by 19 minutes. Future delegated engineering uses Codex 6 Astra MEDIUM/LOW only with more than two resets remaining, otherwise GPT-5.6 Terra HIGH; when no resets/cloud usage remain, try Qwen and fall back to direct ChatGPT/CatDesk work if Qwen is inadequate.
+- Every substantive turn uses the first-class Wake TurnTimer; checkpoint by 19 minutes. Exactly one hourly deadman is enabled for the generation-30 canonical chat; predecessor CatDesk deadmen are disabled. Future delegated engineering uses Codex 6 Astra MEDIUM/LOW only with more than two resets remaining, otherwise GPT-5.6 Terra HIGH; when no resets/cloud usage remain, try Qwen and fall back to direct ChatGPT/CatDesk work if Qwen is inadequate.
 
 ## Canonical sources and precedence
 
