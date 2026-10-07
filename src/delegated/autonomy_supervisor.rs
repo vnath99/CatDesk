@@ -347,6 +347,11 @@ pub fn tool_schemas() -> Vec<Value> {
                             "confirmationToken":{"type":"string","minLength":1,"maxLength":256}
                         },
                         "additionalProperties":false
+                    },
+                    {
+                        "required":["action"],
+                        "properties":{"action":{"const":"RESULT"}},
+                        "additionalProperties":false
                     }
                 ]});
             }
@@ -1165,6 +1170,22 @@ impl AutonomousSupervisorV1 {
     }
 
     fn daemon_reload(&self, args: &Value) -> Result<Value, String> {
+        let action = required_str(args, "action")?;
+        let allowed: &[&str] = match action {
+            "PREFLIGHT" => &["action", "buildPath", "expectedSha256", "recordId"],
+            "CONFIRM" => &["action", "buildPath", "expectedSha256", "confirmationToken"],
+            "RESULT" => &["action"],
+            _ => return Err("CatDesk daemon reload action is invalid".into()),
+        };
+        let object = args
+            .as_object()
+            .ok_or_else(|| "CatDesk daemon reload request is invalid".to_string())?;
+        if object.len() != allowed.len()
+            || object.keys().any(|key| !allowed.contains(&key.as_str()))
+        {
+            return Err("CatDesk daemon reload request is invalid".into());
+        }
+
         let active_mutation = self
             .store
             .list_sessions()
@@ -1179,26 +1200,38 @@ impl AutonomousSupervisorV1 {
                             | AutonomousSessionStateV1::RecoveringAfterRestart
                     )
             });
+
+        if action == "RESULT" {
+            let preflight = crate::daemon_reload::read_reload_preflight(&self.workspace).ok();
+            let preflight_present = preflight.is_some();
+            let state = if active_mutation {
+                "BLOCKED_ACTIVE_MUTATION"
+            } else if preflight_present {
+                "PREFLIGHT_PRESENT"
+            } else {
+                "READY_FOR_PREFLIGHT"
+            };
+            let next_action = if active_mutation {
+                "WAIT_FOR_ACTIVE_MUTATION"
+            } else if preflight_present {
+                "CONFIRM_OR_REFRESH_PREFLIGHT"
+            } else {
+                "PREFLIGHT"
+            };
+            return Ok(json!({
+                "state": state,
+                "activeMutation": active_mutation,
+                "preflightPresent": preflight_present,
+                "nextAction": next_action,
+                "tunnelAction": "none-external-tunnel-untouched"
+            }));
+        }
+
         if active_mutation {
             return Err(
                 "CatDesk daemon reload is blocked while autonomous mutation or verification is active"
                     .into(),
             );
-        }
-
-        let action = required_str(args, "action")?;
-        let allowed: &[&str] = match action {
-            "PREFLIGHT" => &["action", "buildPath", "expectedSha256", "recordId"],
-            "CONFIRM" => &["action", "buildPath", "expectedSha256", "confirmationToken"],
-            _ => return Err("CatDesk daemon reload action is invalid".into()),
-        };
-        let object = args
-            .as_object()
-            .ok_or_else(|| "CatDesk daemon reload request is invalid".to_string())?;
-        if object.len() != allowed.len()
-            || object.keys().any(|key| !allowed.contains(&key.as_str()))
-        {
-            return Err("CatDesk daemon reload request is invalid".into());
         }
 
         let build_path = PathBuf::from(required_str(args, "buildPath")?);
@@ -5056,6 +5089,45 @@ mod tests {
     }
 
     #[test]
+    fn daemon_reload_result_is_read_only_and_reports_active_blocker() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-daemon-reload-result-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("src")).expect("workspace");
+        handle_tool(
+            "autonomy_contract_create",
+            json!({"contract":contract(&root)}),
+            &root,
+        )
+        .expect("create");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk").join("autonomy")).expect("store");
+        let mut snapshot = store.load_session("session-1").expect("snapshot");
+        snapshot.state = AutonomousSessionStateV1::Running;
+        snapshot.active = true;
+        store.save_session(&snapshot).expect("running state");
+
+        let result = handle_tool("catdesk_daemon_reload", json!({"action":"RESULT"}), &root)
+            .expect("read-only reload result");
+        assert_eq!(
+            result.get("state").and_then(Value::as_str),
+            Some("BLOCKED_ACTIVE_MUTATION")
+        );
+        assert_eq!(
+            result.get("activeMutation").and_then(Value::as_bool),
+            Some(true)
+        );
+        assert_eq!(
+            result.get("preflightPresent").and_then(Value::as_bool),
+            Some(false)
+        );
+        assert_eq!(
+            result.get("tunnelAction").and_then(Value::as_str),
+            Some("none-external-tunnel-untouched")
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn daemon_reload_schema_is_closed_to_reviewed_preflight_and_confirm() {
         let schema = tool_schemas()
             .into_iter()
@@ -5063,7 +5135,9 @@ mod tests {
             .expect("reload schema");
         let input = &schema["inputSchema"];
         assert_eq!(input["type"], "object");
-        assert_eq!(input["oneOf"].as_array().map(Vec::len), Some(2));
+        assert_eq!(input["oneOf"].as_array().map(Vec::len), Some(3));
+        assert_eq!(input["oneOf"][2]["required"], json!(["action"]));
+        assert_eq!(input["oneOf"][2]["properties"]["action"]["const"], "RESULT");
         assert_eq!(
             input["oneOf"][0]["required"],
             json!(["action", "buildPath", "expectedSha256", "recordId"])
