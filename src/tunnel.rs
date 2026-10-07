@@ -2,8 +2,10 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use rand::{RngCore, rngs::OsRng};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::net::IpAddr;
 use std::path::Path;
+use std::sync::OnceLock;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
@@ -252,6 +254,9 @@ pub struct TransportIdentitySnapshot {
     pub git_commit: String,
     pub dirty_build: String,
     pub binary_fingerprint: String,
+    pub serving_binary_sha256: String,
+    pub canonical_release_sha256: String,
+    pub serving_canonical_parity: String,
     pub startup_time: String,
     pub workspace_hash: String,
     pub transport_mode: String,
@@ -852,6 +857,47 @@ pub fn binary_fingerprint() -> String {
     ))
 }
 
+fn serving_binary_sha256() -> String {
+    static SHA256: OnceLock<String> = OnceLock::new();
+    SHA256
+        .get_or_init(|| {
+            let Ok(exe) = std::env::current_exe() else {
+                return "unknown".into();
+            };
+            let Ok(bytes) = std::fs::read(exe) else {
+                return "unknown".into();
+            };
+            format!("{:x}", Sha256::digest(bytes))
+        })
+        .clone()
+}
+
+fn canonical_release_sha256(workspace_root: &str) -> String {
+    let path = Path::new(workspace_root)
+        .join("target")
+        .join("release")
+        .join("catdesk.exe.sha256");
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return "unknown".into();
+    };
+    let value = text.trim().to_ascii_lowercase();
+    if value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        value
+    } else {
+        "unknown".into()
+    }
+}
+
+fn serving_canonical_parity(serving: &str, canonical: &str) -> String {
+    if serving == "unknown" || canonical == "unknown" {
+        "UNKNOWN".into()
+    } else if serving == canonical {
+        "MATCH".into()
+    } else {
+        "MISMATCH".into()
+    }
+}
+
 #[allow(dead_code)]
 pub fn build_identity_snapshot(
     installation_id: String,
@@ -861,12 +907,19 @@ pub fn build_identity_snapshot(
     tunnel_mode: TunnelMode,
     connection_url: Option<&str>,
 ) -> TransportIdentitySnapshot {
+    let serving_binary_sha256 = serving_binary_sha256();
+    let canonical_release_sha256 = canonical_release_sha256(workspace_root);
+    let serving_canonical_parity =
+        serving_canonical_parity(&serving_binary_sha256, &canonical_release_sha256);
     TransportIdentitySnapshot {
         installation_id,
         server_instance_id,
         git_commit: git_commit(),
         dirty_build: dirty_build_state(),
         binary_fingerprint: binary_fingerprint(),
+        serving_binary_sha256,
+        canonical_release_sha256,
+        serving_canonical_parity,
         startup_time,
         workspace_hash: workspace_fingerprint(workspace_root),
         transport_mode: tunnel_mode.as_str().to_string(),
@@ -894,6 +947,28 @@ mod tests {
     use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::post};
     use serde_json::json;
     use tokio::task::JoinHandle;
+
+    #[test]
+    fn transport_identity_reports_serving_to_canonical_release_parity() {
+        let root = std::env::temp_dir().join(format!("catdesk-identity-{}", Uuid::new_v4()));
+        let release = root.join("target").join("release");
+        std::fs::create_dir_all(&release).expect("release dir");
+        let serving = serving_binary_sha256();
+        assert_ne!(serving, "unknown");
+        std::fs::write(release.join("catdesk.exe.sha256"), &serving).expect("sidecar");
+        assert_eq!(canonical_release_sha256(&root.to_string_lossy()), serving);
+        assert_eq!(
+            serving_canonical_parity(&serving, &canonical_release_sha256(&root.to_string_lossy())),
+            "MATCH"
+        );
+        let other = "0".repeat(64);
+        std::fs::write(release.join("catdesk.exe.sha256"), &other).expect("sidecar mismatch");
+        assert_eq!(
+            serving_canonical_parity(&serving, &canonical_release_sha256(&root.to_string_lossy())),
+            "MISMATCH"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
 
     #[test]
     fn every_documented_tunnel_mode_parses() {
