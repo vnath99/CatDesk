@@ -744,3 +744,14 @@ Expected continuation: next bounded direct CatDesk turn should finish the diagno
 
 OPERATOR ACTION: NONE.
 Expected continuation: create/bind a fresh source-current T-0419 independent review authority, then execute only the closed reviewed build/promotion/reload chain. Hourly deadman remains fallback and must defer to active MANUAL_WORK.
+
+
+## 2026-10-07 — T-0419 fresh authority / protected-build root-cause checkpoint
+
+- Fresh direct-review session `adc-t0419r1-runtime-recovery-review-20261007` completed `COMPLETED_VERIFIED`; review record `review-adc-t0419r1-runtime-recovery-review-20261007-6-independent_final_review` was ACKed and used as the exact reviewed-build authority.
+- Fresh reviewed-build generation `386196def03b47cfafa41d9f45040895` is correctly bound to T-0419 R1 authority/snapshot. Authority creation and binding are therefore proven working; stale T-0418 authority was not reused.
+- The fresh protected build failed at `CARGO_BUILD`, exit 101, persisted classification `CARGO_EXIT_NONZERO`. No attestation or promotion was produced.
+- One temporary test-only bounded diagnostic was used locally and then fully reverted (tracked `src/reviewed_build.rs` returned to zero diff). The redacted result identifies `CUSTOM_BUILD_COMMAND_FAILED` + `PROCESS_EXITED_UNSUCCESSFULLY` for `ring 0.17.14`, with no LNK error code and no missing link/library basename. This moves the remaining T-0419 blocker from generic reviewed-build failure to the protected dependency custom-build/toolchain layer.
+- Historical failed manual Wake ATTENTION is diagnostic history only and does not block current work; only the latest relevant current-generation attempt or a fresh canary matters for acceptance.
+
+T-0419 remains OPEN. Next: determine the exact fixed-environment requirement for the packaged `ring 0.17.14` build script, implement the smallest closed/attested environment repair with deterministic tests, obtain fresh review authority for that source change, then rerun the protected build. Do not retry blindly and do not change Secure MCP ownership.
