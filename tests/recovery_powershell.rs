@@ -151,6 +151,54 @@ mod windows {
     }
 
     #[test]
+    fn public_diagnose_process_returns_bounded_layered_json() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let script = root.join("catdesk.ps1");
+        let output = Command::new("powershell.exe")
+            .arg("-NoLogo")
+            .arg("-NoProfile")
+            .arg("-NonInteractive")
+            .arg("-ExecutionPolicy")
+            .arg("Bypass")
+            .arg("-File")
+            .arg(&script)
+            .arg("diagnose")
+            .current_dir(root)
+            .output()
+            .expect("launch public lifecycle diagnose");
+
+        assert!(
+            output.status.success(),
+            "diagnose process must carry lifecycle failure in JSON, not exit status: status={} stdout={} stderr={}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        assert!(
+            output.stderr.is_empty(),
+            "public diagnose must keep stderr empty"
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for required in [
+            "\"command\":\"diagnose\"",
+            "\"state\":",
+            "\"primaryLayer\":",
+            "\"nextAction\":",
+            "\"layers\":",
+        ] {
+            assert!(
+                stdout.contains(required),
+                "missing bounded diagnose field {required}: {stdout}"
+            );
+        }
+        assert!(
+            !stdout.to_ascii_lowercase().contains("token=")
+                && !stdout.to_ascii_lowercase().contains("https://"),
+            "diagnose output must not expose credentials or routes: {stdout}"
+        );
+    }
+
+    #[test]
     fn wake_installers_use_windows_powershell_compatible_utf8_without_bom() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         for relative in ["wake/install.ps1", "wake/install-browser-runtime.ps1"] {

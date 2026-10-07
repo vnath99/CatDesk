@@ -694,6 +694,17 @@ Expected continuation: manual/event-driven Python browser Wake from the next que
 OPERATOR ACTION: NONE. The GitHub connector was connected and independently verified against the private `vnath99/CatDesk` feature branch.
 Expected continuation: T-0419 runtime/recovery convergence in bounded direct CatDesk turns; hourly deadman is fallback and must defer while a direct MANUAL_WORK timer is active.
 
+## 2026-10-07 — T-0419 runtime/recovery convergence / layered diagnosis first slice
+
+- Recovery UX is now deliberately simple: `catdesk.ps1 diagnose` is read-only diagnosis, `catdesk.ps1 recover` remains the single ordinary repair command, and `catdesk.ps1 status` remains the concise health view.
+- The first implementation slice adds a bounded eight-layer diagnostic model: lifecycle engine -> canonical release -> reviewed recovery authority -> local MCP config -> local daemon/listener identity -> local MCP protocol -> Wake runtime -> external official runtime. Output contains fixed state/gate vocabulary, one `primaryLayer`, and one bounded `nextAction` (`NONE`, `RUN_RECOVER`, `RUN_INSTALL`, or `OPERATOR_ATTENTION`); no credentials, raw endpoints, or filesystem paths are emitted.
+- Diagnostics distinguish repairable daemon/protocol/Wake failures from missing official-runtime client setup and from damaged/missing reviewed recovery authority, preventing blind recovery loops.
+- Windows integration coverage now launches the public `diagnose` process and validates its JSON contract. The full recovery PowerShell integration harness passed: 5 tests, 0 failed, including all lifecycle/recovery fixture scripts. `git diff --check` passed for the implementation/test paths.
+- This is a checkpoint, not milestone closure. Next bounded turn should add concise operator traceability/documentation, inspect the live diagnosis result, commit/push the verified slice, then continue serving-build provenance and reviewed daemon-reload observability hardening.
+
+OPERATOR ACTION: NONE.
+Expected continuation: direct bounded CatDesk work on T-0419. Event-driven Python browser Wake only if a fresh legitimate review event is generated; hourly deadman remains fallback.
+
 ## 2026-10-07 — T-0419 layered recovery diagnosis implementation checkpoint
 
 - Recovery usability is now the active milestone. The public lifecycle remains intentionally simple: `catdesk.ps1 status` for concise state, `catdesk.ps1 diagnose` for a non-mutating layer-by-layer doctor, and `catdesk.ps1 recover` as the single ordinary repair action.
