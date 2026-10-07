@@ -65,7 +65,7 @@ $realCanonicalRoot = $null
 
 try {
     Require ($source -match [regex]::Escape('$PSScriptRoot')) 'facade resolves all internal paths from its own root'
-    Require ($source -match "ValidateSet\('install', 'start', 'status', 'recover', 'stop', 'autostart', 'wake'\)") 'exact public command vocabulary is present'
+    Require ($source -match "ValidateSet\('install', 'start', 'status', 'diagnose', 'recover', 'stop', 'autostart', 'wake'\)") 'exact public command vocabulary is present'
     Require ($source -notmatch '(?i)provision-catdesk-release|cargo\s+(build|run|test)|tunnel-client.*(stop|remove)|runtimes\s+(stop|rm)') 'facade contains no compile/provision or tunnel stop/remove route'
     Require ($source -notmatch 'Stop-Process\s+-Id\s+\$processId') 'public stop never reacquires destructive authority by PID alone'
     Require ($source -match 'Stop-CatDeskListenerProcessForRecovery\s+-LocalMcp\s+\$endpoint\s+-Canonical\s+\$identity\s+-Candidate\s+\$candidate') 'public stop reuses the exact pinned listener process-instance mutation boundary'
@@ -108,6 +108,14 @@ try {
     Require ($actions.Count -eq 0) 'status did not invoke any lifecycle side effect'
     Require (($status | ConvertTo-Json -Compress) -notmatch '(?i)secret|token|route_|https?://') 'status output is redacted'
 
+    $diagnose = Invoke-FixtureFacade -Command 'diagnose' -Seams $base | ConvertFrom-Json
+    Require ($diagnose.state -eq 'DEGRADED' -and $diagnose.primaryLayer -eq 'LOCAL_DAEMON' -and $diagnose.nextAction -eq 'RUN_RECOVER') 'diagnose identifies the first broken local-daemon layer and recommends one-command recovery'
+    Require (@($diagnose.layers).Count -eq 8) 'diagnose returns the fixed eight-layer model'
+    Require ((@($diagnose.layers) | Where-Object { $_.layer -eq 'LOCAL_DAEMON' }).gate -eq 'LOCAL_MCP_LISTENER_MISSING') 'diagnose preserves the fixed local-daemon failure gate'
+    Require ((@($diagnose.layers) | Where-Object { $_.layer -eq 'OFFICIAL_RUNTIME' }).gate -eq 'RUNTIME_STATUS_NOT_READY') 'diagnose independently reports downstream external-runtime state'
+    Require ($actions.Count -eq 0) 'diagnose is non-mutating'
+    Require (($diagnose | ConvertTo-Json -Compress -Depth 5) -notmatch '(?i)secret|token|route_|https?://') 'diagnose output is redacted'
+
     [void](Invoke-FixtureFacade -Command 'start' -Seams $base)
     [void](Invoke-FixtureFacade -Command 'recover' -Seams $base)
     Require (([string]::Join(',', $actions)) -eq 'recover:start,recover:recover') 'start and recover route only through canonical recovery'
@@ -123,6 +131,11 @@ try {
     $runtimeGate.Recovery = { param($engine, $root, $config, $expected, $manifest, $timeout, $command) '{"State":"TRANSPORT_VERIFICATION_FAILED","Gate":"RUNTIME_STATUS_TIMEOUT"}' }
     $runtimeGateResult = Invoke-FixtureFacade -Command 'recover' -Seams $runtimeGate | ConvertFrom-Json
     Require ($runtimeGateResult.state -eq 'TRANSPORT_VERIFICATION_FAILED' -and $runtimeGateResult.detail -eq 'gate=RUNTIME_STATUS_TIMEOUT') 'recovery preserves the fixed runtime verification gate'
+
+    $localGate = $base.Clone()
+    $localGate.Recovery = { param($engine, $root, $config, $expected, $manifest, $timeout, $command) '{"State":"TRANSPORT_VERIFICATION_FAILED","Gate":"LOCAL_MCP_RESPONSE_TIMEOUT"}' }
+    $localGateResult = Invoke-FixtureFacade -Command 'recover' -Seams $localGate | ConvertFrom-Json
+    Require ($localGateResult.state -eq 'TRANSPORT_VERIFICATION_FAILED' -and $localGateResult.detail -eq 'gate=LOCAL_MCP_RESPONSE_TIMEOUT') 'recovery preserves the same fixed local-MCP layer vocabulary used by diagnose'
 
     $invalidRuntimeGate = $base.Clone()
     $invalidRuntimeGate.Recovery = { param($engine, $root, $config, $expected, $manifest, $timeout, $command) '{"State":"TRANSPORT_VERIFICATION_FAILED","Gate":"https://example.invalid/secret"}' }
@@ -176,6 +189,11 @@ try {
     Require ($recoverableStatus.state -eq 'RECOVERY_AVAILABLE' -and $recoverableStatus.detail -eq 'source=LAST_KNOWN_GOOD') 'canonical mismatch with exact LKG authority reports bounded recovery availability'
     Require ($actions.Count -eq 0) 'read-only recovery assessment never starts recovery or changes tunnel ownership'
 
+    $recoverableDiagnosis = Invoke-FixtureFacade -Command 'diagnose' -Seams $recoverableRelease | ConvertFrom-Json
+    Require ($recoverableDiagnosis.state -eq 'RECOVERY_AVAILABLE' -and $recoverableDiagnosis.primaryLayer -eq 'CANONICAL_RELEASE' -and $recoverableDiagnosis.nextAction -eq 'RUN_RECOVER') 'diagnose turns a broken canonical pair with reviewed LKG into one clear recovery action'
+    Require ((@($recoverableDiagnosis.layers) | Where-Object { $_.layer -eq 'RECOVERY_AUTHORITY' }).gate -eq 'LAST_KNOWN_GOOD') 'diagnose reports the bounded reviewed recovery source without paths'
+    Require ($actions.Count -eq 0) 'recoverable diagnosis remains non-mutating'
+
     $interruptedRelease = $recoverableRelease.Clone()
     $interruptedRelease.RecoveryReadiness = { param($engine, $root, $config, $expected, $manifest, $timeout) '{"State":"RECOVERY_READY","RecoverySource":"INTERRUPTED_PROMOTION"}' }
     $interruptedStatus = Invoke-FixtureFacade -Command 'status' -Seams $interruptedRelease | ConvertFrom-Json
@@ -188,6 +206,10 @@ try {
     $ambiguousStatus = Invoke-FixtureFacade -Command 'status' -Seams $ambiguousRelease | ConvertFrom-Json
     Require ($ambiguousStatus.state -eq 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED') 'ambiguous recovery authority remains fail-closed'
     Require ($actions.Count -eq 0) 'ambiguous recovery authority does not trigger lifecycle work'
+
+    $ambiguousDiagnosis = Invoke-FixtureFacade -Command 'diagnose' -Seams $ambiguousRelease | ConvertFrom-Json
+    Require ($ambiguousDiagnosis.state -eq 'ACTION_REQUIRED' -and $ambiguousDiagnosis.primaryLayer -eq 'RECOVERY_AUTHORITY' -and $ambiguousDiagnosis.nextAction -eq 'OPERATOR_ATTENTION') 'diagnose isolates damaged recovery authority instead of suggesting blind recovery'
+    Require ((@($ambiguousDiagnosis.layers) | Where-Object { $_.layer -eq 'RECOVERY_AUTHORITY' }).gate -eq 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED') 'diagnose keeps the exact bounded recovery-authority failure class'
 
     $badLocalConfig = $base.Clone()
     $badLocalConfig.LocalMcp = { param($config) throw 'fixture endpoint secret must never escape' }
@@ -214,6 +236,11 @@ try {
     Require ($first.state -eq 'READY' -and $second.state -eq 'READY') 'repeated healthy status is idempotent'
     Require ($actions.Count -eq 0) 'repeated healthy status remains non-mutating'
 
+    $readyDiagnosis = Invoke-FixtureFacade -Command 'diagnose' -Seams $ready | ConvertFrom-Json
+    Require ($readyDiagnosis.state -eq 'HEALTHY' -and $readyDiagnosis.primaryLayer -eq 'NONE' -and $readyDiagnosis.nextAction -eq 'NONE') 'healthy diagnosis reports no failing layer or recovery action'
+    Require ((@($readyDiagnosis.layers) | Where-Object { $_.state -eq 'FAILED' }).Count -eq 0) 'healthy diagnosis has no failed layers'
+    Require ($actions.Count -eq 0) 'healthy diagnosis remains non-mutating'
+
     $canonicalButUnready = $base.Clone()
     $canonicalButUnready.Listener = { param($local, $identity) [pscustomobject]@{ Pid = 50; MatchesCanonical = $true } }
     $canonicalButUnready.LocalMcpReadiness = { param($local, $identity) $false }
@@ -228,6 +255,12 @@ try {
     $localPending = Invoke-FixtureFacade -Command 'status' -Seams $localOnly | ConvertFrom-Json
     Require ($localPending.state -eq 'LOCAL_READY_EXTERNAL_RUNTIME_PENDING') 'verified local JSON-RPC readiness with pending runtime is explicit'
     Require ($actions.Count -eq 0) 'local-only readiness status remains non-mutating'
+
+    $clientMissing = $ready.Clone()
+    $clientMissing.RuntimeStatus = { param($root, $config) [pscustomobject]@{ Verified = $false; Gate = 'RUNTIME_CLIENT_UNAVAILABLE' } }
+    $clientMissingDiagnosis = Invoke-FixtureFacade -Command 'diagnose' -Seams $clientMissing | ConvertFrom-Json
+    Require ($clientMissingDiagnosis.state -eq 'DEGRADED' -and $clientMissingDiagnosis.primaryLayer -eq 'OFFICIAL_RUNTIME' -and $clientMissingDiagnosis.nextAction -eq 'RUN_INSTALL') 'diagnose distinguishes missing official runtime client from daemon recovery'
+    Require ((@($clientMissingDiagnosis.layers) | Where-Object { $_.layer -eq 'OFFICIAL_RUNTIME' }).gate -eq 'RUNTIME_CLIENT_UNAVAILABLE') 'diagnose preserves missing runtime client gate'
 
     $wake = $base.Clone()
     $wake.Listener = { param($local, $identity) [pscustomobject]@{ Pid = 51; MatchesCanonical = $true } }

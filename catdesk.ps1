@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateSet('install', 'start', 'status', 'recover', 'stop', 'autostart', 'wake')]
+    [ValidateSet('install', 'start', 'status', 'diagnose', 'recover', 'stop', 'autostart', 'wake')]
     [string]$Command,
     [Parameter(Position = 1)]
     [string]$AutostartAction = '',
@@ -74,6 +74,120 @@ function Write-LifecycleStatus {
         ConvertTo-Json -Compress
 }
 
+function New-LifecycleDiagnosticLayer {
+    param([string]$Layer, [string]$State, [string]$Gate)
+    $allowedLayers = @(
+        'LIFECYCLE_ENGINE', 'CANONICAL_RELEASE', 'RECOVERY_AUTHORITY',
+        'LOCAL_MCP_CONFIG', 'LOCAL_DAEMON', 'LOCAL_MCP_PROTOCOL',
+        'WAKE_RUNTIME', 'OFFICIAL_RUNTIME'
+    )
+    $allowedStates = @('READY', 'DEGRADED', 'FAILED', 'NOT_REQUIRED')
+    if ($Layer -notin $allowedLayers -or $State -notin $allowedStates -or
+        [string]::IsNullOrWhiteSpace($Gate) -or $Gate -notmatch '^[A-Z0-9_]{1,96}$') {
+        throw 'lifecycle diagnostic layer is invalid'
+    }
+    [pscustomobject][ordered]@{ layer = $Layer; state = $State; gate = $Gate }
+}
+
+function Write-LifecycleDiagnosis {
+    param(
+        [string]$State,
+        [string]$PrimaryLayer,
+        [string]$NextAction,
+        [Collections.Generic.List[object]]$Layers
+    )
+    if ($State -notin @('HEALTHY', 'DEGRADED', 'RECOVERY_AVAILABLE', 'ACTION_REQUIRED')) {
+        throw 'lifecycle diagnosis state is invalid'
+    }
+    if ($PrimaryLayer -notin @(
+        'NONE', 'LIFECYCLE_ENGINE', 'CANONICAL_RELEASE', 'RECOVERY_AUTHORITY',
+        'LOCAL_MCP_CONFIG', 'LOCAL_DAEMON', 'LOCAL_MCP_PROTOCOL',
+        'WAKE_RUNTIME', 'OFFICIAL_RUNTIME'
+    )) { throw 'lifecycle diagnosis primary layer is invalid' }
+    if ($NextAction -notin @('NONE', 'RUN_RECOVER', 'RUN_INSTALL', 'OPERATOR_ATTENTION')) {
+        throw 'lifecycle diagnosis next action is invalid'
+    }
+    [pscustomobject][ordered]@{
+        command = $Command
+        state = $State
+        primaryLayer = $PrimaryLayer
+        nextAction = $NextAction
+        layers = @($Layers)
+    } | ConvertTo-Json -Compress -Depth 5
+}
+
+function Get-LifecycleCanonicalFailureGate {
+    param([string]$Message)
+    switch ($Message) {
+        'CATDESK_CANONICAL_WORKSPACE_RESOLVE' { 'CANONICAL_WORKSPACE_RESOLVE' }
+        'CATDESK_CANONICAL_BINARY_MISSING' { 'CANONICAL_BINARY_MISSING' }
+        'CATDESK_CANONICAL_FINGERPRINT_MISSING' { 'CANONICAL_FINGERPRINT_MISSING' }
+        'CATDESK_CANONICAL_FINGERPRINT_INVALID' { 'CANONICAL_FINGERPRINT_INVALID' }
+        'CATDESK_CANONICAL_HASH_MISMATCH' { 'CANONICAL_HASH_MISMATCH' }
+        'CATDESK_CANONICAL_IDENTITY_INTERNAL' { 'CANONICAL_IDENTITY_INTERNAL' }
+        default { 'CANONICAL_IDENTITY' }
+    }
+}
+
+function Get-LifecycleLocalMcpReadinessResult {
+    param($LocalMcp, $Canonical)
+    $observed = Invoke-LifecycleSeam -Name 'LocalMcpReadiness' -Arguments @($LocalMcp, $Canonical) -Default {
+        param($endpoint, $identity)
+        Get-LocalMcpReadiness -LocalMcp $endpoint -Canonical $identity
+    }
+    if ($observed -is [bool]) {
+        return [pscustomobject]@{
+            Ready = [bool]$observed
+            Gate = if ($observed) { 'READY' } else { 'LOCAL_MCP_RESPONSE_UNAVAILABLE' }
+        }
+    }
+    if ($null -eq $observed -or $null -eq $observed.PSObject.Properties['Ready'] -or
+        $null -eq $observed.PSObject.Properties['Gate']) {
+        throw 'local MCP readiness result is invalid'
+    }
+    $gate = [string]$observed.Gate
+    if ($gate -notin @(
+        'READY', 'LOCAL_MCP_LISTENER_MISSING', 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH',
+        'LOCAL_MCP_LAUNCHED_PROCESS_MISMATCH', 'LOCAL_MCP_RESPONSE_TIMEOUT',
+        'LOCAL_MCP_RESPONSE_UNAVAILABLE', 'LOCAL_MCP_RESPONSE_INVALID',
+        'LOCAL_MCP_PROTOCOL_UNREADY'
+    )) { throw 'local MCP readiness gate is invalid' }
+    return [pscustomobject]@{ Ready = [bool]$observed.Ready; Gate = $gate }
+}
+
+function Get-LifecycleOfficialRuntimeVerificationResult {
+    if ($script:LifecycleSeams.ContainsKey('RuntimeStatus')) {
+        $observed = & $script:LifecycleSeams['RuntimeStatus'] $Workspace $ConfigPath
+        if ($observed -is [bool]) {
+            return [pscustomobject]@{
+                Verified = [bool]$observed
+                Gate = if ($observed) { 'READY' } else { 'RUNTIME_STATUS_NOT_READY' }
+            }
+        }
+        if ($null -eq $observed -or $null -eq $observed.PSObject.Properties['Verified'] -or
+            $null -eq $observed.PSObject.Properties['Gate']) {
+            throw 'runtime verification result is invalid'
+        }
+        $gate = [string]$observed.Gate
+        if ($gate -notin @(
+            'READY', 'RUNTIME_CLIENT_UNAVAILABLE', 'RUNTIME_STATUS_TIMEOUT',
+            'RUNTIME_STATUS_OVERSIZED', 'RUNTIME_STATUS_COMMAND_FAILED',
+            'RUNTIME_STATUS_INVALID', 'RUNTIME_STATUS_UNAVAILABLE',
+            'RUNTIME_STATUS_NOT_READY', 'RUNTIME_STATUS_TRANSIENT',
+            'RUNTIME_HEALTH_REFERENCE_INVALID', 'RUNTIME_HEALTHZ_UNAVAILABLE',
+            'RUNTIME_HEALTHZ_FAILED', 'RUNTIME_READYZ_UNAVAILABLE',
+            'RUNTIME_READYZ_FAILED', 'LOCAL_MCP_PENDING'
+        )) { throw 'runtime verification gate is invalid' }
+        return [pscustomobject]@{ Verified = [bool]$observed.Verified; Gate = $gate }
+    }
+    $alias = Get-ConfiguredRuntimeAlias -Path $ConfigPath
+    $client = Find-TunnelClient -ExplicitPath ''
+    if (-not $client) {
+        return [pscustomobject]@{ Verified = $false; Gate = 'RUNTIME_CLIENT_UNAVAILABLE' }
+    }
+    return Get-OfficialRuntimeVerification -Root $Workspace -TimeoutSeconds 5 -Alias $alias -ClientPath $client
+}
+
 function Get-LifecycleCanonicalIdentity {
     Invoke-LifecycleSeam -Name 'CanonicalIdentity' -Arguments @($Workspace, $ExpectedBuildSha256, $BuildFingerprintPath) -Default {
         param($root, $expected, $manifest)
@@ -115,12 +229,7 @@ function Get-LifecycleListener {
 
 function Test-LifecycleLocalMcpReadiness {
     param($LocalMcp, $Canonical)
-    Invoke-LifecycleSeam -Name 'LocalMcpReadiness' -Arguments @($LocalMcp, $Canonical) -Default {
-        param($endpoint, $identity)
-        # Reuse the canonical JSON-RPC initialize/tools-list readiness contract;
-        # listener ownership alone is not a public READY signal.
-        Test-LocalMcpReadiness -LocalMcp $endpoint -Canonical $identity
-    }
+    return [bool](Get-LifecycleLocalMcpReadinessResult -LocalMcp $LocalMcp -Canonical $Canonical).Ready
 }
 
 function Get-LifecycleSha256Hex {
@@ -504,7 +613,11 @@ function Get-LifecycleRecoveryResult {
             'RUNTIME_STATUS_NOT_READY', 'RUNTIME_STATUS_TRANSIENT',
             'RUNTIME_HEALTH_REFERENCE_INVALID', 'RUNTIME_HEALTHZ_UNAVAILABLE',
             'RUNTIME_HEALTHZ_FAILED', 'RUNTIME_READYZ_UNAVAILABLE',
-            'RUNTIME_READYZ_FAILED', 'LOCAL_MCP_PENDING'
+            'RUNTIME_READYZ_FAILED', 'LOCAL_MCP_PENDING',
+            'LOCAL_MCP_LISTENER_MISSING', 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH',
+            'LOCAL_MCP_LAUNCHED_PROCESS_MISMATCH', 'LOCAL_MCP_RESPONSE_TIMEOUT',
+            'LOCAL_MCP_RESPONSE_UNAVAILABLE', 'LOCAL_MCP_RESPONSE_INVALID',
+            'LOCAL_MCP_PROTOCOL_UNREADY'
         )
         if ($state -eq 'TRANSPORT_VERIFICATION_FAILED') {
             if ($gate -notin $allowedGates) { return $null }
@@ -603,6 +716,131 @@ function Get-NonMutatingStatus {
     }
 }
 
+function Invoke-LayeredDiagnosis {
+    $layers = [Collections.Generic.List[object]]::new()
+    [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LIFECYCLE_ENGINE' -State 'READY' -Gate 'READY'))
+
+    $canonical = $null
+    try {
+        $canonical = Get-LifecycleCanonicalIdentity
+        [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'CANONICAL_RELEASE' -State 'READY' -Gate 'READY'))
+        [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'RECOVERY_AUTHORITY' -State 'NOT_REQUIRED' -Gate 'NOT_REQUIRED'))
+    } catch {
+        $canonicalGate = Get-LifecycleCanonicalFailureGate -Message ([string]$_.Exception.Message)
+        [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'CANONICAL_RELEASE' -State 'FAILED' -Gate $canonicalGate))
+        $assessment = Get-LifecycleRecoveryAssessment
+        if ($null -ne $assessment) {
+            switch ($assessment.State) {
+                'RECOVERY_READY' {
+                    $authorityGate = if ($assessment.RecoverySource) { [string]$assessment.RecoverySource } else { 'RECOVERY_READY' }
+                    [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'RECOVERY_AUTHORITY' -State 'READY' -Gate $authorityGate))
+                    Write-LifecycleDiagnosis -State 'RECOVERY_AVAILABLE' -PrimaryLayer 'CANONICAL_RELEASE' -NextAction 'RUN_RECOVER' -Layers $layers
+                    return
+                }
+                'LKG_AUTHORITY_MISSING' {
+                    [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'RECOVERY_AUTHORITY' -State 'FAILED' -Gate 'LKG_AUTHORITY_MISSING'))
+                    Write-LifecycleDiagnosis -State 'ACTION_REQUIRED' -PrimaryLayer 'RECOVERY_AUTHORITY' -NextAction 'OPERATOR_ATTENTION' -Layers $layers
+                    return
+                }
+                'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED' {
+                    [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'RECOVERY_AUTHORITY' -State 'FAILED' -Gate 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED'))
+                    Write-LifecycleDiagnosis -State 'ACTION_REQUIRED' -PrimaryLayer 'RECOVERY_AUTHORITY' -NextAction 'OPERATOR_ATTENTION' -Layers $layers
+                    return
+                }
+                'RECOVERY_RELEASE_AUTHORITY_REQUIRED' {
+                    [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'RECOVERY_AUTHORITY' -State 'FAILED' -Gate 'RECOVERY_AUTHORITY_REQUIRED'))
+                    Write-LifecycleDiagnosis -State 'ACTION_REQUIRED' -PrimaryLayer 'RECOVERY_AUTHORITY' -NextAction 'OPERATOR_ATTENTION' -Layers $layers
+                    return
+                }
+            }
+        }
+        [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'RECOVERY_AUTHORITY' -State 'FAILED' -Gate 'RECOVERY_AUTHORITY_UNAVAILABLE'))
+        Write-LifecycleDiagnosis -State 'ACTION_REQUIRED' -PrimaryLayer 'CANONICAL_RELEASE' -NextAction 'OPERATOR_ATTENTION' -Layers $layers
+        return
+    }
+
+    $local = $null
+    try {
+        $local = Get-LifecycleLocalMcp
+        [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LOCAL_MCP_CONFIG' -State 'READY' -Gate 'READY'))
+    } catch {
+        [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LOCAL_MCP_CONFIG' -State 'FAILED' -Gate 'LOCAL_MCP_CONFIG_UNAVAILABLE'))
+        Write-LifecycleDiagnosis -State 'ACTION_REQUIRED' -PrimaryLayer 'LOCAL_MCP_CONFIG' -NextAction 'OPERATOR_ATTENTION' -Layers $layers
+        return
+    }
+
+    $localDaemonReady = $false
+    try {
+        $listener = Get-LifecycleListener -LocalMcp $local -Canonical $canonical
+        if ($null -eq $listener) {
+            [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LOCAL_DAEMON' -State 'FAILED' -Gate 'LOCAL_MCP_LISTENER_MISSING'))
+        } elseif (-not $listener.MatchesCanonical) {
+            [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LOCAL_DAEMON' -State 'FAILED' -Gate 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH'))
+        } else {
+            $localDaemonReady = $true
+            [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LOCAL_DAEMON' -State 'READY' -Gate 'READY'))
+        }
+    } catch {
+        [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LOCAL_DAEMON' -State 'FAILED' -Gate 'LOCAL_MCP_LISTENER_UNAVAILABLE'))
+    }
+
+    $localProtocolReady = $false
+    if ($localDaemonReady) {
+        try {
+            $mcp = Get-LifecycleLocalMcpReadinessResult -LocalMcp $local -Canonical $canonical
+            $localProtocolReady = [bool]$mcp.Ready
+            [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LOCAL_MCP_PROTOCOL' -State $(if ($mcp.Ready) { 'READY' } else { 'FAILED' }) -Gate ([string]$mcp.Gate)))
+        } catch {
+            [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LOCAL_MCP_PROTOCOL' -State 'FAILED' -Gate 'LOCAL_MCP_READINESS_INVALID'))
+        }
+    } else {
+        [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'LOCAL_MCP_PROTOCOL' -State 'NOT_REQUIRED' -Gate 'UPSTREAM_FAILED'))
+    }
+
+    $wakeReady = $false
+    try {
+        $wakeReady = [bool](Invoke-LifecycleSeam -Name 'WakeRuntime' -Arguments @($Workspace) -Default {
+            param($root)
+            Test-WakeBridgeRuntime -Root $root
+        })
+        [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'WAKE_RUNTIME' -State $(if ($wakeReady) { 'READY' } else { 'FAILED' }) -Gate $(if ($wakeReady) { 'READY' } else { 'WAKE_RUNTIME_NOT_READY' })))
+    } catch {
+        [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'WAKE_RUNTIME' -State 'FAILED' -Gate 'WAKE_RUNTIME_UNAVAILABLE'))
+    }
+
+    $runtimeReady = $false
+    $runtimeGate = 'RUNTIME_STATUS_TRANSIENT'
+    try {
+        $runtime = Get-LifecycleOfficialRuntimeVerificationResult
+        $runtimeReady = [bool]$runtime.Verified
+        $runtimeGate = [string]$runtime.Gate
+        [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'OFFICIAL_RUNTIME' -State $(if ($runtimeReady) { 'READY' } else { 'FAILED' }) -Gate $runtimeGate))
+    } catch {
+        $runtimeGate = 'RUNTIME_VERIFICATION_UNAVAILABLE'
+        [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'OFFICIAL_RUNTIME' -State 'FAILED' -Gate $runtimeGate))
+    }
+
+    if (-not $localDaemonReady) {
+        Write-LifecycleDiagnosis -State 'DEGRADED' -PrimaryLayer 'LOCAL_DAEMON' -NextAction 'RUN_RECOVER' -Layers $layers
+        return
+    }
+    if (-not $localProtocolReady) {
+        Write-LifecycleDiagnosis -State 'DEGRADED' -PrimaryLayer 'LOCAL_MCP_PROTOCOL' -NextAction 'RUN_RECOVER' -Layers $layers
+        return
+    }
+    if (-not $wakeReady) {
+        Write-LifecycleDiagnosis -State 'DEGRADED' -PrimaryLayer 'WAKE_RUNTIME' -NextAction 'RUN_RECOVER' -Layers $layers
+        return
+    }
+    if (-not $runtimeReady) {
+        $next = if ($runtimeGate -eq 'RUNTIME_CLIENT_UNAVAILABLE') { 'RUN_INSTALL' } elseif ($runtimeGate -eq 'RUNTIME_VERIFICATION_UNAVAILABLE') { 'OPERATOR_ATTENTION' } else { 'RUN_RECOVER' }
+        Write-LifecycleDiagnosis -State 'DEGRADED' -PrimaryLayer 'OFFICIAL_RUNTIME' -NextAction $next -Layers $layers
+        return
+    }
+
+    Write-LifecycleDiagnosis -State 'HEALTHY' -PrimaryLayer 'NONE' -NextAction 'NONE' -Layers $layers
+}
+
 function Invoke-CatDeskOnlyStop {
     try {
         $canonical = Get-LifecycleCanonicalIdentity
@@ -629,6 +867,7 @@ try {
         'start' { Invoke-CanonicalRecovery -RequestedCommand 'start' }
         'recover' { Invoke-CanonicalRecovery -RequestedCommand 'recover' }
         'status' { Get-NonMutatingStatus }
+        'diagnose' { Invoke-LayeredDiagnosis }
         'stop' { Invoke-CatDeskOnlyStop }
         'autostart' { Invoke-AutostartLifecycle }
         'wake' { Invoke-WakePolicyLifecycle }
