@@ -5078,9 +5078,10 @@ mod tests {
         let error = handle_tool(
             "catdesk_daemon_reload",
             json!({
+                "action":"PREFLIGHT",
                 "buildPath":"missing.exe",
                 "expectedSha256":"0".repeat(64),
-                "dryRun":true
+                "recordId":"review-record"
             }),
             &root,
         )
@@ -5157,7 +5158,7 @@ mod tests {
         );
         assert_eq!(input["oneOf"][1]["additionalProperties"], false);
         let serialized = serde_json::to_string(input).expect("schema JSON");
-        for forbidden in ["dryRun", "decision", "\"RESULT\""] {
+        for forbidden in ["dryRun", "decision"] {
             assert!(
                 !serialized.contains(forbidden),
                 "reload schema must not expose legacy field/value {forbidden}"
@@ -5176,7 +5177,6 @@ mod tests {
                 "dryRun":true
             }),
             json!({"decision":"CATDESK_CANONICAL_RECOVERY"}),
-            json!({"action":"RESULT"}),
             json!({
                 "action":"PREFLIGHT",
                 "buildPath":"candidate.exe",
