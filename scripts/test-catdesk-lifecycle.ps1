@@ -216,6 +216,10 @@ try {
     $localConfigState = Invoke-FixtureFacade -Command 'status' -Seams $badLocalConfig | ConvertFrom-Json
     Require ($localConfigState.state -eq 'STATUS_UNAVAILABLE' -and $localConfigState.detail -eq 'stage=LOCAL_MCP_CONFIG') 'status reports only the fixed local-MCP-config failure stage'
 
+    $localConfigDiagnosis = Invoke-FixtureFacade -Command 'diagnose' -Seams $badLocalConfig | ConvertFrom-Json
+    Require ($localConfigDiagnosis.state -eq 'ACTION_REQUIRED' -and $localConfigDiagnosis.primaryLayer -eq 'LOCAL_MCP_CONFIG' -and $localConfigDiagnosis.nextAction -eq 'OPERATOR_ATTENTION') 'diagnose isolates local MCP configuration failure without suggesting blind daemon recovery'
+    Require ((@($localConfigDiagnosis.layers) | Where-Object { $_.layer -eq 'LOCAL_MCP_CONFIG' }).gate -eq 'LOCAL_MCP_CONFIG_UNAVAILABLE') 'diagnose emits the fixed local MCP configuration gate'
+
     $badLocalReadiness = $base.Clone()
     $badLocalReadiness.LocalMcpReadiness = { param($local, $identity) throw 'fixture route secret must never escape' }
     $localReadinessState = Invoke-FixtureFacade -Command 'status' -Seams $badLocalReadiness | ConvertFrom-Json
@@ -240,6 +244,38 @@ try {
     Require ($readyDiagnosis.state -eq 'HEALTHY' -and $readyDiagnosis.primaryLayer -eq 'NONE' -and $readyDiagnosis.nextAction -eq 'NONE') 'healthy diagnosis reports no failing layer or recovery action'
     Require ((@($readyDiagnosis.layers) | Where-Object { $_.state -eq 'FAILED' }).Count -eq 0) 'healthy diagnosis has no failed layers'
     Require ($actions.Count -eq 0) 'healthy diagnosis remains non-mutating'
+
+    $listenerMismatchDiagnosisSeams = $ready.Clone()
+    $listenerMismatchDiagnosisSeams.Listener = { param($local, $identity) [pscustomobject]@{ Pid = 52; MatchesCanonical = $false } }
+    $listenerMismatchDiagnosis = Invoke-FixtureFacade -Command 'diagnose' -Seams $listenerMismatchDiagnosisSeams | ConvertFrom-Json
+    Require ($listenerMismatchDiagnosis.state -eq 'DEGRADED' -and $listenerMismatchDiagnosis.primaryLayer -eq 'LOCAL_DAEMON' -and $listenerMismatchDiagnosis.nextAction -eq 'RUN_RECOVER') 'diagnose identifies listener identity mismatch as the local-daemon repair layer'
+    Require ((@($listenerMismatchDiagnosis.layers) | Where-Object { $_.layer -eq 'LOCAL_DAEMON' }).gate -eq 'LOCAL_MCP_LISTENER_IDENTITY_MISMATCH') 'diagnose preserves listener identity mismatch gate'
+
+    $protocolFailure = $ready.Clone()
+    $protocolFailure.LocalMcpReadiness = { param($local, $identity) [pscustomobject]@{ Ready = $false; Gate = 'LOCAL_MCP_RESPONSE_TIMEOUT' } }
+    $protocolDiagnosis = Invoke-FixtureFacade -Command 'diagnose' -Seams $protocolFailure | ConvertFrom-Json
+    Require ($protocolDiagnosis.state -eq 'DEGRADED' -and $protocolDiagnosis.primaryLayer -eq 'LOCAL_MCP_PROTOCOL' -and $protocolDiagnosis.nextAction -eq 'RUN_RECOVER') 'diagnose identifies MCP protocol readiness failure independently from listener identity'
+    Require ((@($protocolDiagnosis.layers) | Where-Object { $_.layer -eq 'LOCAL_MCP_PROTOCOL' }).gate -eq 'LOCAL_MCP_RESPONSE_TIMEOUT') 'diagnose preserves the fixed MCP protocol failure gate'
+
+    $wakeFailure = $ready.Clone()
+    $wakeFailure.WakeRuntime = { param($root) $false }
+    $wakeDiagnosis = Invoke-FixtureFacade -Command 'diagnose' -Seams $wakeFailure | ConvertFrom-Json
+    Require ($wakeDiagnosis.state -eq 'DEGRADED' -and $wakeDiagnosis.primaryLayer -eq 'WAKE_RUNTIME' -and $wakeDiagnosis.nextAction -eq 'RUN_RECOVER') 'diagnose isolates Wake runtime failure after local MCP readiness'
+    Require ((@($wakeDiagnosis.layers) | Where-Object { $_.layer -eq 'WAKE_RUNTIME' }).gate -eq 'WAKE_RUNTIME_NOT_READY') 'diagnose preserves the fixed Wake runtime gate'
+
+    $runtimeTimeout = $ready.Clone()
+    $runtimeTimeout.RuntimeStatus = { param($root, $config) [pscustomobject]@{ Verified = $false; Gate = 'RUNTIME_STATUS_TIMEOUT' } }
+    $runtimeTimeoutDiagnosis = Invoke-FixtureFacade -Command 'diagnose' -Seams $runtimeTimeout | ConvertFrom-Json
+    Require ($runtimeTimeoutDiagnosis.state -eq 'DEGRADED' -and $runtimeTimeoutDiagnosis.primaryLayer -eq 'OFFICIAL_RUNTIME' -and $runtimeTimeoutDiagnosis.nextAction -eq 'RUN_RECOVER') 'diagnose maps recoverable official-runtime timeout to one-command recovery'
+    Require ((@($runtimeTimeoutDiagnosis.layers) | Where-Object { $_.layer -eq 'OFFICIAL_RUNTIME' }).gate -eq 'RUNTIME_STATUS_TIMEOUT') 'diagnose preserves the fixed official-runtime timeout gate'
+
+    $runtimeUnavailableDiagnosisSeams = $ready.Clone()
+    $runtimeUnavailableDiagnosisSeams.RuntimeStatus = { param($root, $config) throw 'fixture runtime internals must never escape' }
+    $runtimeUnavailableDiagnosis = Invoke-FixtureFacade -Command 'diagnose' -Seams $runtimeUnavailableDiagnosisSeams | ConvertFrom-Json
+    Require ($runtimeUnavailableDiagnosis.state -eq 'DEGRADED' -and $runtimeUnavailableDiagnosis.primaryLayer -eq 'OFFICIAL_RUNTIME' -and $runtimeUnavailableDiagnosis.nextAction -eq 'OPERATOR_ATTENTION') 'diagnose reserves operator attention for unclassified official-runtime verification failure'
+    Require ((@($runtimeUnavailableDiagnosis.layers) | Where-Object { $_.layer -eq 'OFFICIAL_RUNTIME' }).gate -eq 'RUNTIME_VERIFICATION_UNAVAILABLE') 'diagnose redacts unclassified runtime failure behind one fixed gate'
+    Require ((@($listenerMismatchDiagnosis, $protocolDiagnosis, $wakeDiagnosis, $runtimeTimeoutDiagnosis, $runtimeUnavailableDiagnosis) | ConvertTo-Json -Compress -Depth 5) -notmatch '(?i)fixture runtime internals|https?://') 'failure-matrix diagnosis does not project internal runtime details'
+    Require ($actions.Count -eq 0) 'failure-matrix diagnosis remains non-mutating'
 
     $canonicalButUnready = $base.Clone()
     $canonicalButUnready.Listener = { param($local, $identity) [pscustomobject]@{ Pid = 50; MatchesCanonical = $true } }
