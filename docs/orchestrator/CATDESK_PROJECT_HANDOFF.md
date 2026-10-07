@@ -5,6 +5,18 @@ maintainer. It records the current durable project state without granting new
 authority. Read it before selecting a ticket or operating a local lifecycle
 surface.
 
+## Current checkpoint — 2026-10-07
+
+This section supersedes older operating-picture text below when the two disagree.
+
+- Canonical CatDesk conversation: `https://chatgpt.com/c/6ac63f72-a2ac-83e9-bf61-db8ab9d97224`.
+- The paired CatDesk project + independent Wake authority is generation 30, digest `bd55d92e8e4e29b0fcb722f7826b0d61c215b93b539b8ec782119fa1c1b8b9f3`. Canonical rollovers use the established CatDesk-only `DESIGNATED_CHAT_TARGET_URL=` CAS transaction, not registry-only or standalone Wake setters.
+- The GitHub recovery mirror milestone is complete. Current branch `orchestrator/chatgpt-codex-autonomous-loop` local HEAD and remote HEAD were freshly revalidated equal at `b9753da74b5245c5f01b2b9748a20b634dc1c86a`; a direct push dry-run reports `Everything up-to-date`.
+- Git and Codex are functionally live through CatDesk: direct `git` commands execute and `codex --version` reports `codex-cli 0.160.0`. The remaining daemon `identity.gitCommit=unknown` / reviewed-reload `INVALID_ARGUMENT` issue is provenance/control-plane hardening, not evidence that the Git/Codex deployment failed.
+- Five local untracked diagnostic/review artifacts remain intentionally preserved; consult `.catdesk/current_plan.md` before deleting or publishing anything.
+- Immediate gate: before recovery implementation, the operator connects the ChatGPT GitHub connector and ChatGPT verifies private off-host repo access. Then proceed in order: runtime/recovery convergence -> current Wake selector/reconciliation attention -> Binagotchy CLI/TUI + one-command diagnostics -> multi-project scheduling/wake fairness.
+- Every substantive turn uses the first-class Wake TurnTimer; checkpoint by 19 minutes. Future delegated engineering uses Codex 6 Astra MEDIUM/LOW only with more than two resets remaining, otherwise GPT-5.6 Terra HIGH; when no resets/cloud usage remain, try Qwen and fall back to direct ChatGPT/CatDesk work if Qwen is inadequate.
+
 ## Canonical sources and precedence
 
 | Purpose | Canonical source | How to use it |
