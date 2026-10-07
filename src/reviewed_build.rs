@@ -5530,6 +5530,7 @@ fn apply_exact_worker_cargo_command(
         .env("LIBPATH", &toolchain.libpath)
         .env("INCLUDE", &toolchain.include)
         .env("SystemDrive", os_system_drive()?)
+        .env("SystemRoot", os_system_root()?)
         .env("TEMP", temp)
         .env("TMP", temp)
         .stdin(Stdio::null())
@@ -7067,8 +7068,9 @@ fn trusted_rustup_toolchain() -> Result<(TrustedBuildToolV1, TrustedBuildToolV1)
 /// inheriting a caller-controlled environment value. Rust's MSVC discovery
 /// needs this one standard root after the reviewed worker clears its
 /// environment.
+// Derive MSVC's required SystemRoot from Windows, not the ambient environment.
 #[cfg(windows)]
-fn os_system_drive() -> Result<OsString, String> {
+fn os_system_root() -> Result<OsString, String> {
     unsafe extern "system" {
         fn GetWindowsDirectoryW(buffer: *mut u16, size: u32) -> u32;
     }
@@ -7087,7 +7089,18 @@ fn os_system_drive() -> Result<OsString, String> {
     {
         return Err("REVIEWED_BUILD_TOOLCHAIN_UNAVAILABLE".into());
     }
-    Ok(OsString::from(format!("{}:", bytes[0] as char)))
+    Ok(OsString::from(windows))
+}
+
+#[cfg(windows)]
+fn os_system_drive() -> Result<OsString, String> {
+    let root = os_system_root()?.to_string_lossy().into_owned();
+    Ok(OsString::from(format!("{}:", root.as_bytes()[0] as char)))
+}
+
+#[cfg(not(windows))]
+fn os_system_root() -> Result<OsString, String> {
+    Err("REVIEWED_BUILD_TOOLCHAIN_UNAVAILABLE".into())
 }
 
 #[cfg(not(windows))]
@@ -10455,6 +10468,7 @@ mod tests {
                 "PATH".into(),
                 "RUSTC".into(),
                 "SystemDrive".into(),
+                "SystemRoot".into(),
                 "TEMP".into(),
                 "TMP".into(),
             ])
@@ -10472,7 +10486,13 @@ mod tests {
         for derived in ["CC", "AR", "LIB", "LIBPATH", "INCLUDE"] {
             assert!(command_body.contains(&format!(".env(\"{derived}\", &toolchain.")));
         }
-        for ambient in ["LIB", "LIBPATH", "INCLUDE", "VCINSTALLDIR", "VSINSTALLDIR"] {
+        let system_root = command
+            .get_envs()
+            .find(|(name, _)| name.to_string_lossy() == "SystemRoot")
+            .and_then(|(_, value)| value)
+            .expect("SystemRoot must be set");
+        assert_eq!(system_root, os_system_root().expect("Windows root").as_os_str());
+        for ambient in ["LIB", "LIBPATH", "INCLUDE", "SystemRoot", "VCINSTALLDIR", "VSINSTALLDIR"] {
             assert!(!command_body.contains(&format!("std::env::var(\"{ambient}\")")));
             assert!(!command_body.contains(&format!("std::env::var_os(\"{ambient}\")")));
         }
