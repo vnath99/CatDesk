@@ -56,6 +56,7 @@ $base = @{
     TunnelClient = { $null }
     InstallTunnelClient = { param($setup) [void]$actions.Add('install-client') }
     CodexPrerequisites = { [void]$actions.Add('codex-check') }
+    CodexStatus = { $true }
     WakeRuntime = { param($root) $true }
     WakeRepair = { param($root) [void]$actions.Add('wake-repair') }
     StopProcess = { param($local, $identity, $listener) [void]$actions.Add("stop:$([int]$listener.Pid)"); $true }
@@ -110,7 +111,7 @@ try {
 
     $diagnose = Invoke-FixtureFacade -Command 'diagnose' -Seams $base | ConvertFrom-Json
     Require ($diagnose.state -eq 'DEGRADED' -and $diagnose.primaryLayer -eq 'LOCAL_DAEMON' -and $diagnose.nextAction -eq 'RUN_RECOVER') 'diagnose identifies the first broken local-daemon layer and recommends one-command recovery'
-    Require (@($diagnose.layers).Count -eq 8) 'diagnose returns the fixed eight-layer model'
+    Require (@($diagnose.layers).Count -eq 9) 'diagnose returns the fixed nine-layer model including Codex CLI'
     Require ((@($diagnose.layers) | Where-Object { $_.layer -eq 'LOCAL_DAEMON' }).gate -eq 'LOCAL_MCP_LISTENER_MISSING') 'diagnose preserves the fixed local-daemon failure gate'
     Require ((@($diagnose.layers) | Where-Object { $_.layer -eq 'OFFICIAL_RUNTIME' }).gate -eq 'RUNTIME_STATUS_NOT_READY') 'diagnose independently reports downstream external-runtime state'
     Require ($actions.Count -eq 0) 'diagnose is non-mutating'
@@ -274,7 +275,14 @@ try {
     $runtimeUnavailableDiagnosis = Invoke-FixtureFacade -Command 'diagnose' -Seams $runtimeUnavailableDiagnosisSeams | ConvertFrom-Json
     Require ($runtimeUnavailableDiagnosis.state -eq 'DEGRADED' -and $runtimeUnavailableDiagnosis.primaryLayer -eq 'OFFICIAL_RUNTIME' -and $runtimeUnavailableDiagnosis.nextAction -eq 'OPERATOR_ATTENTION') 'diagnose reserves operator attention for unclassified official-runtime verification failure'
     Require ((@($runtimeUnavailableDiagnosis.layers) | Where-Object { $_.layer -eq 'OFFICIAL_RUNTIME' }).gate -eq 'RUNTIME_VERIFICATION_UNAVAILABLE') 'diagnose redacts unclassified runtime failure behind one fixed gate'
-    Require ((@($listenerMismatchDiagnosis, $protocolDiagnosis, $wakeDiagnosis, $runtimeTimeoutDiagnosis, $runtimeUnavailableDiagnosis) | ConvertTo-Json -Compress -Depth 5) -notmatch '(?i)fixture runtime internals|https?://') 'failure-matrix diagnosis does not project internal runtime details'
+
+    $codexUnavailable = $ready.Clone()
+    $codexUnavailable.CodexStatus = { [pscustomobject]@{ Ready = $false; Gate = 'CODEX_CLI_UNAVAILABLE' } }
+    $codexDiagnosis = Invoke-FixtureFacade -Command 'diagnose' -Seams $codexUnavailable | ConvertFrom-Json
+    Require ($codexDiagnosis.state -eq 'DEGRADED' -and $codexDiagnosis.primaryLayer -eq 'CODEX_CLI' -and $codexDiagnosis.nextAction -eq 'OPERATOR_ATTENTION') 'diagnose isolates Codex CLI availability only after CatDesk runtime layers are healthy'
+    Require ((@($codexDiagnosis.layers) | Where-Object { $_.layer -eq 'CODEX_CLI' }).gate -eq 'CODEX_CLI_UNAVAILABLE') 'diagnose preserves the fixed Codex CLI availability gate'
+
+    Require ((@($listenerMismatchDiagnosis, $protocolDiagnosis, $wakeDiagnosis, $runtimeTimeoutDiagnosis, $runtimeUnavailableDiagnosis, $codexDiagnosis) | ConvertTo-Json -Compress -Depth 5) -notmatch '(?i)fixture runtime internals|https?://') 'failure-matrix diagnosis does not project internal runtime details'
     Require ($actions.Count -eq 0) 'failure-matrix diagnosis remains non-mutating'
 
     $canonicalButUnready = $base.Clone()
