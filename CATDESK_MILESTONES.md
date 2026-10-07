@@ -717,3 +717,16 @@ Expected continuation: direct bounded CatDesk work on T-0419. Event-driven Pytho
 
 OPERATOR ACTION: NONE.
 Expected continuation: direct bounded T-0419 verification/documentation/commit/push in this canonical chat. Hourly deadman is fallback and should now defer while the direct timer is active; no manual Wake event is required.
+
+
+## 2026-10-07 — T-0419 serving provenance + reload observability checkpoint
+
+- Added runtime provenance that hashes the actual serving CatDesk executable and compares it to the canonical reviewed-release sidecar. Transport identity will expose `servingBinarySha256`, `canonicalReleaseSha256`, and `servingCanonicalParity` (`MATCH`, `MISMATCH`, or `UNKNOWN`) once this source is legitimately deployed. This replaces the invalid assumption that compile-time `gitCommit=unknown` itself proves source skew.
+- Added a closed read-only `catdesk_daemon_reload {"action":"RESULT"}` path. It performs no reload mutation and reports fixed bounded state: active-mutation blocker, whether a valid persisted preflight is readable, the next valid action, and `tunnelAction=none-external-tunnel-untouched`. Existing reviewed `PREFLIGHT` / `CONFIRM` remain the only mutating reload actions.
+- GitHub/off-host commits for this slice are `b739cfa`, `d32ec49`, `3753405`, and test reconciliation `fe50935`. Local checkout was fast-forwarded to exact remote HEAD `fe50935ad1a11039caa9637e330270fe69502bd9`.
+- Focused provenance test passes. The complete daemon-reload test family passes 9/9 after updating the old contract tests to recognize read-only RESULT while preserving legacy-shape rejection and active-mutation blocking for PREFLIGHT.
+- Strict all-target/all-feature Clippy with `-D warnings` passes; fmt and diff checks pass. Broad `cargo test` reached 1006 passing tests before reporting the known Windows host-permission fixture `reviewed_build::tests::appcontainer_fixed_helper_writes_only_fixed_output_child` as `PermissionDenied / Access is denied`; that same environment-specific AppContainer fixture is documented in historical logs and is unrelated to T-0419. The three T-0419 reload contract failures from the first broad run were fixed and independently rerun green.
+- The currently serving dev.84 daemon has not been raw-reloaded and therefore still reports the old identity shape. Do not infer failure from absence of the new fields until a reviewed deployment legitimately serves this source. External Secure MCP ownership remains unchanged.
+
+OPERATOR ACTION: NONE.
+Expected continuation: next bounded direct CatDesk turn should finish the diagnose/recover failure matrix and determine the reviewed deployment path for the source-current provenance/RESULT surface; hourly deadman remains fallback and must defer to an active direct MANUAL_WORK timer.
