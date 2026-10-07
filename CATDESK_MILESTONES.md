@@ -730,3 +730,17 @@ Expected continuation: direct bounded T-0419 verification/documentation/commit/p
 
 OPERATOR ACTION: NONE.
 Expected continuation: next bounded direct CatDesk turn should finish the diagnose/recover failure matrix and determine the reviewed deployment path for the source-current provenance/RESULT surface; hourly deadman remains fallback and must defer to an active direct MANUAL_WORK timer.
+
+
+## 2026-10-07 — T-0419 nine-layer recovery matrix / fresh deployment authority gate
+
+- Closed the remaining T-0419 ticket gap: the public non-mutating doctor now covers nine ordered layers, adding `CODEX_CLI` after CatDesk/Wake/official-runtime health. Missing/unrunnable/unauthenticated Codex is isolated behind fixed redacted gates and produces explicit operator attention rather than being misclassified as a CatDesk daemon failure.
+- Expanded the deterministic lifecycle fixture matrix to cover local MCP config failure, listener identity mismatch, MCP protocol timeout, Wake runtime failure, recoverable official-runtime timeout, unclassified official-runtime verification failure, missing official runtime client, Codex CLI unavailable, healthy state, recoverable canonical release, and damaged recovery authority. The full recovery PowerShell integration suite passes 5/5.
+- Source-current review bundle added at `docs/orchestrator/review_bundles/T-0419_RUNTIME_RECOVERY_CONVERGENCE_REVIEW.md`.
+- The current reviewed-build RESULT is **not** current T-0419 authority. Its active generation `314db15b5d5a4569af43dabea186e46f` is bound to T-0418 review record `review-adc-t0418r1-git-codex-allowlist-daemon-review-20261006-6-independent_final_review` and is terminal `BUILD_FAILED_OR_AMBIGUOUS` with protected Cargo exit 101 / `CARGO_EXIT_NONZERO`. Reusing it would violate source-current review binding.
+- Stable-supervisor read-only preflight currently returns `SUPERVISOR_STARTUP_POLICY_UNPROVEN`; no activation was attempted.
+- Required live-deployment sequence is now explicit: fresh T-0419 independent review/snapshot authority -> reviewed build PREPARE/CONFIRM -> require BUILD_ATTESTED -> reviewed promotion PREPARE/CONFIRM -> canonical release parity -> reviewed daemon reload -> live provenance/reload-RESULT proof. External Secure MCP ownership remains untouched throughout.
+- T-0419 remains OPEN until that fresh authority and live proof complete. No stale review record, raw reload, or arbitrary shell fallback is allowed.
+
+OPERATOR ACTION: NONE.
+Expected continuation: create/bind a fresh source-current T-0419 independent review authority, then execute only the closed reviewed build/promotion/reload chain. Hourly deadman remains fallback and must defer to active MANUAL_WORK.
