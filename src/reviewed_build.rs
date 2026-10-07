@@ -10491,8 +10491,18 @@ mod tests {
             .find(|(name, _)| name.to_string_lossy() == "SystemRoot")
             .and_then(|(_, value)| value)
             .expect("SystemRoot must be set");
-        assert_eq!(system_root, os_system_root().expect("Windows root").as_os_str());
-        for ambient in ["LIB", "LIBPATH", "INCLUDE", "SystemRoot", "VCINSTALLDIR", "VSINSTALLDIR"] {
+        assert_eq!(
+            system_root,
+            os_system_root().expect("Windows root").as_os_str()
+        );
+        for ambient in [
+            "LIB",
+            "LIBPATH",
+            "INCLUDE",
+            "SystemRoot",
+            "VCINSTALLDIR",
+            "VSINSTALLDIR",
+        ] {
             assert!(!command_body.contains(&format!("std::env::var(\"{ambient}\")")));
             assert!(!command_body.contains(&format!("std::env::var_os(\"{ambient}\")")));
         }
