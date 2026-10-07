@@ -5288,6 +5288,8 @@ pub fn run_reviewed_build_worker(
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct ReviewedWindowsToolchainEnvironment {
     path: OsString,
+    cc: OsString,
+    ar: OsString,
     lib: OsString,
     libpath: OsString,
     include: OsString,
@@ -5449,6 +5451,10 @@ fn reviewed_windows_toolchain_environment(
     let msvc_include = msvc.join("include");
     let sdk_ucrt_lib = sdk_lib.join("ucrt/x64");
     let sdk_um_lib = sdk_lib.join("um/x64");
+    let cc = msvc_bin.join("cl.exe");
+    let ar = msvc_bin.join("lib.exe");
+    require_reviewed_toolchain_file(&cc)?;
+    require_reviewed_toolchain_file(&ar)?;
     require_reviewed_toolchain_file(&msvc_bin.join("link.exe"))?;
     require_reviewed_toolchain_file(&msvc_lib.join("libcmt.lib"))?;
     require_reviewed_toolchain_file(&sdk_ucrt_lib.join("ucrt.lib"))?;
@@ -5467,6 +5473,8 @@ fn reviewed_windows_toolchain_environment(
     Ok(ReviewedWindowsToolchainEnvironment {
         path: std::env::join_paths([cargo_parent, msvc_bin.as_path()])
             .map_err(|_| "REVIEWED_BUILD_TOOLCHAIN_UNAVAILABLE".to_string())?,
+        cc: cc.into_os_string(),
+        ar: ar.into_os_string(),
         lib: std::env::join_paths([
             msvc_lib.as_path(),
             sdk_ucrt_lib.as_path(),
@@ -5516,6 +5524,8 @@ fn apply_exact_worker_cargo_command(
         .env("RUSTC", rustc)
         .env("CARGO_HOME", cargo_home)
         .env("PATH", &toolchain.path)
+        .env("CC", &toolchain.cc)
+        .env("AR", &toolchain.ar)
         .env("LIB", &toolchain.lib)
         .env("LIBPATH", &toolchain.libpath)
         .env("INCLUDE", &toolchain.include)
@@ -8493,6 +8503,8 @@ mod tests {
     fn test_windows_toolchain_environment() -> ReviewedWindowsToolchainEnvironment {
         ReviewedWindowsToolchainEnvironment {
             path: OsString::from(r"C:\trusted\cargo;C:\trusted\msvc\bin"),
+            cc: OsString::from(r"C:\trusted\msvc\bin\cl.exe"),
+            ar: OsString::from(r"C:\trusted\msvc\bin\lib.exe"),
             lib: OsString::from(r"C:\trusted\msvc\lib;C:\trusted\sdk\ucrt;C:\trusted\sdk\um"),
             libpath: OsString::from(r"C:\trusted\msvc\lib;C:\trusted\sdk\ucrt;C:\trusted\sdk\um"),
             include: OsString::from(
@@ -10433,8 +10445,10 @@ mod tests {
         assert_eq!(
             names,
             BTreeSet::from([
+                "AR".into(),
                 "CARGO_HOME".into(),
                 "CARGO_TARGET_DIR".into(),
+                "CC".into(),
                 "INCLUDE".into(),
                 "LIB".into(),
                 "LIBPATH".into(),
@@ -10455,7 +10469,7 @@ mod tests {
                 .expect("closed command helper end");
         let command_body = &source[command_start..command_end];
         assert!(command_body.contains(".env_clear()"));
-        for derived in ["LIB", "LIBPATH", "INCLUDE"] {
+        for derived in ["CC", "AR", "LIB", "LIBPATH", "INCLUDE"] {
             assert!(command_body.contains(&format!(".env(\"{derived}\", &toolchain.")));
         }
         for ambient in ["LIB", "LIBPATH", "INCLUDE", "VCINSTALLDIR", "VSINSTALLDIR"] {
