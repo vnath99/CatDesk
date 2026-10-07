@@ -3844,10 +3844,12 @@ fn validate_allowlisted_shell(
         }
         "npm" | "pnpm" | "yarn" | "bun" => Ok(()),
         "pytest" | "ruff" | "mypy" => Ok(()),
-        "git" => match words.get(1).map(String::as_str) {
-            Some("status" | "diff" | "log" | "show" | "rev-parse") => Ok(()),
-            _ => Err("allowlist shell mode permits only git status/diff/log/show/rev-parse".into()),
-        },
+        // Git and Codex are trusted operator CLIs in CatDesk allowlist mode.
+        // Shell control syntax, absolute paths, and non-root cwd remain blocked
+        // by the checks above; only the executable/subcommand restriction is
+        // intentionally lifted so normal commit/push and Codex resume flows
+        // do not require shell_mode = "unrestricted".
+        "git" | "git.exe" | "codex" | "codex.exe" => Ok(()),
         _ => Err(format!(
             "allowlist shell mode rejected `{command_name}`. Configure shell_mode = \"unrestricted\" only if you accept that shell access is not sandboxed."
         )),
@@ -9927,6 +9929,57 @@ mod tests {
         assert!(
             validate_allowlisted_shell(&workspace_root_str, &workspace_root, "git status | more")
                 .is_err()
+        );
+
+        let _ = std::fs::remove_dir_all(workspace_root);
+    }
+
+    #[test]
+    fn shell_allowlist_permits_full_git_and_codex_cli_without_opening_shell_control() {
+        let workspace_root =
+            std::env::temp_dir().join(format!("catdesk-mcp-cli-allowlist-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&workspace_root).expect("create workspace");
+        let workspace_root_str = workspace_root.to_string_lossy().into_owned();
+
+        for command in [
+            "git status",
+            "git add src/mcp.rs",
+            "git commit -m allow-cli",
+            "git push origin feature/demo",
+            "git.exe fetch origin",
+            "codex",
+            "codex resume --all",
+            "codex.exe resume --all",
+        ] {
+            assert!(
+                validate_allowlisted_shell(&workspace_root_str, &workspace_root, command).is_ok(),
+                "expected allowlisted command: {command}"
+            );
+        }
+
+        assert!(
+            validate_allowlisted_shell(
+                &workspace_root_str,
+                &workspace_root,
+                "git status && whoami"
+            )
+            .is_err()
+        );
+        assert!(
+            validate_allowlisted_shell(
+                &workspace_root_str,
+                &workspace_root,
+                "codex resume --all | more"
+            )
+            .is_err()
+        );
+        assert!(
+            validate_allowlisted_shell(
+                &workspace_root_str,
+                &workspace_root,
+                "powershell -Command whoami"
+            )
+            .is_err()
         );
 
         let _ = std::fs::remove_dir_all(workspace_root);

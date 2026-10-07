@@ -668,3 +668,11 @@ Expected continuation: manual/event-driven Python browser Wake from the next que
 - An exact-path `git_commit_verified` dry-run was started for the 972 include paths plus the R17 manifest/descriptor/review/authority artifacts, but the orchestration tool call exceeded its response window before returning a confirmation token. Follow-up Git inspection proves it did not alter the index: only the pre-existing staged `scripts/wake_bridge.py` remains staged. No commit or push occurred.
 - OPERATOR ACTION: NONE.
 - Expected continuation: a manual Binagotchy wake after this bounded turn should retry the exact-path commit preview/confirmation, then non-force push the feature branch and require remote HEAD == local HEAD. Hourly deadman remains fallback.
+
+## 2026-10-06 — GitHub recovery mirror published / Git + Codex CLI allowlist follow-up
+
+- The generation-29 R17 recovery publication is now off-host on `origin/orchestrator/chatgpt-codex-autonomous-loop`. Part 1 commit `801e1d4`, part 2 commit `700b4fa`, and part 3 commit `aa7428c` collectively consumed all R17-approved changed paths; remote HEAD was independently verified equal to local HEAD `aa7428cc2e288ee217a6e9dcd7a4b6506b05f489` after a non-force explicit feature-branch push.
+- Operator requested Git and Codex CLI be permanently available through CatDesk allowlist mode rather than requiring publication workarounds. `src/mcp.rs` now treats `git`, `git.exe`, `codex`, and `codex.exe` as trusted operator CLIs with their full native subcommand surfaces while retaining the pre-existing root-CWD, no-absolute-path, and no-shell-control-syntax checks.
+- Added a regression test proving `git add/commit/push`, `git.exe fetch`, `codex`, and `codex resume --all` are accepted, while chained/piped commands and nested PowerShell remain blocked. Focused test passes.
+- OPERATOR ACTION: NONE.
+- Expected continuation: finish fmt/verification, remove only the temporary R17 publication helper/pathspec files created by ChatGPT, commit/push this allowlist follow-up, and then return to the next CatDesk core priority.

@@ -28,7 +28,7 @@ This is an independent open-source project and is not affiliated with or endorse
 
 CatDesk gives ChatGPT Web local tools. Treat it like a powerful local automation process, not a sandbox.
 
-- Shell execution is guardrails, not containment. `shell_mode = "allowlist"` is the default, `shell_mode = "disabled"` turns shell execution off, and `shell_mode = "unrestricted"` allows a normal local shell that can access the machine like any other terminal.
+- Shell execution is guardrails, not containment. `shell_mode = "allowlist"` is the default, `shell_mode = "disabled"` turns shell execution off, and `shell_mode = "unrestricted"` allows a normal local shell that can access the machine like any other terminal. In allowlist mode, Git (`git`/`git.exe`) and the Codex CLI (`codex`/`codex.exe`) are trusted operator CLIs with their full native subcommand surface; shell chaining, pipes, redirection, absolute-path arguments, and non-workspace-root execution remain blocked by the surrounding allowlist checks.
 - File tools check that requested paths stay inside the workspace, but unrestricted shell commands are separate from file-tool path checks.
 - Destructive delete operations require a dry-run first. The dry-run returns a short-lived confirmation token that must be supplied in a later delete call.
 - If `.catdesk/current_plan.md` contains `plan_required: true`, mutating tools and shell/Git operations are blocked until a non-empty plan is recorded, unless the caller explicitly passes `allow_without_plan=true`.
