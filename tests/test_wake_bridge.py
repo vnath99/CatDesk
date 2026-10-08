@@ -2329,6 +2329,8 @@ class WakeBridgeTests(unittest.TestCase):
             def press_keys(self, _selector, text, timeout): timeline.append("type"); self.composer = text
             def evaluate(self, script):
                 if "#prompt-textarea" in script: return ["ready", True]
+                if "const selectorTiers" in script:
+                    return ["ready", int(message in self.messages), 0]
                 if "data-message-author-role" in script: return list(self.messages)
                 if "const unique" in script: return ["missing", None]
                 raise AssertionError("unexpected fixed CDP evaluation")
@@ -2344,6 +2346,11 @@ class WakeBridgeTests(unittest.TestCase):
                 sink, "durable_receipt_round_trip", side_effect=lambda _cdp: timeline.append("reload")
             ), patch.object(
                 sink, "wait_for_response_completion", return_value=None
+            ), patch.object(
+                sink, "wait_for_submission_accepted", return_value=99.0
+            ), patch.object(
+                sink, "confirm_exact_receipt",
+                return_value=wake_bridge.receipt_for(self.record_id, message, sink.url, 99.0)
             ):
                 return sink.wake(self.record_id, message, lambda: True, lambda: timeline.append("boundary"))
 
