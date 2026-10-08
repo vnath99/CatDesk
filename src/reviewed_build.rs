@@ -4364,6 +4364,7 @@ enum CargoFailureClassification {
     LinkUnresolvedExternal,
     LinkPdbFailure,
     LinkOutOfMemory,
+    MsvcTemporaryIlFailure,
     LinkFailed,
     CompilationFailed,
     ExitNonzero,
@@ -4380,6 +4381,7 @@ impl CargoFailureClassification {
             Self::LinkUnresolvedExternal => "CARGO_LINK_UNRESOLVED_EXTERNAL",
             Self::LinkPdbFailure => "CARGO_LINK_PDB_FAILURE",
             Self::LinkOutOfMemory => "CARGO_LINK_OUT_OF_MEMORY",
+            Self::MsvcTemporaryIlFailure => "CARGO_MSVC_TEMP_IL_FILE_FAILURE",
             Self::LinkFailed => "CARGO_LINK_FAILED",
             Self::CompilationFailed => "CARGO_COMPILATION_FAILED",
             Self::ExitNonzero => "CARGO_EXIT_NONZERO",
@@ -4406,6 +4408,7 @@ struct CargoStderrClassifier {
     saw_link_unresolved_external: bool,
     saw_link_pdb_failure: bool,
     saw_link_out_of_memory: bool,
+    saw_msvc_d8037: bool,
     saw_compile: bool,
     // Manual host-linker diagnostics may retain only this fixed bitset. It is
     // deliberately test-only: production classification and persisted
@@ -4480,6 +4483,9 @@ impl CargoStderrClassifier {
             contains_any_ascii(&normalized, &[b"lnk2001", b"lnk2019", b"lnk1120"]);
         self.saw_link_pdb_failure |= contains_ascii(&normalized, b"lnk1318");
         self.saw_link_out_of_memory |= contains_ascii(&normalized, b"lnk1102");
+        // D8037 can appear after the bounded retained prefix. Recognize the
+        // fixed MSVC code across pipe chunks, never retain the diagnostic line.
+        self.saw_msvc_d8037 |= contains_ascii(&normalized, b"error d8037");
         self.saw_compile |= contains_ascii(&normalized, b"could not compile ");
         observe_fixed_linker_error_codes!(self, &normalized);
         observe_fixed_cargo_failure_signals!(self, &normalized);
@@ -4519,6 +4525,8 @@ impl CargoStderrClassifier {
             CargoFailureClassification::LinkPdbFailure
         } else if self.saw_link_out_of_memory {
             CargoFailureClassification::LinkOutOfMemory
+        } else if self.saw_msvc_d8037 {
+            CargoFailureClassification::MsvcTemporaryIlFailure
         } else if self.saw_linker && self.saw_link_failure {
             CargoFailureClassification::LinkFailed
         } else if self.saw_compile {
@@ -10685,6 +10693,32 @@ mod tests {
         assert_eq!(
             summarize_cargo_failure(Some(101), compiler).classification,
             "CARGO_COMPILATION_FAILED"
+        );
+    }
+
+    #[test]
+    fn cargo_failure_diagnostic_recognizes_late_msvc_d8037_without_raw_error_text() {
+        // The emitted error may be past the persisted 4 KiB stderr prefix.
+        let mut late = vec![b'x'; MAX_CARGO_FAILURE_DIAGNOSTIC_BYTES + 1017];
+        late.extend_from_slice(b"cl : Command line error D8037 : cannot create temporary il file");
+        let captured =
+            read_bounded_cargo_stderr(std::io::Cursor::new(late)).expect("bounded MSVC capture");
+        assert!(captured.truncated);
+        let diagnostic = summarize_cargo_failure(Some(101), captured);
+        assert_eq!(diagnostic.classification, "CARGO_MSVC_TEMP_IL_FILE_FAILURE");
+        assert_eq!(diagnostic.missing_link_library, None);
+        assert_eq!(diagnostic.missing_link_input, None);
+        let persisted = serde_json::to_string(&diagnostic).expect("diagnostic json");
+        assert!(!persisted.contains("cannot create temporary il file"));
+
+        // Distinguish the exact compiler code; do not guess from similar errors.
+        let unrelated = read_bounded_cargo_stderr(std::io::Cursor::new(
+            b"cl : Command line error D8038 : unrelated compiler error".to_vec(),
+        ))
+        .expect("unrelated compiler capture");
+        assert_eq!(
+            summarize_cargo_failure(Some(101), unrelated).classification,
+            "CARGO_EXIT_NONZERO"
         );
     }
 
