@@ -2470,21 +2470,13 @@ pub fn run_resilient(store: &Store) -> Result<()> {
     let mut pending_error = None::<(String, u64)>;
 
     loop {
-        if pending_recovery_count > 0 {
-            if let Some((reason, error_utc)) = pending_error.as_ref() {
-                if persist_host_runtime_failure(
-                    store,
-                    reason,
-                    true,
-                    pending_recovery_count,
-                    *error_utc,
-                )
+        if pending_recovery_count > 0
+            && let Some((reason, error_utc)) = pending_error.as_ref()
+            && persist_host_runtime_failure(store, reason, true, pending_recovery_count, *error_utc)
                 .is_ok()
-                {
-                    pending_recovery_count = 0;
-                    let _ = pending_error.take();
-                }
-            }
+        {
+            pending_recovery_count = 0;
+            let _ = pending_error.take();
         }
 
         match run_with_lease(store, &lease) {
