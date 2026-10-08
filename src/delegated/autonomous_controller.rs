@@ -4398,7 +4398,9 @@ mod tests {
                             .safe_task_output_hash("src/link-dir/output.txt")
                             .is_err()
                     );
-                    fs::remove_file(&intermediate).expect("remove intermediate link fixture");
+                    // Windows directory symlinks are removed as directories;
+                    // do not follow the link to the missing target.
+                    fs::remove_dir(&intermediate).expect("remove intermediate link fixture");
                 }
                 Err(error) if error.raw_os_error() == Some(1314) => {
                     assert!(output_component_flags_are_unsafe(true, true, true, false));

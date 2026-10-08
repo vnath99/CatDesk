@@ -1411,7 +1411,9 @@ mod tests {
             "basename \"$PWD\""
         };
 
-        let result = run_command(command, &workspace_root, 10_000).await;
+        // Cold Windows CI workers may take longer than 10 seconds to start
+        // PowerShell under concurrent Rust tests. Keep a bounded 30s lease.
+        let result = run_command(command, &workspace_root, 30_000).await;
 
         assert!(result.success, "stderr: {}", result.stderr);
         assert_eq!(result.stdout.trim(), leaf);

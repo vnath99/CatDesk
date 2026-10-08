@@ -2180,7 +2180,7 @@ mod tests {
     fn windows_bare_launch_is_presentation_only_before_legacy_app_state() {
         let source = include_str!("main.rs");
         let bare_launch = source
-            .find("#[cfg(target_os = \"windows\")]\n    if args.is_empty()")
+            .find("    if args.is_empty() {")
             .expect("Windows bare-launch routing");
         let legacy_state = bare_launch
             + source[bare_launch..]
