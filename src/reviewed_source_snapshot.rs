@@ -959,8 +959,10 @@ fn query_relative_directory_names(
                     return Err("reviewed source snapshot content is malformed".into());
                 }
                 let units = buffer[offset + 64..offset + 64 + name_length]
-                    .chunks_exact(2)
-                    .map(|value| u16::from_ne_bytes([value[0], value[1]]))
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|value| u16::from_ne_bytes(*value))
                     .collect::<Vec<_>>();
                 let name = String::from_utf16(&units)
                     .map_err(|_| "reviewed source snapshot path identity is invalid")?;
