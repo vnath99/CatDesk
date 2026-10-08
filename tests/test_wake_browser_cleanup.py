@@ -32,11 +32,13 @@ class WakeBrowserCleanupTests(unittest.TestCase):
 
         class Driver:
             def quit(self):
-                timeline.append("quit")
+                raise AssertionError("Wake must not quit the shared browser process")
 
         class Cdp:
             def press_keys(self, *_args, **_kwargs):
                 return None
+            def close_active_tab(self):
+                timeline.append("close_owned_tab")
 
         cdp = Cdp()
 
@@ -94,10 +96,10 @@ class WakeBrowserCleanupTests(unittest.TestCase):
                 )
         return result, receipt, timeline
 
-    def test_proven_success_explicitly_quits_owned_browser_before_context_exit(self):
+    def test_proven_success_closes_only_owned_tab_before_context_exit(self):
         result, receipt, timeline = self._run()
         self.assertEqual(receipt, result)
-        self.assertEqual(["open", "complete", "receipt", "quit", "exit"], timeline)
+        self.assertEqual(["open", "complete", "receipt", "close_owned_tab", "exit"], timeline)
 
     def test_unproven_post_submit_failure_does_not_use_success_cleanup_path(self):
         with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "UNPROVEN"):
