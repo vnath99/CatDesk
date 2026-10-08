@@ -8,6 +8,7 @@ mod win {
     const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
     const INVALID_HANDLE_VALUE: isize = -1isize;
     #[repr(C)]
+    #[allow(non_snake_case)] // Windows PROCESSENTRY32W ABI field names are exact.
     struct PROCESSENTRY32W {
         dwSize: u32,
         cntUsage: u32,
