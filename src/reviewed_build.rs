@@ -10103,7 +10103,10 @@ mod tests {
         let start = source
             .find("fn open_built_output(")
             .expect("built-output helper");
-        let end = start + source[start..].find("\n}\n\n").expect("built-output end");
+        let end = start
+            + source[start..]
+                .find("fn candidate_parent_for_create(")
+                .expect("candidate parent after built-output helper");
         let body = &source[start..end];
         let seam = body
             .find("built-output-first-authority")
