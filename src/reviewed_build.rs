@@ -10105,7 +10105,7 @@ mod tests {
             .expect("built-output helper");
         let end = start
             + source[start..]
-                .find("\n}\n\n/// Creates the only approved candidate")
+                .find("\n}\n\n")
                 .expect("built-output end");
         let body = &source[start..end];
         let seam = body
@@ -12845,7 +12845,11 @@ mod tests {
 
         let root = std::env::temp_dir().join(format!("catdesk-t0216-canonical-{}", Uuid::new_v4()));
         fs::create_dir(&root).unwrap();
-        assert!(reviewed_main_image_fixed_directory_canonical_identity_matches(&root));
+        // Hosted Windows temp directories can resolve through a junction;
+        // that alias must fail closed, while the exact canonical directory
+        // identity is valid for the same existing fixture.
+        let canonical = fs::canonicalize(&root).expect("canonical test root");
+        assert!(reviewed_main_image_fixed_directory_canonical_identity_matches(&canonical));
         fs::remove_dir(&root).unwrap();
     }
 
