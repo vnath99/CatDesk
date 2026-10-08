@@ -29,7 +29,7 @@
 4. Obtain independent immutable source review and reviewed-build attestation; only then install/restart Wake and run exactly one **fresh** generation-31 event with exact appended USER receipt proof.
 5. Do not replay ambiguous `manual-wake-mcp-1791459602150` or treat the generation-30 receipt as a generation-31 success.
 
-## Canonical direct-chat reconciliation — 2026-10-08 12:xx EDT
+## Canonical direct-chat reconciliation — 2026-10-08
 - User disabled the sole enabled hourly CatDesk deadman; all older CatDesk hourly tasks were already disabled. Canonical project/Wake target generation 31 was independently checked and left unchanged.
 - Prior task changes consisted only of dirty docs/tests and *untracked* review and pytest configuration files. Confirmed no new source commit, reviewed build, Wake package installation or event replay by that task. Source HEAD at initial reconciliation remained e8bbbc2.
 - **Corrected a real safety gap before installation:** post-submit `reopen_submit_receipt_target` was using `cdp.open(self.url)` even though pre-submit `retry_page_readiness` in this same project warns that `open()` may switch/new tab and uses `get()`. The new candidate uses `cdp.get(self.url)` on the same CDP object, failing closed if method missing, checking exact target and fresh JS marker, and never retyping or clicking Send. Modified mock tests make `open()` raise if touched and assert the single exact `get()` destination plus other-host/chat, missing-get, stale-document rejections.
