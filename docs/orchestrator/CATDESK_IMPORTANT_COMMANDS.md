@@ -109,3 +109,18 @@ Schedule is hourly, one active CatDesk deadman; retire or disable old canonical-
 - Source code, review authority, build attestation, canonical SHA, and serving reload are separate gates. External Secure MCP tunnel is not owned by these commands.
 
 **Operating rule:** before asking the operator to paste any command, check whether an existing connected CatDesk operation (including the paired designated-chat route) can execute it safely, and actually try it when authorized.
+
+## 8. Python verification and Wake source/deployment separation
+
+The supported project-local CatDesk `run_command` operation accepts narrow, bounded `pytest` commands with `allow_without_plan=true`; use it when `verify_project` has a broad-suite timeout. Useful commands:
+
+```powershell
+pytest --collect-only -q
+pytest tests/test_stable_wake_browser_adapter.py -q
+pytest tests/advisors/test_deepseek_web_advisor.py -q
+pytest tests/test_wake_bridge.py -k receipt -q
+pytest tests/test_wake_profile_login.py -q
+pytest tests/test_wake_smoke_state.py -q
+```
+
+Root pytest configuration must add the workspace root to `pythonpath` so `experimental.advisors` resolves under the console-script `pytest` entrypoint. `tests/test_stable_wake_browser_adapter.py` must unit-test version-controlled `scripts/stable_wake_browser_adapter.py`, **not** assume that the separately installed `.catdesk/wake-bridge/stable-runtime-v1` exists. The installed adapter's provenance, SHA, presence, and browser acceptance remain independent release gates: passing source tests does **not** attest or install that runtime. A 30-second `verify_project` timeout is not equivalent to a test failure; the receipt test subset alone can take over 20 seconds. Preserve full-suite verification status separately from focused results.

@@ -12,11 +12,9 @@ from unittest import mock
 
 SPEC = importlib.util.spec_from_file_location(
     "stable_wake_browser_adapter",
-    Path(__file__).parents[1]
-    / ".catdesk"
-    / "wake-bridge"
-    / "stable-runtime-v1"
-    / "stable_wake_browser_adapter.py",
+    # Unit-test the version-controlled source. Deployed runtime identity and
+    # presence are separate release/installation acceptance gates.
+    Path(__file__).parents[1] / "scripts" / "stable_wake_browser_adapter.py",
 )
 adapter = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = adapter

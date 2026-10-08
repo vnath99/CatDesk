@@ -1139,16 +1139,16 @@ class CdpSink:
         """Recover only from post-submit chrome-error drift without re-submitting.
 
         The USER action has already occurred at this boundary, so recovery may
-        navigate only to the fixed canonical conversation. It never queries
+        navigate in-place in the current CDP tab to the fixed canonical conversation. It never queries
         editor readiness, types, or clicks Send. Success means only that a
         fresh exact-target document is loaded; normal receipt proof still has
         to observe the exact submitted USER turn and a server-backed signal.
         """
-        opener = getattr(cdp, "open", None)
-        if not callable(opener):
+        navigate = getattr(cdp, "get", None)
+        if not callable(navigate):
             return False
         try:
-            opener(self.url)
+            navigate(self.url)
         except Exception:
             return False
         recovery_deadline = min(
@@ -1181,7 +1181,7 @@ class CdpSink:
         sleeper=time.sleep,
     ) -> None:
         """Re-open only the already-authorized exact conversation after timeout."""
-        opener = getattr(cdp, "open", None)
+        navigate = getattr(cdp, "get", None)
         if not callable(opener):
             raise PostSubmitUnknown("RESPONSE_REOPEN_UNAVAILABLE")
         try:

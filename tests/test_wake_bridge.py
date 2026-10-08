@@ -1456,15 +1456,17 @@ class WakeBridgeTests(unittest.TestCase):
             def __init__(self, drift):
                 self.drift = drift
                 self.reloaded = 0
-                self.opened = []
+                self.navigations = []
                 self.marker = False
             def get_current_url(self):
-                return self.drift if self.reloaded and not self.opened else "https://chatgpt.com/c/review-one"
+                return self.drift if self.reloaded and not self.navigations else "https://chatgpt.com/c/review-one"
             def reload(self, ignore_cache=False):
                 self.reloaded += 1
                 self.marker = True
             def open(self, url):
-                self.opened.append(url)
+                raise AssertionError('post-submit must not open another browser tab')
+            def get(self, url):
+                self.navigations.append(url)
                 self.marker = False
             def evaluate(self, script):
                 if "__catdeskWakeReceiptPreReloadV1 = true" in script:
@@ -1483,13 +1485,40 @@ class WakeBridgeTests(unittest.TestCase):
         with patch.object(sink, "post_submit_visible_any", return_value=False):
             sink.durable_receipt_round_trip(cdp, monotonic=clock.monotonic, sleeper=clock.sleep)
         self.assertEqual(1, cdp.reloaded)
-        self.assertEqual(["https://chatgpt.com/c/review-one"], cdp.opened)
+        self.assertEqual(["https://chatgpt.com/c/review-one"], cdp.navigations)
 
         other = Cdp("https://example.invalid/unrelated")
         with patch.object(sink, "post_submit_visible_any", return_value=False):
             with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "SUBMIT_TARGET_DRIFT_OTHER_HOST"):
                 sink.durable_receipt_round_trip(other, monotonic=clock.monotonic, sleeper=clock.sleep)
-        self.assertEqual([], other.opened)
+        self.assertEqual([], other.navigations)
+
+        wrong_chat = Cdp("https://chatgpt.com/c/review-two")
+        with patch.object(sink, "post_submit_visible_any", return_value=False):
+            with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "SUBMIT_TARGET_DRIFT_DIFFERENT_CONVERSATION"):
+                sink.durable_receipt_round_trip(wrong_chat, monotonic=clock.monotonic, sleeper=clock.sleep)
+        self.assertEqual([], wrong_chat.navigations)
+
+        class NoGetCdp(Cdp):
+            get = None
+
+        no_opener = NoGetCdp("chrome-error://chromewebdata/")
+        with patch.object(sink, "post_submit_visible_any", return_value=False):
+            with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "SUBMIT_TARGET_DRIFT_CHROME_ERROR"):
+                sink.durable_receipt_round_trip(no_opener, monotonic=clock.monotonic, sleeper=clock.sleep)
+        self.assertEqual([], no_opener.navigations)
+
+        class StaleDocumentCdp(Cdp):
+            def get(self, url):
+                self.navigations.append(url)
+                self.marker = True  # Simulate a navigation that reused the old JS context.
+
+        stale = StaleDocumentCdp("chrome-error://chromewebdata/")
+        stale_clock = Clock()
+        with patch.object(sink, "post_submit_visible_any", return_value=False):
+            with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "SUBMIT_RECEIPT_ROUND_TRIP_FAILED"):
+                sink.durable_receipt_round_trip(stale, monotonic=stale_clock.monotonic, sleeper=stale_clock.sleep)
+        self.assertEqual(["https://chatgpt.com/c/review-one"], stale.navigations)
 
     def test_same_document_optimistic_append_cannot_become_definite_success(self):
         message = wake_bridge.MESSAGE.format(record_id=self.record_id)
