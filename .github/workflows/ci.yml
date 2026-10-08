@@ -35,3 +35,19 @@ jobs:
         run: python -m pip install pytest==9.1.1
       - name: Run full offline Python test suite
         run: python -m pytest -q --tb=short
+
+  wake-rust:
+    name: Independent WakeHost Rust
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Format Wake crate
+        run: cargo fmt --manifest-path wake/Cargo.toml --all -- --check
+      - name: Strict Clippy Wake crate
+        run: cargo clippy --locked --manifest-path wake/Cargo.toml --all-targets --all-features -- -D warnings
+      - name: Test Wake crate
+        run: cargo test --locked --manifest-path wake/Cargo.toml
