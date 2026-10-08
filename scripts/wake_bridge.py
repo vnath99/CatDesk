@@ -1182,10 +1182,10 @@ class CdpSink:
     ) -> None:
         """Re-open only the already-authorized exact conversation after timeout."""
         navigate = getattr(cdp, "get", None)
-        if not callable(opener):
+        if not callable(navigate):
             raise PostSubmitUnknown("RESPONSE_REOPEN_UNAVAILABLE")
         try:
-            opener(self.url)
+            navigate(self.url)
         except Exception as error:
             raise PostSubmitUnknown("RESPONSE_REOPEN_FAILED") from error
         deadline = monotonic() + max(self.ui_timeout, READINESS_WINDOW_SECONDS)

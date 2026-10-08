@@ -1817,6 +1817,42 @@ class WakeBridgeTests(unittest.TestCase):
                 sink.wait_for_response_completion(Cdp(), wake_bridge.digest("exact"), monotonic=clock.monotonic, sleeper=clock.sleep)
         self.assertEqual(3, clock.now)
 
+    def test_response_reopen_uses_same_cdp_tab_and_fails_closed_when_missing(self):
+        class Cdp:
+            def __init__(self):
+                self.url = "chrome-error://chromewebdata/"
+                self.navigations = []
+            def get(self, url):
+                self.navigations.append(url)
+                self.url = url
+            def open(self, _url):
+                raise AssertionError("must not open or switch browser tab")
+            def get_current_url(self):
+                return self.url
+            def evaluate(self, script):
+                if script == "document.readyState":
+                    return "complete"
+                raise AssertionError("unexpected CDP query")
+            def is_element_visible(self, _selector):
+                return False
+
+        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
+        cdp = Cdp()
+        with patch.object(sink, "editor_state", return_value=("ready", True)):
+            sink.reopen_response_target(cdp)
+        self.assertEqual(["https://chatgpt.com/c/review-one"], cdp.navigations)
+
+        class NoGetCdp(Cdp):
+            get = None
+        with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "RESPONSE_REOPEN_UNAVAILABLE"):
+            sink.reopen_response_target(NoGetCdp())
+
+        class FailingGetCdp(Cdp):
+            def get(self, _url):
+                raise RuntimeError("navigation unavailable")
+        with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "RESPONSE_REOPEN_FAILED"):
+            sink.reopen_response_target(FailingGetCdp())
+
     def test_response_timeout_retries_existing_turn_in_place_before_any_reload(self):
         class Clock:
             def __init__(self): self.now = 0.0
