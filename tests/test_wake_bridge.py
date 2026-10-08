@@ -1446,6 +1446,51 @@ class WakeBridgeTests(unittest.TestCase):
                 sink.durable_receipt_round_trip(stale, monotonic=clock.monotonic, sleeper=clock.sleep)
         self.assertEqual(1, stale.reloads)
 
+    def test_receipt_round_trip_chrome_error_reopens_fixed_target_without_user_submit(self):
+        class Clock:
+            def __init__(self): self.now = 0.0
+            def monotonic(self): return self.now
+            def sleep(self, value): self.now += value
+
+        class Cdp:
+            def __init__(self, drift):
+                self.drift = drift
+                self.reloaded = 0
+                self.opened = []
+                self.marker = False
+            def get_current_url(self):
+                return self.drift if self.reloaded and not self.opened else "https://chatgpt.com/c/review-one"
+            def reload(self, ignore_cache=False):
+                self.reloaded += 1
+                self.marker = True
+            def open(self, url):
+                self.opened.append(url)
+                self.marker = False
+            def evaluate(self, script):
+                if "__catdeskWakeReceiptPreReloadV1 = true" in script:
+                    self.marker = True
+                    return True
+                if "typeof window.__catdeskWakeReceiptPreReloadV1" in script:
+                    return not self.marker
+                if script == "document.readyState":
+                    return "complete"
+                raise AssertionError("unexpected CDP evaluation")
+            def is_element_visible(self, _selector): return False
+
+        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, .5)
+        clock = Clock()
+        cdp = Cdp("chrome-error://chromewebdata/")
+        with patch.object(sink, "post_submit_visible_any", return_value=False):
+            sink.durable_receipt_round_trip(cdp, monotonic=clock.monotonic, sleeper=clock.sleep)
+        self.assertEqual(1, cdp.reloaded)
+        self.assertEqual(["https://chatgpt.com/c/review-one"], cdp.opened)
+
+        other = Cdp("https://example.invalid/unrelated")
+        with patch.object(sink, "post_submit_visible_any", return_value=False):
+            with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "SUBMIT_TARGET_DRIFT_OTHER_HOST"):
+                sink.durable_receipt_round_trip(other, monotonic=clock.monotonic, sleeper=clock.sleep)
+        self.assertEqual([], other.opened)
+
     def test_same_document_optimistic_append_cannot_become_definite_success(self):
         message = wake_bridge.MESSAGE.format(record_id=self.record_id)
         boundary = []

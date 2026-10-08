@@ -835,7 +835,20 @@ class CdpSink:
                 sleeper(.25)
                 continue
             if not self.exact(current):
-                raise PostSubmitUnknown(bounded_submit_target_drift_reason(current, self.url))
+                drift_reason = bounded_submit_target_drift_reason(current, self.url)
+                if (
+                    drift_reason == "SUBMIT_TARGET_DRIFT_CHROME_ERROR"
+                    and self.reopen_submit_receipt_target(
+                        cdp,
+                        deadline=deadline,
+                        monotonic=monotonic,
+                        sleeper=sleeper,
+                    )
+                ):
+                    # Same-CDP fixed canonical reload only; no USER resubmit.
+                    # Still require fresh-document marker proof below.
+                    continue
+                raise PostSubmitUnknown(drift_reason)
             try:
                 if self.post_submit_visible_any(cdp, NETWORK):
                     sleeper(.25)
