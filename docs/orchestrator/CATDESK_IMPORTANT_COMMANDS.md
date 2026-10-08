@@ -25,6 +25,8 @@ CatDesk MCP: autonomy_project_registry_bind
 
 **Why the ordinary target setter is not equivalent:** `catdesk_wake_target_set` updates only the project-local Wake target and is fail-closed when a prior Wake is `SUBMITTING`. The project-registry-only `autonomy_project_registry_chat_target_bind` does not perform the paired rollover. If a prior event is in flight, **use the designated chat rollover** above, not unpaired setters.
 
+**Chat55 caution (2026-10-08):** Do not use `autonomy_project_registry_chat_target_bind` even with `action=PREFLIGHT` as a presumed read-only probe. A live call immediately updated the registry-only URL. Its return-to-old-URL operation restored the old URL but produced a registry SHA-256 that differs from the independent WakeHost-reported digest; the subsequent approved `DESIGNATED_CHAT_TARGET_URL` transaction was rejected with `INVALID_ARGUMENT`. Until the existing guarded Binagotchy CLI `target set` or supported paired tool reports successful coherent readback, do not issue any manual Wake to the new chat or claim canonical migration. Preserve the old incomplete event, do not attempt unpaired repairs or write protected target files.
+
 **Existing PowerShell CLI fallback** (use only if the connector cannot perform the guarded rollover):
 
 ```powershell
