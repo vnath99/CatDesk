@@ -7,6 +7,8 @@ An open-source tool that turns ChatGPT Web into a coding agent. No reverse engin
 For the current accepted milestone state, operational ownership boundaries, and
 the safe procedure for resuming work in a new ChatGPT conversation, start with
 [the canonical project handoff](docs/orchestrator/CATDESK_PROJECT_HANDOFF.md).
+For operational shortcuts and the guarded chat/Wake target rollover procedure,
+see [CatDesk Important Commands](docs/orchestrator/CATDESK_IMPORTANT_COMMANDS.md).
 It reconciles the durable [milestone tracker](CATDESK_MILESTONES.md),
 [current plan](.catdesk/current_plan.md), and [work queue](.catdesk/todo.md).
 Those sources take precedence over historical review bundles and this README's
