@@ -1306,6 +1306,8 @@ class WakeBridgeTests(unittest.TestCase):
                     else "chrome-error://chromewebdata/"
                 )
             def open(self, url):
+                raise AssertionError("post-submit recovery must not open a second tab")
+            def get(self, url):
                 self.opens.append(url)
                 self.recovered = True
             def press_keys(self, *_args, **_kwargs):
@@ -1539,6 +1541,8 @@ class WakeBridgeTests(unittest.TestCase):
             def evaluate(self, script):
                 if script == "document.readyState": return "complete"
                 if "#prompt-textarea" in script: return ["ready", self.composer == ""]
+                if "const selectorTiers" in script:
+                    return ["ready", int(message in self.messages), 0]
                 if "data-message-author-role" in script: return list(self.messages)
                 if "const unique" in script: return ["missing", None]
                 if "__catdeskWakeReceiptPreReloadV1 = true" in script: return True
@@ -1558,6 +1562,8 @@ class WakeBridgeTests(unittest.TestCase):
             sink, "post_submit_visible_any", return_value=False
         ), patch.object(
             sink, "post_submit_composer_text", return_value=""
+        ), patch.object(
+            sink, "wait_for_response_completion", return_value=None
         ):
             with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "SUBMIT_RECEIPT_ROUND_TRIP_FAILED"):
                 sink.wake(self.record_id, message, lambda: True, lambda: boundary.append("submitted"))
@@ -2180,6 +2186,7 @@ class WakeBridgeTests(unittest.TestCase):
                 "SUBMIT_ENTER_UNKNOWN",
                 "SUBMIT_COMPOSER_RETAINED",
                 "SUBMIT_COMPOSER_CHANGED",
+                "SUBMIT_ACCEPTANCE_UNPROVEN",
                 "SUBMIT_TARGET_DRIFT",
                 "SUBMIT_TARGET_DRIFT_CHROME_ERROR",
                 "SUBMIT_TARGET_DRIFT_OTHER_HOST",
@@ -2578,6 +2585,8 @@ class WakeBridgeTests(unittest.TestCase):
                     self.composer = text
             def evaluate(self, script):
                 if "#prompt-textarea" in script: return ["ready", True]
+                if "const selectorTiers" in script:
+                    return ["ready", int(message in self.messages), 0]
                 if "data-message-author-role" in script: return list(self.messages)
                 if "const unique" in script: return ["missing", None]
                 raise AssertionError("unexpected fixed CDP evaluation")
@@ -2596,6 +2605,9 @@ class WakeBridgeTests(unittest.TestCase):
             sink, "durable_receipt_round_trip", return_value=None
         ), patch.object(
             sink, "wait_for_response_completion", return_value=None
+        ), patch.object(
+            sink, "confirm_exact_receipt",
+            return_value=wake_bridge.receipt_for(self.record_id, message, sink.url, 99.0)
         ):
             receipt = sink.wake(self.record_id, message, lambda: True, lambda: events.append("boundary"))
         self.assertEqual(["boundary"], events)

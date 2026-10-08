@@ -82,9 +82,10 @@ class WakeBrowserCleanupTests(unittest.TestCase):
             patch.object(sink, "durable_receipt_round_trip"),
             patch.object(sink, "confirm_exact_receipt", side_effect=confirm),
             patch.object(sink, "wait_for_response_completion", side_effect=lambda *_args: timeline.append("complete")),
+            patch.object(sink, "wait_for_submission_accepted", return_value=99.0),
         )
         with patches[0]:
-            with patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7], patches[8], patches[9], patches[10], patches[11]:
+            with patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7], patches[8], patches[9], patches[10], patches[11], patches[12]:
                 result = sink.wake(
                     "cleanup-record",
                     message,
@@ -96,7 +97,7 @@ class WakeBrowserCleanupTests(unittest.TestCase):
     def test_proven_success_explicitly_quits_owned_browser_before_context_exit(self):
         result, receipt, timeline = self._run()
         self.assertEqual(receipt, result)
-        self.assertEqual(["open", "receipt", "complete", "quit", "exit"], timeline)
+        self.assertEqual(["open", "complete", "receipt", "quit", "exit"], timeline)
 
     def test_unproven_post_submit_failure_does_not_use_success_cleanup_path(self):
         with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "UNPROVEN"):
