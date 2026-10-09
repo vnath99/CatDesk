@@ -31,10 +31,10 @@ fn main() -> Result<(), String> {
             .env("TEMP", &tmp)
             .env("TMP", &tmp)
             .env(&k, &v);
-        if let Ok(result) = cmd.output() {
-            if result.status.success() {
-                println!("SINGLE_VAR_RESTORES={name}");
-            }
+        if let Ok(result) = cmd.output()
+            && result.status.success()
+        {
+            println!("SINGLE_VAR_RESTORES={name}");
         }
         let _ = fs::remove_file(out);
     }
