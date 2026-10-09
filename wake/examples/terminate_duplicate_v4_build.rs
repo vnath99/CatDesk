@@ -1,10 +1,7 @@
 #![allow(non_snake_case)]
 #[cfg(windows)]
 mod win {
-    use std::{
-        ffi::c_void,
-        mem::{size_of, zeroed},
-    };
+    use std::ffi::c_void;
     const PROCESS_TERMINATE: u32 = 0x0001;
     const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
     const PROCESS_COMMAND_LINE_INFORMATION: u32 = 60;
