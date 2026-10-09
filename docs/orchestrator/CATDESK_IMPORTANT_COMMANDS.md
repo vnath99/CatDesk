@@ -98,11 +98,13 @@ Select the intended existing session (use session directory when specifically pr
 
 ## 6. Current automation continuity
 
-The CatDesk hourly fallback deadman prompt must remain exactly:
+The requested Chat55 continuation prompt is:
 
-> continue progressing where you left off, use the timer workflow for bounded turns. If this deadman is in a new chat, read 'https://chatgpt.com/c/6ac6cbe8-6f0c-83ea-9f7d-13489d4d87f5', for context on where it left off
+> continue progressing where you left off, use the timer workflow for bounded turns. If this deadman is in a new chat, read 'https://chatgpt.com/c/6ac823ac-91b8-83e9-8996-f639c461de50', for context on where it left off
 
-Schedule is hourly, one active CatDesk deadman; retire or disable old canonical-chat deadmen, do not create competing writers. This is **not** a natural Wake receipt. New chats must explicitly update both designated target authorities using section 1, then update the deadman prompt to the new canonical URL.
+**Current schedule: DISABLED** since 2026-10-08; do not claim an active hourly continuation. If explicitly re-enabled, use a single hourly CatDesk deadman; retire/disable all older canonical-chat deadmen and avoid competing writers. A deadman is **not** a natural Wake receipt. The requested Chat55 URL is not yet established as the independent Wake and project canonical authority; only the previous chat is still reported by both.
+
+**Mismatch note (2026-10-09):** Project-registry digest `8eb1e045...` differs from independent WakeHost digest `3a1d4cc...` for the same predecessor URL. Source `operator_update_designated_chat_target` rejects this at readback (`ProtectedStateMismatch`) before writes. The Binagotchy CLI `target set` invokes the same guarded transaction; do **not** assume it will repair inconsistent prior state. Investigate an independently reviewed, narrow recovery path, not an unpaired target setter or direct edits of protected stores.
 
 ## 7. Current recovery and build-gate reminders (T-0419)
 
