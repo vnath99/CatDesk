@@ -3,6 +3,16 @@ param()
 
 $ErrorActionPreference = 'Stop'
 Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop
+# The extracted bootstrap functions run in this isolated fixture scope.
+# Keep SHA-256 verification deterministic without module-autoload dependence.
+function Get-FixtureHash {
+    param([string]$LiteralPath, [ValidateSet('SHA256')][string]$Algorithm = 'SHA256')
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $stream = [IO.File]::OpenRead($LiteralPath)
+    try { [pscustomobject]@{ Hash = ([BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '')) } }
+    finally { $sha.Dispose(); $stream.Dispose() }
+}
+Set-Alias -Name Get-FileHash -Value Get-FixtureHash -Scope Script
 $workspace = Join-Path ([IO.Path]::GetTempPath()) ('catdesk-stale-daemon-fixture-' + [Guid]::NewGuid().ToString('N'))
 $bootstrapPath = Join-Path $PSScriptRoot 'start-catdesk-stack.ps1'
 $source = Get-Content -LiteralPath $bootstrapPath -Raw
