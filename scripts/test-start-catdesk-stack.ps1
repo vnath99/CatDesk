@@ -9,6 +9,9 @@ function Get-FixtureHash {
   try { [pscustomobject]@{Hash=([BitConverter]::ToString($sha.ComputeHash($stream)).Replace("-",""))} }
   finally { $sha.Dispose();$stream.Dispose() }
 }
+# Extracted bootstrap functions run in this isolated fixture scope. Preserve
+# their Get-FileHash contract without relying on PowerShell module autoloading.
+Set-Alias -Name Get-FileHash -Value Get-FixtureHash -Scope Script
 $scriptPath=Join-Path $PSScriptRoot "start-catdesk-stack.ps1";$source=Get-Content -LiteralPath $scriptPath -Raw;$tokens=$null;$errors=$null
 $ast=[System.Management.Automation.Language.Parser]::ParseInput($source,[ref]$tokens,[ref]$errors);if($errors.Count){throw "bootstrap script did not parse"}
 # Reboot regression: Windows PowerShell can evaluate parameter-default

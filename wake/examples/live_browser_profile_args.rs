@@ -83,14 +83,13 @@ mod win {
             unsafe { CloseHandle(h) };
             return None;
         }
-        let u = &*(buf.as_ptr() as *const UNICODE_STRING);
+        let u = unsafe { std::ptr::read_unaligned(buf.as_ptr() as *const UNICODE_STRING) };
         let s = if u.Buffer.is_null() {
             None
         } else {
-            Some(String::from_utf16_lossy(std::slice::from_raw_parts(
-                u.Buffer,
-                (u.Length / 2) as usize,
-            )))
+            Some(String::from_utf16_lossy(unsafe {
+                std::slice::from_raw_parts(u.Buffer, (u.Length / 2) as usize)
+            }))
         };
         unsafe { CloseHandle(h) };
         s
