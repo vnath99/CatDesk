@@ -1,9 +1,12 @@
 use sha2::{Digest, Sha256};
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
-fn show(root: &PathBuf, rel: &str) {
+fn show(root: &Path, rel: &str) {
     let p = root.join(rel);
     match fs::read(&p) {
         Ok(bytes) => println!(
