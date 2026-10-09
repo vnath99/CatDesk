@@ -51,46 +51,48 @@ mod win {
         let n = v.iter().position(|&x| x == 0).unwrap_or(v.len());
         String::from_utf16_lossy(&v[..n])
     }
-    unsafe fn cmdline(pid: u32) -> Option<String> {
-        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, 0, pid);
-        if h.is_null() {
-            return None;
-        }
-        let mut need = 0u32;
-        let _ = NtQueryInformationProcess(
-            h,
-            PROCESS_COMMAND_LINE_INFORMATION,
-            std::ptr::null_mut(),
-            0,
-            &mut need,
-        );
-        if need == 0 {
+    fn cmdline(pid: u32) -> Option<String> {
+        unsafe {
+            let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, 0, pid);
+            if h.is_null() {
+                return None;
+            }
+            let mut need = 0u32;
+            let _ = NtQueryInformationProcess(
+                h,
+                PROCESS_COMMAND_LINE_INFORMATION,
+                std::ptr::null_mut(),
+                0,
+                &mut need,
+            );
+            if need == 0 {
+                CloseHandle(h);
+                return None;
+            }
+            let mut buf = vec![0u8; need as usize + 16];
+            let st = NtQueryInformationProcess(
+                h,
+                PROCESS_COMMAND_LINE_INFORMATION,
+                buf.as_mut_ptr() as *mut _,
+                buf.len() as u32,
+                &mut need,
+            );
+            if st < 0 {
+                CloseHandle(h);
+                return None;
+            }
+            let u = &*(buf.as_ptr() as *const UNICODE_STRING);
+            let s = if u.Buffer.is_null() {
+                None
+            } else {
+                Some(String::from_utf16_lossy(std::slice::from_raw_parts(
+                    u.Buffer,
+                    (u.Length / 2) as usize,
+                )))
+            };
             CloseHandle(h);
-            return None;
+            s
         }
-        let mut buf = vec![0u8; need as usize + 16];
-        let st = NtQueryInformationProcess(
-            h,
-            PROCESS_COMMAND_LINE_INFORMATION,
-            buf.as_mut_ptr() as *mut _,
-            buf.len() as u32,
-            &mut need,
-        );
-        if st < 0 {
-            CloseHandle(h);
-            return None;
-        }
-        let u = &*(buf.as_ptr() as *const UNICODE_STRING);
-        let s = if u.Buffer.is_null() {
-            None
-        } else {
-            Some(String::from_utf16_lossy(std::slice::from_raw_parts(
-                u.Buffer,
-                (u.Length / 2) as usize,
-            )))
-        };
-        CloseHandle(h);
-        s
     }
     pub fn run() {
         unsafe {

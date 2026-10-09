@@ -89,26 +89,24 @@ fn main() -> Result<(), String> {
         let mut entry = ProcessEntry32W::default();
         let mut ok = Process32FirstW(snapshot, &mut entry) != 0;
         while ok {
-            if entry.process_id != std::process::id() {
-                if let Some(path) = full_image(entry.process_id) {
-                    if path
-                        .to_string_lossy()
-                        .eq_ignore_ascii_case(&expected.to_string_lossy())
-                    {
-                        matched += 1;
-                        let handle = OpenProcess(
-                            PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE,
-                            0,
-                            entry.process_id,
-                        );
-                        if !handle.is_null() {
-                            if TerminateProcess(handle, 0xC0DE) != 0 {
-                                let _ = WaitForSingleObject(handle, 5000);
-                                terminated += 1;
-                            }
-                            CloseHandle(handle);
-                        }
+            if entry.process_id != std::process::id()
+                && let Some(path) = full_image(entry.process_id)
+                && path
+                    .to_string_lossy()
+                    .eq_ignore_ascii_case(&expected.to_string_lossy())
+            {
+                matched += 1;
+                let handle = OpenProcess(
+                    PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE,
+                    0,
+                    entry.process_id,
+                );
+                if !handle.is_null() {
+                    if TerminateProcess(handle, 0xC0DE) != 0 {
+                        let _ = WaitForSingleObject(handle, 5000);
+                        terminated += 1;
                     }
+                    CloseHandle(handle);
                 }
             }
             ok = Process32NextW(snapshot, &mut entry) != 0;

@@ -73,7 +73,7 @@ fn cmd(pid: u32) -> String {
         }
         let mut n = 0u32;
         let _ = NtQueryInformationProcess(h, 60, std::ptr::null_mut(), 0, &mut n);
-        if n < 16 || n > 1024 * 1024 {
+        if !(16..=1024 * 1024).contains(&n) {
             CloseHandle(h);
             return "<unavailable>".into();
         }

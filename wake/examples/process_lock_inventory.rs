@@ -64,7 +64,7 @@ fn command_line(h: *mut c_void) -> Option<String> {
     unsafe {
         let mut needed = 0u32;
         let _ = NtQueryInformationProcess(h, 60, std::ptr::null_mut(), 0, &mut needed);
-        if needed < 16 || needed > 1024 * 1024 {
+        if !(16..=1024 * 1024).contains(&needed) {
             return None;
         }
         let mut buf = vec![0u8; needed as usize + 2];

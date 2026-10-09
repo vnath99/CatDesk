@@ -26,7 +26,6 @@ fn main() -> Result<(), String> {
     let installed = root.join("versions").join(directory);
     let adapter = installed.join("adapter.py");
     let python = root.join("runtime").join("python.exe");
-    let profile = root.join("browser-profile");
     let script = r#"
 import contextlib, importlib.util, os, pathlib, sys, time
 adapter_path, root, url = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]

@@ -71,7 +71,7 @@ fn command_line(h: *mut c_void) -> Option<String> {
     unsafe {
         let mut needed = 0u32;
         let _ = NtQueryInformationProcess(h, 60, std::ptr::null_mut(), 0, &mut needed);
-        if needed < 16 || needed > 1024 * 1024 {
+        if !(16..=1024 * 1024).contains(&needed) {
             return None;
         }
         let mut buf = vec![0u8; needed as usize + 2];
@@ -115,13 +115,13 @@ fn main() -> Result<(), String> {
                     e.pid,
                 );
                 if !h.is_null() {
-                    if let Some(cmd) = command_line(h) {
-                        if normalized(&cmd).contains(&needle) {
-                            matched += 1;
-                            if TerminateProcess(h, 0xC0DE) != 0 {
-                                let _ = WaitForSingleObject(h, 5000);
-                                terminated += 1;
-                            }
+                    if let Some(cmd) = command_line(h)
+                        && normalized(&cmd).contains(&needle)
+                    {
+                        matched += 1;
+                        if TerminateProcess(h, 0xC0DE) != 0 {
+                            let _ = WaitForSingleObject(h, 5000);
+                            terminated += 1;
                         }
                     }
                     CloseHandle(h);

@@ -93,7 +93,7 @@ fn command_line(h: *mut c_void) -> Result<String, String> {
     unsafe {
         let mut n = 0u32;
         let _ = NtQueryInformationProcess(h, 60, std::ptr::null_mut(), 0, &mut n);
-        if n < 16 || n > 1024 * 1024 {
+        if !(16..=1024 * 1024).contains(&n) {
             return Err("COMMAND_LINE_UNAVAILABLE".into());
         }
         let mut b = vec![0u8; n as usize + 2];

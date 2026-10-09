@@ -14,7 +14,7 @@ fn fixture() {
     };
     let mut input = String::new();
     std::io::stdin().read_line(&mut input).unwrap();
-    let child = Command::new(std::env::current_exe().unwrap())
+    let mut child = Command::new(std::env::current_exe().unwrap())
         .args(["--exact", "descendant", "--nocapture"])
         .env("WAKE_JOB_DESCENDANT", "1")
         .creation_flags(0x08000000)
@@ -23,6 +23,7 @@ fn fixture() {
         .unwrap();
     std::fs::write(path, child.id().to_string()).unwrap();
     thread::sleep(Duration::from_secs(30));
+    let _ = child.wait();
 }
 #[test]
 fn descendant() {

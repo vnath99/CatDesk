@@ -3,6 +3,15 @@ param()
 
 $ErrorActionPreference = 'Stop'
 Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop
+# Test-only SHA256 helper independent of optional PowerShell module autoload.
+function Get-FixtureHash {
+    param([string]$LiteralPath, [ValidateSet('SHA256')][string]$Algorithm = 'SHA256')
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $stream = [IO.File]::OpenRead($LiteralPath)
+    try { [pscustomobject]@{ Hash = ([BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '')) } }
+    finally { $sha.Dispose(); $stream.Dispose() }
+}
+Set-Alias -Name Get-FileHash -Value Get-FixtureHash -Scope Script
 $promoter = Join-Path $PSScriptRoot 'promote-reviewed-catdesk-build.ps1'
 $source = Get-Content -LiteralPath $promoter -Raw
 $tokens = $null; $errors = $null

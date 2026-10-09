@@ -123,9 +123,8 @@ def probe_only(bridge, sb, event, target):
             Ok(value) => value,
             Err(_) => continue,
         };
-        match value.get("stage").and_then(Value::as_str) {
-            Some("PROBE_READY" | "ATTENTION") => break,
-            _ => {}
+        if let Some("PROBE_READY" | "ATTENTION") = value.get("stage").and_then(Value::as_str) {
+            break;
         }
     }
 

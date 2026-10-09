@@ -5,7 +5,7 @@ mod win {
     const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
     #[repr(C)]
     #[derive(Clone, Copy)]
-    struct FILETIME {
+    struct Filetime {
         dwLowDateTime: u32,
         dwHighDateTime: u32,
     }
@@ -14,14 +14,14 @@ mod win {
         fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut c_void;
         fn GetProcessTimes(
             h: *mut c_void,
-            create: *mut FILETIME,
-            exit: *mut FILETIME,
-            kernel: *mut FILETIME,
-            user: *mut FILETIME,
+            create: *mut Filetime,
+            exit: *mut Filetime,
+            kernel: *mut Filetime,
+            user: *mut Filetime,
         ) -> i32;
         fn CloseHandle(h: *mut c_void) -> i32;
     }
-    fn ticks(ft: FILETIME) -> u64 {
+    fn ticks(ft: Filetime) -> u64 {
         ((ft.dwHighDateTime as u64) << 32) | ft.dwLowDateTime as u64
     }
     unsafe fn cpu(pid: u32) -> Option<(u64, u64)> {
@@ -29,7 +29,7 @@ mod win {
         if h.is_null() {
             return None;
         }
-        let mut c = FILETIME {
+        let mut c = Filetime {
             dwLowDateTime: 0,
             dwHighDateTime: 0,
         };
