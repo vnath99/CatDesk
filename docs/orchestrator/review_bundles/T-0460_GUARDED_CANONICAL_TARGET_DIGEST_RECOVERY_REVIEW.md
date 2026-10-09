@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-09  
 **Requested target:** `https://chatgpt.com/c/6ac823ac-91b8-83e9-8996-f639c461de50`  
-**State:** SOURCE CANDIDATE — NOT VERIFIED, REVIEWED, INSTALLED, OR ACTIVATED.
+**State:** Guarded core recovery source has PASSED full three-job Windows CI at `b3585ad` (run `37992094331`). A subsequent narrow CLI readback fix is implemented and builds locally; its fresh CI is pending. Neither serving deployment nor live target binding has been performed. Independent source review for this latest source is still pending.
 
 ## Problem evidenced
 - CatDesk project registry advertises predecessor URL `https://chatgpt.com/c/6ac6cbe8-6f0c-83ea-9f7d-13489d4d87f5` but stored digest `8eb1e045f231df3214c16d7f97b382511399deef2e62b8ff32b3cdbeea004eb3`.
@@ -16,6 +16,13 @@
 - Under existing registry registration lock, read no more than 1 MiB of registry bytes, replace **only** the CatDesk digest with the witnessed old Wake digest, validate the entire registry using unchanged normal validation, and commit via the existing validated atomic registry writer.
 - Re-read the paired target, then resume the normal quarantine-capable Wake+registry transaction with its CAS guards. Retain all other project data, all historical delivery evidence, and external tunnel ownership.
 - This correction is *not* a replacement for reviewed release, independent review, or exact end-to-end Wake acceptance.
+
+## CLI entry-point blocker uncovered after CI green
+- `src/binagotchy_cli.rs::update_target` historically used `operator_read_designated_chat_target` as a hard pre-read. That read fails on the exact known digest mismatch, preventing the CLI from reaching the new core recovery branch.
+- Updated CLI source accepts a **single specific** recoverable readback error, `ProtectedStateMismatch`, then fetches the old predecessor digest from the independent Wake config. It requires a canonical ChatGPT URL and SHA-256 matching that URL. The core paired update revalidates URL, expected digest, registry shape, and exact old Wake target under its lock; no unpaired target setter is introduced.
+- Added a pure-source CLI validation unit test for canonical predecessor acceptance and wrong-digest/domain rejection. Local `cargo fmt --all` and `cargo build --bin catdesk` passed. Complete Windows CI must be rerun at the new HEAD.
+- CatDesk `run_command` rejected the existing piped interactive Binagotchy CLI command with `INVALID_ARGUMENT` (including its read-only `target` command). This is a command-gateway execution limitation, not proof the compiled CLI was invoked. No target state was mutated, and a documented operator PowerShell step may be needed.
+- Once executed, require independent readback of both exact Chat55 bindings: `https://chatgpt.com/c/6ac823ac-91b8-83e9-8996-f639c461de50`, SHA `fc92062981985bb64c392ff9bdf1663f5ae3e975b2b7d0d0286092b97484cde7`, Wake generation increment from 31 to >=32, no replay of the historic SUBMITTING event.
 
 ## Evidence/acceptance
 - Added tests: corrupt SHA only with matching predecessor URL safely repairs and completes paired update; different CatDesk URL refuses without modifying registry or Wake.

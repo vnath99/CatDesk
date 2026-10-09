@@ -119,9 +119,40 @@ fn read_target(workspace: &Path) -> Result<DesignatedChatTargetV1, DesignatedCha
     crate::mcp::operator_read_designated_chat_target(workspace)
 }
 
+fn validated_wake_predecessor_digest(url: &str, digest: &str) -> Result<String, String> {
+    use crate::delegated::autonomy_projects::{
+        canonical_project_chat_target, project_chat_target_digest,
+    };
+    if canonical_project_chat_target(url).ok().as_deref() != Some(url)
+        || project_chat_target_digest(url) != digest
+    {
+        return Err("TARGET_PROTECTED_STATE_MISMATCH".into());
+    }
+    Ok(digest.to_owned())
+}
+
 fn update_target(workspace: &Path, url: &str) -> Result<DesignatedChatTargetV1, String> {
-    let current = read_target(workspace).map_err(|error| target_error(error).to_string())?;
-    crate::mcp::operator_update_designated_chat_target(workspace, url, &current.sha256)
+    let expected_sha256 = match read_target(workspace) {
+        Ok(current) => current.sha256,
+        Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch) => {
+            // The guarded paired update can repair an invalid registry digest
+            // only when the existing independent Wake target still agrees on
+            // the canonical predecessor URL. Obtain the old CAS identity from
+            // Wake, not from the corrupt registry. The paired operation will
+            // remeasure both authorities under its lock and fail closed on any
+            // different kind of divergence before advancing a generation.
+            let store = independent_wake_store()?;
+            let wake = store
+                .config()?
+                .targets
+                .get("catdesk")
+                .cloned()
+                .ok_or_else(|| "TARGET_AUTHORITY_UNAVAILABLE".to_string())?;
+            validated_wake_predecessor_digest(&wake.url, &wake.digest)?
+        }
+        Err(error) => return Err(target_error(error).into()),
+    };
+    crate::mcp::operator_update_designated_chat_target(workspace, url, &expected_sha256)
         .map_err(|error| target_error(error).to_string())
 }
 
@@ -554,7 +585,7 @@ pub fn run_cli(workspace: &Path) -> Result<(), String> {
 mod tests {
     use super::{
         BINAGOTCHY_CLI_MODE_FLAG, ParsedCommand, normalized_manual_message,
-        parse_binagotchy_cli_mode, parse_command,
+        parse_binagotchy_cli_mode, parse_command, validated_wake_predecessor_digest,
     };
 
     #[test]
@@ -610,6 +641,24 @@ mod tests {
             "MANUAL WAKE DEBUG - CatDesk diagnostic test - NOT natural acceptance."
         );
         assert!(message.contains("NOT natural acceptance"));
+    }
+
+    #[test]
+    fn rollover_fallback_only_accepts_canonical_integrity_verified_wake_identity() {
+        let old = "https://chatgpt.com/c/6ac6cbe8-6f0c-83e9-9f7d-13489d4d87f5";
+        let digest = crate::delegated::autonomy_projects::project_chat_target_digest(old);
+        assert_eq!(
+            validated_wake_predecessor_digest(old, &digest),
+            Ok(digest.clone())
+        );
+        assert!(validated_wake_predecessor_digest(old, &"8".repeat(64)).is_err());
+        assert!(
+            validated_wake_predecessor_digest(
+                "https://example.com/c/6ac6cbe8-6f0c-83e9-9f7d-13489d4d87f5",
+                &digest
+            )
+            .is_err()
+        );
     }
 
     #[test]
