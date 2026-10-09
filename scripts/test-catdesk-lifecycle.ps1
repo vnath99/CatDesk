@@ -3,6 +3,15 @@ param()
 
 $ErrorActionPreference = 'Stop'
 Import-Module Microsoft.PowerShell.Utility -ErrorAction Stop
+# Isolated fixture hash probe: avoid depending on PowerShell module autoload.
+function Get-FixtureHash {
+    param([string]$LiteralPath, [ValidateSet('SHA256')][string]$Algorithm = 'SHA256')
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $stream = [IO.File]::OpenRead($LiteralPath)
+    try { [pscustomobject]@{ Hash = ([BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '')) } }
+    finally { $sha.Dispose(); $stream.Dispose() }
+}
+Set-Alias -Name Get-FileHash -Value Get-FixtureHash -Scope Script
 $workspace = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $facade = Join-Path $workspace 'catdesk.ps1'
 $source = Get-Content -LiteralPath $facade -Raw
