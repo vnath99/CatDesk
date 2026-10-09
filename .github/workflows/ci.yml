@@ -50,4 +50,4 @@ jobs:
       - name: Strict Clippy Wake crate
         run: cargo clippy --keep-going --locked --manifest-path wake/Cargo.toml --all-targets --all-features -- -D warnings
       - name: Test Wake crate
-        run: cargo test --locked --manifest-path wake/Cargo.toml
+        run: cargo test --locked --manifest-path wake/Cargo.toml --all-features
