@@ -56,8 +56,8 @@ fn main() {
             let start = i.saturating_sub(18);
             let end = (i + 35).min(lines.len());
             println!("--- {}:{} ---", path.display(), i + 1);
-            for j in start..end {
-                println!("{:05}: {}", j + 1, lines[j]);
+            for (j, line) in lines.iter().enumerate().take(end).skip(start) {
+                println!("{:05}: {}", j + 1, line);
             }
         }
     }
