@@ -10,16 +10,16 @@ mod win {
     const INVALID_HANDLE_VALUE: isize = -1isize;
     #[repr(C)]
     struct PROCESSENTRY32W {
-        dwSize: u32,
-        cntUsage: u32,
-        th32ProcessID: u32,
-        th32DefaultHeapID: usize,
-        th32ModuleID: u32,
-        cntThreads: u32,
-        th32ParentProcessID: u32,
-        pcPriClassBase: i32,
-        dwFlags: u32,
-        szExeFile: [u16; 260],
+        dw_size: u32,
+        cnt_usage: u32,
+        th32_process_id: u32,
+        th32_default_heap_id: usize,
+        th32_module_id: u32,
+        cnt_threads: u32,
+        th32_parent_process_id: u32,
+        pc_pri_class_base: i32,
+        dw_flags: u32,
+        sz_exe_file: [u16; 260],
     }
     #[link(name = "kernel32")]
     unsafe extern "system" {
@@ -47,12 +47,12 @@ mod win {
             }
             let mut map: HashMap<u32, (u32, String)> = HashMap::new();
             let mut e: PROCESSENTRY32W = zeroed();
-            e.dwSize = size_of::<PROCESSENTRY32W>() as u32;
+            e.dw_size = size_of::<PROCESSENTRY32W>() as u32;
             let mut ok = Process32FirstW(snap, &mut e);
             while ok != 0 {
                 map.insert(
-                    e.th32ProcessID,
-                    (e.th32ParentProcessID, utf16z(&e.szExeFile)),
+                    e.th32_process_id,
+                    (e.th32_parent_process_id, utf16z(&e.sz_exe_file)),
                 );
                 ok = Process32NextW(snap, &mut e);
             }
