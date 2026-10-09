@@ -31,4 +31,4 @@
 - If full reviewed serving activation is blocked (currently T-0419 protected build/ring), report BLOCKED. Do not claim Chat55 Wake binding succeeded.
 
 ## Operator / continuation
-Operator action: none required for development; direct ChatGPT/CatDesk remains the current continuation while hourly deadman is disabled. Event-driven Python browser Wake is NOT considered bound to Chat55.
+Operator action: none needed for CI/source development. If the CatDesk command gateway continues rejecting the *existing* guarded Binagotchy console transaction, the operator must run that transaction locally after fresh source CI passes; inspect exact two-authority readback afterward. Hourly deadman for Chat55 is ACTIVE as a fallback, other CatDesk deadmen are disabled. Event-driven Python browser Wake is NOT considered bound to Chat55.

@@ -1,7 +1,7 @@
 # CatDesk — Important Command Reference
 
 **Audience:** CatDesk operator, ChatGPT/CatDesk automation, and future handoffs.  
-**Maintained:** 2026-10-08. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
+**Maintained:** 2026-10-09. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
 ## Rule zero: try CatDesk tools first
@@ -30,10 +30,10 @@ CatDesk MCP: autonomy_project_registry_bind
 **Existing PowerShell CLI fallback** (use only if the connector cannot perform the guarded rollover):
 
 ```powershell
-Set-Location 'C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop'; @('target set https://chatgpt.com/c/<NEW_CONVERSATION_UUID>','exit') | & '.\target\debug\catdesk.exe' --catdesk-binagotchy-cli
+Set-Location 'C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop'; @('target set https://chatgpt.com/c/<NEW_CONVERSATION_UUID>','target','wake status','exit') | & '.\target\debug\catdesk.exe' --catdesk-binagotchy-cli
 ```
 
-This invokes the *existing* Binagotchy `target set` implementation; the CLI calls the same guarded `operator_update_designated_chat_target` transaction. It must not be replaced with manual modification of `.catdesk` or independent Wake store files. `target` without `set` shows the current designated target. Note that an already-running Binagotchy CLI may own the singleton console mutex.
+This invokes the *existing* Binagotchy `target set` implementation; the CLI calls the same guarded `operator_update_designated_chat_target` transaction. It must not be replaced with manual modification of `.catdesk` or independent Wake store files. `target` without `set` shows the current designated target. **Important:** An already-running Binagotchy console owns a singleton mutex. In that case the one-shot CLI can exit without applying the change. Close the existing Binagotchy console first, then run the line, and require an explicit `Designated Chat URL updated` plus independent project+Wake readback; absence of output does **not** establish success.
 
 **Verified example (2026-10-08):** previously retained target generation 30 at `https://chatgpt.com/c/6ac63f72-a2ac-83e9-bf61-db8ab9d97224` was changed successfully through the MCP designated-chat route to generation 31 at `https://chatgpt.com/c/6ac6cbe8-6f0c-83ea-9f7d-13489d4d87f5`. Both WakeHost and registry independently reported digest `3a1d4cc69dfa3d05cb2bc33ef1197ac5a7433a120cfb4214a6996edb5a9d29e9`. That digest is **historical**, not a permanent default.
 
@@ -102,7 +102,7 @@ The requested Chat55 continuation prompt is:
 
 > continue progressing where you left off, use the timer workflow for bounded turns. If this deadman is in a new chat, read 'https://chatgpt.com/c/6ac823ac-91b8-83e9-8996-f639c461de50', for context on where it left off
 
-**Current schedule: DISABLED** since 2026-10-08; do not claim an active hourly continuation. If explicitly re-enabled, use a single hourly CatDesk deadman; retire/disable all older canonical-chat deadmen and avoid competing writers. A deadman is **not** a natural Wake receipt. The requested Chat55 URL is not yet established as the independent Wake and project canonical authority; only the previous chat is still reported by both.
+**Current schedule: ACTIVE** as of 2026-10-09, re-enabled under the original operator request after unblocking Windows CI. The only active CatDesk hourly deadman is `CatDesk Hourly Deadman — 6ac823ac`, scheduled every hour in America/New_York and bound to the exact Chat55 continuation prompt quoted above. All earlier CatDesk hourly deadmen remain disabled. This is **fallback** transport, not natural Wake acceptance; defer source mutations when a direct manual-work timer holds the writer. The requested Chat55 URL is not yet established as independent Wake/project canonical authority; those still report Chat54 until the guarded paired-target rollover finishes.
 
 **T-0460 update (2026-10-09):** The previous CLI/registry pre-read failure is now diagnosed and addressed **in source**, not yet live-bound. Before repair, the CatDesk project registry stored an invalid digest `8eb1e045...` for the old Chat54 URL while independent WakeHost generation 31 stored verified `3a1d4cc...` for that same URL. CI for source HEAD `b3585ad` passed all three Windows jobs (Actions run `37992094331`). The narrow `operator_update_designated_chat_target` recovery (commit `b71d113`) corrects only the digest mismatch witnessed by Wake, then performs the existing paired generation-changing CAS. A follow-up `src/binagotchy_cli.rs` fix teaches the CLI `target set` to obtain the old digest from independent Wake when normal readback is corrupted; it still routes through the **same** guarded paired transaction, rejecting invalid URLs/digests. Verify the follow-up source HEAD against fresh CI before using it.
 
