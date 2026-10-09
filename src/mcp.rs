@@ -3018,7 +3018,33 @@ pub(crate) fn operator_update_designated_chat_target(
     let workspace = workspace
         .canonicalize()
         .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
-    let before = designated_chat_target_readback_locked(&workspace)?;
+    let before = match designated_chat_target_readback_locked(&workspace) {
+        Ok(before) => before,
+        Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch) => {
+            // A previous registry-only rollback can leave the canonical URL
+            // unchanged but its stored digest corrupted. Allow exactly this
+            // recoverable state, using the existing independent Wake identity
+            // and the caller's guarded old-target digest as two witnesses.
+            let wake_url = effective_wake_target_locked(&workspace)
+                .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+            if project_chat_target_digest_for_wake(&wake_url) != expected_current_target_sha256 {
+                return Err(DesignatedChatTargetErrorV1::Stale);
+            }
+            let store = AutonomousProjectRegistryStoreV1::open_read_only(
+                workspace.join(".catdesk").join("projects"),
+            )
+            .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+            store
+                .reconcile_catdesk_digest_with_wake(
+                    &workspace,
+                    &wake_url,
+                    expected_current_target_sha256,
+                )
+                .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+            designated_chat_target_readback_locked(&workspace)?
+        }
+        Err(error) => return Err(error),
+    };
     if before.sha256 != expected_current_target_sha256 {
         return Err(DesignatedChatTargetErrorV1::Stale);
     }
@@ -9476,6 +9502,75 @@ mod tests {
         )
         .expect("same-value update");
         assert_eq!(unchanged, after);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn designated_chat_update_repairs_only_corrupt_digest_matching_independent_wake() {
+        let (root, config_path) = designated_chat_target_fixture("designated-digest-repair");
+        let registry_path = root.join(".catdesk/projects/projects.json");
+        let before = operator_read_designated_chat_target(&root).expect("prior coherent target");
+        let mut registry: Value =
+            serde_json::from_slice(&fs::read(&registry_path).expect("registry"))
+                .expect("registry json");
+        registry["projects"][0]["chatgptTargetSha256"] = json!("8".repeat(64));
+        fs::write(
+            &registry_path,
+            serde_json::to_vec_pretty(&registry).expect("registry bytes"),
+        )
+        .expect("corrupt only target digest");
+        assert_eq!(
+            operator_read_designated_chat_target(&root),
+            Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch)
+        );
+        let after = operator_update_designated_chat_target(
+            &root,
+            "https://chatgpt.com/c/updated-thread",
+            &before.sha256,
+        )
+        .expect("guarded digest recovery and paired target rollover");
+        assert_eq!(after.url, "https://chatgpt.com/c/updated-thread");
+        assert_eq!(
+            operator_read_designated_chat_target(&root).expect("recovered readback"),
+            after
+        );
+        let configured: Value =
+            serde_json::from_slice(&fs::read(config_path).expect("wake config"))
+                .expect("wake config json");
+        assert_eq!(
+            configured["conversation_url"],
+            "https://chatgpt.com/c/updated-thread"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn designated_chat_digest_recovery_rejects_other_corruption_without_mutation() {
+        let (root, config_path) = designated_chat_target_fixture("designated-no-bypass");
+        let registry_path = root.join(".catdesk/projects/projects.json");
+        let prior = operator_read_designated_chat_target(&root).expect("prior");
+        let mut registry: Value =
+            serde_json::from_slice(&fs::read(&registry_path).expect("registry"))
+                .expect("registry json");
+        registry["projects"][0]["chatgptTargetSha256"] = json!("8".repeat(64));
+        registry["projects"][0]["chatgptTargetUrl"] =
+            json!("https://chatgpt.com/c/different-thread");
+        let corruption = serde_json::to_vec_pretty(&registry).expect("json");
+        fs::write(&registry_path, &corruption).expect("fixture corrupted");
+        let wake_before = fs::read(&config_path).expect("wake prior");
+        assert_eq!(
+            operator_update_designated_chat_target(
+                &root,
+                "https://chatgpt.com/c/updated-thread",
+                &prior.sha256,
+            ),
+            Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch)
+        );
+        assert_eq!(
+            fs::read(&registry_path).expect("registry after"),
+            corruption
+        );
+        assert_eq!(fs::read(&config_path).expect("wake after"), wake_before);
         let _ = fs::remove_dir_all(root);
     }
 

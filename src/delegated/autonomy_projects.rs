@@ -193,6 +193,76 @@ impl AutonomousProjectRegistryStoreV1 {
         Ok(registry)
     }
 
+    /// Repair exactly one invalid CatDesk target digest when the canonical URL
+    /// already agrees with independent Wake authority. This is intentionally
+    /// unavailable for other projects, arbitrary target URLs, or other registry
+    /// corruption. The registration lock and normal validated/atomic writer
+    /// protect all other project records.
+    pub(crate) fn reconcile_catdesk_digest_with_wake(
+        &self,
+        workspace: &Path,
+        wake_url: &str,
+        expected_wake_sha256: &str,
+    ) -> Result<(), RuntimeError> {
+        let canonical = canonical_project_chat_target(wake_url)?;
+        if canonical != wake_url
+            || !valid_sha256(expected_wake_sha256)
+            || project_chat_target_digest(wake_url) != expected_wake_sha256
+        {
+            return Err(RuntimeError::Validation(
+                "designated target reconciliation wake identity mismatch".into(),
+            ));
+        }
+        let workspace = workspace.canonicalize().map_err(|_| {
+            RuntimeError::Validation("designated target workspace unavailable".into())
+        })?;
+        let _lock = self.acquire_registration_lock()?;
+        let file = OpenOptions::new()
+            .read(true)
+            .open(self.registry_path())
+            .map_err(io_error)?;
+        if file.metadata().map_err(io_error)?.len() > 1024 * 1024 {
+            return Err(RuntimeError::Validation(
+                "designated target registry is oversized".into(),
+            ));
+        }
+        let mut registry: AutonomousProjectRegistryV1 =
+            serde_json::from_reader(file).map_err(|_| {
+                RuntimeError::Validation("designated target registry is malformed".into())
+            })?;
+        let matching: Vec<usize> = registry
+            .projects
+            .iter()
+            .enumerate()
+            .filter(|(_, project)| {
+                project.project_id == CATDESK_PROJECT_ID_V1 && project.workspace == workspace
+            })
+            .map(|(index, _)| index)
+            .collect();
+        if matching.len() != 1 {
+            return Err(RuntimeError::Validation(
+                "designated target project identity mismatch".into(),
+            ));
+        }
+        let project = &mut registry.projects[matching[0]];
+        if project.chatgpt_target_url.as_deref() != Some(wake_url)
+            || project.chatgpt_target_sha256.as_deref() == Some(expected_wake_sha256)
+            || !project
+                .chatgpt_target_sha256
+                .as_deref()
+                .is_some_and(valid_sha256)
+        {
+            return Err(RuntimeError::Validation(
+                "designated target reconciliation preconditions absent".into(),
+            ));
+        }
+        project.chatgpt_target_sha256 = Some(expected_wake_sha256.to_owned());
+        // The regular validator checks every field of every project, including
+        // duplicates. Only the single CatDesk digest discrepancy may be healed.
+        validate_registry(&registry)?;
+        self.save_registry(&registry)
+    }
+
     pub fn register_project(&self, mut project: AutonomousProjectV1) -> Result<(), RuntimeError> {
         project.workspace = project.workspace.canonicalize().map_err(|_| {
             RuntimeError::Validation("registered project workspace canonicalization failed".into())
