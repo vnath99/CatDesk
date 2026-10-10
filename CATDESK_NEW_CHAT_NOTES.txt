@@ -1,3 +1,7 @@
+## 2026-10-10 — Chat51 follow-up review attempt (LATEST)
+
+- Fresh independent T0470 R2 autonomy contract proposal was rejected `INVALID_ARGUMENT`; no accepted contract, active reviewer or final record exists. ChatGPT direct source audit notes that dry-run now guards shell execution, but list/move intercepts might still report optimistic dry-run for unresolved/invalid paths; this is an unverified QA question for independent reviewer, NOT an accepted defect or authority. Source commit eb2413a CI passing; docs successor commit e13bb89 pushed. No serving deployment or Wake action.
+
 ## 2026-10-10 — Chat51 continuation (LATEST)
 
 - Desired new human/hourly URL: https://chatgpt.com/c/6acaae13-4b18-83e9-b6ca-3c5e00cf47a8 SHA256 7faf9cc96669e240362da0dd4266bec8b2585f0ef3e03b4b56ae4c8f66db1b22. Disabled Chat50 deadman, enabled Chat51 hourly at :00 EDT. CatDesk timer manual-turn-1791667864-22112-88 started.
