@@ -4,6 +4,17 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-10 — CatDesk_chat50 source repair and command gateway (LATEST)
+
+- Chat identity correction: **CatDesk_chat50** follows CatDesk_chat49, not Chat56. Canonical URL unchanged. Hourly task renamed; only one active CatDesk fallback.
+- The manually ignored short-root diagnostic cannot be executed through current `run_command` (returns `INVALID_ARGUMENT`); dry-run succeeded but is non-execution. Ordinary `cargo test --locked --offline --bin catdesk reviewed_build::tests::active_unclassified_cargo_diagnostic_is_manual_only` returns **IGNORED** as expected. Do not alter `--ignored` policy or bypass it without authorization.
+- Protected-worker source candidate now uses the existing validated `build_attempt_output_root_guard` at `target-verify/rb/<attempt>` to seed the isolated `cargo-home` alongside `target`, reducing header lookup path depth; validated attempted generation linkage and fail-closed mismatch. Focused `cargo test ... active_generation_target_layout_uses_short_attempt_bound_workspace_root` and `... offline_worker_policy_never_inherits_ambient_cargo_home` PASSED. This is NOT a reviewed deployment, and full CI/review still required. Old WakeHost remains STOPPED.
+
+## 2026-10-10 — C1083 path-length finding (LATEST)
+
+- Exact manual T-0462 replay: `ring 0.17.14` failed to include `prefix_symbols.h` (C1083 `INCLUDE_FILE`); fixed, bounded probe confirmed the package's `pregenerated/ring_core_generated/prefix_symbols.h` exists yet its absolute path is 264 UTF-16 units long. Do not assume the header is missing or regenerate/alter it.
+- New test-only `fixed_short_cargo_diagnostic_root` switches the manual replay to a shorter pinned scratch root `target-verify/sc/<8hex>`. This is NOT a production fix. The manual test command was rejected `INVALID_ARGUMENT`; record as unexecuted, do not claim success. `cargo fmt --all` and strict all-target Clippy passed. Next prove the shortened scratch root resolves C1083 and only then review a safe production isolated Cargo home path relocation. No protected build retry or WakeHost restart.
+
 ## 2026-10-10 — Active protected build diagnostic (LATEST)
 
 - `catdesk_reviewed_build({action:"RESULT"})` **takes exactly one key**. Adding `taskId` or `projectId` causes `INVALID_ARGUMENT`; with correct shape old serving returned `BUILD_FAILED_OR_AMBIGUOUS` without classification. Do not treat the argument-shape rejection as transport failure.
@@ -11,12 +22,12 @@ This is the quick reference for **existing** controls; consult each control's li
 - Manually gated source diagnostic tests (only for exact T-0462 **terminal failure** in current verified generation, and ignored in normal CI): `cargo test --locked --offline --bin catdesk reviewed_build::tests::active_reviewed_build_failure_category_is_manual_only -- --ignored --exact --nocapture` (read-only) and `cargo test --locked --offline --bin catdesk reviewed_build::tests::active_unclassified_cargo_diagnostic_is_manual_only -- --ignored --exact --nocapture` (disposable isolated replay). The latter uses a 95-second worker job cutoff; it does not create a reviewed build.
 - Observed 2026-10-10: failure is `CARGO_BUILD/CARGO_EXIT_NONZERO`, exit 101, stderr 4096 bytes/truncated. Isolated exact replay revealed `ring 0.17.14` custom-build failure with `CC_RS_ERROR`, `MSVC_C1083`; no D8037 or LNK code. C1083 suggests missing/inaccessible include file but specific header/path unproven. Do not repeat replay without purpose or equate it with protected build attestation.
 
-## 2026-10-10 — Chat56 supersedes Chat55 (CURRENT)
+## 2026-10-10 — CatDesk_chat50 supersedes CatDesk_chat49 (CURRENT; earlier internal chat numbering corrected)
 
 - New desired engineering URL: `https://chatgpt.com/c/6aca50a3-0da0-83ea-8358-dbc128c4f9ad`; expected SHA-256 `625ddb77fa11ea42663806c7e9e436c81a6a01368e1d14f6f68c8a7ac456d0fc`. This is the human/hourly canonical; NOT YET paired in protected CatDesk project registry and independent WakeHost. Old WakeHost dev84 remains STOPPED PID0 targeting Chat48 gen31; registry SHA mismatch remains.
-- Disabled the previously enabled Chat55 hourly deadman and created new Chat56 hourly deadman (hourly at :00, from 11:00 EDT) with the requested exact continuation and single-writer/STOP-Wake safeguards. No old CatDesk hourly deadmen enabled.
+- Disabled the previously enabled Chat55 hourly deadman and created new Chat50 hourly deadman (hourly at :00, from 11:00 EDT) with the requested exact continuation and single-writer/STOP-Wake safeguards. No old CatDesk hourly deadmen enabled.
 - Confirmed source GitHub CI run 38059945796 all three jobs SUCCESS, but repaired code is NOT deployed. Old serving build RESULT still BUILD_FAILED_OR_AMBIGUOUS without failure class; release recovery tool still INVALID_ARGUMENT. Supervisor readback additionally reports SUPERVISOR_STARTUP_DEFINITION_READ_FAILED, SUPERVISOR_STARTUP_POLICY_UNPROVEN and SUPERVISOR_ROOT_UNAVAILABLE, not known to explain protected build failure.
-- Recovery ACTIVE, GitHub mirror COMPLETE. Do not open old installed Binagotchy CLI, start/resume/test Wake or attempt unpaired target setter. Next obtain sanctioned protected build category, repair proven cause, BUILD_ATTESTED/promote/serve parity, live diagnose/recover, then guarded paired target rollover to Chat56; verify matching URL+SHA and Wake generation >=32; finally fresh Wake canary/natural acceptance. External tunnel and historical untracked files remain untouched.
+- Recovery ACTIVE, GitHub mirror COMPLETE. Do not open old installed Binagotchy CLI, start/resume/test Wake or attempt unpaired target setter. Next obtain sanctioned protected build category, repair proven cause, BUILD_ATTESTED/promote/serve parity, live diagnose/recover, then guarded paired target rollover to Chat50; verify matching URL+SHA and Wake generation >=32; finally fresh Wake canary/natural acceptance. External tunnel and historical untracked files remain untouched.
 
 ---
 

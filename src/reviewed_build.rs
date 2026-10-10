@@ -4421,6 +4421,12 @@ struct CargoStderrClassifier {
     diagnostic_custom_build_crate: Option<String>,
     #[cfg(all(test, windows))]
     diagnostic_custom_build_version: Option<String>,
+    #[cfg(all(test, windows))]
+    diagnostic_c1083_kind: Option<&'static str>,
+    #[cfg(all(test, windows))]
+    diagnostic_c1083_header: Option<&'static str>,
+    #[cfg(all(test, windows))]
+    diagnostic_c1083_sanitized_basename: Option<String>,
 }
 
 #[cfg(all(test, windows))]
@@ -4489,6 +4495,19 @@ impl CargoStderrClassifier {
         self.saw_compile |= contains_ascii(&normalized, b"could not compile ");
         observe_fixed_linker_error_codes!(self, &normalized);
         observe_fixed_cargo_failure_signals!(self, &normalized);
+        #[cfg(all(test, windows))]
+        {
+            if self.diagnostic_c1083_kind.is_none() {
+                self.diagnostic_c1083_kind = fixed_c1083_kind(&normalized);
+            }
+            if self.diagnostic_c1083_header.is_none() {
+                self.diagnostic_c1083_header = fixed_c1083_header(&normalized);
+            }
+            if self.diagnostic_c1083_sanitized_basename.is_none() {
+                self.diagnostic_c1083_sanitized_basename =
+                    fixed_c1083_sanitized_basename(&normalized);
+            }
+        }
         #[cfg(all(test, windows))]
         if self.diagnostic_custom_build_crate.is_none() {
             if let Some((name, version)) = extract_custom_build_package(&normalized) {
@@ -4617,6 +4636,73 @@ fn extract_custom_build_package(bytes: &[u8]) -> Option<(String, Option<String>)
 }
 
 #[cfg(all(test, windows))]
+fn fixed_c1083_kind(bytes: &[u8]) -> Option<&'static str> {
+    const KINDS: [(&[u8], &str); 3] = [
+        (b"cannot open include file:", "INCLUDE_FILE"),
+        (b"cannot open source file:", "SOURCE_FILE"),
+        (b"cannot open compiler generated file:", "GENERATED_FILE"),
+    ];
+    KINDS
+        .into_iter()
+        .find_map(|(needle, kind)| contains_ascii(bytes, needle).then_some(kind))
+}
+
+#[cfg(all(test, windows))]
+fn fixed_c1083_sanitized_basename(bytes: &[u8]) -> Option<String> {
+    let marker = b"cannot open include file: '";
+    let start = bytes.windows(marker.len()).position(|win| win == marker)? + marker.len();
+    let rest = &bytes[start..];
+    let end = rest.iter().position(|byte| *byte == b'\'')?;
+    let reference = &rest[..end];
+    let basename = reference
+        .rsplit(|byte| *byte == b'/' || *byte == b'\\')
+        .next()?;
+    if basename.is_empty()
+        || basename.len() > 96
+        || !basename
+            .iter()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(*byte, b'.' | b'_' | b'-'))
+        || ![b".h".as_slice(), b".hpp".as_slice(), b".inc".as_slice()]
+            .iter()
+            .any(|ext| basename.ends_with(ext))
+    {
+        return None;
+    }
+    String::from_utf8(basename.to_vec()).ok()
+}
+
+#[cfg(all(test, windows))]
+fn fixed_c1083_header(bytes: &[u8]) -> Option<&'static str> {
+    // These are constant, non-sensitive C/MSVC system header names, not any
+    // caller-supplied filename, path or captured compiler text.
+    const HEADERS: [(&[u8], &str); 20] = [
+        (b"'stdio.h'", "STDIO_H"),
+        (b"'stdlib.h'", "STDLIB_H"),
+        (b"'stddef.h'", "STDDEF_H"),
+        (b"'stdint.h'", "STDINT_H"),
+        (b"'stdarg.h'", "STDARG_H"),
+        (b"'string.h'", "STRING_H"),
+        (b"'intrin.h'", "INTRIN_H"),
+        (b"'immintrin.h'", "IMMINTRIN_H"),
+        (b"'assert.h'", "ASSERT_H"),
+        (b"'limits.h'", "LIMITS_H"),
+        (b"'inttypes.h'", "INTTYPES_H"),
+        (b"'errno.h'", "ERRNO_H"),
+        (b"'malloc.h'", "MALLOC_H"),
+        (b"'windows.h'", "WINDOWS_H"),
+        (b"'wincrypt.h'", "WINCRYPT_H"),
+        (b"'sal.h'", "SAL_H"),
+        (b"'vcruntime.h'", "VCRUNTIME_H"),
+        (b"'vcruntime_string.h'", "VCRUNTIME_STRING_H"),
+        (b"'basetsd.h'", "BASETSD_H"),
+        (b"'bcrypt.h'", "BCRYPT_H"),
+    ];
+    HEADERS
+        .into_iter()
+        .find_map(|(needle, name)| contains_ascii(bytes, needle).then_some(name))
+}
+
+#[cfg(all(test, windows))]
 fn fixed_cargo_failure_signal_mask(bytes: &[u8]) -> u16 {
     [
         (b"failed to run custom build command for".as_slice(), 1),
@@ -4725,6 +4811,12 @@ struct BoundedCargoStderr {
     diagnostic_custom_build_crate: Option<String>,
     #[cfg(all(test, windows))]
     diagnostic_custom_build_version: Option<String>,
+    #[cfg(all(test, windows))]
+    diagnostic_c1083_kind: Option<&'static str>,
+    #[cfg(all(test, windows))]
+    diagnostic_c1083_header: Option<&'static str>,
+    #[cfg(all(test, windows))]
+    diagnostic_c1083_sanitized_basename: Option<String>,
 }
 
 impl Default for BoundedCargoStderr {
@@ -4743,6 +4835,12 @@ impl Default for BoundedCargoStderr {
             diagnostic_custom_build_crate: None,
             #[cfg(all(test, windows))]
             diagnostic_custom_build_version: None,
+            #[cfg(all(test, windows))]
+            diagnostic_c1083_kind: None,
+            #[cfg(all(test, windows))]
+            diagnostic_c1083_header: None,
+            #[cfg(all(test, windows))]
+            diagnostic_c1083_sanitized_basename: None,
         }
     }
 }
@@ -4776,6 +4874,13 @@ fn read_bounded_cargo_stderr(mut reader: impl Read) -> std::io::Result<BoundedCa
     let diagnostic_custom_build_crate = classifier.diagnostic_custom_build_crate.clone();
     #[cfg(all(test, windows))]
     let diagnostic_custom_build_version = classifier.diagnostic_custom_build_version.clone();
+    #[cfg(all(test, windows))]
+    let diagnostic_c1083_kind = classifier.diagnostic_c1083_kind;
+    #[cfg(all(test, windows))]
+    let diagnostic_c1083_header = classifier.diagnostic_c1083_header;
+    #[cfg(all(test, windows))]
+    let diagnostic_c1083_sanitized_basename =
+        classifier.diagnostic_c1083_sanitized_basename.clone();
     let classification = classifier.finish();
     Ok(BoundedCargoStderr {
         captured,
@@ -4791,6 +4896,12 @@ fn read_bounded_cargo_stderr(mut reader: impl Read) -> std::io::Result<BoundedCa
         diagnostic_custom_build_crate,
         #[cfg(all(test, windows))]
         diagnostic_custom_build_version,
+        #[cfg(all(test, windows))]
+        diagnostic_c1083_kind,
+        #[cfg(all(test, windows))]
+        diagnostic_c1083_header,
+        #[cfg(all(test, windows))]
+        diagnostic_c1083_sanitized_basename,
     })
 }
 
@@ -5249,7 +5360,7 @@ pub fn run_reviewed_build_worker(
         let temp = temp_guard.path().to_path_buf();
         let cargo_pin = open_attested_tool(&attempt.cargo, "cargo")?;
         let rustc_pin = open_attested_tool(&attempt.rustc, "rustc")?;
-        let cargo_home = seed_isolated_cargo_home(&control, &source)?;
+        let cargo_home = seed_isolated_cargo_home(workspace, &control, build_attempt_id, &source)?;
         let mut command = Command::new(&cargo_pin.evidence.absolute_path);
         configure_exact_worker_cargo_command(
             &mut command,
@@ -5705,6 +5816,9 @@ struct FixedV5HostLinkerDiagnosticOutcome {
     cargo_failure_signals: Vec<&'static str>,
     custom_build_crate: Option<String>,
     custom_build_version: Option<String>,
+    c1083_kind: Option<&'static str>,
+    c1083_header: Option<&'static str>,
+    c1083_sanitized_basename: Option<String>,
     // Fixed LNK codes only. These are recognized from the full drained stream
     // and contain neither diagnostic text nor linker arguments.
     linker_error_codes: Vec<&'static str>,
@@ -5889,6 +6003,9 @@ fn fixed_v5_host_linker_diagnostic_outcome(
     let cargo_failure_signals = captured_stderr.diagnostic_cargo_failure_signals.clone();
     let custom_build_crate = captured_stderr.diagnostic_custom_build_crate.clone();
     let custom_build_version = captured_stderr.diagnostic_custom_build_version.clone();
+    let c1083_kind = captured_stderr.diagnostic_c1083_kind;
+    let c1083_header = captured_stderr.diagnostic_c1083_header;
+    let c1083_sanitized_basename = captured_stderr.diagnostic_c1083_sanitized_basename.clone();
     let diagnostic = summarize_cargo_failure(exit_code, captured_stderr);
     let classification = match diagnostic.classification.as_str() {
         "CARGO_LINKER_NOT_FOUND" => "LINKER_EXECUTABLE_NOT_FOUND",
@@ -5905,6 +6022,9 @@ fn fixed_v5_host_linker_diagnostic_outcome(
         cargo_failure_signals,
         custom_build_crate,
         custom_build_version,
+        c1083_kind,
+        c1083_header,
+        c1083_sanitized_basename,
         linker_error_codes,
         missing_link_library: diagnostic.missing_link_library,
         missing_link_input: diagnostic.missing_link_input,
@@ -5919,12 +6039,15 @@ fn fixed_v5_host_linker_diagnostic_summary_line(
     outcome: &FixedV5HostLinkerDiagnosticOutcome,
 ) -> String {
     format!(
-        "FIXED_V5_HOST_LINKER_DIAGNOSTIC classification={} cargoClassification={} cargoFailureSignals={:?} customBuildCrate={:?} customBuildVersion={:?} linkerErrorCodes={:?} missingLinkLibrary={:?} missingLinkInput={:?} capturedStderrSha256={} capturedStderrLength={} stderrTruncated={}",
+        "FIXED_V5_HOST_LINKER_DIAGNOSTIC classification={} cargoClassification={} cargoFailureSignals={:?} customBuildCrate={:?} customBuildVersion={:?} c1083Kind={:?} c1083Header={:?} c1083SanitizedBasename={:?} linkerErrorCodes={:?} missingLinkLibrary={:?} missingLinkInput={:?} capturedStderrSha256={} capturedStderrLength={} stderrTruncated={}",
         outcome.classification,
         outcome.cargo_classification,
         outcome.cargo_failure_signals,
         outcome.custom_build_crate,
         outcome.custom_build_version,
+        outcome.c1083_kind,
+        outcome.c1083_header,
+        outcome.c1083_sanitized_basename,
         outcome.linker_error_codes,
         outcome.missing_link_library,
         outcome.missing_link_input,
@@ -6042,6 +6165,19 @@ fn run_fixed_v5_cargo_cache_seed_diagnostic() -> Result<FixedV5CargoCacheSeedDia
 }
 
 #[cfg(all(test, windows))]
+fn fixed_short_cargo_diagnostic_root(workspace: &Path) -> Result<ProtectedDirectoryGuard, String> {
+    // Diagnostic-only workspace path: no reviewed build/promotion authority.
+    // Keep the registry source path short enough for native MSVC include lookup.
+    let mut root = ProtectedDirectoryGuard::acquire(workspace, "short cargo diagnostic workspace")?;
+    root.descend_or_create("target-verify", "short cargo diagnostic root")?;
+    root.descend_or_create("sc", "short cargo diagnostic root")?;
+    let nonce = Uuid::new_v4().simple().to_string();
+    root.create_child(&nonce[..8], "short cargo diagnostic root")?;
+    root.assert_stable("short cargo diagnostic root")?;
+    Ok(root)
+}
+
+#[cfg(all(test, windows))]
 fn run_active_unclassified_cargo_diagnostic() -> Result<FixedV5HostLinkerDiagnosticOutcome, String>
 {
     // Host-only diagnostic reproduction, NEVER an attestation or release build.
@@ -6082,7 +6218,7 @@ fn run_active_unclassified_cargo_diagnostic() -> Result<FixedV5HostLinkerDiagnos
         &attempt.review_authority_sha256,
         &attempt.snapshot_expected,
     )?;
-    let mut diagnostic_root = fixed_v5_host_linker_diagnostic_root(workspace)?;
+    let mut diagnostic_root = fixed_short_cargo_diagnostic_root(workspace)?;
     let mut source_guard = diagnostic_root.try_clone("cargo reproduction source")?;
     source_guard.create_child("source", "cargo reproduction source")?;
     materialize_snapshot_into(&snapshot, &mut source_guard)?;
@@ -6149,6 +6285,21 @@ fn run_active_unclassified_cargo_diagnostic() -> Result<FixedV5HostLinkerDiagnos
             != attempt.rustc
     {
         return Err("REVIEWED_BUILD_EVIDENCE_DRIFTED".into());
+    }
+    // Only numeric path-length and fixed presence metadata. Never expose an
+    // absolute path, compiler command, registry identity, or compiler stderr.
+    if let Ok(registries) = fs::read_dir(cargo_home.join("registry/src")) {
+        for registry in registries.flatten().take(3) {
+            let header = registry
+                .path()
+                .join("ring-0.17.14/pregenerated/ring_core_generated/prefix_symbols.h");
+            let path_units = header.to_string_lossy().encode_utf16().count();
+            let parent_present = header.parent().is_some_and(Path::is_dir);
+            let header_present = header.is_file();
+            println!(
+                "ACTIVE_RING_HEADER_PROBE pathUtf16Units={path_units} parentPresent={parent_present} headerPresent={header_present}"
+            );
+        }
     }
     fixed_v5_host_linker_diagnostic_outcome(exit.code(), captured)
 }
@@ -7759,10 +7910,10 @@ fn descend_or_create(
     }
 }
 
-/// The Cargo target parent remains pinned from before process launch through
-/// opening the release output.  The path handed to Cargo is display/argv data;
-/// the produced executable is never reacquired through that path.
-fn build_target_guard(
+/// Return one pinned, attempt-scoped output parent shared by target and
+/// isolated Cargo home. The immutable control generation remains separate:
+/// neither build outputs nor unpacked registry sources grant authority.
+fn build_attempt_output_root_guard(
     workspace: &Path,
     control: &BuildControlRoot,
     attempt: &str,
@@ -7771,18 +7922,16 @@ fn build_target_guard(
         return Err("REVIEWED_BUILD_EVIDENCE_DRIFTED".into());
     }
 
-    let mut guard = if control.guard.path() == control.base_guard.path() {
+    let guard = if control.guard.path() == control.base_guard.path() {
         // Legacy unversioned control roots retain their historical layout.
-        let mut guard = control.guard.try_clone("reviewed build target")?;
-        guard.descend_existing("builds", "reviewed build target")?;
-        guard.descend_existing(attempt, "reviewed build target")?;
+        let mut guard = control.guard.try_clone("reviewed build output root")?;
+        guard.descend_existing("builds", "reviewed build output root")?;
+        guard.descend_existing(attempt, "reviewed build output root")?;
         guard
     } else {
-        // The active generation remains the authority-bearing attempt/digest
-        // record, but Cargo outputs are not authority. Keep those outputs in a
-        // fixed, no-follow, attempt-named workspace subtree so MSVC link.exe
-        // never inherits the long .catdesk/reviewed-build-control/generations
-        // prefix. The exact attempt id still prevents cross-attempt reuse.
+        // Active generation retains authority; outputs and cache are not authority.
+        // Keep both outside the long generations path in pinned, no-follow,
+        // attempt-specific workspace children. No caller-selected path is used.
         if control
             .guard
             .path()
@@ -7793,13 +7942,25 @@ fn build_target_guard(
             return Err("REVIEWED_BUILD_EVIDENCE_DRIFTED".into());
         }
         let mut guard =
-            ProtectedDirectoryGuard::acquire(workspace, "reviewed build target workspace")?;
-        descend_or_create(&mut guard, "target-verify", "reviewed build target")?;
-        descend_or_create(&mut guard, "rb", "reviewed build target")?;
-        descend_or_create(&mut guard, attempt, "reviewed build target")?;
+            ProtectedDirectoryGuard::acquire(workspace, "reviewed build output workspace")?;
+        descend_or_create(&mut guard, "target-verify", "reviewed build output root")?;
+        descend_or_create(&mut guard, "rb", "reviewed build output root")?;
+        descend_or_create(&mut guard, attempt, "reviewed build output root")?;
         guard
     };
+    guard.assert_stable("reviewed build output root")?;
+    Ok(guard)
+}
 
+/// The Cargo target parent remains pinned from before process launch through
+/// opening the release output. The path handed to Cargo is display/argv data;
+/// the produced executable is never reacquired through that path.
+fn build_target_guard(
+    workspace: &Path,
+    control: &BuildControlRoot,
+    attempt: &str,
+) -> Result<ProtectedDirectoryGuard, String> {
+    let mut guard = build_attempt_output_root_guard(workspace, control, attempt)?;
     descend_or_create(&mut guard, "target", "reviewed build target")?;
     guard.assert_stable("reviewed build target")?;
     Ok(guard)
@@ -8055,10 +8216,23 @@ struct LockedRegistryCrate {
 /// `registry/src` tree.  It copies only lockfile-checked crate archives and
 /// the matching sparse-index entries into a fresh pinned generation-local
 /// Cargo home, then Cargo runs with its fixed `--offline` argument.
-fn seed_isolated_cargo_home(control: &BuildControlRoot, source: &Path) -> Result<PathBuf, String> {
-    let mut destination = control
-        .guard
-        .try_clone("reviewed build isolated cargo home")?;
+fn seed_isolated_cargo_home(
+    workspace: &Path,
+    control: &BuildControlRoot,
+    attempt: &str,
+    source: &Path,
+) -> Result<PathBuf, String> {
+    // Legacy single-generation roots preserve their existing Cargo cache path.
+    // On reviewed retry generations, isolate dependencies in the same short,
+    // attempt-bound and pinned parent as the non-authoritative Cargo target.
+    // This avoids ring/MSVC C1083 on a 260+-character unpacked include path.
+    let mut destination = if control.guard.path() == control.base_guard.path() {
+        control
+            .guard
+            .try_clone("reviewed build legacy isolated cargo home")?
+    } else {
+        build_attempt_output_root_guard(workspace, control, attempt)?
+    };
     seed_isolated_cargo_home_into(&mut destination, source)
 }
 
@@ -9404,7 +9578,32 @@ mod tests {
                 .to_string_lossy()
                 .contains("reviewed-build-control")
         );
+        let parent = build_attempt_output_root_guard(&root, &control, &attempt).unwrap();
+        assert_eq!(
+            parent.path(),
+            root.join("target-verify").join("rb").join(&attempt)
+        );
+        // Only the pin-guarded, attempt-bound output tree may hold the
+        // non-authoritative Cargo cache. Compare equivalent registry includes:
+        // the new name must be shorter than the old protected generations path.
+        let suffix = Path::new(
+            "cargo-home/registry/src/index.crates.io-6f17d22bba15001f/ring-0.17.14/pregenerated/ring_core_generated/prefix_symbols.h",
+        );
+        let short = parent.path().join(suffix);
+        let old = control.guard.path().join(suffix);
+        assert!(
+            short.to_string_lossy().encode_utf16().count()
+                < old.to_string_lossy().encode_utf16().count()
+        );
+        assert!(!short.starts_with(control.guard.path()));
+        assert_eq!(
+            build_attempt_output_root_guard(&root, &control, &"e".repeat(32))
+                .err()
+                .as_deref(),
+            Some("REVIEWED_BUILD_EVIDENCE_DRIFTED"),
+        );
 
+        drop(parent);
         drop(target);
         drop(control);
         let _ = fs::remove_dir_all(root);
@@ -10003,7 +10202,11 @@ mod tests {
                 .iter()
                 .any(|argument| argument == "--offline")
         );
-        assert!(worker.contains("seed_isolated_cargo_home(&control, &source)?"));
+        assert!(
+            worker.contains(
+                "seed_isolated_cargo_home(workspace, &control, build_attempt_id, &source)?"
+            )
+        );
         assert!(worker.contains("configure_exact_worker_cargo_command("));
         assert!(worker.contains("&cargo_home,"));
         assert!(command_body.contains(".env_clear()"));

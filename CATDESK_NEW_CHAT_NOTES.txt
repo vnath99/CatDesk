@@ -1,15 +1,27 @@
+## 2026-10-10 — CatDesk_chat50 Recovery short Cargo-home candidate (LATEST)
+
+- This is CatDesk_chat50, successor to CatDesk_chat49; earlier "Chat56" was an assistant numbering mistake. The one enabled hourly deadman name and prompt use Chat50 and same canonical URL/digest.
+- Tried to run shortened manual isolated T-0462 reproduction; command gateway rejected `--ignored --exact --nocapture` with `INVALID_ARGUMENT`, though normal test compilation/ignored status succeeded. Do NOT bypass or interpret an ignored test as a successful replay.
+- Implemented a **source-only** pinned short attempt-scoped isolated Cargo home next to existing `target-verify/rb/<attempt>/target` (now sibling `cargo-home`) for active reviewed-build generations. Legacy generation keeps old location. Rust focused layout and env-closed worker tests, formatting, strict Clippy passed. Evidence for repair is ring's C1083 `prefix_symbols.h` present at 264-character path in the prior disposable snapshot build. Root cause in original protected build is inferred, not conclusively proven.
+- Next verify full CI and independent review before one new protected build/promotion; preserve stopped WakeHost dev84, Chat48 gen31 until paired Chat50 verified.
+
+## 2026-10-10 — C1083 header/path diagnosis (LATEST)
+
+- Isolated T-0462 replay of `ring 0.17.14` shows C1083 `INCLUDE_FILE`, basename `prefix_symbols.h`. The header and its containing directory EXIST at **264 UTF-16 code units** in the disposable Cargo cache, suggesting MSVC/Win32 path length rather than missing package data. No raw stderr or full path exposed.
+- Shorter test-only disposable root at `target-verify/sc/<8hex>` added, but gateway rejected invoking that ignored manual test (`INVALID_ARGUMENT`), so short-path improvement is not proven. Production builder/source deployment untouched. Rust formatting/strict Clippy passed; next run the guarded short-root test through an approved command and compare. After proof, refactor protected Cargo home out of overly deep generation control root while keeping immutable authority and pinned guards. Never restart old WakeHost (Chat48, gen31, STOPPED) before pairing Chat50.
+
 ## 2026-10-10 — Latest T-0462 recovery checkpoint
 
 - Exact active reviewed build terminal: `CARGO_BUILD/CARGO_EXIT_NONZERO` (exit 101), 4096 retained stderr bytes truncated. New manually gated read-only source test independently validated terminal generation and worker/owner evidence.
 - Disposable fixed-current T-0462 source-snapshot Cargo replay reproduces `ring 0.17.14` custom-build failure. Fixed test-only signal classifier sees `CC_RS_ERROR` and `MSVC_C1083`, no D8037/LNK. This is evidence of native header/include access failure; exact missing header and remediation remain to be proven.
-- Source diagnostic does not promote/install/attest/retry protected release. Next fixed-category header diagnosis -> evidence-based fix -> CI/independent review -> guarded protected build/promotion. Old WakeHost dev84 STOPPED, Chat48 gen31, no Chat56 paired bind yet. Hourly fallback Chat56 active with single-writer rule.
+- Source diagnostic does not promote/install/attest/retry protected release. Next fixed-category header diagnosis -> evidence-based fix -> CI/independent review -> guarded protected build/promotion. Old WakeHost dev84 STOPPED, Chat48 gen31, no Chat50 paired bind yet. Hourly fallback Chat50 active with single-writer rule.
 
-## 2026-10-10 — Chat56 supersedes Chat55 (CURRENT)
+## 2026-10-10 — CatDesk_chat50 supersedes CatDesk_chat49 (CURRENT; earlier internal chat numbering corrected)
 
 - New desired engineering URL: `https://chatgpt.com/c/6aca50a3-0da0-83ea-8358-dbc128c4f9ad`; expected SHA-256 `625ddb77fa11ea42663806c7e9e436c81a6a01368e1d14f6f68c8a7ac456d0fc`. This is the human/hourly canonical; NOT YET paired in protected CatDesk project registry and independent WakeHost. Old WakeHost dev84 remains STOPPED PID0 targeting Chat48 gen31; registry SHA mismatch remains.
-- Disabled the previously enabled Chat55 hourly deadman and created new Chat56 hourly deadman (hourly at :00, from 11:00 EDT) with the requested exact continuation and single-writer/STOP-Wake safeguards. No old CatDesk hourly deadmen enabled.
+- Disabled the previously enabled Chat55 hourly deadman and created new Chat50 hourly deadman (hourly at :00, from 11:00 EDT) with the requested exact continuation and single-writer/STOP-Wake safeguards. No old CatDesk hourly deadmen enabled.
 - Confirmed source GitHub CI run 38059945796 all three jobs SUCCESS, but repaired code is NOT deployed. Old serving build RESULT still BUILD_FAILED_OR_AMBIGUOUS without failure class; release recovery tool still INVALID_ARGUMENT. Supervisor readback additionally reports SUPERVISOR_STARTUP_DEFINITION_READ_FAILED, SUPERVISOR_STARTUP_POLICY_UNPROVEN and SUPERVISOR_ROOT_UNAVAILABLE, not known to explain protected build failure.
-- Recovery ACTIVE, GitHub mirror COMPLETE. Do not open old installed Binagotchy CLI, start/resume/test Wake or attempt unpaired target setter. Next obtain sanctioned protected build category, repair proven cause, BUILD_ATTESTED/promote/serve parity, live diagnose/recover, then guarded paired target rollover to Chat56; verify matching URL+SHA and Wake generation >=32; finally fresh Wake canary/natural acceptance. External tunnel and historical untracked files remain untouched.
+- Recovery ACTIVE, GitHub mirror COMPLETE. Do not open old installed Binagotchy CLI, start/resume/test Wake or attempt unpaired target setter. Next obtain sanctioned protected build category, repair proven cause, BUILD_ATTESTED/promote/serve parity, live diagnose/recover, then guarded paired target rollover to Chat50; verify matching URL+SHA and Wake generation >=32; finally fresh Wake canary/natural acceptance. External tunnel and historical untracked files remain untouched.
 
 ---
 
