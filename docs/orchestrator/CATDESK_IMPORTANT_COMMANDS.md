@@ -78,6 +78,13 @@ This is the quick reference for **existing** controls; consult each control's li
 
 ---
 
+## 2026-10-10 — Chat51 continuation (LATEST)
+
+- Desired new human/hourly URL: https://chatgpt.com/c/6acaae13-4b18-83e9-b6ca-3c5e00cf47a8 SHA256 7faf9cc96669e240362da0dd4266bec8b2585f0ef3e03b4b56ae4c8f66db1b22. Disabled Chat50 deadman, enabled Chat51 hourly at :00 EDT. CatDesk timer manual-turn-1791667864-22112-88 started.
+- GitHub source commit eb2413a732606d00076db05dc3335f826990dd81 verified published; Actions run 38085867314 SUCCESS with Rust, independent WakeHost Rust and Python Wake/advisor all SUCCESS. T0470 R2 independent review/deployment NOT yet complete.
+- Important rollover discovery: registry chat_target_bind with action PREFLIGHT is mutating; the single registry update does NOT alter independent Wake. Documented guarded designated bind returned success-shaped Chat51 registry response, but independent Wake snapshot continued to report Chat48 gen31. Wake target CAS rejected INVALID_ARGUMENT twice. Registry returned to old Chat48 URL/digest 3a1d4cc69dfa3d05cb2bc33ef1197ac5a7433a120cfb4214a6996edb5a9d29e9, to avoid known mixed targets. Fresh Binagotchy status reports stopped PID0, queueDepth0. No Wake start, browser event or test. Do not claim Chat51 paired until exact Wake target/digest/gen readback proves it.
+- Recovery prerequisites: operator fixed signed-image readback output/error (T0469) still outstanding; T0470 independent review; legitimate source-current product-root signed image/rotation, guarded serving activation, fresh BUILD_ATTESTED, nine-layer diagnostics and recovery acceptance. External Secure MCP owned separately. Seven unrelated historical untracked files left unchanged.
+
 ## HISTORICAL safety override — 2026-10-10, next-chat rollover
 
 The installed independent WakeHost dev.84 is **intentionally STOPPED** because it was claiming work against obsolete Chat48 at generation 31. The existing *installed* Binagotchy CLI can silently re-start WakeHost when the console is opened. **Do not launch that old CLI or run its one-shot PowerShell fallback from section 1, call Wake start/resume/restart/test, or replay old review events** until the stop-preserving source repair has passed full CI **and been installed** and the new canonical chat target is bound coherently through the guarded paired transaction. A debug `target/debug/catdesk.exe` is not serving authority. This safety override takes precedence over the historical command examples below. Keep old Wake event records and avoid arbitrary Chrome process termination.

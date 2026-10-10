@@ -1,3 +1,7 @@
+## 2026-10-10 — Chat51 control-thread update (LATEST)
+
+- New human/deadman canonical: https://chatgpt.com/c/6acaae13-4b18-83e9-b6ca-3c5e00cf47a8, SHA256 7faf9cc96669e240362da0dd4266bec8b2585f0ef3e03b4b56ae4c8f66db1b22. New hourly deadman active; Chat50 old hourly disabled. GitHub CI run 38085867314 for eb2413a passed all three jobs; independent T0470 R2 review still pending. Guarded designated bind returned a new registry target, but independent Wake readback stayed old Chat48 gen31; wake-target CAS rejected INVALID_ARGUMENT. Restored registry to original old Chat48 URL/digest 3a1d4cc69dfa3d05cb2bc33ef1197ac5a7433a120cfb4214a6996edb5a9d29e9 to avoid a half-bound pair. WakeHost STOPPED pid0, no browser event/restart. Fixed signed-image readback from operator still needed.
+
 ## 2026-10-10 — Chat50 T-0469 operator readback authorized; T-0470 dry-run parity corrected (LATEST)
 
 - Operator explicitly authorized the fixed read-only signed main-image status CLI. A CatDesk `run_command` dry run of `.\\target\\debug\\catdesk.exe --catdesk-reviewed-main-image-status-fixed-policy` returned success, but the actual call was rejected `INVALID_ARGUMENT` by the installed controller. No process execution, protected host readback, signed epoch observation or Wake/daemon change was proven. Current `src/mcp.rs` explains the mismatch: dry run returned before actual shell safety/mode validation; allowlist does not authorize executing CatDesk itself through `run_command`. Never switch to unrestricted mode or an older plugin to evade that gate.
