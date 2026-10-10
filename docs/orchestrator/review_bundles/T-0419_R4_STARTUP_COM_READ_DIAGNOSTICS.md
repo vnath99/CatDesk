@@ -14,7 +14,7 @@ These existing categories collapse every native COM failure into one status. The
 
 ## Source change
 
-`src/windows_supervisor_startup.rs` introduces fixed, non-sensitive read-only failure categories for COM initialization, Task Scheduler activation, COM Connect, root-folder read, fixed-task lookup, and task XML retrieval. Access-denied HRESULTs retain a distinct elevation-required category. No raw HRESULT, XML, SID, task action path, credential, or caller-selected scheduler identity is returned.
+`src/windows_supervisor_startup.rs` introduces fixed, non-sensitive read-only failure categories for COM initialization (including the fixed `RPC_E_CHANGED_MODE` apartment-conflict category), Task Scheduler activation, COM Connect, root-folder read, fixed-task lookup, and task XML retrieval. Access-denied HRESULTs retain a distinct elevation-required category. No raw HRESULT, XML, SID, task action path, credential, or caller-selected scheduler identity is returned.
 
 `src/supervisor_lifecycle.rs` exposes only the fixed category through the existing read-only `startupDefinition` status field. The activation preflight remains fail-closed and continues to return `SUPERVISOR_STARTUP_POLICY_UNPROVEN` when ownership cannot be proven.
 

@@ -33,6 +33,7 @@ pub(crate) enum SupervisorStartupErrorV1 {
     // Fixed, non-sensitive stages of the read-only Task Scheduler COM path.
     // These never carry an HRESULT, task XML, SID, or executable path.
     ComInitializationFailed,
+    ComApartmentModeConflict,
     ComActivationFailed,
     ComConnectFailed,
     RootFolderReadFailed,
@@ -46,6 +47,7 @@ impl SupervisorStartupErrorV1 {
     pub(crate) fn fixed_read_diagnostic(self) -> &'static str {
         match self {
             Self::ComInitializationFailed => "SUPERVISOR_STARTUP_COM_INIT_FAILED",
+            Self::ComApartmentModeConflict => "SUPERVISOR_STARTUP_COM_APARTMENT_CONFLICT",
             Self::ComActivationFailed => "SUPERVISOR_STARTUP_COM_ACTIVATION_FAILED",
             Self::ComConnectFailed => "SUPERVISOR_STARTUP_COM_CONNECT_FAILED",
             Self::RootFolderReadFailed => "SUPERVISOR_STARTUP_ROOT_FOLDER_READ_FAILED",
@@ -711,6 +713,10 @@ mod native {
             let hr = unsafe { CoInitializeEx(std::ptr::null_mut(), COINIT_MULTITHREADED) };
             if hr >= 0 {
                 Ok(Self(true))
+            } else if hr == 0x8001_0106_u32 as i32 {
+                // RPC_E_CHANGED_MODE: this thread already has an incompatible
+                // COM apartment. Do not silently change its threading model.
+                Err(SupervisorStartupErrorV1::ComApartmentModeConflict)
             } else {
                 Err(SupervisorStartupErrorV1::ComInitializationFailed)
             }
@@ -1234,6 +1240,10 @@ mod tests {
             (
                 SupervisorStartupErrorV1::ComInitializationFailed,
                 "SUPERVISOR_STARTUP_COM_INIT_FAILED",
+            ),
+            (
+                SupervisorStartupErrorV1::ComApartmentModeConflict,
+                "SUPERVISOR_STARTUP_COM_APARTMENT_CONFLICT",
             ),
             (
                 SupervisorStartupErrorV1::ComActivationFailed,
