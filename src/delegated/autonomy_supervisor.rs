@@ -1828,9 +1828,23 @@ impl AutonomousSupervisorV1 {
         if action == "RESULT" {
             let result = crate::reviewed_build::reviewed_build_result(&self.workspace)
                 .map_err(|_| "reviewed build result is unavailable".to_string())?;
-            return Ok(
-                json!({"state":result.state,"tunnelAction":"none-external-tunnel-untouched"}),
-            );
+            // Re-read the current verified active generation, but project only
+            // a fixed failure phase and classification. No raw compiler output.
+            let safe_failure = (result.state == "BUILD_FAILED_OR_AMBIGUOUS")
+                .then(|| crate::reviewed_build::reviewed_build_failure_category(&self.workspace))
+                .and_then(Result::ok);
+            return Ok(match safe_failure {
+                Some((phase, classification)) => json!({
+                    "state":result.state,
+                    "failurePhase":phase,
+                    "failureClassification":classification,
+                    "tunnelAction":"none-external-tunnel-untouched"
+                }),
+                None => json!({
+                    "state":result.state,
+                    "tunnelAction":"none-external-tunnel-untouched"
+                }),
+            });
         }
         if matches!(action, "PREPARE" | "PREFLIGHT") {
             let authority =
