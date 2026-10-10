@@ -1,3 +1,12 @@
+## 2026-10-10 — CatDesk_chat50 T-0464 isolated bootstrap PASSED; T-0465 reload approval pending (LATEST)
+
+- Durable session `adc-t0464r1-source-current-bootstrap-verifier-20261010` ended `COMPLETED_VERIFIED`, verified fixed profile `CARGO_BUILD_RELEASE_ISOLATED` succeeded (Cargo release profile finished; report says code 0 / 4.67s). Independent final review record `review-adc-t0464r1-source-current-bootstrap-verifier-20261010-6-independent_final_review` was ACKNOWLEDGED. Exact standalone direct build from earlier chat timed out and was never counted as success.
+- New attributed build evidence: `docs/orchestrator/review_bundles/T-0464_R1_SOURCE_CURRENT_ISOLATED_BOOTSTRAP_VERIFICATION.md`, source commit `3aafa22c1a900fc8fdf4c15d3b8b9fcf126afb48`, scratch binary `.catdesk/verification-targets/autonomy-release/release/catdesk.exe`, SHA256 `1096edfa483ff38c0b115bb3d80b500018b97b6111516d704fb0ef54d4cab855`, 26886144 bytes. Candidate is **bootstrap verification only**, not reviewed attestation/promotion/serving image. A direct PowerShell Get-FileHash command was denied by CatDesk gateway; must use guarded daemon-reload independent candidate remeasurement before approval.
+- Existing source file `src/daemon-reload-approval-request-v1.json` is **untracked historical artifact** for old `target/release/catdesk.exe`, hash `9a8f4ebf...`; do not overwrite blindly or reuse as authorization. Byte-identical 475-byte backup made at `docs/orchestrator/review_bundles/T-0465_R0_LEGACY_DAEMON_RELOAD_APPROVAL_ARCHIVE.json`, readback verified.
+- NEXT: require fresh independently reviewed, *task-attributable* canonical JSON approval at fixed `src/daemon-reload-approval-request-v1.json`, binding the new exact bootstrap path/hash/length, preserving archived original. Only after `COMPLETED_VERIFIED` + record ACK and strict candidate remeasurement may run guarded `catdesk_daemon_reload` PREFLIGHT/CONFIRM; verify serving parity and tunnel retention. No new protected build under old worker; WakeHost dev84 STOPPED on old Chat48 generation31 until paired Chat50 target is verified.
+
+---
+
 ## 2026-10-10 — CatDesk_chat50 T-0463 R2 protected-build/bootstrap blocker (LATEST)
 
 - GitHub Actions run `38067618614` for docs-only HEAD `e7784c4` PASSED **all 3 Windows jobs**. Earlier source-fix run `38066384342` at `3160cd4` also PASSED all 3 Windows jobs.
