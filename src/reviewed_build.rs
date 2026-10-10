@@ -5360,7 +5360,8 @@ pub fn run_reviewed_build_worker(
         let temp = temp_guard.path().to_path_buf();
         let cargo_pin = open_attested_tool(&attempt.cargo, "cargo")?;
         let rustc_pin = open_attested_tool(&attempt.rustc, "rustc")?;
-        let cargo_home = seed_isolated_cargo_home(workspace, &control, build_attempt_id, &source)?;
+        let (_cargo_home_guard, cargo_home) =
+            seed_isolated_cargo_home(workspace, &control, build_attempt_id, &source)?;
         let mut command = Command::new(&cargo_pin.evidence.absolute_path);
         configure_exact_worker_cargo_command(
             &mut command,
@@ -8221,7 +8222,7 @@ fn seed_isolated_cargo_home(
     control: &BuildControlRoot,
     attempt: &str,
     source: &Path,
-) -> Result<PathBuf, String> {
+) -> Result<(ProtectedDirectoryGuard, PathBuf), String> {
     // Legacy single-generation roots preserve their existing Cargo cache path.
     // On reviewed retry generations, isolate dependencies in the same short,
     // attempt-bound and pinned parent as the non-authoritative Cargo target.
@@ -8233,7 +8234,11 @@ fn seed_isolated_cargo_home(
     } else {
         build_attempt_output_root_guard(workspace, control, attempt)?
     };
-    seed_isolated_cargo_home_into(&mut destination, source)
+    let home = seed_isolated_cargo_home_into(&mut destination, source)?;
+    // Keep the attempt-specific pinned parent alive through Cargo execution,
+    // not only during dependency seeding, independently of protected control.
+    destination.assert_stable("reviewed build isolated cargo home")?;
+    Ok((destination, home))
 }
 
 /// Seed a fresh isolated Cargo closure beneath a caller-owned pinned root.
@@ -10207,6 +10212,7 @@ mod tests {
                 "seed_isolated_cargo_home(workspace, &control, build_attempt_id, &source)?"
             )
         );
+        assert!(worker.contains("let (_cargo_home_guard, cargo_home)"));
         assert!(worker.contains("configure_exact_worker_cargo_command("));
         assert!(worker.contains("&cargo_home,"));
         assert!(command_body.contains(".env_clear()"));
