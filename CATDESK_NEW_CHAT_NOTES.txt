@@ -1,4 +1,13 @@
-## 2026-10-10 — Chat55 to NEXT CHAT handoff (CURRENT; supersedes older headings)
+## 2026-10-10 — Chat56 supersedes Chat55 (CURRENT)
+
+- New desired engineering URL: `https://chatgpt.com/c/6aca50a3-0da0-83ea-8358-dbc128c4f9ad`; expected SHA-256 `625ddb77fa11ea42663806c7e9e436c81a6a01368e1d14f6f68c8a7ac456d0fc`. This is the human/hourly canonical; NOT YET paired in protected CatDesk project registry and independent WakeHost. Old WakeHost dev84 remains STOPPED PID0 targeting Chat48 gen31; registry SHA mismatch remains.
+- Disabled the previously enabled Chat55 hourly deadman and created new Chat56 hourly deadman (hourly at :00, from 11:00 EDT) with the requested exact continuation and single-writer/STOP-Wake safeguards. No old CatDesk hourly deadmen enabled.
+- Confirmed source GitHub CI run 38059945796 all three jobs SUCCESS, but repaired code is NOT deployed. Old serving build RESULT still BUILD_FAILED_OR_AMBIGUOUS without failure class; release recovery tool still INVALID_ARGUMENT. Supervisor readback additionally reports SUPERVISOR_STARTUP_DEFINITION_READ_FAILED, SUPERVISOR_STARTUP_POLICY_UNPROVEN and SUPERVISOR_ROOT_UNAVAILABLE, not known to explain protected build failure.
+- Recovery ACTIVE, GitHub mirror COMPLETE. Do not open old installed Binagotchy CLI, start/resume/test Wake or attempt unpaired target setter. Next obtain sanctioned protected build category, repair proven cause, BUILD_ATTESTED/promote/serve parity, live diagnose/recover, then guarded paired target rollover to Chat56; verify matching URL+SHA and Wake generation >=32; finally fresh Wake canary/natural acceptance. External tunnel and historical untracked files remain untouched.
+
+---
+
+## 2026-10-10 — Chat55 to NEXT CHAT handoff (HISTORICAL; superseded)
 
 **READ FIRST:** `docs/orchestrator/CATDESK_CHAT55_RECOVERY_HANDOFF_2026-10-10.md`, `.catdesk/session.md`, `.catdesk/current_plan.md`, and `CATDESK_MILESTONES.md`. All earlier new-chat notes below are historical; in particular their canonical URLs, generations, enabled-hourly-task claims, and current milestones must NOT be reused without fresh evidence.
 

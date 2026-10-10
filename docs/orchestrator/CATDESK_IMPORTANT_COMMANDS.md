@@ -4,7 +4,16 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
-## CURRENT safety override — 2026-10-10, next-chat rollover
+## 2026-10-10 — Chat56 supersedes Chat55 (CURRENT)
+
+- New desired engineering URL: `https://chatgpt.com/c/6aca50a3-0da0-83ea-8358-dbc128c4f9ad`; expected SHA-256 `625ddb77fa11ea42663806c7e9e436c81a6a01368e1d14f6f68c8a7ac456d0fc`. This is the human/hourly canonical; NOT YET paired in protected CatDesk project registry and independent WakeHost. Old WakeHost dev84 remains STOPPED PID0 targeting Chat48 gen31; registry SHA mismatch remains.
+- Disabled the previously enabled Chat55 hourly deadman and created new Chat56 hourly deadman (hourly at :00, from 11:00 EDT) with the requested exact continuation and single-writer/STOP-Wake safeguards. No old CatDesk hourly deadmen enabled.
+- Confirmed source GitHub CI run 38059945796 all three jobs SUCCESS, but repaired code is NOT deployed. Old serving build RESULT still BUILD_FAILED_OR_AMBIGUOUS without failure class; release recovery tool still INVALID_ARGUMENT. Supervisor readback additionally reports SUPERVISOR_STARTUP_DEFINITION_READ_FAILED, SUPERVISOR_STARTUP_POLICY_UNPROVEN and SUPERVISOR_ROOT_UNAVAILABLE, not known to explain protected build failure.
+- Recovery ACTIVE, GitHub mirror COMPLETE. Do not open old installed Binagotchy CLI, start/resume/test Wake or attempt unpaired target setter. Next obtain sanctioned protected build category, repair proven cause, BUILD_ATTESTED/promote/serve parity, live diagnose/recover, then guarded paired target rollover to Chat56; verify matching URL+SHA and Wake generation >=32; finally fresh Wake canary/natural acceptance. External tunnel and historical untracked files remain untouched.
+
+---
+
+## HISTORICAL safety override — 2026-10-10, next-chat rollover
 
 The installed independent WakeHost dev.84 is **intentionally STOPPED** because it was claiming work against obsolete Chat48 at generation 31. The existing *installed* Binagotchy CLI can silently re-start WakeHost when the console is opened. **Do not launch that old CLI or run its one-shot PowerShell fallback from section 1, call Wake start/resume/restart/test, or replay old review events** until the stop-preserving source repair has passed full CI **and been installed** and the new canonical chat target is bound coherently through the guarded paired transaction. A debug `target/debug/catdesk.exe` is not serving authority. This safety override takes precedence over the historical command examples below. Keep old Wake event records and avoid arbitrary Chrome process termination.
 

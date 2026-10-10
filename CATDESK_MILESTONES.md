@@ -1,4 +1,13 @@
-## 2026-10-10 — Chat55 final documentation and next-chat handoff (CURRENT)
+## 2026-10-10 — Chat56 supersedes Chat55 (CURRENT)
+
+- New desired engineering URL: `https://chatgpt.com/c/6aca50a3-0da0-83ea-8358-dbc128c4f9ad`; expected SHA-256 `625ddb77fa11ea42663806c7e9e436c81a6a01368e1d14f6f68c8a7ac456d0fc`. This is the human/hourly canonical; NOT YET paired in protected CatDesk project registry and independent WakeHost. Old WakeHost dev84 remains STOPPED PID0 targeting Chat48 gen31; registry SHA mismatch remains.
+- Disabled the previously enabled Chat55 hourly deadman and created new Chat56 hourly deadman (hourly at :00, from 11:00 EDT) with the requested exact continuation and single-writer/STOP-Wake safeguards. No old CatDesk hourly deadmen enabled.
+- Confirmed source GitHub CI run 38059945796 all three jobs SUCCESS, but repaired code is NOT deployed. Old serving build RESULT still BUILD_FAILED_OR_AMBIGUOUS without failure class; release recovery tool still INVALID_ARGUMENT. Supervisor readback additionally reports SUPERVISOR_STARTUP_DEFINITION_READ_FAILED, SUPERVISOR_STARTUP_POLICY_UNPROVEN and SUPERVISOR_ROOT_UNAVAILABLE, not known to explain protected build failure.
+- Recovery ACTIVE, GitHub mirror COMPLETE. Do not open old installed Binagotchy CLI, start/resume/test Wake or attempt unpaired target setter. Next obtain sanctioned protected build category, repair proven cause, BUILD_ATTESTED/promote/serve parity, live diagnose/recover, then guarded paired target rollover to Chat56; verify matching URL+SHA and Wake generation >=32; finally fresh Wake canary/natural acceptance. External tunnel and historical untracked files remain untouched.
+
+---
+
+## 2026-10-10 — Chat55 final documentation and next-chat handoff (HISTORICAL)
 
 - **Canonical source handoff:** `docs/orchestrator/CATDESK_CHAT55_RECOVERY_HANDOFF_2026-10-10.md`. Also updated `.catdesk/current_plan.md`, `CATDESK_NEW_CHAT_NOTES.txt`, `docs/orchestrator/CATDESK_IMPORTANT_COMMANDS.md` with explicit supersession of old canonical Chat39/Chat47 records and warning that opening the old installed Binagotchy CLI can restart STOPPED WakeHost. `.catdesk/session.md` is the transient durable operational resume summary.
 - **Milestones:** GitHub mirror and connected GitHub provider COMPLETE; recovery ACTIVE; Binagotchy UI/CLI polish and multi-project fairness LATER. Local/remote feature-branch source checkpoint `8bfa4ed` with `vnath99/CatDesk` private repo; GitHub Actions run `38059945796` for exact `8bfa4ed` COMPLETED SUCCESS with all three Windows jobs PASSED. This is source verification, NOT attested serving/installed WakeHost authority. Earlier full-green `16c0ba8` CI `38057810788` with T-0462 independent review VERIFIED/ACKed, but no production promotion.
