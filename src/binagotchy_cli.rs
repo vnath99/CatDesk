@@ -637,14 +637,17 @@ mod tests {
 
     #[test]
     fn presentation_launch_cannot_implicitly_restart_an_operator_stopped_wakehost() {
+        // Limit source assertions to product code. Literals in this test
+        // must not accidentally satisfy or invalidate their own assertions.
         let source = include_str!("binagotchy_cli.rs");
+        let production = source.split("mod tests {").next().expect("product source");
         assert!(
-            source
+            production
                 .contains("catdesk_wake::runtime::start_installed_only_if_desired_running(&store)")
         );
-        assert!(!source.contains("let _ = catdesk_wake::runtime::start_installed(&store);"));
-        assert!(source.contains("ParsedCommand::WakeStart"));
-        assert!(source.contains("ParsedCommand::WakeResume"));
+        assert!(!production.contains("let _ = catdesk_wake::runtime::start_installed(&store);"));
+        assert!(production.contains("ParsedCommand::WakeStart"));
+        assert!(production.contains("ParsedCommand::WakeResume"));
     }
 
     #[test]
