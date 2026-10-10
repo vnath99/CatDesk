@@ -1,3 +1,9 @@
+## 2026-10-10 — Chat50 CI verified and formal T-0463 source review needed (LATEST)
+
+- GitHub Actions run 38066384342 at exact source HEAD 3160cd43ca021c2b6b55c29ca61801b0cd9cfa3e completed SUCCESS with Rust, independent WakeHost Rust, Python Wake/advisor all passing. Rust job Format, Clippy, isolated PowerShell cwd and remaining suite steps also SUCCESS.
+- Saved source-readiness review request at docs/orchestrator/review_bundles/T-0463_R1_SHORT_CARGO_HOME_SOURCE_READINESS.md; inspected exact code and pin lifetime but no new independent final-review record for current HEAD exists. Read-only autonomy_contract_create attempt returned INVALID_ARGUMENT without creating a session. Do not reuse older T-0462 authority or blindly run protected build.
+- Prior local full cargo test connector TIMEOUT is not a pass/fail claim; tasklist process status query also INVALID_ARGUMENT. Source-only repair still not a deployed/attested release. Keep old WakeHost STOPPED on Chat48 generation31 until coherent paired Chat50 target migration.
+
 ## 2026-10-10 — CatDesk_chat50 Recovery short Cargo-home candidate (LATEST)
 
 - This is CatDesk_chat50, successor to CatDesk_chat49; earlier "Chat56" was an assistant numbering mistake. The one enabled hourly deadman name and prompt use Chat50 and same canonical URL/digest.

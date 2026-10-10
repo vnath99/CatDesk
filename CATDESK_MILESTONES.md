@@ -1,3 +1,9 @@
+## 2026-10-10 — CatDesk_chat50: HEAD 3160cd4 CI verified; T-0463 source-review gate (LATEST)
+
+- GitHub Actions **CI run 38066384342** for exact pushed `3160cd43ca021c2b6b55c29ca61801b0cd9cfa3e` is **COMPLETED SUCCESS**, all three Windows jobs PASS (Rust, independent WakeHost Rust, Python Wake/advisor). Rust job individually passed format, strict Clippy, isolated PowerShell shell/cwd tests, and remaining Rust suite. This is source CI, NOT reviewed serving deployment. Prior local full Cargo test command timed out; its direct result/process state is unknown. `tasklist` via current CatDesk run_command rejected `INVALID_ARGUMENT` and was not bypassed.
+- Inspected exact `fa86754` and `3160cd4` source diffs, source output root and dependency-cache pin semantics. Wrote **source-readiness assessment**, `docs/orchestrator/review_bundles/T-0463_R1_SHORT_CARGO_HOME_SOURCE_READINESS.md`. **No newly accepted CatDesk independent final review record exists** for current source HEAD. A tentative read-only autonomous review contract create returned `INVALID_ARGUMENT` before creating any session; do not claim one started, and do not reuse older T-0462 review authority.
+- **Next:** issue a fresh independent T-0463 source-final-review with supported controller workflow, verify exact authoritative reviewed source snapshot, then one approved guarded reviewed-build PREPARE/CONFIRM/RESULT. Require `BUILD_ATTESTED` before promotion/reload. WakeHost dev84 remains STOPPED on old Chat48 generation 31 until verified paired Chat50 migration.
+
 ## 2026-10-10 — CatDesk_chat50 Recovery: short pinned Cargo-home source repair (LATEST)
 
 - User corrected chat number to **CatDesk_chat50** (previous assistant wrongly called it Chat56); canonical URL/digest unchanged. The single enabled Chat50 hourly deadman title/prompt corrected. Older independent WakeHost remains STOPPED on Chat48 generation 31; no paired migration performed.

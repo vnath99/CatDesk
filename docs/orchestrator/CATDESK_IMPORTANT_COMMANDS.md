@@ -4,6 +4,12 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-10 — Verified current Windows CI, review authority still pending (LATEST)
+
+- Source HEAD `3160cd43ca021c2b6b55c29ca61801b0cd9cfa3e`; GitHub REST supported read-only URL `https://api.github.com/repos/vnath99/CatDesk/actions/runs?head_sha=3160cd43ca021c2b6b55c29ca61801b0cd9cfa3e&per_page=10` via connected `mcp__GitHub__fetch` returned **CI push run `38066384342` completed SUCCESS**. `mcp__GitHub__fetch_workflow_run_jobs` confirmed three SUCCESS jobs, `mcp__GitHub__fetch_workflow_job_steps` confirmed Rust full CI steps. This is better than empty combined-status or PR-only workflow endpoints for push runs.
+- Attempt to check old local Cargo process with `tasklist` via `run_command` returned `INVALID_ARGUMENT` (no process observation). Do not infer lingering process or bypass allowlist. The prior standalone broad Cargo test timeout remains unknown; configured CI full suite passed.
+- New review readiness report `docs/orchestrator/review_bundles/T-0463_R1_SHORT_CARGO_HOME_SOURCE_READINESS.md`; controller independent final-review NOT yet approved. `autonomy_contract_create` tentative read-only proposal rejected `INVALID_ARGUMENT`, no contract/session started. Requires new exact HEAD source review before invoking guarded reviewed build PREPARE/CONFIRM. Do not recycle older T-0462 record or restart Wake.
+
 ## 2026-10-10 — CatDesk_chat50 source repair and command gateway (LATEST)
 
 - Chat identity correction: **CatDesk_chat50** follows CatDesk_chat49, not Chat56. Canonical URL unchanged. Hourly task renamed; only one active CatDesk fallback.
