@@ -1,3 +1,16 @@
+## 2026-10-10 — Recovery milestone: protected-build failure diagnosis (T-0460)
+
+- **Milestone classification:** GitHub mirror/connector is COMPLETE; recovery is CURRENT/ACTIVE. Git operations below are source synchronization and CI verification for recovery, not restarting the GitHub milestone.
+- Verified live CatDesk transport `CONNECTED_VERIFIED` and local MCP `READY`. Installed independent WakeHost dev.84 still targets Chat54 at generation 31; project-registry SHA mismatch remains. No Chat55 binding, no manual Wake canary, and no unpaired target mutation.
+- Runtime read-only supervisor diagnosis reports `SUPERVISOR_STARTUP_DEFINITION_READ_FAILED`, `SUPERVISOR_STARTUP_POLICY_UNPROVEN`, `SUPERVISOR_ROOT_UNAVAILABLE`. New commits `e6e49ed`, `309f51b`, and `d38f07e` develop fixed-stage Task Scheduler/COM diagnostics but are **source only**, not accepted live service recovery.
+- Existing `catdesk.ps1 diagnose`, `catdesk.ps1 status`, and dedicated `catdesk_release_recovery({})` were attempted through CatDesk MCP; the command gateway returned `INVALID_ARGUMENT` in each case. **No canonical recovery was executed.** Do not work around guardrails by direct protected state edits.
+- Reconciled 3 local recovery commits with remote `ac6a789` supervisor fixed-category result projection using `git fetch` + ordinary `git merge --no-edit`, success without conflicts. Kept other worktree artifacts intact; no force push.
+- Implemented a **read-only, fixed-vocabulary** reviewed-build failure category reader in `src/reviewed_build.rs`, complementing remote `src/delegated/autonomy_supervisor.rs` RESULT projection. It validates the active reviewed-build attempt and result before returning only a known phase/classification (no owner IDs, raw stderr, arbitrary paths or messages). Added pure regression tests: specific MSVC `D8037` classifier and arbitrary-string non-disclosure. Local `cargo fmt --all` PASS, `cargo build --bin catdesk` PASS (unreviewed debug), strict `cargo clippy --locked --all-targets --all-features -- -D warnings` PASS. Focused `cargo test --lib reviewed_failure_category_tests` rejected by gateway `INVALID_ARGUMENT`; fresh Windows CI required.
+- **Current blocker:** active T-0460 reviewed-build generation `afeceefcb1874482b7732425448d3a8f` ended `BUILD_FAILED_OR_AMBIGUOUS`; full active `result.json` reading was denied by protected CatDesk MCP. Never attribute a specific Cargo failure absent evidence or blindly restart/retry. Next: green CI + exact reviewed approval/serving deployment of new classification, then inspect failing protected phase and repair deterministic one-command recovery. Only after approved controller rollout call paired `autonomy_project_registry_bind` with old Wake SHA to Chat55 and independently verify new URL/digest and generation >=32.
+- Hourly Chat55 deadman remains enabled as fallback; historic incomplete Wake message remains untouched.
+
+---
+
 ## 2026-10-09 — Chat55 CI green; guarded target recovery CLI entry-point repair
 
 - Verified authoritative GitHub Actions run `37992094331` for source `b3585ad`: all three Windows jobs PASSED, including full Rust test, WakeHost strict Clippy/Wake tests, and Python suite. This closes the prior CI convergence blocker. Historical failed runs no longer define the source's status.

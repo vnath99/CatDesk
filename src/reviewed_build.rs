@@ -5052,6 +5052,118 @@ pub fn confirm_reviewed_build(
     }
 }
 
+/// Return only fixed, non-secret failure categories from the independently
+/// validated, active reviewed-build generation. Never project raw compiler
+/// stderr, source paths, owner identities, or free-form persisted error text.
+pub fn reviewed_build_failure_category(
+    workspace: &Path,
+) -> Result<(&'static str, &'static str), String> {
+    let control = existing_control_root(workspace)?;
+    let attempt: ReviewedBuildAttemptV1 = control_read_json(&control, "attempt.json")?;
+    let outcome = outcome_from_existing_state(&control, &attempt)?;
+    if outcome.state != "BUILD_FAILED_OR_AMBIGUOUS" {
+        return Err("REVIEWED_BUILD_RESULT_UNAVAILABLE".into());
+    }
+    let result: ReviewedBuildResultV1 = control_read_json(&control, "result.json")?;
+    Ok(sanitized_build_failure_category(&result))
+}
+
+/// Fixed-vocabulary projection kept separately testable without live protected
+/// build control records, process handles, or compiler stderr.
+fn sanitized_build_failure_category(
+    result: &ReviewedBuildResultV1,
+) -> (&'static str, &'static str) {
+    let phase = match result.failure_code.as_deref() {
+        Some("REVIEWED_BUILD_FAILED") => "CARGO_BUILD",
+        Some("REVIEWED_BUILD_TIMEOUT") => "CARGO_TIMEOUT",
+        Some("REVIEWED_BUILD_TOOLCHAIN_UNAVAILABLE") => "TOOLCHAIN",
+        Some("REVIEWED_BUILD_EVIDENCE_DRIFTED") => "TOOLCHAIN_DRIFT",
+        Some("REVIEWED_SOURCE_SNAPSHOT_REQUIRED") => "SOURCE_SNAPSHOT",
+        Some("REVIEWED_BUILD_OUTPUT_UNAVAILABLE") => "OUTPUT",
+        Some("REVIEWED_BUILD_LINKER_UNAVAILABLE") => "LINKER",
+        Some("SPAWN_FAILED") => "SPAWN",
+        _ => "OTHER_PROTECTED_FAILURE",
+    };
+    let classification = if phase == "CARGO_BUILD" {
+        match result
+            .failure_diagnostic
+            .as_ref()
+            .map(|diagnostic| diagnostic.classification.as_str())
+        {
+            Some("CARGO_DEPENDENCY_NETWORK_UNAVAILABLE") => "CARGO_DEPENDENCY_NETWORK_UNAVAILABLE",
+            Some("CARGO_LOCKFILE_OUT_OF_DATE") => "CARGO_LOCKFILE_OUT_OF_DATE",
+            Some("CARGO_LINKER_NOT_FOUND") => "CARGO_LINKER_NOT_FOUND",
+            Some("CARGO_LINK_LIBRARY_NOT_FOUND") => "CARGO_LINK_LIBRARY_NOT_FOUND",
+            Some("CARGO_LINK_INPUT_NOT_FOUND") => "CARGO_LINK_INPUT_NOT_FOUND",
+            Some("CARGO_LINK_UNRESOLVED_EXTERNAL") => "CARGO_LINK_UNRESOLVED_EXTERNAL",
+            Some("CARGO_LINK_PDB_FAILURE") => "CARGO_LINK_PDB_FAILURE",
+            Some("CARGO_LINK_OUT_OF_MEMORY") => "CARGO_LINK_OUT_OF_MEMORY",
+            Some("CARGO_MSVC_TEMP_IL_FILE_FAILURE") => "CARGO_MSVC_TEMP_IL_FILE_FAILURE",
+            Some("CARGO_LINK_FAILED") => "CARGO_LINK_FAILED",
+            Some("CARGO_COMPILATION_FAILED") => "CARGO_COMPILATION_FAILED",
+            Some("CARGO_EXIT_NONZERO") => "CARGO_EXIT_NONZERO",
+            _ => "CARGO_CLASSIFICATION_UNAVAILABLE",
+        }
+    } else {
+        "NOT_APPLICABLE"
+    };
+    (phase, classification)
+}
+
+#[cfg(test)]
+mod reviewed_failure_category_tests {
+    use super::{
+        ReviewedBuildFailureDiagnosticV1, ReviewedBuildResultV1, sanitized_build_failure_category,
+    };
+
+    fn failed(code: &str, classification: Option<&str>) -> ReviewedBuildResultV1 {
+        ReviewedBuildResultV1 {
+            schema_version: 1,
+            build_attempt_id: "fixture".into(),
+            owner_id: "fixture".into(),
+            state: "BUILD_FAILED_OR_AMBIGUOUS".into(),
+            attestation_digest: None,
+            failure_code: Some(code.into()),
+            failure_diagnostic: classification.map(|value| ReviewedBuildFailureDiagnosticV1 {
+                schema_version: 1,
+                phase: "CARGO_BUILD".into(),
+                exit_code: Some(101),
+                classification: value.into(),
+                captured_stderr_sha256: "0".repeat(64),
+                captured_stderr_length: 100,
+                stderr_truncated: false,
+                missing_link_library: None,
+                missing_link_input: None,
+            }),
+        }
+    }
+
+    #[test]
+    fn recognizes_specific_failure_without_raw_evidence() {
+        let record = failed(
+            "REVIEWED_BUILD_FAILED",
+            Some("CARGO_MSVC_TEMP_IL_FILE_FAILURE"),
+        );
+        assert_eq!(
+            sanitized_build_failure_category(&record),
+            ("CARGO_BUILD", "CARGO_MSVC_TEMP_IL_FILE_FAILURE")
+        );
+    }
+
+    #[test]
+    fn arbitrary_stored_failure_text_cannot_escape_fixed_vocabulary() {
+        let arbitrary = "C:\\sensitive\\secret.txt Token=private";
+        assert_eq!(
+            sanitized_build_failure_category(&failed(arbitrary, Some(arbitrary))),
+            ("OTHER_PROTECTED_FAILURE", "NOT_APPLICABLE")
+        );
+        assert_eq!(
+            sanitized_build_failure_category(&failed("REVIEWED_BUILD_FAILED", Some(arbitrary))),
+            ("CARGO_BUILD", "CARGO_CLASSIFICATION_UNAVAILABLE")
+        );
+    }
+}
+
 pub fn reviewed_build_result(workspace: &Path) -> Result<ReviewedBuildPublicOutcomeV1, String> {
     let control = existing_control_root(workspace)?;
     let attempt: ReviewedBuildAttemptV1 = control_read_json(&control, "attempt.json")?;
