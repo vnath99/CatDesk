@@ -554,7 +554,9 @@ pub fn run_cli(workspace: &Path) -> Result<(), String> {
             .config()
             .is_ok_and(|config| !config.targets.is_empty())
     {
-        let _ = catdesk_wake::runtime::start_installed(&store);
+        // Opening this presentation shell is not permission to resume an
+        // explicitly stopped or paused independent WakeHost.
+        let _ = catdesk_wake::runtime::start_installed_only_if_desired_running(&store);
     }
     print_status(workspace, &mut stdout)?;
     writeln!(stdout).map_err(|_| "CLI_OUTPUT_FAILED")?;
@@ -631,6 +633,18 @@ mod tests {
             ParsedCommand::WakeRetire("old-event-1")
         );
         assert_eq!(parse_command("rm -rf ."), ParsedCommand::Unknown);
+    }
+
+    #[test]
+    fn presentation_launch_cannot_implicitly_restart_an_operator_stopped_wakehost() {
+        let source = include_str!("binagotchy_cli.rs");
+        assert!(
+            source
+                .contains("catdesk_wake::runtime::start_installed_only_if_desired_running(&store)")
+        );
+        assert!(!source.contains("let _ = catdesk_wake::runtime::start_installed(&store);"));
+        assert!(source.contains("ParsedCommand::WakeStart"));
+        assert!(source.contains("ParsedCommand::WakeResume"));
     }
 
     #[test]

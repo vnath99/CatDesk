@@ -234,6 +234,18 @@ pub fn control(store: &Store, desired: &str) -> Result<()> {
     )
 }
 
+/// Presentation helpers may reconnect to an already-authorized RUNNING
+/// WakeHost, but must never turn an operator's PAUSED or STOPPED intent into
+/// RUNNING merely because the Binagotchy console was opened. Explicit start
+/// and resume operations continue to call start_installed themselves.
+pub fn start_installed_only_if_desired_running(store: &Store) -> Result<bool> {
+    if desired(store)? != "RUNNING" {
+        return Ok(false);
+    }
+    start_installed(store)?;
+    Ok(true)
+}
+
 fn desired(store: &Store) -> Result<String> {
     let value: Control = read(&store.root().join("control.json"))?;
     if value.schema_version != 1
@@ -2597,6 +2609,27 @@ mod host_runtime_recovery_tests {
         let store = Store::open_scoped_for_test(&root, &base).expect("store");
         store.initialize().expect("initialize");
         (base, store)
+    }
+
+    #[test]
+    fn console_autostart_preserves_explicit_stop_and_pause_intent() {
+        let (base, store) = fixture();
+        for state in ["STOPPED", "PAUSED"] {
+            control(&store, state).expect("set explicit operator intent");
+            assert_eq!(
+                start_installed_only_if_desired_running(&store),
+                Ok(false),
+                "{state} must never reopen the old-target browser"
+            );
+            assert_eq!(desired(&store).expect("persistent intent"), state);
+        }
+        // With no reviewed install pointer in this fixture, a RUNNING intent
+        // must try the normal hash-verified path and fail closed, not invent
+        // a new executable, target, or install authority.
+        control(&store, "RUNNING").expect("restore start intent");
+        assert!(start_installed_only_if_desired_running(&store).is_err());
+        drop(store);
+        let _ = std::fs::remove_dir_all(base);
     }
 
     #[test]
