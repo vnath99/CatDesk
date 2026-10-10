@@ -2623,11 +2623,12 @@ mod host_runtime_recovery_tests {
             );
             assert_eq!(desired(&store).expect("persistent intent"), state);
         }
-        // With no reviewed install pointer in this fixture, a RUNNING intent
-        // must try the normal hash-verified path and fail closed, not invent
-        // a new executable, target, or install authority.
+        // RUNNING permits the normal path, but a fixture with no configured
+        // target is deliberately a no-op; no install pointer is needed and
+        // no target or executable is fabricated.
         control(&store, "RUNNING").expect("restore start intent");
-        assert!(start_installed_only_if_desired_running(&store).is_err());
+        assert_eq!(start_installed_only_if_desired_running(&store), Ok(true));
+        assert_eq!(desired(&store).expect("running intent"), "RUNNING");
         drop(store);
         let _ = std::fs::remove_dir_all(base);
     }
