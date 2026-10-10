@@ -4,6 +4,11 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-10 — T0468 R2 reviewed source, host run separately gated (LATEST)
+
+- New fixed signed-image status source `--catdesk-reviewed-main-image-status-fixed-policy` at HEAD `65e881b` independently reviewed Codex T0468 R2 `COMPLETED_VERIFIED`, final record `review-adc-t0468r2-signed-main-image-status-independent-20261010-6-independent_final_review` ACKED. Source-review conclusion PASS, operation on protected host NOT performed or approved. Independent GitHub Actions run `38076645150` all three Windows jobs COMPLETE SUCCESS. Local `cargo build --locked --offline --bin catdesk` built debug artifact but no binary hash measurement, no launch and no signed-image authority.
+- Next supported path requires operator-authorized **read-only** fixed-flag status against trusted local host once source provenance and read-only privileges independently verified. Do not run this as an installer, force reload old daemon, use a raw PowerShell file reader as cryptographic proof, assume epoch1 still active, or expose private signer. An output indicating VERIFIED must bind current accepted/rotation signed envelopes and fixed installed image hash/length; any refusal means fail closed.
+
 ## 2026-10-10 — T-0468 fixed read-only signed-main-image CLI SOURCE ONLY (LATEST)
 
 - New *not installed / not approved for production host execution* exact CLI source mode: `--catdesk-reviewed-main-image-status-fixed-policy` (no other flags or arguments; do not add a pathname/epoch/hash/secret). Source in `src/main.rs` and `src/reviewed_build.rs`, described by `T-0468_R1_FIXED_SIGNED_MAIN_IMAGE_READBACK_SOURCE.md`. Uses only compiled public signer root and existing fixed no-follow signed receipt read/verification, installed-image SHA256/length binding and retained handle rechecks; output `SIGNED_MAIN_IMAGE_READBACK state=VERIFIED bootstrapEpoch=... installedRotationEpoch=... pendingRotationEpoch=... payloadSha256=... payloadLength=...`. Zero means no installed/pending rotation receipt. No raw signature/envelope/private key/host path returned. Non-Windows returns transport unavailable.

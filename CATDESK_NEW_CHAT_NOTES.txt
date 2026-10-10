@@ -1,3 +1,9 @@
+## 2026-10-10 — T0468 R2 independent source PASS / protected host readback pending (LATEST)
+
+- Git HEAD source `65e881bd05b8379bd595650b905b047d047e277f` CI run `38076645150` COMPLETED SUCCESS with Rust, Independent WakeHost Rust and Python Wake/advisor all passing, independently checked through GitHub connector. Local debug CLI build exit0 and historical signer/rotation focused tests passed, **no CLI execution/installation**.
+- Codex T0468 R2 review `adc-t0468r2-signed-main-image-status-independent-20261010` COMPLETED_VERIFIED, exact record `review-adc-t0468r2-signed-main-image-status-independent-20261010-6-independent_final_review` ACKed; new attributable R2 report `docs/orchestrator/review_bundles/T-0468_R2_INDEPENDENT_SIGNED_READBACK_REVIEW.md`. Verdict SOURCE_REVIEW_PASS, OPERATIONAL_READBACK_BLOCKED. Reviewer did not see final CI status at review time; latest GitHub run confirmation above supersedes that narrow evidence gap without editing immutable reviewer report.
+- Next: separately approved narrow read-only host use of fixed `--catdesk-reviewed-main-image-status-fixed-policy` with source-reviewed executable, obtain authenticated current accepted/installed/pending signing epochs, image SHA and length. Old serving CatDesk lacks flag and rejects reviewed reload API, current signed epoch remains UNKNOWN. No operator private key in project or ChatGPT; no signed rotation/daemon/Wake without later independent authority.
+
 ## 2026-10-10 — T-0467 completion and T-0468 source diagnostic (LATEST)
 
 - T0467 Codex provider hit usage limit. New task-attributable report existed; supported direct work finalize of original WAITING_FOR_CHATGPT session reached COMPLETED_VERIFIED. Exact independent review record `review-adc-t0467r1-signed-bootstrap-readiness-20261010-9-independent_final_review` ACKed, report committed/pushed `51a9d26`. Current signed epoch/image still UNKNOWN, no installation authorized.
