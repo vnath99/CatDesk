@@ -71,6 +71,10 @@ pub(crate) const REVIEWED_MAIN_IMAGE_BOOTSTRAP_INSTALL_FLAG: &str =
 /// child, policy, and anti-rollback state are all compiled/fixed.
 pub(crate) const REVIEWED_MAIN_IMAGE_ROTATE_FLAG: &str =
     "--catdesk-reviewed-main-image-rotate-fixed-policy";
+/// Read-only fixed-host signed receipt status. No caller-selected path, epoch,
+/// envelope, policy, destination, service, output file or private key.
+pub(crate) const REVIEWED_MAIN_IMAGE_STATUS_FLAG: &str =
+    "--catdesk-reviewed-main-image-status-fixed-policy";
 const ATTEMPT_SCHEMA_VERSION: u8 = 2;
 const CLAIM_SCHEMA_VERSION: u8 = 1;
 const RESULT_SCHEMA_VERSION: u8 = 1;
@@ -3114,6 +3118,104 @@ pub(crate) fn parse_reviewed_main_image_rotate_args(args: &[String]) -> Result<b
 
 pub(crate) fn run_reviewed_main_image_rotate_command() -> Result<&'static str, String> {
     execute_reviewed_main_image_rotation_as_administrator()
+}
+
+/// Zero-argument, read-only signed receipt and installed-image status.
+/// Diagnostic output is a fixed field set of verified public hashes, lengths,
+/// epochs and presence flags; no raw envelope, signature or host path is returned.
+pub(crate) fn parse_reviewed_main_image_status_args(args: &[String]) -> Result<bool, String> {
+    let count = args
+        .iter()
+        .filter(|arg| arg.as_str() == REVIEWED_MAIN_IMAGE_STATUS_FLAG)
+        .count();
+    if count == 0 {
+        return Ok(false);
+    }
+    if count != 1 || args.len() != 1 {
+        return Err("reviewed main-image status accepts only its fixed flag".into());
+    }
+    Ok(true)
+}
+
+/// Select only the receipt that authenticates the currently installed image,
+/// never the merely pending next image. Callers must independently verify each
+/// signed envelope against the fixed compiled product root before this step.
+fn select_signed_main_image_readback<'a>(
+    accepted: &'a ReviewedMainImageEnvelopeV1,
+    installed: Option<&'a ReviewedMainImageEnvelopeV1>,
+    pending: Option<&ReviewedMainImageEnvelopeV1>,
+) -> Result<&'a ReviewedMainImageEnvelopeV1, String> {
+    if installed.is_some_and(|value| value.epoch <= accepted.epoch)
+        || pending.is_some_and(|value| value.epoch <= accepted.epoch)
+        || matches!(
+            (installed, pending),
+            (Some(current), Some(next))
+                if next.epoch < current.epoch
+                    || (next.epoch == current.epoch && next != current)
+        )
+    {
+        return Err(REVIEWED_MAIN_IMAGE_ROTATION_REFUSED.into());
+    }
+    Ok(installed.unwrap_or(accepted))
+}
+
+#[cfg(windows)]
+pub(crate) fn run_reviewed_main_image_status_command() -> Result<String, String> {
+    let root = production_reviewed_main_image_trust_root()?;
+    let bootstrap_policy = reviewed_main_image_bootstrap_policy();
+    let rotation_policy = reviewed_main_image_rotation_policy();
+    let accepted = read_accepted_reviewed_main_image_envelope(&root, &bootstrap_policy)?
+        .ok_or_else(|| REVIEWED_MAIN_IMAGE_ROLLBACK_STATE_INVALID.to_string())?;
+    let installed = read_optional_reviewed_main_image_rotation_envelope(
+        Path::new(REVIEWED_MAIN_IMAGE_ROTATION_INSTALLED_ENVELOPE),
+        &root,
+        &rotation_policy,
+    )?;
+    let pending = read_optional_reviewed_main_image_rotation_envelope(
+        Path::new(REVIEWED_MAIN_IMAGE_ROTATION_PENDING_ENVELOPE),
+        &root,
+        &rotation_policy,
+    )?;
+    let current =
+        select_signed_main_image_readback(&accepted, installed.as_ref(), pending.as_ref())?;
+    let mut image = open_fixed_reviewed_main_image_file(
+        Path::new(bootstrap_policy.destination),
+        MAX_CANDIDATE_BYTES,
+    )?;
+    let measured = evidence_from_open_regular(&mut image, "read-only reviewed image status")?;
+    verify_reviewed_main_image_payload_binding(current, &measured)?;
+
+    // Fail closed on a concurrent rotation/receipt change, holding the
+    // read-only image handle across all remeasurements.
+    if read_accepted_reviewed_main_image_envelope(&root, &bootstrap_policy)?
+        != Some(accepted.clone())
+        || read_optional_reviewed_main_image_rotation_envelope(
+            Path::new(REVIEWED_MAIN_IMAGE_ROTATION_INSTALLED_ENVELOPE),
+            &root,
+            &rotation_policy,
+        )? != installed
+        || read_optional_reviewed_main_image_rotation_envelope(
+            Path::new(REVIEWED_MAIN_IMAGE_ROTATION_PENDING_ENVELOPE),
+            &root,
+            &rotation_policy,
+        )? != pending
+        || evidence_from_open_regular(&mut image, "read-only reviewed image status")? != measured
+    {
+        return Err(REVIEWED_MAIN_IMAGE_ROLLBACK_STATE_INVALID.into());
+    }
+    Ok(format!(
+        "SIGNED_MAIN_IMAGE_READBACK state=VERIFIED bootstrapEpoch={} installedRotationEpoch={} pendingRotationEpoch={} payloadSha256={} payloadLength={}",
+        accepted.epoch,
+        installed.as_ref().map_or(0, |value| value.epoch),
+        pending.as_ref().map_or(0, |value| value.epoch),
+        measured.sha256,
+        measured.length
+    ))
+}
+
+#[cfg(not(windows))]
+pub(crate) fn run_reviewed_main_image_status_command() -> Result<String, String> {
+    Err(REVIEWED_MAIN_IMAGE_TRANSPORT_UNAVAILABLE.into())
 }
 
 /// Parse only the exact administrator-owned command shape. A flag occurrence
@@ -8681,6 +8783,104 @@ fn digest_attestation(value: &ReviewedBuildAttestationV2) -> Result<String, Stri
 mod tests {
     use super::*;
     use crate::reviewed_source_snapshot::ReviewedSourceEntryV1;
+
+    #[test]
+    fn signed_main_image_readback_cli_is_exact_and_non_authorizing() {
+        let flag = REVIEWED_MAIN_IMAGE_STATUS_FLAG.to_owned();
+        assert_eq!(
+            parse_reviewed_main_image_status_args(std::slice::from_ref(&flag)),
+            Ok(true)
+        );
+        assert_eq!(parse_reviewed_main_image_status_args(&[]), Ok(false));
+        for args in [
+            vec![flag.clone(), "--epoch=42".into()],
+            vec![flag.clone(), flag.clone()],
+            vec![flag.clone(), "--output=receipt.txt".into()],
+            vec![flag.clone(), "--path=custom.exe".into()],
+        ] {
+            assert!(parse_reviewed_main_image_status_args(&args).is_err());
+        }
+        // Must stay a source-only, fixed-root status readback rather than
+        // making a new signer, installer, MCP or daemon mutation path.
+        let source = include_str!("reviewed_build.rs");
+        let status = source
+            .split("pub(crate) fn run_reviewed_main_image_status_command() -> Result<String, String> {")
+            .nth(1)
+            .expect("fixed status handler");
+        let windows_handler = status
+            .split("#[cfg(not(windows))]")
+            .next()
+            .expect("Windows handler boundary");
+        assert!(windows_handler.contains("production_reviewed_main_image_trust_root()"));
+        assert!(windows_handler.contains("read_accepted_reviewed_main_image_envelope("));
+        assert!(windows_handler.contains("verify_reviewed_main_image_payload_binding("));
+        assert!(!windows_handler.contains("persist_accepted_reviewed_main_image_envelope("));
+        assert!(
+            !windows_handler.contains("execute_reviewed_main_image_rotation_as_administrator(")
+        );
+        assert!(
+            !windows_handler
+                .contains("execute_reviewed_main_image_bootstrap_install_as_administrator(")
+        );
+    }
+
+    #[test]
+    fn signed_main_image_readback_never_confuses_pending_and_installed_epochs() {
+        let accepted = ReviewedMainImageEnvelopeV1 {
+            product: REVIEWED_MAIN_IMAGE_PRODUCT.into(),
+            purpose: REVIEWED_MAIN_IMAGE_PURPOSE.into(),
+            root_id: REVIEWED_MAIN_IMAGE_TRUST_ROOT_ID.into(),
+            root_version: REVIEWED_MAIN_IMAGE_TRUST_ROOT_VERSION,
+            epoch: 1,
+            policy_sha256: "a".repeat(64),
+            payload_sha256: "b".repeat(64),
+            payload_length: 100,
+            review_id: "test-accepted".into(),
+            build_id: "test-build".into(),
+            signature: [0; 64],
+        };
+        let mut installed = accepted.clone();
+        installed.epoch = 2;
+        installed.purpose = REVIEWED_MAIN_IMAGE_ROTATION_PURPOSE.into();
+        let mut pending = installed.clone();
+        pending.epoch = 3;
+        assert_eq!(
+            select_signed_main_image_readback(&accepted, None, None)
+                .unwrap()
+                .epoch,
+            1
+        );
+        assert_eq!(
+            select_signed_main_image_readback(&accepted, Some(&installed), Some(&pending))
+                .unwrap()
+                .epoch,
+            2
+        );
+        assert_eq!(
+            select_signed_main_image_readback(&accepted, Some(&installed), Some(&installed))
+                .unwrap()
+                .epoch,
+            2
+        );
+        let mut conflicting = installed.clone();
+        conflicting.payload_sha256 = "c".repeat(64);
+        assert!(
+            select_signed_main_image_readback(&accepted, Some(&installed), Some(&conflicting))
+                .is_err()
+        );
+        assert!(
+            select_signed_main_image_readback(&accepted, Some(&installed), Some(&accepted))
+                .is_err()
+        );
+        assert!(select_signed_main_image_readback(&accepted, Some(&accepted), None).is_err());
+        assert!(select_signed_main_image_readback(&accepted, None, Some(&accepted)).is_err());
+        let mut stale_pending = installed.clone();
+        stale_pending.epoch = 1;
+        assert!(
+            select_signed_main_image_readback(&accepted, Some(&installed), Some(&stale_pending))
+                .is_err()
+        );
+    }
 
     struct FakeDedicatedProducerBackend {
         state: DedicatedProducerExistingState,

@@ -1,3 +1,8 @@
+## 2026-10-10 — T-0467 completion and T-0468 source diagnostic (LATEST)
+
+- T0467 Codex provider hit usage limit. New task-attributable report existed; supported direct work finalize of original WAITING_FOR_CHATGPT session reached COMPLETED_VERIFIED. Exact independent review record `review-adc-t0467r1-signed-bootstrap-readiness-20261010-9-independent_final_review` ACKed, report committed/pushed `51a9d26`. Current signed epoch/image still UNKNOWN, no installation authorized.
+- T0468 source implements a FUTURE non-mutating fixed CLI `--catdesk-reviewed-main-image-status-fixed-policy` with public-root signature/accepted/rotation receipt checks, fixed installed image no-follow hash/length, remeasurement stability, and no caller paths/epochs. New doc `docs/orchestrator/review_bundles/T-0468_R1_FIXED_SIGNED_MAIN_IMAGE_READBACK_SOURCE.md`. Focused tests 2/2 PASS, existing first-image tests 3/3 PASS, Clippy fmt diff PASS. Source is not independently reviewed or deployed, no host receipt read. Need independent verification + CI, then approved narrow host read-only context; still requires external signer/accepted epoch for eventual signed rotation. WakeHost stopped old Chat48 gen31.
+
 ## 2026-10-10 — T-0466 diagnostics: installed reload generation mismatch (LATEST)
 
 - T-0466 report `docs/orchestrator/review_bundles/T-0466_R1_SERVING_RELOAD_COMPATIBILITY_DIAGNOSIS.md` is read-only. Installed daemon predates source-current T-0436 reviewed `PREFLIGHT/CONFIRM` and T-0419 read-only `RESULT`; both calls `INVALID_ARGUMENT`. This strongly suggests stale serving schema, though generic connector error does not expose definitive parsing reason. DO NOT probe legacy raw `dryRun/buildPath` or manually replace/start scratch binary.

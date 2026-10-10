@@ -1330,6 +1330,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::process::exit(2);
         }
     }
+    match reviewed_build::parse_reviewed_main_image_status_args(&args) {
+        Ok(true) => match reviewed_build::run_reviewed_main_image_status_command() {
+            Ok(status) => {
+                println!("{status}");
+                return Ok(());
+            }
+            Err(error) => {
+                eprintln!("CatDesk signed main-image status: {error}");
+                std::process::exit(2);
+            }
+        },
+        Ok(false) => {}
+        Err(error) => {
+            eprintln!("CatDesk signed main-image status: {error}");
+            std::process::exit(2);
+        }
+    }
     match reviewed_build::parse_reviewed_main_image_rotate_args(&args) {
         Ok(true) => match reviewed_build::run_reviewed_main_image_rotate_command() {
             Ok(result) => {

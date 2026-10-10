@@ -4,6 +4,11 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-10 — T-0468 fixed read-only signed-main-image CLI SOURCE ONLY (LATEST)
+
+- New *not installed / not approved for production host execution* exact CLI source mode: `--catdesk-reviewed-main-image-status-fixed-policy` (no other flags or arguments; do not add a pathname/epoch/hash/secret). Source in `src/main.rs` and `src/reviewed_build.rs`, described by `T-0468_R1_FIXED_SIGNED_MAIN_IMAGE_READBACK_SOURCE.md`. Uses only compiled public signer root and existing fixed no-follow signed receipt read/verification, installed-image SHA256/length binding and retained handle rechecks; output `SIGNED_MAIN_IMAGE_READBACK state=VERIFIED bootstrapEpoch=... installedRotationEpoch=... pendingRotationEpoch=... payloadSha256=... payloadLength=...`. Zero means no installed/pending rotation receipt. No raw signature/envelope/private key/host path returned. Non-Windows returns transport unavailable.
+- `cargo test --locked --offline --bin catdesk signed_main_image_readback -- --nocapture` currently 2 PASS; strict all-target Clippy PASS, historical main-image tests 3 PASS; **host execution NOT performed** and should occur ONLY after independent source review and approved read-only host operation. Current old installed CatDesk does NOT implement flag; NEVER use unreviewed scratch binary/legacy raw reload as a workaround. This diagnostic is for signed epoch readback, NOT a signing/rotation authority.
+
 ## 2026-10-10 — T-0466 read-only reload compatibility evidence and operator gate (LATEST)
 
 - Exact source T-0436 replaces legacy unreviewed reload `buildPath/dryRun` with purpose-separated `PREFLIGHT+buildPath+expectedSha256+recordId` / `CONFIRM+buildPath+expectedSha256+confirmationToken`, T-0419 adds read-only `RESULT`. Current-serving startup `unix:1791334517` and unknown Git identity predate updated source; live approved PREFLIGHT and RESULT rejected `INVALID_ARGUMENT`. Old serving parser mismatch is supported inference, not proven raw internal error. Do NOT probe/use legacy raw reload as alternate reviewed authorization, even for a fixed scratch image.
