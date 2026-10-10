@@ -74,6 +74,7 @@ pub struct InterceptedMovePathRequest {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LifecycleFacadeOperation {
     Status,
+    Diagnose,
     Start,
     Recover,
     Stop,
@@ -86,6 +87,7 @@ impl LifecycleFacadeOperation {
     pub fn command_tokens(self) -> &'static [&'static str] {
         match self {
             Self::Status => &["status"],
+            Self::Diagnose => &["diagnose"],
             Self::Start => &["start"],
             Self::Recover => &["recover"],
             Self::Stop => &["stop"],
@@ -98,6 +100,7 @@ impl LifecycleFacadeOperation {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Status => "status",
+            Self::Diagnose => "diagnose",
             Self::Start => "start",
             Self::Recover => "recover",
             Self::Stop => "stop",
@@ -115,7 +118,7 @@ impl LifecycleFacadeOperation {
     }
 
     pub fn is_read_only(self) -> bool {
-        matches!(self, Self::Status | Self::AutostartStatus)
+        matches!(self, Self::Status | Self::Diagnose | Self::AutostartStatus)
     }
 }
 
@@ -292,6 +295,9 @@ pub fn detect_lifecycle_facade_intercept(command: &str) -> Option<LifecycleFacad
     match *args {
         [operation] if operation.eq_ignore_ascii_case("status") => {
             Some(LifecycleFacadeOperation::Status)
+        }
+        [operation] if operation.eq_ignore_ascii_case("diagnose") => {
+            Some(LifecycleFacadeOperation::Diagnose)
         }
         [operation] if operation.eq_ignore_ascii_case("start") => {
             Some(LifecycleFacadeOperation::Start)
@@ -1577,6 +1583,7 @@ mod tests {
 
         for (input, expected) in [
             (r".\catdesk.ps1 status", Status),
+            (r".\catdesk.ps1 diagnose", Diagnose),
             (r"./catdesk.ps1 start", Start),
             (r".\CATDESK.PS1 recover", Recover),
             (r".\catdesk.ps1 stop", Stop),

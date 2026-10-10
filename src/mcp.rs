@@ -1917,6 +1917,7 @@ fn lifecycle_facade_invocation(
 fn lifecycle_facade_timeout_ms(operation: command::LifecycleFacadeOperation) -> u64 {
     match operation {
         command::LifecycleFacadeOperation::Status
+        | command::LifecycleFacadeOperation::Diagnose
         | command::LifecycleFacadeOperation::AutostartStatus => 15_000,
         command::LifecycleFacadeOperation::Start | command::LifecycleFacadeOperation::Recover => {
             120_000
@@ -1925,6 +1926,75 @@ fn lifecycle_facade_timeout_ms(operation: command::LifecycleFacadeOperation) -> 
         | command::LifecycleFacadeOperation::AutostartDisable => 30_000,
         command::LifecycleFacadeOperation::Stop => 5_000,
     }
+}
+
+/// Accept only the public nine-layer diagnosis JSON contract. This is a
+/// read-only facade result, not executable instructions or path authority.
+/// Every surfaced string is either a closed token or a bounded A-Z0-9_ gate.
+fn parse_lifecycle_facade_diagnosis(result: &command::CommandResult) -> Option<Value> {
+    if !result.success
+        || !result.stderr.trim().is_empty()
+        || result.stdout.len() > MAX_LIFECYCLE_FACADE_OUTPUT_BYTES
+        || result.stderr.len() > MAX_LIFECYCLE_FACADE_OUTPUT_BYTES
+    {
+        return None;
+    }
+    const LAYERS: [&str; 9] = [
+        "LIFECYCLE_ENGINE",
+        "CANONICAL_RELEASE",
+        "RECOVERY_AUTHORITY",
+        "LOCAL_MCP_CONFIG",
+        "LOCAL_DAEMON",
+        "LOCAL_MCP_PROTOCOL",
+        "WAKE_RUNTIME",
+        "OFFICIAL_RUNTIME",
+        "CODEX_CLI",
+    ];
+    let value: Value = serde_json::from_str(result.stdout.trim()).ok()?;
+    let object = value.as_object()?;
+    if object.len() != 5
+        || object.get("command")?.as_str()? != "diagnose"
+        || !matches!(
+            object.get("state")?.as_str()?,
+            "HEALTHY" | "DEGRADED" | "RECOVERY_AVAILABLE" | "ACTION_REQUIRED"
+        )
+        || !matches!(
+            object.get("nextAction")?.as_str()?,
+            "NONE" | "RUN_RECOVER" | "RUN_INSTALL" | "OPERATOR_ATTENTION"
+        )
+    {
+        return None;
+    }
+    let primary = object.get("primaryLayer")?.as_str()?;
+    if primary != "NONE" && !LAYERS.contains(&primary) {
+        return None;
+    }
+    let layers = object.get("layers")?.as_array()?;
+    if layers.len() != LAYERS.len() {
+        return None;
+    }
+    for (entry, expected) in layers.iter().zip(LAYERS) {
+        let layer = entry.as_object()?;
+        if layer.len() != 3
+            || layer.get("layer")?.as_str()? != expected
+            || !matches!(
+                layer.get("state")?.as_str()?,
+                "READY" | "DEGRADED" | "FAILED" | "NOT_REQUIRED"
+            )
+        {
+            return None;
+        }
+        let gate = layer.get("gate")?.as_str()?;
+        if gate.is_empty()
+            || gate.len() > 96
+            || !gate
+                .bytes()
+                .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+        {
+            return None;
+        }
+    }
+    Some(value)
 }
 
 fn parse_lifecycle_facade_state(
@@ -2020,7 +2090,9 @@ fn is_expected_lifecycle_state(operation: command::LifecycleFacadeOperation, sta
                 | "AUTOSTART_UNAVAILABLE"
                 | "ACTION_REQUIRED"
         ),
-        command::LifecycleFacadeOperation::Stop => false,
+        command::LifecycleFacadeOperation::Stop | command::LifecycleFacadeOperation::Diagnose => {
+            false
+        }
     }
 }
 
@@ -2091,6 +2163,28 @@ async fn handle_lifecycle_facade_intercept(
         lifecycle_facade_timeout_ms(operation),
     )
     .await;
+    if operation == command::LifecycleFacadeOperation::Diagnose {
+        let Some(diagnosis) = parse_lifecycle_facade_diagnosis(&result) else {
+            return tool_error_response(
+                req,
+                "code: LIFECYCLE_FACADE_FAILED\nreason: JSON_CONTRACT_REJECTED\nmessage: canonical diagnostic returned invalid or unbounded data"
+                    .into(),
+            );
+        };
+        return tool_success_response_with_structured(
+            req,
+            "CatDesk nine-layer read-only recovery diagnosis completed.".into(),
+            json!({
+                "toolName": "run_command",
+                "interceptedCommandName": "catdesk_lifecycle",
+                "lifecycleOperation": "diagnose",
+                "readOnly": true,
+                "diagnosis": diagnosis,
+                "success": true,
+                "elapsedMs": result.elapsed_ms,
+            }),
+        );
+    }
     let Some(state) = parse_lifecycle_facade_state(operation, &result) else {
         let reason = if !result.success {
             if result.exit_code.is_none() && result.stderr.starts_with("Command timed out after ") {
@@ -9063,6 +9157,66 @@ mod tests {
         assert!(!invocation.args.iter().any(|arg| arg.contains(";")));
         assert!(!invocation.args.iter().any(|arg| arg.contains("-Workspace")));
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn lifecycle_diagnosis_accepts_only_nine_ordered_bounded_layers() {
+        let ordered = [
+            "LIFECYCLE_ENGINE",
+            "CANONICAL_RELEASE",
+            "RECOVERY_AUTHORITY",
+            "LOCAL_MCP_CONFIG",
+            "LOCAL_DAEMON",
+            "LOCAL_MCP_PROTOCOL",
+            "WAKE_RUNTIME",
+            "OFFICIAL_RUNTIME",
+            "CODEX_CLI",
+        ];
+        let good = json!({
+            "command": "diagnose",
+            "state": "DEGRADED",
+            "primaryLayer": "WAKE_RUNTIME",
+            "nextAction": "RUN_RECOVER",
+            "layers": ordered.iter().map(|layer| json!({
+                "layer": layer,
+                "state": if *layer == "WAKE_RUNTIME" { "FAILED" } else { "READY" },
+                "gate": if *layer == "WAKE_RUNTIME" { "WAKE_HOST_STOPPED" } else { "READY" },
+            })).collect::<Vec<_>>()
+        });
+        let record = command::CommandResult {
+            stdout: good.to_string(),
+            stderr: String::new(),
+            success: true,
+            exit_code: Some(0),
+            elapsed_ms: 1,
+        };
+        assert_eq!(
+            parse_lifecycle_facade_diagnosis(&record),
+            Some(good.clone())
+        );
+
+        let mut hostile = good.clone();
+        hostile["layers"][6]["gate"] = json!("C:\\Secret\\credential.txt");
+        assert!(
+            parse_lifecycle_facade_diagnosis(&command::CommandResult {
+                stdout: hostile.to_string(),
+                ..record
+            })
+            .is_none()
+        );
+
+        let mut extra = good.clone();
+        extra["password"] = json!("unexpected");
+        assert!(
+            parse_lifecycle_facade_diagnosis(&command::CommandResult {
+                stdout: extra.to_string(),
+                stderr: String::new(),
+                success: true,
+                exit_code: Some(0),
+                elapsed_ms: 1,
+            })
+            .is_none()
+        );
     }
 
     #[test]
