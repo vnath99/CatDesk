@@ -4,6 +4,14 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-10 — Operator-authorized signed-image readback and CatDesk dry-run pitfall (LATEST)
+
+- Exact **operator-only**, no-elevation-first Windows PowerShell one-shot, from canonical workspace root:
+  `& '.\\target\\debug\\catdesk.exe' '--catdesk-reviewed-main-image-status-fixed-policy'`.
+  It reads only compiled fixed product-root-signed receipts and fixed installed image, and yields `SIGNED_MAIN_IMAGE_READBACK state=VERIFIED bootstrapEpoch=<u64> installedRotationEpoch=<u64|0> pendingRotationEpoch=<u64|0> payloadSha256=<64hex> payloadLength=<u64>`, or bounded `CatDesk signed main-image status: <error>`. Operator should return ONLY the fixed result/error. No root private key, signature, raw file, Program Files listing, installer, daemon, Wake, service or unrestricted shell.
+- **Do not treat `run_command(dry_run:true)` success as execution authorization on the old serving binary.** T0468 exact attempted CatDesk `run_command` returned `INVALID_ARGUMENT` on actual execution, while dry-run success was misleading: current `src/mcp.rs` dry-run branch historically preceded allowlist check, and allowlist blocks the arbitrary CatDesk debug exe. T0470 source-only fix now enforces safety/mode checks for dry-run before success, with targeted tests; deployed daemon is OLD and does not contain this fix. Documentation: `docs/orchestrator/review_bundles/T-0469_R1_SIGNED_MAIN_IMAGE_READBACK_OPERATOR_GATEWAY.md` and `T-0470_R1_RUN_COMMAND_DRY_RUN_AUTHORIZATION_PARITY.md`.
+- Signed epoch/installed hash remain UNKNOWN until authorized host result. Do not use old `catdesk_daemon_reload` legacy `buildPath/dryRun`, copy the scratch executable into Program Files, change shell_mode to unrestricted or restart WakeHost.
+
 ## 2026-10-10 — T0468 R2 reviewed source, host run separately gated (LATEST)
 
 - New fixed signed-image status source `--catdesk-reviewed-main-image-status-fixed-policy` at HEAD `65e881b` independently reviewed Codex T0468 R2 `COMPLETED_VERIFIED`, final record `review-adc-t0468r2-signed-main-image-status-independent-20261010-6-independent_final_review` ACKED. Source-review conclusion PASS, operation on protected host NOT performed or approved. Independent GitHub Actions run `38076645150` all three Windows jobs COMPLETE SUCCESS. Local `cargo build --locked --offline --bin catdesk` built debug artifact but no binary hash measurement, no launch and no signed-image authority.

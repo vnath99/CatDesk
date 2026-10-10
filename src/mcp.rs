@@ -1296,6 +1296,23 @@ async fn handle_run_command(
     }
 
     if dry_run {
+        // A dry run is an authorization preflight, not proof of permission
+        // to execute arbitrary source-current binaries. Mirror the actual
+        // shell safety check and use shell-mode validation for commands that
+        // would not be handled by the fixed listing/move intercepts.
+        if let Err(error) = command::validate_shell_safety(&effective_command) {
+            return tool_error_response(req, format!("code: COMMAND_BLOCKED\nmessage: {error}"));
+        }
+        if command::detect_list_files_intercept(&effective_command).is_none()
+            && command::detect_move_path_intercept(&effective_command).is_none()
+        {
+            if let Err(error) = validate_shell_mode(workspace_root, &cwd, &effective_command) {
+                return tool_error_response(
+                    req,
+                    format!("code: SHELL_MODE_BLOCKED\nmessage: {error}"),
+                );
+            }
+        }
         return tool_success_response_with_structured(
             req,
             format!(
@@ -10181,6 +10198,90 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(workspace_root);
+    }
+
+    #[tokio::test]
+    async fn run_command_dry_run_must_not_claim_blocked_executable_is_allowed() {
+        let root = std::env::temp_dir().join(format!("catdesk-mcp-dryrun-auth-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join(".catdesk")).expect("create workspace");
+        std::fs::write(
+            root.join(".catdesk/config.toml"),
+            "shell_mode = \"allowlist\"\n",
+        )
+        .expect("write config");
+        let workspace = root.to_string_lossy().into_owned();
+
+        for denied in [
+            r".\target\debug\catdesk.exe --catdesk-reviewed-main-image-status-fixed-policy",
+            "powershell -Command whoami",
+            "git status && whoami",
+        ] {
+            let req = tool_call_request(
+                "run_command",
+                json!({
+                    "command": denied,
+                    "dry_run": true,
+                }),
+            );
+            let response = handle_tools_call(
+                &req,
+                &workspace,
+                1,
+                Mode::Both,
+                ToolMode::MultiTools,
+                false,
+                &None,
+            )
+            .await;
+            assert_eq!(
+                response
+                    .result
+                    .as_ref()
+                    .and_then(|r| r.get("isError"))
+                    .and_then(Value::as_bool),
+                Some(true),
+                "dry-run must fail closed for {denied}"
+            );
+            assert!(
+                result_text(&response).contains("BLOCKED"),
+                "rejection category must be visible"
+            );
+        }
+        let req = tool_call_request(
+            "run_command",
+            json!({
+                "command": "git status",
+                "dry_run": true,
+            }),
+        );
+        let response = handle_tools_call(
+            &req,
+            &workspace,
+            1,
+            Mode::Both,
+            ToolMode::MultiTools,
+            false,
+            &None,
+        )
+        .await;
+        assert_ne!(
+            response
+                .result
+                .as_ref()
+                .and_then(|r| r.get("isError"))
+                .and_then(Value::as_bool),
+            Some(true)
+        );
+        let structured = response
+            .result
+            .as_ref()
+            .and_then(|r| r.get("structuredContent"))
+            .expect("successful dry run");
+        assert_eq!(
+            structured.get("dryRun").and_then(Value::as_bool),
+            Some(true)
+        );
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

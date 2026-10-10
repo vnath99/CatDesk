@@ -1,3 +1,8 @@
+## 2026-10-10 — Chat50 operator readback blocked by old shell allowlist; T0470 source-only fix (LATEST)
+
+- User authorized T0468 exact read-only signed main-image diagnostic. Actual `run_command` invocation of `.\\target\\debug\\catdesk.exe --catdesk-reviewed-main-image-status-fixed-policy` returned `INVALID_ARGUMENT` after misleading dry-run SUCCESS. No host receipt was read. Source `src/mcp.rs` confirms dry-run preempted shell safety/allowlist, and `allowlist` refuses arbitrary CatDesk exe. This is a host-command **gateway refusal**, not signed image invalidity. The one-flag operator PowerShell command with no elevation/signing/reload is in `docs/orchestrator/review_bundles/T-0469_R1_SIGNED_MAIN_IMAGE_READBACK_OPERATOR_GATEWAY.md`; await user fixed output/error. Never bypass old plugin allowlist.
+- T0470 adds truthful dry-run authorization parity to `src/mcp.rs`; test 1/1 PASS, full CatDesk binary 1021 passed / 26 ignored, strict Clippy/fmt/diff PASS. Source-only report `T-0470_R1_RUN_COMMAND_DRY_RUN_AUTHORIZATION_PARITY.md` exists, not yet independent reviewed/installed. Exact signed current epoch/image still UNKNOWN, Wake STOPPED old Chat48 gen31.
+
 ## 2026-10-10 — T0468 R2 independent source PASS / protected host readback pending (LATEST)
 
 - Git HEAD source `65e881bd05b8379bd595650b905b047d047e277f` CI run `38076645150` COMPLETED SUCCESS with Rust, Independent WakeHost Rust and Python Wake/advisor all passing, independently checked through GitHub connector. Local debug CLI build exit0 and historical signer/rotation focused tests passed, **no CLI execution/installation**.
