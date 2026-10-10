@@ -4,6 +4,11 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-10 — T-0466 read-only reload compatibility evidence and operator gate (LATEST)
+
+- Exact source T-0436 replaces legacy unreviewed reload `buildPath/dryRun` with purpose-separated `PREFLIGHT+buildPath+expectedSha256+recordId` / `CONFIRM+buildPath+expectedSha256+confirmationToken`, T-0419 adds read-only `RESULT`. Current-serving startup `unix:1791334517` and unknown Git identity predate updated source; live approved PREFLIGHT and RESULT rejected `INVALID_ARGUMENT`. Old serving parser mismatch is supported inference, not proven raw internal error. Do NOT probe/use legacy raw reload as alternate reviewed authorization, even for a fixed scratch image.
+- Historical T-0301/T-0307: fixed reviewed-main-image **signed envelope** is a separate trust root; candidate built by `CARGO_BUILD_RELEASE_ISOLATED` with T-0465 independent review cannot act as signed installed image or LKG. `catdesk.ps1 recover` uses interrupted reviewed promotion/LKG only. Signed host artifact availability is not visible via current safe tools; no operator command justified yet. Next seek approved signing/host-elevation authority or continue T-0360/T-0362 design, keep Secure MCP tunnel and stopped Wake untouched. Full diagnostic: `docs/orchestrator/review_bundles/T-0466_R1_SERVING_RELOAD_COMPATIBILITY_DIAGNOSIS.md`.
+
 ## 2026-10-10 — T-0465 approval accepted; catdesk_daemon_reload INVALID_ARGUMENT (LATEST)
 
 - Typed `src/daemon-reload-approval-request-v1.json` now 513 canonical bytes (no newline), task-attributable to `adc-t0465r1-exact-bootstrap-reload-approval-20261010` COMPLETED_VERIFIED PASS, record `review-adc-t0465r1-exact-bootstrap-reload-approval-20261010-6-independent_final_review` ACKNOWLEDGED. Exact candidate path `.catdesk/verification-targets/autonomy-release/release/catdesk.exe`, SHA `1096edfa483ff38c0b115bb3d80b500018b97b6111516d704fb0ef54d4cab855`, byte length 26886144. The prior unrelated 475-byte artifact is backed up in T0465 R0 archive.
