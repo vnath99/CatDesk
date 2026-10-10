@@ -4,6 +4,13 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-10 — Active protected build diagnostic (LATEST)
+
+- `catdesk_reviewed_build({action:"RESULT"})` **takes exactly one key**. Adding `taskId` or `projectId` causes `INVALID_ARGUMENT`; with correct shape old serving returned `BUILD_FAILED_OR_AMBIGUOUS` without classification. Do not treat the argument-shape rejection as transport failure.
+- First-class ordinary timer: `catdesk_turn_timer({action:"START",allow_without_plan:true})`; `STATUS` and `STOP` need the returned ID. CatDesk `run_command` on a plan-required workspace also requires `allow_without_plan:true` for allowed safe checks; this does not bypass the command allowlist.
+- Manually gated source diagnostic tests (only for exact T-0462 **terminal failure** in current verified generation, and ignored in normal CI): `cargo test --locked --offline --bin catdesk reviewed_build::tests::active_reviewed_build_failure_category_is_manual_only -- --ignored --exact --nocapture` (read-only) and `cargo test --locked --offline --bin catdesk reviewed_build::tests::active_unclassified_cargo_diagnostic_is_manual_only -- --ignored --exact --nocapture` (disposable isolated replay). The latter uses a 95-second worker job cutoff; it does not create a reviewed build.
+- Observed 2026-10-10: failure is `CARGO_BUILD/CARGO_EXIT_NONZERO`, exit 101, stderr 4096 bytes/truncated. Isolated exact replay revealed `ring 0.17.14` custom-build failure with `CC_RS_ERROR`, `MSVC_C1083`; no D8037 or LNK code. C1083 suggests missing/inaccessible include file but specific header/path unproven. Do not repeat replay without purpose or equate it with protected build attestation.
+
 ## 2026-10-10 — Chat56 supersedes Chat55 (CURRENT)
 
 - New desired engineering URL: `https://chatgpt.com/c/6aca50a3-0da0-83ea-8358-dbc128c4f9ad`; expected SHA-256 `625ddb77fa11ea42663806c7e9e436c81a6a01368e1d14f6f68c8a7ac456d0fc`. This is the human/hourly canonical; NOT YET paired in protected CatDesk project registry and independent WakeHost. Old WakeHost dev84 remains STOPPED PID0 targeting Chat48 gen31; registry SHA mismatch remains.

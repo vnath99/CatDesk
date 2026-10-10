@@ -1,3 +1,13 @@
+## 2026-10-10 — Chat56 T-0462 isolated Cargo diagnosis (LATEST RECOVERY CHECKPOINT)
+
+- Tested the active protected reviewed-build control via an explicit ignored, read-only unit diagnostic. Independent active-generation + terminal-owner audit reported `CARGO_BUILD / CARGO_EXIT_NONZERO`, exit 101; retained stderr reached 4096 bytes and was truncated. The original stderr is deliberately not exposed.
+- Added exact-T-0462-only, manually gated, disposable Cargo reproduction in `src/reviewed_build.rs`, using the validated immutable snapshot, attested Cargo/rustc paths, fixed toolchain environment, isolated temporary Cargo/cache/target, Windows kill-on-close job and 95-second internal timeout. It does not retry or mutate the protected reviewed-build generation, mint an attestation, promote, reload, or touch Wake.
+- Initial isolated replay succeeded as a diagnostic and reproduced failure in `ring 0.17.14` custom-build: `CUSTOM_BUILD_COMMAND_FAILED`, `PROCESS_EXITED_UNSUCCESSFULLY`; no LNK code, missing link library or missing link input.
+- Expanded **test-only** fixed-vocabulary detector for cc-rs and selected MSVC error codes. Second isolated replay found `CC_RS_ERROR` and **`MSVC_C1083`** (missing include file or include access failure) for `ring 0.17.14`; no `D8037` observed. Specific header/path not yet proven; do not blindly change MSVC environment. Scoped tests and `cargo fmt --all` passed. The manually gated reproductions do NOT count as reviewed serving deployment.
+- NEXT: validate which header is failing in C1083 using a bounded, non-secret fixed-code/header-family diagnostic; repair the proven include-path defect, run full Windows CI and exact independent source review before one new guarded protected reviewed build. Keep old WakeHost STOPPED at Chat48 gen31 until source-current serving promotion and guarded paired Chat56 migration.
+
+---
+
 ## 2026-10-10 — Chat56 supersedes Chat55 (CURRENT)
 
 - New desired engineering URL: `https://chatgpt.com/c/6aca50a3-0da0-83ea-8358-dbc128c4f9ad`; expected SHA-256 `625ddb77fa11ea42663806c7e9e436c81a6a01368e1d14f6f68c8a7ac456d0fc`. This is the human/hourly canonical; NOT YET paired in protected CatDesk project registry and independent WakeHost. Old WakeHost dev84 remains STOPPED PID0 targeting Chat48 gen31; registry SHA mismatch remains.

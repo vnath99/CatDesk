@@ -1,3 +1,9 @@
+## 2026-10-10 — Latest T-0462 recovery checkpoint
+
+- Exact active reviewed build terminal: `CARGO_BUILD/CARGO_EXIT_NONZERO` (exit 101), 4096 retained stderr bytes truncated. New manually gated read-only source test independently validated terminal generation and worker/owner evidence.
+- Disposable fixed-current T-0462 source-snapshot Cargo replay reproduces `ring 0.17.14` custom-build failure. Fixed test-only signal classifier sees `CC_RS_ERROR` and `MSVC_C1083`, no D8037/LNK. This is evidence of native header/include access failure; exact missing header and remediation remain to be proven.
+- Source diagnostic does not promote/install/attest/retry protected release. Next fixed-category header diagnosis -> evidence-based fix -> CI/independent review -> guarded protected build/promotion. Old WakeHost dev84 STOPPED, Chat48 gen31, no Chat56 paired bind yet. Hourly fallback Chat56 active with single-writer rule.
+
 ## 2026-10-10 — Chat56 supersedes Chat55 (CURRENT)
 
 - New desired engineering URL: `https://chatgpt.com/c/6aca50a3-0da0-83ea-8358-dbc128c4f9ad`; expected SHA-256 `625ddb77fa11ea42663806c7e9e436c81a6a01368e1d14f6f68c8a7ac456d0fc`. This is the human/hourly canonical; NOT YET paired in protected CatDesk project registry and independent WakeHost. Old WakeHost dev84 remains STOPPED PID0 targeting Chat48 gen31; registry SHA mismatch remains.

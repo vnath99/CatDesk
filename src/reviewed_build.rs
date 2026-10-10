@@ -4557,7 +4557,7 @@ impl CargoStderrClassifier {
 
     #[cfg(all(test, windows))]
     fn fixed_cargo_failure_signals(&self) -> Vec<&'static str> {
-        const SIGNALS: [(u16, &str); 9] = [
+        const SIGNALS: [(u16, &str); 16] = [
             (1, "CUSTOM_BUILD_COMMAND_FAILED"),
             (2, "COULD_NOT_COMPILE"),
             (4, "PROCESS_EXITED_UNSUCCESSFULLY"),
@@ -4567,6 +4567,13 @@ impl CargoStderrClassifier {
             (64, "ARCHIVE_UNPACK_FAILURE"),
             (128, "PANIC"),
             (256, "LINKING_WITH"),
+            (512, "CC_RS_ERROR"),
+            (1024, "CC_RS_TOOL_EXEC_FAILED"),
+            (2048, "MSVC_C1083"),
+            (4096, "MSVC_D8037"),
+            (8192, "MSVC_C1900"),
+            (16384, "TOOL_NOT_FOUND"),
+            (32768, "WINDOWS_PATH_UNAVAILABLE"),
         ];
         SIGNALS
             .into_iter()
@@ -4621,6 +4628,13 @@ fn fixed_cargo_failure_signal_mask(bytes: &[u8]) -> u16 {
         (b"failed to unpack".as_slice(), 64),
         (b"panicked at".as_slice(), 128),
         (b"linking with ".as_slice(), 256),
+        (b"error occurred in cc-rs".as_slice(), 512),
+        (b"tool execution failed".as_slice(), 1024),
+        (b"fatal error c1083".as_slice(), 2048),
+        (b"error d8037".as_slice(), 4096),
+        (b"fatal error c1900".as_slice(), 8192),
+        (b"failed to find tool".as_slice(), 16384),
+        (b"system cannot find the path specified".as_slice(), 32768),
     ]
     .into_iter()
     .filter_map(|(signature, mask)| contains_ascii(bytes, signature).then_some(mask))
@@ -6025,6 +6039,118 @@ fn run_fixed_v5_cargo_cache_seed_diagnostic() -> Result<FixedV5CargoCacheSeedDia
         }),
         Err(outcome) => Ok(outcome),
     }
+}
+
+#[cfg(all(test, windows))]
+fn run_active_unclassified_cargo_diagnostic() -> Result<FixedV5HostLinkerDiagnosticOutcome, String>
+{
+    // Host-only diagnostic reproduction, NEVER an attestation or release build.
+    // Refuse any other generation, review or classified failure.
+    const EXACT_REVIEW: &str = "review-adc-t0462r1-wake-stop-recovery-diagnose-gateway-20261010-6-independent_final_review";
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let control = existing_control_root(workspace)?;
+    let attempt: ReviewedBuildAttemptV1 = control_read_json(&control, "attempt.json")?;
+    let active = read_active_pointer(&control.base_guard)?;
+    if active.active_attempt_id != attempt.build_attempt_id
+        || active.active_attempt_digest != attempt.attempt_digest
+        || attempt.review_record_id != EXACT_REVIEW
+        || attempt.policy != fixed_policy()
+    {
+        return Err("REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED".into());
+    }
+    let audit = terminal_failure_audit(&control, &attempt)
+        .map_err(|_| "REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED".to_string())?;
+    let diagnostic = audit
+        .result
+        .failure_diagnostic
+        .as_ref()
+        .ok_or("REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED")?;
+    if audit.result.failure_code.as_deref() != Some("REVIEWED_BUILD_FAILED")
+        || diagnostic.phase != "CARGO_BUILD"
+        || diagnostic.exit_code != Some(101)
+        || diagnostic.classification != "CARGO_EXIT_NONZERO"
+        || !diagnostic.stderr_truncated
+        || diagnostic.captured_stderr_length != MAX_CARGO_FAILURE_DIAGNOSTIC_BYTES
+        || !valid_sha256(&diagnostic.captured_stderr_sha256)
+    {
+        return Err("REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED".into());
+    }
+    let snapshot = validate_attempt(
+        workspace,
+        &attempt,
+        &attempt.review_record_id,
+        &attempt.review_authority_sha256,
+        &attempt.snapshot_expected,
+    )?;
+    let mut diagnostic_root = fixed_v5_host_linker_diagnostic_root(workspace)?;
+    let mut source_guard = diagnostic_root.try_clone("cargo reproduction source")?;
+    source_guard.create_child("source", "cargo reproduction source")?;
+    materialize_snapshot_into(&snapshot, &mut source_guard)?;
+    let source = source_guard.path().to_path_buf();
+    let mut target_guard = diagnostic_root.try_clone("cargo reproduction target")?;
+    target_guard.create_child("target", "cargo reproduction target")?;
+    let target = target_guard.path().to_path_buf();
+    let mut temp_guard = diagnostic_root.try_clone("cargo reproduction temp")?;
+    temp_guard.create_child("tmp", "cargo reproduction temp")?;
+    let temp = temp_guard.path().to_path_buf();
+    let cargo_home = seed_isolated_cargo_home_into(&mut diagnostic_root, &source)?;
+    let cargo_pin = open_attested_tool(&attempt.cargo, "cargo")?;
+    let rustc_pin = open_attested_tool(&attempt.rustc, "rustc")?;
+    let mut command = Command::new(&cargo_pin.evidence.absolute_path);
+    configure_exact_worker_cargo_command(
+        &mut command,
+        &attempt,
+        &source,
+        &target,
+        &temp,
+        &cargo_home,
+        &rustc_pin.evidence.absolute_path,
+    )?;
+    ensure_exact_active_pointer(&control.base_guard, &active)
+        .map_err(|_| "REVIEWED_BUILD_CARGO_REPRODUCTION_GATE_REFUSED".to_string())?;
+    let job = BuildJob::new()?;
+    command.creation_flags(CREATE_SUSPENDED);
+    let mut child = command
+        .spawn()
+        .map_err(|_| "REVIEWED_BUILD_CARGO_REPRODUCTION_SPAWN_FAILED".to_string())?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or("REVIEWED_BUILD_CARGO_REPRODUCTION_UNAVAILABLE")?;
+    let reader = std::thread::spawn(move || read_bounded_cargo_stderr(stderr));
+    job.assign(&child)?;
+    job.resume(&child)?;
+    let started = std::time::Instant::now();
+    let exit = loop {
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|_| "REVIEWED_BUILD_CARGO_REPRODUCTION_UNAVAILABLE".to_string())?
+        {
+            break status;
+        }
+        if started.elapsed() > Duration::from_secs(95) {
+            let _ = child.kill();
+            let _ = job.terminate();
+            let _ = child.wait();
+            return Err("REVIEWED_BUILD_CARGO_REPRODUCTION_TIMEOUT".into());
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    let captured = reader
+        .join()
+        .ok()
+        .and_then(Result::ok)
+        .ok_or("REVIEWED_BUILD_CARGO_REPRODUCTION_UNAVAILABLE")?;
+    if cargo_pin.evidence != attempt.cargo
+        || rustc_pin.evidence != attempt.rustc
+        || trusted_tool_from_absolute(Path::new(&attempt.cargo.absolute_path), "cargo")?
+            != attempt.cargo
+        || trusted_tool_from_absolute(Path::new(&attempt.rustc.absolute_path), "rustc")?
+            != attempt.rustc
+    {
+        return Err("REVIEWED_BUILD_EVIDENCE_DRIFTED".into());
+    }
+    fixed_v5_host_linker_diagnostic_outcome(exit.code(), captured)
 }
 
 #[cfg(all(test, windows))]
@@ -10703,6 +10829,61 @@ mod tests {
         println!(
             "FIXED_V5_CARGO_CACHE_SEED_DIAGNOSTIC stage={} crateName={:?} crateVersion={:?}",
             outcome.stage, outcome.crate_name, outcome.crate_version
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "manual read-only active reviewed-build failure classification; never runs in ordinary CI"]
+    fn active_reviewed_build_failure_category_is_manual_only() {
+        // Reuse the validated active-generation reader; never print raw result JSON,
+        // compiler output, user-controlled paths, owner data, or credentials.
+        let workspace = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let (phase, classification) =
+            reviewed_build_failure_category(workspace).expect("verified terminal build failure");
+        assert!(
+            phase
+                .bytes()
+                .all(|byte| byte.is_ascii_uppercase() || byte == b'_')
+        );
+        assert!(
+            classification
+                .bytes()
+                .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
+        );
+        // Verify the same terminal generation's immutable worker/owner evidence
+        // before projecting only bounded diagnostic metadata.
+        let control = existing_control_root(workspace).expect("verified reviewed-build control");
+        let attempt: ReviewedBuildAttemptV1 =
+            control_read_json(&control, "attempt.json").expect("verified active attempt");
+        let audit = terminal_failure_audit(&control, &attempt).expect("terminal worker audit");
+        let diagnostic = audit
+            .result
+            .failure_diagnostic
+            .as_ref()
+            .expect("bounded recorded cargo diagnostic");
+        assert_eq!(audit.result.state, "BUILD_FAILED_OR_AMBIGUOUS");
+        assert_eq!(diagnostic.phase, phase);
+        assert_eq!(diagnostic.classification, classification);
+        assert!(diagnostic.captured_stderr_length <= MAX_CARGO_FAILURE_DIAGNOSTIC_BYTES);
+        println!(
+            "ACTIVE_REVIEWED_BUILD_FAILURE phase={phase} classification={classification} exitCode={:?} capturedStderrLength={} stderrTruncated={} stderrDigest={}",
+            diagnostic.exit_code,
+            diagnostic.captured_stderr_length,
+            diagnostic.stderr_truncated,
+            diagnostic.captured_stderr_sha256
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "manual disposable reproduction of exact T-0462 unclassified Cargo failure"]
+    fn active_unclassified_cargo_diagnostic_is_manual_only() {
+        let outcome =
+            run_active_unclassified_cargo_diagnostic().expect("bounded cargo reproduction");
+        println!(
+            "ACTIVE_UNCLASSIFIED_CARGO_REPRODUCTION {}",
+            fixed_v5_host_linker_diagnostic_summary_line(&outcome)
         );
     }
 
