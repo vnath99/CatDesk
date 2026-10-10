@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-09  
 **Requested target:** `https://chatgpt.com/c/6ac823ac-91b8-83e9-8996-f639c461de50`  
-**State:** Guarded core recovery source has PASSED full three-job Windows CI at `b3585ad` (run `37992094331`). A subsequent narrow CLI readback fix is implemented and builds locally; its fresh CI is pending. Neither serving deployment nor live target binding has been performed. Independent source review for this latest source is still pending.
+**State (2026-10-09 22:02 UTC):** Guarded core recovery source PASSED full three-job Windows CI at `b3585ad` (run `37992094331`). The subsequent narrow CLI readback fix at `0b31b05` also PASSED all three Windows jobs in run `37995124770` (Rust, independent WakeHost Rust, Python). Local targeted CLI regression, digest-repair/paired-rollover regression, divergence/no-mutation regression, `cargo fmt --all -- --check`, and `git diff --check` all PASS. The docs-only successor is `7f0b30f`. Source was inspected again, but a distinct protected CatDesk independent-review authority has not been established. Neither serving deployment nor live target binding has been performed.
 
 ## Problem evidenced
 - CatDesk project registry advertises predecessor URL `https://chatgpt.com/c/6ac6cbe8-6f0c-83ea-9f7d-13489d4d87f5` but stored digest `8eb1e045f231df3214c16d7f97b382511399deef2e62b8ff32b3cdbeea004eb3`.
@@ -29,6 +29,12 @@
 - Before any production use: Rust formatting, strict Clippy, focused recovery tests, complete three-job Windows CI, independent source review, authorized protected serving activation/parity, fresh two-authority readback and one fresh manual Wake.
 - No direct edits to `.catdesk/projects/projects.json` or independent Wake store may be used as an operational shortcut.
 - If full reviewed serving activation is blocked (currently T-0419 protected build/ring), report BLOCKED. Do not claim Chat55 Wake binding succeeded.
+
+## Latest protected-build checkpoint (2026-10-09)
+The exact T-0460-R1 `catdesk_reviewed_build(PREFLIGHT)` returned `PREPARED` for the active reviewed source authority. `CONFIRM` was rejected by the external tool safety gateway; **do not describe this attempt as a failed Cargo build** because no worker result was proven. The registry/Wake paired bind was also blocked by the gateway, and both live authorities remain on predecessor Chat54 (Wake generation 31, registry SHA mismatch). The independent three-job Windows CI run `37995124770` remains green. Local `cargo fmt --all -- --check`, `cargo check --locked --offline`, and `git diff --check` passed; `cargo check` warns about a new unintegrated local `reviewed_build_failure_category` helper in `src/reviewed_build.rs`. This 50-line helper is **WIP, not reviewed or deployed**. Its supervisor exposure and focused tests must be completed, or it must be reverted, before strict Clippy/reviewed release. No Wake migration, promotion, or supervisor activation occurred.
+
+## Additional lifecycle diagnostic (2026-10-09)
+The stable-supervisor status reports `SUPERVISOR_STARTUP_DEFINITION_READ_FAILED`. The read-only startup classifier reaches native Task Scheduler COM (`CoInitializeEx`, `CoCreateInstance`, `ITaskService::Connect`, root `GetFolder`, fixed-name `GetTask`, and `IRegisteredTask::get_Xml`), but currently collapses any COM failure to one generic category. The precise failing stage is not proven. Before activation, add a fixed-vocabulary read-only stage classifier and tests; never overwrite a foreign task or bypass scheduler authority. This is separate from the reviewed-build `PREPARED` confirmation gate.
 
 ## Operator / continuation
 Operator action: none needed for CI/source development. If the CatDesk command gateway continues rejecting the *existing* guarded Binagotchy console transaction, the operator must run that transaction locally after fresh source CI passes; inspect exact two-authority readback afterward. Hourly deadman for Chat55 is ACTIVE as a fallback, other CatDesk deadmen are disabled. Event-driven Python browser Wake is NOT considered bound to Chat55.
