@@ -30,8 +30,33 @@ pub(crate) enum SupervisorStartupErrorV1 {
     ElevationRequired,
     ForeignOrAmbiguous,
     NativeApiUnavailable,
+    // Fixed, non-sensitive stages of the read-only Task Scheduler COM path.
+    // These never carry an HRESULT, task XML, SID, or executable path.
+    ComInitializationFailed,
+    ComApartmentModeConflict,
+    ComActivationFailed,
+    ComConnectFailed,
+    RootFolderReadFailed,
+    TaskLookupFailed,
+    TaskXmlReadFailed,
     RegistrationFailed,
     PostRegistrationMismatch,
+}
+
+impl SupervisorStartupErrorV1 {
+    pub(crate) fn fixed_read_diagnostic(self) -> &'static str {
+        match self {
+            Self::ComInitializationFailed => "SUPERVISOR_STARTUP_COM_INIT_FAILED",
+            Self::ComApartmentModeConflict => "SUPERVISOR_STARTUP_COM_APARTMENT_CONFLICT",
+            Self::ComActivationFailed => "SUPERVISOR_STARTUP_COM_ACTIVATION_FAILED",
+            Self::ComConnectFailed => "SUPERVISOR_STARTUP_COM_CONNECT_FAILED",
+            Self::RootFolderReadFailed => "SUPERVISOR_STARTUP_ROOT_FOLDER_READ_FAILED",
+            Self::TaskLookupFailed => "SUPERVISOR_STARTUP_TASK_LOOKUP_FAILED",
+            Self::TaskXmlReadFailed => "SUPERVISOR_STARTUP_TASK_XML_READ_FAILED",
+            Self::ElevationRequired => "SUPERVISOR_STARTUP_TASK_ACCESS_DENIED",
+            _ => "SUPERVISOR_STARTUP_DEFINITION_READ_FAILED",
+        }
+    }
 }
 
 /// Opaque evidence that the current process is the interactive product user.
@@ -688,8 +713,12 @@ mod native {
             let hr = unsafe { CoInitializeEx(std::ptr::null_mut(), COINIT_MULTITHREADED) };
             if hr >= 0 {
                 Ok(Self(true))
+            } else if hr == 0x8001_0106_u32 as i32 {
+                // RPC_E_CHANGED_MODE: this thread already has an incompatible
+                // COM apartment. Do not silently change its threading model.
+                Err(SupervisorStartupErrorV1::ComApartmentModeConflict)
             } else {
-                Err(SupervisorStartupErrorV1::NativeApiUnavailable)
+                Err(SupervisorStartupErrorV1::ComInitializationFailed)
             }
         }
     }
@@ -773,14 +802,21 @@ mod native {
             )
         };
         if hr < 0 || raw.is_null() {
-            return Err(SupervisorStartupErrorV1::NativeApiUnavailable);
+            return Err(super::native_hresult_reason(
+                hr,
+                SupervisorStartupErrorV1::ComActivationFailed,
+            ));
         }
         let service = ComPtr(raw);
         let empty = Variant::empty();
         let connect: ITaskServiceConnect =
             unsafe { method(service.0, I_TASK_SERVICE_CONNECT_SLOT) };
-        if unsafe { connect(service.0, empty, empty, empty, empty) } < 0 {
-            return Err(SupervisorStartupErrorV1::NativeApiUnavailable);
+        let hr = unsafe { connect(service.0, empty, empty, empty, empty) };
+        if hr < 0 {
+            return Err(super::native_hresult_reason(
+                hr,
+                SupervisorStartupErrorV1::ComConnectFailed,
+            ));
         }
         Ok((apartment, service))
     }
@@ -790,8 +826,12 @@ mod native {
         let mut raw = std::ptr::null_mut();
         let get_folder: ITaskServiceGetFolder =
             unsafe { method(service.0, I_TASK_SERVICE_GET_FOLDER_SLOT) };
-        if unsafe { get_folder(service.0, root.as_ptr(), &mut raw) } < 0 || raw.is_null() {
-            return Err(SupervisorStartupErrorV1::NativeApiUnavailable);
+        let hr = unsafe { get_folder(service.0, root.as_ptr(), &mut raw) };
+        if hr < 0 || raw.is_null() {
+            return Err(super::native_hresult_reason(
+                hr,
+                SupervisorStartupErrorV1::RootFolderReadFailed,
+            ));
         }
         Ok(ComPtr(raw))
     }
@@ -805,14 +845,21 @@ mod native {
             return Ok(None);
         }
         if hr < 0 || task_raw.is_null() {
-            return Err(SupervisorStartupErrorV1::NativeApiUnavailable);
+            return Err(super::native_hresult_reason(
+                hr,
+                SupervisorStartupErrorV1::TaskLookupFailed,
+            ));
         }
         let task = ComPtr(task_raw);
         let mut xml = std::ptr::null_mut();
         let get_xml: IRegisteredTaskGetXml =
             unsafe { method(task.0, I_REGISTERED_TASK_GET_XML_SLOT) };
-        if unsafe { get_xml(task.0, &mut xml) } < 0 || xml.is_null() {
-            return Err(SupervisorStartupErrorV1::NativeApiUnavailable);
+        let hr = unsafe { get_xml(task.0, &mut xml) };
+        if hr < 0 || xml.is_null() {
+            return Err(super::native_hresult_reason(
+                hr,
+                SupervisorStartupErrorV1::TaskXmlReadFailed,
+            ));
         }
         Ok(Some(unsafe { Bstr::into_string(xml) }))
     }
@@ -1185,6 +1232,56 @@ mod tests {
         assert!(source.contains("TASK_LOGON_INTERACTIVE_TOKEN"));
         assert!(source.contains("TASK_CREATE"));
         assert!(!source.contains(&["TASK_CREATE", "_OR_UPDATE"].concat()));
+    }
+
+    #[test]
+    fn startup_com_read_failures_report_only_fixed_nonsecret_stages() {
+        let expected = [
+            (
+                SupervisorStartupErrorV1::ComInitializationFailed,
+                "SUPERVISOR_STARTUP_COM_INIT_FAILED",
+            ),
+            (
+                SupervisorStartupErrorV1::ComApartmentModeConflict,
+                "SUPERVISOR_STARTUP_COM_APARTMENT_CONFLICT",
+            ),
+            (
+                SupervisorStartupErrorV1::ComActivationFailed,
+                "SUPERVISOR_STARTUP_COM_ACTIVATION_FAILED",
+            ),
+            (
+                SupervisorStartupErrorV1::ComConnectFailed,
+                "SUPERVISOR_STARTUP_COM_CONNECT_FAILED",
+            ),
+            (
+                SupervisorStartupErrorV1::RootFolderReadFailed,
+                "SUPERVISOR_STARTUP_ROOT_FOLDER_READ_FAILED",
+            ),
+            (
+                SupervisorStartupErrorV1::TaskLookupFailed,
+                "SUPERVISOR_STARTUP_TASK_LOOKUP_FAILED",
+            ),
+            (
+                SupervisorStartupErrorV1::TaskXmlReadFailed,
+                "SUPERVISOR_STARTUP_TASK_XML_READ_FAILED",
+            ),
+            (
+                SupervisorStartupErrorV1::ElevationRequired,
+                "SUPERVISOR_STARTUP_TASK_ACCESS_DENIED",
+            ),
+            (
+                SupervisorStartupErrorV1::NativeApiUnavailable,
+                "SUPERVISOR_STARTUP_DEFINITION_READ_FAILED",
+            ),
+        ];
+        for (reason, category) in expected {
+            assert_eq!(reason.fixed_read_diagnostic(), category);
+            assert!(
+                category
+                    .bytes()
+                    .all(|byte| byte.is_ascii_uppercase() || byte == b'_')
+            );
+        }
     }
 
     #[test]

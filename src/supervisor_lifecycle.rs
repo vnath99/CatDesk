@@ -304,7 +304,7 @@ fn fixed_startup_definition_status(
         Ok(SupervisorStartupDefinitionStateV1::ForeignOrAmbiguous) => {
             "SUPERVISOR_STARTUP_DEFINITION_FOREIGN_OR_AMBIGUOUS"
         }
-        Err(_) => "SUPERVISOR_STARTUP_DEFINITION_READ_FAILED",
+        Err(error) => error.fixed_read_diagnostic(),
     }
 }
 
