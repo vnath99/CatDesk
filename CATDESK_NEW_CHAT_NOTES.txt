@@ -1,3 +1,9 @@
+## 2026-10-10 — Chat50 T-0463 R2 bootstrap dependency (LATEST)
+
+- R2 review record `review-adc-t0463r2-attributable-cargo-home-review-20261010-6-independent_final_review` was COMPLETED_VERIFIED, produced a genuine completion output and ACKed. Both current/source CI runs (38066384342, 38067618614) passed all three Windows jobs. Guarded reviewed build R2 PREPARED/CONFIRM scheduled once but terminal BUILD_FAILED_OR_AMBIGUOUS; active-generation diagnostic `CARGO_BUILD/CARGO_EXIT_NONZERO` exit101, 4096 stderr bytes truncated SHA256 `50b1ea6c7a2371097956283ee3fae36213652c078ba5ca31df416d07f3fae6ca`; no attestation or promotion.
+- Confirmed bootstrap trap: old serving controller starts helper via `std::env::current_exe()`. New short Cargo-home source code is not running in old build worker. Historical T-0412R3_SOURCE_CURRENT_BOOTSTRAP_BUILD.md documents EXACT same failure and safe recovery path: `CARGO_BUILD_RELEASE_ISOLATED` -> guarded/independently reviewed daemon_reload -> new source-current serving worker -> fresh reviewed build. Do not repeat old reviewed builder. Test-only gated repro R2 rejected INVALID_ARGUMENT; selector edit reverted, no code changes.
+- WakeHost dev84 STOPPED Chat48 gen31; user Chat50 url/digest intended only, project/wake paired migration pending. Next implement source-current isolated verifier and guarded reload without modifying canonical release or external tunnel.
+
 ## 2026-10-10 — Chat50 CI verified and formal T-0463 source review needed (LATEST)
 
 - GitHub Actions run 38066384342 at exact source HEAD 3160cd43ca021c2b6b55c29ca61801b0cd9cfa3e completed SUCCESS with Rust, independent WakeHost Rust, Python Wake/advisor all passing. Rust job Format, Clippy, isolated PowerShell cwd and remaining suite steps also SUCCESS.
