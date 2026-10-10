@@ -17,8 +17,13 @@ jobs:
         run: cargo fmt --check
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
-      - name: Test
-        run: cargo test
+      # Isolate the native PowerShell shell/cwd integration test from parallel
+      # Windows security-process fixtures. Both steps together test the entire
+      # Rust suite; the full-suite step excludes only the test already run here.
+      - name: Test PowerShell shell and cwd (isolated)
+        run: cargo test --locked command::tests::run_command_uses_platform_shell_and_cwd -- --exact
+      - name: Test remaining Rust suite
+        run: cargo test --locked -- --skip command::tests::run_command_uses_platform_shell_and_cwd
 
   python:
     name: Python Wake and advisor tests
