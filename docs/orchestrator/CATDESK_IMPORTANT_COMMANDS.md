@@ -4,6 +4,10 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 — R3B4-A2 candidate blob assembler, not source authority (LATEST)
+
+- Follow-up pure `CandidateBlob` + `assemble_candidate_manifest` only accepts already supplied UTF-8 no-NUL bytes mapped to two fixed Git source paths, computes digest and canonical candidate entries. No Git command, fixture file writes, trusted Git commit attestation, MCP route, production authority or autonomous worker. After syntax correction 8 focused tests, cargo fmt-check and strict Clippy PASS locally; independently verify GitHub CI before acceptance. Source snapshot builder must reuse trusted fixed Git selector and protected handle writer; no mutable-worktree source provenance.
+
 ## 2026-10-11 — R3B4-A candidate manifest validation is source-only (LATEST)
 
 - T0478 R3B4-A `src/isolated_fixture_manifest.rs` defines **candidate-only** deterministic canonical manifest validation. It proves syntax, a strict fixed source-to-leaf mapping, size and digest formats, and in-memory file hash match, **not** the Git commit's trust/CI or snapshot-copy provenance. New GitHub CI pending. Focused local six tests, `cargo fmt --check`, strict Clippy, real HTTP fixture integration and full Rust main suite passed. The future exact-Git-tracked-blob producer and runtime manifest binding remain blocked; no added MCP file or execution authority. See `docs/orchestrator/review_bundles/T-0478_R3B4A_CANDIDATE_MANIFEST_VALIDATOR.md`.

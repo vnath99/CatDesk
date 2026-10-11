@@ -130,6 +130,63 @@ pub(crate) fn verify_file_bytes(entry: &SnapshotFile, bytes: &[u8]) -> Result<()
     Ok(())
 }
 
+/// Bytes supplied by a future trusted Git-object reader. This type itself
+/// carries NO proof of object origin, GitHub review or runner identity.
+pub(crate) struct CandidateBlob<'a> {
+    pub source_path: &'a str,
+    pub bytes: &'a [u8],
+}
+
+/// Convert *already supplied* candidate bytes to a deterministic manifest.
+/// This cannot read a repository or claim its caller supplied trusted blobs.
+pub(crate) fn assemble_candidate_manifest(
+    source_commit: &str,
+    snapshot_id: &str,
+    blobs: &[CandidateBlob<'_>],
+) -> Result<SnapshotManifest, String> {
+    if blobs.is_empty() || blobs.len() > MAX_FILES {
+        return Err("candidate source count invalid".into());
+    }
+    let mut files = Vec::with_capacity(blobs.len());
+    let mut total = 0u64;
+    for blob in blobs {
+        let leaf = match blob.source_path {
+            "Cargo.toml" => "Cargo.toml",
+            "src/main.rs" => "main.rs",
+            _ => return Err("candidate Git source mapping denied".into()),
+        };
+        let size = blob.bytes.len() as u64;
+        if size > MAX_FILE_BYTES
+            || std::str::from_utf8(blob.bytes).is_err()
+            || blob.bytes.contains(&0)
+        {
+            return Err("candidate Git source is not bounded UTF-8 text".into());
+        }
+        total = total
+            .checked_add(size)
+            .ok_or("candidate source aggregate size invalid")?;
+        if total > MAX_TOTAL_BYTES {
+            return Err("candidate source aggregate size invalid".into());
+        }
+        files.push(SnapshotFile {
+            fixture_leaf: leaf.into(),
+            source_path: blob.source_path.into(),
+            size_bytes: size,
+            sha256: format!("{:x}", Sha256::digest(blob.bytes)),
+        });
+    }
+    files.sort_by(|a, b| a.fixture_leaf.cmp(&b.fixture_leaf));
+    let result = SnapshotManifest {
+        schema_version: 1,
+        source_repository: SOURCE_REPOSITORY.into(),
+        source_commit: source_commit.into(),
+        snapshot_id: snapshot_id.into(),
+        files,
+    };
+    validate_manifest(&result)?;
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,6 +206,101 @@ mod tests {
                 sha256: format!("{:x}", Sha256::digest(data)),
             }],
         }
+    }
+
+    #[test]
+    fn candidate_bytes_produce_deterministic_schema_without_git_access() {
+        let baseline = manifest();
+        let blobs = [
+            CandidateBlob {
+                source_path: "src/main.rs",
+                bytes: b"fn main() {}",
+            },
+            CandidateBlob {
+                source_path: "Cargo.toml",
+                bytes: b"sample cargo",
+            },
+        ];
+        let built =
+            assemble_candidate_manifest(&baseline.source_commit, &baseline.snapshot_id, &blobs)
+                .expect("two scoped UTF-8 candidate blobs");
+        assert_eq!(built.files.len(), 2);
+        assert_eq!(built.files[0].fixture_leaf, "Cargo.toml");
+        assert_eq!(built.files[1].fixture_leaf, "main.rs");
+        assert!(verify_file_bytes(&built.files[0], blobs[1].bytes).is_ok());
+        assert!(verify_file_bytes(&built.files[1], blobs[0].bytes).is_ok());
+        let canonical = serde_json::to_vec(&built).unwrap();
+        assert_eq!(parse_manifest_json(&canonical).unwrap(), built);
+    }
+
+    #[test]
+    fn candidate_blob_input_fails_closed_on_unknown_duplicate_or_binary() {
+        let m = manifest();
+        let commit = &m.source_commit;
+        let id = &m.snapshot_id;
+        for source_path in ["../Cargo.toml", "secret.txt", "config.toml", "src\\main.rs"] {
+            assert!(
+                assemble_candidate_manifest(
+                    commit,
+                    id,
+                    &[CandidateBlob {
+                        source_path,
+                        bytes: b"valid"
+                    }],
+                )
+                .is_err(),
+                "candidate path {source_path}"
+            );
+        }
+        let duplicate = [
+            CandidateBlob {
+                source_path: "Cargo.toml",
+                bytes: b"one",
+            },
+            CandidateBlob {
+                source_path: "Cargo.toml",
+                bytes: b"two",
+            },
+        ];
+        assert!(assemble_candidate_manifest(commit, id, &duplicate).is_err());
+        let invalid_sources: [&[u8]; 3] = [b"bad\0bytes", b"\xff", b"\xc0\xaf"];
+        for data in invalid_sources {
+            assert!(
+                assemble_candidate_manifest(
+                    commit,
+                    id,
+                    &[CandidateBlob {
+                        source_path: "Cargo.toml",
+                        bytes: data
+                    }],
+                )
+                .is_err()
+            );
+        }
+        let oversized = vec![b'A'; MAX_FILE_BYTES as usize + 1];
+        assert!(
+            assemble_candidate_manifest(
+                commit,
+                id,
+                &[CandidateBlob {
+                    source_path: "Cargo.toml",
+                    bytes: &oversized
+                }],
+            )
+            .is_err()
+        );
+        assert!(assemble_candidate_manifest(commit, id, &[]).is_err());
+        assert!(
+            assemble_candidate_manifest(
+                "unverified-commit",
+                id,
+                &[CandidateBlob {
+                    source_path: "Cargo.toml",
+                    bytes: b"valid"
+                }],
+            )
+            .is_err()
+        );
     }
 
     #[test]

@@ -21,6 +21,13 @@ Six focused tests: valid canonical input and matching bytes, same-length tamper 
 
 Windows workspace outputs: `cargo fmt --check` PASS; `cargo clippy --locked --offline --workspace --all-targets --all-features -- -D warnings` PASS; `cargo test --locked --offline --bin catdesk isolated_fixture_manifest` **6 passed, 0 failed**; `cargo test --locked --offline --test isolated_dev_fixture` **1 passed** real-process test; full `cargo test --locked --offline --bin catdesk` **exit0**. Final GitHub Windows Actions three-job result is pending until commit and CI proof.
 
+## Follow-up candidate-bytes assembler (R3B4-A2 source, 2026-10-11)
+
+- Added a **pure** `assemble_candidate_manifest` helper and `CandidateBlob` type in the existing R3B4-A module. It maps *caller-supplied* in-memory bytes from exactly `Cargo.toml` or `src/main.rs` to flat fixed leaf names, enforces UTF-8 with no embedded NUL, max 512KiB per blob and total size, computes SHA256 per buffer, sorts leaves, and runs the same manifest schema validator. It does **not** open a file, run Git, create a fixture snapshot, or certify that the caller supplied trusted Git objects.
+- Two more unit tests verify deterministic sorted mapping and canonical JSON compatibility, plus refusal for duplicate, unknown/traversal/backslash, oversize and invalid UTF-8/blob input or malformed commit.
+- Initial new-test source had invalid Rust `for data: &[u8]` syntax; the dedicated `verify_project` caught it and we corrected it to a typed `invalid_sources: [&[u8];3]` array. After the correction, `cargo fmt --all` and `cargo fmt --check` PASS, strict all-target Clippy PASS, focused manifest suite **8/8 PASS**. Full main Rust suite and independent GitHub CI for this follow-up remain to be verified; do not claim accepted without that proof.
+- This is only a preparation seam for a future **trusted** Git-blob runner. Never accept a caller-provided CandidateBlob as provenance or wire this builder directly to MCP.
+
 ## Pending R3B4-B/C/D
 
 R3B4-B: exact immutable Git blob source builder with independently witnessed expected commit/branch/CI, fixed source allowlist, owned temporary root and verified byte copies. R3B4-C: bind trusted manifest in isolated server state **without accepting client-provided manifest as authority**, verify each read/search response against manifest from its single no-follow pinned-handle bytes and refuse new/tampered data. R3B4-D: source-snapshot lifecycle/provenance tests and PID/port ownership, bounded kill/restart/recovery. Do not introduce general source read/write, shell tools, or an LLM agent until independent security gates.
