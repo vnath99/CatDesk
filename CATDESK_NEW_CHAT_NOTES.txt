@@ -1,3 +1,8 @@
+## 2026-10-11 — Chat52 T0478 R3B4-A manifest validator locally verified (LATEST)
+
+- Pure dormant source module `src/isolated_fixture_manifest.rs` performs strict candidate snapshot schema/byte checks: exact repo string, syntactic commit SHA, canonical UUID, fixed allowlist `Cargo.toml`/`main.rs`, SHA256 lower hex, canonical sorted unique entries, size/count bounds, duplicate-key/unknown-field rejection. 6 tests PASS, local cargo fmt, strict Clippy, real fixture HTTP and full Rust main suite PASS. **No Git object copying, no trusted commit verification, no runtime MCP manifest-binding yet**. Detailed report `docs/orchestrator/review_bundles/T-0478_R3B4A_CANDIDATE_MANIFEST_VALIDATOR.md`. New GitHub Windows CI must pass after scoped commit; R3B4-B/C/D remain.
+- Canonical Chat52 gen33 authority pair and WakeHost unchanged; exact manual event `manual-wake-mcp-1791737671996` SENT/EXACT_USER_MESSAGE_APPENDED/COMPLETE. Hourly deadmen OFF. Current timer `manual-turn-1791740469-22112-107`. Preserve signed T0366 pending epoch2 and external tunnel, and seven unrelated untracked.
+
 ## 2026-10-11 — R3B3 independent GitHub CI 3/3 SUCCESS (LATEST)
 
 - R3B3 source commit04806d8 in GitHub Actions run38158118618 now terminal SUCCESS all three Windows jobs including Rust fmt/Clippy/full tests. Root handle pin/rename denial/release fixture-only increment verified. R3B4 source-commit provenance/manifest remains design only (commit1eff6b1); do not claim code or a sandboxed agent exists. Latest turn timer manual-turn-1791737785-22112-106 STOP COMPLETE elapsed1091s. Manual event manual-wake-mcp-1791737671996 exact append receipt seen but response timer/delivery remained nonterminal during reply; do not replay. Hourly deadmen OFF.

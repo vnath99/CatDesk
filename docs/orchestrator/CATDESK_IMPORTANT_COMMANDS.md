@@ -4,6 +4,11 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 — R3B4-A candidate manifest validation is source-only (LATEST)
+
+- T0478 R3B4-A `src/isolated_fixture_manifest.rs` defines **candidate-only** deterministic canonical manifest validation. It proves syntax, a strict fixed source-to-leaf mapping, size and digest formats, and in-memory file hash match, **not** the Git commit's trust/CI or snapshot-copy provenance. New GitHub CI pending. Focused local six tests, `cargo fmt --check`, strict Clippy, real HTTP fixture integration and full Rust main suite passed. The future exact-Git-tracked-blob producer and runtime manifest binding remain blocked; no added MCP file or execution authority. See `docs/orchestrator/review_bundles/T-0478_R3B4A_CANDIDATE_MANIFEST_VALIDATOR.md`.
+- Chat52 generation33 paired target and WakeHost unchanged; manual event `manual-wake-mcp-1791737671996` exact SENT+receipt+COMPLETE. User disabled all hourly deadmen, keep them OFF.
+
 ## 2026-10-11 — R3B3 CI accepted / Chat52 turn boundary (LATEST)
 
 - R3B3 `04806d8` GitHub Windows Actions `38158118618` complete SUCCESS 3/3. The source-only fixture holds no-delete-share pinned root for server lifetime with Windows root rename/release process proof. R3B4 canonical source manifest is **design only**, not implemented. Manual event `manual-wake-mcp-1791737671996` has exact gen33 appended receipt but not terminal delivery while responding, so no duplicate test yet. Turn timer `manual-turn-1791737785-22112-106` STOP COMPLETE at 1091s. All hourly CatDesk deadmen disabled.

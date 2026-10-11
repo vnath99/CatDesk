@@ -1,6 +1,8 @@
 # T-0478 R3B4 — Trusted source snapshot and immutable fixture read contract
 
-**Status: DESIGN ONLY — NOT IMPLEMENTED OR ACCEPTED.** 2026-10-11, CatDesk Chat52.
+**Status: R3B4-A pure candidate manifest validator IMPLEMENTED SOURCE-ONLY, local tests PASS, GitHub CI pending; B/C/D DESIGN ONLY — NOT IMPLEMENTED OR ACCEPTED.** 2026-10-11, CatDesk Chat52.
+
+R3B4-A code: `src/isolated_fixture_manifest.rs`, scoped report `T-0478_R3B4A_CANDIDATE_MANIFEST_VALIDATOR.md`. This module is deliberately not wired to the MCP fixture endpoint, Git or production authority. Syntactically plausible commits/digests are not trusted source evidence until the reviewed producer and runtime policy exist.
 
 ## Why this exists
 

@@ -38,6 +38,9 @@ mod daemon_reload_approval;
 mod delegated;
 mod devtools;
 mod git_workflow;
+#[allow(dead_code)]
+// T0478 R3B4-A pure schema; trusted producer and runtime enforcement follow later.
+mod isolated_fixture_manifest;
 mod macos_terminal;
 mod mascot;
 mod mcp;
