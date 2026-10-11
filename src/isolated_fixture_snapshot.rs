@@ -144,6 +144,25 @@ pub(crate) struct StagedCandidateSnapshot {
     _leases: Vec<RetainedReviewedArtifact>,
 }
 
+/// Dormant exact manifest-bound read gate for a producer-owned staged root.
+/// Ordinary fixture MCP routing must NOT call this by manufacturing a manifest
+/// from a request: only the future owner of StagedCandidateSnapshot may use it.
+impl StagedCandidateSnapshot {
+    pub(crate) fn read_manifest_leaf(&self, leaf: &str) -> Result<Vec<u8>, String> {
+        verify_disposable_root(&self.root)?;
+        validate_manifest(&self.manifest)?;
+        let entry = self
+            .manifest
+            .files
+            .iter()
+            .find(|entry| entry.fixture_leaf == leaf)
+            .ok_or("isolated fixture leaf is not in witnessed manifest")?;
+        let bytes = read_relative_regular_unique(&self.root, leaf, MAX_FILE_BYTES, LABEL)?;
+        verify_file_bytes(entry, &bytes)?;
+        Ok(bytes)
+    }
+}
+
 /// Dormant reviewed-source path. It uses only the opaque live HTTPS GitHub
 /// witness, the existing fixed Git object reader and protected relative writer.
 /// It does NOT expose data to the MCP router, start processes or auto-clean
@@ -230,18 +249,28 @@ mod tests {
         assert!(stage_candidate_into_owned_root(&root, &manifest, &extra).is_err());
         assert!(!dir.join("secret.txt").exists());
         let leases = retain_staged_artifacts(&root, &manifest).expect("retain reviewed files");
+        let staged = StagedCandidateSnapshot {
+            root,
+            manifest,
+            _leases: leases,
+        };
+        assert_eq!(
+            staged.read_manifest_leaf("Cargo.toml").unwrap(),
+            b"source tracked bytes"
+        );
+        for disallowed in ["secret.txt", "../Cargo.toml", "main.rs", "config.toml"] {
+            assert!(
+                staged.read_manifest_leaf(disallowed).is_err(),
+                "unlisted source leaf should fail closed"
+            );
+        }
         assert!(
             std::fs::write(dir.join("Cargo.toml"), b"modified").is_err(),
             "retained source file handle must prevent write"
         );
-        assert_eq!(
-            read_relative_regular_unique(&root, "Cargo.toml", MAX_FILE_BYTES, LABEL).unwrap(),
-            b"source tracked bytes"
-        );
-        drop(leases);
+        drop(staged);
         std::fs::write(dir.join("Cargo.toml"), b"modified")
             .expect("source write allowed only after retired file lease");
-        drop(root);
         std::fs::remove_dir_all(dir).expect("cleanup only own released fixture root");
     }
 

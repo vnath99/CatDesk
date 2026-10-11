@@ -1,3 +1,8 @@
+## 2026-10-11 — R3B4-B3A3 snapshot in-process manifest read gate (LATEST)
+
+- B3A `c9c174d` independently GitHub CI38183273233 3/3 SUCCESS. Added dormant `StagedCandidateSnapshot::read_manifest_leaf` method to refuse unlisted/nested/traversal/config paths, enforce size and SHA256 from pinned no-follow unique-link read for manifest-approved fixed file, keeping root/content leases held. Focused 3/3, fmt and strict Clippy PASS; source follow-up GitHub CI pending. Not linked to actual MCP router, not a secure coding worker.
+- B3A2 retained source-file lease commit `fac671d` CI38183594202 still in progress at last check (Independent Wake Rust success). Need B3B ACL and crash/partial-stage cleanup, C runtime-bound trusted reader, D child ownership. No hourly deadman, protected production Recovery still incomplete.
+
 ## 2026-10-11 — R3B4-B3A2 Windows source file immutability leases (LATEST)
 
 - New dormant result holds `RetainedReviewedArtifact` handle leases for each fixed temp-staged manifest leaf, pinned with exact expected SHA/byte count and Windows read-only sharing. Real focused Windows test denies writes while leases live, allows own-fixture writes after explicit release. Reuses existing `windows_protected_fs`; local fmt, strict Clippy, focused 3/3 and full main Rust suite PASS. Independent GitHub Windows CI still required. Report `T-0478_R3B4B3A_PROTECTED_CANDIDATE_SNAPSHOT_STAGING.md`.

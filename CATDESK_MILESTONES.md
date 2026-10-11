@@ -1,3 +1,8 @@
+## 2026-10-11 — R3B4-B3A3 dormant manifest-bound file read gate (LATEST)
+
+- Added `StagedCandidateSnapshot::read_manifest_leaf` to verify a requested flat name is in its **retained in-memory manifest**, read bytes through the existing pinned no-follow single-link handle, and enforce expected SHA256+size before exposing bytes to any future internal caller. Tests reject unknown, traversal, config and other unlisted leaves. No client-provided manifest, no MCP wiring, no general file permission expansion. Local fmt-check, strict Clippy and focused 3/3 staging tests PASS; new GitHub CI required. Review: `T-0478_R3B4B3A_PROTECTED_CANDIDATE_SNAPSHOT_STAGING.md`.
+- Original B3A staging commit `c9c174d` Windows Actions run `38183273233` independently **SUCCESS 3/3**. B3A2 file lease commit `fac671d` Windows CI `38183594202` at last status Independent WakeHost Rust SUCCESS; Rust/Python ongoing. Continue B3B owner-only ACL and partial-stage handle-verified cleanup before hooking real runtime, C bound reader, D owned PID/port. No production/signer/Wake/tunnel mutation, all CatDesk hourly deadmen OFF.
+
 ## 2026-10-11 — Chat52 R3B4-B3A2 retained source-content leases (LATEST)
 
 - Updated dormant `StagedCandidateSnapshot` to retain shared `windows_protected_fs::RetainedReviewedArtifact` SHA-bound read-only file handles for all staged Git-object leaves, alongside its pinned directory root. Windows source test proves same-user file writes denied while lease lives and allowed only after explicit lease release; correct source file remains readable with unique no-follow handle. Reuses existing audited handle primitive, no new NTFS APIs or shell.
