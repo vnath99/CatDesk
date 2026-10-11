@@ -754,6 +754,8 @@ pub struct AppState {
     pub theme: String,
     pub mode: Mode,
     pub tool_mode: ToolMode,
+    // Fixture-only state never opens or persists a pathname-based configuration.
+    fixture_config_in_memory: bool,
     pub mcp_slug: String,
     pub installation_id: String,
     #[allow(dead_code)]
@@ -1120,6 +1122,27 @@ impl AppState {
         Self::from_config_path_with_archive(port, workspace_root, config_path, true)
     }
 
+    /// The isolated read/search fixture uses ephemeral in-memory settings.
+    /// Do not load or initialize config.toml via a pathname.
+    pub(crate) fn new_isolated_fixture(
+        port: u16,
+        workspace_root: String,
+        config_path: PathBuf,
+    ) -> std::io::Result<Self> {
+        let mut config = AppConfig::default();
+        ensure_installation_id(&mut config.identity);
+        let mut state = Self::from_prepared_config(
+            port,
+            workspace_root,
+            config_path,
+            false,
+            config,
+            Vec::new(),
+        )?;
+        state.fixture_config_in_memory = true;
+        Ok(state)
+    }
+
     pub(crate) fn new_headless(
         port: u16,
         workspace_root: String,
@@ -1154,6 +1177,24 @@ impl AppState {
     ) -> std::io::Result<Self> {
         let (config, startup_warnings) =
             AppConfig::load_or_initialize_from_path_with_warnings(&config_path)?;
+        Self::from_prepared_config(
+            port,
+            workspace_root,
+            config_path,
+            _archive_startup_mascot,
+            config,
+            startup_warnings,
+        )
+    }
+
+    fn from_prepared_config(
+        port: u16,
+        workspace_root: String,
+        config_path: PathBuf,
+        _archive_startup_mascot: bool,
+        config: AppConfig,
+        startup_warnings: Vec<String>,
+    ) -> std::io::Result<Self> {
         if let Some(message) = config.tunnel.mode.unimplemented_message() {
             return Err(std::io::Error::other(message));
         }
@@ -1182,6 +1223,7 @@ impl AppState {
             theme: config.theme,
             mode: config.mode,
             tool_mode: config.tool_mode,
+            fixture_config_in_memory: false,
             mcp_slug: config
                 .mcp
                 .route_id
@@ -1262,6 +1304,11 @@ impl AppState {
     }
 
     fn app_config(&self) -> std::io::Result<AppConfig> {
+        if self.fixture_config_in_memory {
+            return Err(std::io::Error::other(
+                "isolated fixture must never load or persist configuration",
+            ));
+        }
         let mut config = AppConfig::load_from_path(&self.config_path)?;
         config.partner_binagotchy_seed = self.partner_binagotchy_seed.clone();
         config.set_catdesk_as_co_author = self.set_catdesk_as_co_author;

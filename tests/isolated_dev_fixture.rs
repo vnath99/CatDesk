@@ -79,6 +79,8 @@ async fn fixture_headless_mcp_has_only_authenticated_local_read_and_search() {
         "token must not be logged"
     );
     assert_eq!(ready["tool_mode"], "read-only");
+    // The fixture must never initialize a pathname-backed configuration.
+    assert!(!config.exists(), "fixture must use in-memory config only");
 
     let client = reqwest::Client::new();
     let list = json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}});
@@ -208,5 +210,6 @@ async fn fixture_headless_mcp_has_only_authenticated_local_read_and_search() {
     let _ = timeout(Duration::from_secs(5), child.wait())
         .await
         .expect("bounded exit");
+    assert!(!config.exists(), "fixture never persisted configuration");
     let _ = std::fs::remove_dir_all(root);
 }

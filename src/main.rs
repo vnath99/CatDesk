@@ -1196,11 +1196,20 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
     if options.isolated_dev_fixture {
         validate_isolated_fixture_scope(&workspace_root, &options.config_path)?;
     }
-    let state: SharedState = Arc::new(Mutex::new(AppState::new_headless(
-        options.port,
-        workspace_root.clone(),
-        options.config_path.clone(),
-    )?));
+    let app = if options.isolated_dev_fixture {
+        AppState::new_isolated_fixture(
+            options.port,
+            workspace_root.clone(),
+            options.config_path.clone(),
+        )?
+    } else {
+        AppState::new_headless(
+            options.port,
+            workspace_root.clone(),
+            options.config_path.clone(),
+        )?
+    };
+    let state: SharedState = Arc::new(Mutex::new(app));
 
     let mcp_path = {
         let mut app = state.lock().await;
@@ -2383,6 +2392,40 @@ mod tests {
             ])
             .is_err()
         );
+    }
+
+    #[test]
+    fn isolated_fixture_config_is_memory_only_even_with_existing_file() {
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-dev-fixture-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir(&root).expect("create disposable fixture");
+        let config = root.join("config.toml");
+        let workspace = root.to_str().expect("fixture path");
+        let mut state = crate::state::AppState::new_isolated_fixture(
+            0,
+            workspace.to_owned(),
+            config.clone(),
+        )
+        .expect("in-memory fixture state");
+        assert!(!config.exists(), "default fixture must not create a config");
+        assert!(state.persist_state().is_err(), "fixture persistence must fail closed");
+        state.persist_state_with_log();
+        assert!(!config.exists(), "logging persistence refusal must not write");
+
+        let marker = "not valid TOML [";
+        std::fs::write(&config, marker).expect("create untrusted fixture config");
+        let mut ignored = crate::state::AppState::new_isolated_fixture(
+            0,
+            workspace.to_owned(),
+            config.clone(),
+        )
+        .expect("fixture ignores pathname-based config");
+        assert!(ignored.persist_state().is_err());
+        ignored.persist_state_with_log();
+        assert_eq!(std::fs::read_to_string(&config).unwrap(), marker);
+        std::fs::remove_dir_all(root).expect("cleanup own fixture");
     }
 
     #[test]

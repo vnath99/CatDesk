@@ -4,6 +4,12 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 Chat52 manual Wake accepted; T0478 R3B2 source-only (LATEST)
+
+- Independent WakeHost and project target `https://chatgpt.com/c/6acba3bf-e740-8331-8896-8a25fefdbf16`, SHA `d82593bf8a7eb82936cd63d1ed52f77243c46afa3f9aa57ca2d9a642a31b73ce`, generation33. Exact manual event `manual-wake-mcp-1791732042693` reached SENT with `EXACT_USER_MESSAGE_APPENDED`, timer COMPLETE and queue0; no natural Wake acceptance. All old ChatGPT hourly deadmen OFF; do not reenable.
+- R3B1 repair `9f6d0bc` GitHub Windows CI `38151893173` SUCCESS 3/3. R3B2 source-only creates isolated read/search fixture config in-memory, refuses persistence, tests no config creation and malformed preexisting config ignored. Normal headless/production unchanged. Local strict Clippy/full Rust suite/focused fixture tests PASS, fresh GitHub CI pending. Exact code/report: `docs/orchestrator/review_bundles/T-0478_R3B2_IN_MEMORY_FIXTURE_CONFIG.md`.
+- Use guarded CatDesk `catdesk_turn_timer(START|STATUS|STOP)` for 19-minute bounded turns; manual Wake `catdesk_binagotchy_command(test)` only when target paired, no in-flight event and queue0. Do not treat manual as natural acceptance. Production supervisor recovery still partial, seven old untracked paths must remain untouched.
+
 ## 2026-10-11 fixture CI correction and Wake status (LATEST)
 
 - T0478 R3B1 original commit db82920 GitHub Windows CI38150502950 FAILED Rust Clippy due unstable Windows MetadataExt::number_of_links E0658 and Option-vs-integer E0308. The corrected source now validates existing fixture config via stable pinned Windows `read_relative_regular_unique`. Local strict Clippy/fmt, focused config-hardlink test, fixture HTTP integration and full main Rust test PASS; new GitHub CI required.
