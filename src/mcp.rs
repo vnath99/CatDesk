@@ -9007,6 +9007,23 @@ mod tests {
         .await
         .expect("local read response");
         assert!(local.error.is_none(), "fixture read must be allowed");
+        let body = local.result.expect("local read payload");
+        assert!(body.get("isError").is_none());
+        assert!(
+            body["structuredContent"]["text"]
+                .as_str()
+                .is_some_and(|text| text.contains("safe fixture value"))
+        );
+        let escaped = handle_isolated_fixture_request(
+            &make(
+                "tools/call",
+                json!({"name":"read","arguments":{"path":"../not-in-fixture.txt"}}),
+            ),
+            workspace,
+        )
+        .await
+        .expect("escaped path response");
+        assert_eq!(escaped.result.expect("escape refusal")["isError"], true);
         for prohibited in [
             "run_command",
             "write",
