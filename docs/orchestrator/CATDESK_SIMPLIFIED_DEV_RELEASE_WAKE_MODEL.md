@@ -27,8 +27,11 @@ not block routine local development.
 
 A **separate**, proven obstacle is that the live CatDesk control daemon is
 older than current source, and its guarded current-chat target rollover rejected
-the current Chat51 request. Independent WakeHost is STOPPED and still points to
-old Chat48 generation31; only the hourly Chat51 deadman is a current, working
+the current Chat51 request. Independent WakeHost is STOPPED. The freshest operator-run independent
+WakeHost readback now shows **Chat51 generation32**, but the CatDesk project
+registry remains at **Chat48**; the older serving daemon's cached gen31 Wake
+snapshot must not override the fresh independent readback. Until the split
+pair is reconciled, only the hourly Chat51 deadman is a confirmed
 continuation mechanism. Signing a new main image is not intrinsically required
 to update a ChatGPT conversation target if the already-existing operator-owned,
 guarded project+Wake target update is used. Conversely unpaired target setters,
@@ -82,15 +85,24 @@ old target are not acceptable shortcuts.
 - For Chat51, the expected target is
   `https://chatgpt.com/c/6acaae13-4b18-83e9-b6ca-3c5e00cf47a8`, hash
   `7faf9cc96669e240362da0dd4266bec8b2585f0ef3e03b4b56ae4c8f66db1b22`.
-  Existing old paired URL is Chat48 with hash
+  The **registry** still shows the old Chat48 URL with SHA
   `3a1d4cc69dfa3d05cb2bc33ef1197ac5a7433a120cfb4214a6996edb5a9d29e9`,
-  generation31. Source-local CLI must obtain old target from the trusted Wake
-  store if the earlier registry-only rollback left digest damaged.
-- Precise live gated steps: focused tests + all Windows CI green -> operator
-  one-line local source CLI does `target set <Chat51>`, `target`,
-  `wake status`, `exit` -> fresh **independent CatDesk MCP**
-  `autonomy_project_registry_read` and `catdesk_transport_status` prove exact
-  URL/hash and independent generation>=32 with WakeHost still STOPPED ->
+  while independent Wake is **already Chat51 generation32**. T0477's guarded
+  wake-first recovery source is specifically designed to commit only the
+  outstanding registry side when Wake and the caller's exact requested
+  target/digest already agree; it must NOT advance Wake to generation33.
+  A separate preexisting helper still handles same-URL/damaged-registry-SHA
+  correction. No blind retry of an old paired rollover is permitted.
+- Precise live gated steps: focused tests + all Windows CI green for the
+  **T0477 R2 partial-recovery fix** -> assistant first tries the currently
+  supported, guarded paired CatDesk tool (old serving gateway has rejected
+  this exact split state) -> only if still unavailable, a **rare operator**
+  one-line locally rebuilt source CLI issues `target set <Chat51>`, `target`,
+  `wake status`, `exit`. It must return the exact success receipt and
+  current Wake generation32 without advancing it, plus the assistant's
+  independent CatDesk registry readback must show Chat51 URL/hash. Do not
+  rely on old-serving `catdesk_transport_status` if its Wake snapshot is
+  stale. Only when both authorities have been proven equal with WakeHost STOPPED ->
   **separate explicit authorization** to start WakeHost if auth/session ready ->
   one MANUAL canary, explicit receipt, then actual natural event acceptance.
   Never infer success from CLI output alone. A singleton Binagotchy mutex can
@@ -133,36 +145,40 @@ old target are not acceptable shortcuts.
 
 ## Priority reversal and measurable next milestones
 
-1. **T0476 — Wake binding decoupling NOW.** Source patch no-autostart CLI;
-   local `cargo test --locked --offline --bin catdesk binagotchy_cli` and
-   designated-chat tests, Clippy/fmt, debug binary build and GitHub Windows CI.
-   Then *operator* performs one existing paired target command from the local
-   source-built CLI; no production image or signer; independently verify paired
-   Chat51 target gen>=32 and STOPPED WakeHost. If any partial state, leave Wake
-   OFF and diagnose the exact guard. This is the shortest potential route to
-   genuine Wake acceptance.
-2. **T0477 — Isolated dev runner.** One explicit `catdesk dev ...` interface,
+1. **T0476 — No implicit Wake activation.** Completed source fix and all
+   three GitHub Windows CI jobs passed (commit `4213ba8`,
+   run `38105874271`); the non-daemon local CLI cannot start WakeHost
+   merely by opening.
+2. **T0477 — Complete the interrupted Chat51 target pair.** Source commit
+   `58c4bfc` keeps Wake generation32 as-is while reconciling old registry
+   Chat48 to Chat51 under exact CAS, preserving legacy same-URL digest-only
+   repair. Windows CI run `38108654054` PASSED all three Windows jobs, including
+   both designated-chat repair regression tests, before live recovery;
+   require explicit updated CLI receipt and independently verified paired
+   readbacks, then separate Wake start/canary approval.
+3. **T0478 — Isolated dev runner.** One explicit `catdesk dev ...` interface,
    separate state and ports, no production transport or signer, build/test,
    stop/restart and measurable task progression, no accidental session
    duplication. CI and safety tests prove forbidden production access.
-3. **T0478 — Stable supervisor versioned worker release.** Inventory what
+4. **T0479 — Stable supervisor versioned worker release.** Inventory what
    T-0223 already implements; implement missing operator activation, versioned
    source-current rollout, LKG and bounded recovery. Avoid new overlapping
    release systems or a second tunnel owner.
-4. **T0479 — Production signed-state cleanup.** Review T0366 pending stage,
+5. **T0480 — Production signed-state cleanup.** Review T0366 pending stage,
    file-sharing/ACL evidence, identify the real elevated replacement failure;
    preserve signed receipts, provide reviewed one-shot completion or
    monotonic supersession before any new signed release. Stop the current
    unbounded series of bespoke T03xx scripts.
-5. Resume Recovery nine-layer doctor and core milestones, then multi-project
+6. Resume Recovery nine-layer doctor and core milestones, then multi-project
    scheduling / Binagotchy UI / natural Wake maturity. Source implementation
    is allowed to progress via dev lane while production signing is parked.
 
 ## Explicit rollback and gate criteria
 
 - Target binding success requires **both** project registry and independent
-  Wake target exact canonical Chat51 + SHA, incremented Wake generation,
-  WakeHost STOPPED through the bind, no old Chat48 submission, no duplicate.
+  Wake target exact canonical Chat51 + SHA, Wake generation **32 retained**
+  through the recovery (not incremented again), WakeHost STOPPED,
+  no old Chat48 submission, no duplicate.
 - The first live Wake MANUAL canary is not natural acceptance; check one exact
   new generation receipt and stopped/ready status before declaring reliability.
 - The old source/current official Secure MCP client remains externally owned
@@ -182,7 +198,9 @@ old target are not acceptable shortcuts.
   MoveFileExW success/failure.
 - Existing T0473 fresh inventory at `.catdesk/t0372-rotation-state.json`
   and signed T0472 readback verified T0215 installed1/T0366 pending2.
-- Source binagotchy_cli.rs has the paired updater and previous
-  `start_installed_only_if_desired_running` UI startup behavior; removed in
-  first T0476 patch. No target change, browser event, protected image
-  rotation, production daemon reload or private signer use performed.
+- Source `binagotchy_cli.rs` has a paired updater. T0476 removed
+  `start_installed_only_if_desired_running` from console startup.
+  Independent Wake was later observed already changed to Chat51 generation32
+  without a corresponding CatDesk registry commit; no WakeHost launch/browser
+  event, protected main-image rotation, production daemon reload or private
+  signer use was performed by this recovery work.

@@ -2,6 +2,11 @@
 
 Date: 2026-10-10 EDT; canonical Chat51 https://chatgpt.com/c/6acaae13-4b18-83e9-b6ca-3c5e00cf47a8.
 
+## T0477 R2 — final verified Windows source result (2026-10-10 EDT / 2026-10-11 UTC)
+
+- R2 source commit `58c4bfcca7a66ec6815e9156fc97802ddc254b08` was pushed and GitHub Windows Actions `38108654054` completed **SUCCESS all three jobs**: Rust, Python Wake/advisor, Independent WakeHost Rust. Main Rust job PASS includes formatting, strict Clippy, fixed PowerShell syntax/native shim and isolated shell test plus full Rust binary suite. Exact CI logs confirm `mcp::tests::designated_chat_update_completes_exact_interrupted_wake_first_commit ... ok` AND `mcp::tests::designated_chat_update_repairs_only_corrupt_digest_matching_independent_wake ... ok`. R1 run `38107639800` remains failed history, superseded by R2 for source acceptance. Local rebuilt `target/debug/catdesk.exe` from R2 completed successfully.
+- Fresh user-host independent WakeHost generation32 Chat51 STOPPED and project registry old Chat48 remains a **split pair**; no live target reconciliation yet. CatDesk workspace `.catdesk/wake-bridge/owner.json` explicitly `owner=independent_v1`; source `wake_protocol_client::selected` uses that exact selector to choose independent Wake store. Old serving first-class paired `autonomy_project_registry_bind` rejected once `INVALID_ARGUMENT`; no mutation performed. The source-current local CLI is therefore an **exceptional operator-side supported path**, not a routine target setter. Require exact success output + independently verified paired state before explicit Wake start/manual canary. Do not mistake old cached `catdesk_transport_status` Chat48 gen31 for fresh independent WakeHost state.
+
 ## T0477 R2 — CI-discovered regression repair (2026-10-10; source-only)
 
 - First source commit `ef7ce6b` Windows Actions run `38107639800` TERMINAL FAILURE on Rust job. Python Wake and independent WakeHost Rust jobs PASS. Rust formatting/Clippy/PowerShell helper PASS, 1022 of 1023 main binary tests PASS and 26 ignored. New `designated_chat_update_completes_exact_interrupted_wake_first_commit` test PASS; older `designated_chat_update_repairs_only_corrupt_digest_matching_independent_wake` test FAILED `ProtectedStateMismatch`.

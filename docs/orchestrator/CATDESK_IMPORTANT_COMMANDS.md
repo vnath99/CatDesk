@@ -4,6 +4,12 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## SOURCE VERIFIED — T0477 R2 (Chat51 recovery) — 2026-10-10
+
+- `58c4bfc` GitHub Actions run `38108654054` **SUCCESS all three Windows jobs**. Exact Rust CI proves both source target recovery paths: (1) independent Wake already Chat51, complete old registry Chat48 to Chat51 with NO Wake generation increment; (2) legacy bad SHA with same URL, repair only exact digest. Local source-current `target/debug/catdesk.exe` rebuilt PASS. Previously failed R1 CI superseded. Workspace `.catdesk/wake-bridge/owner.json` says `independent_v1`.
+- Live source direct operator showed independent WakeHost Chat51 gen32 STOPPED queue0, while first-class CatDesk registry read stayed Chat48: **pair NOT YET reconciled**. Old serving direct paired setter `autonomy_project_registry_bind` already tried once and rejected INVALID_ARGUMENT. Do not request another full signed main-image rotation to change target; a rare one-line operator local source CLI recovery may be necessary for this old-serving mismatch. Check exact CLI output and independent registry readback before starting Wake.
+- All operator PowerShell commands **one line**. This reference remains the ONLY primary command index; historical dated sections below are context, not an instruction to repeat stale operations.
+
 ## START HERE — Essential commands and current target repair (2026-10-10, Chat51)
 
 **Canonical reference:** This file is the single supported command index. Past dated sections below are historical evidence, not current instructions. Verify live tool schema/installed version before invoking. **All commands given to the operator in PowerShell must be one line, ready to paste.** Prefer assistant-owned CatDesk typed tools; ask the operator to run a shell command only when the current serving tool cannot perform the guarded operation.
