@@ -1,3 +1,8 @@
+## 2026-10-11 — R3B4-B2A Git-object fake runner tests (LATEST)
+
+- R3B4-B2A source-only generic Git-object phase runner allows deterministic test injection; real runner continues using existing measured fixed-slot trusted Git program and exact `cat-file` commands. Four Git-object tests locally PASS (fixed argv, wrong kinds/sizes, correct phase order/fixed paths/limits, and early non-blob rejection); strict Clippy, cargo fmt and full Rust main suite exit0. Documentation `T-0478_R3B4B2A_INJECTED_GIT_OBJECT_READER.md` and GitHub commit/Windows CI needed. **Not reviewed GitHub commit proof, not a trusted source snapshot and not an autonomous coding worker.**
+- B1 correction `47e14ef` Actions run `38170517509` Rust full suite in progress, Python and Independent Wake Rust PASSED at last check. Production supervisor Recovery remains unverified, GitHub mirror itself COMPLETE. Previous manual wake `manual-wake-mcp-1791741648885` generation33 exactly SENT/EXACT_USER_MESSAGE_APPENDED/COMPLETE; hourly deadmen OFF. Current timer `manual-turn-1791748669-22112-109`.
+
 ## 2026-10-11 — R3B4-B1 CI test error corrected (LATEST)
 
 - GitHub run38163372088 failed only B1 main Rust test `fixed_commands_only_and_no_caller_source_path`: `"a".repeat(40)` is valid hexadecimal syntax. Replaced negative case with forty `g` letters. After correction local fmt-check, strict Clippy, focused 2/2 and full main Rust tests PASS. Publish correction and check new CI. R3B4-B1 read-only candidate Git object code remains dormant, not verified GitHub reviewed commit proof.

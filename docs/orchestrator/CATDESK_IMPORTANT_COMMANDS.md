@@ -4,6 +4,11 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 — Current source milestone T0478 R3B4-B2A (LATEST)
+
+- GitHub mirror/publishing milestone **COMPLETE**. Production stable-supervisor recovery **NOT COMPLETE**. T0478 next: independently attested GitHub branch+CI expected commit, safe source-only Git blob copy into protected disposable fixture, runtime digest enforcement, bounded owned child lifecycle. New B2A `src/isolated_fixture_git_objects.rs` generic fake-runner test seam; focused 4/4 local, full main Rust suite, strict Clippy and cargo fmt-check PASS. It is not approved GitHub provenance nor permission for real workspace writes. Docs `T-0478_R3B4B2A_INJECTED_GIT_OBJECT_READER.md`. B1 CI correction `47e14ef` pending terminal Windows Rust check at last review.
+- Hourly CatDesk deadmen OFF. Paired canonical Chat52 generation33, WakeHost independent and official Secure MCP external owner unchanged, private signed pending T0366 epoch2 untouched.
+
 ## 2026-10-11 — Post-GitHub-mirror roadmap and B1 test correction (LATEST)
 
 - **GitHub mirror is done.** Separate production recovery still blocked `SUPERVISOR_ROOT_UNAVAILABLE`, `SUPERVISOR_STARTUP_POLICY_UNPROVEN`, `SUPERVISOR_STARTUP_DEFINITION_READ_FAILED` and `SUPERVISOR_3201_NOT_PROBED`. Work now in T0478 isolated nonprivileged dev fixture, then T0479 stable supervisor versioned release/LKG, then converge production recovery. Current B1 source CI38163372088 main Rust test failed due invalid negative test `"a".repeat(40)`; repaired to `"g".repeat(40)`. Local fmt, strict Clippy, focused and full Rust tests pass; await new CI.

@@ -155,30 +155,38 @@ pub(crate) async fn read_candidate_git_objects(
     }
     let git = resolve_trusted_git_identity(workspace)
         .map_err(|_| "trusted Git executable unavailable")?;
+    collect_candidate_from_runner(source_commit, snapshot_id, |path, phase, limit| {
+        let git = &git;
+        async move {
+            let args = fixed_cat_file_args(source_commit, path, phase)?;
+            read_git_output(workspace, git, &args, limit).await
+        }
+    })
+    .await
+}
+
+/// Injected read-only object-result seam. Tests use only faked byte outputs;
+/// actual Git process selection stays in read_candidate_git_objects above.
+async fn collect_candidate_from_runner<F, Fut>(
+    source_commit: &str,
+    snapshot_id: &str,
+    mut runner: F,
+) -> Result<(SnapshotManifest, Vec<(String, Vec<u8>)>), String>
+where
+    F: FnMut(&'static str, GitBlobPhase, usize) -> Fut,
+    Fut: std::future::Future<Output = Result<Vec<u8>, String>>,
+{
+    if !lowercase_commit_sha(source_commit) {
+        return Err("candidate Git source commit invalid".into());
+    }
     let mut candidates = Vec::with_capacity(FIXED_SOURCES.len());
     for source_path in FIXED_SOURCES {
-        let kind = read_git_output(
-            workspace,
-            &git,
-            &fixed_cat_file_args(source_commit, source_path, GitBlobPhase::Type)?,
-            MAX_PROBE_BYTES,
-        )
-        .await?;
-        let size = read_git_output(
-            workspace,
-            &git,
-            &fixed_cat_file_args(source_commit, source_path, GitBlobPhase::Size)?,
-            MAX_PROBE_BYTES,
-        )
-        .await?;
-        // Read one extra byte to refuse unexpectedly large output.
-        let data = read_git_output(
-            workspace,
-            &git,
-            &fixed_cat_file_args(source_commit, source_path, GitBlobPhase::Bytes)?,
-            MAX_FILE_BYTES as usize,
-        )
-        .await?;
+        let kind = runner(source_path, GitBlobPhase::Type, MAX_PROBE_BYTES).await?;
+        if kind != b"blob\n" {
+            return Err("candidate Git object is not a blob".into());
+        }
+        let size = runner(source_path, GitBlobPhase::Size, MAX_PROBE_BYTES).await?;
+        let data = runner(source_path, GitBlobPhase::Bytes, MAX_FILE_BYTES as usize).await?;
         candidates.push((
             source_path.to_string(),
             verified_candidate_blob(&kind, &size, data)?,
@@ -228,6 +236,77 @@ mod tests {
         assert!(
             fixed_cat_file_args("g".repeat(40).as_str(), "Cargo.toml", GitBlobPhase::Bytes)
                 .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn fake_runner_fetches_only_fixed_git_objects_in_order() {
+        use std::sync::{Arc, Mutex};
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let audit = seen.clone();
+        let result = collect_candidate_from_runner(
+            SHA,
+            "8e1ae4ac-3d5f-46b3-9d5f-1e16bbf4f3e5",
+            move |path, phase, max| {
+                let audit = audit.clone();
+                async move {
+                    audit.lock().unwrap().push((path, phase, max));
+                    let data = if path == "Cargo.toml" {
+                        b"cargo".as_slice()
+                    } else {
+                        b"main"
+                    };
+                    Ok(match phase {
+                        GitBlobPhase::Type => b"blob\n".to_vec(),
+                        GitBlobPhase::Size => format!("{}\n", data.len()).into_bytes(),
+                        GitBlobPhase::Bytes => data.to_vec(),
+                    })
+                }
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.0.files.len(), 2);
+        assert_eq!(result.1[0].0, "Cargo.toml");
+        assert_eq!(result.1[1].0, "src/main.rs");
+        assert_eq!(
+            *seen.lock().unwrap(),
+            vec![
+                ("Cargo.toml", GitBlobPhase::Type, MAX_PROBE_BYTES),
+                ("Cargo.toml", GitBlobPhase::Size, MAX_PROBE_BYTES),
+                ("Cargo.toml", GitBlobPhase::Bytes, MAX_FILE_BYTES as usize),
+                ("src/main.rs", GitBlobPhase::Type, MAX_PROBE_BYTES),
+                ("src/main.rs", GitBlobPhase::Size, MAX_PROBE_BYTES),
+                ("src/main.rs", GitBlobPhase::Bytes, MAX_FILE_BYTES as usize),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn fake_runner_rejects_wrong_object_and_errors_before_second_path() {
+        use std::sync::{Arc, Mutex};
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let audit = seen.clone();
+        let failed = collect_candidate_from_runner(
+            SHA,
+            "8e1ae4ac-3d5f-46b3-9d5f-1e16bbf4f3e5",
+            move |path, phase, _max| {
+                let audit = audit.clone();
+                async move {
+                    audit.lock().unwrap().push((path, phase));
+                    Ok(match phase {
+                        GitBlobPhase::Type => b"tree\n".to_vec(),
+                        GitBlobPhase::Size => b"4\n".to_vec(),
+                        GitBlobPhase::Bytes => b"data".to_vec(),
+                    })
+                }
+            },
+        )
+        .await;
+        assert!(failed.is_err());
+        assert_eq!(
+            *seen.lock().unwrap(),
+            vec![("Cargo.toml", GitBlobPhase::Type)]
         );
     }
 
