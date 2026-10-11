@@ -1,3 +1,8 @@
+## 2026-10-11 — Chat52 R3B4-B1 CI test regression corrected locally (LATEST)
+
+- Initial B1 feature commit `51919e6` GitHub Windows run `38163372088` failed main Rust suite 1/1038 tests: negative fixed source-commit syntax test incorrectly classified `"a".repeat(40)` as non-hex. Corrected to `"g".repeat(40)`, an actually invalid lowercase-hex string. Local focused B1 tests 2/2 PASS, strict all-target Clippy, cargo fmt-check, and full main Rust suite PASS after correction. Other Windows CI jobs Python and independent WakeHost passed. Root failure is the test, not Git binary selection; unrelated AppContainer helper diagnostic in Rust logs is not B1 test authority. Publish scoped correction and require new GitHub Windows CI. Details R3B4B1 report.
+- GitHub mirror already complete; independent stable supervisor production recovery remains **incomplete** (root unavailable, startup policy unproven, startup definition read failed, port3201 not probed). Current development priority R3B4 producer/final isolation, then T0479 stable versioned worker and rollback and recovery convergence. Do not claim production recovery complete or rotate signed T0366 pending epoch2.
+
 ## 2026-10-11 — Chat52 T0478 R3B4-B1 fixed candidate Git object reader source only (LATEST)
 
 - Prior candidate manifest assembler commit `37a55d6` GitHub Windows CI `38161909658` independently SUCCESS 3/3 jobs. Current manual event `manual-wake-mcp-1791741648885` visibly arrived Chat52 and WakeHost recorded SUBMISSION_ACCEPTED on gen33, exact terminal receipt not yet proven during the reply. Current ordinary timer `manual-turn-1791741754-22112-108`, hourly deadmen still OFF.

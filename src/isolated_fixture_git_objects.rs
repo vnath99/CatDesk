@@ -226,7 +226,7 @@ mod tests {
         }
         assert!(fixed_cat_file_args("HEAD", "Cargo.toml", GitBlobPhase::Bytes).is_err());
         assert!(
-            fixed_cat_file_args("a".repeat(40).as_str(), "Cargo.toml", GitBlobPhase::Bytes)
+            fixed_cat_file_args("g".repeat(40).as_str(), "Cargo.toml", GitBlobPhase::Bytes)
                 .is_err()
         );
     }

@@ -4,6 +4,11 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 — Post-GitHub-mirror roadmap and B1 test correction (LATEST)
+
+- **GitHub mirror is done.** Separate production recovery still blocked `SUPERVISOR_ROOT_UNAVAILABLE`, `SUPERVISOR_STARTUP_POLICY_UNPROVEN`, `SUPERVISOR_STARTUP_DEFINITION_READ_FAILED` and `SUPERVISOR_3201_NOT_PROBED`. Work now in T0478 isolated nonprivileged dev fixture, then T0479 stable supervisor versioned release/LKG, then converge production recovery. Current B1 source CI38163372088 main Rust test failed due invalid negative test `"a".repeat(40)`; repaired to `"g".repeat(40)`. Local fmt, strict Clippy, focused and full Rust tests pass; await new CI.
+- No signed production T0366 epoch2 rotation or official Secure MCP tunnel/restart. Operator commands remain **one line**. All old ChatGPT hourly deadmen OFF; new manual wake only when previous exact event SENT/COMPLETE and independent target matches Chat52 gen33.
+
 ## 2026-10-11 — R3B4-B1 candidate Git-object reader source-only (LATEST)
 
 - `src/isolated_fixture_git_objects.rs` source-only fixed read-only Git object retrieval; uses existing measured trusted Git executable identity, only exact `cat-file -t/-s/blob` fixed commit/path, bounded stdout/time/UTF-8. No caller-selected shell/path, production restart, source workspace worktree copy, new MCP tool, or trusted GitHub review authority. Local fmt/Clippy/all-target check PASS, test execution rejected by gateway, GitHub CI pending. Important report `docs/orchestrator/review_bundles/T-0478_R3B4B1_FIXED_GIT_OBJECT_READER.md`. R3B4-A2 commit37a55d6 CI38161909658 SUCCESS 3/3. Hourly deadmen OFF.
