@@ -3143,63 +3143,67 @@ pub(crate) fn operator_update_designated_chat_target(
                 workspace.join(".catdesk").join("projects"),
             )
             .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
-            let registry = store
-                .load_registry()
-                .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
-            let matching: Vec<_> = registry
-                .projects
-                .iter()
-                .filter(|p| p.project_id == "catdesk" && p.workspace == workspace)
-                .collect();
-            if matching.len() != 1 {
-                return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
-            }
-            let project = matching[0];
-            if wake_url == target && project.chatgpt_target_url.as_deref() != Some(target.as_str())
-            {
-                // An earlier paired operation advanced independent Wake but
-                // failed before committing the registry. Complete exactly
-                // that requested URL under registry CAS, without moving Wake
-                // again (and without advancing its generation twice).
-                let old_url = project
-                    .chatgpt_target_url
-                    .as_deref()
-                    .ok_or(DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
-                if canonical_project_chat_target(old_url).ok().as_deref() != Some(old_url)
-                    || project.chatgpt_target_sha256.as_deref()
-                        != Some(
-                            crate::delegated::autonomy_projects::project_chat_target_digest(
-                                old_url,
-                            )
-                            .as_str(),
-                        )
-                {
+            // A fully valid registry is required to complete Wake-first
+            // partial-commit recovery. A registry with only a corrupt digest
+            // is intentionally handled by the separate narrow repair below.
+            if let Ok(registry) = store.load_registry() {
+                let matching: Vec<_> = registry
+                    .projects
+                    .iter()
+                    .filter(|p| p.project_id == "catdesk" && p.workspace == workspace)
+                    .collect();
+                if matching.len() != 1 {
                     return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
                 }
-                store
-                    .bind_project_chat_target_after(
-                        "catdesk",
-                        &target,
-                        project.chatgpt_target_sha256.as_deref(),
-                        || {
-                            // Before the registry write, recheck the Wake
-                            // witness under the paired-update process lock.
-                            (effective_wake_target_locked(&workspace).ok().as_deref()
-                                == Some(target.as_str()))
-                            .then_some(())
-                            .ok_or_else(|| {
-                                crate::delegated::runtime::RuntimeError::Validation(
-                                    "independent Wake target changed during recovery".into(),
+                let project = matching[0];
+                if wake_url == target
+                    && project.chatgpt_target_url.as_deref() != Some(target.as_str())
+                {
+                    // An earlier paired operation advanced independent Wake but
+                    // failed before committing the registry. Complete exactly
+                    // that requested URL under registry CAS, without moving Wake
+                    // again (and without advancing its generation twice).
+                    let old_url = project
+                        .chatgpt_target_url
+                        .as_deref()
+                        .ok_or(DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+                    if canonical_project_chat_target(old_url).ok().as_deref() != Some(old_url)
+                        || project.chatgpt_target_sha256.as_deref()
+                            != Some(
+                                crate::delegated::autonomy_projects::project_chat_target_digest(
+                                    old_url,
                                 )
-                            })
-                        },
-                    )
-                    .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
-                let recovered = designated_chat_target_readback_locked(&workspace)?;
-                if recovered.url != target || recovered.sha256 != expected_current_target_sha256 {
-                    return Err(DesignatedChatTargetErrorV1::SynchronizationFailure);
+                                .as_str(),
+                            )
+                    {
+                        return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
+                    }
+                    store
+                        .bind_project_chat_target_after(
+                            "catdesk",
+                            &target,
+                            project.chatgpt_target_sha256.as_deref(),
+                            || {
+                                // Before the registry write, recheck the Wake
+                                // witness under the paired-update process lock.
+                                (effective_wake_target_locked(&workspace).ok().as_deref()
+                                    == Some(target.as_str()))
+                                .then_some(())
+                                .ok_or_else(|| {
+                                    crate::delegated::runtime::RuntimeError::Validation(
+                                        "independent Wake target changed during recovery".into(),
+                                    )
+                                })
+                            },
+                        )
+                        .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+                    let recovered = designated_chat_target_readback_locked(&workspace)?;
+                    if recovered.url != target || recovered.sha256 != expected_current_target_sha256
+                    {
+                        return Err(DesignatedChatTargetErrorV1::SynchronizationFailure);
+                    }
+                    return Ok(recovered);
                 }
-                return Ok(recovered);
             }
             // Historical URL agrees with Wake but the stored digest was
             // damaged by registry-only rollback: repair *only* that digest.
