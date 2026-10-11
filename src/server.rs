@@ -86,6 +86,57 @@ pub fn router(
         .with_state(state)
 }
 
+/// Independent disposable developer fixture: POST MCP only. Do not
+/// inherit the normal server's UI mutation, archive, agent, or partner routes.
+pub fn isolated_fixture_router(
+    app_state: SharedState,
+    mcp_path: String,
+    ui_events: UnboundedSender<ServerUiEvent>,
+    auth_token: String,
+) -> Router {
+    let state = ServerState {
+        app: app_state,
+        devtools: None,
+        ui_events,
+        mcp_auth_token: Some(auth_token),
+    };
+    Router::new()
+        .route(&mcp_path, post(post_isolated_fixture_mcp))
+        .with_state(state)
+}
+
+async fn post_isolated_fixture_mcp(
+    State(s): State<ServerState>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response<Body> {
+    if !mcp_authorized(&headers, s.mcp_auth_token.as_deref()) {
+        return unauthorized_mcp_response();
+    }
+    if body.len() > MAX_MCP_REQUEST_BYTES {
+        return jsonrpc_error_response(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            -32600,
+            "isolated fixture request too large",
+        );
+    }
+    let request: JsonRpcRequest = match serde_json::from_slice(&body) {
+        Ok(req) => req,
+        Err(_) => {
+            return jsonrpc_error_response(
+                StatusCode::BAD_REQUEST,
+                -32600,
+                "isolated fixture JSON-RPC invalid",
+            );
+        }
+    };
+    let fixture_root = { s.app.lock().await.workspace_root.clone() };
+    match mcp::handle_isolated_fixture_request(&request, &fixture_root).await {
+        Some(response) => Json(response).into_response(),
+        None => StatusCode::ACCEPTED.into_response(),
+    }
+}
+
 async fn get_oauth_protected_resource_metadata(
     State(s): State<ServerState>,
     uri: Uri,
@@ -797,6 +848,69 @@ mod tests {
     use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::sync::{Mutex, mpsc::unbounded_channel};
+
+    #[tokio::test]
+    async fn isolated_fixture_http_refuses_unauthenticated_and_global_tools() {
+        let workspace_root = unique_temp_path("catdesk-dev-fixture-http");
+        std::fs::create_dir_all(&workspace_root).expect("fixture root");
+        std::fs::write(workspace_root.join("note.txt"), "fixture only").expect("fixture content");
+        let config_path = workspace_root.join("config.toml");
+        let app = AppState::new_for_test(
+            0,
+            workspace_root.to_string_lossy().into_owned(),
+            config_path,
+        )
+        .expect("fixture state");
+        let (tx, _rx) = unbounded_channel();
+        let state = ServerState {
+            app: Arc::new(Mutex::new(app)),
+            devtools: None,
+            ui_events: tx,
+            mcp_auth_token: Some("fixture-private-token".into()),
+        };
+        let call = |name: &str| {
+            Bytes::from(
+                serde_json::to_vec(&json!({
+                    "jsonrpc":"2.0", "id":1, "method":"tools/call",
+                    "params":{"name":name,"arguments":{}}
+                }))
+                .expect("serialize"),
+            )
+        };
+        let unauthorized =
+            post_isolated_fixture_mcp(State(state.clone()), HeaderMap::new(), call("read")).await;
+        assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            "Bearer fixture-private-token"
+                .parse()
+                .expect("token header"),
+        );
+        for forbidden in [
+            "catdesk_transport_status",
+            "run_command",
+            "catdesk_binagotchy_command",
+            "catdesk_release_recovery",
+        ] {
+            let answer =
+                post_isolated_fixture_mcp(State(state.clone()), headers.clone(), call(forbidden))
+                    .await;
+            let bytes = to_bytes(answer.into_body(), 65_536).await.expect("body");
+            let value: Value = serde_json::from_slice(&bytes).expect("rpc");
+            assert_eq!(value["error"]["code"], -32602, "{forbidden}");
+        }
+        let list_body =
+            Bytes::from_static(br#"{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}"#);
+        let listed = post_isolated_fixture_mcp(State(state), headers, list_body).await;
+        let bytes = to_bytes(listed.into_body(), 65_536).await.expect("tools");
+        let payload: Value = serde_json::from_slice(&bytes).expect("tools JSON");
+        assert_eq!(
+            payload["result"]["tools"].as_array().expect("array").len(),
+            2
+        );
+        let _ = std::fs::remove_dir_all(workspace_root);
+    }
 
     fn unique_temp_path(prefix: &str) -> PathBuf {
         let unique = SystemTime::now()

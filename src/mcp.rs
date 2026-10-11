@@ -214,6 +214,54 @@ struct AutoWidgetContext {
 
 // ── Handler ─────────────────────────────────────────────────
 
+/// Deliberately tiny MCP surface for a disposable developer fixture.
+/// Never forward to the general CatDesk dispatcher or its global Wake, signer,
+/// provider, supervisor, shell, tunnel or browser adapters.
+pub async fn handle_isolated_fixture_request(
+    req: &JsonRpcRequest,
+    fixture_root: &str,
+) -> Option<JsonRpcResponse> {
+    match req.method.as_str() {
+        "initialize" => Some(handle_initialize(req)),
+        "ping" => Some(JsonRpcResponse::success(req.id.clone(), json!({}))),
+        method if method.starts_with("notifications/") => None,
+        "tools/list" => {
+            let mut reply = handle_tools_list(req, Mode::Computer, ToolMode::ReadOnly, &None).await;
+            if let Some(tools) = reply
+                .result
+                .as_mut()
+                .and_then(|value| value.get_mut("tools"))
+                .and_then(Value::as_array_mut)
+            {
+                tools.retain(|tool| {
+                    matches!(
+                        tool.get("name").and_then(Value::as_str),
+                        Some("read" | "search")
+                    )
+                });
+            }
+            Some(reply)
+        }
+        "tools/call" => {
+            let name = req.params.get("name").and_then(Value::as_str).unwrap_or("");
+            Some(match name {
+                "read" => handle_read_file(req, fixture_root),
+                "search" => handle_search_text(req, fixture_root),
+                _ => JsonRpcResponse::error(
+                    req.id.clone(),
+                    -32602,
+                    "isolated fixture tool denied".into(),
+                ),
+            })
+        }
+        _ => Some(JsonRpcResponse::error(
+            req.id.clone(),
+            -32601,
+            "isolated fixture method denied".into(),
+        )),
+    }
+}
+
 pub async fn handle_request(
     req: &JsonRpcRequest,
     workspace_root: &str,
@@ -8911,6 +8959,71 @@ mod tests {
     use super::*;
     use std::ffi::OsString;
     use uuid::Uuid;
+
+    #[tokio::test]
+    async fn isolated_fixture_dispatch_exposes_only_local_read_and_search() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple()));
+        fs::create_dir_all(&root).expect("fixture");
+        fs::write(root.join("example.txt"), "safe fixture value").expect("fixture content");
+        let workspace = root.to_str().expect("utf8 fixture path");
+        let make = |method: &str, params: Value| JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!(1)),
+            method: method.into(),
+            params,
+        };
+        let listed = handle_isolated_fixture_request(&make("tools/list", json!({})), workspace)
+            .await
+            .expect("tool listing");
+        let tools = listed.result.expect("list payload")["tools"]
+            .as_array()
+            .expect("tool array")
+            .iter()
+            .map(|t| t["name"].as_str().expect("name"))
+            .collect::<Vec<_>>();
+        assert_eq!(tools, vec!["read", "search"]);
+        let local = handle_isolated_fixture_request(
+            &make(
+                "tools/call",
+                json!({"name":"read","arguments":{"path":"example.txt"}}),
+            ),
+            workspace,
+        )
+        .await
+        .expect("local read response");
+        assert!(local.error.is_none(), "fixture read must be allowed");
+        for prohibited in [
+            "run_command",
+            "write",
+            "delete",
+            "catdesk_transport_status",
+            "catdesk_wake_target_set",
+            "catdesk_binagotchy_command",
+            "autonomy_project_registry_bind",
+            "catdesk_stable_supervisor_start",
+        ] {
+            let response = handle_isolated_fixture_request(
+                &make("tools/call", json!({"name": prohibited,"arguments":{}})),
+                workspace,
+            )
+            .await
+            .expect("denied response");
+            assert_eq!(
+                response.error.expect("refusal").code,
+                -32602,
+                "{prohibited}"
+            );
+        }
+        let denied = handle_isolated_fixture_request(
+            &make("resources/read", json!({"uri":"file:///private"})),
+            workspace,
+        )
+        .await
+        .expect("denied resources");
+        assert_eq!(denied.error.expect("method refusal").code, -32601);
+        let _ = fs::remove_dir_all(root);
+    }
 
     fn fixture_acceptance_snapshot(overall: &str) -> Value {
         json!({

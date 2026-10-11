@@ -894,6 +894,7 @@ struct HeadlessMcpOptions {
     tool_mode: ToolMode,
     config_path: PathBuf,
     auth_token: String,
+    isolated_dev_fixture: bool,
 }
 
 fn parse_headless_mcp_options(
@@ -917,12 +918,20 @@ fn parse_headless_mcp_options(
     let mut tool_mode = ToolMode::ReadOnly;
     let mut config_path: Option<PathBuf> = None;
     let mut auth_token = std::env::var("CATDESK_MCP_AUTH_TOKEN").ok();
+    let mut isolated_dev_fixture = false;
 
     let mut index = 0;
     while index < args.len() {
         let arg = &args[index];
         match arg.as_str() {
             "--headless-mcp" | "--no-ngrok" => {
+                index += 1;
+            }
+            "--isolated-dev-fixture" => {
+                if isolated_dev_fixture {
+                    return Err("duplicate --isolated-dev-fixture".into());
+                }
+                isolated_dev_fixture = true;
                 index += 1;
             }
             "--host" => {
@@ -977,7 +986,27 @@ fn parse_headless_mcp_options(
                 .to_string()
         })?;
 
+    if isolated_dev_fixture
+        && (host != "127.0.0.1"
+            || port != 0
+            || !matches!(tool_mode, ToolMode::ReadOnly)
+            || !matches!(mode, Mode::Computer)
+            || mcp_path.as_deref() != Some("/dev/mcp")
+            || ![
+                "--host",
+                "--port",
+                "--workspace",
+                "--config-path",
+                "--auth-token",
+                "--mcp-path",
+            ]
+            .iter()
+            .all(|flag| args.iter().any(|arg| arg == flag)))
+    {
+        return Err("isolated fixture requires explicit workspace, config, /dev/mcp, loopback port 0 and read-only computer mode".into());
+    }
     Ok(Some(HeadlessMcpOptions {
+        isolated_dev_fixture,
         host,
         port,
         workspace,
@@ -1108,8 +1137,43 @@ fn resolve_headless_workspace(workspace: &str) -> std::io::Result<String> {
     Ok(workspace_path.to_string_lossy().into_owned())
 }
 
+// A developer fixture may be read by a bounded MCP endpoint, but it must
+// never share the production workspace/config, even if someone supplies them
+// explicitly. A fixed direct child of the OS temp root is the only scope.
+fn validate_isolated_fixture_scope(
+    workspace: &str,
+    config: &std::path::Path,
+) -> std::io::Result<()> {
+    let fail = || std::io::Error::other("isolated development fixture scope rejected");
+    let temp = std::fs::canonicalize(std::env::temp_dir()).map_err(|_| fail())?;
+    let fixture = std::path::Path::new(workspace);
+    if fixture.parent() != Some(temp.as_path())
+        || !fixture
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| {
+                n.starts_with("catdesk-dev-fixture-")
+                    && n.len() <= 100
+                    && n.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+            })
+        || config.file_name().and_then(|n| n.to_str()) != Some("config.toml")
+        || std::fs::canonicalize(config.parent().ok_or_else(fail)?).map_err(|_| fail())? != fixture
+    {
+        return Err(fail());
+    }
+    match std::fs::symlink_metadata(config) {
+        Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        _ => return Err(fail()),
+    }
+    Ok(())
+}
+
 async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std::error::Error>> {
     let workspace_root = resolve_headless_workspace(&options.workspace)?;
+    if options.isolated_dev_fixture {
+        validate_isolated_fixture_scope(&workspace_root, &options.config_path)?;
+    }
     let state: SharedState = Arc::new(Mutex::new(AppState::new_headless(
         options.port,
         workspace_root.clone(),
@@ -1127,13 +1191,22 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
     };
 
     let (ui_event_tx, mut ui_event_rx) = unbounded_channel();
-    let router = server::router(
-        state.clone(),
-        None,
-        mcp_path.clone(),
-        ui_event_tx,
-        Some(options.auth_token.clone()),
-    );
+    let router = if options.isolated_dev_fixture {
+        server::isolated_fixture_router(
+            state.clone(),
+            mcp_path.clone(),
+            ui_event_tx,
+            options.auth_token.clone(),
+        )
+    } else {
+        server::router(
+            state.clone(),
+            None,
+            mcp_path.clone(),
+            ui_event_tx,
+            Some(options.auth_token.clone()),
+        )
+    };
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", options.host, options.port))
         .await
         .map_err(|error| {
@@ -2122,7 +2195,7 @@ mod tests {
         ToolMode, is_canonical_production_worker_listener, key_is_clipboard_paste,
         loopback_http_origin, normalize_ngrok_authtoken_input, parse_auto_start_computer,
         parse_headless_mcp_options, parse_native_daemon_mode, resolve_headless_workspace,
-        safe_bind_identity, validate_headless_mcp_path,
+        safe_bind_identity, validate_headless_mcp_path, validate_isolated_fixture_scope,
     };
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
@@ -2239,6 +2312,87 @@ mod tests {
             KeyCode::Insert,
             KeyModifiers::SHIFT
         )));
+    }
+
+    #[test]
+    fn isolated_dev_fixture_mode_requires_strict_headless_identity() {
+        let args = [
+            "--headless-mcp",
+            "--isolated-dev-fixture",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0",
+            "--mcp-path",
+            "/dev/mcp",
+            "--workspace",
+            "C:\\Temp\\catdesk-dev-fixture-123",
+            "--config-path",
+            "C:\\Temp\\catdesk-dev-fixture-123\\config.toml",
+            "--tool-mode",
+            "read-only",
+            "--auth-token",
+            "catdesk-fixture-token-1234567890",
+        ]
+        .map(str::to_owned);
+        let parsed = parse_headless_mcp_options(args.clone())
+            .expect("parse fixture")
+            .expect("fixture selected");
+        assert!(parsed.isolated_dev_fixture);
+        assert_eq!(parsed.port, 0);
+        for extra in [
+            vec!["--tool-mode", "multi-tools"],
+            vec!["--port", "3200"],
+            vec!["--mcp-path", "/prod/mcp"],
+            vec!["--mode", "browser"],
+        ] {
+            let mut candidate = args.to_vec();
+            candidate.extend(extra.into_iter().map(str::to_owned));
+            assert!(parse_headless_mcp_options(candidate).is_err());
+        }
+        assert!(
+            parse_headless_mcp_options([
+                "--headless-mcp".into(),
+                "--isolated-dev-fixture".into(),
+                "--auth-token".into(),
+                "catdesk-fixture-token-1234567890".into(),
+                "--config-path".into(),
+                "config.toml".into(),
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn isolated_dev_fixture_rejects_production_and_outside_config() {
+        let fixture = std::env::temp_dir().join(format!(
+            "catdesk-dev-fixture-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir_all(&fixture).expect("create fixture");
+        let root = std::fs::canonicalize(&fixture).expect("canonical fixture");
+        let path = root.to_str().expect("utf8 fixture");
+        assert!(validate_isolated_fixture_scope(path, &root.join("config.toml")).is_ok());
+        assert!(validate_isolated_fixture_scope(path, &root.join("other.toml")).is_err());
+        assert!(
+            validate_isolated_fixture_scope(path, &std::env::temp_dir().join("config.toml"))
+                .is_err()
+        );
+        let invalid = std::env::temp_dir().join(format!(
+            "not-catdesk-fixture-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir_all(&invalid).expect("invalid folder");
+        let canonical = std::fs::canonicalize(&invalid).expect("canonical invalid");
+        assert!(
+            validate_isolated_fixture_scope(
+                canonical.to_str().expect("utf8"),
+                &canonical.join("config.toml")
+            )
+            .is_err()
+        );
+        let _ = std::fs::remove_dir_all(fixture);
+        let _ = std::fs::remove_dir_all(invalid);
     }
 
     #[test]
