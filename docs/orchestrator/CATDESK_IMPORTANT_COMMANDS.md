@@ -36,7 +36,10 @@ This is the quick reference for **existing** controls; consult each control's li
 | Codex use and limits | `codex` | Interactive; check actual provider availability before resuming |
 | Resume Codex sessions | `codex resume --all`, select exact existing session, then enter `/goal resume` | Commands are separate steps; choose 'work in session directory' when prompted for the existing chats |
 | Git status, history and publication | `git status --short`; `git log --oneline -n 5`; `git diff --check`; `git push origin orchestrator/chatgpt-codex-autonomous-loop` | Stage only intended paths; verify CI; no force-push |
-| Dev vs release | Build/test from local Git repo for **isolated nonprivileged** development; privileged serving image uses reviewed signed image authority | Source-local CLI is not permission to replace installed production daemon |
+| Dev source status | `cd 'C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop'; & '.\scripts\catdesk-dev-lane.ps1' status` | Source fingerprint only; never starts any runtime |
+| Dev source build | `cd 'C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop'; & '.\scripts\catdesk-dev-lane.ps1' build` | Offline Cargo debug build only, no install or daemon |
+| Dev source verification | `cd 'C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop'; & '.\scripts\catdesk-dev-lane.ps1' verify` | Offline fmt/Clippy/main Rust tests only; not isolated agent activation |
+| Dev vs release | Build and verify without product-root signing per iteration; protected serving images still require reviewed release authority | `isolatedRuntimeReady=false` until explicit global-state/MCP authority isolation passes |
 | Current Chat51 hourly fallback | Chat51 hourly deadman | Do not treat this as event-driven natural Wake acceptance |
 
 ### Chat51 live discrepancy — DO NOT blindly rebind or wake
