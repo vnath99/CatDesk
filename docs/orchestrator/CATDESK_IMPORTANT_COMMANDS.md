@@ -4,6 +4,13 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-10 — T0474 fixed read-only pending T0366 sharing probe (LATEST)
+
+- Latest operator T0472 signed-host status and fresh T0372 hash inventory COMPLETED: installed epoch1 T0215 SHA `2421a90a...` (25,134,592 B); pending **signed T0366 epoch2** SHA `d09c677f...` (26,302,464 B); protected staging + incoming executable exact T0366; pending and incoming signed envelope exact SHA `42ababb6...`; installed rotation receipt ABSENT. This supersedes earlier 'pending identity unknown' notes.
+- Historical T0373 mutating installer **MUST NOT BE RUN**: it requires pending/staging absent; current protected pending and staging are present and correct. No manual receipt/file deletion/rename or bare rotation flag. T0475 R0 documents the guard/resume path.
+- New fixed-path source script `scripts/t0474_readonly_rotation_open_probes.ps1` is non-elevating; it rehashes five fixed known signed/installed/staged artifacts and probes only Win32 `CreateFileW` and `CloseHandle` access modes, reporting Win32 32 sharing violation / 5 access denied / 0 open succeeded. It writes **only workspace JSON** `.catdesk/t0474-rotation-open-probes.json`. GitHub Windows CI parses the script and compiles its shim **without running the host probes**. Exact ordinary **non-admin, one-line** PowerShell command: `cd 'C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop'; & '.\scripts\t0474_readonly_rotation_open_probes.ps1'`. On success, CatDesk can read that workspace JSON; no need to paste protected file contents or perform elevation.
+- Do not treat non-admin Win32 5 as evidence that elevated `MoveFileExW` cannot work, nor Open_OK as authorization. Preserve external Secure MCP runtime; independent WakeHost remains STOPPED old Chat48 gen31.
+
 ## 2026-10-10 — Signed epoch-1 installed, epoch-2 PENDING; T0472 read-only update (LATEST)
 
 - On October 10 the operator successfully ran the earlier fixed no-elevation diagnostic and returned `SIGNED_MAIN_IMAGE_READBACK state=VERIFIED bootstrapEpoch=1 installedRotationEpoch=0 pendingRotationEpoch=2 payloadSha256=2421a90aeb9ad7775ec9927f8dfbe294faa3cbfe11ec7a071a1ed554eee28459 payloadLength=25134592`. This supersedes the below historical 'current epoch unknown' claims. Signed pending epoch2 is **not installed**, and the pending receipt's exact hash/size cannot be inferred from its epoch.
