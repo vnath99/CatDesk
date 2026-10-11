@@ -4,6 +4,10 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 — R3B4-B3A2 retained staged file handles (LATEST)
+
+- Dormant `StagedCandidateSnapshot` retains per-file `RetainedReviewedArtifact` exact SHA/size, Windows FILE_SHARE_READ only, so test-observed file writes are denied while running. Root also held with pinned no-delete-sharing. Local focused snapshot tests 3/3, full main Rust, strict Clippy and fmt pass; new GitHub CI required. Still not a runnable autonomous worker; owner ACL, safe cleanup and per-request runtime hash validation remain. Do not change production supervisor, signed pending T0366 or independently-owned Secure MCP. See `T-0478_R3B4B3A_PROTECTED_CANDIDATE_SNAPSHOT_STAGING.md`.
+
 ## 2026-10-11 — R3B4-B3A protected disposable snapshot staging (LATEST)
 
 - B2 fixed GitHub branch+CI witness commit `124adc5` Windows Actions38172447911 SUCCESS 3/3. B3A new source-only protected snapshot copy uses `ProtectedDirectoryGuard` under freshly created canonical OS temp direct-child, audited protected new regular file write and no-follow single-link re-read plus SHA256/size checks. Root pin retained, no caller-selected path/tool. Focused Windows source-only 3 tests, fmt, strict Clippy, full Rust main suite PASS. Independent GitHub CI for new source pending. No actual MCP read/search manifest binding nor worker launch; B3B cleanup+ACL before production use. See `T-0478_R3B4B3A_PROTECTED_CANDIDATE_SNAPSHOT_STAGING.md`.

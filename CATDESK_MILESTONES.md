@@ -1,3 +1,9 @@
+## 2026-10-11 — Chat52 R3B4-B3A2 retained source-content leases (LATEST)
+
+- Updated dormant `StagedCandidateSnapshot` to retain shared `windows_protected_fs::RetainedReviewedArtifact` SHA-bound read-only file handles for all staged Git-object leaves, alongside its pinned directory root. Windows source test proves same-user file writes denied while lease lives and allowed only after explicit lease release; correct source file remains readable with unique no-follow handle. Reuses existing audited handle primitive, no new NTFS APIs or shell.
+- Local `cargo fmt --check`, strict all-target Clippy, focused snapshot 3/3 PASS and full main Rust suite PASS. This follow-up source still needs independent GitHub CI. Initial B3A staging commit `c9c174d` source CI `38183273233` was in progress (Independent WakeHost Rust SUCCESS, Rust/Python ongoing); do not claim green without terminal.
+- **Still blocked before activation:** owner-only temp ACL at creation, safe exact-owned cleanup of partial staging, process-bound root/file handle lifetime and runtime manifest-gated read/search; source remains dormant and cannot create/serve autonomous coding worker. Production supervisor recovery incomplete, official Secure MCP and signed pending T0366 unchanged.
+
 ## 2026-10-11 — Chat52 T0478 R3B4-B3A protected candidate source snapshot staging (LATEST)
 
 - B2 source commit `124adc5719d2755af51bd61084746400422e2a86` GitHub Windows CI run `38172447911` independently SUCCESS all three Rust/Python Wake/advisor/Independent WakeHost Rust jobs. Paired project registry+independent WakeHost Chat52 generation33, last manual `manual-wake-mcp-1791749767086` exact SENT/EXACT_USER_MESSAGE_APPENDED/COMPLETE. GitHub mirror milestone remains complete.

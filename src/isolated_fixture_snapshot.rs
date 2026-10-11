@@ -13,7 +13,8 @@ use crate::isolated_fixture_manifest::{
     MAX_FILE_BYTES, MAX_TOTAL_BYTES, SnapshotManifest, validate_manifest, verify_file_bytes,
 };
 use crate::windows_protected_fs::{
-    ProtectedDirectoryGuard, read_relative_regular_unique, write_new_regular_in,
+    PinnedDirectory, ProtectedDirectoryGuard, RetainedReviewedArtifact,
+    read_relative_regular_unique, retain_reviewed_regular_artifact, write_new_regular_in,
 };
 
 const LABEL: &str = "isolated fixture source snapshot";
@@ -102,12 +103,45 @@ pub(crate) fn stage_candidate_into_owned_root(
     root.assert_stable(LABEL)
 }
 
+/// Bind all freshly staged files to independently opened SHA-256 checked,
+/// no-write/no-delete Windows read leases. On error the caller must retain
+/// ownership of the root until its reviewed cleanup phase; nothing is served.
+fn retain_staged_artifacts(
+    root: &ProtectedDirectoryGuard,
+    manifest: &SnapshotManifest,
+) -> Result<Vec<RetainedReviewedArtifact>, String> {
+    verify_disposable_root(root)?;
+    validate_manifest(manifest)?;
+    // The accepted root is already held open with no delete sharing. Opening
+    // its same pathname again cannot redirect to a replacement while pinned.
+    let pinned = PinnedDirectory::acquire(root.path(), LABEL)?;
+    let mut leases = Vec::with_capacity(manifest.files.len());
+    for file in &manifest.files {
+        let retained = retain_reviewed_regular_artifact(
+            &pinned,
+            &file.fixture_leaf,
+            &file.sha256,
+            MAX_FILE_BYTES,
+            LABEL,
+        )?;
+        if retained.identity.byte_length != file.size_bytes {
+            return Err("isolated fixture retained size mismatch".into());
+        }
+        leases.push(retained);
+    }
+    root.assert_stable(LABEL)?;
+    Ok(leases)
+}
+
 /// Result of a reviewed-source candidate staging operation. The pinned root
 /// handle is retained by the caller. This is NOT runtime MCP authority.
 #[allow(dead_code)]
 pub(crate) struct StagedCandidateSnapshot {
     pub(crate) root: ProtectedDirectoryGuard,
     pub(crate) manifest: SnapshotManifest,
+    // Read-only, no-write/no-delete file handles retained alongside the
+    // root; the fixture source must not change before the owner retires it.
+    _leases: Vec<RetainedReviewedArtifact>,
 }
 
 /// Dormant reviewed-source path. It uses only the opaque live HTTPS GitHub
@@ -141,7 +175,12 @@ pub(crate) async fn stage_witnessed_candidate_snapshot(
     let child_name = format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple());
     root.create_child(&child_name, LABEL)?;
     stage_candidate_into_owned_root(&root, &manifest, &candidates)?;
-    Ok(StagedCandidateSnapshot { root, manifest })
+    let leases = retain_staged_artifacts(&root, &manifest)?;
+    Ok(StagedCandidateSnapshot {
+        root,
+        manifest,
+        _leases: leases,
+    })
 }
 
 #[cfg(test)]
@@ -190,6 +229,18 @@ mod tests {
         ];
         assert!(stage_candidate_into_owned_root(&root, &manifest, &extra).is_err());
         assert!(!dir.join("secret.txt").exists());
+        let leases = retain_staged_artifacts(&root, &manifest).expect("retain reviewed files");
+        assert!(
+            std::fs::write(dir.join("Cargo.toml"), b"modified").is_err(),
+            "retained source file handle must prevent write"
+        );
+        assert_eq!(
+            read_relative_regular_unique(&root, "Cargo.toml", MAX_FILE_BYTES, LABEL).unwrap(),
+            b"source tracked bytes"
+        );
+        drop(leases);
+        std::fs::write(dir.join("Cargo.toml"), b"modified")
+            .expect("source write allowed only after retired file lease");
         drop(root);
         std::fs::remove_dir_all(dir).expect("cleanup only own released fixture root");
     }

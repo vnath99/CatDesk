@@ -1,3 +1,8 @@
+## 2026-10-11 — R3B4-B3A2 Windows source file immutability leases (LATEST)
+
+- New dormant result holds `RetainedReviewedArtifact` handle leases for each fixed temp-staged manifest leaf, pinned with exact expected SHA/byte count and Windows read-only sharing. Real focused Windows test denies writes while leases live, allows own-fixture writes after explicit release. Reuses existing `windows_protected_fs`; local fmt, strict Clippy, focused 3/3 and full main Rust suite PASS. Independent GitHub Windows CI still required. Report `T-0478_R3B4B3A_PROTECTED_CANDIDATE_SNAPSHOT_STAGING.md`.
+- B3 owner-only temp ACL and **reviewed handle-bound cleanup for partial root** remain missing; no full worker/agent/MCP source authority activation. Next B3B fail-closed cleanup and ACL, C manifest read/search SHA enforcement, D bounded PID/port. Latest prior B3A source commit c9c174d CI38183273233 pending full terminal result at last check.
+
 ## 2026-10-11 — R3B4-B3A source snapshot staging (LATEST)
 
 - B2 fixed GitHub branch+3-job CI witness `124adc5` accepted Windows CI38172447911 3/3. New dormant source `src/isolated_fixture_snapshot.rs` combines fixed witnessed Git blob candidates with generated OS-temp direct-child protected Windows root, new no-follow relative file writes, single-link no-follow file re-read and expected SHA256/size verification; refuses non-owned temp names, preexisting file/hardlink, mismatched candidates. Focused 3/3, fmt, strict Clippy and full Rust tests PASS locally. GitHub CI acceptance still pending for B3A. Detailed `T-0478_R3B4B3A_PROTECTED_CANDIDATE_SNAPSHOT_STAGING.md`.
