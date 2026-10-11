@@ -36,6 +36,9 @@ jobs:
           $tokens = $null; $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile('scripts/catdesk-dev-lane.ps1', [ref]$tokens, [ref]$errors) | Out-Null
           if ($errors.Count -gt 0) { throw ($errors | Out-String) }
+          $tokens = $null; $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile('scripts/start-catdesk-stack.ps1', [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { throw ($errors | Out-String) }
           $status = & '.\scripts\catdesk-dev-lane.ps1' status | ConvertFrom-Json
           if ($status.schemaVersion -ne 1 -or $status.mode -ne 'DEVELOPMENT_SOURCE_ONLY' -or $status.operation -ne 'STATUS') { throw 'Dev source status invalid' }
           if ($status.productionInstallationChanged -ne $false -or $status.daemonOrBrowserStarted -ne $false -or $status.isolatedRuntimeReady -ne $false) { throw 'Dev source status claimed unsafe runtime' }

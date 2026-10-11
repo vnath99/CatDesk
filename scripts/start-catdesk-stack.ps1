@@ -86,20 +86,27 @@ function Test-CatDeskInteractiveDesktop {
     return [bool]$interactive
 }
 
-function Start-CatDeskWakeHost {
+function Resolve-VerifiedInstalledWakeHost {
     param(
         [string]$Root,
         [string]$WakeRoot = (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'CatDeskWake')
     )
     $selectorPath = Join-Path $Root '.catdesk\wake-bridge\owner.json'
-    if (-not (Test-Path -LiteralPath $selectorPath -PathType Leaf)) { return $false }
-    $selectorItem = Get-Item -LiteralPath $selectorPath -Force -ErrorAction Stop
+    # Missing means the documented legacy default; all other lookup
+    # failures are ambiguous and must not authorize a Python fallback.
+    try {
+        $selectorItem = Get-Item -LiteralPath $selectorPath -Force -ErrorAction Stop
+    } catch [System.Management.Automation.ItemNotFoundException] {
+        return $null
+    } catch {
+        throw 'wake owner selector is unavailable'
+    }
     if (-not ($selectorItem -is [System.IO.FileInfo]) -or ($selectorItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $selectorItem.Length -gt 512) {
         throw 'wake owner selector is invalid'
     }
     try { $selector = [IO.File]::ReadAllText($selectorItem.FullName) | ConvertFrom-Json -ErrorAction Stop } catch { throw 'wake owner selector is invalid' }
     if ($selector.schemaVersion -ne 1) { throw 'wake owner selector is invalid' }
-    if ([string]$selector.owner -eq 'legacy_python') { return $false }
+    if ([string]$selector.owner -eq 'legacy_python') { return $null }
     if ([string]$selector.owner -ne 'independent_v1') { throw 'wake owner selector is invalid' }
 
     $pointerPath = Join-Path $WakeRoot 'current.json'
@@ -115,6 +122,16 @@ function Start-CatDeskWakeHost {
     $wakeHostPath = Resolve-TrustedBootstrapHelperPath -Path (Join-Path $WakeRoot ("versions\" + $pointer.directory + '\CatDeskWakeHost.exe')) -FailureMessage 'WakeHost installed executable identity is invalid'
     $actualHash = (Get-FileHash -LiteralPath $wakeHostPath -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($actualHash -ne ([string]$pointer.hostSha256).ToLowerInvariant()) { throw 'WakeHost installation hash mismatch' }
+    return $wakeHostPath
+}
+
+function Start-CatDeskWakeHost {
+    param(
+        [string]$Root,
+        [string]$WakeRoot = (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'CatDeskWake')
+    )
+    $wakeHostPath = Resolve-VerifiedInstalledWakeHost -Root $Root -WakeRoot $WakeRoot
+    if (-not $wakeHostPath) { return $false }
     Invoke-BootstrapSeam -Name 'WakeHostStart' -Arguments @($wakeHostPath) -Default {
         param($wakeHost)
         $null = Invoke-BoundedRecoveryHelper -FileName $wakeHost -Arguments @('start') -TimeoutMilliseconds 10000 -FailureMessage 'WakeHost failed to start'
@@ -742,6 +759,20 @@ function Test-WakeBridgeRuntime {
     Invoke-BootstrapSeam -Name "WakeRuntime" -Arguments @($Root) -Default {
         param($workspace)
         try {
+            $independentHost = Resolve-VerifiedInstalledWakeHost -Root $workspace
+            if ($independentHost) {
+                # The independent WakeHost supersedes the retired Python venv.
+                # Status is read-only and checks the version-pinned executable;
+                # it does not start a stopped owner or touch any browser.
+                $observed = Invoke-BoundedRecoveryHelper -FileName $independentHost -Arguments @('status') -TimeoutMilliseconds $script:MaxWakeRuntimeProbeMilliseconds -FailureMessage 'independent WakeHost status unavailable'
+                if ($observed.ExitCode -ne 0 -or $observed.Overflow -or $observed.OutputDrainTimedOut) { return $false }
+                $status = [string]$observed.Stdout | ConvertFrom-Json -ErrorAction Stop
+                if ($status.protocolVersion -ne 1 -or $status.host -notin @('RUNNING','STOPPED') -or
+                    $null -eq $status.targets -or $null -eq $status.targets.catdesk -or
+                    [string]$status.targets.catdesk.digest -notmatch '^[a-fA-F0-9]{64}$' -or
+                    [int]$status.targets.catdesk.generation -lt 1) { return $false }
+                return $true
+            }
             # The provisioned wake venv interpreter is executable recovery
             # authority just like project-owned PowerShell helpers. A leaf
             # existence check alone would allow a reparse-point replacement to
@@ -757,6 +788,10 @@ function Invoke-WakeBridgeRuntimeRepair {
     param([string]$Root)
     Invoke-BootstrapSeam -Name "WakeRepair" -Arguments @($Root) -Default {
         param($workspace)
+        # If independent_v1 is selected, repairing the retired Python venv
+        # cannot repair the active WakeHost. Refuse instead of mutating it.
+        $independentHost = Resolve-VerifiedInstalledWakeHost -Root $workspace
+        if ($independentHost) { throw 'independent wake repair requires installed host authority' }
         $repair=Resolve-TrustedBootstrapHelperPath -Path (Join-Path $workspace "scripts\repair_wake_bridge_environment.ps1") -FailureMessage "wake runtime repair helper identity is invalid"
         $powershell=Resolve-TrustedWindowsPowerShellPath
         $null=Invoke-BoundedRecoveryHelper -FileName $powershell -Arguments @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',$repair) -TimeoutMilliseconds $script:MaxWakeRepairMilliseconds -FailureMessage "wake runtime repair did not complete"
