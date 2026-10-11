@@ -4,6 +4,10 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 — R3B4-B1 candidate Git-object reader source-only (LATEST)
+
+- `src/isolated_fixture_git_objects.rs` source-only fixed read-only Git object retrieval; uses existing measured trusted Git executable identity, only exact `cat-file -t/-s/blob` fixed commit/path, bounded stdout/time/UTF-8. No caller-selected shell/path, production restart, source workspace worktree copy, new MCP tool, or trusted GitHub review authority. Local fmt/Clippy/all-target check PASS, test execution rejected by gateway, GitHub CI pending. Important report `docs/orchestrator/review_bundles/T-0478_R3B4B1_FIXED_GIT_OBJECT_READER.md`. R3B4-A2 commit37a55d6 CI38161909658 SUCCESS 3/3. Hourly deadmen OFF.
+
 ## 2026-10-11 — R3B4-A2 candidate blob assembler, not source authority (LATEST)
 
 - Follow-up pure `CandidateBlob` + `assemble_candidate_manifest` only accepts already supplied UTF-8 no-NUL bytes mapped to two fixed Git source paths, computes digest and canonical candidate entries. No Git command, fixture file writes, trusted Git commit attestation, MCP route, production authority or autonomous worker. After syntax correction 8 focused tests, cargo fmt-check and strict Clippy PASS locally; independently verify GitHub CI before acceptance. Source snapshot builder must reuse trusted fixed Git selector and protected handle writer; no mutable-worktree source provenance.
