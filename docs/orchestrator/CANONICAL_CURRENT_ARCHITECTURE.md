@@ -9,6 +9,31 @@ read [`CATDESK_MILESTONES.md`](../../CATDESK_MILESTONES.md),
 [architecture/document index](ARCHITECTURE_DOCUMENT_INDEX.md) identifies
 superseded and historical material.
 
+## T-0476 operating model clarification — independent development and Wake
+
+**October 2026 operator priority:** An installed product-root-signed CatDesk main
+image is a **production executable trust boundary**, not a prerequisite for
+all GitHub source development or for a separately authenticated, operator-owned
+paired ChatGPT conversation target change. The project now has three intended
+lanes: (1) isolated, non-elevated source/CI development (implementation of the
+runner still pending); (2) the independently installed WakeHost and its guarded
+project-registry/Wake-target transaction; (3) infrequent protected production
+releases through the existing planned stable supervisor and versioned workers.
+See [the simplified operating model](CATDESK_SIMPLIFIED_DEV_RELEASE_WAKE_MODEL.md)
+for exact gates, unfinished implementation work, and explicit prohibitions.
+
+The source-current Binagotchy CLI's existing guarded `target set` route can
+pair the CatDesk project target with the independent Wake target without
+installing a new privileged main image. It MUST verify the previous digest,
+update both stores as one transaction, compensate failure and independently
+verify the new URL/digest/generation before enabling Wake. Its T0476 source
+patch removes automatic WakeHost launch merely from opening the CLI; explicit
+`wake start` or `wake resume` is still required. This is not an exemption
+for unsigned production code, arbitrary shell execution, private signer
+access, the stalled T0366 pending-image override, or stealing ownership of
+the externally managed Secure MCP runtime. Browser wake to the old Chat48
+target must remain STOPPED until paired Chat51 authority is proven.
+
 ## Current end-to-end architecture
 
 ```text
