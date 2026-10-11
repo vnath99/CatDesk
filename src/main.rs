@@ -1193,9 +1193,23 @@ fn validate_isolated_fixture_scope(
 
 async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std::error::Error>> {
     let workspace_root = resolve_headless_workspace(&options.workspace)?;
-    if options.isolated_dev_fixture {
+    // Hold a no-delete-share Windows directory handle for the entire fixture
+    // listener lifetime. Requests otherwise reopen the root path and could
+    // follow a renamed/replaced directory after startup validation.
+    let _fixture_root_guard = if options.isolated_dev_fixture {
         validate_isolated_fixture_scope(&workspace_root, &options.config_path)?;
-    }
+        let pinned = windows_protected_fs::PinnedDirectory::acquire(
+            std::path::Path::new(&workspace_root),
+            "isolated fixture root",
+        )
+        .map_err(std::io::Error::other)?;
+        pinned
+            .assert_stable("isolated fixture root")
+            .map_err(std::io::Error::other)?;
+        Some(pinned)
+    } else {
+        None
+    };
     let app = if options.isolated_dev_fixture {
         AppState::new_isolated_fixture(
             options.port,

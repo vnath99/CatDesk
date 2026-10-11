@@ -4,6 +4,11 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 — Chat52 accepted R3B2, R3B3 development fixture root lease (LATEST)
+
+- R3B2 in-memory config correction `6f07231`, GitHub Windows CI `38157083333` SUCCESS all 3 jobs. New R3B3 source-only disposable fixture retains no-delete-share `PinnedDirectory` for entire listener; Windows source subprocess test rejects root rename during serving and releases lock at own-child shutdown. Local tests/Clippy passed; await independent GitHub CI for source R3B3. See `docs/orchestrator/review_bundles/T-0478_R3B3_FIXTURE_ROOT_LIFETIME_LEASE.md`. No production install or autonomous coding worker.
+- Current paired project and independent Wake target Chat52 generation33, SHA `d82593bf8a7eb82936cd63d1ed52f77243c46afa3f9aa57ca2d9a642a31b73ce`. Manual test `manual-wake-mcp-1791737671996` visible but exact receipt remains pending while ChatGPT responds. Timer `manual-turn-1791737785-22112-106` running; stop near 19m (20m hard). All hourly CatDesk deadmen OFF. Do not replay Wake events or mutate external tunnel / signed T0366 pending2.
+
 ## 2026-10-11 R3B2 source CI formatting correction (LATEST)
 
 - First R3B2 commit `fe90d69` CI run `38156865303` failed **Rust cargo fmt** only on formatting of new in-memory fixture unit test. Exact four Rustfmt changes applied; must validate the next CI run before treating R3B2 verified. Existing production/Wake control unchanged.

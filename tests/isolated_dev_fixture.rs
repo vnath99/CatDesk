@@ -82,6 +82,23 @@ async fn fixture_headless_mcp_has_only_authenticated_local_read_and_search() {
     // The fixture must never initialize a pathname-backed configuration.
     assert!(!config.exists(), "fixture must use in-memory config only");
 
+    // Running fixture pins its accepted directory without delete sharing.
+    // Prove that a second same-user process cannot rename that directory
+    // and replace the path served by later file-tool requests.
+    let moved_root = root.with_file_name(format!(
+        "catdesk-dev-fixture-moved-{}",
+        uuid::Uuid::new_v4().simple()
+    ));
+    let attempted_move = std::fs::rename(&root, &moved_root);
+    if attempted_move.is_ok() {
+        // Restore before failing, to avoid leaving test-owned fixture paths.
+        std::fs::rename(&moved_root, &root).expect("restore fixture after unexpected rename");
+    }
+    assert!(
+        attempted_move.is_err(),
+        "running fixture root must resist rename"
+    );
+
     let client = reqwest::Client::new();
     let list = json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}});
     let mut response = None;
@@ -211,5 +228,12 @@ async fn fixture_headless_mcp_has_only_authenticated_local_read_and_search() {
         .await
         .expect("bounded exit");
     assert!(!config.exists(), "fixture never persisted configuration");
-    let _ = std::fs::remove_dir_all(root);
+    // A stopped child must relinquish its root lease so only this test-owned
+    // fixture can be moved and cleaned up. Never touch another process.
+    let after_stop = root.with_file_name(format!(
+        "catdesk-dev-fixture-released-{}",
+        uuid::Uuid::new_v4().simple()
+    ));
+    std::fs::rename(&root, &after_stop).expect("fixture root lease released on child exit");
+    std::fs::remove_dir_all(after_stop).expect("clean up own fixture");
 }
