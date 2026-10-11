@@ -3132,10 +3132,8 @@ pub(crate) fn operator_update_designated_chat_target(
     let before = match designated_chat_target_readback_locked(&workspace) {
         Ok(before) => before,
         Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch) => {
-            // A previous registry-only rollback can leave the canonical URL
-            // unchanged but its stored digest corrupted. Allow exactly this
-            // recoverable state, using the existing independent Wake identity
-            // and the caller's guarded old-target digest as two witnesses.
+            // Both recoveries use the *independently authenticated* current
+            // Wake target as their CAS witness. A stale caller never repairs.
             let wake_url = effective_wake_target_locked(&workspace)
                 .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
             if project_chat_target_digest_for_wake(&wake_url) != expected_current_target_sha256 {
@@ -3145,6 +3143,66 @@ pub(crate) fn operator_update_designated_chat_target(
                 workspace.join(".catdesk").join("projects"),
             )
             .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+            let registry = store
+                .load_registry()
+                .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+            let matching: Vec<_> = registry
+                .projects
+                .iter()
+                .filter(|p| p.project_id == "catdesk" && p.workspace == workspace)
+                .collect();
+            if matching.len() != 1 {
+                return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
+            }
+            let project = matching[0];
+            if wake_url == target && project.chatgpt_target_url.as_deref() != Some(target.as_str())
+            {
+                // An earlier paired operation advanced independent Wake but
+                // failed before committing the registry. Complete exactly
+                // that requested URL under registry CAS, without moving Wake
+                // again (and without advancing its generation twice).
+                let old_url = project
+                    .chatgpt_target_url
+                    .as_deref()
+                    .ok_or(DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+                if canonical_project_chat_target(old_url).ok().as_deref() != Some(old_url)
+                    || project.chatgpt_target_sha256.as_deref()
+                        != Some(
+                            crate::delegated::autonomy_projects::project_chat_target_digest(
+                                old_url,
+                            )
+                            .as_str(),
+                        )
+                {
+                    return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
+                }
+                store
+                    .bind_project_chat_target_after(
+                        "catdesk",
+                        &target,
+                        project.chatgpt_target_sha256.as_deref(),
+                        || {
+                            // Before the registry write, recheck the Wake
+                            // witness under the paired-update process lock.
+                            (effective_wake_target_locked(&workspace).ok().as_deref()
+                                == Some(target.as_str()))
+                            .then_some(())
+                            .ok_or_else(|| {
+                                crate::delegated::runtime::RuntimeError::Validation(
+                                    "independent Wake target changed during recovery".into(),
+                                )
+                            })
+                        },
+                    )
+                    .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+                let recovered = designated_chat_target_readback_locked(&workspace)?;
+                if recovered.url != target || recovered.sha256 != expected_current_target_sha256 {
+                    return Err(DesignatedChatTargetErrorV1::SynchronizationFailure);
+                }
+                return Ok(recovered);
+            }
+            // Historical URL agrees with Wake but the stored digest was
+            // damaged by registry-only rollback: repair *only* that digest.
             store
                 .reconcile_catdesk_digest_with_wake(
                     &workspace,
@@ -9712,6 +9770,83 @@ mod tests {
             configured["conversation_url"],
             "https://chatgpt.com/c/updated-thread"
         );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn designated_chat_update_completes_exact_interrupted_wake_first_commit() {
+        use crate::delegated::autonomy_projects::project_chat_target_digest;
+        let (root, config_path) = designated_chat_target_fixture("wake-first-recovery");
+        let next = "https://chatgpt.com/c/advanced-generation";
+        let next_digest = project_chat_target_digest(next);
+        let mut config: Value = serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
+        config["conversation_url"] = json!(next);
+        fs::write(&config_path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+        let before = fs::read(&config_path).unwrap();
+        assert_eq!(
+            operator_read_designated_chat_target(&root),
+            Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch)
+        );
+        let repaired = operator_update_designated_chat_target(&root, next, &next_digest)
+            .expect("finish the exact partial paired target without moving Wake again");
+        assert_eq!(repaired.url, next);
+        assert_eq!(repaired.sha256, next_digest);
+        assert_eq!(
+            fs::read(&config_path).unwrap(),
+            before,
+            "Wake must not be rewritten"
+        );
+        assert_eq!(operator_read_designated_chat_target(&root), Ok(repaired));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn designated_chat_partial_target_recovery_fails_closed_on_unrequested_or_stale_target() {
+        use crate::delegated::autonomy_projects::project_chat_target_digest;
+        let (root, config_path) = designated_chat_target_fixture("wake-first-reject");
+        let wake_url = "https://chatgpt.com/c/advanced-generation";
+        let mut config: Value = serde_json::from_slice(&fs::read(&config_path).unwrap()).unwrap();
+        config["conversation_url"] = json!(wake_url);
+        fs::write(&config_path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+        let original_wake = fs::read(&config_path).unwrap();
+        let registry_path = root.join(".catdesk/projects/projects.json");
+        let original_registry = fs::read(&registry_path).unwrap();
+        let prior_digest = project_chat_target_digest("https://chatgpt.com/c/previous-thread");
+        assert_eq!(
+            operator_update_designated_chat_target(&root, wake_url, &prior_digest),
+            Err(DesignatedChatTargetErrorV1::Stale)
+        );
+        assert_eq!(
+            operator_update_designated_chat_target(
+                &root,
+                "https://chatgpt.com/c/unrequested",
+                &project_chat_target_digest(wake_url)
+            ),
+            Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch)
+        );
+        assert_eq!(fs::read(&config_path).unwrap(), original_wake);
+        assert_eq!(fs::read(&registry_path).unwrap(), original_registry);
+
+        let mut invalid_registry: Value =
+            serde_json::from_slice(&original_registry).expect("valid registry");
+        invalid_registry["projects"][0]["chatgptTargetSha256"] = json!("8".repeat(64));
+        fs::write(
+            &registry_path,
+            serde_json::to_vec_pretty(&invalid_registry).unwrap(),
+        )
+        .unwrap();
+        let invalid_bytes = fs::read(&registry_path).unwrap();
+        assert_eq!(
+            operator_update_designated_chat_target(
+                &root,
+                wake_url,
+                &project_chat_target_digest(wake_url)
+            ),
+            Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch),
+            "an independently valid old registry URL/digest is mandatory"
+        );
+        assert_eq!(fs::read(&registry_path).unwrap(), invalid_bytes);
+        assert_eq!(fs::read(&config_path).unwrap(), original_wake);
         let _ = fs::remove_dir_all(root);
     }
 

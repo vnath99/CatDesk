@@ -4,6 +4,51 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## START HERE — Essential commands and current target repair (2026-10-10, Chat51)
+
+**Canonical reference:** This file is the single supported command index. Past dated sections below are historical evidence, not current instructions. Verify live tool schema/installed version before invoking. **All commands given to the operator in PowerShell must be one line, ready to paste.** Prefer assistant-owned CatDesk typed tools; ask the operator to run a shell command only when the current serving tool cannot perform the guarded operation.
+
+| Operation | First choice / exact short command | Safety / status |
+|---|---|---|
+| CatDesk connection | `catdesk_transport_status`; `autonomy_project_registry_read` | Read-only; transport Wake snapshots may be stale, compare with fresh independently installed Wake readback |
+| **Designated Chat + Wake target** | Assistant CatDesk `autonomy_project_registry_bind` with `projectId=catdesk`, `decision=DESIGNATED_CHAT_TARGET_URL=<canonical URL>`, and `expectedSha256=<currently verified PREVIOUS paired SHA>` | **ONLY** for a coherent existing pair; never use registry-only `autonomy_project_registry_chat_target_bind` or Wake-only setter as a substitute; CAS must prove both |
+| Wake status/queue | `catdesk_binagotchy_command(status)`, `catdesk_binagotchy_command(queue)` | Read-only; verify exact target independently before start |
+| Wake start/resume/pause/stop | `catdesk_binagotchy_command(start/resume/pause/stop)` | **Stop now**: generation32 Chat51 independent WakeHost is STOPPED but registry remains Chat48; no test/start until repaired |
+| Wake test | `catdesk_binagotchy_command(test)` | After paired target proof and explicit start; manual event **not** natural acceptance |
+| CatDesk turn timer | `catdesk_turn_timer(START)`, `STATUS(timerId)`, `STOP(timerId)` | 20-minute hard bound; aim ~19-minute turn; return exact server timerId |
+| CatDesk status | `cd 'C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop'; & '.\catdesk.ps1' status` | One-line PowerShell, read-only |
+| Nine-layer recovery diagnosis | `cd 'C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop'; & '.\catdesk.ps1' diagnose` | One-line PowerShell, read-only; examine failure category before any recovery |
+| Guarded CatDesk recovery | `cd 'C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop'; & '.\catdesk.ps1' recover` | Mutating; only with valid reviewed release/LKG authority; does not repair missing signing/provenance |
+| Codex use and limits | `codex` | Interactive; check actual provider availability before resuming |
+| Resume Codex sessions | `codex resume --all`, select exact existing session, then enter `/goal resume` | Commands are separate steps; choose 'work in session directory' when prompted for the existing chats |
+| Git status, history and publication | `git status --short`; `git log --oneline -n 5`; `git diff --check`; `git push origin orchestrator/chatgpt-codex-autonomous-loop` | Stage only intended paths; verify CI; no force-push |
+| Dev vs release | Build/test from local Git repo for **isolated nonprivileged** development; privileged serving image uses reviewed signed image authority | Source-local CLI is not permission to replace installed production daemon |
+| Current Chat51 hourly fallback | Chat51 hourly deadman | Do not treat this as event-driven natural Wake acceptance |
+
+### Chat51 live discrepancy — DO NOT blindly rebind or wake
+
+- Operator source-local Binagotchy 2026-10-10 command printed **WakeHost Chat51 URL `https://chatgpt.com/c/6acaae13-4b18-83e9-b6ca-3c5e00cf47a8`, generation32, STOPPED**, queue0, but `target` and `target set` both returned `TARGET_PROTECTED_STATE_MISMATCH`. It did **not** print `Designated Chat URL updated`. Read-only CatDesk project registry still shows old Chat48 URL `https://chatgpt.com/c/6ac6cbe8-6f0c-83e9-9f7d-13489d4d87f5`, SHA `3a1d4cc69dfa3d05cb2bc33ef1197ac5a7433a120cfb4214a6996edb5a9d29e9`. This is a **partial Wake-first advance**, not a successful paired target bind. Old serving CatDesk `catdesk_transport_status` still returned historical Chat48 gen31 snapshot despite operator fresh independent Wake gen32: do not use a stale cached transport result as independent host proof or undo gen32 speculatively.
+- Assistant invoked the **historically successful** paired `autonomy_project_registry_bind` with exact old digest and Chat51 target; serving connector rejected `INVALID_ARGUMENT`. No state-changing fallback performed. Avoid registry-only `autonomy_project_registry_chat_target_bind` (even `PREFLIGHT` is mutating), direct protected file edits and blind old-Wake replay.
+- Source `src/mcp.rs::operator_update_designated_chat_target` previously repaired only matching URL with corrupted SHA. **T0477** now adds a guarded completion for exactly this partial state: requested target URL and independent Wake target/digest are identical, existing registry old URL/digest are independently valid, registry CAS is exact, recheck wake under the lock before registry commit, then final full paired readback. It never rewrites Wake or increments its generation a second time, and refuses stale targets/other corrupt registry fields. Source-only pending CI/review/compilation, not serving. Old CLI binary needs locally rebuilt version before retry. Do not assume it is installed.
+- The standard future assistant workflow remains the single paired `DESIGNATED_CHAT_TARGET_URL` tool. If serving tool still rejects, surface the exact blocked state and move to reviewed tool update rather than require user to manually move each chat. Do not ask for T0472/T0372/T0474 old results again.
+
+### Operator PowerShell — source-local recovery CLI (only after this source fix passes CI)
+
+The single-line command below drives the existing guarded **paired** recovery with exact Chat51 intent and prints status, *without starting WakeHost*. **Do not rerun the earlier T0476 CLI until the new T0477 source is built and validated.**
+
+```powershell
+cd 'C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop'; @('target set https://chatgpt.com/c/6acaae13-4b18-83e9-b6ca-3c5e00cf47a8','target','wake status','exit') | & '.\target\debug\catdesk.exe' '--catdesk-binagotchy-cli'
+```
+
+Success requires `Designated Chat URL updated` and an independent read of both target stores showing Chat51 digest `7faf9cc96669e240362da0dd4266bec8b2585f0ef3e03b4b56ae4c8f66db1b22`, independent Wake generation32 (or higher if separately authorized), STOPPED and queue0. Any mismatch is a STOP; do not attempt a manual wake or launch old browser host.
+
+### Pointers for maintainers
+
+- The concise architectural design is `docs/orchestrator/CATDESK_SIMPLIFIED_DEV_RELEASE_WAKE_MODEL.md`.
+- Source/current project checkpoints: `CATDESK_MILESTONES.md`, `.catdesk/current_plan.md`, `.catdesk/session.md`.
+- Existing longer command examples are in sections **1–8 below**; dated sections between this quick index and them may refer to an old conversation/version and must not override current state.
+- The independently installed WakeHost is separate from CatDesk's source-local CLI; **GitHub source control does not confer a privileged production binary signing identity**.
+
 ## 2026-10-10 — T0476 Wake-first and simplified CatDesk dev/release model (LATEST)
 
 - **User priority changed:** Stop treating product-root signed Program Files main-image rotation as prerequisite for ordinary GitHub/CI development or a guarded, operator-owned ChatGPT Wake target update. New canonical design: `docs/orchestrator/CATDESK_SIMPLIFIED_DEV_RELEASE_WAKE_MODEL.md`; development, independent Wake and infrequent protected production release are distinct lanes.
