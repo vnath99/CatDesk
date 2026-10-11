@@ -1,3 +1,12 @@
+## 2026-10-11 — B3A3 GitHub CI accepted (LATEST)
+
+- Initial B3A3 exact manifest-leaf reader commit `79587d6d7ae1b8acb59e55a6007eaf3ad7212ec9` independently passed all 3 Windows jobs in GitHub Actions `38183793984` (Rust, Python Wake/advisor, Independent WakeHost Rust). This accepts only the dormant source helper, **not** a runtime MCP binding, process owner or secure cleanup. B3B1 follow-up inventory source still requires its own CI acceptance.
+
+## 2026-10-11 — T0478 R3B4-B3B1 non-destructive retirement guard (LATEST)
+
+- Implemented `StagedCandidateSnapshot::review_retirement_inventory` in dormant fixture source: exact OS-temp generated root identity, full in-memory expected manifest check, immediate entry enumeration with no untrusted symlink metadata following, fail closed on extra/missing/foreign/duplicate/directory/reparse child, re-read every permitted flat file via existing pinned no-follow single-link handle and SHA256/length match. Tests inject unexpected file and foreign directory into **test-owned** temp root; no file removal or foreign filesystem mutation occurs. This is **preflight only, NOT cleanup/deletion authorization**, and cannot prove owner-only ACL. Full reviewed handle-rooted native dispose/ACL-at-create B3B2 is still required before worker activation. Review: `docs/orchestrator/review_bundles/T-0478_R3B4B3B1_RETIREMENT_INVENTORY_GUARD.md`.
+- Local `cargo fmt --check`, strict Clippy and focused snapshot 3/3 PASS; full main Rust and fresh independent Windows CI pending. B3A2 `fac671d` GitHub CI38183594202 3/3 SUCCESS; B3A3 `79587d6` CI38183793984 at last status Independent WakeHost/Python SUCCESS, Rust remaining full suite running. All hourly deadmen OFF, production signed/T0366/official tunnel untouched.
+
 ## 2026-10-11 — R3B4-B3A3 dormant manifest-bound file read gate (LATEST)
 
 - Added `StagedCandidateSnapshot::read_manifest_leaf` to verify a requested flat name is in its **retained in-memory manifest**, read bytes through the existing pinned no-follow single-link handle, and enforce expected SHA256+size before exposing bytes to any future internal caller. Tests reject unknown, traversal, config and other unlisted leaves. No client-provided manifest, no MCP wiring, no general file permission expansion. Local fmt-check, strict Clippy and focused 3/3 staging tests PASS; new GitHub CI required. Review: `T-0478_R3B4B3A_PROTECTED_CANDIDATE_SNAPSHOT_STAGING.md`.

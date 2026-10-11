@@ -161,6 +161,60 @@ impl StagedCandidateSnapshot {
         verify_file_bytes(entry, &bytes)?;
         Ok(bytes)
     }
+
+    /// R3B4-B3B1 diagnostic only. Before a future handle-authorized retire
+    /// operation, reject foreign, renamed, reparse or altered contents. This
+    /// NEVER deletes anything and is NOT permission to delete via pathname.
+    pub(crate) fn review_retirement_inventory(&self) -> Result<(), String> {
+        verify_disposable_root(&self.root)?;
+        validate_manifest(&self.manifest)?;
+        let directory = std::fs::read_dir(self.root.path())
+            .map_err(|_| "disposable snapshot inventory unavailable")?;
+        let mut observed = std::collections::BTreeSet::new();
+        for item in directory {
+            let entry = item.map_err(|_| "disposable snapshot inventory unavailable")?;
+            let name = entry
+                .file_name()
+                .into_string()
+                .map_err(|_| "disposable snapshot foreign leaf name")?;
+            if !self
+                .manifest
+                .files
+                .iter()
+                .any(|file| file.fixture_leaf == name)
+                || !observed.insert(name)
+            {
+                return Err("disposable snapshot contains unexpected leaf".into());
+            }
+            let file_type = entry
+                .file_type()
+                .map_err(|_| "disposable snapshot inventory changed")?;
+            if !file_type.is_file() || file_type.is_symlink() {
+                return Err("disposable snapshot contains nonregular leaf".into());
+            }
+            // Never follow an unreviewed symlink simply to classify it.
+            let metadata = std::fs::symlink_metadata(entry.path())
+                .map_err(|_| "disposable snapshot inventory changed")?;
+            if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+                return Err("disposable snapshot contains nonregular leaf".into());
+            }
+            #[cfg(windows)]
+            {
+                use std::os::windows::fs::MetadataExt;
+                if metadata.file_attributes() & 0x400 != 0 {
+                    return Err("disposable snapshot contains reparse leaf".into());
+                }
+            }
+        }
+        if observed.len() != self.manifest.files.len() {
+            return Err("disposable snapshot missing expected leaf".into());
+        }
+        for file in &self.manifest.files {
+            self.read_manifest_leaf(&file.fixture_leaf)?;
+        }
+        self.root.assert_stable(LABEL)?;
+        Ok(())
+    }
 }
 
 /// Dormant reviewed-source path. It uses only the opaque live HTTPS GitHub
@@ -257,6 +311,21 @@ mod tests {
         assert_eq!(
             staged.read_manifest_leaf("Cargo.toml").unwrap(),
             b"source tracked bytes"
+        );
+        staged
+            .review_retirement_inventory()
+            .expect("intact test-owned fixture has expected inventory");
+        std::fs::write(dir.join("unlisted.txt"), b"foreign")
+            .expect("inject only into test-owned fixture");
+        assert!(
+            staged.review_retirement_inventory().is_err(),
+            "unexpected new content must block future retirement"
+        );
+        std::fs::create_dir(dir.join("foreign-directory"))
+            .expect("inject only into test-owned fixture");
+        assert!(
+            staged.review_retirement_inventory().is_err(),
+            "unexpected nested directory must also block future retirement"
         );
         for disallowed in ["secret.txt", "../Cargo.toml", "main.rs", "config.toml"] {
             assert!(

@@ -1,3 +1,8 @@
+## 2026-10-11 — T0478 R3B4-B3B1 safe cleanup preflight only (LATEST)
+
+- Dormant `StagedCandidateSnapshot::review_retirement_inventory` proves only that the pinned test-owned temp root's immediate children match the manifest, refusing extra names, nested directories, reparse and missing/changed expected data via per-file SHA/size. **It never deletes anything and does not prove owner-only ACL**. Tests inject extra file and nested directory to confirm refusal; local fmt, strict Clippy and focused 3/3 PASS. New GitHub CI required. Report `docs/orchestrator/review_bundles/T-0478_R3B4B3B1_RETIREMENT_INVENTORY_GUARD.md`.
+- B3A2 fac671d CI38183594202 independently 3/3 SUCCESS, B3A3 79587d6 CI38183793984 pending Rust full test at last check. Next implement actual owner-bound native handle deletion and security descriptor at directory creation (existing Windows helpers only test-available); do not use pathname `remove_dir_all` for live cleanup or call the preflight deletion authority. Then C real MCP manifest binding, D owned PID/port worker. Hourly deadmen OFF; protected production stable supervisor Recovery incomplete.
+
 ## 2026-10-11 — R3B4-B3A3 snapshot in-process manifest read gate (LATEST)
 
 - B3A `c9c174d` independently GitHub CI38183273233 3/3 SUCCESS. Added dormant `StagedCandidateSnapshot::read_manifest_leaf` method to refuse unlisted/nested/traversal/config paths, enforce size and SHA256 from pinned no-follow unique-link read for manifest-approved fixed file, keeping root/content leases held. Focused 3/3, fmt and strict Clippy PASS; source follow-up GitHub CI pending. Not linked to actual MCP router, not a secure coding worker.

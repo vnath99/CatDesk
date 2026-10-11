@@ -4,6 +4,11 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 — T0478 B3B1 retirement safety status (LATEST)
+
+- `StagedCandidateSnapshot::review_retirement_inventory` is **read-only preflight**, NOT a file deletion control. It checks own generated temp root+manifest, denies unknown directories/files/symlink/reparse and SHA drift, all under pinned root; own-fixture Windows tests pass locally. Do NOT run recursive pathname cleanup of a live staged root. B3B2 needs exact-handle native disposal and owner SID ACL-at-create from reviewed Windows helpers (current descriptor-at-create is test-only). New CI pending. Report `T-0478_R3B4B3B1_RETIREMENT_INVENTORY_GUARD.md`.
+- B3A2 fac671d CI38183594202 SUCCESS3/3; B3A3 79587d6 run38183793984 pending Rust. T0478 C/D before T0479 stable versioned worker and true production Recovery. No hourly deadman, no signed T0366 rotation or external official tunnel changes.
+
 ## 2026-10-11 — R3B4-B3A3 restricted snapshot leaf read (LATEST)
 
 - Dormant `StagedCandidateSnapshot::read_manifest_leaf` reads only exact manifest listed flat names with pinned no-follow single hardlink handle + SHA256/length, while source leases remain retained. Tests reject unknown/unlisted/traversal. Local focused3/3, fmt and strict Clippy PASS; new GitHub CI pending. **Not exposed** by ordinary isolated fixture MCP, no accepted caller-controlled manifest. Initial B3A source `c9c174d` CI38183273233 passed 3/3; B3A2 `fac671d` CI38183594202 pending. Before activation: B3B owner ACL and safe partial-stage cleanup; C real process manifest binding; D owned PID/port lifecycle.
