@@ -549,15 +549,12 @@ pub fn run_cli(workspace: &Path) -> Result<(), String> {
     .map_err(|_| "CLI_OUTPUT_FAILED")?;
     writeln!(stdout, "Type `help` for commands.\n").map_err(|_| "CLI_OUTPUT_FAILED")?;
 
-    if let Ok(store) = independent_wake_store()
-        && store
-            .config()
-            .is_ok_and(|config| !config.targets.is_empty())
-    {
-        // Opening this presentation shell is not permission to resume an
-        // explicitly stopped or paused independent WakeHost.
-        let _ = catdesk_wake::runtime::start_installed_only_if_desired_running(&store);
-    }
+    // This console is a presentation/explicit-control boundary, not a
+    // background supervisor. Never start WakeHost merely by opening the
+    // console, even if a persisted desired state says RUNNING. This makes
+    // target readback and a guarded paired target update safe to perform
+    // while the independent browser host is deliberately stopped.
+    // Only explicit WakeStart/WakeResume commands may launch WakeHost.
     print_status(workspace, &mut stdout)?;
     writeln!(stdout).map_err(|_| "CLI_OUTPUT_FAILED")?;
     stdout.flush().map_err(|_| "CLI_OUTPUT_FAILED")?;
@@ -641,13 +638,18 @@ mod tests {
         // must not accidentally satisfy or invalidate their own assertions.
         let source = include_str!("binagotchy_cli.rs");
         let production = source.split("mod tests {").next().expect("product source");
-        assert!(
-            production
-                .contains("catdesk_wake::runtime::start_installed_only_if_desired_running(&store)")
-        );
-        assert!(!production.contains("let _ = catdesk_wake::runtime::start_installed(&store);"));
+        // The explicit command handlers are the sole host-start owners.
+        // Merely opening a console or issuing 'target set' must not start
+        // independent WakeHost, even if stored desired state is RUNNING.
+        let startup = production
+            .split("pub fn run_cli(")
+            .nth(1)
+            .expect("CLI entry point");
+        assert!(!startup.contains("start_installed("));
+        assert!(!startup.contains("start_installed_only_if_desired_running("));
         assert!(production.contains("ParsedCommand::WakeStart"));
         assert!(production.contains("ParsedCommand::WakeResume"));
+        assert!(production.contains("catdesk_wake::runtime::start_installed(&store)?"));
     }
 
     #[test]
