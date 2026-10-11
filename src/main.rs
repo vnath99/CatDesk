@@ -1166,9 +1166,23 @@ fn validate_isolated_fixture_scope(
             #[cfg(windows)]
             {
                 use std::os::windows::fs::MetadataExt;
-                if meta.file_attributes() & 0x400 != 0 || meta.number_of_links() != 1 {
+                if meta.file_attributes() & 0x400 != 0 {
                     return Err(fail());
                 }
+                // Use the already-reviewed stable Win32 handle information path
+                // to reject config hardlinks without unstable MetadataExt APIs.
+                let pinned = crate::windows_protected_fs::PinnedDirectory::acquire(
+                    fixture,
+                    "isolated fixture directory",
+                )
+                .map_err(|_| fail())?;
+                crate::windows_protected_fs::read_relative_regular_unique(
+                    &pinned,
+                    "config.toml",
+                    512 * 1024,
+                    "isolated fixture configuration",
+                )
+                .map_err(|_| fail())?;
             }
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}

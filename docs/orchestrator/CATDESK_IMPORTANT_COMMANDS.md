@@ -4,6 +4,11 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 fixture CI correction and Wake status (LATEST)
+
+- T0478 R3B1 original commit db82920 GitHub Windows CI38150502950 FAILED Rust Clippy due unstable Windows MetadataExt::number_of_links E0658 and Option-vs-integer E0308. The corrected source now validates existing fixture config via stable pinned Windows `read_relative_regular_unique`. Local strict Clippy/fmt, focused config-hardlink test, fixture HTTP integration and full main Rust test PASS; new GitHub CI required.
+- Chat52 gen33 event manual-wake-mcp-1791732042693 visibly delivered and `SUBMISSION_ACCEPTED` during the active ChatGPT reply, but durable exact SENT receipt still pending. Never send a duplicate while this event is not terminal. Hourly CatDesk deadmen remain OFF.
+
 ## 2026-10-11 control update: Chat52 canonical, hourly deadman OFF (LATEST)
 
 - Current canonical project AND independent Wake target: https://chatgpt.com/c/6acba3bf-e740-8331-8896-8a25fefdbf16, SHA `d82593bf8a7eb82936cd63d1ed52f77243c46afa3f9aa57ca2d9a642a31b73ce`, independent generation **33**. Bound atomically through `autonomy_project_registry_bind` guarded with previous verified Chat51 SHA `7faf9cc96669e240362da0dd4266bec8b2585f0ef3e03b4b56ae4c8f66db1b22`. No manual operator target command needed. Historical Chat51/Chat48 instructions below are superseded.

@@ -1,3 +1,9 @@
+## 2026-10-11 — Chat52 R3B1 CI regression repaired in working tree (LATEST)
+
+- Chat52 paired generation33 manual wake `manual-wake-mcp-1791732042693` visibly appended in Chat52 and is `SUBMISSION_ACCEPTED` with queue0, no exact new-event SENT receipt while response active. Timer `manual-turn-1791732129-22112-104` START confirmed. All old hourly deadmen OFF; no competing timer or Wake replay.
+- Original R3B1 CI run38150502950 failed Windows Clippy on unstable `MetadataExt::number_of_links` and Option mismatch. Fixed to existing reviewed pinned Windows file helper. Local Windows focused config hardlink test1/1, real subprocess fixture test1/1, strict Clippy, fmt, full main Rust tests, diff-check PASS. Publish fix and independently verify new GitHub 3-job CI. Source preflight remains susceptible to later same-user config replacement (TOCTOU), so do not call isolated coding worker secure.
+- Production supervisor unchanged/incomplete. Preserve signed pending T0366, external tunnel and seven unrelated untracked files.
+
 ## 2026-10-11 — Chat52 current handoff: paired target gen33; T0478 R3A CI green (LATEST)
 
 - Canonical Chat52: https://chatgpt.com/c/6acba3bf-e740-8331-8896-8a25fefdbf16. Project registry + independent WakeHost target were successfully changed **together** by guarded CAS from Chat51, now matching SHA d82593bf8a7eb82936cd63d1ed52f77243c46afa3f9aa57ca2d9a642a31b73ce at Wake generation33. Turn timer manual-turn-1791730889-22112-103 started; STOP before hard 20m. No operator binding needed.
