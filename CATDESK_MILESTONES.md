@@ -1,3 +1,9 @@
+## 2026-10-10 — Chat51 T0471 reviewed-promotion tool-schema source repair (LATEST)
+
+- Direct user approval to promote prompted fresh live readback: `catdesk_reviewed_build_promotion RESULT` returned `RESULT_UNAVAILABLE_OR_PENDING`, reviewed-build RESULT remained `BUILD_FAILED_OR_AMBIGUOUS`, and stable supervisor preflight remained `SUPERVISOR_STARTUP_POLICY_UNPROVEN`. A review-bound PREFLIGHT using the earlier T0464 scratch build/T0465 reload review failed **before dispatch** in connector input-schema validation. No promotion or host mutation occurred; scratch image is not product-root signed.
+- Proven tool schema defect in `src/delegated/autonomy_supervisor.rs`: required fields `buildPath`, `expectedSha256`, `recordId`/`confirmationToken` were omitted from closed `properties` in promotion PREFLIGHT/CONFIRM, making valid input impossible. Fixed those schemas without widening accepted fields or changing controller guard logic. Added regression test. Focused 1/1 PASS; full binary test PASS; strict all-target Clippy, fmt and diff PASS. See `docs/orchestrator/review_bundles/T-0471_R1_REVIEWED_PROMOTION_TOOL_SCHEMA_PARITY.md`.
+- This is SOURCE ONLY. New CI, independent review and signed source-current main-image rotation still needed. Current serving image and stopped WakeHost unchanged; T0469 operator fixed signed-image readback still outstanding.
+
 ## 2026-10-10 — Chat51 T0470 independent review request and residual QA (LATEST)
 
 - The fresh, narrowly scoped task-attributable T0470 R2 Codex review contract attempt returned generic `INVALID_ARGUMENT`; no contract/session/independent review record was accepted. Do NOT mark SOURCE_REVIEW_PASS merely from GitHub CI and do not fabricate independent review authority. Existing serving controller remains older than reviewed source.

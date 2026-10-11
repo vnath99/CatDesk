@@ -1,3 +1,8 @@
+## 2026-10-10 — Chat51 T0471 promotion schema fix (LATEST)
+
+- User reauthorized supported promotion. Live promotion RESULT `RESULT_UNAVAILABLE_OR_PENDING`; build `BUILD_FAILED_OR_AMBIGUOUS`; supervisor startup policy unproven. Promotion PREFLIGHT rejected by connector JSON schema before controller execution: source oneOf branches require fields not declared under properties while additionalProperties=false.
+- Patched `src/delegated/autonomy_supervisor.rs` to declare all existing required fields for PREFLIGHT/CONFIRM and added closed-schema regression test. Focused test, full binary suite, strict Clippy/fmt/diff PASS. Source bundle T-0471 R1. No signed image, protected deployment or Wake action. CI/independent review needed after publication; T0469 operator fixed signed-image readback remains needed.
+
 ## 2026-10-10 — Chat51 follow-up review attempt (LATEST)
 
 - Fresh independent T0470 R2 autonomy contract proposal was rejected `INVALID_ARGUMENT`; no accepted contract, active reviewer or final record exists. ChatGPT direct source audit notes that dry-run now guards shell execution, but list/move intercepts might still report optimistic dry-run for unresolved/invalid paths; this is an unverified QA question for independent reviewer, NOT an accepted defect or authority. Source commit eb2413a CI passing; docs successor commit e13bb89 pushed. No serving deployment or Wake action.

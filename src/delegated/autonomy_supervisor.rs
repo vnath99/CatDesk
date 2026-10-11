@@ -364,8 +364,8 @@ pub fn tool_schemas() -> Vec<Value> {
             }
             if *name == "catdesk_reviewed_build_promotion" {
                 input_schema = json!({"type":"object","oneOf":[
-                    {"required":["action","buildPath","expectedSha256","recordId"],"properties":{"action":{"const":"PREFLIGHT"}},"additionalProperties":false},
-                    {"required":["action","buildPath","expectedSha256","confirmationToken"],"properties":{"action":{"const":"CONFIRM"}},"additionalProperties":false},
+                    {"required":["action","buildPath","expectedSha256","recordId"],"properties":{"action":{"const":"PREFLIGHT"},"buildPath":{"type":"string","minLength":1,"maxLength":4096},"expectedSha256":{"type":"string","pattern":"^[A-Fa-f0-9]{64}$"},"recordId":{"type":"string","pattern":"^[A-Za-z0-9_-]{1,128}$"}},"additionalProperties":false},
+                    {"required":["action","buildPath","expectedSha256","confirmationToken"],"properties":{"action":{"const":"CONFIRM"},"buildPath":{"type":"string","minLength":1,"maxLength":4096},"expectedSha256":{"type":"string","pattern":"^[A-Fa-f0-9]{64}$"},"confirmationToken":{"type":"string","minLength":1,"maxLength":256}},"additionalProperties":false},
                     {"required":["action"],"properties":{"action":{"const":"RESULT"}},"additionalProperties":false}
                 ]});
             }
@@ -5207,6 +5207,24 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
 
+    #[test]
+    fn reviewed_promotion_schema_declares_required_properties() {
+        let schema = tool_schemas()
+            .into_iter()
+            .find(|s| s["name"] == "catdesk_reviewed_build_promotion")
+            .unwrap();
+        let branches = schema["inputSchema"]["oneOf"].as_array().unwrap();
+        assert_eq!(branches.len(), 3);
+        for branch in branches {
+            assert_eq!(branch["additionalProperties"], false);
+            for field in branch["required"].as_array().unwrap() {
+                assert!(
+                    branch["properties"].get(field.as_str().unwrap()).is_some(),
+                    "missing required property: {field}"
+                );
+            }
+        }
+    }
     #[test]
     fn canonical_recovery_surface_and_cached_bridge_are_closed_before_execution() {
         assert!(AUTONOMY_MCP_TOOL_NAMES.contains(&"catdesk_release_recovery"));
