@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "task": "T-0372",
+  "state": "READ_ONLY_COMPLETE",
+  "timestampUtc": "2026-09-10T14:13:49.3707617Z",
+  "records": [
+    {
+      "name": "installedCandidate",
+      "path": "C:\\Program Files\\CatDesk\\CatDesk.exe",
+      "exists": true,
+      "length": 25134592,
+      "sha256": "2421a90aeb9ad7775ec9927f8dfbe294faa3cbfe11ec7a071a1ed554eee28459",
+      "classification": "t0215Epoch1Candidate"
+    },
+    {
+      "name": "acceptedBootstrapEnvelope",
+      "path": "C:\\Program Files\\CatDesk.reviewed-main-image-accepted.v1",
+      "exists": true,
+      "length": 527,
+      "sha256": "2684020a2bb4c4be81a207af713cdb4239a41e65a48628c07f3bbbaca42b3a81",
+      "classification": "UNKNOWN",
+      "envelope": {
+        "product": "CatDesk",
+        "purpose": "reviewed-main-image-bootstrap",
+        "root_id": "catdesk-main-image-root",
+        "root_version": "1",
+        "epoch": "1",
+        "policy_sha256": "a89cccc440eabe56997dab3fa064f62c1d5b11a9704c50286e506d9dfdd51efb",
+        "payload_sha256": "2421a90aeb9ad7775ec9927f8dfbe294faa3cbfe11ec7a071a1ed554eee28459",
+        "payload_length": "25134592",
+        "review_id": "review-t0215-trust-root-activation-20260822",
+        "build_id": "build-t0215-root-3bc6a210-2421a90a"
+      }
+    },
+    {
+      "name": "pendingRotationEnvelope",
+      "path": "C:\\Program Files\\CatDesk.reviewed-main-image-rotation-pending.v1",
+      "exists": false
+    },
+    {
+      "name": "installedRotationEnvelope",
+      "path": "C:\\Program Files\\CatDesk.reviewed-main-image-rotation-installed.v1",
+      "exists": false
+    },
+    {
+      "name": "rotationStagingCandidate",
+      "path": "C:\\Program Files\\CatDesk\\CatDesk.rotation-next.exe",
+      "exists": false
+    },
+    {
+      "name": "incomingCandidate",
+      "path": "C:\\ProgramData\\CatDesk\\reviewed-main-image\\rotation\\incoming\\CatDesk.exe",
+      "exists": true,
+      "length": 26302464,
+      "sha256": "d09c677f8ce5f14b3600a5435929aff31b4128d9a041cdaceae3213b5f0af36f",
+      "classification": "t0366Epoch2Candidate"
+    },
+    {
+      "name": "incomingEnvelope",
+      "path": "C:\\ProgramData\\CatDesk\\reviewed-main-image\\rotation\\incoming\\review-envelope.v1",
+      "exists": true,
+      "length": 519,
+      "sha256": "50194cf9613e8b9b541db597045fb2fc73a70511cbe90efcf1b512b19ce02644",
+      "classification": "t0217Epoch2SignedEnvelope",
+      "envelope": {
+        "product": "CatDesk",
+        "purpose": "reviewed-main-image-rotation",
+        "root_id": "catdesk-main-image-root",
+        "root_version": "1",
+        "epoch": "2",
+        "policy_sha256": "c477d5bc486002e2034324b3a40b07d8e87c149cf5f2dab9b12aafee92816705",
+        "payload_sha256": "552cb917998d283e7d901593ffed5a9ceaa108223654aa69349fa7e567c21482",
+        "payload_length": "25172480",
+        "review_id": "review-t0217-main-image-rotation-20260822",
+        "build_id": "build-t0217-rotation-552cb917"
+      }
+    }
+  ]
+}
