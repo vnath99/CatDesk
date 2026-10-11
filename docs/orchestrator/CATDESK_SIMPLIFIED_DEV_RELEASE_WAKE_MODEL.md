@@ -1,5 +1,15 @@
 # T-0476 — CatDesk fast development, safe Wake recovery and simple production releases
 
+## 2026-10-11 actual live progress (supersedes historical states below)
+
+- T0477 split Chat48 registry / Chat51 independent Wake was successfully reconciled via source-current guarded paired recovery. Both authoritative Chat51 URL/digest match; independent Wake target generation32. No signed-image rotation was needed.
+- WakeHost dev84 is RUNNING; exactly one manual generation32 event `manual-wake-mcp-1791691944140` ended `SENT`, `EXACT_USER_MESSAGE_APPENDED`, timer `COMPLETE`, queue0. This is confirmed **manual**, not natural automatic Wake acceptance.
+- The **production Recovery** milestone still has unverified stable supervisor startup definition/policy and unavailable supervisor root; old serving controller cannot execute the current typed nine-layer diagnose via MCP. It must not be marked COMPLETE.
+- T0478 starts the parallel **nonprivileged source-only development loop** `scripts/catdesk-dev-lane.ps1 status|build|verify`. It never starts a daemon/browser or installs a production executable; `isolatedRuntimeReady=false` until R2 proves state/port/tunnel separation and safely enables a development worker.
+- Retain all protected signing/rollback boundaries for actual production installs. Do not serialize ordinary source engineering on pending T0366 epoch2 rotation.
+
+
+
 Date: 2026-10-10 local / 2026-10-11 UTC. Canonical human/hourly Chat51:
 https://chatgpt.com/c/6acaae13-4b18-83e9-b6ca-3c5e00cf47a8.
 

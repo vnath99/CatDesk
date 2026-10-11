@@ -4,6 +4,14 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## CURRENT LIVE STATUS — 2026-10-11 (Chat51 manual Wake accepted; recovery partial)
+
+- The CatDesk registry and independent WakeHost target now **both** identify Chat51 `https://chatgpt.com/c/6acaae13-4b18-83e9-b6ca-3c5e00cf47a8`, digest `7faf9cc96669e240362da0dd4266bec8b2585f0ef3e03b4b56ae4c8f66db1b22`, independent generation 32. The guarded T0477 repaired the earlier Chat48/Chat51 split. **Do not rebind, replay the old CAS, or require operator target-set again.**
+- WakeHost `1.0.0-dev.84` is **RUNNING**. Exact generation32 diagnostic event `manual-wake-mcp-1791691944140` has durable `EXACT_USER_MESSAGE_APPENDED` receipt, delivery `SENT`, event timer `COMPLETE`, queue0. Manual delivery acceptance is proven; **natural automatic Wake acceptance remains separate**. Historical staleCount107 is forensic only.
+- **Recovery is NOT complete:** `catdesk_stable_supervisor_status` still shows `SUPERVISOR_ROOT_UNAVAILABLE`, `SUPERVISOR_STARTUP_POLICY_UNPROVEN` and `SUPERVISOR_STARTUP_DEFINITION_READ_FAILED`; start/recover of the supervisor is unauthorized. The old serving CatDesk command gateway still returns `INVALID_ARGUMENT` for the existing `catdesk.ps1 diagnose`, despite updated source support. Do not confuse a healthy Secure MCP tunnel + independent Wake with production supervisor acceptance.
+- Current safe engineering lane is T0478: source-only `scripts/catdesk-dev-lane.ps1` (`status/build/verify`) with no production install, daemon or browser launch; first CI status/parse canary and separate R1 report. **It is not yet an isolated dev runtime.** Once R1 passes Windows CI, continue isolation audit and safe dev-runner R2 while production signed release/supervisor host authority remains separate. Exact work is in `docs/orchestrator/review_bundles/T-0478_R1_SOURCE_ONLY_DEVELOPMENT_LANE.md`.
+- Assistant default for Wake is CatDesk's guarded paired MCP setter and typed `catdesk_binagotchy_command`, not operator PowerShell. All operator PowerShell examples remain one line; `codex resume --all` then `/goal resume` remain the Codex workflow.
+
 ## SOURCE VERIFIED — T0477 R2 (Chat51 recovery) — 2026-10-10
 
 - `58c4bfc` GitHub Actions run `38108654054` **SUCCESS all three Windows jobs**. Exact Rust CI proves both source target recovery paths: (1) independent Wake already Chat51, complete old registry Chat48 to Chat51 with NO Wake generation increment; (2) legacy bad SHA with same URL, repair only exact digest. Local source-current `target/debug/catdesk.exe` rebuilt PASS. Previously failed R1 CI superseded. Workspace `.catdesk/wake-bridge/owner.json` says `independent_v1`.

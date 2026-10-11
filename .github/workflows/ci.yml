@@ -30,6 +30,18 @@ jobs:
           $native = [regex]::Match($source, '(?ms)^\$Native = @''\r?\n(.*?)\r?\n''@')
           if (-not $native.Success) { throw 'T0474 fixed native shim declaration not found' }
           Add-Type -TypeDefinition $native.Groups[1].Value -ErrorAction Stop
+      - name: Validate source-only developer lane
+        shell: pwsh
+        run: |
+          $tokens = $null; $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile('scripts/catdesk-dev-lane.ps1', [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { throw ($errors | Out-String) }
+          $status = & '.\scripts\catdesk-dev-lane.ps1' status | ConvertFrom-Json
+          if ($status.schemaVersion -ne 1 -or $status.mode -ne 'DEVELOPMENT_SOURCE_ONLY' -or $status.operation -ne 'STATUS') { throw 'Dev source status invalid' }
+          if ($status.productionInstallationChanged -ne $false -or $status.daemonOrBrowserStarted -ne $false -or $status.isolatedRuntimeReady -ne $false) { throw 'Dev source status claimed unsafe runtime' }
+          if ($status.sourceCommit -notmatch '^[0-9a-f]{40}$') { throw 'Dev source commit missing' }
+          $source = Get-Content -LiteralPath 'scripts/catdesk-dev-lane.ps1' -Raw
+          if ($source -match '(?im)^\s*(Start-Process|Start-Service|Register-ScheduledTask|Invoke-Expression)\b') { throw 'Unexpected runtime or persistence operation' }
       - name: Test PowerShell shell and cwd (isolated)
         run: cargo test --locked command::tests::run_command_uses_platform_shell_and_cwd -- --exact
       - name: Test remaining Rust suite
