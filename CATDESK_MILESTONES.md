@@ -1,3 +1,8 @@
+## 2026-10-11 — T0478 R3B4 trusted snapshot provenance design, NOT implemented (LATEST)
+
+- Authored scoped Codex-ready R3B4 design `docs/orchestrator/review_bundles/T-0478_R3B4_SOURCE_SNAPSHOT_PROVENANCE_DESIGN.md`: derive fixture leaves only from a separately verified exact Git commit's tracked objects, fixed allowlist and size/count bounds, canonical SHA-256 manifest retained in trusted launcher/runtime memory, deny files added or changed after snapshot via per-request no-follow/unique-file-handle digest recheck. Requires Windows adversarial replacement/manifest tests, and safe owner PID/port lifecycle; **design only**, not an accepted live coding agent or implemented source.
+- R3B3 source commit `04806d894d869228861e6d2c50c5d31daea04310` independently pushed and GitHub Actions `38158118618` under full three-job Windows verification at writing. Rust fmt/Clippy already passed, other jobs still progressing. Do not mark R3B3 CI green until all terminal success.
+
 ## 2026-10-11 — Chat52 R3B2 CI green, R3B3 fixture root lease locally proven (LATEST)
 
 - R3B2 corrected source commit `6f07231a7ff996f0f077dc52d284805c7456e7c8` GitHub Windows CI run `38157083333` now independently **SUCCESS all three jobs** (Rust full suite/fmt/Clippy, Python Wake/advisor, independent WakeHost Rust). Earlier `fe90d69` fmt-only CI failure historical/superseded. No production deployment.

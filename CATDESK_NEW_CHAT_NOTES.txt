@@ -1,3 +1,8 @@
+## 2026-10-11 — Chat52 R3B4 fixed source snapshot contract drafted (LATEST)
+
+- `docs/orchestrator/review_bundles/T-0478_R3B4_SOURCE_SNAPSHOT_PROVENANCE_DESIGN.md` is a **design**, not implementation: trusted exact Git commit tracked-blob source, fixed flat allowlist, bounded fresh temp snapshot, canonical SHA manifest, per-request digest binding, reject new/tampered leaf, negative symlink/hardlink/race tests, owner-bound child lifecycle. Do not treat generated snapshot hash alone as reviewed source provenance. Prior R3B3 root no-delete lease code has commit04806d8 on feature branch and is pending GitHub CI38158118618 full terminal result.
+- Current Chat52 gen33 Wake target unchanged; most recent manual wake event manual-wake-mcp-1791737671996 was visibly delivered but exact SENT receipt should be checked after current response; hourly deadmen OFF. Production stable supervisor recovery and signed epoch2 T0366 pending remain separate.
+
 ## 2026-10-11 — Chat52 R3B2 CI successful; R3B3 root lease source-only (LATEST)
 
 - GitHub Windows CI `38157083333` for corrected R3B2 commit `6f07231` is terminal SUCCESS all 3 jobs, superseding `fe90d69` fmt failure. Fixture startup config is in-memory, no parse/write of config.toml. R3B3 new root-guard uses retained Windows `PinnedDirectory::acquire` with no delete share throughout server lifetime; real source-built fixture HTTP test asserts rename of owned root denied while running and allowed after child exit. Local strict Clippy, full main Rust tests, integration, formatter and diff-check passed; R3B3 needs GitHub independent CI. Report `docs/orchestrator/review_bundles/T-0478_R3B3_FIXTURE_ROOT_LIFETIME_LEASE.md`.
