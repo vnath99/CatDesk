@@ -4,6 +4,10 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 R3B2 source CI formatting correction (LATEST)
+
+- First R3B2 commit `fe90d69` CI run `38156865303` failed **Rust cargo fmt** only on formatting of new in-memory fixture unit test. Exact four Rustfmt changes applied; must validate the next CI run before treating R3B2 verified. Existing production/Wake control unchanged.
+
 ## 2026-10-11 Chat52 manual Wake accepted; T0478 R3B2 source-only (LATEST)
 
 - Independent WakeHost and project target `https://chatgpt.com/c/6acba3bf-e740-8331-8896-8a25fefdbf16`, SHA `d82593bf8a7eb82936cd63d1ed52f77243c46afa3f9aa57ca2d9a642a31b73ce`, generation33. Exact manual event `manual-wake-mcp-1791732042693` reached SENT with `EXACT_USER_MESSAGE_APPENDED`, timer COMPLETE and queue0; no natural Wake acceptance. All old ChatGPT hourly deadmen OFF; do not reenable.

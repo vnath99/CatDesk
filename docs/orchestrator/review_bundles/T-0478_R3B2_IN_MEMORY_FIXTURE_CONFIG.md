@@ -17,6 +17,11 @@ Date: 2026-10-11. Canonical Chat52: https://chatgpt.com/c/6acba3bf-e740-8331-889
 - **Local verification:** strict `cargo clippy --locked --offline --workspace --all-targets --all-features -- -D warnings` PASS, focused in-memory test 1/1 PASS, real fixture HTTP integration 1/1 PASS, full `cargo test --locked --offline --bin catdesk` exit0, `git diff --check` exit0. A later `cargo fmt --all -- --check` invocation intermittently returned gateway INVALID_ARGUMENT (an earlier pre-test invocation passed before the additional regression was inserted), so independent Windows CI formatting result is required for this exact final source.
 - **No** protected signing, Program Files, official Secure MCP, independent WakeHost, startup tasks, other projects, or production configuration files were mutated.
 
+## Independent CI correction
+
+- First R3B2 source commit `fe90d69365b2253abe10c6dcb4ae7716997c0290`, Windows CI run `38156865303`, had a genuine Rust `cargo fmt --check` failure for only four fragments in the newly added in-memory fixture unit test. Fmt failure occurred before CI Rust tests; it does not invalidate the prior passing local compilation, but CI has not yet accepted this exact source.
+- Applied exactly the Rustfmt changes shown in that job's log (constructor call wrapping and two multi-line assertions). No fixture runtime behavior changed. Follow-up CI must establish fmt/Clippy/tests all terminal SUCCESS.
+
 ## Security limits / subsequent R3B
 
 This removes the fixture config file's **startup parse/rewrite race**, not hostile same-user replacement of the **fixture root directory** or access to mutable fixture source files. It is still only an ephemeral read/search server, not a sandboxed autonomous coding agent. Next tasks: fixture root identity retained for the process lifetime or equivalent no-follow path chain, trusted source-copy manifest and immutable snapshot provenance, file content hashes, and owner-validated bounded PID/port/stop lifecycle with adversarial tests. Finish Windows CI before claiming R3B2 complete. Production stable supervisor recovery remains separate and incomplete; signed T0366 pending epoch2 remains untouched.

@@ -2403,25 +2403,25 @@ mod tests {
         std::fs::create_dir(&root).expect("create disposable fixture");
         let config = root.join("config.toml");
         let workspace = root.to_str().expect("fixture path");
-        let mut state = crate::state::AppState::new_isolated_fixture(
-            0,
-            workspace.to_owned(),
-            config.clone(),
-        )
-        .expect("in-memory fixture state");
+        let mut state =
+            crate::state::AppState::new_isolated_fixture(0, workspace.to_owned(), config.clone())
+                .expect("in-memory fixture state");
         assert!(!config.exists(), "default fixture must not create a config");
-        assert!(state.persist_state().is_err(), "fixture persistence must fail closed");
+        assert!(
+            state.persist_state().is_err(),
+            "fixture persistence must fail closed"
+        );
         state.persist_state_with_log();
-        assert!(!config.exists(), "logging persistence refusal must not write");
+        assert!(
+            !config.exists(),
+            "logging persistence refusal must not write"
+        );
 
         let marker = "not valid TOML [";
         std::fs::write(&config, marker).expect("create untrusted fixture config");
-        let mut ignored = crate::state::AppState::new_isolated_fixture(
-            0,
-            workspace.to_owned(),
-            config.clone(),
-        )
-        .expect("fixture ignores pathname-based config");
+        let mut ignored =
+            crate::state::AppState::new_isolated_fixture(0, workspace.to_owned(), config.clone())
+                .expect("fixture ignores pathname-based config");
         assert!(ignored.persist_state().is_err());
         ignored.persist_state_with_log();
         assert_eq!(std::fs::read_to_string(&config).unwrap(), marker);

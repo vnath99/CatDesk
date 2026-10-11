@@ -1,3 +1,7 @@
+## 2026-10-11 — R3B2 CI Rustfmt correction pending fresh CI (LATEST)
+
+- Original R3B2 `fe90d69` Actions run `38156865303` failed Rust formatting step with four exact diffs in newly added `isolated_fixture_config_is_memory_only_even_with_existing_file` test. Applied log-authoritative Rustfmt changes to src/main.rs only, without behavior change; push scoped correction and verify all three Windows jobs terminal success before R3B2 acceptance. Underlying local strict Clippy/full Rust/unit and real fixture HTTP tests passed before formatting-only revision. No rebind/duplicate manual Wake; gen33 previous manual SENT/COMPLETE, hourly deadmen OFF.
+ 
 ## 2026-10-11 — Chat52 R3B2 fixture configuration TOCTOU closure (LATEST)
 
 - R3B1 commit 9f6d0bc full GitHub Windows CI run38151893173 SUCCESS all three. Chat52 gen33 manual test manual-wake-mcp-1791732042693 durably SENT, EXACT_USER_MESSAGE_APPENDED, event timer COMPLETE. Hourly deadmen remain disabled. Current ordinary timer manual-turn-1791736558-22112-105.

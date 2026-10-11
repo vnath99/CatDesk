@@ -1,3 +1,7 @@
+## 2026-10-11 — Chat52 R3B2 CI format-only correction (LATEST)
+
+- R3B2 original `fe90d69` GitHub Windows CI `38156865303` Rust job FAIL at `cargo fmt --check`: four formatting changes in newly added in-memory fixture unit test; exact diff read from GitHub job logs, no runtime test rejection. Corrected precisely those four fragments. Python/Wake results must be checked independently and fresh CI run required before claiming R3B2 green. Underlying strict local Clippy, focused regression, real fixture process test, and full main Rust tests passed; no protected runtime change.
+
 ## 2026-10-11 — Chat52 T0478 R3B2 in-memory disposable config (LATEST)
 
 - R3B1 repair commit `9f6d0bc` GitHub Windows Actions `38151893173` independently finished SUCCESS **3/3 jobs**. Prior Rust CI failure on `db82920` is superseded, not erased.
