@@ -222,7 +222,14 @@ pub async fn handle_isolated_fixture_request(
     fixture_root: &str,
 ) -> Option<JsonRpcResponse> {
     match req.method.as_str() {
-        "initialize" => Some(handle_initialize(req)),
+        "initialize" => Some(JsonRpcResponse::success(
+            req.id.clone(),
+            json!({
+                "protocolVersion": PROTOCOL_VERSION,
+                "capabilities": { "tools": { "listChanged": false } },
+                "serverInfo": { "name": "catdesk-isolated-fixture", "version": SERVER_VERSION }
+            }),
+        )),
         "ping" => Some(JsonRpcResponse::success(req.id.clone(), json!({}))),
         method if method.starts_with("notifications/") => None,
         "tools/list" => {
@@ -8973,6 +8980,13 @@ mod tests {
             method: method.into(),
             params,
         };
+        let initialized =
+            handle_isolated_fixture_request(&make("initialize", json!({})), workspace)
+                .await
+                .expect("isolated initialization");
+        let init = initialized.result.expect("init payload");
+        assert!(init["capabilities"]["resources"].is_null());
+        assert_eq!(init["serverInfo"]["name"], "catdesk-isolated-fixture");
         let listed = handle_isolated_fixture_request(&make("tools/list", json!({})), workspace)
             .await
             .expect("tool listing");
