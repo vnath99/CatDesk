@@ -372,7 +372,19 @@ mod tests {
             "an existing hardlink must never be overwritten"
         );
         assert_eq!(std::fs::read(&external).unwrap(), b"external unchanged");
-        drop(root);
+        // Even a manifest-matching leaf name is not an owned cleanup target
+        // when it aliases an outside file through a second hardlink.
+        let staged = StagedCandidateSnapshot {
+            root,
+            manifest,
+            _leases: Vec::new(),
+        };
+        assert!(
+            staged.review_retirement_inventory().is_err(),
+            "hardlinked external content must block retirement review"
+        );
+        assert_eq!(std::fs::read(&external).unwrap(), b"external unchanged");
+        drop(staged);
         std::fs::remove_dir_all(dir).unwrap();
         std::fs::remove_file(external).unwrap();
     }

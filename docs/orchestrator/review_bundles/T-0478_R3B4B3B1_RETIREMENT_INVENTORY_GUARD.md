@@ -17,7 +17,7 @@ Added `StagedCandidateSnapshot::review_retirement_inventory` to the existing dor
 
 ## B3B1 follow-up: missing-leaf proof
 
-Added a fourth focused test constructing a **test-only** pinned temp root with a legitimate expected manifest but no staged file; `review_retirement_inventory` returns an error. The test releases the exact guard and removes only its own empty temp directory. Windows local `cargo fmt --check`, strict all-target Clippy, focused snapshot tests **4/4 PASS**, and full main Rust suite **exit 0** after this follow-up. This additional source is not independently accepted until its own GitHub Windows CI is terminal success.
+Added a fourth focused test constructing a **test-only** pinned temp root with a legitimate expected manifest but no staged file; and extended the existing hardlink case to construct a test-only snapshot with a manifest-named external hardlink, requiring retirement review to refuse without changing external bytes. `review_retirement_inventory` returns an error. The test releases the exact guard and removes only its own empty temp directory. Windows local `cargo fmt --check`, strict all-target Clippy, focused snapshot tests **4/4 PASS**, and full main Rust suite **exit 0** after this follow-up. This additional source is not independently accepted until its own GitHub Windows CI is terminal success.
 
 ## Explicit security limits
 
