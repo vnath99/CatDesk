@@ -8990,7 +8990,8 @@ mod tests {
         let listed = handle_isolated_fixture_request(&make("tools/list", json!({})), workspace)
             .await
             .expect("tool listing");
-        let tools = listed.result.expect("list payload")["tools"]
+        let list_payload = listed.result.expect("list payload");
+        let tools = list_payload["tools"]
             .as_array()
             .expect("tool array")
             .iter()
