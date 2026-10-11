@@ -1162,7 +1162,15 @@ fn validate_isolated_fixture_scope(
         return Err(fail());
     }
     match std::fs::symlink_metadata(config) {
-        Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {}
+        Ok(meta) if meta.is_file() && !meta.file_type().is_symlink() => {
+            #[cfg(windows)]
+            {
+                use std::os::windows::fs::MetadataExt;
+                if meta.file_attributes() & 0x400 != 0 || meta.number_of_links() != 1 {
+                    return Err(fail());
+                }
+            }
+        }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
         _ => return Err(fail()),
     }
@@ -2373,6 +2381,20 @@ mod tests {
         let root = std::fs::canonicalize(&fixture).expect("canonical fixture");
         let path = root.to_str().expect("utf8 fixture");
         assert!(validate_isolated_fixture_scope(path, &root.join("config.toml")).is_ok());
+        #[cfg(windows)]
+        {
+            // A second name for external configuration must not be accepted.
+            let external = std::env::temp_dir().join(format!(
+                "catdesk-external-config-{}.toml",
+                uuid::Uuid::new_v4().simple()
+            ));
+            std::fs::write(&external, "external=true").expect("external fixture config");
+            let linked_config = root.join("config.toml");
+            std::fs::hard_link(&external, &linked_config).expect("fixture config hardlink");
+            assert!(validate_isolated_fixture_scope(path, &linked_config).is_err());
+            std::fs::remove_file(&linked_config).expect("remove fixture config hardlink");
+            std::fs::remove_file(&external).expect("remove external fixture config");
+        }
         assert!(validate_isolated_fixture_scope(path, &root.join("other.toml")).is_err());
         assert!(
             validate_isolated_fixture_scope(path, &std::env::temp_dir().join("config.toml"))

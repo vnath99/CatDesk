@@ -4,6 +4,13 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 control update: Chat52 canonical, hourly deadman OFF (LATEST)
+
+- Current canonical project AND independent Wake target: https://chatgpt.com/c/6acba3bf-e740-8331-8896-8a25fefdbf16, SHA `d82593bf8a7eb82936cd63d1ed52f77243c46afa3f9aa57ca2d9a642a31b73ce`, independent generation **33**. Bound atomically through `autonomy_project_registry_bind` guarded with previous verified Chat51 SHA `7faf9cc96669e240362da0dd4266bec8b2585f0ef3e03b4b56ae4c8f66db1b22`. No manual operator target command needed. Historical Chat51/Chat48 instructions below are superseded.
+- `catdesk_turn_timer(START)` succeeded: `manual-turn-1791730889-22112-103`; use STATUS/STOP with exact ID and `allow_without_plan:true` when serving gateway rejects current-plan calls. Target 19 minutes, 20-minute hard deadline.
+- All older CatDesk hourly automations are OFF (independent scheduled-task inspection). User expressly requested **manual Wake** only after previous Chat51 generation32 `manual-wake-mcp-1791693864808` ATTENTION/RESPONSE_SEQUENCE_DRIFT is safely reconciled or retired. Do not blindly replay, and do not count manual delivery as natural acceptance. Host RUNNING, queue0, latest submission IDLE at handoff.
+- R3A commit `bedfe05` GitHub Windows CI `38147692024` is independently SUCCESS 3/3. New R3B1 fixture config hardlink/reparse preflight source is not yet independently test-verified; see `T-0478_R3B1_FIXTURE_CONFIG_ALIAS_GUARD.md`. Production supervisor recovery still partial; preserve official Secure MCP owner, protected signing state and unrelated untracked files. One-line operator PowerShell only.
+
 ## 2026-10-11 control update: Hourly deadman OFF; manual Wake guarded (LATEST)
 
 - Chat51 hourly deadman `CatDesk Hourly Deadman — Chat51` was explicitly DISABLED at the user's request after verifying its T0478 R2 fixture changes. All older hourly CatDesk automations were already disabled. This command reference is authoritative: don't rely on historical 'ACTIVE' deadman sections below. Do not recreate hourly automation without a new user request.
