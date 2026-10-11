@@ -45,6 +45,9 @@ mod isolated_fixture_github_authority;
 #[allow(dead_code)]
 // T0478 R3B4-A pure schema; trusted producer and runtime enforcement follow later.
 mod isolated_fixture_manifest;
+#[allow(dead_code)]
+// R3B4-B3 dormant handle-pinned disposable source staging, no runtime MCP binding.
+mod isolated_fixture_snapshot;
 mod macos_terminal;
 mod mascot;
 mod mcp;
