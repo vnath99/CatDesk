@@ -3159,6 +3159,17 @@ fn select_signed_main_image_readback<'a>(
     Ok(installed.unwrap_or(accepted))
 }
 
+/// Public identifiers from an already signature-verified pending receipt.
+/// Reporting these fields never selects the pending image as installed.
+#[cfg(any(windows, test))]
+fn pending_main_image_payload_identity(
+    pending: Option<&ReviewedMainImageEnvelopeV1>,
+) -> (&str, u64) {
+    pending
+        .map(|value| (value.payload_sha256.as_str(), value.payload_length))
+        .unwrap_or(("none", 0))
+}
+
 #[cfg(windows)]
 pub(crate) fn run_reviewed_main_image_status_command() -> Result<String, String> {
     let root = production_reviewed_main_image_trust_root()?;
@@ -3203,13 +3214,16 @@ pub(crate) fn run_reviewed_main_image_status_command() -> Result<String, String>
     {
         return Err(REVIEWED_MAIN_IMAGE_ROLLBACK_STATE_INVALID.into());
     }
+    let (pending_sha, pending_length) = pending_main_image_payload_identity(pending.as_ref());
     Ok(format!(
-        "SIGNED_MAIN_IMAGE_READBACK state=VERIFIED bootstrapEpoch={} installedRotationEpoch={} pendingRotationEpoch={} payloadSha256={} payloadLength={}",
+        "SIGNED_MAIN_IMAGE_READBACK state=VERIFIED bootstrapEpoch={} installedRotationEpoch={} pendingRotationEpoch={} payloadSha256={} payloadLength={} pendingPayloadSha256={} pendingPayloadLength={}",
         accepted.epoch,
         installed.as_ref().map_or(0, |value| value.epoch),
         pending.as_ref().map_or(0, |value| value.epoch),
         measured.sha256,
-        measured.length
+        measured.length,
+        pending_sha,
+        pending_length
     ))
 }
 
@@ -8814,6 +8828,8 @@ mod tests {
         assert!(windows_handler.contains("production_reviewed_main_image_trust_root()"));
         assert!(windows_handler.contains("read_accepted_reviewed_main_image_envelope("));
         assert!(windows_handler.contains("verify_reviewed_main_image_payload_binding("));
+        assert!(windows_handler.contains("pendingPayloadSha256="));
+        assert!(windows_handler.contains("pendingPayloadLength="));
         assert!(!windows_handler.contains("persist_accepted_reviewed_main_image_envelope("));
         assert!(
             !windows_handler.contains("execute_reviewed_main_image_rotation_as_administrator(")
@@ -8844,6 +8860,13 @@ mod tests {
         installed.purpose = REVIEWED_MAIN_IMAGE_ROTATION_PURPOSE.into();
         let mut pending = installed.clone();
         pending.epoch = 3;
+        pending.payload_sha256 = "d".repeat(64);
+        pending.payload_length = 200;
+        assert_eq!(pending_main_image_payload_identity(None), ("none", 0));
+        assert_eq!(
+            pending_main_image_payload_identity(Some(&pending)),
+            (pending.payload_sha256.as_str(), 200)
+        );
         assert_eq!(
             select_signed_main_image_readback(&accepted, None, None)
                 .unwrap()
