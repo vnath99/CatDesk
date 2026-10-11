@@ -15,6 +15,10 @@ Added `StagedCandidateSnapshot::review_retirement_inventory` to the existing dor
 
 `cargo fmt --check` PASS; `cargo test --locked --offline --bin catdesk isolated_fixture_snapshot` 3/3 PASS including new retirement assertions; strict `cargo clippy --locked --offline --workspace --all-targets --all-features -- -D warnings` PASS. Full main Rust suite and independent GitHub CI for this exact follow-up must be verified before acceptance.
 
+## B3B1 follow-up: missing-leaf proof
+
+Added a fourth focused test constructing a **test-only** pinned temp root with a legitimate expected manifest but no staged file; `review_retirement_inventory` returns an error. The test releases the exact guard and removes only its own empty temp directory. Windows local `cargo fmt --check`, strict all-target Clippy, focused snapshot tests **4/4 PASS**, and full main Rust suite **exit 0** after this follow-up. This additional source is not independently accepted until its own GitHub Windows CI is terminal success.
+
 ## Explicit security limits
 
 **A read-only inventory check does not authorize filesystem deletion.** A hostile same-user process could replace or inject children after this check. It is never safe to pass a mutable pathname to `remove_dir_all` based only on these results. The actual B3B2 retire implementation must re-open or retain exact Windows DELETE handles under a pinned trusted parent, refuse reparse and foreign objects and compare identity at the point of deletion, using the reviewed native disposal logic already in `src/reviewed_source_snapshot.rs` instead of inventing a parallel unsafe deletion implementation.

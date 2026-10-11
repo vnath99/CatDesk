@@ -1,3 +1,9 @@
+## 2026-10-11 — B3B1 missing-leaf refusal, B3B2 exact-handle cleanup plan (LATEST)
+
+- Added missing expected Cargo.toml negative test for dormant read-only `review_retirement_inventory`, creating and removing only exact test-owned empty fixture. Focused snapshot 4/4, cargo fmt/strict Clippy and full main Rust suite PASS. Follow-up CI pending. This is **not deletion authorization**.
+- B3B2 owner SID/ACL-at-create/exact-handle cleanup contract written `T-0478_R3B4B3B2_OWNER_ACL_HANDLE_CLEANUP_CONTRACT.md`, not implemented. Existing descriptor-at-create helper `#[cfg(test)]` only; do not silently promote or use unsafe pathname recursion. Must reuse audited native read/deletion under pinned parent and fail-closed foreign object checks.
+- B3B1 commit a438d16 GitHub Actions38184571227 pending terminal at last check. Hourly deadmen OFF, Chat52 gen33 paired, new manual event manual-wake-mcp-1791760868717 visible, exact receipt pending when response active.
+
 ## 2026-10-11 — T0478 R3B4-B3B1 safe cleanup preflight only (LATEST)
 
 - Dormant `StagedCandidateSnapshot::review_retirement_inventory` proves only that the pinned test-owned temp root's immediate children match the manifest, refusing extra names, nested directories, reparse and missing/changed expected data via per-file SHA/size. **It never deletes anything and does not prove owner-only ACL**. Tests inject extra file and nested directory to confirm refusal; local fmt, strict Clippy and focused 3/3 PASS. New GitHub CI required. Report `docs/orchestrator/review_bundles/T-0478_R3B4B3B1_RETIREMENT_INVENTORY_GUARD.md`.

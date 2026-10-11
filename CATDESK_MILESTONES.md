@@ -2,6 +2,12 @@
 
 - Initial B3A3 exact manifest-leaf reader commit `79587d6d7ae1b8acb59e55a6007eaf3ad7212ec9` independently passed all 3 Windows jobs in GitHub Actions `38183793984` (Rust, Python Wake/advisor, Independent WakeHost Rust). This accepts only the dormant source helper, **not** a runtime MCP binding, process owner or secure cleanup. B3B1 follow-up inventory source still requires its own CI acceptance.
 
+## 2026-10-11 — Chat52 B3B1 incomplete-stage test and B3B2 native cleanup contract (LATEST)
+
+- B3B1 added a fourth focused negative test: a generated test-only temp root with a valid manifest but a missing expected source file fails the read-only retirement inventory check. It never deletes or mutates foreign data. Local cargo fmt-check, strict all-target Clippy, focused snapshot 4/4 and full main Rust suite PASS; new GitHub CI required.
+- Wrote Codex-ready `docs/orchestrator/review_bundles/T-0478_R3B4B3B2_OWNER_ACL_HANDLE_CLEANUP_CONTRACT.md`: establish OS-token-derived owner SID and ACL **at creation**, exact pinned parent/child owner lease, narrowly reuse `reviewed_source_snapshot.rs` native handle-rooted enumeration/disposition (no copied unsafe NT delete logic), refuse foreign/reparse/hardlink/stale object, fail closed with operator attention, only tested owner-bound cleanup. **Design only**, not working deletion or private ACL. No activation or production state change.
+- Initial B3B1 code `a438d1620ad2edf473705498fa5640072fa1b7d9` GitHub CI `38184571227` was still running at writing; its result is separate from this follow-up source CI.
+
 ## 2026-10-11 — T0478 R3B4-B3B1 non-destructive retirement guard (LATEST)
 
 - Implemented `StagedCandidateSnapshot::review_retirement_inventory` in dormant fixture source: exact OS-temp generated root identity, full in-memory expected manifest check, immediate entry enumeration with no untrusted symlink metadata following, fail closed on extra/missing/foreign/duplicate/directory/reparse child, re-read every permitted flat file via existing pinned no-follow single-link handle and SHA256/length match. Tests inject unexpected file and foreign directory into **test-owned** temp root; no file removal or foreign filesystem mutation occurs. This is **preflight only, NOT cleanup/deletion authorization**, and cannot prove owner-only ACL. Full reviewed handle-rooted native dispose/ACL-at-create B3B2 is still required before worker activation. Review: `docs/orchestrator/review_bundles/T-0478_R3B4B3B1_RETIREMENT_INVENTORY_GUARD.md`.

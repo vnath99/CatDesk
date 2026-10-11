@@ -1,0 +1,27 @@
+# T0478 R3B4-B3B2 — Owner-only ACL and exact-handle cleanup implementation contract
+
+**Status:** planned / unimplemented. **Date:** 2026-10-11. **Canonical:** Chat52.
+
+## Current boundary
+
+B3A protected source copies and B3A2/3 retain SHA-bound read-only file leases and require an in-memory manifest to return bytes. B3B1 adds only a non-destructive inventory check that refuses unexpected/missing files. It is **not** permission to delete any file. Production supervisor recovery and the signed pending T0366 are separate.
+
+Existing reviewed native building blocks are `windows_protected_fs.rs::ProtectedDirectoryGuard`, `PinnedDirectory`, `write_new_regular_in`, `read_relative_regular_unique`, and `reviewed_source_snapshot.rs`'s private `query_relative_directory_names`, `cleanup_staging_tree`, `remove_owned_staging` and `dispose_opened_object`. The latter already use exact opened handles and NT file disposition rather than pathname recursion. Do **not** duplicate unsafe NT deletion logic into the fixture module.
+
+## Required staged ownership
+
+1. Derive the current ordinary user's SID from the actual Windows process token via an existing reviewed Win32 token query path; do not trust `USERNAME`/`USERPROFILE`, caller-supplied SDDL or a guessed SID. Need to use a fixed, minimal DACL at object **creation**, not a chmod-like after-the-fact ACL swap. Existing `create_relative_with_sddl` and `create_child_with_security_descriptor` in `windows_protected_fs.rs` are currently `#[cfg(all(test, windows))]` feasibility helpers: review/adapt only a **dedicated fixed-policy** production subset, never export general caller SDDL control.
+2. Create a generated `catdesk-dev-fixture-<uuid-simple>` direct child of canonical OS temp through the retained, already-pinned temp parent. Require owner-only read/write/delete plus the narrowly reviewed system access needed for cleanup; no Everyone/Users/other-app-package ACEs, reparse points, pre-existing adopted directories or implicit inheritance that adds write principals. Verify actual descriptor and derived owner identity **on the opened child handle** before staging any bytes. If any identity/ACL proof is unavailable, fail closed, do not serve.
+3. Keep an unforgeable in-process owner lease containing exact pinned parent and child object identities, generated snapshot ID and expected fixed-leaf manifest. It must be constructed only by the reviewed owned-root creator, not from arbitrary path strings. No generic cleanup by prefix scan, shell, or MCP command. Recovery of an orphan requires independent, durable trusted ownership metadata bound to the exact volume/file ID (not merely a familiar name).
+4. When aborting after a partial write, first release any `RetainedReviewedArtifact` file leases owned by that operation. Enumerate the **exact pinned directory** using the already-reviewed native directory enumeration, refuse foreign/reparse/directory/hardlink records, and compare each candidate leaf to the known fixed create-only writes and expected identity/digest. Open only those exact children with DELETE access using the shared reviewed native helper. Delete exact opened objects via native disposition. Then delete the exact opened directory object through a pinned parent only after independent empty-directory identity proof. Do not use `remove_dir_all`, `Remove-Item -Recurse`, glob, wildcard or name-only cleanup.
+5. A failed deletion, conflict, foreign entry, reparse, owner drift or remaining lease must leave the inactive root untouched, record bounded `OPERATOR_ATTENTION` with only generation/snapshot digest and safe reason, and never automatically retry a destructive action. No production Task Scheduler/tunnel/signing or other local project path may be affected.
+
+## Required tests before promotion
+
+- Fresh generated owner-only ACL: token-derived owner SID matches the opened object, DACL excludes foreign principals, parent/temp inherited ACEs do not enlarge write/delete authority, CreateChild is atomic and refuses existing names.
+- Positive staged owner cleanup: two expected flat files, read lease release, source hash verifies, exact opened-handle deletion, root gone only after no file remains. A failed stage leaves a durable specific failure requiring review, not an unsound "success".
+- Negative source: injected unexpected file/subdirectory, junction/symlink/reparse, hardlink to an external file, modified file bytes, missing expected file, duplicate name, impersonation/foreign owner, stale generation, destination replacement, partially readable directory inventory. Every unexpected condition refuses deletion and preserves external/test-owned outside bytes.
+- Idempotent recovery: crash before the first file, between file writes, after all writes but before manifest commitment, during release; two competing owners cannot both clean one directory. Do not count test-only `std::fs::remove_dir_all` on explicitly test-owned fixtures as implementation of live cleanup.
+- `cargo fmt --check`, strict all-target Clippy, focused Windows tests, real fixture subprocess integration and full main Rust suite locally, then Rust/Python Wake/Independent WakeHost Windows CI all terminal SUCCESS before release authority changes.
+
+**Next accepted sequence:** finish B3B2 exact ownership/cleanup; then R3B4-C wire only a producer-owned `StagedCandidateSnapshot` to read/search with a rehashed immutable manifest, and R3B4-D bounded owner PID/port lifecycle; then T0479 stable versioned worker/LKG and incomplete production recovery.

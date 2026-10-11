@@ -4,6 +4,11 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 — B3B1 source gate versus B3B2 cleanup authority (LATEST)
+
+- Dormant B3B1 `review_retirement_inventory` now refuses injected file, foreign directory **and missing expected manifest leaf**, source-only, no deletion. Local focused 4/4, strict Clippy/full Rust and cargo fmt-check PASS. Initial code a438d16 GitHub CI38184571227 pending, follow-up CI required. Read `T-0478_R3B4B3B1_RETIREMENT_INVENTORY_GUARD.md`.
+- B3B2 implementation **design** `T-0478_R3B4B3B2_OWNER_ACL_HANDLE_CLEANUP_CONTRACT.md` needs native Windows owner SID, ACL at file creation, reviewed handle-rooted disposal and collision/foreign-object tests. Do NOT use `Remove-Item -Recurse`, `std::fs::remove_dir_all` in live cleanup or promote test-only SDDL helpers to production without focused security acceptance. Source-only T0478 lane, no signed production/T0366/official Secure MCP mutations.
+
 ## 2026-10-11 — T0478 B3B1 retirement safety status (LATEST)
 
 - `StagedCandidateSnapshot::review_retirement_inventory` is **read-only preflight**, NOT a file deletion control. It checks own generated temp root+manifest, denies unknown directories/files/symlink/reparse and SHA drift, all under pinned root; own-fixture Windows tests pass locally. Do NOT run recursive pathname cleanup of a live staged root. B3B2 needs exact-handle native disposal and owner SID ACL-at-create from reviewed Windows helpers (current descriptor-at-create is test-only). New CI pending. Report `T-0478_R3B4B3B1_RETIREMENT_INVENTORY_GUARD.md`.

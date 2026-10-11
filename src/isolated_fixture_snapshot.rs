@@ -378,6 +378,35 @@ mod tests {
     }
 
     #[test]
+    fn retirement_inventory_refuses_incomplete_test_owned_stage() {
+        let temp = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+        let dir = temp.join(format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple()));
+        std::fs::create_dir(&dir).expect("create own incomplete fixture");
+        let snapshot = StagedCandidateSnapshot {
+            root: ProtectedDirectoryGuard::acquire(&dir, LABEL).unwrap(),
+            manifest: SnapshotManifest {
+                schema_version: 1,
+                source_repository: SOURCE_REPOSITORY.into(),
+                source_commit: "abcdef0123456789abcdef0123456789abcdef01".into(),
+                snapshot_id: Uuid::new_v4().to_string(),
+                files: vec![SnapshotFile {
+                    fixture_leaf: "Cargo.toml".into(),
+                    source_path: "Cargo.toml".into(),
+                    size_bytes: 4,
+                    sha256: format!("{:x}", Sha256::digest(b"data")),
+                }],
+            },
+            _leases: Vec::new(),
+        };
+        assert!(
+            snapshot.review_retirement_inventory().is_err(),
+            "incomplete fixture is not ready for handle-based retirement"
+        );
+        drop(snapshot);
+        std::fs::remove_dir_all(dir).expect("cleanup own empty test-only fixture");
+    }
+
+    #[test]
     fn refuses_ordinary_temp_dirs_and_unapproved_names() {
         let temp = std::fs::canonicalize(std::env::temp_dir()).unwrap();
         let root = ProtectedDirectoryGuard::acquire(&temp, LABEL).unwrap();
