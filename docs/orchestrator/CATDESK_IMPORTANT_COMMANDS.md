@@ -4,6 +4,11 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 — R3B4-B2 GitHub branch/CI witness (LATEST)
+
+- Source-only dormant `src/isolated_fixture_github_authority.rs` pins `https://api.github.com/repos/vnath99/CatDesk`, feature branch `orchestrator/chatgpt-codex-autonomous-loop`, latest matching successful push CI and all 3 required Windows job results; `LiveGithubSourceWitness` privately constructed after real HTTPS checks and branch reread. No caller URL/token/JSON, no redirects, hard response/time caps; unauth private repo fails closed. No live runtime authority yet; source CI pending, local focused tests and strict Clippy/fmt pass. `src/isolated_fixture_git_objects.rs` has only an in-memory witnessed candidate-byte wrapper. See `T-0478_R3B4B2_FIXED_GITHUB_CI_WITNESS.md`.
+- GitHub mirror COMPLETE; production Recovery still blocked on stable supervisor root, startup policy/definition and 3201; T0478 B3/C/D isolated fixture first, T0479 protected versioned worker+LKG then production Recovery. All hourly deadmen OFF; preserve official external tunnel, signed T0366 pending2 and seven historical untracked paths.
+
 ## 2026-10-11 — B1 fixed Git read-only source CI accepted (LATEST)
 
 - GitHub B1 correction `47e14ef` Windows Actions `38170517509` independently SUCCESS across all three Rust/Python/Wake jobs; B1 dormant candidate Git-object reader accepted **source only**. Does NOT prove independent GitHub review attestation or give fixture runtime permissions. Next B2A generic fake runner source `234af1d` currently awaiting Windows CI `38171106662`; local 4/4 focused, fmt, strict Clippy, full Rust PASS. After B2A verify, implement independent GitHub branch/commit/CI witness binding, protected fixture source-copy, digest-enforced read/search, then T0479 and production Recovery.

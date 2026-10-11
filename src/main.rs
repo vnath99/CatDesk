@@ -40,6 +40,8 @@ mod devtools;
 mod git_workflow;
 #[allow(dead_code)] // R3B4-B1: fixed Git-object candidate reader, not a trusted producer.
 mod isolated_fixture_git_objects;
+#[allow(dead_code)] // R3B4-B2 fixed live GitHub CI witness; not a production signing authority.
+mod isolated_fixture_github_authority;
 #[allow(dead_code)]
 // T0478 R3B4-A pure schema; trusted producer and runtime enforcement follow later.
 mod isolated_fixture_manifest;

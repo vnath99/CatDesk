@@ -1,3 +1,9 @@
+## 2026-10-11 — Chat52 R3B4-B2 live GitHub source witness is source-only (LATEST)
+
+- B2A Git object fake-runner commit234af1d CI38171106662 verified all three Windows jobs SUCCESS. New dormant `src/isolated_fixture_github_authority.rs` performs direct fixed HTTPS GitHub branch-head+matching latest push Actions CI check and 3 named job statuses, then rereads branch to catch drift; privately minted in-memory witness passed to dormant fixed candidate Git-object reader only. No external token/user JSON, production install, source copy or new MCP permission; local fmt/strict Clippy, 5 focused witness and 4 fixed Git object tests PASS. No actual Rust live HTTPS request made; source CI and full main Rust test pending. Source review `T-0478_R3B4B2_FIXED_GITHUB_CI_WITNESS.md`.
+- Next after B2 CI and operator-controlled live HTTPS canary: T0478 B3 protected Windows owned temp snapshot source copying with hash; C runtime allowlisted immutable manifest read/search enforcement, D owned process PID/port lifecycle; then T0479 stable supervisor versioned worker/LKG and production Recovery (still unproven startup root/policy/3201). GitHub mirror completed previously.
+- Latest Chat52 manual `manual-wake-mcp-1791749767086` physically delivered, final exact SENT/COMPLETE to check; current normal turn timer `manual-turn-1791749884-22112-110`. All hourly deadmen disabled, external tunnel and T0366 pending2 signed state untouched.
+
 ## 2026-10-11 — Fixed Git-object reader B1 CI now 3/3 GREEN (LATEST)
 
 - B1 repair commit47e14ef GitHub Actions38170517509 terminal SUCCESS all three Windows Rust/Python/Wake jobs. Earlier CI failure38163372088 is superseded, not erased. Source B1 only retrieves candidate Git tracked blob bytes via fixed trusted Git program and two hardcoded paths; it does NOT independently attest reviewed GitHub branch/CI or copy/serve source.

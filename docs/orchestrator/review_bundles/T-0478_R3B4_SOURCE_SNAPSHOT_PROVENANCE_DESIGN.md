@@ -26,6 +26,10 @@ R3B2 eliminated the disposable fixture's `config.toml` parse/rewrite race and R3
 - Prefer an injected **read-only Git-object runner trait** with deterministic fake-runner tests (wrong commit, wrong path, tree/non-blob, oversized response, timeout, dirty worktree, mismatched Git executable fingerprint) before connecting the existing trusted executable resolver. No environment-selected executable, no generic `run_command` passed through a fixture MCP client, no hidden Git add/checkout or network.
 - R3B4-A validator is pure, source-only, and dormant until the trust-producing entry point is accepted; test-only manifest construction is not a deployment approval.
 
+## R3B4-B2 fixed live GitHub source witness (2026-10-11)
+
+The dormant source module `src/isolated_fixture_github_authority.rs` performs direct fixed HTTPS verification against `api.github.com/repos/vnath99/CatDesk` for the exact feature-branch HEAD SHA, matching latest successful push CI run and three named completed/success Windows jobs, then checks branch identity again. No arbitrary caller JSON/URL or token can create its privately constructed `LiveGithubSourceWitness`. The dormant Git-object reader accepts a witness through `read_witnessed_candidate_git_objects`, but there is **no trusted temp-file producer, runtime manifest enforcement or agent permission**. All of this remains source-only until the exact commit's independent GitHub Windows CI passes and a real controlled live HTTPS canary is separately approved/verified. See `docs/orchestrator/review_bundles/T-0478_R3B4B2_FIXED_GITHUB_CI_WITNESS.md`. Private-repo API access failing unauthenticated must fail closed, not silently downgrade to local HEAD or caller JSON.
+
 ## Phased implementation tickets
 
 1. **R3B4-A: producer design and fixed manifest schema.** Choose existing source commit/branch verification APIs; implement a deterministic pure validator for a typed manifest and scope (unknown/duplicate fields, filenames, SHA, sizes, aggregate counts). Add unit cases for malformed JSON, tampered hashes, absolute/traversal names, duplicate names, missing commit.

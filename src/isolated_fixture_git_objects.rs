@@ -165,6 +165,17 @@ pub(crate) async fn read_candidate_git_objects(
     .await
 }
 
+/// This can only consume an opaque witness constructed by the separate
+/// fixed HTTPS GitHub branch+CI verifier. It remains *read-only* candidate
+/// extraction: no copied snapshot, no tool-serving or production authority.
+pub(crate) async fn read_witnessed_candidate_git_objects(
+    workspace: &Path,
+    witness: &crate::isolated_fixture_github_authority::LiveGithubSourceWitness,
+    snapshot_id: &str,
+) -> Result<(SnapshotManifest, Vec<(String, Vec<u8>)>), String> {
+    read_candidate_git_objects(workspace, witness.commit_sha(), snapshot_id).await
+}
+
 /// Injected read-only object-result seam. Tests use only faked byte outputs;
 /// actual Git process selection stays in read_candidate_git_objects above.
 async fn collect_candidate_from_runner<F, Fut>(
