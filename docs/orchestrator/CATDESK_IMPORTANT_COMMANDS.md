@@ -4,6 +4,10 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 — B1 fixed Git read-only source CI accepted (LATEST)
+
+- GitHub B1 correction `47e14ef` Windows Actions `38170517509` independently SUCCESS across all three Rust/Python/Wake jobs; B1 dormant candidate Git-object reader accepted **source only**. Does NOT prove independent GitHub review attestation or give fixture runtime permissions. Next B2A generic fake runner source `234af1d` currently awaiting Windows CI `38171106662`; local 4/4 focused, fmt, strict Clippy, full Rust PASS. After B2A verify, implement independent GitHub branch/commit/CI witness binding, protected fixture source-copy, digest-enforced read/search, then T0479 and production Recovery.
+
 ## 2026-10-11 — Current source milestone T0478 R3B4-B2A (LATEST)
 
 - GitHub mirror/publishing milestone **COMPLETE**. Production stable-supervisor recovery **NOT COMPLETE**. T0478 next: independently attested GitHub branch+CI expected commit, safe source-only Git blob copy into protected disposable fixture, runtime digest enforcement, bounded owned child lifecycle. New B2A `src/isolated_fixture_git_objects.rs` generic fake-runner test seam; focused 4/4 local, full main Rust suite, strict Clippy and cargo fmt-check PASS. It is not approved GitHub provenance nor permission for real workspace writes. Docs `T-0478_R3B4B2A_INJECTED_GIT_OBJECT_READER.md`. B1 CI correction `47e14ef` pending terminal Windows Rust check at last review.

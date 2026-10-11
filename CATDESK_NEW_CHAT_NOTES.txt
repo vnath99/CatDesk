@@ -1,3 +1,8 @@
+## 2026-10-11 — Fixed Git-object reader B1 CI now 3/3 GREEN (LATEST)
+
+- B1 repair commit47e14ef GitHub Actions38170517509 terminal SUCCESS all three Windows Rust/Python/Wake jobs. Earlier CI failure38163372088 is superseded, not erased. Source B1 only retrieves candidate Git tracked blob bytes via fixed trusted Git program and two hardcoded paths; it does NOT independently attest reviewed GitHub branch/CI or copy/serve source.
+- B2A fake runner code commit234af1d pushed, local focused 4/4 and full Rust, fmt, Clippy pass; Actions38171106662 pending terminal outcome. Continue R3B4-B2 actual GitHub source authority, B3 protected snapshot, C digest read/search enforcement, D bounded fixture process, then T0479 stable worker and production Recovery.
+
 ## 2026-10-11 — R3B4-B2A Git-object fake runner tests (LATEST)
 
 - R3B4-B2A source-only generic Git-object phase runner allows deterministic test injection; real runner continues using existing measured fixed-slot trusted Git program and exact `cat-file` commands. Four Git-object tests locally PASS (fixed argv, wrong kinds/sizes, correct phase order/fixed paths/limits, and early non-blob rejection); strict Clippy, cargo fmt and full Rust main suite exit0. Documentation `T-0478_R3B4B2A_INJECTED_GIT_OBJECT_READER.md` and GitHub commit/Windows CI needed. **Not reviewed GitHub commit proof, not a trusted source snapshot and not an autonomous coding worker.**

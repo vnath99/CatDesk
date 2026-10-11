@@ -1,3 +1,7 @@
+## 2026-10-11 — B1 Git-object test repair independently accepted (LATEST)
+
+- GitHub Windows CI run `38170517509` for corrected fixed Git-object B1 test source commit `47e14ef6afae96bbba1bf6fd42b78f4f96d900d3` is now terminal **SUCCESS all three jobs**: Rust full suite/Clippy/fmt, Python Wake/advisor, independent WakeHost Rust. This supersedes initial B1 CI failure in `38163372088`; the incorrect forty-'a' nonhex test was fixed to forty-'g'. B1 remains a dormant **candidate** immutable Git-object reader, not trusted GitHub review authority or a production agent. B2A commit `234af1d` independent CI `38171106662` is still pending. No production installation, tunnel or protected state change.
+
 ## 2026-10-11 — Chat52 R3B4-B2A injectable Git-object fake runner (LATEST)
 
 - Following scoped correction `47e14ef6afae96bbba1bf6fd42b78f4f96d900d3` of B1's negative SHA test, implemented R3B4-B2A generic async fixed-object test seam in the dormant Git-object module. Tests verify ordered only-two-source path requests, exact Type/Size/Bytes limits, candidate manifest assembly and early non-blob refusal before remaining requests. Local cargo fmt-check, strict all-target Clippy, focused 4/4 Git-object tests and full main Rust suite PASS. All this is **source-only**: no independent GitHub reviewed approval, no temp source copy, no runtime manifest/MCP privilege. New Windows CI for B2A still required. See `docs/orchestrator/review_bundles/T-0478_R3B4B2A_INJECTED_GIT_OBJECT_READER.md`.
