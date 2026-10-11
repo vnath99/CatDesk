@@ -4,6 +4,10 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 — R3B3 CI accepted / Chat52 turn boundary (LATEST)
+
+- R3B3 `04806d8` GitHub Windows Actions `38158118618` complete SUCCESS 3/3. The source-only fixture holds no-delete-share pinned root for server lifetime with Windows root rename/release process proof. R3B4 canonical source manifest is **design only**, not implemented. Manual event `manual-wake-mcp-1791737671996` has exact gen33 appended receipt but not terminal delivery while responding, so no duplicate test yet. Turn timer `manual-turn-1791737785-22112-106` STOP COMPLETE at 1091s. All hourly CatDesk deadmen disabled.
+
 ## 2026-10-11 — Chat52 R3B3 root lease and R3B4 trusted snapshot next (LATEST)
 
 - R3B3 feature commit `04806d8` retains no-delete-share pinned Windows fixture directory throughout listener runtime; local HTTP process tests prove rename blocked while active and allowed after owned process terminates. Independent GitHub Windows CI `38158118618` still must be verified terminal. R3B4 `docs/orchestrator/review_bundles/T-0478_R3B4_SOURCE_SNAPSHOT_PROVENANCE_DESIGN.md` is a source-only Codex-ready design for exact-commit trusted fixture data plus immutable per-file hashes; **not implemented**, not autonomous coding authorization.

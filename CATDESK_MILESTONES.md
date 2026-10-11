@@ -1,3 +1,8 @@
+## 2026-10-11 — R3B3 Windows CI accepted, R3B4 design remains next (LATEST)
+
+- GitHub Actions `38158118618` for R3B3 source commit `04806d894d869228861e6d2c50c5d31daea04310` independently completed **SUCCESS 3/3 Windows jobs**: Rust fmt/Clippy/full tests, Python Wake/advisor, independent WakeHost Rust. The pinned root no-delete-share lifetime source and real Windows HTTP rename/refusal/release integration are accepted as **fixture-only**; no production install or autonomous agent acceptance. Later R3B4 plan `1eff6b1` is design only.
+- User's Chat52 latest manual Wake `manual-wake-mcp-1791737671996` got exact `EXACT_USER_MESSAGE_APPENDED` receipt at gen33 during current assistant response; its turn/delivery remained OBSERVING/USER_MESSAGE_APPENDED, not terminal, at last read. Ordinary 20m timer `manual-turn-1791737785-22112-106` STOPped COMPLETE at 1091 sec (18m11s), no deadline overrun. Hourly deadmen OFF. Next confirm exact event terminal before issuing any new manual Wake.
+
 ## 2026-10-11 — T0478 R3B4 trusted snapshot provenance design, NOT implemented (LATEST)
 
 - Authored scoped Codex-ready R3B4 design `docs/orchestrator/review_bundles/T-0478_R3B4_SOURCE_SNAPSHOT_PROVENANCE_DESIGN.md`: derive fixture leaves only from a separately verified exact Git commit's tracked objects, fixed allowlist and size/count bounds, canonical SHA-256 manifest retained in trusted launcher/runtime memory, deny files added or changed after snapshot via per-request no-follow/unique-file-handle digest recheck. Requires Windows adversarial replacement/manifest tests, and safe owner PID/port lifecycle; **design only**, not an accepted live coding agent or implemented source.
