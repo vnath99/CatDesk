@@ -849,6 +849,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::sync::{Mutex, mpsc::unbounded_channel};
 
+    #[cfg(windows)]
     #[tokio::test]
     async fn isolated_fixture_http_refuses_unauthenticated_and_global_tools() {
         let workspace_root = unique_temp_path("catdesk-dev-fixture-http");

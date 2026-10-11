@@ -998,6 +998,43 @@ pub(crate) fn create_delete_on_close_regular_lock<P: PinnedParent>(
     }
 }
 
+/// Only use for disposable fixture data. A single opened, no-follow child
+/// handle is pinned throughout the read and must have no other hardlink name.
+pub(crate) fn read_relative_regular_unique<P: PinnedParent>(
+    parent: &P,
+    name: &str,
+    limit: u64,
+    label: &str,
+) -> Result<Vec<u8>, String> {
+    validate_component(name, label)?;
+    parent.assert_stable(label)?;
+    let mut file = open_relative_regular_file(parent, name, label)?;
+    #[cfg(windows)]
+    {
+        let info = handle_information(file.as_raw_handle().cast(), label)?;
+        if info.number_of_links != 1 {
+            return Err(format!("{label} is unsafe"));
+        }
+    }
+    let length = file
+        .metadata()
+        .map_err(|_| format!("{label} is unavailable"))?
+        .len();
+    if length > limit {
+        return Err(format!("{label} is unsafe"));
+    }
+    let mut bytes = Vec::with_capacity(length as usize);
+    Read::by_ref(&mut file)
+        .take(limit.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(|_| format!("{label} is unavailable"))?;
+    if bytes.len() as u64 != length {
+        return Err(format!("{label} changed while reading"));
+    }
+    parent.assert_stable(label)?;
+    Ok(bytes)
+}
+
 pub(crate) fn read_relative_regular<P: PinnedParent>(
     parent: &P,
     name: &str,

@@ -136,6 +136,57 @@ async fn fixture_headless_mcp_has_only_authenticated_local_read_and_search() {
             .is_some_and(|s| s.contains("fixture-boundary-evidence"))
     );
 
+    let memory_search = json!({"jsonrpc":"2.0","id":4,"method":"tools/call",
+        "params":{"name":"search","arguments":{"path":"fixture.txt","pattern":"fixture-boundary"}}});
+    let searched: Value = client
+        .post(mcp_url)
+        .bearer_auth(token)
+        .json(&memory_search)
+        .send()
+        .await
+        .expect("search response")
+        .json()
+        .await
+        .expect("search JSON");
+    assert_eq!(
+        searched["result"]["structuredContent"]["searchBackend"],
+        "isolated-memory"
+    );
+    assert_eq!(searched["result"]["structuredContent"]["matchCount"], 1);
+    let config_read = json!({"jsonrpc":"2.0","id":5,"method":"tools/call",
+        "params":{"name":"read","arguments":{"path":"config.toml"}}});
+    let config_denied: Value = client
+        .post(mcp_url)
+        .bearer_auth(token)
+        .json(&config_read)
+        .send()
+        .await
+        .expect("config denied")
+        .json()
+        .await
+        .expect("config refusal");
+    assert_eq!(config_denied["result"]["isError"], true);
+
+    let outside = root.with_file_name(format!("fixture-outside-{}.txt", uuid::Uuid::new_v4()));
+    std::fs::write(&outside, "outside proof").expect("outside data");
+    std::fs::hard_link(&outside, root.join("linked.txt")).expect("hardlink fixture");
+    for name in ["read", "search"] {
+        let request = json!({"jsonrpc":"2.0","id":6,"method":"tools/call",
+            "params":{"name":name,"arguments":{"path":"linked.txt","pattern":"outside"}}});
+        let denied: Value = client
+            .post(mcp_url)
+            .bearer_auth(token)
+            .json(&request)
+            .send()
+            .await
+            .expect("hardlink denial")
+            .json()
+            .await
+            .expect("refusal JSON");
+        assert_eq!(denied["result"]["isError"], true, "{name}");
+    }
+    std::fs::remove_file(outside).expect("remove only own external test file");
+
     let unauthenticated = client
         .post(mcp_url)
         .json(&list)

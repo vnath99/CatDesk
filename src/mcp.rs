@@ -214,6 +214,160 @@ struct AutoWidgetContext {
 
 // ── Handler ─────────────────────────────────────────────────
 
+// Fixture access is intentionally a single regular leaf: no recursive
+// directory walk, process PATH-based search, config read, junction, or hardlink.
+fn fixture_read_data(root: &str, name: &str) -> Result<String, String> {
+    if name.is_empty()
+        || name.len() > 128
+        || name.eq_ignore_ascii_case("config.toml")
+        || name.starts_with('.')
+        || !name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    {
+        return Err("isolated fixture filename denied".into());
+    }
+    let pinned = crate::windows_protected_fs::PinnedDirectory::acquire(
+        Path::new(root),
+        "isolated fixture directory",
+    )?;
+    let bytes = crate::windows_protected_fs::read_relative_regular_unique(
+        &pinned,
+        name,
+        512 * 1024,
+        "isolated fixture regular file",
+    )?;
+    String::from_utf8(bytes).map_err(|_| "isolated fixture file must be UTF-8".into())
+}
+
+fn handle_isolated_fixture_file_tool(
+    req: &JsonRpcRequest,
+    fixture_root: &str,
+    tool: &str,
+) -> JsonRpcResponse {
+    let args = tool_arguments(req);
+    let name = match required_string_argument(&args, "path") {
+        Ok(name) => name,
+        Err(_) => return tool_error_response(req, "isolated fixture file path required".into()),
+    };
+    let data = match fixture_read_data(fixture_root, name) {
+        Ok(data) => data,
+        Err(error) => return tool_error_response(req, error),
+    };
+    if tool == "read" {
+        let bytes = data.len();
+        let line_count = if data.is_empty() {
+            0
+        } else {
+            data.bytes().filter(|c| *c == b'\n').count() + usize::from(!data.ends_with('\n'))
+        };
+        let output = workspace_tools::ReadFileOutput {
+            path: name.into(),
+            bytes,
+            size_bytes: bytes as u64,
+            line_count,
+            text: data,
+            truncated: false,
+        };
+        return tool_success_response_with_structured(
+            req,
+            output.render_text(),
+            json!({
+                "toolName":"read",
+                "path":output.path,
+                "bytes":output.bytes,
+                "sizeBytes":output.size_bytes,
+                "lineCount":output.line_count,
+                "text":output.text,
+                "truncated":false
+            }),
+        );
+    }
+    // Deliberately no rg/grep spawn or traversal in the isolated process.
+    if args.get("glob").is_some()
+        || args.get("context").is_some()
+        || args.get("before").is_some()
+        || args.get("after").is_some()
+        || args.get("max_matches_per_file").is_some()
+        || args.get("include_hidden").is_some()
+        || args.get("no_ignore").is_some()
+    {
+        return tool_error_response(req, "isolated fixture search option unsupported".into());
+    }
+    let pattern = match required_string_argument(&args, "pattern") {
+        Ok(p) if !p.trim().is_empty() && p.len() <= 1024 => p,
+        _ => return tool_error_response(req, "isolated fixture search pattern invalid".into()),
+    };
+    let fixed = match optional_bool_argument(&args, "fixed_strings", false) {
+        Ok(v) => v,
+        Err(e) => return tool_error_response(req, e),
+    };
+    let insensitive = match optional_bool_argument(&args, "case_insensitive", false) {
+        Ok(v) => v,
+        Err(e) => return tool_error_response(req, e),
+    };
+    let limit = match optional_usize_argument(&args, "max_matches") {
+        Ok(Some(v)) if (1..=500).contains(&v) => v,
+        Ok(None) => 100,
+        _ => return tool_error_response(req, "isolated fixture search limit invalid".into()),
+    };
+    let escaped_pattern;
+    let expression = if fixed {
+        escaped_pattern = regex::escape(pattern);
+        escaped_pattern.as_str()
+    } else {
+        pattern
+    };
+    let regex = match regex::RegexBuilder::new(expression)
+        .case_insensitive(insensitive)
+        .build()
+    {
+        Ok(regex) => regex,
+        Err(_) => return tool_error_response(req, "isolated fixture search regex invalid".into()),
+    };
+    let mut results = Vec::new();
+    let mut truncated = false;
+    for (index, line) in data.lines().enumerate() {
+        if regex.is_match(line) {
+            if results.len() == limit {
+                truncated = true;
+                break;
+            }
+            results.push(workspace_tools::SearchTextEntry {
+                path: name.into(),
+                line: index + 1,
+                text: line.into(),
+                is_context: false,
+            });
+        }
+    }
+    let output = workspace_tools::SearchTextOutput {
+        pattern: pattern.into(),
+        path: name.into(),
+        backend: "isolated-memory".into(),
+        backend_note: "no subprocess or recursive filesystem traversal".into(),
+        match_count: results.len(),
+        truncated,
+        limit,
+        results,
+    };
+    tool_success_response_with_structured(
+        req,
+        output.render_text(),
+        json!({
+            "toolName":"search",
+            "searchPattern":output.pattern,
+            "searchPath":output.path,
+            "searchBackend":output.backend,
+            "searchBackendNote":output.backend_note,
+            "matchCount":output.match_count,
+            "searchTruncated":output.truncated,
+            "searchLimit":output.limit,
+            "searchResults":output.results
+        }),
+    )
+}
+
 /// Deliberately tiny MCP surface for a disposable developer fixture.
 /// Never forward to the general CatDesk dispatcher or its global Wake, signer,
 /// provider, supervisor, shell, tunnel or browser adapters.
@@ -246,14 +400,20 @@ pub async fn handle_isolated_fixture_request(
                         Some("read" | "search")
                     )
                 });
+                // The fixture is leaf-file-only; unlike the production search
+                // catalog, it does not accept a directory/default search path.
+                for tool in tools {
+                    if tool.get("name").and_then(Value::as_str) == Some("search") {
+                        tool["inputSchema"]["required"] = json!(["pattern", "path"]);
+                    }
+                }
             }
             Some(reply)
         }
         "tools/call" => {
             let name = req.params.get("name").and_then(Value::as_str).unwrap_or("");
             Some(match name {
-                "read" => handle_read_file(req, fixture_root),
-                "search" => handle_search_text(req, fixture_root),
+                "read" | "search" => handle_isolated_fixture_file_tool(req, fixture_root, name),
                 _ => JsonRpcResponse::error(
                     req.id.clone(),
                     -32602,
@@ -8967,6 +9127,7 @@ mod tests {
     use std::ffi::OsString;
     use uuid::Uuid;
 
+    #[cfg(windows)]
     #[tokio::test]
     async fn isolated_fixture_dispatch_exposes_only_local_read_and_search() {
         let root =
@@ -9015,6 +9176,47 @@ mod tests {
                 .as_str()
                 .is_some_and(|text| text.contains("safe fixture value"))
         );
+        // The dev fixture must not leak its process config or a hardlink to
+        // a file outside this temporary root, even through its search tool.
+        let config_refusal = handle_isolated_fixture_request(
+            &make(
+                "tools/call",
+                json!({"name":"read","arguments":{"path":"config.toml"}}),
+            ),
+            workspace,
+        )
+        .await
+        .expect("config file refusal");
+        assert_eq!(config_refusal.result.expect("error")["isError"], true);
+        let found = handle_isolated_fixture_request(
+            &make("tools/call", json!({"name":"search","arguments":{"path":"example.txt","pattern":"safe fixture"}})),
+            workspace,
+        ).await.expect("in-memory search");
+        assert_eq!(
+            found
+                .result
+                .expect("search")
+                .pointer("/structuredContent/searchBackend"),
+            Some(&json!("isolated-memory"))
+        );
+        let external = root.with_file_name(format!("fixture-outside-{}.txt", Uuid::new_v4()));
+        fs::write(&external, "outside secret").expect("outside marker");
+        let linked = root.join("linked.txt");
+        fs::hard_link(&external, &linked).expect("create hardlink on Windows fixture volume");
+        for tool in ["read", "search"] {
+            let denied = handle_isolated_fixture_request(
+                &make(
+                    "tools/call",
+                    json!({"name":tool,"arguments":{"path":"linked.txt","pattern":"secret"}}),
+                ),
+                workspace,
+            )
+            .await
+            .expect("hardlink denial");
+            assert_eq!(denied.result.expect("refusal")["isError"], true, "{tool}");
+        }
+        let _ = fs::remove_file(&linked);
+        let _ = fs::remove_file(&external);
         let escaped = handle_isolated_fixture_request(
             &make(
                 "tools/call",

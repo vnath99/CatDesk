@@ -4,6 +4,12 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 control update: Hourly deadman OFF; manual Wake guarded (LATEST)
+
+- Chat51 hourly deadman `CatDesk Hourly Deadman — Chat51` was explicitly DISABLED at the user's request after verifying its T0478 R2 fixture changes. All older hourly CatDesk automations were already disabled. This command reference is authoritative: don't rely on historical 'ACTIVE' deadman sections below. Do not recreate hourly automation without a new user request.
+- Manual Wake `manual-wake-mcp-1791693864808` displayed in Chat51 but is **not durably accepted**: delivery SUBMITTING, attention RESPONSE_SEQUENCE_DRIFT, no gen32 receipt and expired event timer. Do not requeue/duplicate while its outcome is ambiguous. Prior manual event `manual-wake-mcp-1791691944140` was durably SENT + EXACT_USER_MESSAGE_APPENDED + COMPLETE. Natural Wake acceptance separately unproven. Future manual events allowed only after explicit reconciliation.
+- The source-level development command `scripts/catdesk-dev-lane.ps1 status|build|verify` is verified, and isolated `--isolated-dev-fixture` is currently **read-only fixture**, not an autonomous agent. T0478 R3A hardens fixture only; not production. All operator PowerShell examples remain one-line.
+
 ## CURRENT LIVE STATUS — 2026-10-11 (Chat51 manual Wake accepted; recovery partial)
 
 - The CatDesk registry and independent WakeHost target now **both** identify Chat51 `https://chatgpt.com/c/6acaae13-4b18-83e9-b6ca-3c5e00cf47a8`, digest `7faf9cc96669e240362da0dd4266bec8b2585f0ef3e03b4b56ae4c8f66db1b22`, independent generation 32. The guarded T0477 repaired the earlier Chat48/Chat51 split. **Do not rebind, replay the old CAS, or require operator target-set again.**
