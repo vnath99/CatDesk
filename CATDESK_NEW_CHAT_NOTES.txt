@@ -1,3 +1,8 @@
+## 2026-10-12 — B3B2B2A retained volume/file identity record (LATEST)
+
+- New source-only `CandidateRetirementInventory` in `src/isolated_fixture_snapshot.rs` checks original in-process manifest against existing retained file leases and captures root and file volume/index identities from pinned Windows handles only; denies missing or extra/foreign data. No delete capability. Local cargo fmt, strict all-target Clippy, focused 5/5 and full main Rust PASS; new CI pending. Review `T-0478_R3B4B3B2B2A_RETIREMENT_OBJECT_IDENTITY.md`.
+- B3B2B1 corrected semantic owner DACL comparison `ad701934` GitHub CI38235173396 Rust in progress; Python/Wake PASS at last read. Actual live native cleanup B3B2B2B and owner-only lease still missing; preserve T0366 pending, official Secure MCP, seven untracked, hourly deadman OFF.
+
 ## 2026-10-12 — B3B2B1 ACL textual normalization fixed locally (LATEST)
 
 - Initial B3B2B1 commit39caacb GitHub run38194352700 Rust FAILED native pinned owner DACL readback due to exact-string SDDL comparison; also unrelated job_manager tests timed out. New source normalizes exactly protected owner+two full-access allow ACEs (interactive SID and System), accepting Windows serialization order/mask differences but rejecting foreign/extra/deny ACEs, unexpected owner and unprotected DACL. Local native owner readback focused PASS, ACL negative policy PASS, full main Rust suite and workspace strict Clippy PASS. Fresh CI pending; no native deletion or production authority. Primary group is not a DACL grant, so semantic access-control comparison does not require exact primary-group text.

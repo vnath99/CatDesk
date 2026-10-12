@@ -144,6 +144,17 @@ pub(crate) struct StagedCandidateSnapshot {
     _leases: Vec<RetainedReviewedArtifact>,
 }
 
+/// Read-only evidence used by a future owner/handle-bound cleanup engine.
+// Not a delete token. The in-process owner must separately prove the opened
+// root ACL, exact file DELETE handles and single-generation authority.
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub(crate) struct CandidateRetirementInventory {
+    pub(crate) snapshot_id: String,
+    pub(crate) root_object_identity: String,
+    pub(crate) files: Vec<(String, String)>,
+}
+
 /// Dormant exact manifest-bound read gate for a producer-owned staged root.
 /// Ordinary fixture MCP routing must NOT call this by manufacturing a manifest
 /// from a request: only the future owner of StagedCandidateSnapshot may use it.
@@ -160,6 +171,47 @@ impl StagedCandidateSnapshot {
         let bytes = read_relative_regular_unique(&self.root, leaf, MAX_FILE_BYTES, LABEL)?;
         verify_file_bytes(entry, &bytes)?;
         Ok(bytes)
+    }
+
+    /// R3B4-B3B2A: bind a *candidate* retirement audit to exact live file
+    /// handles rather than names or digests alone. This never deletes,
+    /// releases leases or attests the directory's owner-only ACL.
+    #[cfg(windows)]
+    pub(crate) fn review_retirement_object_identities(
+        &self,
+    ) -> Result<CandidateRetirementInventory, String> {
+        self.review_retirement_inventory()?;
+        if self._leases.len() != self.manifest.files.len() {
+            return Err("disposable snapshot retained file count mismatch".into());
+        }
+        let root =
+            crate::windows_protected_fs::handle_information(self.root.last_handle(LABEL)?, LABEL)?;
+        let root_object_identity = format!(
+            "{:08x}:{:08x}:{:08x}",
+            root.volume_serial_number, root.file_index_high, root.file_index_low,
+        );
+        let mut names = std::collections::BTreeSet::new();
+        let mut identities = std::collections::BTreeSet::new();
+        let mut files = Vec::with_capacity(self.manifest.files.len());
+        for (entry, retained) in self.manifest.files.iter().zip(&self._leases) {
+            if retained.identity.sha256 != entry.sha256
+                || retained.identity.byte_length != entry.size_bytes
+                || !names.insert(&entry.fixture_leaf)
+                || !identities.insert(&retained.identity.object_identity)
+            {
+                return Err("disposable snapshot retained file identity mismatch".into());
+            }
+            files.push((
+                entry.fixture_leaf.clone(),
+                retained.identity.object_identity.clone(),
+            ));
+        }
+        self.root.assert_stable(LABEL)?;
+        Ok(CandidateRetirementInventory {
+            snapshot_id: self.manifest.snapshot_id.clone(),
+            root_object_identity,
+            files,
+        })
     }
 
     /// R3B4-B3B1 diagnostic only. Before a future handle-authorized retire
@@ -325,11 +377,26 @@ mod tests {
         staged
             .review_retirement_inventory()
             .expect("intact test-owned fixture has expected inventory");
+        #[cfg(windows)]
+        {
+            let audit = staged
+                .review_retirement_object_identities()
+                .expect("retained file and root handles bind a candidate inventory");
+            assert_eq!(audit.snapshot_id, staged.manifest.snapshot_id);
+            assert_eq!(audit.files.len(), 1);
+            assert_eq!(audit.files[0].0, "Cargo.toml");
+            assert!(!audit.root_object_identity.is_empty());
+        }
         std::fs::write(dir.join("unlisted.txt"), b"foreign")
             .expect("inject only into test-owned fixture");
         assert!(
             staged.review_retirement_inventory().is_err(),
             "unexpected new content must block future retirement"
+        );
+        #[cfg(windows)]
+        assert!(
+            staged.review_retirement_object_identities().is_err(),
+            "unexpected file also blocks retained-identity retirement audit"
         );
         std::fs::create_dir(dir.join("foreign-directory"))
             .expect("inject only into test-owned fixture");

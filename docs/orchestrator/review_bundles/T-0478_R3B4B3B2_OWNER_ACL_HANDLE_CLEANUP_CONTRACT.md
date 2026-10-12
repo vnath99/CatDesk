@@ -16,6 +16,10 @@ The source-only Windows owner ACL-at-create half now uses `ProtectedDirectoryGua
 
 The **dormant** source now verifies actual fixed owner and protected DACL from the same pinned Windows directory HANDLE before staging candidate Git bytes. The code uses GetSecurityInfo and ConvertSecurityDescriptorToStringSecurityDescriptorW on the opened object; fixed policy must match exactly or fail closed. Pure ACL negative tests and local fmt/check/bin strict Clippy PASS; full independent Windows CI, actual interactive-user positive canary and security audit still required. Review T-0478_R3B4B3B2B1_PINNED_OWNER_DACL_READBACK.md. This check grants NO deletion. Exact-owned handle-only native retirement with crash residue and foreign-object adversarial tests remains B3B2B2.
 
+## B3B2B2A source-only identity evidence (2026-10-12)
+
+The dormant `CandidateRetirementInventory` binds expected manifest SHA/file bytes to currently retained Windows volume/file IDs and a pinned root identity. This is **read-only evidence**, not native deletion authority or a persisted crash-recovery receipt. Review `T-0478_R3B4B3B2B2A_RETIREMENT_OBJECT_IDENTITY.md`. Next implementation must independently re-open exact DELETE handles under pinned parent, match these identities and owner ACL, and call only reviewed native disposition on manifest-known files, with no generic recursive cleanup and no caller-supplied path.
+
 ## Required staged ownership
 
 1. Derive the current ordinary user's SID from the actual Windows process token via an existing reviewed Win32 token query path; do not trust `USERNAME`/`USERPROFILE`, caller-supplied SDDL or a guessed SID. Need to use a fixed, minimal DACL at object **creation**, not a chmod-like after-the-fact ACL swap. Existing `create_relative_with_sddl` and `create_child_with_security_descriptor` in `windows_protected_fs.rs` are currently `#[cfg(all(test, windows))]` feasibility helpers: review/adapt only a **dedicated fixed-policy** production subset, never export general caller SDDL control.
