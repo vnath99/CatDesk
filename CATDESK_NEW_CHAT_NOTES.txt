@@ -1,3 +1,8 @@
+## 2026-10-12 — Native ACL mismatch diagnostic published next (LATEST)
+
+- ACL readback original39caacb failed CI38194352700; first semantic correction ad701934 CI38235173396 also FAILED same native positive test on runner, though local positive/negative passed. Need actual Windows SDDL shape, but do NOT log SID or weaken policy. Added `fixture_acl_safe_shape` returning owner match boolean, DACL flag and ACE type/flags/rights plus principal class OWNER/SYSTEM/OTHER only, preserving hard rejection. Local fmt, strict Clippy, focused native test PASS; next scoped CI will show redacted reason.
+- Read-only retirement object identities `84ba1f7` CI38235951813 in progress. No native delete or actual worker/MCP source authority. B3B2B2B still blocked by ACL acceptance, leave T0366/external Secure MCP/7 untracked unchanged and hourly deadman off.
+
 ## 2026-10-12 — B3B2B2A retained volume/file identity record (LATEST)
 
 - New source-only `CandidateRetirementInventory` in `src/isolated_fixture_snapshot.rs` checks original in-process manifest against existing retained file leases and captures root and file volume/index identities from pinned Windows handles only; denies missing or extra/foreign data. No delete capability. Local cargo fmt, strict all-target Clippy, focused 5/5 and full main Rust PASS; new CI pending. Review `T-0478_R3B4B3B2B2A_RETIREMENT_OBJECT_IDENTITY.md`.

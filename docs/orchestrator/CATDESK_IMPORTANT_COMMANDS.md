@@ -4,6 +4,10 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-12 — Do not bypass pinned ACL CI failure (LATEST)
+
+- B3B2B1 exact opened-handle native owner/DACL positive test still FAILS GitHub Windows after first semantic normalization `ad701934` CI38235173396. Preserve fail-closed. New redacted diagnostic `fixture_acl_safe_shape` supplies only bool/ACE classification without raw user SID or secret to distinguish OS ACL normalization. Local native test and Clippy pass; independent Windows CI is authoritative. Until resolved there is NO active snapshot owner lease or authorized native cleanup.
+
 ## 2026-10-12 — B3B2B2A non-destructive retirement identities (LATEST)
 
 - `StagedCandidateSnapshot::review_retirement_object_identities` verifies root and retained file volume/file IDs from pinned existing Windows handles against manifest SHA/length/leaf. Returns read-only candidate evidence; **not deletion authorization**. Focused own temp source tests and full Rust/Clippy local PASS; CI pending. Review `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2A_RETIREMENT_OBJECT_IDENTITY.md`. Must not call recursive path delete to interpret this evidence as cleanup permission; B3B2B2B native exact-handle retirement still unimplemented.

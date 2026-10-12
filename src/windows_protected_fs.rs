@@ -575,7 +575,10 @@ impl ProtectedDirectoryGuard {
         self.assert_stable(label)?;
         let actual = security_descriptor_sddl_from_handle(self.last_handle(label)?, label)?;
         if !fixed_fixture_descriptor_matches(&actual, &expected) {
-            return Err(format!("{label} owner DACL is unverified"));
+            return Err(format!(
+                "{label} owner DACL is unverified ({})",
+                fixture_acl_safe_shape(&actual, os_derived_interactive_sid)
+            ));
         }
         self.assert_stable(label)
     }
@@ -1679,6 +1682,40 @@ const DUPLICATE_SAME_ACCESS: u32 = 0x0000_0002;
 /// Exact ACL policy equivalence. Canonical Windows SDDL may include the
 /// auto-inherited AI flag even for a protected DACL. No unknown ACEs, flags,
 /// principals, or reordered broad permissions are tolerated.
+#[cfg(windows)]
+fn fixture_acl_safe_shape(actual: &str, owner_sid: &str) -> String {
+    // Bounded diagnostics only: never expose owner, group, or foreign SIDs.
+    let owner_matches = actual
+        .strip_prefix("O:")
+        .and_then(|s| s.split("G:").next())
+        .is_some_and(|s| s == owner_sid);
+    let dacl = actual.split_once("D:").map(|(_, d)| d).unwrap_or("");
+    let flags = dacl.split('(').next().unwrap_or("");
+    let mut entries = Vec::new();
+    for fragment in dacl.split('(').skip(1).take(4) {
+        let fields = fragment
+            .split(')')
+            .next()
+            .unwrap_or("")
+            .split(';')
+            .collect::<Vec<_>>();
+        let principal = match fields.get(5).copied().unwrap_or("") {
+            "SY" | "S-1-5-18" => "SYSTEM",
+            sid if sid == owner_sid => "OWNER",
+            _ => "OTHER",
+        };
+        let ty = fields.first().copied().unwrap_or("?");
+        let ace_flags = fields.get(1).copied().unwrap_or("?");
+        let rights = fields.get(2).copied().unwrap_or("?");
+        entries.push(format!("{ty}/{ace_flags}/{rights}/{principal}"));
+    }
+    format!(
+        "owner_matches={owner_matches}, dacl_flags={flags}, ace_count={}, entries={}",
+        dacl.matches('(').count(),
+        entries.join(",")
+    )
+}
+
 #[cfg(windows)]
 fn fixed_fixture_descriptor_matches(actual: &str, expected: &str) -> bool {
     // SDDL string serialization is not stable across Windows versions:
