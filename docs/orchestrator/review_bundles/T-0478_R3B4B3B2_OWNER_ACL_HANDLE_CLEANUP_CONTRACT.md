@@ -8,6 +8,10 @@ B3A protected source copies and B3A2/3 retain SHA-bound read-only file leases an
 
 Existing reviewed native building blocks are `windows_protected_fs.rs::ProtectedDirectoryGuard`, `PinnedDirectory`, `write_new_regular_in`, `read_relative_regular_unique`, and `reviewed_source_snapshot.rs`'s private `query_relative_directory_names`, `cleanup_staging_tree`, `remove_owned_staging` and `dispose_opened_object`. The latter already use exact opened handles and NT file disposition rather than pathname recursion. Do **not** duplicate unsafe NT deletion logic into the fixture module.
 
+## Implementation checkpoint B3B2A (2026-10-11)
+
+The source-only Windows owner ACL-at-create half now uses `ProtectedDirectoryGuard::create_owner_only_fixture_child` for dormant snapshot staging, with fixed OS interactive token SID, generated fixture name and protected minimal user+SYSTEM DACL. Reuses prior test-only SDDL primitive as a private method rather than a general runtime SDDL-taking API. Local Windows tests passed, independent CI pending. See `T-0478_R3B4B3B2A_FIXED_OWNER_ACL_CREATION.md`. This does **not** constitute verified actual opened-handle descriptor readback or owner-bound native deletion; both are outstanding for B3B2B and all cleanup remains disabled.
+
 ## Required staged ownership
 
 1. Derive the current ordinary user's SID from the actual Windows process token via an existing reviewed Win32 token query path; do not trust `USERNAME`/`USERPROFILE`, caller-supplied SDDL or a guessed SID. Need to use a fixed, minimal DACL at object **creation**, not a chmod-like after-the-fact ACL swap. Existing `create_relative_with_sddl` and `create_child_with_security_descriptor` in `windows_protected_fs.rs` are currently `#[cfg(all(test, windows))]` feasibility helpers: review/adapt only a **dedicated fixed-policy** production subset, never export general caller SDDL control.

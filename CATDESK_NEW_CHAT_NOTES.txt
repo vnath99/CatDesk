@@ -1,3 +1,8 @@
+## 2026-10-11 — B3B2A fixed owner-token ACL-at-create source-only (LATEST)
+
+- Previous B3B1 source+contract CI all Windows jobs green: a438d16/38184571227, 2757537/38184893674, d9233f5/38185112053, 61e01c3/38185131855. B3B2A introduced `ProtectedDirectoryGuard::create_owner_only_fixture_child` with exact canonical-temp pinned parent, generated UUID child, non-service interactive token SID from existing supervisor principal derivation, fixed protected user+SYSTEM DACL descriptor-at-create and no generic SDDL-taking external API. Dormant witnessed source staging now uses it. Negative Windows tests for collision/foreign parent/service or invalid SID plus local fmt, focused5/5, SDDL1/1, full Rust suite and binary Clippy PASS. Independent Windows 3-job CI required before acceptance. Detailed `T-0478_R3B4B3B2A_FIXED_OWNER_ACL_CREATION.md`.
+- Actual ACL owner/DACL readback on opened handle and exact native handle-based cleanup B3B2B remain **unimplemented**; no deletion, no active MCP/agent. C runtime SHA gate, D bounded owned PID/port, T0479 stable worker/LKG then production Recovery. Keep official tunnel, protected signed T0366 pending epoch2, seven old untracked, hourly deadmen OFF.
+
 ## 2026-10-11 — B3B1 missing-leaf refusal, B3B2 exact-handle cleanup plan (LATEST)
 
 - Added missing expected Cargo.toml negative test for dormant read-only `review_retirement_inventory`, creating and removing only exact test-owned empty fixture. Focused snapshot 4/4, cargo fmt/strict Clippy and full main Rust suite PASS. Follow-up CI pending. This is **not deletion authorization**.

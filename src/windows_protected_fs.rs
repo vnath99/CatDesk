@@ -182,8 +182,8 @@ impl PinnedDirectory {
         }
     }
 
-    #[cfg(all(test, windows))]
-    pub(crate) fn create_relative_with_sddl(
+    #[cfg(windows)]
+    fn create_relative_with_sddl(
         parent: &Self,
         component: &str,
         sddl: &str,
@@ -379,6 +379,28 @@ pub(crate) struct ProtectedDirectoryGuard {
     directories: Vec<PinnedDirectory>,
 }
 
+#[cfg(windows)]
+fn fixed_fixture_owner_sddl(sid: &str, label: &str) -> Result<String, String> {
+    let parts = sid
+        .strip_prefix("S-1-")
+        .ok_or_else(|| format!("{label} owner SID is unsafe"))?;
+    if sid.len() > 256
+        || parts.is_empty()
+        || parts
+            .split('-')
+            .any(|segment| segment.is_empty() || !segment.bytes().all(|byte| byte.is_ascii_digit()))
+        || sid == "S-1-5-18"
+    {
+        return Err(format!("{label} owner SID is unsafe"));
+    }
+    // No inherited write ACEs; only the actual interactive token user and
+    // LocalSystem receive explicit permissions. User ownership is not a
+    // same-user isolation sandbox.
+    Ok(format!(
+        "O:{sid}G:{sid}D:P(A;OICI;FA;;;{sid})(A;OICI;FA;;;SY)"
+    ))
+}
+
 impl ProtectedDirectoryGuard {
     pub(crate) fn acquire(path: &Path, label: &str) -> Result<Self, String> {
         Ok(Self {
@@ -476,6 +498,44 @@ impl ProtectedDirectoryGuard {
                 component,
                 label,
             )?);
+        self.assert_stable(label)
+    }
+
+    /// Fixed-policy disposable source directory creator. This API accepts no
+    /// SDDL or SID from a caller: only an OS-token-derived ordinary interactive
+    /// principal, under the canonical OS temp directory, can create one fresh
+    /// CatDesk-generated direct child. It does not approve later deletion.
+    #[cfg(windows)]
+    pub(crate) fn create_owner_only_fixture_child(
+        &mut self,
+        component: &str,
+        label: &str,
+    ) -> Result<(), String> {
+        let temp = fs::canonicalize(std::env::temp_dir())
+            .map_err(|_| format!("{label} temp authority unavailable"))?;
+        if self.path() != temp {
+            return Err(format!("{label} parent is outside OS temp"));
+        }
+        let Some(id) = component.strip_prefix("catdesk-dev-fixture-") else {
+            return Err(format!("{label} component outside generated scope"));
+        };
+        let parsed =
+            Uuid::parse_str(id).map_err(|_| format!("{label} generated identity invalid"))?;
+        if parsed.simple().to_string() != id {
+            return Err(format!("{label} generated identity invalid"));
+        }
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .map_err(|_| format!("{label} interactive owner identity unavailable"))?;
+        let sddl = fixed_fixture_owner_sddl(&sid, label)?;
+        self.assert_stable(label)?;
+        let pinned = PinnedDirectory::create_relative_with_sddl(
+            self.directories.last().expect("guard has root"),
+            component,
+            &sddl,
+            label,
+        )?;
+        self.directories.push(pinned);
         self.assert_stable(label)
     }
 
@@ -1421,14 +1481,12 @@ unsafe extern "system" {
         inherit_handle: i32,
         options: u32,
     ) -> i32;
-    #[cfg(test)]
     fn ConvertStringSecurityDescriptorToSecurityDescriptorW(
         definition: *const u16,
         revision: u32,
         descriptor: *mut *mut c_void,
         descriptor_size: *mut u32,
     ) -> i32;
-    #[cfg(test)]
     fn LocalFree(memory: *mut c_void) -> *mut c_void;
 }
 #[cfg(windows)]
@@ -1558,7 +1616,7 @@ fn nt_open_relative_with_security_descriptor_for_domain(
 #[cfg(windows)]
 const DUPLICATE_SAME_ACCESS: u32 = 0x0000_0002;
 
-#[cfg(all(test, windows))]
+#[cfg(windows)]
 fn security_descriptor_from_sddl(sddl: &str, label: &str) -> Result<*mut c_void, String> {
     if sddl.is_empty() || sddl.len() > 8 * 1024 || sddl.contains('\0') {
         return Err(format!("{label} security descriptor is unsafe"));
@@ -1589,6 +1647,29 @@ fn security_descriptor_from_sddl(sddl: &str, label: &str) -> Result<*mut c_void,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn fixture_owner_acl_is_fixed_and_rejects_sid_injection() {
+        let sid = "S-1-5-21-111-222-333-1001";
+        let acl = fixed_fixture_owner_sddl(sid, "fixture").unwrap();
+        assert_eq!(
+            acl,
+            format!("O:{sid}G:{sid}D:P(A;OICI;FA;;;{sid})(A;OICI;FA;;;SY)")
+        );
+        assert!(!acl.contains(";;;WD"));
+        assert!(!acl.contains(";;;BU"));
+        assert!(!acl.contains(";;;AU"));
+        for invalid in [
+            "",
+            "S-1-5-18",
+            "S-1-5-21-1);(A;;FA;;;WD",
+            "S-1-5-21--2",
+            "S-1-5-21-abc",
+        ] {
+            assert!(fixed_fixture_owner_sddl(invalid, "fixture").is_err());
+        }
+    }
 
     #[test]
     fn production_module_has_no_snapshot_reverse_dependency() {

@@ -246,7 +246,11 @@ pub(crate) async fn stage_witnessed_candidate_snapshot(
     // an already opened parent. No existing directory is adopted.
     let mut root = ProtectedDirectoryGuard::acquire(&temp, LABEL)?;
     let child_name = format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple());
-    root.create_child(&child_name, LABEL)?;
+    #[cfg(windows)]
+    root.create_owner_only_fixture_child(&child_name, LABEL)?;
+    #[cfg(not(windows))]
+    return Err("isolated fixture owner-only creation is Windows-only".into());
+
     stage_candidate_into_owned_root(&root, &manifest, &candidates)?;
     let leases = retain_staged_artifacts(&root, &manifest)?;
     Ok(StagedCandidateSnapshot {
@@ -416,6 +420,59 @@ mod tests {
         );
         drop(snapshot);
         std::fs::remove_dir_all(dir).expect("cleanup own empty test-only fixture");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn generated_fixture_owner_acl_is_fixed_at_creation() {
+        let temp = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+        let mut parent = ProtectedDirectoryGuard::acquire(&temp, LABEL).unwrap();
+        assert!(
+            parent
+                .create_owner_only_fixture_child("other-root", LABEL)
+                .is_err()
+        );
+        assert!(
+            parent
+                .create_owner_only_fixture_child("catdesk-dev-fixture-bad", LABEL)
+                .is_err()
+        );
+        let name = format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple());
+        let interactive =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid();
+        let attempt = parent.create_owner_only_fixture_child(&name, LABEL);
+        if interactive.is_err() {
+            assert!(attempt.is_err(), "service/CI identities fail closed");
+            assert!(!temp.join(&name).exists());
+            return;
+        }
+        attempt.expect("create fresh fixed ACL child for ordinary interactive SID");
+        parent.assert_stable(LABEL).unwrap();
+        verify_disposable_root(&parent).unwrap();
+        let mut second = ProtectedDirectoryGuard::acquire(&temp, LABEL).unwrap();
+        assert!(
+            second
+                .create_owner_only_fixture_child(&name, LABEL)
+                .is_err(),
+            "existing fixture root must never be adopted or overwritten"
+        );
+        let foreign = temp.join(format!("fixture-not-owned-{}", Uuid::new_v4().simple()));
+        std::fs::create_dir(&foreign).unwrap();
+        let mut nested = ProtectedDirectoryGuard::acquire(&foreign, LABEL).unwrap();
+        assert!(
+            nested
+                .create_owner_only_fixture_child(
+                    &format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple()),
+                    LABEL
+                )
+                .is_err(),
+            "foreign non-temp parent is not authorized"
+        );
+        drop(nested);
+        drop(second);
+        drop(parent);
+        std::fs::remove_dir(foreign).unwrap();
+        std::fs::remove_dir(temp.join(name)).expect("remove only test-owned empty root");
     }
 
     #[test]

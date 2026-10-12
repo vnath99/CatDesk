@@ -4,6 +4,11 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 — B3B2A owner ACL creation, NOT native retirement (LATEST)
+
+- Fixed-policy `ProtectedDirectoryGuard::create_owner_only_fixture_child` accepts only pinned canonical OS temp parent and a fresh generated fixture UUID, derives current ordinary non-service owner SID from the existing reviewed Windows process-token routine, creates a no-inheritance user+LocalSystem DACL at native directory creation and refuses name collisions/foreign roots. Generic SDDL-taking core stays PRIVATE. Local focused Windows tests, fmt, main Rust suite and binary strict Clippy passed; Windows CI required. **Owner/DACL descriptor readback and exact opened-handle cleanup are not implemented or authorized**, so leave B3B2 native deletion OFF and preserve potential partial-stage residue for a reviewed owner. `T-0478_R3B4B3B2A_FIXED_OWNER_ACL_CREATION.md`.
+- GitHub mirror COMPLETE, production supervisor Recovery INCOMPLETE, all hourly deadmen OFF. Do not touch external official Secure MCP, signed pending T0366 or unrelated old untracked data.
+
 ## 2026-10-11 — B3B1 source gate versus B3B2 cleanup authority (LATEST)
 
 - Dormant B3B1 `review_retirement_inventory` now refuses injected file, foreign directory **and missing expected manifest leaf**, source-only, no deletion. Local focused 4/4, strict Clippy/full Rust and cargo fmt-check PASS. Initial code a438d16 GitHub CI38184571227 pending, follow-up CI required. Read `T-0478_R3B4B3B1_RETIREMENT_INVENTORY_GUARD.md`.
