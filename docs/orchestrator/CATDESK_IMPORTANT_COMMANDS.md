@@ -4,6 +4,10 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-11 — B3B2B1 pinned owner DACL readback, still no deletion (LATEST)
+
+- Fixed `ProtectedDirectoryGuard::verify_owner_only_fixture_descriptor` reads OWNER/GROUP/DACL via GetSecurityInfo on already opened pinned directory handle (not path) and checks exact protected SID+SYSTEM policy; rejects foreign ACL before Git-object copy. New source-only B3B2B1, local fmt/check/bin Clippy and pure ACL policy test PASS, Windows CI/interactive canary pending. B3B2A corrective c60a0c0 CI38193158886 PASS3/3. DO NOT use any recursive pathname cleanup, native deletion remains unimplemented. See T-0478_R3B4B3B2B1_PINNED_OWNER_DACL_READBACK.md.
+
 ## 2026-10-11 — B3B2A owner ACL creation, NOT native retirement (LATEST)
 
 - Fixed-policy `ProtectedDirectoryGuard::create_owner_only_fixture_child` accepts only pinned canonical OS temp parent and a fresh generated fixture UUID, derives current ordinary non-service owner SID from the existing reviewed Windows process-token routine, creates a no-inheritance user+LocalSystem DACL at native directory creation and refuses name collisions/foreign roots. Generic SDDL-taking core stays PRIVATE. Local focused Windows tests, fmt, main Rust suite and binary strict Clippy passed; Windows CI required. **Owner/DACL descriptor readback and exact opened-handle cleanup are not implemented or authorized**, so leave B3B2 native deletion OFF and preserve potential partial-stage residue for a reviewed owner. `T-0478_R3B4B3B2A_FIXED_OWNER_ACL_CREATION.md`.

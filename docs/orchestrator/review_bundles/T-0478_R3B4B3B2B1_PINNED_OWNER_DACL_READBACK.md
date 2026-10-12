@@ -1,0 +1,28 @@
+# T0478 R3B4-B3B2B1 — Pinned directory owner and DACL readback
+
+Date: 2026-10-11/12. Canonical CatDesk Chat52: https://chatgpt.com/c/6acba3bf-e740-8331-8896-8a25fefdbf16.
+
+## Scope
+
+**SOURCE-ONLY, dormant. No native deletion or production release.** After the B3B2A fixed token-owner SDDL root creation, this increment verifies the actual security descriptor of the **same opened, pinned directory handle** before a witnessed Git-object snapshot could stage any files. It makes no general ACL management endpoint and does not expand MCP tool permissions. It also retains earlier no-follow root/file identity safeguards.
+
+Earlier B3B2A commit `87e979b` failed GitHub Windows CI `38192751423` because standalone utility binaries include `windows_protected_fs.rs` without importing the supervisor module. The scoped correction `c60a0c0943ee84b97977ccb6b07762f0934f5a25` moved token SID derivation to the dormant fixture producer and passed the derived SID into the fixed shared helper. That correction reached GitHub Windows CI `38193158886` **SUCCESS 3/3**, including Rust, Python Wake/advisor and Independent WakeHost Rust. It does not prove native deletion or worker activation.
+
+## Implementation
+
+- The shared `PinnedDirectory::create_relative_with_sddl` requests `READ_CONTROL` on its newly created Windows directory handle, in addition to existing fixed directory read/create attributes. No extra mutation or DELETE rights were added.
+- New private `security_descriptor_sddl_from_handle` reads OWNER, GROUP and protected DACL using Windows `GetSecurityInfo(SE_FILE_OBJECT)` **on the already opened directory handle**, converts the returned descriptor with `ConvertSecurityDescriptorToStringSecurityDescriptorW`, uses bounded wide-character length and frees both OS allocations via `LocalFree`. It never calls `GetFileSecurityW` or reopens by a caller-controlled pathname.
+- New `ProtectedDirectoryGuard::verify_owner_only_fixture_descriptor(&sid,label)` requires exactly a pinned canonical OS-temp parent + one generated UUID child, a syntactically valid owner SID, and stable directory-chain identity. It compares actual handle-derived SDDL to the existing **fixed** protected user + SYSTEM DACL, permitting only the OS's canonical additional auto-inheritance flag (AI). Any extra ACE, wrong SID, missing protected DACL, unexpected group/flags or API failure refuses staging.
+- The dormant `stage_witnessed_candidate_snapshot` derives the SID from its nonservice interactive token and calls this descriptor readback **immediately after native fixed-ACL child creation**, before writing even the first staged Git blob. Source remains limited to two manifest-allowed Git objects after the live GitHub branch/CI witness.
+- Existing shared protected FS module remains standalone-bin compatible: no dependency on the supervisor module from `windows_protected_fs.rs`; the caller derives the SID. No generic caller-supplied SDDL/API is exported.
+
+## Verification evidence and limits
+
+- Local `cargo fmt --check`, `cargo check --locked --offline --bin catdesk`, `cargo clippy --locked --offline --bin catdesk -- -D warnings` PASS.
+- Pure Windows negative test `fixture_owner_acl_readback_rejects_unreviewed_aces_and_flags` PASS: rejects appended broad Everyone ACE, removed protected DACL, changed trustee or wrong owner; accepts exact protected policy and canonical protected-auto-inherited form.
+- The conditional positive native-descriptor test in `isolated_fixture_snapshot::generated_fixture_owner_acl_is_fixed_at_creation` was updated to call this readback and deny a wrong SID. Local CatDesk command gateway intermittently returned `INVALID_ARGUMENT` for that focused execution while formatting, cargo check, Clippy and pure test succeeded. **The native positive test is not independently claimed pass**; it must run under exact new GitHub Windows CI, and because CI runners may have service/noninteractive tokens, a real interactive-user canary is still necessary before promoting active staging. The full main Rust suite for this exact readback increment is also pending CI.
+- A mismatch must fail closed but may leave an inactive generated temp root. **There is no reviewed cleanup / owner-bound deletion implementation yet.** Do not use pathname recursive deletion or assume a generated UUID alone proves cleanup authority. This is not a sandbox against malicious processes sharing the same user token.
+
+## B3B2B2 and remaining work
+
+Implement fail-closed exact-handle owner-lease retirement for only the generated root and its manifest-known leaves, reusing audited Windows native `reviewed_source_snapshot.rs` disposition/enumeration logic but never calling its generic recursive cleanup directly. Require on-handle owner DACL identity at deletion, no foreign file/directory/reparse/hardlink, no concurrent access, and tests of partial writes, substitutions and double cleanup. Then T0478-C binds a verified `StagedCandidateSnapshot` directly into the real isolated MCP read/search path, D creates bounded owned PID/port lifecycle, and T0479 establishes stable versioned worker/LKG. Production stable supervisor Recovery remains blocked by root/startup/port3201; GitHub mirror itself is already complete. No changes to protected T0366 pending signer, official external Secure MCP or hourly deadmen.

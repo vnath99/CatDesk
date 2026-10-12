@@ -252,6 +252,7 @@ pub(crate) async fn stage_witnessed_candidate_snapshot(
             crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
                 .map_err(|_| "isolated fixture interactive owner identity unavailable")?;
         root.create_owner_only_fixture_child(&child_name, &sid, LABEL)?;
+        root.verify_owner_only_fixture_descriptor(&sid, LABEL)?;
     }
     #[cfg(not(windows))]
     return Err("isolated fixture owner-only creation is Windows-only".into());
@@ -458,6 +459,15 @@ mod tests {
             .expect("create fresh fixed ACL child for ordinary interactive SID");
         parent.assert_stable(LABEL).unwrap();
         verify_disposable_root(&parent).unwrap();
+        parent
+            .verify_owner_only_fixture_descriptor(&sid, LABEL)
+            .expect("exact opened directory owner and protected DACL");
+        assert!(
+            parent
+                .verify_owner_only_fixture_descriptor("S-1-5-21-123-999", LABEL)
+                .is_err(),
+            "wrong SID must not match even if the directory name is correct"
+        );
         let mut second = ProtectedDirectoryGuard::acquire(&temp, LABEL).unwrap();
         assert!(
             second

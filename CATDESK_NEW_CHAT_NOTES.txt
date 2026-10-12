@@ -1,3 +1,8 @@
+## 2026-10-11 — B3B2B1 exact opened Windows owner/DACL readback (LATEST)
+
+- B3B2A correction c60a0c0 Windows CI38193158886 all three jobs SUCCESS. New source-only fixed owner/DACL descriptor validation on exact opened pinned temp child handle uses GetSecurityInfo+bounded ConvertSecurityDescriptorToStringSecurityDescriptorW, protected user+SYSTEM DACL exact comparison (allow canonical AI), retains OS identity chain; dormant staged source waits for readback before bytes. Local fmt, cargo check, binary strict Clippy, pure negative ACL string test PASS. Native positive test call hit gateway INVALID_ARGUMENT and must be independently verified via new GitHub CI plus ordinary interactive-user canary. No cleanup or MCP wiring. Report T-0478_R3B4B3B2B1_PINNED_OWNER_DACL_READBACK.md.
+- Next B3B2B2 identity-checked owned native handle deletion and partial-stage recovery; C actual manifest-gated MCP, D child PID lifecycle, then T0479 stable worker and separate production recovery. Hourly deadmen OFF, external official tunnel, protected T0366 pending2 and seven unrelated historical untracked files untouched.
+
 ## 2026-10-11 — B3B2A initial CI cross-binary failure fixed (LATEST)
 
 - Commit87e979b CI38192751423 Rust failed standalone utility bins: shared filesystem used supervisor-module SID derivation unavailable in those binaries. Moved OS-token SID derivation to the dormant snapshot producer caller; shared `create_owner_only_fixture_child(component, &os_derived_interactive_sid, label)` still creates only fixed ACL under pinned canonical OS-temp. Local fmt, 5 focused Windows snapshot tests and strict all-target Clippy PASS after fix. New Windows CI pending; do not mark B3B2A accepted yet. Native retirement B3B2B still not implemented.

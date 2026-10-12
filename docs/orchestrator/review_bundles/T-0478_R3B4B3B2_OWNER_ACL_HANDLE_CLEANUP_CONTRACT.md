@@ -12,6 +12,10 @@ Existing reviewed native building blocks are `windows_protected_fs.rs::Protected
 
 The source-only Windows owner ACL-at-create half now uses `ProtectedDirectoryGuard::create_owner_only_fixture_child` for dormant snapshot staging, with fixed OS interactive token SID, generated fixture name and protected minimal user+SYSTEM DACL. Reuses prior test-only SDDL primitive as a private method rather than a general runtime SDDL-taking API. Local Windows tests passed, independent CI pending. See `T-0478_R3B4B3B2A_FIXED_OWNER_ACL_CREATION.md`. This does **not** constitute verified actual opened-handle descriptor readback or owner-bound native deletion; both are outstanding for B3B2B and all cleanup remains disabled.
 
+## B3B2B1 implementation checkpoint — 2026-10-11
+
+The **dormant** source now verifies actual fixed owner and protected DACL from the same pinned Windows directory HANDLE before staging candidate Git bytes. The code uses GetSecurityInfo and ConvertSecurityDescriptorToStringSecurityDescriptorW on the opened object; fixed policy must match exactly or fail closed. Pure ACL negative tests and local fmt/check/bin strict Clippy PASS; full independent Windows CI, actual interactive-user positive canary and security audit still required. Review T-0478_R3B4B3B2B1_PINNED_OWNER_DACL_READBACK.md. This check grants NO deletion. Exact-owned handle-only native retirement with crash residue and foreign-object adversarial tests remains B3B2B2.
+
 ## Required staged ownership
 
 1. Derive the current ordinary user's SID from the actual Windows process token via an existing reviewed Win32 token query path; do not trust `USERNAME`/`USERPROFILE`, caller-supplied SDDL or a guessed SID. Need to use a fixed, minimal DACL at object **creation**, not a chmod-like after-the-fact ACL swap. Existing `create_relative_with_sddl` and `create_child_with_security_descriptor` in `windows_protected_fs.rs` are currently `#[cfg(all(test, windows))]` feasibility helpers: review/adapt only a **dedicated fixed-policy** production subset, never export general caller SDDL control.

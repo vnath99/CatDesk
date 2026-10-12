@@ -200,6 +200,7 @@ impl PinnedDirectory {
                     | FILE_ADD_FILE
                     | FILE_ADD_SUBDIRECTORY
                     | FILE_READ_ATTRIBUTES
+                    | READ_CONTROL
                     | SYNCHRONIZE,
                 FILE_SHARE_READ | FILE_SHARE_WRITE,
                 FILE_CREATE,
@@ -538,6 +539,44 @@ impl ProtectedDirectoryGuard {
             label,
         )?;
         self.directories.push(pinned);
+        self.assert_stable(label)
+    }
+
+    /// Compare the real OWNER/GROUP/DACL read directly from the pinned child
+    /// HANDLE with the exact policy used at creation. A matching pathname or
+    /// well-formed generated name is never sufficient identity evidence.
+    #[cfg(windows)]
+    pub(crate) fn verify_owner_only_fixture_descriptor(
+        &self,
+        os_derived_interactive_sid: &str,
+        label: &str,
+    ) -> Result<(), String> {
+        let temp = fs::canonicalize(std::env::temp_dir())
+            .map_err(|_| format!("{label} temp authority unavailable"))?;
+        if self.directories.len() != 2 || self.directories[0].path != temp {
+            return Err(format!("{label} owner scope is invalid"));
+        }
+        let Some(name) = self.path().file_name().and_then(|name| name.to_str()) else {
+            return Err(format!("{label} owner name is invalid"));
+        };
+        let Some(id) = name.strip_prefix("catdesk-dev-fixture-") else {
+            return Err(format!("{label} owner name is invalid"));
+        };
+        if self.path().parent() != Some(temp.as_path())
+            || Uuid::parse_str(id)
+                .map(|id| id.simple().to_string())
+                .ok()
+                .as_deref()
+                != Some(id)
+        {
+            return Err(format!("{label} owner name is invalid"));
+        }
+        let expected = fixed_fixture_owner_sddl(os_derived_interactive_sid, label)?;
+        self.assert_stable(label)?;
+        let actual = security_descriptor_sddl_from_handle(self.last_handle(label)?, label)?;
+        if !fixed_fixture_descriptor_matches(&actual, &expected) {
+            return Err(format!("{label} owner DACL is unverified"));
+        }
         self.assert_stable(label)
     }
 
@@ -1371,6 +1410,8 @@ fn open_optional_relative_regular_file<P: PinnedParent>(
 const FILE_READ_DATA: u32 = 0x0001;
 const FILE_WRITE_DATA: u32 = 0x0002;
 const FILE_READ_ATTRIBUTES: u32 = 0x0080;
+#[cfg(windows)]
+const READ_CONTROL: u32 = 0x0002_0000;
 const FILE_LIST_DIRECTORY: u32 = 0x0001;
 const FILE_ADD_FILE: u32 = 0x0002;
 const FILE_ADD_SUBDIRECTORY: u32 = 0x0004;
@@ -1488,6 +1529,23 @@ unsafe extern "system" {
         revision: u32,
         descriptor: *mut *mut c_void,
         descriptor_size: *mut u32,
+    ) -> i32;
+    fn GetSecurityInfo(
+        handle: *mut c_void,
+        object_type: u32,
+        information: u32,
+        owner: *mut *mut c_void,
+        group: *mut *mut c_void,
+        dacl: *mut *mut c_void,
+        sacl: *mut *mut c_void,
+        descriptor: *mut *mut c_void,
+    ) -> u32;
+    fn ConvertSecurityDescriptorToStringSecurityDescriptorW(
+        descriptor: *mut c_void,
+        revision: u32,
+        security_information: u32,
+        string_descriptor: *mut *mut u16,
+        length: *mut u32,
     ) -> i32;
     fn LocalFree(memory: *mut c_void) -> *mut c_void;
 }
@@ -1618,6 +1676,66 @@ fn nt_open_relative_with_security_descriptor_for_domain(
 #[cfg(windows)]
 const DUPLICATE_SAME_ACCESS: u32 = 0x0000_0002;
 
+/// Exact ACL policy equivalence. Canonical Windows SDDL may include the
+/// auto-inherited AI flag even for a protected DACL. No unknown ACEs, flags,
+/// principals, or reordered broad permissions are tolerated.
+#[cfg(windows)]
+fn fixed_fixture_descriptor_matches(actual: &str, expected: &str) -> bool {
+    actual == expected || actual == expected.replacen("D:P", "D:PAI", 1)
+}
+
+/// Query only the *already opened* directory HANDLE; never GetFileSecurityW
+/// by pathname. No authority is obtained by accepting a caller-created path.
+#[cfg(windows)]
+fn security_descriptor_sddl_from_handle(
+    handle: *mut c_void,
+    label: &str,
+) -> Result<String, String> {
+    const SE_FILE_OBJECT: u32 = 1;
+    const SECURITY_INFORMATION: u32 = 0x0000_0001 | 0x0000_0002 | 0x0000_0004;
+    let mut descriptor: *mut c_void = std::ptr::null_mut();
+    let result = unsafe {
+        GetSecurityInfo(
+            handle,
+            SE_FILE_OBJECT,
+            SECURITY_INFORMATION,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut descriptor,
+        )
+    };
+    if result != 0 || descriptor.is_null() {
+        if !descriptor.is_null() {
+            unsafe { LocalFree(descriptor) };
+        }
+        return Err(format!("{label} owner security descriptor unavailable"));
+    }
+    let mut sddl: *mut u16 = std::ptr::null_mut();
+    let mut length = 0u32;
+    let converted = unsafe {
+        ConvertSecurityDescriptorToStringSecurityDescriptorW(
+            descriptor,
+            1,
+            SECURITY_INFORMATION,
+            &mut sddl,
+            &mut length,
+        )
+    };
+    let text = if converted == 0 || sddl.is_null() || length == 0 || length > 8192 {
+        Err(format!("{label} owner security descriptor unavailable"))
+    } else {
+        let wide = unsafe { std::slice::from_raw_parts(sddl, length as usize) };
+        String::from_utf16(wide).map_err(|_| format!("{label} owner SDDL invalid"))
+    };
+    if !sddl.is_null() {
+        unsafe { LocalFree(sddl.cast()) };
+    }
+    unsafe { LocalFree(descriptor) };
+    text
+}
+
 #[cfg(windows)]
 fn security_descriptor_from_sddl(sddl: &str, label: &str) -> Result<*mut c_void, String> {
     if sddl.is_empty() || sddl.len() > 8 * 1024 || sddl.contains('\0') {
@@ -1649,6 +1767,26 @@ fn security_descriptor_from_sddl(sddl: &str, label: &str) -> Result<*mut c_void,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn fixture_owner_acl_readback_rejects_unreviewed_aces_and_flags() {
+        let sid = "S-1-5-21-111-222-333-1001";
+        let expected = fixed_fixture_owner_sddl(sid, "fixture").unwrap();
+        assert!(fixed_fixture_descriptor_matches(&expected, &expected));
+        assert!(fixed_fixture_descriptor_matches(
+            &expected.replacen("D:P", "D:PAI", 1),
+            &expected
+        ));
+        for extra in [
+            format!("{expected}(A;;FA;;;WD)"),
+            expected.replacen("D:P", "D:", 1),
+            expected.replacen(";;;SY)", ";;;BU)", 1),
+            expected.replacen("O:", "O:S-1-5-18G:", 1),
+        ] {
+            assert!(!fixed_fixture_descriptor_matches(&extra, &expected));
+        }
+    }
 
     #[cfg(windows)]
     #[test]
