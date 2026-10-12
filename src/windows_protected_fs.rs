@@ -1681,7 +1681,71 @@ const DUPLICATE_SAME_ACCESS: u32 = 0x0000_0002;
 /// principals, or reordered broad permissions are tolerated.
 #[cfg(windows)]
 fn fixed_fixture_descriptor_matches(actual: &str, expected: &str) -> bool {
-    actual == expected || actual == expected.replacen("D:P", "D:PAI", 1)
+    // SDDL string serialization is not stable across Windows versions:
+    // readback may re-order ACEs, add the auto-inheritance flag, map FA to a
+    // numeric FILE_ALL_ACCESS mask, and retain an OS-selected primary group.
+    // Compare the actual *security-relevant* owner and protected DACL shape,
+    // never downgrade to string containment or accept additional ACEs.
+    fn normalized(value: &str) -> Option<(String, Vec<(String, String)>)> {
+        let value = value.trim_end_matches('\0');
+        if value.contains('\0') || !value.starts_with("O:") {
+            return None;
+        }
+        let d = value.find("D:")?;
+        let owner_section = &value[2..d];
+        let owner = owner_section.split("G:").next()?;
+        if owner.is_empty() || owner.contains(['(', ')', ';']) {
+            return None;
+        }
+        let dacl = &value[d + 2..];
+        let pos = dacl.find('(')?;
+        if !matches!(&dacl[..pos], "P" | "PAI" | "PAR" | "PAIAR" | "PARAI") {
+            return None;
+        }
+        let mut cursor = &dacl[pos..];
+        let mut aces = Vec::new();
+        while !cursor.is_empty() {
+            cursor = cursor.strip_prefix('(')?;
+            let end = cursor.find(')')?;
+            let ace = &cursor[..end];
+            cursor = &cursor[end + 1..];
+            let fields = ace.split(';').collect::<Vec<_>>();
+            if fields.len() != 6
+                || fields[0] != "A"
+                || !matches!(fields[1], "OICI" | "CIOI")
+                || !fields[3].is_empty()
+                || !fields[4].is_empty()
+            {
+                return None;
+            }
+            let mask = if fields[2] == "FA" || fields[2].eq_ignore_ascii_case("0x001f01ff") {
+                "FA"
+            } else {
+                return None;
+            };
+            let sid = if fields[5] == "S-1-5-18" {
+                "SY"
+            } else {
+                fields[5]
+            };
+            if sid.is_empty() {
+                return None;
+            }
+            aces.push((sid.to_owned(), mask.to_owned()));
+            if aces.len() > 2 {
+                return None;
+            }
+        }
+        aces.sort();
+        Some((owner.to_owned(), aces))
+    }
+    let Some((expected_owner, expected_aces)) = normalized(expected) else {
+        return false;
+    };
+    let Some((actual_owner, actual_aces)) = normalized(actual) else {
+        return false;
+    };
+    actual_owner == expected_owner && actual_aces == expected_aces
 }
 
 /// Query only the *already opened* directory HANDLE; never GetFileSecurityW
@@ -1778,6 +1842,10 @@ mod tests {
             &expected.replacen("D:P", "D:PAI", 1),
             &expected
         ));
+        // Windows may normalize ACE order and symbolic/full file mask while
+        // preserving precisely the same two allowed trustees and rights.
+        let canonicalized = format!("O:{sid}G:SYD:PAI(A;OICI;0x001f01ff;;;SY)(A;OICI;FA;;;{sid})");
+        assert!(fixed_fixture_descriptor_matches(&canonicalized, &expected));
         for extra in [
             format!("{expected}(A;;FA;;;WD)"),
             expected.replacen("D:P", "D:", 1),

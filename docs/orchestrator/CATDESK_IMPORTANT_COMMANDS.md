@@ -4,6 +4,10 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-12 — B3B2B1 fixed Windows ACL verification (LATEST)
+
+- CI failure `39caacb` Actions38194352700 identified Windows native owner descriptor exact-text mismatch. Fixed policy now compares actual pinned-handle-derived **owner SID + protected two-entry DACL** instead of raw SDDL string order/mask aliases, refusing unexpected trustees/rights. Local native positive and negative Windows tests, cargo fmt, strict all-target Clippy and full main Rust PASS; new GitHub CI required. Separate job manager timeouts from same run are not ACL evidence. **No destructive cleanup enabled**. Review `T-0478_R3B4B3B2B1_PINNED_OWNER_DACL_READBACK.md`.
+
 ## 2026-10-11 — B3B2B1 pinned owner DACL readback, still no deletion (LATEST)
 
 - Fixed `ProtectedDirectoryGuard::verify_owner_only_fixture_descriptor` reads OWNER/GROUP/DACL via GetSecurityInfo on already opened pinned directory handle (not path) and checks exact protected SID+SYSTEM policy; rejects foreign ACL before Git-object copy. New source-only B3B2B1, local fmt/check/bin Clippy and pure ACL policy test PASS, Windows CI/interactive canary pending. B3B2A corrective c60a0c0 CI38193158886 PASS3/3. DO NOT use any recursive pathname cleanup, native deletion remains unimplemented. See T-0478_R3B4B3B2B1_PINNED_OWNER_DACL_READBACK.md.
