@@ -1,3 +1,7 @@
+## 2026-10-11 — Chat52 B3B2A Windows cross-binary CI compile repair (LATEST)
+
+- Initial owner-ACL source commit `87e979b` GitHub Windows run `38192751423` FAILED Rust Clippy E0433: shared `windows_protected_fs.rs` referenced `windows_supervisor_control_pipe` which intentionally is not imported by the standalone catdesk-wake-migrate and catdesk-stable-wake-activate binaries. Fixed by deriving the OS-token ordinary SID only in the dormant snapshot producer caller, then passing `&os_derived_interactive_sid` to the shared fixed-policy ACL creator. Shared helper validates SID syntax and fixed protected DACL; no CLI/MCP SID/SDDL argument or production mutation. Local fmt, focused owner creation tests 5/5, strict workspace all-target Clippy PASS after correction; new GitHub CI required. Report `T-0478_R3B4B3B2A_FIXED_OWNER_ACL_CREATION.md`. B3B2B owner/DACL readback and exact-handle deletion remain unimplemented.
+
 ## 2026-10-11 — Chat52 T0478 B3B2A fixed token-owner ACL creation (LATEST)
 
 - GitHub B3B1 CI `a438d16` run38184571227, `2757537` run38184893674, `d9233f5` run38185112053 and cleanup-contract `61e01c3` run38185131855 all independently SUCCESS 3/3 Windows jobs. No production or deletion authority.

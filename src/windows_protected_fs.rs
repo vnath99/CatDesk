@@ -509,6 +509,7 @@ impl ProtectedDirectoryGuard {
     pub(crate) fn create_owner_only_fixture_child(
         &mut self,
         component: &str,
+        os_derived_interactive_sid: &str,
         label: &str,
     ) -> Result<(), String> {
         let temp = fs::canonicalize(std::env::temp_dir())
@@ -524,10 +525,11 @@ impl ProtectedDirectoryGuard {
         if parsed.simple().to_string() != id {
             return Err(format!("{label} generated identity invalid"));
         }
-        let sid =
-            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
-                .map_err(|_| format!("{label} interactive owner identity unavailable"))?;
-        let sddl = fixed_fixture_owner_sddl(&sid, label)?;
+        // The only in-tree production caller obtains this SID from the fixed
+        // process-token routine. Keep generic filesystem code independent of
+        // the supervisor module: standalone utility bins import this module
+        // but deliberately do not import the supervisor principal logic.
+        let sddl = fixed_fixture_owner_sddl(os_derived_interactive_sid, label)?;
         self.assert_stable(label)?;
         let pinned = PinnedDirectory::create_relative_with_sddl(
             self.directories.last().expect("guard has root"),

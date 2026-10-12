@@ -247,7 +247,12 @@ pub(crate) async fn stage_witnessed_candidate_snapshot(
     let mut root = ProtectedDirectoryGuard::acquire(&temp, LABEL)?;
     let child_name = format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple());
     #[cfg(windows)]
-    root.create_owner_only_fixture_child(&child_name, LABEL)?;
+    {
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .map_err(|_| "isolated fixture interactive owner identity unavailable")?;
+        root.create_owner_only_fixture_child(&child_name, &sid, LABEL)?;
+    }
     #[cfg(not(windows))]
     return Err("isolated fixture owner-only creation is Windows-only".into());
 
@@ -427,32 +432,36 @@ mod tests {
     fn generated_fixture_owner_acl_is_fixed_at_creation() {
         let temp = std::fs::canonicalize(std::env::temp_dir()).unwrap();
         let mut parent = ProtectedDirectoryGuard::acquire(&temp, LABEL).unwrap();
+        let invalid_source = "S-1-5-21-111-222-333-1001";
         assert!(
             parent
-                .create_owner_only_fixture_child("other-root", LABEL)
+                .create_owner_only_fixture_child("other-root", invalid_source, LABEL)
                 .is_err()
         );
         assert!(
             parent
-                .create_owner_only_fixture_child("catdesk-dev-fixture-bad", LABEL)
+                .create_owner_only_fixture_child("catdesk-dev-fixture-bad", invalid_source, LABEL)
                 .is_err()
         );
         let name = format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple());
         let interactive =
             crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid();
-        let attempt = parent.create_owner_only_fixture_child(&name, LABEL);
-        if interactive.is_err() {
-            assert!(attempt.is_err(), "service/CI identities fail closed");
-            assert!(!temp.join(&name).exists());
+        let Ok(sid) = interactive else {
+            assert!(
+                !temp.join(&name).exists(),
+                "service/CI identities may not stage"
+            );
             return;
-        }
-        attempt.expect("create fresh fixed ACL child for ordinary interactive SID");
+        };
+        parent
+            .create_owner_only_fixture_child(&name, &sid, LABEL)
+            .expect("create fresh fixed ACL child for ordinary interactive SID");
         parent.assert_stable(LABEL).unwrap();
         verify_disposable_root(&parent).unwrap();
         let mut second = ProtectedDirectoryGuard::acquire(&temp, LABEL).unwrap();
         assert!(
             second
-                .create_owner_only_fixture_child(&name, LABEL)
+                .create_owner_only_fixture_child(&name, &sid, LABEL)
                 .is_err(),
             "existing fixture root must never be adopted or overwritten"
         );
@@ -463,6 +472,7 @@ mod tests {
             nested
                 .create_owner_only_fixture_child(
                     &format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple()),
+                    &sid,
                     LABEL
                 )
                 .is_err(),
