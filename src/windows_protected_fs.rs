@@ -1550,6 +1550,12 @@ unsafe extern "system" {
         string_descriptor: *mut *mut u16,
         length: *mut u32,
     ) -> i32;
+    fn GetSecurityDescriptorOwner(
+        security_descriptor: *mut c_void,
+        owner: *mut *mut c_void,
+        owner_defaulted: *mut i32,
+    ) -> i32;
+    fn EqualSid(first: *mut c_void, second: *mut c_void) -> i32;
     fn LocalFree(memory: *mut c_void) -> *mut c_void;
 }
 #[cfg(windows)]
@@ -1679,6 +1685,51 @@ fn nt_open_relative_with_security_descriptor_for_domain(
 #[cfg(windows)]
 const DUPLICATE_SAME_ACCESS: u32 = 0x0000_0002;
 
+/// Compare SDDL principals by their actual Windows SID bytes. The Windows
+/// serializer can emit a local account alias such as `LA` for a token SID
+/// supplied numerically at creation. Parse each principal through the OS's
+/// full descriptor parser, then compare OWNER SIDs; no textual shortcut, RID
+/// suffix guess, group membership, or additional trustee is accepted.
+#[cfg(windows)]
+fn fixture_principals_equal(left: &str, right: &str) -> bool {
+    fn owner_from_principal(principal: &str) -> Option<(*mut c_void, *mut c_void)> {
+        if principal.is_empty()
+            || principal.len() > 256
+            || !principal
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        {
+            return None;
+        }
+        let descriptor = security_descriptor_from_sddl(
+            &format!("O:{principal}G:SYD:P(A;;FA;;;SY)"),
+            "fixture SID equivalence",
+        )
+        .ok()?;
+        let mut owner = std::ptr::null_mut();
+        let mut owner_defaulted = 0;
+        let ok =
+            unsafe { GetSecurityDescriptorOwner(descriptor, &mut owner, &mut owner_defaulted) };
+        if ok == 0 || owner.is_null() {
+            unsafe { LocalFree(descriptor) };
+            return None;
+        }
+        Some((descriptor, owner))
+    }
+    let Some((left_descriptor, left_sid)) = owner_from_principal(left) else {
+        return false;
+    };
+    let right_sid = owner_from_principal(right);
+    let matches = right_sid
+        .as_ref()
+        .is_some_and(|(_, right_sid)| unsafe { EqualSid(left_sid, *right_sid) != 0 });
+    if let Some((descriptor, _)) = right_sid {
+        unsafe { LocalFree(descriptor) };
+    }
+    unsafe { LocalFree(left_descriptor) };
+    matches
+}
+
 /// Exact ACL policy equivalence. Canonical Windows SDDL may include the
 /// auto-inherited AI flag even for a protected DACL. No unknown ACEs, flags,
 /// principals, or reordered broad permissions are tolerated.
@@ -1688,7 +1739,7 @@ fn fixture_acl_safe_shape(actual: &str, owner_sid: &str) -> String {
     let owner_matches = actual
         .strip_prefix("O:")
         .and_then(|s| s.split("G:").next())
-        .is_some_and(|s| s == owner_sid);
+        .is_some_and(|s| fixture_principals_equal(s, owner_sid));
     let dacl = actual.split_once("D:").map(|(_, d)| d).unwrap_or("");
     let flags = dacl.split('(').next().unwrap_or("");
     let mut entries = Vec::new();
@@ -1701,7 +1752,7 @@ fn fixture_acl_safe_shape(actual: &str, owner_sid: &str) -> String {
             .collect::<Vec<_>>();
         let principal = match fields.get(5).copied().unwrap_or("") {
             "SY" | "S-1-5-18" => "SYSTEM",
-            sid if sid == owner_sid => "OWNER",
+            sid if fixture_principals_equal(sid, owner_sid) => "OWNER",
             _ => "OTHER",
         };
         let ty = fields.first().copied().unwrap_or("?");
@@ -1782,7 +1833,30 @@ fn fixed_fixture_descriptor_matches(actual: &str, expected: &str) -> bool {
     let Some((actual_owner, actual_aces)) = normalized(actual) else {
         return false;
     };
-    actual_owner == expected_owner && actual_aces == expected_aces
+    if !fixture_principals_equal(&actual_owner, &expected_owner)
+        || actual_aces.len() != expected_aces.len()
+    {
+        return false;
+    }
+    // Pair every required ACE with a DISTINCT exact-SID/mask match. A
+    // duplicate owner ACE may never stand in for the required SYSTEM ACE.
+    let mut unmatched = vec![true; actual_aces.len()];
+    for (expected_sid, expected_mask) in expected_aces {
+        let Some(index) = actual_aces
+            .iter()
+            .enumerate()
+            .find_map(|(index, (sid, mask))| {
+                (unmatched[index]
+                    && mask == &expected_mask
+                    && fixture_principals_equal(sid, &expected_sid))
+                .then_some(index)
+            })
+        else {
+            return false;
+        };
+        unmatched[index] = false;
+    }
+    true
 }
 
 /// Query only the *already opened* directory HANDLE; never GetFileSecurityW
@@ -1883,6 +1957,25 @@ mod tests {
         // preserving precisely the same two allowed trustees and rights.
         let canonicalized = format!("O:{sid}G:SYD:PAI(A;OICI;0x001f01ff;;;SY)(A;OICI;FA;;;{sid})");
         assert!(fixed_fixture_descriptor_matches(&canonicalized, &expected));
+        // GitHub Windows runners may serialize a recognized SID as its SDDL
+        // abbreviation instead of the numeric string supplied at creation.
+        let administrators = "S-1-5-32-544";
+        let administrative_policy = fixed_fixture_owner_sddl(administrators, "fixture").unwrap();
+        let administrative_alias = "O:BAG:SYD:P(A;OICI;FA;;;BA)(A;OICI;FA;;;SY)";
+        assert!(fixture_principals_equal("BA", administrators));
+        assert!(!fixture_principals_equal("BU", administrators));
+        assert!(fixed_fixture_descriptor_matches(
+            administrative_alias,
+            &administrative_policy
+        ));
+        assert!(!fixed_fixture_descriptor_matches(
+            "O:BAG:SYD:P(A;OICI;FA;;;BU)(A;OICI;FA;;;SY)",
+            &administrative_policy
+        ));
+        assert!(!fixed_fixture_descriptor_matches(
+            "O:BAG:SYD:P(A;OICI;FA;;;BA)(A;OICI;FA;;;BA)",
+            &administrative_policy
+        ));
         for extra in [
             format!("{expected}(A;;FA;;;WD)"),
             expected.replacen("D:P", "D:", 1),

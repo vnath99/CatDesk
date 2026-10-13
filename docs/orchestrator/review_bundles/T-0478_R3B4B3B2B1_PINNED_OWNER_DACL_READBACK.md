@@ -2,6 +2,14 @@
 
 Date: 2026-10-11/12. Canonical CatDesk Chat52: https://chatgpt.com/c/6acba3bf-e740-8331-8896-8a25fefdbf16.
 
+## Chat53 follow-up — 2026-10-13 (pending independent CI)
+
+Independent Windows Rust CI for commits `84ba1f7` (run38235951813) and `67b7e3e` (run38236290955) failed the native owner ACL readback. Exact redacted diagnostic: protected `D:P` with two full-access inherit ACEs, owner mismatch and unknown non-SYSTEM ACE. On these same runs the two non-Rust jobs passed. Separate AppContainer helper test failed `Access is denied` code5; it is not part of this patch.
+
+Windows SDDL can serialize a SID such as the local Administrator account using `LA` rather than its original numeric SID. Replaced text-based owner/ACE principal comparison with exact Windows security descriptor parsing (`ConvertStringSecurityDescriptorToSecurityDescriptorW`), `GetSecurityDescriptorOwner` and `EqualSid`. This still requires the expected token-derived OWNER and SYSTEM SIDs, a protected DACL with precisely two distinct allowed inherit ACEs and exact full-access masks; no acceptance of unknown principals, alternate owner groups, new rights, or duplicate ACEs. Source `src/windows_protected_fs.rs` only. Regression tests prove recognized `BA` alias equals its numeric SID but `BU` and duplicate owner ACEs fail. Manual Windows local ACL policy and native snapshot positive tests passed, with full Rust 1053 passed/0 failed/26 ignored and fmt-check PASS. Independent fresh Windows CI is still pending, so B3B2B1 and B3B2B2A do not yet have full CI acceptance. No deletion or runtime MCP integration was enabled.
+
+Microsoft SID string documentation: https://learn.microsoft.com/en-us/windows/win32/secauthz/sid-strings .
+
 ## Scope
 
 **SOURCE-ONLY, dormant. No native deletion or production release.** After the B3B2A fixed token-owner SDDL root creation, this increment verifies the actual security descriptor of the **same opened, pinned directory handle** before a witnessed Git-object snapshot could stage any files. It makes no general ACL management endpoint and does not expand MCP tool permissions. It also retains earlier no-follow root/file identity safeguards.

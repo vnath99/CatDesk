@@ -4,7 +4,12 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
-## 2026-10-12 — Do not bypass pinned ACL CI failure (LATEST)
+## 2026-10-13 — Chat53 current operational checkpoint
+
+- Designated transactional rollover: `autonomy_project_registry_bind` with `projectId:catdesk`, `decision:DESIGNATED_CHAT_TARGET_URL=https://chatgpt.com/c/<uuid>`, `expectedSha256:<current digest>`; **NOT** the registry-only `autonomy_project_registry_chat_target_bind` or independent `catdesk_wake_target_set` if old event is SUBMITTING. Verified Chat53 in both registries at generation34 SHA `b9c3c16a978e424ff4122f868450d4f7b8c540578dda2cc652cd3e04c557a3e3` on 2026-10-13. Old Chat52 event remained ATTENTION; do not replay. CatDesk timer `START/STATUS/STOP` needs `allow_without_plan:true` on plan-required gateway; 19-min target, 20-min hard. All old hourly deadmen OFF.
+- Active T0478 B3B2B1 change: numeric Windows SID vs serialized SDDL alias (e.g. `LA`) now compared using the OS security-descriptor parser and `EqualSid` for owner and both required ACEs; preserve exact protected DACL and 2 distinct ACEs, no unknown principal. Local focused fixture, ACL negatives, main Rust 1053/0 and fmt passed. Independent three-job Windows CI on new commit REQUIRED; separate AppContainer test failure is not ACL validation. No fixture deletion, worker production promotion, signed T0366 or official tunnel mutation.
+
+## 2026-10-12 — Do not bypass pinned ACL CI failure (HISTORICAL)
 
 - B3B2B1 exact opened-handle native owner/DACL positive test still FAILS GitHub Windows after first semantic normalization `ad701934` CI38235173396. Preserve fail-closed. New redacted diagnostic `fixture_acl_safe_shape` supplies only bool/ACE classification without raw user SID or secret to distinguish OS ACL normalization. Local native test and Clippy pass; independent Windows CI is authoritative. Until resolved there is NO active snapshot owner lease or authorized native cleanup.
 
