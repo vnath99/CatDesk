@@ -1187,6 +1187,20 @@ class CdpSink:
                 except Exception:
                     # Reinspect the actual route before any bounded retry.
                     pass
+                # Inspect the result immediately. A verified same-tab return
+                # can complete inside a short remaining receipt deadline; a
+                # blind half-second sleep would discard that recovery.
+                try:
+                    navigated_url = str(cdp.get_current_url())
+                except Exception:
+                    navigated_url = None
+                if navigated_url is not None:
+                    if self.exact(navigated_url):
+                        if (not self.error(cdp, navigated_url)
+                                and self.document_ready_state(cdp) != "loading"):
+                            return True
+                    elif bounded_submit_target_drift_reason(navigated_url, self.url) != "SUBMIT_TARGET_DRIFT_CHROME_ERROR":
+                        return False
                 next_navigation_at = monotonic() + min(float(2 ** (attempts - 1)), 4.0)
             sleeper(RESPONSE_POLL_SECONDS)
         return False

@@ -1,6 +1,6 @@
 [package]
 name = "catdesk-wake"
-version = "1.0.0-dev.84"
+version = "1.0.0-dev.85"
 edition = "2024"
 publish = false
 

@@ -13,7 +13,7 @@ dependencies = [
 
 [[package]]
 name = "catdesk-wake"
-version = "1.0.0-dev.84"
+version = "1.0.0-dev.85"
 dependencies = [
  "serde",
  "serde_json",
