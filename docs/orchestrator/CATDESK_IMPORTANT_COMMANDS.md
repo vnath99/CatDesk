@@ -4,6 +4,11 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
+## 2026-10-13 — Chat53 stale Wake event and CI linkage checkpoint (CURRENT)
+
+- Fresh `catdesk_binagotchy_command({command:"status",allow_without_plan:true})` reports independent WakeHost `RUNNING`, submission `IDLE`, queue 0. `catdesk_transport_status` can still display the **last OLD** Chat52 gen33 `SUBMITTING / RESPONSE_GENERATION_TIMEOUT` event. It is forensic last-event state, not in-flight Chat53 generation34 submission or a reason to prevent fresh current-target manual event. Always use current target digest/generation and fresh live host status; preserve but ignore old events in current acceptance gating. No blind replay or retirement of old records merely because they are old.
+- `b117cb6` CI38411179749 Rust FAILED before ACL tests because standalone auxiliary binaries lacked Advapi32 link for new SID parser `ConvertStringSecurityDescriptorToSecurityDescriptorW`; other two jobs passed. Corrected the shared FFI block with `#[link(name = "advapi32")]`; validated local all-bin build/test, isolated fixture, fmt, strict Clippy. Require new CI 3/3 and Windows native fixture proof before approving T0478 B3B2B1; AppContainer helper test remains separate. Existing `cargo build --locked --offline --bins` catches this class of cross-binary link failures.
+
 ## 2026-10-13 — Chat53 current operational checkpoint
 
 - Designated transactional rollover: `autonomy_project_registry_bind` with `projectId:catdesk`, `decision:DESIGNATED_CHAT_TARGET_URL=https://chatgpt.com/c/<uuid>`, `expectedSha256:<current digest>`; **NOT** the registry-only `autonomy_project_registry_chat_target_bind` or independent `catdesk_wake_target_set` if old event is SUBMITTING. Verified Chat53 in both registries at generation34 SHA `b9c3c16a978e424ff4122f868450d4f7b8c540578dda2cc652cd3e04c557a3e3` on 2026-10-13. Old Chat52 event remained ATTENTION; do not replay. CatDesk timer `START/STATUS/STOP` needs `allow_without_plan:true` on plan-required gateway; 19-min target, 20-min hard. All old hourly deadmen OFF.

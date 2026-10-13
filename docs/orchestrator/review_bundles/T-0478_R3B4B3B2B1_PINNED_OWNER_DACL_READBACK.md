@@ -2,6 +2,10 @@
 
 Date: 2026-10-11/12. Canonical CatDesk Chat52: https://chatgpt.com/c/6acba3bf-e740-8331-8896-8a25fefdbf16.
 
+## Chat53 CI remediation — 2026-10-13 (in progress)
+
+Commit b117cb6 reached GitHub Windows Actions run 38411179749: main Rust job failed **at linker stage** with LNK2019 `ConvertStringSecurityDescriptorToSecurityDescriptorW` while building standalone `catdesk-wake-migrate` and `catdesk-stable-wake-activate`; Python Wake and Independent WakeHost Rust jobs succeeded. This is distinct from native ACL mismatches and means b117cb6 has **not** proved the Windows runner ACL outcome. Explicitly annotate existing Windows extern block with `#[link(name = "advapi32")]` to guarantee imports for all binaries including those without any other Advapi32 references. Local `cargo build --locked --offline --bins`, full `cargo test --locked --offline --bins`, isolated MCP integration, strict workspace all-target Clippy, and `cargo fmt --check` passed. New independent CI required; continue fail-closed, no native cleanup or worker activation before complete acceptance.
+
 ## Chat53 follow-up — 2026-10-13 (pending independent CI)
 
 Independent Windows Rust CI for commits `84ba1f7` (run38235951813) and `67b7e3e` (run38236290955) failed the native owner ACL readback. Exact redacted diagnostic: protected `D:P` with two full-access inherit ACEs, owner mismatch and unknown non-SYSTEM ACE. On these same runs the two non-Rust jobs passed. Separate AppContainer helper test failed `Access is denied` code5; it is not part of this patch.

@@ -1482,6 +1482,7 @@ pub(crate) struct BY_HANDLE_FILE_INFORMATION {
     pub(crate) file_index_low: u32,
 }
 #[cfg(windows)]
+#[link(name = "advapi32")]
 unsafe extern "system" {
     fn CreateFileW(
         file_name: *const u16,
