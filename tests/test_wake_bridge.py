@@ -1338,6 +1338,91 @@ class WakeBridgeTests(unittest.TestCase):
         self.assertEqual(9.0, accepted)
         self.assertEqual(["https://chatgpt.com/c/review-one"], cdp.opens)
 
+    def test_submission_acceptance_retries_transient_chrome_navigation_without_second_send(self):
+        class Clock:
+            def __init__(self): self.now = 0.0
+            def monotonic(self): return self.now
+            def sleep(self, seconds): self.now += seconds
+
+        class Cdp:
+            def __init__(self):
+                self.current = "chrome-error://chromewebdata/"
+                self.navigations = []
+            def get_current_url(self): return self.current
+            def get(self, url):
+                self.navigations.append(url)
+                if len(self.navigations) == 1:
+                    raise RuntimeError("transient Chrome navigation failure")
+                self.current = url
+            def open(self, url): raise AssertionError("must never open another tab")
+            def press_keys(self, *_args, **_kwargs):
+                raise AssertionError("post-submit recovery must not type or submit")
+
+        clock = Clock()
+        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, .5)
+        cdp = Cdp()
+        with patch.object(sink, "error", return_value=False), patch.object(
+            sink, "document_ready_state", return_value="complete"
+        ):
+            self.assertTrue(sink.reopen_submit_receipt_target(
+                cdp, deadline=8.0, monotonic=clock.monotonic, sleeper=clock.sleep
+            ))
+        self.assertEqual([sink.url, sink.url], cdp.navigations)
+        self.assertGreaterEqual(clock.now, 1.0)
+
+    def test_submission_reopen_bounded_after_persistent_chrome_error(self):
+        class Clock:
+            def __init__(self): self.now = 0.0
+            def monotonic(self): return self.now
+            def sleep(self, seconds): self.now += seconds
+
+        class Cdp:
+            def __init__(self):
+                self.current = "chrome-error://chromewebdata/"
+                self.navigations = []
+            def get_current_url(self): return self.current
+            def get(self, url):
+                self.navigations.append(url)
+                raise RuntimeError("transient navigation unavailable")
+            def open(self, url): raise AssertionError("must not open another tab")
+            def press_keys(self, *_args, **_kwargs):
+                raise AssertionError("must not re-submit wake")
+
+        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, .5)
+        clock = Clock()
+        cdp = Cdp()
+        self.assertFalse(sink.reopen_submit_receipt_target(
+            cdp, deadline=10.0, monotonic=clock.monotonic, sleeper=clock.sleep
+        ))
+        self.assertEqual([sink.url] * 3, cdp.navigations)
+        self.assertLessEqual(clock.now, 10.0)
+
+    def test_submission_reopen_stops_on_different_conversation_after_navigation(self):
+        class Clock:
+            def __init__(self): self.now = 0.0
+            def monotonic(self): return self.now
+            def sleep(self, seconds): self.now += seconds
+
+        class Cdp:
+            def __init__(self):
+                self.current = "chrome-error://chromewebdata/"
+                self.navigations = []
+            def get_current_url(self): return self.current
+            def get(self, url):
+                self.navigations.append(url)
+                self.current = "https://chatgpt.com/c/unexpected-thread"
+            def open(self, url): raise AssertionError("must not open another tab")
+            def press_keys(self, *_args, **_kwargs):
+                raise AssertionError("must not re-submit wake")
+
+        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, .5)
+        cdp = Cdp()
+        clock = Clock()
+        self.assertFalse(sink.reopen_submit_receipt_target(
+            cdp, deadline=8.0, monotonic=clock.monotonic, sleeper=clock.sleep
+        ))
+        self.assertEqual([sink.url], cdp.navigations)
+
     def test_submission_acceptance_does_not_reopen_non_chrome_target_drift(self):
         sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, .5)
 
@@ -1447,6 +1532,55 @@ class WakeBridgeTests(unittest.TestCase):
             with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "SUBMIT_RECEIPT_ROUND_TRIP_FAILED"):
                 sink.durable_receipt_round_trip(stale, monotonic=clock.monotonic, sleeper=clock.sleep)
         self.assertEqual(1, stale.reloads)
+
+    def test_confirm_exact_receipt_reopens_chrome_error_and_reproves_turn(self):
+        class Clock:
+            def __init__(self): self.now = 0.0
+            def monotonic(self): return self.now
+            def sleep(self, seconds): self.now += seconds
+
+        class Cdp:
+            def __init__(self):
+                self.current = "chrome-error://chromewebdata/"
+                self.navigations = []
+            def get_current_url(self): return self.current
+            def get(self, url):
+                self.navigations.append(url)
+                self.current = url
+            def open(self, _url): raise AssertionError("no new tab")
+            def press_keys(self, *_args, **_kwargs):
+                raise AssertionError("must not retype or resubmit")
+
+        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, .5)
+        clock = Clock()
+        cdp = Cdp()
+        with patch.object(sink, "error", return_value=False), patch.object(
+            sink, "document_ready_state", return_value="complete"
+        ), patch.object(sink, "post_submit_visible_any", return_value=False), patch.object(
+            sink, "post_submit_composer_text", return_value=""
+        ), patch.object(sink, "trusted_turn_anchor_state", return_value=(1, 0)), patch.object(
+            sink, "turn_anchor_receipt_stage", return_value="RECEIPT_OK"
+        ) as proof:
+            receipt = sink.confirm_exact_receipt(
+                cdp, 0, wake_bridge.digest("exact submitted message"),
+                self.record_id, "exact submitted message",
+                monotonic=clock.monotonic, sleeper=clock.sleep, wall_time=lambda: 17.0
+            )
+        self.assertEqual([sink.url], cdp.navigations)
+        self.assertEqual(2, proof.call_count)
+        self.assertEqual(17.0, receipt.browser_sent_at_unix)
+        self.assertGreater(clock.now, 0.0)
+
+    def test_confirm_exact_receipt_refuses_non_chrome_route_drift(self):
+        class Cdp:
+            def get_current_url(self): return "https://chatgpt.com/c/unexpected-thread"
+            def get(self, _url): raise AssertionError("no navigation to a foreign conversation")
+        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, .5)
+        with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "SUBMIT_TARGET_DRIFT_DIFFERENT_CONVERSATION"):
+            sink.confirm_exact_receipt(
+                Cdp(), 0, wake_bridge.digest("exact submitted message"),
+                self.record_id, "exact submitted message",
+            )
 
     def test_receipt_round_trip_chrome_error_reopens_fixed_target_without_user_submit(self):
         class Clock:

@@ -1779,6 +1779,27 @@ mod review_discovery_tests {
             transient.event.created_utc + SUBMITTING_RECONCILIATION_RETRY_WINDOW_SECONDS + 1
         ));
 
+        // Chrome's own error document is transient and may safely trigger
+        // another read-only reconcile of the SAME SUBMITTING event. This
+        // cannot call claim()/retry_pre_submit() or click Send a second time.
+        let chrome_error = store
+            .note_submitting_attention(&event.event_id, "SUBMIT_TARGET_DRIFT_CHROME_ERROR")
+            .expect("chrome error");
+        assert!(!submitting_reconciliation_due(
+            &chrome_error,
+            1,
+            chrome_error.updated_utc + 29
+        ));
+        assert!(submitting_reconciliation_due(
+            &chrome_error,
+            1,
+            chrome_error.updated_utc + 30
+        ));
+        assert!(!submitting_reconciliation_due(
+            &chrome_error,
+            SUBMITTING_RECONCILIATION_ATTEMPTS,
+            chrome_error.updated_utc + 3600
+        ));
         let contradictory = store
             .note_submitting_attention(&event.event_id, "SUBMIT_TARGET_DRIFT")
             .expect("contradictory attention");
@@ -2175,6 +2196,7 @@ fn retryable_submitting_reconciliation_reason(reason: Option<&str>) -> bool {
                 | "SUBMIT_COMPOSER_CHANGED"
                 | "SUBMIT_CLEARED_NO_APPEND"
                 | "SUBMIT_RECEIPT_QUERY_FAILED"
+                | "SUBMIT_TARGET_DRIFT_CHROME_ERROR"
                 | "SUBMIT_RECEIPT_ROUND_TRIP_FAILED"
                 | "SUBMIT_RECEIPT_UNPROVEN"
                 | "SUBMISSION_RECONCILIATION_TIMEOUT"

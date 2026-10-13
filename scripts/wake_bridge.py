@@ -887,7 +887,18 @@ class CdpSink:
             except Exception as error:
                 raise PostSubmitUnknown("SUBMIT_RECEIPT_QUERY_FAILED") from error
             if not self.exact(current_url):
-                raise PostSubmitUnknown(bounded_submit_target_drift_reason(current_url, self.url))
+                drift_reason = bounded_submit_target_drift_reason(current_url, self.url)
+                if (
+                    drift_reason == "SUBMIT_TARGET_DRIFT_CHROME_ERROR"
+                    and self.reopen_submit_receipt_target(
+                        cdp, deadline=deadline, monotonic=monotonic, sleeper=sleeper
+                    )
+                ):
+                    # An error-page transition invalidates previous same-DOM
+                    # observations. Require two fresh exact-turn polls again.
+                    stable_observations, first_stable_at, stop_seen_at = 0, None, None
+                    continue
+                raise PostSubmitUnknown(drift_reason)
             try:
                 stop_active = self.post_submit_visible_any(cdp, STOP)
                 composer = normalize_message(self.post_submit_composer_text(cdp))
@@ -1147,30 +1158,37 @@ class CdpSink:
         navigate = getattr(cdp, "get", None)
         if not callable(navigate):
             return False
-        try:
-            navigate(self.url)
-        except Exception:
-            return False
         recovery_deadline = min(
             deadline,
             monotonic() + max(self.ui_timeout, READINESS_WINDOW_SECONDS),
         )
+        # Only retry *navigation* after Chrome's own error document. Never
+        # retype the wake, click Send, switch tabs, or navigate away from a
+        # different host/chat. A thrown CDP navigation can be transient.
+        attempts = 0
+        next_navigation_at = monotonic()
         while monotonic() < recovery_deadline:
             try:
                 current = str(cdp.get_current_url())
             except Exception:
+                # No target identity evidence: observe rather than navigate.
                 sleeper(RESPONSE_POLL_SECONDS)
                 continue
-            if not self.exact(current):
-                sleeper(RESPONSE_POLL_SECONDS)
-                continue
-            if self.error(cdp, current):
-                sleeper(RESPONSE_POLL_SECONDS)
-                continue
-            if self.document_ready_state(cdp) == "loading":
-                sleeper(RESPONSE_POLL_SECONDS)
-                continue
-            return True
+            if self.exact(current):
+                if not self.error(cdp, current) and self.document_ready_state(cdp) != "loading":
+                    return True
+            elif bounded_submit_target_drift_reason(current, self.url) != "SUBMIT_TARGET_DRIFT_CHROME_ERROR":
+                # A different conversation or origin is not a network retry.
+                return False
+            elif attempts < 3 and monotonic() >= next_navigation_at:
+                attempts += 1
+                try:
+                    navigate(self.url)
+                except Exception:
+                    # Reinspect the actual route before any bounded retry.
+                    pass
+                next_navigation_at = monotonic() + min(float(2 ** (attempts - 1)), 4.0)
+            sleeper(RESPONSE_POLL_SECONDS)
         return False
 
     def reopen_response_target(
