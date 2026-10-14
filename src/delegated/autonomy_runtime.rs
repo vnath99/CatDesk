@@ -437,16 +437,34 @@ pub fn host_observe_registration_thread(
     git_identity: &str,
     observed_at_unix: u64,
 ) -> Result<ProjectRegistrationEvidenceV1, RuntimeError> {
+    host_observe_registration_thread_for_model(
+        workspace,
+        git_identity,
+        observed_at_unix,
+        super::codex_model_policy::LEGACY_TERRA_MODEL,
+    )
+}
+
+pub fn host_observe_registration_thread_for_model(
+    workspace: &Path,
+    git_identity: &str,
+    observed_at_unix: u64,
+    expected_model: &str,
+) -> Result<ProjectRegistrationEvidenceV1, RuntimeError> {
+    let effort = super::codex_model_policy::required_effort(expected_model).ok_or_else(|| {
+        RuntimeError::Validation("registration has no supported exact model profile".into())
+    })?;
     let workspace = workspace.canonicalize().map_err(|_| {
         RuntimeError::Validation("registration workspace canonicalization failed".into())
     })?;
     let mut transport = host_app_server_launch_config(&workspace)?.spawn_stdio_transport()?;
     transport.initialize()?;
     let cwd = workspace.to_string_lossy().into_owned();
-    let candidates = CodexAppServerReadClientV1::discover_adoptable_threads(
+    let candidates = CodexAppServerReadClientV1::discover_adoptable_threads_for_model(
         &mut transport,
         &cwd,
         observed_at_unix,
+        expected_model,
     )?;
     let preparation = match candidates.as_slice() {
         [preparation] => preparation.clone(),
@@ -455,8 +473,8 @@ pub fn host_observe_registration_thread(
                 "thread/start",
                 serde_json::json!({
                     "cwd": cwd,
-                    "model": super::codex_app_server::CATDESK_REQUIRED_CODEX_MODEL_V1,
-                    "effort": super::codex_app_server::CATDESK_REQUIRED_CODEX_REASONING_EFFORT_V1,
+                    "model": expected_model,
+                    "effort": effort,
                     "approvalPolicy": "never",
                     "sandboxPolicy": {"type":"readOnly", "networkAccess":false},
                     "input": [{"type":"text", "text":"CatDesk registration bootstrap. Do not modify files, run commands, use tools, or access the network. Reply only that this exact workspace thread is available."}]
@@ -468,12 +486,13 @@ pub fn host_observe_registration_thread(
                     "registration bootstrap returned a different workspace".into(),
                 ));
             }
-            CodexAppServerReadClientV1::prepare_mutating_thread(
+            CodexAppServerReadClientV1::prepare_mutating_thread_for_model(
                 &mut transport,
                 &cwd,
                 None,
                 Some(&metadata.thread_id),
                 observed_at_unix,
+                expected_model,
             )?
         }
         _ => {

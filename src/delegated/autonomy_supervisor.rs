@@ -521,6 +521,7 @@ pub fn handle_tool(name: &str, args: Value, workspace: &Path) -> Result<Value, S
             required_str(&args, "workspace")?,
             required_str(&args, "gitIdentity")?,
             required_str(&args, "verificationProfile")?,
+            requested_registration_model(&args)?,
         ),
         "autonomy_project_registry_confirm" => {
             supervisor.project_registry_confirm(required_str(&args, "confirmationToken")?)
@@ -903,6 +904,7 @@ impl AutonomousSupervisorV1 {
                     "decision",
                     "gitIdentity",
                     "verificationProfile",
+                    "modelId",
                 ],
             )?;
             return self.project_registry_preflight(
@@ -910,6 +912,7 @@ impl AutonomousSupervisorV1 {
                 workspace,
                 required_str(args, "gitIdentity")?,
                 required_str(args, "verificationProfile")?,
+                requested_registration_model(args)?,
             );
         }
         if decision == "PROJECT_REGISTRATION_CONFIRM" {
@@ -996,12 +999,14 @@ impl AutonomousSupervisorV1 {
         workspace: &str,
         git_identity: &str,
         verification_profile: &str,
+        model_id: Option<&str>,
     ) -> Result<Value, String> {
         let workspace = verified_external_git_workspace(workspace, git_identity)?;
-        let evidence = super::autonomy_runtime::host_observe_registration_thread(
+        let evidence = super::autonomy_runtime::host_observe_registration_thread_for_model(
             &workspace,
             git_identity,
             supervisor_now_unix(),
+            model_id.unwrap_or(super::codex_model_policy::LEGACY_TERRA_MODEL),
         )
         .map_err(|_| {
             "authoritative exact-CWD Codex registration evidence is unavailable".to_string()
@@ -1037,10 +1042,11 @@ impl AutonomousSupervisorV1 {
             &preflight.evidence.workspace.to_string_lossy(),
             &preflight.evidence.git_identity,
         )?;
-        let evidence = super::autonomy_runtime::host_observe_registration_thread(
+        let evidence = super::autonomy_runtime::host_observe_registration_thread_for_model(
             &workspace,
             &preflight.evidence.git_identity,
             supervisor_now_unix(),
+            &preflight.evidence.selected_model,
         )
         .map_err(|_| {
             "authoritative exact-CWD Codex confirmation evidence is unavailable".to_string()
@@ -3344,6 +3350,14 @@ fn required_str<'a>(args: &'a Value, name: &str) -> Result<&'a str, String> {
         .ok_or_else(|| format!("{name} must be a non-empty string"))
 }
 
+fn requested_registration_model(args: &Value) -> Result<Option<&str>, String> {
+    match args.get("modelId") {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(model)) if !model.is_empty() => Ok(Some(model)),
+        _ => Err("modelId must be a non-empty string when supplied".into()),
+    }
+}
+
 fn cached_bind_decision(args: &Value) -> Result<&str, String> {
     let decision = required_str(args, "decision")?;
     if decision.len() > 4_096 || decision.trim() != decision {
@@ -3655,6 +3669,21 @@ fn reviewed_promotion_completion_artifact_ids(
 mod tests {
     use super::*;
     use uuid::Uuid;
+
+    #[test]
+    fn registration_model_argument_never_silently_defaults_on_wrong_type() {
+        assert_eq!(requested_registration_model(&json!({})).unwrap(), None);
+        assert_eq!(
+            requested_registration_model(&json!({"modelId": null})).unwrap(),
+            None
+        );
+        assert_eq!(
+            requested_registration_model(&json!({"modelId": "gpt-6.1-sol"})).unwrap(),
+            Some("gpt-6.1-sol")
+        );
+        assert!(requested_registration_model(&json!({"modelId": 1})).is_err());
+        assert!(requested_registration_model(&json!({"modelId": ""})).is_err());
+    }
 
     fn contract(root: &Path) -> AutonomousDevelopmentContractV1 {
         use super::super::autonomous_contract::{

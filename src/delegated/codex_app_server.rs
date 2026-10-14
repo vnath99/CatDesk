@@ -549,6 +549,25 @@ impl CodexAppServerReadClientV1 {
         cwd: &str,
         observed_at_unix: u64,
     ) -> Result<Vec<CodexHostPreparationV1>, RuntimeError> {
+        Self::discover_adoptable_threads_for_model(
+            transport,
+            cwd,
+            observed_at_unix,
+            CATDESK_REQUIRED_CODEX_MODEL_V1,
+        )
+    }
+
+    pub fn discover_adoptable_threads_for_model<T: CodexAppServerTransportV1>(
+        transport: &mut T,
+        cwd: &str,
+        observed_at_unix: u64,
+        expected_model: &str,
+    ) -> Result<Vec<CodexHostPreparationV1>, RuntimeError> {
+        if required_effort(expected_model).is_none() {
+            return Err(RuntimeError::Validation(
+                "Codex adoption has no supported exact model profile".into(),
+            ));
+        }
         let expected_cwd = normalize_cwd(cwd)?;
         let listed = transport.request(
             "thread/list",
@@ -566,12 +585,13 @@ impl CodexAppServerReadClientV1 {
             {
                 continue;
             }
-            let mut preparation = Self::prepare_mutating_thread(
+            let mut preparation = Self::prepare_mutating_thread_for_model(
                 transport,
                 cwd,
                 None,
                 Some(&listed_thread.thread_id),
                 observed_at_unix,
+                expected_model,
             )?;
             if normalize_cwd(&preparation.thread.cwd)? != expected_cwd {
                 return Err(RuntimeError::Validation(
@@ -1536,6 +1556,56 @@ mod tests {
             resolution,
             CodexThreadResolutionV1::ConcurrentlyOwned(_)
         ));
+    }
+
+    #[test]
+    fn adoption_discovery_requires_requested_sol_medium_profile() {
+        let replies = || {
+            VecDeque::from([
+                json!({"threads":[{"id":"existing","cwd":"C:/work/project","name":"Sol thread"}]}),
+                json!({"thread":{"id":"existing","cwd":"C:/work/project","canAcceptDirectInput":true}}),
+                json!({"rateLimits":[]}),
+                json!({"thread":{"id":"existing","cwd":"C:/work/project","canAcceptDirectInput":true},"cwd":"C:/work/project","model":"gpt-6.1-sol","reasoningEffort":"medium"}),
+            ])
+        };
+        let mut transport = FakeTransport {
+            replies: replies(),
+            methods: Vec::new(),
+        };
+        let candidates = CodexAppServerReadClientV1::discover_adoptable_threads_for_model(
+            &mut transport,
+            "C:/work/project",
+            10,
+            "gpt-6.1-sol",
+        )
+        .expect("exact Sol/medium candidate");
+        assert_eq!(candidates.len(), 1);
+        let mut transport = FakeTransport {
+            replies: replies(),
+            methods: Vec::new(),
+        };
+        assert!(
+            CodexAppServerReadClientV1::discover_adoptable_threads_for_model(
+                &mut transport,
+                "C:/work/project",
+                10,
+                "gpt-5.6-terra",
+            )
+            .is_err()
+        );
+        let mut transport = FakeTransport {
+            replies: VecDeque::new(),
+            methods: Vec::new(),
+        };
+        assert!(
+            CodexAppServerReadClientV1::discover_adoptable_threads_for_model(
+                &mut transport,
+                "C:/work/project",
+                10,
+                "gpt-6.1-sol-fallback",
+            )
+            .is_err()
+        );
     }
 
     #[test]

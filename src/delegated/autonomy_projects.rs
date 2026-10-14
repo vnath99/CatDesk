@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+use super::codex_model_policy::required_effort;
 use super::runtime::RuntimeError;
 
 pub const PROJECT_REGISTRY_SCHEMA_VERSION: u32 = 1;
@@ -1122,11 +1123,10 @@ fn validate_registration_evidence(
     if evidence.workspace.as_os_str().is_empty()
         || evidence.git_identity.is_empty()
         || evidence.git_identity.len() > 1024
-        || evidence.selected_model != "gpt-5.6-terra"
-        || evidence.reasoning_effort != "high"
+        || required_effort(&evidence.selected_model) != Some(evidence.reasoning_effort.as_str())
     {
         return Err(RuntimeError::Validation(
-            "registration evidence is incomplete or not Terra/High".into(),
+            "registration evidence is incomplete or has no exact supported model profile".into(),
         ));
     }
     valid_slug(&evidence.codex_thread_id, "Codex thread id")
@@ -1652,6 +1652,38 @@ mod tests {
                 .preflight_project_registration("wrong", "rust_full", wrong, 10)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn registration_accepts_only_exact_sol_medium_evidence() {
+        let root = std::env::temp_dir().join(format!("catdesk-project-sol-{}", Uuid::new_v4()));
+        let workspace = root.join("external");
+        fs::create_dir_all(&workspace).expect("workspace");
+        let store = AutonomousProjectRegistryStoreV1::open(root.join("registry")).expect("store");
+        store.initialize(1, 1).expect("init");
+        let mut evidence = registration_evidence(workspace, "thread-sol");
+        evidence.selected_model = "gpt-6.1-sol".into();
+        evidence.reasoning_effort = "high".into();
+        assert!(
+            store
+                .preflight_project_registration("external", "rust_full", evidence.clone(), 10)
+                .is_err()
+        );
+        evidence.reasoning_effort = "medium".into();
+        let preflight = store
+            .preflight_project_registration("external", "rust_full", evidence.clone(), 10)
+            .expect("Sol/medium preflight");
+        let mut drift = evidence.clone();
+        drift.reasoning_effort = "high".into();
+        assert!(
+            store
+                .confirm_project_registration(&preflight.confirmation_token, &drift, 11)
+                .is_err()
+        );
+        let bound = store
+            .confirm_project_registration(&preflight.confirmation_token, &evidence, 12)
+            .expect("Sol/medium confirmation");
+        assert_eq!(bound.codex_thread_id.as_deref(), Some("thread-sol"));
     }
 
     #[test]

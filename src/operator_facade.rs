@@ -162,6 +162,7 @@ fn parse_project_control_action(args: &[String]) -> Result<Option<OperatorAction
                 "--workspace",
                 "--git-identity",
                 "--verification-profile",
+                "--model-id",
             ],
         ),
         (Some("registration"), Some("confirm")) => (
@@ -218,6 +219,7 @@ fn parse_project_control_action(args: &[String]) -> Result<Option<OperatorAction
         "projectId": values.get("--project-id"), "conversationUrl": values.get("--conversation-url"),
         "expectedCurrentTargetSha256": values.get("--expected-current-target-sha256"), "workspace": values.get("--workspace"),
         "gitIdentity": values.get("--git-identity"), "verificationProfile": values.get("--verification-profile"),
+        "modelId": values.get("--model-id"),
         "confirmationToken": values.get("--confirmation-token"), "candidateHandle": values.get("--candidate-handle"),
     });
     Ok(Some(OperatorAction::ProjectControl {
