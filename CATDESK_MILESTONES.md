@@ -1,4 +1,8 @@
-## 2026-10-14 — Operator handoff to Codex Desktop; hourly deadman disabled (CURRENT)
+## 2026-10-14 — Competitor research: browser wake + transactional new ChatGPT chat continuation (CURRENT)
+
+- Operator requested source-level analysis of Chat On Steroids and the other projects from the Oct11 *CatDesk competitors* discussion. New optional research and future acceptance plan: `docs/orchestrator/CATDESK_COMPETITOR_BROWSER_CONTINUITY_2026-10-14.md`, linked from Codex Desktop handoff. CoS uses authenticated local WebSocket **notification**, durable browser input owner, Chrome extension for exact existing chat or id-less native New Chat UI, ChatGPT-issued `/c/<id>` binding, and WAL-based Compact & Resume A→B local session identity transfer. CatDesk should borrow these architectural ideas **after** WakeHost dev85 and real Codex task/review work. No browser extension or new-chat automation installed/authorized; source research only. Hourly deadman remains OFF and all protected release boundaries preserved.
+
+## 2026-10-14 — Operator handoff to Codex Desktop; hourly deadman disabled (HISTORICAL)
 
 - Operator requested pause of ChatGPT-driven CatDesk work and comprehensive Codex Desktop handoff. “CatDesk Hourly Deadman Chat53” automation was confirmed **disabled** on 2026-10-14; prior deadmen remain disabled. Do not recreate it without operator request. New authoritative start point: `docs/orchestrator/CATDESK_CODEX_DESKTOP_HANDOFF_2026-10-14.md`.
 - At handoff Codex CLI `0.160.0`, `codex login status` = `Logged in using ChatGPT`, `codex exec --help` works, and earlier Sol/medium read-only probe succeeded. The failure was **substantive Codex execution through CatDesk gateway/model routing**, NOT absent Codex CLI; managed CatDesk source pins Terra/high. Codex Desktop should work directly on existing local feature branch and verify chosen effective model/effort.
