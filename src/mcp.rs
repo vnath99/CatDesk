@@ -10944,6 +10944,8 @@ mod tests {
                 "autonomy_project_registry_chat_target_bind",
                 "autonomy_project_thread_adoption_preflight",
                 "autonomy_project_thread_adoption_confirm",
+                "autonomy_project_thread_rotation_preflight",
+                "autonomy_project_thread_rotation_confirm",
                 "catdesk_codex_goal_resume",
                 "catdesk_daemon_reload",
                 "catdesk_release_recovery",

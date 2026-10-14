@@ -1884,6 +1884,27 @@ impl AutonomousStateStoreV1 {
         Ok(sessions)
     }
 
+    /// Rotation and other authority changes must not silently skip a damaged
+    /// session whose live writer state cannot be established.
+    pub fn list_sessions_strict(
+        &self,
+    ) -> Result<Vec<AutonomousSessionSnapshotV1>, AutonomyStateError> {
+        let mut sessions = Vec::new();
+        for entry in fs::read_dir(&self.root).map_err(io_error)? {
+            let entry = entry.map_err(io_error)?;
+            if !entry.file_type().map_err(io_error)?.is_dir() {
+                continue;
+            }
+            let session_id = entry.file_name().to_string_lossy().into_owned();
+            if matches!(session_id.as_str(), "diagnostics" | "qwen_tools") {
+                continue;
+            }
+            sessions.push(self.load_session(&session_id)?);
+        }
+        sessions.sort_by(|left, right| left.session_id.cmp(&right.session_id));
+        Ok(sessions)
+    }
+
     fn ensure_session_exists(&self, session_id: &str) -> Result<(), AutonomyStateError> {
         if self.session_dir(session_id)?.join("state.json").is_file() {
             Ok(())

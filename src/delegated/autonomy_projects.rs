@@ -95,6 +95,8 @@ pub struct ProjectThreadAdoptionPreflightV1 {
     pub confirmation_token: String,
     pub project_id: String,
     pub workspace: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_previous_thread_id: Option<String>,
     pub candidates: Vec<ProjectThreadAdoptionCandidateV1>,
     pub expires_at_unix: u64,
     #[serde(default)]
@@ -325,6 +327,74 @@ impl AutonomousProjectRegistryStoreV1 {
         self.save_registry(&registry)
     }
 
+    /// Test-only entry to exercise the compare-and-swap failure cases without
+    /// creating an operator path that bypasses quiescence confirmation.
+    #[cfg(test)]
+    fn rotate_codex_thread(
+        &self,
+        project_id: &str,
+        expected_old_thread_id: &str,
+        evidence: &ProjectRegistrationEvidenceV1,
+    ) -> Result<AutonomousProjectV1, RuntimeError> {
+        self.rotate_codex_thread_after(project_id, expected_old_thread_id, evidence, || Ok(()))
+    }
+
+    /// Only the confirmed rotation path invokes this in production; its guard
+    /// runs under the registry lock immediately before the durable write.
+    fn rotate_codex_thread_after<F>(
+        &self,
+        project_id: &str,
+        expected_old_thread_id: &str,
+        evidence: &ProjectRegistrationEvidenceV1,
+        before_commit: F,
+    ) -> Result<AutonomousProjectV1, RuntimeError>
+    where
+        F: FnOnce() -> Result<(), RuntimeError>,
+    {
+        valid_slug(project_id, "project id")?;
+        valid_slug(expected_old_thread_id, "Codex thread id")?;
+        validate_registration_evidence(evidence)?;
+        if evidence.selected_model != super::codex_model_policy::SOL_MEDIUM_MODEL
+            || evidence.codex_thread_id == expected_old_thread_id
+        {
+            return Err(RuntimeError::Validation(
+                "thread rotation requires a distinct exact Sol/medium thread".into(),
+            ));
+        }
+        let workspace = evidence.workspace.canonicalize().map_err(|_| {
+            RuntimeError::Validation("thread rotation workspace canonicalization failed".into())
+        })?;
+        let _transition_lock = self.acquire_thread_transition_lock()?;
+        let _lock = self.acquire_registration_lock()?;
+        let mut registry = self.load_registry()?;
+        if registry.projects.iter().any(|project| {
+            project.project_id != project_id
+                && project.codex_thread_id.as_deref() == Some(&evidence.codex_thread_id)
+        }) {
+            return Err(RuntimeError::Validation(
+                "rotation thread is already bound to another project".into(),
+            ));
+        }
+        let project = registry
+            .projects
+            .iter_mut()
+            .find(|project| project.project_id == project_id)
+            .ok_or_else(|| RuntimeError::Validation("project is not registered".into()))?;
+        if project.codex_thread_id.as_deref() != Some(expected_old_thread_id)
+            || project.workspace != workspace
+            || project.git_identity != evidence.git_identity
+        {
+            return Err(RuntimeError::Validation(
+                "thread rotation compare-and-swap or project identity did not match".into(),
+            ));
+        }
+        before_commit()?;
+        project.codex_thread_id = Some(evidence.codex_thread_id.clone());
+        let rotated = project.clone();
+        self.save_registry(&registry)?;
+        Ok(rotated)
+    }
+
     /// Resolves one execution identity only when both the durable project id
     /// and the caller's already-canonical workspace agree.  A project id is
     /// never a workspace selector: callers must not use a sibling project's
@@ -476,8 +546,38 @@ impl AutonomousProjectRegistryStoreV1 {
         &self,
         project_id: &str,
         workspace: &Path,
+        candidates: Vec<(Option<String>, ProjectRegistrationEvidenceV1)>,
+        now_unix: u64,
+    ) -> Result<ProjectThreadAdoptionPreflightV1, RuntimeError> {
+        self.preflight_thread_selection(project_id, workspace, candidates, now_unix, None)
+    }
+
+    pub(crate) fn preflight_thread_rotation(
+        &self,
+        project_id: &str,
+        workspace: &Path,
+        candidates: Vec<(Option<String>, ProjectRegistrationEvidenceV1)>,
+        now_unix: u64,
+    ) -> Result<ProjectThreadAdoptionPreflightV1, RuntimeError> {
+        let registry = self.load_registry()?;
+        let current = registry
+            .projects
+            .iter()
+            .find(|project| project.project_id == project_id)
+            .and_then(|project| project.codex_thread_id.as_deref())
+            .ok_or_else(|| {
+                RuntimeError::Validation("rotation requires an existing project thread".into())
+            })?;
+        self.preflight_thread_selection(project_id, workspace, candidates, now_unix, Some(current))
+    }
+
+    fn preflight_thread_selection(
+        &self,
+        project_id: &str,
+        workspace: &Path,
         mut candidates: Vec<(Option<String>, ProjectRegistrationEvidenceV1)>,
         now_unix: u64,
+        expected_previous_thread_id: Option<&str>,
     ) -> Result<ProjectThreadAdoptionPreflightV1, RuntimeError> {
         valid_slug(project_id, "project id")?;
         if candidates.is_empty() || candidates.len() > 8 {
@@ -494,9 +594,11 @@ impl AutonomousProjectRegistryStoreV1 {
             .iter()
             .find(|project| project.project_id == project_id)
             .ok_or_else(|| RuntimeError::Validation("project is not registered".into()))?;
-        if project.workspace != workspace || project.codex_thread_id.is_some() {
+        if project.workspace != workspace
+            || project.codex_thread_id.as_deref() != expected_previous_thread_id
+        {
             return Err(RuntimeError::Validation(
-                "project cannot adopt a different Codex thread".into(),
+                "project thread selection no longer matches its canonical binding".into(),
             ));
         }
         let mut prepared = Vec::with_capacity(candidates.len());
@@ -508,6 +610,14 @@ impl AutonomousProjectRegistryStoreV1 {
             if evidence.workspace != workspace || evidence.git_identity != project.git_identity {
                 return Err(RuntimeError::Validation(
                     "thread adoption evidence drifted from project".into(),
+                ));
+            }
+            if expected_previous_thread_id.is_some()
+                && (evidence.selected_model != super::codex_model_policy::SOL_MEDIUM_MODEL
+                    || Some(evidence.codex_thread_id.as_str()) == expected_previous_thread_id)
+            {
+                return Err(RuntimeError::Validation(
+                    "rotation candidate is not a distinct Sol/medium thread".into(),
                 ));
             }
             if registry
@@ -535,6 +645,7 @@ impl AutonomousProjectRegistryStoreV1 {
             confirmation_token: format!("adopt-{}", Uuid::new_v4().simple()),
             project_id: project_id.into(),
             workspace,
+            expected_previous_thread_id: expected_previous_thread_id.map(str::to_string),
             candidates: prepared,
             expires_at_unix: now_unix
                 .checked_add(PROJECT_THREAD_ADOPTION_CONFIRMATION_TTL_SECONDS)
@@ -562,6 +673,11 @@ impl AutonomousProjectRegistryStoreV1 {
         let _lock = self.acquire_registration_lock()?;
         let mut preflight = self.load_thread_adoption_preflight(confirmation_token)?;
         validate_adoption_preflight(&preflight)?;
+        if preflight.expected_previous_thread_id.is_some() {
+            return Err(RuntimeError::Validation(
+                "thread rotation cannot use adoption confirmation".into(),
+            ));
+        }
         let candidate = preflight
             .candidates
             .iter()
@@ -609,6 +725,69 @@ impl AutonomousProjectRegistryStoreV1 {
         preflight.confirmed_candidate_handle = Some(candidate_handle.into());
         self.write_adoption_preflight(&preflight)?;
         Ok(bound)
+    }
+
+    /// Confirms one host-selected Sol/medium candidate against a short-lived
+    /// preflight and the exact previous binding. The caller's quiescence
+    /// check runs under the registry lock immediately before the CAS write.
+    pub(crate) fn confirm_thread_rotation<F>(
+        &self,
+        confirmation_token: &str,
+        candidate_handle: &str,
+        evidence: &ProjectRegistrationEvidenceV1,
+        now_unix: u64,
+        before_commit: F,
+    ) -> Result<AutonomousProjectV1, RuntimeError>
+    where
+        F: FnOnce() -> Result<(), RuntimeError>,
+    {
+        valid_adoption_token(confirmation_token)?;
+        valid_candidate_handle(candidate_handle)?;
+        validate_registration_evidence(evidence)?;
+        let mut preflight = self.load_thread_adoption_preflight(confirmation_token)?;
+        let old = preflight
+            .expected_previous_thread_id
+            .as_deref()
+            .ok_or_else(|| {
+                RuntimeError::Validation("adoption preflight cannot rotate a thread".into())
+            })?;
+        let candidate = preflight
+            .candidates
+            .iter()
+            .find(|candidate| candidate.candidate_handle == candidate_handle)
+            .ok_or_else(|| RuntimeError::Validation("rotation candidate is unknown".into()))?;
+        if candidate.evidence != *evidence
+            || evidence.workspace.canonicalize().ok().as_deref()
+                != Some(preflight.workspace.as_path())
+        {
+            return Err(RuntimeError::Validation(
+                "rotation evidence drifted from preflight".into(),
+            ));
+        }
+        if preflight.confirmed_candidate_handle.as_deref() == Some(candidate_handle) {
+            let project =
+                self.project_for_workspace(&preflight.project_id, &preflight.workspace)?;
+            if project.codex_thread_id.as_deref() == Some(&evidence.codex_thread_id) {
+                return Ok(project);
+            }
+        }
+        if preflight.confirmed_candidate_handle.is_some() || now_unix > preflight.expires_at_unix {
+            return Err(RuntimeError::Validation(
+                "thread rotation confirmation expired or was already used".into(),
+            ));
+        }
+        let project =
+            self.rotate_codex_thread_after(&preflight.project_id, old, evidence, || {
+                if self.load_thread_adoption_preflight(confirmation_token)? != preflight {
+                    return Err(RuntimeError::Validation(
+                        "thread rotation preflight changed during confirmation".into(),
+                    ));
+                }
+                before_commit()
+            })?;
+        preflight.confirmed_candidate_handle = Some(candidate_handle.into());
+        self.write_adoption_preflight(&preflight)?;
+        Ok(project)
     }
 
     pub fn bind_project_chat_target(
@@ -965,6 +1144,33 @@ impl AutonomousProjectRegistryStoreV1 {
             Err(error) => Err(io_error(error)),
         }
     }
+
+    fn acquire_thread_transition_lock(&self) -> Result<std::fs::File, RuntimeError> {
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(self.root.join("thread-transition.lock"))
+            .map_err(io_error)?;
+        file.try_lock().map_err(|_| {
+            RuntimeError::Validation("project thread transition is already in progress".into())
+        })?;
+        Ok(file)
+    }
+
+    /// Session approval takes this same lock while it changes a draft into a
+    /// runnable writer. Rotation can then check quiescence and commit without
+    /// an approval interleaving between those steps.
+    pub(crate) fn with_thread_transition_lock<T, F>(&self, operation: F) -> Result<T, String>
+    where
+        F: FnOnce() -> Result<T, String>,
+    {
+        let _lock = self
+            .acquire_thread_transition_lock()
+            .map_err(|_| "project thread transition is already in progress".to_string())?;
+        operation()
+    }
 }
 
 struct RegistrationLockV1 {
@@ -1197,6 +1403,9 @@ fn validate_adoption_preflight(
     }
     valid_adoption_token(&preflight.confirmation_token)?;
     valid_slug(&preflight.project_id, "project id")?;
+    if let Some(previous) = &preflight.expected_previous_thread_id {
+        valid_slug(previous, "previous Codex thread id")?;
+    }
     let workspace = preflight
         .workspace
         .canonicalize()
@@ -1210,6 +1419,10 @@ fn validate_adoption_preflight(
         valid_candidate_handle(&candidate.candidate_handle)?;
         validate_registration_evidence(&candidate.evidence)?;
         if candidate.evidence.workspace != preflight.workspace
+            || preflight.expected_previous_thread_id.as_deref()
+                == Some(candidate.evidence.codex_thread_id.as_str())
+            || preflight.expected_previous_thread_id.is_some()
+                && candidate.evidence.selected_model != super::codex_model_policy::SOL_MEDIUM_MODEL
             || candidate.thread_fingerprint
                 != adoption_fingerprint("thread", &candidate.evidence.codex_thread_id)
             || candidate.cwd_fingerprint
@@ -1470,6 +1683,179 @@ mod tests {
             selected_model: "gpt-5.6-terra".into(),
             reasoning_effort: "high".into(),
         }
+    }
+
+    #[test]
+    fn sol_thread_rotation_requires_exact_old_binding_and_project_identity() {
+        let root = std::env::temp_dir().join(format!("catdesk-rotate-{}", Uuid::new_v4()));
+        let alpha = root.join("alpha");
+        let beta = root.join("beta");
+        fs::create_dir_all(&alpha).expect("alpha");
+        fs::create_dir_all(&beta).expect("beta");
+        let store = AutonomousProjectRegistryStoreV1::open(root.join("registry")).expect("store");
+        store.initialize(2, 1).expect("init");
+        store
+            .register_project(project("alpha", alpha.clone()))
+            .expect("alpha project");
+        store
+            .register_project(project("beta", beta.clone()))
+            .expect("beta project");
+        store
+            .bind_codex_thread("alpha", "old-alpha")
+            .expect("old binding");
+        store
+            .bind_codex_thread("beta", "other-beta")
+            .expect("sibling binding");
+        let mut evidence = ProjectRegistrationEvidenceV1 {
+            workspace: alpha.canonicalize().expect("canonical alpha"),
+            git_identity: "fixture-alpha".into(),
+            codex_thread_id: "new-sol".into(),
+            selected_model: "gpt-6.1-sol".into(),
+            reasoning_effort: "medium".into(),
+        };
+        assert!(
+            store
+                .rotate_codex_thread("alpha", "wrong-old", &evidence)
+                .is_err()
+        );
+        let mut wrong_workspace = evidence.clone();
+        wrong_workspace.workspace = beta.canonicalize().expect("canonical beta");
+        assert!(
+            store
+                .rotate_codex_thread("alpha", "old-alpha", &wrong_workspace)
+                .is_err()
+        );
+        let mut wrong_profile = evidence.clone();
+        wrong_profile.reasoning_effort = "high".into();
+        assert!(
+            store
+                .rotate_codex_thread("alpha", "old-alpha", &wrong_profile)
+                .is_err()
+        );
+        evidence.codex_thread_id = "other-beta".into();
+        assert!(
+            store
+                .rotate_codex_thread("alpha", "old-alpha", &evidence)
+                .is_err()
+        );
+        evidence.codex_thread_id = "new-sol".into();
+        let rotated = store
+            .rotate_codex_thread("alpha", "old-alpha", &evidence)
+            .expect("rotate");
+        assert_eq!(rotated.codex_thread_id.as_deref(), Some("new-sol"));
+        assert!(
+            store
+                .rotate_codex_thread("alpha", "old-alpha", &evidence)
+                .is_err()
+        );
+        let registry = store.load_registry().expect("registry");
+        assert_eq!(
+            registry.projects[1].codex_thread_id.as_deref(),
+            Some("other-beta")
+        );
+    }
+
+    #[test]
+    fn rotation_preflight_is_opaque_expiring_and_separate_from_adoption() {
+        let root = std::env::temp_dir().join(format!("catdesk-rotate-confirm-{}", Uuid::new_v4()));
+        let workspace = root.join("alpha");
+        fs::create_dir_all(&workspace).expect("workspace");
+        let store = AutonomousProjectRegistryStoreV1::open(root.join("registry")).expect("store");
+        store.initialize(1, 1).expect("init");
+        store
+            .register_project(project("alpha", workspace.clone()))
+            .expect("project");
+        store.bind_codex_thread("alpha", "old-alpha").expect("old");
+        let evidence = ProjectRegistrationEvidenceV1 {
+            workspace: workspace.canonicalize().expect("canonical"),
+            git_identity: "fixture-alpha".into(),
+            codex_thread_id: "new-sol".into(),
+            selected_model: "gpt-6.1-sol".into(),
+            reasoning_effort: "medium".into(),
+        };
+        let preflight = store
+            .preflight_thread_rotation(
+                "alpha",
+                &workspace,
+                vec![(Some("Sol thread".into()), evidence.clone())],
+                10,
+            )
+            .expect("preflight");
+        let handle = &preflight.candidates[0].candidate_handle;
+        assert_eq!(
+            preflight.expected_previous_thread_id.as_deref(),
+            Some("old-alpha")
+        );
+        assert_ne!(handle, &evidence.codex_thread_id);
+        assert!(
+            store
+                .confirm_thread_adoption(&preflight.confirmation_token, handle, &evidence, 11,)
+                .is_err()
+        );
+        assert!(
+            store
+                .confirm_thread_rotation(
+                    &preflight.confirmation_token,
+                    handle,
+                    &evidence,
+                    131,
+                    || Ok(()),
+                )
+                .is_err()
+        );
+        let mut called = false;
+        assert!(
+            store
+                .confirm_thread_rotation(
+                    &preflight.confirmation_token,
+                    handle,
+                    &evidence,
+                    12,
+                    || {
+                        called = true;
+                        Err(RuntimeError::Validation("active session".into()))
+                    },
+                )
+                .is_err()
+        );
+        assert!(called);
+        assert_eq!(
+            store.load_registry().expect("registry").projects[0]
+                .codex_thread_id
+                .as_deref(),
+            Some("old-alpha")
+        );
+        let rotated = store
+            .confirm_thread_rotation(&preflight.confirmation_token, handle, &evidence, 13, || {
+                Ok(())
+            })
+            .expect("confirm");
+        assert_eq!(rotated.codex_thread_id.as_deref(), Some("new-sol"));
+        let replay = store
+            .confirm_thread_rotation(
+                &preflight.confirmation_token,
+                handle,
+                &evidence,
+                200,
+                || Ok(()),
+            )
+            .expect("exact replay");
+        assert_eq!(replay.codex_thread_id.as_deref(), Some("new-sol"));
+    }
+
+    #[test]
+    fn transition_lock_rejects_overlap_and_releases_with_file_handle() {
+        let root = std::env::temp_dir().join(format!("catdesk-transition-lock-{}", Uuid::new_v4()));
+        let store = AutonomousProjectRegistryStoreV1::open(root.join("registry")).expect("store");
+        store
+            .with_thread_transition_lock(|| {
+                assert!(store.with_thread_transition_lock(|| Ok(())).is_err());
+                Ok(())
+            })
+            .expect("first lock");
+        store
+            .with_thread_transition_lock(|| Ok(()))
+            .expect("released lock");
     }
 
     #[test]

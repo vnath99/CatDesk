@@ -10,6 +10,8 @@ The operator requests **Codex GPT-6.1 Sol with medium reasoning effort** to work
 
 **2026-10-14 source increment:** `docs/orchestrator/review_bundles/T-0483_R2_SOL_MEDIUM_OPT_IN_SOURCE.md` documents an opt-in exact Sol/medium contract/CLI/app-server/controller path. This is source-only; a matching Sol thread, actual worker deliverable, authentic review event, installed dev.85 and exact live Wake receipt remain required.
 
+**Subsequent source increments:** `T-0483_R4_SOL_REGISTRATION_PROFILE.md` adds explicit Sol/medium registration; `T-0483_R5_SOL_THREAD_ROTATION_SOURCE.md` adds a guarded, short-lived Terra-to-Sol canonical-thread rotation for a quiescent registered CatDesk workspace. Neither has been installed or exercised on the live project. The existing CatDesk binding remains Terra. The exact new commit has no independent Windows CI while GitHub Actions dispatch reports HTTP 422 (`Actions has been disabled for this repository`).
+
 **P0 authority hold:** `docs/orchestrator/review_bundles/T-0483_R3_WAKE_STORE_AUTHORITY_PROVENANCE.md` records the connected-vs-direct Wake store mismatch and a source-only bounded hash readback. Resolve the live authority discrepancy before protected dev.85 activation or fresh canary. The R1 candidate binary hashes predate the R3 source change and must be rebuilt/reviewed.
 
 ## Grounded state

@@ -71,7 +71,7 @@ use super::github_publication_executor::{
     reconcile as reconcile_github_publication,
 };
 
-pub const AUTONOMY_MCP_TOOL_NAMES: [&str; 42] = [
+pub const AUTONOMY_MCP_TOOL_NAMES: [&str; 44] = [
     "autonomy_contract_create",
     "autonomy_contract_validate",
     "autonomy_runtime_capabilities",
@@ -108,6 +108,8 @@ pub const AUTONOMY_MCP_TOOL_NAMES: [&str; 42] = [
     "autonomy_project_registry_chat_target_bind",
     "autonomy_project_thread_adoption_preflight",
     "autonomy_project_thread_adoption_confirm",
+    "autonomy_project_thread_rotation_preflight",
+    "autonomy_project_thread_rotation_confirm",
     "catdesk_codex_goal_resume",
     "catdesk_daemon_reload",
     "catdesk_release_recovery",
@@ -542,6 +544,15 @@ pub fn handle_tool(name: &str, args: Value, workspace: &Path) -> Result<Value, S
             required_str(&args, "confirmationToken")?,
             required_str(&args, "candidateHandle")?,
         ),
+        "autonomy_project_thread_rotation_preflight" => supervisor
+            .project_thread_rotation_preflight(
+                required_str(&args, "projectId")?,
+                required_str(&args, "workspace")?,
+            ),
+        "autonomy_project_thread_rotation_confirm" => supervisor.project_thread_rotation_confirm(
+            required_str(&args, "confirmationToken")?,
+            required_str(&args, "candidateHandle")?,
+        ),
         "catdesk_codex_goal_resume" => {
             let titles = args
                 .get("titles")
@@ -956,6 +967,35 @@ impl AutonomousSupervisorV1 {
             }
             return Ok(confirmed);
         }
+        if let Some(workspace) =
+            decision.strip_prefix("PROJECT_THREAD_ROTATION_PREFLIGHT_WORKSPACE=")
+        {
+            cached_bind_keys(args, &["projectId", "decision"])?;
+            return self
+                .project_thread_rotation_preflight(required_str(args, "projectId")?, workspace);
+        }
+        if decision == "PROJECT_THREAD_ROTATION_CONFIRM" {
+            cached_bind_keys(
+                args,
+                &[
+                    "projectId",
+                    "decision",
+                    "confirmationToken",
+                    "candidateHandle",
+                ],
+            )?;
+            let requested_project_id = cached_optional_project_id(args)?;
+            let confirmed = self.project_thread_rotation_confirm(
+                required_str(args, "confirmationToken")?,
+                required_str(args, "candidateHandle")?,
+            )?;
+            if requested_project_id.is_some_and(|project_id| {
+                confirmed.get("projectId").and_then(Value::as_str) != Some(project_id)
+            }) {
+                return Err("thread rotation confirmation projectId did not match".into());
+            }
+            return Ok(confirmed);
+        }
         if let Some(conversation_url) = decision.strip_prefix("CHAT_TARGET_INIT_URL=") {
             cached_bind_keys(args, &["projectId", "decision"])?;
             return self.project_registry_bind_cached_chat_target_initialize(
@@ -1173,6 +1213,167 @@ impl AutonomousSupervisorV1 {
         Ok(
             json!({"projectId": project.project_id, "workspace": project.workspace, "codexThreadId": project.codex_thread_id}),
         )
+    }
+
+    fn project_thread_rotation_preflight(
+        &self,
+        project_id: &str,
+        workspace: &str,
+    ) -> Result<Value, String> {
+        let workspace = PathBuf::from(workspace)
+            .canonicalize()
+            .map_err(|_| "rotation workspace canonicalization failed".to_string())?;
+        if workspace != self.workspace {
+            return Err("rotation is limited to the supervisor's exact workspace".into());
+        }
+        let store = self.project_registry()?;
+        let project = store
+            .project_for_workspace(project_id, &workspace)
+            .map_err(|_| "rotation project/workspace binding is unavailable".to_string())?;
+        if verified_external_git_workspace(&workspace.to_string_lossy(), &project.git_identity)?
+            != workspace
+        {
+            return Err("rotation Git workspace identity drifted".into());
+        }
+        let old = project.codex_thread_id.as_deref().ok_or_else(|| {
+            "rotation requires a currently bound canonical Codex thread".to_string()
+        })?;
+        project_rotation_quiescent(&workspace)
+            .map_err(|_| "rotation requires a quiescent project workspace".to_string())?;
+        super::autonomy_runtime::host_confirm_project_thread_adoption(
+            &workspace,
+            &project.git_identity,
+            old,
+            supervisor_now_unix(),
+        )
+        .map_err(|_| "previous canonical Terra thread is not idle and authoritative".to_string())?;
+        let candidates = super::autonomy_runtime::host_discover_project_thread_rotation_candidates(
+            &workspace,
+            &project.git_identity,
+            supervisor_now_unix(),
+        )
+        .map_err(|_| "authoritative Sol/medium rotation metadata is unavailable".to_string())?;
+        let preflight = store
+            .preflight_thread_rotation(
+                project_id,
+                &workspace,
+                candidates
+                    .into_iter()
+                    .map(|candidate| (candidate.title, candidate.evidence))
+                    .collect(),
+                supervisor_now_unix(),
+            )
+            .map_err(|_| "thread rotation preflight was rejected".to_string())?;
+        Ok(json!({
+            "confirmationToken": preflight.confirmation_token,
+            "projectId": preflight.project_id,
+            "workspace": preflight.workspace,
+            "expiresAtUnix": preflight.expires_at_unix,
+            "previousThreadFingerprint": format!("sha256:{:x}", Sha256::digest(old.as_bytes())),
+            "candidates": preflight.candidates.into_iter().map(|candidate| json!({
+                "candidateHandle": candidate.candidate_handle,
+                "title": candidate.title,
+                "threadFingerprint": candidate.thread_fingerprint,
+                "cwdFingerprint": candidate.cwd_fingerprint,
+                "model": candidate.evidence.selected_model,
+                "reasoningEffort": candidate.evidence.reasoning_effort,
+            })).collect::<Vec<_>>(),
+        }))
+    }
+
+    fn project_thread_rotation_confirm(
+        &self,
+        confirmation_token: &str,
+        candidate_handle: &str,
+    ) -> Result<Value, String> {
+        let store = self.project_registry()?;
+        let preflight = store
+            .load_thread_adoption_preflight(confirmation_token)
+            .map_err(|_| "thread rotation confirmation is unavailable".to_string())?;
+        if preflight.workspace != self.workspace {
+            return Err("rotation preflight is outside the supervisor workspace".into());
+        }
+        let old = preflight
+            .expected_previous_thread_id
+            .as_deref()
+            .ok_or_else(|| "thread rotation requires a rotation preflight".to_string())?;
+        let candidate = preflight
+            .candidates
+            .iter()
+            .find(|candidate| candidate.candidate_handle == candidate_handle)
+            .ok_or_else(|| "thread rotation candidate is unavailable".to_string())?;
+        let evidence = super::autonomy_runtime::host_confirm_project_thread_rotation(
+            &preflight.workspace,
+            &candidate.evidence.git_identity,
+            &candidate.evidence.codex_thread_id,
+            supervisor_now_unix(),
+        )
+        .map_err(|_| "authoritative Sol/medium confirmation metadata is unavailable".to_string())?;
+        if verified_external_git_workspace(
+            &preflight.workspace.to_string_lossy(),
+            &evidence.git_identity,
+        )? != preflight.workspace
+        {
+            return Err("rotation Git workspace identity drifted".into());
+        }
+        let project = store
+            .confirm_thread_rotation(
+                confirmation_token,
+                candidate_handle,
+                &evidence,
+                supervisor_now_unix(),
+                || {
+                    if supervisor_now_unix() > preflight.expires_at_unix {
+                        return Err(super::runtime::RuntimeError::Validation(
+                            "thread rotation preflight expired before commit".into(),
+                        ));
+                    }
+                    project_rotation_quiescent(&preflight.workspace)?;
+                    if verified_external_git_workspace(
+                        &preflight.workspace.to_string_lossy(),
+                        &evidence.git_identity,
+                    )
+                    .ok()
+                    .as_deref()
+                        != Some(preflight.workspace.as_path())
+                    {
+                        return Err(super::runtime::RuntimeError::Validation(
+                            "rotation Git identity drifted before commit".into(),
+                        ));
+                    }
+                    super::autonomy_runtime::host_confirm_project_thread_adoption(
+                        &preflight.workspace,
+                        &evidence.git_identity,
+                        old,
+                        supervisor_now_unix(),
+                    )?;
+                    let fresh = super::autonomy_runtime::host_confirm_project_thread_rotation(
+                        &preflight.workspace,
+                        &evidence.git_identity,
+                        &evidence.codex_thread_id,
+                        supervisor_now_unix(),
+                    )?;
+                    if fresh != evidence {
+                        return Err(super::runtime::RuntimeError::Validation(
+                            "Sol/medium rotation metadata drifted before commit".into(),
+                        ));
+                    }
+                    if supervisor_now_unix() > preflight.expires_at_unix {
+                        return Err(super::runtime::RuntimeError::Validation(
+                            "thread rotation preflight expired during confirmation".into(),
+                        ));
+                    }
+                    Ok(())
+                },
+            )
+            .map_err(|_| "thread rotation confirmation was rejected".to_string())?;
+        Ok(json!({
+            "projectId": project.project_id,
+            "workspace": project.workspace,
+            "codexThreadId": project.codex_thread_id,
+            "model": evidence.selected_model,
+            "reasoningEffort": evidence.reasoning_effort,
+        }))
     }
 
     fn daemon_reload(&self, args: &Value) -> Result<Value, String> {
@@ -2386,12 +2587,14 @@ impl AutonomousSupervisorV1 {
         if decision_hash != policy.contract_hash() {
             return Err("approval decision hash does not match the persisted contract".into());
         }
-        self.mutate(session_id, expected, key, "approve", |snapshot| {
-            snapshot.approved_contract_hash = Some(decision_hash.into());
-            snapshot.state = AutonomousSessionStateV1::Queued;
-            snapshot.active = true;
-            let _ = approval_id;
-            Ok(())
+        self.project_registry()?.with_thread_transition_lock(|| {
+            self.mutate(session_id, expected, key, "approve", |snapshot| {
+                snapshot.approved_contract_hash = Some(decision_hash.into());
+                snapshot.state = AutonomousSessionStateV1::Queued;
+                snapshot.active = true;
+                let _ = approval_id;
+                Ok(())
+            })
         })
     }
 
@@ -3358,6 +3561,38 @@ fn requested_registration_model(args: &Value) -> Result<Option<&str>, String> {
     }
 }
 
+fn project_rotation_quiescent(workspace: &Path) -> Result<(), super::runtime::RuntimeError> {
+    let workspace = workspace.canonicalize().map_err(|_| {
+        super::runtime::RuntimeError::Validation("rotation workspace is unavailable".into())
+    })?;
+    let state = AutonomousStateStoreV1::open(workspace.join(".catdesk").join("autonomy"))
+        .map_err(super::runtime::RuntimeError::from)?;
+    for snapshot in state
+        .list_sessions_strict()
+        .map_err(super::runtime::RuntimeError::from)?
+    {
+        let contract = state
+            .load_contract(&snapshot.session_id)
+            .map_err(super::runtime::RuntimeError::from)?;
+        let contract_workspace = contract.workspace.canonicalize().map_err(|_| {
+            super::runtime::RuntimeError::Validation(
+                "rotation session workspace is unavailable".into(),
+            )
+        })?;
+        if contract_workspace != workspace {
+            return Err(super::runtime::RuntimeError::Validation(
+                "rotation session workspace identity drifted".into(),
+            ));
+        }
+        if snapshot.active || !snapshot.state.is_terminal() {
+            return Err(super::runtime::RuntimeError::Validation(
+                "rotation workspace has an unfinished autonomy session".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn cached_bind_decision(args: &Value) -> Result<&str, String> {
     let decision = required_str(args, "decision")?;
     if decision.len() > 4_096 || decision.trim() != decision {
@@ -3683,6 +3918,35 @@ mod tests {
         );
         assert!(requested_registration_model(&json!({"modelId": 1})).is_err());
         assert!(requested_registration_model(&json!({"modelId": ""})).is_err());
+    }
+
+    #[test]
+    fn thread_rotation_quiescence_rejects_unfinished_and_corrupt_sessions() {
+        let root = std::env::temp_dir().join(format!("catdesk-rotation-idle-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("src")).expect("workspace");
+        assert!(project_rotation_quiescent(&root).is_ok());
+        handle_tool(
+            "autonomy_contract_create",
+            json!({"contract": contract(&root)}),
+            &root,
+        )
+        .expect("draft session");
+        assert!(project_rotation_quiescent(&root).is_err());
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk").join("autonomy")).expect("store");
+        let mut snapshot = store.load_session("session-1").expect("snapshot");
+        snapshot.state = AutonomousSessionStateV1::CompletedVerified;
+        snapshot.active = false;
+        store.save_session(&snapshot).expect("terminal snapshot");
+        assert!(project_rotation_quiescent(&root).is_ok());
+        std::fs::create_dir_all(root.join(".catdesk").join("autonomy").join("diagnostics"))
+            .expect("diagnostics auxiliary directory");
+        std::fs::create_dir_all(root.join(".catdesk").join("autonomy").join("qwen_tools"))
+            .expect("Qwen auxiliary directory");
+        assert!(project_rotation_quiescent(&root).is_ok());
+        std::fs::create_dir_all(root.join(".catdesk").join("autonomy").join("damaged"))
+            .expect("damaged session directory");
+        assert!(project_rotation_quiescent(&root).is_err());
     }
 
     fn contract(root: &Path) -> AutonomousDevelopmentContractV1 {

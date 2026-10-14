@@ -411,6 +411,24 @@ impl CodexAppServerReadClientV1 {
                 "Codex mutating preflight has no supported exact model profile".into(),
             ));
         }
+        let preparation = Self::prepare_exact_idle_thread_metadata(
+            transport,
+            cwd,
+            title_or_search,
+            explicit_thread_id,
+            observed_at_unix,
+        )?;
+        enforce_model_profile(&preparation.thread, expected_model)?;
+        Ok(preparation)
+    }
+
+    fn prepare_exact_idle_thread_metadata<T: CodexAppServerTransportV1>(
+        transport: &mut T,
+        cwd: &str,
+        title_or_search: Option<&str>,
+        explicit_thread_id: Option<&str>,
+        observed_at_unix: u64,
+    ) -> Result<CodexHostPreparationV1, RuntimeError> {
         let resolution = Self::resolve_thread(transport, cwd, title_or_search, explicit_thread_id)?;
         let CodexThreadResolutionV1::Exact(resolved) = &resolution else {
             return Err(RuntimeError::Validation(
@@ -429,7 +447,6 @@ impl CodexAppServerReadClientV1 {
                 "Codex metadata-only resume did not preserve the exact resolved thread".into(),
             ));
         }
-        enforce_model_profile(&authoritative, expected_model)?;
         telemetry.selected_model = authoritative.selected_model.clone();
         telemetry.reasoning_effort = authoritative.reasoning_effort.clone();
         telemetry.thread_token_usage = authoritative.token_usage.clone();
@@ -563,6 +580,25 @@ impl CodexAppServerReadClientV1 {
         observed_at_unix: u64,
         expected_model: &str,
     ) -> Result<Vec<CodexHostPreparationV1>, RuntimeError> {
+        Self::discover_threads_for_model(transport, cwd, observed_at_unix, expected_model, false)
+    }
+
+    pub fn discover_quiescent_rotation_threads_for_model<T: CodexAppServerTransportV1>(
+        transport: &mut T,
+        cwd: &str,
+        observed_at_unix: u64,
+        expected_model: &str,
+    ) -> Result<Vec<CodexHostPreparationV1>, RuntimeError> {
+        Self::discover_threads_for_model(transport, cwd, observed_at_unix, expected_model, true)
+    }
+
+    fn discover_threads_for_model<T: CodexAppServerTransportV1>(
+        transport: &mut T,
+        cwd: &str,
+        observed_at_unix: u64,
+        expected_model: &str,
+        reject_owned_workspace_threads: bool,
+    ) -> Result<Vec<CodexHostPreparationV1>, RuntimeError> {
         if required_effort(expected_model).is_none() {
             return Err(RuntimeError::Validation(
                 "Codex adoption has no supported exact model profile".into(),
@@ -580,19 +616,42 @@ impl CodexAppServerReadClientV1 {
         )?;
         let mut prepared = Vec::new();
         for listed_thread in parse_thread_list(&listed)?.into_iter().take(8) {
-            if listed_thread.concurrently_owned
-                || normalize_cwd(&listed_thread.cwd)? != expected_cwd
-            {
+            if normalize_cwd(&listed_thread.cwd)? != expected_cwd {
                 continue;
             }
-            let mut preparation = Self::prepare_mutating_thread_for_model(
+            if listed_thread.concurrently_owned {
+                if reject_owned_workspace_threads {
+                    return Err(RuntimeError::Validation(
+                        "Codex rotation blocked by a concurrently owned workspace thread".into(),
+                    ));
+                }
+                continue;
+            }
+            let mut preparation = Self::prepare_exact_idle_thread_metadata(
                 transport,
                 cwd,
                 None,
                 Some(&listed_thread.thread_id),
                 observed_at_unix,
-                expected_model,
             )?;
+            let observed_model = preparation
+                .thread
+                .selected_model
+                .as_deref()
+                .unwrap_or_default();
+            let observed_effort = preparation
+                .thread
+                .reasoning_effort
+                .as_deref()
+                .unwrap_or_default();
+            if required_effort(observed_model) != Some(observed_effort) {
+                return Err(RuntimeError::Validation(
+                    "Codex adoption metadata has no exact supported model profile".into(),
+                ));
+            }
+            if observed_model != expected_model {
+                continue;
+            }
             if normalize_cwd(&preparation.thread.cwd)? != expected_cwd {
                 return Err(RuntimeError::Validation(
                     "Codex adoption metadata cwd drifted".into(),
@@ -1591,7 +1650,8 @@ mod tests {
                 10,
                 "gpt-5.6-terra",
             )
-            .is_err()
+            .expect("other exact profile is skipped")
+            .is_empty()
         );
         let mut transport = FakeTransport {
             replies: VecDeque::new(),
@@ -1603,6 +1663,53 @@ mod tests {
                 "C:/work/project",
                 10,
                 "gpt-6.1-sol-fallback",
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn rotation_discovery_skips_idle_terra_and_keeps_exact_sol_candidate() {
+        let mut transport = FakeTransport {
+            replies: VecDeque::from([
+                json!({"threads":[
+                    {"id":"terra","cwd":"C:/work/project"},
+                    {"id":"sol","cwd":"C:/work/project"}
+                ]}),
+                json!({"thread":{"id":"terra","cwd":"C:/work/project","canAcceptDirectInput":true}}),
+                json!({"rateLimits":[]}),
+                json!({"thread":{"id":"terra","cwd":"C:/work/project","canAcceptDirectInput":true},"cwd":"C:/work/project","model":"gpt-5.6-terra","reasoningEffort":"high"}),
+                json!({"thread":{"id":"sol","cwd":"C:/work/project","canAcceptDirectInput":true}}),
+                json!({"rateLimits":[]}),
+                json!({"thread":{"id":"sol","cwd":"C:/work/project","canAcceptDirectInput":true},"cwd":"C:/work/project","model":"gpt-6.1-sol","reasoningEffort":"medium"}),
+            ]),
+            methods: Vec::new(),
+        };
+        let candidates = CodexAppServerReadClientV1::discover_adoptable_threads_for_model(
+            &mut transport,
+            "C:/work/project",
+            10,
+            "gpt-6.1-sol",
+        )
+        .expect("mixed exact-profile discovery");
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].thread.thread_id, "sol");
+    }
+
+    #[test]
+    fn rotation_discovery_rejects_any_listed_owned_workspace_thread() {
+        let mut transport = FakeTransport {
+            replies: VecDeque::from([json!({"threads":[{
+                "id":"other-writer", "cwd":"C:/work/project", "canAcceptDirectInput":false
+            }]})]),
+            methods: Vec::new(),
+        };
+        assert!(
+            CodexAppServerReadClientV1::discover_quiescent_rotation_threads_for_model(
+                &mut transport,
+                "C:/work/project",
+                10,
+                "gpt-6.1-sol",
             )
             .is_err()
         );

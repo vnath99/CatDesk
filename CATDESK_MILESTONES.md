@@ -1,3 +1,8 @@
+## 2026-10-14 — T-0483 Sol/medium canonical thread rotation source (CURRENT)
+
+- Added an exact Sol/medium registration profile and a separate, guarded Terra-to-Sol canonical-thread rotation preflight/confirm path. Rotation uses host-observed app-server metadata, opaque candidate selection, strict idle-session inspection, a shared approval/rotation transition lock, and old-binding compare-and-swap. Source review: `docs/orchestrator/review_bundles/T-0483_R4_SOL_REGISTRATION_PROFILE.md` and `T-0483_R5_SOL_THREAD_ROTATION_SOURCE.md`.
+- Local full Rust all-features suite and strict Clippy passed. This is not live acceptance: the CatDesk project still has its Terra thread; no Sol managed task/review_ready/Wake cycle has occurred. Exact-commit GitHub Windows CI is absent because Actions dispatch returns HTTP 422 even though repository actions permissions report enabled. P0 Wake store authority and reviewed dev.85 install remain unresolved.
+
 ## 2026-10-14 — P0 Wake store authority provenance source (CURRENT)
 
 - A live readback contradiction persists: connected CatDesk MCP reports dev.84/Chat53 generation34 and an actively updated Wake status, while direct installed WakeHost CLI and `%LOCALAPPDATA%\CatDeskWake` files report a September dev.59/Chat52 generation1 store. A bounded open-handle check also found different file IDs for the displayed `host.lock` path, without establishing the cause. Details: `docs/orchestrator/review_bundles/T-0483_R3_WAKE_STORE_AUTHORITY_PROVENANCE.md`.

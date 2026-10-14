@@ -177,6 +177,14 @@ fn parse_project_control_action(args: &[String]) -> Result<Option<OperatorAction
             "autonomy_project_thread_adoption_confirm",
             &["--confirmation-token", "--candidate-handle"],
         ),
+        (Some("thread-rotation"), Some("preflight")) => (
+            "autonomy_project_thread_rotation_preflight",
+            &["--project-id", "--workspace"],
+        ),
+        (Some("thread-rotation"), Some("confirm")) => (
+            "autonomy_project_thread_rotation_confirm",
+            &["--confirmation-token", "--candidate-handle"],
+        ),
         _ => return Err("operator project accepts only reviewed fixed actions".into()),
     };
     let mut values = std::collections::BTreeMap::new();
@@ -209,7 +217,10 @@ fn parse_project_control_action(args: &[String]) -> Result<Option<OperatorAction
         ]
         .as_slice(),
         "autonomy_project_registry_confirm" => ["--confirmation-token"].as_slice(),
-        "autonomy_project_thread_adoption_preflight" => ["--project-id", "--workspace"].as_slice(),
+        "autonomy_project_thread_adoption_preflight"
+        | "autonomy_project_thread_rotation_preflight" => {
+            ["--project-id", "--workspace"].as_slice()
+        }
         _ => ["--confirmation-token", "--candidate-handle"].as_slice(),
     };
     if !required.iter().all(|flag| values.contains_key(flag)) {
@@ -426,6 +437,12 @@ fn redacted_project_control_result(
         }
         "autonomy_project_thread_adoption_preflight" => {
             json!({"action":"project_thread_adoption_preflight","status":"success","confirmationToken":field("confirmationToken"),"expiresAtUnix":field("expiresAtUnix"),"candidates":field("candidates")})
+        }
+        "autonomy_project_thread_rotation_preflight" => {
+            json!({"action":"project_thread_rotation_preflight","status":"success","confirmationToken":field("confirmationToken"),"expiresAtUnix":field("expiresAtUnix"),"previousThreadFingerprint":field("previousThreadFingerprint"),"candidates":field("candidates")})
+        }
+        "autonomy_project_thread_rotation_confirm" => {
+            json!({"action":"project_thread_rotation_confirm","status":"success","projectId":field("projectId"),"model":field("model"),"reasoningEffort":field("reasoningEffort")})
         }
         _ => {
             json!({"action":"project_thread_adoption_confirm","status":"success","projectId":field("projectId")})
@@ -981,6 +998,28 @@ mod tests {
             action,
             OperatorAction::ProjectControl {
                 operation: "autonomy_project_thread_adoption_confirm",
+                ..
+            }
+        ));
+        let rotation = parse_operator_action(
+            [
+                "operator",
+                "project",
+                "thread-rotation",
+                "preflight",
+                "--project-id",
+                "catdesk",
+                "--workspace",
+                "C:/work/catdesk",
+            ]
+            .map(str::to_string),
+        )
+        .expect("parse rotation")
+        .expect("rotation action");
+        assert!(matches!(
+            rotation,
+            OperatorAction::ProjectControl {
+                operation: "autonomy_project_thread_rotation_preflight",
                 ..
             }
         ));

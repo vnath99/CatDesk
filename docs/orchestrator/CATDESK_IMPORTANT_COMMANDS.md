@@ -1,5 +1,10 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — T-0483 source-only canonical thread rotation
+
+- After exact Windows CI, reviewed serving installation, and current-state checks, the fixed operator controls are `operator project thread-rotation preflight --project-id catdesk --workspace <exact canonical workspace>` and `operator project thread-rotation confirm --confirmation-token <returned token> --candidate-handle <returned opaque handle>`. The equivalent MCP tools are `autonomy_project_thread_rotation_preflight` and `autonomy_project_thread_rotation_confirm`. The controls accept no raw replacement thread ID. They require idle old Terra/high and new Sol/medium app-server threads, no unfinished local session, and a matching previous registry binding. See `docs/orchestrator/review_bundles/T-0483_R5_SOL_THREAD_ROTATION_SOURCE.md`.
+- These commands are **not in the installed daemon**. Do not run a debug/source binary against the live registry as a deployment shortcut. GitHub has not produced an exact check run for the current source because Actions dispatch returns HTTP 422. The hourly ChatGPT deadman remains OFF; older sections describing an active hourly schedule are historical.
+
 ## 2026-10-14 — P0 read-only Wake store authority
 
 - New source command after a reviewed dev.85 package is available: `CatDeskWakeHost.exe store-provenance`. It returns hashes only for the canonical root path and bounded config/current/status files. The matching CatDesk `catdesk_transport_status` field is `independentWakeStoreProvenance`. Compare both readbacks at a stable point before installation/canary; any divergence is a HOLD. The running daemon/installed dev.84 do not yet contain this readback. See `docs/orchestrator/review_bundles/T-0483_R3_WAKE_STORE_AUTHORITY_PROVENANCE.md`.

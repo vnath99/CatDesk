@@ -529,13 +529,58 @@ pub fn host_discover_project_thread_adoption_candidates(
     git_identity: &str,
     observed_at_unix: u64,
 ) -> Result<Vec<HostThreadAdoptionCandidateV1>, RuntimeError> {
+    host_discover_project_thread_candidates_for_model(
+        workspace,
+        git_identity,
+        observed_at_unix,
+        super::codex_model_policy::LEGACY_TERRA_MODEL,
+        false,
+    )
+}
+
+pub fn host_discover_project_thread_rotation_candidates(
+    workspace: &Path,
+    git_identity: &str,
+    observed_at_unix: u64,
+) -> Result<Vec<HostThreadAdoptionCandidateV1>, RuntimeError> {
+    host_discover_project_thread_candidates_for_model(
+        workspace,
+        git_identity,
+        observed_at_unix,
+        super::codex_model_policy::SOL_MEDIUM_MODEL,
+        true,
+    )
+}
+
+fn host_discover_project_thread_candidates_for_model(
+    workspace: &Path,
+    git_identity: &str,
+    observed_at_unix: u64,
+    expected_model: &str,
+    reject_owned_workspace_threads: bool,
+) -> Result<Vec<HostThreadAdoptionCandidateV1>, RuntimeError> {
     let workspace = workspace.canonicalize().map_err(|_| {
         RuntimeError::Validation("adoption workspace canonicalization failed".into())
     })?;
     let cwd = workspace.to_string_lossy().into_owned();
     let mut transport = host_app_server_launch_config(&workspace)?.spawn_stdio_transport()?;
     transport.initialize()?;
-    CodexAppServerReadClientV1::discover_adoptable_threads(&mut transport, &cwd, observed_at_unix)?
+    let candidates = if reject_owned_workspace_threads {
+        CodexAppServerReadClientV1::discover_quiescent_rotation_threads_for_model(
+            &mut transport,
+            &cwd,
+            observed_at_unix,
+            expected_model,
+        )?
+    } else {
+        CodexAppServerReadClientV1::discover_adoptable_threads_for_model(
+            &mut transport,
+            &cwd,
+            observed_at_unix,
+            expected_model,
+        )?
+    };
+    candidates
         .into_iter()
         .map(|preparation| {
             Ok(HostThreadAdoptionCandidateV1 {
@@ -560,18 +605,50 @@ pub fn host_confirm_project_thread_adoption(
     thread_id: &str,
     observed_at_unix: u64,
 ) -> Result<ProjectRegistrationEvidenceV1, RuntimeError> {
+    host_confirm_project_thread_for_model(
+        workspace,
+        git_identity,
+        thread_id,
+        observed_at_unix,
+        super::codex_model_policy::LEGACY_TERRA_MODEL,
+    )
+}
+
+pub fn host_confirm_project_thread_rotation(
+    workspace: &Path,
+    git_identity: &str,
+    thread_id: &str,
+    observed_at_unix: u64,
+) -> Result<ProjectRegistrationEvidenceV1, RuntimeError> {
+    host_confirm_project_thread_for_model(
+        workspace,
+        git_identity,
+        thread_id,
+        observed_at_unix,
+        super::codex_model_policy::SOL_MEDIUM_MODEL,
+    )
+}
+
+fn host_confirm_project_thread_for_model(
+    workspace: &Path,
+    git_identity: &str,
+    thread_id: &str,
+    observed_at_unix: u64,
+    expected_model: &str,
+) -> Result<ProjectRegistrationEvidenceV1, RuntimeError> {
     let workspace = workspace.canonicalize().map_err(|_| {
         RuntimeError::Validation("adoption workspace canonicalization failed".into())
     })?;
     let cwd = workspace.to_string_lossy().into_owned();
     let mut transport = host_app_server_launch_config(&workspace)?.spawn_stdio_transport()?;
     transport.initialize()?;
-    let preparation = CodexAppServerReadClientV1::prepare_mutating_thread(
+    let preparation = CodexAppServerReadClientV1::prepare_mutating_thread_for_model(
         &mut transport,
         &cwd,
         None,
         Some(thread_id),
         observed_at_unix,
+        expected_model,
     )?;
     if PathBuf::from(&preparation.thread.cwd)
         .canonicalize()
