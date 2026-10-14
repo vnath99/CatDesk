@@ -4,7 +4,13 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
-## 2026-10-14 — Sol/medium review/wake task T-0483 (CURRENT)
+## 2026-10-14 — Codex Desktop handoff; hourly deadman OFF (CURRENT)
+
+- User has handed CatDesk implementation to Codex Desktop for now. Comprehensive source-grounded path: `docs/orchestrator/CATDESK_CODEX_DESKTOP_HANDOFF_2026-10-14.md`. ChatGPT automation `CatDesk Hourly Deadman Chat53` **disabled** at 2026-10-14 operator request. No automatic ChatGPT review should be assumed merely because a Wake event is queued; resume only upon actual new delivered event or operator action.
+- `codex-cli 0.160.0` is installed; `codex login status` = `Logged in using ChatGPT`; `codex exec --help` works. Earlier “Codex unavailable” language conflated CatDesk `run_command` rejections and Terra/high managed routing with CLI availability. Codex Desktop should use native workspace/CLI directly, verify effective model/effort (operator prefers Sol/medium), and not bypass protected install/signing safeguards.
+- Current source HEAD before this handoff doc: `bea190d`; feature branch tracked/published. CI dev85 `38443116318` and T0483 `38550793848` all 3 Windows jobs SUCCESS. Installed WakeHost still dev84; source dev85 is not active. Prior current-gen Chat53 manual event `manual-wake-mcp-1791908511726` has SUBMITTING/CHROME_ERROR and no exact receipt, must not be retransmitted. Seven historical untracked files preserved; signed T0366/main image and externally owned Secure MCP untouched.
+
+## 2026-10-14 — Sol/medium review/wake task T-0483 (HISTORICAL)
 
 - Hourly ChatGPT fallback `CatDesk Hourly Deadman Chat53` enabled, hourly at minute 0. Single-writer gate: no OBSERVING manual timer, running Codex writer, active review, or in-flight current-generation browser submission. It must never pose as natural Wake. Canonical Chat53 gen34 unchanged.
 - Codex CLI `codex exec -m gpt-6.1-sol -c model_reasoning_effort=medium --json READY` completed a non-mutating model probe, but scoped substantive task/queue calls returned CatDesk `INVALID_ARGUMENT` and no worker task/deliverable was accepted. The existing managed autonomous contract is hard-coded to Terra/high, so **do not silently substitute it** for operator-requested Sol/medium. Ticket `docs/orchestrator/tickets/T-0483_CODEX_SOL_MEDIUM_WAKE_CYCLE.md` defines approved bounded review deliverable, exact source-bound review_ready event, and independent proof gates. Never call a debug `test` event a Codex review wake. CI dev85 source run38443116318 3/3 PASS but installed independent WakeHost dev84 remains unrepaired; use approved immutable promotion before live new wake.
