@@ -11,6 +11,7 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
+use super::codex_model_policy::{LEGACY_TERRA_MODEL, exact_profile_matches, required_effort};
 use super::runtime::RuntimeError;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -19,7 +20,7 @@ pub const CODEX_APP_SERVER_READ_METHODS_V1: [&str; 3] =
     ["account/rateLimits/read", "thread/list", "thread/read"];
 pub const CODEX_APP_SERVER_CONTINUITY_METHODS_V1: [&str; 2] = ["turn/start", "thread/turns/list"];
 pub const CODEX_APP_SERVER_GOAL_METHODS_V1: [&str; 2] = ["thread/goal/get", "thread/goal/set"];
-pub const CATDESK_REQUIRED_CODEX_MODEL_V1: &str = "gpt-5.6-terra";
+pub const CATDESK_REQUIRED_CODEX_MODEL_V1: &str = LEGACY_TERRA_MODEL;
 pub const CATDESK_REQUIRED_CODEX_REASONING_EFFORT_V1: &str = "high";
 const MAX_APP_SERVER_MESSAGE_BYTES: usize = 64 * 1024;
 const MAX_APP_SERVER_SKIPPED_NOTIFICATIONS: usize = 32;
@@ -387,6 +388,29 @@ impl CodexAppServerReadClientV1 {
         explicit_thread_id: Option<&str>,
         observed_at_unix: u64,
     ) -> Result<CodexHostPreparationV1, RuntimeError> {
+        Self::prepare_mutating_thread_for_model(
+            transport,
+            cwd,
+            title_or_search,
+            explicit_thread_id,
+            observed_at_unix,
+            CATDESK_REQUIRED_CODEX_MODEL_V1,
+        )
+    }
+
+    pub fn prepare_mutating_thread_for_model<T: CodexAppServerTransportV1>(
+        transport: &mut T,
+        cwd: &str,
+        title_or_search: Option<&str>,
+        explicit_thread_id: Option<&str>,
+        observed_at_unix: u64,
+        expected_model: &str,
+    ) -> Result<CodexHostPreparationV1, RuntimeError> {
+        if required_effort(expected_model).is_none() {
+            return Err(RuntimeError::Validation(
+                "Codex mutating preflight has no supported exact model profile".into(),
+            ));
+        }
         let resolution = Self::resolve_thread(transport, cwd, title_or_search, explicit_thread_id)?;
         let CodexThreadResolutionV1::Exact(resolved) = &resolution else {
             return Err(RuntimeError::Validation(
@@ -405,7 +429,7 @@ impl CodexAppServerReadClientV1 {
                 "Codex metadata-only resume did not preserve the exact resolved thread".into(),
             ));
         }
-        enforce_terra_high(&authoritative)?;
+        enforce_model_profile(&authoritative, expected_model)?;
         telemetry.selected_model = authoritative.selected_model.clone();
         telemetry.reasoning_effort = authoritative.reasoning_effort.clone();
         telemetry.thread_token_usage = authoritative.token_usage.clone();
@@ -718,7 +742,15 @@ impl CodexAppServerReadClientV1 {
                 "Codex continuity turn sequence must be one or two".into(),
             ));
         }
-        enforce_terra_high(&preparation.thread)?;
+        let selected_model = preparation
+            .thread
+            .selected_model
+            .as_deref()
+            .ok_or_else(|| {
+                RuntimeError::Validation("Codex continuity turn has no authoritative model".into())
+            })?;
+        enforce_model_profile(&preparation.thread, selected_model)?;
+        let effort = required_effort(selected_model).expect("validated exact model profile");
         if preparation.thread.concurrently_owned {
             return Err(RuntimeError::Validation(
                 "Codex continuity turn requires an idle direct-input thread".into(),
@@ -738,8 +770,8 @@ impl CodexAppServerReadClientV1 {
             json!({
                 "threadId": preparation.thread.thread_id,
                 "cwd": preparation.thread.cwd,
-                "model": CATDESK_REQUIRED_CODEX_MODEL_V1,
-                "effort": CATDESK_REQUIRED_CODEX_REASONING_EFFORT_V1,
+                "model": selected_model,
+                "effort": effort,
                 "approvalPolicy": "never",
                 "sandboxPolicy": {"type": "readOnly", "networkAccess": false},
                 "input": [{"type": "text", "text": prompt}]
@@ -834,11 +866,22 @@ fn turn_status(value: &Value) -> Option<String> {
 /// explicit process flags select intent, while app-server thread metadata is
 /// the authoritative evidence required before CatDesk permits mutation.
 pub fn enforce_terra_high(thread: &CodexThreadMetadataV1) -> Result<(), RuntimeError> {
-    if thread.selected_model.as_deref() != Some(CATDESK_REQUIRED_CODEX_MODEL_V1)
-        || thread.reasoning_effort.as_deref() != Some(CATDESK_REQUIRED_CODEX_REASONING_EFFORT_V1)
+    enforce_model_profile(thread, CATDESK_REQUIRED_CODEX_MODEL_V1)
+}
+
+pub fn enforce_model_profile(
+    thread: &CodexThreadMetadataV1,
+    expected_model: &str,
+) -> Result<(), RuntimeError> {
+    if required_effort(expected_model).is_none()
+        || !exact_profile_matches(
+            expected_model,
+            thread.selected_model.as_deref().unwrap_or_default(),
+            thread.reasoning_effort.as_deref().unwrap_or_default(),
+        )
     {
         return Err(RuntimeError::Validation(
-            "Codex mutating turn blocked: authoritative app-server metadata is not gpt-5.6-terra/high".into(),
+            "Codex mutating turn blocked: authoritative app-server model/effort differs from the exact contract profile".into(),
         ));
     }
     Ok(())
@@ -1385,6 +1428,53 @@ mod tests {
     }
 
     #[test]
+    fn opt_in_sol_preflight_requires_authoritative_medium_metadata() {
+        let replies = || {
+            VecDeque::from([
+                json!({"thread":{"id":"thread-one","cwd":"C:/work/project","canAcceptDirectInput":null}}),
+                json!({"rateLimits":[]}),
+                json!({"thread":{"id":"thread-one","cwd":"C:/work/project","canAcceptDirectInput":true},"cwd":"C:/work/project","model":"gpt-6.1-sol","reasoningEffort":"medium"}),
+            ])
+        };
+        let mut transport = FakeTransport {
+            replies: replies(),
+            methods: Vec::new(),
+        };
+        let accepted = CodexAppServerReadClientV1::prepare_mutating_thread_for_model(
+            &mut transport,
+            "C:/work/project",
+            None,
+            Some("thread-one"),
+            10,
+            "gpt-6.1-sol",
+        )
+        .expect("Sol/medium metadata");
+        assert_eq!(
+            accepted.telemetry.selected_model.as_deref(),
+            Some("gpt-6.1-sol")
+        );
+        assert_eq!(
+            accepted.telemetry.reasoning_effort.as_deref(),
+            Some("medium")
+        );
+        let mut downgraded = FakeTransport {
+            replies: replies(),
+            methods: Vec::new(),
+        };
+        assert!(
+            CodexAppServerReadClientV1::prepare_mutating_thread_for_model(
+                &mut downgraded,
+                "C:/work/project",
+                None,
+                Some("thread-one"),
+                10,
+                "gpt-5.6-terra",
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
     fn exact_cwd_resolution_fails_closed_for_ambiguity_and_writer_ownership() {
         let listing = json!({"threads":[
             {"id":"one","cwd":"C:/work/project","title":"Polish BYOVD driver pipeline"},
@@ -1619,6 +1709,20 @@ mod tests {
             ..base
         };
         assert!(enforce_terra_high(&accepted).is_ok());
+        let sol = CodexThreadMetadataV1 {
+            selected_model: Some("gpt-6.1-sol".into()),
+            reasoning_effort: Some("medium".into()),
+            ..accepted
+        };
+        assert!(enforce_model_profile(&sol, "gpt-6.1-sol").is_ok());
+        assert!(enforce_model_profile(&sol, "gpt-5.6-terra").is_err());
+        assert!(enforce_terra_high(&sol).is_err());
+        let downgraded = CodexThreadMetadataV1 {
+            selected_model: Some("gpt-5.6-terra".into()),
+            reasoning_effort: Some("high".into()),
+            ..sol
+        };
+        assert!(enforce_model_profile(&downgraded, "gpt-6.1-sol").is_err());
     }
 
     #[test]

@@ -1,4 +1,9 @@
-## 2026-10-14 — P0 WakeHost dev.85 release review and immutable build preflight (CURRENT)
+## 2026-10-14 — T-0483 opt-in Sol/medium model policy source (CURRENT)
+
+- Added an exact opt-in `gpt-6.1-sol`/`medium` model profile alongside legacy `gpt-5.6-terra`/`high`. Contract, CLI launch, app-server preflight, session binding/accounting, and controller telemetry gate now compare the model/effort pair without silently moving old sessions. Source review and remaining gates: `docs/orchestrator/review_bundles/T-0483_R2_SOL_MEDIUM_OPT_IN_SOURCE.md`. No live Codex task/review_ready cycle is claimed.
+- P0 review checkpoint `bc24000` was pushed and [Windows CI run38644625690](https://github.com/vnath99/CatDesk/actions/runs/38644625690) passed 3/3. Installed WakeHost remains dev.84 and the status authority mismatch still holds activation.
+
+## 2026-10-14 — P0 WakeHost dev.85 release review and immutable build preflight (HISTORICAL)
 
 - Codex Desktop reviewed the `09c0456` Chrome-error read-only reconciliation and `7df27ee` dev.85 version change. Exact `f4fae1a` Windows CI run38642577662 is terminal SUCCESS in all three jobs. Local Wake all-features Rust tests, focused Python Wake/adapter tests, root and Wake formatting, strict Wake Clippy, and dev.85 release-host plus forced GUI builds passed. Full evidence and hashes: `docs/orchestrator/review_bundles/T-0483_R1_CODEX_DEV85_RELEASE_REVIEW.md`.
 - The installed immutable package remains dev.84, with old Chat53 generation-34 event `manual-wake-mcp-1791908511726` in ambiguous `SUBMITTING/CHROME_ERROR`, no event-specific receipt. No replay, installation, or new wake occurred. Direct installed CLI status and Binagotchy MCP live status disagree about store/target identity; activation is held until that readback discrepancy and reviewed-install approval are resolved. The hourly ChatGPT deadman remains OFF.

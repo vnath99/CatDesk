@@ -9,6 +9,7 @@ use std::os::windows::fs::MetadataExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use super::codex_model_policy::required_effort;
 use super::contracts::stable_hash;
 
 pub const AUTONOMOUS_DEVELOPMENT_CONTRACT_SCHEMA_VERSION: u32 = 1;
@@ -374,9 +375,10 @@ impl AutonomousDevelopmentContractV1 {
                 "autonomous contract provider selection is unsupported".into(),
             ));
         }
-        if self.provider_policy.primary_model != "gpt-5.6-terra" {
+        if required_effort(&self.provider_policy.primary_model).is_none() {
             return Err(ContractPolicyError::Validation(
-                "autonomous Codex implementation work requires gpt-5.6-terra".into(),
+                "autonomous Codex implementation work requires a supported exact model profile"
+                    .into(),
             ));
         }
         if self.autonomy_lease.expires_at_unix <= self.autonomy_lease.issued_at_unix
@@ -931,6 +933,20 @@ mod tests {
             contract.decision_hash().expect("hash"),
             restored.decision_hash().expect("hash")
         );
+    }
+
+    #[test]
+    fn sol_medium_is_opt_in_and_legacy_contract_bytes_stay_valid() {
+        let legacy = contract();
+        let legacy_hash = legacy.decision_hash().expect("legacy hash");
+        legacy.validate().expect("legacy Terra contract");
+        let mut sol = legacy.clone();
+        sol.provider_policy.primary_model = "gpt-6.1-sol".into();
+        sol.validate().expect("opt-in Sol contract");
+        assert_ne!(sol.decision_hash().expect("Sol hash"), legacy_hash);
+        sol.provider_policy.primary_model = "gpt-6.1-sol-preview".into();
+        assert!(sol.validate().is_err());
+        assert_eq!(legacy.decision_hash().expect("legacy hash"), legacy_hash);
     }
 
     #[test]

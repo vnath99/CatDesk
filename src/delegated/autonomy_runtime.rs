@@ -221,6 +221,28 @@ pub fn bind_codex_app_server_thread<T: CodexAppServerTransportV1>(
     resume: bool,
     observed_at_unix: u64,
 ) -> Result<String, RuntimeError> {
+    bind_codex_app_server_thread_for_model(
+        workspace,
+        session_id,
+        transport,
+        title_or_preview,
+        explicit_thread_id,
+        resume,
+        observed_at_unix,
+        super::codex_app_server::CATDESK_REQUIRED_CODEX_MODEL_V1,
+    )
+}
+
+pub fn bind_codex_app_server_thread_for_model<T: CodexAppServerTransportV1>(
+    workspace: &Path,
+    session_id: &str,
+    transport: &mut T,
+    title_or_preview: Option<&str>,
+    explicit_thread_id: Option<&str>,
+    resume: bool,
+    observed_at_unix: u64,
+    expected_model: &str,
+) -> Result<String, RuntimeError> {
     let workspace = workspace.canonicalize().map_err(|_| {
         RuntimeError::Validation("autonomous workspace canonicalization failed".into())
     })?;
@@ -236,12 +258,13 @@ pub fn bind_codex_app_server_thread<T: CodexAppServerTransportV1>(
             "cannot bind a Codex thread while the autonomous session is in flight".into(),
         ));
     }
-    let preparation = CodexAppServerReadClientV1::prepare_mutating_thread(
+    let preparation = CodexAppServerReadClientV1::prepare_mutating_thread_for_model(
         transport,
         &workspace.to_string_lossy(),
         title_or_preview,
         explicit_thread_id,
         observed_at_unix,
+        expected_model,
     )?;
     if snapshot
         .provider_thread_id
@@ -333,7 +356,7 @@ pub fn host_prepare_codex_app_server_thread(
                 if candidate_contract.project_id == contract.project_id
                     && candidate_workspace == workspace
                     && candidate_contract.provider_policy.primary_model
-                        == super::codex_app_server::CATDESK_REQUIRED_CODEX_MODEL_V1
+                        == contract.provider_policy.primary_model
                 {
                     candidate.provider_thread_id
                 } else {
@@ -357,7 +380,7 @@ pub fn host_prepare_codex_app_server_thread(
                     .into(),
             )
         })?;
-    let bound_thread = bind_codex_app_server_thread(
+    let bound_thread = bind_codex_app_server_thread_for_model(
         &workspace,
         session_id,
         &mut transport,
@@ -365,6 +388,7 @@ pub fn host_prepare_codex_app_server_thread(
         Some(&candidate_thread),
         false,
         observed_at_unix,
+        &contract.provider_policy.primary_model,
     )?;
 
     let registry = project_store.load_registry()?;
@@ -572,6 +596,9 @@ pub fn host_start_same_thread_continuity_turn(
     let store = AutonomousStateStoreV1::open(workspace.join(".catdesk").join("autonomy"))
         .map_err(RuntimeError::from)?;
     let snapshot = store.load_session(session_id).map_err(RuntimeError::from)?;
+    let contract = store
+        .load_contract(session_id)
+        .map_err(RuntimeError::from)?;
     let existing = snapshot.codex_continuity.clone();
     match (sequence, existing.as_ref()) {
         (1, None) => {}
@@ -595,12 +622,13 @@ pub fn host_start_same_thread_continuity_turn(
 
     let mut transport = host_app_server_launch_config(&workspace)?.spawn_stdio_transport()?;
     transport.initialize()?;
-    let preparation = CodexAppServerReadClientV1::prepare_mutating_thread(
+    let preparation = CodexAppServerReadClientV1::prepare_mutating_thread_for_model(
         &mut transport,
         &workspace.to_string_lossy(),
         None,
         Some(&canonical_thread_id),
         observed_at_unix,
+        &contract.provider_policy.primary_model,
     )?;
     if preparation.thread.thread_id != canonical_thread_id {
         return Err(RuntimeError::Validation(
@@ -774,12 +802,16 @@ pub fn host_refresh_codex_app_server_accounting(
     }
     let mut transport = host_app_server_launch_config(&workspace)?.spawn_stdio_transport()?;
     transport.initialize()?;
-    refresh_post_codex_accounting_with_transport(
+    let contract = store
+        .load_contract(session_id)
+        .map_err(RuntimeError::from)?;
+    refresh_post_codex_accounting_with_transport_for_model(
         &workspace,
         &store,
         session_id,
         observed_at_unix,
         &mut transport,
+        &contract.provider_policy.primary_model,
     )?;
     Ok(())
 }
@@ -793,6 +825,24 @@ fn refresh_post_codex_accounting_with_transport<T: CodexAppServerTransportV1>(
     session_id: &str,
     observed_at_unix: u64,
     transport: &mut T,
+) -> Result<bool, RuntimeError> {
+    refresh_post_codex_accounting_with_transport_for_model(
+        workspace,
+        store,
+        session_id,
+        observed_at_unix,
+        transport,
+        super::codex_app_server::CATDESK_REQUIRED_CODEX_MODEL_V1,
+    )
+}
+
+fn refresh_post_codex_accounting_with_transport_for_model<T: CodexAppServerTransportV1>(
+    workspace: &Path,
+    store: &AutonomousStateStoreV1,
+    session_id: &str,
+    observed_at_unix: u64,
+    transport: &mut T,
+    expected_model: &str,
 ) -> Result<bool, RuntimeError> {
     let snapshot = store.load_session(session_id).map_err(RuntimeError::from)?;
     let thread_id = snapshot.provider_thread_id.ok_or_else(|| {
@@ -815,7 +865,7 @@ fn refresh_post_codex_accounting_with_transport<T: CodexAppServerTransportV1>(
         token_usage: telemetry.thread_token_usage.clone(),
         concurrently_owned: false,
     };
-    super::codex_app_server::enforce_terra_high(&metadata)?;
+    super::codex_app_server::enforce_model_profile(&metadata, expected_model)?;
     let recorded = store
         .execution_accounting_store()
         .map_err(RuntimeError::from)?
@@ -2935,9 +2985,9 @@ pub fn operator_configuration_available(
 }
 
 fn operator_config(workspace: &Path, model_id: String) -> Result<CodexCliConfigV1, RuntimeError> {
-    if model_id != super::codex_app_server::CATDESK_REQUIRED_CODEX_MODEL_V1 {
+    if super::codex_model_policy::required_effort(&model_id).is_none() {
         return Err(RuntimeError::Validation(
-            "Codex implementation policy requires gpt-5.6-terra".into(),
+            "Codex implementation policy requires an exact supported model profile".into(),
         ));
     }
     let executable = resolve_codex_executable()?;
@@ -4923,6 +4973,55 @@ mod tests {
             transport.methods,
             ["thread/read", "account/rateLimits/read", "thread/resume"]
         );
+    }
+
+    #[test]
+    fn opt_in_sol_binding_rejects_legacy_thread_without_changing_session() {
+        let root = std::env::temp_dir().join(format!("catdesk-runtime-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("workspace");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk").join("autonomy")).expect("store");
+        store
+            .create_session(
+                "session-one",
+                AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                    task_id: "task-one".into(),
+                    priority: 1,
+                    depends_on: Vec::new(),
+                    state: AutonomousQueueTaskStateV1::Ready,
+                }])
+                .expect("queue"),
+            )
+            .expect("session");
+        let cwd = root
+            .canonicalize()
+            .expect("cwd")
+            .to_string_lossy()
+            .to_string();
+        let mut transport = FakeTransport {
+            replies: VecDeque::from([
+                json!({"thread":{"id":"thread-one","cwd":cwd,"canAcceptDirectInput":null}}),
+                json!({"rateLimits":[]}),
+                json!({"thread":{"id":"thread-one","cwd":root.canonicalize().expect("cwd").to_string_lossy(),"canAcceptDirectInput":true,"status":{"type":"idle"}},"cwd":root.canonicalize().expect("cwd").to_string_lossy(),"model":"gpt-5.6-terra","reasoningEffort":"high"}),
+            ]),
+            methods: Vec::new(),
+        };
+        assert!(
+            bind_codex_app_server_thread_for_model(
+                &root,
+                "session-one",
+                &mut transport,
+                None,
+                Some("thread-one"),
+                false,
+                10,
+                "gpt-6.1-sol",
+            )
+            .is_err()
+        );
+        let snapshot = store.load_session("session-one").expect("snapshot");
+        assert!(snapshot.provider_thread_id.is_none());
+        assert!(snapshot.codex_routing_telemetry.is_none());
     }
 
     #[test]

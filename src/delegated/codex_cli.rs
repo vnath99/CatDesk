@@ -19,6 +19,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
+use super::codex_model_policy::{LEGACY_TERRA_MODEL, required_effort};
 use super::contracts::{TurnId, WorkerSessionId};
 use super::runtime::{
     NormalizedProviderEventKind, NormalizedProviderEventV1, ProviderCapabilitiesV1,
@@ -35,8 +36,11 @@ const MAX_PROMPT_BYTES: usize = 24 * 1024;
 const DIAGNOSTIC_SCHEMA_VERSION: u32 = 1;
 const MAX_DIAGNOSTIC_EVENTS: usize = 64;
 const MAX_DIAGNOSTIC_EVENT_TEXT_BYTES: usize = 2 * 1024;
-const CATDESK_REQUIRED_CODEX_MODEL: &str = "gpt-5.6-terra";
-const CATDESK_REQUIRED_CODEX_REASONING_EFFORT: &str = "high";
+const CATDESK_REQUIRED_CODEX_MODEL: &str = LEGACY_TERRA_MODEL;
+
+fn managed_reasoning_override(model_id: &str) -> Option<String> {
+    required_effort(model_id).map(|effort| format!("model_reasoning_effort={effort}"))
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -632,10 +636,8 @@ impl CodexCliProviderV1 {
         }
         if let Some(model_id) = &self.config.model_id {
             command.arg("--model").arg(model_id);
-            if model_id == CATDESK_REQUIRED_CODEX_MODEL {
-                command.arg("-c").arg(format!(
-                    "model_reasoning_effort={CATDESK_REQUIRED_CODEX_REASONING_EFFORT}"
-                ));
+            if let Some(override_value) = managed_reasoning_override(model_id) {
+                command.arg("-c").arg(override_value);
             }
         }
         command
@@ -857,7 +859,7 @@ fn execution_diagnostic(
     }
     if let Some(model_id) = &config.model_id {
         argv.extend(["--model".into(), "<configured-model>".into()]);
-        if model_id == CATDESK_REQUIRED_CODEX_MODEL {
+        if required_effort(model_id).is_some() {
             argv.extend([
                 "-c".into(),
                 "model_reasoning_effort=<configured-reasoning-effort>".into(),
@@ -1975,6 +1977,34 @@ mod tests {
             diagnostic.model_id.as_deref(),
             Some(CATDESK_REQUIRED_CODEX_MODEL)
         );
+        assert!(diagnostic.argv.windows(2).any(|pair| {
+            pair == [
+                "-c".to_string(),
+                "model_reasoning_effort=<configured-reasoning-effort>".to_string(),
+            ]
+        }));
+    }
+
+    #[test]
+    fn sol_medium_diagnostic_records_explicit_reasoning_override() {
+        assert_eq!(
+            managed_reasoning_override("gpt-6.1-sol").as_deref(),
+            Some("model_reasoning_effort=medium")
+        );
+        assert_eq!(
+            managed_reasoning_override("gpt-5.6-terra").as_deref(),
+            Some("model_reasoning_effort=high")
+        );
+        assert!(managed_reasoning_override("unsupported").is_none());
+        let request = CodexCliTurnRequestV1 {
+            worker_session_id: WorkerSessionId::new("codex-worker").expect("worker"),
+            turn_id: TurnId::new("codex-turn").expect("turn"),
+            prompt: "bounded prompt".into(),
+        };
+        let mut sol = config();
+        sol.model_id = Some(super::super::codex_model_policy::SOL_MEDIUM_MODEL.into());
+        let diagnostic = execution_diagnostic(&sol, "codex-cli 0.146.1", &request, None);
+        assert_eq!(diagnostic.model_id.as_deref(), Some("gpt-6.1-sol"));
         assert!(diagnostic.argv.windows(2).any(|pair| {
             pair == [
                 "-c".to_string(),

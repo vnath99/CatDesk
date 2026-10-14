@@ -28,14 +28,14 @@ use super::autonomy_state::{
     AutonomousTaskOutputBaselineAuthorityV1, AutonomousTaskOutputBaselineV1,
     AutonomousTaskOutputObservationV1, validate_exact_task_graph_materialization,
 };
-use super::codex_app_server::{
-    CATDESK_REQUIRED_CODEX_MODEL_V1, CATDESK_REQUIRED_CODEX_REASONING_EFFORT_V1,
-    CodexRoutingTelemetryV1,
-};
+#[cfg(test)]
+use super::codex_app_server::CATDESK_REQUIRED_CODEX_REASONING_EFFORT_V1;
+use super::codex_app_server::{CATDESK_REQUIRED_CODEX_MODEL_V1, CodexRoutingTelemetryV1};
 use super::codex_cli::{
     CodexAvailabilityFailureV1, classify_codex_availability_failure,
     parse_codex_credits_reset_after, trusted_host_local_clock,
 };
+use super::codex_model_policy::exact_profile_matches;
 use super::contracts::{RunId, TurnId, WorkerSessionId};
 use super::coordinator::{VerificationStatusV1, VerificationSummaryV1};
 use super::runtime::{
@@ -463,9 +463,19 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
             return self.escalate("planned_architecture_decision_required");
         }
         if self.provider.provider_id() == ProviderIdV1::CodexCli
-            && !has_authoritative_terra_high_gate(&snapshot)
+            && !has_authoritative_model_gate(
+                &snapshot,
+                &self.policy.contract().provider_policy.primary_model,
+            )
         {
-            return self.escalate("codex_terra_high_gate_unavailable_or_mismatched");
+            let reason = if self.policy.contract().provider_policy.primary_model
+                == CATDESK_REQUIRED_CODEX_MODEL_V1
+            {
+                "codex_terra_high_gate_unavailable_or_mismatched"
+            } else {
+                "codex_model_profile_gate_unavailable_or_mismatched"
+            };
+            return self.escalate(reason);
         }
         let worker = WorkerSessionId::new(format!("autonomy-{}", self.session_id))
             .map_err(RuntimeError::Validation)?;
@@ -2449,8 +2459,9 @@ const fn output_component_flags_are_unsafe(
     is_symlink || is_reparse || (!is_terminal && !is_directory)
 }
 
-fn has_authoritative_terra_high_gate(
+fn has_authoritative_model_gate(
     snapshot: &super::autonomy_state::AutonomousSessionSnapshotV1,
+    expected_model: &str,
 ) -> bool {
     snapshot
         .codex_routing_telemetry
@@ -2460,9 +2471,11 @@ fn has_authoritative_terra_high_gate(
                 telemetry.source.as_str(),
                 "codex-app-server/account-rateLimits-read"
                     | "codex-app-server/account-rateLimits-unavailable"
-            ) && telemetry.selected_model.as_deref() == Some(CATDESK_REQUIRED_CODEX_MODEL_V1)
-                && telemetry.reasoning_effort.as_deref()
-                    == Some(CATDESK_REQUIRED_CODEX_REASONING_EFFORT_V1)
+            ) && exact_profile_matches(
+                expected_model,
+                telemetry.selected_model.as_deref().unwrap_or_default(),
+                telemetry.reasoning_effort.as_deref().unwrap_or_default(),
+            )
         })
 }
 
@@ -5217,6 +5230,27 @@ mod tests {
                 .reason,
             "codex_terra_high_gate_unavailable_or_mismatched"
         );
+    }
+
+    #[test]
+    fn sol_contract_gate_rejects_legacy_or_wrong_effort_telemetry() {
+        let controller = route_controller(CodexRouteTestProvider::new(false, true));
+        let mut snapshot = controller.store.load_session("session-1").expect("session");
+        assert!(!has_authoritative_model_gate(&snapshot, "gpt-6.1-sol"));
+        let telemetry = snapshot
+            .codex_routing_telemetry
+            .as_mut()
+            .expect("host telemetry");
+        telemetry.selected_model = Some("gpt-6.1-sol".into());
+        telemetry.reasoning_effort = Some("high".into());
+        assert!(!has_authoritative_model_gate(&snapshot, "gpt-6.1-sol"));
+        snapshot
+            .codex_routing_telemetry
+            .as_mut()
+            .expect("host telemetry")
+            .reasoning_effort = Some("medium".into());
+        assert!(has_authoritative_model_gate(&snapshot, "gpt-6.1-sol"));
+        assert!(!has_authoritative_model_gate(&snapshot, "gpt-5.6-terra"));
     }
 
     #[tokio::test]

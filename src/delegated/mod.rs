@@ -13,6 +13,7 @@ pub mod autonomy_supervisor;
 pub mod autonomy_verifier;
 pub mod codex_app_server;
 pub mod codex_cli;
+pub mod codex_model_policy;
 pub mod context;
 pub mod contracts;
 pub mod coordinator;

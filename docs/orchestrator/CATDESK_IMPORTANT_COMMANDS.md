@@ -1,5 +1,10 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — T-0483 source-only Sol/medium policy
+
+- `docs/orchestrator/review_bundles/T-0483_R2_SOL_MEDIUM_OPT_IN_SOURCE.md` records the opt-in Codex model profile implementation and current verification. A Sol model ID in an explicit contract requires authoritative app-server `gpt-6.1-sol`/`medium` metadata; a Terra canonical thread or mismatched effort fails closed. The legacy Terra/high profile remains valid. This source increment does not install WakeHost or prove the real Codex → review_ready → ChatGPT review cycle.
+
+
 ## 2026-10-14 — Current dev.85 release gate
 
 - Review bundle: `docs/orchestrator/review_bundles/T-0483_R1_CODEX_DEV85_RELEASE_REVIEW.md`. Exact HEAD `f4fae1a` [Windows CI run38642577662](https://github.com/vnath99/CatDesk/actions/runs/38642577662) is 3/3 SUCCESS. `wake/install.ps1 -BuildOnly -RebuildGui` built dev.85 host and GUI without activating them. For tests use `cargo test --locked --offline --manifest-path wake/Cargo.toml --all-features`; the test-support feature is required by the test suite.

@@ -8,6 +8,8 @@ The operator requests **Codex GPT-6.1 Sol with medium reasoning effort** to work
 
 **STATUS: NOT END-TO-END ACCEPTED.** An authenticated Codex CLI model probe succeeded, but no verified Sol/medium Codex-produced milestone deliverable, corresponding natural review_ready Wake, or latest-generation exact delivery receipt has been proven. The hourly ChatGPT fallback was **disabled at the operator's request on 2026-10-14**. Do not mislabel any synthetic manual debug event as a natural review wake.
 
+**2026-10-14 source increment:** `docs/orchestrator/review_bundles/T-0483_R2_SOL_MEDIUM_OPT_IN_SOURCE.md` documents an opt-in exact Sol/medium contract/CLI/app-server/controller path. This is source-only; a matching Sol thread, actual worker deliverable, authentic review event, installed dev.85 and exact live Wake receipt remain required.
+
 ## Grounded state
 
 - Official CatDesk secure tunnel: CONNECTED_VERIFIED. Local user Codex CLI 0.160.0 reports login via ChatGPT.
