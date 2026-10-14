@@ -1,3 +1,9 @@
+## 2026-10-14 — P0 Wake root-object provenance source (CURRENT)
+
+- Extended read-only Wake store provenance with a hashed Windows directory-object identity. A replacement directory at the same displayed path now yields a different `root_object_sha256`; focused and full Wake/root Rust suites, formatting, strict Clippy, and inert `-BuildOnly -RebuildGui` passed. Candidate `1.0.0-dev.85-0e936b150e0f-6d74342e3f48` and artifact hashes are in `docs/orchestrator/review_bundles/T-0483_R6_WAKE_ROOT_OBJECT_PROVENANCE.md`.
+- Connected CatDesk still reports dev.84/Chat53 generation34 while the direct installed CLI sees an old dev.59/generation1 store. Both relevant processes report the same `LOCALAPPDATA`, and the connected daemon reads this workspace; the authority mismatch remains unexplained. Installed components cannot yet emit the new object hash. No install, new Wake, old-event replay, or tunnel mutation occurred.
+- Exact-commit Windows CI is absent. GitHub Actions dispatch returns HTTP 422, `Actions has been disabled for this repository`, despite normal repository permissions reporting enabled. GitHub's documented separate disabled state requires GitHub Support review. Do not treat local suites as independent CI or lift the protected release hold.
+
 ## 2026-10-14 — T-0483 Sol/medium canonical thread rotation source (CURRENT)
 
 - Added an exact Sol/medium registration profile and a separate, guarded Terra-to-Sol canonical-thread rotation preflight/confirm path. Rotation uses host-observed app-server metadata, opaque candidate selection, strict idle-session inspection, a shared approval/rotation transition lock, and old-binding compare-and-swap. Source review: `docs/orchestrator/review_bundles/T-0483_R4_SOL_REGISTRATION_PROFILE.md` and `T-0483_R5_SOL_THREAD_ROTATION_SOURCE.md`.
@@ -1360,6 +1366,3 @@ OPERATOR ACTION: NONE. Expected continuation: event-driven Python browser wake o
 - Run `37988696124` exposed `non_snake_case` errors on the private Win32 `PROCESSENTRY32W` probe struct. Renamed internal Rust field identifiers to snake case while preserving `#[repr(C)]`, field order/types, and Win32 ABI; updated field accesses. Rustfmt PASS and staged diff check PASS; commit `5be3a19` pushed.
 - GitHub run `37989023644` for HEAD `5be3a19` was queued at latest readback; there is **no all-green three-job CI** yet. Source-current independent review, immutable release, installed Wake and fresh manual Wake acceptance remain blocked. All six historical untracked files preserved, local/remote feature branch sync enforced.
 - NEXT: observe `37989023644`; correct exact new CI failures with targeted changes. Repair paired canonical target mismatch only via reviewed guarded consistency recovery (current normal CLI route is predicted to fail closed). OPERATOR ACTION: none required for source CI; do not claim event-driven Wake continuation to this chat. Hourly deadman remains disabled.
-
-
-

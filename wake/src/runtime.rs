@@ -61,9 +61,94 @@ pub struct Status {
 pub struct StoreProvenance {
     pub schema_version: u32,
     pub root_path_sha256: String,
+    /// Windows volume/file-index identity of the opened root directory,
+    /// hashed so a replaced object at the same displayed path is detectable.
+    pub root_object_sha256: Option<String>,
     pub config_sha256: Option<String>,
     pub current_sha256: Option<String>,
     pub status_sha256: Option<String>,
+}
+
+#[cfg(windows)]
+fn provenance_root_object_hash(root: &Path) -> Result<Option<String>> {
+    use std::ffi::c_void;
+    use std::os::windows::ffi::OsStrExt;
+
+    const INVALID_HANDLE_VALUE: *mut c_void = -1_isize as *mut c_void;
+    const OPEN_EXISTING: u32 = 3;
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x0010;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0400;
+    #[repr(C)]
+    #[derive(Default)]
+    struct Information {
+        attributes: u32,
+        creation_low: u32,
+        creation_high: u32,
+        access_low: u32,
+        access_high: u32,
+        write_low: u32,
+        write_high: u32,
+        volume: u32,
+        size_high: u32,
+        size_low: u32,
+        links: u32,
+        index_high: u32,
+        index_low: u32,
+    }
+    unsafe extern "system" {
+        fn CreateFileW(
+            file_name: *const u16,
+            desired_access: u32,
+            share_mode: u32,
+            security_attributes: *mut c_void,
+            creation_disposition: u32,
+            flags_and_attributes: u32,
+            template_file: *mut c_void,
+        ) -> *mut c_void;
+        fn GetFileInformationByHandle(handle: *mut c_void, information: *mut Information) -> i32;
+        fn CloseHandle(handle: *mut c_void) -> i32;
+    }
+    let wide = root
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let handle = unsafe {
+        CreateFileW(
+            wide.as_ptr(),
+            0,
+            0x0000_0007,
+            std::ptr::null_mut(),
+            OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+            std::ptr::null_mut(),
+        )
+    };
+    if handle.is_null() || handle == INVALID_HANDLE_VALUE {
+        return Err("STORE_PROVENANCE_ROOT_UNAVAILABLE".into());
+    }
+    let mut information = Information::default();
+    let queried = unsafe { GetFileInformationByHandle(handle, &mut information) };
+    unsafe { CloseHandle(handle) };
+    if queried == 0
+        || information.attributes & FILE_ATTRIBUTE_DIRECTORY == 0
+        || information.attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    {
+        return Err("STORE_PROVENANCE_ROOT_INVALID".into());
+    }
+    let mut hasher = Sha256::new();
+    hasher.update(b"catdesk-wake-root-object-v1\0");
+    hasher.update(information.volume.to_le_bytes());
+    hasher.update(information.index_high.to_le_bytes());
+    hasher.update(information.index_low.to_le_bytes());
+    Ok(Some(format!("{:x}", hasher.finalize())))
+}
+
+#[cfg(not(windows))]
+fn provenance_root_object_hash(_root: &Path) -> Result<Option<String>> {
+    Ok(None)
 }
 
 fn provenance_file_hash(root: &Path, name: &str) -> Result<Option<String>> {
@@ -125,6 +210,7 @@ pub fn store_provenance(root: &Path) -> Result<StoreProvenance> {
             "{:x}",
             Sha256::digest(canonical.to_string_lossy().as_bytes())
         ),
+        root_object_sha256: provenance_root_object_hash(&canonical)?,
         config_sha256: provenance_file_hash(&canonical, "config.json")?,
         current_sha256: provenance_file_hash(&canonical, "current.json")?,
         status_sha256: provenance_file_hash(&canonical, "status.json")?,
@@ -153,6 +239,14 @@ mod store_provenance_tests {
         assert_eq!(first.current_sha256, repeat.current_sha256);
         assert_eq!(first.status_sha256, repeat.status_sha256);
         assert_eq!(first.root_path_sha256, repeat.root_path_sha256);
+        assert_eq!(first.root_object_sha256, repeat.root_object_sha256);
+        #[cfg(windows)]
+        assert!(
+            first
+                .root_object_sha256
+                .as_ref()
+                .is_some_and(|hash| hash.len() == 64)
+        );
         assert!(
             !serde_json::to_string(&first)
                 .expect("json")
@@ -163,6 +257,16 @@ mod store_provenance_tests {
         assert_ne!(first.config_sha256, changed.config_sha256);
         assert_eq!(first.current_sha256, changed.current_sha256);
         assert_eq!(first.status_sha256, changed.status_sha256);
+        let other_root = std::env::temp_dir().join(format!(
+            "catdesk-wake-provenance-other-{}-{}",
+            std::process::id(),
+            now()
+        ));
+        std::fs::create_dir(&other_root).expect("other root");
+        let other = store_provenance(&other_root).expect("other provenance");
+        #[cfg(windows)]
+        assert_ne!(first.root_object_sha256, other.root_object_sha256);
+        std::fs::remove_dir(&other_root).expect("remove other root");
         for name in ["config.json", "current.json", "status.json"] {
             std::fs::remove_file(root.join(name)).expect("remove fixture file");
         }
@@ -184,6 +288,29 @@ mod store_provenance_tests {
         );
         std::fs::remove_file(root.join("status.json")).expect("remove fixture file");
         std::fs::remove_dir(&root).expect("remove fixture directory");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn root_object_hash_detects_replacement_at_the_same_displayed_path() {
+        let base = std::env::temp_dir().join(format!(
+            "catdesk-wake-root-object-{}-{}",
+            std::process::id(),
+            now()
+        ));
+        let root = base.join("current");
+        let retired = base.join("retired");
+        std::fs::create_dir(&base).expect("base");
+        std::fs::create_dir(&root).expect("first root");
+        let first = store_provenance(&root).expect("first identity");
+        std::fs::rename(&root, &retired).expect("retire first root");
+        std::fs::create_dir(&root).expect("replacement root");
+        let replacement = store_provenance(&root).expect("replacement identity");
+        assert_eq!(first.root_path_sha256, replacement.root_path_sha256);
+        assert_ne!(first.root_object_sha256, replacement.root_object_sha256);
+        std::fs::remove_dir(&root).expect("remove replacement");
+        std::fs::remove_dir(&retired).expect("remove retired");
+        std::fs::remove_dir(&base).expect("remove base");
     }
 }
 

@@ -1,5 +1,10 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — P0 root-object provenance source and CI hold
+
+- The source-only `CatDeskWakeHost.exe store-provenance` readback now includes `root_object_sha256`, a hash of the opened Windows root directory's volume/file-index identity. Compare connected and direct path, object, and bounded-file hashes only after both installed components expose the same reviewed build. See `docs/orchestrator/review_bundles/T-0483_R6_WAKE_ROOT_OBJECT_PROVENANCE.md`.
+- Current connected dev.84 and direct installed CLI still disagree on store/target state; the live daemon does not expose the new object hash. Exact Windows CI is unavailable because workflow dispatch returns HTTP 422 (`Actions has been disabled for this repository`) despite reported `enabled:true`. Keep protected dev.85 activation and fresh canary on hold; do not use source/debug binaries against the live store.
+
 ## 2026-10-14 — T-0483 source-only canonical thread rotation
 
 - After exact Windows CI, reviewed serving installation, and current-state checks, the fixed operator controls are `operator project thread-rotation preflight --project-id catdesk --workspace <exact canonical workspace>` and `operator project thread-rotation confirm --confirmation-token <returned token> --candidate-handle <returned opaque handle>`. The equivalent MCP tools are `autonomy_project_thread_rotation_preflight` and `autonomy_project_thread_rotation_confirm`. The controls accept no raw replacement thread ID. They require idle old Terra/high and new Sol/medium app-server threads, no unfinished local session, and a matching previous registry binding. See `docs/orchestrator/review_bundles/T-0483_R5_SOL_THREAD_ROTATION_SOURCE.md`.

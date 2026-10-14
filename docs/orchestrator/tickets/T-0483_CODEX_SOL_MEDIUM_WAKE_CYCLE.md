@@ -12,7 +12,7 @@ The operator requests **Codex GPT-6.1 Sol with medium reasoning effort** to work
 
 **Subsequent source increments:** `T-0483_R4_SOL_REGISTRATION_PROFILE.md` adds explicit Sol/medium registration; `T-0483_R5_SOL_THREAD_ROTATION_SOURCE.md` adds a guarded, short-lived Terra-to-Sol canonical-thread rotation for a quiescent registered CatDesk workspace. Neither has been installed or exercised on the live project. The existing CatDesk binding remains Terra. The exact new commit has no independent Windows CI while GitHub Actions dispatch reports HTTP 422 (`Actions has been disabled for this repository`).
 
-**P0 authority hold:** `docs/orchestrator/review_bundles/T-0483_R3_WAKE_STORE_AUTHORITY_PROVENANCE.md` records the connected-vs-direct Wake store mismatch and a source-only bounded hash readback. Resolve the live authority discrepancy before protected dev.85 activation or fresh canary. The R1 candidate binary hashes predate the R3 source change and must be rebuilt/reviewed.
+**P0 authority hold:** `docs/orchestrator/review_bundles/T-0483_R3_WAKE_STORE_AUTHORITY_PROVENANCE.md` records the connected-vs-direct Wake store mismatch. `T-0483_R6_WAKE_ROOT_OBJECT_PROVENANCE.md` adds a source-only hash of the opened Windows root directory object, plus a rebuilt inert dev.85 candidate. Resolve the live authority discrepancy and exact Windows CI outage before protected activation or a fresh canary. Earlier R1/R3 binary hashes are superseded by the R6 candidate; none is installed.
 
 ## Grounded state
 
