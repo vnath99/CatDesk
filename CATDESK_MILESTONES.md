@@ -1,4 +1,9 @@
-## 2026-10-14 — T-0483 opt-in Sol/medium model policy source (CURRENT)
+## 2026-10-14 — P0 Wake store authority provenance source (CURRENT)
+
+- A live readback contradiction persists: connected CatDesk MCP reports dev.84/Chat53 generation34 and an actively updated Wake status, while direct installed WakeHost CLI and `%LOCALAPPDATA%\CatDeskWake` files report a September dev.59/Chat52 generation1 store. A bounded open-handle check also found different file IDs for the displayed `host.lock` path, without establishing the cause. Details: `docs/orchestrator/review_bundles/T-0483_R3_WAKE_STORE_AUTHORITY_PROVENANCE.md`.
+- Added fixed read-only SHA-256 store provenance to WakeHost CLI and CatDesk transport status, with bounded-file and no-content tests. Final inert dev.85 build candidate ID `1.0.0-dev.85-8e96f5157414-529cd47bc211` and all four artifact hashes are recorded in R3. This is source-only; live daemon and installed dev.84 do not expose the new readback. P0 activation and fresh wake remain on hold pending matching authority, exact Windows CI and reviewed-install approval. Old ambiguous event is not replayed.
+
+## 2026-10-14 — T-0483 opt-in Sol/medium model policy source (HISTORICAL)
 
 - Added an exact opt-in `gpt-6.1-sol`/`medium` model profile alongside legacy `gpt-5.6-terra`/`high`. Contract, CLI launch, app-server preflight, session binding/accounting, and controller telemetry gate now compare the model/effort pair without silently moving old sessions. Source review and remaining gates: `docs/orchestrator/review_bundles/T-0483_R2_SOL_MEDIUM_OPT_IN_SOURCE.md`. No live Codex task/review_ready cycle is claimed.
 - P0 review checkpoint `bc24000` was pushed and [Windows CI run38644625690](https://github.com/vnath99/CatDesk/actions/runs/38644625690) passed 3/3. Installed WakeHost remains dev.84 and the status authority mismatch still holds activation.

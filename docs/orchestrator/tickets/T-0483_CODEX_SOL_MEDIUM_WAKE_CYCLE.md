@@ -10,6 +10,8 @@ The operator requests **Codex GPT-6.1 Sol with medium reasoning effort** to work
 
 **2026-10-14 source increment:** `docs/orchestrator/review_bundles/T-0483_R2_SOL_MEDIUM_OPT_IN_SOURCE.md` documents an opt-in exact Sol/medium contract/CLI/app-server/controller path. This is source-only; a matching Sol thread, actual worker deliverable, authentic review event, installed dev.85 and exact live Wake receipt remain required.
 
+**P0 authority hold:** `docs/orchestrator/review_bundles/T-0483_R3_WAKE_STORE_AUTHORITY_PROVENANCE.md` records the connected-vs-direct Wake store mismatch and a source-only bounded hash readback. Resolve the live authority discrepancy before protected dev.85 activation or fresh canary. The R1 candidate binary hashes predate the R3 source change and must be rebuilt/reviewed.
+
 ## Grounded state
 
 - Official CatDesk secure tunnel: CONNECTED_VERIFIED. Local user Codex CLI 0.160.0 reports login via ChatGPT.

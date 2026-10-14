@@ -67,5 +67,30 @@ fn manual_cli_requires_matching_expected_target_before_publication_or_start() {
     assert_eq!(history, serde_json::json!([]));
     assert!(!root.join("status.json").exists());
 
+    let output = Command::new(env!("CARGO_BIN_EXE_CatDeskWakeHost"))
+        .arg("store-provenance")
+        .env("LOCALAPPDATA", &base)
+        .env("CATDESK_WAKE_TEST_ONLY_ROOT_PARENT", &base)
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let provenance: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(provenance["schemaVersion"], 1);
+    assert!(provenance["rootPathSha256"].as_str().is_some());
+    assert!(provenance["configSha256"].as_str().is_some());
+    assert!(provenance["currentSha256"].is_null());
+    assert!(provenance["statusSha256"].is_null());
+    assert!(!root.join("status.json").exists());
+
+    let missing_parent = base.join("provenance-absent");
+    let output = Command::new(env!("CARGO_BIN_EXE_CatDeskWakeHost"))
+        .arg("store-provenance")
+        .env("LOCALAPPDATA", &missing_parent)
+        .env("CATDESK_WAKE_TEST_ONLY_ROOT_PARENT", &missing_parent)
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(!missing_parent.exists());
+
     fs::remove_dir_all(base).unwrap();
 }

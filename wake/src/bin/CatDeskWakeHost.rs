@@ -18,6 +18,14 @@ fn main() {
 fn execute() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let root = runtime::default_root()?;
+    if args.as_slice() == ["store-provenance"] {
+        println!(
+            "{}",
+            serde_json::to_string(&runtime::store_provenance(&root)?)
+                .map_err(|_| "STATUS_SERIALIZATION_FAILED")?
+        );
+        return Ok(());
+    }
     let store = open_runtime_store(&root)?;
     match args.as_slice() {
         [command] if command == "init" => store.initialize()?,

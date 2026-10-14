@@ -1413,6 +1413,12 @@ impl AppState {
                 }),
             }
         })();
+        let independent_wake_store_provenance = match catdesk_wake::runtime::default_root()
+            .and_then(|root| catdesk_wake::runtime::store_provenance(&root))
+        {
+            Ok(value) => serde_json::json!({"available": true, "provenance": value}),
+            Err(error) => serde_json::json!({"available": false, "reason": error}),
+        };
         serde_json::json!({
             "toolName": "catdesk_transport_status",
             "transportMode": self.tunnel_config.mode.as_str(),
@@ -1445,6 +1451,7 @@ impl AppState {
                 "staleCount": stable_wake.stale_count,
             },
             "independentWake": independent_wake,
+            "independentWakeStoreProvenance": independent_wake_store_provenance,
             "identity": {
                 "gitCommit": identity.git_commit,
                 "dirtyBuild": identity.dirty_build,

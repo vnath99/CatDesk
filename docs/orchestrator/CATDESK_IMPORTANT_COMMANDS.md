@@ -1,5 +1,10 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — P0 read-only Wake store authority
+
+- New source command after a reviewed dev.85 package is available: `CatDeskWakeHost.exe store-provenance`. It returns hashes only for the canonical root path and bounded config/current/status files. The matching CatDesk `catdesk_transport_status` field is `independentWakeStoreProvenance`. Compare both readbacks at a stable point before installation/canary; any divergence is a HOLD. The running daemon/installed dev.84 do not yet contain this readback. See `docs/orchestrator/review_bundles/T-0483_R3_WAKE_STORE_AUTHORITY_PROVENANCE.md`.
+- Do not treat the connected dev.84/gen34 status and direct local dev.59/gen1 status as interchangeable. Do not replay `manual-wake-mcp-1791908511726`, replace installed files directly, or touch the official tunnel. The hourly deadman stays OFF.
+
 ## 2026-10-14 — T-0483 source-only Sol/medium policy
 
 - `docs/orchestrator/review_bundles/T-0483_R2_SOL_MEDIUM_OPT_IN_SOURCE.md` records the opt-in Codex model profile implementation and current verification. A Sol model ID in an explicit contract requires authoritative app-server `gpt-6.1-sol`/`medium` metadata; a Terra canonical thread or mismatched effort fails closed. The legacy Terra/high profile remains valid. This source increment does not install WakeHost or prove the real Codex → review_ready → ChatGPT review cycle.

@@ -4,10 +4,11 @@ use crate::{
     store::{HostLease, Phase, Receipt, ResponseState, Store, TurnTimer, atomic, now, read},
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
     fs::{File, OpenOptions},
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
     sync::mpsc::{self, Receiver},
@@ -49,6 +50,141 @@ pub struct Status {
     pub last_host_error_utc: Option<u64>,
     #[serde(default)]
     pub turn_timers: Vec<TurnStatus>,
+}
+
+/// A read-only identity for the three small files that determine Wake's
+/// installed package, target, and last host observation. Hashes are useful
+/// when two callers resolve the same displayed root but observe different
+/// underlying store contents. No path or file body is returned.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreProvenance {
+    pub schema_version: u32,
+    pub root_path_sha256: String,
+    pub config_sha256: Option<String>,
+    pub current_sha256: Option<String>,
+    pub status_sha256: Option<String>,
+}
+
+fn provenance_file_hash(root: &Path, name: &str) -> Result<Option<String>> {
+    let path = root.join(name);
+    let metadata = match std::fs::symlink_metadata(&path) {
+        Ok(value) => value,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err("STORE_PROVENANCE_FILE_UNAVAILABLE".into()),
+    };
+    if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() > 64 * 1024 {
+        return Err("STORE_PROVENANCE_FILE_INVALID".into());
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if metadata.file_attributes() & 0x400 != 0 {
+            return Err("STORE_PROVENANCE_FILE_INVALID".into());
+        }
+    }
+    let mut bytes = Vec::new();
+    File::open(&path)
+        .map_err(|_| "STORE_PROVENANCE_FILE_UNAVAILABLE")?
+        .take(64 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "STORE_PROVENANCE_FILE_UNAVAILABLE")?;
+    if bytes.len() > 64 * 1024 {
+        return Err("STORE_PROVENANCE_FILE_INVALID".into());
+    }
+    Ok(Some(format!("{:x}", Sha256::digest(&bytes))))
+}
+
+pub fn store_provenance(root: &Path) -> Result<StoreProvenance> {
+    if !root.is_absolute() {
+        return Err("STORE_PROVENANCE_ROOT_INVALID".into());
+    }
+    let mut current = PathBuf::new();
+    for component in root.components() {
+        if matches!(component, std::path::Component::ParentDir) {
+            return Err("STORE_PROVENANCE_ROOT_INVALID".into());
+        }
+        current.push(component);
+        let metadata =
+            std::fs::symlink_metadata(&current).map_err(|_| "STORE_PROVENANCE_ROOT_UNAVAILABLE")?;
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+            return Err("STORE_PROVENANCE_ROOT_INVALID".into());
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            if metadata.file_attributes() & 0x400 != 0 {
+                return Err("STORE_PROVENANCE_ROOT_INVALID".into());
+            }
+        }
+    }
+    let canonical = std::fs::canonicalize(root).map_err(|_| "STORE_PROVENANCE_ROOT_UNAVAILABLE")?;
+    Ok(StoreProvenance {
+        schema_version: 1,
+        root_path_sha256: format!(
+            "{:x}",
+            Sha256::digest(canonical.to_string_lossy().as_bytes())
+        ),
+        config_sha256: provenance_file_hash(&canonical, "config.json")?,
+        current_sha256: provenance_file_hash(&canonical, "current.json")?,
+        status_sha256: provenance_file_hash(&canonical, "status.json")?,
+    })
+}
+
+#[cfg(test)]
+mod store_provenance_tests {
+    use super::*;
+
+    #[test]
+    fn reports_only_bounded_hashes_and_detects_target_store_change() {
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-wake-provenance-{}-{}",
+            std::process::id(),
+            now()
+        ));
+        std::fs::create_dir(&root).expect("create provenance fixture");
+        std::fs::write(root.join("config.json"), b"first target").expect("config");
+        std::fs::write(root.join("current.json"), b"dev.84").expect("current");
+        std::fs::write(root.join("status.json"), b"old status").expect("status");
+        let first = store_provenance(&root).expect("first provenance");
+        let repeat = store_provenance(&root).expect("repeat provenance");
+        assert_eq!(first.schema_version, 1);
+        assert_eq!(first.config_sha256, repeat.config_sha256);
+        assert_eq!(first.current_sha256, repeat.current_sha256);
+        assert_eq!(first.status_sha256, repeat.status_sha256);
+        assert_eq!(first.root_path_sha256, repeat.root_path_sha256);
+        assert!(
+            !serde_json::to_string(&first)
+                .expect("json")
+                .contains("first target")
+        );
+        std::fs::write(root.join("config.json"), b"second target").expect("new config");
+        let changed = store_provenance(&root).expect("changed provenance");
+        assert_ne!(first.config_sha256, changed.config_sha256);
+        assert_eq!(first.current_sha256, changed.current_sha256);
+        assert_eq!(first.status_sha256, changed.status_sha256);
+        for name in ["config.json", "current.json", "status.json"] {
+            std::fs::remove_file(root.join(name)).expect("remove fixture file");
+        }
+        std::fs::remove_dir(&root).expect("remove fixture directory");
+    }
+
+    #[test]
+    fn rejects_oversized_status_without_reading_it() {
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-wake-provenance-large-{}-{}",
+            std::process::id(),
+            now()
+        ));
+        std::fs::create_dir(&root).expect("create provenance fixture");
+        std::fs::write(root.join("status.json"), vec![0; 64 * 1024 + 1]).expect("oversized status");
+        assert_eq!(
+            store_provenance(&root).unwrap_err(),
+            "STORE_PROVENANCE_FILE_INVALID"
+        );
+        std::fs::remove_file(root.join("status.json")).expect("remove fixture file");
+        std::fs::remove_dir(&root).expect("remove fixture directory");
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
