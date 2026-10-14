@@ -4,7 +4,11 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
-## 2026-10-14 — Codex Desktop handoff; hourly deadman OFF (CURRENT)
+## 2026-10-14 — Post-multi-project token/compaction core milestone T-0484 (CURRENT)
+
+- Planned **AFTER accepted multi-project fair queues and review/wake ownership**, not before: `docs/orchestrator/tickets/T-0484_POST_MULTI_PROJECT_CONTEXT_METER_AUTO_COMPACTION.md`. CatDesk existing ↓/↑/Σ/$/ƒ token stats are `src/mcp.rs` `o200k_base` estimates for serialized tool requests/results and widget historical traffic, **not ChatGPT provider model context usage**. CoS uses ~4 chars/token for visible messages/tool traffic and caps each tool result to 10K; neither estimate includes all native attachment/hidden context. Proposed feature builds per-conversation scoped accounting and uncertainty, safe context threshold, SeleniumBase Chat A handoff→new Chat B→atomic per-project registry+Wake target rebind; **no extension required**. No new production command or scheduled task exists. Hourly deadman remains OFF.
+
+## 2026-10-14 — Codex Desktop handoff; hourly deadman OFF (HISTORICAL)
 
 - User has handed CatDesk implementation to Codex Desktop for now. Comprehensive source-grounded path: `docs/orchestrator/CATDESK_CODEX_DESKTOP_HANDOFF_2026-10-14.md`. ChatGPT automation `CatDesk Hourly Deadman Chat53` **disabled** at 2026-10-14 operator request. No automatic ChatGPT review should be assumed merely because a Wake event is queued; resume only upon actual new delivered event or operator action.
 - `codex-cli 0.160.0` is installed; `codex login status` = `Logged in using ChatGPT`; `codex exec --help` works. Earlier “Codex unavailable” language conflated CatDesk `run_command` rejections and Terra/high managed routing with CLI availability. Codex Desktop should use native workspace/CLI directly, verify effective model/effort (operator prefers Sol/medium), and not bypass protected install/signing safeguards.
