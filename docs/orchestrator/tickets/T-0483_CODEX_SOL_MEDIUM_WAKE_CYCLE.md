@@ -4,9 +4,9 @@ Date: 2026-10-14. Canonical CatDesk Chat53: https://chatgpt.com/c/6ace36d3-8634-
 
 ## Request and acceptance
 
-The operator requests **Codex GPT-6.1 Sol with medium reasoning effort** to work on a bounded CatDesk milestone, leave a concrete reviewable deliverable, have CatDesk emit an exact review event to Chat53, and have ChatGPT verify that deliverable before delegating the next ticket. A ChatGPT hourly fallback should check once per hour without competing with active writers or manual turn timers.
+The operator requests **Codex GPT-6.1 Sol with medium reasoning effort** to work on a bounded CatDesk milestone, leave a concrete reviewable deliverable, have CatDesk emit an exact review event to Chat53, and have ChatGPT verify that deliverable before delegating the next ticket. The earlier hourly-fallback request was later superseded by the operator's decision to disable that automation.
 
-**STATUS: NOT END-TO-END ACCEPTED.** An authenticated Codex CLI model probe succeeded, and an hourly ChatGPT fallback is enabled, but no Codex-produced milestone deliverable, corresponding natural review_ready Wake, or latest-generation exact delivery receipt has been proven. Do not mislabel any synthetic manual debug event as a natural review wake.
+**STATUS: NOT END-TO-END ACCEPTED.** An authenticated Codex CLI model probe succeeded, but no verified Sol/medium Codex-produced milestone deliverable, corresponding natural review_ready Wake, or latest-generation exact delivery receipt has been proven. The hourly ChatGPT fallback was **disabled at the operator's request on 2026-10-14**. Do not mislabel any synthetic manual debug event as a natural review wake.
 
 ## Grounded state
 
@@ -16,7 +16,7 @@ The operator requests **Codex GPT-6.1 Sol with medium reasoning effort** to work
 - The current source CatDesk autonomous contract in `src/delegated/autonomous_contract.rs` requires `gpt-5.6-terra`; `src/delegated/codex_cli.rs` only sets `model_reasoning_effort=high` for that model. App-server routing also references Terra/high. Do **not** quietly run a managed task under Terra/high to satisfy this Sol/medium request, and do not globally replace the old pinned model without scoped compatibility tests.
 - Latest Wake source commit `7df27ee` passed independent Windows CI run `38443116318` (Rust, independent WakeHost Rust, Python Wake/advisor). Installed independent WakeHost still reports `1.0.0-dev.84`, target generation 34, exact Chat53 target and historical unresolved `SUBMIT_TARGET_DRIFT_CHROME_ERROR` for manual event `manual-wake-mcp-1791908511726`. The source candidate `dev.85` is not an installed reviewed package. Do not replay the ambiguous event or claim natural Wake acceptance.
 - Tracked feature branch `orchestrator/chatgpt-codex-autonomous-loop` synchronized with GitHub at the current checked HEAD. Preserve the seven unrelated historical untracked files.
-- A new ChatGPT hourly automation `CatDesk Hourly Deadman Chat53` is enabled at the top of every hour as fallback. It must inspect active manual turn timers, Codex work and Wake submission before any write, and never count itself as natural Wake acceptance.
+- The ChatGPT hourly automation `CatDesk Hourly Deadman Chat53` is **disabled by operator request**. Do not reenable it as part of this ticket.
 
 ## Scoped Codex task to delegate once the Sol/medium policy gate is satisfied
 
@@ -33,7 +33,7 @@ The operator requests **Codex GPT-6.1 Sol with medium reasoning effort** to work
 3. Have CatDesk produce one `review_ready` record *for that exact session/deliverable*. Persist its ID, source SHA, file list and verification outcome. Avoid faking a review-ready record with `catdesk_binagotchy_command(test)`; that is only a manual debug canary.
 4. Have independent installed WakeHost deliver the event to the paired canonical Chat53 target with matching generation and SHA. Require exact current event `EXACT_USER_MESSAGE_APPENDED`, terminal `SENT`, turn timer `COMPLETE`, and no duplicate USER message. After the answer completes, browser should close cleanly.
 5. Upon receiving the wake, ChatGPT reads the exact session/review bundle and Git state, reviews changes for correctness and scope, checks independent CI where required, ACKs/finalizes only supported records and delegates the next scoped task. If review fails, continue a bounded fix cycle.
-6. The hourly fallback is observation/continuation-only, not a second Codex writer when any other turn, review, or browser Wake is live.
+6. The hourly fallback is disabled. If the operator separately enables it in the future, it must remain observation/continuation-only and never become a second Codex writer during another turn, review, or browser Wake.
 
 ## Implementation and validation gates
 

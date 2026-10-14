@@ -1,5 +1,11 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — Current dev.85 release gate
+
+- Review bundle: `docs/orchestrator/review_bundles/T-0483_R1_CODEX_DEV85_RELEASE_REVIEW.md`. Exact HEAD `f4fae1a` [Windows CI run38642577662](https://github.com/vnath99/CatDesk/actions/runs/38642577662) is 3/3 SUCCESS. `wake/install.ps1 -BuildOnly -RebuildGui` built dev.85 host and GUI without activating them. For tests use `cargo test --locked --offline --manifest-path wake/Cargo.toml --all-features`; the test-support feature is required by the test suite.
+- Installed dev.84 still has an ambiguous current-generation Chat53 `SUBMITTING` event. A direct installed CLI `status` returned an older dev.59/gen1 record, while Binagotchy MCP status reported the live dev.84/gen34 event. Resolve that authority mismatch through supported read-only diagnostics before any reviewed immutable activation or fresh canary. Never replay the old event or restart the hourly deadman, which is OFF by operator request.
+
+
 **Audience:** CatDesk operator, ChatGPT/CatDesk automation, and future handoffs.  
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
