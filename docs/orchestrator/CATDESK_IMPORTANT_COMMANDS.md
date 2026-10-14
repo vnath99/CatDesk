@@ -4,7 +4,11 @@
 **Maintained:** 2026-10-10. **Workspace:** `C:\Users\Volap\OneDrive\Desktop\Projects\CatDesk-codex-loop`.  
 This is the quick reference for **existing** controls; consult each control's live help/schema before assuming an example remains supported. Keep this document in GitHub.
 
-## 2026-10-14 — Post-multi-project token/compaction core milestone T-0484 (CURRENT)
+## 2026-10-14 — Updated Codex Desktop start prompt (CURRENT)
+
+- Primary copy-ready working instructions for Codex Desktop: `docs/orchestrator/CATDESK_CODEX_DESKTOP_START_PROMPT_2026-10-14.md`. Preserve existing source and feature-branch review continuity; execute P0 reviewed WakeHost dev85 release/canary, P1 real Codex Sol/medium task/review_ready proof, P2 T0478/T0479 worker and production recovery, P3 Binagotchy GUI+multi-project queue/fairness, then **P4 core T0484 per-conversation context monitoring/auto-compaction after P3**. Keep SeleniumBase, no new extension. User-requested ChatGPT hourly deadman OFF. At document draft HEAD `b0a664e` Actions38641559086 in progress; verify fresh exact HEAD/CI before claiming acceptance.
+
+## 2026-10-14 — Post-multi-project token/compaction core milestone T-0484 (HISTORICAL)
 
 - Planned **AFTER accepted multi-project fair queues and review/wake ownership**, not before: `docs/orchestrator/tickets/T-0484_POST_MULTI_PROJECT_CONTEXT_METER_AUTO_COMPACTION.md`. CatDesk existing ↓/↑/Σ/$/ƒ token stats are `src/mcp.rs` `o200k_base` estimates for serialized tool requests/results and widget historical traffic, **not ChatGPT provider model context usage**. CoS uses ~4 chars/token for visible messages/tool traffic and caps each tool result to 10K; neither estimate includes all native attachment/hidden context. Proposed feature builds per-conversation scoped accounting and uncertainty, safe context threshold, SeleniumBase Chat A handoff→new Chat B→atomic per-project registry+Wake target rebind; **no extension required**. No new production command or scheduled task exists. Hourly deadman remains OFF.
 

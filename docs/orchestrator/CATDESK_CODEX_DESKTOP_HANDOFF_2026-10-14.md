@@ -8,6 +8,10 @@
 **Previous ChatGPT canonical conversation:** https://chatgpt.com/c/6ace36d3-8634-8333-a79c-1a4cba32caeb (Chat 53)  
 **Operator scheduling decision:** ChatGPT hourly deadman **DISABLED** at handoff. Do not recreate it automatically.
 
+## Current Codex Desktop start prompt (2026-10-14 update)
+
+The latest unified **copy-ready implementation instruction**, incorporating the **post-multi-project T-0484 token/context compaction requirement**, is at `docs/orchestrator/CATDESK_CODEX_DESKTOP_START_PROMPT_2026-10-14.md`. Use it as the entry point, then this longer handoff, active tickets and independently verified repo/CI. This historical handoff's original `bea190d` checkpoint is **not the latest HEAD**: at prompt generation, HEAD was `b0a664e` and CI run38641559086 was still IN_PROGRESS. The user has explicitly disabled the ChatGPT hourly deadman; do not recreate it.
+
 ## 0. Read this first — what to do in Codex Desktop
 
 You are the primary engineering implementer for CatDesk. Open the **existing local repository** above in Codex Desktop and work from the checked-out feature branch. Read the files in §2, inspect live source and GitHub state rather than treating dated entries as timeless, then make concrete changes, tests, reviewable commits, and feature-branch pushes. The operator prefers `gpt-6.1-sol` at **medium reasoning effort**, if available; verify the **effective** model rather than silently switching to an older pinned model. A different Codex Desktop model should require operator direction if the named model is unavailable.
