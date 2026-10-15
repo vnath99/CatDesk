@@ -1,5 +1,9 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-15 write-ahead stage durability source checkpoint
+
+The dormant ledger now flushes a `STAGE_STARTED` marker before candidate creation and refuses any second create after reopening that marker. Pinned parent directories are flushed after ledger record and candidate/leaf entry creation, with a hard failure if the OS flush cannot be performed. Fault/restart tests and the full Wake suite pass locally; see `T-0485_R16_STAGE_STARTED_PARENT_FLUSH_SOURCE.md`. A controlled power-cut test on the actual protected deployment filesystem is still required before claiming sudden-power-loss durability. The signed service/bootstrap, trusted observation/clock, independent exact-CI fetch and full package/pointer/owner/reader transaction remain absent; install guards stay closed.
+
 ## 2026-10-15 fixed-source INTENT→STAGED transaction source checkpoint
 
 The dormant broker transaction now acquires the pre-provisioned global lock before calling a future trusted observer, requires a policy-key-verified opaque approval, pins exact five-file source bytes, creates and rechecks the fixed protected `staging/candidate`, then records its seven physical IDs in a typed STAGED phase. A residual partial stage is sticky attention. The temp-root integrated test covers fresh copy/record/reopen and partial-stage refusal, but uses a test-only owner/security mode. See `T-0485_R15_FIXED_SOURCE_TO_STAGED_TRANSACTION.md`. The callback and exact CI fetch are not implemented by a signed service, parent-directory power-loss durability is unproven, and no package/pointer/owner publication or protected activation is enabled. Both install mutators still refuse with `WAKE_INSTALL_BROKER_UNPROVISIONED`.

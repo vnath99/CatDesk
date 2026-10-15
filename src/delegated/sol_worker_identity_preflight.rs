@@ -102,6 +102,15 @@ impl BoundFixedLocalSolWorkerProcessV1 {
         self.observed_token.token_user_sid()
     }
 
+    pub(crate) fn require_same_opened_process(
+        &self,
+        process: BorrowedHandle<'_>,
+    ) -> Result<(), String> {
+        self.revalidate()?;
+        self.observed_token.require_same_opened_process(process)?;
+        self.revalidate()
+    }
+
     pub(crate) fn reject_stage_acl_trustees(&self, trustees: &[&str]) -> Result<(), String> {
         self.observed_token.reject_stage_acl_trustees(trustees)
     }

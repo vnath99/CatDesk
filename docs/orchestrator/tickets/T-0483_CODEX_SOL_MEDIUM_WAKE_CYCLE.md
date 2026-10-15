@@ -1,5 +1,9 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-15 bound fixed-worker Job transition (source only)
+
+The dormant Windows lifecycle now separates a suspended Job member from a running same-user diagnostic child. Its only bound transition checks the opaque R20 fixed-account restricted-process observation against the exact opened child process object before resume. A consuming drain of that bound state can create a non-cloneable, private-field `DrainedBoundFixedWorkerJobV1`; diagnostic `Command` runs still return no witness. Seven lifecycle tests passed, one helper stayed ignored; 54 focused Sol tests passed with one ignored helper, plus strict root Clippy and formatting. The fixed worker account is absent, so no positive bound run occurred. The witness proves only the original and Job-associated processes drained. It is not connected to nonce burn, stage, repository use, runtime, review or Wake, and does not exclude outside-Job processes, inherited/duplicated handles or ancestor write rights. See `docs/orchestrator/review_bundles/T-0483_R23_BOUND_FIXED_WORKER_JOB_DRAIN_WITNESS_SOURCE.md`.
+
 ## 2026-10-15 private Sol process/Job drain source checkpoint
 
 A dormant private Windows owner creates a suspended helper, assigns and verifies it in an unnamed noninheritable kill-on-close/no-breakaway Job before resume, and returns only a bounded diagnostic after original-process exit, zero active Job processes and an empty PID list. Failed assignment cleanup is bounded. Four focused tests passed; see `docs/orchestrator/review_bundles/T-0483_R22_PRIVATE_SOL_JOB_DRAIN_SOURCE.md`. This is same-user mechanics, not a fixed-account restricted launcher or a stopped-worker repository-use proof. The worker account is absent, escaped descendants/inherited handles/ancestor ACL exclusion and durable burn-to-stage handoff remain, and no real Sol→review→Wake cycle is accepted.

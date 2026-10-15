@@ -14,6 +14,7 @@ use crate::{
         BrokerCandidateStageReadbackV1, inspect_stage_under_guard,
         require_empty_staging_under_guard,
     },
+    install_broker_durability::{ParentFlushPoint, flush_pinned_directory},
     install_broker_ledger::{
         ApprovalContinuityV1, BrokerLedgerLease, InstallPhaseV1, StageBindingV1,
     },
@@ -474,11 +475,14 @@ impl BrokerStageReceiptV1<'_> {
 /// protected slot while INTENT/global lease is live. An existing slot fails
 /// closed. The receipt is not publication or activation authority.
 pub fn materialize_fixed_candidate_stage<'p>(
-    lease: &BrokerLedgerLease<'_>,
+    lease: &mut BrokerLedgerLease<'_>,
     approved: &PolicyVerifiedApprovalV1<'p>,
 ) -> Result<BrokerStageReceiptV1<'p>> {
     let policy = approved.policy();
     let approval = approved.verified();
+    if lease.phase() == InstallPhaseV1::StageStarted {
+        return Err("WAKE_BROKER_STAGE_ATTENTION".into());
+    }
     if lease.phase() != InstallPhaseV1::Intent || !lease.matches_policy_approval(approved) {
         return Err("WAKE_BROKER_STAGE_APPROVAL_BINDING_INVALID".into());
     }
@@ -504,12 +508,15 @@ pub fn materialize_fixed_candidate_stage<'p>(
 }
 
 fn materialize_pinned_candidate_stage<'p>(
-    lease: &BrokerLedgerLease<'_>,
+    lease: &mut BrokerLedgerLease<'_>,
     approval: &VerifiedApprovalV1,
     mut source: PinnedCandidateSourceV1,
     security: StageSecurityMode,
     policy: Option<&'p BrokerProtectedPolicyV1>,
 ) -> Result<BrokerStageReceiptV1<'p>> {
+    if lease.phase() == InstallPhaseV1::StageStarted {
+        return Err("WAKE_BROKER_STAGE_ATTENTION".into());
+    }
     if lease.phase() != InstallPhaseV1::Intent || !lease.matches_approval(approval) {
         return Err("WAKE_BROKER_STAGE_APPROVAL_BINDING_INVALID".into());
     }
@@ -530,23 +537,28 @@ fn materialize_pinned_candidate_stage<'p>(
             return Err("WAKE_BROKER_STAGE_POLICY_CHANGED".into());
         }
     }
-    let root = lease.protected_root();
-    let root_id = identity(root.as_raw_handle(), true)?;
+    let root_id = identity(lease.protected_root().as_raw_handle(), true)?;
     if approval.payload().target_protected_root != root_id {
         return Err("WAKE_BROKER_STAGE_ROOT_CHANGED".into());
     }
     source.revalidate(approval)?;
-    security.require_empty(root, &root_id)?;
+    security.require_empty(lease.protected_root(), &root_id)?;
     let service_sid = security.service_sid();
-    let staging = open_child(root, STAGING, true, false, service_sid)?;
+    let staging = open_child(lease.protected_root(), STAGING, true, false, service_sid)?;
+    let staging_id = identity(staging.as_raw_handle(), true)?;
     if let Some(service_sid) = service_sid {
         let (owner, actual) = protected_security_raw(staging.as_raw_handle())?;
         if owner != "S-1-5-18" || actual != canonical_protected_security(service_sid, true)? {
             return Err("WAKE_BROKER_STAGE_ACL_MISMATCH".into());
         }
     }
+    // No candidate create is allowed until this write-ahead marker and its
+    // parent directory entry are durable. A later failure is sticky attention.
+    lease.record_stage_started()?;
+    let root = lease.protected_root();
     let candidate = open_child(&staging, CANDIDATE, true, true, service_sid)?;
     let created_id = identity(candidate.as_raw_handle(), true)?;
+    flush_pinned_directory(&staging, &staging_id, ParentFlushPoint::StageCandidateEntry)?;
     let payload = approval.payload();
     for (index, name) in ARTIFACTS.into_iter().enumerate() {
         let signed = &payload.manifest.artifacts[index];
@@ -558,8 +570,20 @@ fn materialize_pinned_candidate_stage<'p>(
             &signed.sha256,
             service_sid,
         )?;
+        #[cfg(test)]
+        if FAIL_AFTER_ARTIFACT.with(|failure| {
+            if failure.get() == Some(index) {
+                failure.set(None);
+                true
+            } else {
+                false
+            }
+        }) {
+            return Err("WAKE_BROKER_STAGE_FAULT_INJECTED".into());
+        }
     }
     write_blob(&candidate, MANIFEST, source.manifest_bytes(), service_sid)?;
+    flush_pinned_directory(&candidate, &created_id, ParentFlushPoint::StageLeafEntries)?;
     drop(candidate);
     drop(staging);
     source.revalidate(approval)?;
@@ -599,10 +623,16 @@ fn materialize_pinned_candidate_stage<'p>(
 }
 
 #[cfg(test)]
+thread_local! {
+    static FAIL_AFTER_ARTIFACT: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
         install_broker_approval::{self, ArtifactV1, verify_approval},
+        install_broker_durability::fail_next_flush,
         install_broker_ledger::{BrokerLedgerGuard, LedgerExpectationV1, OriginalDesiredStateV1},
         install_broker_source::open_fixture_candidate_source,
     };
@@ -784,7 +814,7 @@ mod tests {
             .begin_fixture(&fixture.approval, &fixture.expectation)
             .expect("durable intent");
         let mut receipt = materialize_pinned_candidate_stage(
-            &lease,
+            &mut lease,
             &fixture.approval,
             fixture.source(),
             StageSecurityMode::Fixture,
@@ -817,17 +847,229 @@ mod tests {
     }
 
     #[test]
+    fn marker_flush_failure_never_creates_candidate_and_reopens_as_attention() {
+        let fixture = TransactionFixture::new();
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("global lock");
+        let mut lease = guard
+            .begin_fixture(&fixture.approval, &fixture.expectation)
+            .expect("intent");
+        fail_next_flush(ParentFlushPoint::StageStarted);
+        assert_eq!(
+            materialize_pinned_candidate_stage(
+                &mut lease,
+                &fixture.approval,
+                fixture.source(),
+                StageSecurityMode::Fixture,
+                None,
+            )
+            .err()
+            .unwrap(),
+            "WAKE_BROKER_PARENT_FLUSH_FAILED"
+        );
+        assert_eq!(lease.phase(), InstallPhaseV1::Intent);
+        assert!(!fixture.staged_path().exists());
+        assert!(
+            fixture
+                .base
+                .join("install-transaction-00000000000000000002-stage-started.json")
+                .exists()
+        );
+        drop(lease);
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("reopen lock");
+        let mut resumed = guard
+            .begin_fixture(&fixture.approval, &fixture.expectation)
+            .expect("exact marker reopen");
+        assert_eq!(resumed.phase(), InstallPhaseV1::StageStarted);
+        assert_eq!(
+            materialize_pinned_candidate_stage(
+                &mut resumed,
+                &fixture.approval,
+                fixture.source(),
+                StageSecurityMode::Fixture,
+                None,
+            )
+            .err()
+            .unwrap(),
+            "WAKE_BROKER_STAGE_ATTENTION"
+        );
+        assert!(!fixture.staged_path().exists());
+        drop(resumed);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn parent_flush_failures_leave_stage_attempt_sticky_across_reopen() {
+        for (point, has_leaves) in [
+            (ParentFlushPoint::StageCandidateEntry, false),
+            (ParentFlushPoint::StageLeafEntries, true),
+        ] {
+            let fixture = TransactionFixture::new();
+            let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("global lock");
+            let mut lease = guard
+                .begin_fixture(&fixture.approval, &fixture.expectation)
+                .expect("intent");
+            fail_next_flush(point);
+            assert_eq!(
+                materialize_pinned_candidate_stage(
+                    &mut lease,
+                    &fixture.approval,
+                    fixture.source(),
+                    StageSecurityMode::Fixture,
+                    None,
+                )
+                .err()
+                .unwrap(),
+                "WAKE_BROKER_PARENT_FLUSH_FAILED"
+            );
+            assert_eq!(lease.phase(), InstallPhaseV1::StageStarted);
+            assert!(fixture.staged_path().is_dir());
+            assert_eq!(
+                fixture.staged_path().join(ARTIFACTS[0]).exists(),
+                has_leaves
+            );
+            assert!(
+                !fixture
+                    .base
+                    .join("install-transaction-00000000000000000002-staged.json")
+                    .exists()
+            );
+            drop(lease);
+            let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("reopen lock");
+            let mut resumed = guard
+                .begin_fixture(&fixture.approval, &fixture.expectation)
+                .expect("exact marker reopen");
+            assert_eq!(resumed.phase(), InstallPhaseV1::StageStarted);
+            assert_eq!(
+                materialize_pinned_candidate_stage(
+                    &mut resumed,
+                    &fixture.approval,
+                    fixture.source(),
+                    StageSecurityMode::Fixture,
+                    None,
+                )
+                .err()
+                .unwrap(),
+                "WAKE_BROKER_STAGE_ATTENTION"
+            );
+            assert!(fixture.staged_path().is_dir());
+            drop(resumed);
+            fixture.cleanup();
+        }
+    }
+
+    #[test]
+    fn injected_abort_after_first_artifact_retains_partial_stage_and_marker() {
+        let fixture = TransactionFixture::new();
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("global lock");
+        let mut lease = guard
+            .begin_fixture(&fixture.approval, &fixture.expectation)
+            .expect("intent");
+        FAIL_AFTER_ARTIFACT.with(|failure| failure.set(Some(0)));
+        assert_eq!(
+            materialize_pinned_candidate_stage(
+                &mut lease,
+                &fixture.approval,
+                fixture.source(),
+                StageSecurityMode::Fixture,
+                None,
+            )
+            .err()
+            .unwrap(),
+            "WAKE_BROKER_STAGE_FAULT_INJECTED"
+        );
+        assert_eq!(lease.phase(), InstallPhaseV1::StageStarted);
+        assert!(fixture.staged_path().join(ARTIFACTS[0]).exists());
+        assert!(!fixture.staged_path().join(ARTIFACTS[1]).exists());
+        let bytes = std::fs::read(fixture.staged_path().join(ARTIFACTS[0])).unwrap();
+        drop(lease);
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("reopen lock");
+        let mut resumed = guard
+            .begin_fixture(&fixture.approval, &fixture.expectation)
+            .expect("marker reopen");
+        assert_eq!(resumed.phase(), InstallPhaseV1::StageStarted);
+        assert_eq!(
+            materialize_pinned_candidate_stage(
+                &mut resumed,
+                &fixture.approval,
+                fixture.source(),
+                StageSecurityMode::Fixture,
+                None,
+            )
+            .err()
+            .unwrap(),
+            "WAKE_BROKER_STAGE_ATTENTION"
+        );
+        assert_eq!(
+            std::fs::read(fixture.staged_path().join(ARTIFACTS[0])).unwrap(),
+            bytes
+        );
+        drop(resumed);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn staged_record_flush_failure_never_reuses_the_stage_slot() {
+        let fixture = TransactionFixture::new();
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("global lock");
+        let mut lease = guard
+            .begin_fixture(&fixture.approval, &fixture.expectation)
+            .expect("intent");
+        let mut receipt = materialize_pinned_candidate_stage(
+            &mut lease,
+            &fixture.approval,
+            fixture.source(),
+            StageSecurityMode::Fixture,
+            None,
+        )
+        .expect("copied stage");
+        fail_next_flush(ParentFlushPoint::Staged);
+        assert_eq!(
+            lease.record_staged(&mut receipt).unwrap_err(),
+            "WAKE_BROKER_PARENT_FLUSH_FAILED"
+        );
+        assert_eq!(lease.phase(), InstallPhaseV1::StageStarted);
+        let before = std::fs::read(fixture.staged_path().join(ARTIFACTS[0])).unwrap();
+        drop(receipt);
+        drop(lease);
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("reopen lock");
+        let mut resumed = guard
+            .begin_fixture(&fixture.approval, &fixture.expectation)
+            .expect("exact record reopen");
+        // The simulated flush failure leaves an exact record on this test
+        // filesystem. A real power loss may instead leave only StageStarted.
+        assert_eq!(resumed.phase(), InstallPhaseV1::Staged);
+        assert_eq!(
+            materialize_pinned_candidate_stage(
+                &mut resumed,
+                &fixture.approval,
+                fixture.source(),
+                StageSecurityMode::Fixture,
+                None,
+            )
+            .err()
+            .unwrap(),
+            "WAKE_BROKER_STAGE_APPROVAL_BINDING_INVALID"
+        );
+        assert_eq!(
+            std::fs::read(fixture.staged_path().join(ARTIFACTS[0])).unwrap(),
+            before
+        );
+        drop(resumed);
+        fixture.cleanup();
+    }
+
+    #[test]
     fn residual_partial_stage_is_sticky_and_never_records_staged() {
         let fixture = TransactionFixture::new();
         std::fs::create_dir(fixture.staged_path()).expect("orphan candidate");
         std::fs::write(fixture.staged_path().join(ARTIFACTS[0]), b"partial")
             .expect("partial stage");
         let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("global lock first");
-        let lease = guard
+        let mut lease = guard
             .begin_fixture(&fixture.approval, &fixture.expectation)
             .expect("intent");
         let result = materialize_pinned_candidate_stage(
-            &lease,
+            &mut lease,
             &fixture.approval,
             fixture.source(),
             StageSecurityMode::Fixture,

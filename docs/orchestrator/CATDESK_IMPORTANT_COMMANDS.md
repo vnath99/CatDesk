@@ -1,10 +1,15 @@
 # CatDesk — Important Command Reference
 
+## Current stage durability boundary (2026-10-15)
+
+- R16 writes and flushes `STAGE_STARTED` before `staging/candidate` creation. A marker or partial stage requires operator attention and cannot be retried automatically. Directory flush failures stop the dormant transaction; a local successful flush does not validate protected deployment power-loss behavior. Keep both `WAKE_INSTALL_BROKER_UNPROVISIONED` holds. See `docs/orchestrator/review_bundles/T-0485_R16_STAGE_STARTED_PARENT_FLUSH_SOURCE.md`.
+- R23 adds only a private Job-drain witness tied to the fixed worker's exact opened process; it has no nonce, stage, repository or runtime consumer. The missing fixed account and outside-Job/handle/ACL proof keep the Sol cycle closed. See `docs/orchestrator/review_bundles/T-0483_R23_BOUND_FIXED_WORKER_JOB_DRAIN_WITNESS_SOURCE.md`.
+
 ## Current source-only transaction and worker boundary (2026-10-15)
 
 - R15 adds `BrokerLedgerGuard::accept_with_observation` and a fixed-source-to-`STAGED` path that requires an opaque approval verified by the pinned policy key. A real broker observer, CI fetch, protected bootstrap and full owner/pointer transaction are still absent; do not run protected installation. The fixed source inbox is `C:\ProgramData\CatDesk\WakeSubmissionV1\candidate`, not a caller-selected path. See `docs/orchestrator/review_bundles/T-0485_R15_FIXED_SOURCE_TO_STAGED_TRANSACTION.md`.
 - R22 adds only private Sol Job/process-drain mechanics. It neither creates the missing `CatDeskSolWorker` account nor proves escaped descendants, inherited-handle denial or ancestor lost-write authority; it grants no repository-use capability. See `docs/orchestrator/review_bundles/T-0483_R22_PRIVATE_SOL_JOB_DRAIN_SOURCE.md`.
-- The last clean `wake/install.ps1 -BuildOnly` candidate at tracked `7de5940` was `1.0.0-dev.85-36ad2d4adc8f-818748eeee6a`; both executables are unsigned. This diagnostic candidate predates R15/R22, so rebuild before any later package review. Exact new-source Windows CI remains required; no manual workflow dispatch or settings change.
+- The last clean `wake/install.ps1 -BuildOnly` candidate at tracked `272fa73` was `1.0.0-dev.85-c9c052df91ac-f37940b75706`; both executables are unsigned. This diagnostic candidate predates R16/R23, so rebuild before any later package review. Exact new-source Windows CI remains required; no manual workflow dispatch or settings change.
 
 ## Current authority and release hold (2026-10-15)
 

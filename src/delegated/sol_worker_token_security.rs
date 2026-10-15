@@ -129,6 +129,20 @@ impl ObservedRestrictedWorkerProcessTokenV1 {
         &self.snapshot.user_sid
     }
 
+    /// Compare the retained process object, not a reusable PID or a caller's
+    /// account claim, with the suspended process owned by the Job launcher.
+    pub(crate) fn require_same_opened_process(
+        &self,
+        process: BorrowedHandle<'_>,
+    ) -> Result<(), String> {
+        self.revalidate()?;
+        require_same_opened_process_object(
+            unsafe { BorrowedHandle::borrow_raw(self.process.as_raw_handle()) },
+            process,
+        )?;
+        self.revalidate()
+    }
+
     pub(crate) fn enabled_groups(&self) -> impl Iterator<Item = &TokenGroupV1> {
         self.snapshot
             .groups
@@ -166,6 +180,16 @@ impl ObservedRestrictedWorkerProcessTokenV1 {
         self.revalidate()?;
         reject_snapshot_stage_acl_trustees(&self.snapshot, trustees)
     }
+}
+
+pub(super) fn require_same_opened_process_object(
+    first: BorrowedHandle<'_>,
+    second: BorrowedHandle<'_>,
+) -> Result<(), String> {
+    if unsafe { CompareObjectHandles(first.as_raw_handle(), second.as_raw_handle()) } == 0 {
+        return Err(format!("{LABEL} opened process object differs"));
+    }
+    Ok(())
 }
 
 fn reject_snapshot_stage_acl_trustees(
@@ -225,6 +249,12 @@ unsafe extern "system" {
         options: u32,
     ) -> i32;
     fn LocalFree(memory: *mut c_void) -> *mut c_void;
+}
+
+// The installed Windows SDK exposes this KernelBase API through mincore.lib.
+#[link(name = "mincore")]
+unsafe extern "system" {
+    fn CompareObjectHandles(first: *mut c_void, second: *mut c_void) -> i32;
 }
 
 fn owned_handle(raw: *mut c_void) -> Result<OwnedHandle, String> {

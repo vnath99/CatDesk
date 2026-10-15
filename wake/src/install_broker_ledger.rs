@@ -7,9 +7,9 @@
 //! generation and fixed phase names. A returned lease holds the intent file
 //! exclusively until dropped; reopening checks every completed phase.
 //!
-//! File data is flushed before a phase is reported. Parent-directory metadata
-//! durability across sudden power loss is not established by this primitive;
-//! the broker must prove that separately before using it as a mutation gate.
+//! File data and the parent directory are flushed before a new phase is
+//! reported. The future broker must still validate the filesystem and storage
+//! power-loss behavior before using this as a mutation gate.
 //! The protected bootstrap must also pre-create the fixed global lock file,
 //! establish its owner/DACL and supply a protected root with list access.
 //! This code cannot prove the trustworthiness of a supplied root or clock.
@@ -23,6 +23,7 @@ use crate::{
     install_broker_approval::{
         BrokerObservedStateV1, ObjectIdentityV1, VerifiedApprovalV1, verify_approval,
     },
+    install_broker_durability::{ParentFlushPoint, flush_pinned_directory},
     install_broker_policy::{BrokerProtectedPolicyV1, PolicyVerifiedApprovalV1},
     install_broker_stage_writer::BrokerStageReceiptV1,
 };
@@ -142,6 +143,7 @@ unsafe extern "system" {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum InstallPhaseV1 {
     Intent,
+    StageStarted,
     Staged,
     Published,
     OldOwnerStopped,
@@ -159,8 +161,9 @@ pub enum OriginalDesiredStateV1 {
 }
 
 impl InstallPhaseV1 {
-    const ORDER: [Self; 7] = [
+    const ORDER: [Self; 8] = [
         Self::Intent,
+        Self::StageStarted,
         Self::Staged,
         Self::Published,
         Self::OldOwnerStopped,
@@ -179,6 +182,7 @@ impl InstallPhaseV1 {
     fn name(self) -> &'static str {
         match self {
             Self::Intent => "intent",
+            Self::StageStarted => "stage-started",
             Self::Staged => "staged",
             Self::Published => "published",
             Self::OldOwnerStopped => "old-owner-stopped",
@@ -599,7 +603,7 @@ fn parse_record_name(name: &str) -> Result<(u64, InstallPhaseV1)> {
 /// Enumerate only the fixed record prefix through the pinned directory handle.
 /// The caller holds the pre-provisioned global lock throughout the scan and
 /// subsequent transaction, so another cooperating broker cannot race it.
-fn ledger_inventory(root: &OwnedHandle) -> Result<BTreeMap<u64, [bool; 7]>> {
+fn ledger_inventory(root: &OwnedHandle) -> Result<BTreeMap<u64, [bool; 8]>> {
     let fresh = open_fresh_inventory_directory(root)?;
     let mut pattern: Vec<u16> = "install-transaction-*".encode_utf16().collect();
     let mut filter = UnicodeString {
@@ -660,7 +664,7 @@ fn ledger_inventory(root: &OwnedHandle) -> Result<BTreeMap<u64, [bool; 7]>> {
             .collect();
         let name = String::from_utf16(&units).map_err(|_| "WAKE_LEDGER_RECORD_CORRUPT")?;
         let (generation, phase) = parse_record_name(&name)?;
-        let slots = found.entry(generation).or_insert([false; 7]);
+        let slots = found.entry(generation).or_insert([false; 8]);
         if slots[phase.index()] {
             return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
         }
@@ -715,7 +719,7 @@ fn read_exact(file: &mut File, expected: &LedgerRecordV1) -> Result<String> {
 fn historical_intent(
     root: &OwnedHandle,
     generation: u64,
-    present: &[bool; 7],
+    present: &[bool; 8],
     observed_root: &ObjectIdentityV1,
 ) -> Result<(LedgerRecordV1, InstallPhaseV1)> {
     if !present[0] {
@@ -1038,6 +1042,10 @@ impl<'a> BrokerLedgerGuard<'a> {
         } else {
             read_exact(&mut intent_file, &intent)?
         };
+        // The record bytes alone do not persist the new directory entry. On
+        // reopen this also completes a prior failed parent flush before any
+        // later stage mutation can be considered.
+        flush_pinned_directory(root, &observed_root, ParentFlushPoint::Intent)?;
         let mut current = InstallPhaseV1::Intent;
         let mut binding = binding;
         let mut gap = false;
@@ -1123,11 +1131,24 @@ impl<'a> BrokerLedgerLease<'a> {
         &self.binding.approval_continuity
     }
 
+    /// Durable write-ahead marker for the first protected candidate create.
+    /// An existing marker, including one left by a failed call or crash, is
+    /// sticky attention; no second stage create is authorized from it.
+    pub(crate) fn record_stage_started(&mut self) -> Result<()> {
+        if self.current != InstallPhaseV1::Intent || self.binding.stage_binding.is_some() {
+            return Err("WAKE_LEDGER_STAGE_ATTENTION".into());
+        }
+        if !self.advance_internal(InstallPhaseV1::StageStarted)? {
+            return Err("WAKE_LEDGER_STAGE_ATTENTION".into());
+        }
+        Ok(())
+    }
+
     /// The only production transition into STAGED. The opaque receipt owns
     /// freshly created stage pins and rechecks all bytes/IDs while this lease
     /// still holds the pre-provisioned global lock.
     pub fn record_staged(&mut self, receipt: &mut BrokerStageReceiptV1<'_>) -> Result<bool> {
-        if self.current != InstallPhaseV1::Intent || self.binding.stage_binding.is_some() {
+        if self.current != InstallPhaseV1::StageStarted || self.binding.stage_binding.is_some() {
             return Err("WAKE_LEDGER_PHASE_ORDER_INVALID".into());
         }
         receipt.revalidate_for_ledger(
@@ -1210,6 +1231,13 @@ impl<'a> BrokerLedgerLease<'a> {
         } else {
             read_exact(&mut file, &record)?
         };
+        let point = match next {
+            InstallPhaseV1::Intent => ParentFlushPoint::Intent,
+            InstallPhaseV1::StageStarted => ParentFlushPoint::StageStarted,
+            InstallPhaseV1::Staged => ParentFlushPoint::Staged,
+            _ => ParentFlushPoint::LaterLedgerPhase,
+        };
+        flush_pinned_directory(self.root, &self.binding.protected_root, point)?;
         if root_info(self.root)? != self.binding.protected_root {
             return Err("WAKE_LEDGER_ROOT_CHANGED".into());
         }
@@ -1223,6 +1251,7 @@ impl<'a> BrokerLedgerLease<'a> {
 mod tests {
     use super::*;
     use crate::install_broker_approval::{tests as approval_test, verify_approval};
+    use crate::install_broker_durability::fail_next_flush;
     use std::{
         os::windows::{ffi::OsStrExt, io::FromRawHandle},
         path::{Path, PathBuf},
@@ -1340,12 +1369,13 @@ mod tests {
             lease.advance(InstallPhaseV1::Published).unwrap_err(),
             "WAKE_LEDGER_PHASE_ORDER_INVALID"
         );
+        assert!(lease.advance(InstallPhaseV1::StageStarted).expect("marker"));
         assert!(lease.advance(InstallPhaseV1::Staged).expect("stage"));
         drop(lease);
         let mut resumed = BrokerLedgerLease::begin(&handle, &approval, &expected).expect("reopen");
         assert_eq!(resumed.phase(), InstallPhaseV1::Staged);
         assert!(!resumed.advance(InstallPhaseV1::Staged).expect("idempotent"));
-        for phase in InstallPhaseV1::ORDER.iter().copied().skip(2) {
+        for phase in InstallPhaseV1::ORDER.iter().copied().skip(3) {
             assert!(resumed.advance(phase).expect("ordered phase"));
         }
         drop(resumed);
@@ -1358,6 +1388,63 @@ mod tests {
                 .expect("duplicate complete")
         );
         drop(complete);
+        drop(handle);
+        remove_fixture(&root, expected.next_install_generation);
+    }
+
+    #[test]
+    fn intent_parent_flush_failure_stops_before_any_stage_attempt() {
+        let (root, handle, approval, expected) = fixture();
+        fail_next_flush(ParentFlushPoint::Intent);
+        assert_eq!(
+            BrokerLedgerLease::begin(&handle, &approval, &expected)
+                .err()
+                .unwrap(),
+            "WAKE_BROKER_PARENT_FLUSH_FAILED"
+        );
+        assert!(root.join(record_name(2, InstallPhaseV1::Intent)).exists());
+        assert!(
+            !root
+                .join(record_name(2, InstallPhaseV1::StageStarted))
+                .exists()
+        );
+        // If the directory entry survived, exact reopen can finish the flush;
+        // no physical stage mutation was permitted by the failed acceptance.
+        let lease = BrokerLedgerLease::begin(&handle, &approval, &expected)
+            .expect("exact intent reopen after flush failure");
+        assert_eq!(lease.phase(), InstallPhaseV1::Intent);
+        drop(lease);
+        drop(handle);
+        remove_fixture(&root, expected.next_install_generation);
+    }
+
+    #[test]
+    fn durable_stage_started_is_sticky_without_a_candidate_directory() {
+        let (root, handle, approval, expected) = fixture();
+        let mut lease = BrokerLedgerLease::begin(&handle, &approval, &expected).expect("intent");
+        lease.record_stage_started().expect("durable marker");
+        assert_eq!(lease.phase(), InstallPhaseV1::StageStarted);
+        drop(lease);
+        let mut reopened =
+            BrokerLedgerLease::begin(&handle, &approval, &expected).expect("marker reopen");
+        assert_eq!(reopened.phase(), InstallPhaseV1::StageStarted);
+        assert_eq!(
+            reopened.record_stage_started().unwrap_err(),
+            "WAKE_LEDGER_STAGE_ATTENTION"
+        );
+        assert!(!root.join(record_name(2, InstallPhaseV1::Staged)).exists());
+        drop(reopened);
+        let next_approval = signed_for_generation(&expected.protected_root, 3, 3);
+        let next_expected = LedgerExpectationV1 {
+            next_install_generation: 3,
+            ..expected.clone()
+        };
+        assert_eq!(
+            BrokerLedgerLease::begin(&handle, &next_approval, &next_expected)
+                .err()
+                .unwrap(),
+            "WAKE_LEDGER_PRIOR_INCOMPLETE"
+        );
         drop(handle);
         remove_fixture(&root, expected.next_install_generation);
     }
@@ -1467,6 +1554,7 @@ mod tests {
     fn future_phase_after_a_gap_is_corrupt() {
         let (root, handle, approval, expected) = fixture();
         let mut lease = BrokerLedgerLease::begin(&handle, &approval, &expected).expect("intent");
+        lease.advance(InstallPhaseV1::StageStarted).expect("marker");
         lease.advance(InstallPhaseV1::Staged).expect("staged");
         drop(lease);
         let staged = root.join(record_name(
@@ -1612,6 +1700,7 @@ mod tests {
     fn expired_approval_resumes_only_from_exact_original_intent() {
         let (root, handle, approval, expected) = fixture();
         let mut first = BrokerLedgerLease::begin(&handle, &approval, &expected).expect("intent");
+        first.advance(InstallPhaseV1::StageStarted).expect("marker");
         first.advance(InstallPhaseV1::Staged).expect("staged");
         drop(first);
         let (mut payload, mut observed, key) = approval_test::fixture();
@@ -1859,6 +1948,7 @@ mod tests {
     fn duplicate_phase_rechecks_current_record_instead_of_claiming_idempotence() {
         let (root, handle, approval, expected) = fixture();
         let mut lease = BrokerLedgerLease::begin(&handle, &approval, &expected).expect("intent");
+        lease.advance(InstallPhaseV1::StageStarted).expect("marker");
         lease.advance(InstallPhaseV1::Staged).expect("stage");
         let stage = root.join(record_name(
             expected.next_install_generation,

@@ -2,17 +2,21 @@
 //!
 //! This private owner creates a suspended child, assigns it to an unnamed,
 //! noninheritable kill-on-close Job, checks exact membership, and only then
-//! resumes it. A consuming finish terminates the Job and waits for both the
-//! original process and the retained Job's active count to reach zero.
-//! These observations are not a worker identity, escaped-descendant,
-//! inherited-handle, or repository-write exclusion proof. No production
-//! Sol launcher or repository-use path calls this module.
+//! resumes it. The same-user diagnostic route returns no capability. A
+//! separate dormant route can bind the still-suspended process object to the
+//! opaque fixed-account restricted-token observation before resume, then
+//! consume that owner to obtain a narrow drained-Job witness. No production
+//! fixed-account launcher can call that route yet. The witness does not prove
+//! escaped descendants, inherited handles, or repository-write exclusion,
+//! and no nonce, staging, or repository-use path accepts it.
 
 use std::ffi::c_void;
-use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+use std::os::windows::io::{AsRawHandle, BorrowedHandle, FromRawHandle, OwnedHandle};
 use std::os::windows::process::CommandExt;
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
+
+use super::sol_worker_identity_preflight::BoundFixedLocalSolWorkerProcessV1;
 
 const LABEL: &str = "Sol worker lifecycle";
 const CREATE_SUSPENDED: u32 = 0x0000_0004;
@@ -176,6 +180,11 @@ impl PrivateJob {
         if unsafe { AssignProcessToJobObject(self.0.as_raw_handle(), child.as_raw_handle()) } == 0 {
             return Err(format!("{LABEL} Job assignment failed"));
         }
+        self.require_exact_member(child)
+    }
+
+    fn require_exact_member(&self, child: &Child) -> Result<(), String> {
+        self.require_limits()?;
         let mut exact_member = 0;
         if unsafe {
             IsProcessInJob(
@@ -234,13 +243,35 @@ impl PrivateJob {
     }
 }
 
-/// Private mechanical owner. The future privileged launcher must create a
-/// fixed-account restricted process and bind its token separately; this
-/// generic command helper is deliberately inaccessible outside this module.
+/// Private diagnostic launcher. Its `Command` inherits the current user and
+/// cannot by itself create the fixed-account worker or the drained witness.
 struct OwnedSuspendedJobChild {
     // Job drops first on every early return and terminates active members.
     job: PrivateJob,
     child: Option<Child>,
+}
+
+struct OwnedRunningJobChild {
+    // Job drops first on every early return and terminates active members.
+    job: PrivateJob,
+    child: Option<Child>,
+}
+
+/// Only a still-suspended, exact Job member whose opened process was bound to
+/// the fixed local account can reach this state. This is private while a
+/// trusted fixed-account launcher and host-held run/output-root binding are
+/// absent.
+struct BoundFixedWorkerJobChild {
+    running: OwnedRunningJobChild,
+    bound_worker: BoundFixedLocalSolWorkerProcessV1,
+}
+
+/// A necessary-condition observation: the bound original process and all
+/// members observed in its retained Job have drained. It says nothing about
+/// processes launched outside that Job or handles held by other processes.
+/// Private fields and the lack of `Clone` prevent a caller-created claim.
+pub(crate) struct DrainedBoundFixedWorkerJobV1 {
+    _bound_worker: BoundFixedLocalSolWorkerProcessV1,
 }
 
 /// The original process handle is the cleanup target. A failed assignment
@@ -270,7 +301,7 @@ fn terminate_original_child_bounded(child: &mut Child) -> Result<(), String> {
 }
 
 impl OwnedSuspendedJobChild {
-    fn launch(command: &mut Command) -> Result<Self, String> {
+    fn launch_suspended(command: &mut Command) -> Result<Self, String> {
         let job = PrivateJob::create()?;
         command.creation_flags(CREATE_SUSPENDED);
         let mut child = command
@@ -282,19 +313,68 @@ impl OwnedSuspendedJobChild {
                 Err(cleanup) => Err(format!("{error}; {cleanup}")),
             };
         }
-        if unsafe { NtResumeProcess(child.as_raw_handle()) } < 0 {
-            let _ = job.terminate();
-            return match terminate_original_child_bounded(&mut child) {
-                Ok(()) => Err(format!("{LABEL} child resume failed")),
-                Err(cleanup) => Err(format!("{LABEL} child resume failed; {cleanup}")),
-            };
-        }
         Ok(Self {
             job,
             child: Some(child),
         })
     }
 
+    fn launch(command: &mut Command) -> Result<OwnedRunningJobChild, String> {
+        Self::launch_suspended(command)?.resume()
+    }
+
+    fn abort(mut self, error: String) -> String {
+        let job_error = self.job.terminate().err();
+        let child_error = self
+            .child
+            .take()
+            .and_then(|mut child| terminate_original_child_bounded(&mut child).err());
+        match (job_error, child_error) {
+            (None, None) => error,
+            (Some(job), None) => format!("{error}; {job}"),
+            (None, Some(child)) => format!("{error}; {child}"),
+            (Some(job), Some(child)) => format!("{error}; {job}; {child}"),
+        }
+    }
+
+    fn resume(self) -> Result<OwnedRunningJobChild, String> {
+        let Some(child) = self.child.as_ref() else {
+            return Err(self.abort(format!("{LABEL} original child missing")));
+        };
+        if let Err(error) = self.job.require_exact_member(child) {
+            return Err(self.abort(error));
+        }
+        if unsafe { NtResumeProcess(child.as_raw_handle()) } < 0 {
+            return Err(self.abort(format!("{LABEL} child resume failed")));
+        }
+        let Self { job, child } = self;
+        Ok(OwnedRunningJobChild { job, child })
+    }
+
+    /// Bind the real opened process object while it is still suspended. The
+    /// R20 observation also checks the live fixed-account restricted token.
+    /// On any failure the suspended original process is terminated and no
+    /// bound or drained value is returned.
+    fn bind_and_resume_fixed(
+        self,
+        bound_worker: BoundFixedLocalSolWorkerProcessV1,
+    ) -> Result<BoundFixedWorkerJobChild, String> {
+        let Some(child) = self.child.as_ref() else {
+            return Err(self.abort(format!("{LABEL} original child missing")));
+        };
+        let opened = unsafe { BorrowedHandle::borrow_raw(child.as_raw_handle()) };
+        if let Err(error) = bound_worker.require_same_opened_process(opened) {
+            return Err(self.abort(error));
+        }
+        let running = self.resume()?;
+        Ok(BoundFixedWorkerJobChild {
+            running,
+            bound_worker,
+        })
+    }
+}
+
+impl OwnedRunningJobChild {
     /// Consume the owner and return a diagnostic only. The child is waited
     /// on through its original handle; its handle is then released before
     /// checking the retained Job's active-process count and bounded process
@@ -343,10 +423,25 @@ impl OwnedSuspendedJobChild {
     }
 }
 
+impl BoundFixedWorkerJobChild {
+    /// A normal worker may already have exited at this point, so the live
+    /// token observation is intentionally checked before resume, not here.
+    /// This only drains the original and Job-associated processes.
+    fn finish(self, timeout: Duration) -> Result<DrainedBoundFixedWorkerJobV1, String> {
+        self.running.finish(timeout)?;
+        Ok(DrainedBoundFixedWorkerJobV1 {
+            _bound_worker: self.bound_worker,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::process::Stdio;
+
+    use super::super::sol_worker_identity_preflight::bind_fixed_local_sol_worker_to_opened_process;
+    use super::super::sol_worker_token_security::require_same_opened_process_object;
 
     const HELPER: &str = "delegated::sol_worker_lifecycle::tests::sleep_helper";
 
@@ -400,6 +495,43 @@ mod tests {
     }
 
     #[test]
+    fn fixed_worker_drain_type_requires_pre_resume_process_binding() {
+        let _: fn(
+            OwnedSuspendedJobChild,
+            BoundFixedLocalSolWorkerProcessV1,
+        ) -> Result<BoundFixedWorkerJobChild, String> =
+            OwnedSuspendedJobChild::bind_and_resume_fixed;
+        let _: fn(
+            BoundFixedWorkerJobChild,
+            Duration,
+        ) -> Result<DrainedBoundFixedWorkerJobV1, String> = BoundFixedWorkerJobChild::finish;
+        let _: fn(OwnedRunningJobChild, Duration) -> Result<(), String> =
+            OwnedRunningJobChild::finish;
+    }
+
+    #[test]
+    fn same_user_diagnostic_child_cannot_become_fixed_worker_or_supply_another_handle() {
+        let mut first_command = helper_command("descendant");
+        let mut second_command = helper_command("descendant");
+        let first = OwnedSuspendedJobChild::launch_suspended(&mut first_command)
+            .expect("first suspended diagnostic child");
+        let second = OwnedSuspendedJobChild::launch_suspended(&mut second_command)
+            .expect("second suspended diagnostic child");
+        let first_handle = unsafe {
+            BorrowedHandle::borrow_raw(first.child.as_ref().expect("first child").as_raw_handle())
+        };
+        let second_handle = unsafe {
+            BorrowedHandle::borrow_raw(second.child.as_ref().expect("second child").as_raw_handle())
+        };
+        require_same_opened_process_object(first_handle, first_handle)
+            .expect("same opened process object");
+        assert!(require_same_opened_process_object(first_handle, second_handle).is_err());
+        assert!(bind_fixed_local_sol_worker_to_opened_process(first_handle).is_err());
+        assert_eq!(first.abort("diagnostic only".into()), "diagnostic only");
+        assert_eq!(second.abort("diagnostic only".into()), "diagnostic only");
+    }
+
+    #[test]
     fn descendant_is_in_same_job_and_finish_drains_entire_job() {
         let mut command = helper_command("parent");
         let owner = OwnedSuspendedJobChild::launch(&mut command).expect("launch in exact Job");
@@ -415,6 +547,26 @@ mod tests {
         owner
             .finish(Duration::from_secs(5))
             .expect("drain child and descendant");
+    }
+
+    #[test]
+    fn retained_observer_process_handle_does_not_fake_an_active_job_member() {
+        let mut command = helper_command("descendant");
+        let owner = OwnedSuspendedJobChild::launch(&mut command).expect("launch in exact Job");
+        let opened = unsafe {
+            BorrowedHandle::borrow_raw(
+                owner
+                    .child
+                    .as_ref()
+                    .expect("original child")
+                    .as_raw_handle(),
+            )
+        };
+        let observer = opened.try_clone_to_owned().expect("retain opened process");
+        owner
+            .finish(Duration::from_secs(5))
+            .expect("drain despite retained process observation");
+        drop(observer);
     }
 
     #[test]

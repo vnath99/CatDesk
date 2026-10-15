@@ -7,6 +7,8 @@ pub mod install_broker_ci_witness;
 #[cfg(windows)]
 pub mod install_broker_client;
 #[cfg(windows)]
+pub(crate) mod install_broker_durability;
+#[cfg(windows)]
 pub mod install_broker_endpoint;
 #[cfg(windows)]
 pub mod install_broker_ledger;
