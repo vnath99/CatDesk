@@ -1477,6 +1477,9 @@ async fn run_reviewed_candidate_mcp(
     if !local_addr.ip().is_loopback() {
         return Err(std::io::Error::other("reviewed candidate listener is not loopback").into());
     }
+    let runtime_generation = snapshot
+        .mark_serving(local_addr.port())
+        .map_err(std::io::Error::other)?;
     {
         let mut app = state.lock().await;
         app.port = local_addr.port();
@@ -1489,6 +1492,8 @@ async fn run_reviewed_candidate_mcp(
             "kind":"reviewed-candidate",
             "snapshotId":snapshot_id,
             "sourceCommit":source_commit,
+            "runtimeGeneration":runtime_generation,
+            "ownerPid":std::process::id(),
             "mcpUrl":format!("http://{local_addr}/dev/mcp"),
             "auth":{"scheme":"bearer","tokenRedacted":true}
         })

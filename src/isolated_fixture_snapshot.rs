@@ -55,6 +55,94 @@ struct FixtureOwnerRootV1 {
 #[cfg(windows)]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct FixtureOwnerServingV1 {
+    schema_version: u32,
+    snapshot_id: String,
+    intent_sha256: String,
+    root_object_identity: String,
+    runtime_generation: String,
+    owner_pid: u32,
+    loopback_port: u16,
+}
+
+#[cfg(windows)]
+struct FixtureOwnerJournal {
+    guard: ProtectedDirectoryGuard,
+    intent: FixtureOwnerIntentV1,
+    intent_bytes: Vec<u8>,
+    binding: FixtureOwnerRootV1,
+    sid: String,
+}
+
+#[cfg(windows)]
+fn write_fixture_owner_serving(
+    journal: &ProtectedDirectoryGuard,
+    manifest: &SnapshotManifest,
+    root: &ProtectedDirectoryGuard,
+    sid: &str,
+    port: u16,
+) -> Result<FixtureOwnerServingV1, String> {
+    if port == 0 {
+        return Err("fixture owner serving port unavailable".into());
+    }
+    let (intent, binding) = read_fixture_owner_records(journal, manifest, Some(root), sid)?;
+    let binding = binding.ok_or("fixture owner root binding missing")?;
+    let record = FixtureOwnerServingV1 {
+        schema_version: 1,
+        snapshot_id: intent.snapshot_id,
+        intent_sha256: binding.intent_sha256,
+        root_object_identity: binding.root_object_identity,
+        runtime_generation: Uuid::new_v4().to_string(),
+        owner_pid: std::process::id(),
+        loopback_port: port,
+    };
+    let bytes =
+        serde_json::to_vec(&record).map_err(|_| "fixture owner serving encoding unavailable")?;
+    if bytes.len() as u64 > MAX_OWNER_RECORD_BYTES {
+        return Err("fixture owner serving record too large".into());
+    }
+    write_new_regular_in(journal, "serving.json", &bytes, LABEL)?;
+    if read_relative_regular_unique(journal, "serving.json", MAX_OWNER_RECORD_BYTES, LABEL)?
+        != bytes
+    {
+        return Err("fixture owner serving readback drifted".into());
+    }
+    Ok(record)
+}
+
+#[cfg(windows)]
+fn read_fixture_owner_serving(
+    journal: &ProtectedDirectoryGuard,
+    manifest: &SnapshotManifest,
+    root: &ProtectedDirectoryGuard,
+    sid: &str,
+) -> Result<FixtureOwnerServingV1, String> {
+    let (intent, binding) = read_fixture_owner_records(journal, manifest, Some(root), sid)?;
+    let binding = binding.ok_or("fixture owner root binding missing")?;
+    let bytes =
+        read_relative_regular_unique(journal, "serving.json", MAX_OWNER_RECORD_BYTES, LABEL)?;
+    let record: FixtureOwnerServingV1 =
+        serde_json::from_slice(&bytes).map_err(|_| "fixture owner serving invalid")?;
+    if bytes
+        != serde_json::to_vec(&record).map_err(|_| "fixture owner serving encoding unavailable")?
+        || record.schema_version != 1
+        || record.snapshot_id != intent.snapshot_id
+        || record.intent_sha256 != binding.intent_sha256
+        || record.root_object_identity != binding.root_object_identity
+        || record.owner_pid == 0
+        || record.loopback_port == 0
+        || Uuid::parse_str(&record.runtime_generation)
+            .map(|uuid| uuid.to_string() != record.runtime_generation)
+            .unwrap_or(true)
+    {
+        return Err("fixture owner serving identity drifted".into());
+    }
+    Ok(record)
+}
+
+#[cfg(windows)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct FixtureOwnerAttentionV1 {
     schema_version: u32,
     snapshot_id: String,
@@ -457,6 +545,8 @@ pub(crate) struct StagedCandidateSnapshot {
     // Read-only, no-write/no-delete file handles retained alongside the
     // root; the fixture source must not change before the owner retires it.
     _leases: Vec<RetainedReviewedArtifact>,
+    #[cfg(windows)]
+    owner_journal: Option<FixtureOwnerJournal>,
 }
 
 #[cfg(test)]
@@ -468,6 +558,8 @@ pub(crate) fn unleased_snapshot_for_adversarial_test(
         root,
         manifest,
         _leases: Vec::new(),
+        #[cfg(windows)]
+        owner_journal: None,
     }
 }
 
@@ -525,6 +617,8 @@ fn finish_owned_candidate_stage(
         root,
         manifest,
         _leases: leases,
+        #[cfg(windows)]
+        owner_journal: None,
     })
 }
 
@@ -572,6 +666,40 @@ pub(crate) struct CandidateRetirementInventory {
 /// Ordinary fixture MCP routing must NOT call this by manufacturing a manifest
 /// from a request: only the future owner of StagedCandidateSnapshot may use it.
 impl StagedCandidateSnapshot {
+    pub(crate) fn mark_serving(&self, port: u16) -> Result<String, String> {
+        #[cfg(windows)]
+        {
+            let owner = self
+                .owner_journal
+                .as_ref()
+                .ok_or("fixture owner journal unavailable")?;
+            let record = write_fixture_owner_serving(
+                &owner.guard,
+                &self.manifest,
+                &self.root,
+                &owner.sid,
+                port,
+            )?;
+            if record.snapshot_id != owner.intent.snapshot_id
+                || record.intent_sha256 != owner.binding.intent_sha256
+                || read_relative_regular_unique(
+                    &owner.guard,
+                    "intent.json",
+                    MAX_OWNER_RECORD_BYTES,
+                    LABEL,
+                )? != owner.intent_bytes
+            {
+                return Err("fixture owner serving journal drifted".into());
+            }
+            Ok(record.runtime_generation)
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = port;
+            Err("fixture owner serving is Windows-only".into())
+        }
+    }
+
     /// Recheck the pinned root's exact owner and protected DACL at the HTTP
     /// authority boundary. A pathname, manifest hash or prior check alone
     /// cannot authorize later serving after an ACL change.
@@ -690,6 +818,7 @@ impl StagedCandidateSnapshot {
             root,
             manifest,
             _leases,
+            ..
         } = self;
         let expected = _leases
             .iter()
@@ -869,21 +998,30 @@ pub(crate) async fn stage_witnessed_candidate_snapshot(
                 )));
             }
         };
-        finish_owned_candidate_stage(root, manifest, &candidates).map_err(|mut failure| {
-            if let Err(attention_error) = record_fixture_owner_attention(
-                &journal,
-                &intent,
-                &intent_bytes,
-                Some(&binding),
-                "partial_stage",
-                &sid,
-            ) {
-                failure.reason.push_str(&format!(
-                    "; attention record unavailable: {attention_error}"
-                ));
-            }
-            CandidateStageError::Owned(failure)
-        })
+        let mut staged =
+            finish_owned_candidate_stage(root, manifest, &candidates).map_err(|mut failure| {
+                if let Err(attention_error) = record_fixture_owner_attention(
+                    &journal,
+                    &intent,
+                    &intent_bytes,
+                    Some(&binding),
+                    "partial_stage",
+                    &sid,
+                ) {
+                    failure.reason.push_str(&format!(
+                        "; attention record unavailable: {attention_error}"
+                    ));
+                }
+                CandidateStageError::Owned(failure)
+            })?;
+        staged.owner_journal = Some(FixtureOwnerJournal {
+            guard: journal,
+            intent,
+            intent_bytes,
+            binding,
+            sid,
+        });
+        Ok(staged)
     }
     #[cfg(not(windows))]
     return Err(CandidateStageError::BeforeOwnership(
@@ -949,6 +1087,8 @@ mod tests {
             root,
             manifest,
             _leases: leases,
+            #[cfg(windows)]
+            owner_journal: None,
         };
         assert_eq!(
             staged.read_manifest_leaf("Cargo.toml").unwrap(),
@@ -1053,6 +1193,8 @@ mod tests {
             // Deliberately omit read leases in this adversarial test so a
             // same-user writer can change bytes between tool calls.
             _leases: Vec::new(),
+            #[cfg(windows)]
+            owner_journal: None,
         };
         let call = |tool: &str, leaf: &str| crate::mcp::JsonRpcRequest {
             jsonrpc: "2.0".into(),
@@ -1126,6 +1268,8 @@ mod tests {
             root,
             manifest,
             _leases: Vec::new(),
+            #[cfg(windows)]
+            owner_journal: None,
         };
         assert!(
             staged.review_retirement_inventory().is_err(),
@@ -1157,6 +1301,8 @@ mod tests {
                 }],
             },
             _leases: Vec::new(),
+            #[cfg(windows)]
+            owner_journal: None,
         };
         assert!(
             snapshot.review_retirement_inventory().is_err(),
@@ -1335,6 +1481,35 @@ mod tests {
                 .expect("verify exact bound root");
         assert_eq!(read_binding, Some(binding.clone()));
 
+        let serving =
+            write_fixture_owner_serving(&reopened_journal, &manifest, &reopened_root, &sid, 3209)
+                .expect("persist serving generation before ready");
+        assert_eq!(serving.owner_pid, std::process::id());
+        assert_eq!(serving.loopback_port, 3209);
+        assert!(
+            write_fixture_owner_serving(&reopened_journal, &manifest, &reopened_root, &sid, 3210)
+                .is_err(),
+            "serving generation is create-only"
+        );
+        drop(reopened_root);
+        drop(reopened_journal);
+
+        let mut reopened_journal =
+            ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp after serving crash");
+        reopened_journal
+            .descend_existing_for_security(&journal_name, LABEL)
+            .expect("reopen serving journal");
+        let mut reopened_root =
+            ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp after serving crash");
+        reopened_root
+            .descend_existing_for_security(&intent.root_name, LABEL)
+            .expect("reopen serving root");
+        assert_eq!(
+            read_fixture_owner_serving(&reopened_journal, &manifest, &reopened_root, &sid)
+                .expect("read serving generation after crash"),
+            serving
+        );
+
         record_fixture_owner_attention(
             &reopened_journal,
             &intent,
@@ -1385,6 +1560,18 @@ mod tests {
             "attention for another root identity must not verify"
         );
 
+        let mut altered_serving = serving;
+        altered_serving.root_object_identity = "00000000:00000000:00000000".into();
+        std::fs::write(
+            temp.join(&journal_name).join("serving.json"),
+            serde_json::to_vec(&altered_serving).unwrap(),
+        )
+        .expect("tamper only test-owned serving record");
+        assert!(
+            read_fixture_owner_serving(&reopened_journal, &manifest, &reopened_root, &sid).is_err(),
+            "serving for another root identity must not verify"
+        );
+
         let mut altered = binding;
         altered.root_object_identity = "00000000:00000000:00000000".into();
         std::fs::write(
@@ -1400,6 +1587,8 @@ mod tests {
         assert!(temp.join(&intent.root_name).is_dir());
         drop(reopened_root);
         drop(reopened_journal);
+        std::fs::remove_file(temp.join(&journal_name).join("serving.json"))
+            .expect("remove test serving record");
         std::fs::remove_file(temp.join(&journal_name).join("attention.json"))
             .expect("remove test attention record");
         std::fs::remove_file(temp.join(&journal_name).join("root.json"))
@@ -1561,6 +1750,8 @@ mod tests {
             root,
             manifest,
             _leases: leases,
+            #[cfg(windows)]
+            owner_journal: None,
         };
         assert!(staged.retire_owned_root().is_err());
         assert_eq!(std::fs::read(dir.join("Cargo.toml")).unwrap(), bytes);
@@ -1607,6 +1798,8 @@ mod tests {
             root,
             manifest,
             _leases: leases,
+            #[cfg(windows)]
+            owner_journal: None,
         };
         assert!(
             staged.retire_owned_root().is_err(),
@@ -1652,6 +1845,8 @@ mod tests {
             root,
             manifest,
             _leases: leases,
+            #[cfg(windows)]
+            owner_journal: None,
         };
         assert!(staged.retire_owned_root().is_err());
         assert_eq!(std::fs::read(dir.join("Cargo.toml")).unwrap(), bytes);
