@@ -1,5 +1,9 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-15 fresh-successor predecessor gate (source only)
+
+Production ledger acceptance now compares a signed successor with a retained COMPLETE protected pointer/package under the global lock, including exact pointer physical ID/digest and predecessor package/pointer/generation/root. It then refuses before CI fetch or INTENT because the first dev.84 migration anchor and current live old-owner proof are absent. Focused ledger 26 passed, full Wake 197 library passed/one ignored plus integrations, full root/Python and strict gates passed locally. See `T-0485_R24_FRESH_SUCCESSOR_PREDECESSOR_GATE_SOURCE.md`. Pushed source `9e8d1c8d5f4ade8327fdcf521181faf31b901ab30` had zero exact GitHub runs/checks on immediate readback. The production install/service holds remain closed; no protected dev.85 activation or new Chat53 receipt occurred.
+
 ## 2026-10-15 read-only pointer-switch binding checkpoint
 
 The ledger can now retain the new `current.json` physical ID and byte digest across `POINTER_SWITCHED`/`COMPLETE`; a legacy unbound completion remains readable but cannot authorize another INTENT. The locked diagnostic compares that binding with the pinned protected reader, still returning no install authority. Focused broker (132 passed, one ignored), full Wake (197 library passed, one ignored, plus binaries/integrations), full root Rust and strict Clippy/format/build gates passed locally. See `T-0485_R23_POINTER_SWITCH_LEDGER_BINDING_SOURCE.md`. Pushed source `c5b35648223c1bb5e838d0f28a61ef28b0a128810` had zero exact GitHub runs/checks on immediate readback. The production pointer writer, staging parent, first-generation dev.84 anchor, owner/readers transaction, signed broker and exact-current CI remain open; install guards stay closed.

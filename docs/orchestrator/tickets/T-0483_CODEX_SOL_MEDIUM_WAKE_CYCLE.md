@@ -1,5 +1,9 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-15 stopped Sol host-context diagnosis (source only)
+
+The inert stopped candidate now rechecks its selected nonce, exact launch record, pinned ledger/output/executable-parent identities and executable path/object/length/SHA after worker output may exist. It returns no output or repository authority. Focused lifecycle 30 passed/one ignored, journal six passed, full root/Python and strict gates passed locally. See `T-0483_R31_STOPPED_SOL_HOST_CONTEXT_DIAGNOSTIC.md`. Pushed source `6ba3c4eae992068c75eb03d408ed88899735dff60` had zero exact GitHub runs/checks on immediate readback. The fixed worker account, full lost-write proof, durable burn-to-stage handoff and real Sol/medium→review_ready→Wake remain open.
+
 ## 2026-10-15 retained exited worker identity diagnosis (source only)
 
 The inert stopped candidate now checks its original retained process handle's PID, creation time and exit, and rereads the pre-resume primary token handle against the exact snapshot and restricted policy. The fixed-account preflight brackets that readback. A real same-user child fixture and negative identity cases passed locally; the focused Sol suite passed 83 tests with two ignored helpers, with full root Rust, strict Clippy, formatting and all-bin build passing. See `T-0483_R30_RETAINED_EXITED_SOL_IDENTITY_DIAGNOSTIC.md`. Pushed source `de89d796fa49172ae8be94a696d421fa25486a82` had zero exact GitHub runs/checks on immediate readback. The `CatDeskSolWorker` account is absent, and the diagnostic proves neither escaped descendants nor loss of all write authority. Burn, stage, repository use and real Sol/medium→review_ready→Wake remain closed.
