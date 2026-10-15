@@ -21,7 +21,8 @@
 use crate::{
     Result,
     install_broker_approval::{
-        BrokerObservedStateV1, ObjectIdentityV1, VerifiedApprovalV1, verify_approval,
+        BrokerObservedStateV1, ObjectIdentityV1, VerifiedApprovalV1, WakeInstallApprovalV1,
+        verify_approval,
     },
     install_broker_candidate_stage::{
         BrokerCandidateStageReadbackV1, inspect_stage_under_guard,
@@ -31,7 +32,8 @@ use crate::{
     install_broker_durability::{ParentFlushPoint, flush_pinned_directory},
     install_broker_policy::{BrokerProtectedPolicyV1, PolicyVerifiedApprovalV1},
     install_broker_reader::{
-        ProtectedInstallReadOnlySnapshotV1, pin_protected_install_under_guard,
+        ProtectedInstallPinV1, ProtectedInstallReadOnlySnapshotV1,
+        pin_protected_install_under_guard,
     },
     install_broker_stage_writer::BrokerStageReceiptV1,
 };
@@ -252,9 +254,9 @@ pub struct BrokerExactResumeReadbackV1 {
 /// A completed ledger head and six installed package object IDs agree at one
 /// locked readback. The staging parent is not checked. Older completed records
 /// may lack a pointer-switch binding, and even a contiguous ledger
-/// beginning above generation one is not a migration anchor. This value is
-/// diagnostic; it does not reverify the historical signed approval envelope
-/// or become an install observation.
+/// beginning above generation one is not a migration anchor. The live old
+/// owner is also unverified. This value is diagnostic; it does not reverify
+/// the historical signed approval envelope or become an install observation.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BrokerCompletedPredecessorReadbackV1 {
@@ -268,6 +270,8 @@ pub struct BrokerCompletedPredecessorReadbackV1 {
     /// current.json object and exact canonical bytes at this readback.
     pub pointer_switch_record_binding_present: bool,
     pub first_generation_migration_anchor_verified: bool,
+    /// No current reader proves the serving dev.84 owner and its loaded image.
+    pub old_live_owner_verified: bool,
     pub disposition: &'static str,
 }
 
@@ -517,6 +521,18 @@ impl<'a> BrokerLedgerGuard<'a> {
         policy: &BrokerProtectedPolicyV1,
         reader_mode: PredecessorReaderMode,
     ) -> Result<BrokerCompletedPredecessorReadbackV1> {
+        let (readback, _pin) = self.pin_completed_predecessor_with(policy, reader_mode)?;
+        Ok(readback)
+    }
+
+    /// Keep the physical pointer and package pins live for a subsequent
+    /// guarded comparison. The public projection above deliberately drops
+    /// these pins and cannot be used to authorize an install.
+    fn pin_completed_predecessor_with(
+        &self,
+        policy: &BrokerProtectedPolicyV1,
+        reader_mode: PredecessorReaderMode,
+    ) -> Result<(BrokerCompletedPredecessorReadbackV1, ProtectedInstallPinV1)> {
         let root_id = root_info(self.root)?;
         let policy_before = policy.readback()?;
         if policy_before.protected_root != root_id {
@@ -562,8 +578,8 @@ impl<'a> BrokerLedgerGuard<'a> {
             return Err("WAKE_BROKER_PREDECESSOR_POLICY_MISMATCH".into());
         }
         // Keep the pinned package, policy and global lock live through the
-        // last read. Only copied diagnostic fields leave this function.
-        Ok(BrokerCompletedPredecessorReadbackV1 {
+        // last read. The public projection drops the retained pin.
+        let readback = BrokerCompletedPredecessorReadbackV1 {
             schema_version: 1,
             install_generation: head.install_generation,
             approval_id: head.approval_id,
@@ -572,12 +588,35 @@ impl<'a> BrokerLedgerGuard<'a> {
             staging_parent_object_verified: false,
             pointer_switch_record_binding_present: pointer_binding.is_some(),
             first_generation_migration_anchor_verified: false,
+            old_live_owner_verified: false,
             disposition: if pointer_binding.is_some() {
                 "COMPLETE_POINTER_BINDING_MATCHES_READBACK_NO_INSTALL_AUTHORITY"
             } else {
                 "COMPLETE_PACKAGE_IDS_MATCH_POINTER_UNBOUND_NO_INSTALL_AUTHORITY"
             },
-        })
+        };
+        Ok((readback, pin))
+    }
+
+    /// Compare a proposed fresh successor to the retained, fully replayed
+    /// COMPLETE head and the exact currently pinned protected install. This
+    /// checks predecessor correspondence only; the first dev.84 migration
+    /// anchor and old live owner still have no trusted production proof.
+    fn pin_fresh_successor_predecessor_with(
+        &self,
+        policy: &BrokerProtectedPolicyV1,
+        approved: &PolicyVerifiedApprovalV1<'_>,
+        expected: &LedgerExpectationV1,
+        reader_mode: PredecessorReaderMode,
+    ) -> Result<(BrokerCompletedPredecessorReadbackV1, ProtectedInstallPinV1)> {
+        let (readback, pin) = self.pin_completed_predecessor_with(policy, reader_mode)?;
+        if approved.readback_snapshot() != &policy.readback()? {
+            return Err("WAKE_BROKER_PREDECESSOR_SUCCESSOR_MISMATCH".into());
+        }
+        compare_fresh_successor(&readback, approved.verified().payload(), expected)?;
+        pin.revalidate(self.root, &readback.protected_install.protected_root)?;
+        policy.revalidate()?;
+        Ok((readback, pin))
     }
 
     /// Diagnose only an existing exact transaction while this guard retains
@@ -1332,6 +1371,36 @@ fn compare_completed_head(
     Ok(())
 }
 
+/// Compare only the proposed successor fields. The caller separately pins and
+/// revalidates the physical predecessor under the global lock; a match here
+/// never proves migration or the old live owner.
+fn compare_fresh_successor(
+    predecessor: &BrokerCompletedPredecessorReadbackV1,
+    payload: &WakeInstallApprovalV1,
+    expected: &LedgerExpectationV1,
+) -> Result<()> {
+    if !predecessor.pointer_switch_record_binding_present {
+        return Err("WAKE_BROKER_PREDECESSOR_POINTER_UNBOUND".into());
+    }
+    let next_generation = predecessor
+        .install_generation
+        .checked_add(1)
+        .ok_or("WAKE_LEDGER_STALE_GENERATION")?;
+    let installed = &predecessor.protected_install;
+    if expected.next_install_generation != next_generation
+        || payload.install_generation != next_generation
+        || expected.predecessor_package_id != installed.package_id
+        || payload.predecessor_package_id != installed.package_id
+        || expected.predecessor_pointer != installed.pointer
+        || payload.predecessor_pointer != installed.pointer
+        || expected.protected_root != installed.protected_root
+        || payload.target_protected_root != installed.protected_root
+    {
+        return Err("WAKE_BROKER_PREDECESSOR_SUCCESSOR_MISMATCH".into());
+    }
+    Ok(())
+}
+
 /// Validate every prior ledger generation and reject later records or reused
 /// approval IDs before creating a fresh intent. The fixed global lease is
 /// already held by the caller.
@@ -1474,20 +1543,69 @@ fn write_new(file: &mut File, expected: &LedgerRecordV1) -> Result<String> {
 
 impl<'a> BrokerLedgerGuard<'a> {
     /// Invoke the observation provider only while this global lock is held,
-    /// then verify the envelope against the pinned protected policy and fetch
-    /// exact CI from the broker's fixed GitHub origin before creating INTENT.
-    /// The future service must supply a fixed kernel-backed
-    /// provider that keeps its object/process pins alive through the returned
-    /// lease. A closure itself cannot prove observation provenance.
+    /// then verify the envelope against the pinned protected policy. A fresh
+    /// successor must match a retained, bound completed pointer and package.
+    /// The first dev.84 migration anchor and live old-owner evidence remain
+    /// unavailable, so this production path refuses before INTENT. Once those
+    /// proofs exist, exact CI must still be fetched from the fixed GitHub
+    /// origin before creating INTENT. A closure cannot prove provenance.
     pub fn accept_with_observation<'p>(
         self,
         policy: &'p BrokerProtectedPolicyV1,
         envelope: &[u8],
         observe: impl FnOnce(&OwnedHandle) -> Result<(BrokerObservedStateV1, LedgerExpectationV1)>,
     ) -> Result<(BrokerLedgerLease<'a>, PolicyVerifiedApprovalV1<'p>)> {
-        self.accept_with_observation_using(policy, envelope, observe, require_broker_owned_exact_ci)
+        self.accept_with_guarded_predecessor_mode(
+            policy,
+            envelope,
+            observe,
+            PredecessorReaderMode::Protected,
+        )
     }
 
+    #[cfg(test)]
+    fn accept_with_guarded_predecessor_fixture<'p>(
+        self,
+        policy: &'p BrokerProtectedPolicyV1,
+        envelope: &[u8],
+        observe: impl FnOnce(&OwnedHandle) -> Result<(BrokerObservedStateV1, LedgerExpectationV1)>,
+    ) -> Result<(BrokerLedgerLease<'a>, PolicyVerifiedApprovalV1<'p>)> {
+        self.accept_with_guarded_predecessor_mode(
+            policy,
+            envelope,
+            observe,
+            PredecessorReaderMode::Fixture,
+        )
+    }
+
+    fn accept_with_guarded_predecessor_mode<'p>(
+        self,
+        policy: &'p BrokerProtectedPolicyV1,
+        envelope: &[u8],
+        observe: impl FnOnce(&OwnedHandle) -> Result<(BrokerObservedStateV1, LedgerExpectationV1)>,
+        reader_mode: PredecessorReaderMode,
+    ) -> Result<(BrokerLedgerLease<'a>, PolicyVerifiedApprovalV1<'p>)> {
+        let (observed, expected) = observe(self.root)?;
+        let approved = policy.verify_approval_for_transaction(envelope, &observed)?;
+        let (predecessor, pin) =
+            self.pin_fresh_successor_predecessor_with(policy, &approved, &expected, reader_mode)?;
+        if !predecessor.first_generation_migration_anchor_verified {
+            return Err("WAKE_BROKER_PREDECESSOR_MIGRATION_UNANCHORED".into());
+        }
+        if !predecessor.old_live_owner_verified {
+            return Err("WAKE_BROKER_OLD_OWNER_UNVERIFIED".into());
+        }
+        require_broker_owned_exact_ci(&approved)?;
+        pin.revalidate(self.root, &predecessor.protected_install.protected_root)?;
+        let lease = self.begin(&approved, &expected)?;
+        pin.revalidate(
+            lease.protected_root(),
+            &predecessor.protected_install.protected_root,
+        )?;
+        Ok((lease, approved))
+    }
+
+    #[cfg(test)]
     fn accept_with_observation_using<'p>(
         self,
         policy: &'p BrokerProtectedPolicyV1,
@@ -1497,8 +1615,8 @@ impl<'a> BrokerLedgerGuard<'a> {
     ) -> Result<(BrokerLedgerLease<'a>, PolicyVerifiedApprovalV1<'p>)> {
         let (observed, expected) = observe(self.root)?;
         let approved = policy.verify_approval_for_transaction(envelope, &observed)?;
-        // The production path always fetches fixed-origin CI under this
-        // retained global lock. Failure returns before `begin` writes INTENT.
+        // Test-only CI seam: a failing check returns before fixture INTENT.
+        // Production requires the separate predecessor and owner gates above.
         check_ci(&approved)?;
         let lease = self.begin(&approved, &expected)?;
         Ok((lease, approved))
@@ -2553,6 +2671,24 @@ mod tests {
             protected_root: fixture.root_id().clone(),
             original_desired_state: OriginalDesiredStateV1::Running,
         };
+        let guard = BrokerLedgerGuard::acquire(fixture.root()).expect("empty-history lock");
+        assert_eq!(
+            guard
+                .accept_with_observation(&policy, &envelope, |_| {
+                    Ok((observed.clone(), expected.clone()))
+                })
+                .err()
+                .expect("first-generation production refusal"),
+            "WAKE_BROKER_PREDECESSOR_UNANCHORED"
+        );
+        assert!(
+            !root_path
+                .join(record_name(
+                    payload.install_generation,
+                    InstallPhaseV1::Intent
+                ))
+                .exists()
+        );
         let guard = BrokerLedgerGuard::acquire(fixture.root()).expect("global lock");
         let (mut lease, _) = guard
             .accept_with_observation_fixture(&policy, &envelope, |_| {
@@ -2661,7 +2797,133 @@ mod tests {
         assert!(!result.staging_parent_object_verified);
         assert!(result.pointer_switch_record_binding_present);
         assert!(!result.first_generation_migration_anchor_verified);
+        assert!(!result.old_live_owner_verified);
         assert!(result.disposition.ends_with("NO_INSTALL_AUTHORITY"));
+        let mut successor_payload = payload.clone();
+        successor_payload.install_generation += 1;
+        successor_payload.approval_id = format!("{:032x}", 0x35u64);
+        successor_payload.predecessor_package_id = installed.package_id.clone();
+        successor_payload.predecessor_pointer = installed.pointer.clone();
+        let mut successor_observed = observed.clone();
+        successor_observed.next_install_generation = successor_payload.install_generation;
+        successor_observed.predecessor_package_id = installed.package_id.clone();
+        successor_observed.predecessor_pointer = installed.pointer.clone();
+        let successor_envelope = approval_test::envelope(&successor_payload, &key);
+        let successor = policy
+            .verify_approval_for_transaction(&successor_envelope, &successor_observed)
+            .expect("signed successor for fixture");
+        let successor_expected = LedgerExpectationV1 {
+            next_install_generation: successor_payload.install_generation,
+            predecessor_package_id: installed.package_id.clone(),
+            predecessor_pointer: installed.pointer.clone(),
+            ..expected.clone()
+        };
+        let (matched, successor_pin) = guard
+            .pin_fresh_successor_predecessor_with(
+                &policy,
+                &successor,
+                &successor_expected,
+                PredecessorReaderMode::Fixture,
+            )
+            .expect("pinned signed successor correspondence");
+        assert_eq!(matched, result);
+        assert!(!matched.first_generation_migration_anchor_verified);
+        assert!(!matched.old_live_owner_verified);
+        successor_pin
+            .revalidate(fixture.root(), fixture.root_id())
+            .expect("retained predecessor pin");
+        drop(successor_pin);
+        let next_intent = root_path.join(record_name(
+            successor_payload.install_generation,
+            InstallPhaseV1::Intent,
+        ));
+        assert!(!next_intent.exists());
+        let mut wrong_expected = successor_expected.clone();
+        wrong_expected.next_install_generation += 1;
+        assert_eq!(
+            compare_fresh_successor(&result, &successor_payload, &wrong_expected).unwrap_err(),
+            "WAKE_BROKER_PREDECESSOR_SUCCESSOR_MISMATCH"
+        );
+        let mut wrong_payload = successor_payload.clone();
+        wrong_payload.install_generation += 1;
+        assert_eq!(
+            compare_fresh_successor(&result, &wrong_payload, &successor_expected).unwrap_err(),
+            "WAKE_BROKER_PREDECESSOR_SUCCESSOR_MISMATCH"
+        );
+        let mut wrong_expected = successor_expected.clone();
+        wrong_expected.predecessor_package_id = "other-package".into();
+        assert_eq!(
+            compare_fresh_successor(&result, &successor_payload, &wrong_expected).unwrap_err(),
+            "WAKE_BROKER_PREDECESSOR_SUCCESSOR_MISMATCH"
+        );
+        let mut wrong_expected = successor_expected.clone();
+        wrong_expected.predecessor_pointer.file_index_low = wrong_expected
+            .predecessor_pointer
+            .file_index_low
+            .wrapping_add(1);
+        assert_eq!(
+            compare_fresh_successor(&result, &successor_payload, &wrong_expected).unwrap_err(),
+            "WAKE_BROKER_PREDECESSOR_SUCCESSOR_MISMATCH"
+        );
+        let mut wrong_payload = successor_payload.clone();
+        wrong_payload.predecessor_pointer.file_index_low = wrong_payload
+            .predecessor_pointer
+            .file_index_low
+            .wrapping_add(1);
+        assert_eq!(
+            compare_fresh_successor(&result, &wrong_payload, &successor_expected).unwrap_err(),
+            "WAKE_BROKER_PREDECESSOR_SUCCESSOR_MISMATCH"
+        );
+        let mut wrong_payload = successor_payload.clone();
+        wrong_payload.predecessor_package_id = "other-package".into();
+        assert_eq!(
+            compare_fresh_successor(&result, &wrong_payload, &successor_expected).unwrap_err(),
+            "WAKE_BROKER_PREDECESSOR_SUCCESSOR_MISMATCH"
+        );
+        let mut unbound = result.clone();
+        unbound.pointer_switch_record_binding_present = false;
+        assert_eq!(
+            compare_fresh_successor(&unbound, &successor_payload, &successor_expected).unwrap_err(),
+            "WAKE_BROKER_PREDECESSOR_POINTER_UNBOUND"
+        );
+        let mut overflow = result.clone();
+        overflow.install_generation = u64::MAX;
+        assert_eq!(
+            compare_fresh_successor(&overflow, &successor_payload, &successor_expected)
+                .unwrap_err(),
+            "WAKE_LEDGER_STALE_GENERATION"
+        );
+        drop(guard);
+        let guard = BrokerLedgerGuard::acquire(fixture.root()).expect("fresh successor gate lock");
+        assert_eq!(
+            guard
+                .accept_with_guarded_predecessor_fixture(&policy, &successor_envelope, |_| Ok((
+                    successor_observed.clone(),
+                    successor_expected.clone()
+                )),)
+                .err()
+                .expect("migration anchor still unavailable"),
+            "WAKE_BROKER_PREDECESSOR_MIGRATION_UNANCHORED"
+        );
+        assert!(!next_intent.exists());
+        let mut signed_wrong_payload = successor_payload.clone();
+        signed_wrong_payload.predecessor_package_id = "other-package".into();
+        let mut signed_wrong_observed = successor_observed.clone();
+        signed_wrong_observed.predecessor_package_id =
+            signed_wrong_payload.predecessor_package_id.clone();
+        let signed_wrong_envelope = approval_test::envelope(&signed_wrong_payload, &key);
+        let guard = BrokerLedgerGuard::acquire(fixture.root()).expect("signed drift gate lock");
+        assert_eq!(
+            guard
+                .accept_with_guarded_predecessor_fixture(&policy, &signed_wrong_envelope, |_| {
+                    Ok((signed_wrong_observed, successor_expected.clone()))
+                })
+                .err()
+                .expect("signed but physically wrong predecessor refused"),
+            "WAKE_BROKER_PREDECESSOR_SUCCESSOR_MISMATCH"
+        );
+        assert!(!next_intent.exists());
+        let guard = BrokerLedgerGuard::acquire(fixture.root()).expect("read-only drift lock");
         let pointer_path = root_path.join("current.json");
         let original_pointer_bytes = std::fs::read(&pointer_path).expect("pointer bytes");
         let saved_pointer = root_path.join("original-pointer-fixture.json");
@@ -2672,6 +2934,18 @@ mod tests {
             guard
                 .inspect_completed_predecessor_fixture(&policy)
                 .unwrap_err(),
+            "WAKE_BROKER_PREDECESSOR_POINTER_MISMATCH"
+        );
+        assert_eq!(
+            guard
+                .pin_fresh_successor_predecessor_with(
+                    &policy,
+                    &successor,
+                    &successor_expected,
+                    PredecessorReaderMode::Fixture,
+                )
+                .err()
+                .expect("swapped pointer physical ID refused"),
             "WAKE_BROKER_PREDECESSOR_POINTER_MISMATCH"
         );
         std::fs::remove_file(&pointer_path).expect("remove replacement pointer");
@@ -2690,6 +2964,18 @@ mod tests {
                 .unwrap_err(),
             "WAKE_PROTECTED_READER_HASH_MISMATCH"
         );
+        assert_eq!(
+            guard
+                .pin_fresh_successor_predecessor_with(
+                    &policy,
+                    &successor,
+                    &successor_expected,
+                    PredecessorReaderMode::Fixture,
+                )
+                .err()
+                .expect("same-length artifact drift refused"),
+            "WAKE_PROTECTED_READER_HASH_MISMATCH"
+        );
         std::fs::write(&changed_artifact, b"adapter-code").expect("restore fixture bytes");
         let ledger_bytes_after: [Vec<u8>; 8] = std::array::from_fn(|index| {
             std::fs::read(root_path.join(record_name(
@@ -2699,6 +2985,7 @@ mod tests {
             .expect("unchanged record bytes")
         });
         assert_eq!(ledger_bytes_after, ledger_bytes_before);
+        assert!(!next_intent.exists());
         assert!(
             !root_path
                 .join(record_name(
