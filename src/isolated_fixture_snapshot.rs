@@ -297,6 +297,120 @@ fn write_fixture_owner_retirement_outcome(
     Ok(())
 }
 
+/// Retire only the five exact, canonical records in a clean owner journal.
+/// The candidate root must already be absent. Any extra child or uncertain
+/// record preserves the journal for operator attention.
+#[cfg(windows)]
+fn retire_clean_fixture_owner_journal(
+    owner: FixtureOwnerJournal,
+    manifest: &SnapshotManifest,
+) -> Result<(), String> {
+    let (intent, binding) = read_fixture_owner_records(&owner.guard, manifest, None, &owner.sid)?;
+    if intent != owner.intent || binding.as_ref() != Some(&owner.binding) {
+        return Err("fixture owner journal changed before retirement".into());
+    }
+    let started = read_fixture_owner_retirement_record(
+        &owner.guard,
+        manifest,
+        None,
+        &owner.sid,
+        "retirement-started.json",
+        "started",
+    )?;
+    let retired = read_fixture_owner_retirement_record(
+        &owner.guard,
+        manifest,
+        None,
+        &owner.sid,
+        "retirement-outcome.json",
+        "retired",
+    )?;
+    if started.serving != retired.serving {
+        return Err("fixture owner retirement generation drifted".into());
+    }
+    let mut root_parent = owner.guard.direct_parent_guard(LABEL)?;
+    if root_parent.descend_optional_existing(&intent.root_name, LABEL)? {
+        return Err("fixture owner root name still occupied".into());
+    }
+    let expected = [
+        "intent.json",
+        "root.json",
+        "serving.json",
+        "retirement-started.json",
+        "retirement-outcome.json",
+    ];
+    let expected_names = expected
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    let observed = query_relative_directory_names(&owner.guard)?;
+    if observed.len() != expected.len()
+        || observed.iter().any(|(name, attributes)| {
+            !expected_names.contains(name.as_str()) || attributes & (0x10 | 0x400) != 0
+        })
+    {
+        return Err("fixture owner journal inventory drifted".into());
+    }
+    let mut identities = Vec::with_capacity(expected.len());
+    let mut leases = Vec::with_capacity(expected.len());
+    for leaf in expected {
+        let bytes =
+            read_relative_regular_unique(&owner.guard, leaf, MAX_OWNER_RECORD_BYTES, LABEL)?;
+        let digest = format!("{:x}", sha2::Sha256::digest(&bytes));
+        let lease = retain_reviewed_regular_artifact(
+            &owner.guard,
+            leaf,
+            &digest,
+            MAX_OWNER_RECORD_BYTES,
+            LABEL,
+        )?;
+        identities.push(lease.identity.clone());
+        leases.push(lease);
+    }
+    drop(leases);
+    let mut opened = Vec::with_capacity(expected.len());
+    for (leaf, identity) in expected.iter().zip(&identities) {
+        opened.push(open_reviewed_regular_for_delete(
+            &owner.guard,
+            leaf,
+            identity,
+            MAX_OWNER_RECORD_BYTES,
+            LABEL,
+        )?);
+    }
+    if query_relative_directory_names(&owner.guard)? != observed {
+        return Err("fixture owner journal changed before disposition".into());
+    }
+    owner
+        .guard
+        .verify_owner_only_fixture_journal_descriptor(&owner.sid, LABEL)?;
+    for file in opened {
+        dispose_opened_object(file.as_raw_handle().cast(), LABEL)?;
+        drop(file);
+    }
+    if !query_relative_directory_names(&owner.guard)?.is_empty() {
+        return Err("fixture owner journal not empty after disposition".into());
+    }
+    let journal = owner.guard.reopen_direct_child_for_delete(LABEL)?;
+    journal.verify_owner_only_fixture_journal_descriptor(&owner.sid, LABEL)?;
+    if !query_relative_directory_names(&journal)?.is_empty() {
+        return Err("fixture owner journal changed before root disposition".into());
+    }
+    let mut parent = journal.direct_parent_guard(LABEL)?;
+    let name = journal
+        .path()
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or("fixture owner journal name unavailable")?
+        .to_owned();
+    dispose_opened_object(journal.last_handle(LABEL)?, LABEL)?;
+    drop(journal);
+    if parent.descend_optional_existing(&name, LABEL)? {
+        return Err("fixture owner journal identity drifted after disposition".into());
+    }
+    Ok(())
+}
+
 #[cfg(windows)]
 fn write_fixture_owner_runtime_attention(
     journal: &ProtectedDirectoryGuard,
@@ -1208,7 +1322,12 @@ impl StagedCandidateSnapshot {
                 status,
             );
             return match (result, outcome) {
-                (Ok(()), Ok(())) => Ok(()),
+                (Ok(()), Ok(())) => retire_clean_fixture_owner_journal(owner, &outcome_manifest)
+                    .map_err(|error| {
+                        format!(
+                            "disposable snapshot root retired but owner journal requires attention: {error}"
+                        )
+                    }),
                 (Ok(()), Err(error)) => Err(format!(
                     "disposable snapshot root retired but outcome unavailable: {error}"
                 )),
@@ -1699,7 +1818,7 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn witnessed_owner_retirement_records_terminal_outcome_without_root() {
+    fn witnessed_owner_retirement_removes_clean_root_and_journal() {
         let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
         let sid =
             crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
@@ -1739,58 +1858,78 @@ mod tests {
             binding,
             sid: sid.clone(),
         });
-        let generation = staged.mark_serving(3209).expect("persist serving record");
+        staged.mark_serving(3209).expect("persist serving record");
         staged.retire_owned_root().expect("retire exact owned root");
         assert!(!temp.join(&intent.root_name).exists());
-
-        let mut reopened = ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp");
-        reopened
-            .descend_existing_for_security(&journal_name, LABEL)
-            .expect("reopen exact journal");
-        let started = read_fixture_owner_retirement_record(
-            &reopened,
-            &manifest,
-            None,
-            &sid,
-            "retirement-started.json",
-            "started",
-        )
-        .expect("read write-ahead retirement marker");
-        assert_eq!(started.serving.runtime_generation, generation);
-        let retired = read_fixture_owner_retirement_record(
-            &reopened,
-            &manifest,
-            None,
-            &sid,
-            "retirement-outcome.json",
-            "retired",
-        )
-        .expect("read terminal outcome after root deletion");
-        assert_eq!(retired.serving, started.serving);
         assert!(
-            read_fixture_owner_retirement_record(
-                &reopened,
-                &manifest,
-                None,
-                &sid,
-                "retirement-outcome.json",
-                "attention"
-            )
-            .is_err(),
-            "retired outcome cannot be misread as attention"
+            !temp.join(journal_name).exists(),
+            "clean journal must be absent"
         );
-        drop(reopened);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn witnessed_owner_retirement_preserves_journal_with_foreign_leaf() {
+        let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .expect("interactive owner SID");
+        let bytes = b"[package]\nname='retirement-foreign-leaf'\n".to_vec();
+        let manifest = SnapshotManifest {
+            schema_version: 1,
+            source_repository: SOURCE_REPOSITORY.into(),
+            source_commit: "abcdef0123456789abcdef0123456789abcdef01".into(),
+            snapshot_id: Uuid::new_v4().to_string(),
+            files: vec![SnapshotFile {
+                fixture_leaf: "Cargo.toml".into(),
+                source_path: "Cargo.toml".into(),
+                size_bytes: bytes.len() as u64,
+                sha256: format!("{:x}", Sha256::digest(&bytes)),
+            }],
+        };
+        let (journal, intent, intent_bytes) =
+            create_fixture_owner_intent(&manifest, &sid).expect("persist intent");
+        let journal_path = journal.path().to_path_buf();
+        let parent = ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp");
+        let (root, manifest) =
+            create_owned_candidate_root(parent, intent.root_name.clone(), &sid, manifest)
+                .unwrap_or_else(|_| panic!("create exact root"));
+        let binding = bind_fixture_owner_root(&journal, &intent, &intent_bytes, &root, &sid)
+            .expect("bind opened root");
+        let mut staged =
+            finish_owned_candidate_stage(root, manifest, &[("Cargo.toml".into(), bytes)])
+                .unwrap_or_else(|failure| panic!("stage fixture: {}", failure.reason));
+        staged.owner_journal = Some(FixtureOwnerJournal {
+            guard: journal,
+            intent: intent.clone(),
+            intent_bytes,
+            binding,
+            sid,
+        });
+        staged.mark_serving(3209).expect("persist serving record");
+        std::fs::write(journal_path.join("foreign.txt"), b"preserve me")
+            .expect("create unexpected journal child");
+        let error = staged
+            .retire_owned_root()
+            .expect_err("unexpected journal child must block journal retirement");
+        assert!(error.contains("owner journal requires attention"));
+        assert!(!temp.join(&intent.root_name).exists(), "root was retired");
+        assert_eq!(
+            std::fs::read(journal_path.join("foreign.txt")).expect("foreign child remains"),
+            b"preserve me"
+        );
+        assert!(journal_path.join("retirement-outcome.json").is_file());
         for leaf in [
+            "foreign.txt",
             "retirement-outcome.json",
             "retirement-started.json",
             "serving.json",
             "root.json",
             "intent.json",
         ] {
-            std::fs::remove_file(temp.join(&journal_name).join(leaf))
-                .expect("remove only exact test journal file");
+            std::fs::remove_file(journal_path.join(leaf)).expect("remove exact test journal file");
         }
-        std::fs::remove_dir(temp.join(journal_name)).expect("remove empty test journal");
+        std::fs::remove_dir(journal_path).expect("remove empty test journal");
     }
 
     #[cfg(windows)]

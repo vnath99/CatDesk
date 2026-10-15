@@ -1,8 +1,12 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — T0478 clean journal retirement
+
+- A clean source-only reviewed-candidate stop now retires its exact owner journal after root deletion and verified `retired` outcome. An extra journal child or any uncertainty leaves residue and reports attention; preserve it for reviewed recovery. There is no new operator cleanup command or name-based retry. See `docs/orchestrator/review_bundles/T-0478_R3B4C9_JOURNAL_RETIREMENT.md`.
+
 ## 2026-10-14 — T0478 retirement outcome evidence
 
-- Reviewed-candidate stop now leaves create-only `retirement-started.json` and `retirement-outcome.json` in its owner-only journal. `retired` means the in-process exact-handle transaction reported success; `attention` means it failed and may have partially disposed files. Preserve the journal for reviewed recovery. Neither record permits name-scanned cleanup or proves power-loss durability. See `docs/orchestrator/review_bundles/T-0478_R3B4C8_RETIREMENT_OUTCOME.md`.
+- Reviewed-candidate stop writes create-only `retirement-started.json` and `retirement-outcome.json` in its owner-only journal. `retired` means the in-process exact-handle root transaction reported success; C9 then retires a verified clean journal. `attention` means root retirement failed and may have partially disposed files; preserve that journal for reviewed recovery. Neither record permits name-scanned cleanup or proves power-loss durability. See `docs/orchestrator/review_bundles/T-0478_R3B4C8_RETIREMENT_OUTCOME.md`.
 
 
 ## 2026-10-14 — T0478 reviewed-candidate startup attention

@@ -1,7 +1,12 @@
-## 2026-10-14 — T0478 retirement write-ahead and terminal outcome (CURRENT)
+## 2026-10-14 — T0478 clean owner-journal retirement (CURRENT)
+
+- After an exact-handle root retirement and a read-back `retired` outcome, the source-only owner lifecycle now revalidates the canonical journal, root absence, owner/DACL, and an exact five-file flat inventory. It retains reviewed identities, opens all five DELETE handles before disposition, deletes only those opened objects, then reopens and disposes the exact empty journal directory. Any extra child or uncertain outcome preserves the journal for attention. Windows tests pass clean root+journal removal, unexpected-child preservation, and replacement/attention preservation.
+- Full local Rust all-features suite and strict Clippy pass. Crash-interrupted journal retirement can still leave partial residue requiring reviewed recovery. Cross-process exclusion, bounded PID/port ownership, power-loss proof, exact three-job GitHub CI and P0/P1 acceptance remain open. No installed runtime or tunnel changed. See `docs/orchestrator/review_bundles/T-0478_R3B4C9_JOURNAL_RETIREMENT.md`.
+
+## 2026-10-14 — T0478 retirement write-ahead and terminal outcome (HISTORICAL INCREMENT)
 
 - The owner-bound reviewed-candidate retirement transaction now retains its independent owner-only journal while consuming the snapshot. It writes a create-only `retirement-started.json` after root/manifest/lease preflight and before any file disposition, then a create-only `retirement-outcome.json` with `retired` or `attention` after the exact-handle transaction. Preflight failures attempt a distinct runtime attention record. Windows tests prove a retired outcome can be read after the exact root is gone and a same-name replacement survives while an attention outcome is recorded.
-- The terminal record is forensic evidence; the independent journal remains and is not yet safely retired. Power-loss durability, cross-process exclusion, owned PID/port supervision and successful CI-witnessed launch remain. Exact GitHub Windows CI is unavailable while Actions dispatch returns HTTP 422. No installed runtime or tunnel changed. See `docs/orchestrator/review_bundles/T-0478_R3B4C8_RETIREMENT_OUTCOME.md`.
+- This increment left the terminal record for forensic inspection; the following C9 increment retires a verified clean journal. Power-loss durability, cross-process exclusion, owned PID/port supervision and successful CI-witnessed launch remain. Exact GitHub Windows CI is unavailable while Actions dispatch returns HTTP 422. No installed runtime or tunnel changed. See `docs/orchestrator/review_bundles/T-0478_R3B4C8_RETIREMENT_OUTCOME.md`.
 
 ## 2026-10-14 — T0478 pre-serving startup attention (CURRENT)
 

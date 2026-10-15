@@ -996,8 +996,8 @@ pub(crate) fn bind_reviewed_regular_artifact(
 /// of `bind_reviewed_regular_artifact` for consumers that must subsequently
 /// use a fixed pathname (for example CreateProcess and Python module import).
 #[allow(dead_code)] // Retained by the stable adapter launch lease.
-pub(crate) fn retain_reviewed_regular_artifact(
-    parent: &PinnedDirectory,
+pub(crate) fn retain_reviewed_regular_artifact<P: PinnedParent>(
+    parent: &P,
     component: &str,
     expected_sha256: &str,
     max_bytes: u64,
