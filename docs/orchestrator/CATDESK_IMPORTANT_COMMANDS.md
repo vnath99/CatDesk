@@ -1,5 +1,11 @@
 # CatDesk — Important Command Reference
 
+## Current guarded resume and Sol preparation boundary (2026-10-15)
+
+- R17's `BrokerLedgerGuard::inspect_exact_resume` is read-only. It must run under the global lock with protected policy and current observations; its INTENT/STAGE_STARTED/STAGED dispositions never authorize a package, pointer or owner change. See `docs/orchestrator/review_bundles/T-0485_R17_GUARDED_READ_ONLY_EXACT_RESUME.md`.
+- R24's private prepared Sol run selects one active nonce and retains pinned host context before a future fixed-account resume. It has no burn/stage/repository-use consumer; the launcher, ACL and lost-write gates remain. See `docs/orchestrator/review_bundles/T-0483_R24_PREPARED_SOL_RUN_SOURCE.md`.
+- The last clean `wake/install.ps1 -BuildOnly` candidate at tracked `ce925eb` was `1.0.0-dev.85-74a83c7476b7-830544706e00`; both executables are unsigned. This diagnostic candidate predates R17/R24. Exact new-source Windows CI remains required; no manual workflow dispatch or Actions settings change.
+
 ## Current stage durability boundary (2026-10-15)
 
 - R16 writes and flushes `STAGE_STARTED` before `staging/candidate` creation. A marker or partial stage requires operator attention and cannot be retried automatically. Directory flush failures stop the dormant transaction; a local successful flush does not validate protected deployment power-loss behavior. Keep both `WAKE_INSTALL_BROKER_UNPROVISIONED` holds. See `docs/orchestrator/review_bundles/T-0485_R16_STAGE_STARTED_PARENT_FLUSH_SOURCE.md`.
@@ -9,7 +15,7 @@
 
 - R15 adds `BrokerLedgerGuard::accept_with_observation` and a fixed-source-to-`STAGED` path that requires an opaque approval verified by the pinned policy key. A real broker observer, CI fetch, protected bootstrap and full owner/pointer transaction are still absent; do not run protected installation. The fixed source inbox is `C:\ProgramData\CatDesk\WakeSubmissionV1\candidate`, not a caller-selected path. See `docs/orchestrator/review_bundles/T-0485_R15_FIXED_SOURCE_TO_STAGED_TRANSACTION.md`.
 - R22 adds only private Sol Job/process-drain mechanics. It neither creates the missing `CatDeskSolWorker` account nor proves escaped descendants, inherited-handle denial or ancestor lost-write authority; it grants no repository-use capability. See `docs/orchestrator/review_bundles/T-0483_R22_PRIVATE_SOL_JOB_DRAIN_SOURCE.md`.
-- The last clean `wake/install.ps1 -BuildOnly` candidate at tracked `272fa73` was `1.0.0-dev.85-c9c052df91ac-f37940b75706`; both executables are unsigned. This diagnostic candidate predates R16/R23, so rebuild before any later package review. Exact new-source Windows CI remains required; no manual workflow dispatch or settings change.
+- An earlier clean `wake/install.ps1 -BuildOnly` candidate at tracked `272fa73` was `1.0.0-dev.85-c9c052df91ac-f37940b75706`; both executables were unsigned. This diagnostic candidate predates R16/R23. Exact new-source Windows CI remains required; no manual workflow dispatch or settings change.
 
 ## Current authority and release hold (2026-10-15)
 

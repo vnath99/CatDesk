@@ -1,3 +1,9 @@
+## 2026-10-15 — guarded Wake resume and prepared Sol run (SOURCE ONLY, CURRENT)
+
+- P0 adds a guarded, policy-bound, read-only exact-resume inspection. It requires an existing INTENT, current physical observation and complete ledger history under one global lock; INTENT needs empty staging, STAGE_STARTED stays attention, and STAGED compares exact bytes, protected ACLs and seven physical IDs. No lease or install authority is returned. Three integrated tests and the full Wake suite pass locally; see `docs/orchestrator/review_bundles/T-0485_R17_GUARDED_READ_ONLY_EXACT_RESUME.md`.
+- P1 adds private pre-resume preparation that selects one nonce after validating the task path contract and empty pinned output root, then carries that context through the bound Job drain witness. No burn, stage, repository-use or live launcher route consumes it. Focused tests and strict Clippy pass; see `docs/orchestrator/review_bundles/T-0483_R24_PREPARED_SOL_RUN_SOURCE.md`.
+- Exact-source CI, signed protected broker, trustworthy observer/clock, power-cut validation, fixed worker account, ancestor ACL/handle/escaped-descendant proof, dev.84 cutover, real Sol cycle and new Chat53 remain open.
+
 ## 2026-10-15 — write-ahead Wake stage and directory flush (SOURCE ONLY, CURRENT)
 
 - P0 adds a durable-intent `STAGE_STARTED` phase before any protected candidate create, plus pinned parent-directory flushes after each record/create batch. Reopen at the marker is sticky attention, including a partial copy or absent candidate entry. Six fault/restart cases and the full Wake suite pass locally. This does not establish sudden-power-loss behavior of the deployment filesystem and creates no install authority. See `docs/orchestrator/review_bundles/T-0485_R16_STAGE_STARTED_PARENT_FLUSH_SOURCE.md`.

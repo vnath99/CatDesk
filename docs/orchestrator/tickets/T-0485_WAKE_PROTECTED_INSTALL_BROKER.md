@@ -1,5 +1,9 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-15 guarded exact-resume diagnosis (source only)
+
+The dormant broker ledger now offers a read-only policy-bound inspection under its retained global lock. It creates no record or lease: missing INTENT refuses, INTENT requires empty staging, STAGE_STARTED is sticky attention, and STAGED compares protected five-file bytes/ACLs and seven physical IDs with the ledger. Three integrated tests and the full Wake suite pass locally; see `T-0485_R17_GUARDED_READ_ONLY_EXACT_RESUME.md`. The observation callback still requires a signed broker with trustworthy clock and pinned process/namespace evidence; no recovery mutation, package/pointer/owner/reader transition, exact-source CI or protected activation is enabled. Both install guards remain closed.
+
 ## 2026-10-15 write-ahead stage durability source checkpoint
 
 The dormant ledger now flushes a `STAGE_STARTED` marker before candidate creation and refuses any second create after reopening that marker. Pinned parent directories are flushed after ledger record and candidate/leaf entry creation, with a hard failure if the OS flush cannot be performed. Fault/restart tests and the full Wake suite pass locally; see `T-0485_R16_STAGE_STARTED_PARENT_FLUSH_SOURCE.md`. A controlled power-cut test on the actual protected deployment filesystem is still required before claiming sudden-power-loss durability. The signed service/bootstrap, trusted observation/clock, independent exact-CI fetch and full package/pointer/owner/reader transaction remain absent; install guards stay closed.

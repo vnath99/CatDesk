@@ -129,6 +129,29 @@ fn valid_relative_path(path: &str) -> bool {
         && path.split('/').all(valid_component)
 }
 
+/// Check the host's path contract before a nonce can be selected. This has no
+/// native-turn dependency and uses the same path and case-fold rules as the
+/// later complete-output verifier.
+pub(super) fn validate_sol_worker_allowed_paths(
+    allowed_paths: &BTreeSet<String>,
+) -> Result<(), String> {
+    if allowed_paths.len() > MAX_FILES
+        || allowed_paths.iter().any(|path| !valid_relative_path(path))
+    {
+        return Err(format!("{LABEL} allowlist is invalid"));
+    }
+    if allowed_paths
+        .iter()
+        .map(|path| path.to_ascii_lowercase())
+        .collect::<BTreeSet<_>>()
+        .len()
+        != allowed_paths.len()
+    {
+        return Err(format!("{LABEL} allowlist is ambiguous"));
+    }
+    Ok(())
+}
+
 fn validate_manifest(
     expected: &ExpectedSolWorkerOutputV1,
     manifest: &SolWorkerOutputManifestV1,
@@ -143,14 +166,10 @@ fn validate_manifest(
         || manifest.native_turn_id != expected.native_turn_id
         || manifest.handoff_nonce != expected.handoff_nonce
         || manifest.files.len() > MAX_FILES
-        || expected.allowed_paths.len() > MAX_FILES
-        || expected
-            .allowed_paths
-            .iter()
-            .any(|path| !valid_relative_path(path))
     {
         return Err(format!("{LABEL} binding is invalid"));
     }
+    validate_sol_worker_allowed_paths(&expected.allowed_paths)?;
     let mut paths = BTreeSet::new();
     let mut folded = BTreeSet::new();
     let mut total = 0_u64;
@@ -171,16 +190,6 @@ fn validate_manifest(
         {
             return Err(format!("{LABEL} manifest is ambiguous or oversized"));
         }
-    }
-    if expected
-        .allowed_paths
-        .iter()
-        .map(|path| path.to_ascii_lowercase())
-        .collect::<BTreeSet<_>>()
-        .len()
-        != expected.allowed_paths.len()
-    {
-        return Err(format!("{LABEL} allowlist is ambiguous"));
     }
     Ok(paths)
 }

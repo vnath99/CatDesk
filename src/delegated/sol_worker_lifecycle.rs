@@ -5,8 +5,10 @@
 //! resumes it. The same-user diagnostic route returns no capability. A
 //! separate dormant route can bind the still-suspended process object to the
 //! opaque fixed-account restricted-token observation before resume, then
-//! consume that owner to obtain a narrow drained-Job witness. No production
-//! fixed-account launcher can call that route yet. The witness does not prove
+//! consume that owner to obtain a narrow drained-Job witness. A private run
+//! preparation captures the host task, one selected nonce, and pinned ledger
+//! and empty output root before that transition. No production fixed-account
+//! launcher can call that route yet. The witness does not prove
 //! escaped descendants, inherited handles, or repository-write exclusion,
 //! and no nonce, staging, or repository-use path accepts it.
 
@@ -16,7 +18,14 @@ use std::os::windows::process::CommandExt;
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
+use crate::reviewed_source_snapshot::query_relative_directory_names_bounded;
+use crate::windows_protected_fs::ProtectedDirectoryGuard;
+
 use super::sol_worker_identity_preflight::BoundFixedLocalSolWorkerProcessV1;
+use super::sol_worker_nonce::{
+    SolWorkerNonceAuthorityV1, issue_sol_worker_nonce, read_active_sol_worker_nonce,
+};
+use super::sol_worker_output::validate_sol_worker_allowed_paths;
 
 const LABEL: &str = "Sol worker lifecycle";
 const CREATE_SUSPENDED: u32 = 0x0000_0004;
@@ -257,13 +266,69 @@ struct OwnedRunningJobChild {
     child: Option<Child>,
 }
 
+/// Necessary host-held context for one future fixed-account run. This type
+/// selects the nonce only after checking the pinned output root is empty. It
+/// does not prove the ledger ACL excludes the worker or that no other process
+/// can write the output root. No live launcher or downstream handoff accepts
+/// it yet.
+struct PreparedSolRunV1 {
+    authority: SolWorkerNonceAuthorityV1,
+    nonce: String,
+    ledger: ProtectedDirectoryGuard,
+    output_root: ProtectedDirectoryGuard,
+}
+
+impl PreparedSolRunV1 {
+    fn prepare(
+        ledger: ProtectedDirectoryGuard,
+        output_root: ProtectedDirectoryGuard,
+        authority: SolWorkerNonceAuthorityV1,
+    ) -> Result<Self, String> {
+        validate_sol_worker_allowed_paths(&authority.allowed_paths)?;
+        ledger.assert_stable(LABEL)?;
+        Self::require_empty_output_root(&output_root)?;
+        let nonce = issue_sol_worker_nonce(&ledger, &authority)?;
+        let prepared = Self {
+            authority,
+            nonce,
+            ledger,
+            output_root,
+        };
+        // A failed check after selection leaves this turn in attention. The
+        // create-once active record prevents a replacement nonce on retry.
+        prepared.require_ready()?;
+        Ok(prepared)
+    }
+
+    fn require_empty_output_root(root: &ProtectedDirectoryGuard) -> Result<(), String> {
+        root.assert_stable(LABEL)?;
+        let entries = query_relative_directory_names_bounded(root, 1)?;
+        root.assert_stable(LABEL)?;
+        if !entries.is_empty() {
+            return Err(format!("{LABEL} output root is not empty"));
+        }
+        Ok(())
+    }
+
+    fn require_ready(&self) -> Result<(), String> {
+        self.ledger.assert_stable(LABEL)?;
+        Self::require_empty_output_root(&self.output_root)?;
+        if read_active_sol_worker_nonce(&self.ledger, &self.authority)? != self.nonce {
+            return Err(format!("{LABEL} selected nonce changed"));
+        }
+        self.ledger.assert_stable(LABEL)?;
+        Self::require_empty_output_root(&self.output_root)
+    }
+}
+
 /// Only a still-suspended, exact Job member whose opened process was bound to
 /// the fixed local account can reach this state. This is private while a
-/// trusted fixed-account launcher and host-held run/output-root binding are
+/// trusted fixed-account launcher and complete write-authority proof are
 /// absent.
 struct BoundFixedWorkerJobChild {
     running: OwnedRunningJobChild,
     bound_worker: BoundFixedLocalSolWorkerProcessV1,
+    prepared_run: PreparedSolRunV1,
 }
 
 /// A necessary-condition observation: the bound original process and all
@@ -272,6 +337,7 @@ struct BoundFixedWorkerJobChild {
 /// Private fields and the lack of `Clone` prevent a caller-created claim.
 pub(crate) struct DrainedBoundFixedWorkerJobV1 {
     _bound_worker: BoundFixedLocalSolWorkerProcessV1,
+    _prepared_run: PreparedSolRunV1,
 }
 
 /// The original process handle is the cleanup target. A failed assignment
@@ -358,6 +424,7 @@ impl OwnedSuspendedJobChild {
     fn bind_and_resume_fixed(
         self,
         bound_worker: BoundFixedLocalSolWorkerProcessV1,
+        prepared_run: PreparedSolRunV1,
     ) -> Result<BoundFixedWorkerJobChild, String> {
         let Some(child) = self.child.as_ref() else {
             return Err(self.abort(format!("{LABEL} original child missing")));
@@ -366,10 +433,14 @@ impl OwnedSuspendedJobChild {
         if let Err(error) = bound_worker.require_same_opened_process(opened) {
             return Err(self.abort(error));
         }
+        if let Err(error) = prepared_run.require_ready() {
+            return Err(self.abort(error));
+        }
         let running = self.resume()?;
         Ok(BoundFixedWorkerJobChild {
             running,
             bound_worker,
+            prepared_run,
         })
     }
 }
@@ -431,6 +502,7 @@ impl BoundFixedWorkerJobChild {
         self.running.finish(timeout)?;
         Ok(DrainedBoundFixedWorkerJobV1 {
             _bound_worker: self.bound_worker,
+            _prepared_run: self.prepared_run,
         })
     }
 }
@@ -438,12 +510,77 @@ impl BoundFixedWorkerJobChild {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
+    use std::fs;
+    use std::path::PathBuf;
     use std::process::Stdio;
+    use uuid::Uuid;
 
     use super::super::sol_worker_identity_preflight::bind_fixed_local_sol_worker_to_opened_process;
     use super::super::sol_worker_token_security::require_same_opened_process_object;
 
     const HELPER: &str = "delegated::sol_worker_lifecycle::tests::sleep_helper";
+
+    struct PreparationFixture {
+        base: PathBuf,
+        ledger_path: PathBuf,
+        output_path: PathBuf,
+        authority: SolWorkerNonceAuthorityV1,
+    }
+
+    impl PreparationFixture {
+        fn new() -> Self {
+            let base =
+                std::env::temp_dir().join(format!("catdesk-sol-prepared-{}", Uuid::new_v4()));
+            let ledger_path = base.join("ledger");
+            let output_path = base.join("output");
+            fs::create_dir(&base).expect("fixture base");
+            fs::create_dir(&ledger_path).expect("fixture ledger");
+            fs::create_dir(&output_path).expect("fixture output");
+            Self {
+                base,
+                ledger_path,
+                output_path,
+                authority: SolWorkerNonceAuthorityV1 {
+                    session_id: "session-1".into(),
+                    task_id: "T-0483".into(),
+                    host_turn_id: "host-turn-1".into(),
+                    contract_hash: "b".repeat(64),
+                    baseline_commit: "a".repeat(40),
+                    allowed_paths: BTreeSet::from(["src/lib.rs".into()]),
+                },
+            }
+        }
+
+        fn prepare_with(
+            &self,
+            authority: SolWorkerNonceAuthorityV1,
+        ) -> Result<PreparedSolRunV1, String> {
+            let ledger = ProtectedDirectoryGuard::acquire(&self.ledger_path, LABEL)?;
+            let output = ProtectedDirectoryGuard::acquire(&self.output_path, LABEL)?;
+            PreparedSolRunV1::prepare(ledger, output, authority)
+        }
+
+        fn prepare(&self) -> Result<PreparedSolRunV1, String> {
+            self.prepare_with(self.authority.clone())
+        }
+
+        fn cleanup(self) {
+            for entry in fs::read_dir(&self.ledger_path).expect("list fixture ledger") {
+                fs::remove_file(entry.expect("ledger entry").path()).expect("remove ledger record");
+            }
+            assert_eq!(
+                fs::read_dir(&self.output_path)
+                    .expect("list fixture output")
+                    .count(),
+                0,
+                "fixture output must be empty at cleanup"
+            );
+            fs::remove_dir(&self.output_path).expect("remove fixture output");
+            fs::remove_dir(&self.ledger_path).expect("remove fixture ledger");
+            fs::remove_dir(&self.base).expect("remove fixture base");
+        }
+    }
 
     fn helper_command(level: &str) -> Command {
         let mut command = Command::new(std::env::current_exe().expect("test executable"));
@@ -499,6 +636,7 @@ mod tests {
         let _: fn(
             OwnedSuspendedJobChild,
             BoundFixedLocalSolWorkerProcessV1,
+            PreparedSolRunV1,
         ) -> Result<BoundFixedWorkerJobChild, String> =
             OwnedSuspendedJobChild::bind_and_resume_fixed;
         let _: fn(
@@ -510,7 +648,113 @@ mod tests {
     }
 
     #[test]
+    fn prepared_run_selects_one_nonce_and_retains_pinned_host_context() {
+        let fixture = PreparationFixture::new();
+        let prepared = fixture.prepare().expect("prepare one host turn");
+        assert_eq!(prepared.authority, fixture.authority);
+        assert_eq!(prepared.ledger.path(), fixture.ledger_path);
+        assert_eq!(prepared.output_root.path(), fixture.output_path);
+        assert_eq!(
+            read_active_sol_worker_nonce(&prepared.ledger, &prepared.authority)
+                .expect("read selected nonce"),
+            prepared.nonce
+        );
+        prepared.require_ready().expect("still ready before resume");
+        drop(prepared);
+        assert!(
+            fixture.prepare().is_err(),
+            "a second preparation cannot select a replacement nonce"
+        );
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn preparation_rejects_preexisting_output_and_unsafe_allowlist_before_nonce_issue() {
+        let fixture = PreparationFixture::new();
+        fs::write(fixture.output_path.join("preexisting.txt"), b"old").expect("preexisting output");
+        assert!(fixture.prepare().is_err());
+        assert_eq!(
+            fs::read_dir(&fixture.ledger_path)
+                .expect("list empty ledger")
+                .count(),
+            0
+        );
+        fs::remove_file(fixture.output_path.join("preexisting.txt"))
+            .expect("remove preexisting output");
+
+        for paths in [
+            BTreeSet::from(["../src/lib.rs".into()]),
+            BTreeSet::from(["CON/file.rs".into()]),
+            BTreeSet::from(["src/lib.rs".into(), "src/LIB.rs".into()]),
+        ] {
+            let mut authority = fixture.authority.clone();
+            authority.allowed_paths = paths;
+            assert!(fixture.prepare_with(authority).is_err());
+            assert_eq!(
+                fs::read_dir(&fixture.ledger_path)
+                    .expect("list empty ledger")
+                    .count(),
+                0,
+                "invalid allowlist must not select a nonce"
+            );
+        }
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn preparation_recheck_detects_output_and_ledger_tamper() {
+        let fixture = PreparationFixture::new();
+        let prepared = fixture.prepare().expect("prepare one host turn");
+        let added = fixture.output_path.join("added.txt");
+        fs::write(&added, b"late").expect("add output before resume");
+        assert!(prepared.require_ready().is_err());
+        fs::remove_file(added).expect("remove late output");
+        prepared.require_ready().expect("output empty again");
+
+        let issued = fs::read_dir(&fixture.ledger_path)
+            .expect("list ledger")
+            .map(|entry| entry.expect("ledger entry").path())
+            .find(|path| {
+                path.file_name()
+                    .expect("ledger name")
+                    .to_string_lossy()
+                    .starts_with("issued-")
+            })
+            .expect("issued record");
+        fs::write(issued, b"tampered").expect("tamper diagnostic ledger");
+        assert!(prepared.require_ready().is_err());
+        drop(prepared);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn preparation_rejects_ledger_as_output_and_leaves_selected_turn_in_attention() {
+        let fixture = PreparationFixture::new();
+        let ledger =
+            ProtectedDirectoryGuard::acquire(&fixture.ledger_path, LABEL).expect("pin ledger");
+        let output = ProtectedDirectoryGuard::acquire(&fixture.ledger_path, LABEL)
+            .expect("pin same directory as output");
+        assert!(
+            PreparedSolRunV1::prepare(ledger, output, fixture.authority.clone()).is_err(),
+            "journal writes make the output root nonempty"
+        );
+        let ledger = ProtectedDirectoryGuard::acquire(&fixture.ledger_path, LABEL)
+            .expect("reopen ledger for diagnostic read");
+        assert!(read_active_sol_worker_nonce(&ledger, &fixture.authority).is_ok());
+        drop(ledger);
+        assert!(
+            fixture.prepare().is_err(),
+            "selected turn cannot be reissued"
+        );
+        fixture.cleanup();
+    }
+
+    #[test]
     fn same_user_diagnostic_child_cannot_become_fixed_worker_or_supply_another_handle() {
+        let fixture = PreparationFixture::new();
+        let prepared = fixture
+            .prepare()
+            .expect("host context alone is not a process bind");
         let mut first_command = helper_command("descendant");
         let mut second_command = helper_command("descendant");
         let first = OwnedSuspendedJobChild::launch_suspended(&mut first_command)
@@ -527,8 +771,13 @@ mod tests {
             .expect("same opened process object");
         assert!(require_same_opened_process_object(first_handle, second_handle).is_err());
         assert!(bind_fixed_local_sol_worker_to_opened_process(first_handle).is_err());
+        prepared
+            .require_ready()
+            .expect("host context remains prepared");
         assert_eq!(first.abort("diagnostic only".into()), "diagnostic only");
         assert_eq!(second.abort("diagnostic only".into()), "diagnostic only");
+        drop(prepared);
+        fixture.cleanup();
     }
 
     #[test]

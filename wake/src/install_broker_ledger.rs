@@ -23,6 +23,10 @@ use crate::{
     install_broker_approval::{
         BrokerObservedStateV1, ObjectIdentityV1, VerifiedApprovalV1, verify_approval,
     },
+    install_broker_candidate_stage::{
+        BrokerCandidateStageReadbackV1, inspect_stage_under_guard,
+        require_empty_staging_under_guard,
+    },
     install_broker_durability::{ParentFlushPoint, flush_pinned_directory},
     install_broker_policy::{BrokerProtectedPolicyV1, PolicyVerifiedApprovalV1},
     install_broker_stage_writer::BrokerStageReceiptV1,
@@ -216,6 +220,28 @@ pub struct StageBindingV1 {
     pub artifacts: [ObjectIdentityV1; 4],
 }
 
+/// A point-in-time diagnosis of one existing transaction. The stage reader's
+/// own provenance flag remains false; matching protected ledger IDs here does
+/// not retain the stage, owner or pointer pins needed for install mutation.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrokerExactResumeReadbackV1 {
+    pub schema_version: u32,
+    pub install_generation: u64,
+    pub approval_id: String,
+    pub phase: &'static str,
+    pub stage: Option<BrokerCandidateStageReadbackV1>,
+    pub ledger_stage_binding_matched: bool,
+    pub disposition: &'static str,
+}
+
+#[derive(Clone, Copy)]
+enum ResumeStageInspection {
+    Protected,
+    #[cfg(test)]
+    Fixture,
+}
+
 /// The exact signature and protected trust root accepted with INTENT. Every
 /// subsequent record repeats this binding, including after crash recovery.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -314,6 +340,34 @@ struct Binding {
 }
 
 impl Binding {
+    fn from_approval(
+        approval: &VerifiedApprovalV1,
+        original_desired_state: OriginalDesiredStateV1,
+        approval_continuity: ApprovalContinuityV1,
+    ) -> Self {
+        let payload = approval.payload();
+        Self {
+            install_generation: payload.install_generation,
+            approval_id: payload.approval_id.clone(),
+            signed_approval_sha256: approval.signed_payload_sha256().into(),
+            approval_continuity,
+            accepted_at_utc_seconds: approval.verified_at_utc_seconds(),
+            package_id: payload.manifest.package_id.clone(),
+            manifest_sha256: payload.manifest_sha256.clone(),
+            predecessor_package_id: payload.predecessor_package_id.clone(),
+            predecessor_pointer: payload.predecessor_pointer.clone(),
+            protected_root: payload.target_protected_root.clone(),
+            old_runtime_root: payload.old_runtime_root.clone(),
+            old_runtime_lock: payload.old_runtime_lock.clone(),
+            old_host_image: payload.old_host_image.clone(),
+            old_host_image_sha256: payload.old_host_image_sha256.clone(),
+            old_host_pid: payload.old_host_pid,
+            old_host_creation_time_100ns: payload.old_host_creation_time_100ns,
+            original_desired_state,
+            stage_binding: None,
+        }
+    }
+
     fn record(&self, phase: InstallPhaseV1, prior_record_sha256: &str) -> LedgerRecordV1 {
         LedgerRecordV1 {
             schema_version: 1,
@@ -372,6 +426,172 @@ impl<'a> BrokerLedgerGuard<'a> {
     /// global lock is held. No request value is installation evidence.
     pub fn root(&self) -> &OwnedHandle {
         self.root
+    }
+
+    /// Diagnose only an existing exact transaction while this guard retains
+    /// the global lock. The observation callback is a future service seam: it
+    /// must sample broker-owned pinned objects and a trusted clock. This
+    /// readback creates no record, flushes no directory and returns no lease,
+    /// approval capability or install authority.
+    pub fn inspect_exact_resume(
+        &self,
+        policy: &BrokerProtectedPolicyV1,
+        envelope: &[u8],
+        generation: u64,
+        observe_current: impl FnOnce(
+            &OwnedHandle,
+        ) -> Result<(BrokerObservedStateV1, OriginalDesiredStateV1)>,
+    ) -> Result<BrokerExactResumeReadbackV1> {
+        self.inspect_exact_resume_with(
+            policy,
+            envelope,
+            generation,
+            observe_current,
+            ResumeStageInspection::Protected,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn inspect_exact_resume_fixture(
+        &self,
+        policy: &BrokerProtectedPolicyV1,
+        envelope: &[u8],
+        generation: u64,
+        observe_current: impl FnOnce(
+            &OwnedHandle,
+        ) -> Result<(BrokerObservedStateV1, OriginalDesiredStateV1)>,
+    ) -> Result<BrokerExactResumeReadbackV1> {
+        self.inspect_exact_resume_with(
+            policy,
+            envelope,
+            generation,
+            observe_current,
+            ResumeStageInspection::Fixture,
+        )
+    }
+
+    fn inspect_exact_resume_with(
+        &self,
+        policy: &BrokerProtectedPolicyV1,
+        envelope: &[u8],
+        generation: u64,
+        observe_current: impl FnOnce(
+            &OwnedHandle,
+        ) -> Result<(BrokerObservedStateV1, OriginalDesiredStateV1)>,
+        stage_inspection: ResumeStageInspection,
+    ) -> Result<BrokerExactResumeReadbackV1> {
+        if generation == 0 {
+            return Err("WAKE_LEDGER_GENERATION_INVALID".into());
+        }
+        let root_id = root_info(self.root)?;
+        if policy.readback()?.protected_root != root_id {
+            return Err("WAKE_LEDGER_ROOT_CHANGED".into());
+        }
+        let inventory = ledger_inventory(self.root)?;
+        let present = inventory
+            .get(&generation)
+            .ok_or("WAKE_LEDGER_NO_PRIOR_INTENT")?;
+        let (intent, phase, stage_binding) =
+            historical_intent(self.root, generation, present, &root_id)?;
+        let original = original_observation(&intent);
+        let approved = policy.verify_approval_for_transaction(envelope, &original)?;
+        let binding = Binding::from_approval(
+            approved.verified(),
+            intent.original_desired_state,
+            ApprovalContinuityV1::from_policy(&approved),
+        );
+        if intent != binding.record(InstallPhaseV1::Intent, &"0".repeat(64)) {
+            return Err("WAKE_LEDGER_APPROVAL_CONFLICT".into());
+        }
+        if !preflight_history(self.root, &binding, &root_id)? {
+            return Err("WAKE_LEDGER_NO_PRIOR_INTENT".into());
+        }
+        let (current, desired) = observe_current(self.root)?;
+        if current.now_utc_seconds < intent.accepted_at_utc_seconds {
+            return Err("WAKE_LEDGER_CLOCK_ROLLBACK".into());
+        }
+        let mut expected_current = original;
+        expected_current.now_utc_seconds = current.now_utc_seconds;
+        if current != expected_current || desired != intent.original_desired_state {
+            return Err("WAKE_LEDGER_RESUME_PHYSICAL_MISMATCH".into());
+        }
+        let (stage, disposition) = match phase {
+            InstallPhaseV1::Intent => {
+                match stage_inspection {
+                    ResumeStageInspection::Protected => {
+                        let (service_sid, _) = policy.checked_endpoint_sids()?;
+                        require_empty_staging_under_guard(self.root, &root_id, service_sid)?;
+                    }
+                    #[cfg(test)]
+                    ResumeStageInspection::Fixture => {
+                        crate::install_broker_candidate_stage::require_empty_staging_fixture(
+                            self.root,
+                        )?;
+                    }
+                }
+                (None, "INTENT_STAGING_EMPTY_NO_INSTALL_AUTHORITY")
+            }
+            InstallPhaseV1::StageStarted => (None, "STAGE_STARTED_ATTENTION_NO_INSTALL_AUTHORITY"),
+            InstallPhaseV1::Staged => {
+                let snapshot = match stage_inspection {
+                    ResumeStageInspection::Protected => {
+                        let (service_sid, _) = policy.checked_endpoint_sids()?;
+                        inspect_stage_under_guard(
+                            self.root,
+                            &root_id,
+                            approved.verified(),
+                            service_sid,
+                        )?
+                    }
+                    #[cfg(test)]
+                    ResumeStageInspection::Fixture => {
+                        crate::install_broker_candidate_stage::inspect_stage_fixture(
+                            self.root,
+                            &root_id,
+                            approved.verified(),
+                        )?
+                    }
+                };
+                let observed_stage = StageBindingV1 {
+                    staging_directory: snapshot.staging_directory.clone(),
+                    candidate_directory: snapshot.candidate_directory.clone(),
+                    manifest_file: snapshot.manifest_file.clone(),
+                    artifacts: std::array::from_fn(|index| {
+                        snapshot.artifacts[index].object.clone()
+                    }),
+                };
+                if stage_binding.as_ref() != Some(&observed_stage) {
+                    return Err("WAKE_LEDGER_STAGE_BINDING_INVALID".into());
+                }
+                (Some(snapshot), "STAGED_IDS_MATCH_NO_INSTALL_AUTHORITY")
+            }
+            _ => return Err("WAKE_LEDGER_RESUME_PHASE_UNSUPPORTED".into()),
+        };
+        // The result is a point-in-time diagnosis. Reopen this generation's
+        // records and the policy after stage I/O. Prior history was checked
+        // under the cooperative global lock, not snapshotted against a
+        // noncooperating writer with protected-ledger write access.
+        if ledger_inventory(self.root)? != inventory {
+            return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
+        }
+        let (last_intent, last_phase, last_binding) =
+            historical_intent(self.root, generation, present, &root_id)?;
+        if last_intent != intent || last_phase != phase || last_binding != stage_binding {
+            return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
+        }
+        policy.revalidate()?;
+        if root_info(self.root)? != root_id {
+            return Err("WAKE_LEDGER_ROOT_CHANGED".into());
+        }
+        Ok(BrokerExactResumeReadbackV1 {
+            schema_version: 1,
+            install_generation: generation,
+            approval_id: intent.approval_id,
+            phase: phase.name(),
+            ledger_stage_binding_matched: stage.is_some(),
+            stage,
+            disposition,
+        })
     }
 }
 
@@ -721,7 +941,7 @@ fn historical_intent(
     generation: u64,
     present: &[bool; 8],
     observed_root: &ObjectIdentityV1,
-) -> Result<(LedgerRecordV1, InstallPhaseV1)> {
+) -> Result<(LedgerRecordV1, InstallPhaseV1, Option<StageBindingV1>)> {
     if !present[0] {
         return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
     }
@@ -794,7 +1014,7 @@ fn historical_intent(
         digest = next_digest;
         current = phase;
     }
-    Ok((intent, current))
+    Ok((intent, current, binding.stage_binding))
 }
 
 /// Validate every prior ledger generation and reject later records or reused
@@ -817,7 +1037,7 @@ fn preflight_history(
         if last_prior.is_some_and(|prior| prior.checked_add(1) != Some(generation)) {
             return Err("WAKE_LEDGER_STALE_GENERATION".into());
         }
-        let (intent, phase) = historical_intent(root, generation, &present, observed_root)?;
+        let (intent, phase, _) = historical_intent(root, generation, &present, observed_root)?;
         if !seen_approval_ids.insert(intent.approval_id.clone())
             || !seen_approval_digests.insert(intent.signed_approval_sha256.clone())
         {
@@ -853,8 +1073,24 @@ fn read_intent_for_resume(root: &OwnedHandle, generation: u64) -> Result<Option<
     let Some(present) = inventory.get(&generation) else {
         return Ok(None);
     };
-    let (intent, _) = historical_intent(root, generation, present, &observed_root)?;
+    let (intent, _, _) = historical_intent(root, generation, present, &observed_root)?;
     Ok(Some(intent))
+}
+
+fn original_observation(intent: &LedgerRecordV1) -> BrokerObservedStateV1 {
+    BrokerObservedStateV1 {
+        now_utc_seconds: intent.accepted_at_utc_seconds,
+        next_install_generation: intent.install_generation,
+        predecessor_package_id: intent.predecessor_package_id.clone(),
+        predecessor_pointer: intent.predecessor_pointer.clone(),
+        target_protected_root: intent.protected_root.clone(),
+        old_runtime_root: intent.old_runtime_root.clone(),
+        old_runtime_lock: intent.old_runtime_lock.clone(),
+        old_host_image: intent.old_host_image.clone(),
+        old_host_image_sha256: intent.old_host_image_sha256.clone(),
+        old_host_pid: intent.old_host_pid,
+        old_host_creation_time_100ns: intent.old_host_creation_time_100ns,
+    }
 }
 
 /// Reverify the original signed envelope against the protected intent's first
@@ -874,19 +1110,7 @@ pub fn verify_exact_resume(
     if now_utc_seconds < intent.accepted_at_utc_seconds {
         return Err("WAKE_LEDGER_CLOCK_ROLLBACK".into());
     }
-    let original = BrokerObservedStateV1 {
-        now_utc_seconds: intent.accepted_at_utc_seconds,
-        next_install_generation: intent.install_generation,
-        predecessor_package_id: intent.predecessor_package_id.clone(),
-        predecessor_pointer: intent.predecessor_pointer.clone(),
-        target_protected_root: intent.protected_root.clone(),
-        old_runtime_root: intent.old_runtime_root.clone(),
-        old_runtime_lock: intent.old_runtime_lock.clone(),
-        old_host_image: intent.old_host_image.clone(),
-        old_host_image_sha256: intent.old_host_image_sha256.clone(),
-        old_host_pid: intent.old_host_pid,
-        old_host_creation_time_100ns: intent.old_host_creation_time_100ns,
-    };
+    let original = original_observation(&intent);
     let approval = verify_approval(envelope_bytes, broker_trust_root, &original)?;
     if approval.signed_payload_sha256() != intent.signed_approval_sha256
         || approval.signed_envelope_sha256() != intent.approval_continuity.signed_envelope_sha256
@@ -1177,6 +1401,18 @@ impl<'a> BrokerLedgerLease<'a> {
             &self.binding.approval_continuity,
         )?;
         Ok(written)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn record_staged_fixture(&mut self, stage: StageBindingV1) -> Result<bool> {
+        if self.current != InstallPhaseV1::StageStarted
+            || self.binding.stage_binding.is_some()
+            || !valid_stage_binding(&stage, &self.binding.protected_root)
+        {
+            return Err("WAKE_LEDGER_STAGE_BINDING_INVALID".into());
+        }
+        self.binding.stage_binding = Some(stage);
+        self.advance_internal(InstallPhaseV1::Staged)
     }
 
     #[cfg(test)]

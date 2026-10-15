@@ -651,9 +651,14 @@ pub fn load_fixed_broker_policy_read_only() -> Result<BrokerProtectedPolicyV1> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::install_broker_approval::tests as approval_test;
+    use crate::install_broker_approval::{
+        ArtifactV1, BrokerObservedStateV1, tests as approval_test,
+    };
+    use crate::install_broker_candidate_stage::inspect_stage_fixture;
+    use crate::install_broker_durability::{ParentFlushPoint, fail_next_flush};
     use crate::install_broker_ledger::{
         BrokerLedgerGuard, InstallPhaseV1, LedgerExpectationV1, OriginalDesiredStateV1,
+        StageBindingV1,
     };
     use ed25519_dalek::SigningKey;
     use std::{
@@ -870,6 +875,115 @@ mod tests {
                 .expect("remove fixture policy");
             std::fs::remove_dir(self.path).expect("remove fixture root");
         }
+    }
+
+    const RESUME_ARTIFACTS: [&str; 4] = [
+        "CatDeskWakeHost.exe",
+        "CatDeskBinagotchy.exe",
+        "adapter.py",
+        "wake_bridge.py",
+    ];
+    const RESUME_BLOBS: [&[u8]; 4] = [
+        b"host-binary",
+        b"gui-binary",
+        b"adapter-code",
+        b"bridge-code",
+    ];
+
+    fn resume_fixture() -> (
+        Fixture,
+        BrokerProtectedPolicyV1,
+        Vec<u8>,
+        BrokerObservedStateV1,
+        LedgerExpectationV1,
+        Vec<u8>,
+    ) {
+        let fixture = Fixture::new();
+        std::fs::write(fixture.path.join("install-ledger.lock"), b"").expect("global lock");
+        std::fs::create_dir(fixture.path.join("staging")).expect("staging directory");
+        let policy = fixture.load().expect("pinned fixture policy");
+        let (mut payload, mut observed, key) = approval_test::fixture();
+        payload.target_protected_root = fixture.root_id.clone();
+        observed.target_protected_root = fixture.root_id.clone();
+        payload.manifest.artifacts = std::array::from_fn(|index| ArtifactV1 {
+            name: RESUME_ARTIFACTS[index].into(),
+            byte_length: RESUME_BLOBS[index].len() as u64,
+            sha256: format!("{:x}", Sha256::digest(RESUME_BLOBS[index])),
+        });
+        payload.manifest.package_id = format!(
+            "{}-{}-{}",
+            payload.manifest.version,
+            &payload.manifest.artifacts[0].sha256[..12],
+            &payload.manifest.artifacts[1].sha256[..12]
+        );
+        let manifest = serde_json::to_vec(&payload.manifest).expect("canonical manifest");
+        payload.manifest_sha256 = format!("{:x}", Sha256::digest(&manifest));
+        let envelope = approval_test::envelope(&payload, &key);
+        let expected = LedgerExpectationV1 {
+            now_utc_seconds: observed.now_utc_seconds,
+            next_install_generation: payload.install_generation,
+            predecessor_package_id: payload.predecessor_package_id,
+            predecessor_pointer: payload.predecessor_pointer,
+            protected_root: fixture.root_id.clone(),
+            original_desired_state: OriginalDesiredStateV1::Running,
+        };
+        (fixture, policy, envelope, observed, expected, manifest)
+    }
+
+    fn cleanup_resume_fixture(fixture: Fixture, policy: BrokerProtectedPolicyV1) {
+        drop(policy);
+        assert!(fixture.path.starts_with(std::env::temp_dir()));
+        let reopened_raw = unsafe {
+            CreateFileW(
+                wide(fixture.path.to_str().expect("test path UTF-8")).as_ptr(),
+                FILE_READ_DATA | FILE_READ_ATTRIBUTES | READ_CONTROL,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                ptr::null_mut(),
+                OPEN_EXISTING,
+                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                ptr::null_mut(),
+            )
+        };
+        assert!(!reopened_raw.is_null() && reopened_raw != INVALID_HANDLE_VALUE);
+        let reopened = unsafe { OwnedHandle::from_raw_handle(reopened_raw) };
+        assert_eq!(
+            object_identity(&file_info(reopened.as_raw_handle(), true).expect("fixture root")),
+            fixture.root_id
+        );
+        assert_eq!(
+            object_identity(&file_info(fixture.root.as_raw_handle(), true).expect("pinned root")),
+            fixture.root_id
+        );
+        drop(reopened);
+        for phase in ["intent", "stage-started", "staged"] {
+            let path = fixture.path.join(format!(
+                "install-transaction-00000000000000000002-{phase}.json"
+            ));
+            if path.exists() {
+                std::fs::remove_file(path).expect("remove exact fixture record");
+            }
+        }
+        let staging = fixture.path.join("staging");
+        let candidate = staging.join("candidate");
+        if candidate.exists() {
+            for name in [
+                "manifest.json",
+                RESUME_ARTIFACTS[0],
+                RESUME_ARTIFACTS[1],
+                RESUME_ARTIFACTS[2],
+                RESUME_ARTIFACTS[3],
+            ] {
+                let path = candidate.join(name);
+                if path.exists() {
+                    std::fs::remove_file(path).expect("remove exact fixture stage leaf");
+                }
+            }
+            std::fs::remove_dir(candidate).expect("remove empty fixture candidate");
+        }
+        std::fs::remove_dir(staging).expect("remove empty fixture staging");
+        std::fs::remove_file(fixture.path.join("install-ledger.lock"))
+            .expect("remove fixture lock");
+        fixture.cleanup();
     }
 
     #[test]
@@ -1213,6 +1327,299 @@ mod tests {
         policy.revalidate().unwrap();
         drop(policy);
         fixture.cleanup();
+    }
+
+    #[test]
+    fn guarded_resume_is_existing_only_policy_bound_and_checks_current_observation() {
+        let (fixture, policy, envelope, observed, expected, _) = resume_fixture();
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("global lock");
+        assert_eq!(
+            guard
+                .inspect_exact_resume_fixture(&policy, &envelope, 2, |_| {
+                    panic!("missing intent must not invoke observer")
+                })
+                .unwrap_err(),
+            "WAKE_LEDGER_NO_PRIOR_INTENT"
+        );
+        drop(guard);
+        assert!(
+            !fixture
+                .path
+                .join("install-transaction-00000000000000000002-intent.json")
+                .exists()
+        );
+
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("acceptance lock");
+        let (lease, approved) = guard
+            .accept_with_observation(&policy, &envelope, |_| {
+                Ok((observed.clone(), expected.clone()))
+            })
+            .expect("original policy-bound INTENT");
+        drop(lease);
+        drop(approved);
+
+        let mut later = observed.clone();
+        later.now_utc_seconds = 2_001; // Original approval is expired now.
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("resume lock");
+        let diagnosis = guard
+            .inspect_exact_resume_fixture(&policy, &envelope, 2, |root| {
+                assert!(BrokerLedgerGuard::acquire(root).is_err());
+                Ok((later.clone(), OriginalDesiredStateV1::Running))
+            })
+            .expect("exact expired approval readback");
+        assert_eq!(diagnosis.phase, "intent");
+        assert!(diagnosis.stage.is_none());
+        assert!(!diagnosis.ledger_stage_binding_matched);
+        assert_eq!(
+            diagnosis.disposition,
+            "INTENT_STAGING_EMPTY_NO_INSTALL_AUTHORITY"
+        );
+        assert!(
+            !fixture
+                .path
+                .join("install-transaction-00000000000000000002-stage-started.json")
+                .exists()
+        );
+        let future = fixture
+            .path
+            .join("install-transaction-00000000000000000003-intent.json");
+        std::fs::write(&future, b"future fixture").expect("later-generation residue");
+        assert_eq!(
+            guard
+                .inspect_exact_resume_fixture(&policy, &envelope, 2, |_| {
+                    panic!("later generation must stop before observation")
+                })
+                .unwrap_err(),
+            "WAKE_LEDGER_STALE_GENERATION"
+        );
+        std::fs::remove_file(future).expect("remove exact later-generation fixture");
+        let orphan = fixture.path.join("staging").join("candidate");
+        std::fs::create_dir(&orphan).expect("orphan candidate fixture");
+        assert!(
+            guard
+                .inspect_exact_resume_fixture(&policy, &envelope, 2, |_| {
+                    Ok((later.clone(), OriginalDesiredStateV1::Running))
+                })
+                .is_err()
+        );
+        std::fs::remove_dir(orphan).expect("remove empty orphan candidate");
+
+        let mut drifted = later.clone();
+        drifted.predecessor_pointer.file_index_low += 1;
+        assert_eq!(
+            guard
+                .inspect_exact_resume_fixture(&policy, &envelope, 2, |_| {
+                    Ok((drifted, OriginalDesiredStateV1::Running))
+                })
+                .unwrap_err(),
+            "WAKE_LEDGER_RESUME_PHYSICAL_MISMATCH"
+        );
+        assert_eq!(
+            guard
+                .inspect_exact_resume_fixture(&policy, &envelope, 2, |_| {
+                    Ok((later.clone(), OriginalDesiredStateV1::Paused))
+                })
+                .unwrap_err(),
+            "WAKE_LEDGER_RESUME_PHYSICAL_MISMATCH"
+        );
+        let mut rollback = later.clone();
+        rollback.now_utc_seconds = observed.now_utc_seconds - 1;
+        assert_eq!(
+            guard
+                .inspect_exact_resume_fixture(&policy, &envelope, 2, |_| {
+                    Ok((rollback, OriginalDesiredStateV1::Running))
+                })
+                .unwrap_err(),
+            "WAKE_LEDGER_CLOCK_ROLLBACK"
+        );
+        let other_key = SigningKey::from_bytes(&[8u8; 32]);
+        let (mut same_payload, _, _) = approval_test::fixture();
+        same_payload.target_protected_root = fixture.root_id.clone();
+        // A different valid signature for a different key cannot impersonate
+        // the original protected policy, regardless of payload shape.
+        let other_envelope = approval_test::envelope(&same_payload, &other_key);
+        assert_eq!(
+            guard
+                .inspect_exact_resume_fixture(&policy, &other_envelope, 2, |_| {
+                    panic!("wrong-key approval must stop before observation")
+                })
+                .unwrap_err(),
+            "WAKE_APPROVAL_SIGNATURE_INVALID"
+        );
+        drop(guard);
+        cleanup_resume_fixture(fixture, policy);
+    }
+
+    #[test]
+    fn guarded_resume_rejects_same_payload_after_policy_key_rotation() {
+        let (fixture, policy, envelope, observed, expected, _) = resume_fixture();
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("acceptance lock");
+        let (lease, approved) = guard
+            .accept_with_observation(&policy, &envelope, |_| {
+                Ok((observed.clone(), expected.clone()))
+            })
+            .expect("original INTENT");
+        drop(lease);
+        drop(approved);
+        drop(policy);
+
+        let parsed: serde_json::Value = serde_json::from_slice(&envelope).expect("original wire");
+        let payload: crate::install_broker_approval::WakeInstallApprovalV1 =
+            serde_json::from_value(parsed["payload"].clone()).expect("same payload");
+        let rotated_key = SigningKey::from_bytes(&[8u8; 32]);
+        let rotated_envelope = approval_test::envelope(&payload, &rotated_key);
+        let mut rotated_wire = fixture.wire.clone();
+        rotated_wire.approval_public_key_hex = rotated_key
+            .verifying_key()
+            .as_bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        fixture.write_wire(&rotated_wire);
+        let rotated_policy = fixture.load().expect("new pinned policy snapshot");
+        let mut later = observed;
+        later.now_utc_seconds = 2_001;
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("resume lock");
+        assert_eq!(
+            guard
+                .inspect_exact_resume_fixture(&rotated_policy, &rotated_envelope, 2, |_| {
+                    Ok((later, OriginalDesiredStateV1::Running))
+                })
+                .unwrap_err(),
+            "WAKE_LEDGER_APPROVAL_CONFLICT"
+        );
+        drop(guard);
+        cleanup_resume_fixture(fixture, rotated_policy);
+    }
+
+    #[test]
+    fn guarded_resume_reports_stage_started_attention_and_matches_staged_ids() {
+        let (fixture, policy, envelope, observed, expected, manifest) = resume_fixture();
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("acceptance lock");
+        let (mut lease, approved) = guard
+            .accept_with_observation(&policy, &envelope, |_| {
+                Ok((observed.clone(), expected.clone()))
+            })
+            .expect("original INTENT");
+        fail_next_flush(ParentFlushPoint::StageStarted);
+        assert_eq!(
+            lease.record_stage_started().unwrap_err(),
+            "WAKE_BROKER_PARENT_FLUSH_FAILED"
+        );
+        drop(lease);
+        drop(approved);
+
+        let mut later = observed.clone();
+        later.now_utc_seconds = 2_001;
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("marker resume lock");
+        let attention = guard
+            .inspect_exact_resume_fixture(&policy, &envelope, 2, |_| {
+                Ok((later.clone(), OriginalDesiredStateV1::Running))
+            })
+            .expect("marker is diagnosable without candidate");
+        assert_eq!(attention.phase, "stage-started");
+        assert!(attention.stage.is_none());
+        assert_eq!(
+            attention.disposition,
+            "STAGE_STARTED_ATTENTION_NO_INSTALL_AUTHORITY"
+        );
+        let partial = fixture.path.join("staging").join("candidate");
+        std::fs::create_dir(&partial).expect("partial candidate fixture");
+        std::fs::write(partial.join(RESUME_ARTIFACTS[0]), RESUME_BLOBS[0])
+            .expect("first partial artifact");
+        let still_attention = guard
+            .inspect_exact_resume_fixture(&policy, &envelope, 2, |_| {
+                Ok((later.clone(), OriginalDesiredStateV1::Running))
+            })
+            .expect("partial candidate remains attention");
+        assert_eq!(still_attention.phase, "stage-started");
+        assert_eq!(
+            std::fs::read(partial.join(RESUME_ARTIFACTS[0])).expect("partial bytes retained"),
+            RESUME_BLOBS[0]
+        );
+        std::fs::remove_file(partial.join(RESUME_ARTIFACTS[0]))
+            .expect("remove exact partial artifact");
+        std::fs::remove_dir(partial).expect("remove empty partial candidate");
+        drop(guard);
+
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("stage fixture lock");
+        let (mut lease, approved) = guard
+            .accept_with_observation(&policy, &envelope, |_| {
+                Ok((observed.clone(), expected.clone()))
+            })
+            .expect("exact marker reopen");
+        let candidate = fixture.path.join("staging").join("candidate");
+        std::fs::create_dir(&candidate).expect("fixture candidate");
+        for (name, bytes) in RESUME_ARTIFACTS.into_iter().zip(RESUME_BLOBS) {
+            std::fs::write(candidate.join(name), bytes).expect("fixture artifact");
+        }
+        std::fs::write(candidate.join("manifest.json"), manifest).expect("fixture manifest");
+        let snapshot = inspect_stage_fixture(&fixture.root, &fixture.root_id, approved.verified())
+            .expect("exact fixture stage bytes");
+        let binding = StageBindingV1 {
+            staging_directory: snapshot.staging_directory,
+            candidate_directory: snapshot.candidate_directory,
+            manifest_file: snapshot.manifest_file,
+            artifacts: std::array::from_fn(|index| snapshot.artifacts[index].object.clone()),
+        };
+        lease
+            .record_staged_fixture(binding)
+            .expect("test-only ledger STAGED");
+        drop(lease);
+        drop(approved);
+
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("staged resume lock");
+        let staged = guard
+            .inspect_exact_resume_fixture(&policy, &envelope, 2, |_| {
+                Ok((later.clone(), OriginalDesiredStateV1::Running))
+            })
+            .expect("exact physical STAGED readback");
+        assert_eq!(staged.phase, "staged");
+        assert!(staged.ledger_stage_binding_matched);
+        assert!(
+            !staged
+                .stage
+                .expect("stage readback")
+                .stage_creation_and_ledger_binding_proven
+        );
+        std::fs::write(candidate.join("adapter.py"), b"adapter-codz")
+            .expect("same-size tamper fixture");
+        assert!(
+            guard
+                .inspect_exact_resume_fixture(&policy, &envelope, 2, |_| {
+                    Ok((later.clone(), OriginalDesiredStateV1::Running))
+                })
+                .is_err()
+        );
+        std::fs::write(candidate.join("adapter.py"), RESUME_BLOBS[2])
+            .expect("restore fixture bytes");
+        std::fs::write(candidate.join("unexpected"), b"x").expect("foreign entry");
+        assert!(
+            guard
+                .inspect_exact_resume_fixture(&policy, &envelope, 2, |_| {
+                    Ok((later.clone(), OriginalDesiredStateV1::Running))
+                })
+                .is_err()
+        );
+        std::fs::remove_file(candidate.join("unexpected")).expect("remove foreign fixture entry");
+        // Replace one file with identical signed bytes while the old physical
+        // object still exists under a different fixed fixture name.
+        let displaced = candidate.join("displaced-adapter.py");
+        std::fs::rename(candidate.join("adapter.py"), &displaced)
+            .expect("displace one fixture file");
+        std::fs::write(candidate.join("adapter.py"), RESUME_BLOBS[2])
+            .expect("replacement artifact bytes");
+        std::fs::remove_file(displaced).expect("remove displaced fixture file");
+        assert_eq!(
+            guard
+                .inspect_exact_resume_fixture(&policy, &envelope, 2, |_| {
+                    Ok((later.clone(), OriginalDesiredStateV1::Running))
+                })
+                .unwrap_err(),
+            "WAKE_LEDGER_STAGE_BINDING_INVALID"
+        );
+        drop(guard);
+        cleanup_resume_fixture(fixture, policy);
     }
 
     #[test]
