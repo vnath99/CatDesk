@@ -6,6 +6,8 @@
 
 use std::fs;
 use std::io::{Read, Write};
+#[cfg(windows)]
+use std::path::{Component, Prefix};
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
@@ -40,6 +42,33 @@ pub(crate) struct PinnedDirectory {
     pub(crate) handle: OwnedHandle,
     #[cfg(windows)]
     pub(crate) identity: (u32, u32, u32),
+}
+
+#[cfg(windows)]
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct StrongFileId {
+    volume_serial_number: u64,
+    file_id: [u8; 16],
+}
+
+#[cfg(windows)]
+fn strong_file_id(handle: *mut c_void, label: &str) -> Result<StrongFileId, String> {
+    const FILE_ID_INFO_CLASS: u32 = 0x12;
+    let mut info = StrongFileId::default();
+    if unsafe {
+        GetFileInformationByHandleEx(
+            handle,
+            FILE_ID_INFO_CLASS,
+            (&mut info as *mut StrongFileId).cast(),
+            std::mem::size_of::<StrongFileId>() as u32,
+        )
+    } == 0
+        || info.file_id == [0; 16]
+    {
+        return Err(format!("{label} strong identity is unavailable"));
+    }
+    Ok(info)
 }
 
 pub(crate) fn validate_protected_component(component: &str, label: &str) -> Result<(), String> {
@@ -124,6 +153,46 @@ impl PinnedDirectory {
             let _ = path;
             Err(format!("{label} stable identity is unavailable"))
         }
+    }
+
+    #[cfg(windows)]
+    fn acquire_for_security_root(path: &Path, label: &str) -> Result<Self, String> {
+        classify_pinned_directory(path, label)?;
+        let wide: Vec<u16> = path
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        let raw = unsafe {
+            CreateFileW(
+                wide.as_ptr(),
+                FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES | READ_CONTROL | SYNCHRONIZE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                std::ptr::null_mut(),
+                OPEN_EXISTING,
+                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                std::ptr::null_mut(),
+            )
+        };
+        if raw.is_null() || raw == INVALID_HANDLE_VALUE {
+            return Err(format!("{label} security root unavailable"));
+        }
+        let handle = unsafe { OwnedHandle::from_raw_handle(raw) };
+        let info = handle_information(handle.as_raw_handle(), label)?;
+        if info.file_attributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)
+            != FILE_ATTRIBUTE_DIRECTORY
+        {
+            return Err(format!("{label} security root is unsafe"));
+        }
+        Ok(Self {
+            path: path.to_path_buf(),
+            handle,
+            identity: (
+                info.volume_serial_number,
+                info.file_index_high,
+                info.file_index_low,
+            ),
+        })
     }
 
     pub(crate) fn open_relative(
@@ -268,6 +337,42 @@ impl PinnedDirectory {
         label: &str,
     ) -> Result<Self, String> {
         Self::open_relative_with_security(parent, component, FILE_OPEN, false, true, label)
+    }
+
+    #[cfg(windows)]
+    fn open_relative_read_only_for_security(
+        parent: &Self,
+        component: &str,
+        label: &str,
+    ) -> Result<Self, String> {
+        validate_protected_component(component, label)?;
+        parent.assert_stable(label)?;
+        let raw = nt_open_relative_with_security_descriptor_for_domain(
+            parent.handle.as_raw_handle(),
+            component,
+            FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES | READ_CONTROL | SYNCHRONIZE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            FILE_OPEN,
+            FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT,
+            std::ptr::null_mut(),
+            Some("protected filesystem security chain"),
+        )?;
+        let handle = unsafe { OwnedHandle::from_raw_handle(raw) };
+        let info = handle_information(handle.as_raw_handle(), label)?;
+        if info.file_attributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)
+            != FILE_ATTRIBUTE_DIRECTORY
+        {
+            return Err(format!("{label} security child is unsafe"));
+        }
+        Ok(Self {
+            path: parent.path.join(component),
+            handle,
+            identity: (
+                info.volume_serial_number,
+                info.file_index_high,
+                info.file_index_low,
+            ),
+        })
     }
 
     fn open_relative_with_security(
@@ -444,6 +549,123 @@ impl ProtectedDirectoryGuard {
         Ok(Self {
             directories: vec![PinnedDirectory::acquire(path, label)?],
         })
+    }
+
+    /// Read-only, handle-relative walk of every directory from a local drive
+    /// root through one exact absolute path. UNC, device, verbatim, relative,
+    /// normalized and reparse paths fail closed. This creates no mutation
+    /// authority and must be compared to the caller's separately pinned final
+    /// object before its ACL readback is used.
+    #[cfg(windows)]
+    pub(crate) fn acquire_full_security_chain(path: &Path, label: &str) -> Result<Self, String> {
+        const MAX_DEPTH: usize = 32;
+        let mut components = path.components();
+        let Some(Component::Prefix(prefix)) = components.next() else {
+            return Err(format!("{label} security path is not drive absolute"));
+        };
+        let Prefix::Disk(letter) = prefix.kind() else {
+            return Err(format!("{label} security path is not a local drive"));
+        };
+        if !letter.is_ascii_alphabetic() || components.next() != Some(Component::RootDir) {
+            return Err(format!("{label} security path is not drive absolute"));
+        }
+        let mut rebuilt = PathBuf::from(format!("{}:\\", letter as char));
+        let mut names = Vec::new();
+        for component in components {
+            let Component::Normal(name) = component else {
+                return Err(format!("{label} security path contains unsafe traversal"));
+            };
+            let name = name
+                .to_str()
+                .ok_or_else(|| format!("{label} security path is not Unicode"))?;
+            validate_protected_component(name, label)?;
+            if names.len() >= MAX_DEPTH {
+                return Err(format!("{label} security path is too deep"));
+            }
+            rebuilt.push(name);
+            names.push(name);
+        }
+        // `Path` equality normalizes components such as `.`. Compare the raw
+        // spelling so no normalized alias is accepted as a pinned path.
+        if rebuilt.as_os_str() != path.as_os_str() {
+            return Err(format!("{label} security path is not canonical"));
+        }
+        let drive_root = PathBuf::from(format!("{}:\\", letter as char));
+        let drive_root_wide: Vec<u16> = drive_root
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        if unsafe { GetDriveTypeW(drive_root_wide.as_ptr()) } != 3 {
+            return Err(format!("{label} security path is not on a fixed drive"));
+        }
+        let mut directories = vec![PinnedDirectory::acquire_for_security_root(
+            &drive_root,
+            label,
+        )?];
+        // A fixed-media drive letter can still be a SUBST alias for a
+        // directory below another volume root. Its hidden parent chain would
+        // be outside this walk. Require the opened drive root to be the exact
+        // object named by the mount manager's volume GUID root.
+        let mut volume_name = [0_u16; 128];
+        if unsafe {
+            GetVolumeNameForVolumeMountPointW(
+                drive_root_wide.as_ptr(),
+                volume_name.as_mut_ptr(),
+                volume_name.len() as u32,
+            )
+        } == 0
+        {
+            return Err(format!("{label} drive is not a volume root"));
+        }
+        let volume_name_len = volume_name
+            .iter()
+            .position(|unit| *unit == 0)
+            .filter(|length| *length > 0)
+            .ok_or_else(|| format!("{label} volume root is unsafe"))?;
+        let volume_name = String::from_utf16(&volume_name[..volume_name_len])
+            .map_err(|_| format!("{label} volume root is unsafe"))?;
+        if !volume_name.starts_with("\\\\?\\Volume{") || !volume_name.ends_with("}\\") {
+            return Err(format!("{label} volume root is unsafe"));
+        }
+        let volume_root =
+            PinnedDirectory::acquire_for_security_root(Path::new(&volume_name), label)?;
+        if strong_file_id(directories[0].handle.as_raw_handle(), label)?
+            != strong_file_id(volume_root.handle.as_raw_handle(), label)?
+        {
+            return Err(format!("{label} drive does not name the volume root"));
+        }
+        for name in names {
+            directories.push(PinnedDirectory::open_relative_read_only_for_security(
+                directories.last().expect("drive root is pinned"),
+                name,
+                label,
+            )?);
+        }
+        let guard = Self { directories };
+        guard.assert_stable(label)?;
+        Ok(guard)
+    }
+
+    /// Visit each pinned prefix from the drive root to the final object while
+    /// retaining all earlier handles. Only a guard built by the full-chain
+    /// constructor establishes a volume-root anchor for this diagnostic.
+    #[cfg(windows)]
+    pub(crate) fn for_each_pinned_prefix(
+        &self,
+        label: &str,
+        mut visit: impl FnMut(&Self) -> Result<(), String>,
+    ) -> Result<(), String> {
+        self.assert_stable(label)?;
+        let mut prefix = Self {
+            directories: Vec::with_capacity(self.directories.len()),
+        };
+        for directory in &self.directories {
+            prefix.directories.push(directory.try_clone(label)?);
+            visit(&prefix)?;
+            prefix.assert_stable(label)?;
+        }
+        self.assert_stable(label)
     }
 
     /// Adopts a directory already opened relative to an accepted pinned
@@ -849,6 +1071,11 @@ impl ProtectedDirectoryGuard {
     pub(crate) fn physical_identity(&self, label: &str) -> Result<(u32, u32, u32), String> {
         self.assert_stable(label)?;
         Ok(self.directories.last().expect("guard has root").identity)
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn strong_physical_identity(&self, label: &str) -> Result<StrongFileId, String> {
+        strong_file_id(self.last_handle(label)?, label)
     }
 
     /// Renames the exact opened direct child under the exact pinned parent.
@@ -1971,6 +2198,18 @@ unsafe extern "system" {
         capacity: u32,
         flags: u32,
     ) -> u32;
+    fn GetDriveTypeW(root_path: *const u16) -> u32;
+    fn GetFileInformationByHandleEx(
+        file: *mut c_void,
+        information_class: u32,
+        information: *mut c_void,
+        capacity: u32,
+    ) -> i32;
+    fn GetVolumeNameForVolumeMountPointW(
+        mount_point: *const u16,
+        volume_name: *mut u16,
+        capacity: u32,
+    ) -> i32;
 }
 #[cfg(windows)]
 fn handle_attributes(handle: *mut c_void, label: &str) -> Result<u32, String> {
@@ -2695,6 +2934,74 @@ mod tests {
                 .expect("stable renameable child");
         }
         fs::remove_dir_all(root).expect("fixture cleanup");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn full_security_chain_pins_drive_root_through_exact_directory() {
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-security-chain-{}",
+            Uuid::new_v4().simple()
+        ));
+        let child = root.join("stage");
+        fs::create_dir(&root).expect("fixture root");
+        fs::create_dir(&child).expect("fixture child");
+        let pinned = ProtectedDirectoryGuard::acquire(&child, "security chain test")
+            .expect("pin supplied final object");
+        let chain =
+            ProtectedDirectoryGuard::acquire_full_security_chain(&child, "security chain test")
+                .expect("pin complete read-only chain");
+        assert_eq!(
+            chain
+                .strong_physical_identity("security chain test")
+                .expect("chain identity"),
+            pinned
+                .strong_physical_identity("security chain test")
+                .expect("supplied identity")
+        );
+        let sibling = ProtectedDirectoryGuard::acquire(&root, "security chain test")
+            .expect("pin different directory");
+        assert_ne!(
+            chain
+                .strong_physical_identity("security chain test")
+                .expect("chain identity"),
+            sibling
+                .strong_physical_identity("security chain test")
+                .expect("different identity")
+        );
+        let mut paths = Vec::new();
+        chain
+            .for_each_pinned_prefix("security chain test", |prefix| {
+                paths.push(prefix.path().to_path_buf());
+                Ok(())
+            })
+            .expect("visit all pinned prefixes");
+        assert_eq!(paths.last(), Some(&child));
+        assert!(paths.first().is_some_and(|path| path.parent().is_none()));
+        assert!(paths.len() >= 3);
+        for unsafe_path in [
+            Path::new("relative\\stage"),
+            Path::new("\\\\server\\share\\stage"),
+            Path::new("\\\\?\\C:\\stage"),
+            Path::new("C:\\stage\\..\\other"),
+            Path::new("C:\\stage\\.\\child"),
+            Path::new("C:\\stage\\child\\"),
+        ] {
+            assert!(
+                ProtectedDirectoryGuard::acquire_full_security_chain(
+                    unsafe_path,
+                    "security chain test",
+                )
+                .is_err(),
+                "unsupported path must fail closed: {}",
+                unsafe_path.display()
+            );
+        }
+        drop(chain);
+        drop(pinned);
+        drop(sibling);
+        fs::remove_dir(child).expect("remove fixture child");
+        fs::remove_dir(root).expect("remove fixture root");
     }
 
     #[cfg(windows)]

@@ -1455,6 +1455,66 @@ impl StoppedBoundFixedWorkerCandidateV1 {
             self._bound_worker.token_user_sid(),
         )
     }
+
+    /// Diagnostic only. Reopen a supplied stage root's complete local-drive
+    /// path from the volume root with read-only, nonreparse, pinned handles.
+    /// Every ancestor owner and potentially write-capable allow ACE is
+    /// compared conservatively with the original exited worker token. This
+    /// cannot invalidate handles copied before exit or stop later ACL edits.
+    pub(crate) fn diagnose_supplied_stage_full_ancestor_acl(
+        &self,
+        root: &ProtectedDirectoryGuard,
+    ) -> Result<(), String> {
+        self.diagnose_retained_exited_identity()?;
+        self.diagnose_retained_job_empty()?;
+        let chain = ProtectedDirectoryGuard::acquire_full_security_chain(root.path(), LABEL)?;
+        sol_worker_staging_security::same_opened_directory(&chain, root)?;
+        let host_sid = sol_worker_staging_security::current_host_sid()?;
+        self._bound_worker
+            .reject_retained_exited_acl_trustees(&[&host_sid, "S-1-5-18"])?;
+        sol_worker_staging_security::verify_private_root(
+            root,
+            self._bound_worker.token_user_sid(),
+        )?;
+        let first = scan_full_ancestor_acl_trustees(&chain)?;
+        reject_ancestor_acl_trustees(&self._bound_worker, &first)?;
+        self.diagnose_retained_exited_identity()?;
+        self.diagnose_retained_job_empty()?;
+        sol_worker_staging_security::same_opened_directory(&chain, root)?;
+        let second = scan_full_ancestor_acl_trustees(&chain)?;
+        if first != second || host_sid != sol_worker_staging_security::current_host_sid()? {
+            return Err(format!("{LABEL} stage ancestor ACL diagnosis changed"));
+        }
+        reject_ancestor_acl_trustees(&self._bound_worker, &second)?;
+        sol_worker_staging_security::verify_private_root(
+            root,
+            self._bound_worker.token_user_sid(),
+        )?;
+        sol_worker_staging_security::same_opened_directory(&chain, root)
+    }
+}
+
+fn scan_full_ancestor_acl_trustees(
+    chain: &ProtectedDirectoryGuard,
+) -> Result<Vec<Vec<String>>, String> {
+    let mut result = Vec::new();
+    chain.for_each_pinned_prefix(LABEL, |directory| {
+        result
+            .push(sol_worker_staging_security::dangerous_opened_directory_acl_trustees(directory)?);
+        Ok(())
+    })?;
+    Ok(result)
+}
+
+fn reject_ancestor_acl_trustees(
+    worker: &BoundFixedLocalSolWorkerProcessV1,
+    directories: &[Vec<String>],
+) -> Result<(), String> {
+    let trustees = directories
+        .iter()
+        .flat_map(|directory| directory.iter().map(String::as_str))
+        .collect::<Vec<_>>();
+    worker.reject_retained_exited_acl_trustees(&trustees)
 }
 
 impl DrainedBoundFixedWorkerJobV1 {
@@ -2295,6 +2355,11 @@ mod tests {
             &ProtectedDirectoryGuard,
         ) -> Result<(), String> =
             StoppedBoundFixedWorkerCandidateV1::diagnose_supplied_stage_direct_parent_acl;
+        let _: fn(
+            &StoppedBoundFixedWorkerCandidateV1,
+            &ProtectedDirectoryGuard,
+        ) -> Result<(), String> =
+            StoppedBoundFixedWorkerCandidateV1::diagnose_supplied_stage_full_ancestor_acl;
     }
 
     #[test]

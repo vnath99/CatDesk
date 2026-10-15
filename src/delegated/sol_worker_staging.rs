@@ -1036,6 +1036,50 @@ mod tests {
     }
 
     #[test]
+    fn opened_ancestor_acl_scan_distinguishes_read_and_write_allow_aces() {
+        let fixture = Fixture::new();
+        let private = fixture.private_root();
+        let host_sid = security::current_host_sid().expect("host SID");
+        let system_ace = if host_sid == "S-1-5-18" {
+            String::new()
+        } else {
+            "(A;OICI;FA;;;SY)".into()
+        };
+        let base_sddl = format!("O:{host_sid}G:{host_sid}D:P(A;OICI;FA;;;{host_sid}){system_ace}");
+        for (name, rights, dangerous) in [
+            ("read-ancestor", "FR", false),
+            ("write-ancestor", "FW", true),
+        ] {
+            let sddl = format!("{base_sddl}(A;OICI;{rights};;;WD)");
+            let mut created = private.guard.try_clone(LABEL).expect("clone parent");
+            created
+                .create_child_with_security_descriptor(name, &sddl, LABEL)
+                .expect("create exact ACL fixture");
+            let mut opened = private.guard.try_clone(LABEL).expect("clone parent");
+            opened
+                .descend_existing_for_security(name, LABEL)
+                .expect("reopen ACL fixture");
+            security::same_opened_directory(&created, &opened).expect("same opened object");
+            let trustees = security::dangerous_opened_directory_acl_trustees(&opened)
+                .expect("read bounded ACL trustees");
+            assert!(
+                trustees.contains(&host_sid),
+                "owner or host write ACE is reported"
+            );
+            assert_eq!(
+                trustees.iter().any(|sid| sid == "S-1-1-0"),
+                dangerous,
+                "Everyone read access must not be mistaken for write access"
+            );
+            drop(opened);
+            drop(created);
+            fs::remove_dir(fixture.staging.join(name)).expect("remove exact ACL fixture");
+        }
+        drop(private);
+        fixture.remove(None);
+    }
+
+    #[test]
     fn child_acl_rejects_worker_or_inherited_broad_ace_and_wrong_object() {
         let fixture = Fixture::new();
         let private = fixture.private_root();

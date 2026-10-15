@@ -38,6 +38,13 @@ pub(super) fn verify_private_direct_parent_and_root(
 }
 
 #[cfg(not(windows))]
+pub(super) fn dangerous_opened_directory_acl_trustees(
+    _directory: &ProtectedDirectoryGuard,
+) -> Result<Vec<String>, String> {
+    Err(format!("{LABEL} requires Windows"))
+}
+
+#[cfg(not(windows))]
 pub(super) fn same_opened_directory(
     _created: &ProtectedDirectoryGuard,
     _security_reopen: &ProtectedDirectoryGuard,
@@ -69,7 +76,16 @@ mod windows {
     const CONTAINER_INHERIT_ACE: u8 = 0x02;
     const INHERITED_ACE: u8 = 0x10;
     const ACCESS_ALLOWED_ACE_TYPE: u8 = 0;
+    const ACCESS_DENIED_ACE_TYPE: u8 = 1;
     const ACL_SIZE_INFORMATION_CLASS: u32 = 2;
+    const READ_ONLY_DIRECTORY_ACCESS: u32 = 0x0000_0001
+        | 0x0000_0008
+        | 0x0000_0020
+        | 0x0000_0080
+        | 0x0002_0000
+        | 0x0010_0000
+        | 0x2000_0000
+        | 0x8000_0000;
 
     fn acceptable_dacl_control(control: u16, require_protected: bool) -> bool {
         control & SE_DACL_PRESENT != 0 && (!require_protected || control & SE_DACL_PROTECTED != 0)
@@ -251,6 +267,28 @@ mod windows {
         unsafe { EqualSid(left, right) != 0 }
     }
 
+    fn sid_text(sid: *mut c_void) -> Result<String, String> {
+        if sid.is_null() || unsafe { IsValidSid(sid) } == 0 {
+            return Err(format!("{LABEL} ACL trustee is invalid"));
+        }
+        let mut text = ptr::null_mut();
+        if unsafe { ConvertSidToStringSidW(sid, &mut text) } == 0 || text.is_null() {
+            return Err(format!("{LABEL} ACL trustee unavailable"));
+        }
+        let allocation = LocalAllocation(text.cast());
+        let mut length = 0usize;
+        while length < 256 && unsafe { *text.add(length) } != 0 {
+            length += 1;
+        }
+        if length == 0 || length == 256 {
+            return Err(format!("{LABEL} ACL trustee is invalid"));
+        }
+        String::from_utf16(unsafe {
+            std::slice::from_raw_parts(allocation.0.cast::<u16>(), length)
+        })
+        .map_err(|_| format!("{LABEL} ACL trustee is invalid"))
+    }
+
     fn opened_identity(guard: &ProtectedDirectoryGuard) -> Result<(u32, u32, u32), String> {
         guard.assert_stable(LABEL)?;
         let handle = guard.last_handle(LABEL)?;
@@ -430,6 +468,122 @@ mod windows {
         audit_descriptor(guard, host_sid, system.0, require_protected)
     }
 
+    /// Conservative owner and allow-ACE scan of one exact opened directory.
+    /// Deny ACEs are not used to offset allows; unknown ACE layouts fail.
+    /// The caller must compare every returned SID against the retained worker
+    /// user, all token groups and restricting SIDs.
+    pub(crate) fn dangerous_opened_directory_acl_trustees(
+        directory: &ProtectedDirectoryGuard,
+    ) -> Result<Vec<String>, String> {
+        let before = opened_identity(directory)?;
+        let handle = directory.last_handle(LABEL)?;
+        let mut owner = ptr::null_mut();
+        let mut dacl = ptr::null_mut();
+        let mut descriptor = ptr::null_mut();
+        let status = unsafe {
+            GetSecurityInfo(
+                handle,
+                SE_FILE_OBJECT,
+                OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+                &mut owner,
+                ptr::null_mut(),
+                &mut dacl,
+                ptr::null_mut(),
+                &mut descriptor,
+            )
+        };
+        if status != 0 || descriptor.is_null() {
+            if !descriptor.is_null() {
+                unsafe { LocalFree(descriptor) };
+            }
+            return Err(format!("{LABEL} ancestor ACL unavailable"));
+        }
+        let descriptor = LocalAllocation(descriptor);
+        if unsafe { IsValidSecurityDescriptor(descriptor.0) } == 0 {
+            return Err(format!("{LABEL} ancestor descriptor is invalid"));
+        }
+        let mut trustees = vec![sid_text(owner)?];
+        let mut control = 0_u16;
+        let mut revision = 0_u32;
+        let mut present = 0_i32;
+        let mut defaulted = 0_i32;
+        let mut descriptor_dacl = ptr::null_mut();
+        if unsafe { GetSecurityDescriptorControl(descriptor.0, &mut control, &mut revision) } == 0
+            || control & SE_DACL_PRESENT == 0
+            || unsafe {
+                GetSecurityDescriptorDacl(
+                    descriptor.0,
+                    &mut present,
+                    &mut descriptor_dacl,
+                    &mut defaulted,
+                )
+            } == 0
+            || present == 0
+            || dacl.is_null()
+            || dacl != descriptor_dacl
+            || unsafe { IsValidAcl(dacl) } == 0
+        {
+            return Err(format!("{LABEL} ancestor DACL is unsafe"));
+        }
+        let mut information = AclSizeInformation::default();
+        if unsafe {
+            GetAclInformation(
+                dacl,
+                (&mut information as *mut AclSizeInformation).cast(),
+                std::mem::size_of::<AclSizeInformation>() as u32,
+                ACL_SIZE_INFORMATION_CLASS,
+            )
+        } == 0
+            || !(8..=64 * 1024).contains(&information.acl_bytes_in_use)
+            || information.ace_count > 1024
+        {
+            return Err(format!("{LABEL} ancestor DACL is oversized"));
+        }
+        let acl_start = dacl as usize;
+        let acl_end = acl_start
+            .checked_add(information.acl_bytes_in_use as usize)
+            .ok_or_else(|| format!("{LABEL} ancestor DACL is unsafe"))?;
+        let first_ace = acl_start
+            .checked_add(8)
+            .ok_or_else(|| format!("{LABEL} ancestor DACL is unsafe"))?;
+        for index in 0..information.ace_count {
+            let mut ace = ptr::null_mut();
+            if unsafe { GetAce(dacl, index, &mut ace) } == 0 || ace.is_null() {
+                return Err(format!("{LABEL} ancestor ACE unavailable"));
+            }
+            let ace_start = ace as usize;
+            if ace_start < first_ace || ace_start.checked_add(8).is_none_or(|end| end > acl_end) {
+                return Err(format!("{LABEL} ancestor ACE is unsafe"));
+            }
+            let bytes = ace.cast::<u8>();
+            let kind = unsafe { *bytes };
+            if kind != ACCESS_ALLOWED_ACE_TYPE && kind != ACCESS_DENIED_ACE_TYPE {
+                return Err(format!("{LABEL} ancestor ACE type is unsupported"));
+            }
+            let size = unsafe { ptr::read_unaligned(bytes.add(2).cast::<u16>()) } as usize;
+            let mask = unsafe { ptr::read_unaligned(bytes.add(4).cast::<u32>()) };
+            let ace_end = ace_start
+                .checked_add(size)
+                .ok_or_else(|| format!("{LABEL} ancestor ACE is unsafe"))?;
+            if size < 16 || ace_end > acl_end {
+                return Err(format!("{LABEL} ancestor ACE is unsafe"));
+            }
+            let sid = unsafe { bytes.add(8) }.cast::<c_void>();
+            let sid_size = bounded_sid_length(sid, ace_start + 8, ace_end)
+                .ok_or_else(|| format!("{LABEL} ancestor ACE SID is unsafe"))?;
+            if size != 8 + sid_size || unsafe { IsValidSid(sid) } == 0 {
+                return Err(format!("{LABEL} ancestor ACE SID is unsafe"));
+            }
+            if kind == ACCESS_ALLOWED_ACE_TYPE && mask & !READ_ONLY_DIRECTORY_ACCESS != 0 {
+                trustees.push(sid_text(sid)?);
+            }
+        }
+        if opened_identity(directory)? != before {
+            return Err(format!("{LABEL} ancestor identity changed"));
+        }
+        Ok(trustees)
+    }
+
     pub(crate) fn verify_private_root(
         root: &ProtectedDirectoryGuard,
         worker_token_user_sid: &str,
@@ -474,7 +628,9 @@ mod windows {
         created: &ProtectedDirectoryGuard,
         security_reopen: &ProtectedDirectoryGuard,
     ) -> Result<(), String> {
-        if opened_identity(created)? != opened_identity(security_reopen)? {
+        if created.strong_physical_identity(LABEL)?
+            != security_reopen.strong_physical_identity(LABEL)?
+        {
             return Err(format!("{LABEL} created child identity changed"));
         }
         Ok(())
@@ -537,6 +693,6 @@ mod windows {
 
 #[cfg(windows)]
 pub(super) use windows::{
-    current_host_sid, same_opened_directory, verify_private_child,
-    verify_private_direct_parent_and_root, verify_private_root,
+    current_host_sid, dangerous_opened_directory_acl_trustees, same_opened_directory,
+    verify_private_child, verify_private_direct_parent_and_root, verify_private_root,
 };
