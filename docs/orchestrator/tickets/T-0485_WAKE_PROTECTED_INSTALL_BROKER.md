@@ -1,5 +1,9 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-15 fixed SCM entry and bounded pipe source checkpoint
+
+A separate fixed `CatDeskWakeInstallBroker` service entry point now exists in source. It requires SCM launch, reports RUNNING before its own SCM preflight, pins the compiled protected root/policy and global lock, proves its running service/process before creating one fixed endpoint, and reads one operator-admitted frame with bounded overlapped connect/read. STOP, deadline, callback error and unwind retire pending I/O safely; a one-shot refusal cannot be reused. It always ends with `WAKE_BROKER_TRANSACTION_GATES_UNAVAILABLE` before INTENT or any install mutation. The full independent Wake suite passes locally (181 library tests plus binaries/integrations), as do strict Clippy, formatting and repeated cancellation-race tests. See `T-0485_R20_FIXED_SCM_BROKER_BOUNDARY_SOURCE.md`. No signed service/namespace was provisioned, trusted dev.84 connected owner or independent exact CI provider is available, and no approved package/pointer/reader transition or fresh Chat53 Wake occurred. Both install guards remain closed.
+
 ## 2026-10-15 guarded exact-resume diagnosis (source only)
 
 The dormant broker ledger now offers a read-only policy-bound inspection under its retained global lock. It creates no record or lease: missing INTENT refuses, INTENT requires empty staging, STAGE_STARTED is sticky attention, and STAGED compares protected five-file bytes/ACLs and seven physical IDs with the ledger. Three integrated tests and the full Wake suite pass locally; see `T-0485_R17_GUARDED_READ_ONLY_EXACT_RESUME.md`. The observation callback still requires a signed broker with trustworthy clock and pinned process/namespace evidence; no recovery mutation, package/pointer/owner/reader transition, exact-source CI or protected activation is enabled. Both install guards remain closed.
