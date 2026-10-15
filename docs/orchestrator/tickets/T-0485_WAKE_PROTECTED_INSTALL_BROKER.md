@@ -1,5 +1,9 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-15 broker-owned exact-CI fetch source checkpoint
+
+Production ledger acceptance now fetches the signed SHA's GitHub runs and attempt jobs itself from fixed WinHTTP paths after signature verification and before INTENT. It rejects non-200, redirect, incomplete, changed, oversized or nonmatching evidence; a process-wide permit prevents concurrent stalled fetch workers. Full Wake tests and strict Clippy/format passed, and a read-only native transport probe matched an older green run. See `T-0485_R21_BROKER_OWNED_EXACT_CI_FETCH_SOURCE.md`. Pushed source `d66d22a` has zero exact workflow/check runs on bounded readback. No signed/provisioned broker, trusted current dev.84 connected owner, approved transaction or protected activation exists; service/install guards stay closed.
+
 ## 2026-10-15 fixed SCM entry and bounded pipe source checkpoint
 
 A separate fixed `CatDeskWakeInstallBroker` service entry point now exists in source. It requires SCM launch, reports RUNNING before its own SCM preflight, pins the compiled protected root/policy and global lock, proves its running service/process before creating one fixed endpoint, and reads one operator-admitted frame with bounded overlapped connect/read. STOP, deadline, callback error and unwind retire pending I/O safely; a one-shot refusal cannot be reused. It always ends with `WAKE_BROKER_TRANSACTION_GATES_UNAVAILABLE` before INTENT or any install mutation. The full independent Wake suite passes locally (181 library tests plus binaries/integrations), as do strict Clippy, formatting and repeated cancellation-race tests. See `T-0485_R20_FIXED_SCM_BROKER_BOUNDARY_SOURCE.md`. No signed service/namespace was provisioned, trusted dev.84 connected owner or independent exact CI provider is available, and no approved package/pointer/reader transition or fresh Chat53 Wake occurred. Both install guards remain closed.
