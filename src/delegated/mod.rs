@@ -28,6 +28,8 @@ pub mod journal;
 pub mod patch_engine;
 pub mod provider_router;
 pub mod runtime;
+#[cfg(windows)]
+pub(crate) mod sol_worker_identity_preflight;
 pub(crate) mod sol_worker_nonce;
 pub(crate) mod sol_worker_output;
 pub(crate) mod sol_worker_staging;

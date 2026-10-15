@@ -1,5 +1,9 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-15 fixed local Sol worker account preflight (source only)
+
+The dormant Windows source adds a zero-argument, read-only diagnostic for the fixed `CatDeskSolWorker` local account. It checks a bounded local account SID/type/name, rejects the host/SYSTEM identity and domain controllers, and requires a complete local-group API response with its documented indirect-membership flag before checking the localized Administrators alias. The fixed account is absent on this host (`NERR_UserNotFound`, 2221), so the real invocation fails closed; no account was created. Five focused Windows tests, strict Clippy, repository-wide formatting and diff checks passed. See `docs/orchestrator/review_bundles/T-0483_R19_FIXED_LOCAL_SOL_WORKER_ACCOUNT_PREFLIGHT.md`. Account existence alone does not prove an actual restricted worker token, account privilege assignments, descendants, or lost write authority. Sol launch, staging integration and the live review/Wake cycle remain held.
+
 ## 2026-10-15 observed worker-token stage binding (source only)
 
 The dormant host staging path can now bind its ACL audit to a pinned opened worker-process primary token rather than a supplied SID. It reads all group/restricting SIDs, privilege and low-integrity/mandatory policy, checks the class-21 filtered-token witness, and revalidates token identity around staging/readback. A distinct process-bound stage type requires this evidence on readback. Thirty-five focused Sol tests pass; an actual restricted copy of the host token is correctly refused because it retains the host `TokenUser` ACL trustee. See `docs/orchestrator/review_bundles/T-0483_R18_OBSERVED_SOL_WORKER_TOKEN_SOURCE.md`. A distinct worker user, proven launched-process/descendant authority, ancestors/inherited handles and crash-safe burn-to-stage remain; Sol launch and live review/Wake are still held.

@@ -432,7 +432,9 @@ mod windows {
     }
 
     fn expected_service_sddl() -> &'static str {
-        "O:SYG:SYD:P(A;;0x000F01FF;;;SY)(A;;0x00020005;;;BA)(A;;0x00020004;;;IU)"
+        // IU may query config/status and READ_CONTROL for preflight, but has
+        // no SERVICE_CHANGE_CONFIG, SERVICE_START/STOP or WRITE_DAC/OWNER.
+        "O:SYG:SYD:P(A;;0x000F01FF;;;SY)(A;;0x00020005;;;BA)(A;;0x00020005;;;IU)"
     }
 
     fn expected_namespace_sddl(service_sid: &str) -> String {
@@ -440,11 +442,13 @@ mod windows {
     }
 
     fn expected_image_parent_sddl(service_sid: &str) -> String {
-        format!("O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;0x001200A9;;;{service_sid})")
+        format!(
+            "O:SYG:SYD:P(A;OICI;FA;;;SY)(A;OICI;0x001200A9;;;{service_sid})(A;OICI;0x001200A9;;;IU)"
+        )
     }
 
     fn expected_image_file_sddl(service_sid: &str) -> String {
-        format!("O:SYG:SYD:P(A;;FA;;;SY)(A;;0x001200A9;;;{service_sid})")
+        format!("O:SYG:SYD:P(A;;FA;;;SY)(A;;0x001200A9;;;{service_sid})(A;;0x001200A9;;;IU)")
     }
 
     fn assert_service(readback: &ServiceReadback) -> Result<()> {
@@ -932,6 +936,15 @@ mod windows {
         canonical_sddl(&expected)
     }
 
+    pub(super) fn canonical_broker_policy_security(service_sid: &str) -> Result<String> {
+        // The interactive client must read this public-key/SID projection to
+        // authenticate the connected service. IU has only FILE_GENERIC_READ:
+        // no write, append/create-instance, delete or DACL/owner control.
+        canonical_sddl(&format!(
+            "O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;{service_sid})(A;;0x00120089;;;IU)"
+        ))
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -982,6 +995,15 @@ mod windows {
                 assert_service(&bad).unwrap_err(),
                 "WAKE_BROKER_SCM_SECURITY_MISMATCH"
             );
+            let mut bad = exact_service();
+            bad.security_sddl = canonical_sddl(
+                "O:SYG:SYD:P(A;;0x000F01FF;;;SY)(A;;0x00020005;;;BA)(A;;0x00020004;;;IU)",
+            )
+            .expect("missing IU query-config right");
+            assert_eq!(
+                assert_service(&bad).unwrap_err(),
+                "WAKE_BROKER_SCM_SECURITY_MISMATCH"
+            );
         }
 
         #[test]
@@ -1028,6 +1050,18 @@ mod windows {
                 "WAKE_BROKER_PROTECTED_ACL_MISMATCH"
             );
             let image_policy = expected_image_file_sddl(sid);
+            let old_image_policy = format!("O:SYG:SYD:P(A;;FA;;;SY)(A;;0x001200A9;;;{sid})");
+            assert_eq!(
+                assert_image_file_policy(
+                    &SecurityReadback {
+                        owner: "S-1-5-18".into(),
+                        sddl: canonical_sddl(&old_image_policy).expect("missing IU read"),
+                    },
+                    &image_policy
+                )
+                .unwrap_err(),
+                "WAKE_BROKER_IMAGE_ACL_MISMATCH"
+            );
             assert!(
                 assert_image_file_policy(
                     &SecurityReadback {
@@ -1084,6 +1118,11 @@ pub(crate) fn protected_security_raw(handle: *mut c_void) -> Result<(String, Str
 #[cfg(windows)]
 pub(crate) fn canonical_protected_security(service_sid: &str, directory: bool) -> Result<String> {
     windows::canonical_protected_security(service_sid, directory)
+}
+
+#[cfg(windows)]
+pub(crate) fn canonical_broker_policy_security(service_sid: &str) -> Result<String> {
+    windows::canonical_broker_policy_security(service_sid)
 }
 
 #[cfg(windows)]

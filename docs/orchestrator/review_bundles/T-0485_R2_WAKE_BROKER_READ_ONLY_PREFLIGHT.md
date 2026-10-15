@@ -18,3 +18,7 @@ On this host, a real read-only invocation exited **1** with `{"error":"WAKE_BROK
 ## Authority still missing
 
 The snapshot does **not** prove Authenticode signature, integrity labels, ancestor effective access, worker and descendant denial, inherited writable handles, service runtime/client-token checks, protected trust-root provisioning, anti-replay ledger, pinned candidate staging, owner-pinned handoff, protected runtime executable readers or approved release. A source diagnostic cannot provision its own broker. Exact source-commit three-job GitHub Windows CI and operator-controlled signed bootstrap are outstanding. No dev.85 installation or fresh Wake acceptance follows from this result.
+
+## Later R8 client-read policy adjustment
+
+The dormant connected client must perform this preflight before sending approval bytes. The exact SCM service descriptor therefore now grants IU query-config/status and `READ_CONTROL` (`0x00020005`), without service mutation rights. The fixed Program Files broker image parent and image file now grant IU read/execute (`0x001200A9`), without write/delete/DACL/owner rights; SYSTEM retains full access and the restricted service SID retains read/execute. Three focused preflight tests still pass, including rejection of the earlier insufficient IU service ACE, missing IU image read and a broad IU writer. These source expectations do not create or modify any installed object; complete ancestor effective-access and actual worker-token denial remain open.

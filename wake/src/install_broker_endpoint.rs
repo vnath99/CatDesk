@@ -1,9 +1,9 @@
 //! Dormant constructor and readback for the fixed Wake install-broker pipe.
 //!
-//! No production code can yet construct `ProvisionedOperatorSid`: it must
-//! eventually come from pinned, independently protected broker policy. The
-//! endpoint's security readback is not an install authorization. A future
-//! service must additionally prove its image/token, serialize each request
+//! The operator SID comes only from the pinned, independently protected
+//! `BrokerProtectedPolicyV1` loader. The endpoint's security readback is not
+//! an install authorization. A future service must prove its image/token,
+//! serialize each request
 //! read with connected-client impersonation, and verify signed approval and
 //! transaction state. This module does not start a service or alter the
 //! protected package namespace.
@@ -14,6 +14,7 @@
 
 use crate::{
     Result,
+    install_broker_policy::BrokerProtectedPolicyV1,
     install_broker_preflight::{
         fixed_broker_service_sid_for_endpoint, inspect_fixed_broker_read_only,
     },
@@ -39,11 +40,12 @@ const PIPE_REJECT_REMOTE_CLIENTS: u32 = 8;
 const PIPE_SERVER_END: u32 = 1;
 const HANDLE_FLAG_INHERIT: u32 = 1;
 const SERVER_FULL_ACCESS: u32 = 0x001f_01ff;
-// Data read/write, read attributes (needed by CreateFileW), and synchronize.
+// Data read/write, read attributes (needed by CreateFileW), READ_CONTROL
+// (connected-client descriptor readback), and synchronize.
 // In particular, exclude 0x4 FILE_CREATE_PIPE_INSTANCE and every generic
 // write/full-access right. An isolated Windows test exercises both exchange
 // and rejection of a competing second server instance under this trustee.
-const OPERATOR_CLIENT_ACCESS: u32 = 0x0010_0083;
+const OPERATOR_CLIENT_ACCESS: u32 = 0x0012_0083;
 const FILE_CREATE_PIPE_INSTANCE: u32 = 4;
 const OWNER_SECURITY_INFORMATION: u32 = 1;
 const DACL_SECURITY_INFORMATION: u32 = 4;
@@ -139,13 +141,6 @@ impl Drop for LocalAllocation {
             unsafe { LocalFree(self.0) };
         }
     }
-}
-
-/// This value has no production constructor until protected operator policy
-/// is installed and independently read back. The endpoint never accepts a SID
-/// from a pipe request, candidate package, environment variable, or CLI.
-pub struct ProvisionedOperatorSid {
-    sid: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -491,19 +486,21 @@ fn create_endpoint(
     })
 }
 
-/// Construct the compiled one-instance endpoint only after a future
-/// protected-policy loader has supplied an opaque operator SID. There is no
-/// such loader or constructor for that value in the current source.
+/// Construct the compiled one-instance endpoint only from the fixed pinned
+/// protected policy. It never accepts a caller-selected SID or pipe name.
 pub fn create_fixed_broker_endpoint_from_protected_policy(
-    policy: &ProvisionedOperatorSid,
+    policy: &BrokerProtectedPolicyV1,
 ) -> Result<FixedBrokerPipeEndpoint> {
     inspect_fixed_broker_read_only()?;
-    let service_sid = fixed_broker_service_sid_for_endpoint()?;
-    if !service_sid.starts_with("S-1-5-80-") {
+    let expected_service_sid = fixed_broker_service_sid_for_endpoint()?;
+    let (service_sid, operator_sid) = policy.checked_endpoint_sids()?;
+    if !service_sid.starts_with("S-1-5-80-") || service_sid != expected_service_sid {
         return Err("WAKE_BROKER_ENDPOINT_POLICY_INVALID".into());
     }
-    require_user_account_sid(&policy.sid)?;
-    create_endpoint(EndpointName::Fixed, SYSTEM_SID, &service_sid, &policy.sid)
+    require_user_account_sid(operator_sid)?;
+    let endpoint = create_endpoint(EndpointName::Fixed, SYSTEM_SID, service_sid, operator_sid)?;
+    policy.revalidate()?;
+    Ok(endpoint)
 }
 
 #[cfg(test)]
