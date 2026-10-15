@@ -1,5 +1,9 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-15 read-only pointer-switch binding checkpoint
+
+The ledger can now retain the new `current.json` physical ID and byte digest across `POINTER_SWITCHED`/`COMPLETE`; a legacy unbound completion remains readable but cannot authorize another INTENT. The locked diagnostic compares that binding with the pinned protected reader, still returning no install authority. Focused broker (132 passed, one ignored), full Wake (197 library passed, one ignored, plus binaries/integrations), full root Rust and strict Clippy/format/build gates passed locally. See `T-0485_R23_POINTER_SWITCH_LEDGER_BINDING_SOURCE.md`. Pushed source `c5b35648223c1bb5e838d0f28a61ef28b0a128810` had zero exact GitHub runs/checks on immediate readback. The production pointer writer, staging parent, first-generation dev.84 anchor, owner/readers transaction, signed broker and exact-current CI remain open; install guards stay closed.
+
 ## 2026-10-15 read-only completed predecessor checkpoint
 
 The broker can now corroborate a nonempty COMPLETE ledger head against pinned protected pointer/package objects under its global lock, requiring exact policy continuity and installed package/manifest/four-artifact physical IDs. An integrated Windows fixture covers durable history, same-length artifact drift, unchanged ledger bytes and no new INTENT. The diagnostic explicitly leaves the staging parent, new pointer switch and first-generation migration anchor unverified; it grants no install authority. Full Wake and root Rust suites, strict Clippy, formatting and all-bin build passed locally. See `T-0485_R22_COMPLETED_PREDECESSOR_PROJECTION_SOURCE.md`. Pushed source `ee5e9e39e644966a9cef211d8b5af1038040c888` had zero exact GitHub runs/checks on immediate readback. The service/install guards remain closed; no dev.85 activation or new Chat53 receipt occurred.

@@ -1,5 +1,9 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-15 retained exited worker identity diagnosis (source only)
+
+The inert stopped candidate now checks its original retained process handle's PID, creation time and exit, and rereads the pre-resume primary token handle against the exact snapshot and restricted policy. The fixed-account preflight brackets that readback. A real same-user child fixture and negative identity cases passed locally; the focused Sol suite passed 83 tests with two ignored helpers, with full root Rust, strict Clippy, formatting and all-bin build passing. See `T-0483_R30_RETAINED_EXITED_SOL_IDENTITY_DIAGNOSTIC.md`. Pushed source `de89d796fa49172ae8be94a696d421fa25486a82` had zero exact GitHub runs/checks on immediate readback. The `CatDeskSolWorker` account is absent, and the diagnostic proves neither escaped descendants nor loss of all write authority. Burn, stage, repository use and real Sol/medium→review_ready→Wake remain closed.
+
 ## 2026-10-15 inert stopped-worker handoff candidate (source only)
 
 Normal bound Job drain can now be consumed into an opaque candidate retaining the opened fixed-worker/token evidence and exact prepared task/nonce/image context. It has no burn, stage, repository-use, review or Wake method. The old live-process staging helper is module-private because it cannot prove post-exit safety. Focused lifecycle (29 passed, one ignored) and staging (13 passed), full root Rust, strict Clippy, formatting and all-bin build passed locally. See `T-0483_R29_INERT_STOPPED_SOL_CANDIDATE_SOURCE.md`. Exact pushed source `84e7d2343fe4931cfe2adbbae1d6cb558f72fa3d` had zero GitHub runs/checks on immediate readback. Fixed-account launch, post-exit identity/lost-write proof, durable burn-to-stage and real Sol/medium→review_ready→Wake remain open.
