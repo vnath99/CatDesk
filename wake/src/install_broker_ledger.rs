@@ -15,8 +15,9 @@
 //! This code cannot prove the trustworthiness of a supplied root or clock.
 //! An empty history cannot attest its own first generation: bootstrap must
 //! bind that first generation to an independently protected predecessor pointer.
-//! `advance` only records a claimed phase; the future broker must prove each
-//! corresponding physical side effect and recovery invariant before calling it.
+//! Production has no generic phase advancement past STAGED. PUBLISHED and
+//! later writes remain fixture-only until their physical side effects and
+//! recovery invariants are proven by typed broker-owned receipts.
 
 use crate::{
     Result,
@@ -32,8 +33,9 @@ use crate::{
     install_broker_durability::{ParentFlushPoint, flush_pinned_directory},
     install_broker_policy::{BrokerProtectedPolicyV1, PolicyVerifiedApprovalV1},
     install_broker_reader::{
-        ProtectedInstallPinV1, ProtectedInstallReadOnlySnapshotV1, PublicationLocationV1,
-        inspect_publication_location_under_guard, pin_protected_install_under_guard,
+        ProtectedInstallPinV1, ProtectedInstallReadOnlySnapshotV1, ProtectedPublishedPackagePinV1,
+        PublicationLocationV1, inspect_publication_location_under_guard,
+        pin_protected_install_under_guard, pin_published_package_under_guard,
     },
     install_broker_stage_writer::BrokerStageReceiptV1,
 };
@@ -303,8 +305,11 @@ fn inspect_publication_for_resume(
     approved: &VerifiedApprovalV1,
     stage: &StageBindingV1,
     mode: ResumeStageInspection<'_>,
-) -> Result<PublicationLocationV1> {
-    match mode {
+) -> Result<(
+    PublicationLocationV1,
+    Option<ProtectedPublishedPackagePinV1>,
+)> {
+    let location = match mode {
         ResumeStageInspection::Protected(_) => {
             let (service_sid, _) = policy.checked_endpoint_sids()?;
             inspect_publication_location_under_guard(root, root_id, approved, stage, service_sid)
@@ -321,7 +326,41 @@ fn inspect_publication_for_resume(
         }
         #[cfg(test)]
         ResumeStageInspection::Fixture => Err("WAKE_LEDGER_RESUME_PHASE_UNSUPPORTED".into()),
-    }
+    }?;
+    let pin = match (&location, mode) {
+        (PublicationLocationV1::Moved(expected), ResumeStageInspection::Protected(_)) => {
+            let (service_sid, _) = policy.checked_endpoint_sids()?;
+            let pin =
+                pin_published_package_under_guard(root, root_id, approved, stage, service_sid)?;
+            if pin.snapshot() != expected.as_ref() {
+                return Err("WAKE_PROTECTED_PUBLICATION_OBJECT_CHANGED".into());
+            }
+            Some(pin)
+        }
+        #[cfg(test)]
+        (
+            PublicationLocationV1::Moved(expected),
+            ResumeStageInspection::FixturePublication(fixture_policy),
+        ) => {
+            let pin = crate::install_broker_reader::pin_published_package_fixture(
+                root,
+                root_id,
+                approved,
+                stage,
+                fixture_policy,
+            )?;
+            if pin.snapshot() != expected.as_ref() {
+                return Err("WAKE_PROTECTED_PUBLICATION_OBJECT_CHANGED".into());
+            }
+            Some(pin)
+        }
+        (PublicationLocationV1::Stage, _) => None,
+        #[cfg(test)]
+        (PublicationLocationV1::Moved(_), ResumeStageInspection::Fixture) => {
+            return Err("WAKE_LEDGER_RESUME_PHASE_UNSUPPORTED".into());
+        }
+    };
+    Ok((location, pin))
 }
 
 /// The exact signature and protected trust root accepted with INTENT. Every
@@ -761,6 +800,7 @@ impl<'a> BrokerLedgerGuard<'a> {
         if current != expected_current || desired != intent.original_desired_state {
             return Err("WAKE_LEDGER_RESUME_PHYSICAL_MISMATCH".into());
         }
+        let mut published_pin = None;
         let (stage, published_package_binding_matched, staging_parent_object_verified, disposition) =
             match phase {
                 InstallPhaseV1::Intent => {
@@ -797,14 +837,18 @@ impl<'a> BrokerLedgerGuard<'a> {
                     let location = match stage_inspection {
                         #[cfg(test)]
                         ResumeStageInspection::Fixture => None,
-                        _ => Some(inspect_publication_for_resume(
-                            self.root,
-                            &root_id,
-                            policy,
-                            approved.verified(),
-                            durable_stage,
-                            stage_inspection,
-                        )?),
+                        _ => {
+                            let (location, pin) = inspect_publication_for_resume(
+                                self.root,
+                                &root_id,
+                                policy,
+                                approved.verified(),
+                                durable_stage,
+                                stage_inspection,
+                            )?;
+                            published_pin = pin;
+                            Some(location)
+                        }
                     };
                     if let Some(PublicationLocationV1::Moved(_)) = location {
                         (
@@ -857,14 +901,16 @@ impl<'a> BrokerLedgerGuard<'a> {
                     let durable_stage = stage_binding
                         .as_ref()
                         .ok_or("WAKE_LEDGER_STAGE_BINDING_INVALID")?;
-                    match inspect_publication_for_resume(
+                    let (location, pin) = inspect_publication_for_resume(
                         self.root,
                         &root_id,
                         policy,
                         approved.verified(),
                         durable_stage,
                         stage_inspection,
-                    )? {
+                    )?;
+                    published_pin = pin;
+                    match location {
                         PublicationLocationV1::Moved(_) => (
                             None,
                             true,
@@ -897,6 +943,9 @@ impl<'a> BrokerLedgerGuard<'a> {
         policy.revalidate()?;
         if root_info(self.root)? != root_id {
             return Err("WAKE_LEDGER_ROOT_CHANGED".into());
+        }
+        if let Some(pin) = &published_pin {
+            pin.revalidate(self.root, &root_id)?;
         }
         Ok(BrokerExactResumeReadbackV1 {
             schema_version: 1,

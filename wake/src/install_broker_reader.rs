@@ -227,6 +227,63 @@ pub(crate) enum PublicationLocationV1 {
     Moved(Box<ProtectedPublishedPackageReadbackV1>),
 }
 
+/// Retains the exact moved package and both namespace parents across a
+/// caller's ledger/history recheck. Every handle denies write and delete
+/// sharing, so this read-only proof must be dropped before any future rename
+/// or other publication mutation. It grants no PUBLISHED record authority.
+pub(crate) struct ProtectedPublishedPackagePinV1 {
+    approval: VerifiedApprovalV1,
+    stage: StageBindingV1,
+    snapshot: ProtectedPublishedPackageReadbackV1,
+    policy: PublicationPolicy,
+    staging: OwnedHandle,
+    packages: OwnedHandle,
+    packages_id: ObjectIdentityV1,
+    package: OwnedHandle,
+    manifest: OwnedHandle,
+    artifacts: [OwnedHandle; 4],
+}
+
+impl ProtectedPublishedPackagePinV1 {
+    pub(crate) fn snapshot(&self) -> &ProtectedPublishedPackageReadbackV1 {
+        &self.snapshot
+    }
+
+    pub(crate) fn revalidate(
+        &self,
+        root: &OwnedHandle,
+        expected_root: &ObjectIdentityV1,
+    ) -> Result<()> {
+        if self.snapshot.protected_root != *expected_root
+            || identity(&file_info(self.staging.as_raw_handle(), true)?)
+                != self.stage.staging_directory
+            || identity(&file_info(self.packages.as_raw_handle(), true)?) != self.packages_id
+            || identity(&file_info(self.package.as_raw_handle(), true)?)
+                != self.stage.candidate_directory
+            || identity(&file_info(self.manifest.as_raw_handle(), false)?)
+                != self.stage.manifest_file
+            || self.artifacts.iter().enumerate().any(|(index, handle)| {
+                file_info(handle.as_raw_handle(), false)
+                    .map(|info| identity(&info))
+                    .ok()
+                    != Some(self.stage.artifacts[index].clone())
+            })
+        {
+            return Err("WAKE_PROTECTED_PUBLICATION_OBJECT_CHANGED".into());
+        }
+        match inspect_publication_location_pinned(
+            root,
+            expected_root,
+            &self.approval,
+            &self.stage,
+            &self.policy,
+        )? {
+            PublicationLocationV1::Moved(snapshot) if *snapshot == self.snapshot => Ok(()),
+            _ => Err("WAKE_PROTECTED_PUBLICATION_OBJECT_CHANGED".into()),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ExactSecurity {
     owner: String,
@@ -986,6 +1043,60 @@ fn inspect_publication_location_pinned(
     }
 }
 
+fn pin_published_package_pinned(
+    root: &OwnedHandle,
+    root_id: &ObjectIdentityV1,
+    approval: &VerifiedApprovalV1,
+    stage: &StageBindingV1,
+    policy: PublicationPolicy,
+) -> Result<ProtectedPublishedPackagePinV1> {
+    let PublicationLocationV1::Moved(snapshot) =
+        inspect_publication_location_pinned(root, root_id, approval, stage, &policy)?
+    else {
+        return Err("WAKE_PROTECTED_PUBLICATION_LOCATION_INVALID".into());
+    };
+    let staging = open_relative(root, "staging", true)?;
+    let packages = open_relative(root, "packages", true)?;
+    let packages_id = identity(&file_info(packages.as_raw_handle(), true)?);
+    let package = open_relative(&packages, &approval.payload().manifest.package_id, true)?;
+    let manifest = open_relative(&package, "manifest.json", false)?;
+    let artifacts = ARTIFACT_NAMES
+        .into_iter()
+        .map(|name| open_relative(&package, name, false))
+        .collect::<Result<Vec<_>>>()?
+        .try_into()
+        .map_err(|_| "WAKE_PROTECTED_READER_INVENTORY_MISMATCH")?;
+    let pin = ProtectedPublishedPackagePinV1 {
+        approval: approval.clone(),
+        stage: stage.clone(),
+        snapshot: *snapshot,
+        policy,
+        staging,
+        packages,
+        packages_id,
+        package,
+        manifest,
+        artifacts,
+    };
+    pin.revalidate(root, root_id)?;
+    Ok(pin)
+}
+
+/// Retain an already moved package while the broker's ledger lock and pinned
+/// policy are held. The caller must still bind this supplied approval to its
+/// protected policy and `stage` to durable STAGED history. This proof is
+/// deliberately read-only and cannot authorize a PUBLISHED record.
+pub(crate) fn pin_published_package_under_guard(
+    root: &OwnedHandle,
+    root_id: &ObjectIdentityV1,
+    approval: &VerifiedApprovalV1,
+    stage: &StageBindingV1,
+    service_sid: &str,
+) -> Result<ProtectedPublishedPackagePinV1> {
+    let policy = PublicationPolicy::production(service_sid)?;
+    pin_published_package_pinned(root, root_id, approval, stage, policy)
+}
+
 /// Classify the exact STAGED object while the broker's ledger lock and root
 /// pin are held. This is a physical diagnostic only. `VerifiedApprovalV1`
 /// alone does not prove protected-policy key provenance; the caller must also
@@ -1055,6 +1166,17 @@ pub(crate) fn inspect_publication_location_fixture(
     policy: &PublicationFixturePolicyV1,
 ) -> Result<PublicationLocationV1> {
     inspect_publication_location_pinned(root, root_id, approval, stage, &policy.0)
+}
+
+#[cfg(test)]
+pub(crate) fn pin_published_package_fixture(
+    root: &OwnedHandle,
+    root_id: &ObjectIdentityV1,
+    approval: &VerifiedApprovalV1,
+    stage: &StageBindingV1,
+    policy: &PublicationFixturePolicyV1,
+) -> Result<ProtectedPublishedPackagePinV1> {
+    pin_published_package_pinned(root, root_id, approval, stage, policy.0.clone())
 }
 
 fn inspect_pinned(

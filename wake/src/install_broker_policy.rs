@@ -1711,7 +1711,9 @@ pub(crate) mod tests {
 
     #[test]
     fn guarded_publication_seam_distinguishes_exact_move_and_ambiguous_restart() {
-        use crate::install_broker_reader::publication_fixture_policy_before_rename;
+        use crate::install_broker_reader::{
+            pin_published_package_fixture, publication_fixture_policy_before_rename,
+        };
 
         let (fixture, policy, envelope, observed, expected, manifest) = resume_fixture();
         let candidate = fixture.path.join("staging").join("candidate");
@@ -1816,6 +1818,8 @@ pub(crate) mod tests {
         let publication_policy =
             publication_fixture_policy_before_rename(&fixture.root, approved.verified(), &stage)
                 .expect("stage ACL and package-parent fixture policy");
+        let verified = approved.verified().clone();
+        let stage_for_pin = stage.clone();
         lease
             .record_staged_fixture(stage)
             .expect("durable fixture STAGED");
@@ -1835,6 +1839,15 @@ pub(crate) mod tests {
         let mut later = observed.clone();
         later.now_utc_seconds = 2_001;
         {
+            let pin_moved = || {
+                pin_published_package_fixture(
+                    &fixture.root,
+                    &fixture.root_id,
+                    &verified,
+                    &stage_for_pin,
+                    &publication_policy,
+                )
+            };
             let inspect = || {
                 let guard = BrokerLedgerGuard::acquire(&fixture.root)?;
                 guard.inspect_publication_seam_fixture(
@@ -1865,12 +1878,46 @@ pub(crate) mod tests {
                 moved.disposition,
                 "STAGED_PACKAGE_MOVED_PUBLISHED_RECORD_MISSING_ATTENTION_NO_INSTALL_AUTHORITY"
             );
+            let pin = pin_moved().expect("retained exact moved package pin");
+            assert_eq!(
+                pin.snapshot().package_directory,
+                stage_for_pin.candidate_directory
+            );
+            assert!(std::fs::write(package.join("adapter.py"), b"adapter-codz").is_err());
+            let blocked = fixture.path.join("packages").join("blocked-fixture");
+            assert_eq!(
+                blocked
+                    .parent()
+                    .expect("blocked rename parent")
+                    .canonicalize()
+                    .expect("resolved blocked rename parent"),
+                fixture_packages
+            );
+            assert_eq!(
+                package
+                    .parent()
+                    .expect("package rename parent")
+                    .canonicalize()
+                    .expect("resolved package rename parent"),
+                fixture_packages
+            );
+            assert!(std::fs::rename(&package, &blocked).is_err());
+            pin.revalidate(&fixture.root, &fixture.root_id)
+                .expect("reopened exact package while pins retained");
+            drop(pin);
+            assert!(
+                !fixture
+                    .path
+                    .join("install-transaction-00000000000000000002-published.json")
+                    .exists()
+            );
 
             std::fs::create_dir(&candidate).expect("ambiguous second slot");
             assert_eq!(
                 inspect().unwrap_err(),
                 "WAKE_PROTECTED_PUBLICATION_LOCATION_INVALID"
             );
+            assert!(pin_moved().is_err());
             std::fs::remove_dir(&candidate).expect("remove exact extra slot");
 
             let displaced = fixture.path.join("packages").join("displaced-fixture");
@@ -1887,6 +1934,7 @@ pub(crate) mod tests {
                 inspect().unwrap_err(),
                 "WAKE_PROTECTED_READER_HASH_MISMATCH"
             );
+            assert!(pin_moved().is_err());
             std::fs::write(&artifact, RESUME_BLOBS[2]).expect("restore signed bytes");
             std::fs::write(package.join("unexpected"), b"x").expect("extra package entry");
             assert_eq!(
@@ -1910,6 +1958,7 @@ pub(crate) mod tests {
                 inspect().unwrap_err(),
                 "WAKE_PROTECTED_PUBLICATION_BINDING_INVALID"
             );
+            assert!(pin_moved().is_err());
             remove_exact_package(&package);
             checked_rename(&displaced, &package, &fixture_packages, &fixture_packages);
 
@@ -1926,6 +1975,7 @@ pub(crate) mod tests {
                 inspect().unwrap_err(),
                 "WAKE_PROTECTED_PUBLICATION_BINDING_INVALID"
             );
+            assert!(pin_moved().is_err());
             std::fs::remove_dir(fixture.path.join("staging"))
                 .expect("remove replacement staging parent");
             checked_rename(
@@ -1959,10 +2009,18 @@ pub(crate) mod tests {
                 inspect().unwrap_err(),
                 "WAKE_BROKER_PUBLICATION_PHASE_MISMATCH"
             );
+            assert!(pin_moved().is_err());
             checked_rename(&candidate, &package, &fixture_staging, &fixture_packages);
             inspect().expect("exact published location restored");
+            let pin = pin_moved().expect("retain package for ACL drift check");
             set_file_dacl(&artifact, "D:P(A;;FA;;;SY)(A;;FA;;;WD)");
+            assert_eq!(
+                pin.revalidate(&fixture.root, &fixture.root_id).unwrap_err(),
+                "WAKE_PROTECTED_READER_ACL_MISMATCH"
+            );
+            drop(pin);
             assert_eq!(inspect().unwrap_err(), "WAKE_PROTECTED_READER_ACL_MISMATCH");
+            assert!(pin_moved().is_err());
         }
         let ledger_after: Vec<Vec<u8>> = ["intent", "stage-started", "staged"]
             .into_iter()
