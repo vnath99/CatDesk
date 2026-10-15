@@ -102,20 +102,30 @@ pub fn isolated_fixture_router(
 /// The reviewed candidate owner passes its already staged snapshot directly
 /// into this isolated listener. Requests cannot supply or replace it.
 #[allow(dead_code)]
-pub fn isolated_fixture_snapshot_router(
+pub async fn isolated_fixture_snapshot_router(
     app_state: SharedState,
     mcp_path: String,
     ui_events: UnboundedSender<ServerUiEvent>,
     auth_token: String,
     snapshot: Arc<crate::isolated_fixture_snapshot::StagedCandidateSnapshot>,
-) -> Router {
-    isolated_fixture_router_with_snapshot(
+) -> Result<Router, String> {
+    let app_root = { app_state.lock().await.workspace_root.clone() };
+    let canonical_app_root =
+        std::fs::canonicalize(&app_root).map_err(|_| "isolated fixture app root unavailable")?;
+    if canonical_app_root != snapshot.root.path() {
+        return Err("isolated fixture app and snapshot root differ".into());
+    }
+    let sid =
+        crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+            .map_err(|_| "isolated fixture owner identity unavailable")?;
+    snapshot.verify_serving_owner(&sid)?;
+    Ok(isolated_fixture_router_with_snapshot(
         app_state,
         mcp_path,
         ui_events,
         auth_token,
         Some(snapshot),
-    )
+    ))
 }
 
 fn isolated_fixture_router_with_snapshot(
@@ -163,7 +173,28 @@ async fn post_isolated_fixture_mcp(
         }
     };
     let response = if let Some(snapshot) = s.fixture_snapshot.as_ref() {
-        mcp::handle_isolated_fixture_request_with_snapshot(&request, snapshot).await
+        let sid = match crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid() {
+            Ok(sid) => sid,
+            Err(_) => return Json(mcp::JsonRpcResponse::error(request.id.clone(), -32602, "isolated fixture owner identity unavailable".into())).into_response(),
+        };
+        if let Err(reason) = snapshot.verify_serving_owner(&sid) {
+            return Json(mcp::JsonRpcResponse::error(
+                request.id.clone(),
+                -32602,
+                reason,
+            ))
+            .into_response();
+        }
+        let response = mcp::handle_isolated_fixture_request_with_snapshot(&request, snapshot).await;
+        if let Err(reason) = snapshot.verify_serving_owner(&sid) {
+            return Json(mcp::JsonRpcResponse::error(
+                request.id.clone(),
+                -32602,
+                reason,
+            ))
+            .into_response();
+        }
+        response
     } else {
         let fixture_root = { s.app.lock().await.workspace_root.clone() };
         mcp::handle_isolated_fixture_request(&request, &fixture_root).await
@@ -961,11 +992,20 @@ mod tests {
 
         let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
         let root = temp.join(format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple()));
-        std::fs::create_dir(&root).expect("create own fixture");
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .expect("interactive owner SID");
+        let mut pinned =
+            ProtectedDirectoryGuard::acquire(&temp, "snapshot HTTP test").expect("pin temp");
+        pinned
+            .create_owner_only_fixture_child(
+                root.file_name().unwrap().to_str().unwrap(),
+                &sid,
+                "snapshot HTTP test",
+            )
+            .expect("create owner-only fixture");
         let original = b"reviewed source";
         std::fs::write(root.join("Cargo.toml"), original).expect("write own source leaf");
-        let pinned =
-            ProtectedDirectoryGuard::acquire(&root, "snapshot HTTP test").expect("pin own root");
         let manifest = SnapshotManifest {
             schema_version: 1,
             source_repository: SOURCE_REPOSITORY.into(),
@@ -989,14 +1029,31 @@ mod tests {
             root.join("config.toml"),
         )
         .expect("fixture app");
+        let app_state = Arc::new(Mutex::new(app));
         let (tx, _rx) = unbounded_channel();
+        app_state.lock().await.workspace_root = temp.to_string_lossy().into_owned();
+        assert!(
+            isolated_fixture_snapshot_router(
+                app_state.clone(),
+                "/dev/mcp".into(),
+                tx.clone(),
+                "fixture-private-token".into(),
+                snapshot.clone(),
+            )
+            .await
+            .is_err(),
+            "a different app root must not gain snapshot authority"
+        );
+        app_state.lock().await.workspace_root = root.to_string_lossy().into_owned();
         let router = isolated_fixture_snapshot_router(
-            Arc::new(Mutex::new(app)),
+            app_state,
             "/dev/mcp".into(),
             tx,
             "fixture-private-token".into(),
             snapshot.clone(),
-        );
+        )
+        .await
+        .expect("bind exact owner-only snapshot and app root");
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("loopback listener");
@@ -1043,6 +1100,11 @@ mod tests {
                 .expect("approved JSON");
             assert!(response["result"]["isError"].is_null(), "{tool}");
         }
+        let renamed = temp.join(format!("catdesk-retired-test-{}", Uuid::new_v4().simple()));
+        assert!(
+            std::fs::rename(&root, &renamed).is_err(),
+            "pinned root must not be replaceable while HTTP listener owns it"
+        );
         std::fs::write(root.join("Cargo.toml"), b"changed source")
             .expect("mutate own unleased leaf");
         std::fs::write(root.join("new.txt"), original).expect("inject own foreign leaf");
@@ -1070,6 +1132,66 @@ mod tests {
         std::fs::remove_file(root.join("new.txt")).expect("remove own injected leaf");
         std::fs::remove_file(root.join("Cargo.toml")).expect("remove own source leaf");
         std::fs::remove_dir(root).expect("remove empty own root");
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn isolated_snapshot_router_refuses_foreign_acl() {
+        use crate::isolated_fixture_manifest::{SOURCE_REPOSITORY, SnapshotFile, SnapshotManifest};
+        use crate::windows_protected_fs::ProtectedDirectoryGuard;
+        use sha2::{Digest, Sha256};
+        use uuid::Uuid;
+
+        let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
+        let name = format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple());
+        let root = temp.join(&name);
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .expect("interactive owner SID");
+        let wrong = format!("O:{sid}G:{sid}D:P(A;OICI;FA;;;{sid})(A;OICI;FA;;;SY)(A;OICI;FA;;;BU)");
+        let mut pinned =
+            ProtectedDirectoryGuard::acquire(&temp, "snapshot HTTP test").expect("pin temp");
+        pinned
+            .create_child_with_security_descriptor(&name, &wrong, "snapshot HTTP test")
+            .expect("create only own foreign-ACL fixture");
+        let manifest = SnapshotManifest {
+            schema_version: 1,
+            source_repository: SOURCE_REPOSITORY.into(),
+            source_commit: "abcdef0123456789abcdef0123456789abcdef01".into(),
+            snapshot_id: Uuid::new_v4().to_string(),
+            files: vec![SnapshotFile {
+                fixture_leaf: "Cargo.toml".into(),
+                source_path: "Cargo.toml".into(),
+                size_bytes: 0,
+                sha256: format!("{:x}", Sha256::digest([])),
+            }],
+        };
+        let snapshot = Arc::new(
+            crate::isolated_fixture_snapshot::unleased_snapshot_for_adversarial_test(
+                pinned, manifest,
+            ),
+        );
+        let app = AppState::new_isolated_fixture(
+            0,
+            root.to_string_lossy().into_owned(),
+            root.join("config.toml"),
+        )
+        .expect("fixture app");
+        let (tx, _rx) = unbounded_channel();
+        assert!(
+            isolated_fixture_snapshot_router(
+                Arc::new(Mutex::new(app)),
+                "/dev/mcp".into(),
+                tx,
+                "fixture-private-token".into(),
+                snapshot.clone(),
+            )
+            .await
+            .is_err(),
+            "foreign DACL must not start snapshot listener"
+        );
+        drop(snapshot);
+        std::fs::remove_dir(root).expect("remove empty own foreign-ACL fixture");
     }
 
     fn unique_temp_path(prefix: &str) -> PathBuf {

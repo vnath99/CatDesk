@@ -1,5 +1,9 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — T0478 snapshot serving owner gate
+
+- `docs/orchestrator/review_bundles/T-0478_R3B4C3_SNAPSHOT_SERVING_OWNER_BINDING.md` records source-only app/snapshot root and OS-token owner/DACL checks at router start and around requests. There is still no reviewed candidate launch command; do not use the existing pathname fixture listener as a reviewed worker.
+
 ## 2026-10-14 — T0478 snapshot-owned HTTP source
 
 - `docs/orchestrator/review_bundles/T-0478_R3B4C2_SNAPSHOT_HTTP_LIFETIME.md` records a source-only isolated router and real loopback HTTP test. There is no new installed command or reviewed candidate launcher. The old `--isolated-dev-fixture` command still uses its pathname fixture path; it must not be represented as the manifest-bound reviewed worker.

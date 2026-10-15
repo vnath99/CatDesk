@@ -572,6 +572,21 @@ pub(crate) struct CandidateRetirementInventory {
 /// Ordinary fixture MCP routing must NOT call this by manufacturing a manifest
 /// from a request: only the future owner of StagedCandidateSnapshot may use it.
 impl StagedCandidateSnapshot {
+    /// Recheck the pinned root's exact owner and protected DACL at the HTTP
+    /// authority boundary. A pathname, manifest hash or prior check alone
+    /// cannot authorize later serving after an ACL change.
+    pub(crate) fn verify_serving_owner(&self, sid: &str) -> Result<(), String> {
+        verify_disposable_root(&self.root)?;
+        validate_manifest(&self.manifest)?;
+        #[cfg(windows)]
+        return self.root.verify_owner_only_fixture_descriptor(sid, LABEL);
+        #[cfg(not(windows))]
+        {
+            let _ = sid;
+            Err("isolated fixture owner verification is Windows-only".into())
+        }
+    }
+
     pub(crate) fn read_manifest_leaf(&self, leaf: &str) -> Result<Vec<u8>, String> {
         verify_disposable_root(&self.root)?;
         validate_manifest(&self.manifest)?;
