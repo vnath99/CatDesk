@@ -1,0 +1,11 @@
+# T0478 R3B4-C2 — Snapshot-owned isolated HTTP listener
+
+Date: 2026-10-14. Source-only change; no installed daemon, WakeHost, signer, tunnel, or browser state changed.
+
+The protected directory handle owner now uses Rust's `OwnedHandle`. Every successful raw Windows handle acquisition is wrapped immediately, so rejected attributes and later errors release it automatically. `PinnedDirectory` no longer needs a manual `Drop` or an unchecked `Send`/`Sync` implementation. A compile-time test verifies the complete `StagedCandidateSnapshot` is `Send + Sync` through standard handle ownership.
+
+`isolated_fixture_snapshot_router` accepts a producer-held `Arc<StagedCandidateSnapshot>` and retains it in Axum server state for the listener's lifetime. Authenticated read/search calls go through the manifest-bound dispatcher; the client supplies only a requested leaf and search pattern. The older disposable fixture router retains its existing pathname mode for backward compatibility. No general CatDesk router or global tool is added to the reviewed snapshot surface.
+
+A real loopback HTTP test constructs an isolated in-memory app state and a test-owned snapshot. It verifies bearer authentication, denial of `run_command`, successful read/search of an approved leaf, and rejection of changed bytes and a newly injected leaf through both tools. It deliberately omits retained file leases so the per-request digest gate is exercised after mutation. The test cleans up only its exact own files and empty directory. A prior test run exposed the general test app constructor writing `config.toml`; the final test uses the isolated in-memory constructor, and the single identified residue was inspected and removed by exact path.
+
+This router is not yet reached by a reviewed candidate launcher. T0478-C still requires a trusted producer to call the witnessed staging path, bind the resulting snapshot to the listener, recheck owner/DACL and root identity for serving, and test hardlink/reparse/replacement and shutdown behavior. T0478-D bounded PID/port lifecycle, T0479 versioned worker/LKG, P0/P1 and independent exact-commit Windows CI remain. The repository currently rejects Actions dispatch with HTTP 422 (`Actions has been disabled for this repository`).

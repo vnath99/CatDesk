@@ -29,15 +29,15 @@ use std::os::windows::ffi::OsStrExt;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
-use std::os::windows::io::AsRawHandle;
-#[cfg(windows)]
 use std::os::windows::io::FromRawHandle;
+#[cfg(windows)]
+use std::os::windows::io::{AsRawHandle, OwnedHandle};
 
 /// Handle-pinned directory identity used by protected filesystem consumers.
 pub(crate) struct PinnedDirectory {
     pub(crate) path: PathBuf,
     #[cfg(windows)]
-    pub(crate) handle: *mut c_void,
+    pub(crate) handle: OwnedHandle,
     #[cfg(windows)]
     pub(crate) identity: (u32, u32, u32),
 }
@@ -103,15 +103,10 @@ impl PinnedDirectory {
             if handle.is_null() || handle == INVALID_HANDLE_VALUE {
                 return Err(format!("{label} identity is unavailable"));
             }
-            let information = match handle_information(handle, label) {
-                Ok(information) => information,
-                Err(_) => {
-                    unsafe { CloseHandle(handle) };
-                    return Err(format!("{label} is unsafe"));
-                }
-            };
+            let handle = unsafe { OwnedHandle::from_raw_handle(handle) };
+            let information = handle_information(handle.as_raw_handle(), label)
+                .map_err(|_| format!("{label} is unsafe"))?;
             if information.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-                unsafe { CloseHandle(handle) };
                 return Err(format!("{label} is unsafe"));
             }
             Ok(Self {
@@ -205,7 +200,7 @@ impl PinnedDirectory {
         let descriptor = security_descriptor_from_sddl(sddl, label)?;
         let result = (|| {
             let handle = nt_open_relative_with_security_descriptor_for_domain(
-                parent.handle,
+                parent.handle.as_raw_handle(),
                 component,
                 FILE_LIST_DIRECTORY
                     | FILE_ADD_FILE
@@ -219,12 +214,12 @@ impl PinnedDirectory {
                 descriptor,
                 Some("reviewed source snapshot"),
             )?;
-            let information = handle_information(handle, label)?;
+            let handle = unsafe { OwnedHandle::from_raw_handle(handle) };
+            let information = handle_information(handle.as_raw_handle(), label)?;
             if information.file_attributes
                 & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)
                 != FILE_ATTRIBUTE_DIRECTORY
             {
-                unsafe { CloseHandle(handle) };
                 return Err(format!("{label} is unsafe"));
             }
             Ok(Self {
@@ -288,7 +283,7 @@ impl PinnedDirectory {
         #[cfg(windows)]
         {
             let handle = nt_open_relative_with_security_descriptor_for_domain(
-                parent.handle,
+                parent.handle.as_raw_handle(),
                 component,
                 FILE_LIST_DIRECTORY
                     | FILE_ADD_FILE
@@ -313,12 +308,12 @@ impl PinnedDirectory {
                 std::ptr::null_mut(),
                 Some("protected filesystem"),
             )?;
-            let information = handle_information(handle, label)?;
+            let handle = unsafe { OwnedHandle::from_raw_handle(handle) };
+            let information = handle_information(handle.as_raw_handle(), label)?;
             if information.file_attributes
                 & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)
                 != FILE_ATTRIBUTE_DIRECTORY
             {
-                unsafe { CloseHandle(handle) };
                 return Err(format!("{label} is unsafe"));
             }
             Ok(Self {
@@ -352,7 +347,7 @@ impl PinnedDirectory {
             let ok = unsafe {
                 DuplicateHandle(
                     GetCurrentProcess(),
-                    self.handle,
+                    self.handle.as_raw_handle(),
                     GetCurrentProcess(),
                     &mut duplicate,
                     0,
@@ -365,7 +360,7 @@ impl PinnedDirectory {
             }
             Ok(Self {
                 path: self.path.clone(),
-                handle: duplicate,
+                handle: unsafe { OwnedHandle::from_raw_handle(duplicate) },
                 identity: self.identity,
             })
         }
@@ -380,7 +375,7 @@ impl PinnedDirectory {
         classify_pinned_directory(&self.path, label)?;
         #[cfg(windows)]
         {
-            let information = handle_information(self.handle, label)
+            let information = handle_information(self.handle.as_raw_handle(), label)
                 .map_err(|_| format!("{label} identity drifted"))?;
             if information.file_attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
                 || self.identity
@@ -394,13 +389,6 @@ impl PinnedDirectory {
             }
         }
         Ok(())
-    }
-}
-
-#[cfg(windows)]
-impl Drop for PinnedDirectory {
-    fn drop(&mut self) {
-        unsafe { CloseHandle(self.handle) };
     }
 }
 
@@ -418,7 +406,7 @@ impl PinnedParent for PinnedDirectory {
     #[cfg(windows)]
     fn protected_fs_last_handle(&self) -> Result<*mut c_void, String> {
         self.assert_stable("protected pinned directory")?;
-        Ok(self.handle)
+        Ok(self.handle.as_raw_handle())
     }
 }
 
@@ -849,7 +837,12 @@ impl ProtectedDirectoryGuard {
     #[cfg(windows)]
     pub(crate) fn last_handle(&self, label: &str) -> Result<*mut c_void, String> {
         self.assert_stable(label)?;
-        Ok(self.directories.last().expect("guard has root").handle)
+        Ok(self
+            .directories
+            .last()
+            .expect("guard has root")
+            .handle
+            .as_raw_handle())
     }
 
     /// Renames the exact opened direct child under the exact pinned parent.
@@ -2463,8 +2456,8 @@ mod tests {
         assert_eq!(count(snapshot, "pub(crate) struct PinnedDirectory"), 0);
         assert_eq!(count(shared, "impl PinnedDirectory {"), 1);
         assert_eq!(count(snapshot, "impl PinnedDirectory {"), 0);
-        assert_eq!(count(shared, "impl Drop for PinnedDirectory {"), 1);
-        assert_eq!(count(snapshot, "impl Drop for PinnedDirectory {"), 0);
+        assert_eq!(count(shared, "pub(crate) handle: OwnedHandle,"), 1);
+        assert_eq!(count(snapshot, "pub(crate) handle: OwnedHandle,"), 0);
         assert_eq!(
             count(shared, "pub(crate) struct ProtectedDirectoryGuard"),
             1

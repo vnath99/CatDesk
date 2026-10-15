@@ -1,5 +1,9 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — T0478 snapshot-owned HTTP source
+
+- `docs/orchestrator/review_bundles/T-0478_R3B4C2_SNAPSHOT_HTTP_LIFETIME.md` records a source-only isolated router and real loopback HTTP test. There is no new installed command or reviewed candidate launcher. The old `--isolated-dev-fixture` command still uses its pathname fixture path; it must not be represented as the manifest-bound reviewed worker.
+
 ## 2026-10-14 — T0478 manifest-bound MCP source
 
 - `docs/orchestrator/review_bundles/T-0478_R3B4C1_MANIFEST_BOUND_MCP_DISPATCH.md` describes a producer-owned snapshot dispatch function and adversarial tests. There is no new operator command or serving route yet. The existing `--isolated-dev-fixture` listener still uses its older pathname-based read/search path; do not treat it as a reviewed candidate worker.

@@ -459,6 +459,18 @@ pub(crate) struct StagedCandidateSnapshot {
     _leases: Vec<RetainedReviewedArtifact>,
 }
 
+#[cfg(test)]
+pub(crate) fn unleased_snapshot_for_adversarial_test(
+    root: ProtectedDirectoryGuard,
+    manifest: SnapshotManifest,
+) -> StagedCandidateSnapshot {
+    StagedCandidateSnapshot {
+        root,
+        manifest,
+        _leases: Vec::new(),
+    }
+}
+
 /// A stage that created an exact disposable root but could not finish. The
 /// caller keeps its pinned owner handle and manifest; it must record attention
 /// and may not infer deletion authority from the generated pathname.
@@ -869,6 +881,13 @@ mod tests {
     use super::*;
     use crate::isolated_fixture_manifest::{SOURCE_REPOSITORY, SnapshotFile};
     use sha2::{Digest, Sha256};
+
+    #[cfg(windows)]
+    #[test]
+    fn staged_snapshot_uses_thread_safe_owned_handles() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<StagedCandidateSnapshot>();
+    }
 
     #[tokio::test]
     async fn staged_bytes_roundtrip_only_inside_test_owned_root() {

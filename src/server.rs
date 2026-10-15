@@ -31,6 +31,7 @@ struct ServerState {
     devtools: Option<Arc<Mutex<DevtoolsBridge>>>,
     ui_events: UnboundedSender<ServerUiEvent>,
     mcp_auth_token: Option<String>,
+    fixture_snapshot: Option<Arc<crate::isolated_fixture_snapshot::StagedCandidateSnapshot>>,
 }
 
 /// Build the axum router.
@@ -47,6 +48,7 @@ pub fn router(
         devtools,
         ui_events,
         mcp_auth_token,
+        fixture_snapshot: None,
     };
     Router::new()
         .route("/", get(health))
@@ -94,11 +96,41 @@ pub fn isolated_fixture_router(
     ui_events: UnboundedSender<ServerUiEvent>,
     auth_token: String,
 ) -> Router {
+    isolated_fixture_router_with_snapshot(app_state, mcp_path, ui_events, auth_token, None)
+}
+
+/// The reviewed candidate owner passes its already staged snapshot directly
+/// into this isolated listener. Requests cannot supply or replace it.
+#[allow(dead_code)]
+pub fn isolated_fixture_snapshot_router(
+    app_state: SharedState,
+    mcp_path: String,
+    ui_events: UnboundedSender<ServerUiEvent>,
+    auth_token: String,
+    snapshot: Arc<crate::isolated_fixture_snapshot::StagedCandidateSnapshot>,
+) -> Router {
+    isolated_fixture_router_with_snapshot(
+        app_state,
+        mcp_path,
+        ui_events,
+        auth_token,
+        Some(snapshot),
+    )
+}
+
+fn isolated_fixture_router_with_snapshot(
+    app_state: SharedState,
+    mcp_path: String,
+    ui_events: UnboundedSender<ServerUiEvent>,
+    auth_token: String,
+    snapshot: Option<Arc<crate::isolated_fixture_snapshot::StagedCandidateSnapshot>>,
+) -> Router {
     let state = ServerState {
         app: app_state,
         devtools: None,
         ui_events,
         mcp_auth_token: Some(auth_token),
+        fixture_snapshot: snapshot,
     };
     Router::new()
         .route(&mcp_path, post(post_isolated_fixture_mcp))
@@ -130,8 +162,13 @@ async fn post_isolated_fixture_mcp(
             );
         }
     };
-    let fixture_root = { s.app.lock().await.workspace_root.clone() };
-    match mcp::handle_isolated_fixture_request(&request, &fixture_root).await {
+    let response = if let Some(snapshot) = s.fixture_snapshot.as_ref() {
+        mcp::handle_isolated_fixture_request_with_snapshot(&request, snapshot).await
+    } else {
+        let fixture_root = { s.app.lock().await.workspace_root.clone() };
+        mcp::handle_isolated_fixture_request(&request, &fixture_root).await
+    };
+    match response {
         Some(response) => Json(response).into_response(),
         None => StatusCode::ACCEPTED.into_response(),
     }
@@ -868,6 +905,7 @@ mod tests {
             devtools: None,
             ui_events: tx,
             mcp_auth_token: Some("fixture-private-token".into()),
+            fixture_snapshot: None,
         };
         let call = |name: &str| {
             Bytes::from(
@@ -911,6 +949,127 @@ mod tests {
             2
         );
         let _ = std::fs::remove_dir_all(workspace_root);
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn isolated_snapshot_http_rehashes_read_and_search() {
+        use crate::isolated_fixture_manifest::{SOURCE_REPOSITORY, SnapshotFile, SnapshotManifest};
+        use crate::windows_protected_fs::ProtectedDirectoryGuard;
+        use sha2::{Digest, Sha256};
+        use uuid::Uuid;
+
+        let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
+        let root = temp.join(format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple()));
+        std::fs::create_dir(&root).expect("create own fixture");
+        let original = b"reviewed source";
+        std::fs::write(root.join("Cargo.toml"), original).expect("write own source leaf");
+        let pinned =
+            ProtectedDirectoryGuard::acquire(&root, "snapshot HTTP test").expect("pin own root");
+        let manifest = SnapshotManifest {
+            schema_version: 1,
+            source_repository: SOURCE_REPOSITORY.into(),
+            source_commit: "abcdef0123456789abcdef0123456789abcdef01".into(),
+            snapshot_id: Uuid::new_v4().to_string(),
+            files: vec![SnapshotFile {
+                fixture_leaf: "Cargo.toml".into(),
+                source_path: "Cargo.toml".into(),
+                size_bytes: original.len() as u64,
+                sha256: format!("{:x}", Sha256::digest(original)),
+            }],
+        };
+        let snapshot = Arc::new(
+            crate::isolated_fixture_snapshot::unleased_snapshot_for_adversarial_test(
+                pinned, manifest,
+            ),
+        );
+        let app = AppState::new_isolated_fixture(
+            0,
+            root.to_string_lossy().into_owned(),
+            root.join("config.toml"),
+        )
+        .expect("fixture app");
+        let (tx, _rx) = unbounded_channel();
+        let router = isolated_fixture_snapshot_router(
+            Arc::new(Mutex::new(app)),
+            "/dev/mcp".into(),
+            tx,
+            "fixture-private-token".into(),
+            snapshot.clone(),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("loopback listener");
+        let url = format!("http://{}/dev/mcp", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, router).await });
+        let client = reqwest::Client::new();
+        let unauthorized = client
+            .post(&url)
+            .json(&json!({
+                "jsonrpc":"2.0", "id":0, "method":"tools/call",
+                "params":{"name":"read","arguments":{"path":"Cargo.toml"}}
+            }))
+            .send()
+            .await
+            .expect("unauthorized HTTP call");
+        assert_eq!(unauthorized.status(), reqwest::StatusCode::UNAUTHORIZED);
+        let global: Value = client
+            .post(&url)
+            .bearer_auth("fixture-private-token")
+            .json(&json!({
+                "jsonrpc":"2.0", "id":0, "method":"tools/call",
+                "params":{"name":"run_command","arguments":{}}
+            }))
+            .send()
+            .await
+            .expect("global tool HTTP call")
+            .json()
+            .await
+            .expect("global denial JSON");
+        assert_eq!(global["error"]["code"], -32602);
+        for tool in ["read", "search"] {
+            let response: Value = client
+                .post(&url)
+                .bearer_auth("fixture-private-token")
+                .json(&json!({
+                    "jsonrpc":"2.0", "id":1, "method":"tools/call",
+                    "params":{"name":tool,"arguments":{"path":"Cargo.toml","pattern":"reviewed"}}
+                }))
+                .send()
+                .await
+                .expect("approved HTTP call")
+                .json()
+                .await
+                .expect("approved JSON");
+            assert!(response["result"]["isError"].is_null(), "{tool}");
+        }
+        std::fs::write(root.join("Cargo.toml"), b"changed source")
+            .expect("mutate own unleased leaf");
+        std::fs::write(root.join("new.txt"), original).expect("inject own foreign leaf");
+        for tool in ["read", "search"] {
+            for leaf in ["Cargo.toml", "new.txt"] {
+                let response: Value = client
+                    .post(&url)
+                    .bearer_auth("fixture-private-token")
+                    .json(&json!({
+                        "jsonrpc":"2.0", "id":2, "method":"tools/call",
+                        "params":{"name":tool,"arguments":{"path":leaf,"pattern":"reviewed"}}
+                    }))
+                    .send()
+                    .await
+                    .expect("denied HTTP call")
+                    .json()
+                    .await
+                    .expect("denied JSON");
+                assert_eq!(response["result"]["isError"], true, "{tool} {leaf}");
+            }
+        }
+        server.abort();
+        let _ = server.await;
+        drop(snapshot);
+        std::fs::remove_file(root.join("new.txt")).expect("remove own injected leaf");
+        std::fs::remove_file(root.join("Cargo.toml")).expect("remove own source leaf");
+        std::fs::remove_dir(root).expect("remove empty own root");
     }
 
     fn unique_temp_path(prefix: &str) -> PathBuf {
@@ -1156,6 +1315,7 @@ mod tests {
             devtools: None,
             ui_events: ui_tx,
             mcp_auth_token: None,
+            fixture_snapshot: None,
         };
 
         let response = post_mcp(
@@ -1229,6 +1389,7 @@ mod tests {
             devtools: None,
             ui_events: ui_tx,
             mcp_auth_token: Some("catdesk-test-token-1234567890".into()),
+            fixture_snapshot: None,
         };
 
         let rejected = post_mcp(
@@ -1445,6 +1606,7 @@ mod tests {
             devtools: None,
             ui_events: ui_tx,
             mcp_auth_token: None,
+            fixture_snapshot: None,
         };
 
         let listed = post_mcp(
@@ -1550,6 +1712,7 @@ mod tests {
             devtools: None,
             ui_events: ui_tx,
             mcp_auth_token: None,
+            fixture_snapshot: None,
         };
 
         let response = post_mcp(
@@ -1601,6 +1764,7 @@ mod tests {
             devtools: None,
             ui_events: ui_tx,
             mcp_auth_token: None,
+            fixture_snapshot: None,
         };
         let mut headers = HeaderMap::new();
         headers.insert(CATDESK_SELF_CHECK_HEADER, "1".parse().expect("header"));

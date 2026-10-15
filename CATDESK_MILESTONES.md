@@ -1,3 +1,8 @@
+## 2026-10-14 — T0478 snapshot-owned HTTP listener source (CURRENT)
+
+- Shared pinned directories now own Windows handles with standard `OwnedHandle`; rejected opens close automatically, and a compile-time test proves the staged snapshot is `Send + Sync` without unchecked trait implementations. A dedicated isolated Axum router retains `Arc<StagedCandidateSnapshot>` and dispatches authenticated read/search through the immutable manifest. Real loopback HTTP tests pass authorized reads/search, deny missing bearer/global tools, and reject changed/new leaves through both tools. Focused snapshot 15/15, HTTP 1/1, full local Rust all-features suite (main 1,081 passed, 26 ignored), strict Clippy/fmt/diff pass. See `docs/orchestrator/review_bundles/T-0478_R3B4C2_SNAPSHOT_HTTP_LIFETIME.md`.
+- No reviewed candidate launcher invokes the router yet. T0478-C still needs trusted witnessed staging-to-listener binding, owner/DACL revalidation, root identity and hardlink/reparse/replacement tests; T0478-D and independent Windows CI remain. Installed Wake, signed image and official tunnel unchanged.
+
 ## 2026-10-14 — T0478 manifest-bound MCP dispatch bridge (CURRENT)
 
 - Added a separate source-only isolated MCP dispatcher that takes the producer-owned `StagedCandidateSnapshot` directly. Both read and search now use its pinned manifest leaf reader, rejecting unknown/new leaves and changed size/hash before exposing bytes; JSON-RPC cannot supply the manifest. Focused adversarial tests pass, strict Clippy passes, and the full local Rust all-features suite exits 0 (main binary 1,079 passed, 26 ignored). See `docs/orchestrator/review_bundles/T-0478_R3B4C1_MANIFEST_BOUND_MCP_DISPATCH.md`.
