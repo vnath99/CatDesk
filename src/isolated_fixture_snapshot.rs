@@ -80,10 +80,23 @@ struct FixtureOwnerRuntimeAttentionV1 {
 }
 
 #[cfg(windows)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct FixtureOwnerRetirementV1 {
+    schema_version: u32,
+    serving: FixtureOwnerServingV1,
+    status: String,
+}
+
+#[cfg(windows)]
 fn valid_runtime_attention_code(code: &str) -> bool {
     matches!(
         code,
-        "listener_exited" | "signal_failed" | "shutdown_failed" | "source_leases_active"
+        "listener_exited"
+            | "signal_failed"
+            | "shutdown_failed"
+            | "source_leases_active"
+            | "retirement_failed"
     )
 }
 
@@ -139,7 +152,17 @@ fn read_fixture_owner_serving(
     root: &ProtectedDirectoryGuard,
     sid: &str,
 ) -> Result<FixtureOwnerServingV1, String> {
-    let (intent, binding) = read_fixture_owner_records(journal, manifest, Some(root), sid)?;
+    read_fixture_owner_serving_record(journal, manifest, Some(root), sid)
+}
+
+#[cfg(windows)]
+fn read_fixture_owner_serving_record(
+    journal: &ProtectedDirectoryGuard,
+    manifest: &SnapshotManifest,
+    root: Option<&ProtectedDirectoryGuard>,
+    sid: &str,
+) -> Result<FixtureOwnerServingV1, String> {
+    let (intent, binding) = read_fixture_owner_records(journal, manifest, root, sid)?;
     let binding = binding.ok_or("fixture owner root binding missing")?;
     let bytes =
         read_relative_regular_unique(journal, "serving.json", MAX_OWNER_RECORD_BYTES, LABEL)?;
@@ -160,6 +183,118 @@ fn read_fixture_owner_serving(
         return Err("fixture owner serving identity drifted".into());
     }
     Ok(record)
+}
+
+#[cfg(windows)]
+fn read_fixture_owner_retirement_record(
+    journal: &ProtectedDirectoryGuard,
+    manifest: &SnapshotManifest,
+    root: Option<&ProtectedDirectoryGuard>,
+    sid: &str,
+    leaf: &'static str,
+    expected_status: &'static str,
+) -> Result<FixtureOwnerRetirementV1, String> {
+    if !matches!(
+        (leaf, expected_status),
+        ("retirement-started.json", "started")
+            | ("retirement-outcome.json", "retired" | "attention")
+    ) {
+        return Err("fixture owner retirement record type invalid".into());
+    }
+    let serving = read_fixture_owner_serving_record(journal, manifest, root, sid)?;
+    let bytes = read_relative_regular_unique(journal, leaf, MAX_OWNER_RECORD_BYTES, LABEL)?;
+    let record: FixtureOwnerRetirementV1 =
+        serde_json::from_slice(&bytes).map_err(|_| "fixture owner retirement record invalid")?;
+    if bytes
+        != serde_json::to_vec(&record)
+            .map_err(|_| "fixture owner retirement encoding unavailable")?
+        || record.schema_version != 1
+        || record.serving != serving
+        || record.status != expected_status
+    {
+        return Err("fixture owner retirement record drifted".into());
+    }
+    Ok(record)
+}
+
+#[cfg(windows)]
+fn write_fixture_owner_retirement_started(
+    journal: &ProtectedDirectoryGuard,
+    manifest: &SnapshotManifest,
+    root: &ProtectedDirectoryGuard,
+    sid: &str,
+) -> Result<FixtureOwnerRetirementV1, String> {
+    let serving = read_fixture_owner_serving(journal, manifest, root, sid)?;
+    let record = FixtureOwnerRetirementV1 {
+        schema_version: 1,
+        serving,
+        status: "started".into(),
+    };
+    let bytes =
+        serde_json::to_vec(&record).map_err(|_| "fixture owner retirement encoding unavailable")?;
+    if bytes.len() as u64 > MAX_OWNER_RECORD_BYTES {
+        return Err("fixture owner retirement record too large".into());
+    }
+    write_new_regular_in(journal, "retirement-started.json", &bytes, LABEL)?;
+    if read_fixture_owner_retirement_record(
+        journal,
+        manifest,
+        Some(root),
+        sid,
+        "retirement-started.json",
+        "started",
+    )? != record
+    {
+        return Err("fixture owner retirement start readback drifted".into());
+    }
+    Ok(record)
+}
+
+#[cfg(windows)]
+fn write_fixture_owner_retirement_outcome(
+    journal: &ProtectedDirectoryGuard,
+    manifest: &SnapshotManifest,
+    sid: &str,
+    started: &FixtureOwnerRetirementV1,
+    status: &'static str,
+) -> Result<(), String> {
+    if !matches!(status, "retired" | "attention") {
+        return Err("fixture owner retirement outcome invalid".into());
+    }
+    if read_fixture_owner_retirement_record(
+        journal,
+        manifest,
+        None,
+        sid,
+        "retirement-started.json",
+        "started",
+    )? != *started
+    {
+        return Err("fixture owner retirement start drifted".into());
+    }
+    let record = FixtureOwnerRetirementV1 {
+        schema_version: 1,
+        serving: started.serving.clone(),
+        status: status.into(),
+    };
+    let bytes =
+        serde_json::to_vec(&record).map_err(|_| "fixture owner retirement encoding unavailable")?;
+    if bytes.len() as u64 > MAX_OWNER_RECORD_BYTES {
+        return Err("fixture owner retirement outcome too large".into());
+    }
+    write_new_regular_in(journal, "retirement-outcome.json", &bytes, LABEL)?;
+    if read_fixture_owner_retirement_record(
+        journal,
+        manifest,
+        None,
+        sid,
+        "retirement-outcome.json",
+        status,
+    )? != record
+    {
+        return Err("fixture owner retirement outcome readback drifted".into());
+    }
+    Ok(())
 }
 
 #[cfg(windows)]
@@ -950,84 +1085,142 @@ impl StagedCandidateSnapshot {
     }
 
     /// Consume one producer-owned snapshot and retire only its exact
-    /// manifest files. This remains dormant until the fixture owner lifecycle
-    /// records durable failure/attention and owns the entire operation.
+    /// manifest files. A witnessed launcher also persists a write-ahead
+    /// attempt and a terminal outcome in the owner-only journal.
     #[cfg(windows)]
     pub(crate) fn retire_owned_root(self) -> Result<(), String> {
-        let evidence = self.review_retirement_object_identities()?;
+        let attention_error = |reason: String| {
+            if self.owner_journal.is_none() {
+                return reason;
+            }
+            match self.mark_runtime_attention("retirement_failed") {
+                Ok(()) => format!("{reason}; durable retirement attention recorded"),
+                Err(error) => format!("{reason}; retirement attention unavailable: {error}"),
+            }
+        };
+        let evidence = self
+            .review_retirement_object_identities()
+            .map_err(&attention_error)?;
         let sid =
             crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
-                .map_err(|_| "disposable snapshot owner identity unavailable")?;
+                .map_err(|_| {
+                    attention_error("disposable snapshot owner identity unavailable".into())
+                })?;
         self.root
-            .verify_owner_only_fixture_descriptor(&sid, LABEL)?;
+            .verify_owner_only_fixture_descriptor(&sid, LABEL)
+            .map_err(&attention_error)?;
+        let started = self
+            .owner_journal
+            .as_ref()
+            .map(|owner| {
+                write_fixture_owner_retirement_started(
+                    &owner.guard,
+                    &self.manifest,
+                    &self.root,
+                    &owner.sid,
+                )
+            })
+            .transpose()
+            .map_err(&attention_error)?;
         let StagedCandidateSnapshot {
             root,
             manifest,
             _leases,
-            ..
+            owner_journal,
         } = self;
-        let expected = _leases
-            .iter()
-            .map(|lease| lease.identity.clone())
-            .collect::<Vec<_>>();
-        drop(_leases);
-
-        // Open and validate every DELETE-capable child handle before the
-        // first disposition. An absent, changed, aliased or leased child
-        // refuses the whole operation while all manifest files remain.
-        let mut opened = Vec::with_capacity(manifest.files.len());
-        for (entry, identity) in manifest.files.iter().zip(&expected) {
-            opened.push(open_reviewed_regular_for_delete(
-                &root,
-                &entry.fixture_leaf,
-                identity,
-                MAX_FILE_BYTES,
-                LABEL,
-            )?);
-        }
-        if query_relative_directory_names(&root)?
-            .iter()
-            .map(|(name, attributes)| (name.as_str(), *attributes & (0x10 | 0x400)))
-            .collect::<Vec<_>>()
-            != manifest
-                .files
+        let outcome_manifest = manifest.clone();
+        let result = (|| -> Result<(), String> {
+            let expected = _leases
                 .iter()
-                .map(|entry| (entry.fixture_leaf.as_str(), 0))
-                .collect::<Vec<_>>()
-        {
-            return Err("disposable snapshot inventory drifted before retirement".into());
-        }
-        root.verify_owner_only_fixture_descriptor(&sid, LABEL)?;
-        if evidence.snapshot_id != manifest.snapshot_id || evidence.files.len() != opened.len() {
-            return Err("disposable snapshot retirement evidence drifted".into());
-        }
+                .map(|lease| lease.identity.clone())
+                .collect::<Vec<_>>();
+            drop(_leases);
 
-        for file in opened {
-            dispose_opened_object(file.as_raw_handle().cast(), LABEL)?;
-            drop(file);
+            // Open and validate every DELETE-capable child handle before the
+            // first disposition. An absent, changed, aliased or leased child
+            // refuses the whole operation while all manifest files remain.
+            let mut opened = Vec::with_capacity(manifest.files.len());
+            for (entry, identity) in manifest.files.iter().zip(&expected) {
+                opened.push(open_reviewed_regular_for_delete(
+                    &root,
+                    &entry.fixture_leaf,
+                    identity,
+                    MAX_FILE_BYTES,
+                    LABEL,
+                )?);
+            }
+            if query_relative_directory_names(&root)?
+                .iter()
+                .map(|(name, attributes)| (name.as_str(), *attributes & (0x10 | 0x400)))
+                .collect::<Vec<_>>()
+                != manifest
+                    .files
+                    .iter()
+                    .map(|entry| (entry.fixture_leaf.as_str(), 0))
+                    .collect::<Vec<_>>()
+            {
+                return Err("disposable snapshot inventory drifted before retirement".into());
+            }
+            root.verify_owner_only_fixture_descriptor(&sid, LABEL)?;
+            if evidence.snapshot_id != manifest.snapshot_id || evidence.files.len() != opened.len()
+            {
+                return Err("disposable snapshot retirement evidence drifted".into());
+            }
+
+            for file in opened {
+                dispose_opened_object(file.as_raw_handle().cast(), LABEL)?;
+                drop(file);
+            }
+            if !query_relative_directory_names(&root)?.is_empty() {
+                return Err("disposable snapshot root not empty after file disposition".into());
+            }
+            root.verify_owner_only_fixture_descriptor(&sid, LABEL)?;
+            let root = root.reopen_direct_child_for_delete(LABEL)?;
+            root.verify_owner_only_fixture_descriptor(&sid, LABEL)?;
+            if !query_relative_directory_names(&root)?.is_empty() {
+                return Err("disposable snapshot root changed before disposition".into());
+            }
+            let mut parent = root.direct_parent_guard(LABEL)?;
+            let name = root
+                .path()
+                .file_name()
+                .and_then(|name| name.to_str())
+                .ok_or("disposable snapshot root name unavailable")?
+                .to_owned();
+            dispose_opened_object(root.last_handle(LABEL)?, LABEL)?;
+            drop(root);
+            if parent.descend_optional_existing(&name, LABEL)? {
+                return Err("disposable snapshot root identity drifted after disposition".into());
+            }
+            Ok(())
+        })();
+        if let (Some(owner), Some(started)) = (owner_journal, started) {
+            let status = if result.is_ok() {
+                "retired"
+            } else {
+                "attention"
+            };
+            let outcome = write_fixture_owner_retirement_outcome(
+                &owner.guard,
+                &outcome_manifest,
+                &owner.sid,
+                &started,
+                status,
+            );
+            return match (result, outcome) {
+                (Ok(()), Ok(())) => Ok(()),
+                (Ok(()), Err(error)) => Err(format!(
+                    "disposable snapshot root retired but outcome unavailable: {error}"
+                )),
+                (Err(reason), Ok(())) => {
+                    Err(format!("{reason}; durable retirement attention recorded"))
+                }
+                (Err(reason), Err(error)) => Err(format!(
+                    "{reason}; retirement attention unavailable: {error}"
+                )),
+            };
         }
-        if !query_relative_directory_names(&root)?.is_empty() {
-            return Err("disposable snapshot root not empty after file disposition".into());
-        }
-        root.verify_owner_only_fixture_descriptor(&sid, LABEL)?;
-        let root = root.reopen_direct_child_for_delete(LABEL)?;
-        root.verify_owner_only_fixture_descriptor(&sid, LABEL)?;
-        if !query_relative_directory_names(&root)?.is_empty() {
-            return Err("disposable snapshot root changed before disposition".into());
-        }
-        let mut parent = root.direct_parent_guard(LABEL)?;
-        let name = root
-            .path()
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or("disposable snapshot root name unavailable")?
-            .to_owned();
-        dispose_opened_object(root.last_handle(LABEL)?, LABEL)?;
-        drop(root);
-        if parent.descend_optional_existing(&name, LABEL)? {
-            return Err("disposable snapshot root identity drifted after disposition".into());
-        }
-        Ok(())
+        result
     }
 }
 
@@ -1502,6 +1695,199 @@ mod tests {
             .retire_owned_root()
             .expect("retire only exact owned files and root");
         assert!(!temp.join(name).exists(), "owned root must be absent");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn witnessed_owner_retirement_records_terminal_outcome_without_root() {
+        let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .expect("interactive owner SID");
+        let bytes = b"[package]\nname='retirement'\n".to_vec();
+        let manifest = SnapshotManifest {
+            schema_version: 1,
+            source_repository: SOURCE_REPOSITORY.into(),
+            source_commit: "abcdef0123456789abcdef0123456789abcdef01".into(),
+            snapshot_id: Uuid::new_v4().to_string(),
+            files: vec![SnapshotFile {
+                fixture_leaf: "Cargo.toml".into(),
+                source_path: "Cargo.toml".into(),
+                size_bytes: bytes.len() as u64,
+                sha256: format!("{:x}", Sha256::digest(&bytes)),
+            }],
+        };
+        let journal_name = format!(
+            "catdesk-fixture-journal-{}",
+            Uuid::parse_str(&manifest.snapshot_id).unwrap().simple()
+        );
+        let (journal, intent, intent_bytes) =
+            create_fixture_owner_intent(&manifest, &sid).expect("persist intent");
+        let parent = ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp");
+        let (root, manifest) =
+            create_owned_candidate_root(parent, intent.root_name.clone(), &sid, manifest)
+                .unwrap_or_else(|_| panic!("create exact root"));
+        let binding = bind_fixture_owner_root(&journal, &intent, &intent_bytes, &root, &sid)
+            .expect("bind opened root");
+        let mut staged =
+            finish_owned_candidate_stage(root, manifest.clone(), &[("Cargo.toml".into(), bytes)])
+                .unwrap_or_else(|failure| panic!("stage fixture: {}", failure.reason));
+        staged.owner_journal = Some(FixtureOwnerJournal {
+            guard: journal,
+            intent: intent.clone(),
+            intent_bytes,
+            binding,
+            sid: sid.clone(),
+        });
+        let generation = staged.mark_serving(3209).expect("persist serving record");
+        staged.retire_owned_root().expect("retire exact owned root");
+        assert!(!temp.join(&intent.root_name).exists());
+
+        let mut reopened = ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp");
+        reopened
+            .descend_existing_for_security(&journal_name, LABEL)
+            .expect("reopen exact journal");
+        let started = read_fixture_owner_retirement_record(
+            &reopened,
+            &manifest,
+            None,
+            &sid,
+            "retirement-started.json",
+            "started",
+        )
+        .expect("read write-ahead retirement marker");
+        assert_eq!(started.serving.runtime_generation, generation);
+        let retired = read_fixture_owner_retirement_record(
+            &reopened,
+            &manifest,
+            None,
+            &sid,
+            "retirement-outcome.json",
+            "retired",
+        )
+        .expect("read terminal outcome after root deletion");
+        assert_eq!(retired.serving, started.serving);
+        assert!(
+            read_fixture_owner_retirement_record(
+                &reopened,
+                &manifest,
+                None,
+                &sid,
+                "retirement-outcome.json",
+                "attention"
+            )
+            .is_err(),
+            "retired outcome cannot be misread as attention"
+        );
+        drop(reopened);
+        for leaf in [
+            "retirement-outcome.json",
+            "retirement-started.json",
+            "serving.json",
+            "root.json",
+            "intent.json",
+        ] {
+            std::fs::remove_file(temp.join(&journal_name).join(leaf))
+                .expect("remove only exact test journal file");
+        }
+        std::fs::remove_dir(temp.join(journal_name)).expect("remove empty test journal");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn witnessed_owner_retirement_failure_preserves_replacement_and_attention() {
+        let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .expect("interactive owner SID");
+        let bytes = b"[package]\nname='retirement-failure'\n".to_vec();
+        let manifest = SnapshotManifest {
+            schema_version: 1,
+            source_repository: SOURCE_REPOSITORY.into(),
+            source_commit: "abcdef0123456789abcdef0123456789abcdef01".into(),
+            snapshot_id: Uuid::new_v4().to_string(),
+            files: vec![SnapshotFile {
+                fixture_leaf: "Cargo.toml".into(),
+                source_path: "Cargo.toml".into(),
+                size_bytes: bytes.len() as u64,
+                sha256: format!("{:x}", Sha256::digest(&bytes)),
+            }],
+        };
+        let journal_name = format!(
+            "catdesk-fixture-journal-{}",
+            Uuid::parse_str(&manifest.snapshot_id).unwrap().simple()
+        );
+        let (journal, intent, intent_bytes) =
+            create_fixture_owner_intent(&manifest, &sid).expect("persist intent");
+        let parent = ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp");
+        let (root, manifest) =
+            create_owned_candidate_root(parent, intent.root_name.clone(), &sid, manifest)
+                .unwrap_or_else(|_| panic!("create exact root"));
+        let binding = bind_fixture_owner_root(&journal, &intent, &intent_bytes, &root, &sid)
+            .expect("bind opened root");
+        let mut staged =
+            finish_owned_candidate_stage(root, manifest.clone(), &[("Cargo.toml".into(), bytes)])
+                .unwrap_or_else(|failure| panic!("stage fixture: {}", failure.reason));
+        staged.owner_journal = Some(FixtureOwnerJournal {
+            guard: journal,
+            intent: intent.clone(),
+            intent_bytes,
+            binding,
+            sid: sid.clone(),
+        });
+        staged.mark_serving(3209).expect("persist serving record");
+        let original = temp.join(&intent.root_name);
+        let moved = temp.join(format!("catdesk-retired-test-{}", Uuid::new_v4().simple()));
+        let hook_original = original.clone();
+        let hook_moved = moved.clone();
+        crate::windows_protected_fs::replace_reopen_delete_test_hook(Some(Box::new(move || {
+            std::fs::rename(&hook_original, &hook_moved).expect("move empty owned root");
+            std::fs::create_dir(&hook_original).expect("create foreign replacement");
+        })));
+        let error = staged
+            .retire_owned_root()
+            .expect_err("replacement must block retirement");
+        assert!(error.contains("durable retirement attention recorded"));
+        assert!(original.is_dir(), "replacement must remain");
+        assert!(moved.is_dir(), "original root must remain at moved path");
+
+        let mut reopened = ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp");
+        reopened
+            .descend_existing_for_security(&journal_name, LABEL)
+            .expect("reopen exact journal");
+        let started = read_fixture_owner_retirement_record(
+            &reopened,
+            &manifest,
+            None,
+            &sid,
+            "retirement-started.json",
+            "started",
+        )
+        .expect("read retirement start");
+        let attention = read_fixture_owner_retirement_record(
+            &reopened,
+            &manifest,
+            None,
+            &sid,
+            "retirement-outcome.json",
+            "attention",
+        )
+        .expect("read durable attention outcome");
+        assert_eq!(attention.serving, started.serving);
+        drop(reopened);
+        for leaf in [
+            "retirement-outcome.json",
+            "retirement-started.json",
+            "serving.json",
+            "root.json",
+            "intent.json",
+        ] {
+            std::fs::remove_file(temp.join(&journal_name).join(leaf))
+                .expect("remove only exact test journal file");
+        }
+        std::fs::remove_dir(temp.join(journal_name)).expect("remove empty test journal");
+        std::fs::remove_dir(original).expect("remove empty replacement");
+        std::fs::remove_dir(moved).expect("remove empty original root");
     }
 
     #[cfg(windows)]

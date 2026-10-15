@@ -1,3 +1,8 @@
+## 2026-10-14 — T0478 retirement write-ahead and terminal outcome (CURRENT)
+
+- The owner-bound reviewed-candidate retirement transaction now retains its independent owner-only journal while consuming the snapshot. It writes a create-only `retirement-started.json` after root/manifest/lease preflight and before any file disposition, then a create-only `retirement-outcome.json` with `retired` or `attention` after the exact-handle transaction. Preflight failures attempt a distinct runtime attention record. Windows tests prove a retired outcome can be read after the exact root is gone and a same-name replacement survives while an attention outcome is recorded.
+- The terminal record is forensic evidence; the independent journal remains and is not yet safely retired. Power-loss durability, cross-process exclusion, owned PID/port supervision and successful CI-witnessed launch remain. Exact GitHub Windows CI is unavailable while Actions dispatch returns HTTP 422. No installed runtime or tunnel changed. See `docs/orchestrator/review_bundles/T-0478_R3B4C8_RETIREMENT_OUTCOME.md`.
+
 ## 2026-10-14 — T0478 pre-serving startup attention (CURRENT)
 
 - Once witnessed staging has returned an owner-bound snapshot, app setup, router creation, listener bind/inspection and serving-record failures now attempt a create-only, owner-only `attention.json` with fixed `startup_failed` code. The snapshot method revalidates the manifest, journal, intent and exact opened root identity before writing. A Windows test persists the record, rejects a second write, drops both handles and reopens the exact objects to verify the attention code.

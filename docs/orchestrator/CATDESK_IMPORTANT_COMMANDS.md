@@ -1,5 +1,10 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — T0478 retirement outcome evidence
+
+- Reviewed-candidate stop now leaves create-only `retirement-started.json` and `retirement-outcome.json` in its owner-only journal. `retired` means the in-process exact-handle transaction reported success; `attention` means it failed and may have partially disposed files. Preserve the journal for reviewed recovery. Neither record permits name-scanned cleanup or proves power-loss durability. See `docs/orchestrator/review_bundles/T-0478_R3B4C8_RETIREMENT_OUTCOME.md`.
+
+
 ## 2026-10-14 — T0478 reviewed-candidate startup attention
 
 - After witnessed staging, startup failures before ready now write a create-only, root-bound `attention.json` with `startup_failed` where owner/journal verification succeeds. It is forensic evidence only. A crash before the handler or a corrupted owner journal may still leave no attention record; preserve the exact journal and root for reviewed recovery. See `docs/orchestrator/review_bundles/T-0478_R3B4C7_STARTUP_FAILURE_ATTENTION.md`.
