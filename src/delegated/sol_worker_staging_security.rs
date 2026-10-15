@@ -29,6 +29,15 @@ pub(super) fn verify_private_child(
 }
 
 #[cfg(not(windows))]
+pub(super) fn verify_private_direct_parent_and_root(
+    _parent: &ProtectedDirectoryGuard,
+    _root: &ProtectedDirectoryGuard,
+    _worker_token_user_sid: &str,
+) -> Result<(), String> {
+    Err(format!("{LABEL} requires Windows"))
+}
+
+#[cfg(not(windows))]
 pub(super) fn same_opened_directory(
     _created: &ProtectedDirectoryGuard,
     _security_reopen: &ProtectedDirectoryGuard,
@@ -441,6 +450,26 @@ mod windows {
         verify_private_root(root, worker_token_user_sid)
     }
 
+    /// Read-only check of exactly one supplied, pinned parent and its direct
+    /// child staging root. The caller must separately establish every earlier
+    /// ancestor and exclude handles copied before the worker stopped.
+    pub(crate) fn verify_private_direct_parent_and_root(
+        parent: &ProtectedDirectoryGuard,
+        root: &ProtectedDirectoryGuard,
+        worker_token_user_sid: &str,
+    ) -> Result<(), String> {
+        if !root.is_direct_child_of(parent) {
+            return Err(format!("{LABEL} staging root is not a direct child"));
+        }
+        audit(parent, worker_token_user_sid, true)?;
+        audit(root, worker_token_user_sid, true)?;
+        audit(parent, worker_token_user_sid, true)?;
+        if !root.is_direct_child_of(parent) {
+            return Err(format!("{LABEL} staging parent changed"));
+        }
+        Ok(())
+    }
+
     pub(crate) fn same_opened_directory(
         created: &ProtectedDirectoryGuard,
         security_reopen: &ProtectedDirectoryGuard,
@@ -508,5 +537,6 @@ mod windows {
 
 #[cfg(windows)]
 pub(super) use windows::{
-    current_host_sid, same_opened_directory, verify_private_child, verify_private_root,
+    current_host_sid, same_opened_directory, verify_private_child,
+    verify_private_direct_parent_and_root, verify_private_root,
 };

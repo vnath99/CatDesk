@@ -184,6 +184,19 @@ impl BoundFixedLocalSolWorkerProcessV1 {
         )?;
         self.observed_token.require_retained_exited_snapshot()
     }
+
+    /// Compare supplied ACL trustees with the exact retained exited token,
+    /// bracketing that comparison with fixed-account readback. This does not
+    /// establish that the caller supplied every relevant ancestor.
+    pub(crate) fn reject_retained_exited_acl_trustees(
+        &self,
+        trustees: &[&str],
+    ) -> Result<(), String> {
+        self.require_retained_exited_identity()?;
+        self.observed_token
+            .reject_retained_exited_acl_trustees(trustees)?;
+        self.require_retained_exited_identity()
+    }
 }
 
 fn require_same_account_and_token(

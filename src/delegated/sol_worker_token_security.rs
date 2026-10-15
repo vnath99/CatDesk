@@ -284,6 +284,24 @@ impl ObservedRestrictedWorkerProcessTokenV1 {
         self.revalidate()?;
         reject_snapshot_stage_acl_trustees(&self.snapshot, trustees)
     }
+
+    /// Read-only trustee comparison against the original token after the
+    /// original process has exited. It cannot rule out another process or a
+    /// writable handle copied before exit.
+    pub(crate) fn reject_retained_exited_acl_trustees(
+        &self,
+        trustees: &[&str],
+    ) -> Result<(), String> {
+        let snapshot = read_retained_exited_snapshot(
+            &self.process,
+            &self.token,
+            self.process_id,
+            self.creation_time,
+            &self.snapshot,
+        )?;
+        enforce_restricted_policy(&snapshot)?;
+        reject_snapshot_stage_acl_trustees(&snapshot, trustees)
+    }
 }
 
 pub(super) fn require_same_opened_process_object(

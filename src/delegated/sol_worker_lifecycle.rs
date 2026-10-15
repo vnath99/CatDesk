@@ -45,6 +45,7 @@ use super::sol_worker_nonce::{
     SolWorkerNonceAuthorityV1, issue_sol_worker_nonce, read_active_sol_worker_nonce,
 };
 use super::sol_worker_output::validate_sol_worker_allowed_paths;
+use super::sol_worker_staging_security;
 
 const LABEL: &str = "Sol worker lifecycle";
 const CREATE_SUSPENDED: u32 = 0x0000_0004;
@@ -1420,6 +1421,40 @@ impl StoppedBoundFixedWorkerCandidateV1 {
         self._prepared_run
             .diagnose_retained_post_run_context(&self._executable)
     }
+
+    /// Diagnostic only. Audit one supplied pinned stage root and its direct
+    /// parent against the original exited worker token. This cannot show that
+    /// all earlier ancestors are safe or that no outside-Job process kept a
+    /// writable handle. It returns no stage or repository-use authority.
+    pub(crate) fn diagnose_supplied_stage_direct_parent_acl(
+        &self,
+        parent: &ProtectedDirectoryGuard,
+        root: &ProtectedDirectoryGuard,
+    ) -> Result<(), String> {
+        self.diagnose_retained_exited_identity()?;
+        self.diagnose_retained_job_empty()?;
+        let host_sid = sol_worker_staging_security::current_host_sid()?;
+        self._bound_worker
+            .reject_retained_exited_acl_trustees(&[&host_sid, "S-1-5-18"])?;
+        sol_worker_staging_security::verify_private_direct_parent_and_root(
+            parent,
+            root,
+            self._bound_worker.token_user_sid(),
+        )?;
+        if host_sid != sol_worker_staging_security::current_host_sid()? {
+            return Err(format!(
+                "{LABEL} host token changed during stage ACL diagnosis"
+            ));
+        }
+        self._bound_worker
+            .reject_retained_exited_acl_trustees(&[&host_sid, "S-1-5-18"])?;
+        self.diagnose_retained_job_empty()?;
+        sol_worker_staging_security::verify_private_direct_parent_and_root(
+            parent,
+            root,
+            self._bound_worker.token_user_sid(),
+        )
+    }
 }
 
 impl DrainedBoundFixedWorkerJobV1 {
@@ -2254,6 +2289,12 @@ mod tests {
             StoppedBoundFixedWorkerCandidateV1::diagnose_retained_job_empty;
         let _: fn(&StoppedBoundFixedWorkerCandidateV1) -> Result<(), String> =
             StoppedBoundFixedWorkerCandidateV1::diagnose_retained_host_context;
+        let _: fn(
+            &StoppedBoundFixedWorkerCandidateV1,
+            &ProtectedDirectoryGuard,
+            &ProtectedDirectoryGuard,
+        ) -> Result<(), String> =
+            StoppedBoundFixedWorkerCandidateV1::diagnose_supplied_stage_direct_parent_acl;
     }
 
     #[test]

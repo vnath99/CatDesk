@@ -953,6 +953,89 @@ mod tests {
     }
 
     #[test]
+    fn supplied_direct_parent_and_stage_root_must_both_be_pinned_and_private() {
+        let fixture = Fixture::new();
+        let private = fixture.private_root();
+        let host_sid = security::current_host_sid().expect("host SID");
+        let system_ace = if host_sid == "S-1-5-18" {
+            String::new()
+        } else {
+            "(A;OICI;FA;;;SY)".into()
+        };
+        let sddl = format!("O:{host_sid}G:{host_sid}D:P(A;OICI;FA;;;{host_sid}){system_ace}");
+        let name = "direct-stage-root";
+        let mut created = private
+            .guard
+            .try_clone(LABEL)
+            .expect("clone private parent");
+        created
+            .create_child_with_security_descriptor(name, &sddl, LABEL)
+            .expect("create private direct child");
+        let mut opened = private
+            .guard
+            .try_clone(LABEL)
+            .expect("clone private parent");
+        opened
+            .descend_existing_for_security(name, LABEL)
+            .expect("reopen direct child for ACL readback");
+        security::same_opened_directory(&created, &opened).expect("exact created stage root");
+        security::verify_private_direct_parent_and_root(&private.guard, &opened, TEST_WORKER_SID)
+            .expect("both supplied objects exclude a distinct worker SID");
+        assert!(
+            security::verify_private_direct_parent_and_root(&private.guard, &opened, &host_sid)
+                .is_err(),
+            "host identity cannot be claimed as the worker"
+        );
+        let base = ProtectedDirectoryGuard::acquire(&fixture.root, LABEL)
+            .expect("pin ordinary fixture parent");
+        assert!(
+            security::verify_private_direct_parent_and_root(&base, &opened, TEST_WORKER_SID)
+                .is_err(),
+            "an unrelated supplied parent cannot pass the opened-object relation"
+        );
+        let broad_name = "broad-parent";
+        let broad_sddl = format!("{sddl}(A;OICI;FA;;;WD)");
+        let mut broad_created = base.try_clone(LABEL).expect("clone base");
+        broad_created
+            .create_child_with_security_descriptor(broad_name, &broad_sddl, LABEL)
+            .expect("create broad direct parent");
+        let mut broad_parent = base.try_clone(LABEL).expect("clone base");
+        broad_parent
+            .descend_existing_for_security(broad_name, LABEL)
+            .expect("reopen broad parent for ACL readback");
+        let mut broad_child_created = broad_parent.try_clone(LABEL).expect("clone broad parent");
+        broad_child_created
+            .create_child_with_security_descriptor(name, &sddl, LABEL)
+            .expect("create private child under broad parent");
+        let mut broad_child_opened = broad_parent.try_clone(LABEL).expect("clone broad parent");
+        broad_child_opened
+            .descend_existing_for_security(name, LABEL)
+            .expect("reopen private child under broad parent");
+        assert!(
+            security::verify_private_direct_parent_and_root(
+                &broad_parent,
+                &broad_child_opened,
+                TEST_WORKER_SID,
+            )
+            .is_err(),
+            "a broadly writable immediate parent cannot authorize the private child"
+        );
+        drop(broad_child_opened);
+        drop(broad_child_created);
+        drop(broad_parent);
+        drop(broad_created);
+        fs::remove_dir(fixture.root.join(broad_name).join(name))
+            .expect("remove private child under broad parent");
+        fs::remove_dir(fixture.root.join(broad_name)).expect("remove broad parent");
+        drop(base);
+        drop(opened);
+        drop(created);
+        drop(private);
+        fs::remove_dir(fixture.staging.join(name)).expect("remove exact diagnostic child");
+        fixture.remove(None);
+    }
+
+    #[test]
     fn child_acl_rejects_worker_or_inherited_broad_ace_and_wrong_object() {
         let fixture = Fixture::new();
         let private = fixture.private_root();
