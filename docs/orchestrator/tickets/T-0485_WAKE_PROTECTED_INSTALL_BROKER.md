@@ -1,5 +1,11 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-15 CI comparison and protected-ledger source checkpoint
+
+`install_broker_ci_witness.rs` compares the signed exact-CI claim with independently fetched, complete GitHub run and attempt-job JSON, requiring the latest matching push run and three successful Windows jobs; it performs no fetch or signing and grants no authority. Seven focused tests pass. `install_broker_ledger.rs` holds a pre-provisioned global lock, inventories history through a fresh pinned relative directory object, refuses gaps/replay/corruption, and records create-once ordered phases with original desired/owner state. It can cryptographically reverify the original envelope against the protected acceptance record for exact post-expiry resume. Fifteen focused tests pass; see `docs/orchestrator/review_bundles/T-0485_R3_CI_CLAIM_COMPARISON_SOURCE.md` and `T-0485_R4_PROTECTED_LEDGER_SOURCE.md`.
+
+Both modules are dormant. The future broker must independently fetch CI, protect its own image/key/root/lock, anchor the first generation after dev.84 physical reconciliation, use a trustworthy clock, prove parent metadata durability and reconcile actual package/pointer/owner side effects. The production install hold remains. The exact pushed source SHA has no Windows CI run.
+
 ## 2026-10-15 fixed broker read-only preflight checkpoint
 
 The source now includes a zero-argument diagnostic of the proposed fixed SCM service and protected ProgramData/Program Files objects. It uses pinned no-follow relative opens, exact leaf owner/DACL policy and image identity/hash readback. A real invocation on this host failed closed at `WAKE_BROKER_SERVICE_UNPROVISIONED`; no service was installed. Three focused policy tests and the final full Wake suite passed. The snapshot explicitly says it is **not installation authority**; ancestor effective access, signature/integrity, worker-token denial, service protocol, protected key/ledger and launch-reader migration remain. See `docs/orchestrator/review_bundles/T-0485_R2_WAKE_BROKER_READ_ONLY_PREFLIGHT.md`.

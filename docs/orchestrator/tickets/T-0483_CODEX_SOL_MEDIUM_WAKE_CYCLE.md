@@ -1,5 +1,9 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-15 dormant host stage ACL audit (source only)
+
+The staging source now audits the opened root/child owner and DACL, and compares created/reopened child volume/file ID before writing payload bytes. Eleven focused Windows staging tests pass. Its API explicitly takes a **supplied** worker SID; the actual restricted token identity, ancestor delete/rename rights, alternate group/privilege paths, descendant exit/lost write authority and burn-to-stage crash recovery remain unproven. No live Sol launch or review/Wake cycle occurred. See `docs/orchestrator/review_bundles/T-0483_R17_SOL_STAGE_ACL_AUDIT_SOURCE.md`.
+
 ## 2026-10-15 dormant host-owned staging (source only)
 
 `sol_worker_staging.rs` now consumes verified bytes into a fresh pinned host stage with exact manifest, bounded inventory and no-follow byte/hash readback. `VerifiedSolWorkerOutputV1` retains the original host expectation, and staging refuses a different task, baseline, native turn, nonce or allowlist before creating a stage. Seven focused staging and five output-verifier tests passed. This still requires independently proven restricted worker termination/lost write authority and staging root/child ACL exclusion, plus a durable burn-to-stage transaction; no live Sol launch or review/Wake cycle occurred. See `docs/orchestrator/review_bundles/T-0483_R16_SOL_HOST_STAGING_SOURCE.md`.

@@ -1,10 +1,14 @@
 //! Dormant host-side staging for a verified, stopped Sol worker export.
 //!
-//! The caller must provide a pinned root whose Windows ACL was independently
-//! proved to exclude the restricted worker identity and every worker child.
-//! This module cannot establish that process/token/ACL proof; it is not wired
-//! to Sol launch or repository mutation. It creates one fresh child beneath
-//! the pinned root and leaves incomplete children inert for later diagnosis.
+//! The caller supplies a pinned root and a numeric SID. The root's opened ACL
+//! is checked against that SID, but this module cannot establish that it came
+//! from the restricted worker's actual token or excludes every worker child.
+//! The caller must also prove the entire parent chain grants no worker
+//! DELETE_CHILD or rename authority, ACL takeover rights, inherited writable
+//! handles, or access through alternate groups or privileges.
+//! It is not wired to Sol launch or repository mutation. It creates one fresh
+//! child beneath the pinned root and leaves incomplete children inert for
+//! later diagnosis.
 //! The post-burn value is memory-only: a crash or staging failure after burn
 //! leaves the nonce spent and requires operator attention, not an automatic
 //! retry or a newly issued nonce.
@@ -24,6 +28,7 @@ use crate::windows_protected_fs::{
 
 use super::sol_worker_nonce::BurnedSolWorkerOutputV1;
 use super::sol_worker_output::{ExpectedSolWorkerOutputV1, SolWorkerOutputFileV1};
+use super::sol_worker_staging_security as security;
 
 const LABEL: &str = "Sol worker staging";
 const MAX_FILES: usize = 256;
@@ -53,7 +58,9 @@ pub(crate) struct SolStagedOutputManifestV1 {
 /// A single fresh stage object, pinned through its original parent. The
 /// trusted host can use `readback` before applying any bytes to a repository.
 pub(crate) struct PinnedSolWorkerStageV1 {
+    acl_audited_root: ProtectedDirectoryGuard,
     guard: ProtectedDirectoryGuard,
+    worker_token_user_sid: String,
     manifest: SolStagedOutputManifestV1,
 }
 
@@ -63,8 +70,39 @@ impl PinnedSolWorkerStageV1 {
     }
 
     pub(crate) fn readback(&self) -> Result<BTreeMap<String, Vec<u8>>, String> {
-        readback(&self.guard, &self.manifest)
+        security::verify_private_child(
+            &self.acl_audited_root,
+            &self.guard,
+            &self.worker_token_user_sid,
+        )?;
+        let bytes = readback(&self.guard, &self.manifest)?;
+        security::verify_private_child(
+            &self.acl_audited_root,
+            &self.guard,
+            &self.worker_token_user_sid,
+        )?;
+        Ok(bytes)
     }
+}
+
+/// An ACL audit of the exact opened staging root against a caller-supplied
+/// SID. The root must have been opened for READ_CONTROL relative to a pinned
+/// parent. This value does not prove that the SID identifies the real worker
+/// or that the worker lost write authority through other SIDs or privileges.
+pub(crate) struct AclAuditedSolStageRootForSuppliedSidV1 {
+    guard: ProtectedDirectoryGuard,
+    worker_token_user_sid: String,
+}
+
+pub(crate) fn audit_sol_stage_root_acl_for_supplied_sid(
+    root: &ProtectedDirectoryGuard,
+    worker_token_user_sid: &str,
+) -> Result<AclAuditedSolStageRootForSuppliedSidV1, String> {
+    security::verify_private_root(root, worker_token_user_sid)?;
+    Ok(AclAuditedSolStageRootForSuppliedSidV1 {
+        guard: root.try_clone(LABEL)?,
+        worker_token_user_sid: worker_token_user_sid.into(),
+    })
 }
 
 fn valid_slug(value: &str) -> bool {
@@ -315,21 +353,22 @@ fn readback(
 }
 
 /// Stage host-owned bytes only after the nonce burn path returns its distinct
-/// output type, below an independently proved host-private parent. This
-/// function deliberately accepts no worker-supplied path or stage ID. It
-/// never opens an existing stage, retries a collision, removes crash residue,
-/// mutates the repository, or grants Sol launch authority.
+/// output type, below a pinned parent whose ACL was audited against the
+/// caller-supplied SID. Full worker token binding remains external and is
+/// required before live use. This function accepts no worker-supplied path or
+/// stage ID. It never opens an existing stage, retries a collision, removes
+/// crash residue, mutates the repository, or grants Sol launch authority.
 pub(crate) fn stage_verified_sol_worker_output(
-    host_private_root: &ProtectedDirectoryGuard,
+    acl_audited_root: &AclAuditedSolStageRootForSuppliedSidV1,
     expected: &ExpectedSolWorkerOutputV1,
     burned: BurnedSolWorkerOutputV1,
 ) -> Result<PinnedSolWorkerStageV1, String> {
     let stage_id = Uuid::new_v4().simple().to_string();
-    stage_verified_sol_worker_output_with_id(host_private_root, expected, burned, &stage_id)
+    stage_verified_sol_worker_output_with_id(acl_audited_root, expected, burned, &stage_id)
 }
 
 fn stage_verified_sol_worker_output_with_id(
-    host_private_root: &ProtectedDirectoryGuard,
+    acl_audited_root: &AclAuditedSolStageRootForSuppliedSidV1,
     expected: &ExpectedSolWorkerOutputV1,
     burned: BurnedSolWorkerOutputV1,
     stage_id: &str,
@@ -341,9 +380,22 @@ fn stage_verified_sol_worker_output_with_id(
         ));
     }
     let manifest = prepare_manifest(stage_id, expected, &files)?;
-    host_private_root.assert_stable(LABEL)?;
-    let mut stage = host_private_root.try_clone(LABEL)?;
+    security::verify_private_root(
+        &acl_audited_root.guard,
+        &acl_audited_root.worker_token_user_sid,
+    )?;
+    let mut stage = acl_audited_root.guard.try_clone(LABEL)?;
     stage.create_child(&stage_name(stage_id), LABEL)?;
+    let mut security_stage = acl_audited_root.guard.try_clone(LABEL)?;
+    security_stage.descend_existing_for_security(&stage_name(stage_id), LABEL)?;
+    security::same_opened_directory(&stage, &security_stage)?;
+    security::verify_private_child(
+        &acl_audited_root.guard,
+        &security_stage,
+        &acl_audited_root.worker_token_user_sid,
+    )?;
+    drop(stage);
+    let stage = security_stage;
     let mut payload = stage.try_clone(LABEL)?;
     payload.create_child(PAYLOAD, LABEL)?;
     for path in expected_directories(&manifest.files) {
@@ -371,13 +423,18 @@ fn stage_verified_sol_worker_output_with_id(
     let serialized = manifest_bytes(&manifest)?;
     write_new_regular_in(&stage, ROOT_MANIFEST, &serialized, LABEL)?;
     let staged = PinnedSolWorkerStageV1 {
+        acl_audited_root: acl_audited_root.guard.try_clone(LABEL)?,
         guard: stage,
+        worker_token_user_sid: acl_audited_root.worker_token_user_sid.clone(),
         manifest,
     };
     if staged.readback()? != files {
         return Err(format!("{LABEL} readback differs from verified output"));
     }
-    host_private_root.assert_stable(LABEL)?;
+    security::verify_private_root(
+        &acl_audited_root.guard,
+        &acl_audited_root.worker_token_user_sid,
+    )?;
     Ok(staged)
 }
 
@@ -393,6 +450,8 @@ mod tests {
         verify_and_burn_sol_worker_output,
     };
     use super::super::sol_worker_output::SolWorkerOutputManifestV1;
+
+    const TEST_WORKER_SID: &str = "S-1-5-21-111-222-333-1009";
 
     struct Fixture {
         root: PathBuf,
@@ -414,7 +473,19 @@ mod tests {
             fs::create_dir(&root).expect("fresh test root");
             fs::create_dir(&ledger).expect("fresh nonce ledger");
             fs::create_dir(&export).expect("fresh export");
-            fs::create_dir(&staging).expect("fresh staging root");
+            let host_sid = security::current_host_sid_for_test().expect("host token SID");
+            let stage_sddl = if host_sid == "S-1-5-18" {
+                "O:SYG:SYD:P(A;OICI;FA;;;SY)".into()
+            } else {
+                format!("O:{host_sid}G:{host_sid}D:P(A;OICI;FA;;;{host_sid})(A;OICI;FA;;;SY)")
+            };
+            let root_guard = ProtectedDirectoryGuard::acquire(&root, LABEL).expect("pin test root");
+            let mut stage_guard = root_guard.try_clone(LABEL).expect("clone test root");
+            stage_guard
+                .create_child_with_security_descriptor("staging", &stage_sddl, LABEL)
+                .expect("create protected staging root");
+            drop(stage_guard);
+            drop(root_guard);
             fs::create_dir(export.join("src")).expect("export source directory");
             fs::write(export.join("src/lib.rs"), b"changed\n").expect("export source file");
             fs::write(export.join("README.md"), b"review\n").expect("export readme");
@@ -499,10 +570,19 @@ mod tests {
         }
 
         fn stage(&self) -> PinnedSolWorkerStageV1 {
-            let guard =
-                ProtectedDirectoryGuard::acquire(&self.staging, LABEL).expect("pin staging");
+            let guard = self.private_root();
             stage_verified_sol_worker_output(&guard, &self.expected, self.burned())
                 .expect("stage exact export")
+        }
+
+        fn private_root(&self) -> AclAuditedSolStageRootForSuppliedSidV1 {
+            let base = ProtectedDirectoryGuard::acquire(&self.root, LABEL).expect("pin test root");
+            let mut stage = base.try_clone(LABEL).expect("clone test root");
+            stage
+                .descend_existing_for_security("staging", LABEL)
+                .expect("open staging root for READ_CONTROL");
+            audit_sol_stage_root_acl_for_supplied_sid(&stage, TEST_WORKER_SID)
+                .expect("audit test root ACL")
         }
 
         fn remove(self, stage_id: Option<&str>) {
@@ -585,7 +665,7 @@ mod tests {
     #[test]
     fn collision_fails_closed_and_does_not_replace_existing_stage() {
         let fixture = Fixture::new();
-        let guard = ProtectedDirectoryGuard::acquire(&fixture.staging, LABEL).expect("pin root");
+        let guard = fixture.private_root();
         let stage_id = Uuid::new_v4().simple().to_string();
         let collided = fixture.staging.join(stage_name(&stage_id));
         fs::create_dir(&collided).expect("preexisting stage identity");
@@ -660,12 +740,12 @@ mod tests {
     #[test]
     fn changed_host_allowlist_fails_before_creating_a_stage() {
         let fixture = Fixture::new();
-        let guard = ProtectedDirectoryGuard::acquire(&fixture.staging, LABEL).expect("pin root");
+        let guard = fixture.private_root();
         let mut changed = fixture.expected.clone();
         changed.allowed_paths.remove("README.md");
         assert!(stage_verified_sol_worker_output(&guard, &changed, fixture.burned()).is_err());
         assert!(
-            query_relative_directory_names_bounded(&guard, 0)
+            query_relative_directory_names_bounded(&guard.guard, 0)
                 .expect("empty staging root")
                 .is_empty()
         );
@@ -677,8 +757,7 @@ mod tests {
     fn verified_bytes_cannot_be_rebound_to_another_host_task_or_turn() {
         for changed_field in ["task", "baseline", "turn", "nonce"] {
             let fixture = Fixture::new();
-            let guard =
-                ProtectedDirectoryGuard::acquire(&fixture.staging, LABEL).expect("pin root");
+            let guard = fixture.private_root();
             let mut changed = fixture.expected.clone();
             match changed_field {
                 "task" => changed.task_id = "T-other".into(),
@@ -689,7 +768,7 @@ mod tests {
             }
             assert!(stage_verified_sol_worker_output(&guard, &changed, fixture.burned()).is_err());
             assert!(
-                query_relative_directory_names_bounded(&guard, 0)
+                query_relative_directory_names_bounded(&guard.guard, 0)
                     .expect("no created stages")
                     .is_empty()
             );
@@ -706,5 +785,102 @@ mod tests {
         let id = Uuid::new_v4().simple().to_string();
         assert!(valid_stage_id(&id));
         assert!(stage_name(&id).starts_with("sol-stage-"));
+    }
+
+    #[test]
+    fn root_acl_rejects_broad_and_same_worker_identity() {
+        let fixture = Fixture::new();
+        let host_sid = security::current_host_sid_for_test().expect("host SID");
+        let private = fixture.private_root();
+        assert!(audit_sol_stage_root_acl_for_supplied_sid(&private.guard, &host_sid).is_err());
+        assert!(audit_sol_stage_root_acl_for_supplied_sid(&private.guard, "not-a-sid").is_err());
+        let plain = ProtectedDirectoryGuard::acquire(&fixture.staging, LABEL)
+            .expect("ordinary directory handle without READ_CONTROL");
+        assert!(audit_sol_stage_root_acl_for_supplied_sid(&plain, TEST_WORKER_SID).is_err());
+        drop(plain);
+        drop(private);
+
+        let base = ProtectedDirectoryGuard::acquire(&fixture.root, LABEL).expect("pin base");
+        let host_ace = format!("(A;OICI;FA;;;{host_sid})");
+        let system_ace = if host_sid == "S-1-5-18" {
+            String::new()
+        } else {
+            "(A;OICI;FA;;;SY)".into()
+        };
+        let broad = format!("O:{host_sid}G:{host_sid}D:P{host_ace}{system_ace}(A;OICI;FA;;;WD)");
+        let name = "broad-root";
+        let mut created = base.try_clone(LABEL).expect("clone base");
+        created
+            .create_child_with_security_descriptor(name, &broad, LABEL)
+            .expect("create hostile test root");
+        let mut security_open = base.try_clone(LABEL).expect("clone base");
+        security_open
+            .descend_existing_for_security(name, LABEL)
+            .expect("security reopen hostile root");
+        security::same_opened_directory(&created, &security_open).expect("same opened object");
+        assert!(
+            audit_sol_stage_root_acl_for_supplied_sid(&security_open, TEST_WORKER_SID).is_err()
+        );
+        drop(security_open);
+        drop(created);
+        fs::remove_dir(fixture.root.join(name)).expect("remove exact hostile test root");
+        drop(base);
+        fixture.remove(None);
+    }
+
+    #[test]
+    fn child_acl_rejects_worker_or_inherited_broad_ace_and_wrong_object() {
+        let fixture = Fixture::new();
+        let private = fixture.private_root();
+        let host_sid = security::current_host_sid_for_test().expect("host SID");
+        let host_ace = format!("(A;OICI;FA;;;{host_sid})");
+        let system_ace = if host_sid == "S-1-5-18" {
+            String::new()
+        } else {
+            "(A;OICI;FA;;;SY)".into()
+        };
+        for (name, extra_ace) in [
+            ("worker-child", format!("(A;OICI;FA;;;{TEST_WORKER_SID})")),
+            ("inherited-broad-child", "(A;OICIID;FA;;;WD)".into()),
+        ] {
+            let sddl = format!("O:{host_sid}G:{host_sid}D:P{host_ace}{system_ace}{extra_ace}");
+            let mut created = private.guard.try_clone(LABEL).expect("clone parent");
+            created
+                .create_child_with_security_descriptor(name, &sddl, LABEL)
+                .expect("create hostile test child");
+            let mut security_open = private.guard.try_clone(LABEL).expect("clone parent");
+            security_open
+                .descend_existing_for_security(name, LABEL)
+                .expect("security reopen hostile child");
+            security::same_opened_directory(&created, &security_open).expect("same opened object");
+            assert!(
+                security::verify_private_child(&private.guard, &security_open, TEST_WORKER_SID,)
+                    .is_err()
+            );
+            drop(security_open);
+            drop(created);
+            fs::remove_dir(fixture.staging.join(name)).expect("remove exact hostile child");
+        }
+
+        let mut first = private.guard.try_clone(LABEL).expect("clone parent");
+        first
+            .create_child("first-child", LABEL)
+            .expect("create first child");
+        let mut second = private.guard.try_clone(LABEL).expect("clone parent");
+        second
+            .create_child("second-child", LABEL)
+            .expect("create second child");
+        let mut security_open = private.guard.try_clone(LABEL).expect("clone parent");
+        security_open
+            .descend_existing_for_security("second-child", LABEL)
+            .expect("reopen second child");
+        assert!(security::same_opened_directory(&first, &security_open).is_err());
+        drop(security_open);
+        drop(second);
+        drop(first);
+        drop(private);
+        fs::remove_dir(fixture.staging.join("first-child")).expect("remove first child");
+        fs::remove_dir(fixture.staging.join("second-child")).expect("remove second child");
+        fixture.remove(None);
     }
 }

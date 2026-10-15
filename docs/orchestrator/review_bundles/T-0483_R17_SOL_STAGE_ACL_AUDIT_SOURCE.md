@@ -1,0 +1,9 @@
+# T-0483 R17 — Dormant Sol stage ACL and identity audit
+
+**Scope:** `src/delegated/sol_worker_staging_security.rs`, `sol_worker_staging.rs`, and the module declaration. This source does not launch Codex, move bytes into a repository, publish a review, or send Wake.
+
+The stage root is opened for `READ_CONTROL` relative to a pinned parent. The audit reads its owner and DACL from that opened handle, requires the current host token user as owner, a protected non-null DACL, and only host and SYSTEM full-access inheritable ACEs. Staging compares the fresh child's created and security-reopened volume/file IDs before writing payload bytes. The child ACL permits the same trustees and is checked again around exact inventory and hash readback. SID and ACE extents are bounded before native SID routines inspect them. Focused tests use the actual host SID and reject a broad Everyone ACE, a worker ACE, an inherited broad ACE, a wrong child object, and a handle without `READ_CONTROL`.
+
+The API explicitly calls this an **ACL audit for a supplied SID**. The caller has not yet proved that the SID belongs to the actual restricted Sol worker token, that its groups and privileges cannot write or take ownership, that its descendants exited and lost write authority, or that ancestors deny rename/delete through parent rights. It also does not prove inherited writable handles were absent. The stage root must be in a separately controlled location; passing a string and a same-user directory is insufficient. Burn-to-stage crash recovery and parent-directory metadata durability across power loss remain open. No live P1 acceptance follows from this audit.
+
+**Local verification:** 11 focused Windows staging tests; final combined root all-features main suite 1,173 passed/26 ignored plus integration groups; strict root all-target/all-feature Clippy, format and source whitespace checks passed. Exact-commit GitHub Windows CI remains outstanding.

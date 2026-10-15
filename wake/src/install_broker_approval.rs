@@ -135,8 +135,26 @@ pub struct BrokerObservedStateV1 {
 /// physical objects before its first mutation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VerifiedApprovalV1 {
-    pub payload: WakeInstallApprovalV1,
-    pub signed_payload_sha256: String,
+    payload: WakeInstallApprovalV1,
+    signed_payload_sha256: String,
+    verified_at_utc_seconds: u64,
+}
+
+impl VerifiedApprovalV1 {
+    pub fn payload(&self) -> &WakeInstallApprovalV1 {
+        &self.payload
+    }
+
+    pub fn signed_payload_sha256(&self) -> &str {
+        &self.signed_payload_sha256
+    }
+
+    /// Time checked by the verifier. A future broker must supply its own
+    /// current clock for a fresh acceptance, or the protected intent's
+    /// original acceptance time for exact-only crash recovery.
+    pub fn verified_at_utc_seconds(&self) -> u64 {
+        self.verified_at_utc_seconds
+    }
 }
 
 fn lowercase_hex(value: &str, len: usize) -> bool {
@@ -324,11 +342,12 @@ pub fn verify_approval(
     Ok(VerifiedApprovalV1 {
         payload: envelope.payload,
         signed_payload_sha256: format!("{:x}", Sha256::digest(signed)),
+        verified_at_utc_seconds: observed.now_utc_seconds,
     })
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use ed25519_dalek::{Signer, SigningKey};
 
@@ -340,7 +359,7 @@ mod tests {
         }
     }
 
-    fn fixture() -> (WakeInstallApprovalV1, BrokerObservedStateV1, SigningKey) {
+    pub(crate) fn fixture() -> (WakeInstallApprovalV1, BrokerObservedStateV1, SigningKey) {
         let artifacts = ARTIFACTS.map(|(name, _)| ArtifactV1 {
             name: name.into(),
             byte_length: 100,
@@ -416,7 +435,7 @@ mod tests {
         (payload, observed, SigningKey::from_bytes(&[7u8; 32]))
     }
 
-    fn envelope(payload: &WakeInstallApprovalV1, key: &SigningKey) -> Vec<u8> {
+    pub(crate) fn envelope(payload: &WakeInstallApprovalV1, key: &SigningKey) -> Vec<u8> {
         let signature = key.sign(&signed_bytes(payload).expect("signed bytes"));
         serde_json::to_vec(&ApprovalEnvelopeV1 {
             payload: payload.clone(),
