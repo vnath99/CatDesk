@@ -4612,6 +4612,20 @@ mod tests {
             .load_session("session-1")
             .expect("checkpoint state")
             .provider_turn_count;
+        // Model the durable inbox write surviving a crash before the
+        // COMPLETED_VERIFIED transition. Retry receives a later clock value
+        // but must reuse this exact review record without another turn.
+        let review_written_before_crash = initial
+            .store
+            .emit_review_inbox_record(
+                "session-1",
+                "catdesk",
+                AutonomousSessionStateV1::CompletedVerified,
+                "independent_final_review",
+                "artifacts/completion.json",
+                10,
+            )
+            .expect("partially finalized review inbox");
         let policy = initial.policy.clone();
         let store = initial.store.clone();
         let session_id = initial.session_id.clone();
@@ -4649,12 +4663,8 @@ mod tests {
         );
         assert!(resumed.store.load_completion_artifacts("session-1").is_ok());
         assert_eq!(
-            resumed
-                .store
-                .all_review_inbox()
-                .expect("review inbox")
-                .len(),
-            1
+            resumed.store.all_review_inbox().expect("review inbox"),
+            vec![review_written_before_crash]
         );
         assert_eq!(
             resumed

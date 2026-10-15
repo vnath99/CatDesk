@@ -1459,9 +1459,115 @@ fn reviewed_candidate_startup_error(
     }
 }
 
+/// A bound socket is not a ready MCP worker. Prove that the exact loopback
+/// listener answers an authenticated request with only the isolated tools
+/// before advertising its PID and port to a parent.
+async fn probe_reviewed_candidate_ready(
+    local_addr: std::net::SocketAddr,
+    auth_token: &str,
+) -> Result<(), String> {
+    if !local_addr.ip().is_loopback() || local_addr.port() == 0 {
+        return Err("reviewed candidate readiness address is unsafe".into());
+    }
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_millis(500))
+        .build()
+        .map_err(|_| "reviewed candidate readiness client unavailable")?;
+    let url = format!("http://{local_addr}/dev/mcp");
+    let request = serde_json::json!({
+        "jsonrpc":"2.0",
+        "id":"candidate-ready",
+        "method":"tools/list",
+        "params":{}
+    });
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match client.post(&url).json(&request).send().await {
+            Ok(response) if response.status() == reqwest::StatusCode::UNAUTHORIZED => {}
+            Ok(_) => return Err("reviewed candidate unauthenticated request was accepted".into()),
+            Err(_) => {
+                if Instant::now() >= deadline {
+                    return Err("reviewed candidate readiness timed out".into());
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                continue;
+            }
+        }
+        let response = client
+            .post(&url)
+            .bearer_auth(auth_token)
+            .json(&request)
+            .send()
+            .await;
+        if let Ok(response) = response {
+            if response.status() != reqwest::StatusCode::OK {
+                return Err("reviewed candidate readiness HTTP response invalid".into());
+            }
+            let bytes = response
+                .bytes()
+                .await
+                .map_err(|_| "reviewed candidate readiness response unavailable")?;
+            if bytes.len() > 32 * 1024 {
+                return Err("reviewed candidate readiness response oversized".into());
+            }
+            let reply: serde_json::Value = serde_json::from_slice(&bytes)
+                .map_err(|_| "reviewed candidate readiness response invalid")?;
+            let tools = reply["result"]["tools"]
+                .as_array()
+                .ok_or("reviewed candidate readiness tool catalog unavailable")?;
+            let names = tools
+                .iter()
+                .filter_map(|tool| tool["name"].as_str())
+                .collect::<std::collections::BTreeSet<_>>();
+            if reply["jsonrpc"] == "2.0"
+                && reply["id"] == "candidate-ready"
+                && reply.get("error").is_none()
+                && tools.len() == 2
+                && names == std::collections::BTreeSet::from(["read", "search"])
+            {
+                return Ok(());
+            }
+            return Err("reviewed candidate readiness tool catalog invalid".into());
+        }
+        if Instant::now() >= deadline {
+            return Err("reviewed candidate readiness timed out".into());
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+/// One logical CatDesk reviewed-candidate owner at a time. The lock is a
+/// create-once, delete-on-close Windows object beneath a pinned OS temp root;
+/// a preexisting name fails closed and is never removed by pathname. Keep
+/// both fields alive through root and journal retirement.
+struct ReviewedCandidateProcessLock {
+    _temp: windows_protected_fs::ProtectedDirectoryGuard,
+    _lock: windows_protected_fs::DeleteOnCloseRegularLock,
+}
+
+fn acquire_reviewed_candidate_process_lock() -> Result<ReviewedCandidateProcessLock, String> {
+    let temp = std::fs::canonicalize(std::env::temp_dir())
+        .map_err(|_| "reviewed candidate temp authority unavailable")?;
+    let pinned = windows_protected_fs::ProtectedDirectoryGuard::acquire(
+        &temp,
+        "reviewed candidate process lock",
+    )?;
+    let lock = windows_protected_fs::create_delete_on_close_regular_lock(
+        &pinned,
+        "catdesk-reviewed-candidate-owner.lock",
+        "reviewed candidate process lock",
+    )?;
+    Ok(ReviewedCandidateProcessLock {
+        _temp: pinned,
+        _lock: lock,
+    })
+}
+
 async fn run_reviewed_candidate_mcp(
     options: ReviewedCandidateMcpOptions,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let _owner_lock = acquire_reviewed_candidate_process_lock().map_err(std::io::Error::other)?;
     let source = std::fs::canonicalize(&options.source_workspace)?;
     if !source.is_dir() {
         return Err(std::io::Error::other("reviewed candidate source workspace invalid").into());
@@ -1492,6 +1598,7 @@ async fn run_reviewed_candidate_mcp(
     }
     let (ui_event_tx, _ui_event_rx) = unbounded_channel();
     let snapshot = Arc::new(staged);
+    let readiness_token = options.auth_token.clone();
     let router = server::isolated_fixture_snapshot_router(
         state.clone(),
         "/dev/mcp".into(),
@@ -1520,6 +1627,30 @@ async fn run_reviewed_candidate_mcp(
         app.port = local_addr.port();
         app.server_running = true;
     }
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    let mut serve = tokio::spawn(async move {
+        axum::serve(listener, router)
+            .with_graceful_shutdown(async move {
+                let _ = shutdown_rx.await;
+            })
+            .await
+    });
+    let readiness = tokio::select! {
+        result = &mut serve => Err(format!("reviewed candidate listener exited before ready: {result:?}")),
+        result = probe_reviewed_candidate_ready(local_addr, &readiness_token) => result,
+    };
+    if let Err(error) = readiness {
+        if !serve.is_finished() {
+            serve.abort();
+            let _ = tokio::time::timeout(Duration::from_secs(2), &mut serve).await;
+        }
+        return Err(reviewed_candidate_startup_error(&snapshot, error).into());
+    }
+    if serve.is_finished() {
+        return Err(
+            reviewed_candidate_startup_error(&snapshot, "listener exited before ready").into(),
+        );
+    }
     println!(
         "{}",
         serde_json::json!({
@@ -1533,14 +1664,6 @@ async fn run_reviewed_candidate_mcp(
             "auth":{"scheme":"bearer","tokenRedacted":true}
         })
     );
-    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-    let mut serve = tokio::spawn(async move {
-        axum::serve(listener, router)
-            .with_graceful_shutdown(async move {
-                let _ = shutdown_rx.await;
-            })
-            .await
-    });
     tokio::select! {
         signal = tokio::signal::ctrl_c() => {
             if let Err(error) = signal {
@@ -2502,15 +2625,124 @@ fn render_toast(f: &mut Frame, palette: theme::Palette, msg: &str, pos: (u16, u1
 #[cfg(test)]
 mod tests {
     use super::{
-        ToolMode, is_canonical_production_worker_listener, key_is_clipboard_paste,
-        loopback_http_origin, normalize_ngrok_authtoken_input, parse_auto_start_computer,
-        parse_headless_mcp_options, parse_native_daemon_mode, parse_reviewed_candidate_mcp_options,
+        ToolMode, acquire_reviewed_candidate_process_lock, is_canonical_production_worker_listener,
+        key_is_clipboard_paste, loopback_http_origin, normalize_ngrok_authtoken_input,
+        parse_auto_start_computer, parse_headless_mcp_options, parse_native_daemon_mode,
+        parse_reviewed_candidate_mcp_options, probe_reviewed_candidate_ready,
         resolve_headless_workspace, safe_bind_identity, validate_headless_mcp_path,
         validate_isolated_fixture_scope,
     };
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
     use std::time::Duration;
+
+    #[cfg(windows)]
+    #[test]
+    fn reviewed_candidate_process_lock_child() {
+        if std::env::var_os("CATDESK_REVIEWED_CANDIDATE_LOCK_TEST_CHILD").is_none() {
+            return;
+        }
+        let _lock = acquire_reviewed_candidate_process_lock().expect("own candidate lock");
+        println!("LOCK_READY");
+        std::io::Write::flush(&mut std::io::stdout()).expect("flush ready");
+        std::thread::sleep(Duration::from_secs(60));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn reviewed_candidate_process_lock_excludes_second_process_and_releases_on_crash() {
+        use std::io::{BufRead, BufReader};
+        use std::process::{Command, Stdio};
+
+        let mut child = Command::new(std::env::current_exe().expect("test executable"))
+            .args([
+                "--exact",
+                "tests::reviewed_candidate_process_lock_child",
+                "--nocapture",
+            ])
+            .env("CATDESK_REVIEWED_CANDIDATE_LOCK_TEST_CHILD", "1")
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("spawn candidate lock owner");
+        let mut reader = BufReader::new(child.stdout.take().expect("child stdout"));
+        let mut line = String::new();
+        let mut ready = false;
+        while reader.read_line(&mut line).expect("child output") != 0 {
+            if line.contains("LOCK_READY") {
+                ready = true;
+                break;
+            }
+            line.clear();
+        }
+        if !ready {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("child never acquired the candidate lock");
+        }
+        let contender_rejected = acquire_reviewed_candidate_process_lock().is_err();
+        child.kill().expect("hard kill lock owner");
+        child.wait().expect("reap owner");
+        assert!(
+            contender_rejected,
+            "second process must fail before staging"
+        );
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        loop {
+            if let Ok(lock) = acquire_reviewed_candidate_process_lock() {
+                drop(lock);
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "crashed owner did not release exact kernel lock"
+            );
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    }
+
+    #[tokio::test]
+    async fn reviewed_candidate_ready_probe_requires_authenticated_isolated_mcp() {
+        use super::{AppState, SharedState, server};
+        use std::sync::Arc;
+        use tokio::sync::{Mutex, mpsc::unbounded_channel};
+
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-ready-probe-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir(&root).expect("test root");
+        let app = AppState::new_isolated_fixture(
+            0,
+            root.to_string_lossy().into_owned(),
+            root.join("config.toml"),
+        )
+        .expect("isolated app");
+        let state: SharedState = Arc::new(Mutex::new(app));
+        let (tx, _rx) = unbounded_channel();
+        let router = server::isolated_fixture_router(
+            state,
+            "/dev/mcp".into(),
+            tx,
+            "fixture-private-token".into(),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("loopback listener");
+        let addr = listener.local_addr().expect("bound address");
+        let task = tokio::spawn(async move { axum::serve(listener, router).await });
+        probe_reviewed_candidate_ready(addr, "fixture-private-token")
+            .await
+            .expect("authenticated isolated read/search catalog");
+        assert!(
+            probe_reviewed_candidate_ready(addr, "wrong-token")
+                .await
+                .is_err(),
+            "wrong bearer token cannot prove readiness"
+        );
+        task.abort();
+        let _ = task.await;
+        std::fs::remove_dir_all(root).expect("remove exact test root");
+    }
 
     #[test]
     fn auto_start_computer_is_explicit_and_singleton() {

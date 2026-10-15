@@ -1518,15 +1518,6 @@ impl AutonomousStateStoreV1 {
         } else {
             Vec::new()
         };
-        if let Some(record) = records.iter().find(|record| record.record_id == record_id) {
-            return Ok(record.clone());
-        }
-        compact_review_inbox_for_capacity(&mut records);
-        if records.len() >= AUTONOMY_REVIEW_INBOX_RECORD_LIMIT {
-            return Err(AutonomyStateError::Validation(
-                "review inbox reached its bounded record limit".into(),
-            ));
-        }
         let record = AutonomousReviewInboxRecordV1 {
             schema_version: AUTONOMY_STATE_SCHEMA_VERSION,
             record_id,
@@ -1539,6 +1530,29 @@ impl AutonomousStateStoreV1 {
             unread: true,
         };
         validate_review_record(&record)?;
+        if let Some(existing) = records
+            .iter()
+            .find(|existing| existing.record_id == record.record_id)
+        {
+            let mut expected = record.clone();
+            // The first durable write owns creation time. A checkpoint retry
+            // may pass a later clock value after the inbox write but before
+            // the session reaches its terminal state.
+            expected.created_at_unix = existing.created_at_unix;
+            expected.unread = existing.unread;
+            if *existing != expected {
+                return Err(AutonomyStateError::Validation(
+                    "autonomous review replay conflicts with durable inbox evidence".into(),
+                ));
+            }
+            return Ok(existing.clone());
+        }
+        compact_review_inbox_for_capacity(&mut records);
+        if records.len() >= AUTONOMY_REVIEW_INBOX_RECORD_LIMIT {
+            return Err(AutonomyStateError::Validation(
+                "review inbox reached its bounded record limit".into(),
+            ));
+        }
         records.push(record.clone());
         write_json_atomic(&path, &records)?;
         Ok(record)
@@ -2717,6 +2731,7 @@ mod tests {
             )
             .expect("replay");
         assert_eq!(first, replay);
+        assert_eq!(replay.created_at_unix, 10);
         assert_eq!(
             store
                 .list_review_inbox(Some("project-one"), None, 10)
@@ -2742,6 +2757,70 @@ mod tests {
                 .expect("idempotent ack")
                 .unread
         );
+        let acknowledged_replay = store
+            .emit_review_inbox_record(
+                "session-one",
+                "project-one",
+                AutonomousSessionStateV1::WaitingForChatgpt,
+                "chatgpt_decision_required",
+                "artifacts/escalation.json",
+                12,
+            )
+            .expect("acknowledged exact replay");
+        assert!(!acknowledged_replay.unread);
+        assert_eq!(acknowledged_replay.created_at_unix, 10);
+    }
+
+    #[test]
+    fn review_inbox_rejects_conflicting_same_id_replays() {
+        let (_root, store) = store("review-inbox-conflicting-replay");
+        store
+            .create_session("session-one", queue())
+            .expect("session");
+        let first = store
+            .emit_review_inbox_record(
+                "session-one",
+                "project-one",
+                AutonomousSessionStateV1::WaitingForChatgpt,
+                "chatgpt_decision_required",
+                "artifacts/escalation.json",
+                10,
+            )
+            .expect("first record");
+
+        for (project, state, reference) in [
+            (
+                "project-two",
+                AutonomousSessionStateV1::WaitingForChatgpt,
+                "artifacts/escalation.json",
+            ),
+            (
+                "project-one",
+                AutonomousSessionStateV1::CompletedVerified,
+                "artifacts/escalation.json",
+            ),
+            (
+                "project-one",
+                AutonomousSessionStateV1::WaitingForChatgpt,
+                "artifacts/other.json",
+            ),
+        ] {
+            assert!(matches!(
+                store.emit_review_inbox_record(
+                    "session-one",
+                    project,
+                    state,
+                    "chatgpt_decision_required",
+                    reference,
+                    11,
+                ),
+                Err(AutonomyStateError::Validation(_))
+            ));
+            assert_eq!(
+                store.all_review_inbox().expect("unchanged inbox"),
+                vec![first.clone()]
+            );
+        }
     }
 
     #[test]

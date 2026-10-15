@@ -1,5 +1,13 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — T0483 autonomous review retry
+
+- Replaying an autonomous review ID now requires the same project, session, state, action and artifact reference. A later clock preserves the first recorded creation time; acknowledgment remains sticky. Conflicting evidence is rejected before any Wake publication. This is source-only and does not establish a real Sol/medium task or exact Wake receipt. See `docs/orchestrator/review_bundles/T-0483_R8_REVIEW_INBOX_REPLAY_BINDING.md`.
+
+## 2026-10-14 — T0478 reviewed-candidate readiness
+
+- `--reviewed-candidate-mcp` now fails before staging when another process holds the fixed CatDesk candidate lock, and reports ready only after a bounded authenticated `/dev/mcp` read/search catalog probe. A failed probe leaves startup attention for reviewed recovery; the lock releases on process exit. This is source-only until exact Windows CI and a successful witnessed launch. See `docs/orchestrator/review_bundles/T-0478_R3B4C10_READY_OWNER_FENCE.md`.
+
 ## 2026-10-14 — T0478 clean journal retirement
 
 - A clean source-only reviewed-candidate stop now retires its exact owner journal after root deletion and verified `retired` outcome. An extra journal child or any uncertainty leaves residue and reports attention; preserve it for reviewed recovery. There is no new operator cleanup command or name-based retry. See `docs/orchestrator/review_bundles/T-0478_R3B4C9_JOURNAL_RETIREMENT.md`.
