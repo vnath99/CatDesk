@@ -3,6 +3,7 @@
 - P0 adds a zero-argument read-only inventory of named WakeHost process candidates and fixed current-token direct/LocalCache root/lock physical IDs. Its `NO_MATCHING_NAMED_PROCESS_IN_SNAPSHOT`, `AMBIGUOUS` and `UNPROVEN_LEGACY_OWNER` states grant no old-owner or install authority. Four focused tests and independent review passed. See `docs/orchestrator/review_bundles/T-0485_R19_LEGACY_OWNER_CANDIDATE_INVENTORY_SOURCE.md`.
 - P1 separates successful child exit and empty Job from forced abort, and retains process/Job/prepared-run/executable ownership on uncertain cleanup in a private attention value. Focused tests (20 passed, one helper ignored) and independent review passed; no durable registry or fixed-account launch exists. See `docs/orchestrator/review_bundles/T-0483_R26_SOL_NORMAL_COMPLETION_ATTENTION_OWNER_SOURCE.md`.
 - Exact-source CI, signed broker and trusted old-owner anchor, protected install/reader cutover, approved dev.85/new Chat53, fixed Sol worker/digest/launch/lost-write authority and a real review/Wake cycle remain. P2/P3/P4 remain sequential after P0/P1 acceptance.
+- Published `89ef5558655e77d3e0c0302cf4c5e0a33862a0ac` with local/origin parity. Full local root/Wake/Python/strict/build gates passed; clean BuildOnly produced unsigned diagnostic `1.0.0-dev.85-daef712899bc-a75541a78920`. Exact SHA still has zero GitHub runs/checks on bounded post-build readback. Installed dev.84, browser/auth/tunnel and hourly deadman OFF were unchanged.
 
 ## 2026-10-15 — fixed broker self-clock and pre-spawn Sol executable lease (SOURCE ONLY, CURRENT)
 

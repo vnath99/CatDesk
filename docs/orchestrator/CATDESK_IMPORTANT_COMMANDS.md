@@ -4,7 +4,7 @@
 
 - R19's `inspect_legacy_owner_candidates()` has no arguments or install/cleanup authority. `NO_MATCHING_NAMED_PROCESS_IN_SNAPSHOT` means only no fixed-name process in one Toolhelp snapshot; a per-user pointer, pathname-text hash or opened lock never proves the old connected owner. See `docs/orchestrator/review_bundles/T-0485_R19_LEGACY_OWNER_CANDIDATE_INVENTORY_SOURCE.md`.
 - R26's private Sol `finish_normal` requires exact child success and empty Job without forced termination. Uncertain cleanup retains a typed attention owner; it cannot mint a deliverable or reissue a nonce. The same-user launcher, post-create Job assignment and in-memory attention remain diagnostic only. See `docs/orchestrator/review_bundles/T-0483_R26_SOL_NORMAL_COMPLETION_ATTENTION_OWNER_SOURCE.md`.
-- The latest clean committed BuildOnly is still `d49d238` / unsigned `1.0.0-dev.85-eaab41b4f47d-36e5cb743d19`; R19/R26 source is newer and has no signed package or exact three-job Windows CI. Keep protected install and new Chat53 held.
+- The latest clean committed `wake/install.ps1 -BuildOnly` source is `89ef555` / unsigned diagnostic `1.0.0-dev.85-daef712899bc-a75541a78920` (WakeHost SHA-256 `daef712899bc04918dd73b1a83d7041562d74b65542a72f90687a3ddd2754d14`; GUI `a75541a789203357e52d34d7b9ab703bad5e535fa654bdcd5caa11edbd60af46`). Adapter and bridge hashes are unchanged. The exact source has zero GitHub runs/checks on the bounded post-build readback; no signed package or independent three-job Windows CI exists. Keep protected install and new Chat53 held.
 
 ## Current broker clock and Sol launch diagnostic boundary (2026-10-15)
 
