@@ -460,8 +460,32 @@ impl<T> std::fmt::Debug for ChildTransitionFailure<T> {
     }
 }
 
-#[derive(Debug)]
-struct NormalDrainedJobV1;
+/// Retain the exact unnamed Job after a normal drain. Keeping its
+/// kill-on-close handle lets a later diagnostic reject changed limits or a
+/// newly active member instead of relying on a past empty-Job observation.
+struct NormalDrainedJobV1 {
+    job: PrivateJob,
+}
+
+impl std::fmt::Debug for NormalDrainedJobV1 {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("NormalDrainedJobV1")
+    }
+}
+
+impl NormalDrainedJobV1 {
+    fn diagnose_retained_empty(&self) -> Result<(), String> {
+        self.job.require_limits()?;
+        let state = self.job.accounting()?;
+        if state.total_processes == 0
+            || state.active_processes != 0
+            || !self.job.process_list_empty()?
+        {
+            return Err(format!("{LABEL} retained Job is not empty"));
+        }
+        self.job.require_limits()
+    }
+}
 
 enum AttentionJobChild {
     Suspended(OwnedSuspendedJobChild),
@@ -1217,6 +1241,7 @@ struct BoundFixedWorkerJobChild {
 /// processes launched outside that Job or handles held by other processes.
 /// Private fields and the lack of `Clone` prevent a caller-created claim.
 pub(crate) struct DrainedBoundFixedWorkerJobV1 {
+    _job: NormalDrainedJobV1,
     _bound_worker: BoundFixedLocalSolWorkerProcessV1,
     _prepared_run: ReservedPreparedSolRunV1,
     _executable: PinnedSolWorkerExecutableV1,
@@ -1231,12 +1256,20 @@ pub(crate) struct DrainedBoundFixedWorkerJobV1 {
 /// must prove post-exit identity and loss of all write authority before it may
 /// consume output. This type exposes no burn, stage or repository-use method.
 pub(crate) struct StoppedBoundFixedWorkerCandidateV1 {
+    _job: NormalDrainedJobV1,
     _bound_worker: BoundFixedLocalSolWorkerProcessV1,
     _prepared_run: ReservedPreparedSolRunV1,
     _executable: PinnedSolWorkerExecutableV1,
 }
 
 impl StoppedBoundFixedWorkerCandidateV1 {
+    /// Diagnostic only. This rereads the exact Job's limits, accounting and
+    /// process list after the prior normal drain. It cannot see an escaped
+    /// process or a writable handle held outside the Job.
+    pub(crate) fn diagnose_retained_job_empty(&self) -> Result<(), String> {
+        self._job.diagnose_retained_empty()
+    }
+
     /// Diagnostic only. This checks the original exited process and retained
     /// restricted token against the fixed local account, but cannot prove no
     /// outside-Job process or writable handle survived the normal drain.
@@ -1256,6 +1289,7 @@ impl StoppedBoundFixedWorkerCandidateV1 {
 impl DrainedBoundFixedWorkerJobV1 {
     pub(crate) fn into_stopped_candidate(self) -> StoppedBoundFixedWorkerCandidateV1 {
         StoppedBoundFixedWorkerCandidateV1 {
+            _job: self._job,
             _bound_worker: self._bound_worker,
             _prepared_run: self._prepared_run,
             _executable: self._executable,
@@ -1626,7 +1660,7 @@ impl OwnedRunningJobChild {
             )));
         }
         match job_empty_until(&self.job, deadline, true) {
-            Ok(true) => Ok(NormalDrainedJobV1),
+            Ok(true) => Ok(NormalDrainedJobV1 { job: self.job }),
             Ok(false) => Err(self.failed_normal_completion(format!(
                 "{LABEL} Job did not drain after normal child exit"
             ))),
@@ -1649,15 +1683,19 @@ impl BoundFixedWorkerJobChild {
             prepared_run,
             executable,
         } = self;
-        if let Err(failure) = running.finish_normal(timeout) {
-            return Err(prepared_failure(
-                failure.map_attention_child(AttentionJobChild::Running),
-                prepared_run,
-                executable,
-                Some(bound_worker),
-            ));
-        }
+        let drained_job = match running.finish_normal(timeout) {
+            Ok(drained_job) => drained_job,
+            Err(failure) => {
+                return Err(prepared_failure(
+                    failure.map_attention_child(AttentionJobChild::Running),
+                    prepared_run,
+                    executable,
+                    Some(bound_worker),
+                ));
+            }
+        };
         Ok(DrainedBoundFixedWorkerJobV1 {
+            _job: drained_job,
             _bound_worker: bound_worker,
             _prepared_run: prepared_run,
             _executable: executable,
@@ -1849,7 +1887,54 @@ mod tests {
         FORCE_JOB_TERMINATE_FAILURE.with(|slot| slot.set(true));
         let result = owner.finish_normal(Duration::from_secs(5));
         FORCE_JOB_TERMINATE_FAILURE.with(|slot| slot.set(false));
-        result.expect("normal zero exit and empty Job without forced termination");
+        let drained = result.expect("normal zero exit and empty Job without forced termination");
+        drained
+            .diagnose_retained_empty()
+            .expect("retained Job stays empty after normal completion");
+        FORCE_JOB_ACCOUNTING_FAILURE.with(|slot| slot.set(true));
+        assert!(drained.diagnose_retained_empty().is_err());
+        FORCE_JOB_ACCOUNTING_FAILURE.with(|slot| slot.set(false));
+        drained
+            .diagnose_retained_empty()
+            .expect("retained Job readback recovers without changing witness");
+    }
+
+    #[test]
+    fn retained_normal_job_rejects_a_late_active_member() {
+        let mut command = helper_command("success");
+        let owner = OwnedSuspendedJobChild::launch(&mut command).expect("launch in exact Job");
+        let drained = owner
+            .finish_normal(Duration::from_secs(5))
+            .expect("normal zero exit and empty Job");
+        drained
+            .diagnose_retained_empty()
+            .expect("initial retained empty observation");
+
+        let mut late_command = helper_command("descendant");
+        late_command.creation_flags(CREATE_SUSPENDED);
+        let mut late_child = OwnedChildProcess::Command(
+            late_command
+                .spawn()
+                .expect("spawn suspended diagnostic member"),
+        );
+        if let Err(error) = drained.job.assign_and_check(&late_child) {
+            terminate_original_child_bounded(&mut late_child)
+                .expect("clean up unassigned diagnostic child");
+            panic!("assign late diagnostic member: {error}");
+        }
+        assert!(
+            drained.diagnose_retained_empty().is_err(),
+            "a member added after normal completion invalidates the empty observation"
+        );
+        drained.job.terminate().expect("terminate late Job member");
+        terminate_original_child_bounded(&mut late_child).expect("late child becomes terminal");
+        assert!(
+            job_empty_until(&drained.job, Instant::now() + Duration::from_secs(5), true)
+                .expect("read drained Job after termination")
+        );
+        drained
+            .diagnose_retained_empty()
+            .expect("retained Job is empty again");
     }
 
     #[test]
@@ -1995,6 +2080,8 @@ mod tests {
         let _: fn(&StoppedBoundFixedWorkerCandidateV1) -> Result<(), String> =
             StoppedBoundFixedWorkerCandidateV1::diagnose_retained_exited_identity;
         let _: fn(&StoppedBoundFixedWorkerCandidateV1) -> Result<(), String> =
+            StoppedBoundFixedWorkerCandidateV1::diagnose_retained_job_empty;
+        let _: fn(&StoppedBoundFixedWorkerCandidateV1) -> Result<(), String> =
             StoppedBoundFixedWorkerCandidateV1::diagnose_retained_host_context;
     }
 
@@ -2139,7 +2226,10 @@ mod tests {
         FORCE_JOB_TERMINATE_FAILURE.with(|slot| slot.set(true));
         let result = running.finish_normal(Duration::from_secs(5));
         FORCE_JOB_TERMINATE_FAILURE.with(|slot| slot.set(false));
-        result.expect("zero exit and empty Job without forced termination");
+        result
+            .expect("zero exit and empty Job without forced termination")
+            .diagnose_retained_empty()
+            .expect("native creation-time Job remains empty after normal exit");
         drop(prepared_run);
         drop(executable);
         let reopened = ProtectedDirectoryGuard::acquire(&fixture.ledger_path, LABEL)
