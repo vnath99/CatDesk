@@ -25,7 +25,8 @@ const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
 /// This expectation must come from the trusted host's task/native-turn state,
 /// never from the worker-supplied manifest. `allowed_paths` is the exact
 /// contract allowlist, not a worker-selected expansion of it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub(crate) struct ExpectedSolWorkerOutputV1 {
     pub task_id: String,
     pub baseline_commit: String,

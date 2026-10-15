@@ -18,6 +18,8 @@
 //! Synced files and readback do not prove parent-directory metadata survives
 //! sudden power loss.
 
+#[cfg(all(test, windows))]
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 #[cfg(windows)]
 use std::sync::Arc;
@@ -30,10 +32,22 @@ use crate::reviewed_source_snapshot::query_relative_directory_names_bounded;
 use crate::windows_protected_fs::{
     ProtectedDirectoryGuard, read_relative_regular_unique, write_new_regular_in,
 };
+#[cfg(windows)]
+use crate::windows_protected_fs::{
+    StrongFileId, flush_pinned_directory_metadata, read_optional_relative_regular,
+};
 
 #[cfg(windows)]
 use super::sol_worker_identity_preflight::BoundFixedLocalSolWorkerProcessV1;
 use super::sol_worker_nonce::BurnedSolWorkerOutputV1;
+#[cfg(windows)]
+use super::sol_worker_nonce::{
+    SolWorkerNonceAuthorityV1, read_active_sol_worker_nonce, require_exact_burned_sol_worker_nonce,
+    require_matching_bound_turn, require_unburned_sol_worker_nonce,
+    verify_and_burn_sol_worker_output,
+};
+#[cfg(windows)]
+use super::sol_worker_output::SolWorkerOutputManifestV1;
 use super::sol_worker_output::{ExpectedSolWorkerOutputV1, SolWorkerOutputFileV1};
 use super::sol_worker_staging_security as security;
 
@@ -529,6 +543,457 @@ fn stage_verified_sol_worker_output_with_id(
     Ok(staged)
 }
 
+// This journal is deliberately private to the staging module. The stopped
+// fixed-worker candidate cannot construct it: exclusion of copied writable
+// handles and outside-Job processes has not been proved. Its testable path
+// establishes process-crash fail-closed ordering, not recovered stage use.
+#[cfg(windows)]
+const STAGE_JOURNAL_MAX_RECORD_BYTES: usize = 64 * 1024;
+
+#[cfg(windows)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct StageIntentRecordV1 {
+    schema_version: u32,
+    purpose: String,
+    authority: SolWorkerNonceAuthorityV1,
+    expected: ExpectedSolWorkerOutputV1,
+    worker_manifest_sha256: String,
+    worker_token_user_sid: String,
+    stage_id: String,
+    ledger_identity: StrongFileId,
+    output_identity: StrongFileId,
+    stage_root_identity: StrongFileId,
+}
+
+#[cfg(windows)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct StageCompleteRecordV1 {
+    schema_version: u32,
+    purpose: String,
+    intent_sha256: String,
+    stage_id: String,
+    stage_identity: StrongFileId,
+    staged_manifest_sha256: String,
+}
+
+#[cfg(windows)]
+struct StageIntentReceiptV1 {
+    record: StageIntentRecordV1,
+    bytes: Vec<u8>,
+    ledger: ProtectedDirectoryGuard,
+    output: ProtectedDirectoryGuard,
+    audited_root: AclAuditedSolStageRootForSuppliedSidV1,
+    worker_manifest: SolWorkerOutputManifestV1,
+}
+
+#[cfg(windows)]
+struct StageBurnedReceiptV1 {
+    intent: StageIntentReceiptV1,
+    burned: BurnedSolWorkerOutputV1,
+}
+
+#[cfg(windows)]
+struct StageCompletedReceiptV1 {
+    stage: PinnedSolWorkerStageV1,
+}
+
+#[cfg(all(test, windows))]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StageJournalFailpoint {
+    IntentCreated,
+    IntentFlushed,
+    Burned,
+    StageReadback,
+    CompleteCreated,
+    CompleteFlushed,
+}
+
+#[cfg(all(test, windows))]
+thread_local! {
+    static STAGE_JOURNAL_FAILPOINT: Cell<Option<StageJournalFailpoint>> = const { Cell::new(None) };
+}
+
+#[cfg(all(test, windows))]
+fn stage_journal_fail_at(point: StageJournalFailpoint) -> Result<(), String> {
+    if STAGE_JOURNAL_FAILPOINT.with(|slot| {
+        if slot.get() == Some(point) {
+            slot.set(None);
+            true
+        } else {
+            false
+        }
+    }) {
+        return Err(format!("{LABEL} injected stage journal interruption"));
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn stage_intent_name(nonce: &str) -> String {
+    format!("stage-intent-{nonce}.json")
+}
+
+#[cfg(windows)]
+fn stage_complete_name(nonce: &str) -> String {
+    format!("stage-complete-{nonce}.json")
+}
+
+#[cfg(windows)]
+fn stage_journal_bytes<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
+    let bytes = serde_json::to_vec(value).map_err(|_| format!("{LABEL} journal is invalid"))?;
+    if bytes.len() > STAGE_JOURNAL_MAX_RECORD_BYTES {
+        return Err(format!("{LABEL} journal is oversized"));
+    }
+    Ok(bytes)
+}
+
+#[cfg(windows)]
+fn stage_journal_digest(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+#[cfg(windows)]
+impl StageIntentReceiptV1 {
+    fn create_once(
+        ledger: &ProtectedDirectoryGuard,
+        output: &ProtectedDirectoryGuard,
+        audited_root: AclAuditedSolStageRootForSuppliedSidV1,
+        authority: &SolWorkerNonceAuthorityV1,
+        expected: &ExpectedSolWorkerOutputV1,
+        worker_manifest: &SolWorkerOutputManifestV1,
+    ) -> Result<Self, String> {
+        // The output verifier accepts an empty export, but staging cannot.
+        // Reject that mismatch before an irreversible burn or intent create.
+        if worker_manifest.files.is_empty() {
+            return Err(format!("{LABEL} empty output cannot be staged"));
+        }
+        require_matching_bound_turn(ledger, authority, expected)?;
+        require_unburned_sol_worker_nonce(ledger, authority, &expected.handoff_nonce)?;
+        security::verify_private_root(&audited_root.guard, &audited_root.worker_token_user_sid)?;
+        let worker_manifest_bytes = stage_journal_bytes(worker_manifest)?;
+        let record = StageIntentRecordV1 {
+            schema_version: 1,
+            purpose: "sol-worker-stage-intent".into(),
+            authority: authority.clone(),
+            expected: expected.clone(),
+            worker_manifest_sha256: stage_journal_digest(&worker_manifest_bytes),
+            worker_token_user_sid: audited_root.worker_token_user_sid.clone(),
+            stage_id: Uuid::new_v4().simple().to_string(),
+            ledger_identity: ledger.strong_physical_identity(LABEL)?,
+            output_identity: output.strong_physical_identity(LABEL)?,
+            stage_root_identity: audited_root.guard.strong_physical_identity(LABEL)?,
+        };
+        let bytes = stage_journal_bytes(&record)?;
+        let name = stage_intent_name(&expected.handoff_nonce);
+        write_new_regular_in(ledger, &name, &bytes, LABEL)?;
+        #[cfg(test)]
+        stage_journal_fail_at(StageJournalFailpoint::IntentCreated)?;
+        flush_pinned_directory_metadata(ledger, LABEL)?;
+        #[cfg(test)]
+        stage_journal_fail_at(StageJournalFailpoint::IntentFlushed)?;
+        if read_relative_regular_unique(
+            ledger,
+            &name,
+            STAGE_JOURNAL_MAX_RECORD_BYTES as u64,
+            LABEL,
+        )? != bytes
+        {
+            return Err(format!("{LABEL} stage intent changed"));
+        }
+        let receipt = Self {
+            record,
+            bytes,
+            ledger: ledger.try_clone(LABEL)?,
+            output: output.try_clone(LABEL)?,
+            audited_root,
+            worker_manifest: worker_manifest.clone(),
+        };
+        receipt.require_exact()?;
+        require_unburned_sol_worker_nonce(&receipt.ledger, authority, &expected.handoff_nonce)?;
+        Ok(receipt)
+    }
+
+    fn require_exact(&self) -> Result<(), String> {
+        if self.ledger.strong_physical_identity(LABEL)? != self.record.ledger_identity
+            || self.output.strong_physical_identity(LABEL)? != self.record.output_identity
+            || self.audited_root.guard.strong_physical_identity(LABEL)?
+                != self.record.stage_root_identity
+            || stage_journal_digest(&stage_journal_bytes(&self.worker_manifest)?)
+                != self.record.worker_manifest_sha256
+            || read_relative_regular_unique(
+                &self.ledger,
+                &stage_intent_name(&self.record.expected.handoff_nonce),
+                STAGE_JOURNAL_MAX_RECORD_BYTES as u64,
+                LABEL,
+            )? != self.bytes
+        {
+            return Err(format!("{LABEL} stage intent binding changed"));
+        }
+        require_matching_bound_turn(&self.ledger, &self.record.authority, &self.record.expected)?;
+        security::verify_private_root(&self.audited_root.guard, &self.record.worker_token_user_sid)
+    }
+
+    fn burn(self) -> Result<StageBurnedReceiptV1, String> {
+        self.require_exact()?;
+        require_unburned_sol_worker_nonce(
+            &self.ledger,
+            &self.record.authority,
+            &self.record.expected.handoff_nonce,
+        )?;
+        let burned = verify_and_burn_sol_worker_output(
+            &self.ledger,
+            &self.output,
+            &self.record.authority,
+            &self.record.expected,
+            &self.worker_manifest,
+        )?;
+        #[cfg(test)]
+        stage_journal_fail_at(StageJournalFailpoint::Burned)?;
+        burned.require_source_identities(&self.ledger, &self.output)?;
+        require_exact_burned_sol_worker_nonce(
+            &self.ledger,
+            &self.record.authority,
+            &self.record.expected,
+        )?;
+        self.require_exact()?;
+        Ok(StageBurnedReceiptV1 {
+            intent: self,
+            burned,
+        })
+    }
+}
+
+#[cfg(windows)]
+fn flush_stage_tree(stage: &PinnedSolWorkerStageV1) -> Result<(), String> {
+    let mut payload = stage.guard.try_clone(LABEL)?;
+    payload.descend_existing(PAYLOAD, LABEL)?;
+    let mut directories = expected_directories(&stage.manifest.files)
+        .into_iter()
+        .collect::<Vec<_>>();
+    directories.sort_by_key(|path| std::cmp::Reverse(path.split('/').count()));
+    for path in directories {
+        let mut child = payload.try_clone(LABEL)?;
+        for component in path.split('/') {
+            child.descend_existing(component, LABEL)?;
+        }
+        flush_pinned_directory_metadata(&child, LABEL)?;
+    }
+    flush_pinned_directory_metadata(&payload, LABEL)?;
+    flush_pinned_directory_metadata(&stage.guard, LABEL)?;
+    flush_pinned_directory_metadata(&stage.acl_audited_root, LABEL)
+}
+
+#[cfg(windows)]
+impl StageBurnedReceiptV1 {
+    fn stage(self) -> Result<StageCompletedReceiptV1, String> {
+        self.intent.require_exact()?;
+        self.burned
+            .require_source_identities(&self.intent.ledger, &self.intent.output)?;
+        require_exact_burned_sol_worker_nonce(
+            &self.intent.ledger,
+            &self.intent.record.authority,
+            &self.intent.record.expected,
+        )?;
+        let stage = stage_verified_sol_worker_output_with_id(
+            &self.intent.audited_root,
+            &self.intent.record.expected,
+            self.burned,
+            &self.intent.record.stage_id,
+        )?;
+        let readback = stage.readback()?;
+        if prepare_manifest(
+            &self.intent.record.stage_id,
+            &self.intent.record.expected,
+            &readback,
+        )? != *stage.manifest()
+        {
+            return Err(format!("{LABEL} staged binding changed"));
+        }
+        #[cfg(test)]
+        stage_journal_fail_at(StageJournalFailpoint::StageReadback)?;
+        flush_stage_tree(&stage)?;
+        self.intent.require_exact()?;
+        require_exact_burned_sol_worker_nonce(
+            &self.intent.ledger,
+            &self.intent.record.authority,
+            &self.intent.record.expected,
+        )?;
+        let completion = StageCompleteRecordV1 {
+            schema_version: 1,
+            purpose: "sol-worker-stage-complete".into(),
+            intent_sha256: stage_journal_digest(&self.intent.bytes),
+            stage_id: self.intent.record.stage_id.clone(),
+            stage_identity: stage.guard.strong_physical_identity(LABEL)?,
+            staged_manifest_sha256: stage_journal_digest(&manifest_bytes(stage.manifest())?),
+        };
+        let bytes = stage_journal_bytes(&completion)?;
+        let name = stage_complete_name(&self.intent.record.expected.handoff_nonce);
+        write_new_regular_in(&self.intent.ledger, &name, &bytes, LABEL)?;
+        #[cfg(test)]
+        stage_journal_fail_at(StageJournalFailpoint::CompleteCreated)?;
+        flush_pinned_directory_metadata(&self.intent.ledger, LABEL)?;
+        #[cfg(test)]
+        stage_journal_fail_at(StageJournalFailpoint::CompleteFlushed)?;
+        if read_relative_regular_unique(
+            &self.intent.ledger,
+            &name,
+            STAGE_JOURNAL_MAX_RECORD_BYTES as u64,
+            LABEL,
+        )? != bytes
+            || stage.guard.strong_physical_identity(LABEL)? != completion.stage_identity
+            || stage.readback()? != readback
+        {
+            return Err(format!("{LABEL} stage completion changed"));
+        }
+        self.intent.require_exact()?;
+        require_exact_burned_sol_worker_nonce(
+            &self.intent.ledger,
+            &self.intent.record.authority,
+            &self.intent.record.expected,
+        )?;
+        Ok(StageCompletedReceiptV1 { stage })
+    }
+}
+
+/// Reopen is diagnostic even after a complete receipt. No process restart
+/// reconstructs a burned value, retries staging, or grants repository use.
+#[cfg(windows)]
+fn reopen_stage_handoff_attention(
+    ledger: &ProtectedDirectoryGuard,
+    output: &ProtectedDirectoryGuard,
+    stage_root: &ProtectedDirectoryGuard,
+    authority: &SolWorkerNonceAuthorityV1,
+    expected: &ExpectedSolWorkerOutputV1,
+    worker_manifest: &SolWorkerOutputManifestV1,
+    worker_token_user_sid: &str,
+) -> String {
+    diagnose_reopened_stage_handoff(
+        ledger,
+        output,
+        stage_root,
+        authority,
+        expected,
+        worker_manifest,
+        worker_token_user_sid,
+    )
+    .unwrap_or_else(|reason| format!("{reason}; ATTENTION"))
+}
+
+#[cfg(windows)]
+fn diagnose_reopened_stage_handoff(
+    ledger: &ProtectedDirectoryGuard,
+    output: &ProtectedDirectoryGuard,
+    stage_root: &ProtectedDirectoryGuard,
+    authority: &SolWorkerNonceAuthorityV1,
+    expected: &ExpectedSolWorkerOutputV1,
+    worker_manifest: &SolWorkerOutputManifestV1,
+    worker_token_user_sid: &str,
+) -> Result<String, String> {
+    require_matching_bound_turn(ledger, authority, expected)?;
+    if read_active_sol_worker_nonce(ledger, authority)? != expected.handoff_nonce {
+        return Err(format!("{LABEL} selected nonce changed"));
+    }
+    let intent_name = stage_intent_name(&expected.handoff_nonce);
+    let Some(intent_bytes) = read_optional_relative_regular(
+        ledger,
+        &intent_name,
+        STAGE_JOURNAL_MAX_RECORD_BYTES as u64,
+        LABEL,
+    )?
+    else {
+        return Ok(format!("{LABEL} no stage intent; ATTENTION"));
+    };
+    let intent: StageIntentRecordV1 = serde_json::from_slice(&intent_bytes)
+        .map_err(|_| format!("{LABEL} corrupt stage intent"))?;
+    if intent.schema_version != 1
+        || intent.purpose != "sol-worker-stage-intent"
+        || intent.authority != *authority
+        || intent.expected != *expected
+        || intent.worker_manifest_sha256
+            != stage_journal_digest(&stage_journal_bytes(worker_manifest)?)
+        || intent.worker_token_user_sid != worker_token_user_sid
+        || !valid_stage_id(&intent.stage_id)
+        || intent.ledger_identity != ledger.strong_physical_identity(LABEL)?
+        || intent.output_identity != output.strong_physical_identity(LABEL)?
+        || intent.stage_root_identity != stage_root.strong_physical_identity(LABEL)?
+        || stage_journal_bytes(&intent)? != intent_bytes
+    {
+        return Err(format!("{LABEL} stage intent binding changed"));
+    }
+    if require_exact_burned_sol_worker_nonce(ledger, authority, expected).is_err() {
+        return Ok(format!("{LABEL} stage intent has no exact burn; ATTENTION"));
+    }
+    let completion_name = stage_complete_name(&expected.handoff_nonce);
+    let Some(completion_bytes) = read_optional_relative_regular(
+        ledger,
+        &completion_name,
+        STAGE_JOURNAL_MAX_RECORD_BYTES as u64,
+        LABEL,
+    )?
+    else {
+        return Ok(format!(
+            "{LABEL} burned without stage completion; ATTENTION"
+        ));
+    };
+    let completion: StageCompleteRecordV1 = serde_json::from_slice(&completion_bytes)
+        .map_err(|_| format!("{LABEL} corrupt stage completion"))?;
+    if completion.schema_version != 1
+        || completion.purpose != "sol-worker-stage-complete"
+        || completion.intent_sha256 != stage_journal_digest(&intent_bytes)
+        || completion.stage_id != intent.stage_id
+        || stage_journal_bytes(&completion)? != completion_bytes
+    {
+        return Err(format!("{LABEL} stage completion binding changed"));
+    }
+    security::verify_private_root(stage_root, worker_token_user_sid)?;
+    let mut stage_guard = stage_root.try_clone(LABEL)?;
+    stage_guard.descend_existing_for_security(&stage_name(&intent.stage_id), LABEL)?;
+    if stage_guard.strong_physical_identity(LABEL)? != completion.stage_identity {
+        return Err(format!("{LABEL} stage object changed"));
+    }
+    security::verify_private_child(stage_root, &stage_guard, worker_token_user_sid)?;
+    let manifest_data = read_relative_regular_unique(
+        &stage_guard,
+        ROOT_MANIFEST,
+        MAX_MANIFEST_BYTES as u64,
+        LABEL,
+    )?;
+    if stage_journal_digest(&manifest_data) != completion.staged_manifest_sha256 {
+        return Err(format!("{LABEL} staged manifest changed"));
+    }
+    let staged_manifest: SolStagedOutputManifestV1 = serde_json::from_slice(&manifest_data)
+        .map_err(|_| format!("{LABEL} staged manifest is invalid"))?;
+    let stage = PinnedSolWorkerStageV1 {
+        acl_audited_root: stage_root.try_clone(LABEL)?,
+        guard: stage_guard,
+        worker_token_user_sid: worker_token_user_sid.into(),
+        manifest: staged_manifest,
+    };
+    let files = stage.readback()?;
+    if prepare_manifest(&intent.stage_id, expected, &files)? != *stage.manifest()
+        || read_relative_regular_unique(
+            ledger,
+            &intent_name,
+            STAGE_JOURNAL_MAX_RECORD_BYTES as u64,
+            LABEL,
+        )? != intent_bytes
+        || read_relative_regular_unique(
+            ledger,
+            &completion_name,
+            STAGE_JOURNAL_MAX_RECORD_BYTES as u64,
+            LABEL,
+        )? != completion_bytes
+    {
+        return Err(format!("{LABEL} reopened stage changed"));
+    }
+    require_exact_burned_sol_worker_nonce(ledger, authority, expected)?;
+    Ok(format!(
+        "{LABEL} complete receipt is diagnostic only; ATTENTION"
+    ))
+}
+
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
@@ -709,6 +1174,39 @@ mod tests {
                 .expect("audit test root ACL")
         }
 
+        fn try_stage_intent(&self) -> Result<StageIntentReceiptV1, String> {
+            let ledger = ProtectedDirectoryGuard::acquire(&self.ledger, LABEL).expect("pin ledger");
+            let output = ProtectedDirectoryGuard::acquire(&self.export, LABEL).expect("pin output");
+            StageIntentReceiptV1::create_once(
+                &ledger,
+                &output,
+                self.private_root(),
+                &self.authority,
+                &self.expected,
+                &self.worker_manifest,
+            )
+        }
+
+        fn stage_intent(&self) -> StageIntentReceiptV1 {
+            self.try_stage_intent()
+                .expect("create one fixture stage intent")
+        }
+
+        fn stage_attention(&self) -> String {
+            let ledger = ProtectedDirectoryGuard::acquire(&self.ledger, LABEL).expect("pin ledger");
+            let output = ProtectedDirectoryGuard::acquire(&self.export, LABEL).expect("pin output");
+            let root = self.private_root();
+            reopen_stage_handoff_attention(
+                &ledger,
+                &output,
+                &root.guard,
+                &self.authority,
+                &self.expected,
+                &self.worker_manifest,
+                TEST_WORKER_SID,
+            )
+        }
+
         fn remove(self, stage_id: Option<&str>) {
             if let Some(stage_id) = stage_id {
                 let stage = self.staging.join(stage_name(stage_id));
@@ -734,6 +1232,8 @@ mod tests {
                 format!("issued-{}.json", self.expected.handoff_nonce),
                 format!("native-turn-{}.json", self.expected.handoff_nonce),
                 format!("burned-{}.json", self.expected.handoff_nonce),
+                stage_intent_name(&self.expected.handoff_nonce),
+                stage_complete_name(&self.expected.handoff_nonce),
             ] {
                 let file = self.ledger.join(name);
                 if file.exists() {
@@ -744,6 +1244,278 @@ mod tests {
             fs::remove_dir(&self.staging).expect("remove exact staging root");
             fs::remove_dir(&self.root).expect("remove exact test root");
         }
+    }
+
+    #[test]
+    fn private_stage_journal_binds_one_burn_and_reopens_complete_as_attention() {
+        let fixture = Fixture::new();
+        let intent = fixture.stage_intent();
+        let stage_id = intent.record.stage_id.clone();
+        assert!(
+            fixture
+                .stage_attention()
+                .contains("no exact burn; ATTENTION")
+        );
+        let burned = intent.burn().expect("burn after intent");
+        assert!(
+            fixture
+                .stage_attention()
+                .contains("burned without stage completion; ATTENTION")
+        );
+        let completed = burned.stage().expect("complete one fixture stage");
+        assert_eq!(completed.stage.manifest().stage_id, stage_id);
+        assert_eq!(
+            completed.stage.readback().expect("exact staged bytes")["src/lib.rs"],
+            b"changed\n"
+        );
+        assert!(
+            fixture
+                .stage_attention()
+                .contains("complete receipt is diagnostic only; ATTENTION")
+        );
+        assert!(fixture.try_stage_intent().is_err(), "intent cannot replay");
+        assert!(fixture.try_burn().is_err(), "burn cannot replay");
+        let mut wrong_authority = fixture.authority.clone();
+        wrong_authority.contract_hash = "d".repeat(64);
+        let ledger = ProtectedDirectoryGuard::acquire(&fixture.ledger, LABEL).expect("ledger");
+        let output = ProtectedDirectoryGuard::acquire(&fixture.export, LABEL).expect("output");
+        let root = fixture.private_root();
+        let wrong_authority_attention = reopen_stage_handoff_attention(
+            &ledger,
+            &output,
+            &root.guard,
+            &wrong_authority,
+            &fixture.expected,
+            &fixture.worker_manifest,
+            TEST_WORKER_SID,
+        );
+        assert!(wrong_authority_attention.contains("ATTENTION"));
+        assert!(!wrong_authority_attention.contains("complete receipt"));
+        let wrong_output_attention = reopen_stage_handoff_attention(
+            &ledger,
+            &ledger,
+            &root.guard,
+            &fixture.authority,
+            &fixture.expected,
+            &fixture.worker_manifest,
+            TEST_WORKER_SID,
+        );
+        assert!(wrong_output_attention.contains("ATTENTION"));
+        assert!(!wrong_output_attention.contains("complete receipt"));
+        drop(root);
+        drop(output);
+        drop(ledger);
+        drop(completed);
+        fixture.remove(Some(&stage_id));
+    }
+
+    #[test]
+    fn interrupted_stage_intent_is_sticky_attention_before_burn() {
+        for point in [
+            StageJournalFailpoint::IntentCreated,
+            StageJournalFailpoint::IntentFlushed,
+        ] {
+            let fixture = Fixture::new();
+            STAGE_JOURNAL_FAILPOINT.with(|slot| slot.set(Some(point)));
+            assert!(fixture.try_stage_intent().is_err());
+            assert!(fixture.stage_attention().contains("ATTENTION"));
+            assert!(
+                fixture.try_stage_intent().is_err(),
+                "create-once intent survives"
+            );
+            assert!(
+                !fixture
+                    .ledger
+                    .join(format!("burned-{}.json", fixture.expected.handoff_nonce))
+                    .exists(),
+                "intent interruption must precede burn"
+            );
+            fixture.remove(None);
+        }
+    }
+
+    #[test]
+    fn torn_stage_intent_blocks_burn_wrapper_and_reopen() {
+        let fixture = Fixture::new();
+        let intent = fixture.stage_intent();
+        drop(intent);
+        fs::write(
+            fixture
+                .ledger
+                .join(stage_intent_name(&fixture.expected.handoff_nonce)),
+            b"{",
+        )
+        .expect("tear intent fixture");
+        assert!(fixture.stage_attention().contains("ATTENTION"));
+        assert!(fixture.try_stage_intent().is_err(), "torn name is occupied");
+        assert!(
+            !fixture
+                .ledger
+                .join(format!("burned-{}.json", fixture.expected.handoff_nonce))
+                .exists(),
+            "the journal wrapper did not burn after a torn intent"
+        );
+        fixture.remove(None);
+    }
+
+    #[test]
+    fn interrupted_burn_or_stage_never_replays_and_leaves_no_completion() {
+        for point in [
+            StageJournalFailpoint::Burned,
+            StageJournalFailpoint::StageReadback,
+        ] {
+            let fixture = Fixture::new();
+            let intent = fixture.stage_intent();
+            let stage_id = intent.record.stage_id.clone();
+            STAGE_JOURNAL_FAILPOINT.with(|slot| slot.set(Some(point)));
+            if point == StageJournalFailpoint::Burned {
+                assert!(intent.burn().is_err());
+            } else {
+                let burned = intent.burn().expect("burn before stage interruption");
+                assert!(burned.stage().is_err());
+            }
+            assert!(
+                fixture
+                    .stage_attention()
+                    .contains("burned without stage completion; ATTENTION")
+            );
+            assert!(fixture.try_burn().is_err(), "burn is one-shot");
+            assert!(fixture.try_stage_intent().is_err(), "stage ID is one-shot");
+            assert!(
+                !fixture
+                    .ledger
+                    .join(stage_complete_name(&fixture.expected.handoff_nonce))
+                    .exists()
+            );
+            fixture.remove(if point == StageJournalFailpoint::StageReadback {
+                Some(&stage_id)
+            } else {
+                None
+            });
+        }
+    }
+
+    #[test]
+    fn journal_reserved_stage_id_collision_is_terminal_and_preserves_target() {
+        let fixture = Fixture::new();
+        let intent = fixture.stage_intent();
+        let stage_id = intent.record.stage_id.clone();
+        let colliding = fixture.staging.join(stage_name(&stage_id));
+        fs::create_dir(&colliding).expect("occupy exact reserved stage ID");
+        let sentinel = colliding.join("sentinel.txt");
+        fs::write(&sentinel, b"unchanged").expect("write collision sentinel");
+        let burned = intent.burn().expect("burn after reserved intent");
+        assert!(burned.stage().is_err(), "reserved collision is terminal");
+        assert_eq!(
+            fs::read(&sentinel).expect("read collision sentinel"),
+            b"unchanged"
+        );
+        assert!(
+            fixture
+                .stage_attention()
+                .contains("burned without stage completion; ATTENTION")
+        );
+        assert!(
+            fixture.try_stage_intent().is_err(),
+            "no replacement stage ID"
+        );
+        assert!(fixture.try_burn().is_err(), "burn remains spent");
+        assert!(
+            !fixture
+                .ledger
+                .join(stage_complete_name(&fixture.expected.handoff_nonce))
+                .exists()
+        );
+        fs::remove_file(sentinel).expect("remove collision sentinel");
+        fs::remove_dir(colliding).expect("remove exact collision target");
+        fixture.remove(None);
+    }
+
+    #[test]
+    fn interrupted_or_torn_stage_completion_remains_diagnostic_attention() {
+        for point in [
+            StageJournalFailpoint::CompleteCreated,
+            StageJournalFailpoint::CompleteFlushed,
+        ] {
+            let fixture = Fixture::new();
+            let intent = fixture.stage_intent();
+            let stage_id = intent.record.stage_id.clone();
+            let burned = intent.burn().expect("burn after intent");
+            STAGE_JOURNAL_FAILPOINT.with(|slot| slot.set(Some(point)));
+            assert!(burned.stage().is_err());
+            assert!(fixture.stage_attention().contains("ATTENTION"));
+            assert!(fixture.try_stage_intent().is_err());
+            assert!(fixture.try_burn().is_err());
+            fixture.remove(Some(&stage_id));
+        }
+        let fixture = Fixture::new();
+        let intent = fixture.stage_intent();
+        let stage_id = intent.record.stage_id.clone();
+        let completed = intent.burn().expect("burn").stage().expect("stage");
+        drop(completed);
+        fs::write(
+            fixture
+                .ledger
+                .join(stage_complete_name(&fixture.expected.handoff_nonce)),
+            b"{",
+        )
+        .expect("tear completion fixture");
+        assert!(fixture.stage_attention().contains("ATTENTION"));
+        assert!(fixture.try_stage_intent().is_err());
+        fixture.remove(Some(&stage_id));
+    }
+
+    #[test]
+    fn completed_journal_reopen_rejects_changed_staged_bytes() {
+        let fixture = Fixture::new();
+        let intent = fixture.stage_intent();
+        let stage_id = intent.record.stage_id.clone();
+        let completed = intent.burn().expect("burn").stage().expect("stage");
+        drop(completed);
+        let staged_source = fixture
+            .staging
+            .join(stage_name(&stage_id))
+            .join("payload/src/lib.rs");
+        fs::write(staged_source, b"changed after receipt").expect("tamper staged bytes");
+        let attention = fixture.stage_attention();
+        assert!(attention.contains("ATTENTION"));
+        assert!(
+            !attention.contains("complete receipt is diagnostic only"),
+            "a complete record cannot mask changed staged bytes"
+        );
+        fixture.remove(Some(&stage_id));
+    }
+
+    #[test]
+    fn empty_export_is_rejected_before_intent_and_stays_spent_after_legacy_burn() {
+        let mut fixture = Fixture::new();
+        let original_manifest = fixture.worker_manifest.clone();
+        fixture.worker_manifest.files.clear();
+        assert!(fixture.try_stage_intent().is_err(), "empty stage preflight");
+        assert!(
+            fixture
+                .stage_attention()
+                .contains("no stage intent; ATTENTION")
+        );
+        fs::remove_file(fixture.export.join("src/lib.rs")).expect("remove source export");
+        fs::remove_file(fixture.export.join("README.md")).expect("remove readme export");
+        fs::remove_dir(fixture.export.join("src")).expect("remove export directory");
+        drop(fixture.burned());
+        assert!(
+            fixture
+                .stage_attention()
+                .contains("no stage intent; ATTENTION")
+        );
+        assert!(fixture.try_burn().is_err(), "empty burn stays spent");
+        fixture.worker_manifest = original_manifest;
+        assert!(
+            fixture.try_stage_intent().is_err(),
+            "spent nonce cannot stage"
+        );
+        fs::create_dir(fixture.export.join("src")).expect("restore fixture directory");
+        fs::write(fixture.export.join("src/lib.rs"), b"changed\n").expect("restore fixture source");
+        fs::write(fixture.export.join("README.md"), b"review\n").expect("restore fixture readme");
+        fixture.remove(None);
     }
 
     #[test]

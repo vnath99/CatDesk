@@ -46,7 +46,7 @@ pub(crate) struct PinnedDirectory {
 
 #[cfg(windows)]
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct StrongFileId {
     volume_serial_number: u64,
     file_id: [u8; 16],

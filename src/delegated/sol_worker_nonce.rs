@@ -23,6 +23,10 @@ use uuid::Uuid;
 use crate::windows_protected_fs::{
     ProtectedDirectoryGuard, read_relative_regular_unique, write_new_regular_in,
 };
+#[cfg(windows)]
+use crate::windows_protected_fs::{
+    StrongFileId, flush_pinned_directory_metadata, read_optional_relative_regular,
+};
 
 use super::codex_model_policy::{CodexCliTurnProfileEvidenceV1, SOL_MEDIUM_MODEL};
 use super::sol_worker_output::{
@@ -39,9 +43,27 @@ const MAX_ALLOWED_PATHS: usize = 256;
 /// being passed to the later staging transaction without nonce consumption.
 pub(crate) struct BurnedSolWorkerOutputV1 {
     verified: VerifiedSolWorkerOutputV1,
+    #[cfg(windows)]
+    ledger_identity: StrongFileId,
+    #[cfg(windows)]
+    output_identity: StrongFileId,
 }
 
 impl BurnedSolWorkerOutputV1 {
+    #[cfg(windows)]
+    pub(super) fn require_source_identities(
+        &self,
+        ledger: &ProtectedDirectoryGuard,
+        output: &ProtectedDirectoryGuard,
+    ) -> Result<(), String> {
+        if self.ledger_identity != ledger.strong_physical_identity(LABEL)?
+            || self.output_identity != output.strong_physical_identity(LABEL)?
+        {
+            return Err(format!("{LABEL} burned source identity changed"));
+        }
+        Ok(())
+    }
+
     pub(super) fn into_parts(
         self,
     ) -> (
@@ -165,6 +187,21 @@ fn burn_name(nonce: &str) -> String {
 
 fn bound_name(nonce: &str) -> String {
     format!("native-turn-{nonce}.json")
+}
+
+#[cfg(windows)]
+pub(super) fn require_unburned_sol_worker_nonce(
+    ledger: &ProtectedDirectoryGuard,
+    authority: &SolWorkerNonceAuthorityV1,
+    nonce: &str,
+) -> Result<(), String> {
+    require_matching_issue(ledger, authority, nonce)?;
+    if read_optional_relative_regular(ledger, &burn_name(nonce), MAX_RECORD_BYTES as u64, LABEL)?
+        .is_some()
+    {
+        return Err(format!("{LABEL} nonce is already spent"));
+    }
+    Ok(())
 }
 
 fn serialize_bounded<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
@@ -331,20 +368,13 @@ pub(crate) fn bind_sol_worker_native_turn(
     Ok(())
 }
 
-/// Verify output and write a synced burn marker before returning captured
-/// bytes. A process restart sees an existing marker as spent.
-/// The caller must first prove the producer and all descendants have exited
-/// and cannot mutate either pinned directory. This function deliberately
-/// does not stage files or turn a nonce into a launch permit. A failed burn,
-/// including a pre-existing or torn marker, returns no output and never
-/// deletes the marker.
-pub(crate) fn verify_and_burn_sol_worker_output(
+/// Recheck the selected nonce and trusted native-turn profile before either a
+/// read-only burn diagnosis or an irreversible output burn.
+pub(super) fn require_matching_bound_turn(
     ledger: &ProtectedDirectoryGuard,
-    output_root: &ProtectedDirectoryGuard,
     authority: &SolWorkerNonceAuthorityV1,
     expected: &ExpectedSolWorkerOutputV1,
-    manifest: &SolWorkerOutputManifestV1,
-) -> Result<BurnedSolWorkerOutputV1, String> {
+) -> Result<(), String> {
     if !valid_authority(authority)
         || !valid_nonce(&expected.handoff_nonce)
         || authority.task_id != expected.task_id
@@ -375,6 +405,60 @@ pub(crate) fn verify_and_burn_sol_worker_output(
     {
         return Err(format!("{LABEL} native turn binding does not match"));
     }
+    Ok(())
+}
+
+/// Read-only, exact burn-record readback. This confirms a nonce is spent for
+/// one host authority and native turn; it never reconstructs captured output
+/// bytes or permits a retry after a crash.
+#[cfg(windows)]
+pub(super) fn require_exact_burned_sol_worker_nonce(
+    ledger: &ProtectedDirectoryGuard,
+    authority: &SolWorkerNonceAuthorityV1,
+    expected: &ExpectedSolWorkerOutputV1,
+) -> Result<(), String> {
+    require_matching_bound_turn(ledger, authority, expected)?;
+    let bytes = read_relative_regular_unique(
+        ledger,
+        &burn_name(&expected.handoff_nonce),
+        MAX_RECORD_BYTES as u64,
+        LABEL,
+    )?;
+    let burn: BurnedNonceRecordV1 =
+        serde_json::from_slice(&bytes).map_err(|_| format!("{LABEL} burn record is invalid"))?;
+    if burn.schema_version != 1
+        || burn.purpose != "sol-worker-handoff-burned"
+        || burn.nonce != expected.handoff_nonce
+        || burn.session_id != authority.session_id
+        || burn.task_id != authority.task_id
+        || burn.host_turn_id != authority.host_turn_id
+        || burn.contract_hash != authority.contract_hash
+        || burn.baseline_commit != authority.baseline_commit
+        || burn.native_turn_id != expected.native_turn_id
+        || serialize_bounded(&burn)? != bytes
+    {
+        return Err(format!("{LABEL} burn record does not match"));
+    }
+    Ok(())
+}
+
+/// Verify output and write a synced burn marker before returning captured
+/// bytes. A process restart sees an existing marker as spent. The caller must
+/// first prove the worker lost write authority over the pinned output. This
+/// private primitive is currently reached only from fixtures; a failed burn
+/// never deletes the marker or permits a retry.
+pub(super) fn verify_and_burn_sol_worker_output(
+    ledger: &ProtectedDirectoryGuard,
+    output_root: &ProtectedDirectoryGuard,
+    authority: &SolWorkerNonceAuthorityV1,
+    expected: &ExpectedSolWorkerOutputV1,
+    manifest: &SolWorkerOutputManifestV1,
+) -> Result<BurnedSolWorkerOutputV1, String> {
+    require_matching_bound_turn(ledger, authority, expected)?;
+    #[cfg(windows)]
+    let ledger_identity = ledger.strong_physical_identity(LABEL)?;
+    #[cfg(windows)]
+    let output_identity = output_root.strong_physical_identity(LABEL)?;
     let output = verify_exact_sol_worker_output(output_root, expected, manifest)?;
     let burn = BurnedNonceRecordV1 {
         schema_version: 1,
@@ -392,11 +476,25 @@ pub(crate) fn verify_and_burn_sol_worker_output(
     // FILE_CREATE under the pinned ledger is the replay serialization point.
     // Existing names, including torn crash residue, fail closed.
     write_new_regular_in(ledger, &name, &bytes, LABEL)?;
+    #[cfg(windows)]
+    flush_pinned_directory_metadata(ledger, LABEL)?;
     let observed = read_relative_regular_unique(ledger, &name, MAX_RECORD_BYTES as u64, LABEL)?;
     if observed != bytes {
         return Err(format!("{LABEL} burn record changed"));
     }
-    Ok(BurnedSolWorkerOutputV1 { verified: output })
+    #[cfg(windows)]
+    if ledger.strong_physical_identity(LABEL)? != ledger_identity
+        || output_root.strong_physical_identity(LABEL)? != output_identity
+    {
+        return Err(format!("{LABEL} burned source identity changed"));
+    }
+    Ok(BurnedSolWorkerOutputV1 {
+        verified: output,
+        #[cfg(windows)]
+        ledger_identity,
+        #[cfg(windows)]
+        output_identity,
+    })
 }
 
 #[cfg(all(test, windows))]
