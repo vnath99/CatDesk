@@ -40,7 +40,7 @@ mod devtools;
 mod git_workflow;
 #[allow(dead_code)] // R3B4-B1: fixed Git-object candidate reader, not a trusted producer.
 mod isolated_fixture_git_objects;
-#[allow(dead_code)] // R3B4-B2 fixed live GitHub CI witness; not a production signing authority.
+#[allow(dead_code)] // Fixed live and diagnostic GitHub witnesses; not production signing authority.
 mod isolated_fixture_github_authority;
 #[allow(dead_code)]
 // T0478 R3B4-A pure schema; trusted producer and runtime enforcement follow later.
@@ -2030,13 +2030,15 @@ fn format_candidate_owner_diagnostic_report(
     report: isolated_fixture_snapshot::CandidateOwnerRecoveryReport,
     source_commit: &str,
     witness_run_id: u64,
+    witness_run_attempt: u64,
     temp_parent: &str,
 ) -> Result<String, String> {
     serde_json::to_string(&serde_json::json!({
         "snapshotId": report.snapshot_id,
         "sourceCommit": source_commit,
         "witnessRunId": witness_run_id,
-        "witnessScope": "BRANCH_HEAD_AT_FETCH",
+        "witnessRunAttempt": witness_run_attempt,
+        "witnessScope": "HISTORICAL_COMMIT_PUSH_CI",
         "scope": "EXACT_SNAPSHOT_IN_DIAGNOSTIC_PROCESS_TEMP_PARENT",
         "tempParent": temp_parent,
         "authority": "DIAGNOSTIC_ONLY",
@@ -2055,13 +2057,16 @@ async fn run_reviewed_candidate_owner_diagnose(
     if !source.is_dir() {
         return Err("candidate owner diagnostic source workspace invalid".into());
     }
-    // Reconstruct the exact manifest using a fresh fixed-branch, three-job CI
-    // witness and the two fixed Git objects. A caller cannot supply a manifest,
-    // journal pathname, or root pathname to this forensic route.
-    let witness = isolated_fixture_github_authority::fetch_live_witness(&options.expected_commit)
-        .await
-        .map_err(|error| format!("branch head at witness fetch and green CI required: {error}"))?;
-    let (manifest, _) = isolated_fixture_git_objects::read_witnessed_candidate_git_objects(
+    // Reconstruct the exact historical manifest from a fixed-branch push CI
+    // diagnostic witness and the two immutable Git blobs. The distinct witness
+    // cannot satisfy the current-head fixture launch gate. No caller supplies
+    // a manifest, journal pathname, or candidate root pathname.
+    let witness = isolated_fixture_github_authority::fetch_historical_diagnostic_witness(
+        &options.expected_commit,
+    )
+    .await
+    .map_err(|error| format!("historical commit push CI required: {error}"))?;
+    let manifest = isolated_fixture_git_objects::read_historical_diagnostic_git_objects(
         &source,
         &witness,
         &options.snapshot_id,
@@ -2090,6 +2095,7 @@ async fn run_reviewed_candidate_owner_diagnose(
         report,
         witness.commit_sha(),
         witness.run_id(),
+        witness.run_attempt(),
         temp_parent_text,
     )
 }
@@ -3711,12 +3717,14 @@ mod tests {
             report,
             "abcdef0123456789abcdef0123456789abcdef01",
             42,
+            1,
             "C:\\Users\\operator\\AppData\\Local\\Temp",
         )
         .expect("format diagnostic scope");
         let value: serde_json::Value = serde_json::from_str(&output).unwrap();
         assert_eq!(value["classification"], "NO_JOURNAL");
-        assert_eq!(value["witnessScope"], "BRANCH_HEAD_AT_FETCH");
+        assert_eq!(value["witnessScope"], "HISTORICAL_COMMIT_PUSH_CI");
+        assert_eq!(value["witnessRunAttempt"], 1);
         assert_eq!(
             value["scope"],
             "EXACT_SNAPSHOT_IN_DIAGNOSTIC_PROCESS_TEMP_PARENT"

@@ -176,6 +176,19 @@ pub(crate) async fn read_witnessed_candidate_git_objects(
     read_candidate_git_objects(workspace, witness.commit_sha(), snapshot_id).await
 }
 
+/// Reconstruct the same two fixed immutable Git blobs for a historical owner
+/// diagnosis. The distinct witness type cannot enter the current-head
+/// staging/launch route, and this reader creates no snapshot or fixture root.
+pub(crate) async fn read_historical_diagnostic_git_objects(
+    workspace: &Path,
+    witness: &crate::isolated_fixture_github_authority::HistoricalGithubDiagnosticWitness,
+    snapshot_id: &str,
+) -> Result<SnapshotManifest, String> {
+    let (manifest, _) =
+        read_candidate_git_objects(workspace, witness.commit_sha(), snapshot_id).await?;
+    Ok(manifest)
+}
+
 /// Injected read-only object-result seam. Tests use only faked byte outputs;
 /// actual Git process selection stays in read_candidate_git_objects above.
 async fn collect_candidate_from_runner<F, Fut>(
