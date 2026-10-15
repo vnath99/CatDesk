@@ -1,5 +1,9 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-15 durable packages-parent STAGED binding (source only)
+
+New STAGED records durably bind the pre-existing protected `packages` parent physical ID. The typed stage receipt pins/revalidates its ACL and ID across the STAGED/root flush; locked read-only resume rejects same-name parent replacement. The optional trailing field preserves canonical old V1 replay, but unbound records cannot authorize a future publisher. Full Wake 204 library tests passed/one ignored plus binary/integration tests, strict gates and independent review passed locally. See `T-0485_R28_DURABLE_PACKAGES_PARENT_STAGE_BINDING.md`. Pushed source `b74ef2e00b1d21d9cd97a058af6fc94e431b5b7b` had zero exact GitHub check-runs. Pre-rename marker, no-replace rename/PUBLISHED receipt, dev.84 anchor, signed broker and exact CI remain open; service/install holds stay closed.
+
 ## 2026-10-15 retained moved-package pin (source only)
 
 The locked exact-resume diagnosis now holds the moved package, five leaves and both namespace parents through its final ledger recheck. Retained handles deny write/delete sharing; fixture cases reject ambiguous location, object/byte/ACL drift and mutation attempts. Full Wake 200 library passed/one ignored plus binaries/integrations, combined root 1,231 main passed/28 ignored, strict gates and independent review passed locally. See `T-0485_R27_RETAINED_MOVED_PACKAGE_PIN_SOURCE.md`. Pushed source `aac1c7e2e4e5a6e820b22098ca739f2a0a67c17b` had zero exact GitHub check-runs. The packages parent is not durably bound to STAGED; production rename/PUBLISHED/pointer/owner/reader and first-generation migration anchor remain open. Service/install holds stay closed.

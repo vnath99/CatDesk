@@ -1,5 +1,11 @@
 # CatDesk — Important Command Reference
 
+## Current R28/R35 source gate (2026-10-15)
+
+- P0 `b74ef2e` durably binds the `packages` parent in STAGED; P1 `c3ae701` adds an inert full-ancestor ACL diagnostic. Local full Rust/strict gates passed and Python pytest exited 0, but neither exact source SHA has a GitHub check-run. See `docs/orchestrator/review_bundles/T-0485_R28_DURABLE_PACKAGES_PARENT_STAGE_BINDING.md` and `T-0483_R35_STOPPED_SOL_FULL_ANCESTOR_ACL_DIAGNOSTIC.md`.
+- A publisher still needs a crash-safe attempt marker, tested no-replace rename/dual-parent durability and typed PUBLISHED receipt. The fixed worker still needs copied-handle/outside-Job lost-write proof and durable burn-to-stage before repository use. The last clean inert BuildOnly at `df5b5ec` predates these sources. Prior CLI HTTP422 `Actions has been disabled for this repository` and absent `workflow_dispatch` are distinct; do not retry dispatch or change Actions settings.
+
+
 ## Current R27/R34 source gate (2026-10-15)
 
 - P0 `aac1c7e` retains moved-package read-only pins during locked resume; P1 `0ffd8d5` diagnoses one supplied stopped-worker staging parent/root ACL. Both have zero exact GitHub check-runs on immediate readback despite passing local Rust and strict gates. The package pin is not a production rename/PUBLISHED writer, and the ACL diagnostic grants no stage or repository use. See `docs/orchestrator/review_bundles/T-0485_R27_RETAINED_MOVED_PACKAGE_PIN_SOURCE.md` and `T-0483_R34_STOPPED_SOL_DIRECT_PARENT_ACL_DIAGNOSTIC.md`.

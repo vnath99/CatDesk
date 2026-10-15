@@ -1,5 +1,9 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-15 stopped Sol full-ancestor ACL diagnosis (source only)
+
+The inert stopped candidate can now pin every local-drive ancestor to the supplied stage root, verify drive-volume root and final physical identity with 128-bit file IDs, and conservatively scan owner/write-capable allow ACE trustees twice against the retained exited worker token. Focused full-chain/staging/lifecycle tests and the full root suite (1,234 main passed/28 ignored), strict gates and independent review passed locally. See `T-0483_R35_STOPPED_SOL_FULL_ANCESTOR_ACL_DIAGNOSTIC.md`. Pushed source `c3ae701b1b04ea2243061e395bf275867c3a98e6` had zero exact GitHub check-runs. The fixed account/provider, outside-Job and copied-handle exclusion, later ACL drift, durable burn/stage and genuine Sol/medium→review_ready→Wake remain open.
+
 ## 2026-10-15 stopped Sol direct-parent ACL diagnosis (source only)
 
 The inert stopped candidate can now check one supplied pinned stage root and its direct parent for exact host/System ACLs while bracketing retained exited worker token/account and empty-Job readback. A broad Everyone ACE on the parent fails. Focused Sol 87 passed/two ignored and staging 14 passed; combined root 1,231 main passed/28 ignored, strict gates and independent review passed locally. See `T-0483_R34_STOPPED_SOL_DIRECT_PARENT_ACL_DIAGNOSTIC.md`. Pushed source `0ffd8d53015168a2fc9d2e8e4f2eaa5da1880b37` had zero exact GitHub check-runs. The fixed account/token provider, earlier ancestors, escaped processes, copied writable handles, burn/stage/repository-use and real Sol/medium→review_ready→Wake remain open.
