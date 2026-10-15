@@ -677,6 +677,29 @@ mod tests {
 
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
     const OPEN_EXISTING: u32 = 3;
+    const DELETE: u32 = 0x0001_0000;
+    const FILE_TRAVERSE: u32 = 0x20;
+    const FILE_RENAME_INFORMATION_CLASS: u32 = 10;
+
+    #[repr(C)]
+    struct RenameInformation {
+        replace_if_exists: u8,
+        reserved: [u8; 7],
+        root_directory: *mut c_void,
+        file_name_length: u32,
+        file_name: [u16; 128],
+    }
+
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn NtSetInformationFile(
+            handle: *mut c_void,
+            status: *mut IoStatusBlock,
+            information: *mut c_void,
+            length: u32,
+            information_class: u32,
+        ) -> i32;
+    }
 
     #[link(name = "kernel32")]
     unsafe extern "system" {
@@ -689,6 +712,92 @@ mod tests {
             flags: u32,
             template: *mut c_void,
         ) -> *mut c_void;
+    }
+
+    #[link(name = "advapi32")]
+    unsafe extern "system" {
+        fn SetFileSecurityW(path: *const u16, information: u32, descriptor: *mut c_void) -> i32;
+    }
+
+    // This fixture probes the native handle contract before a production
+    // publication writer is admitted. Both parents are opened without DELETE
+    // sharing, but with WRITE sharing for the filesystem's rename target open.
+    fn open_rename_fixture_child(parent: &OwnedHandle, name: &str, source: bool) -> OwnedHandle {
+        let mut units = name.encode_utf16().collect::<Vec<_>>();
+        let length = u16::try_from(units.len() * 2).expect("bounded fixture name");
+        let mut unicode = UnicodeString {
+            length,
+            maximum_length: length,
+            buffer: units.as_mut_ptr(),
+        };
+        let mut attributes = ObjectAttributes {
+            length: std::mem::size_of::<ObjectAttributes>() as u32,
+            root_directory: parent.as_raw_handle(),
+            object_name: &mut unicode,
+            attributes: 0x40,
+            security_descriptor: ptr::null_mut(),
+            security_quality_of_service: ptr::null_mut(),
+        };
+        let mut status = IoStatusBlock {
+            status: 0,
+            information: 0,
+        };
+        let mut raw = ptr::null_mut();
+        let result = unsafe {
+            NtCreateFile(
+                &mut raw,
+                FILE_READ_ATTRIBUTES | SYNCHRONIZE | if source { DELETE } else { FILE_TRAVERSE },
+                &mut attributes,
+                &mut status,
+                ptr::null_mut(),
+                FILE_ATTRIBUTE_DIRECTORY,
+                if source {
+                    FILE_SHARE_READ
+                } else {
+                    FILE_SHARE_READ | FILE_SHARE_WRITE
+                },
+                FILE_OPEN,
+                FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT,
+                ptr::null_mut(),
+                0,
+            )
+        };
+        assert_eq!(result, 0, "native fixture open for {name}");
+        assert!(!raw.is_null() && raw != INVALID_HANDLE_VALUE);
+        unsafe { OwnedHandle::from_raw_handle(raw) }
+    }
+
+    fn rename_fixture_noreplace(
+        source: &OwnedHandle,
+        packages: &OwnedHandle,
+        package_id: &str,
+    ) -> i32 {
+        let units = package_id.encode_utf16().collect::<Vec<_>>();
+        assert!(!units.is_empty() && units.len() <= 128);
+        let mut rename = RenameInformation {
+            replace_if_exists: 0,
+            reserved: [0; 7],
+            root_directory: packages.as_raw_handle(),
+            file_name_length: u32::try_from(units.len() * 2).expect("bounded name"),
+            file_name: [0; 128],
+        };
+        rename.file_name[..units.len()].copy_from_slice(&units);
+        let mut status = IoStatusBlock {
+            status: 0,
+            information: 0,
+        };
+        let length =
+            u32::try_from(std::mem::offset_of!(RenameInformation, file_name) + units.len() * 2)
+                .expect("bounded rename structure");
+        unsafe {
+            NtSetInformationFile(
+                source.as_raw_handle(),
+                &mut status,
+                &raw mut rename as *mut c_void,
+                length,
+                FILE_RENAME_INFORMATION_CLASS,
+            )
+        }
     }
 
     struct TransactionFixture {
@@ -957,6 +1066,507 @@ mod tests {
             "WAKE_BROKER_PUBLICATION_ATTEMPT_ATTENTION"
         );
         assert_eq!(std::fs::read(&marker).unwrap(), bytes);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn native_handle_relative_noreplace_rename_preserves_exact_package_after_both_parent_flushes() {
+        use crate::install_broker_reader::{
+            PublicationLocationV1, inspect_publication_location_fixture,
+            pin_published_package_fixture, publication_fixture_policy_before_rename,
+        };
+
+        let fixture = TransactionFixture::new();
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("global lock");
+        let mut lease = guard
+            .begin_fixture(&fixture.approval, &fixture.expectation)
+            .expect("durable intent");
+        let mut receipt = materialize_pinned_candidate_stage(
+            &mut lease,
+            &fixture.approval,
+            fixture.source(),
+            StageSecurityMode::Fixture,
+            None,
+        )
+        .expect("fresh typed stage");
+        lease.record_staged(&mut receipt).expect("durable STAGED");
+        let stage = receipt.stage_binding();
+        let reader_policy =
+            publication_fixture_policy_before_rename(&fixture.root, &fixture.approval, &stage)
+                .expect("exact stage security and bytes");
+        lease
+            .record_publication_attempt(&mut receipt)
+            .expect("durable no-retry marker before rename");
+        drop(receipt); // Its original read pins deny DELETE access.
+
+        let resolved_root = fixture.base.canonicalize().expect("fixture root");
+        let resolved_staging = fixture
+            .base
+            .join(STAGING)
+            .canonicalize()
+            .expect("stage parent");
+        let resolved_packages = fixture
+            .base
+            .join(PACKAGES)
+            .canonicalize()
+            .expect("package parent");
+        assert_eq!(resolved_staging.parent(), Some(resolved_root.as_path()));
+        assert_eq!(resolved_packages.parent(), Some(resolved_root.as_path()));
+        assert_eq!(
+            fixture.staged_path().canonicalize().unwrap().parent(),
+            Some(resolved_staging.as_path())
+        );
+        let package_id = &fixture.approval.payload().manifest.package_id;
+        assert!(!fixture.base.join(PACKAGES).join(package_id).exists());
+        let staging = open_rename_fixture_child(&fixture.root, STAGING, false);
+        let packages = open_rename_fixture_child(&fixture.root, PACKAGES, false);
+        assert_eq!(
+            identity(staging.as_raw_handle(), true).unwrap(),
+            stage.staging_directory
+        );
+        assert_eq!(
+            identity(packages.as_raw_handle(), true).unwrap(),
+            stage.packages_directory.clone().unwrap()
+        );
+        let source = open_rename_fixture_child(&staging, CANDIDATE, true);
+        assert_eq!(
+            identity(source.as_raw_handle(), true).unwrap(),
+            stage.candidate_directory
+        );
+        assert_eq!(
+            stage.staging_directory.volume_serial,
+            stage.packages_directory.as_ref().unwrap().volume_serial
+        );
+        assert_eq!(
+            stage.candidate_directory.volume_serial,
+            stage.staging_directory.volume_serial
+        );
+
+        let status = rename_fixture_noreplace(&source, &packages, package_id);
+        assert_eq!(status, 0, "native no-replace rename status {status:#010x}");
+        assert_eq!(
+            identity(source.as_raw_handle(), true).unwrap(),
+            stage.candidate_directory
+        );
+        assert!(!fixture.staged_path().exists());
+        assert!(fixture.base.join(PACKAGES).join(package_id).is_dir());
+        flush_pinned_directory(
+            &staging,
+            &stage.staging_directory,
+            ParentFlushPoint::PublicationSourceParent,
+        )
+        .expect("durable source-parent removal");
+        flush_pinned_directory(
+            &packages,
+            stage.packages_directory.as_ref().unwrap(),
+            ParentFlushPoint::PublicationDestinationParent,
+        )
+        .expect("durable destination-parent entry");
+        assert_eq!(
+            identity(source.as_raw_handle(), true).unwrap(),
+            stage.candidate_directory
+        );
+        drop(source);
+        drop(packages);
+        drop(staging);
+
+        let location = inspect_publication_location_fixture(
+            &fixture.root,
+            &fixture.expectation.protected_root,
+            &fixture.approval,
+            &stage,
+            &reader_policy,
+        )
+        .expect("exact post-rename readback");
+        let PublicationLocationV1::Moved(moved) = location else {
+            panic!("expected exact moved package");
+        };
+        assert_eq!(moved.package_directory, stage.candidate_directory);
+        assert_eq!(moved.manifest_file, stage.manifest_file);
+        let retained = pin_published_package_fixture(
+            &fixture.root,
+            &fixture.expectation.protected_root,
+            &fixture.approval,
+            &stage,
+            &reader_policy,
+        )
+        .expect("retained exact post-rename object, bytes, and ACL pin");
+        assert_eq!(retained.snapshot(), moved.as_ref());
+        retained
+            .revalidate(&fixture.root, &fixture.expectation.protected_root)
+            .expect("retained post-rename pin stable");
+        let destination = fixture.base.join(PACKAGES).join(package_id);
+        let displaced = fixture
+            .base
+            .join(PACKAGES)
+            .join("displaced-fixture-package");
+        assert_eq!(
+            destination.canonicalize().unwrap().parent(),
+            Some(resolved_packages.as_path())
+        );
+        assert_eq!(
+            displaced.parent().unwrap().canonicalize().unwrap(),
+            resolved_packages
+        );
+        assert!(!displaced.exists());
+        assert!(std::fs::rename(&destination, &displaced).is_err());
+        assert!(
+            !fixture
+                .base
+                .join("install-transaction-00000000000000000002-published.json")
+                .exists()
+        );
+        drop(lease);
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("reopen global lock");
+        assert_eq!(
+            guard
+                .begin_fixture(&fixture.approval, &fixture.expectation)
+                .err()
+                .unwrap(),
+            "WAKE_BROKER_PUBLICATION_ATTEMPT_ATTENTION"
+        );
+        drop(retained);
+        std::fs::rename(&destination, &displaced).expect("fixture object drift after pin release");
+        std::fs::create_dir(&destination).expect("same-name replacement directory");
+        for name in [
+            MANIFEST,
+            ARTIFACTS[0],
+            ARTIFACTS[1],
+            ARTIFACTS[2],
+            ARTIFACTS[3],
+        ] {
+            let original = displaced.join(name);
+            let replacement = destination.join(name);
+            std::fs::copy(&original, &replacement).expect("same-byte replacement leaf");
+            assert_eq!(
+                std::fs::read(&original).unwrap(),
+                std::fs::read(&replacement).unwrap()
+            );
+        }
+        let packages = open_child(&fixture.root, PACKAGES, true, false, None).unwrap();
+        let replacement = open_rename_fixture_child(&packages, package_id, false);
+        assert_ne!(
+            identity(replacement.as_raw_handle(), true).unwrap(),
+            stage.candidate_directory
+        );
+        drop(replacement);
+        drop(packages);
+        assert_eq!(
+            inspect_publication_location_fixture(
+                &fixture.root,
+                &fixture.expectation.protected_root,
+                &fixture.approval,
+                &stage,
+                &reader_policy,
+            )
+            .unwrap_err(),
+            "WAKE_PROTECTED_PUBLICATION_BINDING_INVALID"
+        );
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn native_handle_relative_rename_collision_does_not_replace_or_retry() {
+        let fixture = TransactionFixture::new();
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("global lock");
+        let mut lease = guard
+            .begin_fixture(&fixture.approval, &fixture.expectation)
+            .expect("durable intent");
+        let mut receipt = materialize_pinned_candidate_stage(
+            &mut lease,
+            &fixture.approval,
+            fixture.source(),
+            StageSecurityMode::Fixture,
+            None,
+        )
+        .expect("fresh stage");
+        lease.record_staged(&mut receipt).expect("durable STAGED");
+        let stage = receipt.stage_binding();
+        lease
+            .record_publication_attempt(&mut receipt)
+            .expect("durable no-retry marker");
+        drop(receipt);
+        let resolved_root = fixture.base.canonicalize().unwrap();
+        let resolved_staging = fixture.base.join(STAGING).canonicalize().unwrap();
+        let resolved_packages = fixture.base.join(PACKAGES).canonicalize().unwrap();
+        assert_eq!(resolved_staging.parent(), Some(resolved_root.as_path()));
+        assert_eq!(resolved_packages.parent(), Some(resolved_root.as_path()));
+        let package_id = &fixture.approval.payload().manifest.package_id;
+        let destination = fixture.base.join(PACKAGES).join(package_id);
+        std::fs::create_dir(&destination).expect("colliding destination");
+        assert_eq!(
+            destination.canonicalize().unwrap().parent(),
+            Some(resolved_packages.as_path())
+        );
+        let staging = open_rename_fixture_child(&fixture.root, STAGING, false);
+        let packages = open_rename_fixture_child(&fixture.root, PACKAGES, false);
+        assert_eq!(
+            identity(staging.as_raw_handle(), true).unwrap(),
+            stage.staging_directory
+        );
+        assert_eq!(
+            identity(packages.as_raw_handle(), true).unwrap(),
+            stage.packages_directory.clone().unwrap()
+        );
+        let source = open_rename_fixture_child(&staging, CANDIDATE, true);
+        assert_eq!(
+            identity(source.as_raw_handle(), true).unwrap(),
+            stage.candidate_directory
+        );
+        assert_ne!(rename_fixture_noreplace(&source, &packages, package_id), 0);
+        assert_eq!(
+            identity(source.as_raw_handle(), true).unwrap(),
+            stage.candidate_directory
+        );
+        assert!(fixture.staged_path().is_dir());
+        assert!(destination.is_dir());
+        assert!(
+            !fixture
+                .base
+                .join("install-transaction-00000000000000000002-published.json")
+                .exists()
+        );
+        drop(source);
+        drop(packages);
+        drop(staging);
+        drop(lease);
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("reopen lock");
+        assert_eq!(
+            guard
+                .begin_fixture(&fixture.approval, &fixture.expectation)
+                .err()
+                .unwrap(),
+            "WAKE_BROKER_PUBLICATION_ATTEMPT_ATTENTION"
+        );
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn native_rename_parent_flush_failures_remain_attention_after_reopen() {
+        for failed_point in [
+            ParentFlushPoint::PublicationSourceParent,
+            ParentFlushPoint::PublicationDestinationParent,
+        ] {
+            let fixture = TransactionFixture::new();
+            let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("global lock");
+            let mut lease = guard
+                .begin_fixture(&fixture.approval, &fixture.expectation)
+                .expect("durable intent");
+            let mut receipt = materialize_pinned_candidate_stage(
+                &mut lease,
+                &fixture.approval,
+                fixture.source(),
+                StageSecurityMode::Fixture,
+                None,
+            )
+            .expect("fresh stage");
+            lease.record_staged(&mut receipt).expect("durable STAGED");
+            let stage = receipt.stage_binding();
+            lease
+                .record_publication_attempt(&mut receipt)
+                .expect("marker precedes rename");
+            drop(receipt);
+            let resolved_root = fixture.base.canonicalize().unwrap();
+            let resolved_staging = fixture.base.join(STAGING).canonicalize().unwrap();
+            let resolved_packages = fixture.base.join(PACKAGES).canonicalize().unwrap();
+            assert_eq!(resolved_staging.parent(), Some(resolved_root.as_path()));
+            assert_eq!(resolved_packages.parent(), Some(resolved_root.as_path()));
+            let staging = open_rename_fixture_child(&fixture.root, STAGING, false);
+            let packages = open_rename_fixture_child(&fixture.root, PACKAGES, false);
+            assert_eq!(
+                identity(staging.as_raw_handle(), true).unwrap(),
+                stage.staging_directory
+            );
+            assert_eq!(
+                identity(packages.as_raw_handle(), true).unwrap(),
+                stage.packages_directory.clone().unwrap()
+            );
+            let source = open_rename_fixture_child(&staging, CANDIDATE, true);
+            assert_eq!(
+                identity(source.as_raw_handle(), true).unwrap(),
+                stage.candidate_directory
+            );
+            let package_id = &fixture.approval.payload().manifest.package_id;
+            assert!(!fixture.base.join(PACKAGES).join(package_id).exists());
+            assert_eq!(rename_fixture_noreplace(&source, &packages, package_id), 0);
+            fail_next_flush(failed_point);
+            let source_result = flush_pinned_directory(
+                &staging,
+                &stage.staging_directory,
+                ParentFlushPoint::PublicationSourceParent,
+            );
+            if failed_point == ParentFlushPoint::PublicationSourceParent {
+                assert_eq!(
+                    source_result.unwrap_err(),
+                    "WAKE_BROKER_PARENT_FLUSH_FAILED"
+                );
+            } else {
+                source_result.expect("source parent flush");
+                assert_eq!(
+                    flush_pinned_directory(
+                        &packages,
+                        stage.packages_directory.as_ref().unwrap(),
+                        ParentFlushPoint::PublicationDestinationParent,
+                    )
+                    .unwrap_err(),
+                    "WAKE_BROKER_PARENT_FLUSH_FAILED"
+                );
+            }
+            assert_eq!(
+                identity(source.as_raw_handle(), true).unwrap(),
+                stage.candidate_directory
+            );
+            assert!(!fixture.staged_path().exists());
+            assert!(fixture.base.join(PACKAGES).join(package_id).is_dir());
+            assert!(
+                !fixture
+                    .base
+                    .join("install-transaction-00000000000000000002-published.json")
+                    .exists()
+            );
+            drop(source);
+            drop(packages);
+            drop(staging);
+            drop(lease);
+            let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("reopen lock");
+            assert_eq!(
+                guard
+                    .begin_fixture(&fixture.approval, &fixture.expectation)
+                    .err()
+                    .unwrap(),
+                "WAKE_BROKER_PUBLICATION_ATTEMPT_ATTENTION"
+            );
+            fixture.cleanup();
+        }
+    }
+
+    #[test]
+    fn native_rename_post_move_acl_drift_cannot_create_published_receipt() {
+        use crate::install_broker_reader::{
+            inspect_publication_location_fixture, publication_fixture_policy_before_rename,
+        };
+
+        let fixture = TransactionFixture::new();
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("global lock");
+        let mut lease = guard
+            .begin_fixture(&fixture.approval, &fixture.expectation)
+            .expect("durable intent");
+        let mut receipt = materialize_pinned_candidate_stage(
+            &mut lease,
+            &fixture.approval,
+            fixture.source(),
+            StageSecurityMode::Fixture,
+            None,
+        )
+        .expect("fresh stage");
+        lease.record_staged(&mut receipt).expect("durable STAGED");
+        let stage = receipt.stage_binding();
+        let reader_policy =
+            publication_fixture_policy_before_rename(&fixture.root, &fixture.approval, &stage)
+                .expect("exact pre-rename security");
+        lease
+            .record_publication_attempt(&mut receipt)
+            .expect("marker precedes rename");
+        drop(receipt);
+        let resolved_root = fixture.base.canonicalize().unwrap();
+        let resolved_staging = fixture.base.join(STAGING).canonicalize().unwrap();
+        let resolved_packages = fixture.base.join(PACKAGES).canonicalize().unwrap();
+        assert_eq!(resolved_staging.parent(), Some(resolved_root.as_path()));
+        assert_eq!(resolved_packages.parent(), Some(resolved_root.as_path()));
+        let staging = open_rename_fixture_child(&fixture.root, STAGING, false);
+        let packages = open_rename_fixture_child(&fixture.root, PACKAGES, false);
+        assert_eq!(
+            identity(staging.as_raw_handle(), true).unwrap(),
+            stage.staging_directory
+        );
+        assert_eq!(
+            identity(packages.as_raw_handle(), true).unwrap(),
+            stage.packages_directory.clone().unwrap()
+        );
+        let source = open_rename_fixture_child(&staging, CANDIDATE, true);
+        assert_eq!(
+            identity(source.as_raw_handle(), true).unwrap(),
+            stage.candidate_directory
+        );
+        let package_id = &fixture.approval.payload().manifest.package_id;
+        assert!(!fixture.base.join(PACKAGES).join(package_id).exists());
+        assert_eq!(rename_fixture_noreplace(&source, &packages, package_id), 0);
+        flush_pinned_directory(
+            &staging,
+            &stage.staging_directory,
+            ParentFlushPoint::PublicationSourceParent,
+        )
+        .expect("source parent flush");
+        flush_pinned_directory(
+            &packages,
+            stage.packages_directory.as_ref().unwrap(),
+            ParentFlushPoint::PublicationDestinationParent,
+        )
+        .expect("destination parent flush");
+        drop(source);
+        drop(packages);
+        drop(staging);
+
+        let destination = fixture.base.join(PACKAGES).join(package_id);
+        assert_eq!(
+            destination.canonicalize().unwrap().parent(),
+            Some(resolved_packages.as_path())
+        );
+        let mut raw = ptr::null_mut();
+        let mut size = 0;
+        let alternate = "D:P(A;;FA;;;WD)"
+            .encode_utf16()
+            .chain([0])
+            .collect::<Vec<_>>();
+        assert_ne!(
+            unsafe {
+                ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                    alternate.as_ptr(),
+                    1,
+                    &mut raw,
+                    &mut size,
+                )
+            },
+            0
+        );
+        assert!(!raw.is_null() && size > 0);
+        let alternate_descriptor = LocalDescriptor(raw);
+        let destination_wide = destination
+            .as_os_str()
+            .encode_wide()
+            .chain([0])
+            .collect::<Vec<_>>();
+        assert_ne!(
+            unsafe { SetFileSecurityW(destination_wide.as_ptr(), 4, alternate_descriptor.0) },
+            0,
+            "fixture DACL drift"
+        );
+        assert_eq!(
+            inspect_publication_location_fixture(
+                &fixture.root,
+                &fixture.expectation.protected_root,
+                &fixture.approval,
+                &stage,
+                &reader_policy,
+            )
+            .unwrap_err(),
+            "WAKE_PROTECTED_READER_ACL_MISMATCH"
+        );
+        assert!(
+            !fixture
+                .base
+                .join("install-transaction-00000000000000000002-published.json")
+                .exists()
+        );
+        drop(lease);
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("reopen lock");
+        assert_eq!(
+            guard
+                .begin_fixture(&fixture.approval, &fixture.expectation)
+                .err()
+                .unwrap(),
+            "WAKE_BROKER_PUBLICATION_ATTEMPT_ATTENTION"
+        );
         fixture.cleanup();
     }
 
