@@ -1,5 +1,9 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-15 read-only completed predecessor checkpoint
+
+The broker can now corroborate a nonempty COMPLETE ledger head against pinned protected pointer/package objects under its global lock, requiring exact policy continuity and installed package/manifest/four-artifact physical IDs. An integrated Windows fixture covers durable history, same-length artifact drift, unchanged ledger bytes and no new INTENT. The diagnostic explicitly leaves the staging parent, new pointer switch and first-generation migration anchor unverified; it grants no install authority. Full Wake and root Rust suites, strict Clippy, formatting and all-bin build passed locally. See `T-0485_R22_COMPLETED_PREDECESSOR_PROJECTION_SOURCE.md`. Pushed source `ee5e9e39e644966a9cef211d8b5af1038040c888` had zero exact GitHub runs/checks on immediate readback. The service/install guards remain closed; no dev.85 activation or new Chat53 receipt occurred.
+
 ## 2026-10-15 broker-owned exact-CI fetch source checkpoint
 
 Production ledger acceptance now fetches the signed SHA's GitHub runs and attempt jobs itself from fixed WinHTTP paths after signature verification and before INTENT. It rejects non-200, redirect, incomplete, changed, oversized or nonmatching evidence; a process-wide permit prevents concurrent stalled fetch workers. Full Wake tests and strict Clippy/format passed, and a read-only native transport probe matched an older green run. See `T-0485_R21_BROKER_OWNED_EXACT_CI_FETCH_SOURCE.md`. Pushed source `d66d22a` has zero exact workflow/check runs on bounded readback. No signed/provisioned broker, trusted current dev.84 connected owner, approved transaction or protected activation exists; service/install guards stay closed.

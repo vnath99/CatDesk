@@ -1,5 +1,9 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-15 inert stopped-worker handoff candidate (source only)
+
+Normal bound Job drain can now be consumed into an opaque candidate retaining the opened fixed-worker/token evidence and exact prepared task/nonce/image context. It has no burn, stage, repository-use, review or Wake method. The old live-process staging helper is module-private because it cannot prove post-exit safety. Focused lifecycle (29 passed, one ignored) and staging (13 passed), full root Rust, strict Clippy, formatting and all-bin build passed locally. See `T-0483_R29_INERT_STOPPED_SOL_CANDIDATE_SOURCE.md`. Exact pushed source `84e7d2343fe4931cfe2adbbae1d6cb558f72fa3d` had zero GitHub runs/checks on immediate readback. Fixed-account launch, post-exit identity/lost-write proof, durable burn-to-stage and real Sol/medium→review_ready→Wake remain open.
+
 ## 2026-10-15 create-once pre-spawn reservation (source only)
 
 The private prepared launch now creates and verifies a nonce-bound, create-once `launch-started` record before native child creation. It binds the selected turn, pinned directory and executable identities, reviewed image digest and exact launch inputs; it syncs the file, flushes the pinned ledger parent and reads back before spawn. Reopen remains ATTENTION, including after a completed diagnostic child, and no error path grants relaunch. Six reservation tests and 29 lifecycle tests passed locally (one helper intentionally ignored); the full root Rust suite, strict Clippy, formatting and all-bin build passed. See `T-0483_R28_DURABLE_SOL_LAUNCH_RESERVATION_SOURCE.md`. Exact source `4e4e1ecfb560d1d13f73990984d8041aacb21688` had zero GitHub runs/checks on immediate readback. Hardware power-loss durability, older nonce parent-entry durability, fixed-account launch, stopped-worker stage, lost-write proof and real Sol/medium→review_ready→Wake remain open.
