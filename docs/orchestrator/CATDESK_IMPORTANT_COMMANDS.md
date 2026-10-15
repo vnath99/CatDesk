@@ -1,5 +1,11 @@
 # CatDesk — Important Command Reference
 
+## Current R26/R33 source gate (2026-10-15)
+
+- The latest source checkpoints are P0 `aa8059c` read-only STAGED→PUBLISHED package diagnosis and P1 `3e869d3` dormant fixed-account token/Job launch. Both passed local focused/full Rust and strict gates but had zero exact-SHA GitHub runs/checks. Neither creates protected install or Sol staging/repository-use authority. See `docs/orchestrator/review_bundles/T-0485_R26_PROTECTED_PACKAGE_PUBLICATION_SEAM_SOURCE.md` and `T-0483_R33_FIXED_ACCOUNT_SOL_LAUNCH_SOURCE.md`.
+- The last clean inert `wake/install.ps1 -BuildOnly` is still from source `df5b5ec`, predating R26/R33; its unsigned hashes below are diagnostic and must not be treated as current-source release artifacts. The prior manual CLI HTTP 422 `Actions has been disabled for this repository` lacks retained raw response body/headers, and `ci.yml` separately lacks `workflow_dispatch`. Read-only permissions remain enabled and workflow active; no new dispatch or settings change. See `T-0485_R14_CI_SCHEDULING_READ_ONLY_TRIAGE.md`.
+
+
 ## Current source verification and release hold (2026-10-15)
 
 - Run the isolated native shell/cwd regression with `cargo test --locked --offline command::tests::run_command_uses_platform_shell_and_cwd -- --exact`, then the remaining root suite with `cargo test --locked --offline --all-features --workspace -- --skip command::tests::run_command_uses_platform_shell_and_cwd`. The latter includes nested independent Wake tests. Run `cargo clippy --locked --offline --workspace --all-targets --all-features -- -D warnings`, both root and Wake `cargo fmt --all -- --check`, and `cargo build --locked --offline --all-features --bins` before checkpointing a source change. `pytest -q --tb=short` uses the installed `pytest` executable on this host; the default Python 3.12 `python -m pytest` lacks that package.

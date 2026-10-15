@@ -1,5 +1,9 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-15 dormant fixed-account launch path (source only)
+
+The private prepared lifecycle can take a host-supplied restricted primary-token lease for fixed `CatDeskSolWorker`, reject weak/changed handle rights before reservation, and use suspended `CreateProcessAsUserW` with the pinned executable, no inherited handles and creation-time Job binding. It checks the returned child before resume and retains uncertain failures in ATTENTION. Token tests passed 10/one ignored, identity eight, lifecycle 32/one ignored; combined root Rust and strict gates passed locally. See `T-0483_R33_FIXED_ACCOUNT_SOL_LAUNCH_SOURCE.md`. Pushed source `3e869d3878c1386babe638e480e0638668286831` had zero exact GitHub runs/checks. This host lacks both the fixed account and trusted token provider, so no positive fixed-account launch or real Sol/medium→review_ready→Wake cycle is accepted. Lost-write and durable burn-to-stage proof remain open; candidate grants no stage/repository authority.
+
 ## 2026-10-15 retained Sol Job empty diagnosis (source only)
 
 Normal drain now retains the exact unnamed kill-on-close Job handle through the bound witness and inert stopped candidate. A read-only diagnostic rechecks limits, accounting and empty PID list; tests cover a late active member and accounting failure. Focused lifecycle 31 passed/one ignored, combined root Rust and strict gates passed locally. See `T-0483_R32_RETAINED_SOL_JOB_EMPTY_DIAGNOSTIC.md`. Pushed source `df5b5ec12251c04c0437f56be872f8a6fc1c7b940` had zero exact GitHub runs/checks on immediate readback. The fixed worker account is absent, and escaped descendants, outside Job handles, ancestor write rights, durable burn-to-stage and real Sol/medium→review_ready→Wake remain open. The candidate grants no stage or repository authority.
