@@ -28,6 +28,7 @@ pub mod journal;
 pub mod patch_engine;
 pub mod provider_router;
 pub mod runtime;
+pub(crate) mod sol_worker_nonce;
 pub(crate) mod sol_worker_output;
 pub mod state_machine;
 pub mod supervisor;

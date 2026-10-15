@@ -914,6 +914,101 @@ struct ReviewedCandidateMcpOptions {
     auth_token: String,
 }
 
+struct ReviewedCandidateOwnerDiagnoseOptions {
+    source_workspace: PathBuf,
+    expected_commit: String,
+    snapshot_id: String,
+}
+
+fn next_candidate_owner_diagnostic_value(
+    args: &[String],
+    index: &mut usize,
+    option: &str,
+) -> Result<String, String> {
+    let value = next_arg(args, index, option)?;
+    if value.is_empty() || value.starts_with('-') {
+        return Err(format!("{option} requires a non-flag value"));
+    }
+    Ok(value)
+}
+
+fn parse_reviewed_candidate_owner_diagnose_options(
+    args: &[String],
+) -> Result<Option<ReviewedCandidateOwnerDiagnoseOptions>, String> {
+    if !args
+        .iter()
+        .any(|arg| arg == "--reviewed-candidate-owner-diagnose")
+    {
+        return Ok(None);
+    }
+    let mut marker_seen = false;
+    let mut workspace = None;
+    let mut commit = None;
+    let mut snapshot_id = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--reviewed-candidate-owner-diagnose" if !marker_seen => {
+                marker_seen = true;
+                index += 1;
+            }
+            "--source-workspace" if workspace.is_none() => {
+                workspace = Some(next_candidate_owner_diagnostic_value(
+                    args,
+                    &mut index,
+                    "--source-workspace",
+                )?)
+            }
+            "--expected-commit" if commit.is_none() => {
+                commit = Some(next_candidate_owner_diagnostic_value(
+                    args,
+                    &mut index,
+                    "--expected-commit",
+                )?)
+            }
+            "--snapshot-id" if snapshot_id.is_none() => {
+                snapshot_id = Some(next_candidate_owner_diagnostic_value(
+                    args,
+                    &mut index,
+                    "--snapshot-id",
+                )?)
+            }
+            other => {
+                return Err(format!(
+                    "unknown candidate owner diagnostic option `{other}`"
+                ));
+            }
+        }
+    }
+    if !marker_seen {
+        return Err("candidate owner diagnosis mode marker was not parsed".into());
+    }
+    let source_workspace = workspace
+        .filter(|value: &String| !value.is_empty())
+        .map(PathBuf::from)
+        .ok_or("candidate owner diagnosis requires source workspace")?;
+    let expected_commit = commit.ok_or("candidate owner diagnosis requires expected commit")?;
+    if expected_commit.len() != 40
+        || !expected_commit
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err("candidate owner diagnosis commit must be a lowercase full SHA-1".into());
+    }
+    let snapshot_id = snapshot_id.ok_or("candidate owner diagnosis requires snapshot ID")?;
+    if uuid::Uuid::parse_str(&snapshot_id)
+        .map(|value| value.to_string() != snapshot_id)
+        .unwrap_or(true)
+    {
+        return Err("candidate owner diagnosis snapshot ID must be canonical".into());
+    }
+    Ok(Some(ReviewedCandidateOwnerDiagnoseOptions {
+        source_workspace,
+        expected_commit,
+        snapshot_id,
+    }))
+}
+
 fn parse_reviewed_candidate_mcp_options(
     args: impl IntoIterator<Item = String>,
 ) -> Result<Option<ReviewedCandidateMcpOptions>, String> {
@@ -1913,6 +2008,99 @@ async fn wait_reviewed_candidate_parent_stop() -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(windows)]
+fn candidate_owner_recovery_class_name(
+    class: isolated_fixture_snapshot::CandidateOwnerRecoveryClass,
+) -> &'static str {
+    use isolated_fixture_snapshot::CandidateOwnerRecoveryClass;
+    match class {
+        CandidateOwnerRecoveryClass::NoJournal => "NO_JOURNAL",
+        CandidateOwnerRecoveryClass::IntentBeforeRoot => "INTENT_BEFORE_ROOT",
+        CandidateOwnerRecoveryClass::BoundBeforeServing => "BOUND_BEFORE_SERVING",
+        CandidateOwnerRecoveryClass::OwnerProcessAlive => "OWNER_PROCESS_ALIVE",
+        CandidateOwnerRecoveryClass::OrphanedOwnerExited => "ORPHANED_OWNER_EXITED",
+        CandidateOwnerRecoveryClass::OrphanedPidReused => "ORPHANED_PID_REUSED",
+        CandidateOwnerRecoveryClass::RetiredJournalPresent => "RETIRED_JOURNAL_PRESENT",
+        CandidateOwnerRecoveryClass::Attention => "ATTENTION",
+    }
+}
+
+#[cfg(windows)]
+fn format_candidate_owner_diagnostic_report(
+    report: isolated_fixture_snapshot::CandidateOwnerRecoveryReport,
+    source_commit: &str,
+    witness_run_id: u64,
+    temp_parent: &str,
+) -> Result<String, String> {
+    serde_json::to_string(&serde_json::json!({
+        "snapshotId": report.snapshot_id,
+        "sourceCommit": source_commit,
+        "witnessRunId": witness_run_id,
+        "witnessScope": "BRANCH_HEAD_AT_FETCH",
+        "scope": "EXACT_SNAPSHOT_IN_DIAGNOSTIC_PROCESS_TEMP_PARENT",
+        "tempParent": temp_parent,
+        "authority": "DIAGNOSTIC_ONLY",
+        "classification": candidate_owner_recovery_class_name(report.class),
+        "detail": report.detail,
+    }))
+    .map_err(|_| "candidate owner diagnostic report encoding failed".into())
+}
+
+#[cfg(windows)]
+async fn run_reviewed_candidate_owner_diagnose(
+    options: ReviewedCandidateOwnerDiagnoseOptions,
+) -> Result<String, String> {
+    let source = std::fs::canonicalize(&options.source_workspace)
+        .map_err(|_| "candidate owner diagnostic source workspace unavailable")?;
+    if !source.is_dir() {
+        return Err("candidate owner diagnostic source workspace invalid".into());
+    }
+    // Reconstruct the exact manifest using a fresh fixed-branch, three-job CI
+    // witness and the two fixed Git objects. A caller cannot supply a manifest,
+    // journal pathname, or root pathname to this forensic route.
+    let witness = isolated_fixture_github_authority::fetch_live_witness(&options.expected_commit)
+        .await
+        .map_err(|error| format!("branch head at witness fetch and green CI required: {error}"))?;
+    let (manifest, _) = isolated_fixture_git_objects::read_witnessed_candidate_git_objects(
+        &source,
+        &witness,
+        &options.snapshot_id,
+    )
+    .await?;
+    if manifest.source_commit != witness.commit_sha() || manifest.snapshot_id != options.snapshot_id
+    {
+        return Err("candidate owner diagnostic witnessed manifest drifted".into());
+    }
+    let temp_parent = std::fs::canonicalize(std::env::temp_dir())
+        .map_err(|_| "candidate owner diagnostic temp parent unavailable")?;
+    if !temp_parent.is_dir() {
+        return Err("candidate owner diagnostic temp parent invalid".into());
+    }
+    let temp_parent_text = temp_parent
+        .to_str()
+        .ok_or("candidate owner diagnostic temp parent is not UTF-8")?;
+    let report = isolated_fixture_snapshot::classify_candidate_owner_recovery(&manifest);
+    if std::fs::canonicalize(std::env::temp_dir())
+        .map_err(|_| "candidate owner diagnostic temp parent unavailable")?
+        != temp_parent
+    {
+        return Err("candidate owner diagnostic temp parent changed".into());
+    }
+    format_candidate_owner_diagnostic_report(
+        report,
+        witness.commit_sha(),
+        witness.run_id(),
+        temp_parent_text,
+    )
+}
+
+#[cfg(not(windows))]
+async fn run_reviewed_candidate_owner_diagnose(
+    _options: ReviewedCandidateOwnerDiagnoseOptions,
+) -> Result<String, String> {
+    Err("candidate owner diagnosis requires Windows".into())
+}
+
 async fn run_reviewed_candidate_mcp(
     options: ReviewedCandidateMcpOptions,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -2367,6 +2555,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(false) => {}
         Err(error) => {
             eprintln!("CatDesk: {error}");
+            std::process::exit(2);
+        }
+    }
+    match parse_reviewed_candidate_owner_diagnose_options(&args) {
+        Ok(Some(options)) => match run_reviewed_candidate_owner_diagnose(options).await {
+            Ok(report) => {
+                println!("{report}");
+                return Ok(());
+            }
+            Err(error) => {
+                eprintln!("CatDesk candidate owner diagnosis: {error}");
+                std::process::exit(2);
+            }
+        },
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("CatDesk candidate owner diagnosis: {error}");
             std::process::exit(2);
         }
     }
@@ -3011,15 +3216,17 @@ fn render_toast(f: &mut Frame, palette: theme::Palette, msg: &str, pos: (u16, u1
 #[cfg(test)]
 mod tests {
     #[cfg(windows)]
+    use super::format_candidate_owner_diagnostic_report;
+    #[cfg(windows)]
     use super::verify_reviewed_candidate_listener_owner;
     use super::{
         ToolMode, acquire_reviewed_candidate_process_lock, is_canonical_production_worker_listener,
         key_is_clipboard_paste, loopback_http_origin, normalize_ngrok_authtoken_input,
         parse_auto_start_computer, parse_headless_mcp_options, parse_native_daemon_mode,
         parse_owned_candidate_ready, parse_reviewed_candidate_mcp_options,
-        parse_reviewed_candidate_owner_options, probe_reviewed_candidate_ready,
-        resolve_headless_workspace, safe_bind_identity, validate_headless_mcp_path,
-        validate_isolated_fixture_scope,
+        parse_reviewed_candidate_owner_diagnose_options, parse_reviewed_candidate_owner_options,
+        probe_reviewed_candidate_ready, resolve_headless_workspace, safe_bind_identity,
+        validate_headless_mcp_path, validate_isolated_fixture_scope,
     };
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
@@ -3412,6 +3619,113 @@ mod tests {
             .unwrap();
         missing_token.truncate(position);
         assert!(parse_reviewed_candidate_mcp_options(missing_token).is_err());
+    }
+
+    #[test]
+    fn candidate_owner_diagnosis_accepts_one_exact_source_and_snapshot_scope() {
+        let args = [
+            "--reviewed-candidate-owner-diagnose",
+            "--source-workspace",
+            "C:\\reviewed-source",
+            "--expected-commit",
+            "abcdef0123456789abcdef0123456789abcdef01",
+            "--snapshot-id",
+            "8e1ae4ac-3d5f-46b3-9d5f-1e16bbf4f3e5",
+        ]
+        .map(str::to_owned);
+        let parsed = parse_reviewed_candidate_owner_diagnose_options(&args)
+            .expect("strict diagnostic options")
+            .expect("diagnostic selected");
+        assert_eq!(
+            parsed.source_workspace,
+            std::path::PathBuf::from("C:\\reviewed-source")
+        );
+        assert_eq!(parsed.snapshot_id, "8e1ae4ac-3d5f-46b3-9d5f-1e16bbf4f3e5");
+        assert!(
+            parse_reviewed_candidate_owner_diagnose_options(&[])
+                .unwrap()
+                .is_none()
+        );
+
+        for extra in [
+            vec!["--reviewed-candidate-owner-diagnose"],
+            vec!["--snapshot-id", "8e1ae4ac-3d5f-46b3-9d5f-1e16bbf4f3e5"],
+            vec!["--reviewed-candidate-owner"],
+            vec!["--reviewed-candidate-mcp"],
+            vec!["--headless-mcp"],
+            vec!["--journal", "C:\\other"],
+            vec!["--cleanup"],
+        ] {
+            let mut changed = args.to_vec();
+            changed.extend(extra.into_iter().map(str::to_owned));
+            assert!(parse_reviewed_candidate_owner_diagnose_options(&changed).is_err());
+        }
+        for (option, invalid) in [
+            ("--source-workspace", ""),
+            ("--source-workspace", "--reviewed-candidate-owner-diagnose"),
+            ("--expected-commit", "HEAD"),
+            ("--expected-commit", "--snapshot-id"),
+            (
+                "--expected-commit",
+                "ABCDEF0123456789ABCDEF0123456789ABCDEF01",
+            ),
+            ("--snapshot-id", "8E1AE4AC-3D5F-46B3-9D5F-1E16BBF4F3E5"),
+            ("--snapshot-id", "../catdesk-dev-fixture-other"),
+            ("--snapshot-id", "--cleanup"),
+        ] {
+            let mut changed = args.to_vec();
+            let position = changed.iter().position(|arg| arg == option).unwrap();
+            changed[position + 1] = invalid.into();
+            assert!(parse_reviewed_candidate_owner_diagnose_options(&changed).is_err());
+        }
+        for required in ["--source-workspace", "--expected-commit", "--snapshot-id"] {
+            let mut changed = args.to_vec();
+            let position = changed.iter().position(|arg| arg == required).unwrap();
+            changed.drain(position..=position + 1);
+            assert!(parse_reviewed_candidate_owner_diagnose_options(&changed).is_err());
+        }
+        let swallowed_marker = [
+            "--source-workspace",
+            "--reviewed-candidate-owner-diagnose",
+            "--expected-commit",
+            "abcdef0123456789abcdef0123456789abcdef01",
+            "--snapshot-id",
+            "8e1ae4ac-3d5f-46b3-9d5f-1e16bbf4f3e5",
+        ]
+        .map(str::to_owned);
+        assert!(parse_reviewed_candidate_owner_diagnose_options(&swallowed_marker).is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn candidate_owner_no_journal_report_names_observed_parent_and_witness_time_scope() {
+        use crate::isolated_fixture_snapshot::{
+            CandidateOwnerRecoveryClass, CandidateOwnerRecoveryReport,
+        };
+        let report = CandidateOwnerRecoveryReport {
+            snapshot_id: "8e1ae4ac-3d5f-46b3-9d5f-1e16bbf4f3e5".into(),
+            class: CandidateOwnerRecoveryClass::NoJournal,
+            detail: None,
+        };
+        let output = format_candidate_owner_diagnostic_report(
+            report,
+            "abcdef0123456789abcdef0123456789abcdef01",
+            42,
+            "C:\\Users\\operator\\AppData\\Local\\Temp",
+        )
+        .expect("format diagnostic scope");
+        let value: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(value["classification"], "NO_JOURNAL");
+        assert_eq!(value["witnessScope"], "BRANCH_HEAD_AT_FETCH");
+        assert_eq!(
+            value["scope"],
+            "EXACT_SNAPSHOT_IN_DIAGNOSTIC_PROCESS_TEMP_PARENT"
+        );
+        assert_eq!(
+            value["tempParent"],
+            "C:\\Users\\operator\\AppData\\Local\\Temp"
+        );
+        assert_eq!(value["authority"], "DIAGNOSTIC_ONLY");
     }
 
     #[test]
