@@ -28,6 +28,7 @@ const MANDATORY_NO_WRITE_UP: u32 = 0x1;
 const DUPLICATE_SAME_ACCESS: u32 = 0x2;
 const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
 const SYNCHRONIZE: u32 = 0x0010_0000;
+const WAIT_OBJECT_0: u32 = 0;
 const WAIT_TIMEOUT: u32 = 0x102;
 const SE_GROUP_ENABLED: u32 = 0x4;
 const SE_GROUP_USE_FOR_DENY_ONLY: u32 = 0x10;
@@ -173,6 +174,21 @@ impl ObservedRestrictedWorkerProcessTokenV1 {
         enforce_restricted_policy(&fresh)
     }
 
+    /// Diagnose the same retained process and token after a normal drain.
+    /// A PID reopen or `OpenProcessToken` on the exited process would lose the
+    /// original object binding. This is only a necessary identity check: it
+    /// says nothing about an escaped process or a duplicated writable handle.
+    pub(crate) fn require_retained_exited_snapshot(&self) -> Result<(), String> {
+        let snapshot = read_retained_exited_snapshot(
+            &self.process,
+            &self.token,
+            self.process_id,
+            self.creation_time,
+            &self.snapshot,
+        )?;
+        enforce_restricted_policy(&snapshot)
+    }
+
     /// Reject every token group that could become an ACL trustee, including
     /// disabled groups that a later token adjustment might enable. Restricting
     /// SIDs are included conservatively.
@@ -277,6 +293,39 @@ fn require_live_process(process: &OwnedHandle) -> Result<(), String> {
         return Err(format!("{LABEL} opened process is not live"));
     }
     Ok(())
+}
+
+fn require_exited_process_identity(
+    process: &OwnedHandle,
+    process_id: u32,
+    creation_time: FileTime,
+) -> Result<(), String> {
+    if process_id == 0
+        || unsafe { GetProcessId(process.as_raw_handle()) } != process_id
+        || process_creation_time(process)? != creation_time
+        || unsafe { WaitForSingleObject(process.as_raw_handle(), 0) } != WAIT_OBJECT_0
+    {
+        return Err(format!(
+            "{LABEL} retained process is not the exact exited process"
+        ));
+    }
+    Ok(())
+}
+
+fn read_retained_exited_snapshot(
+    process: &OwnedHandle,
+    token: &OwnedHandle,
+    process_id: u32,
+    creation_time: FileTime,
+    expected: &TokenSnapshot,
+) -> Result<TokenSnapshot, String> {
+    require_exited_process_identity(process, process_id, creation_time)?;
+    let snapshot = read_snapshot(token)?;
+    if snapshot != *expected {
+        return Err(format!("{LABEL} retained token changed after process exit"));
+    }
+    require_exited_process_identity(process, process_id, creation_time)?;
+    Ok(snapshot)
 }
 
 fn process_creation_time(process: &OwnedHandle) -> Result<FileTime, String> {
@@ -629,7 +678,20 @@ fn enforce_restricted_policy(snapshot: &TokenSnapshot) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::process::Command;
+    use std::io::{Read, Write};
+    use std::process::{Child, Command, Stdio};
+
+    const EXIT_HELPER: &str =
+        "delegated::sol_worker_token_security::tests::retained_exited_process_helper";
+
+    struct KillChildOnDrop(Child);
+
+    impl Drop for KillChildOnDrop {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
 
     const TOKEN_DUPLICATE: u32 = 0x0002;
     const TOKEN_ADJUST_DEFAULT: u32 = 0x0080;
@@ -802,6 +864,85 @@ mod tests {
         assert!(child.wait().expect("child exit").success());
         assert!(require_live_process(&process).is_err());
         assert!(reopen_same_live_process(pid, creation).is_err());
+    }
+
+    #[test]
+    #[ignore]
+    fn retained_exited_process_helper() {
+        if std::env::var("CATDESK_SOL_TOKEN_EXIT_HELPER").as_deref() == Ok("1") {
+            let mut release = [0_u8; 1];
+            std::io::stdin()
+                .read_exact(&mut release)
+                .expect("parent releases token fixture");
+            assert_eq!(release, [1]);
+        }
+    }
+
+    #[test]
+    fn retained_exited_process_and_token_evidence_uses_original_handles() {
+        let mut child = KillChildOnDrop(
+            Command::new(std::env::current_exe().expect("test executable"))
+                .args(["--ignored", "--exact", EXIT_HELPER])
+                .env("CATDESK_SOL_TOKEN_EXIT_HELPER", "1")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("start held test child"),
+        );
+        let mut raw = ptr::null_mut();
+        assert_ne!(
+            unsafe {
+                DuplicateHandle(
+                    GetCurrentProcess(),
+                    child.0.as_raw_handle(),
+                    GetCurrentProcess(),
+                    &mut raw,
+                    0,
+                    0,
+                    DUPLICATE_SAME_ACCESS,
+                )
+            },
+            0
+        );
+        let process = owned_handle(raw).expect("retain exact child process");
+        let token = open_process_token(&process).expect("retain exact child primary token");
+        let snapshot = read_snapshot(&token).expect("read live child token");
+        let pid = unsafe { GetProcessId(process.as_raw_handle()) };
+        let creation = process_creation_time(&process).expect("child creation time");
+        assert!(require_exited_process_identity(&process, pid, creation).is_err());
+        child
+            .0
+            .stdin
+            .take()
+            .expect("child input")
+            .write_all(&[1])
+            .expect("release child");
+        assert!(child.0.wait().expect("child exit").success());
+
+        assert_eq!(
+            read_retained_exited_snapshot(&process, &token, pid, creation, &snapshot)
+                .expect("retained post-exit token readback"),
+            snapshot
+        );
+        assert!(require_live_process(&process).is_err());
+        assert!(require_exited_process_identity(&process, pid ^ 1, creation).is_err());
+        assert!(
+            require_exited_process_identity(
+                &process,
+                pid,
+                FileTime {
+                    low: creation.low ^ 1,
+                    high: creation.high,
+                },
+            )
+            .is_err()
+        );
+        let mut changed = snapshot.clone();
+        changed.modified_id.low ^= 1;
+        assert!(read_retained_exited_snapshot(&process, &token, pid, creation, &changed).is_err());
+        let process_as_token = unsafe { BorrowedHandle::borrow_raw(process.as_raw_handle()) };
+        assert!(observe_restricted_worker_process_token(process_as_token).is_err());
     }
 
     #[test]

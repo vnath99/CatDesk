@@ -1189,6 +1189,15 @@ pub(crate) struct StoppedBoundFixedWorkerCandidateV1 {
     _executable: PinnedSolWorkerExecutableV1,
 }
 
+impl StoppedBoundFixedWorkerCandidateV1 {
+    /// Diagnostic only. This checks the original exited process and retained
+    /// restricted token against the fixed local account, but cannot prove no
+    /// outside-Job process or writable handle survived the normal drain.
+    pub(crate) fn diagnose_retained_exited_identity(&self) -> Result<(), String> {
+        self._bound_worker.require_retained_exited_identity()
+    }
+}
+
 impl DrainedBoundFixedWorkerJobV1 {
     pub(crate) fn into_stopped_candidate(self) -> StoppedBoundFixedWorkerCandidateV1 {
         StoppedBoundFixedWorkerCandidateV1 {
@@ -1928,6 +1937,8 @@ mod tests {
             OwnedRunningJobChild::finish_normal;
         let _: fn(DrainedBoundFixedWorkerJobV1) -> StoppedBoundFixedWorkerCandidateV1 =
             DrainedBoundFixedWorkerJobV1::into_stopped_candidate;
+        let _: fn(&StoppedBoundFixedWorkerCandidateV1) -> Result<(), String> =
+            StoppedBoundFixedWorkerCandidateV1::diagnose_retained_exited_identity;
     }
 
     #[test]

@@ -125,6 +125,26 @@ impl BoundFixedLocalSolWorkerProcessV1 {
         )?;
         self.observed_token.revalidate()
     }
+
+    /// Recheck the fixed account around the retained process/token readback
+    /// after normal exit. The live-process `revalidate` path is deliberately
+    /// unavailable at this point. This grants no output or staging authority.
+    pub(crate) fn require_retained_exited_identity(&self) -> Result<(), String> {
+        let first = preflight_catdesk_sol_worker_local_account()?;
+        require_same_account_and_token(
+            &self.account,
+            &first,
+            self.observed_token.token_user_sid(),
+        )?;
+        self.observed_token.require_retained_exited_snapshot()?;
+        let second = preflight_catdesk_sol_worker_local_account()?;
+        require_same_account_and_token(
+            &self.account,
+            &second,
+            self.observed_token.token_user_sid(),
+        )?;
+        self.observed_token.require_retained_exited_snapshot()
+    }
 }
 
 fn require_same_account_and_token(
