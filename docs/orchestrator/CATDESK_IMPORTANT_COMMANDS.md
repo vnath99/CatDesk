@@ -1,5 +1,10 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — T0478 reviewed-candidate startup attention
+
+- After witnessed staging, startup failures before ready now write a create-only, root-bound `attention.json` with `startup_failed` where owner/journal verification succeeds. It is forensic evidence only. A crash before the handler or a corrupted owner journal may still leave no attention record; preserve the exact journal and root for reviewed recovery. See `docs/orchestrator/review_bundles/T-0478_R3B4C7_STARTUP_FAILURE_ATTENTION.md`.
+
+
 ## 2026-10-14 — T0478 reviewed-candidate runtime attention
 
 - After a ready event, the source-only reviewed-candidate launcher writes create-only `runtime-attention.json` for bounded listener/signal/shutdown/source-lease failure paths. Inspect it with `serving.json`, `root.json` and `intent.json`; do not infer current liveness or deletion authority from its PID/port. Startup and retirement failures can still lack this record. See `docs/orchestrator/review_bundles/T-0478_R3B4C6_RUNTIME_FAILURE_ATTENTION.md`.

@@ -1445,6 +1445,20 @@ fn reviewed_candidate_runtime_error(
     }
 }
 
+fn reviewed_candidate_startup_error(
+    snapshot: &isolated_fixture_snapshot::StagedCandidateSnapshot,
+    reason: impl std::fmt::Display,
+) -> std::io::Error {
+    match snapshot.mark_startup_attention() {
+        Ok(()) => std::io::Error::other(format!(
+            "reviewed candidate startup failed: {reason}; durable startup attention recorded"
+        )),
+        Err(attention_error) => std::io::Error::other(format!(
+            "reviewed candidate startup failed: {reason}; startup attention unavailable: {attention_error}"
+        )),
+    }
+}
+
 async fn run_reviewed_candidate_mcp(
     options: ReviewedCandidateMcpOptions,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -1467,7 +1481,8 @@ async fn run_reviewed_candidate_mcp(
         0,
         fixture_root.to_string_lossy().into_owned(),
         fixture_root.join("config.toml"),
-    )?;
+    )
+    .map_err(|error| reviewed_candidate_startup_error(&staged, error))?;
     let state: SharedState = Arc::new(Mutex::new(app));
     {
         let mut app = state.lock().await;
@@ -1485,16 +1500,21 @@ async fn run_reviewed_candidate_mcp(
         snapshot.clone(),
     )
     .await
-    .map_err(std::io::Error::other)?;
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    daemon_reload::make_listener_non_inheritable(&listener).map_err(std::io::Error::other)?;
-    let local_addr = listener.local_addr()?;
+    .map_err(|error| reviewed_candidate_startup_error(&snapshot, error))?;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(|error| reviewed_candidate_startup_error(&snapshot, error))?;
+    daemon_reload::make_listener_non_inheritable(&listener)
+        .map_err(|error| reviewed_candidate_startup_error(&snapshot, error))?;
+    let local_addr = listener
+        .local_addr()
+        .map_err(|error| reviewed_candidate_startup_error(&snapshot, error))?;
     if !local_addr.ip().is_loopback() {
-        return Err(std::io::Error::other("reviewed candidate listener is not loopback").into());
+        return Err(reviewed_candidate_startup_error(&snapshot, "listener is not loopback").into());
     }
     let runtime_generation = snapshot
         .mark_serving(local_addr.port())
-        .map_err(std::io::Error::other)?;
+        .map_err(|error| reviewed_candidate_startup_error(&snapshot, error))?;
     {
         let mut app = state.lock().await;
         app.port = local_addr.port();

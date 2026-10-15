@@ -255,7 +255,8 @@ fn record_fixture_owner_attention(
             | "creation_indeterminate"
             | "root_binding_unavailable"
             | "partial_stage"
-    ) || (code == "partial_stage") != root_binding.is_some()
+            | "startup_failed"
+    ) || matches!(code, "partial_stage" | "startup_failed") != root_binding.is_some()
     {
         return Err("fixture owner attention code invalid".into());
     }
@@ -342,8 +343,10 @@ fn read_fixture_owner_attention(
                 | "creation_indeterminate"
                 | "root_binding_unavailable"
                 | "partial_stage"
+                | "startup_failed"
         )
-        || (attention.code == "partial_stage") != binding.is_some()
+        || matches!(attention.code.as_str(), "partial_stage" | "startup_failed")
+            != binding.is_some()
     {
         return Err("fixture owner attention drifted".into());
     }
@@ -755,6 +758,37 @@ pub(crate) struct CandidateRetirementInventory {
 /// Ordinary fixture MCP routing must NOT call this by manufacturing a manifest
 /// from a request: only the future owner of StagedCandidateSnapshot may use it.
 impl StagedCandidateSnapshot {
+    pub(crate) fn mark_startup_attention(&self) -> Result<(), String> {
+        #[cfg(windows)]
+        {
+            let owner = self
+                .owner_journal
+                .as_ref()
+                .ok_or("fixture owner journal unavailable")?;
+            let (intent, binding) = read_fixture_owner_records(
+                &owner.guard,
+                &self.manifest,
+                Some(&self.root),
+                &owner.sid,
+            )?;
+            if intent != owner.intent || binding.as_ref() != Some(&owner.binding) {
+                return Err("fixture owner startup journal drifted".into());
+            }
+            record_fixture_owner_attention(
+                &owner.guard,
+                &owner.intent,
+                &owner.intent_bytes,
+                Some(&owner.binding),
+                "startup_failed",
+                &owner.sid,
+            )
+        }
+        #[cfg(not(windows))]
+        {
+            Err("fixture owner startup attention is Windows-only".into())
+        }
+    }
+
     pub(crate) fn mark_serving(&self, port: u16) -> Result<String, String> {
         #[cfg(windows)]
         {
@@ -1805,6 +1839,98 @@ mod tests {
             .expect("remove test intent");
         std::fs::remove_dir(temp.join(&journal_name)).expect("remove empty test journal");
         std::fs::remove_dir(temp.join(&intent.root_name)).expect("remove empty test root");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn staged_startup_failure_persists_exact_bound_attention_windows() {
+        let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .expect("interactive owner SID");
+        let manifest = SnapshotManifest {
+            schema_version: 1,
+            source_repository: SOURCE_REPOSITORY.into(),
+            source_commit: "abcdef0123456789abcdef0123456789abcdef01".into(),
+            snapshot_id: Uuid::new_v4().to_string(),
+            files: vec![SnapshotFile {
+                fixture_leaf: "Cargo.toml".into(),
+                source_path: "Cargo.toml".into(),
+                size_bytes: 0,
+                sha256: format!("{:x}", Sha256::digest([])),
+            }],
+        };
+        let journal_name = format!(
+            "catdesk-fixture-journal-{}",
+            Uuid::parse_str(&manifest.snapshot_id).unwrap().simple()
+        );
+        let (journal, intent, intent_bytes) =
+            create_fixture_owner_intent(&manifest, &sid).expect("persist intent");
+        let parent = ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp");
+        let (root, manifest) =
+            create_owned_candidate_root(parent, intent.root_name.clone(), &sid, manifest)
+                .unwrap_or_else(|_| panic!("create test root"));
+        let binding = bind_fixture_owner_root(&journal, &intent, &intent_bytes, &root, &sid)
+            .expect("bind exact root");
+        write_new_regular_in(&root, "Cargo.toml", &[], LABEL).expect("write test leaf");
+        let staged = StagedCandidateSnapshot {
+            root,
+            manifest: manifest.clone(),
+            _leases: Vec::new(),
+            owner_journal: Some(FixtureOwnerJournal {
+                guard: journal,
+                intent: intent.clone(),
+                intent_bytes: intent_bytes.clone(),
+                binding: binding.clone(),
+                sid: sid.clone(),
+            }),
+        };
+        staged
+            .mark_startup_attention()
+            .expect("persist startup failure");
+        assert!(
+            staged.mark_startup_attention().is_err(),
+            "create-only record"
+        );
+        drop(staged);
+
+        let mut reopened_journal =
+            ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp after crash");
+        reopened_journal
+            .descend_existing_for_security(&journal_name, LABEL)
+            .expect("reopen journal");
+        let mut reopened_root =
+            ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp after crash");
+        reopened_root
+            .descend_existing_for_security(&intent.root_name, LABEL)
+            .expect("reopen root");
+        let (read_intent, read_binding) =
+            read_fixture_owner_records(&reopened_journal, &manifest, Some(&reopened_root), &sid)
+                .expect("verify exact owner records");
+        assert_eq!(read_intent, intent);
+        assert_eq!(read_binding.as_ref(), Some(&binding));
+        let attention = read_fixture_owner_attention(
+            &reopened_journal,
+            &intent,
+            &intent_bytes,
+            Some(&binding),
+            &sid,
+        )
+        .expect("read startup attention")
+        .expect("attention present");
+        assert_eq!(attention.code, "startup_failed");
+        drop(reopened_root);
+        drop(reopened_journal);
+        std::fs::remove_file(temp.join(&journal_name).join("attention.json"))
+            .expect("remove test attention");
+        std::fs::remove_file(temp.join(&journal_name).join("root.json"))
+            .expect("remove test binding");
+        std::fs::remove_file(temp.join(&journal_name).join("intent.json"))
+            .expect("remove test intent");
+        std::fs::remove_dir(temp.join(&journal_name)).expect("remove empty journal");
+        std::fs::remove_file(temp.join(&intent.root_name).join("Cargo.toml"))
+            .expect("remove test leaf");
+        std::fs::remove_dir(temp.join(&intent.root_name)).expect("remove empty root");
     }
 
     #[cfg(windows)]

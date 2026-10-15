@@ -1,3 +1,8 @@
+## 2026-10-14 — T0478 pre-serving startup attention (CURRENT)
+
+- Once witnessed staging has returned an owner-bound snapshot, app setup, router creation, listener bind/inspection and serving-record failures now attempt a create-only, owner-only `attention.json` with fixed `startup_failed` code. The snapshot method revalidates the manifest, journal, intent and exact opened root identity before writing. A Windows test persists the record, rejects a second write, drops both handles and reopens the exact objects to verify the attention code.
+- A crash before the handler runs can still leave only the write-ahead intent/root records. Retirement failures, clean journal retirement, cross-process exclusion and successful witnessed launch remain. Exact three-job GitHub CI remains unavailable while Actions dispatch is disabled. No installed runtime or tunnel changed. See `docs/orchestrator/review_bundles/T-0478_R3B4C7_STARTUP_FAILURE_ATTENTION.md`.
+
 ## 2026-10-14 — T0478 create-only post-ready failure attention (CURRENT)
 
 - Source-only reviewed-candidate startup now writes a create-only, owner-only `runtime-attention.json` when the listener exits unexpectedly, signal handling fails, shutdown fails, or source leases remain after serving. It binds the failure code to the persisted serving generation, exact root identity, snapshot, owner PID and loopback port; the error reports whether persistence succeeded. Windows crash-readback testing rejects a second writer and a changed generation. Signal and shutdown error paths abort and briefly await the server task.
