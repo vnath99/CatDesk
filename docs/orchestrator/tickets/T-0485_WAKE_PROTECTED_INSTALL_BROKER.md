@@ -1,5 +1,9 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-15 canonical protected pointer plan (source only)
+
+The reader now plans canonical `current.json` bytes and SHA-256 from a verified approval and supplied stage IDs, checking stage identity/collisions and reader schema/byte limits. It writes nothing and grants no ledger, pointer-switch or install authority: the approval key is not independently bound to protected broker policy here, and stage IDs do not prove publication. Focused reader 13 passed, full Wake 199 library passed/one ignored plus binaries/integrations, combined root Rust and strict gates passed locally; independent source review found no blocker. See `T-0485_R25_CANONICAL_PROTECTED_POINTER_PLAN_SOURCE.md`. Pushed source `007e6001c944df320793a6339dabceb799773d840` had zero exact GitHub runs/checks on immediate readback. First-generation dev.84 owner/store reconciliation, signed broker, production writer/reader cutover, exact CI, protected dev.85 activation and fresh Chat53 remain open; service/install holds stay closed.
+
 ## 2026-10-15 fresh-successor predecessor gate (source only)
 
 Production ledger acceptance now compares a signed successor with a retained COMPLETE protected pointer/package under the global lock, including exact pointer physical ID/digest and predecessor package/pointer/generation/root. It then refuses before CI fetch or INTENT because the first dev.84 migration anchor and current live old-owner proof are absent. Focused ledger 26 passed, full Wake 197 library passed/one ignored plus integrations, full root/Python and strict gates passed locally. See `T-0485_R24_FRESH_SUCCESSOR_PREDECESSOR_GATE_SOURCE.md`. Pushed source `9e8d1c8d5f4ade8327fdcf521181faf31b901ab30` had zero exact GitHub runs/checks on immediate readback. The production install/service holds remain closed; no protected dev.85 activation or new Chat53 receipt occurred.

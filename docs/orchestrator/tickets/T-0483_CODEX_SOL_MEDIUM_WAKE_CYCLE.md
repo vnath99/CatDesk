@@ -1,5 +1,9 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-15 retained Sol Job empty diagnosis (source only)
+
+Normal drain now retains the exact unnamed kill-on-close Job handle through the bound witness and inert stopped candidate. A read-only diagnostic rechecks limits, accounting and empty PID list; tests cover a late active member and accounting failure. Focused lifecycle 31 passed/one ignored, combined root Rust and strict gates passed locally. See `T-0483_R32_RETAINED_SOL_JOB_EMPTY_DIAGNOSTIC.md`. Pushed source `df5b5ec12251c04c0437f56be872f8a6fc1c7b940` had zero exact GitHub runs/checks on immediate readback. The fixed worker account is absent, and escaped descendants, outside Job handles, ancestor write rights, durable burn-to-stage and real Sol/medium→review_ready→Wake remain open. The candidate grants no stage or repository authority.
+
 ## 2026-10-15 stopped Sol host-context diagnosis (source only)
 
 The inert stopped candidate now rechecks its selected nonce, exact launch record, pinned ledger/output/executable-parent identities and executable path/object/length/SHA after worker output may exist. It returns no output or repository authority. Focused lifecycle 30 passed/one ignored, journal six passed, full root/Python and strict gates passed locally. See `T-0483_R31_STOPPED_SOL_HOST_CONTEXT_DIAGNOSTIC.md`. Pushed source `6ba3c4eae992068c75eb03d408ed88899735dff60` had zero exact GitHub runs/checks on immediate readback. The fixed worker account, full lost-write proof, durable burn-to-stage handoff and real Sol/medium→review_ready→Wake remain open.
