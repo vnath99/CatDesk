@@ -206,7 +206,7 @@ fn signed_bytes(payload: &WakeInstallApprovalV1) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
-fn validate_manifest(manifest: &PackageManifestV1) -> Result<()> {
+pub(crate) fn validate_manifest(manifest: &PackageManifestV1) -> Result<()> {
     if manifest.schema_version != 1 || !manifest.version.starts_with("1.0.0-dev.") {
         return Err("WAKE_APPROVAL_PACKAGE_INVALID".into());
     }

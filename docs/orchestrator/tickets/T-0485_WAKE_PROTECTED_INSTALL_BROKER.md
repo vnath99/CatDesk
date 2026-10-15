@@ -1,5 +1,15 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-15 fixed pipe endpoint source checkpoint
+
+`install_broker_endpoint.rs` now has a dormant fixed-name, first-instance, remote-rejecting, non-inheritable message-pipe constructor with exact owner/DACL and mode readback. The production constructor requires an opaque operator SID without a current provisioner and the fixed broker preflight; it cannot run here. Its operator ACE excludes `FILE_CREATE_PIPE_INSTANCE`, and five focused Windows fixtures pass. See `T-0485_R7_FIXED_BROKER_ENDPOINT_SOURCE.md`. A pipe-name squat before service start still requires future **client-side authentication of the connected service process/image/token**; the genuine service fails closed on its first-instance collision. There is no service, endpoint listener, approved request, protected policy or install mutation.
+
+## 2026-10-15 connected operator and protected reader source checkpoint
+
+`install_broker_operator.rs` now has a dormant connected-pipe Windows impersonation/token admission check against a SID that a future broker must obtain from independently protected policy. It requires exact user, high integrity, elevation, an interactive session, impersonation/delegation level, no AppContainer and no token restrictions, then reverts the service thread. Seven focused tests pass, including a real pipe client/revert fixture; see `T-0485_R5_CONNECTED_OPERATOR_TOKEN_SOURCE.md`. It does not create a service/endpoint or authorize an install. The future service must serialize the last request read and this check on one pipe instance.
+
+`install_broker_reader.rs` now returns a zero-argument read-only snapshot of the fixed proposed ProgramData pointer/package, using pinned no-follow handles, exact leaf ACL/inventory/identity/canonical metadata, all four byte hashes and a final pointer reopen. Ten focused tests and independent audit passed; see `T-0485_R6_PROTECTED_INSTALL_READER_SOURCE.md`. It does not bind the completed ledger or carry pins into launch. All current launch/status/recovery readers still use the legacy per-user selection, and the protected service/namespace is unprovisioned. Neither new module changes `WAKE_INSTALL_BROKER_UNPROVISIONED`.
+
 ## 2026-10-15 CI comparison and protected-ledger source checkpoint
 
 `install_broker_ci_witness.rs` compares the signed exact-CI claim with independently fetched, complete GitHub run and attempt-job JSON, requiring the latest matching push run and three successful Windows jobs; it performs no fetch or signing and grants no authority. Seven focused tests pass. `install_broker_ledger.rs` holds a pre-provisioned global lock, inventories history through a fresh pinned relative directory object, refuses gaps/replay/corruption, and records create-once ordered phases with original desired/owner state. It can cryptographically reverify the original envelope against the protected acceptance record for exact post-expiry resume. Fifteen focused tests pass; see `docs/orchestrator/review_bundles/T-0485_R3_CI_CLAIM_COMPARISON_SOURCE.md` and `T-0485_R4_PROTECTED_LEDGER_SOURCE.md`.

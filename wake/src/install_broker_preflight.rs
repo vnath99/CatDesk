@@ -9,6 +9,8 @@
 
 use crate::{Result, install_broker_approval::ObjectIdentityV1};
 use serde::Serialize;
+#[cfg(windows)]
+use std::{ffi::c_void, os::windows::io::OwnedHandle};
 
 pub const SERVICE_NAME: &str = "CatDeskWakeInstallBroker";
 pub const SERVICE_IMAGE: &str =
@@ -30,6 +32,33 @@ pub struct BrokerReadOnlySnapshotV1 {
     pub protected_root_security_sha256: String,
     pub image_parent_security_sha256: String,
     pub disposition: &'static str,
+}
+
+/// Read-only pins for the compiled ProgramData root. The ancestor handles stay
+/// open without delete sharing while a protected reader inspects children.
+#[cfg(windows)]
+pub(crate) struct FixedProtectedRootReadGuard {
+    _volume: OwnedHandle,
+    _program_data: OwnedHandle,
+    _catdesk: OwnedHandle,
+    root: OwnedHandle,
+    service_sid: String,
+    root_identity: ObjectIdentityV1,
+}
+
+#[cfg(windows)]
+impl FixedProtectedRootReadGuard {
+    pub(crate) fn root(&self) -> &OwnedHandle {
+        &self.root
+    }
+
+    pub(crate) fn service_sid(&self) -> &str {
+        &self.service_sid
+    }
+
+    pub(crate) fn root_identity(&self) -> &ObjectIdentityV1 {
+        &self.root_identity
+    }
 }
 
 #[cfg(not(windows))]
@@ -474,7 +503,7 @@ mod windows {
         sid_string(sid.as_mut_ptr().cast())
     }
 
-    fn lookup_service_sid() -> Result<String> {
+    pub(super) fn lookup_service_sid() -> Result<String> {
         let value = lookup_account_sid(&format!(r"NT SERVICE\{SERVICE_NAME}"))?;
         if !value.starts_with("S-1-5-80-") {
             return Err("WAKE_BROKER_SERVICE_SID_INVALID".into());
@@ -859,6 +888,50 @@ mod windows {
         })
     }
 
+    pub(super) fn acquire_fixed_root_for_reader() -> Result<FixedProtectedRootReadGuard> {
+        // The image/SCM and first namespace snapshot is a required diagnostic
+        // precursor. Reopen and pin the fixed chain for the reader itself, then
+        // compare the exact physical root observed by both passes.
+        let snapshot = inspect()?;
+        let service_sid = lookup_service_sid()?;
+        let volume = open_root()?;
+        let program_data = open_relative(&volume, "ProgramData", true)?;
+        assert_ancestor(&program_data)?;
+        let catdesk = open_relative(&program_data, "CatDesk", true)?;
+        assert_ancestor(&catdesk)?;
+        let root = open_relative(&catdesk, "WakeProtectedInstallV1", true)?;
+        assert_exact_leaf(&root, &expected_namespace_sddl(&service_sid))?;
+        let root_identity = object_identity(&file_info(&root, true)?)?;
+        if root_identity != snapshot.protected_root {
+            return Err("WAKE_BROKER_ROOT_CHANGED".into());
+        }
+        Ok(FixedProtectedRootReadGuard {
+            _volume: volume,
+            _program_data: program_data,
+            _catdesk: catdesk,
+            root,
+            service_sid,
+            root_identity,
+        })
+    }
+
+    pub(super) fn file_security_raw(handle: *mut c_void) -> Result<(String, String)> {
+        let security = read_security_raw(handle)?;
+        Ok((security.owner, security.sddl))
+    }
+
+    pub(super) fn canonical_protected_security(
+        service_sid: &str,
+        directory: bool,
+    ) -> Result<String> {
+        let expected = if directory {
+            expected_namespace_sddl(service_sid)
+        } else {
+            format!("O:SYG:SYD:P(A;;FA;;;SY)(A;;FA;;;{service_sid})(A;;0x001200A9;;;IU)")
+        };
+        canonical_sddl(&expected)
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -996,4 +1069,24 @@ mod windows {
 #[cfg(windows)]
 pub fn inspect_fixed_broker_read_only() -> Result<BrokerReadOnlySnapshotV1> {
     windows::inspect()
+}
+
+#[cfg(windows)]
+pub(crate) fn acquire_fixed_protected_root_for_reader() -> Result<FixedProtectedRootReadGuard> {
+    windows::acquire_fixed_root_for_reader()
+}
+
+#[cfg(windows)]
+pub(crate) fn protected_security_raw(handle: *mut c_void) -> Result<(String, String)> {
+    windows::file_security_raw(handle)
+}
+
+#[cfg(windows)]
+pub(crate) fn canonical_protected_security(service_sid: &str, directory: bool) -> Result<String> {
+    windows::canonical_protected_security(service_sid, directory)
+}
+
+#[cfg(windows)]
+pub(crate) fn fixed_broker_service_sid_for_endpoint() -> Result<String> {
+    windows::lookup_service_sid()
 }

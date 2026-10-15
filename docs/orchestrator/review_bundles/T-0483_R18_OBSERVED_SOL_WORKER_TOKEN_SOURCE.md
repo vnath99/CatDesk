@@ -1,0 +1,11 @@
+# T-0483 R18 — Dormant observed Sol worker-token staging
+
+**Scope:** `src/delegated/sol_worker_token_security.rs`, `sol_worker_staging.rs`, `sol_worker_staging_security.rs` and module export. No live Codex launch path uses this source.
+
+The host may supply an opened process handle to derive its actual primary `TokenUser`, all group and restricting SIDs, privileges, integrity, mandatory no-write-up policy, `TokenHasRestrictions`, and token ID/modified ID. The module duplicates and pins the process handle, opens its token, rejects missing/changed classes, requires low-or-lower integrity, at least one restricting SID, filtered-token evidence and only the change-notify privilege, and reopens/rechecks the process token. The stage ACL audit compares **every** worker group, including disabled and deny-only groups, plus the worker user and restricting SIDs against the host/SYSTEM trustees before the host writes staged bytes.
+
+The observed-process path now returns a distinct `ProcessBoundPinnedSolWorkerStageV1` whose private mandatory worker field is revalidated before and after readback. The older supplied-SID path remains explicitly limited and cannot be passed off as process-bound evidence through this type. The source still consumes only the private post-burn output type and leaves a failed/torn stage inert.
+
+Focused Sol tests pass 35/35. A real Windows `CreateRestrictedToken`/low-integrity test confirms that merely restricting the current host user's token retains its `TokenUser` SID and is correctly denied against the host-owned stage ACL. Separate token tests pass 7/7 and staging tests 11/11 under independent review; strict all-target Clippy and source diff checks pass. The reviewer found and resolved the process-bound type confusion and found no further concrete bypass in the dormant source.
+
+**Remaining:** this ACL model needs a genuinely distinct worker user SID or a redesigned protected stage authority. The host must bind the opened process to the launched Codex worker, prove its liveness and all thread/descendant identities, show descendants and inherited handles have lost write authority, audit every ancestor for delete/rename/ACL takeover, and make nonce burn→stage metadata crash safe. No Sol launch guard was lifted, no real task/review/Wake cycle occurred, and this source cannot establish P1 acceptance.

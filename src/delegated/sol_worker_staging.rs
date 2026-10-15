@@ -1,8 +1,9 @@
-//! Dormant host-side staging for a verified, stopped Sol worker export.
+//! Dormant host-side staging intended for a verified, stopped Sol worker export.
 //!
-//! The caller supplies a pinned root and a numeric SID. The root's opened ACL
-//! is checked against that SID, but this module cannot establish that it came
-//! from the restricted worker's actual token or excludes every worker child.
+//! The source offers a supplied-SID ACL audit and a distinct process-bound
+//! path that reads and retains an opened restricted worker token. The latter
+//! checks the opened root against the observed token identity, but cannot
+//! prove that the process is the intended Codex worker or excludes its children.
 //! The caller must also prove the entire parent chain grants no worker
 //! DELETE_CHILD or rename authority, ACL takeover rights, inherited writable
 //! handles, or access through alternate groups or privileges.
@@ -16,6 +17,8 @@
 //! sudden power loss.
 
 use std::collections::{BTreeMap, BTreeSet};
+#[cfg(windows)]
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -29,6 +32,8 @@ use crate::windows_protected_fs::{
 use super::sol_worker_nonce::BurnedSolWorkerOutputV1;
 use super::sol_worker_output::{ExpectedSolWorkerOutputV1, SolWorkerOutputFileV1};
 use super::sol_worker_staging_security as security;
+#[cfg(windows)]
+use super::sol_worker_token_security::ObservedRestrictedWorkerProcessTokenV1;
 
 const LABEL: &str = "Sol worker staging";
 const MAX_FILES: usize = 256;
@@ -85,6 +90,34 @@ impl PinnedSolWorkerStageV1 {
     }
 }
 
+/// Process-bound readback keeps worker-token evidence mandatory in its type.
+/// A caller cannot mistake the supplied-SID stage above for this result.
+#[cfg(windows)]
+pub(crate) struct ProcessBoundPinnedSolWorkerStageV1 {
+    stage: PinnedSolWorkerStageV1,
+    observed_worker: Arc<ObservedRestrictedWorkerProcessTokenV1>,
+}
+
+#[cfg(windows)]
+impl ProcessBoundPinnedSolWorkerStageV1 {
+    pub(crate) fn manifest(&self) -> &SolStagedOutputManifestV1 {
+        self.stage.manifest()
+    }
+
+    pub(crate) fn readback(&self) -> Result<BTreeMap<String, Vec<u8>>, String> {
+        validate_observed_worker_for_stage_acl(
+            &self.stage.acl_audited_root,
+            &self.observed_worker,
+        )?;
+        let bytes = self.stage.readback()?;
+        validate_observed_worker_for_stage_acl(
+            &self.stage.acl_audited_root,
+            &self.observed_worker,
+        )?;
+        Ok(bytes)
+    }
+}
+
 /// An ACL audit of the exact opened staging root against a caller-supplied
 /// SID. The root must have been opened for READ_CONTROL relative to a pinned
 /// parent. This value does not prove that the SID identifies the real worker
@@ -102,6 +135,43 @@ pub(crate) fn audit_sol_stage_root_acl_for_supplied_sid(
     Ok(AclAuditedSolStageRootForSuppliedSidV1 {
         guard: root.try_clone(LABEL)?,
         worker_token_user_sid: worker_token_user_sid.into(),
+    })
+}
+
+#[cfg(windows)]
+fn validate_observed_worker_for_stage_acl(
+    root: &ProtectedDirectoryGuard,
+    worker: &ObservedRestrictedWorkerProcessTokenV1,
+) -> Result<(), String> {
+    worker.revalidate()?;
+    let host_sid = security::current_host_sid()?;
+    worker.reject_stage_acl_trustees(&[&host_sid, "S-1-5-18"])?;
+    security::verify_private_root(root, worker.token_user_sid())?;
+    worker.revalidate()
+}
+
+/// Binds the ACL audit to a pinned, revalidated process primary token instead
+/// of a caller-chosen SID. The host must separately prove that this opened
+/// process is the intended worker and that it and its descendants have lost
+/// all relevant write authority before repository use.
+#[cfg(windows)]
+pub(crate) struct AclAuditedSolStageRootForObservedProcessTokenV1 {
+    supplied_sid_audit: AclAuditedSolStageRootForSuppliedSidV1,
+    observed_worker: Arc<ObservedRestrictedWorkerProcessTokenV1>,
+}
+
+#[cfg(windows)]
+pub(crate) fn bind_sol_stage_root_acl_to_observed_worker_token(
+    root: &ProtectedDirectoryGuard,
+    worker: ObservedRestrictedWorkerProcessTokenV1,
+) -> Result<AclAuditedSolStageRootForObservedProcessTokenV1, String> {
+    validate_observed_worker_for_stage_acl(root, &worker)?;
+    let supplied_sid_audit =
+        audit_sol_stage_root_acl_for_supplied_sid(root, worker.token_user_sid())?;
+    worker.revalidate()?;
+    Ok(AclAuditedSolStageRootForObservedProcessTokenV1 {
+        supplied_sid_audit,
+        observed_worker: Arc::new(worker),
     })
 }
 
@@ -367,6 +437,28 @@ pub(crate) fn stage_verified_sol_worker_output(
     stage_verified_sol_worker_output_with_id(acl_audited_root, expected, burned, &stage_id)
 }
 
+/// Process-bound dormant path. The observed token is checked again around
+/// staging and retained for later readback; this still does not prove worker
+/// exit, descendant exit, or ancestor and inherited-handle write exclusion.
+#[cfg(windows)]
+pub(crate) fn stage_verified_sol_worker_output_for_observed_worker(
+    bound_root: &AclAuditedSolStageRootForObservedProcessTokenV1,
+    expected: &ExpectedSolWorkerOutputV1,
+    burned: BurnedSolWorkerOutputV1,
+) -> Result<ProcessBoundPinnedSolWorkerStageV1, String> {
+    validate_observed_worker_for_stage_acl(
+        &bound_root.supplied_sid_audit.guard,
+        &bound_root.observed_worker,
+    )?;
+    let stage = stage_verified_sol_worker_output(&bound_root.supplied_sid_audit, expected, burned)?;
+    let staged = ProcessBoundPinnedSolWorkerStageV1 {
+        stage,
+        observed_worker: Arc::clone(&bound_root.observed_worker),
+    };
+    staged.readback()?;
+    Ok(staged)
+}
+
 fn stage_verified_sol_worker_output_with_id(
     acl_audited_root: &AclAuditedSolStageRootForSuppliedSidV1,
     expected: &ExpectedSolWorkerOutputV1,
@@ -473,7 +565,7 @@ mod tests {
             fs::create_dir(&root).expect("fresh test root");
             fs::create_dir(&ledger).expect("fresh nonce ledger");
             fs::create_dir(&export).expect("fresh export");
-            let host_sid = security::current_host_sid_for_test().expect("host token SID");
+            let host_sid = security::current_host_sid().expect("host token SID");
             let stage_sddl = if host_sid == "S-1-5-18" {
                 "O:SYG:SYD:P(A;OICI;FA;;;SY)".into()
             } else {
@@ -790,7 +882,7 @@ mod tests {
     #[test]
     fn root_acl_rejects_broad_and_same_worker_identity() {
         let fixture = Fixture::new();
-        let host_sid = security::current_host_sid_for_test().expect("host SID");
+        let host_sid = security::current_host_sid().expect("host SID");
         let private = fixture.private_root();
         assert!(audit_sol_stage_root_acl_for_supplied_sid(&private.guard, &host_sid).is_err());
         assert!(audit_sol_stage_root_acl_for_supplied_sid(&private.guard, "not-a-sid").is_err());
@@ -832,7 +924,7 @@ mod tests {
     fn child_acl_rejects_worker_or_inherited_broad_ace_and_wrong_object() {
         let fixture = Fixture::new();
         let private = fixture.private_root();
-        let host_sid = security::current_host_sid_for_test().expect("host SID");
+        let host_sid = security::current_host_sid().expect("host SID");
         let host_ace = format!("(A;OICI;FA;;;{host_sid})");
         let system_ace = if host_sid == "S-1-5-18" {
             String::new()

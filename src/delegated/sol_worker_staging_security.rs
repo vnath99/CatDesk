@@ -451,8 +451,7 @@ mod windows {
         Ok(())
     }
 
-    #[cfg(test)]
-    pub(crate) fn current_host_sid_for_test() -> Result<String, String> {
+    pub(crate) fn current_host_sid() -> Result<String, String> {
         let (_token, _bytes, sid) = current_token_user()?;
         let mut text = ptr::null_mut();
         if unsafe { ConvertSidToStringSidW(sid, &mut text) } == 0 || text.is_null() {
@@ -508,7 +507,6 @@ mod windows {
 }
 
 #[cfg(windows)]
-pub(super) use windows::{same_opened_directory, verify_private_child, verify_private_root};
-
-#[cfg(all(test, windows))]
-pub(super) use windows::current_host_sid_for_test;
+pub(super) use windows::{
+    current_host_sid, same_opened_directory, verify_private_child, verify_private_root,
+};

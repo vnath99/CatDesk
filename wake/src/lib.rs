@@ -3,8 +3,13 @@ pub mod install_authority;
 pub mod install_broker_approval;
 pub mod install_broker_ci_witness;
 #[cfg(windows)]
+pub mod install_broker_endpoint;
+#[cfg(windows)]
 pub mod install_broker_ledger;
+pub mod install_broker_operator;
 pub mod install_broker_preflight;
+#[cfg(windows)]
+pub mod install_broker_reader;
 pub mod process_job;
 pub mod protocol;
 pub mod review_binding;

@@ -1,5 +1,9 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-15 observed worker-token stage binding (source only)
+
+The dormant host staging path can now bind its ACL audit to a pinned opened worker-process primary token rather than a supplied SID. It reads all group/restricting SIDs, privilege and low-integrity/mandatory policy, checks the class-21 filtered-token witness, and revalidates token identity around staging/readback. A distinct process-bound stage type requires this evidence on readback. Thirty-five focused Sol tests pass; an actual restricted copy of the host token is correctly refused because it retains the host `TokenUser` ACL trustee. See `docs/orchestrator/review_bundles/T-0483_R18_OBSERVED_SOL_WORKER_TOKEN_SOURCE.md`. A distinct worker user, proven launched-process/descendant authority, ancestors/inherited handles and crash-safe burn-to-stage remain; Sol launch and live review/Wake are still held.
+
 ## 2026-10-15 dormant host stage ACL audit (source only)
 
 The staging source now audits the opened root/child owner and DACL, and compares created/reopened child volume/file ID before writing payload bytes. Eleven focused Windows staging tests pass. Its API explicitly takes a **supplied** worker SID; the actual restricted token identity, ancestor delete/rename rights, alternate group/privilege paths, descendant exit/lost write authority and burn-to-stage crash recovery remain unproven. No live Sol launch or review/Wake cycle occurred. See `docs/orchestrator/review_bundles/T-0483_R17_SOL_STAGE_ACL_AUDIT_SOURCE.md`.
