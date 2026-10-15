@@ -1,9 +1,10 @@
 //! Dormant host-side staging intended for a verified, stopped Sol worker export.
 //!
-//! The source offers a supplied-SID ACL audit and a distinct process-bound
-//! path that reads and retains an opened restricted worker token. The latter
-//! checks the opened root against the observed token identity, but cannot
-//! prove that the process is the intended Codex worker or excludes its children.
+//! The source keeps a supplied-SID ACL audit internal to this module. Its
+//! crate-visible stage path requires an opaque binding of the fixed local
+//! worker account to an opened restricted process primary token. This checks
+//! the opened root against that identity, but cannot prove that the process
+//! is the intended Codex worker or excludes its children.
 //! The caller must also prove the entire parent chain grants no worker
 //! DELETE_CHILD or rename authority, ACL takeover rights, inherited writable
 //! handles, or access through alternate groups or privileges.
@@ -29,11 +30,11 @@ use crate::windows_protected_fs::{
     ProtectedDirectoryGuard, read_relative_regular_unique, write_new_regular_in,
 };
 
+#[cfg(windows)]
+use super::sol_worker_identity_preflight::BoundFixedLocalSolWorkerProcessV1;
 use super::sol_worker_nonce::BurnedSolWorkerOutputV1;
 use super::sol_worker_output::{ExpectedSolWorkerOutputV1, SolWorkerOutputFileV1};
 use super::sol_worker_staging_security as security;
-#[cfg(windows)]
-use super::sol_worker_token_security::ObservedRestrictedWorkerProcessTokenV1;
 
 const LABEL: &str = "Sol worker staging";
 const MAX_FILES: usize = 256;
@@ -62,7 +63,7 @@ pub(crate) struct SolStagedOutputManifestV1 {
 
 /// A single fresh stage object, pinned through its original parent. The
 /// trusted host can use `readback` before applying any bytes to a repository.
-pub(crate) struct PinnedSolWorkerStageV1 {
+struct PinnedSolWorkerStageV1 {
     acl_audited_root: ProtectedDirectoryGuard,
     guard: ProtectedDirectoryGuard,
     worker_token_user_sid: String,
@@ -70,11 +71,11 @@ pub(crate) struct PinnedSolWorkerStageV1 {
 }
 
 impl PinnedSolWorkerStageV1 {
-    pub(crate) fn manifest(&self) -> &SolStagedOutputManifestV1 {
+    fn manifest(&self) -> &SolStagedOutputManifestV1 {
         &self.manifest
     }
 
-    pub(crate) fn readback(&self) -> Result<BTreeMap<String, Vec<u8>>, String> {
+    fn readback(&self) -> Result<BTreeMap<String, Vec<u8>>, String> {
         security::verify_private_child(
             &self.acl_audited_root,
             &self.guard,
@@ -90,29 +91,29 @@ impl PinnedSolWorkerStageV1 {
     }
 }
 
-/// Process-bound readback keeps worker-token evidence mandatory in its type.
-/// A caller cannot mistake the supplied-SID stage above for this result.
+/// Readback retains the opaque fixed-account/process binding. A caller cannot
+/// obtain this value from a supplied SID or an unbound token observation.
 #[cfg(windows)]
-pub(crate) struct ProcessBoundPinnedSolWorkerStageV1 {
+pub(crate) struct FixedWorkerBoundPinnedSolWorkerStageV1 {
     stage: PinnedSolWorkerStageV1,
-    observed_worker: Arc<ObservedRestrictedWorkerProcessTokenV1>,
+    bound_worker: Arc<BoundFixedLocalSolWorkerProcessV1>,
 }
 
 #[cfg(windows)]
-impl ProcessBoundPinnedSolWorkerStageV1 {
+impl FixedWorkerBoundPinnedSolWorkerStageV1 {
     pub(crate) fn manifest(&self) -> &SolStagedOutputManifestV1 {
         self.stage.manifest()
     }
 
     pub(crate) fn readback(&self) -> Result<BTreeMap<String, Vec<u8>>, String> {
-        validate_observed_worker_for_stage_acl(
+        validate_bound_fixed_worker_for_stage_acl(
             &self.stage.acl_audited_root,
-            &self.observed_worker,
+            &self.bound_worker,
         )?;
         let bytes = self.stage.readback()?;
-        validate_observed_worker_for_stage_acl(
+        validate_bound_fixed_worker_for_stage_acl(
             &self.stage.acl_audited_root,
-            &self.observed_worker,
+            &self.bound_worker,
         )?;
         Ok(bytes)
     }
@@ -122,12 +123,12 @@ impl ProcessBoundPinnedSolWorkerStageV1 {
 /// SID. The root must have been opened for READ_CONTROL relative to a pinned
 /// parent. This value does not prove that the SID identifies the real worker
 /// or that the worker lost write authority through other SIDs or privileges.
-pub(crate) struct AclAuditedSolStageRootForSuppliedSidV1 {
+struct AclAuditedSolStageRootForSuppliedSidV1 {
     guard: ProtectedDirectoryGuard,
     worker_token_user_sid: String,
 }
 
-pub(crate) fn audit_sol_stage_root_acl_for_supplied_sid(
+fn audit_sol_stage_root_acl_for_supplied_sid(
     root: &ProtectedDirectoryGuard,
     worker_token_user_sid: &str,
 ) -> Result<AclAuditedSolStageRootForSuppliedSidV1, String> {
@@ -139,9 +140,9 @@ pub(crate) fn audit_sol_stage_root_acl_for_supplied_sid(
 }
 
 #[cfg(windows)]
-fn validate_observed_worker_for_stage_acl(
+fn validate_bound_fixed_worker_for_stage_acl(
     root: &ProtectedDirectoryGuard,
-    worker: &ObservedRestrictedWorkerProcessTokenV1,
+    worker: &BoundFixedLocalSolWorkerProcessV1,
 ) -> Result<(), String> {
     worker.revalidate()?;
     let host_sid = security::current_host_sid()?;
@@ -150,28 +151,28 @@ fn validate_observed_worker_for_stage_acl(
     worker.revalidate()
 }
 
-/// Binds the ACL audit to a pinned, revalidated process primary token instead
-/// of a caller-chosen SID. The host must separately prove that this opened
-/// process is the intended worker and that it and its descendants have lost
-/// all relevant write authority before repository use.
+/// Binds the root ACL audit to a pinned process primary token whose TokenUser
+/// was matched to the fixed local Sol worker account. The host must separately
+/// prove this is the intended worker and that it and its descendants lost all
+/// relevant write authority before repository use.
 #[cfg(windows)]
-pub(crate) struct AclAuditedSolStageRootForObservedProcessTokenV1 {
+pub(crate) struct AclAuditedSolStageRootForBoundFixedLocalWorkerV1 {
     supplied_sid_audit: AclAuditedSolStageRootForSuppliedSidV1,
-    observed_worker: Arc<ObservedRestrictedWorkerProcessTokenV1>,
+    bound_worker: Arc<BoundFixedLocalSolWorkerProcessV1>,
 }
 
 #[cfg(windows)]
-pub(crate) fn bind_sol_stage_root_acl_to_observed_worker_token(
+pub(crate) fn bind_sol_stage_root_acl_to_fixed_local_worker(
     root: &ProtectedDirectoryGuard,
-    worker: ObservedRestrictedWorkerProcessTokenV1,
-) -> Result<AclAuditedSolStageRootForObservedProcessTokenV1, String> {
-    validate_observed_worker_for_stage_acl(root, &worker)?;
+    worker: BoundFixedLocalSolWorkerProcessV1,
+) -> Result<AclAuditedSolStageRootForBoundFixedLocalWorkerV1, String> {
+    validate_bound_fixed_worker_for_stage_acl(root, &worker)?;
     let supplied_sid_audit =
         audit_sol_stage_root_acl_for_supplied_sid(root, worker.token_user_sid())?;
     worker.revalidate()?;
-    Ok(AclAuditedSolStageRootForObservedProcessTokenV1 {
+    Ok(AclAuditedSolStageRootForBoundFixedLocalWorkerV1 {
         supplied_sid_audit,
-        observed_worker: Arc::new(worker),
+        bound_worker: Arc::new(worker),
     })
 }
 
@@ -422,13 +423,12 @@ fn readback(
     Ok(result)
 }
 
-/// Stage host-owned bytes only after the nonce burn path returns its distinct
-/// output type, below a pinned parent whose ACL was audited against the
-/// caller-supplied SID. Full worker token binding remains external and is
-/// required before live use. This function accepts no worker-supplied path or
-/// stage ID. It never opens an existing stage, retries a collision, removes
-/// crash residue, mutates the repository, or grants Sol launch authority.
-pub(crate) fn stage_verified_sol_worker_output(
+/// Internal staging primitive below a pinned root whose ACL was audited
+/// against a SID. Its caller-visible wrapper requires the fixed-account
+/// process binding and nonce burn result before this can create any stage.
+/// It accepts no worker-supplied path or stage ID, retries no collision,
+/// removes no crash residue, and grants no repository or Sol launch authority.
+fn stage_verified_sol_worker_output(
     acl_audited_root: &AclAuditedSolStageRootForSuppliedSidV1,
     expected: &ExpectedSolWorkerOutputV1,
     burned: BurnedSolWorkerOutputV1,
@@ -437,23 +437,24 @@ pub(crate) fn stage_verified_sol_worker_output(
     stage_verified_sol_worker_output_with_id(acl_audited_root, expected, burned, &stage_id)
 }
 
-/// Process-bound dormant path. The observed token is checked again around
-/// staging and retained for later readback; this still does not prove worker
-/// exit, descendant exit, or ancestor and inherited-handle write exclusion.
+/// The only crate-visible path from a burned Sol output to a host stage. The
+/// fixed local worker/process binding is revalidated around staging and held
+/// for readback; this does not prove worker or descendant exit, nor ancestor
+/// and inherited-handle write exclusion.
 #[cfg(windows)]
-pub(crate) fn stage_verified_sol_worker_output_for_observed_worker(
-    bound_root: &AclAuditedSolStageRootForObservedProcessTokenV1,
+pub(crate) fn stage_verified_sol_worker_output_for_bound_fixed_local_worker(
+    bound_root: &AclAuditedSolStageRootForBoundFixedLocalWorkerV1,
     expected: &ExpectedSolWorkerOutputV1,
     burned: BurnedSolWorkerOutputV1,
-) -> Result<ProcessBoundPinnedSolWorkerStageV1, String> {
-    validate_observed_worker_for_stage_acl(
+) -> Result<FixedWorkerBoundPinnedSolWorkerStageV1, String> {
+    validate_bound_fixed_worker_for_stage_acl(
         &bound_root.supplied_sid_audit.guard,
-        &bound_root.observed_worker,
+        &bound_root.bound_worker,
     )?;
     let stage = stage_verified_sol_worker_output(&bound_root.supplied_sid_audit, expected, burned)?;
-    let staged = ProcessBoundPinnedSolWorkerStageV1 {
+    let staged = FixedWorkerBoundPinnedSolWorkerStageV1 {
         stage,
-        observed_worker: Arc::clone(&bound_root.observed_worker),
+        bound_worker: Arc::clone(&bound_root.bound_worker),
     };
     staged.readback()?;
     Ok(staged)
@@ -533,10 +534,13 @@ fn stage_verified_sol_worker_output_with_id(
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
+    use std::ffi::c_void;
     use std::fs;
+    use std::os::windows::io::BorrowedHandle;
     use std::path::PathBuf;
 
     use super::super::codex_model_policy::{CodexCliTurnProfileEvidenceV1, SOL_MEDIUM_MODEL};
+    use super::super::sol_worker_identity_preflight::bind_fixed_local_sol_worker_to_opened_process;
     use super::super::sol_worker_nonce::{
         SolWorkerNonceAuthorityV1, bind_sol_worker_native_turn, issue_sol_worker_nonce,
         verify_and_burn_sol_worker_output,
@@ -544,6 +548,36 @@ mod tests {
     use super::super::sol_worker_output::SolWorkerOutputManifestV1;
 
     const TEST_WORKER_SID: &str = "S-1-5-21-111-222-333-1009";
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetCurrentProcess() -> *mut c_void;
+    }
+
+    #[test]
+    fn exposed_stage_boundary_requires_fixed_account_process_binding() {
+        let _: fn(
+            &ProtectedDirectoryGuard,
+            BoundFixedLocalSolWorkerProcessV1,
+        ) -> Result<AclAuditedSolStageRootForBoundFixedLocalWorkerV1, String> =
+            bind_sol_stage_root_acl_to_fixed_local_worker;
+        let _: fn(
+            &AclAuditedSolStageRootForBoundFixedLocalWorkerV1,
+            &ExpectedSolWorkerOutputV1,
+            BurnedSolWorkerOutputV1,
+        ) -> Result<FixedWorkerBoundPinnedSolWorkerStageV1, String> =
+            stage_verified_sol_worker_output_for_bound_fixed_local_worker;
+        let _: fn(
+            &FixedWorkerBoundPinnedSolWorkerStageV1,
+        ) -> Result<BTreeMap<String, Vec<u8>>, String> =
+            FixedWorkerBoundPinnedSolWorkerStageV1::readback;
+    }
+
+    #[test]
+    fn current_host_process_cannot_satisfy_fixed_worker_stage_boundary() {
+        let process = unsafe { BorrowedHandle::borrow_raw(GetCurrentProcess()) };
+        assert!(bind_fixed_local_sol_worker_to_opened_process(process).is_err());
+    }
 
     struct Fixture {
         root: PathBuf,

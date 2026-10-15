@@ -1,6 +1,8 @@
 //! Independent Wake protocol and durable state. No CatDesk schemas or processes.
 pub mod install_authority;
 pub mod install_broker_approval;
+#[cfg(windows)]
+pub mod install_broker_candidate_stage;
 pub mod install_broker_ci_witness;
 #[cfg(windows)]
 pub mod install_broker_client;

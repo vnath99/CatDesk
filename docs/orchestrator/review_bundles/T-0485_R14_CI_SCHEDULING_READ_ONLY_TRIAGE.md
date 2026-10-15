@@ -1,0 +1,14 @@
+# T-0485 R14 — Exact-source GitHub CI scheduling triage (read only)
+
+## Observed state on 2026-10-15
+
+- The authenticated `gh` identity is repository owner `vnath99` with admin access. `vnath99/CatDesk` is public, active, and neither archived nor disabled.
+- `gh api repos/vnath99/CatDesk/actions/permissions` returned `enabled:true`, `allowed_actions:"all"`. The workflow permissions endpoint returned default token permissions `read`. The repository execution-policy endpoint returned `total_count:0`.
+- Workflow `311012404` (`.github/workflows/ci.yml`) is `active`. The committed YAML declares `push` and `pull_request`; it **does not declare `workflow_dispatch`**. Therefore `gh workflow run` is not a valid manual-run acceptance test for this workflow as currently configured. Do not add that trigger merely to work around missing push runs.
+- The prior explicit `gh workflow run ci.yml --ref orchestrator/chatgpt-codex-autonomous-loop` attempt was recorded by the CLI as **HTTP 422: `Actions has been disabled for this repository`**. Only that CLI error text was retained in the local handoff; the raw HTTP response body/headers were not retained. Do not reinterpret it as proof that the missing `workflow_dispatch` trigger is the sole cause, or as independent confirmation of an administrative disable. No new dispatch was attempted in this audit.
+- Latest workflow run remains successful push run `38646210548` (attempt 1) for older SHA `4e9a2e212c47b0b7229b41874a3b1ec5bfd7d083`, created 2026-10-14T22:14:12Z. Exact pushed SHA `7dafbf1a0e0b2c9a79c79c07b8c7325f3dec116e` has **zero** workflow runs and check-runs on bounded readback. An older green run cannot validate the newer source. Push-run absence is separate from the missing manual trigger.
+- The authenticated legacy personal Actions billing endpoint returned HTTP 404 and stated that the CLI token lacks `user` scope. That response does **not** establish the account's billing or restriction state. No scope refresh, billing change, permission toggle, or dispatch was attempted.
+
+## Gate and owner action
+
+Exact three-job Windows CI for each release source SHA remains open. The repository owner should inspect the authenticated Actions/Settings banner and billing/account notices. If GitHub displays “Actions is currently disabled” for the repository or account despite normal settings, [GitHub's repository Actions documentation](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository) says this may be a separate GitHub-controlled state and directs the owner to GitHub Support. A Support report should include the recorded CLI 422 text, workflow ID/path, newest green run, exact newer SHA with zero push runs, enabled permission/state readbacks, and the fact that `workflow_dispatch` is absent. Do not treat local tests or inert builds as exact-source CI.

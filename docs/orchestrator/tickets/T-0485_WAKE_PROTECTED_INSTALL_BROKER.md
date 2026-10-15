@@ -1,5 +1,15 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-15 exact-source CI scheduling audit
+
+Authenticated read-only CLI inspection finds the repository active, Actions permission `enabled:true`/`allowed_actions:all`, workflow `311012404` active, and no repository execution policy. `ci.yml` has push and pull-request triggers but **no `workflow_dispatch`**. The prior `gh workflow run` attempt's retained CLI error text is HTTP 422 `Actions has been disabled for this repository`; its raw response was not retained, and the missing manual trigger is a distinct issue. The latest green push run is still for older `4e9a2e2`, while the pushed `7dafbf1` has zero exact runs/checks. The personal Actions billing endpoint returned 404 with a missing `user` scope, so billing/account restriction state is unknown. No new dispatch, scope refresh or settings change was attempted. See `T-0485_R14_CI_SCHEDULING_READ_ONLY_TRIAGE.md`; exact-source Windows CI remains mandatory.
+
+## 2026-10-15 fixed candidate-stage readback source checkpoint
+
+`install_broker_candidate_stage.rs` now inspects only the compiled protected `staging/candidate` slot. It verifies the detached approval against the pinned protected policy key and supplied observations, then compares the canonical manifest and exact four artifact bytes. It pins no-follow, no-write/delete-share handles, requires exact SYSTEM-owned protected ACLs and directory inventory, checks length/hash/object identity, and reopens the fixed names. Its readback explicitly marks stage creation and ledger binding **unproven**: stale identical bytes can match, and the result grants no installation authority. Seven focused Windows tests passed; see `T-0485_R13_FIXED_CANDIDATE_STAGE_READBACK_SOURCE.md`.
+
+There is still no broker-owned source copy or protected stage creation record tied to an intent generation and physical slot identity, nor an installed signed service/namespace or independent CI fetch. The source-only readback cannot clear either production `WAKE_INSTALL_BROKER_UNPROVISIONED` hold or authorize dev.85 promotion.
+
 ## 2026-10-15 inert build freshness and one-shot service source checkpoint
 
 `wake/install.ps1 -BuildOnly` now rebuilds both WakeHost and the GUI from the working source, even when an earlier GUI target exists. The normal install path still refuses with `WAKE_INSTALL_BROKER_UNPROVISIONED` before either build. A PowerShell parse and mock-cargo probe passed; no protected state was touched. See `T-0485_R11_BUILDONLY_GUI_FRESHNESS.md`.

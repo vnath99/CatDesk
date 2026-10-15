@@ -102,6 +102,10 @@ impl BoundFixedLocalSolWorkerProcessV1 {
         self.observed_token.token_user_sid()
     }
 
+    pub(crate) fn reject_stage_acl_trustees(&self, trustees: &[&str]) -> Result<(), String> {
+        self.observed_token.reject_stage_acl_trustees(trustees)
+    }
+
     pub(crate) fn revalidate(&self) -> Result<(), String> {
         self.observed_token.revalidate()?;
         let fresh = preflight_catdesk_sol_worker_local_account()?;
