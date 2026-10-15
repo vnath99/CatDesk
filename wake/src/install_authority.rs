@@ -610,28 +610,14 @@ mod windows {
     fn verify_host_image(root: &Path, process: &File) -> Result<()> {
         let actual = process_image(process)?;
         #[cfg(feature = "test-support")]
-        if let Some(parent) = std::env::var_os("CATDESK_WAKE_TEST_ONLY_ROOT_PARENT") {
-            let trusted = std::fs::canonicalize(parent)
-                .map_err(|_| "WAKE_STORE_AUTHORITY_TEST_PARENT_INVALID")?;
-            let root = std::fs::canonicalize(root)
-                .map_err(|_| "WAKE_STORE_AUTHORITY_TEST_PARENT_INVALID")?;
-            let temporary = std::fs::canonicalize(std::env::temp_dir())
-                .map_err(|_| "WAKE_STORE_AUTHORITY_TEST_PARENT_INVALID")?;
-            if trusted.starts_with(temporary)
-                && trusted.file_name().is_some_and(|name| {
-                    name.to_string_lossy()
-                        .starts_with("catdesk-wake-install-authority-test-")
-                })
-                && root.starts_with(trusted)
-            {
-                let expected = std::env::current_exe()
-                    .map_err(|_| "WAKE_STORE_AUTHORITY_PROCESS_IMAGE_UNAVAILABLE")?;
-                return if display_path(&actual) == display_path(&expected) {
-                    Ok(())
-                } else {
-                    Err("WAKE_STORE_AUTHORITY_PROCESS_IMAGE_MISMATCH".into())
-                };
-            }
+        if isolated_test_root(root) {
+            let expected = std::env::current_exe()
+                .map_err(|_| "WAKE_STORE_AUTHORITY_PROCESS_IMAGE_UNAVAILABLE")?;
+            return if display_path(&actual) == display_path(&expected) {
+                Ok(())
+            } else {
+                Err("WAKE_STORE_AUTHORITY_PROCESS_IMAGE_MISMATCH".into())
+            };
         }
 
         let mut pointer_file =
@@ -689,6 +675,40 @@ mod windows {
             return Err("WAKE_STORE_AUTHORITY_PROCESS_IMAGE_HASH_MISMATCH".into());
         }
         Ok(())
+    }
+
+    #[cfg(feature = "test-support")]
+    fn isolated_test_root(root: &Path) -> bool {
+        let Some(parent) = std::env::var_os("CATDESK_WAKE_TEST_ONLY_ROOT_PARENT") else {
+            return false;
+        };
+        let (Ok(trusted), Ok(root), Ok(temporary)) = (
+            std::fs::canonicalize(parent),
+            std::fs::canonicalize(root),
+            std::fs::canonicalize(std::env::temp_dir()),
+        ) else {
+            return false;
+        };
+        trusted.parent() == Some(temporary.as_path())
+            && trusted.file_name().is_some_and(|name| {
+                name.to_string_lossy()
+                    .starts_with("catdesk-wake-install-authority-test-")
+            })
+            && root == trusted.join("CatDeskWake")
+    }
+
+    /// Installation mutation remains disabled until a protected broker owns
+    /// the install namespace and verifies an independent package approval.
+    /// The owner challenge proves the host, not the caller. This gate prevents
+    /// this CLI from treating self-consistent caller inputs as approval; it
+    /// does not protect the current user-owned store against direct writes.
+    pub fn require_install_mutation_broker(root: &Path) -> Result<()> {
+        #[cfg(feature = "test-support")]
+        if isolated_test_root(root) {
+            return Ok(());
+        }
+        let _ = root;
+        Err("WAKE_INSTALL_BROKER_UNPROVISIONED".into())
     }
 
     fn handle_table() -> Result<Vec<u8>> {
@@ -1003,11 +1023,26 @@ mod windows {
                 "WAKE_STORE_AUTHORITY_PROCESS_INVALID"
             );
         }
+
+        #[test]
+        fn install_mutation_requires_protected_broker() {
+            assert_eq!(
+                require_install_mutation_broker(Path::new(r"Z:\nonexistent")).unwrap_err(),
+                "WAKE_INSTALL_BROKER_UNPROVISIONED"
+            );
+        }
     }
 }
 
 #[cfg(windows)]
-pub use windows::{HostOwnerProofServer, HostRootPin, InstallStoreGuard};
+pub use windows::{
+    HostOwnerProofServer, HostRootPin, InstallStoreGuard, require_install_mutation_broker,
+};
+
+#[cfg(not(windows))]
+pub fn require_install_mutation_broker(_root: &Path) -> Result<()> {
+    Err("WAKE_INSTALL_BROKER_UNPROVISIONED".into())
+}
 
 #[cfg(not(windows))]
 pub struct HostRootPin;

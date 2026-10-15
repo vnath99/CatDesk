@@ -6,6 +6,11 @@ $repoSource = Split-Path -Parent $wakeSource
 $wakeRoot = Join-Path $env:LOCALAPPDATA 'CatDeskWake'
 $versionsRoot = Join-Path $wakeRoot 'versions'
 
+# The current per-user store has no protected install broker. Refuse before
+# build or inert staging can write into that namespace; -BuildOnly remains the
+# source verification path.
+if (-not $BuildOnly) { throw 'WAKE_INSTALL_BROKER_UNPROVISIONED' }
+
 function Assert-WakeInstallStoreAuthority {
     # The connected host may resolve the same displayed path to a different
     # physical store than this installer process. Check the exact live lock

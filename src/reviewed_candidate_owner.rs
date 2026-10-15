@@ -63,6 +63,7 @@ mod windows {
             length: u32,
         ) -> i32;
         fn AssignProcessToJobObject(job: *mut c_void, process: *mut c_void) -> i32;
+        fn TerminateJobObject(job: *mut c_void, exit_code: u32) -> i32;
         fn CloseHandle(handle: *mut c_void) -> i32;
     }
 
@@ -102,11 +103,29 @@ mod windows {
             }
             Ok(())
         }
+
+        fn terminate(&self) -> Result<(), String> {
+            if self.0.is_null() || unsafe { TerminateJobObject(self.0, 1) } == 0 {
+                return Err("reviewed candidate child job termination failed".into());
+            }
+            Ok(())
+        }
+
+        fn close(&mut self) -> Result<(), String> {
+            if self.0.is_null() {
+                return Ok(());
+            }
+            if unsafe { CloseHandle(self.0) } == 0 {
+                return Err("reviewed candidate child job close failed".into());
+            }
+            self.0 = std::ptr::null_mut();
+            Ok(())
+        }
     }
 
     impl Drop for KillOnCloseJob {
         fn drop(&mut self) {
-            unsafe { CloseHandle(self.0) };
+            let _ = self.close();
         }
     }
 
@@ -147,23 +166,56 @@ mod windows {
             &mut self.child
         }
 
-        pub(crate) fn terminate_and_wait(mut self) -> Result<(), String> {
-            // Closing the job terminates the exact assigned child and any
-            // descendants. A direct kill is a fallback if CloseHandle fails.
-            drop(self.job);
-            let deadline = Instant::now() + Duration::from_secs(5);
+        fn wait_until(&mut self, deadline: Instant) -> Result<bool, String> {
             loop {
                 match self.child.try_wait() {
-                    Ok(Some(_)) => return Ok(()),
+                    Ok(Some(_)) => return Ok(true),
                     Ok(None) if Instant::now() < deadline => {
                         std::thread::sleep(Duration::from_millis(25));
                     }
-                    Ok(None) => {
-                        let _ = self.child.kill();
-                        return Err("reviewed candidate child termination timed out".into());
-                    }
+                    Ok(None) => return Ok(false),
                     Err(_) => return Err("reviewed candidate child status unavailable".into()),
                 }
+            }
+        }
+
+        fn shutdown_exact(&mut self) -> Result<(), String> {
+            // Close the exact job before dropping the child process handle.
+            // This also covers every early-return path in the owner launcher.
+            let job_closed = if self.job.close().is_ok() {
+                true
+            } else {
+                // If CloseHandle failed while the job handle remains valid,
+                // explicitly terminate its whole process tree and retry close.
+                let _ = self.job.terminate();
+                self.job.close().is_ok()
+            };
+            if !job_closed {
+                let _ = self.child.kill();
+            }
+            if !self.wait_until(Instant::now() + Duration::from_secs(5))? {
+                // Child::kill uses the retained process handle, never a PID
+                // lookup. Reap it with a second bound after the fallback.
+                let _ = self.child.kill();
+                if !self.wait_until(Instant::now() + Duration::from_secs(2))? {
+                    return Err("reviewed candidate child termination timed out".into());
+                }
+            }
+            if !job_closed {
+                return Err("reviewed candidate child job close failed".into());
+            }
+            Ok(())
+        }
+
+        pub(crate) fn terminate_and_wait(mut self) -> Result<(), String> {
+            self.shutdown_exact()
+        }
+    }
+
+    impl Drop for OwnedCandidateChild {
+        fn drop(&mut self) {
+            if let Err(error) = self.shutdown_exact() {
+                eprintln!("reviewed candidate owner cleanup failed: {error}");
             }
         }
     }
@@ -204,6 +256,102 @@ mod windows {
             if std::env::var_os("CATDESK_OWNER_JOB_TEST_CHILD").is_some() {
                 std::thread::sleep(Duration::from_secs(60));
             }
+        }
+
+        #[test]
+        fn child_with_descendant() {
+            if std::env::var_os("CATDESK_OWNER_JOB_TEST_DESCENDANT").is_none() {
+                return;
+            }
+            let mut descendant = Command::new(std::env::current_exe().expect("test executable"))
+                .args([
+                    "--exact",
+                    "reviewed_candidate_owner::windows::tests::sleep_child",
+                ])
+                .env("CATDESK_OWNER_JOB_TEST_CHILD", "1")
+                .stdout(Stdio::null())
+                .spawn()
+                .expect("descendant process");
+            println!("DESCENDANT_PID={}", descendant.id());
+            std::io::stdout().flush().expect("flush descendant PID");
+            std::thread::sleep(Duration::from_secs(60));
+            let _ = descendant.kill();
+            let _ = descendant.wait();
+        }
+
+        #[test]
+        fn early_owner_return_reaps_child_and_descendant() {
+            const PROCESS_TERMINATE: u32 = 0x0001;
+            const SYNCHRONIZE: u32 = 0x0010_0000;
+            const WAIT_OBJECT_0: u32 = 0;
+            const WAIT_TIMEOUT: u32 = 0x0000_0102;
+            let mut command = Command::new(std::env::current_exe().expect("test executable"));
+            command
+                .args([
+                    "--exact",
+                    "reviewed_candidate_owner::windows::tests::child_with_descendant",
+                    "--nocapture",
+                ])
+                .env("CATDESK_OWNER_JOB_TEST_DESCENDANT", "1")
+                .stdout(Stdio::piped());
+            let mut owned = OwnedCandidateChild::spawn(&mut command).expect("owned child");
+            let child_handle =
+                unsafe { OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, 0, owned.pid()) };
+            assert!(!child_handle.is_null(), "exact child process handle");
+            let stdout = owned.child_mut().stdout.take().expect("child stdout");
+            let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+            let ready_reader = std::thread::spawn(move || {
+                let mut reader = BufReader::new(stdout);
+                let mut line = String::new();
+                loop {
+                    line.clear();
+                    if reader.read_line(&mut line).expect("child output") == 0 {
+                        return;
+                    }
+                    if let Some(value) = line.split("DESCENDANT_PID=").nth(1) {
+                        ready_tx
+                            .send(value.trim().parse::<u32>().expect("descendant PID"))
+                            .expect("send descendant PID");
+                        return;
+                    }
+                }
+            });
+            let descendant_pid = ready_rx
+                .recv_timeout(Duration::from_secs(10))
+                .expect("bounded descendant readiness");
+            let descendant_handle =
+                unsafe { OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, 0, descendant_pid) };
+            assert!(
+                !descendant_handle.is_null(),
+                "exact descendant process handle"
+            );
+            assert_eq!(
+                unsafe { WaitForSingleObject(child_handle, 0) },
+                WAIT_TIMEOUT
+            );
+            assert_eq!(
+                unsafe { WaitForSingleObject(descendant_handle, 0) },
+                WAIT_TIMEOUT
+            );
+            // This matches a readiness or listener error exit in the owner:
+            // no explicit terminate_and_wait call is needed by the caller.
+            drop(owned);
+            ready_reader.join().expect("ready reader");
+            let child_outcome = unsafe { WaitForSingleObject(child_handle, 5_000) };
+            let descendant_outcome = unsafe { WaitForSingleObject(descendant_handle, 5_000) };
+            if child_outcome != WAIT_OBJECT_0 {
+                unsafe { TerminateProcess(child_handle, 1) };
+            }
+            if descendant_outcome != WAIT_OBJECT_0 {
+                unsafe { TerminateProcess(descendant_handle, 1) };
+            }
+            unsafe { CloseHandle(child_handle) };
+            unsafe { CloseHandle(descendant_handle) };
+            assert_eq!(child_outcome, WAIT_OBJECT_0, "owner must reap exact child");
+            assert_eq!(
+                descendant_outcome, WAIT_OBJECT_0,
+                "job close must terminate descendant"
+            );
         }
 
         #[test]

@@ -2,6 +2,9 @@
 //! supervisor.  It deliberately has no path, image, hash, pipe, port,
 //! principal, task, service, shell, or tunnel input.
 
+use std::net::{SocketAddr, TcpStream};
+use std::time::Duration;
+
 use serde_json::{Value, json};
 
 use crate::control_plane_supervisor::{
@@ -213,8 +216,9 @@ fn production_preflight() -> SupervisorLifecycleReasonV1 {
 }
 
 /// Returns only fixed, non-secret categories. It is read-only: no root create,
-/// process launch, port probe, pipe client, receipt/state write, or worker/
-/// tunnel action occurs here.
+/// process launch, pipe client, receipt/state write, or worker/tunnel action
+/// occurs here. The bounded loopback connect checks port occupancy only; it
+/// does not authenticate the process on that port or grant activation authority.
 fn fixed_status() -> Value {
     let readiness = assess_fixed_supervisor_activation_readiness();
     let image = production_reviewed_supervisor_image();
@@ -238,9 +242,29 @@ fn fixed_status() -> Value {
         "startup": startup_reason(&startup).as_str(),
         "startupPolicy": startup_policy.as_str(),
         "startupDefinition": startup_definition,
-        "frontDoor3201": "SUPERVISOR_3201_NOT_PROBED",
+        "frontDoor3201": probe_fixed_supervisor_front_door(),
         "activationBlocked": production_preflight().as_str(),
     })
+}
+
+fn probe_fixed_supervisor_front_door() -> &'static str {
+    probe_supervisor_front_door_port(SocketAddr::from((
+        [127, 0, 0, 1],
+        crate::control_plane_supervisor::FIXED_SUPERVISOR_LOOPBACK_PORT,
+    )))
+}
+
+fn probe_supervisor_front_door_port(address: SocketAddr) -> &'static str {
+    match TcpStream::connect_timeout(&address, Duration::from_millis(250)) {
+        Ok(stream) => {
+            drop(stream);
+            "SUPERVISOR_3201_LISTENER_UNATTESTED"
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::ConnectionRefused => {
+            "SUPERVISOR_3201_NO_LISTENER"
+        }
+        Err(_) => "SUPERVISOR_3201_PROBE_UNAVAILABLE",
+    }
 }
 
 fn startup_reason(startup: &FixedStartupAuthorityV1) -> SupervisorLifecycleReasonV1 {
@@ -576,6 +600,7 @@ fn test_state_precondition(root: &std::path::Path) -> SupervisorLifecycleReasonV
 mod tests {
     use super::*;
     use std::fs;
+    use std::net::TcpListener;
     use uuid::Uuid;
 
     fn fixture_root(label: &str) -> std::path::PathBuf {
@@ -583,6 +608,22 @@ mod tests {
             "catdesk-supervisor-lifecycle-{label}-{}",
             Uuid::new_v4()
         ))
+    }
+
+    #[test]
+    fn loopback_port_probe_reports_occupancy_without_claiming_owner_identity() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("ephemeral listener");
+        let address = listener.local_addr().expect("listener address");
+        assert_eq!(
+            probe_supervisor_front_door_port(address),
+            "SUPERVISOR_3201_LISTENER_UNATTESTED"
+        );
+        drop(listener);
+        assert_ne!(
+            probe_supervisor_front_door_port(address),
+            "SUPERVISOR_3201_LISTENER_UNATTESTED",
+            "a closed socket must not be reported as a live listener"
+        );
     }
 
     #[test]

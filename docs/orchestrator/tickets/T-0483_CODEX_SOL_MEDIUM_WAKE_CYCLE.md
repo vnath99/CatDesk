@@ -1,5 +1,9 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+# 2026-10-15 broker and CI hold
+
+Wake installation now fails at `WAKE_INSTALL_BROKER_UNPROVISIONED` in both the PowerShell entry and all four mutating host CLI commands. The current same-user store has no protected caller or direct-write boundary; a broker/namespace and independent approval are required before dev.85 activation. The connected CatDesk transport is presently unavailable, so installed build/generation cannot be freshly verified this turn. The previous dev.84/Chat53 generation-34 evidence is historical. Exact commit `448836b` had zero GitHub check/workflow runs; the prior dispatch returned HTTP 422. No real Sol task, natural review event, or fresh Wake receipt has been accepted. See `T-0483_R12_INSTALL_BROKER_HOLD.md` in the review bundles.
+
 # 2026-10-15 source checkpoint
 
 The opt-in Sol/medium path now reads exact native CLI turn metadata instead of treating an app-server thread setting as turn proof. Accounting and passed-verification checkpoints retain the turn profile; completed Sol inbox records bind the approved task, verification, completion artifact, source snapshot and review ID. Independent WakeHost discovery validates the same binding before `review_ready`. A missing or downgraded profile, direct-ChatGPT completion under a Sol contract, and an unbound review are rejected in isolated tests.

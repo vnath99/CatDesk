@@ -3,11 +3,17 @@ $ErrorActionPreference = 'Stop'
 $probe = Join-Path (Split-Path -Parent $PSScriptRoot) 'check-install-store-authority.ps1'
 $installer = Join-Path (Split-Path -Parent $PSScriptRoot) 'install.ps1'
 $installerSource = [IO.File]::ReadAllText($installer)
+$brokerHoldOffset = $installerSource.IndexOf(
+    "if (-not `$BuildOnly) { throw 'WAKE_INSTALL_BROKER_UNPROVISIONED' }",
+    [StringComparison]::Ordinal
+)
+$firstBuildOffset = $installerSource.IndexOf('& cargo build', [StringComparison]::Ordinal)
 $buildOnlyReturnOffset = $installerSource.IndexOf('if ($BuildOnly) { return }', [StringComparison]::Ordinal)
 $holdOffset = $installerSource.IndexOf('-RequireLiveRootProof', [StringComparison]::Ordinal)
 $nativeHoldOffset = $installerSource.IndexOf('& $hostBuild install-authority-probe', [StringComparison]::Ordinal)
 $firstStoreWriteOffset = $installerSource.IndexOf('$pinnedStore.PinVersions()', [StringComparison]::Ordinal)
-if ($buildOnlyReturnOffset -lt 0 -or $firstStoreWriteOffset -le $buildOnlyReturnOffset -or
+if ($brokerHoldOffset -lt 0 -or $firstBuildOffset -le $brokerHoldOffset -or
+    $buildOnlyReturnOffset -lt 0 -or $firstStoreWriteOffset -le $buildOnlyReturnOffset -or
     $holdOffset -lt 0 -or $holdOffset -ge $firstStoreWriteOffset -or
     $nativeHoldOffset -le $buildOnlyReturnOffset -or
     $nativeHoldOffset -ge $firstStoreWriteOffset) {
@@ -393,8 +399,7 @@ try {
             & $installer
             throw 'TEST_INSTALLER_REJECTION_MISSING'
         } catch {
-            if ($_.Exception.Message -notmatch
-                'WAKE_STORE_AUTHORITY_(HOST_NOT_UNIQUE|POINTER_UNAVAILABLE)') {
+            if ($_.Exception.Message -ne 'WAKE_INSTALL_BROKER_UNPROVISIONED') {
                 throw
             }
         }

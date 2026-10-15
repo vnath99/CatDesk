@@ -1,4 +1,9 @@
-use catdesk_wake::{Result, install_authority::InstallStoreGuard, runtime, store::Store};
+use catdesk_wake::{
+    Result,
+    install_authority::{InstallStoreGuard, require_install_mutation_broker},
+    runtime,
+    store::Store,
+};
 use std::path::Path;
 
 fn open_runtime_store(root: &Path) -> Result<Store> {
@@ -19,6 +24,10 @@ fn guarded_install_store(
         .map_err(|_| "WAKE_STORE_AUTHORITY_PROCESS_INVALID")?;
     let guard = InstallStoreGuard::acquire(root, pid, fingerprint)?;
     guard.require_lock_owner_proof()?;
+    // A reviewed host is not an authorization decision for the requesting
+    // process. Keep every CLI install mutation closed until a protected broker
+    // and independent package approval are deployed.
+    require_install_mutation_broker(root)?;
     let store = open_runtime_store(root)?;
     guard.recheck_live()?;
     Ok((guard, store))
