@@ -1,9 +1,10 @@
 //! Pure comparison of a signed install approval's CI claim with GitHub API JSON.
 //!
-//! This is a diagnostic building block for a future **offline issuer**, not an
-//! installation capability. The issuer must independently fetch every page over
-//! HTTPS from the fixed `api.github.com/repos/vnath99/CatDesk` endpoints, with
-//! redirects and caller-chosen URLs forbidden. It must use the workflow-runs
+//! This pure comparator is shared by a future **offline issuer** and the
+//! broker-owned fixed-origin fetcher. It is not installation capability by
+//! itself. Both must independently fetch every page over HTTPS from the fixed
+//! `api.github.com/repos/vnath99/CatDesk` endpoints, with redirects and
+//! caller-chosen URLs forbidden. They must use the workflow-runs
 //! query for workflow 311012404, the fixed branch, `event=push`, and the exact
 //! source SHA, then fetch the selected run's attempt-specific jobs endpoint.
 //! Run pages must be fetched again after jobs. Page numbers supplied here must
@@ -24,9 +25,9 @@ const REQUIRED_JOBS: [&str; 3] = [
     "Python Wake and advisor tests",
     "Independent WakeHost Rust",
 ];
-const PER_PAGE: usize = 100;
-const MAX_RUNS: usize = 300;
-const MAX_PAGE_BYTES: usize = 1024 * 1024;
+pub(crate) const PER_PAGE: usize = 100;
+pub(crate) const MAX_RUNS: usize = 300;
+pub(crate) const MAX_PAGE_BYTES: usize = 1024 * 1024;
 
 /// Bytes fetched from page `page_number` of a fixed GitHub API request.
 /// The number is bookkeeping, not proof of the response's origin.
@@ -88,7 +89,7 @@ fn valid_sha(value: &str) -> bool {
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
-fn validate_claim(ci: &ExactCiV1) -> Result<(), &'static str> {
+pub(crate) fn validate_claim(ci: &ExactCiV1) -> Result<(), &'static str> {
     if ci.repository != REPOSITORY
         || ci.workflow_path != WORKFLOW_PATH
         || ci.workflow_id != WORKFLOW_ID

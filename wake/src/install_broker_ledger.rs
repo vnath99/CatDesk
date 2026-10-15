@@ -27,6 +27,7 @@ use crate::{
         BrokerCandidateStageReadbackV1, inspect_stage_under_guard,
         require_empty_staging_under_guard,
     },
+    install_broker_ci_fetch::require_broker_owned_exact_ci,
     install_broker_durability::{ParentFlushPoint, flush_pinned_directory},
     install_broker_policy::{BrokerProtectedPolicyV1, PolicyVerifiedApprovalV1},
     install_broker_stage_writer::BrokerStageReceiptV1,
@@ -1199,8 +1200,9 @@ fn write_new(file: &mut File, expected: &LedgerRecordV1) -> Result<String> {
 
 impl<'a> BrokerLedgerGuard<'a> {
     /// Invoke the observation provider only while this global lock is held,
-    /// then verify the envelope against the pinned protected policy before
-    /// creating INTENT. The future service must supply a fixed kernel-backed
+    /// then verify the envelope against the pinned protected policy and fetch
+    /// exact CI from the broker's fixed GitHub origin before creating INTENT.
+    /// The future service must supply a fixed kernel-backed
     /// provider that keeps its object/process pins alive through the returned
     /// lease. A closure itself cannot prove observation provenance.
     pub fn accept_with_observation<'p>(
@@ -1209,10 +1211,45 @@ impl<'a> BrokerLedgerGuard<'a> {
         envelope: &[u8],
         observe: impl FnOnce(&OwnedHandle) -> Result<(BrokerObservedStateV1, LedgerExpectationV1)>,
     ) -> Result<(BrokerLedgerLease<'a>, PolicyVerifiedApprovalV1<'p>)> {
+        self.accept_with_observation_using(policy, envelope, observe, require_broker_owned_exact_ci)
+    }
+
+    fn accept_with_observation_using<'p>(
+        self,
+        policy: &'p BrokerProtectedPolicyV1,
+        envelope: &[u8],
+        observe: impl FnOnce(&OwnedHandle) -> Result<(BrokerObservedStateV1, LedgerExpectationV1)>,
+        check_ci: impl FnOnce(&PolicyVerifiedApprovalV1<'_>) -> Result<()>,
+    ) -> Result<(BrokerLedgerLease<'a>, PolicyVerifiedApprovalV1<'p>)> {
         let (observed, expected) = observe(self.root)?;
         let approved = policy.verify_approval_for_transaction(envelope, &observed)?;
+        // The production path always fetches fixed-origin CI under this
+        // retained global lock. Failure returns before `begin` writes INTENT.
+        check_ci(&approved)?;
         let lease = self.begin(&approved, &expected)?;
         Ok((lease, approved))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn accept_with_observation_fixture<'p>(
+        self,
+        policy: &'p BrokerProtectedPolicyV1,
+        envelope: &[u8],
+        observe: impl FnOnce(&OwnedHandle) -> Result<(BrokerObservedStateV1, LedgerExpectationV1)>,
+    ) -> Result<(BrokerLedgerLease<'a>, PolicyVerifiedApprovalV1<'p>)> {
+        self.accept_with_observation_using(policy, envelope, observe, |_| Ok(()))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn accept_with_observation_ci_rejection_fixture<'p>(
+        self,
+        policy: &'p BrokerProtectedPolicyV1,
+        envelope: &[u8],
+        observe: impl FnOnce(&OwnedHandle) -> Result<(BrokerObservedStateV1, LedgerExpectationV1)>,
+    ) -> Result<(BrokerLedgerLease<'a>, PolicyVerifiedApprovalV1<'p>)> {
+        self.accept_with_observation_using(policy, envelope, observe, |_| {
+            Err("WAKE_BROKER_CI_FIXTURE_DENIED".into())
+        })
     }
 
     fn begin(

@@ -1059,7 +1059,7 @@ mod tests {
         let mut observed_under_lock = false;
         let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("global lock");
         let (lease, approved) = guard
-            .accept_with_observation(&policy, &envelope, |root| {
+            .accept_with_observation_fixture(&policy, &envelope, |root| {
                 observed_under_lock = true;
                 assert!(BrokerLedgerGuard::acquire(root).is_err());
                 Ok((observed.clone(), expectation.clone()))
@@ -1077,6 +1077,43 @@ mod tests {
                 .join("install-transaction-00000000000000000002-intent.json"),
         )
         .expect("remove fixture intent");
+        std::fs::remove_file(fixture.path.join("install-ledger.lock"))
+            .expect("remove fixture lock");
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn exact_ci_failure_does_not_create_intent() {
+        let fixture = Fixture::new();
+        std::fs::write(fixture.path.join("install-ledger.lock"), b"").expect("fixture lock");
+        let policy = fixture.load().expect("pinned policy");
+        let (mut payload, mut observed, key) = approval_test::fixture();
+        payload.target_protected_root = fixture.root_id.clone();
+        observed.target_protected_root = fixture.root_id.clone();
+        let expectation = LedgerExpectationV1 {
+            now_utc_seconds: observed.now_utc_seconds,
+            next_install_generation: payload.install_generation,
+            predecessor_package_id: payload.predecessor_package_id.clone(),
+            predecessor_pointer: payload.predecessor_pointer.clone(),
+            protected_root: fixture.root_id.clone(),
+            original_desired_state: OriginalDesiredStateV1::Running,
+        };
+        let envelope = approval_test::envelope(&payload, &key);
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("global lock");
+        let error = guard
+            .accept_with_observation_ci_rejection_fixture(&policy, &envelope, |_| {
+                Ok((observed, expectation))
+            })
+            .err()
+            .expect("CI failure");
+        assert_eq!(error, "WAKE_BROKER_CI_FIXTURE_DENIED");
+        assert!(
+            !fixture
+                .path
+                .join("install-transaction-00000000000000000002-intent.json")
+                .exists()
+        );
+        drop(policy);
         std::fs::remove_file(fixture.path.join("install-ledger.lock"))
             .expect("remove fixture lock");
         fixture.cleanup();
@@ -1101,7 +1138,7 @@ mod tests {
         let first_envelope = approval_test::envelope(&payload, &first_key);
         let (first_lease, first_approved) = BrokerLedgerGuard::acquire(&fixture.root)
             .expect("global lock")
-            .accept_with_observation(&first_policy, &first_envelope, |_| {
+            .accept_with_observation_fixture(&first_policy, &first_envelope, |_| {
                 Ok((observed.clone(), expectation.clone()))
             })
             .expect("first protected intent");
@@ -1144,7 +1181,7 @@ mod tests {
         assert_eq!(
             BrokerLedgerGuard::acquire(&fixture.root)
                 .expect("global lock")
-                .accept_with_observation(&rotated_policy, &rotated_envelope, |_| {
+                .accept_with_observation_fixture(&rotated_policy, &rotated_envelope, |_| {
                     Ok((observed.clone(), expectation.clone()))
                 })
                 .err()
@@ -1351,7 +1388,7 @@ mod tests {
 
         let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("acceptance lock");
         let (lease, approved) = guard
-            .accept_with_observation(&policy, &envelope, |_| {
+            .accept_with_observation_fixture(&policy, &envelope, |_| {
                 Ok((observed.clone(), expected.clone()))
             })
             .expect("original policy-bound INTENT");
@@ -1455,7 +1492,7 @@ mod tests {
         let (fixture, policy, envelope, observed, expected, _) = resume_fixture();
         let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("acceptance lock");
         let (lease, approved) = guard
-            .accept_with_observation(&policy, &envelope, |_| {
+            .accept_with_observation_fixture(&policy, &envelope, |_| {
                 Ok((observed.clone(), expected.clone()))
             })
             .expect("original INTENT");
@@ -1497,7 +1534,7 @@ mod tests {
         let (fixture, policy, envelope, observed, expected, manifest) = resume_fixture();
         let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("acceptance lock");
         let (mut lease, approved) = guard
-            .accept_with_observation(&policy, &envelope, |_| {
+            .accept_with_observation_fixture(&policy, &envelope, |_| {
                 Ok((observed.clone(), expected.clone()))
             })
             .expect("original INTENT");
@@ -1544,7 +1581,7 @@ mod tests {
 
         let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("stage fixture lock");
         let (mut lease, approved) = guard
-            .accept_with_observation(&policy, &envelope, |_| {
+            .accept_with_observation_fixture(&policy, &envelope, |_| {
                 Ok((observed.clone(), expected.clone()))
             })
             .expect("exact marker reopen");
