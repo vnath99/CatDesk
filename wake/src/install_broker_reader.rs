@@ -13,7 +13,10 @@
 
 use crate::{
     Result,
-    install_broker_approval::{ObjectIdentityV1, PackageManifestV1, validate_manifest},
+    install_broker_approval::{
+        ObjectIdentityV1, PackageManifestV1, VerifiedApprovalV1, validate_manifest,
+    },
+    install_broker_ledger::{StageBindingV1, valid_stage_binding},
     install_broker_preflight::{
         acquire_fixed_protected_root_for_reader, canonical_protected_security,
         protected_security_raw,
@@ -146,6 +149,27 @@ struct ProtectedPointerV1 {
     package_directory: ObjectIdentityV1,
     manifest_file: ObjectIdentityV1,
     manifest_sha256: String,
+}
+
+/// Canonical proposed pointer bytes and their exact SHA-256. This is a claim
+/// assembled from a verified approval and supplied stage IDs, not proof that
+/// the package was published under `packages` or that a pointer was switched.
+/// The verifier's key is not bound to protected broker policy here. It carries
+/// no file handle, ledger lease, or install authority.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProtectedPointerPlanV1 {
+    canonical_bytes: Vec<u8>,
+    sha256: String,
+}
+
+impl ProtectedPointerPlanV1 {
+    pub fn canonical_bytes(&self) -> &[u8] {
+        &self.canonical_bytes
+    }
+
+    pub fn sha256(&self) -> &str {
+        &self.sha256
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -629,6 +653,65 @@ fn validate_pointer(pointer: &ProtectedPointerV1, root: &ObjectIdentityV1) -> Re
     Ok(())
 }
 
+/// Plan the exact bytes a future broker-owned writer would need after it has
+/// independently proven publication. `stage` is only a supplied identity
+/// claim here: this function reads and writes no protected object and never
+/// proves that the stage reached the final package namespace. The caller must
+/// separately bind the approval key to protected broker policy.
+pub fn plan_protected_pointer_from_stage(
+    approval: &VerifiedApprovalV1,
+    stage: &StageBindingV1,
+) -> Result<ProtectedPointerPlanV1> {
+    let payload = approval.payload();
+    validate_manifest(&payload.manifest)?;
+    let root = &payload.target_protected_root;
+    let objects = [
+        &stage.staging_directory,
+        &stage.candidate_directory,
+        &stage.manifest_file,
+        &stage.artifacts[0],
+        &stage.artifacts[1],
+        &stage.artifacts[2],
+        &stage.artifacts[3],
+    ];
+    if !valid_stage_binding(stage, root)
+        || objects
+            .iter()
+            .any(|object| *object == root || *object == &payload.predecessor_pointer)
+    {
+        return Err("WAKE_PROTECTED_POINTER_PLAN_STAGE_INVALID".into());
+    }
+    let pointer = ProtectedPointerV1 {
+        schema_version: 1,
+        purpose: "catdesk-wake-protected-current".into(),
+        install_generation: payload.install_generation,
+        approval_id: payload.approval_id.clone(),
+        predecessor_package_id: payload.predecessor_package_id.clone(),
+        predecessor_pointer: payload.predecessor_pointer.clone(),
+        protected_root: root.clone(),
+        package_id: payload.manifest.package_id.clone(),
+        package_directory: stage.candidate_directory.clone(),
+        manifest_file: stage.manifest_file.clone(),
+        manifest_sha256: payload.manifest_sha256.clone(),
+    };
+    validate_pointer(&pointer, root).map_err(|_| "WAKE_PROTECTED_POINTER_PLAN_INVALID")?;
+    let canonical_bytes =
+        serde_json::to_vec(&pointer).map_err(|_| "WAKE_PROTECTED_POINTER_PLAN_ENCODING_INVALID")?;
+    if canonical_bytes.is_empty() || canonical_bytes.len() > MAX_POINTER_BYTES {
+        return Err("WAKE_PROTECTED_POINTER_PLAN_ENCODING_INVALID".into());
+    }
+    let parsed: ProtectedPointerV1 = canonical_json(&canonical_bytes)
+        .map_err(|_| "WAKE_PROTECTED_POINTER_PLAN_ENCODING_INVALID")?;
+    if parsed != pointer {
+        return Err("WAKE_PROTECTED_POINTER_PLAN_ENCODING_INVALID".into());
+    }
+    let sha256 = format!("{:x}", Sha256::digest(&canonical_bytes));
+    Ok(ProtectedPointerPlanV1 {
+        canonical_bytes,
+        sha256,
+    })
+}
+
 fn inspect_pinned(
     root: &OwnedHandle,
     expected_root: &ObjectIdentityV1,
@@ -829,7 +912,7 @@ pub fn inspect_fixed_protected_install_read_only() -> Result<ProtectedInstallRea
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::install_broker_approval::ArtifactV1;
+    use crate::install_broker_approval::{ArtifactV1, tests as approval_test, verify_approval};
     use std::{
         os::windows::{ffi::OsStrExt, io::FromRawHandle},
         path::PathBuf,
@@ -1027,6 +1110,133 @@ pub(crate) mod tests {
             std::fs::remove_dir(self.root_path.join("packages")).expect("remove packages");
             std::fs::remove_dir(&self.root_path).expect("remove root");
         }
+    }
+
+    fn verified_for_pointer_fixture(
+        fixture: &Fixture,
+        predecessor_package_id: Option<String>,
+        predecessor_pointer: Option<ObjectIdentityV1>,
+    ) -> VerifiedApprovalV1 {
+        let (mut payload, mut observed, key) = approval_test::fixture();
+        payload.target_protected_root = fixture.root_id.clone();
+        observed.target_protected_root = fixture.root_id.clone();
+        payload.manifest = fixture.manifest.clone();
+        payload.manifest_sha256 = format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&payload.manifest).expect("canonical manifest"))
+        );
+        payload.predecessor_package_id = predecessor_package_id
+            .unwrap_or_else(|| fixture.pointer.predecessor_package_id.clone());
+        observed.predecessor_package_id = payload.predecessor_package_id.clone();
+        payload.predecessor_pointer =
+            predecessor_pointer.unwrap_or_else(|| fixture.pointer.predecessor_pointer.clone());
+        observed.predecessor_pointer = payload.predecessor_pointer.clone();
+        verify_approval(
+            &approval_test::envelope(&payload, &key),
+            &key.verifying_key(),
+            &observed,
+        )
+        .expect("signed pointer-plan fixture")
+    }
+
+    fn stage_for_pointer_fixture(fixture: &Fixture) -> StageBindingV1 {
+        std::fs::create_dir(fixture.root_path.join("staging")).expect("fixture stage parent");
+        let staging = open_relative(&fixture.root, "staging", true).expect("stage parent pin");
+        let staging_directory =
+            identity(&file_info(staging.as_raw_handle(), true).expect("stage parent ID"));
+        let installed = fixture.inspect().expect("physical package fixture");
+        StageBindingV1 {
+            staging_directory,
+            candidate_directory: installed.package_directory,
+            manifest_file: installed.manifest_file,
+            artifacts: std::array::from_fn(|index| installed.artifacts[index].object.clone()),
+        }
+    }
+
+    #[test]
+    fn canonical_pointer_plan_matches_reader_bytes_without_writing() {
+        let fixture = Fixture::new();
+        let stage = stage_for_pointer_fixture(&fixture);
+        let approval = verified_for_pointer_fixture(&fixture, None, None);
+        let pointer_path = fixture.root_path.join("current.json");
+        let before = std::fs::read(&pointer_path).expect("original pointer bytes");
+        let mut entries_before = std::fs::read_dir(&fixture.root_path)
+            .expect("fixture root entries")
+            .map(|entry| entry.expect("root entry").file_name())
+            .collect::<Vec<_>>();
+        entries_before.sort();
+        let plan = plan_protected_pointer_from_stage(&approval, &stage)
+            .expect("canonical non-authorizing plan");
+        assert_eq!(plan.canonical_bytes(), before);
+        assert_eq!(plan.sha256(), format!("{:x}", Sha256::digest(&before)));
+        assert!(plan.canonical_bytes().len() <= MAX_POINTER_BYTES);
+        let parsed: ProtectedPointerV1 =
+            canonical_json(plan.canonical_bytes()).expect("reader parses planned bytes");
+        assert_eq!(parsed, fixture.pointer);
+        assert_eq!(std::fs::read(&pointer_path).unwrap(), before);
+        let mut entries_after = std::fs::read_dir(&fixture.root_path)
+            .expect("fixture root entries after plan")
+            .map(|entry| entry.expect("root entry").file_name())
+            .collect::<Vec<_>>();
+        entries_after.sort();
+        assert_eq!(entries_after, entries_before);
+        fixture
+            .inspect()
+            .expect("reader still accepts fixed pointer");
+        std::fs::remove_dir(fixture.root_path.join("staging")).expect("remove fixture stage");
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn pointer_plan_refuses_invalid_stage_and_reader_incompatible_signed_name() {
+        let fixture = Fixture::new();
+        let stage = stage_for_pointer_fixture(&fixture);
+        let approval = verified_for_pointer_fixture(&fixture, None, None);
+        let original =
+            std::fs::read(fixture.root_path.join("current.json")).expect("original pointer bytes");
+        let mut wrong = stage.clone();
+        wrong.candidate_directory.volume_serial =
+            wrong.candidate_directory.volume_serial.wrapping_add(1);
+        assert_eq!(
+            plan_protected_pointer_from_stage(&approval, &wrong).unwrap_err(),
+            "WAKE_PROTECTED_POINTER_PLAN_STAGE_INVALID"
+        );
+        let mut wrong = stage.clone();
+        wrong.manifest_file.file_index_high = 0;
+        wrong.manifest_file.file_index_low = 0;
+        assert_eq!(
+            plan_protected_pointer_from_stage(&approval, &wrong).unwrap_err(),
+            "WAKE_PROTECTED_POINTER_PLAN_STAGE_INVALID"
+        );
+        let mut wrong = stage.clone();
+        wrong.artifacts[1] = wrong.artifacts[0].clone();
+        assert_eq!(
+            plan_protected_pointer_from_stage(&approval, &wrong).unwrap_err(),
+            "WAKE_PROTECTED_POINTER_PLAN_STAGE_INVALID"
+        );
+        let mut wrong = stage.clone();
+        wrong.staging_directory = fixture.root_id.clone();
+        assert_eq!(
+            plan_protected_pointer_from_stage(&approval, &wrong).unwrap_err(),
+            "WAKE_PROTECTED_POINTER_PLAN_STAGE_INVALID"
+        );
+        let predecessor_collision =
+            verified_for_pointer_fixture(&fixture, None, Some(stage.artifacts[0].clone()));
+        assert_eq!(
+            plan_protected_pointer_from_stage(&predecessor_collision, &stage).unwrap_err(),
+            "WAKE_PROTECTED_POINTER_PLAN_STAGE_INVALID"
+        );
+        let long_name = verified_for_pointer_fixture(&fixture, Some("x".repeat(129)), None);
+        assert_eq!(
+            plan_protected_pointer_from_stage(&long_name, &stage).unwrap_err(),
+            "WAKE_PROTECTED_POINTER_PLAN_INVALID"
+        );
+        assert_eq!(
+            std::fs::read(fixture.root_path.join("current.json")).unwrap(),
+            original
+        );
+        std::fs::remove_dir(fixture.root_path.join("staging")).expect("remove fixture stage");
+        fixture.cleanup();
     }
 
     #[test]

@@ -797,7 +797,7 @@ fn lowercase_hex(value: &str, length: usize) -> bool {
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
-fn valid_stage_binding(stage: &StageBindingV1, root: &ObjectIdentityV1) -> bool {
+pub(crate) fn valid_stage_binding(stage: &StageBindingV1, root: &ObjectIdentityV1) -> bool {
     let objects = [
         &stage.staging_directory,
         &stage.candidate_directory,
