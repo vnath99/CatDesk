@@ -1,5 +1,9 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — T0478 reviewed candidate source command
+
+- Source-only `catdesk.exe --reviewed-candidate-mcp --host 127.0.0.1 --port 0 --mcp-path /dev/mcp --workspace <exact source repository> --expected-commit <lowercase 40-hex Git commit> --auth-token <process-scoped secret>` requires a fresh live fixed GitHub branch/three-job CI witness before it can stage or serve. The current exact branch has no CI, so the command fails closed; do not treat this as an installed or accepted worker. On future successful use, its owner-only journal can remain after stop and uncertain startup/retirement needs operator attention. See `docs/orchestrator/review_bundles/T-0478_R3B4C4_REVIEWED_CANDIDATE_LAUNCH_GATE.md`.
+
 ## 2026-10-14 — T0478 snapshot serving owner gate
 
 - `docs/orchestrator/review_bundles/T-0478_R3B4C3_SNAPSHOT_SERVING_OWNER_BINDING.md` records source-only app/snapshot root and OS-token owner/DACL checks at router start and around requests. There is still no reviewed candidate launch command; do not use the existing pathname fixture listener as a reviewed worker.

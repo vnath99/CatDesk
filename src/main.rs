@@ -907,6 +907,79 @@ struct HeadlessMcpOptions {
     isolated_dev_fixture: bool,
 }
 
+struct ReviewedCandidateMcpOptions {
+    source_workspace: PathBuf,
+    expected_commit: String,
+    auth_token: String,
+}
+
+fn parse_reviewed_candidate_mcp_options(
+    args: impl IntoIterator<Item = String>,
+) -> Result<Option<ReviewedCandidateMcpOptions>, String> {
+    let args: Vec<String> = args.into_iter().collect();
+    if !args.iter().any(|arg| arg == "--reviewed-candidate-mcp") {
+        return Ok(None);
+    }
+    let mut marker_seen = false;
+    let mut host = None;
+    let mut port = None;
+    let mut workspace = None;
+    let mut commit = None;
+    let mut token = None;
+    let mut path = None;
+    let mut index = 0;
+    while index < args.len() {
+        match args[index].as_str() {
+            "--reviewed-candidate-mcp" if !marker_seen => {
+                marker_seen = true;
+                index += 1;
+            }
+            "--host" if host.is_none() => host = Some(next_arg(&args, &mut index, "--host")?),
+            "--port" if port.is_none() => port = Some(next_arg(&args, &mut index, "--port")?),
+            "--workspace" if workspace.is_none() => {
+                workspace = Some(next_arg(&args, &mut index, "--workspace")?)
+            }
+            "--expected-commit" if commit.is_none() => {
+                commit = Some(next_arg(&args, &mut index, "--expected-commit")?)
+            }
+            "--auth-token" if token.is_none() => {
+                token = Some(next_arg(&args, &mut index, "--auth-token")?)
+            }
+            "--mcp-path" if path.is_none() => {
+                path = Some(next_arg(&args, &mut index, "--mcp-path")?)
+            }
+            other => return Err(format!("unknown reviewed candidate option `{other}`")),
+        }
+    }
+    if host.as_deref() != Some("127.0.0.1")
+        || port.as_deref() != Some("0")
+        || path.as_deref() != Some("/dev/mcp")
+    {
+        return Err("reviewed candidate requires explicit 127.0.0.1 port 0 and /dev/mcp".into());
+    }
+    let source_workspace = workspace
+        .filter(|value: &String| !value.is_empty())
+        .map(PathBuf::from)
+        .ok_or("reviewed candidate requires explicit source workspace")?;
+    let expected_commit = commit.ok_or("reviewed candidate requires expected commit")?;
+    if expected_commit.len() != 40
+        || !expected_commit
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err("reviewed candidate commit must be a lowercase full SHA-1".into());
+    }
+    let auth_token = token.ok_or("reviewed candidate requires process-scoped auth token")?;
+    if auth_token.len() < 24 || auth_token.chars().any(char::is_whitespace) {
+        return Err("reviewed candidate auth token is unsafe".into());
+    }
+    Ok(Some(ReviewedCandidateMcpOptions {
+        source_workspace,
+        expected_commit,
+        auth_token,
+    }))
+}
+
 fn parse_headless_mcp_options(
     args: impl IntoIterator<Item = String>,
 ) -> Result<Option<HeadlessMcpOptions>, String> {
@@ -1340,6 +1413,120 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
     Ok(())
 }
 
+fn reviewed_candidate_stage_error(
+    failure: isolated_fixture_snapshot::CandidateStageError,
+) -> std::io::Error {
+    let reason = match failure {
+        isolated_fixture_snapshot::CandidateStageError::BeforeOwnership(reason) => reason,
+        isolated_fixture_snapshot::CandidateStageError::CreationIndeterminate(failure) => format!(
+            "candidate root creation indeterminate for snapshot {}: {}",
+            failure.manifest.snapshot_id, failure.reason
+        ),
+        isolated_fixture_snapshot::CandidateStageError::Owned(failure) => format!(
+            "owned candidate snapshot {} requires attention: {}",
+            failure.manifest.snapshot_id, failure.reason
+        ),
+    };
+    std::io::Error::other(reason)
+}
+
+async fn run_reviewed_candidate_mcp(
+    options: ReviewedCandidateMcpOptions,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let source = std::fs::canonicalize(&options.source_workspace)?;
+    if !source.is_dir() {
+        return Err(std::io::Error::other("reviewed candidate source workspace invalid").into());
+    }
+    // The witness and fixed Git-object reader run before any app state or
+    // listener exists. A missing exact three-job CI proof fails closed here.
+    let staged = isolated_fixture_snapshot::stage_witnessed_candidate_snapshot(
+        &source,
+        &options.expected_commit,
+    )
+    .await
+    .map_err(reviewed_candidate_stage_error)?;
+    let fixture_root = staged.root.path().to_path_buf();
+    let snapshot_id = staged.manifest.snapshot_id.clone();
+    let source_commit = staged.manifest.source_commit.clone();
+    let app = AppState::new_isolated_fixture(
+        0,
+        fixture_root.to_string_lossy().into_owned(),
+        fixture_root.join("config.toml"),
+    )?;
+    let state: SharedState = Arc::new(Mutex::new(app));
+    {
+        let mut app = state.lock().await;
+        app.mode = Mode::Computer;
+        app.tool_mode = ToolMode::ReadOnly;
+        app.mcp_slug = "dev".into();
+    }
+    let (ui_event_tx, _ui_event_rx) = unbounded_channel();
+    let snapshot = Arc::new(staged);
+    let router = server::isolated_fixture_snapshot_router(
+        state.clone(),
+        "/dev/mcp".into(),
+        ui_event_tx,
+        options.auth_token,
+        snapshot.clone(),
+    )
+    .await
+    .map_err(std::io::Error::other)?;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    daemon_reload::make_listener_non_inheritable(&listener).map_err(std::io::Error::other)?;
+    let local_addr = listener.local_addr()?;
+    if !local_addr.ip().is_loopback() {
+        return Err(std::io::Error::other("reviewed candidate listener is not loopback").into());
+    }
+    {
+        let mut app = state.lock().await;
+        app.port = local_addr.port();
+        app.server_running = true;
+    }
+    println!(
+        "{}",
+        serde_json::json!({
+            "status":"ready",
+            "kind":"reviewed-candidate",
+            "snapshotId":snapshot_id,
+            "sourceCommit":source_commit,
+            "mcpUrl":format!("http://{local_addr}/dev/mcp"),
+            "auth":{"scheme":"bearer","tokenRedacted":true}
+        })
+    );
+    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+    let mut serve = tokio::spawn(async move {
+        axum::serve(listener, router)
+            .with_graceful_shutdown(async move {
+                let _ = shutdown_rx.await;
+            })
+            .await
+    });
+    tokio::select! {
+        signal = tokio::signal::ctrl_c() => signal?,
+        result = &mut serve => {
+            return Err(std::io::Error::other(format!(
+                "reviewed candidate listener exited unexpectedly: {result:?}"
+            )).into());
+        }
+    }
+    let _ = shutdown_tx.send(());
+    match tokio::time::timeout(Duration::from_secs(10), &mut serve).await {
+        Ok(Ok(Ok(()))) => {}
+        other => {
+            serve.abort();
+            return Err(std::io::Error::other(format!(
+                "reviewed candidate shutdown requires attention: {other:?}"
+            ))
+            .into());
+        }
+    }
+    state.lock().await.server_running = false;
+    let staged = Arc::try_unwrap(snapshot)
+        .map_err(|_| std::io::Error::other("reviewed candidate still has active source leases"))?;
+    staged.retire_owned_root().map_err(std::io::Error::other)?;
+    Ok(())
+}
+
 async fn run_native_daemon() -> Result<(), Box<dyn std::error::Error>> {
     let port = crate::control_plane_supervisor::FIXED_LOCAL_BACKEND_PORT;
     let workspace_root = match std::env::var("WORKSPACE_ROOT") {
@@ -1617,6 +1804,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match parse_native_daemon_mode(&args) {
         Ok(true) => return run_native_daemon().await,
         Ok(false) => {}
+        Err(error) => {
+            eprintln!("CatDesk: {error}");
+            std::process::exit(2);
+        }
+    }
+    match parse_reviewed_candidate_mcp_options(args.clone()) {
+        Ok(Some(options)) => return run_reviewed_candidate_mcp(options).await,
+        Ok(None) => {}
         Err(error) => {
             eprintln!("CatDesk: {error}");
             std::process::exit(2);
@@ -2249,8 +2444,9 @@ mod tests {
     use super::{
         ToolMode, is_canonical_production_worker_listener, key_is_clipboard_paste,
         loopback_http_origin, normalize_ngrok_authtoken_input, parse_auto_start_computer,
-        parse_headless_mcp_options, parse_native_daemon_mode, resolve_headless_workspace,
-        safe_bind_identity, validate_headless_mcp_path, validate_isolated_fixture_scope,
+        parse_headless_mcp_options, parse_native_daemon_mode, parse_reviewed_candidate_mcp_options,
+        resolve_headless_workspace, safe_bind_identity, validate_headless_mcp_path,
+        validate_isolated_fixture_scope,
     };
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
@@ -2367,6 +2563,58 @@ mod tests {
             KeyCode::Insert,
             KeyModifiers::SHIFT
         )));
+    }
+
+    #[test]
+    fn reviewed_candidate_mode_requires_exact_local_identity() {
+        let args = [
+            "--reviewed-candidate-mcp",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0",
+            "--mcp-path",
+            "/dev/mcp",
+            "--workspace",
+            "C:\\reviewed-source",
+            "--expected-commit",
+            "abcdef0123456789abcdef0123456789abcdef01",
+            "--auth-token",
+            "catdesk-reviewed-token-1234567890",
+        ]
+        .map(str::to_owned);
+        let parsed = parse_reviewed_candidate_mcp_options(args.clone())
+            .expect("parse fixed reviewed mode")
+            .expect("reviewed mode selected");
+        assert_eq!(
+            parsed.expected_commit,
+            "abcdef0123456789abcdef0123456789abcdef01"
+        );
+        for extra in [
+            vec!["--host", "0.0.0.0"],
+            vec!["--port", "3200"],
+            vec!["--mcp-path", "/prod/mcp"],
+            vec!["--headless-mcp"],
+            vec!["--config-path", "C:\\production\\config.toml"],
+        ] {
+            let mut candidate = args.to_vec();
+            candidate.extend(extra.into_iter().map(str::to_owned));
+            assert!(parse_reviewed_candidate_mcp_options(candidate).is_err());
+        }
+        let mut bad_commit = args.to_vec();
+        let position = bad_commit
+            .iter()
+            .position(|arg| arg == "--expected-commit")
+            .unwrap();
+        bad_commit[position + 1] = "ABCDEF0123456789ABCDEF0123456789ABCDEF01".into();
+        assert!(parse_reviewed_candidate_mcp_options(bad_commit).is_err());
+        let mut missing_token = args.to_vec();
+        let position = missing_token
+            .iter()
+            .position(|arg| arg == "--auth-token")
+            .unwrap();
+        missing_token.truncate(position);
+        assert!(parse_reviewed_candidate_mcp_options(missing_token).is_err());
     }
 
     #[test]
