@@ -980,6 +980,37 @@ fn valid_install_component(value: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'-' | b'_'))
 }
 
+fn require_plain_install_directory(path: &Path) -> Result<()> {
+    let metadata =
+        std::fs::symlink_metadata(path).map_err(|_| "HOST_INSTALL_DIRECTORY_UNAVAILABLE")?;
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Err("HOST_INSTALL_DIRECTORY_REPARSE".into());
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if metadata.file_attributes() & 0x400 != 0 {
+            return Err("HOST_INSTALL_DIRECTORY_REPARSE".into());
+        }
+    }
+    Ok(())
+}
+
+fn require_plain_install_file(path: &Path) -> Result<()> {
+    let metadata = std::fs::symlink_metadata(path).map_err(|_| "HOST_INSTALL_FILE_UNAVAILABLE")?;
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Err("HOST_INSTALL_FILE_REPARSE".into());
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if metadata.file_attributes() & 0x400 != 0 {
+            return Err("HOST_INSTALL_FILE_REPARSE".into());
+        }
+    }
+    Ok(())
+}
+
 fn validate_reviewed_manifest(manifest: &serde_json::Value) -> Result<String> {
     if manifest.get("schemaVersion").and_then(|v| v.as_u64()) != Some(1)
         || manifest.get("version").and_then(|v| v.as_str()) != Some(VERSION)
@@ -1004,7 +1035,9 @@ fn validate_reviewed_candidate(
         ("adapter.py", "BROWSER_ADAPTER_UNAVAILABLE"),
         ("wake_bridge.py", "BROWSER_PRIMITIVES_UNAVAILABLE"),
     ] {
-        let digest = sha256_file(&directory.join(name), unavailable)?;
+        let path = directory.join(name);
+        require_plain_install_file(&path)?;
+        let digest = sha256_file(&path, unavailable)?;
         if !digest.eq_ignore_ascii_case(manifest_hash(manifest, name)?) {
             return Err("HOST_INSTALL_MANIFEST_HASH_MISMATCH".into());
         }
@@ -1013,10 +1046,78 @@ fn validate_reviewed_candidate(
     Ok(actual)
 }
 
+/// Full artifact digests computed from the installer's source files before it
+/// stages them. A manifest inside the stage cannot authorize its own bytes.
+#[derive(Clone, Debug)]
+pub struct ReviewedInstallExpectedHashes(BTreeMap<String, String>);
+
+impl ReviewedInstallExpectedHashes {
+    pub fn new(host: &str, gui: &str, adapter: &str, bridge: &str) -> Result<Self> {
+        let values = [
+            ("CatDeskWakeHost.exe", host),
+            ("CatDeskBinagotchy.exe", gui),
+            ("adapter.py", adapter),
+            ("wake_bridge.py", bridge),
+        ];
+        if values.iter().any(|(_, digest)| {
+            digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+        }) {
+            return Err("HOST_INSTALL_EXPECTED_HASH_INVALID".into());
+        }
+        Ok(Self(
+            values
+                .into_iter()
+                .map(|(name, digest)| (name.into(), digest.to_ascii_lowercase()))
+                .collect(),
+        ))
+    }
+
+    fn require_match(&self, observed: &BTreeMap<String, String>) -> Result<()> {
+        if observed != &self.0 {
+            return Err("HOST_INSTALL_EXPECTED_HASH_MISMATCH".into());
+        }
+        Ok(())
+    }
+
+    fn require_compiled_script_provenance(&self) -> Result<()> {
+        // A caller-chosen manifest and CLI hash cannot substitute Python
+        // scripts that differ from the source compiled into this host build.
+        for (name, source) in [
+            ("adapter.py", &include_bytes!("../adapter.py")[..]),
+            (
+                "wake_bridge.py",
+                &include_bytes!("../../scripts/wake_bridge.py")[..],
+            ),
+        ] {
+            let compiled = format!("{:x}", Sha256::digest(source));
+            if self.0.get(name) != Some(&compiled) {
+                return Err("HOST_INSTALL_COMPILED_SCRIPT_MISMATCH".into());
+            }
+        }
+        Ok(())
+    }
+}
+
 pub fn publish_reviewed_install(
+    store: &Store,
+    guard: &crate::install_authority::InstallStoreGuard,
+    staging_name: &str,
+    expected_id: &str,
+    expected_hashes: &ReviewedInstallExpectedHashes,
+) -> Result<ReviewedInstallPublication> {
+    expected_hashes.require_compiled_script_provenance()?;
+    guard.require_lock_owner_proof()?;
+    let publication =
+        publish_reviewed_install_checked(store, staging_name, expected_id, Some(expected_hashes))?;
+    guard.recheck_live()?;
+    Ok(publication)
+}
+
+fn publish_reviewed_install_checked(
     store: &Store,
     staging_name: &str,
     expected_id: &str,
+    expected_hashes: Option<&ReviewedInstallExpectedHashes>,
 ) -> Result<ReviewedInstallPublication> {
     if !staging_name.starts_with(".staging-")
         || !valid_install_component(staging_name)
@@ -1028,16 +1129,19 @@ pub fn publish_reviewed_install(
 
     let _lease = reviewed_install_lease(store)?;
     let versions = store.root().join("versions");
+    require_plain_install_directory(&versions)?;
     let staging = versions.join(staging_name);
-    if !staging.is_dir() {
-        return Err("HOST_INSTALL_STAGING_UNAVAILABLE".into());
-    }
+    require_plain_install_directory(&staging)?;
+    require_plain_install_file(&staging.join("manifest.json"))?;
     let manifest: serde_json::Value = read(&staging.join("manifest.json"))?;
     let canonical_id = validate_reviewed_manifest(&manifest)?;
     if canonical_id != expected_id {
         return Err("HOST_INSTALL_IDENTITY_MISMATCH".into());
     }
     let staging_hashes = validate_reviewed_candidate(&staging, &manifest)?;
+    if let Some(expected_hashes) = expected_hashes {
+        expected_hashes.require_match(&staging_hashes)?;
+    }
 
     let final_directory = versions.join(expected_id);
     let mut already_materialized = false;
@@ -1058,6 +1162,11 @@ pub fn publish_reviewed_install(
         if name.starts_with(".staging-") {
             continue;
         }
+        require_plain_install_directory(&entry.path())?;
+        if !entry.path().join("manifest.json").exists() {
+            continue;
+        }
+        require_plain_install_file(&entry.path().join("manifest.json"))?;
         let candidate_manifest: serde_json::Value = match read(&entry.path().join("manifest.json"))
         {
             Ok(value) => value,
@@ -1077,15 +1186,32 @@ pub fn publish_reviewed_install(
         if existing_hashes != staging_hashes {
             return Err("HOST_INSTALL_ARTIFACT_IDENTITY_CONFLICT".into());
         }
+        if let Some(expected_hashes) = expected_hashes {
+            expected_hashes.require_match(&existing_hashes)?;
+        }
         already_materialized = true;
     }
 
-    if already_materialized {
-        std::fs::remove_dir_all(&staging)
-            .map_err(|_| "HOST_INSTALL_STAGING_CLEANUP_FAILED".to_string())?;
-    } else {
+    // Leave an idempotent retry's inert stage for reviewed cleanup. A
+    // recursive pathname deletion could follow a child reparse point inserted
+    // after readback.
+    if !already_materialized {
         std::fs::rename(&staging, &final_directory)
             .map_err(|_| "HOST_INSTALL_PUBLISH_FAILED".to_string())?;
+    }
+
+    // Re-open the published path after the rename. If the stage was replaced
+    // between readback and publication, the installer must not advance to
+    // activation; the unmatched directory remains inert for reviewed cleanup.
+    if let Some(expected_hashes) = expected_hashes {
+        require_plain_install_directory(&final_directory)?;
+        require_plain_install_file(&final_directory.join("manifest.json"))?;
+        let published_manifest: serde_json::Value = read(&final_directory.join("manifest.json"))?;
+        if validate_reviewed_manifest(&published_manifest)? != expected_id {
+            return Err("HOST_INSTALL_IDENTITY_MISMATCH".into());
+        }
+        let published_hashes = validate_reviewed_candidate(&final_directory, &published_manifest)?;
+        expected_hashes.require_match(&published_hashes)?;
     }
 
     Ok(ReviewedInstallPublication {
@@ -1097,6 +1223,7 @@ pub fn publish_reviewed_install(
 
 fn reviewed_candidate(store: &Store) -> Result<(String, PathBuf, serde_json::Value)> {
     let versions = store.root().join("versions");
+    require_plain_install_directory(&versions)?;
     let mut matches = Vec::new();
     for entry in std::fs::read_dir(&versions).map_err(|_| "HOST_INSTALL_UNAVAILABLE")? {
         let entry = entry.map_err(|_| "HOST_INSTALL_UNAVAILABLE")?;
@@ -1119,9 +1246,14 @@ fn reviewed_candidate(store: &Store) -> Result<(String, PathBuf, serde_json::Val
         if id.starts_with(".staging-") {
             continue;
         }
+        require_plain_install_directory(&directory)?;
         if !valid_install_component(&id) {
             return Err("HOST_INSTALL_POINTER_INVALID".into());
         }
+        if !directory.join("manifest.json").exists() {
+            continue;
+        }
+        require_plain_install_file(&directory.join("manifest.json"))?;
         let manifest: serde_json::Value = match read(&directory.join("manifest.json")) {
             Ok(value) => value,
             Err(_) => continue,
@@ -1182,7 +1314,55 @@ pub fn reviewed_install_status(store: &Store) -> Result<ReviewedInstallStatus> {
     })
 }
 
-pub fn activate_reviewed_install(store: &Store) -> Result<ReviewedInstallHandoff> {
+pub fn activate_reviewed_install(
+    store: &Store,
+    guard: &crate::install_authority::InstallStoreGuard,
+    expected_hashes: &ReviewedInstallExpectedHashes,
+) -> Result<ReviewedInstallHandoff> {
+    expected_hashes.require_compiled_script_provenance()?;
+    guard.require_lock_owner_proof()?;
+    require_activation_candidate_self(store, expected_hashes)?;
+    activate_reviewed_install_checked(store, Some(expected_hashes), |handoff| {
+        guard.recheck_path()?;
+        if handoff.prior_desired == "RUNNING"
+            && (handoff.final_host != "RUNNING" || handoff.final_pid == 0)
+        {
+            return Err("WAKE_STORE_AUTHORITY_NEW_OWNER_UNAVAILABLE".into());
+        }
+        if handoff.final_pid != 0 {
+            guard.recheck_owner(handoff.final_pid)?;
+        }
+        Ok(())
+    })
+}
+
+fn require_activation_candidate_self(
+    store: &Store,
+    expected_hashes: &ReviewedInstallExpectedHashes,
+) -> Result<()> {
+    let (_, directory, _) = reviewed_candidate(store)?;
+    let candidate = directory.join("CatDeskWakeHost.exe");
+    require_plain_install_file(&candidate)?;
+    let candidate_path =
+        std::fs::canonicalize(&candidate).map_err(|_| "HOST_INSTALL_ACTIVATOR_INVALID")?;
+    let activator_path = std::env::current_exe()
+        .and_then(std::fs::canonicalize)
+        .map_err(|_| "HOST_INSTALL_ACTIVATOR_INVALID")?;
+    if activator_path != candidate_path {
+        return Err("HOST_INSTALL_ACTIVATOR_MISMATCH".into());
+    }
+    let executable_hash = sha256_file(&candidate, "HOST_INSTALL_ACTIVATOR_INVALID")?;
+    if expected_hashes.0.get("CatDeskWakeHost.exe") != Some(&executable_hash) {
+        return Err("HOST_INSTALL_EXPECTED_HASH_MISMATCH".into());
+    }
+    Ok(())
+}
+
+fn activate_reviewed_install_checked(
+    store: &Store,
+    expected_hashes: Option<&ReviewedInstallExpectedHashes>,
+    verify_new_owner: impl FnOnce(&ReviewedInstallHandoff) -> Result<()>,
+) -> Result<ReviewedInstallHandoff> {
     let _lease = reviewed_install_lease(store)?;
     let (id, directory, manifest) = reviewed_candidate(store)?;
     let host = directory.join("CatDeskWakeHost.exe");
@@ -1203,6 +1383,14 @@ pub fn activate_reviewed_install(store: &Store) -> Result<ReviewedInstallHandoff
         if !actual.eq_ignore_ascii_case(manifest_hash(&manifest, name)?) {
             return Err("HOST_INSTALL_MANIFEST_HASH_MISMATCH".into());
         }
+    }
+    if let Some(expected_hashes) = expected_hashes {
+        expected_hashes.require_match(&BTreeMap::from([
+            ("CatDeskWakeHost.exe".into(), host_hash.clone()),
+            ("CatDeskBinagotchy.exe".into(), gui_hash.clone()),
+            ("adapter.py".into(), adapter_hash.clone()),
+            ("wake_bridge.py".into(), wake_bridge_hash.clone()),
+        ]))?;
     }
     let path = store.root().join("current.json");
     let previous = read::<serde_json::Value>(&path).ok();
@@ -1238,68 +1426,20 @@ pub fn activate_reviewed_install(store: &Store) -> Result<ReviewedInstallHandoff
         control(store, &prior_desired)?;
     }
     let final_status = status(store)?;
-    complete_reviewed_install_handoff(store, &id)?;
-    Ok(ReviewedInstallHandoff {
+    let handoff = ReviewedInstallHandoff {
         directory: id,
         version: VERSION.into(),
         prior_desired,
         already_current,
         final_host: final_status.host,
         final_pid: final_status.pid,
-    })
-}
-
-pub fn register_install(store: &Store) -> Result<()> {
-    use sha2::{Digest, Sha256};
-    let executable = std::env::current_exe().map_err(|_| "HOST_EXECUTABLE_UNAVAILABLE")?;
-    let directory = executable.parent().ok_or("HOST_INSTALL_POINTER_INVALID")?;
-    if directory
-        .parent()
-        .and_then(|p| std::fs::canonicalize(p).ok())
-        != std::fs::canonicalize(store.root().join("versions")).ok()
-    {
-        return Err("HOST_NOT_INSTALLED".into());
-    }
-    let id = directory
-        .file_name()
-        .and_then(|s| s.to_str())
-        .ok_or("HOST_INSTALL_POINTER_INVALID")?;
-    let host_hash = format!(
-        "{:x}",
-        Sha256::digest(std::fs::read(&executable).map_err(|_| "HOST_EXECUTABLE_UNAVAILABLE")?)
-    );
-    let gui_hash = format!(
-        "{:x}",
-        Sha256::digest(
-            std::fs::read(directory.join("CatDeskBinagotchy.exe"))
-                .map_err(|_| "BINAGOTCHY_EXECUTABLE_UNAVAILABLE")?
-        )
-    );
-    let adapter_hash = sha256_file(&directory.join("adapter.py"), "BROWSER_ADAPTER_UNAVAILABLE")?;
-    let wake_bridge_hash = sha256_file(
-        &directory.join("wake_bridge.py"),
-        "BROWSER_PRIMITIVES_UNAVAILABLE",
-    )?;
-    let manifest: serde_json::Value = read(&directory.join("manifest.json"))?;
-    for (name, actual) in [
-        ("CatDeskWakeHost.exe", host_hash.as_str()),
-        ("CatDeskBinagotchy.exe", gui_hash.as_str()),
-        ("adapter.py", adapter_hash.as_str()),
-        ("wake_bridge.py", wake_bridge_hash.as_str()),
-    ] {
-        if !actual.eq_ignore_ascii_case(manifest_hash(&manifest, name)?) {
-            return Err("HOST_INSTALL_MANIFEST_HASH_MISMATCH".into());
-        }
-    }
-    let path = store.root().join("current.json");
-    if path.exists() {
-        let previous: serde_json::Value = read(&path)?;
-        atomic(&store.root().join("previous.json"), &previous)?;
-    }
-    atomic(
-        &path,
-        &serde_json::json!({"schemaVersion":1,"directory":id,"hostSha256":host_hash,"binagotchySha256":gui_hash,"adapterSha256":adapter_hash,"wakeBridgeSha256":wake_bridge_hash}),
-    )
+    };
+    // The new owner must prove it inherited this exact store before the
+    // recovery transaction is removed. A failed proof leaves the pointer and
+    // original desired state recoverable by a reviewed retry.
+    verify_new_owner(&handoff)?;
+    complete_reviewed_install_handoff(store, &handoff.directory)?;
+    Ok(handoff)
 }
 
 struct Adapter {
@@ -1491,11 +1631,58 @@ struct ReviewRecord {
     unread: bool,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReviewDiscoveryAttention {
+    schema_version: u32,
+    inbox_record_sha256: String,
+    record_id_prefix: String,
+    session_id_prefix: String,
+    reason: String,
+    updated_utc: u64,
+}
+
+fn hold_review_discovery_record(store: &Store, record: &ReviewRecord, reason: &str) -> Result<()> {
+    // Use the canonical record digest as the filename: an inbox field can
+    // never supply a path component. Each rejected record keeps its own
+    // durable attention even when a later, unrelated review is actionable.
+    let bytes = serde_json::to_vec(record).map_err(|_| "REVIEW_RECORD_SERIALIZATION_FAILED")?;
+    let digest = format!("{:x}", Sha256::digest(&bytes));
+    let attention = ReviewDiscoveryAttention {
+        schema_version: 1,
+        inbox_record_sha256: digest.clone(),
+        record_id_prefix: record.record_id.chars().take(128).collect(),
+        session_id_prefix: record.session_id.chars().take(128).collect(),
+        reason: if reason.len() <= 128 {
+            reason.to_owned()
+        } else {
+            "WAKE_REVIEW_DISCOVERY_VALIDATION_FAILED".into()
+        },
+        updated_utc: now(),
+    };
+    atomic(
+        &store
+            .root()
+            .join(format!("review-discovery-attention-{digest}.json")),
+        &attention,
+    )
+}
+
 pub fn set_review_source(store: &Store, workspace: &str) -> Result<()> {
     let canonical =
         std::fs::canonicalize(workspace).map_err(|_| "REVIEW_SOURCE_WORKSPACE_INVALID")?;
     if !canonical.is_dir() {
         return Err("REVIEW_SOURCE_WORKSPACE_INVALID".into());
+    }
+    // The installer may confirm an existing binding, but it cannot silently
+    // redirect a live host to a different source tree. A source migration
+    // requires a separate reviewed operator path.
+    if let Some(existing) = review_source(store)? {
+        let bound = std::fs::canonicalize(&existing.workspace)
+            .map_err(|_| "REVIEW_SOURCE_EXISTING_WORKSPACE_INVALID")?;
+        if bound != canonical {
+            return Err("REVIEW_SOURCE_REBIND_REQUIRES_REVIEW".into());
+        }
     }
     let inbox = canonical
         .join(".catdesk")
@@ -1561,7 +1748,8 @@ fn discover_review_events(store: &Store, activation: &Activation) -> Result<usiz
     )
     .map_err(|_| "REVIEW_SOURCE_INBOX_INVALID")?;
     let cutoff = review_cutoff(store, activation, &source.project_id)?;
-    let mut produced = 0usize;
+    let mut counts = BTreeMap::<String, usize>::new();
+    let mut candidates = Vec::new();
     for record in records {
         if record.schema_version != 1
             || !record.unread
@@ -1575,6 +1763,43 @@ fn discover_review_events(store: &Store, activation: &Activation) -> Result<usiz
             ("WAITING_FOR_CHATGPT", "chatgpt_decision_required") => "engineering_attention",
             _ => continue,
         };
+        *counts.entry(record.record_id.clone()).or_default() += 1;
+        if event_type == "review_ready"
+            && let Err(reason) = crate::review_binding::validate_completed_review(
+                &workspace,
+                &record.project_id,
+                &record.session_id,
+                &record.record_id,
+                &record.reference,
+                record.created_at_unix,
+            )
+        {
+            hold_review_discovery_record(store, &record, &reason)?;
+            continue;
+        }
+        candidates.push((record, event_type));
+    }
+    let mut produced = 0usize;
+    for (record, event_type) in candidates {
+        if counts.get(&record.record_id).copied() != Some(1) {
+            hold_review_discovery_record(store, &record, "WAKE_REVIEW_DUPLICATE_RECORD_ID")?;
+            continue;
+        }
+        // A long scan must not publish a completed review whose evidence
+        // changed after its first check while other records were inspected.
+        if event_type == "review_ready"
+            && let Err(reason) = crate::review_binding::validate_completed_review(
+                &workspace,
+                &record.project_id,
+                &record.session_id,
+                &record.record_id,
+                &record.reference,
+                record.created_at_unix,
+            )
+        {
+            hold_review_discovery_record(store, &record, &reason)?;
+            continue;
+        }
         let message = format!(
             "CatDesk Wake: {event_type} for CatDesk review record {}. Review the exact record and current wake/GUI repair plan through CatDesk. Ordinary autonomy remains frozen until wake acceptance completes.",
             record.record_id
@@ -1591,6 +1816,19 @@ mod review_discovery_tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static NEXT: AtomicU64 = AtomicU64::new(1);
+
+    fn discovery_attention(store: &Store) -> Vec<serde_json::Value> {
+        std::fs::read_dir(store.root())
+            .expect("wake root")
+            .map(|entry| entry.expect("attention entry").path())
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with("review-discovery-attention-"))
+            })
+            .map(|path| read(&path).expect("durable attention record"))
+            .collect()
+    }
 
     fn fixture() -> (PathBuf, PathBuf, Store, Activation, u64) {
         let base = std::env::temp_dir().join(format!(
@@ -1631,6 +1869,26 @@ mod review_discovery_tests {
     #[test]
     fn standalone_discovery_queues_only_current_generation_actionable_reviews() {
         let (base, workspace, store, activation, changed) = fixture();
+        // Historical pre-contract sessions remain readable after the Sol
+        // evidence boundary is introduced; an inbox-only synthetic record
+        // cannot claim a completed session.
+        let historical = workspace.join(".catdesk/autonomy/session-current");
+        std::fs::create_dir_all(&historical).expect("historical session");
+        std::fs::write(
+            historical.join("state.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion":1,
+                "sessionId":"session-current",
+                "state":"COMPLETED_VERIFIED",
+                "currentTaskId":null,
+                "providerThreadId":null,
+                "approvedContractHash":null,
+                "lastEventSequence":0,
+                "active":false
+            }))
+            .expect("historical state"),
+        )
+        .expect("write historical state");
         let records = serde_json::json!([
             {
                 "schemaVersion":1,
@@ -1686,6 +1944,254 @@ mod review_discovery_tests {
             1
         );
         assert_eq!(store.events().expect("replayed events").len(), 1);
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    fn sol_review_inbox(workspace: &Path, record_id: &str, created_at_unix: u64) {
+        let records = serde_json::json!([{
+            "schemaVersion":1,
+            "recordId":record_id,
+            "projectId":"catdesk",
+            "sessionId":"sol-current",
+            "state":"COMPLETED_VERIFIED",
+            "nextAction":"independent_final_review",
+            "reference":"artifacts/completion.json",
+            "createdAtUnix":created_at_unix,
+            "unread":true
+        }]);
+        std::fs::write(
+            workspace.join(".catdesk/autonomy/review-inbox.json"),
+            serde_json::to_vec_pretty(&records).expect("Sol inbox"),
+        )
+        .expect("write Sol inbox");
+    }
+
+    #[test]
+    fn standalone_discovery_requires_bound_sol_review_before_review_ready() {
+        let (base, workspace, store, activation, changed) = fixture();
+        let record_id = crate::review_binding::test_support::completed_sol(
+            &workspace,
+            "sol-current",
+            changed + 1,
+        );
+        sol_review_inbox(&workspace, &record_id, changed + 1);
+        assert_eq!(
+            discover_review_events(&store, &activation).expect("bound Sol review"),
+            1
+        );
+        let events = store.events().expect("events");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_id, record_id);
+        assert_eq!(events[0].event_type, "review_ready");
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn standalone_discovery_rejects_unbound_or_tampered_sol_review() {
+        for tamper in [
+            "missing_binding",
+            "wrong_turn",
+            "completion",
+            "snapshot_bytes",
+            "contract_downgrade",
+        ] {
+            let (base, workspace, store, activation, changed) = fixture();
+            let record_id = crate::review_binding::test_support::completed_sol(
+                &workspace,
+                "sol-current",
+                changed + 1,
+            );
+            sol_review_inbox(&workspace, &record_id, changed + 1);
+            let root = workspace.join(".catdesk/autonomy/sol-current");
+            match tamper {
+                "missing_binding" => {
+                    std::fs::remove_file(
+                        root.join(format!("artifacts/review-bindings/{record_id}.json")),
+                    )
+                    .expect("remove isolated binding");
+                }
+                "wrong_turn" => {
+                    let path = root.join("verification/passed-finalization.json");
+                    let mut value: serde_json::Value =
+                        serde_json::from_slice(&std::fs::read(&path).expect("checkpoint"))
+                            .expect("checkpoint JSON");
+                    value["codexTurnProfile"]["reasoningEffort"] = "high".into();
+                    std::fs::write(
+                        path,
+                        serde_json::to_vec_pretty(&value).expect("changed checkpoint"),
+                    )
+                    .expect("write changed checkpoint");
+                }
+                "completion" => {
+                    let path = root.join("artifacts/completion.json");
+                    let mut value: serde_json::Value =
+                        serde_json::from_slice(&std::fs::read(&path).expect("completion"))
+                            .expect("completion JSON");
+                    value["finalReview"] = "unreviewed replacement".into();
+                    std::fs::write(
+                        path,
+                        serde_json::to_vec_pretty(&value).expect("changed completion"),
+                    )
+                    .expect("write changed completion");
+                }
+                "snapshot_bytes" => {
+                    std::fs::write(
+                        workspace.join(
+                            ".catdesk/reviewed-source-snapshots/sol-current/bytes/src/output.rs",
+                        ),
+                        "corrupt",
+                    )
+                    .expect("corrupt isolated source snapshot");
+                }
+                "contract_downgrade" => {
+                    let path = root.join("contract.json");
+                    let mut value: serde_json::Value =
+                        serde_json::from_slice(&std::fs::read(&path).expect("contract"))
+                            .expect("contract JSON");
+                    value["providerPolicy"]["primaryModel"] = "gpt-5.6-terra".into();
+                    std::fs::write(
+                        path,
+                        serde_json::to_vec_pretty(&value).expect("downgraded contract"),
+                    )
+                    .expect("write downgraded contract");
+                    std::fs::remove_file(
+                        root.join(format!("artifacts/review-bindings/{record_id}.json")),
+                    )
+                    .expect("remove isolated binding");
+                }
+                _ => unreachable!(),
+            }
+            assert_eq!(
+                discover_review_events(&store, &activation).expect("quarantine bad Sol review"),
+                0,
+                "{tamper} bypassed Sol review binding"
+            );
+            assert!(
+                store.events().expect("events").is_empty(),
+                "{tamper} emitted a wake event"
+            );
+            let attention = discovery_attention(&store);
+            assert_eq!(attention.len(), 1, "{tamper} lacked durable attention");
+            assert_eq!(attention[0]["recordIdPrefix"], record_id);
+            assert!(
+                attention[0]["reason"]
+                    .as_str()
+                    .is_some_and(|reason| reason.starts_with("WAKE_SOL_REVIEW_")),
+                "{tamper} attention lacked a fixed Sol reason"
+            );
+            let _ = std::fs::remove_dir_all(base);
+        }
+    }
+
+    #[test]
+    fn invalid_sol_review_is_held_without_blocking_later_valid_review() {
+        let (base, workspace, store, activation, changed) = fixture();
+        let bad_id = crate::review_binding::test_support::completed_sol(
+            &workspace,
+            "sol-invalid",
+            changed + 1,
+        );
+        let good_id = crate::review_binding::test_support::completed_sol(
+            &workspace,
+            "sol-valid",
+            changed + 2,
+        );
+        std::fs::remove_file(workspace.join(format!(
+            ".catdesk/autonomy/sol-invalid/artifacts/review-bindings/{bad_id}.json"
+        )))
+        .expect("remove invalid Sol binding");
+        let records = serde_json::json!([
+            {
+                "schemaVersion":1,
+                "recordId":bad_id,
+                "projectId":"catdesk",
+                "sessionId":"sol-invalid",
+                "state":"COMPLETED_VERIFIED",
+                "nextAction":"independent_final_review",
+                "reference":"artifacts/completion.json",
+                "createdAtUnix":changed + 1,
+                "unread":true
+            },
+            {
+                "schemaVersion":1,
+                "recordId":good_id,
+                "projectId":"catdesk",
+                "sessionId":"sol-valid",
+                "state":"COMPLETED_VERIFIED",
+                "nextAction":"independent_final_review",
+                "reference":"artifacts/completion.json",
+                "createdAtUnix":changed + 2,
+                "unread":true
+            }
+        ]);
+        std::fs::write(
+            workspace.join(".catdesk/autonomy/review-inbox.json"),
+            serde_json::to_vec_pretty(&records).expect("mixed inbox"),
+        )
+        .expect("write mixed inbox");
+
+        assert_eq!(
+            discover_review_events(&store, &activation).expect("discover"),
+            1
+        );
+        let events = store.events().expect("events");
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].event_id, good_id);
+        assert_eq!(events[0].event_type, "review_ready");
+        let attention = discovery_attention(&store);
+        assert_eq!(attention.len(), 1);
+        assert_eq!(attention[0]["recordIdPrefix"], bad_id);
+        assert_eq!(attention[0]["reason"], "WAKE_SOL_REVIEW_EVIDENCE_MISSING");
+
+        assert_eq!(
+            discover_review_events(&store, &activation).expect("replay"),
+            1
+        );
+        assert_eq!(store.events().expect("replayed events").len(), 1);
+        assert_eq!(discovery_attention(&store).len(), 1);
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn duplicate_record_id_cannot_publish_a_valid_copy_before_an_invalid_copy() {
+        let (base, workspace, store, activation, changed) = fixture();
+        let record_id = crate::review_binding::test_support::completed_sol(
+            &workspace,
+            "sol-duplicate",
+            changed + 1,
+        );
+        let valid = serde_json::json!({
+            "schemaVersion":1,
+            "recordId":record_id,
+            "projectId":"catdesk",
+            "sessionId":"sol-duplicate",
+            "state":"COMPLETED_VERIFIED",
+            "nextAction":"independent_final_review",
+            "reference":"artifacts/completion.json",
+            "createdAtUnix":changed + 1,
+            "unread":true
+        });
+        let mut invalid = valid.clone();
+        invalid["reference"] = "artifacts/unbound.json".into();
+        std::fs::write(
+            workspace.join(".catdesk/autonomy/review-inbox.json"),
+            serde_json::to_vec_pretty(&serde_json::json!([valid, invalid]))
+                .expect("duplicate inbox"),
+        )
+        .expect("write duplicate inbox");
+
+        assert_eq!(
+            discover_review_events(&store, &activation).expect("hold duplicate"),
+            0
+        );
+        assert!(store.events().expect("events").is_empty());
+        let attention = discovery_attention(&store);
+        assert_eq!(attention.len(), 2);
+        assert!(
+            attention
+                .iter()
+                .any(|entry| { entry["reason"] == "WAKE_REVIEW_DUPLICATE_RECORD_ID" })
+        );
         let _ = std::fs::remove_dir_all(base);
     }
 
@@ -2102,6 +2608,25 @@ mod review_discovery_tests {
             std::fs::canonicalize(workspace).expect("canonical workspace")
         );
         assert!(store.root().join("source.json").is_file());
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn install_source_confirmation_cannot_rebind_existing_review_workspace() {
+        let (base, workspace, store, _activation, _changed) = fixture();
+        set_review_source(&store, workspace.to_str().expect("workspace"))
+            .expect("idempotent confirmation");
+        let other = base.join("other-workspace");
+        std::fs::create_dir_all(other.join(".catdesk/autonomy")).expect("other workspace");
+        assert_eq!(
+            set_review_source(&store, other.to_str().expect("other path")).unwrap_err(),
+            "REVIEW_SOURCE_REBIND_REQUIRES_REVIEW"
+        );
+        let bound = review_source(&store).expect("source").expect("bound");
+        assert_eq!(
+            std::fs::canonicalize(bound.workspace).expect("canonical bound"),
+            std::fs::canonicalize(workspace).expect("canonical original")
+        );
         let _ = std::fs::remove_dir_all(base);
     }
 
@@ -2755,12 +3280,18 @@ fn persist_host_runtime_failure(
 }
 
 pub fn run(store: &Store) -> Result<()> {
+    let root_pin = crate::install_authority::HostRootPin::acquire(store.root())?;
     let lease = store.host_lock()?;
+    let _owner_proof =
+        crate::install_authority::HostOwnerProofServer::start(store.root(), &root_pin, &lease)?;
     run_with_lease(store, &lease)
 }
 
 pub fn run_resilient(store: &Store) -> Result<()> {
+    let root_pin = crate::install_authority::HostRootPin::acquire(store.root())?;
     let lease = store.host_lock()?;
+    let _owner_proof =
+        crate::install_authority::HostOwnerProofServer::start(store.root(), &root_pin, &lease)?;
     let mut consecutive_failures = 0u32;
     let mut last_failure_utc = None::<u64>;
     let mut pending_recovery_count = 0u64;
@@ -3659,6 +4190,45 @@ mod reviewed_install_transaction_tests {
         (staging_name, id)
     }
 
+    fn stage_hashes(path: &Path) -> ReviewedInstallExpectedHashes {
+        let hash = |name| sha256_file(&path.join(name), "artifact").expect("artifact hash");
+        ReviewedInstallExpectedHashes::new(
+            &hash("CatDeskWakeHost.exe"),
+            &hash("CatDeskBinagotchy.exe"),
+            &hash("adapter.py"),
+            &hash("wake_bridge.py"),
+        )
+        .expect("expected hashes")
+    }
+
+    #[test]
+    fn caller_supplied_script_hashes_must_match_compiled_host_sources() {
+        let unrelated = ReviewedInstallExpectedHashes::new(
+            &"0".repeat(64),
+            &"1".repeat(64),
+            &"2".repeat(64),
+            &"3".repeat(64),
+        )
+        .expect("well-formed hashes");
+        assert_eq!(
+            unrelated.require_compiled_script_provenance().unwrap_err(),
+            "HOST_INSTALL_COMPILED_SCRIPT_MISMATCH"
+        );
+        let compiled = ReviewedInstallExpectedHashes::new(
+            &"0".repeat(64),
+            &"1".repeat(64),
+            &format!("{:x}", Sha256::digest(include_bytes!("../adapter.py"))),
+            &format!(
+                "{:x}",
+                Sha256::digest(include_bytes!("../../scripts/wake_bridge.py"))
+            ),
+        )
+        .expect("compiled hashes");
+        compiled
+            .require_compiled_script_provenance()
+            .expect("exact compiled sources");
+    }
+
     #[test]
     fn reviewed_handoff_preserves_pre_stop_desired_state_across_retry() {
         let (root, store) = fixture();
@@ -3673,6 +4243,99 @@ mod reviewed_install_transaction_tests {
             "RUNNING"
         );
         complete_reviewed_install_handoff(&store, "candidate-a").expect("complete");
+        assert!(!reviewed_install_transaction_path(&store).exists());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn failed_new_owner_proof_retains_recoverable_handoff_transaction() {
+        let (root, store) = fixture();
+        let (stage, id) = stage_candidate(&root, "owner-proof", "host", "gui", "adapter");
+        publish_reviewed_install_checked(&store, &stage, &id, None).expect("publish");
+        control(&store, "PAUSED").expect("paused");
+        assert_eq!(
+            activate_reviewed_install_checked(&store, None, |_| {
+                Err("WAKE_STORE_AUTHORITY_NEW_OWNER_UNPROVEN".into())
+            })
+            .unwrap_err(),
+            "WAKE_STORE_AUTHORITY_NEW_OWNER_UNPROVEN"
+        );
+        let transaction: ReviewedInstallTransaction =
+            read(&reviewed_install_transaction_path(&store)).expect("retained transaction");
+        assert_eq!(transaction.candidate_directory, id);
+        assert_eq!(transaction.prior_desired, "PAUSED");
+        assert_eq!(desired(&store).expect("restored intent"), "PAUSED");
+        assert_eq!(
+            install_id(&read::<serde_json::Value>(&root.join("current.json")).expect("pointer"))
+                .expect("id"),
+            id
+        );
+        activate_reviewed_install_checked(&store, None, |_| Ok(())).expect("reviewed retry");
+        assert!(!reviewed_install_transaction_path(&store).exists());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn publication_refuses_stage_not_matching_installer_source_hashes() {
+        let (root, store) = fixture();
+        let (stage, id) = stage_candidate(&root, "hash-mismatch", "host", "gui", "adapter");
+        let stage_path = root.join("versions").join(&stage);
+        let actual = stage_hashes(&stage_path);
+        let wrong = ReviewedInstallExpectedHashes::new(
+            actual.0.get("CatDeskWakeHost.exe").expect("host"),
+            actual.0.get("CatDeskBinagotchy.exe").expect("gui"),
+            &"0".repeat(64),
+            actual.0.get("wake_bridge.py").expect("bridge"),
+        )
+        .expect("mismatched expected hashes");
+        assert_eq!(
+            publish_reviewed_install_checked(&store, &stage, &id, Some(&wrong)).unwrap_err(),
+            "HOST_INSTALL_EXPECTED_HASH_MISMATCH"
+        );
+        assert!(stage_path.is_dir());
+        assert!(!root.join("versions").join(&id).exists());
+        publish_reviewed_install_checked(&store, &stage, &id, Some(&actual))
+            .expect("exact source hashes");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn activation_refuses_changed_artifacts_before_pointer_or_desired_state_mutation() {
+        let (root, store) = fixture();
+        let (stage, id) = stage_candidate(&root, "activation-hash", "host", "gui", "adapter");
+        let actual = stage_hashes(&root.join("versions").join(&stage));
+        publish_reviewed_install_checked(&store, &stage, &id, Some(&actual)).expect("publish");
+        let wrong = ReviewedInstallExpectedHashes::new(
+            actual.0.get("CatDeskWakeHost.exe").expect("host"),
+            actual.0.get("CatDeskBinagotchy.exe").expect("gui"),
+            &"0".repeat(64),
+            actual.0.get("wake_bridge.py").expect("bridge"),
+        )
+        .expect("wrong expected");
+        control(&store, "PAUSED").expect("paused");
+        assert_eq!(
+            activate_reviewed_install_checked(&store, Some(&wrong), |_| {
+                panic!("owner proof must not run for changed candidate")
+            })
+            .unwrap_err(),
+            "HOST_INSTALL_EXPECTED_HASH_MISMATCH"
+        );
+        assert_eq!(desired(&store).expect("desired"), "PAUSED");
+        assert!(!root.join("current.json").exists());
+        assert!(!reviewed_install_transaction_path(&store).exists());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn activation_requires_the_exact_published_host_as_its_caller() {
+        let (root, store) = fixture();
+        let (stage, id) = stage_candidate(&root, "activator", "host", "gui", "adapter");
+        let hashes = stage_hashes(&root.join("versions").join(&stage));
+        publish_reviewed_install_checked(&store, &stage, &id, Some(&hashes)).expect("publish");
+        assert_eq!(
+            require_activation_candidate_self(&store, &hashes).unwrap_err(),
+            "HOST_INSTALL_ACTIVATOR_MISMATCH"
+        );
         assert!(!reviewed_install_transaction_path(&store).exists());
         let _ = std::fs::remove_dir_all(root);
     }
@@ -3732,7 +4395,8 @@ mod reviewed_install_transaction_tests {
     fn reviewed_publication_is_idempotent_for_same_identity() {
         let (root, store) = fixture();
         let (first_staging, id) = stage_candidate(&root, "first", "host-a", "gui-a", "adapter-a");
-        let first = publish_reviewed_install(&store, &first_staging, &id).expect("first publish");
+        let first = publish_reviewed_install_checked(&store, &first_staging, &id, None)
+            .expect("first publish");
         assert!(!first.already_materialized);
         assert!(root.join("versions").join(&id).is_dir());
         assert!(!root.join("versions").join(&first_staging).exists());
@@ -3740,10 +4404,10 @@ mod reviewed_install_transaction_tests {
         let (second_staging, second_id) =
             stage_candidate(&root, "second", "host-a", "gui-a", "adapter-a");
         assert_eq!(id, second_id);
-        let second =
-            publish_reviewed_install(&store, &second_staging, &second_id).expect("second publish");
+        let second = publish_reviewed_install_checked(&store, &second_staging, &second_id, None)
+            .expect("second publish");
         assert!(second.already_materialized);
-        assert!(!root.join("versions").join(&second_staging).exists());
+        assert!(root.join("versions").join(&second_staging).is_dir());
         assert_eq!(reviewed_candidate(&store).expect("candidate").0, id);
         let _ = std::fs::remove_dir_all(root);
     }
@@ -3753,13 +4417,15 @@ mod reviewed_install_transaction_tests {
         let (root, store) = fixture();
         let (first_staging, first_id) =
             stage_candidate(&root, "first", "host-a", "gui-a", "adapter-a");
-        publish_reviewed_install(&store, &first_staging, &first_id).expect("first publish");
+        publish_reviewed_install_checked(&store, &first_staging, &first_id, None)
+            .expect("first publish");
 
         let (second_staging, second_id) =
             stage_candidate(&root, "second", "host-b", "gui-a", "adapter-a");
         assert_ne!(first_id, second_id);
         assert_eq!(
-            publish_reviewed_install(&store, &second_staging, &second_id).unwrap_err(),
+            publish_reviewed_install_checked(&store, &second_staging, &second_id, None)
+                .unwrap_err(),
             "HOST_INSTALL_VERSION_IDENTITY_CONFLICT"
         );
         assert!(root.join("versions").join(&second_staging).is_dir());
@@ -3772,13 +4438,15 @@ mod reviewed_install_transaction_tests {
         let (root, store) = fixture();
         let (first_staging, first_id) =
             stage_candidate(&root, "first", "host-a", "gui-a", "adapter-a");
-        publish_reviewed_install(&store, &first_staging, &first_id).expect("first publish");
+        publish_reviewed_install_checked(&store, &first_staging, &first_id, None)
+            .expect("first publish");
 
         let (second_staging, second_id) =
             stage_candidate(&root, "second", "host-a", "gui-a", "adapter-b");
         assert_eq!(first_id, second_id);
         assert_eq!(
-            publish_reviewed_install(&store, &second_staging, &second_id).unwrap_err(),
+            publish_reviewed_install_checked(&store, &second_staging, &second_id, None)
+                .unwrap_err(),
             "HOST_INSTALL_ARTIFACT_IDENTITY_CONFLICT"
         );
         assert!(root.join("versions").join(&second_staging).is_dir());

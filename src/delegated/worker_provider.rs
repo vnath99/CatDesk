@@ -10,6 +10,7 @@ use std::pin::Pin;
 use serde::{Deserialize, Serialize};
 
 use super::autonomy_state::AutonomousProviderRouteV1;
+use super::codex_model_policy::CodexCliTurnProfileEvidenceV1;
 use super::contracts::{TurnId, WorkerSessionId};
 use super::runtime::{
     FakeProvider, NormalizedProviderEventKind, NormalizedProviderEventV1, OllamaAdapter,
@@ -75,6 +76,10 @@ pub struct ProviderEventBatchV1 {
     /// A provider-captured continuity identifier, if it became available
     /// while polling. CatDesk persists it before any later resume attempt.
     pub provider_session_id: Option<String>,
+    /// Effective profile read from the exact completed native Codex turn.
+    /// A requested CLI model or mutable thread setting cannot fill this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codex_turn_profile: Option<CodexCliTurnProfileEvidenceV1>,
 }
 
 pub trait WorkerProviderV1: Send {
@@ -250,6 +255,7 @@ impl WorkerProviderV1 for OllamaWorkerProviderV1 {
                 next_cursor: result.events.len() as u64,
                 terminal: result.terminal,
                 provider_session_id: Some(handle.provider_session_id.clone()),
+                codex_turn_profile: None,
             })
         })
     }
@@ -530,6 +536,7 @@ impl WorkerProviderV1 for FakeWorkerProviderV1 {
                     next_cursor: after_cursor.saturating_add(1),
                     terminal: true,
                     provider_session_id: Some(handle.provider_session_id.clone()),
+                    codex_turn_profile: None,
                 });
             }
             let result = self.completed_turns.get(&handle.handle_id).ok_or_else(|| {
@@ -544,6 +551,7 @@ impl WorkerProviderV1 for FakeWorkerProviderV1 {
                 next_cursor: result.events.len() as u64,
                 terminal: result.terminal,
                 provider_session_id: Some(handle.provider_session_id.clone()),
+                codex_turn_profile: None,
             })
         })
     }

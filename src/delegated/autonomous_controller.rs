@@ -35,7 +35,9 @@ use super::codex_cli::{
     CodexAvailabilityFailureV1, classify_codex_availability_failure,
     parse_codex_credits_reset_after, trusted_host_local_clock,
 };
-use super::codex_model_policy::exact_profile_matches;
+use super::codex_model_policy::{
+    CodexCliTurnProfileEvidenceV1, SOL_MEDIUM_MODEL, exact_profile_matches,
+};
 use super::contracts::{RunId, TurnId, WorkerSessionId};
 use super::coordinator::{VerificationStatusV1, VerificationSummaryV1};
 use super::runtime::{
@@ -99,6 +101,7 @@ pub(crate) enum RestartTaskReconciliationV1 {
     NotApplicable,
     AlreadyReady,
     Requeued,
+    Contaminated,
     Pending,
 }
 
@@ -129,6 +132,25 @@ pub(crate) fn reconcile_restart_task_state(
     }
     if task.state != AutonomousQueueTaskStateV1::WorkerRunning {
         return Ok(RestartTaskReconciliationV1::NotApplicable);
+    }
+
+    // A Sol worker that vanished before CatDesk could durably bind its exact
+    // native turn may already have changed files. Do not requeue it against
+    // the old attribution baseline, even when no CatDesk tool call was seen:
+    // Codex owns its own shell/tool protocol below that counter.
+    let managed_sol = match store.load_contract(session_id) {
+        Ok(contract) => contract.provider_policy.primary_model == SOL_MEDIUM_MODEL,
+        Err(_) if snapshot.approved_contract_hash.is_some() => {
+            return Ok(RestartTaskReconciliationV1::Pending);
+        }
+        Err(_) => false,
+    };
+    if managed_sol && snapshot.codex_turn_profile_violation {
+        task.state = AutonomousQueueTaskStateV1::Failed;
+        store
+            .save_queue(session_id, &queue)
+            .map_err(RuntimeError::from)?;
+        return Ok(RestartTaskReconciliationV1::Contaminated);
     }
 
     let accounting = store
@@ -175,6 +197,26 @@ pub(crate) fn reconcile_restart_task_state(
     });
     if !provider_interrupted || live_or_ambiguous_ownership {
         return Ok(RestartTaskReconciliationV1::Pending);
+    }
+
+    if managed_sol {
+        let mut contaminated = snapshot;
+        contaminated.codex_turn_profile_violation = true;
+        store
+            .save_session(&contaminated)
+            .map_err(RuntimeError::from)?;
+        task.state = AutonomousQueueTaskStateV1::Failed;
+        store
+            .save_queue(session_id, &queue)
+            .map_err(RuntimeError::from)?;
+        store
+            .append_event(
+                session_id,
+                "interrupted_sol_turn_unprofiled",
+                "interrupted Sol worker may have changed output without a completed native turn profile",
+            )
+            .map_err(RuntimeError::from)?;
+        return Ok(RestartTaskReconciliationV1::Contaminated);
     }
 
     task.state = AutonomousQueueTaskStateV1::Ready;
@@ -261,6 +303,62 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
                 authoritative_diff: None,
                 final_review: None,
             });
+        }
+        if self.policy.contract().provider_policy.primary_model == SOL_MEDIUM_MODEL
+            && !snapshot.codex_turn_profile_tracking_started
+        {
+            if snapshot.provider_turn_count > 0 {
+                snapshot.codex_turn_profile_violation = true;
+                self.store
+                    .save_session(&snapshot)
+                    .map_err(RuntimeError::from)?;
+                self.store
+                    .append_event(
+                        &self.session_id,
+                        "historical_codex_turn_profile_untracked",
+                        "prior Sol turns have no durable native profile chain",
+                    )
+                    .map_err(RuntimeError::from)?;
+                if snapshot.current_task_id.is_some() {
+                    self.set_current_task_state(
+                        super::autonomy_state::AutonomousQueueTaskStateV1::Failed,
+                    )?;
+                }
+                return self.escalate("historical_codex_turn_profile_untracked");
+            }
+            snapshot.codex_turn_profile_tracking_started = true;
+            self.store
+                .save_session(&snapshot)
+                .map_err(RuntimeError::from)?;
+        }
+        // A rejected native-turn profile contaminates the session's existing
+        // workspace output. Requeue, recovery and a later matching turn must
+        // not launder those bytes into a verified Sol review.
+        if snapshot.codex_turn_profile_violation {
+            if snapshot.state == AutonomousSessionStateV1::Running {
+                if let Some(handle) = self.last_handle.clone() {
+                    if !self.cancel_or_observe_terminal(&handle).await {
+                        return Ok(AutonomousControllerOutcomeV1 {
+                            state: AutonomousSessionStateV1::Running,
+                            provider_events: 0,
+                            verification: None,
+                            authoritative_diff: None,
+                            final_review: None,
+                        });
+                    }
+                }
+            }
+            return if snapshot.state == AutonomousSessionStateV1::WaitingForChatgpt {
+                Ok(AutonomousControllerOutcomeV1 {
+                    state: snapshot.state,
+                    provider_events: 0,
+                    verification: None,
+                    authoritative_diff: None,
+                    final_review: None,
+                })
+            } else {
+                self.escalate("codex_turn_profile_violation_requires_new_session")
+            };
         }
         // A passed-verification checkpoint is deliberately narrower than a
         // provider lease: it permits only the already-executed task's local,
@@ -647,13 +745,23 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
         )?;
         let continue_provider_turn = continue_canonical_codex_thread
             || (is_repair && self.provider.provider_id() != ProviderIdV1::Ollama);
-        let handle = if continue_provider_turn {
-            self.provider.resume_turn(request).await?
+        let launch = if continue_provider_turn {
+            self.provider.resume_turn(request).await
         } else {
-            self.provider.start_turn(request).await?
+            self.provider.start_turn(request).await
+        };
+        let handle = match launch {
+            Ok(handle) => handle,
+            Err(RuntimeError::Validation(reason)) if reason.starts_with("Sol Codex ") => {
+                return self.escalate("sol_codex_worker_host_authority_unavailable");
+            }
+            Err(error) => return Err(error),
         };
         if self.codex_thread_identity_mismatch(&handle.provider_session_id)? {
-            return self.fail_closed_codex_thread_mismatch();
+            self.last_handle = Some(handle.clone());
+            return self
+                .fail_closed_codex_thread_mismatch(Some(&handle), false)
+                .await;
         }
         // A provider-active span begins only after the provider returned a
         // real turn handle. Preparing a queue item or sleeping for backoff is
@@ -706,7 +814,10 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
         }
         if let Some(provider_session_id) = &batch.provider_session_id {
             if self.codex_thread_identity_mismatch(provider_session_id)? {
-                return self.fail_closed_codex_thread_mismatch();
+                let handle = self.last_handle.clone();
+                return self
+                    .fail_closed_codex_thread_mismatch(handle.as_ref(), batch.terminal)
+                    .await;
             }
             if let Some(handle) = &mut self.last_handle {
                 handle.provider_session_id = provider_session_id.clone();
@@ -726,6 +837,66 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
                 authoritative_diff: None,
                 final_review: None,
             });
+        }
+        let expected_model = &self.policy.contract().provider_policy.primary_model;
+        if self.provider.provider_id() == ProviderIdV1::CodexCli {
+            let mut snapshot = self
+                .store
+                .load_session(&self.session_id)
+                .map_err(RuntimeError::from)?;
+            let profile_matches = snapshot
+                .provider_thread_id
+                .as_deref()
+                .zip(batch.codex_turn_profile.as_ref())
+                .is_some_and(|(thread_id, profile)| profile.matches(thread_id, expected_model));
+            if (!profile_matches && expected_model == SOL_MEDIUM_MODEL)
+                || (batch.codex_turn_profile.is_some() && !profile_matches)
+            {
+                snapshot.codex_turn_profile_violation = true;
+                self.store
+                    .save_session(&snapshot)
+                    .map_err(RuntimeError::from)?;
+                self.store
+                    .append_event(
+                        &self.session_id,
+                        "codex_turn_profile_rejected",
+                        "native Codex turn lacked the exact approved model and effort; session output cannot be reviewed",
+                    )
+                    .map_err(RuntimeError::from)?;
+                self.set_current_task_state(
+                    super::autonomy_state::AutonomousQueueTaskStateV1::Failed,
+                )?;
+                return self.escalate("codex_effective_turn_profile_unavailable_or_mismatched");
+            }
+            if expected_model == SOL_MEDIUM_MODEL
+                && batch.codex_turn_profile.as_ref().is_none_or(|profile| {
+                    self.store
+                        .execution_accounting_store()
+                        .ok()
+                        .and_then(|accounting| {
+                            accounting
+                                .record_exact_codex_turn_profile(&self.session_id, profile)
+                                .ok()
+                        })
+                        .is_none()
+                })
+            {
+                snapshot.codex_turn_profile_violation = true;
+                self.store
+                    .save_session(&snapshot)
+                    .map_err(RuntimeError::from)?;
+                self.store
+                    .append_event(
+                        &self.session_id,
+                        "codex_turn_profile_accounting_unavailable",
+                        "exact Sol turn profile could not be durably bound to task accounting",
+                    )
+                    .map_err(RuntimeError::from)?;
+                self.set_current_task_state(
+                    super::autonomy_state::AutonomousQueueTaskStateV1::Failed,
+                )?;
+                return self.escalate("codex_turn_profile_accounting_unavailable");
+            }
         }
         if let Some(exhaustion_diagnostic) =
             codex_credit_exhaustion_diagnostic_from_events(&batch.events)
@@ -923,6 +1094,7 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
             verification,
             diff,
             expected_snapshot.as_ref(),
+            batch.codex_turn_profile.as_ref(),
         ) {
             Ok(checkpoint) => checkpoint,
             Err(_) => {
@@ -957,6 +1129,11 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
         &mut self,
         now_unix: u64,
     ) -> Result<AutonomousControllerOutcomeV1, RuntimeError> {
+        if self.policy.contract().provider_policy.primary_model == SOL_MEDIUM_MODEL {
+            return Err(RuntimeError::Validation(
+                "Sol/medium contract requires a Codex CLI turn before review".into(),
+            ));
+        }
         let mut snapshot = self
             .store
             .load_session(&self.session_id)
@@ -1079,6 +1256,11 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
         &mut self,
         now_unix: u64,
     ) -> Result<AutonomousControllerOutcomeV1, RuntimeError> {
+        if self.policy.contract().provider_policy.primary_model == SOL_MEDIUM_MODEL {
+            return Err(RuntimeError::Validation(
+                "Sol/medium contract requires a Codex CLI turn before review".into(),
+            ));
+        }
         let snapshot = self
             .store
             .load_session(&self.session_id)
@@ -1086,6 +1268,9 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
         if snapshot.state != AutonomousSessionStateV1::WaitingForChatgpt
             || snapshot.current_task_id.is_none()
             || snapshot.provider_turn_count == 0
+            || snapshot.codex_turn_profile_violation
+            || (self.policy.contract().provider_policy.primary_model == SOL_MEDIUM_MODEL
+                && !snapshot.codex_turn_profile_tracking_started)
         {
             return Err(RuntimeError::Validation(
                 "direct ChatGPT finalization requires one already-started WAITING_FOR_CHATGPT task"
@@ -1183,6 +1368,7 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
             verification,
             diff,
             expected_snapshot.as_ref(),
+            None,
         ) {
             Ok(checkpoint) => checkpoint,
             Err(_) => {
@@ -1209,6 +1395,7 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
         verification: VerificationSummaryV1,
         authoritative_diff: String,
         expected_snapshot: Option<&ReviewedSourceSnapshotExpectedV1>,
+        codex_turn_profile: Option<&CodexCliTurnProfileEvidenceV1>,
     ) -> Result<AutonomousPassedVerificationCheckpointV1, RuntimeError> {
         let snapshot = self
             .store
@@ -1250,6 +1437,7 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
             authoritative_diff,
             authoritative_diff_sha256: format!("{:x}", diff_hasher.finalize()),
             attribution_digest: format!("{:x}", attribution_hasher.finalize()),
+            codex_turn_profile: codex_turn_profile.cloned(),
             reviewed_source_expectation: expected_snapshot.cloned(),
         })
     }
@@ -1273,6 +1461,20 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
             || checkpoint.provider_id != expected_executor_id
             || checkpoint.verification_profile != self.policy.contract().verification_policy.profile
             || checkpoint.verification.status != VerificationStatusV1::Passed
+            || snapshot.codex_turn_profile_violation
+            || (checkpoint.provider_id == ProviderIdV1::CodexCli.as_str()
+                && (self.policy.contract().provider_policy.primary_model == SOL_MEDIUM_MODEL
+                    || checkpoint.codex_turn_profile.is_some())
+                && !snapshot
+                    .provider_thread_id
+                    .as_deref()
+                    .zip(checkpoint.codex_turn_profile.as_ref())
+                    .is_some_and(|(thread_id, profile)| {
+                        profile.matches(
+                            thread_id,
+                            &self.policy.contract().provider_policy.primary_model,
+                        )
+                    }))
         {
             return self.post_verification_finalization_failure(
                 "passed_verification_checkpoint_mismatched",
@@ -1382,18 +1584,24 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
                 "post_verification_accounting_unavailable",
             );
         }
-        if self
-            .store
-            .emit_review_inbox_record(
-                &self.session_id,
-                &self.policy.contract().project_id,
-                AutonomousSessionStateV1::CompletedVerified,
-                "independent_final_review",
-                "artifacts/completion.json",
-                now_unix,
-            )
-            .is_err()
-        {
+        let review_result =
+            if self.policy.contract().provider_policy.primary_model == SOL_MEDIUM_MODEL {
+                self.store.emit_completed_review_inbox_record(
+                    &self.session_id,
+                    &self.policy.contract().project_id,
+                    now_unix,
+                )
+            } else {
+                self.store.emit_review_inbox_record(
+                    &self.session_id,
+                    &self.policy.contract().project_id,
+                    AutonomousSessionStateV1::CompletedVerified,
+                    "independent_final_review",
+                    "artifacts/completion.json",
+                    now_unix,
+                )
+            };
+        if review_result.is_err() {
             return self.post_verification_finalization_failure("review_inbox_unavailable");
         }
         if self
@@ -1901,17 +2109,62 @@ impl<P: WorkerProviderV1 + LocalQwenFallbackProviderV1, V: AutonomousVerifierV1>
     /// Persist only a bounded, non-secret diagnostic and move to the normal
     /// ChatGPT escalation state; callers return immediately and cannot launch
     /// a second provider turn.
-    fn fail_closed_codex_thread_mismatch(
-        &self,
+    async fn fail_closed_codex_thread_mismatch(
+        &mut self,
+        handle: Option<&ProviderTurnHandleV1>,
+        terminal: bool,
     ) -> Result<AutonomousControllerOutcomeV1, RuntimeError> {
+        let mut snapshot = self
+            .store
+            .load_session(&self.session_id)
+            .map_err(RuntimeError::from)?;
+        // The mismatched child may already have modified approved outputs.
+        // A later canonical turn must never certify those unprofiled bytes.
+        snapshot.codex_turn_profile_violation = true;
+        self.store
+            .save_session(&snapshot)
+            .map_err(RuntimeError::from)?;
+        if snapshot.current_task_id.is_some() {
+            self.set_current_task_state(AutonomousQueueTaskStateV1::Failed)?;
+        }
         self.store
             .append_event(
                 &self.session_id,
                 "codex_thread_identity_mismatch",
-                "provider-reported Codex thread differed from the expected canonical binding",
+                "provider-reported Codex thread differed from the expected canonical binding; task output is contaminated",
             )
             .map_err(RuntimeError::from)?;
+        if !terminal {
+            let Some(handle) = handle else {
+                return Ok(AutonomousControllerOutcomeV1 {
+                    state: AutonomousSessionStateV1::Running,
+                    provider_events: 0,
+                    verification: None,
+                    authoritative_diff: None,
+                    final_review: None,
+                });
+            };
+            if !self.cancel_or_observe_terminal(handle).await {
+                return Ok(AutonomousControllerOutcomeV1 {
+                    state: AutonomousSessionStateV1::Running,
+                    provider_events: 0,
+                    verification: None,
+                    authoritative_diff: None,
+                    final_review: None,
+                });
+            }
+        }
         self.escalate("codex_provider_thread_identity_mismatch")
+    }
+
+    async fn cancel_or_observe_terminal(&mut self, handle: &ProviderTurnHandleV1) -> bool {
+        if self.provider.capabilities().supports_cancellation {
+            let _ = self.provider.cancel(handle).await;
+        }
+        self.provider
+            .poll_events(handle, 0)
+            .await
+            .is_ok_and(|batch| batch.terminal)
     }
 
     fn persist_handle(
@@ -2658,6 +2911,16 @@ mod tests {
     };
     use crate::delegated::worker_provider::{FakeWorkerProviderV1, ProviderFuture, ProviderIdV1};
 
+    fn completed_codex_profile(thread_id: &str, turn_id: &TurnId) -> CodexCliTurnProfileEvidenceV1 {
+        CodexCliTurnProfileEvidenceV1 {
+            codex_thread_id: thread_id.into(),
+            codex_turn_id: turn_id.as_str().into(),
+            model_id: CATDESK_REQUIRED_CODEX_MODEL_V1.into(),
+            reasoning_effort: CATDESK_REQUIRED_CODEX_REASONING_EFFORT_V1.into(),
+            evidence_sha256: "a".repeat(64),
+        }
+    }
+
     struct RateLimitedProvider {
         next_handle: u64,
         return_rate_limit: bool,
@@ -2748,6 +3011,7 @@ mod tests {
                         next_cursor: 1,
                         terminal: true,
                         provider_session_id: Some(handle.provider_session_id.clone()),
+                        codex_turn_profile: None,
                     })
                 } else {
                     Ok(ProviderEventBatchV1 {
@@ -2761,6 +3025,7 @@ mod tests {
                         next_cursor: 1,
                         terminal: true,
                         provider_session_id: Some(handle.provider_session_id.clone()),
+                        codex_turn_profile: None,
                     })
                 }
             })
@@ -2920,6 +3185,11 @@ mod tests {
                     next_cursor: 1,
                     terminal: true,
                     provider_session_id: Some(handle.provider_session_id.clone()),
+                    codex_turn_profile: (handle.provider_id == ProviderIdV1::CodexCli
+                        && text == "completed")
+                        .then(|| {
+                            completed_codex_profile(&handle.provider_session_id, &handle.turn_id)
+                        }),
                 })
             })
         }
@@ -3099,6 +3369,7 @@ mod tests {
                     next_cursor: 1,
                     terminal: true,
                     provider_session_id: Some(handle.provider_session_id.clone()),
+                    codex_turn_profile: None,
                 })
             })
         }
@@ -3151,6 +3422,15 @@ mod tests {
     struct CanonicalCodexProvider {
         reported_thread_id: String,
         poll_reported_thread_id: String,
+        effective_model: String,
+        effective_effort: String,
+        emit_turn_profile: bool,
+        fail_authority_boundary: bool,
+        poll_terminal: bool,
+        supports_cancellation: bool,
+        cancel_succeeds: bool,
+        cancel_calls: u32,
+        write_output_path: Option<std::path::PathBuf>,
         start_calls: u32,
         resume_sessions: Vec<String>,
         next_handle: u32,
@@ -3161,6 +3441,15 @@ mod tests {
             Self {
                 reported_thread_id: reported_thread_id.into(),
                 poll_reported_thread_id: reported_thread_id.into(),
+                effective_model: CATDESK_REQUIRED_CODEX_MODEL_V1.into(),
+                effective_effort: CATDESK_REQUIRED_CODEX_REASONING_EFFORT_V1.into(),
+                emit_turn_profile: true,
+                fail_authority_boundary: false,
+                poll_terminal: true,
+                supports_cancellation: false,
+                cancel_succeeds: true,
+                cancel_calls: 0,
+                write_output_path: None,
                 start_calls: 0,
                 resume_sessions: Vec::new(),
                 next_handle: 1,
@@ -3171,13 +3460,53 @@ mod tests {
             Self {
                 reported_thread_id: handle_thread_id.into(),
                 poll_reported_thread_id: poll_thread_id.into(),
+                effective_model: CATDESK_REQUIRED_CODEX_MODEL_V1.into(),
+                effective_effort: CATDESK_REQUIRED_CODEX_REASONING_EFFORT_V1.into(),
+                emit_turn_profile: true,
+                fail_authority_boundary: false,
+                poll_terminal: true,
+                supports_cancellation: false,
+                cancel_succeeds: true,
+                cancel_calls: 0,
+                write_output_path: None,
                 start_calls: 0,
                 resume_sessions: Vec::new(),
                 next_handle: 1,
             }
         }
 
+        fn with_effective_profile(mut self, model: &str, effort: &str) -> Self {
+            self.effective_model = model.into();
+            self.effective_effort = effort.into();
+            self
+        }
+
+        fn without_turn_profile(mut self) -> Self {
+            self.emit_turn_profile = false;
+            self
+        }
+
+        fn with_authority_boundary_failure(mut self) -> Self {
+            self.fail_authority_boundary = true;
+            self
+        }
+
+        fn with_nonterminal_poll(mut self) -> Self {
+            self.poll_terminal = false;
+            self
+        }
+
+        fn with_cancel_result(mut self, succeeds: bool) -> Self {
+            self.supports_cancellation = true;
+            self.cancel_succeeds = succeeds;
+            self
+        }
+
         fn handle(&mut self, request: WorkerProviderTurnRequestV1) -> ProviderTurnHandleV1 {
+            if let Some(path) = &self.write_output_path {
+                std::fs::write(path, "pub const SOL_OUTPUT: u8 = 1;\n")
+                    .expect("fixture provider output");
+            }
             let handle = ProviderTurnHandleV1 {
                 provider_id: ProviderIdV1::CodexCli,
                 handle_id: format!("canonical-codex-{}", self.next_handle),
@@ -3202,7 +3531,7 @@ mod tests {
                 supports_streaming: true,
                 supports_native_tool_calls: false,
                 supports_session_continuity: true,
-                supports_cancellation: false,
+                supports_cancellation: self.supports_cancellation,
                 context_limit: 1024,
                 output_limit: 1024,
             }
@@ -3223,6 +3552,11 @@ mod tests {
         ) -> ProviderFuture<'a, ProviderTurnHandleV1> {
             Box::pin(async move {
                 self.start_calls += 1;
+                if self.fail_authority_boundary {
+                    return Err(RuntimeError::Validation(
+                        "Sol Codex writable workspace overlaps host authority".into(),
+                    ));
+                }
                 Ok(self.handle(request))
             })
         }
@@ -3234,6 +3568,11 @@ mod tests {
             Box::pin(async move {
                 self.resume_sessions
                     .push(request.provider_session.provider_session_id.clone());
+                if self.fail_authority_boundary {
+                    return Err(RuntimeError::Validation(
+                        "Sol Codex writable workspace overlaps host authority".into(),
+                    ));
+                }
                 Ok(self.handle(request))
             })
         }
@@ -3248,19 +3587,49 @@ mod tests {
                     events: vec![NormalizedProviderEventV1 {
                         provider_id: "codex-cli".into(),
                         turn_id: handle.turn_id.clone(),
-                        kind: NormalizedProviderEventKind::CompletionClaim,
-                        text: Some("completed".into()),
+                        kind: if self.poll_terminal {
+                            NormalizedProviderEventKind::CompletionClaim
+                        } else {
+                            NormalizedProviderEventKind::TextDelta
+                        },
+                        text: Some(
+                            if self.poll_terminal {
+                                "completed"
+                            } else {
+                                "running"
+                            }
+                            .into(),
+                        ),
                         tool_call: None,
                     }],
                     next_cursor: 1,
-                    terminal: true,
+                    terminal: self.poll_terminal,
                     provider_session_id: Some(self.poll_reported_thread_id.clone()),
+                    codex_turn_profile: (self.emit_turn_profile && self.poll_terminal).then(|| {
+                        CodexCliTurnProfileEvidenceV1 {
+                            codex_thread_id: self.poll_reported_thread_id.clone(),
+                            codex_turn_id: handle.turn_id.as_str().into(),
+                            model_id: self.effective_model.clone(),
+                            reasoning_effort: self.effective_effort.clone(),
+                            evidence_sha256: "b".repeat(64),
+                        }
+                    }),
                 })
             })
         }
 
         fn cancel<'a>(&'a mut self, _handle: &'a ProviderTurnHandleV1) -> ProviderFuture<'a, ()> {
-            Box::pin(async { Ok(()) })
+            Box::pin(async move {
+                self.cancel_calls += 1;
+                if self.cancel_succeeds {
+                    self.poll_terminal = true;
+                    Ok(())
+                } else {
+                    Err(RuntimeError::Provider(
+                        "fixture cancellation pending".into(),
+                    ))
+                }
+            })
         }
 
         fn status<'a>(&'a self) -> ProviderFuture<'a, ProviderHealthV1> {
@@ -3569,6 +3938,466 @@ mod tests {
             },
             session_id,
         )
+    }
+
+    fn sol_codex_controller(
+        provider: CanonicalCodexProvider,
+    ) -> AutonomousControllerV1<CanonicalCodexProvider, Verifier> {
+        let mut controller =
+            canonical_codex_controller(provider, vec![VerificationStatusV1::Passed]);
+        let mut contract = controller.policy.contract().clone();
+        let workspace = contract.workspace.clone();
+        std::fs::create_dir_all(workspace.join(".catdesk")).expect("autonomy parent");
+        std::fs::rename(workspace.join("state"), workspace.join(".catdesk/autonomy"))
+            .expect("production autonomy state location");
+        controller.store = AutonomousStateStoreV1::open(workspace.join(".catdesk/autonomy"))
+            .expect("production autonomy store");
+        std::fs::create_dir_all(workspace.join("wake/src")).expect("Wake source directory");
+        std::fs::write(
+            workspace.join("Cargo.toml"),
+            "[package]\nname='fixture'\nversion='0.1.0'\n",
+        )
+        .expect("workspace manifest");
+        std::fs::write(workspace.join("Cargo.lock"), "version = 4\n").expect("workspace lockfile");
+        std::fs::write(
+            workspace.join("wake/Cargo.toml"),
+            "[package]\nname='fixture-wake'\nversion='0.1.0'\n",
+        )
+        .expect("Wake manifest");
+        std::fs::write(
+            workspace.join("wake/src/lib.rs"),
+            "pub const WAKE: u8 = 1;\n",
+        )
+        .expect("Wake source");
+        contract.provider_policy.primary_model = SOL_MEDIUM_MODEL.into();
+        contract.task_id = "work".into();
+        contract.completion_artifact_ids = vec!["src/sol-output.rs".into()];
+        controller.provider.write_output_path = Some(workspace.join("src/sol-output.rs"));
+        controller
+            .store
+            .save_contract("session-1", &contract)
+            .expect("Sol contract");
+        controller.policy = AutonomousPolicyEngineV1::new(contract).expect("Sol policy");
+        let mut snapshot = controller.store.load_session("session-1").expect("session");
+        snapshot.approved_contract_hash = Some(controller.policy.contract_hash().into());
+        snapshot.codex_routing_telemetry = Some(CodexRoutingTelemetryV1 {
+            observed_at_unix: 10,
+            source: "codex-app-server/account-rateLimits-read".into(),
+            selected_model: Some(SOL_MEDIUM_MODEL.into()),
+            reasoning_effort: Some("medium".into()),
+            ..Default::default()
+        });
+        controller
+            .store
+            .save_session(&snapshot)
+            .expect("Sol routing gate");
+        controller
+    }
+
+    #[tokio::test]
+    async fn sol_medium_native_turn_profile_is_required_and_bound_to_review_checkpoint() {
+        let mut controller = sol_codex_controller(
+            CanonicalCodexProvider::new("canonical-project-thread")
+                .with_effective_profile(SOL_MEDIUM_MODEL, "medium"),
+        );
+        assert_eq!(
+            controller
+                .run_once(10)
+                .await
+                .expect("verified Sol turn")
+                .state,
+            AutonomousSessionStateV1::CompletedVerified
+        );
+        let checkpoint = controller
+            .store
+            .load_passed_verification_checkpoint("session-1")
+            .expect("checkpoint")
+            .expect("durable review authority");
+        let profile = checkpoint
+            .codex_turn_profile
+            .expect("exact native turn profile");
+        assert_eq!(profile.model_id, SOL_MEDIUM_MODEL);
+        assert_eq!(profile.reasoning_effort, "medium");
+        assert_eq!(profile.codex_thread_id, "canonical-project-thread");
+        assert_eq!(
+            controller.store.all_review_inbox().expect("reviews").len(),
+            1
+        );
+    }
+
+    #[test]
+    fn sol_contract_cannot_be_completed_as_direct_chatgpt_work() {
+        let mut controller = sol_codex_controller(
+            CanonicalCodexProvider::new("canonical-project-thread")
+                .with_effective_profile(SOL_MEDIUM_MODEL, "medium"),
+        );
+        assert!(controller.claim_direct_chatgpt_work(10).is_err());
+        let mut snapshot = controller.store.load_session("session-1").expect("session");
+        snapshot.state = AutonomousSessionStateV1::WaitingForChatgpt;
+        snapshot.current_task_id = Some("work".into());
+        snapshot.provider_turn_count = 1;
+        controller
+            .store
+            .save_session(&snapshot)
+            .expect("escalated state");
+        assert!(controller.finalize_direct_chatgpt_work(11).is_err());
+        assert!(
+            controller
+                .store
+                .load_completion_artifacts("session-1")
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn sol_worker_authority_failure_after_prepare_becomes_durable_attention() {
+        let mut controller = sol_codex_controller(
+            CanonicalCodexProvider::new("canonical-project-thread")
+                .with_effective_profile(SOL_MEDIUM_MODEL, "medium")
+                .with_authority_boundary_failure(),
+        );
+        let outcome = controller.run_once(10).await.expect("authority hold");
+        assert_eq!(outcome.state, AutonomousSessionStateV1::WaitingForChatgpt);
+        assert_eq!(controller.provider.resume_sessions.len(), 1);
+        assert!(
+            controller
+                .store
+                .load_completion_artifacts("session-1")
+                .is_err()
+        );
+        assert_eq!(controller.store.all_review_inbox().expect("inbox").len(), 1);
+    }
+
+    #[tokio::test]
+    async fn sol_downgrade_poison_is_sticky_across_requeue_and_direct_finalization() {
+        let mut controller =
+            sol_codex_controller(CanonicalCodexProvider::new("canonical-project-thread"));
+        assert_eq!(
+            controller
+                .run_once(10)
+                .await
+                .expect("downgrade rejected")
+                .state,
+            AutonomousSessionStateV1::WaitingForChatgpt
+        );
+        let mut snapshot = controller.store.load_session("session-1").expect("session");
+        assert!(snapshot.codex_turn_profile_violation);
+        assert_eq!(controller.provider.resume_sessions.len(), 1);
+        assert!(
+            controller
+                .store
+                .load_completion_artifacts("session-1")
+                .is_err()
+        );
+        snapshot.state = AutonomousSessionStateV1::Queued;
+        controller
+            .store
+            .save_session(&snapshot)
+            .expect("simulated requeue");
+        controller.provider.effective_model = SOL_MEDIUM_MODEL.into();
+        controller.provider.effective_effort = "medium".into();
+        assert_eq!(
+            controller
+                .run_once(11)
+                .await
+                .expect("sticky rejection")
+                .state,
+            AutonomousSessionStateV1::WaitingForChatgpt
+        );
+        assert_eq!(controller.provider.resume_sessions.len(), 1);
+        assert!(controller.finalize_direct_chatgpt_work(12).is_err());
+        assert!(
+            controller
+                .store
+                .load_completion_artifacts("session-1")
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn sol_missing_native_turn_profile_cannot_publish_review() {
+        let mut controller = sol_codex_controller(
+            CanonicalCodexProvider::new("canonical-project-thread").without_turn_profile(),
+        );
+        assert_eq!(
+            controller
+                .run_once(10)
+                .await
+                .expect("missing profile rejected")
+                .state,
+            AutonomousSessionStateV1::WaitingForChatgpt
+        );
+        assert!(
+            controller
+                .store
+                .load_session("session-1")
+                .expect("session")
+                .codex_turn_profile_violation
+        );
+        assert!(
+            controller
+                .store
+                .load_completion_artifacts("session-1")
+                .is_err()
+        );
+        assert!(
+            !controller
+                .store
+                .all_review_inbox()
+                .expect("inbox")
+                .iter()
+                .any(|record| record.state == AutonomousSessionStateV1::CompletedVerified)
+        );
+    }
+
+    #[tokio::test]
+    async fn interrupted_sol_turn_cannot_be_requeued_or_reviewed_after_workspace_mutation() {
+        let mut controller = sol_codex_controller(
+            CanonicalCodexProvider::new("canonical-project-thread")
+                .with_effective_profile(SOL_MEDIUM_MODEL, "medium")
+                .with_nonterminal_poll(),
+        );
+        assert_eq!(
+            controller.run_once(10).await.expect("first Sol poll").state,
+            AutonomousSessionStateV1::Running
+        );
+        assert!(
+            controller
+                .policy
+                .contract()
+                .workspace
+                .join("src/sol-output.rs")
+                .is_file()
+        );
+        let recovered = controller
+            .store
+            .recover_interrupted_sessions()
+            .expect("simulate process restart");
+        assert_eq!(recovered.len(), 1);
+        assert!(recovered[0].codex_turn_profile_violation);
+        controller
+            .store
+            .execution_accounting_store()
+            .expect("accounting")
+            .interrupt_open_spans("session-1")
+            .expect("interrupted provider span");
+        let mut snapshot = controller
+            .store
+            .load_session("session-1")
+            .expect("recovered");
+        snapshot.state = AutonomousSessionStateV1::Queued;
+        controller
+            .store
+            .save_session(&snapshot)
+            .expect("operator START replay");
+        assert_eq!(
+            reconcile_restart_task_state(&controller.store, "session-1")
+                .expect("no contaminated requeue"),
+            RestartTaskReconciliationV1::Contaminated
+        );
+        assert_eq!(
+            controller
+                .store
+                .load_queue("session-1")
+                .expect("queue")
+                .tasks[0]
+                .state,
+            AutonomousQueueTaskStateV1::Failed
+        );
+        assert_eq!(
+            controller.run_once(11).await.expect("sticky hold").state,
+            AutonomousSessionStateV1::WaitingForChatgpt
+        );
+        assert_eq!(controller.provider.resume_sessions.len(), 1);
+        assert!(
+            controller
+                .store
+                .load_completion_artifacts("session-1")
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn queued_interrupted_sol_turn_is_poisoned_before_restart_reconciliation() {
+        let mut controller = sol_codex_controller(
+            CanonicalCodexProvider::new("canonical-project-thread")
+                .with_effective_profile(SOL_MEDIUM_MODEL, "medium")
+                .with_nonterminal_poll(),
+        );
+        assert_eq!(
+            controller.run_once(10).await.expect("first Sol poll").state,
+            AutonomousSessionStateV1::Running
+        );
+        controller
+            .store
+            .execution_accounting_store()
+            .expect("accounting")
+            .interrupt_open_spans("session-1")
+            .expect("interrupted provider span");
+        let mut snapshot = controller.store.load_session("session-1").expect("state");
+        snapshot.state = AutonomousSessionStateV1::Queued;
+        controller
+            .store
+            .save_session(&snapshot)
+            .expect("queued replay");
+        assert_eq!(
+            reconcile_restart_task_state(&controller.store, "session-1")
+                .expect("Sol interruption held"),
+            RestartTaskReconciliationV1::Contaminated
+        );
+        assert!(
+            controller
+                .store
+                .load_session("session-1")
+                .expect("state")
+                .codex_turn_profile_violation
+        );
+        assert_eq!(
+            controller
+                .store
+                .load_queue("session-1")
+                .expect("queue")
+                .tasks[0]
+                .state,
+            AutonomousQueueTaskStateV1::Failed
+        );
+    }
+
+    #[tokio::test]
+    async fn mismatched_running_sol_thread_holds_child_until_cancel_succeeds() {
+        let mut controller = sol_codex_controller(
+            CanonicalCodexProvider::with_poll_thread_id(
+                "canonical-project-thread",
+                "foreign-project-thread",
+            )
+            .with_effective_profile(SOL_MEDIUM_MODEL, "medium")
+            .with_nonterminal_poll()
+            .with_cancel_result(false),
+        );
+        assert_eq!(
+            controller.run_once(10).await.expect("mismatch hold").state,
+            AutonomousSessionStateV1::Running
+        );
+        assert_eq!(controller.provider.cancel_calls, 1);
+        assert!(
+            controller
+                .store
+                .load_session("session-1")
+                .expect("state")
+                .codex_turn_profile_violation
+        );
+        assert_eq!(
+            controller
+                .store
+                .load_queue("session-1")
+                .expect("queue")
+                .tasks[0]
+                .state,
+            AutonomousQueueTaskStateV1::Failed
+        );
+        assert!(
+            controller
+                .store
+                .all_review_inbox()
+                .expect("inbox")
+                .is_empty()
+        );
+        controller.provider.cancel_succeeds = true;
+        assert_eq!(
+            controller
+                .run_once(11)
+                .await
+                .expect("cancel then escalate")
+                .state,
+            AutonomousSessionStateV1::WaitingForChatgpt
+        );
+        assert_eq!(controller.provider.cancel_calls, 2);
+        let mut snapshot = controller.store.load_session("session-1").expect("state");
+        snapshot.state = AutonomousSessionStateV1::Queued;
+        controller
+            .store
+            .save_session(&snapshot)
+            .expect("requeue attempt");
+        assert_eq!(
+            controller.run_once(12).await.expect("sticky hold").state,
+            AutonomousSessionStateV1::WaitingForChatgpt
+        );
+        assert_eq!(controller.provider.resume_sessions.len(), 1);
+        assert!(
+            controller
+                .store
+                .load_completion_artifacts("session-1")
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn legacy_terra_completion_keeps_its_existing_thread_gate_without_rollout_profile() {
+        let mut controller = canonical_codex_controller(
+            CanonicalCodexProvider::new("canonical-project-thread").without_turn_profile(),
+            vec![VerificationStatusV1::Passed],
+        );
+        assert_eq!(
+            controller
+                .run_once(10)
+                .await
+                .expect("legacy Terra turn")
+                .state,
+            AutonomousSessionStateV1::CompletedVerified
+        );
+        assert!(
+            controller
+                .store
+                .load_passed_verification_checkpoint("session-1")
+                .expect("checkpoint")
+                .expect("legacy checkpoint")
+                .codex_turn_profile
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn sol_terminal_rate_limit_without_profile_poison_blocks_fallback() {
+        let mut controller = route_controller(CodexRouteTestProvider::new(false, true));
+        let mut contract = controller.policy.contract().clone();
+        contract.provider_policy.primary_model = SOL_MEDIUM_MODEL.into();
+        controller
+            .store
+            .save_contract("session-1", &contract)
+            .expect("Sol contract");
+        controller.policy = AutonomousPolicyEngineV1::new(contract).expect("Sol policy");
+        let mut snapshot = controller.store.load_session("session-1").expect("session");
+        snapshot.approved_contract_hash = Some(controller.policy.contract_hash().into());
+        snapshot.codex_routing_telemetry = Some(CodexRoutingTelemetryV1 {
+            observed_at_unix: 10,
+            source: "codex-app-server/account-rateLimits-read".into(),
+            selected_model: Some(SOL_MEDIUM_MODEL.into()),
+            reasoning_effort: Some("medium".into()),
+            ..Default::default()
+        });
+        controller.store.save_session(&snapshot).expect("Sol gate");
+        assert_eq!(
+            controller
+                .run_once(10)
+                .await
+                .expect("rate limit rejected")
+                .state,
+            AutonomousSessionStateV1::WaitingForChatgpt
+        );
+        assert!(
+            controller
+                .store
+                .load_session("session-1")
+                .expect("sticky violation")
+                .codex_turn_profile_violation
+        );
+        assert_eq!(controller.provider.fallback_activations, 0);
+        assert!(
+            controller
+                .store
+                .load_completion_artifacts("session-1")
+                .is_err()
+        );
     }
 
     #[tokio::test]
@@ -3990,6 +4819,10 @@ mod tests {
     #[test]
     fn direct_chatgpt_claim_finalizes_through_normal_review_event() {
         let mut controller = setup(VerificationStatusV1::Passed, "diff --git direct-work");
+        controller
+            .store
+            .save_contract("session-1", controller.policy.contract())
+            .expect("approved direct contract");
         let contract_hash = controller.policy.contract_hash().to_string();
         let mut snapshot = controller.store.load_session("session-1").expect("state");
         snapshot.state = AutonomousSessionStateV1::Queued;
@@ -4549,6 +5382,7 @@ mod tests {
                     next_cursor: 1,
                     terminal: true,
                     provider_session_id: Some("captured-provider-thread".into()),
+                    codex_turn_profile: None,
                 },
                 10,
             )

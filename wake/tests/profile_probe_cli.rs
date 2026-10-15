@@ -1,3 +1,5 @@
+#![cfg(feature = "test-support")]
+
 use catdesk_wake::{
     runtime,
     store::{Store, atomic},

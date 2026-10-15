@@ -195,6 +195,10 @@ impl HostLease {
     pub fn owner(&self) -> &str {
         &self.owner
     }
+
+    pub(crate) fn lock_file(&self) -> &File {
+        &self._lock
+    }
 }
 impl Store {
     pub fn open(root: &Path) -> Result<Self> {
@@ -213,7 +217,7 @@ impl Store {
     /// root. This helper accepts one already-existing canonical trusted parent,
     /// then applies the same non-link/non-reparse directory checks to every
     /// descendant it creates beneath that parent.
-    #[cfg(feature = "test-support")]
+    #[cfg(any(test, feature = "test-support"))]
     pub fn open_scoped_for_test(root: &Path, trusted_parent: &Path) -> Result<Self> {
         let trusted = fs::canonicalize(trusted_parent).map_err(|_| "CONFIG_ROOT_UNAVAILABLE")?;
         if !trusted.is_absolute() || !root.is_absolute() {
@@ -1247,7 +1251,7 @@ fn safe_directories(path: &Path) -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "test-support")]
+#[cfg(any(test, feature = "test-support"))]
 fn safe_directories_beneath(trusted_parent: &Path, path: &Path) -> Result<()> {
     if !trusted_parent.is_absolute() || !path.is_absolute() {
         return Err("CONFIG_ROOT_NOT_ABSOLUTE".into());

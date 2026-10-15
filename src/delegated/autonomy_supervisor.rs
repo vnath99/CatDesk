@@ -2768,6 +2768,15 @@ impl AutonomousSupervisorV1 {
                 }
                 Ok(result)
             }
+            RestartTaskReconciliationV1::Contaminated => {
+                if let Some(object) = result.as_object_mut() {
+                    object.insert(
+                        "restartReconciliation".into(),
+                        Value::String("CONTAMINATED_REQUIRES_NEW_SESSION".into()),
+                    );
+                }
+                Ok(result)
+            }
             RestartTaskReconciliationV1::NotApplicable
             | RestartTaskReconciliationV1::AlreadyReady => Ok(result),
         }

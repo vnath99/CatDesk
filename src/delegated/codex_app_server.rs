@@ -316,7 +316,11 @@ pub struct CodexRoutingTelemetryV1 {
     /// method for credits or billing.
     pub credit_balance_metadata: Option<String>,
     pub earned_reset_metadata: Option<String>,
+    /// Current thread configuration from `thread/resume`, not a readback of
+    /// the model used by any particular completed turn.
     pub selected_model: Option<String>,
+    /// Current thread configuration. A completed turn needs separate,
+    /// turn-bound evidence before its effective effort can be asserted.
     pub reasoning_effort: Option<String>,
     pub thread_token_usage: Option<String>,
 }
@@ -1767,6 +1771,57 @@ mod tests {
             transport.methods,
             ["account/rateLimits/read", "thread/read", "thread/resume"]
         );
+    }
+
+    #[test]
+    fn refreshed_thread_profile_does_not_prove_a_completed_turn_profile() {
+        // An actual Codex thread can contain turns with different efforts.
+        // The installed app-server reports model/effort on the thread, while
+        // completed turn entries carry identity and status without either
+        // profile field. Keep this response shape from being interpreted as
+        // an exact-turn readback during review or Wake finalization.
+        let mut transport = FakeTransport {
+            replies: VecDeque::from([
+                json!({"rateLimits":[]}),
+                json!({"thread":{
+                    "id":"thread-1",
+                    "cwd":"C:/work/project",
+                    "canAcceptDirectInput":null,
+                    "model":"gpt-6.1-sol",
+                    "reasoningEffort":"medium",
+                    "turns":[
+                        {"id":"earlier-turn","status":"completed"},
+                        {"id":"latest-turn","status":"completed"}
+                    ]
+                }}),
+                json!({
+                    "thread":{
+                        "id":"thread-1",
+                        "cwd":"C:/work/project",
+                        "canAcceptDirectInput":true,
+                        "status":{"type":"idle"}
+                    },
+                    "cwd":"C:/work/project",
+                    "model":"gpt-6.1-sol",
+                    "reasoningEffort":"medium"
+                }),
+            ]),
+            methods: Vec::new(),
+        };
+        let telemetry =
+            CodexAppServerReadClientV1::refresh_telemetry(&mut transport, 1, Some("thread-1"))
+                .expect("current thread configuration");
+        assert_eq!(telemetry.selected_model.as_deref(), Some("gpt-6.1-sol"));
+        assert_eq!(telemetry.reasoning_effort.as_deref(), Some("medium"));
+        assert_eq!(
+            transport.methods,
+            ["account/rateLimits/read", "thread/read", "thread/resume"]
+        );
+
+        let persisted = serde_json::to_value(&telemetry).expect("bounded telemetry");
+        assert!(persisted.get("turnId").is_none());
+        assert!(persisted.get("effectiveTurnModel").is_none());
+        assert!(persisted.get("effectiveTurnReasoningEffort").is_none());
     }
 
     #[test]

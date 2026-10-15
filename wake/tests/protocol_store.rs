@@ -1,3 +1,5 @@
+#![cfg(feature = "test-support")]
+
 use catdesk_wake::{
     protocol::{Event, validate_target},
     store::{Phase, Receipt, Store, now},

@@ -5,7 +5,70 @@ $wakeSource = $PSScriptRoot
 $repoSource = Split-Path -Parent $wakeSource
 $wakeRoot = Join-Path $env:LOCALAPPDATA 'CatDeskWake'
 $versionsRoot = Join-Path $wakeRoot 'versions'
-New-Item -ItemType Directory -Path $versionsRoot -Force | Out-Null
+
+function Assert-WakeInstallStoreAuthority {
+    # The connected host may resolve the same displayed path to a different
+    # physical store than this installer process. Check the exact live lock
+    # object before creating even a staging directory in the caller's view.
+    # Native Wake commands must also verify this identity in their own process
+    # before mutation; a PowerShell check cannot pin their later pathname opens.
+    $hosts = @(Get-CimInstance Win32_Process -Filter "Name = 'CatDeskWakeHost.exe'")
+    if ($hosts.Count -ne 1) { throw 'WAKE_STORE_AUTHORITY_HOST_NOT_UNIQUE' }
+    $hostProcess = $hosts[0]
+    $imagePath = [string]$hostProcess.ExecutablePath
+    $pointerPath = Join-Path $wakeRoot 'current.json'
+    if (-not (Test-Path -LiteralPath $pointerPath -PathType Leaf)) {
+        throw 'WAKE_STORE_AUTHORITY_POINTER_UNAVAILABLE'
+    }
+    $pointerItem = Get-Item -LiteralPath $pointerPath
+    if ($pointerItem.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw 'WAKE_STORE_AUTHORITY_POINTER_INVALID'
+    }
+    $pointer = Get-Content -LiteralPath $pointerPath -Raw | ConvertFrom-Json
+    $directory = [string]$pointer.directory
+    $hostHash = [string]$pointer.hostSha256
+    if ($pointer.schemaVersion -ne 1 -or
+        $directory -notmatch '^1\.0\.0-dev\.\d+-[0-9a-f]{12}-[0-9a-f]{12}$' -or
+        $hostHash -notmatch '^[0-9a-fA-F]{64}$') {
+        throw 'WAKE_STORE_AUTHORITY_POINTER_INVALID'
+    }
+    $expectedImage = Join-Path (Join-Path $versionsRoot $directory) 'CatDeskWakeHost.exe'
+    if (-not [string]::Equals($imagePath, $expectedImage, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'WAKE_STORE_AUTHORITY_PROCESS_IMAGE_MISMATCH'
+    }
+    $imageItem = Get-Item -LiteralPath $expectedImage
+    if ($imageItem.Attributes -band [IO.FileAttributes]::ReparsePoint -or
+        (Get-FileHash -LiteralPath $expectedImage -Algorithm SHA256).Hash -ine $hostHash) {
+        throw 'WAKE_STORE_AUTHORITY_PROCESS_IMAGE_HASH_MISMATCH'
+    }
+    $pidBefore = [int]$hostProcess.ProcessId
+    $startedBefore = $hostProcess.CreationDate.ToUniversalTime().Ticks
+    $objectIdentity = @(
+        & (Join-Path $wakeSource 'check-install-store-authority.ps1') `
+            -WakeRoot $wakeRoot -HostProcessId $pidBefore -RequireLiveRootProof
+    )
+    if ($objectIdentity.Count -ne 1 -or
+        $objectIdentity[0] -notmatch '^[0-9a-f]{64}$') {
+        throw 'WAKE_STORE_AUTHORITY_PROBE_INVALID'
+    }
+    $hostAfter = Get-CimInstance Win32_Process -Filter "ProcessId = $pidBefore"
+    if ($null -eq $hostAfter -or
+        $hostAfter.CreationDate.ToUniversalTime().Ticks -ne $startedBefore -or
+        -not [string]::Equals([string]$hostAfter.ExecutablePath, $imagePath,
+            [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'WAKE_STORE_AUTHORITY_PROCESS_CHANGED'
+    }
+    return [pscustomobject]@{
+        Fingerprint = $objectIdentity[0]
+        HostProcessId = $pidBefore
+        HostStartedTicks = $startedBefore
+    }
+}
+
+$prebuildStoreIdentity = $null
+if (-not $BuildOnly) {
+    $prebuildStoreIdentity = Assert-WakeInstallStoreAuthority
+}
 
 & cargo build --release --locked --offline --manifest-path (Join-Path $wakeSource 'Cargo.toml')
 if ($LASTEXITCODE -ne 0) { throw 'Wake Rust build failed' }
@@ -18,7 +81,31 @@ if ($RebuildGui -or -not (Test-Path -LiteralPath $guiBuild -PathType Leaf)) {
 }
 if ($BuildOnly) { return }
 
+$postbuildStoreIdentity = Assert-WakeInstallStoreAuthority
+if ($postbuildStoreIdentity.Fingerprint -ne $prebuildStoreIdentity.Fingerprint -or
+    $postbuildStoreIdentity.HostProcessId -ne $prebuildStoreIdentity.HostProcessId -or
+    $postbuildStoreIdentity.HostStartedTicks -ne $prebuildStoreIdentity.HostStartedTicks) {
+    throw 'WAKE_STORE_AUTHORITY_CHANGED_DURING_BUILD'
+}
+function Assert-WakeInstallStoreStillSame {
+    if ($null -ne $pinnedStore) { $pinnedStore.Verify() }
+    $observed = Assert-WakeInstallStoreAuthority
+    if ($observed.Fingerprint -ne $postbuildStoreIdentity.Fingerprint -or
+        $observed.HostProcessId -ne $postbuildStoreIdentity.HostProcessId -or
+        $observed.HostStartedTicks -ne $postbuildStoreIdentity.HostStartedTicks) {
+        throw 'WAKE_STORE_AUTHORITY_CHANGED_DURING_HANDOFF'
+    }
+}
 $hostBuild = Join-Path $wakeSource 'target\release\CatDeskWakeHost.exe'
+& $hostBuild install-authority-probe `
+    $postbuildStoreIdentity.HostProcessId $postbuildStoreIdentity.Fingerprint | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'WAKE_STORE_AUTHORITY_NATIVE_PROBE_FAILED' }
+$pinnedStore = [CatDeskWakeInstallStoreAuthority]::Pin(
+    $wakeRoot, $postbuildStoreIdentity.Fingerprint
+)
+try {
+$pinnedStore.PinVersions()
+
 $wakeManifestPath = Join-Path $wakeSource 'Cargo.toml'
 $wakeManifest = [IO.File]::ReadAllText($wakeManifestPath)
 $versionMatch = [regex]::Match(
@@ -70,28 +157,39 @@ try {
         (New-Object Text.UTF8Encoding($false))
     )
 
-    $publicationJson = & $hostBuild publish-reviewed-install $stagingName $installId
+    Assert-WakeInstallStoreStillSame
+    $publicationJson = & $hostBuild publish-reviewed-install $stagingName $installId `
+        $hashes['CatDeskWakeHost.exe'] $hashes['CatDeskBinagotchy.exe'] `
+        $hashes['adapter.py'] $hashes['wake_bridge.py'] `
+        $postbuildStoreIdentity.HostProcessId $postbuildStoreIdentity.Fingerprint
     if ($LASTEXITCODE -ne 0) { throw 'Wake reviewed package publication failed' }
     $publication = $publicationJson | ConvertFrom-Json
     if ($publication.version -ne $version -or $publication.directory -ne $installId) {
         throw 'Wake reviewed package publication readback mismatch'
     }
 } catch {
-    if (Test-Path -LiteralPath $stagingDirectory) {
-        Remove-Item -LiteralPath $stagingDirectory -Recurse -Force
-    }
+    # A failed stage may contain a redirected child. Preserve it for reviewed
+    # cleanup instead of recursively deleting through a mutable pathname.
     throw
 }
 
 $candidateHost = Join-Path $installDirectory 'CatDeskWakeHost.exe'
-& $candidateHost init
+Assert-WakeInstallStoreStillSame
+& $candidateHost install-init `
+    $postbuildStoreIdentity.HostProcessId $postbuildStoreIdentity.Fingerprint
 if ($LASTEXITCODE -ne 0) { throw 'Wake config initialization failed' }
-& $candidateHost set-source $repoSource
+Assert-WakeInstallStoreStillSame
+& $candidateHost install-set-source $repoSource `
+    $postbuildStoreIdentity.HostProcessId $postbuildStoreIdentity.Fingerprint
 if ($LASTEXITCODE -ne 0) { throw 'Wake review-source binding failed' }
 
 # Rust owns the stop -> exact-pointer switch -> desired-state restore
 # transaction under the same exclusive install lease used by publication.
-$handoffOutput = @(& $candidateHost activate-reviewed-install)
+Assert-WakeInstallStoreStillSame
+$handoffOutput = @(& $candidateHost activate-reviewed-install `
+    $hashes['CatDeskWakeHost.exe'] $hashes['CatDeskBinagotchy.exe'] `
+    $hashes['adapter.py'] $hashes['wake_bridge.py'] `
+    $postbuildStoreIdentity.HostProcessId $postbuildStoreIdentity.Fingerprint)
 $activationExitCode = $LASTEXITCODE
 $handoffJson = [string]($handoffOutput | Out-String)
 if ($activationExitCode -ne 0) {
@@ -203,3 +301,6 @@ try {
 
 $installResult | Add-Member -NotePropertyName ShortcutState -NotePropertyValue $shortcutState
 $installResult | ConvertTo-Json -Depth 6
+} finally {
+    $pinnedStore.Dispose()
+}

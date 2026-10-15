@@ -39,7 +39,11 @@ use super::codex_app_server::{
     CodexAppServerLaunchConfigV1, CodexAppServerReadClientV1, CodexAppServerTransportV1,
     CodexContinuityTurnV1, CodexThreadResolutionV1,
 };
-use super::codex_cli::{CodexCliConfigV1, CodexCliProviderV1, CodexCliSandboxV1};
+use super::codex_cli::{
+    CodexCliConfigV1, CodexCliProviderV1, CodexCliSandboxV1,
+    is_sol_worker_authority_boundary_error, validate_sol_worker_launch_boundary,
+};
+use super::codex_model_policy::SOL_MEDIUM_MODEL;
 use super::runtime::{FakeProvider, RuntimeError};
 use super::worker_provider::{
     CodexQwenWorkerProviderV1, FakeWorkerProviderV1, OllamaWorkerProviderV1,
@@ -1477,6 +1481,9 @@ where
         {
             continue;
         }
+        store
+            .validate_completed_review_binding(&record)
+            .map_err(RuntimeError::from)?;
         candidates.push(record.session_id);
     }
     candidates.sort();
@@ -2411,14 +2418,6 @@ fn dispatch_actionable_wake_with_policy(
     else {
         return WakeDispatchOutcome::Terminal;
     };
-    let policy_allows = if let Some(run_id) = delegated_run_id {
-        delegated_wake_policy_allows_dispatch(&store, run_id)
-    } else {
-        wake_policy_allows_dispatch(&store, session_id, outcome)
-    };
-    if !policy_allows {
-        return WakeDispatchOutcome::Terminal;
-    }
     if !matches!(
         outcome.state,
         AutonomousSessionStateV1::CompletedVerified | AutonomousSessionStateV1::WaitingForChatgpt
@@ -2428,6 +2427,23 @@ fn dispatch_actionable_wake_with_policy(
     let Ok(Some(record)) = store.latest_actionable_review_for_session(session_id) else {
         return WakeDispatchOutcome::Terminal;
     };
+    if record.state != outcome.state {
+        return WakeDispatchOutcome::Terminal;
+    }
+    if delegated_run_id.is_none()
+        && record.state == AutonomousSessionStateV1::CompletedVerified
+        && store.validate_completed_review_binding(&record).is_err()
+    {
+        return WakeDispatchOutcome::Terminal;
+    }
+    let policy_allows = if let Some(run_id) = delegated_run_id {
+        delegated_wake_policy_allows_dispatch(&store, run_id)
+    } else {
+        wake_policy_allows_dispatch(&store, session_id, outcome)
+    };
+    if !policy_allows {
+        return WakeDispatchOutcome::Terminal;
+    }
     if crate::wake_protocol_client::selected(workspace) {
         // Queue acknowledgement is deliberately not reported as browser delivery.
         // WakeHost owns retries and exact receipts after this durable handoff.
@@ -2809,6 +2825,33 @@ pub async fn start_or_tick(
             "restart task reconciliation is pending authoritative ownership evidence".into(),
         ));
     }
+    let preflight_contract = preflight_store
+        .load_contract(session_id)
+        .map_err(RuntimeError::from)?;
+    if preflight_contract.provider_policy.primary_model == SOL_MEDIUM_MODEL
+        && preflight_snapshot.provider_route != AutonomousProviderRouteV1::QwenFallbackActive
+        && matches!(
+            preflight_snapshot.state,
+            AutonomousSessionStateV1::Queued | AutonomousSessionStateV1::RateLimited
+        )
+        && validate_sol_worker_launch_boundary(&workspace, &[workspace.join(".catdesk")]).is_err()
+    {
+        let outcome = hold_sol_worker_authority_overlap(
+            &preflight_store,
+            session_id,
+            &preflight_contract.project_id,
+            now_unix(),
+        )?;
+        let immediate_wake = dispatch_actionable_wake(&workspace, session_id, &outcome);
+        ensure_reviewer_wakeup(
+            key,
+            workspace,
+            session_id.into(),
+            Some(immediate_wake),
+            outcome.clone(),
+        );
+        return Ok(outcome);
+    }
     // A fresh host preflight is required at every Codex task boundary. Do not
     // open an app-server while a worker owns a live turn, and do not request
     // Codex metadata while the approved route is already local Qwen.
@@ -2889,6 +2932,112 @@ pub async fn start_or_tick(
         outcome.clone(),
     );
     Ok(outcome)
+}
+
+fn hold_sol_worker_authority_overlap(
+    store: &AutonomousStateStoreV1,
+    session_id: &str,
+    project_id: &str,
+    observed_at_unix: u64,
+) -> Result<AutonomousControllerOutcomeV1, RuntimeError> {
+    const REASON: &str = "sol_worker_host_authority_writable";
+    let snapshot = store.load_session(session_id).map_err(RuntimeError::from)?;
+    if !matches!(
+        snapshot.state,
+        AutonomousSessionStateV1::Queued | AutonomousSessionStateV1::RateLimited
+    ) {
+        return Err(RuntimeError::Validation(
+            "Sol host authority hold requires a queued or rate-limited session".into(),
+        ));
+    }
+    let review_already_written = store
+        .latest_actionable_review_for_session(session_id)
+        .map_err(RuntimeError::from)?
+        .is_some_and(|record| {
+            record.project_id == project_id
+                && record.state == AutonomousSessionStateV1::WaitingForChatgpt
+                && record.reference == "artifacts/escalation.json"
+                && store
+                    .load_escalation(session_id)
+                    .is_ok_and(|packet| packet.reason == REASON)
+        });
+    if !review_already_written {
+        store
+            .write_escalation(
+                session_id,
+                AutonomousSessionStateV1::WaitingForChatgpt,
+                REASON,
+            )
+            .map_err(RuntimeError::from)?;
+        store
+            .append_event(
+                session_id,
+                REASON,
+                "Codex workspace-write can modify the host's autonomous state",
+            )
+            .map_err(RuntimeError::from)?;
+        // Write the actionable inbox item before the WAITING state. If a
+        // crash happens between these atomic files, the still-queued session
+        // retries this preflight and adopts the existing unread item.
+        store
+            .emit_review_inbox_record(
+                session_id,
+                project_id,
+                AutonomousSessionStateV1::WaitingForChatgpt,
+                "chatgpt_decision_required",
+                "artifacts/escalation.json",
+                observed_at_unix,
+            )
+            .map_err(RuntimeError::from)?;
+    }
+    let mut snapshot = store.load_session(session_id).map_err(RuntimeError::from)?;
+    // Prior output in a workspace where the provider could rewrite host
+    // authority cannot be carried into a later Sol verification cycle.
+    if snapshot.provider_turn_count > 0 {
+        snapshot.codex_turn_profile_violation = true;
+    }
+    snapshot.state = AutonomousSessionStateV1::WaitingForChatgpt;
+    snapshot.provider_route = AutonomousProviderRouteV1::WaitingForChatgpt;
+    snapshot.active = true;
+    store.save_session(&snapshot).map_err(RuntimeError::from)?;
+    Ok(AutonomousControllerOutcomeV1 {
+        state: AutonomousSessionStateV1::WaitingForChatgpt,
+        provider_events: 0,
+        verification: None,
+        authoritative_diff: None,
+        final_review: None,
+    })
+}
+
+fn hold_sol_worker_authority_after_start_error(
+    workspace: &Path,
+    session_id: &str,
+    error: &RuntimeError,
+) -> Result<Option<AutonomousControllerOutcomeV1>, RuntimeError> {
+    if !is_sol_worker_authority_boundary_error(error) {
+        return Ok(None);
+    }
+    let store = AutonomousStateStoreV1::open(workspace.join(".catdesk/autonomy"))
+        .map_err(RuntimeError::from)?;
+    let contract = store
+        .load_contract(session_id)
+        .map_err(RuntimeError::from)?;
+    if contract.provider_policy.primary_model != SOL_MEDIUM_MODEL
+        || validate_sol_worker_launch_boundary(workspace, &[workspace.join(".catdesk")]).is_ok()
+    {
+        return Ok(None);
+    }
+    // A launch failure is safe to escalate only while no provider handle is
+    // durably running. Unknown in-flight ownership remains for recovery.
+    let snapshot = store.load_session(session_id).map_err(RuntimeError::from)?;
+    if !matches!(
+        snapshot.state,
+        AutonomousSessionStateV1::Queued | AutonomousSessionStateV1::RateLimited
+    ) {
+        return Ok(None);
+    }
+    hold_sol_worker_authority_overlap(&store, session_id, &contract.project_id, now_unix())
+        .map(Some)
 }
 
 fn should_refresh_post_codex_accounting(
@@ -3003,6 +3152,17 @@ fn ensure_reviewer_wakeup(
                     }
                 }
             };
+            let outcome = match outcome {
+                Err(error) => match hold_sol_worker_authority_after_start_error(
+                    &workspace,
+                    &session_id,
+                    &error,
+                ) {
+                    Ok(Some(held)) => Ok(held),
+                    Ok(None) | Err(_) => Err(error),
+                },
+                other => other,
+            };
             match outcome {
                 Ok(outcome)
                     if outcome.state.is_terminal()
@@ -3091,6 +3251,10 @@ fn operator_config(workspace: &Path, model_id: String) -> Result<CodexCliConfigV
     config.operator_codex_home = operator_codex_home()?;
     config.model_id = Some(model_id);
     config.sandbox = CodexCliSandboxV1::WorkspaceWrite;
+    // All autonomous state, project routing, review records, and worker
+    // diagnostics currently live below this directory. A Sol turn must not
+    // launch while Codex workspace-write can modify that host authority.
+    config.host_authority_roots = vec![workspace.join(".catdesk")];
     config.diagnostic_root = Some(
         workspace
             .join(".catdesk")
@@ -3289,6 +3453,11 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+    use crate::delegated::autonomous_contract::{
+        AutonomousCommandProfileV1, AutonomousDevelopmentContractV1, AutonomousGitPolicyV1,
+        AutonomousHardStopV1, AutonomousProviderPolicyV1, AutonomousRateLimitPolicyV1,
+        AutonomousVerificationPolicyV1, AutonomyLeaseV1,
+    };
     use crate::delegated::autonomy_state::{
         AutonomousQueueTaskStateV1, AutonomousQueueTaskV1, AutonomousQueueV1,
     };
@@ -3535,6 +3704,207 @@ mod tests {
             std::env::temp_dir().join(format!("catdesk-wake-receipt-{label}-{}", Uuid::new_v4()));
         fs::create_dir_all(root.join(".catdesk").join("wake-bridge")).expect("wake root");
         root
+    }
+
+    #[test]
+    fn sol_host_authority_overlap_creates_durable_attention_without_provider_launch() {
+        let root = wake_receipt_root("sol-authority-overlap");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).expect("autonomy store");
+        let session_id = "sol-authority-overlap";
+        store
+            .create_session(
+                session_id,
+                AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                    task_id: "work".into(),
+                    priority: 1,
+                    depends_on: Vec::new(),
+                    state: AutonomousQueueTaskStateV1::Ready,
+                }])
+                .expect("queue"),
+            )
+            .expect("session");
+        let mut queued = store.load_session(session_id).expect("snapshot");
+        queued.state = AutonomousSessionStateV1::Queued;
+        store.save_session(&queued).expect("queued session");
+        assert!(
+            validate_sol_worker_launch_boundary(&root, &[root.join(".catdesk")]).is_err(),
+            "the active runtime workspace includes host authority"
+        );
+        let outcome = hold_sol_worker_authority_overlap(&store, session_id, "catdesk", now_unix())
+            .expect("durable attention");
+        assert_eq!(outcome.state, AutonomousSessionStateV1::WaitingForChatgpt);
+        assert_eq!(outcome.provider_events, 0);
+        let snapshot = store.load_session(session_id).expect("snapshot");
+        assert_eq!(snapshot.state, AutonomousSessionStateV1::WaitingForChatgpt);
+        assert_eq!(snapshot.provider_turn_count, 0);
+        assert_eq!(
+            snapshot.provider_route,
+            AutonomousProviderRouteV1::WaitingForChatgpt
+        );
+        assert_eq!(
+            store
+                .load_escalation(session_id)
+                .expect("escalation")
+                .reason,
+            "sol_worker_host_authority_writable"
+        );
+        let review = store
+            .latest_actionable_review_for_session(session_id)
+            .expect("review inbox")
+            .expect("attention review");
+        assert_eq!(review.state, AutonomousSessionStateV1::WaitingForChatgpt);
+        assert!(
+            hold_sol_worker_authority_overlap(&store, session_id, "catdesk", now_unix()).is_err(),
+            "repeated preflight cannot create another review"
+        );
+        fs::remove_dir_all(&root).expect("retire owned fixture");
+    }
+
+    #[test]
+    fn sol_authority_hold_poison_prior_provider_output() {
+        let root = wake_receipt_root("sol-authority-prior-turn");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).expect("autonomy store");
+        let session_id = "sol-authority-prior-turn";
+        store
+            .create_session(
+                session_id,
+                AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                    task_id: "work".into(),
+                    priority: 1,
+                    depends_on: Vec::new(),
+                    state: AutonomousQueueTaskStateV1::Ready,
+                }])
+                .expect("queue"),
+            )
+            .expect("session");
+        let mut snapshot = store.load_session(session_id).expect("snapshot");
+        snapshot.state = AutonomousSessionStateV1::Queued;
+        snapshot.provider_turn_count = 1;
+        store.save_session(&snapshot).expect("historical turn");
+        hold_sol_worker_authority_overlap(&store, session_id, "catdesk", now_unix())
+            .expect("durable attention");
+        assert!(
+            store
+                .load_session(session_id)
+                .expect("held snapshot")
+                .codex_turn_profile_violation,
+            "a prior turn in a writable-authority workspace remains contaminated"
+        );
+        fs::remove_dir_all(&root).expect("retire owned fixture");
+    }
+
+    #[test]
+    fn ticker_codex_start_boundary_error_becomes_durable_sol_attention() {
+        let root = wake_receipt_root("sol-authority-ticker");
+        fs::create_dir_all(root.join("src")).expect("source fixture");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).expect("autonomy store");
+        let session_id = "sol-authority-ticker";
+        store
+            .create_session(
+                session_id,
+                AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                    task_id: "work".into(),
+                    priority: 1,
+                    depends_on: Vec::new(),
+                    state: AutonomousQueueTaskStateV1::Ready,
+                }])
+                .expect("queue"),
+            )
+            .expect("session");
+        store
+            .save_contract(
+                session_id,
+                &AutonomousDevelopmentContractV1 {
+                    schema_version: 1,
+                    contract_id: "sol-boundary-contract".into(),
+                    task_id: "work".into(),
+                    project_id: "catdesk".into(),
+                    mode: "chatgpt_web_codex_autonomous".into(),
+                    objective: "test".into(),
+                    workspace: root.clone(),
+                    base_branch: "main".into(),
+                    feature_branch: "feature-1".into(),
+                    base_commit: "1234567".into(),
+                    expected_origin: "https://example.invalid/repo.git".into(),
+                    ordered_steps: vec!["run".into()],
+                    allowed_paths: vec![root.join("src")],
+                    forbidden_paths: Vec::new(),
+                    allowed_command_profiles: vec![AutonomousCommandProfileV1::CargoTest],
+                    git_policy: AutonomousGitPolicyV1 {
+                        create_branch: true,
+                        create_worktree: true,
+                        local_commits: false,
+                        push_feature_branch: false,
+                        open_pull_request: false,
+                        merge: false,
+                        force_push: false,
+                        modify_main: false,
+                    },
+                    provider_policy: AutonomousProviderPolicyV1 {
+                        primary_provider: "codex-cli".into(),
+                        primary_model: SOL_MEDIUM_MODEL.into(),
+                        routine_provider: "ollama".into(),
+                        routine_model: "qwen3.6:35b-a3b".into(),
+                        allow_paid_fallback: false,
+                        allow_cloud_fallback: false,
+                    },
+                    verification_policy: AutonomousVerificationPolicyV1 {
+                        profile: "test".into(),
+                        required_commands: Vec::new(),
+                        max_repair_cycles: 1,
+                        require_authoritative_diff: true,
+                        require_final_review: true,
+                    },
+                    rate_limit_policy: AutonomousRateLimitPolicyV1 {
+                        automatic_pause: true,
+                        automatic_resume: true,
+                        initial_backoff_seconds: 5,
+                        maximum_backoff_seconds: 30,
+                        maximum_rate_limited_seconds: 60,
+                        honor_provider_retry_after: true,
+                    },
+                    autonomy_lease: AutonomyLeaseV1 {
+                        start_approval_required: false,
+                        renewal_allowed: true,
+                        issued_at_unix: 1,
+                        expires_at_unix: 100,
+                        maximum_total_elapsed_seconds: 99,
+                        maximum_provider_turns: 2,
+                        maximum_tool_calls: 2,
+                        maximum_consecutive_failures: 1,
+                        maximum_repair_cycles: 1,
+                    },
+                    hard_stop_conditions: vec![AutonomousHardStopV1::CancellationRequested],
+                    completion_artifact_ids: Vec::new(),
+                    task_graph: Vec::new(),
+                },
+            )
+            .expect("contract");
+        let mut snapshot = store.load_session(session_id).expect("snapshot");
+        snapshot.state = AutonomousSessionStateV1::Queued;
+        store.save_session(&snapshot).expect("queued session");
+        let boundary = RuntimeError::Validation("Sol Codex worker OS isolation is unproven".into());
+        assert!(
+            hold_sol_worker_authority_after_start_error(
+                &root,
+                session_id,
+                &RuntimeError::Validation("unrelated provider failure".into())
+            )
+            .expect("unrelated error")
+            .is_none()
+        );
+        let outcome = hold_sol_worker_authority_after_start_error(&root, session_id, &boundary)
+            .expect("boundary hold")
+            .expect("durable attention");
+        assert_eq!(outcome.state, AutonomousSessionStateV1::WaitingForChatgpt);
+        assert_eq!(
+            store.load_session(session_id).expect("snapshot").state,
+            AutonomousSessionStateV1::WaitingForChatgpt
+        );
+        fs::remove_dir_all(&root).expect("retire owned fixture");
     }
 
     fn register_wake_project(root: &Path, id: &str, target: Option<&str>) {
@@ -3997,6 +4367,34 @@ mod tests {
             .expect("independent owner candidates"),
             vec![session_id.to_string()],
             "one unread terminal autonomous completion is restart-recoverable for independent Wake"
+        );
+        let mut managed = store.load_session(session_id).expect("managed snapshot");
+        managed.approved_contract_hash = Some("fnv1a64:0123456789abcdef".into());
+        store
+            .save_session(&managed)
+            .expect("managed session marker");
+        assert!(
+            persisted_completed_review_wake_candidates_with_cutoff(&root, |project_id| {
+                crate::wake_protocol_client::current_generation_accept_after_at_for_test(
+                    &independent_wake_root,
+                    &root,
+                    project_id,
+                )
+            })
+            .is_err(),
+            "a managed completion without its contract and review binding cannot be rehydrated"
+        );
+        let completed = AutonomousControllerOutcomeV1 {
+            state: AutonomousSessionStateV1::CompletedVerified,
+            provider_events: 0,
+            verification: None,
+            authoritative_diff: None,
+            final_review: None,
+        };
+        assert_eq!(
+            dispatch_actionable_wake(&root, session_id, &completed),
+            WakeDispatchOutcome::Terminal,
+            "direct dispatch must also reject the unbound managed completion"
         );
         let _ = fs::remove_dir_all(root);
     }

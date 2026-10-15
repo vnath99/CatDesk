@@ -7,19 +7,22 @@
 
 use std::collections::BTreeMap;
 use std::fs::{self, File};
-use std::io::Write;
-use std::path::PathBuf;
+use std::io::{BufRead, BufReader as SyncBufReader, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
-use std::time::Instant;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::mpsc::{self, error::TryRecvError};
 
-use super::codex_model_policy::{LEGACY_TERRA_MODEL, required_effort};
+use super::codex_model_policy::{
+    CodexCliTurnProfileEvidenceV1, LEGACY_TERRA_MODEL, SOL_MEDIUM_MODEL, required_effort,
+};
 use super::contracts::{TurnId, WorkerSessionId};
 use super::runtime::{
     NormalizedProviderEventKind, NormalizedProviderEventV1, ProviderCapabilitiesV1,
@@ -36,6 +39,12 @@ const MAX_PROMPT_BYTES: usize = 24 * 1024;
 const DIAGNOSTIC_SCHEMA_VERSION: u32 = 1;
 const MAX_DIAGNOSTIC_EVENTS: usize = 64;
 const MAX_DIAGNOSTIC_EVENT_TEXT_BYTES: usize = 2 * 1024;
+const MAX_ROLLOUT_SCAN_BYTES: u64 = 128 * 1024 * 1024;
+const MAX_ROLLOUT_LINE_BYTES: usize = 1024 * 1024;
+const MAX_ROLLOUT_DIRECTORY_ENTRIES: usize = 50_000;
+const POST_EXIT_STREAM_DRAIN_WAIT: Duration = Duration::from_millis(500);
+const NATIVE_TIMESTAMP_SKEW_SECS: u64 = 1;
+const NATIVE_EVENT_TIMESTAMP_SKEW: Duration = Duration::from_millis(1);
 const CATDESK_REQUIRED_CODEX_MODEL: &str = LEGACY_TERRA_MODEL;
 
 fn managed_reasoning_override(model_id: &str) -> Option<String> {
@@ -77,11 +86,17 @@ impl CodexCliSandboxV1 {
 pub struct CodexCliConfigV1 {
     pub executable: PathBuf,
     pub working_directory: PathBuf,
-    /// Optional operator-local Codex config root. Child Codex processes see
-    /// this only as `CODEX_HOME`; CatDesk never reads or serializes its
-    /// contents and MCP cannot select it.
+    /// Optional operator-local Codex home. Child Codex processes see it as
+    /// `CODEX_HOME`; CatDesk reads only bounded native session metadata below
+    /// `sessions/` for actual-turn model readback. It never reads auth/config
+    /// storage or serializes rollout transcripts. MCP cannot select this path.
     pub operator_codex_home: Option<PathBuf>,
     pub model_id: Option<String>,
+    /// Host-owned state directories that the worker must not be able to
+    /// modify. The host sets these; an MCP request cannot supply them.
+    /// Sol workspace-write turns require at least one verified root.
+    #[serde(default)]
+    pub host_authority_roots: Vec<PathBuf>,
     pub sandbox: CodexCliSandboxV1,
     pub approval_policy: CodexCliApprovalPolicyV1,
     pub max_event_bytes: usize,
@@ -98,6 +113,7 @@ impl CodexCliConfigV1 {
             working_directory,
             operator_codex_home: None,
             model_id: None,
+            host_authority_roots: Vec::new(),
             sandbox: CodexCliSandboxV1::WorkspaceWrite,
             approval_policy: CodexCliApprovalPolicyV1::Never,
             max_event_bytes: DEFAULT_MAX_EVENT_BYTES,
@@ -144,6 +160,88 @@ impl CodexCliConfigV1 {
         }
         Ok(())
     }
+
+    pub(crate) fn validate_sol_worker_authority_boundary(&self) -> Result<(), RuntimeError> {
+        if self.model_id.as_deref() != Some(SOL_MEDIUM_MODEL)
+            || self.sandbox != CodexCliSandboxV1::WorkspaceWrite
+        {
+            return Ok(());
+        }
+        validate_sol_worker_launch_boundary(&self.working_directory, &self.host_authority_roots)
+    }
+}
+
+/// A necessary path-topology check before Sol workspace-write starts. This
+/// does not establish a security boundary: the ordinary interactive user can
+/// still modify host-owned files elsewhere on the same machine.
+pub(crate) fn validate_sol_worker_write_roots(
+    worker_directory: &Path,
+    host_authority_roots: &[PathBuf],
+) -> Result<(), RuntimeError> {
+    if host_authority_roots.is_empty() {
+        return Err(RuntimeError::Validation(
+            "Sol Codex worker has no host authority boundary".into(),
+        ));
+    }
+    let working_directory = worker_directory.canonicalize().map_err(|_| {
+        RuntimeError::Validation("Sol Codex worker directory is unavailable".into())
+    })?;
+    for root in host_authority_roots {
+        if !root.is_dir() {
+            return Err(RuntimeError::Validation(
+                "Sol Codex host authority root is unavailable".into(),
+            ));
+        }
+        let authority_root = root.canonicalize().map_err(|_| {
+            RuntimeError::Validation("Sol Codex host authority root is unavailable".into())
+        })?;
+        // Check both the configured names and the resolved objects. This
+        // also refuses a junction/symlink placed inside the writable root
+        // that points at an authority directory elsewhere.
+        if paths_overlap(worker_directory, root)
+            || paths_overlap(&working_directory, &authority_root)
+        {
+            return Err(RuntimeError::Validation(
+                "Sol Codex writable workspace overlaps host authority".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// A Sol turn needs both disjoint paths and a separately launched, verified OS
+/// identity that cannot write the host's authority store. The existing CLI
+/// process is launched as CatDesk's interactive user through `tokio::Command`;
+/// neither Codex's workspace-write policy nor a different path constrains
+/// that user. Keep the live launch closed until a dedicated producer token,
+/// owner/ACL proof, and bounded output handoff have been implemented.
+pub(crate) fn validate_sol_worker_launch_boundary(
+    worker_directory: &Path,
+    host_authority_roots: &[PathBuf],
+) -> Result<(), RuntimeError> {
+    validate_sol_worker_write_roots(worker_directory, host_authority_roots)?;
+    Err(RuntimeError::Validation(
+        "Sol Codex worker OS isolation is unproven".into(),
+    ))
+}
+
+fn paths_overlap(first: &Path, second: &Path) -> bool {
+    first.starts_with(second) || second.starts_with(first)
+}
+
+pub(crate) fn is_sol_worker_authority_boundary_error(error: &RuntimeError) -> bool {
+    matches!(
+        error,
+        RuntimeError::Validation(message)
+            if matches!(
+                message.as_str(),
+                "Sol Codex worker has no host authority boundary"
+                    | "Sol Codex worker directory is unavailable"
+                    | "Sol Codex host authority root is unavailable"
+                    | "Sol Codex writable workspace overlaps host authority"
+                    | "Sol Codex worker OS isolation is unproven"
+            )
+    )
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -241,6 +339,8 @@ pub struct CodexCliTurnHandleV1 {
 pub struct CodexCliSessionSnapshotV1 {
     pub codex_thread_id: String,
     pub provider_version: String,
+    /// Actual model from completed native-turn metadata, if readback passed.
+    /// An invocation flag alone never populates this field.
     pub model_id: Option<String>,
     pub working_directory: PathBuf,
     pub last_completed_turn: Option<TurnId>,
@@ -489,6 +589,10 @@ pub struct CodexCliEventBatchV1 {
     pub thread_id: Option<String>,
     pub state: CodexCliTurnStateV1,
     pub terminal: bool,
+    /// Codex-owned rollout metadata for this completed native turn. Never
+    /// derived from the requested CLI flags or an older resumed turn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual_profile: Option<CodexCliTurnProfileEvidenceV1>,
 }
 
 #[derive(Debug)]
@@ -511,11 +615,27 @@ struct ActiveCodexTurn {
     thread_id: Option<String>,
     stderr: String,
     exited: Option<std::process::ExitStatus>,
+    exit_observed_at: Option<SystemTime>,
+    stream_closed: bool,
     cancelled: bool,
     cancel_event_emitted: bool,
     started_at: Instant,
+    launched_at: SystemTime,
+    rollout_root: Option<PathBuf>,
+    rollout_anchor: Option<RolloutAnchor>,
+    actual_profile: Option<CodexCliTurnProfileEvidenceV1>,
     diagnostic: CodexCliExecutionDiagnosticV1,
     diagnostic_persisted: bool,
+}
+
+/// A pre-launch open file and byte boundary for a resumed Codex thread. The
+/// retained handle prevents a same-name replacement from supplying a prior
+/// turn's metadata as evidence for the child just launched.
+#[derive(Debug)]
+struct RolloutAnchor {
+    path: PathBuf,
+    file: File,
+    length: u64,
 }
 
 /// Bounded evidence for an autonomous provider turn. It records process
@@ -614,6 +734,8 @@ impl CodexCliProviderV1 {
         request: CodexCliTurnRequestV1,
         resume_thread_id: Option<&str>,
     ) -> Result<CodexCliTurnHandleV1, RuntimeError> {
+        self.config.validate_sol_worker_authority_boundary()?;
+        let mut rollout_root = codex_rollout_root(&self.config);
         let mut command = Command::new(&self.config.executable);
         command.current_dir(&self.config.working_directory);
         apply_operator_codex_context(&mut command, &self.config);
@@ -649,6 +771,20 @@ impl CodexCliProviderV1 {
             .env_remove("OPENAI_API_KEY")
             .env_remove("CONTROL_PLANE_API_KEY")
             .env("NO_COLOR", "1");
+        // Take the resume byte boundary at the last possible point before
+        // spawn; command construction may otherwise leave a measurable gap
+        // in which another writer could append a turn to the same rollout.
+        let rollout_anchor = match (rollout_root.as_deref(), resume_thread_id) {
+            (Some(root), Some(thread_id)) => match open_prelaunch_rollout(root, thread_id) {
+                Ok(anchor) => anchor,
+                Err(()) => {
+                    rollout_root = None;
+                    None
+                }
+            },
+            _ => None,
+        };
+        let launched_at = SystemTime::now();
         let mut child = command.spawn().map_err(|error| {
             RuntimeError::Provider(format!("failed to launch Codex CLI: {error}"))
         })?;
@@ -688,9 +824,15 @@ impl CodexCliProviderV1 {
                 thread_id: resume_thread_id.map(ToOwned::to_owned),
                 stderr: String::new(),
                 exited: None,
+                exit_observed_at: None,
+                stream_closed: false,
                 cancelled: false,
                 cancel_event_emitted: false,
                 started_at: Instant::now(),
+                launched_at,
+                rollout_root,
+                rollout_anchor,
+                actual_profile: None,
                 diagnostic,
                 diagnostic_persisted: false,
             },
@@ -746,6 +888,9 @@ impl CodexCliProviderV1 {
         }
         let state = active_turn_state(active);
         if !matches!(state, CodexCliTurnStateV1::Running) {
+            if matches!(state, CodexCliTurnStateV1::Completed) && active.actual_profile.is_none() {
+                active.actual_profile = read_completed_turn_profile(active);
+            }
             persist_execution_diagnostic(&self.config, active)?;
         }
         Ok(CodexCliEventBatchV1 {
@@ -755,6 +900,7 @@ impl CodexCliProviderV1 {
             thread_id: active.thread_id.clone(),
             terminal: !matches!(state, CodexCliTurnStateV1::Running),
             state,
+            actual_profile: active.actual_profile.clone(),
         })
     }
 
@@ -764,9 +910,17 @@ impl CodexCliProviderV1 {
             .get_mut(&handle.handle_id)
             .ok_or_else(|| RuntimeError::Validation("unknown Codex CLI turn handle".into()))?;
         if active.exited.is_some() {
-            return Err(RuntimeError::Validation(
-                "cannot cancel a completed Codex CLI turn".into(),
-            ));
+            if active.stream_closed {
+                return Err(RuntimeError::Validation(
+                    "cannot cancel a completed Codex CLI turn".into(),
+                ));
+            }
+            // The process is gone but an inherited or stalled output pipe is
+            // still preventing terminal readback. Cancel this pending drain
+            // without attempting to kill a recycled process id.
+            active.receiver.close();
+            active.cancelled = true;
+            return Ok(());
         }
         let pid = active
             .child
@@ -779,6 +933,9 @@ impl CodexCliProviderV1 {
                 "failed to observe cancelled Codex process: {error}"
             ))
         })?;
+        if active.exited.is_some() {
+            active.exit_observed_at = Some(SystemTime::now());
+        }
         Ok(())
     }
 
@@ -786,6 +943,15 @@ impl CodexCliProviderV1 {
         self.active_turns
             .get(&handle.handle_id)
             .and_then(|active| active.thread_id.as_deref())
+    }
+
+    pub fn turn_profile(
+        &self,
+        handle: &CodexCliTurnHandleV1,
+    ) -> Option<&CodexCliTurnProfileEvidenceV1> {
+        self.active_turns
+            .get(&handle.handle_id)
+            .and_then(|active| active.actual_profile.as_ref())
     }
 
     pub fn session_snapshot(
@@ -802,12 +968,18 @@ impl CodexCliProviderV1 {
         Ok(CodexCliSessionSnapshotV1 {
             codex_thread_id,
             provider_version: self.capabilities.cli_version.clone(),
-            model_id: self.config.model_id.clone(),
+            model_id: active
+                .actual_profile
+                .as_ref()
+                .map(|evidence| evidence.model_id.clone()),
             working_directory: self.config.working_directory.clone(),
-            last_completed_turn: active
-                .exited
-                .is_some_and(|status| status.success())
-                .then(|| handle.turn_id.clone()),
+            last_completed_turn: (active.stream_closed
+                && active.exited.is_some_and(|status| status.success())
+                && active
+                    .events
+                    .iter()
+                    .any(|event| event.event_type == "turn.completed"))
+            .then(|| handle.turn_id.clone()),
             last_event_sequence: active.events.len() as u64,
         })
     }
@@ -1070,6 +1242,7 @@ impl WorkerProviderV1 for CodexCliProviderV1 {
                 next_cursor: batch.next_cursor,
                 terminal: batch.terminal,
                 provider_session_id: batch.thread_id.or(codex_handle.resumed_thread_id),
+                codex_turn_profile: batch.actual_profile,
             })
         })
     }
@@ -1200,13 +1373,493 @@ async fn run_bounded_command<const N: usize>(
     Ok(CommandOutputV1 { stdout })
 }
 
-/// Copies the operator-selected config-root path into the documented Codex
-/// child-process environment. The path was validated at configuration time;
-/// this helper never opens, enumerates, or exports files below that root.
+/// Copies the operator-selected Codex home into the child environment. Auth
+/// and config files remain opaque to CatDesk; native session rollout readback
+/// is limited to the separate bounded `sessions/` scanner above.
 fn apply_operator_codex_context(command: &mut Command, config: &CodexCliConfigV1) {
     if let Some(codex_home) = &config.operator_codex_home {
         command.env("CODEX_HOME", codex_home);
     }
+}
+
+fn codex_rollout_root(config: &CodexCliConfigV1) -> Option<PathBuf> {
+    let home = config
+        .operator_codex_home
+        .clone()
+        .or_else(|| std::env::var_os("CODEX_HOME").map(PathBuf::from))
+        .or_else(|| {
+            std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+                .map(|home| PathBuf::from(home).join(".codex"))
+        })?;
+    Some(home.join("sessions"))
+}
+
+fn valid_codex_thread_id(thread_id: &str) -> bool {
+    uuid::Uuid::parse_str(thread_id).is_ok_and(|parsed| parsed.to_string() == thread_id)
+}
+
+/// Enumerate only Codex's three date-directory levels and accept exact UUID
+/// filenames. Every candidate resolves under the canonical sessions root;
+/// unknown layouts and excessive inventories fail closed.
+fn rollout_paths(root: &Path, thread_id: &str) -> Result<Vec<PathBuf>, ()> {
+    if !valid_codex_thread_id(thread_id) {
+        return Err(());
+    }
+    let canonical_root = fs::canonicalize(root).map_err(|_| ())?;
+    let mut paths = Vec::new();
+    let mut entries = 0;
+    fn visit(
+        directory: &Path,
+        depth: u8,
+        canonical_root: &Path,
+        thread_id: &str,
+        paths: &mut Vec<PathBuf>,
+        entries: &mut usize,
+    ) -> Result<(), ()> {
+        for entry in fs::read_dir(directory).map_err(|_| ())? {
+            let entry = entry.map_err(|_| ())?;
+            *entries += 1;
+            if *entries > MAX_ROLLOUT_DIRECTORY_ENTRIES {
+                return Err(());
+            }
+            let kind = entry.file_type().map_err(|_| ())?;
+            if depth > 0 {
+                if kind.is_dir() {
+                    visit(
+                        &entry.path(),
+                        depth - 1,
+                        canonical_root,
+                        thread_id,
+                        paths,
+                        entries,
+                    )?;
+                }
+            } else if kind.is_file() {
+                let filename = entry.file_name();
+                let filename = filename.to_str().ok_or(())?;
+                if filename.starts_with("rollout-")
+                    && filename.ends_with(&format!("-{thread_id}.jsonl"))
+                {
+                    let path = fs::canonicalize(entry.path()).map_err(|_| ())?;
+                    if !path.starts_with(canonical_root) {
+                        return Err(());
+                    }
+                    paths.push(path);
+                    if paths.len() > 2 {
+                        return Err(());
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+    visit(
+        &canonical_root,
+        3,
+        &canonical_root,
+        thread_id,
+        &mut paths,
+        &mut entries,
+    )?;
+    Ok(paths)
+}
+
+fn open_prelaunch_rollout(root: &Path, thread_id: &str) -> Result<Option<RolloutAnchor>, ()> {
+    let paths = rollout_paths(root, thread_id)?;
+    let [path] = paths.as_slice() else {
+        return if paths.is_empty() { Ok(None) } else { Err(()) };
+    };
+    let file = File::open(path).map_err(|_| ())?;
+    let length = file.metadata().map_err(|_| ())?.len();
+    Ok(Some(RolloutAnchor {
+        path: path.clone(),
+        file,
+        length,
+    }))
+}
+
+/// Read just enough of a completed child rollout to bind its native turn ID
+/// and selected model/effort. Transcript text is never retained or logged.
+/// Codex stdout names the thread but not the native turn ID, so the retained
+/// pre-launch offset and controller's single-writer ownership are both needed
+/// to associate appended rollout records with this child process.
+fn read_completed_turn_profile(active: &ActiveCodexTurn) -> Option<CodexCliTurnProfileEvidenceV1> {
+    let stdout_threads = active
+        .events
+        .iter()
+        .filter(|event| event.event_type == "thread.started")
+        .collect::<Vec<_>>();
+    let [stdout_thread] = stdout_threads.as_slice() else {
+        return None;
+    };
+    let thread_id = stdout_thread.thread_id.as_deref()?;
+    if !valid_codex_thread_id(thread_id)
+        || active.thread_id.as_deref() != Some(thread_id)
+        || active
+            .events
+            .iter()
+            .filter(|event| event.event_type == "turn.started")
+            .count()
+            != 1
+        || active
+            .events
+            .iter()
+            .filter(|event| event.event_type == "turn.completed")
+            .count()
+            != 1
+        || active.events.iter().any(|event| {
+            matches!(
+                event.event_type.as_str(),
+                "turn.failed" | "parse.error" | "oversized.event"
+            )
+        })
+    {
+        return None;
+    }
+    read_postlaunch_rollout_profile(
+        active.rollout_root.as_deref()?,
+        thread_id,
+        active.launched_at,
+        active.exit_observed_at?,
+        active.rollout_anchor.as_ref(),
+    )
+}
+
+fn read_postlaunch_rollout_profile(
+    root: &Path,
+    thread_id: &str,
+    launched_at: SystemTime,
+    exit_observed_at: SystemTime,
+    anchor: Option<&RolloutAnchor>,
+) -> Option<CodexCliTurnProfileEvidenceV1> {
+    let paths = rollout_paths(root, thread_id).ok()?;
+    let appended_anchor = match anchor {
+        Some(anchor) => {
+            let length = anchor.file.metadata().ok()?.len();
+            if length < anchor.length {
+                return None;
+            }
+            (length > anchor.length).then_some(anchor)
+        }
+        None => None,
+    };
+    let mut new_files = Vec::new();
+    for path in paths {
+        let file = File::open(&path).ok()?;
+        let created = file.metadata().ok()?.created().ok()?;
+        if created < launched_at {
+            continue;
+        }
+        // A same-path replacement created after launch is a second candidate,
+        // even when a retained pre-launch handle also received new bytes.
+        new_files.push(file);
+        if new_files.len() > 1 {
+            return None;
+        }
+    }
+    match (appended_anchor, new_files.as_slice()) {
+        (Some(anchor), []) => read_rollout_profile_in_window(
+            &anchor.file,
+            anchor.length,
+            thread_id,
+            launched_at,
+            exit_observed_at,
+        ),
+        (None, [file]) => {
+            read_rollout_profile_in_window(file, 0, thread_id, launched_at, exit_observed_at)
+        }
+        _ => None,
+    }
+}
+
+fn bounded_rollout_line<R: BufRead>(
+    reader: &mut R,
+    scanned: &mut u64,
+) -> Result<Option<Vec<u8>>, ()> {
+    let mut line = Vec::new();
+    loop {
+        let available = reader.fill_buf().map_err(|_| ())?;
+        if available.is_empty() {
+            return if line.is_empty() { Ok(None) } else { Err(()) };
+        }
+        let count = available
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .map_or(available.len(), |index| index + 1);
+        *scanned = scanned.checked_add(count as u64).ok_or(())?;
+        if *scanned > MAX_ROLLOUT_SCAN_BYTES || line.len() + count > MAX_ROLLOUT_LINE_BYTES {
+            return Err(());
+        }
+        let has_newline = available[count - 1] == b'\n';
+        line.extend_from_slice(&available[..count]);
+        reader.consume(count);
+        if has_newline {
+            return Ok(Some(line));
+        }
+    }
+}
+
+#[cfg(test)]
+fn read_rollout_profile(
+    file: &File,
+    offset: u64,
+    thread_id: &str,
+) -> Option<CodexCliTurnProfileEvidenceV1> {
+    read_rollout_profile_inner(file, offset, thread_id, None)
+}
+
+fn read_rollout_profile_in_window(
+    file: &File,
+    offset: u64,
+    thread_id: &str,
+    launched_at: SystemTime,
+    exit_observed_at: SystemTime,
+) -> Option<CodexCliTurnProfileEvidenceV1> {
+    let launch = launched_at.duration_since(UNIX_EPOCH).ok()?.as_secs();
+    let exit = exit_observed_at.duration_since(UNIX_EPOCH).ok()?.as_secs();
+    if exit < launch {
+        return None;
+    }
+    read_rollout_profile_inner(
+        file,
+        offset,
+        thread_id,
+        Some(NativeTurnWindow {
+            earliest_epoch: launch.saturating_sub(NATIVE_TIMESTAMP_SKEW_SECS),
+            latest_epoch: exit.saturating_add(NATIVE_TIMESTAMP_SKEW_SECS),
+            earliest_event: launched_at.checked_sub(NATIVE_EVENT_TIMESTAMP_SKEW)?,
+            latest_event: exit_observed_at.checked_add(NATIVE_EVENT_TIMESTAMP_SKEW)?,
+        }),
+    )
+}
+
+#[derive(Clone, Copy)]
+struct NativeTurnWindow {
+    earliest_epoch: u64,
+    latest_epoch: u64,
+    earliest_event: SystemTime,
+    latest_event: SystemTime,
+}
+
+fn parse_rollout_event_timestamp(value: &Value) -> Option<SystemTime> {
+    let bytes = value.get("timestamp")?.as_str()?.as_bytes();
+    if bytes.len() < 20
+        || bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || bytes[10] != b'T'
+        || bytes[13] != b':'
+        || bytes[16] != b':'
+    {
+        return None;
+    }
+    let decimal = |digits: &[u8]| -> Option<u32> {
+        digits.iter().try_fold(0_u32, |number, digit| {
+            digit
+                .is_ascii_digit()
+                .then(|| number * 10 + u32::from(digit - b'0'))
+        })
+    };
+    let year = i32::try_from(decimal(&bytes[0..4])?).ok()?;
+    let month = u8::try_from(decimal(&bytes[5..7])?).ok()?;
+    let day = u8::try_from(decimal(&bytes[8..10])?).ok()?;
+    let hour = u8::try_from(decimal(&bytes[11..13])?).ok()?;
+    let minute = u8::try_from(decimal(&bytes[14..16])?).ok()?;
+    let second = u8::try_from(decimal(&bytes[17..19])?).ok()?;
+    let nanos = if bytes.len() == 20 && bytes[19] == b'Z' {
+        0
+    } else {
+        if bytes[19] != b'.' || bytes.last() != Some(&b'Z') {
+            return None;
+        }
+        let fraction = &bytes[20..bytes.len() - 1];
+        if fraction.is_empty() || fraction.len() > 9 {
+            return None;
+        }
+        decimal(fraction)? * 10_u32.pow(u32::try_from(9 - fraction.len()).ok()?)
+    };
+    let date =
+        time::Date::from_calendar_date(year, time::Month::try_from(month).ok()?, day).ok()?;
+    let clock = time::Time::from_hms_nano(hour, minute, second, nanos).ok()?;
+    let unix_nanos = time::PrimitiveDateTime::new(date, clock)
+        .assume_utc()
+        .unix_timestamp_nanos();
+    if unix_nanos < 0 {
+        return None;
+    }
+    let seconds = u64::try_from(unix_nanos / 1_000_000_000).ok()?;
+    let remainder = u64::try_from(unix_nanos % 1_000_000_000).ok()?;
+    UNIX_EPOCH
+        .checked_add(Duration::from_secs(seconds))?
+        .checked_add(Duration::from_nanos(remainder))
+}
+
+fn read_rollout_profile_inner(
+    file: &File,
+    offset: u64,
+    thread_id: &str,
+    time_window: Option<NativeTurnWindow>,
+) -> Option<CodexCliTurnProfileEvidenceV1> {
+    let mut reader = SyncBufReader::new(file.try_clone().ok()?);
+    reader.seek(SeekFrom::Start(0)).ok()?;
+    let mut scanned = 0;
+    let first = bounded_rollout_line(&mut reader, &mut scanned).ok()??;
+    let first: Value = serde_json::from_slice(&first).ok()?;
+    if first.get("type")?.as_str()? != "session_meta"
+        || first.pointer("/payload/id")?.as_str()? != thread_id
+    {
+        return None;
+    }
+    if offset != 0 {
+        if offset < reader.stream_position().ok()? || offset > file.metadata().ok()?.len() {
+            return None;
+        }
+        reader.seek(SeekFrom::Start(offset)).ok()?;
+        scanned = 0;
+    }
+    let mut turn_id: Option<String> = None;
+    let mut model_id: Option<String> = None;
+    let mut reasoning_effort: Option<String> = None;
+    let mut started_epoch: Option<u64> = None;
+    let mut started_event_time: Option<SystemTime> = None;
+    let mut context_count = 0;
+    let mut completed = false;
+    let mut hasher = Sha256::new();
+    hasher.update(b"codex-cli-native-turn-profile-v1\n");
+    while let Some(line) = bounded_rollout_line(&mut reader, &mut scanned).ok()? {
+        let value: Value = serde_json::from_slice(&line).ok()?;
+        match (
+            value.get("type")?.as_str()?,
+            value.pointer("/payload/type").and_then(Value::as_str),
+        ) {
+            ("event_msg", Some("task_started")) => {
+                if turn_id.is_some() {
+                    return None;
+                }
+                let id = value.pointer("/payload/turn_id")?.as_str()?;
+                if !valid_codex_thread_id(id)
+                    || value.pointer("/payload/root_turn_id")?.as_str()? != id
+                {
+                    return None;
+                }
+                if let Some(window) = time_window {
+                    let started = value.pointer("/payload/started_at")?.as_u64()?;
+                    let event_time = parse_rollout_event_timestamp(&value)?;
+                    if started < window.earliest_epoch
+                        || started > window.latest_epoch
+                        || event_time < window.earliest_event
+                        || event_time > window.latest_event
+                    {
+                        return None;
+                    }
+                    started_epoch = Some(started);
+                    started_event_time = Some(event_time);
+                }
+                turn_id = Some(id.to_owned());
+                hash_rollout_metadata(
+                    &mut hasher,
+                    &serde_json::json!({
+                        "record":"task_started",
+                        "turn_id":id,
+                        "root_turn_id":value.pointer("/payload/root_turn_id"),
+                        "started_at":value.pointer("/payload/started_at"),
+                    }),
+                );
+            }
+            ("turn_context", _) if turn_id.is_some() && !completed => {
+                if value.pointer("/payload/turn_id")?.as_str()? != turn_id.as_deref()?
+                    || value.pointer("/payload/root_turn_id")?.as_str()? != turn_id.as_deref()?
+                {
+                    return None;
+                }
+                let model = value.pointer("/payload/model")?.as_str()?;
+                let effort = value.pointer("/payload/effort")?.as_str()?;
+                if model.is_empty() || effort.is_empty() || model.len() > 128 || effort.len() > 32 {
+                    return None;
+                }
+                if model_id
+                    .as_deref()
+                    .is_some_and(|previous| previous != model)
+                    || reasoning_effort
+                        .as_deref()
+                        .is_some_and(|previous| previous != effort)
+                {
+                    return None;
+                }
+                model_id = Some(model.to_owned());
+                reasoning_effort = Some(effort.to_owned());
+                context_count += 1;
+                if context_count > 32 {
+                    return None;
+                }
+                hash_rollout_metadata(
+                    &mut hasher,
+                    &serde_json::json!({
+                        "record":"turn_context",
+                        "turn_id":turn_id.as_deref(),
+                        "root_turn_id":value.pointer("/payload/root_turn_id"),
+                        "model":model,
+                        "effort":effort,
+                    }),
+                );
+            }
+            ("event_msg", Some("task_complete")) => {
+                let completion_root = match value.pointer("/payload/root_turn_id") {
+                    Some(root) => Some(root.as_str()?),
+                    None => None,
+                };
+                if completed
+                    || context_count == 0
+                    || value.pointer("/payload/turn_id")?.as_str()? != turn_id.as_deref()?
+                    || completion_root.is_some_and(|root| Some(root) != turn_id.as_deref())
+                {
+                    return None;
+                }
+                if let Some(window) = time_window {
+                    let completion_start = value.pointer("/payload/started_at")?.as_u64()?;
+                    let completion_end = value.pointer("/payload/completed_at")?.as_u64()?;
+                    let event_time = parse_rollout_event_timestamp(&value)?;
+                    if Some(completion_start) != started_epoch
+                        || completion_end < completion_start
+                        || completion_end > window.latest_epoch
+                        || event_time < started_event_time?
+                        || event_time > window.latest_event
+                    {
+                        return None;
+                    }
+                }
+                completed = true;
+                hash_rollout_metadata(
+                    &mut hasher,
+                    &serde_json::json!({
+                        "record":"task_complete",
+                        "turn_id":turn_id.as_deref(),
+                        "root_turn_id":completion_root,
+                        "started_at":value.pointer("/payload/started_at"),
+                        "completed_at":value.pointer("/payload/completed_at"),
+                    }),
+                );
+            }
+            ("turn_context", _) if completed => return None,
+            ("turn_context", _) => return None,
+            _ => {}
+        }
+    }
+    if !completed {
+        return None;
+    }
+    Some(CodexCliTurnProfileEvidenceV1 {
+        codex_thread_id: thread_id.to_owned(),
+        codex_turn_id: turn_id?,
+        model_id: model_id?,
+        reasoning_effort: reasoning_effort?,
+        evidence_sha256: format!("{:x}", hasher.finalize()),
+    })
+}
+
+fn hash_rollout_metadata(hasher: &mut Sha256, projection: &Value) {
+    let bytes = projection.to_string();
+    hasher.update((bytes.len() as u32).to_be_bytes());
+    hasher.update(bytes.as_bytes());
 }
 
 fn spawn_stdout_reader(
@@ -1286,72 +1939,111 @@ async fn drain_active_turn(
 ) -> Result<(), RuntimeError> {
     loop {
         match active.receiver.try_recv() {
-            Ok(StreamMessage::Event(event)) => {
-                if let Some(thread_id) = &event.thread_id {
-                    active.thread_id = Some(thread_id.clone());
-                }
-                active
-                    .normalized_events
-                    .push(normalize_codex_event(&event, turn_id));
-                active.events.push(event);
+            Ok(message) => record_stream_message(active, turn_id, max_diagnostic_bytes, message),
+            Err(TryRecvError::Disconnected) => {
+                active.stream_closed = true;
+                break;
             }
-            Ok(StreamMessage::OversizedEvent(byte_count)) => {
-                let summary = format!(
-                    "Codex JSONL event body omitted because it exceeded the configured byte limit ({} bytes)",
-                    byte_count
-                );
-                let event = CodexCliEventV1 {
-                    event_type: "oversized.event".into(),
-                    thread_id: active.thread_id.clone(),
-                    item_type: None,
-                    text: None,
-                    retry_after_seconds: None,
-                    bounded_summary: bounded_redacted_text(&summary, max_diagnostic_bytes),
-                };
-                active.normalized_events.push(NormalizedProviderEventV1 {
-                    provider_id: ProviderIdV1::CodexCli.as_str().into(),
-                    turn_id: turn_id.clone(),
-                    kind: NormalizedProviderEventKind::TextDelta,
-                    text: Some(event.bounded_summary.clone()),
-                    tool_call: None,
-                });
-                active.events.push(event);
-            }
-            Ok(StreamMessage::ParseError(error)) => {
-                let error = bounded_redacted_text(&error, max_diagnostic_bytes);
-                active.normalized_events.push(NormalizedProviderEventV1 {
-                    provider_id: ProviderIdV1::CodexCli.as_str().into(),
-                    turn_id: turn_id.clone(),
-                    kind: NormalizedProviderEventKind::TerminalError,
-                    text: Some(error.clone()),
-                    tool_call: None,
-                });
-                active.events.push(CodexCliEventV1 {
-                    event_type: "parse.error".into(),
-                    thread_id: active.thread_id.clone(),
-                    item_type: None,
-                    text: None,
-                    retry_after_seconds: None,
-                    bounded_summary: error,
-                });
-            }
-            Ok(StreamMessage::Stderr(line)) => {
-                append_bounded(&mut active.stderr, &line, max_diagnostic_bytes)
-            }
-            Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
+            Err(TryRecvError::Empty) => break,
         }
     }
     if active.exited.is_none() {
         active.exited = active.child.try_wait().map_err(|error| {
             RuntimeError::Provider(format!("failed to poll Codex CLI process: {error}"))
         })?;
+        if active.exited.is_some() {
+            active.exit_observed_at = Some(SystemTime::now());
+        }
+    }
+    if active.exited.is_some() && !active.stream_closed {
+        // The child can exit before its stdout/stderr reader tasks enqueue the
+        // final JSONL lines. A bounded wait gives those readers a chance to
+        // finish. If it expires, leave the turn running for a later poll;
+        // never report a completed turn with an incomplete event stream.
+        let deadline = tokio::time::Instant::now() + POST_EXIT_STREAM_DRAIN_WAIT;
+        loop {
+            match tokio::time::timeout_at(deadline, active.receiver.recv()).await {
+                Ok(Some(message)) => {
+                    record_stream_message(active, turn_id, max_diagnostic_bytes, message)
+                }
+                Ok(None) => {
+                    active.stream_closed = true;
+                    break;
+                }
+                Err(_) => break,
+            }
+        }
     }
     Ok(())
+}
+
+fn record_stream_message(
+    active: &mut ActiveCodexTurn,
+    turn_id: &TurnId,
+    max_diagnostic_bytes: usize,
+    message: StreamMessage,
+) {
+    match message {
+        StreamMessage::Event(event) => {
+            if let Some(thread_id) = &event.thread_id {
+                active.thread_id = Some(thread_id.clone());
+            }
+            active
+                .normalized_events
+                .push(normalize_codex_event(&event, turn_id));
+            active.events.push(event);
+        }
+        StreamMessage::OversizedEvent(byte_count) => {
+            let summary = format!(
+                "Codex JSONL event body omitted because it exceeded the configured byte limit ({} bytes)",
+                byte_count
+            );
+            let event = CodexCliEventV1 {
+                event_type: "oversized.event".into(),
+                thread_id: active.thread_id.clone(),
+                item_type: None,
+                text: None,
+                retry_after_seconds: None,
+                bounded_summary: bounded_redacted_text(&summary, max_diagnostic_bytes),
+            };
+            active.normalized_events.push(NormalizedProviderEventV1 {
+                provider_id: ProviderIdV1::CodexCli.as_str().into(),
+                turn_id: turn_id.clone(),
+                kind: NormalizedProviderEventKind::TextDelta,
+                text: Some(event.bounded_summary.clone()),
+                tool_call: None,
+            });
+            active.events.push(event);
+        }
+        StreamMessage::ParseError(error) => {
+            let error = bounded_redacted_text(&error, max_diagnostic_bytes);
+            active.normalized_events.push(NormalizedProviderEventV1 {
+                provider_id: ProviderIdV1::CodexCli.as_str().into(),
+                turn_id: turn_id.clone(),
+                kind: NormalizedProviderEventKind::TerminalError,
+                text: Some(error.clone()),
+                tool_call: None,
+            });
+            active.events.push(CodexCliEventV1 {
+                event_type: "parse.error".into(),
+                thread_id: active.thread_id.clone(),
+                item_type: None,
+                text: None,
+                retry_after_seconds: None,
+                bounded_summary: error,
+            });
+        }
+        StreamMessage::Stderr(line) => {
+            append_bounded(&mut active.stderr, &line, max_diagnostic_bytes)
+        }
+    }
 }
 
 fn active_turn_state(active: &ActiveCodexTurn) -> CodexCliTurnStateV1 {
     if active.cancelled {
         CodexCliTurnStateV1::Cancelled
+    } else if active.exited.is_none() || !active.stream_closed {
+        CodexCliTurnStateV1::Running
     } else if active.events.iter().any(|event| {
         event.retry_after_seconds.is_some() || is_rate_limit_text(&event.bounded_summary)
     }) || is_rate_limit_text(&active.stderr)
@@ -1364,7 +2056,7 @@ fn active_turn_state(active: &ActiveCodexTurn) -> CodexCliTurnStateV1 {
             CodexCliTurnStateV1::Failed
         }
     } else {
-        CodexCliTurnStateV1::Running
+        unreachable!("terminal Codex state requires an observed process exit")
     }
 }
 
@@ -1597,6 +2289,670 @@ mod tests {
             std::env::current_dir().expect("working directory"),
         )
         .expect("config")
+    }
+
+    async fn exited_test_turn(receiver: mpsc::Receiver<StreamMessage>) -> ActiveCodexTurn {
+        let mut command = if cfg!(windows) {
+            let mut command = Command::new("cmd.exe");
+            command.args(["/C", "exit", "0"]);
+            command
+        } else {
+            let mut command = Command::new("sh");
+            command.args(["-c", "exit 0"]);
+            command
+        };
+        let mut child = command.spawn().expect("spawn test child");
+        let exited = child.wait().await.expect("wait for test child");
+        assert!(exited.success());
+        let request = CodexCliTurnRequestV1 {
+            worker_session_id: WorkerSessionId::new("reader-test-worker").expect("worker"),
+            turn_id: TurnId::new("reader-test-turn").expect("turn"),
+            prompt: "test".into(),
+        };
+        ActiveCodexTurn {
+            child,
+            receiver,
+            events: Vec::new(),
+            normalized_events: Vec::new(),
+            thread_id: None,
+            stderr: String::new(),
+            exited: Some(exited),
+            exit_observed_at: Some(SystemTime::now()),
+            stream_closed: false,
+            cancelled: false,
+            cancel_event_emitted: false,
+            started_at: Instant::now(),
+            launched_at: SystemTime::now(),
+            rollout_root: None,
+            rollout_anchor: None,
+            actual_profile: None,
+            diagnostic: execution_diagnostic(&config(), "codex-cli 0.160.0", &request, None),
+            diagnostic_persisted: false,
+        }
+    }
+
+    #[tokio::test]
+    async fn child_exit_waits_for_delayed_final_reader_event() {
+        let (sender, receiver) = mpsc::channel(4);
+        let mut active = exited_test_turn(receiver).await;
+        let delayed_reader = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            sender
+                .send(StreamMessage::Event(
+                    parse_codex_jsonl_event(r#"{"type":"turn.completed"}"#, 1024)
+                        .expect("completion event"),
+                ))
+                .await
+                .expect("send completion after child exit");
+        });
+        let turn_id = TurnId::new("reader-test-turn").expect("turn");
+        drain_active_turn(&mut active, &turn_id, 1024)
+            .await
+            .expect("drain delayed reader");
+        delayed_reader.await.expect("reader task");
+        assert!(active.stream_closed);
+        assert_eq!(active.events.len(), 1);
+        assert_eq!(active.events[0].event_type, "turn.completed");
+        assert_eq!(active_turn_state(&active), CodexCliTurnStateV1::Completed);
+    }
+
+    #[tokio::test]
+    async fn unclosed_reader_keeps_exited_child_nonterminal_until_next_poll() {
+        let (sender, receiver) = mpsc::channel(4);
+        let mut active = exited_test_turn(receiver).await;
+        let turn_id = TurnId::new("reader-test-turn").expect("turn");
+        drain_active_turn(&mut active, &turn_id, 1024)
+            .await
+            .expect("bounded first drain");
+        assert!(!active.stream_closed);
+        assert_eq!(active_turn_state(&active), CodexCliTurnStateV1::Running);
+        sender
+            .send(StreamMessage::Event(
+                parse_codex_jsonl_event(r#"{"type":"turn.completed"}"#, 1024)
+                    .expect("completion event"),
+            ))
+            .await
+            .expect("send completion after bounded wait");
+        drop(sender);
+        drain_active_turn(&mut active, &turn_id, 1024)
+            .await
+            .expect("second drain");
+        assert!(active.stream_closed);
+        assert_eq!(active.events[0].event_type, "turn.completed");
+        assert_eq!(active_turn_state(&active), CodexCliTurnStateV1::Completed);
+    }
+
+    #[tokio::test]
+    async fn pending_reader_can_be_cancelled_after_child_exit() {
+        let (sender, receiver) = mpsc::channel(4);
+        let active = exited_test_turn(receiver).await;
+        let handle = CodexCliTurnHandleV1 {
+            handle_id: "pending-reader".into(),
+            worker_session_id: WorkerSessionId::new("reader-test-worker").expect("worker"),
+            turn_id: TurnId::new("reader-test-turn").expect("turn"),
+            resumed_thread_id: None,
+        };
+        let mut provider = CodexCliProviderV1 {
+            config: config(),
+            capabilities: CodexCliCapabilitiesV1::from_command_output(
+                "codex-cli 0.160.0",
+                "exec resume --json read-only workspace-write",
+                "Resume a previous session [SESSION_ID] --json",
+            )
+            .expect("capabilities"),
+            active_turns: BTreeMap::from([(handle.handle_id.clone(), active)]),
+            worker_handles: BTreeMap::new(),
+            next_handle_sequence: 2,
+        };
+        provider
+            .cancel(&handle)
+            .await
+            .expect("cancel pending drain");
+        let cancelled = provider
+            .active_turns
+            .get(&handle.handle_id)
+            .expect("active turn");
+        assert_eq!(active_turn_state(cancelled), CodexCliTurnStateV1::Cancelled);
+        assert!(
+            sender
+                .send(StreamMessage::Stderr("late".into()))
+                .await
+                .is_err()
+        );
+    }
+
+    fn rollout_record(value: Value) -> String {
+        format!("{}\n", value)
+    }
+
+    fn rollout_session(thread_id: &str) -> String {
+        rollout_record(serde_json::json!({"type":"session_meta","payload":{"id":thread_id}}))
+    }
+
+    fn rollout_turn(turn_id: &str, model: &str, effort: &str) -> String {
+        [
+            rollout_record(serde_json::json!({"type":"event_msg","payload":{"type":"task_started","turn_id":turn_id,"root_turn_id":turn_id}})),
+            rollout_record(serde_json::json!({"type":"turn_context","payload":{"turn_id":turn_id,"root_turn_id":turn_id,"model":model,"effort":effort}})),
+            rollout_record(serde_json::json!({"type":"event_msg","payload":{"type":"task_complete","turn_id":turn_id,"last_agent_message":"private final text"}})),
+        ]
+        .concat()
+    }
+
+    fn rollout_turn_at(
+        turn_id: &str,
+        model: &str,
+        effort: &str,
+        started_at: u64,
+        completed_at: u64,
+    ) -> String {
+        let event_timestamp = rollout_timestamp(SystemTime::now());
+        rollout_turn_at_timestamp(
+            turn_id,
+            model,
+            effort,
+            started_at,
+            completed_at,
+            &event_timestamp,
+        )
+    }
+
+    fn rollout_turn_at_timestamp(
+        turn_id: &str,
+        model: &str,
+        effort: &str,
+        started_at: u64,
+        completed_at: u64,
+        event_timestamp: &str,
+    ) -> String {
+        [
+            rollout_record(serde_json::json!({"type":"event_msg","timestamp":event_timestamp,"payload":{"type":"task_started","turn_id":turn_id,"root_turn_id":turn_id,"started_at":started_at}})),
+            rollout_record(serde_json::json!({"type":"turn_context","payload":{"turn_id":turn_id,"root_turn_id":turn_id,"model":model,"effort":effort}})),
+            rollout_record(serde_json::json!({"type":"event_msg","timestamp":event_timestamp,"payload":{"type":"task_complete","turn_id":turn_id,"started_at":started_at,"completed_at":completed_at}})),
+        ]
+        .concat()
+    }
+
+    fn rollout_timestamp(at: SystemTime) -> String {
+        let nanos = at.duration_since(UNIX_EPOCH).expect("clock").as_nanos();
+        time::OffsetDateTime::from_unix_timestamp_nanos(i128::try_from(nanos).expect("nanos"))
+            .expect("test timestamp")
+            .format(&time::format_description::well_known::Rfc3339)
+            .expect("format timestamp")
+    }
+
+    #[test]
+    fn native_rollout_timestamp_parser_accepts_observed_millisecond_schema() {
+        let parsed = parse_rollout_event_timestamp(
+            &serde_json::json!({"timestamp":"2026-10-14T10:27:27.197Z"}),
+        )
+        .expect("observed CLI timestamp");
+        let since_epoch = parsed.duration_since(UNIX_EPOCH).expect("post-epoch");
+        assert_eq!(since_epoch.as_secs(), 1_791_973_647);
+        assert_eq!(since_epoch.subsec_millis(), 197);
+        assert!(
+            parse_rollout_event_timestamp(
+                &serde_json::json!({"timestamp":"2026-10-14T10:27:27.197+00:00"})
+            )
+            .is_none()
+        );
+    }
+
+    fn with_rollout_file(contents: &str, test: impl FnOnce(&Path, &File)) {
+        let path = std::env::temp_dir().join(format!(
+            "catdesk-codex-rollout-{}.jsonl",
+            uuid::Uuid::new_v4()
+        ));
+        fs::write(&path, contents).expect("write rollout fixture");
+        let file = File::open(&path).expect("open rollout fixture");
+        test(&path, &file);
+        drop(file);
+        fs::remove_file(&path).expect("remove rollout fixture");
+    }
+
+    #[test]
+    fn native_rollout_profile_binds_exact_session_and_completed_turn() {
+        let thread_id = "01a139f3-ccac-7d00-bca6-8ec83668f752";
+        let turn_id = "01a139f3-e21f-7e31-b61c-9de39d2f7e2e";
+        let transcript = rollout_record(serde_json::json!({
+            "type":"response_item","payload":{"type":"message","text":"private transcript"}
+        }));
+        let contents = format!(
+            "{}{}{}",
+            rollout_session(thread_id),
+            transcript,
+            rollout_turn(turn_id, "gpt-6.1-sol", "medium")
+        );
+        with_rollout_file(&contents, |_, file| {
+            let evidence = read_rollout_profile(file, 0, thread_id).expect("native profile");
+            assert_eq!(evidence.codex_thread_id, thread_id);
+            assert_eq!(evidence.codex_turn_id, turn_id);
+            assert_eq!(evidence.model_id, "gpt-6.1-sol");
+            assert_eq!(evidence.reasoning_effort, "medium");
+            assert!(evidence.matches(thread_id, "gpt-6.1-sol"));
+            assert!(!evidence.matches(thread_id, "gpt-5.6-terra"));
+            assert_eq!(evidence.evidence_sha256.len(), 64);
+            assert!(
+                read_rollout_profile(file, 0, "00000000-0000-0000-0000-000000000001").is_none()
+            );
+        });
+        let without_transcript = format!(
+            "{}{}",
+            rollout_session(thread_id),
+            rollout_turn(turn_id, "gpt-6.1-sol", "medium")
+        );
+        with_rollout_file(&without_transcript, |_, file| {
+            let evidence = read_rollout_profile(file, 0, thread_id).expect("native profile");
+            with_rollout_file(&contents, |_, original| {
+                assert_eq!(
+                    evidence.evidence_sha256,
+                    read_rollout_profile(original, 0, thread_id)
+                        .expect("original native profile")
+                        .evidence_sha256,
+                    "transcript content must not enter the metadata digest"
+                );
+            });
+            with_rollout_file(
+                &without_transcript.replace("private final text", "different final text"),
+                |_, changed_final| {
+                    assert_eq!(
+                        evidence.evidence_sha256,
+                        read_rollout_profile(changed_final, 0, thread_id)
+                            .expect("changed final text profile")
+                            .evidence_sha256,
+                        "final message text must not enter the metadata digest"
+                    );
+                },
+            );
+        });
+    }
+
+    #[test]
+    fn resumed_rollout_reads_only_the_post_launch_native_turn() {
+        let thread_id = "01a139f3-ccac-7d00-bca6-8ec83668f752";
+        let old_turn = "01a139f3-e21f-7e31-b61c-9de39d2f7e2e";
+        let new_turn = "01a139f5-e21f-7e31-b61c-9de39d2f7e2e";
+        let prefix = format!(
+            "{}{}",
+            rollout_session(thread_id),
+            rollout_turn(old_turn, "gpt-5.6-terra", "high")
+        );
+        with_rollout_file(&prefix, |path, file| {
+            let launch_offset = file.metadata().expect("metadata").len();
+            assert!(read_rollout_profile(file, launch_offset, thread_id).is_none());
+            let mut append = fs::OpenOptions::new()
+                .append(true)
+                .open(path)
+                .expect("append rollout");
+            append
+                .write_all(rollout_turn(new_turn, "gpt-6.1-sol", "medium").as_bytes())
+                .expect("append native turn");
+            append.sync_all().expect("sync native turn");
+            let evidence = read_rollout_profile(file, launch_offset, thread_id)
+                .expect("post-launch native profile");
+            assert_eq!(evidence.codex_turn_id, new_turn);
+            assert_eq!(evidence.model_id, "gpt-6.1-sol");
+            assert_eq!(evidence.reasoning_effort, "medium");
+            assert!(
+                read_rollout_profile(file, 0, thread_id).is_none(),
+                "full historical replay contains two turns and is ambiguous"
+            );
+        });
+    }
+
+    #[test]
+    fn prelaunch_append_cannot_supply_the_child_turn_profile() {
+        let thread_id = "01a139f3-ccac-7d00-bca6-8ec83668f752";
+        let foreign_turn = "01a139f5-e21f-7e31-b61c-9de39d2f7e2e";
+        with_rollout_file(&rollout_session(thread_id), |path, held_file| {
+            let prelaunch_offset = held_file.metadata().expect("metadata").len();
+            let stale_start = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock")
+                .as_secs()
+                .saturating_sub(10);
+            fs::OpenOptions::new()
+                .append(true)
+                .open(path)
+                .expect("open prelaunch rollout")
+                .write_all(
+                    rollout_turn_at(
+                        foreign_turn,
+                        "gpt-6.1-sol",
+                        "medium",
+                        stale_start,
+                        stale_start,
+                    )
+                    .as_bytes(),
+                )
+                .expect("append foreign turn after anchor");
+            let launched_at = SystemTime::now();
+            assert!(
+                read_rollout_profile(held_file, prelaunch_offset, thread_id).is_some(),
+                "the foreign append otherwise has a valid native profile"
+            );
+            assert!(
+                read_rollout_profile_in_window(
+                    held_file,
+                    prelaunch_offset,
+                    thread_id,
+                    launched_at,
+                    SystemTime::now(),
+                )
+                .is_none(),
+                "a prelaunch native start cannot be attributed to this child"
+            );
+        });
+        let now = SystemTime::now();
+        let now_epoch = now.duration_since(UNIX_EPOCH).expect("clock").as_secs();
+        with_rollout_file(
+            &format!(
+                "{}{}",
+                rollout_session(thread_id),
+                rollout_turn_at(
+                    foreign_turn,
+                    "gpt-6.1-sol",
+                    "medium",
+                    now_epoch,
+                    now_epoch + 60,
+                )
+            ),
+            |_, file| {
+                assert!(
+                    read_rollout_profile_in_window(file, 0, thread_id, now, SystemTime::now())
+                        .is_none(),
+                    "completion after child-exit observation must be rejected"
+                );
+            },
+        );
+        let synthetic_launch =
+            UNIX_EPOCH + Duration::from_secs(2_000_000_000) + Duration::from_millis(500);
+        let foreign_event = synthetic_launch - Duration::from_millis(100);
+        let same_second_foreign = format!(
+            "{}{}",
+            rollout_session(thread_id),
+            rollout_turn_at_timestamp(
+                foreign_turn,
+                "gpt-6.1-sol",
+                "medium",
+                2_000_000_000,
+                2_000_000_000,
+                &rollout_timestamp(foreign_event),
+            )
+        );
+        with_rollout_file(&same_second_foreign, |_, file| {
+            assert!(
+                read_rollout_profile_in_window(
+                    file,
+                    0,
+                    thread_id,
+                    synthetic_launch,
+                    synthetic_launch + Duration::from_millis(100),
+                )
+                .is_none(),
+                "millisecond event time must reject a prelaunch turn from the same Unix second"
+            );
+        });
+    }
+
+    #[test]
+    fn native_rollout_profile_rejects_partial_or_changed_turn_metadata() {
+        let thread_id = "01a139f3-ccac-7d00-bca6-8ec83668f752";
+        let turn_id = "01a139f3-e21f-7e31-b61c-9de39d2f7e2e";
+        let start = rollout_record(
+            serde_json::json!({"type":"event_msg","payload":{"type":"task_started","turn_id":turn_id,"root_turn_id":turn_id}}),
+        );
+        let context = rollout_record(
+            serde_json::json!({"type":"turn_context","payload":{"turn_id":turn_id,"model":"gpt-6.1-sol","effort":"medium"}}),
+        );
+        let downgraded = rollout_record(
+            serde_json::json!({"type":"turn_context","payload":{"turn_id":turn_id,"model":"gpt-5.6-terra","effort":"high"}}),
+        );
+        let complete = rollout_record(
+            serde_json::json!({"type":"event_msg","payload":{"type":"task_complete","turn_id":turn_id}}),
+        );
+        let cases = [
+            format!("{}{}{}", rollout_session(thread_id), start, context),
+            format!(
+                "{}{}{}{}{}",
+                rollout_session(thread_id),
+                start,
+                context,
+                downgraded,
+                complete
+            ),
+            format!(
+                "{}{}{}{}{}",
+                rollout_session(thread_id),
+                start,
+                context,
+                complete,
+                complete
+            ),
+            format!(
+                "{}{}{}{}{}",
+                rollout_session(thread_id),
+                start,
+                context,
+                complete,
+                context
+            ),
+            format!(
+                "{}{}{}{}{}",
+                rollout_session(thread_id),
+                start,
+                context,
+                complete,
+                start
+            ),
+        ];
+        for contents in cases {
+            with_rollout_file(&contents, |_, file| {
+                assert!(read_rollout_profile(file, 0, thread_id).is_none());
+            });
+        }
+    }
+
+    #[test]
+    fn native_rollout_profile_requires_consistent_root_turn_identity() {
+        let thread_id = "01a139f3-ccac-7d00-bca6-8ec83668f752";
+        let turn_id = "01a139f3-e21f-7e31-b61c-9de39d2f7e2e";
+        let other = "01a139f5-e21f-7e31-b61c-9de39d2f7e2e";
+        let start = rollout_record(
+            serde_json::json!({"type":"event_msg","payload":{"type":"task_started","turn_id":turn_id,"root_turn_id":turn_id}}),
+        );
+        let context = |root: Option<&str>| {
+            let mut value = serde_json::json!({"type":"turn_context","payload":{"turn_id":turn_id,"model":"gpt-6.1-sol","effort":"medium"}});
+            if let Some(root) = root {
+                value["payload"]["root_turn_id"] = serde_json::json!(root);
+            }
+            rollout_record(value)
+        };
+        let complete = |root: Option<&str>| {
+            let mut value = serde_json::json!({"type":"event_msg","payload":{"type":"task_complete","turn_id":turn_id}});
+            if let Some(root) = root {
+                value["payload"]["root_turn_id"] = serde_json::json!(root);
+            }
+            rollout_record(value)
+        };
+        for (context_root, completion_root) in [
+            (None, None),
+            (Some(other), None),
+            (Some(turn_id), Some(other)),
+        ] {
+            let contents = format!(
+                "{}{}{}{}",
+                rollout_session(thread_id),
+                start,
+                context(context_root),
+                complete(completion_root)
+            );
+            with_rollout_file(&contents, |_, file| {
+                assert!(read_rollout_profile(file, 0, thread_id).is_none());
+            });
+        }
+        let absent_completion_root = format!(
+            "{}{}{}{}",
+            rollout_session(thread_id),
+            start,
+            context(Some(turn_id)),
+            complete(None)
+        );
+        let matching_completion_root = format!(
+            "{}{}{}{}",
+            rollout_session(thread_id),
+            start,
+            context(Some(turn_id)),
+            complete(Some(turn_id))
+        );
+        with_rollout_file(&absent_completion_root, |_, file| {
+            let without = read_rollout_profile(file, 0, thread_id).expect("real CLI shape");
+            with_rollout_file(&matching_completion_root, |_, file| {
+                let with = read_rollout_profile(file, 0, thread_id)
+                    .expect("optional matching completion root");
+                assert_ne!(without.evidence_sha256, with.evidence_sha256);
+            });
+        });
+    }
+
+    #[test]
+    fn rollout_discovery_requires_exact_thread_and_post_launch_boundary() {
+        let thread_id = "01a139f3-ccac-7d00-bca6-8ec83668f752";
+        let turn_id = "01a139f3-e21f-7e31-b61c-9de39d2f7e2e";
+        let base = std::env::temp_dir().join(format!(
+            "catdesk-codex-rollout-discovery-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let root = base.join("sessions");
+        let day_one = root.join("2026").join("10").join("14");
+        let day_two = root.join("2026").join("10").join("15");
+        fs::create_dir_all(&day_one).expect("create first date");
+        fs::create_dir_all(&day_two).expect("create second date");
+        let name = format!("rollout-2026-10-14T06-27-26-{thread_id}.jsonl");
+        let old = day_one.join(&name);
+        fs::write(
+            &old,
+            format!(
+                "{}{}",
+                rollout_session(thread_id),
+                rollout_turn_at(
+                    turn_id,
+                    "gpt-5.6-terra",
+                    "high",
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .expect("clock")
+                        .as_secs(),
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .expect("clock")
+                        .as_secs(),
+                )
+            ),
+        )
+        .expect("write pre-launch rollout");
+        let launch = SystemTime::now();
+        assert!(read_postlaunch_rollout_profile(&root, thread_id, launch, launch, None).is_none());
+        let anchor = open_prelaunch_rollout(&root, thread_id)
+            .expect("unambiguous pre-launch rollout")
+            .expect("anchor");
+        assert_eq!(anchor.length, fs::metadata(&old).expect("metadata").len());
+        let new_turn = "01a139f5-e21f-7e31-b61c-9de39d2f7e2e";
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&old)
+            .expect("open old rollout for append")
+            .write_all(
+                rollout_turn_at(
+                    new_turn,
+                    "gpt-6.1-sol",
+                    "medium",
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .expect("clock")
+                        .as_secs(),
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .expect("clock")
+                        .as_secs(),
+                )
+                .as_bytes(),
+            )
+            .expect("append new native turn");
+        let appended = read_postlaunch_rollout_profile(
+            &root,
+            thread_id,
+            launch,
+            SystemTime::now(),
+            Some(&anchor),
+        )
+        .expect("held pre-launch handle and offset");
+        assert_eq!(appended.codex_turn_id, new_turn);
+        let new = day_two.join(name);
+        fs::write(
+            &new,
+            format!(
+                "{}{}",
+                rollout_session(thread_id),
+                rollout_record(serde_json::json!({"type":"event_msg","payload":{"type":"task_started","turn_id":new_turn,"root_turn_id":new_turn}}))
+            ),
+        )
+        .expect("write partial second matching rollout");
+        assert!(
+            read_postlaunch_rollout_profile(
+                &root,
+                thread_id,
+                launch,
+                SystemTime::now(),
+                Some(&anchor),
+            )
+            .is_none(),
+            "a partial exact-thread candidate must block the otherwise valid append"
+        );
+        fs::write(
+            &new,
+            format!(
+                "{}{}",
+                rollout_session(thread_id),
+                rollout_turn_at(
+                    new_turn,
+                    "gpt-6.1-sol",
+                    "medium",
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .expect("clock")
+                        .as_secs(),
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .expect("clock")
+                        .as_secs(),
+                )
+            ),
+        )
+        .expect("write second matching rollout");
+        assert!(
+            read_postlaunch_rollout_profile(
+                &root,
+                thread_id,
+                launch,
+                SystemTime::now(),
+                Some(&anchor),
+            )
+            .is_none(),
+            "two post-launch candidates are ambiguous"
+        );
+        assert!(
+            open_prelaunch_rollout(&root, thread_id).is_err(),
+            "a resumed thread cannot anchor two matching files"
+        );
+        drop(anchor);
+        fs::remove_file(&old).expect("remove old rollout");
+        fs::remove_file(&new).expect("remove new rollout");
+        fs::remove_dir(&day_one).expect("remove first date");
+        fs::remove_dir(&day_two).expect("remove second date");
+        fs::remove_dir(root.join("2026").join("10")).expect("remove month");
+        fs::remove_dir(root.join("2026")).expect("remove year");
+        fs::remove_dir(&root).expect("remove sessions root");
+        fs::remove_dir(&base).expect("remove fixture root");
     }
 
     #[test]
@@ -1874,6 +3230,7 @@ mod tests {
             working_directory: directory.clone(),
             operator_codex_home: None,
             model_id: None,
+            host_authority_roots: Vec::new(),
             sandbox: CodexCliSandboxV1::ReadOnly,
             approval_policy: CodexCliApprovalPolicyV1::Never,
             max_event_bytes: 1,
@@ -1884,6 +3241,69 @@ mod tests {
         let mut invalid = config();
         invalid.working_directory = PathBuf::from("C:\\missing-catdesk-workspace");
         assert!(invalid.validate().is_err());
+    }
+
+    #[tokio::test]
+    async fn sol_workspace_write_refuses_host_authority_overlap_before_spawning() {
+        let fixture = std::env::temp_dir().join(format!(
+            "catdesk-sol-authority-boundary-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let workspace = fixture.join("workspace");
+        let authority = workspace.join(".catdesk").join("autonomy");
+        let sibling = fixture.join("workspace-other");
+        fs::create_dir_all(&authority).expect("host state fixture");
+        fs::create_dir_all(&sibling).expect("sibling fixture");
+        let mut config =
+            CodexCliConfigV1::new(direct_executable(), workspace).expect("worker config");
+        config.model_id = Some(SOL_MEDIUM_MODEL.into());
+        assert!(
+            config.validate_sol_worker_authority_boundary().is_err(),
+            "unknown host authority is not an acceptable Sol worker boundary"
+        );
+        config.host_authority_roots = vec![authority];
+        let mut provider = CodexCliProviderV1 {
+            config: config.clone(),
+            capabilities: CodexCliCapabilitiesV1::from_command_output(
+                "codex-cli 0.160.0",
+                "exec resume --json read-only workspace-write",
+                "Resume a previous session [SESSION_ID] --json",
+            )
+            .expect("capabilities"),
+            active_turns: BTreeMap::new(),
+            worker_handles: BTreeMap::new(),
+            next_handle_sequence: 1,
+        };
+        let request = CodexCliTurnRequestV1 {
+            worker_session_id: WorkerSessionId::new("sol-authority-worker").expect("worker"),
+            turn_id: TurnId::new("sol-authority-turn").expect("turn"),
+            prompt: "bounded request".into(),
+        };
+        let error = provider
+            .start_turn(request)
+            .await
+            .expect_err("overlap must hold");
+        assert!(format!("{error:?}").contains("overlaps host authority"));
+        assert!(provider.active_turns.is_empty());
+        config.host_authority_roots = vec![sibling];
+        validate_sol_worker_write_roots(&config.working_directory, &config.host_authority_roots)
+            .expect("sibling paths are disjoint");
+        let error = config
+            .validate_sol_worker_authority_boundary()
+            .expect_err("disjoint paths cannot replace a worker OS identity");
+        assert!(format!("{error:?}").contains("OS isolation is unproven"));
+        provider.config = config;
+        let error = provider
+            .start_turn(CodexCliTurnRequestV1 {
+                worker_session_id: WorkerSessionId::new("sol-disjoint-worker").expect("worker"),
+                turn_id: TurnId::new("sol-disjoint-turn").expect("turn"),
+                prompt: "bounded request".into(),
+            })
+            .await
+            .expect_err("direct CLI launch must remain closed for disjoint paths");
+        assert!(format!("{error:?}").contains("OS isolation is unproven"));
+        assert!(provider.active_turns.is_empty());
+        fs::remove_dir_all(&fixture).expect("retire owned test fixture");
     }
 
     #[test]

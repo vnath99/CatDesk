@@ -1,5 +1,12 @@
 # CatDesk — Important Command Reference
 
+## Current authority and release hold (2026-10-15)
+
+- The hourly ChatGPT deadman is **OFF by operator request**. Historical schedule text later in this file is superseded; do not recreate or enable it.
+- Do not run `wake/install.ps1` against the live dev.84 store. The new guarded installer requires a host-owned nonce challenge and exact root/lock/versions identities. The installed host cannot answer, and direct-shell and live store objects differ. Run source/isolated tests only until a reviewed migration resolves that authority gap.
+- Do not mark a managed Sol/medium task complete from a configured app-server thread model. Require the exact CLI native turn profile, approved checkpoint, immutable review/source binding and independent Wake validation. The present workspace-write root contains `.catdesk/autonomy`; the Sol guard deliberately holds launch until host authority is outside worker writes and a restricted worker process identity is proven.
+- The exact branch has no independent Windows CI while Actions dispatch returns HTTP 422 (`Actions has been disabled for this repository`). Local builds and tests do not lift the protected install or reviewed-candidate launch gates.
+
 ## 2026-10-14 — T0483 autonomous review retry
 
 - Replaying an autonomous review ID now requires the same project, session, state, action and artifact reference. A later clock preserves the first recorded creation time; acknowledgment remains sticky. Conflicting evidence is rejected before any Wake publication. This is source-only and does not establish a real Sol/medium task or exact Wake receipt. See `docs/orchestrator/review_bundles/T-0483_R8_REVIEW_INBOX_REPLAY_BINDING.md`.

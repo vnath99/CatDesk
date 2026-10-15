@@ -561,6 +561,8 @@ mod tests {
             codex_eligible_after_unix: None,
             codex_routing_telemetry: None,
             codex_continuity: None,
+            codex_turn_profile_violation: false,
+            codex_turn_profile_tracking_started: true,
             cancellation_requested: false,
             approved_contract_hash: None,
             consumed_idempotency_keys: BTreeMap::new(),

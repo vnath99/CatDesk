@@ -1,5 +1,13 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+# 2026-10-15 source checkpoint
+
+The opt-in Sol/medium path now reads exact native CLI turn metadata instead of treating an app-server thread setting as turn proof. Accounting and passed-verification checkpoints retain the turn profile; completed Sol inbox records bind the approved task, verification, completion artifact, source snapshot and review ID. Independent WakeHost discovery validates the same binding before `review_ready`. A missing or downgraded profile, direct-ChatGPT completion under a Sol contract, and an unbound review are rejected in isolated tests.
+
+The real loop is **not accepted**. CatDesk's current `.catdesk/autonomy` authority store sits inside the Codex workspace-write root. The source guard also requires an enforced restricted worker identity even if paths become disjoint; ordinary `tokio::Command` does not provide that boundary. It holds Sol launch and records `WAITING_FOR_CHATGPT` attention. Installed WakeHost dev.84 cannot answer the new lock-owner challenge; dev.85 installation and a fresh natural Wake remain held. Exact branch Windows CI is unavailable while GitHub Actions dispatch returns HTTP 422. No Codex development deliverable has yet passed the full Codex → review → Wake chain. Preserve Terra/high sessions and the disabled hourly deadman.
+
+Current source evidence and exact residual gates are in `docs/orchestrator/review_bundles/T-0483_R9_NATIVE_TURN_REVIEW_WAKE_BINDING.md`, `T-0483_R10_WAKE_CALLER_APPROVAL_BOUNDARY_HOLD.md`, and `T-0483_R11_WAKE_OWNER_CHALLENGE_SOURCE.md`.
+
 Date: 2026-10-14. Canonical CatDesk Chat53: https://chatgpt.com/c/6ace36d3-8634-8333-a79c-1a4cba32caeb
 
 ## Request and acceptance

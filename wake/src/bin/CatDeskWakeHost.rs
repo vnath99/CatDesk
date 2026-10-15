@@ -1,4 +1,4 @@
-use catdesk_wake::{Result, runtime, store::Store};
+use catdesk_wake::{Result, install_authority::InstallStoreGuard, runtime, store::Store};
 use std::path::Path;
 
 fn open_runtime_store(root: &Path) -> Result<Store> {
@@ -7,6 +7,21 @@ fn open_runtime_store(root: &Path) -> Result<Store> {
         return Store::open_scoped_for_test(root, Path::new(&parent));
     }
     Store::open(root)
+}
+
+fn guarded_install_store(
+    root: &Path,
+    pid: &str,
+    fingerprint: &str,
+) -> Result<(InstallStoreGuard, Store)> {
+    let pid = pid
+        .parse()
+        .map_err(|_| "WAKE_STORE_AUTHORITY_PROCESS_INVALID")?;
+    let guard = InstallStoreGuard::acquire(root, pid, fingerprint)?;
+    guard.require_lock_owner_proof()?;
+    let store = open_runtime_store(root)?;
+    guard.recheck_live()?;
+    Ok((guard, store))
 }
 
 fn main() {
@@ -18,6 +33,24 @@ fn main() {
 fn execute() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let root = runtime::default_root()?;
+    #[cfg(feature = "test-support")]
+    if args.as_slice() == ["test-owner-proof-host"] {
+        use std::io::Write;
+        let store = open_runtime_store(&root)?;
+        let root_pin = catdesk_wake::install_authority::HostRootPin::acquire(store.root())?;
+        let lease = store.host_lock()?;
+        let _proof = catdesk_wake::install_authority::HostOwnerProofServer::start(
+            store.root(),
+            &root_pin,
+            &lease,
+        )?;
+        println!("OWNER_PROOF_READY");
+        std::io::stdout()
+            .flush()
+            .map_err(|_| "OWNER_PROOF_TEST_READY_FAILED")?;
+        std::thread::sleep(std::time::Duration::from_secs(60));
+        return Ok(());
+    }
     if args.as_slice() == ["store-provenance"] {
         println!(
             "{}",
@@ -26,36 +59,125 @@ fn execute() -> Result<()> {
         );
         return Ok(());
     }
+    // The authority guard is acquired before Store::open, which may create
+    // missing state subdirectories. Its root and lock handles stay open until
+    // the native operation completes, so pathname retargeting cannot turn a
+    // successful preflight into a write to a different store.
+    match args.as_slice() {
+        [command, pid, fingerprint]
+            if command == "install-authority-probe" || command == "install-object-probe" =>
+        {
+            let pid: u32 = pid
+                .parse()
+                .map_err(|_| "WAKE_STORE_AUTHORITY_PROCESS_INVALID")?;
+            let guard = InstallStoreGuard::acquire_for_probe(&root, pid, fingerprint)?;
+            guard.recheck_live()?;
+            if command == "install-authority-probe" {
+                guard.require_lock_owner_proof()?;
+            }
+            println!(
+                "{}",
+                serde_json::json!({
+                    "objectMatch": true,
+                    "lockOwnerProven": command == "install-authority-probe"
+                })
+            );
+            return Ok(());
+        }
+        [command, pid, fingerprint] if command == "install-init" => {
+            let (guard, store) = guarded_install_store(&root, pid, fingerprint)?;
+            store.initialize()?;
+            guard.recheck_live()?;
+            println!("{}", serde_json::json!({"ok":true}));
+            return Ok(());
+        }
+        [command, workspace, pid, fingerprint] if command == "install-set-source" => {
+            let (guard, store) = guarded_install_store(&root, pid, fingerprint)?;
+            runtime::set_review_source(&store, workspace)?;
+            guard.recheck_live()?;
+            println!("{}", serde_json::json!({"ok":true}));
+            return Ok(());
+        }
+        [
+            command,
+            staging,
+            expected,
+            host_hash,
+            gui_hash,
+            adapter_hash,
+            bridge_hash,
+            pid,
+            fingerprint,
+        ] if command == "publish-reviewed-install" => {
+            let expected_hashes = runtime::ReviewedInstallExpectedHashes::new(
+                host_hash,
+                gui_hash,
+                adapter_hash,
+                bridge_hash,
+            )?;
+            let (guard, store) = guarded_install_store(&root, pid, fingerprint)?;
+            let publication = runtime::publish_reviewed_install(
+                &store,
+                &guard,
+                staging,
+                expected,
+                &expected_hashes,
+            )?;
+            guard.recheck_live()?;
+            println!(
+                "{}",
+                serde_json::to_string(&publication).map_err(|_| "STATUS_SERIALIZATION_FAILED")?
+            );
+            return Ok(());
+        }
+        [
+            command,
+            host_hash,
+            gui_hash,
+            adapter_hash,
+            bridge_hash,
+            pid,
+            fingerprint,
+        ] if command == "activate-reviewed-install" => {
+            let expected_hashes = runtime::ReviewedInstallExpectedHashes::new(
+                host_hash,
+                gui_hash,
+                adapter_hash,
+                bridge_hash,
+            )?;
+            let (guard, store) = guarded_install_store(&root, pid, fingerprint)?;
+            let handoff = runtime::activate_reviewed_install(&store, &guard, &expected_hashes)?;
+            println!(
+                "{}",
+                serde_json::to_string(&handoff).map_err(|_| "STATUS_SERIALIZATION_FAILED")?
+            );
+            return Ok(());
+        }
+        [command, ..]
+            if matches!(
+                command.as_str(),
+                "install-authority-probe"
+                    | "install-object-probe"
+                    | "install-init"
+                    | "install-set-source"
+                    | "publish-reviewed-install"
+                    | "activate-reviewed-install"
+                    | "register-install"
+                    | "init"
+                    | "set-source"
+            ) =>
+        {
+            return Err("CLI_ARGUMENTS_INVALID".into());
+        }
+        _ => {}
+    }
     let store = open_runtime_store(&root)?;
     match args.as_slice() {
-        [command] if command == "init" => store.initialize()?,
-        [command, workspace] if command == "set-source" => {
-            runtime::set_review_source(&store, workspace)?
-        }
-        [command] if command == "register-install" => runtime::register_install(&store)?,
         [command] if command == "reviewed-install-status" => {
             println!(
                 "{}",
                 serde_json::to_string(&runtime::reviewed_install_status(&store)?)
                     .map_err(|_| "STATUS_SERIALIZATION_FAILED")?
-            );
-            return Ok(());
-        }
-        [command] if command == "activate-reviewed-install" => {
-            println!(
-                "{}",
-                serde_json::to_string(&runtime::activate_reviewed_install(&store)?)
-                    .map_err(|_| "STATUS_SERIALIZATION_FAILED")?
-            );
-            return Ok(());
-        }
-        [command, staging, expected] if command == "publish-reviewed-install" => {
-            println!(
-                "{}",
-                serde_json::to_string(&runtime::publish_reviewed_install(
-                    &store, staging, expected,
-                )?)
-                .map_err(|_| "STATUS_SERIALIZATION_FAILED")?
             );
             return Ok(());
         }

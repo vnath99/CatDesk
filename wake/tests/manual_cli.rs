@@ -1,3 +1,5 @@
+#![cfg(feature = "test-support")]
+
 use catdesk_wake::store::Store;
 use std::{fs, process::Command};
 

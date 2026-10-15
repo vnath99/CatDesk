@@ -17,13 +17,17 @@ use uuid::Uuid;
 use super::autonomous_contract::AutonomousDevelopmentContractV1;
 use super::autonomy_accounting::ExecutionAccountingStoreV1;
 use super::codex_app_server::{CodexRoutingTelemetryV1, validate_telemetry};
+use super::codex_model_policy::{CodexCliTurnProfileEvidenceV1, SOL_MEDIUM_MODEL};
 use super::coordinator::VerificationSummaryV1;
 use super::github_publication::GithubPublicationJournalV1;
 use super::runtime::RuntimeError;
-use crate::reviewed_source_snapshot::ReviewedSourceSnapshotExpectedV1;
+use crate::reviewed_source_snapshot::{
+    ReviewedSourceSnapshotExpectedV1, validate_committed_snapshot,
+};
 
 pub const AUTONOMY_STATE_SCHEMA_VERSION: u32 = 1;
 pub const AUTONOMY_WAKE_POLICY_SCHEMA_VERSION: u32 = 1;
+pub const AUTONOMY_COMPLETED_REVIEW_BINDING_SCHEMA_VERSION: u32 = 1;
 pub const AUTONOMY_REVIEW_INBOX_RECORD_LIMIT: usize = 4096;
 // The live inbox is a bounded notification/authorization window, not the sole audit log.
 // Retire only oldest acknowledged records; unread actionable work is never compacted away.
@@ -182,6 +186,16 @@ pub struct AutonomousSessionSnapshotV1 {
     /// autonomous work.
     #[serde(default)]
     pub codex_continuity: Option<CodexContinuityEvidenceV1>,
+    /// A completed native Codex turn lacked the approved effective profile.
+    /// Work already done in this session may be contaminated, so a later
+    /// matching turn cannot clear this marker or authorize review.
+    #[serde(default)]
+    pub codex_turn_profile_violation: bool,
+    /// New sessions opt into exact native-turn profile evidence from their
+    /// first provider turn. Historical sessions deserialize false and cannot
+    /// be silently upgraded after an untracked Sol turn already ran.
+    #[serde(default)]
+    pub codex_turn_profile_tracking_started: bool,
     #[serde(default)]
     pub cancellation_requested: bool,
     #[serde(default)]
@@ -508,6 +522,10 @@ pub struct AutonomousPassedVerificationCheckpointV1 {
     pub authoritative_diff: String,
     pub authoritative_diff_sha256: String,
     pub attribution_digest: String,
+    /// Observed metadata for the exact completed native Codex turn. It must
+    /// be durable before a Codex checkpoint can authorize review on retry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codex_turn_profile: Option<CodexCliTurnProfileEvidenceV1>,
     /// The immutable task-output observations which were attributed before
     /// this checkpoint was committed.  Recovery may only compare current
     /// objects to these observations; it must never create a new expectation.
@@ -584,6 +602,33 @@ pub struct AutonomousReviewInboxRecordV1 {
     pub reference: String,
     pub created_at_unix: u64,
     pub unread: bool,
+}
+
+/// Immutable sidecar for a completed managed Sol review. The established
+/// review-inbox wire record remains unchanged; this record binds its exact ID
+/// to the passed checkpoint, completed native turn, final review bytes and
+/// committed reviewed-source manifest. A missing sidecar cannot be inferred
+/// later from mutable workspace state.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutonomousCompletedReviewBindingV1 {
+    pub schema_version: u32,
+    pub record_id: String,
+    pub created_at_unix: u64,
+    pub session_id: String,
+    pub project_id: String,
+    pub reference: String,
+    pub approved_contract_hash: String,
+    pub logical_task_id: String,
+    pub provider_turn_count: u32,
+    pub codex_turn_profile: CodexCliTurnProfileEvidenceV1,
+    pub checkpoint_sha256: String,
+    pub completion_sha256: String,
+    pub authoritative_diff_sha256: String,
+    pub attribution_digest: String,
+    pub reviewed_source_expectation_sha256: String,
+    pub reviewed_source_snapshot_id: String,
+    pub reviewed_source_manifest_digest: String,
 }
 
 /// Explicit, non-secret replacement evidence for audit reporting.  Session
@@ -718,6 +763,8 @@ impl AutonomousStateStoreV1 {
             codex_eligible_after_unix: None,
             codex_routing_telemetry: None,
             codex_continuity: None,
+            codex_turn_profile_violation: false,
+            codex_turn_profile_tracking_started: true,
             cancellation_requested: false,
             approved_contract_hash: None,
             consumed_idempotency_keys: BTreeMap::new(),
@@ -824,9 +871,45 @@ impl AutonomousStateStoreV1 {
     ) -> Result<(), AutonomyStateError> {
         validate_snapshot(snapshot, &snapshot.session_id)?;
         self.ensure_session_exists(&snapshot.session_id)?;
+        // This is separate from the controller's session.lock: callers may
+        // already hold that lease while persisting a state transition. Keep
+        // the monotonic checks and replacement in one cross-process critical
+        // section shared with append_event's direct state.json write.
+        let _mutation_lock = self.acquire_state_mutation_lock(&snapshot.session_id)?;
+        let durable = self.load_session(&snapshot.session_id)?;
+        if durable.codex_turn_profile_violation && !snapshot.codex_turn_profile_violation {
+            return Err(AutonomyStateError::Validation(
+                "completed Codex turn profile violation cannot be cleared".into(),
+            ));
+        }
+        if durable.codex_turn_profile_tracking_started
+            && !snapshot.codex_turn_profile_tracking_started
+        {
+            return Err(AutonomyStateError::Validation(
+                "Codex turn profile tracking cannot be cleared".into(),
+            ));
+        }
+        if !durable.codex_turn_profile_tracking_started
+            && snapshot.codex_turn_profile_tracking_started
+            && durable.provider_turn_count > 0
+        {
+            return Err(AutonomyStateError::Validation(
+                "Codex turn profile tracking cannot start after a provider turn".into(),
+            ));
+        }
+        if snapshot.last_event_sequence > durable.last_event_sequence {
+            return Err(AutonomyStateError::Validation(
+                "autonomous state cannot advance its event sequence without a journal event".into(),
+            ));
+        }
+        // A supervisor or telemetry writer may have loaded its snapshot just
+        // before another owner appended an event. Preserve the journal head
+        // when its otherwise valid state update is committed afterward.
+        let mut committed = snapshot.clone();
+        committed.last_event_sequence = durable.last_event_sequence;
         write_json_atomic(
             &self.session_dir(&snapshot.session_id)?.join("state.json"),
-            snapshot,
+            &committed,
         )
     }
 
@@ -991,6 +1074,7 @@ impl AutonomousStateStoreV1 {
     ) -> Result<AutonomousEventV1, AutonomyStateError> {
         validate_slug(kind, "autonomous event kind").map_err(validation_error)?;
         let summary = bounded_summary(summary)?;
+        let _mutation_lock = self.acquire_state_mutation_lock(session_id)?;
         let mut snapshot = self.load_session(session_id)?;
         let events_path = self.session_dir(session_id)?.join("events.jsonl");
         let events = read_jsonl_repair_tail::<AutonomousEventV1>(&events_path)?;
@@ -1484,6 +1568,289 @@ impl AutonomousStateStoreV1 {
         Ok(artifacts)
     }
 
+    /// Emit a terminal review only after its passed-verification checkpoint
+    /// and completion artifact are durable. A managed Sol/Codex completion
+    /// first commits a separate immutable evidence sidecar for the exact
+    /// review ID. A crash after that sidecar write can replay the same ID;
+    /// a pre-existing unbound review cannot be upgraded after the fact.
+    pub fn emit_completed_review_inbox_record(
+        &self,
+        session_id: &str,
+        project_id: &str,
+        created_at_unix: u64,
+    ) -> Result<AutonomousReviewInboxRecordV1, AutonomyStateError> {
+        let snapshot = self.load_session(session_id)?;
+        let contract = self.load_contract(session_id)?;
+        if contract.project_id != project_id {
+            return Err(AutonomyStateError::Validation(
+                "completed review project conflicts with approved contract".into(),
+            ));
+        }
+        if contract.provider_policy.primary_model == SOL_MEDIUM_MODEL {
+            // A crash can occur after the bound inbox write but before the
+            // terminal transition. Recovery appends an event and advances
+            // last_event_sequence; adopt the original authenticated review
+            // instead of minting a second ID for the same checkpoint.
+            let inbox_path = self.root.join("review-inbox.json");
+            if inbox_path.exists() {
+                let existing = read_json::<Vec<AutonomousReviewInboxRecordV1>>(&inbox_path)?
+                    .into_iter()
+                    .filter(|record| {
+                        record.session_id == session_id
+                            && record.project_id == project_id
+                            && record.state == AutonomousSessionStateV1::CompletedVerified
+                            && record.next_action == "independent_final_review"
+                    })
+                    .collect::<Vec<_>>();
+                if existing.len() > 1 {
+                    return Err(AutonomyStateError::Validation(
+                        "completed Sol review has conflicting replay records".into(),
+                    ));
+                }
+                if let Some(record) = existing.into_iter().next() {
+                    self.validate_completed_review_binding(&record)?;
+                    return Ok(record);
+                }
+            }
+        }
+        let record_id = format!(
+            "review-{}-{}-independent_final_review",
+            session_id, snapshot.last_event_sequence
+        );
+        let checkpoint = self
+            .load_passed_verification_checkpoint(session_id)?
+            .ok_or_else(|| {
+                AutonomyStateError::Validation(
+                    "completed review has no passed-verification checkpoint".into(),
+                )
+            })?;
+        if contract.provider_policy.primary_model == SOL_MEDIUM_MODEL
+            && checkpoint.provider_id != "codex-cli"
+        {
+            return Err(AutonomyStateError::Validation(
+                "completed Sol review requires a Codex CLI passed-verification checkpoint".into(),
+            ));
+        }
+        let mut bound_created_at_unix = created_at_unix;
+        if contract.provider_policy.primary_model == SOL_MEDIUM_MODEL
+            && checkpoint.provider_id == "codex-cli"
+        {
+            let path = self.completed_review_binding_path(session_id, &record_id)?;
+            if path.exists() {
+                let existing: AutonomousCompletedReviewBindingV1 = read_json(&path)?;
+                bound_created_at_unix = existing.created_at_unix;
+            }
+            let binding = self.expected_completed_review_binding(
+                &record_id,
+                bound_created_at_unix,
+                project_id,
+                &snapshot,
+                &contract,
+                &checkpoint,
+            )?;
+            if path.exists() {
+                let existing: AutonomousCompletedReviewBindingV1 = read_json(&path)?;
+                if existing != binding {
+                    return Err(AutonomyStateError::Validation(
+                        "completed review binding conflicts with durable evidence".into(),
+                    ));
+                }
+            } else {
+                // An inbox record written before the binding is not an
+                // authentic Sol review, even when all current files appear
+                // consistent. Never retrofit it into a publishable event.
+                let inbox_path = self.root.join("review-inbox.json");
+                if inbox_path.exists()
+                    && read_json::<Vec<AutonomousReviewInboxRecordV1>>(&inbox_path)?
+                        .iter()
+                        .any(|record| record.record_id == record_id)
+                {
+                    return Err(AutonomyStateError::Validation(
+                        "completed Sol review record predates its evidence binding".into(),
+                    ));
+                }
+                write_json_atomic(&path, &binding)?;
+            }
+        }
+        let record = self.emit_review_inbox_record(
+            session_id,
+            project_id,
+            AutonomousSessionStateV1::CompletedVerified,
+            "independent_final_review",
+            "artifacts/completion.json",
+            bound_created_at_unix,
+        )?;
+        if record.record_id != record_id {
+            return Err(AutonomyStateError::Validation(
+                "completed review record identity changed during emission".into(),
+            ));
+        }
+        Ok(record)
+    }
+
+    /// Checks the immutable task-to-review proof before either a direct Wake
+    /// dispatch or a restart rehydration can publish a completed Sol review.
+    /// Historical Terra records retain their original inbox contract.
+    pub fn validate_completed_review_binding(
+        &self,
+        record: &AutonomousReviewInboxRecordV1,
+    ) -> Result<(), AutonomyStateError> {
+        validate_review_record(record)?;
+        if record.state != AutonomousSessionStateV1::CompletedVerified
+            || record.next_action != "independent_final_review"
+        {
+            return Ok(());
+        }
+        let snapshot = self.load_session(&record.session_id)?;
+        let path = self.completed_review_binding_path(&record.session_id, &record.record_id)?;
+        let contract_path = self.session_dir(&record.session_id)?.join("contract.json");
+        if !contract_path.exists() && snapshot.approved_contract_hash.is_none() && !path.exists() {
+            // Pre-contract compatibility records used in test and historical
+            // local stores have no managed model selection to enforce.
+            return Ok(());
+        }
+        let contract = self.load_contract(&record.session_id)?;
+        if contract.provider_policy.primary_model != SOL_MEDIUM_MODEL {
+            return if path.exists() {
+                Err(AutonomyStateError::Validation(
+                    "legacy completed review has an unexpected Sol evidence binding".into(),
+                ))
+            } else {
+                Ok(())
+            };
+        }
+        let checkpoint = self.load_passed_verification_checkpoint(&record.session_id)?;
+        let sol_codex = checkpoint
+            .as_ref()
+            .is_some_and(|checkpoint| checkpoint.provider_id == "codex-cli");
+        if !sol_codex {
+            return Err(AutonomyStateError::Validation(
+                "completed Sol review requires a Codex CLI passed-verification checkpoint".into(),
+            ));
+        }
+        let checkpoint = checkpoint.expect("Sol Codex checkpoint was checked");
+        if record.reference != "artifacts/completion.json" {
+            return Err(AutonomyStateError::Validation(
+                "completed Sol review reference is not the durable completion artifact".into(),
+            ));
+        }
+        let expected = self.expected_completed_review_binding(
+            &record.record_id,
+            record.created_at_unix,
+            &record.project_id,
+            &snapshot,
+            &contract,
+            &checkpoint,
+        )?;
+        let actual: AutonomousCompletedReviewBindingV1 = read_json(&path)?;
+        if actual != expected {
+            return Err(AutonomyStateError::Validation(
+                "completed Sol review evidence binding is missing or mismatched".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn completed_review_binding_path(
+        &self,
+        session_id: &str,
+        record_id: &str,
+    ) -> Result<PathBuf, AutonomyStateError> {
+        validate_slug(record_id, "completed review record id").map_err(validation_error)?;
+        Ok(self
+            .session_dir(session_id)?
+            .join("artifacts")
+            .join("review-bindings")
+            .join(format!("{record_id}.json")))
+    }
+
+    fn expected_completed_review_binding(
+        &self,
+        record_id: &str,
+        created_at_unix: u64,
+        project_id: &str,
+        snapshot: &AutonomousSessionSnapshotV1,
+        contract: &AutonomousDevelopmentContractV1,
+        checkpoint: &AutonomousPassedVerificationCheckpointV1,
+    ) -> Result<AutonomousCompletedReviewBindingV1, AutonomyStateError> {
+        let profile = checkpoint.codex_turn_profile.as_ref().ok_or_else(|| {
+            AutonomyStateError::Validation("completed Sol review has no native turn profile".into())
+        })?;
+        let contract_hash = contract.decision_hash().map_err(|_| {
+            AutonomyStateError::Validation("completed Sol review contract hash is invalid".into())
+        })?;
+        let expected_store_root = contract.workspace.join(".catdesk").join("autonomy");
+        if self.root.canonicalize().map_err(io_error)?
+            != expected_store_root.canonicalize().map_err(io_error)?
+        {
+            return Err(AutonomyStateError::Validation(
+                "completed Sol review workspace does not own its state store".into(),
+            ));
+        }
+        if created_at_unix == 0
+            || contract.provider_policy.primary_model != SOL_MEDIUM_MODEL
+            || checkpoint.provider_id != "codex-cli"
+            || checkpoint.session_id != snapshot.session_id
+            || checkpoint.project_id != project_id
+            || contract.project_id != project_id
+            || checkpoint.approved_contract_hash != contract_hash
+            || snapshot.approved_contract_hash.as_deref() != Some(contract_hash.as_str())
+            || snapshot.current_task_id.as_deref() != Some(checkpoint.logical_task_id.as_str())
+            || snapshot.provider_turn_count != checkpoint.provider_turn_count
+            || snapshot.codex_turn_profile_violation
+            || !snapshot.codex_turn_profile_tracking_started
+            || !snapshot
+                .provider_thread_id
+                .as_deref()
+                .is_some_and(|thread_id| profile.matches(thread_id, SOL_MEDIUM_MODEL))
+        {
+            return Err(AutonomyStateError::Validation(
+                "completed Sol review does not match its approved task and native turn".into(),
+            ));
+        }
+        let completion = self.load_completion_artifacts(&snapshot.session_id)?;
+        if completion.verification != checkpoint.verification
+            || completion.authoritative_diff != checkpoint.authoritative_diff
+        {
+            return Err(AutonomyStateError::Validation(
+                "completed Sol review differs from passed verification".into(),
+            ));
+        }
+        let source_expected = checkpoint
+            .reviewed_source_expectation
+            .as_ref()
+            .ok_or_else(|| {
+                AutonomyStateError::Validation(
+                    "completed Sol review has no reviewed-source file hashes".into(),
+                )
+            })?;
+        let reviewed_source = validate_committed_snapshot(&contract.workspace, source_expected)
+            .map_err(|_| {
+                AutonomyStateError::Validation(
+                    "completed Sol review source snapshot is unavailable or invalid".into(),
+                )
+            })?;
+        Ok(AutonomousCompletedReviewBindingV1 {
+            schema_version: AUTONOMY_COMPLETED_REVIEW_BINDING_SCHEMA_VERSION,
+            record_id: record_id.into(),
+            created_at_unix,
+            session_id: snapshot.session_id.clone(),
+            project_id: project_id.into(),
+            reference: "artifacts/completion.json".into(),
+            approved_contract_hash: contract_hash,
+            logical_task_id: checkpoint.logical_task_id.clone(),
+            provider_turn_count: checkpoint.provider_turn_count,
+            codex_turn_profile: profile.clone(),
+            checkpoint_sha256: canonical_json_sha256(checkpoint)?,
+            completion_sha256: canonical_json_sha256(&completion)?,
+            authoritative_diff_sha256: checkpoint.authoritative_diff_sha256.clone(),
+            attribution_digest: checkpoint.attribution_digest.clone(),
+            reviewed_source_expectation_sha256: canonical_json_sha256(source_expected)?,
+            reviewed_source_snapshot_id: reviewed_source.snapshot_id,
+            reviewed_source_manifest_digest: reviewed_source.manifest_digest,
+        })
+    }
+
     /// Idempotently adds an unread review item. The stable record id is
     /// derived from the durable state version, so controller retries and
     /// restart recovery cannot create duplicate notices.
@@ -1530,6 +1897,7 @@ impl AutonomousStateStoreV1 {
             unread: true,
         };
         validate_review_record(&record)?;
+        self.validate_completed_review_binding(&record)?;
         if let Some(existing) = records
             .iter()
             .find(|existing| existing.record_id == record.record_id)
@@ -1869,6 +2237,36 @@ impl AutonomousStateStoreV1 {
                 Err(error) => return Err(error),
             };
             if snapshot.active && snapshot.state.needs_restart_recovery() {
+                // A running Sol child can edit source before it emits a
+                // completed native-turn profile. The interrupted process is
+                // gone from this host's ownership graph, so no later resume
+                // may certify its bytes. A passed checkpoint already binds a
+                // completed turn and is safe for finalization-only replay.
+                if let Ok(contract) = self.load_contract(&session_id) {
+                    if contract.provider_policy.primary_model == SOL_MEDIUM_MODEL {
+                        let passed_turn_bound = self
+                            .load_passed_verification_checkpoint(&session_id)
+                            .ok()
+                            .flatten()
+                            .is_some_and(|checkpoint| {
+                                checkpoint.provider_id == "codex-cli"
+                                    && checkpoint.provider_turn_count
+                                        == snapshot.provider_turn_count
+                                    && checkpoint.approved_contract_hash
+                                        == snapshot.approved_contract_hash.as_deref().unwrap_or("")
+                                    && snapshot
+                                        .provider_thread_id
+                                        .as_deref()
+                                        .zip(checkpoint.codex_turn_profile.as_ref())
+                                        .is_some_and(|(thread_id, profile)| {
+                                            profile.matches(thread_id, SOL_MEDIUM_MODEL)
+                                        })
+                            });
+                        if !passed_turn_bound {
+                            snapshot.codex_turn_profile_violation = true;
+                        }
+                    }
+                }
                 snapshot.state = AutonomousSessionStateV1::RecoveringAfterRestart;
                 self.save_session(&snapshot)?;
                 self.append_event(
@@ -1925,6 +2323,21 @@ impl AutonomousStateStoreV1 {
         } else {
             Err(AutonomyStateError::SessionNotFound(session_id.into()))
         }
+    }
+
+    fn acquire_state_mutation_lock(&self, session_id: &str) -> Result<File, AutonomyStateError> {
+        self.ensure_session_exists(session_id)?;
+        let lock_dir = self.session_dir(session_id)?.join("locks");
+        fs::create_dir_all(&lock_dir).map_err(io_error)?;
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(lock_dir.join("state-mutation.lock"))
+            .map_err(io_error)?;
+        file.lock().map_err(io_error)?;
+        Ok(file)
     }
 
     fn session_dir(&self, session_id: &str) -> Result<PathBuf, AutonomyStateError> {
@@ -2125,6 +2538,25 @@ fn validate_passed_verification_checkpoint(
         || !valid_sha(&checkpoint.attribution_digest)
         || checkpoint.authoritative_diff_sha256 != expected_diff_sha256
         || checkpoint.attribution_digest != expected_attribution_digest
+        || (checkpoint.provider_id != "codex-cli" && checkpoint.codex_turn_profile.is_some())
+        || checkpoint
+            .codex_turn_profile
+            .as_ref()
+            .is_some_and(|profile| {
+                profile.codex_thread_id.is_empty()
+                    || profile.codex_thread_id.len() > 128
+                    || profile.codex_turn_id.is_empty()
+                    || profile.codex_turn_id.len() > 128
+                    || profile.model_id.is_empty()
+                    || profile.model_id.len() > 128
+                    || profile.reasoning_effort.is_empty()
+                    || profile.reasoning_effort.len() > 32
+                    || profile.evidence_sha256.len() != 64
+                    || !profile
+                        .evidence_sha256
+                        .bytes()
+                        .all(|byte| byte.is_ascii_hexdigit())
+            })
         || checkpoint
             .reviewed_source_expectation
             .as_ref()
@@ -2374,6 +2806,11 @@ fn validate_review_record(
     validate_review_inbox_record(record)
 }
 
+fn canonical_json_sha256<T: Serialize>(value: &T) -> Result<String, AutonomyStateError> {
+    let bytes = serde_json::to_vec(value).map_err(serde_error)?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
 fn compact_review_inbox_for_capacity(records: &mut Vec<AutonomousReviewInboxRecordV1>) -> usize {
     if records.len() < AUTONOMY_REVIEW_INBOX_COMPACT_TRIGGER {
         return 0;
@@ -2545,7 +2982,16 @@ fn runtime_validation_error(error: RuntimeError) -> AutonomyStateError {
 
 #[cfg(test)]
 mod tests {
+    use super::super::autonomous_contract::{
+        AutonomousCommandProfileV1, AutonomousGitPolicyV1, AutonomousHardStopV1,
+        AutonomousProviderPolicyV1, AutonomousRateLimitPolicyV1, AutonomousVerificationPolicyV1,
+        AutonomyLeaseV1,
+    };
     use super::*;
+    use crate::reviewed_source_snapshot::{
+        ReviewedSourceBaselineObservationV1, ReviewedSourceCurrentOutputV1,
+        create_or_validate_reviewed_source_snapshot,
+    };
 
     fn store(name: &str) -> (PathBuf, AutonomousStateStoreV1) {
         let root = std::env::temp_dir().join(format!("catdesk-autonomy-{name}-{}", Uuid::new_v4()));
@@ -2569,6 +3015,511 @@ mod tests {
             },
         ])
         .expect("valid queue")
+    }
+
+    fn completed_sol_review_fixture() -> (PathBuf, AutonomousStateStoreV1, String) {
+        let root = std::env::temp_dir().join(format!("catdesk-sol-review-{}", Uuid::new_v4()));
+        fs::create_dir_all(root.join("src")).expect("source directory");
+        fs::create_dir_all(root.join("wake/src")).expect("Wake source directory");
+        fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname='fixture'\nversion='0.1.0'\n",
+        )
+        .expect("manifest");
+        fs::write(root.join("Cargo.lock"), "version = 4\n").expect("lockfile");
+        fs::write(
+            root.join("wake/Cargo.toml"),
+            "[package]\nname='fixture-wake'\nversion='0.1.0'\n",
+        )
+        .expect("Wake manifest");
+        fs::write(root.join("wake/src/lib.rs"), "pub const WAKE: u8 = 1;\n").expect("Wake source");
+        fs::write(root.join("src/output.rs"), "pub const OUTPUT: u8 = 1;\n").expect("task output");
+        let contract = AutonomousDevelopmentContractV1 {
+            schema_version: 1,
+            contract_id: "contract-one".into(),
+            task_id: "analysis".into(),
+            project_id: "catdesk".into(),
+            mode: "chatgpt_web_codex_autonomous".into(),
+            objective: "produce a verified Rust source change".into(),
+            workspace: root.clone(),
+            base_branch: "main".into(),
+            feature_branch: "feature-sol-review".into(),
+            base_commit: "1234567".into(),
+            expected_origin: "https://example.invalid/catdesk.git".into(),
+            ordered_steps: vec!["implement".into()],
+            allowed_paths: vec![root.join("src")],
+            forbidden_paths: Vec::new(),
+            allowed_command_profiles: vec![AutonomousCommandProfileV1::CargoTest],
+            git_policy: AutonomousGitPolicyV1 {
+                create_branch: true,
+                create_worktree: true,
+                local_commits: true,
+                push_feature_branch: false,
+                open_pull_request: false,
+                merge: false,
+                force_push: false,
+                modify_main: false,
+            },
+            provider_policy: AutonomousProviderPolicyV1 {
+                primary_provider: "codex-cli".into(),
+                primary_model: SOL_MEDIUM_MODEL.into(),
+                routine_provider: "ollama".into(),
+                routine_model: "qwen3.6:35b-a3b".into(),
+                allow_paid_fallback: false,
+                allow_cloud_fallback: false,
+            },
+            verification_policy: AutonomousVerificationPolicyV1 {
+                profile: "rust_full".into(),
+                required_commands: vec![AutonomousCommandProfileV1::CargoTest],
+                max_repair_cycles: 1,
+                require_authoritative_diff: true,
+                require_final_review: true,
+            },
+            rate_limit_policy: AutonomousRateLimitPolicyV1 {
+                automatic_pause: true,
+                automatic_resume: true,
+                initial_backoff_seconds: 60,
+                maximum_backoff_seconds: 300,
+                maximum_rate_limited_seconds: 600,
+                honor_provider_retry_after: true,
+            },
+            autonomy_lease: AutonomyLeaseV1 {
+                start_approval_required: true,
+                renewal_allowed: true,
+                issued_at_unix: 10,
+                expires_at_unix: 100,
+                maximum_total_elapsed_seconds: 90,
+                maximum_provider_turns: 2,
+                maximum_tool_calls: 3,
+                maximum_consecutive_failures: 1,
+                maximum_repair_cycles: 1,
+            },
+            hard_stop_conditions: vec![AutonomousHardStopV1::CancellationRequested],
+            completion_artifact_ids: vec!["src/output.rs".into()],
+            task_graph: Vec::new(),
+        };
+        let contract_hash = contract.decision_hash().expect("contract hash");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).expect("autonomy store");
+        store
+            .create_session("session-one", queue())
+            .expect("session");
+        store
+            .save_contract("session-one", &contract)
+            .expect("contract");
+        let mut snapshot = store.load_session("session-one").expect("snapshot");
+        snapshot.state = AutonomousSessionStateV1::Verifying;
+        snapshot.current_task_id = Some("analysis".into());
+        snapshot.provider_thread_id = Some("codex-thread-one".into());
+        snapshot.provider_turn_count = 1;
+        snapshot.approved_contract_hash = Some(contract_hash.clone());
+        store.save_session(&snapshot).expect("verified state");
+        let output_sha256 = format!(
+            "{:x}",
+            Sha256::digest(fs::read(root.join("src/output.rs")).expect("task output"))
+        );
+        let expected = ReviewedSourceSnapshotExpectedV1 {
+            session_id: "session-one".into(),
+            project_id: "catdesk".into(),
+            approved_contract_hash: contract_hash.clone(),
+            logical_task_id: "analysis".into(),
+            completion_artifact_ids: vec!["src/output.rs".into()],
+            current_outputs: vec![ReviewedSourceCurrentOutputV1 {
+                artifact_id: "src/output.rs".into(),
+                sha256: output_sha256,
+            }],
+            baseline_observations: vec![ReviewedSourceBaselineObservationV1 {
+                artifact_id: "src/output.rs".into(),
+                state: "ABSENT".into(),
+                sha256: None,
+            }],
+        };
+        create_or_validate_reviewed_source_snapshot(&root, &expected)
+            .expect("committed source snapshot");
+        let diff = "diff --git a/src/output.rs b/src/output.rs";
+        let attribution =
+            serde_json::to_vec(&(contract_hash.as_str(), "analysis", Some(&expected)))
+                .expect("attribution material");
+        let verification = VerificationSummaryV1 {
+            status: super::super::coordinator::VerificationStatusV1::Passed,
+            command: "cargo test".into(),
+            summary: "passed".into(),
+        };
+        let checkpoint = AutonomousPassedVerificationCheckpointV1 {
+            schema_version: AUTONOMY_STATE_SCHEMA_VERSION,
+            session_id: "session-one".into(),
+            project_id: "catdesk".into(),
+            approved_contract_hash: contract_hash,
+            logical_task_id: "analysis".into(),
+            provider_id: "codex-cli".into(),
+            provider_turn_count: 1,
+            verification_profile: "rust_full".into(),
+            verification: verification.clone(),
+            authoritative_diff: diff.into(),
+            authoritative_diff_sha256: format!("{:x}", Sha256::digest(diff.as_bytes())),
+            attribution_digest: format!("{:x}", Sha256::digest(attribution)),
+            codex_turn_profile: Some(CodexCliTurnProfileEvidenceV1 {
+                codex_thread_id: "codex-thread-one".into(),
+                codex_turn_id: "turn-one".into(),
+                model_id: SOL_MEDIUM_MODEL.into(),
+                reasoning_effort: "medium".into(),
+                evidence_sha256: "a".repeat(64),
+            }),
+            reviewed_source_expectation: Some(expected),
+        };
+        store
+            .write_passed_verification_checkpoint("session-one", &checkpoint)
+            .expect("passed checkpoint");
+        store
+            .write_completion_artifacts("session-one", &verification, diff, "review passed")
+            .expect("completion");
+        (root, store, "session-one".into())
+    }
+
+    #[test]
+    fn completed_sol_review_binds_task_turn_completion_and_snapshot_before_inbox() {
+        let (root, store, session_id) = completed_sol_review_fixture();
+        assert!(
+            store
+                .emit_review_inbox_record(
+                    &session_id,
+                    "catdesk",
+                    AutonomousSessionStateV1::CompletedVerified,
+                    "independent_final_review",
+                    "artifacts/completion.json",
+                    42,
+                )
+                .is_err()
+        );
+        let record = store
+            .emit_completed_review_inbox_record(&session_id, "catdesk", 42)
+            .expect("bound review");
+        assert_eq!(record.reference, "artifacts/completion.json");
+        store
+            .validate_completed_review_binding(&record)
+            .expect("bound review validation");
+        let mut terminal = store.load_session(&session_id).expect("session");
+        terminal.state = AutonomousSessionStateV1::CompletedVerified;
+        terminal.active = false;
+        store
+            .save_session(&terminal)
+            .expect("terminal review state");
+        catdesk_wake::review_binding::validate_completed_review(
+            &root,
+            &record.project_id,
+            &session_id,
+            &record.record_id,
+            &record.reference,
+            record.created_at_unix,
+        )
+        .expect("Wake independently accepts the producer's bound review");
+        let replay = store
+            .emit_completed_review_inbox_record(&session_id, "catdesk", 99)
+            .expect("idempotent replay");
+        assert_eq!(
+            replay, record,
+            "first creation time and record ID are durable"
+        );
+        let mut altered_record = record.clone();
+        altered_record.created_at_unix += 1;
+        assert!(
+            store
+                .validate_completed_review_binding(&altered_record)
+                .is_err(),
+            "the review event timestamp is bound to the original artifact"
+        );
+        assert_eq!(store.all_review_inbox().expect("inbox").len(), 1);
+
+        let completion_path = store
+            .session_dir(&session_id)
+            .expect("session directory")
+            .join("artifacts/completion.json");
+        let original_completion = store
+            .load_completion_artifacts(&session_id)
+            .expect("completion");
+        let mut completion = original_completion.clone();
+        completion.final_review = "different final review".into();
+        fs::write(
+            &completion_path,
+            serde_json::to_vec_pretty(&completion).expect("serialized completion"),
+        )
+        .expect("tamper completion");
+        assert!(store.validate_completed_review_binding(&record).is_err());
+        fs::write(
+            &completion_path,
+            serde_json::to_vec_pretty(&original_completion).expect("original completion"),
+        )
+        .expect("restore completion in isolated fixture");
+        fs::write(root.join("src/output.rs"), "pub const OUTPUT: u8 = 2;\n")
+            .expect("mutable workspace edit");
+        store
+            .validate_completed_review_binding(&record)
+            .expect("committed review ignores later mutable workspace edits");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn completed_sol_review_reuses_bound_id_after_inbox_to_terminal_crash() {
+        let (root, store, session_id) = completed_sol_review_fixture();
+        let first = store
+            .emit_completed_review_inbox_record(&session_id, "catdesk", 42)
+            .expect("bound inbox before crash");
+        let recovered = store
+            .recover_interrupted_sessions()
+            .expect("restart between inbox and terminal transition");
+        assert_eq!(recovered.len(), 1);
+        assert_eq!(
+            recovered[0].state,
+            AutonomousSessionStateV1::RecoveringAfterRestart
+        );
+        assert!(!recovered[0].codex_turn_profile_violation);
+        assert!(recovered[0].last_event_sequence > 0);
+        let replay = store
+            .emit_completed_review_inbox_record(&session_id, "catdesk", 99)
+            .expect("replay must adopt existing bound inbox");
+        assert_eq!(replay.record_id, first.record_id);
+        assert_eq!(replay.created_at_unix, first.created_at_unix);
+        assert_eq!(store.all_review_inbox().expect("inbox").len(), 1);
+        let mut terminal = store.load_session(&session_id).expect("state");
+        terminal.state = AutonomousSessionStateV1::CompletedVerified;
+        terminal.active = false;
+        store.save_session(&terminal).expect("terminal transition");
+        catdesk_wake::review_binding::validate_completed_review(
+            &root,
+            &replay.project_id,
+            &session_id,
+            &replay.record_id,
+            &replay.reference,
+            replay.created_at_unix,
+        )
+        .expect("single replayed review remains valid for Wake");
+    }
+
+    #[test]
+    fn completed_sol_review_rejects_missing_binding_and_corrupt_snapshot() {
+        let (root, store, session_id) = completed_sol_review_fixture();
+        let record = store
+            .emit_completed_review_inbox_record(&session_id, "catdesk", 42)
+            .expect("bound review");
+        let binding_path = store
+            .completed_review_binding_path(&session_id, &record.record_id)
+            .expect("binding path");
+        let original_binding: AutonomousCompletedReviewBindingV1 =
+            read_json(&binding_path).expect("binding");
+        let mut mismatched = original_binding.clone();
+        mismatched.completion_sha256 = "b".repeat(64);
+        fs::write(
+            &binding_path,
+            serde_json::to_vec_pretty(&mismatched).expect("mismatched binding"),
+        )
+        .expect("tamper binding in isolated fixture");
+        assert!(store.validate_completed_review_binding(&record).is_err());
+        fs::write(
+            &binding_path,
+            serde_json::to_vec_pretty(&original_binding).expect("original binding"),
+        )
+        .expect("restore binding in isolated fixture");
+        fs::remove_file(&binding_path).expect("remove binding in isolated fixture");
+        assert!(store.validate_completed_review_binding(&record).is_err());
+        assert!(
+            store
+                .emit_completed_review_inbox_record(&session_id, "catdesk", 43)
+                .is_err(),
+            "an existing review cannot be retroactively bound"
+        );
+        let _ = fs::remove_dir_all(root);
+
+        let (root, store, session_id) = completed_sol_review_fixture();
+        let record = store
+            .emit_completed_review_inbox_record(&session_id, "catdesk", 42)
+            .expect("bound review");
+        let checkpoint = store
+            .load_passed_verification_checkpoint(&session_id)
+            .expect("checkpoint read")
+            .expect("checkpoint");
+        let source = validate_committed_snapshot(
+            &root,
+            checkpoint
+                .reviewed_source_expectation
+                .as_ref()
+                .expect("source expectation"),
+        )
+        .expect("committed snapshot");
+        fs::write(source.bytes_root.join("src/output.rs"), "corrupt")
+            .expect("tamper snapshot in isolated fixture");
+        assert!(store.validate_completed_review_binding(&record).is_err());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn completed_sol_review_rejects_non_codex_checkpoint() {
+        let (root, store, session_id) = completed_sol_review_fixture();
+        let checkpoint_path = store
+            .session_dir(&session_id)
+            .expect("session")
+            .join("verification/passed-finalization.json");
+        let mut checkpoint = store
+            .load_passed_verification_checkpoint(&session_id)
+            .expect("checkpoint read")
+            .expect("checkpoint");
+        checkpoint.provider_id = "chatgpt-direct".into();
+        checkpoint.codex_turn_profile = None;
+        fs::write(
+            &checkpoint_path,
+            serde_json::to_vec_pretty(&checkpoint).expect("checkpoint JSON"),
+        )
+        .expect("isolated fixture checkpoint");
+        assert!(
+            store
+                .emit_completed_review_inbox_record(&session_id, "catdesk", 42)
+                .is_err()
+        );
+        assert!(store.all_review_inbox().expect("inbox").is_empty());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn completed_codex_turn_profile_violation_is_monotonic() {
+        let (root, store) = store("codex-profile-sticky");
+        let original = store
+            .create_session("session-one", queue())
+            .expect("session");
+        assert!(original.codex_turn_profile_tracking_started);
+        let mut marked = original.clone();
+        marked.codex_turn_profile_violation = true;
+        store.save_session(&marked).expect("mark violation");
+        assert!(
+            store.save_session(&original).is_err(),
+            "stale snapshot cannot clear the marker"
+        );
+        assert!(
+            store
+                .load_session("session-one")
+                .expect("durable state")
+                .codex_turn_profile_violation
+        );
+        let mut stale_tracking = marked;
+        stale_tracking.codex_turn_profile_tracking_started = false;
+        assert!(
+            store.save_session(&stale_tracking).is_err(),
+            "stale snapshot cannot clear tracking"
+        );
+        let _ = fs::remove_dir_all(root);
+
+        let (root, store) = self::store("codex-profile-pre-upgrade");
+        store
+            .create_session("session-old", queue())
+            .expect("session");
+        let state_path = store
+            .session_dir("session-old")
+            .expect("session directory")
+            .join("state.json");
+        let mut old_json: serde_json::Value = read_json(&state_path).expect("state JSON");
+        old_json
+            .as_object_mut()
+            .expect("state object")
+            .remove("codexTurnProfileTrackingStarted");
+        old_json["providerTurnCount"] = serde_json::json!(1);
+        fs::write(
+            &state_path,
+            serde_json::to_vec_pretty(&old_json).expect("legacy JSON"),
+        )
+        .expect("legacy state fixture");
+        let mut legacy = store.load_session("session-old").expect("legacy state");
+        assert!(!legacy.codex_turn_profile_tracking_started);
+        legacy.codex_turn_profile_tracking_started = true;
+        assert!(
+            store.save_session(&legacy).is_err(),
+            "tracking cannot be retroactively started after an unobserved turn"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn concurrent_session_saves_and_event_append_preserve_sticky_profile_evidence() {
+        use std::sync::mpsc;
+        use std::thread;
+        use std::time::Duration;
+
+        let (root, store) = self::store("codex-profile-concurrent");
+        let original = store
+            .create_session("session-one", queue())
+            .expect("session");
+        let mut marked = original.clone();
+        marked.codex_turn_profile_violation = true;
+        // Hold the same OS lock used by all state writers so every spawned
+        // mutation reaches a real contention point before we release it.
+        let guard = store
+            .acquire_state_mutation_lock("session-one")
+            .expect("mutation lock");
+        let (started_tx, started_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+
+        let marker_store = store.clone();
+        let marker_started = started_tx.clone();
+        let marker_done = done_tx.clone();
+        let marker = thread::spawn(move || {
+            marker_started.send(()).expect("marker start");
+            marker_done
+                .send(("marker", marker_store.save_session(&marked).is_ok()))
+                .expect("marker result");
+        });
+        let event_store = store.clone();
+        let event_started = started_tx.clone();
+        let event_done = done_tx.clone();
+        let event = thread::spawn(move || {
+            event_started.send(()).expect("event start");
+            event_done
+                .send((
+                    "event",
+                    event_store
+                        .append_event("session-one", "concurrent_event", "one event")
+                        .is_ok(),
+                ))
+                .expect("event result");
+        });
+        let stale_store = store.clone();
+        let stale = thread::spawn(move || {
+            started_tx.send(()).expect("stale start");
+            done_tx
+                .send(("stale", stale_store.save_session(&original).is_ok()))
+                .expect("stale result");
+        });
+        for _ in 0..3 {
+            started_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("all writers reached the lock");
+        }
+        assert!(
+            matches!(
+                done_rx.recv_timeout(Duration::from_millis(100)),
+                Err(mpsc::RecvTimeoutError::Timeout)
+            ),
+            "a state writer completed while another process could own its mutation lock"
+        );
+        drop(guard);
+
+        let mut results = BTreeMap::new();
+        for _ in 0..3 {
+            let (name, succeeded) = done_rx
+                .recv_timeout(Duration::from_secs(5))
+                .expect("writer completed");
+            results.insert(name, succeeded);
+        }
+        marker.join().expect("marker thread");
+        event.join().expect("event thread");
+        stale.join().expect("stale thread");
+        assert_eq!(results.get("marker"), Some(&true));
+        assert_eq!(results.get("event"), Some(&true));
+        let durable = store.load_session("session-one").expect("durable session");
+        assert!(durable.codex_turn_profile_violation);
+        assert!(durable.codex_turn_profile_tracking_started);
+        assert_eq!(durable.last_event_sequence, 1);
+        assert_eq!(
+            store.poll_events("session-one", 0).expect("journal").len(),
+            1
+        );
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

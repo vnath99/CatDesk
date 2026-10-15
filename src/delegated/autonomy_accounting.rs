@@ -5,7 +5,7 @@
 //! estimates or UI price displays: it is reported only when two comparable
 //! app-server snapshots explicitly provide a numeric credit balance.
 
-use std::fs::{self, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -13,11 +13,13 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::codex_app_server::CodexRoutingTelemetryV1;
+use super::codex_model_policy::{CodexCliTurnProfileEvidenceV1, SOL_MEDIUM_MODEL};
 use super::runtime::{NormalizedProviderEventKind, RuntimeError};
 
 pub const EXECUTION_ACCOUNTING_SCHEMA_VERSION: u32 = 1;
 const MAX_RECORDS: usize = 1_024;
 const MAX_ACTIVITY_SPANS_PER_RECORD: usize = 256;
+const MAX_CODEX_TURN_PROFILES_PER_RECORD: usize = 256;
 pub const ACTIVITY_SPAN_SCHEMA_VERSION: u32 = 1;
 
 /// A bounded, source-attributed interval. Absence of a span deliberately does
@@ -159,8 +161,18 @@ pub struct ExecutionAccountingRecordV1 {
     pub catdesk_session_id: String,
     pub provider_session_id: Option<String>,
     pub provider_id: String,
+    /// The requested model is separate from the effective native turn model.
+    /// Historical records omit this field, so their existing display remains
+    /// readable without inventing a turn profile.
+    #[serde(default)]
+    pub requested_model: Option<String>,
     pub effective_model: Option<String>,
     pub reasoning_effort: Option<String>,
+    /// Bounded Codex-owned metadata for completed native turns. Multiple
+    /// entries permit repair turns on the same logical task without replacing
+    /// an earlier turn's immutable evidence.
+    #[serde(default)]
+    pub codex_turn_profiles: Vec<CodexCliTurnProfileEvidenceV1>,
     pub started_at_unix_millis: u128,
     pub ended_at_unix_millis: Option<u128>,
     pub elapsed_millis: Option<u128>,
@@ -234,6 +246,7 @@ impl ExecutionAccountingStoreV1 {
         telemetry: Option<CodexRoutingTelemetryV1>,
         now_millis: u128,
     ) -> Result<(), RuntimeError> {
+        let _mutation_lock = self.acquire_mutation_lock()?;
         let mut ledger = self.load()?;
         let record_id = record_id(session_id, task_id);
         let project_id = bounded(project_id, 128);
@@ -252,7 +265,16 @@ impl ExecutionAccountingStoreV1 {
                 .map(str::to_owned)
                 .or(record.provider_session_id.clone());
             record.provider_id = bounded(provider_id, 128);
-            record.effective_model = effective_model.map(|value| bounded(value, 256));
+            record.requested_model = effective_model.map(|value| bounded(value, 256));
+            if provider_id == "codex-cli" && effective_model == Some(SOL_MEDIUM_MODEL) {
+                // A CLI argument is intent, not evidence of the model that
+                // executed. The next turn is unknown until native metadata is
+                // recorded; earlier turns remain in codex_turn_profiles.
+                record.effective_model = None;
+                record.reasoning_effort = None;
+            } else {
+                record.effective_model = effective_model.map(|value| bounded(value, 256));
+            }
             // A retry is a new provider attempt for this logical task, not a
             // post-turn observation.  Only the host-owned post-turn path may
             // fill the second snapshot; otherwise retry preflight telemetry
@@ -277,8 +299,16 @@ impl ExecutionAccountingStoreV1 {
             catdesk_session_id: bounded(session_id, 128),
             provider_session_id: provider_session_id.map(|value| bounded(value, 256)),
             provider_id: bounded(provider_id, 128),
-            effective_model: effective_model.map(|value| bounded(value, 256)),
+            requested_model: effective_model.map(|value| bounded(value, 256)),
+            effective_model: if provider_id == "codex-cli"
+                && effective_model == Some(SOL_MEDIUM_MODEL)
+            {
+                None
+            } else {
+                effective_model.map(|value| bounded(value, 256))
+            },
             reasoning_effort: None,
+            codex_turn_profiles: Vec::new(),
             started_at_unix_millis: now_millis,
             ended_at_unix_millis: None,
             elapsed_millis: None,
@@ -309,12 +339,80 @@ impl ExecutionAccountingStoreV1 {
         self.save(&ledger)
     }
 
+    /// Bind a completed Codex-owned native turn profile to the active task.
+    /// A duplicate is a no-op, while a conflicting replay or unrelated thread
+    /// fails closed. No CLI request or mutable app-server thread setting can
+    /// create this evidence.
+    pub fn record_exact_codex_turn_profile(
+        &self,
+        session_id: &str,
+        evidence: &CodexCliTurnProfileEvidenceV1,
+    ) -> Result<bool, RuntimeError> {
+        let _mutation_lock = self.acquire_mutation_lock()?;
+        let mut ledger = self.load()?;
+        let record = ledger
+            .records
+            .iter_mut()
+            .rev()
+            .find(|record| record.catdesk_session_id == session_id)
+            .ok_or_else(|| RuntimeError::Validation("Codex turn has no accounting task".into()))?;
+        let replace_unbound_thread = record
+            .provider_session_id
+            .as_deref()
+            .and_then(|thread| thread.strip_prefix("codex-unbound-"))
+            .is_some_and(|suffix| !suffix.is_empty())
+            && record.codex_turn_profiles.is_empty();
+        if record.provider_id != "codex-cli"
+            || (record.provider_session_id.as_deref() != Some(evidence.codex_thread_id.as_str())
+                && !replace_unbound_thread)
+            || record.requested_model.as_deref() != Some(evidence.model_id.as_str())
+            || !valid_codex_turn_profile(evidence)
+        {
+            return Err(RuntimeError::Validation(
+                "Codex turn profile does not match accounting task".into(),
+            ));
+        }
+        if let Some(existing) = record
+            .codex_turn_profiles
+            .iter()
+            .find(|profile| profile.codex_turn_id == evidence.codex_turn_id)
+        {
+            if existing == evidence {
+                return Ok(false);
+            }
+            return Err(RuntimeError::Validation(
+                "Codex turn profile conflicts with durable evidence".into(),
+            ));
+        }
+        if record.ended_at_unix_millis.is_some() {
+            return Err(RuntimeError::Validation(
+                "Codex turn profile arrived after task completion".into(),
+            ));
+        }
+        if record.codex_turn_profiles.len() >= MAX_CODEX_TURN_PROFILES_PER_RECORD
+            || record.codex_turn_profiles.len() >= record.provider_turns as usize
+        {
+            return Err(RuntimeError::Validation(
+                "Codex turn profile exceeds recorded provider turns".into(),
+            ));
+        }
+        if replace_unbound_thread {
+            record.provider_session_id = Some(evidence.codex_thread_id.clone());
+        }
+        record.codex_turn_profiles.push(evidence.clone());
+        record.effective_model = Some(evidence.model_id.clone());
+        record.reasoning_effort = Some(evidence.reasoning_effort.clone());
+        self.save(&ledger)?;
+        Ok(true)
+    }
+
     pub fn record_observability(
         &self,
         session_id: &str,
         telemetry: CodexRoutingTelemetryV1,
         now_millis: u128,
     ) -> Result<(), RuntimeError> {
+        let _mutation_lock = self.acquire_mutation_lock()?;
         let mut ledger = self.load()?;
         if let Some(record) = ledger.records.iter_mut().rev().find(|record| {
             record.catdesk_session_id == session_id && record.ended_at_unix_millis.is_none()
@@ -350,6 +448,7 @@ impl ExecutionAccountingStoreV1 {
         telemetry: CodexRoutingTelemetryV1,
         now_millis: u128,
     ) -> Result<bool, RuntimeError> {
+        let _mutation_lock = self.acquire_mutation_lock()?;
         let mut ledger = self.load()?;
         let Some(record) = ledger
             .records
@@ -589,6 +688,7 @@ impl ExecutionAccountingStoreV1 {
     }
 
     pub fn backfill_t0031(&self) -> Result<(), RuntimeError> {
+        let _mutation_lock = self.acquire_mutation_lock()?;
         let mut ledger = self.load()?;
         if ledger
             .records
@@ -598,7 +698,7 @@ impl ExecutionAccountingStoreV1 {
             return Ok(());
         }
         ledger.records.push(ExecutionAccountingRecordV1 {
-            schema_version: EXECUTION_ACCOUNTING_SCHEMA_VERSION, record_id: "t0031-historical".into(), project_id: "catdesk".into(), task_id: "t0031-milestones1-8".into(), catdesk_session_id: "adc-t0031-milestones1-8-20260808".into(), provider_session_id: None, provider_id: "codex-cli".into(), effective_model: None, reasoning_effort: None,
+            schema_version: EXECUTION_ACCOUNTING_SCHEMA_VERSION, record_id: "t0031-historical".into(), project_id: "catdesk".into(), task_id: "t0031-milestones1-8".into(), catdesk_session_id: "adc-t0031-milestones1-8-20260808".into(), provider_session_id: None, provider_id: "codex-cli".into(), requested_model: None, effective_model: None, reasoning_effort: None, codex_turn_profiles: Vec::new(),
             started_at_unix_millis: 0, ended_at_unix_millis: None, elapsed_millis: Some(630_023), provider_turns: 1, normalized_provider_events: 91, catdesk_tool_calls: 0, retries: 0, repair_cycles: 0,
             verification_started_at_unix_millis: None, verification_ended_at_unix_millis: None, verification_elapsed_millis: None, verification_result: Some("PASSED".into()), verification_reference: Some("docs/orchestrator/review_bundles/T-0031_MILESTONES_1_8_REVIEW_BUNDLE.md".into()), authoritative_diff_reference: Some("authoritative-diff: clean".into()), final_review_reference: Some("CatDesk independent final review".into()), pre_codex_usage_snapshot: None, post_codex_usage_snapshot: None, usage_delta: unknown_usage("historical T-0031 diagnostics did not capture authoritative Codex pre/post usage snapshots"),
             activity_spans: Vec::new(),
@@ -611,6 +711,7 @@ impl ExecutionAccountingStoreV1 {
     where
         F: FnOnce(&mut ExecutionAccountingRecordV1),
     {
+        let _mutation_lock = self.acquire_mutation_lock()?;
         let mut ledger = self.load()?;
         if let Some(record) = ledger.records.iter_mut().rev().find(|record| {
             record.catdesk_session_id == session_id && record.ended_at_unix_millis.is_none()
@@ -621,6 +722,21 @@ impl ExecutionAccountingStoreV1 {
     }
     fn path(&self) -> PathBuf {
         self.root.join("execution-accounting.json")
+    }
+    fn acquire_mutation_lock(&self) -> Result<File, RuntimeError> {
+        // All ledger writers use this separate OS lock for their entire
+        // read-modify-replace transaction. A telemetry notification can then
+        // neither erase a native turn profile nor race a task-finalization
+        // write. The lock file itself is never renamed or removed.
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(self.root.join("execution-accounting-mutation.lock"))
+            .map_err(io_error)?;
+        file.lock().map_err(io_error)?;
+        Ok(file)
     }
     fn load(&self) -> Result<ExecutionAccountingLedgerV1, RuntimeError> {
         if !self.path().exists() {
@@ -961,16 +1077,21 @@ fn record_observability(
     telemetry: CodexRoutingTelemetryV1,
     now_millis: u128,
 ) {
-    record.effective_model = telemetry
-        .selected_model
-        .as_deref()
-        .map(|value| bounded(value, 256))
-        .or(record.effective_model.clone());
-    record.reasoning_effort = telemetry
-        .reasoning_effort
-        .as_deref()
-        .map(|value| bounded(value, 128))
-        .or(record.reasoning_effort.clone());
+    if record.codex_turn_profiles.is_empty()
+        && !(record.provider_id == "codex-cli"
+            && record.requested_model.as_deref() == Some(SOL_MEDIUM_MODEL))
+    {
+        record.effective_model = telemetry
+            .selected_model
+            .as_deref()
+            .map(|value| bounded(value, 256))
+            .or(record.effective_model.clone());
+        record.reasoning_effort = telemetry
+            .reasoning_effort
+            .as_deref()
+            .map(|value| bounded(value, 128))
+            .or(record.reasoning_effort.clone());
+    }
     let snapshot = ExecutionUsageSnapshotV1 {
         observed_at_unix_millis: now_millis,
         telemetry,
@@ -1041,6 +1162,14 @@ fn unknown_usage(reason: &str) -> ExecutionUsageDeltaV1 {
 fn record_id(session_id: &str, task_id: &str) -> String {
     format!("{}-{}", bounded(session_id, 128), bounded(task_id, 128))
 }
+fn valid_codex_turn_profile(profile: &CodexCliTurnProfileEvidenceV1) -> bool {
+    !profile.codex_thread_id.is_empty()
+        && !profile.codex_thread_id.starts_with("codex-unbound-")
+        && profile.codex_thread_id.len() <= 256
+        && profile.model_id.len() <= 256
+        && profile.reasoning_effort.len() <= 32
+        && profile.matches(&profile.codex_thread_id, &profile.model_id)
+}
 fn bounded(value: &str, limit: usize) -> String {
     value.chars().take(limit).collect()
 }
@@ -1054,6 +1183,21 @@ fn validate(ledger: &ExecutionAccountingLedgerV1) -> Result<(), RuntimeError> {
                 || record.project_id.is_empty()
                 || record.task_id.is_empty()
                 || record.catdesk_session_id.is_empty()
+                || record
+                    .requested_model
+                    .as_deref()
+                    .is_some_and(|model| model.len() > 256)
+                || record.codex_turn_profiles.len() > MAX_CODEX_TURN_PROFILES_PER_RECORD
+                || record.codex_turn_profiles.len() > record.provider_turns as usize
+                || record.codex_turn_profiles.iter().any(|profile| {
+                    !valid_codex_turn_profile(profile)
+                        || record
+                            .codex_turn_profiles
+                            .iter()
+                            .filter(|candidate| candidate.codex_turn_id == profile.codex_turn_id)
+                            .count()
+                            != 1
+                })
                 || record.activity_spans.len() > MAX_ACTIVITY_SPANS_PER_RECORD
                 || record.activity_spans.iter().any(|span| {
                     span.schema_version != ACTIVITY_SPAN_SCHEMA_VERSION
@@ -1087,6 +1231,330 @@ pub fn normalized_tool_call_count(events: &[super::runtime::NormalizedProviderEv
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sol_profile(turn_id: &str, digest_byte: char) -> CodexCliTurnProfileEvidenceV1 {
+        CodexCliTurnProfileEvidenceV1 {
+            codex_thread_id: "thread-sol".into(),
+            codex_turn_id: turn_id.into(),
+            model_id: SOL_MEDIUM_MODEL.into(),
+            reasoning_effort: "medium".into(),
+            evidence_sha256: digest_byte.to_string().repeat(64),
+        }
+    }
+
+    fn sol_telemetry(model: &str, effort: &str, observed_at: u64) -> CodexRoutingTelemetryV1 {
+        CodexRoutingTelemetryV1 {
+            observed_at_unix: observed_at,
+            source: "codex-app-server/thread-read".into(),
+            selected_model: Some(model.into()),
+            reasoning_effort: Some(effort.into()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn sol_effective_profile_requires_native_turn_and_survives_mutable_telemetry() {
+        let root = std::env::temp_dir().join(format!("catdesk-accounting-{}", Uuid::new_v4()));
+        let store = ExecutionAccountingStoreV1::open(&root).expect("store");
+        store
+            .record_task_started(
+                "project",
+                "task",
+                "session",
+                Some("thread-sol"),
+                "codex-cli",
+                Some(SOL_MEDIUM_MODEL),
+                Some(sol_telemetry(SOL_MEDIUM_MODEL, "medium", 1)),
+                1_000,
+            )
+            .expect("start");
+        let before = store
+            .list(Some("session"))
+            .expect("list")
+            .pop()
+            .expect("record");
+        assert_eq!(before.requested_model.as_deref(), Some(SOL_MEDIUM_MODEL));
+        assert_eq!(before.effective_model, None);
+        assert_eq!(before.reasoning_effort, None);
+
+        store
+            .record_observability("session", sol_telemetry("gpt-5.6-terra", "high", 2), 2_000)
+            .expect("mutable preflight");
+        assert_eq!(
+            store.list(Some("session")).expect("list")[0].effective_model,
+            None
+        );
+
+        let profile = sol_profile("turn-1", 'a');
+        assert!(
+            store
+                .record_exact_codex_turn_profile("session", &profile)
+                .expect("native evidence")
+        );
+        assert!(
+            !store
+                .record_exact_codex_turn_profile("session", &profile)
+                .expect("same evidence replay")
+        );
+
+        let mut conflicting = profile.clone();
+        conflicting.evidence_sha256 = "b".repeat(64);
+        assert!(
+            store
+                .record_exact_codex_turn_profile("session", &conflicting)
+                .is_err()
+        );
+        store
+            .record_post_codex_observability(
+                "session",
+                sol_telemetry("gpt-5.6-terra", "high", 3),
+                3_000,
+            )
+            .expect("mutable post telemetry");
+        let reopened = ExecutionAccountingStoreV1::open(&root).expect("reopen");
+        let after = reopened
+            .list(Some("session"))
+            .expect("list")
+            .pop()
+            .expect("record");
+        assert_eq!(after.effective_model.as_deref(), Some(SOL_MEDIUM_MODEL));
+        assert_eq!(after.reasoning_effort.as_deref(), Some("medium"));
+        assert_eq!(after.codex_turn_profiles, vec![profile]);
+        assert_eq!(
+            after
+                .post_codex_usage_snapshot
+                .expect("post")
+                .telemetry
+                .selected_model
+                .as_deref(),
+            Some("gpt-5.6-terra")
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn concurrent_native_profile_and_telemetry_cannot_overwrite_each_other() {
+        use std::sync::mpsc;
+        use std::thread;
+        use std::time::Duration;
+
+        let root = std::env::temp_dir().join(format!("catdesk-accounting-{}", Uuid::new_v4()));
+        let store = ExecutionAccountingStoreV1::open(&root).expect("store");
+        store
+            .record_task_started(
+                "project",
+                "task",
+                "session",
+                Some("thread-sol"),
+                "codex-cli",
+                Some(SOL_MEDIUM_MODEL),
+                None,
+                1_000,
+            )
+            .expect("start");
+        let profile = sol_profile("turn-1", 'a');
+        let guard = store.acquire_mutation_lock().expect("mutation lock");
+        let (started_tx, started_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+        let profile_store = store.clone();
+        let profile_started = started_tx.clone();
+        let profile_done = done_tx.clone();
+        let expected_profile = profile.clone();
+        let profile_writer = thread::spawn(move || {
+            profile_started.send(()).expect("profile start");
+            profile_done
+                .send((
+                    "profile",
+                    profile_store
+                        .record_exact_codex_turn_profile("session", &expected_profile)
+                        .is_ok(),
+                ))
+                .expect("profile result");
+        });
+        let telemetry_store = store.clone();
+        let telemetry_writer = thread::spawn(move || {
+            started_tx.send(()).expect("telemetry start");
+            done_tx
+                .send((
+                    "telemetry",
+                    telemetry_store
+                        .record_observability(
+                            "session",
+                            sol_telemetry("gpt-5.6-terra", "high", 2),
+                            2_000,
+                        )
+                        .is_ok(),
+                ))
+                .expect("telemetry result");
+        });
+        for _ in 0..2 {
+            started_rx
+                .recv_timeout(Duration::from_secs(2))
+                .expect("both writers reached the lock");
+        }
+        assert!(
+            matches!(
+                done_rx.recv_timeout(Duration::from_millis(100)),
+                Err(mpsc::RecvTimeoutError::Timeout)
+            ),
+            "a ledger writer completed while another process could own its mutation lock"
+        );
+        drop(guard);
+        let mut results = std::collections::BTreeMap::new();
+        for _ in 0..2 {
+            let (name, succeeded) = done_rx
+                .recv_timeout(Duration::from_secs(5))
+                .expect("writer completed");
+            results.insert(name, succeeded);
+        }
+        profile_writer.join().expect("profile thread");
+        telemetry_writer.join().expect("telemetry thread");
+        assert_eq!(results.get("profile"), Some(&true));
+        assert_eq!(results.get("telemetry"), Some(&true));
+        let reopened = ExecutionAccountingStoreV1::open(&root).expect("reopen");
+        let record = reopened
+            .list(Some("session"))
+            .expect("list")
+            .pop()
+            .expect("record");
+        assert_eq!(record.codex_turn_profiles, vec![profile]);
+        assert_eq!(record.effective_model.as_deref(), Some(SOL_MEDIUM_MODEL));
+        assert_eq!(record.reasoning_effort.as_deref(), Some("medium"));
+        assert_eq!(
+            record
+                .pre_codex_usage_snapshot
+                .expect("telemetry")
+                .telemetry
+                .selected_model
+                .as_deref(),
+            Some("gpt-5.6-terra")
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn codex_turn_profile_rejects_wrong_thread_model_or_extra_turn() {
+        let root = std::env::temp_dir().join(format!("catdesk-accounting-{}", Uuid::new_v4()));
+        let store = ExecutionAccountingStoreV1::open(&root).expect("store");
+        store
+            .record_task_started(
+                "project",
+                "task",
+                "session",
+                Some("thread-sol"),
+                "codex-cli",
+                Some(SOL_MEDIUM_MODEL),
+                None,
+                1_000,
+            )
+            .expect("start");
+        let mut wrong_thread = sol_profile("turn-1", 'a');
+        wrong_thread.codex_thread_id = "other-thread".into();
+        assert!(
+            store
+                .record_exact_codex_turn_profile("session", &wrong_thread)
+                .is_err()
+        );
+        let mut wrong_model = sol_profile("turn-1", 'a');
+        wrong_model.model_id = "gpt-5.6-terra".into();
+        wrong_model.reasoning_effort = "high".into();
+        assert!(
+            store
+                .record_exact_codex_turn_profile("session", &wrong_model)
+                .is_err()
+        );
+        assert!(
+            store
+                .record_exact_codex_turn_profile("session", &sol_profile("turn-1", 'a'))
+                .expect("first")
+        );
+        assert!(
+            store
+                .record_exact_codex_turn_profile("session", &sol_profile("turn-2", 'b'))
+                .is_err()
+        );
+        store
+            .record_task_started(
+                "project",
+                "task",
+                "session",
+                Some("thread-sol"),
+                "codex-cli",
+                Some(SOL_MEDIUM_MODEL),
+                None,
+                2_000,
+            )
+            .expect("repair turn");
+        let interim = store
+            .list(Some("session"))
+            .expect("list")
+            .pop()
+            .expect("record");
+        assert_eq!(interim.effective_model, None);
+        assert_eq!(interim.reasoning_effort, None);
+        assert!(
+            store
+                .record_exact_codex_turn_profile("session", &sol_profile("turn-2", 'b'))
+                .expect("repair evidence")
+        );
+        let after = store
+            .list(Some("session"))
+            .expect("list")
+            .pop()
+            .expect("record");
+        assert_eq!(after.codex_turn_profiles.len(), 2);
+        assert_eq!(after.effective_model.as_deref(), Some(SOL_MEDIUM_MODEL));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn first_native_profile_replaces_only_an_unbound_codex_thread() {
+        let root = std::env::temp_dir().join(format!("catdesk-accounting-{}", Uuid::new_v4()));
+        let store = ExecutionAccountingStoreV1::open(&root).expect("store");
+        store
+            .record_task_started(
+                "project",
+                "task",
+                "session",
+                Some("codex-unbound-worker"),
+                "codex-cli",
+                Some(SOL_MEDIUM_MODEL),
+                None,
+                1_000,
+            )
+            .expect("start");
+        assert!(
+            store
+                .record_exact_codex_turn_profile("session", &sol_profile("turn-1", 'a'))
+                .expect("bind native thread")
+        );
+        let record = store
+            .list(Some("session"))
+            .expect("list")
+            .pop()
+            .expect("record");
+        assert_eq!(record.provider_session_id.as_deref(), Some("thread-sol"));
+        let mut drift = sol_profile("turn-2", 'b');
+        drift.codex_thread_id = "other-thread".into();
+        store
+            .record_task_started(
+                "project",
+                "task",
+                "session",
+                Some("thread-sol"),
+                "codex-cli",
+                Some(SOL_MEDIUM_MODEL),
+                None,
+                2_000,
+            )
+            .expect("repair");
+        assert!(
+            store
+                .record_exact_codex_turn_profile("session", &drift)
+                .is_err()
+        );
+        let _ = fs::remove_dir_all(root);
+    }
     #[test]
     fn backfill_never_guesses_t0031_credit_consumption() {
         let root = std::env::temp_dir().join(format!("catdesk-accounting-{}", Uuid::new_v4()));
@@ -1649,6 +2117,18 @@ mod tests {
             .as_object_mut()
             .expect("object")
             .remove("activityEvidenceTruncated");
+        legacy
+            .pointer_mut("/records/0")
+            .expect("record")
+            .as_object_mut()
+            .expect("object")
+            .remove("requestedModel");
+        legacy
+            .pointer_mut("/records/0")
+            .expect("record")
+            .as_object_mut()
+            .expect("object")
+            .remove("codexTurnProfiles");
         fs::write(
             store.path(),
             serde_json::to_vec(&legacy).expect("serialize"),

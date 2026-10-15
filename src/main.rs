@@ -63,6 +63,7 @@ mod project_memory;
 mod prompt_templates;
 mod repo_map;
 mod reviewed_build;
+mod reviewed_candidate_owner;
 mod reviewed_source_snapshot;
 mod server;
 mod stable_wake_adapter_runtime;
@@ -980,6 +981,27 @@ fn parse_reviewed_candidate_mcp_options(
     }))
 }
 
+fn parse_reviewed_candidate_owner_options(
+    args: &[String],
+) -> Result<Option<ReviewedCandidateMcpOptions>, String> {
+    if !args.iter().any(|arg| arg == "--reviewed-candidate-owner") {
+        return Ok(None);
+    }
+    // The parent accepts the exact same fixed scope as the child. Reuse its
+    // strict parser so aliases, duplicate options and wider binds fail closed.
+    let child_args = args
+        .iter()
+        .map(|arg| {
+            if arg == "--reviewed-candidate-owner" {
+                "--reviewed-candidate-mcp".to_owned()
+            } else {
+                arg.clone()
+            }
+        })
+        .collect::<Vec<_>>();
+    parse_reviewed_candidate_mcp_options(child_args)
+}
+
 fn parse_headless_mcp_options(
     args: impl IntoIterator<Item = String>,
 ) -> Result<Option<HeadlessMcpOptions>, String> {
@@ -1537,6 +1559,112 @@ async fn probe_reviewed_candidate_ready(
     }
 }
 
+/// Verify the live IPv4 listener in the Windows TCP owner table. A process
+/// lock and a successful HTTP request do not establish who owns the bound
+/// port; this check must pass before ready output and throughout serving.
+fn verify_reviewed_candidate_listener_owner(
+    local_addr: std::net::SocketAddr,
+    expected_pid: u32,
+) -> Result<(), String> {
+    if local_addr.ip() != std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
+        || local_addr.port() == 0
+        || expected_pid == 0
+    {
+        return Err("reviewed candidate listener identity is unsafe".into());
+    }
+    #[cfg(windows)]
+    {
+        let owners = reviewed_candidate_ipv4_loopback_listener_owners(local_addr.port())?;
+        if owners.len() != 1 || owners[0] != expected_pid {
+            return Err("reviewed candidate listener PID ownership drifted".into());
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        Err("reviewed candidate listener ownership requires Windows".into())
+    }
+}
+
+#[cfg(windows)]
+fn reviewed_candidate_ipv4_loopback_listener_owners(port: u16) -> Result<Vec<u32>, String> {
+    use std::ffi::c_void;
+
+    const AF_INET: u32 = 2;
+    const TCP_TABLE_OWNER_PID_LISTENER: u32 = 3;
+    const ERROR_INSUFFICIENT_BUFFER: u32 = 122;
+    const MAX_TABLE_BYTES: u32 = 4 * 1024 * 1024;
+    const ROW_BYTES: usize = 6 * std::mem::size_of::<u32>();
+
+    #[link(name = "iphlpapi")]
+    unsafe extern "system" {
+        fn GetExtendedTcpTable(
+            tcp_table: *mut c_void,
+            size: *mut u32,
+            order: i32,
+            af: u32,
+            table_class: u32,
+            reserved: u32,
+        ) -> u32;
+    }
+
+    let mut size = 0u32;
+    let status = unsafe {
+        GetExtendedTcpTable(
+            std::ptr::null_mut(),
+            &mut size,
+            0,
+            AF_INET,
+            TCP_TABLE_OWNER_PID_LISTENER,
+            0,
+        )
+    };
+    if status != ERROR_INSUFFICIENT_BUFFER || !(4..=MAX_TABLE_BYTES).contains(&size) {
+        return Err("reviewed candidate listener table size unavailable".into());
+    }
+    for _ in 0..3 {
+        let mut table = vec![0u8; size as usize];
+        let status = unsafe {
+            GetExtendedTcpTable(
+                table.as_mut_ptr().cast(),
+                &mut size,
+                0,
+                AF_INET,
+                TCP_TABLE_OWNER_PID_LISTENER,
+                0,
+            )
+        };
+        if status == ERROR_INSUFFICIENT_BUFFER && size <= MAX_TABLE_BYTES {
+            continue;
+        }
+        if status != 0 || size < 4 || size as usize > table.len() {
+            return Err("reviewed candidate listener table query failed".into());
+        }
+        let table = &table[..size as usize];
+        let count = u32::from_ne_bytes(table[..4].try_into().unwrap()) as usize;
+        let end = count
+            .checked_mul(ROW_BYTES)
+            .and_then(|bytes| bytes.checked_add(4))
+            .ok_or("reviewed candidate listener table overflowed")?;
+        if end > table.len() {
+            return Err("reviewed candidate listener table was truncated".into());
+        }
+        let mut owners = Vec::new();
+        for row in table[4..end].chunks_exact(ROW_BYTES) {
+            let row_port = u32::from_ne_bytes(row[8..12].try_into().unwrap());
+            // dwLocalAddr is network-order bytes; require the actual
+            // 127.0.0.1 listener rather than another interface on this port.
+            if row[4..8] == [127, 0, 0, 1] && u16::from_be((row_port & 0xffff) as u16) == port {
+                owners.push(u32::from_ne_bytes(row[20..24].try_into().unwrap()));
+            }
+        }
+        owners.sort_unstable();
+        owners.dedup();
+        return Ok(owners);
+    }
+    Err("reviewed candidate listener table kept changing".into())
+}
+
 /// One logical CatDesk reviewed-candidate owner at a time. The lock is a
 /// create-once, delete-on-close Windows object beneath a pinned OS temp root;
 /// a preexisting name fails closed and is never removed by pathname. Keep
@@ -1564,10 +1692,233 @@ fn acquire_reviewed_candidate_process_lock() -> Result<ReviewedCandidateProcessL
     })
 }
 
+fn parse_owned_candidate_ready(
+    line: &str,
+    expected_commit: &str,
+    expected_pid: u32,
+) -> Result<std::net::SocketAddr, String> {
+    let ready: serde_json::Value =
+        serde_json::from_str(line).map_err(|_| "reviewed candidate child ready record invalid")?;
+    if ready["status"] != "ready"
+        || ready["kind"] != "reviewed-candidate"
+        || ready["sourceCommit"] != expected_commit
+        || ready["ownerPid"].as_u64() != Some(u64::from(expected_pid))
+        || ready["auth"]["scheme"] != "bearer"
+        || ready["auth"]["tokenRedacted"] != true
+        || ready["snapshotId"].as_str().is_none_or(str::is_empty)
+        || ready["runtimeGeneration"]
+            .as_str()
+            .is_none_or(str::is_empty)
+    {
+        return Err("reviewed candidate child ready identity mismatch".into());
+    }
+    let raw_url = ready["mcpUrl"]
+        .as_str()
+        .ok_or("reviewed candidate child URL unavailable")?;
+    let url = reqwest::Url::parse(raw_url).map_err(|_| "reviewed candidate child URL invalid")?;
+    if url.scheme() != "http"
+        || url.host_str() != Some("127.0.0.1")
+        || url.path() != "/dev/mcp"
+        || url.port().is_none_or(|port| port == 0)
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || raw_url != format!("http://127.0.0.1:{}/dev/mcp", url.port().unwrap_or(0))
+    {
+        return Err("reviewed candidate child URL is outside exact loopback scope".into());
+    }
+    Ok(std::net::SocketAddr::from((
+        [127, 0, 0, 1],
+        url.port().expect("port checked"),
+    )))
+}
+
+#[cfg(windows)]
+async fn run_reviewed_candidate_owner(
+    options: ReviewedCandidateMcpOptions,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use std::io::{BufReader, Read};
+    use std::process::{Command, Stdio};
+
+    fn bounded_ready_line<R: Read>(reader: &mut R) -> Result<String, String> {
+        let mut bytes = Vec::new();
+        let mut byte = [0_u8; 1];
+        for _ in 0..16_384 {
+            match reader.read(&mut byte) {
+                Ok(0) => return Err("reviewed candidate child exited before ready".into()),
+                Ok(_) if byte[0] == b'\n' => {
+                    return String::from_utf8(bytes)
+                        .map_err(|_| "reviewed candidate child ready record is not UTF-8".into());
+                }
+                Ok(_) => bytes.push(byte[0]),
+                Err(_) => return Err("reviewed candidate child ready stream failed".into()),
+            }
+        }
+        Err("reviewed candidate child ready record oversized".into())
+    }
+
+    let executable = std::env::current_exe()?;
+    let mut command = Command::new(executable);
+    command
+        .arg("--reviewed-candidate-mcp")
+        .arg("--host")
+        .arg("127.0.0.1")
+        .arg("--port")
+        .arg("0")
+        .arg("--mcp-path")
+        .arg("/dev/mcp")
+        .arg("--workspace")
+        .arg(&options.source_workspace)
+        .arg("--expected-commit")
+        .arg(&options.expected_commit)
+        .arg("--auth-token")
+        .arg(&options.auth_token)
+        .env("CATDESK_REVIEWED_CANDIDATE_PARENT_STDIN", "1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit());
+    let mut owned = reviewed_candidate_owner::OwnedCandidateChild::spawn(&mut command)
+        .map_err(std::io::Error::other)?;
+    let pid = owned.pid();
+    let stdout = owned
+        .child_mut()
+        .stdout
+        .take()
+        .ok_or("reviewed candidate child stdout unavailable")?;
+    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+    std::thread::Builder::new()
+        .name("candidate-ready-reader".into())
+        .spawn(move || {
+            let mut reader = BufReader::new(stdout);
+            let _ = ready_tx.send(bounded_ready_line(&mut reader));
+            // Continue draining bounded-process output so a future diagnostic
+            // line cannot block the supervised child on a full pipe.
+            let _ = std::io::copy(&mut reader, &mut std::io::sink());
+        })?;
+    let ready_line = tokio::time::timeout(Duration::from_secs(120), ready_rx)
+        .await
+        .map_err(|_| "reviewed candidate child readiness timed out")?
+        .map_err(|_| "reviewed candidate child ready reader failed")?
+        .map_err(std::io::Error::other)?;
+    let address = parse_owned_candidate_ready(&ready_line, &options.expected_commit, pid)
+        .map_err(std::io::Error::other)?;
+    if owned.child_mut().try_wait()?.is_some() {
+        return Err(
+            std::io::Error::other("reviewed candidate child exited before owner ready").into(),
+        );
+    }
+    verify_reviewed_candidate_listener_owner(address, pid).map_err(std::io::Error::other)?;
+    probe_reviewed_candidate_ready(address, &options.auth_token)
+        .await
+        .map_err(std::io::Error::other)?;
+    if owned.child_mut().try_wait()?.is_some() {
+        return Err(
+            std::io::Error::other("reviewed candidate child exited during owner probe").into(),
+        );
+    }
+    println!("{ready_line}");
+
+    let mut watch = tokio::time::interval(Duration::from_secs(1));
+    watch.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        tokio::select! {
+            signal = tokio::signal::ctrl_c() => {
+                signal.map_err(|_| "reviewed candidate owner signal failed")?;
+                break;
+            }
+            _ = watch.tick() => {
+                if let Some(status) = owned.child_mut().try_wait()? {
+                    return Err(std::io::Error::other(format!(
+                        "reviewed candidate child exited unexpectedly ({status}); journal requires attention"
+                    )).into());
+                }
+                verify_reviewed_candidate_listener_owner(address, pid)
+                    .map_err(std::io::Error::other)?;
+            }
+        }
+    }
+
+    if let Some(status) = owned.child_mut().try_wait()? {
+        if status.success() {
+            return Ok(());
+        }
+        return Err(std::io::Error::other(format!(
+            "reviewed candidate child exited during stop ({status}); journal requires attention"
+        ))
+        .into());
+    }
+    let stop_sent = {
+        let stdin = owned
+            .child_mut()
+            .stdin
+            .as_mut()
+            .ok_or("reviewed candidate owner control channel unavailable")?;
+        stdin.write_all(b"stop\n").and_then(|()| stdin.flush())
+    };
+    if let Err(error) = stop_sent {
+        if owned
+            .child_mut()
+            .try_wait()?
+            .is_some_and(|status| status.success())
+        {
+            return Ok(());
+        }
+        return Err(std::io::Error::other(format!(
+            "reviewed candidate owner stop signal failed ({error}); journal requires attention"
+        ))
+        .into());
+    }
+    drop(owned.child_mut().stdin.take());
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    loop {
+        match owned.child_mut().try_wait()? {
+            Some(status) if status.success() => return Ok(()),
+            Some(status) => {
+                return Err(std::io::Error::other(format!(
+                    "reviewed candidate child shutdown failed ({status}); journal requires attention"
+                )).into());
+            }
+            None if std::time::Instant::now() < deadline => {
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+            None => {
+                owned.terminate_and_wait().map_err(std::io::Error::other)?;
+                return Err(std::io::Error::other(
+                    "reviewed candidate child shutdown timed out; journal requires attention",
+                )
+                .into());
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+async fn run_reviewed_candidate_owner(
+    _options: ReviewedCandidateMcpOptions,
+) -> Result<(), Box<dyn std::error::Error>> {
+    Err(std::io::Error::other("reviewed candidate owner requires Windows").into())
+}
+
+async fn wait_reviewed_candidate_parent_stop() -> Result<(), String> {
+    use tokio::io::AsyncReadExt;
+    let mut stop = [0_u8; 5];
+    tokio::io::stdin()
+        .read_exact(&mut stop)
+        .await
+        .map_err(|_| "reviewed candidate owner control channel closed")?;
+    if &stop != b"stop\n" {
+        return Err("reviewed candidate owner control signal invalid".into());
+    }
+    Ok(())
+}
+
 async fn run_reviewed_candidate_mcp(
     options: ReviewedCandidateMcpOptions,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _owner_lock = acquire_reviewed_candidate_process_lock().map_err(std::io::Error::other)?;
+    let parent_stdin_shutdown =
+        std::env::var_os("CATDESK_REVIEWED_CANDIDATE_PARENT_STDIN").is_some();
     let source = std::fs::canonicalize(&options.source_workspace)?;
     if !source.is_dir() {
         return Err(std::io::Error::other("reviewed candidate source workspace invalid").into());
@@ -1646,6 +1997,11 @@ async fn run_reviewed_candidate_mcp(
         }
         return Err(reviewed_candidate_startup_error(&snapshot, error).into());
     }
+    if let Err(error) = verify_reviewed_candidate_listener_owner(local_addr, std::process::id()) {
+        serve.abort();
+        let _ = tokio::time::timeout(Duration::from_secs(2), &mut serve).await;
+        return Err(reviewed_candidate_startup_error(&snapshot, error).into());
+    }
     if serve.is_finished() {
         return Err(
             reviewed_candidate_startup_error(&snapshot, "listener exited before ready").into(),
@@ -1664,20 +2020,42 @@ async fn run_reviewed_candidate_mcp(
             "auth":{"scheme":"bearer","tokenRedacted":true}
         })
     );
-    tokio::select! {
-        signal = tokio::signal::ctrl_c() => {
-            if let Err(error) = signal {
-                serve.abort();
-                let _ = tokio::time::timeout(Duration::from_secs(2), &mut serve).await;
-                return Err(reviewed_candidate_runtime_error(&snapshot, "signal_failed", error).into());
+    let parent_stop = wait_reviewed_candidate_parent_stop();
+    tokio::pin!(parent_stop);
+    let mut owner_watch = tokio::time::interval(Duration::from_secs(1));
+    owner_watch.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        tokio::select! {
+            parent_stop_result = &mut parent_stop, if parent_stdin_shutdown => {
+                if let Err(error) = parent_stop_result {
+                    serve.abort();
+                    let _ = tokio::time::timeout(Duration::from_secs(2), &mut serve).await;
+                    return Err(reviewed_candidate_runtime_error(&snapshot, "parent_channel_failed", error).into());
+                }
+                break;
             }
-        },
-        result = &mut serve => {
-            return Err(reviewed_candidate_runtime_error(
-                &snapshot,
-                "listener_exited",
-                format!("listener exited unexpectedly: {result:?}"),
-            ).into());
+            signal = tokio::signal::ctrl_c() => {
+                if let Err(error) = signal {
+                    serve.abort();
+                    let _ = tokio::time::timeout(Duration::from_secs(2), &mut serve).await;
+                    return Err(reviewed_candidate_runtime_error(&snapshot, "signal_failed", error).into());
+                }
+                break;
+            },
+            result = &mut serve => {
+                return Err(reviewed_candidate_runtime_error(
+                    &snapshot,
+                    "listener_exited",
+                    format!("listener exited unexpectedly: {result:?}"),
+                ).into());
+            },
+            _ = owner_watch.tick() => {
+                if let Err(error) = verify_reviewed_candidate_listener_owner(local_addr, std::process::id()) {
+                    serve.abort();
+                    let _ = tokio::time::timeout(Duration::from_secs(2), &mut serve).await;
+                    return Err(reviewed_candidate_runtime_error(&snapshot, "listener_exited", error).into());
+                }
+            }
         }
     }
     let _ = shutdown_tx.send(());
@@ -1987,6 +2365,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match parse_native_daemon_mode(&args) {
         Ok(true) => return run_native_daemon().await,
         Ok(false) => {}
+        Err(error) => {
+            eprintln!("CatDesk: {error}");
+            std::process::exit(2);
+        }
+    }
+    match parse_reviewed_candidate_owner_options(&args) {
+        Ok(Some(options)) => return run_reviewed_candidate_owner(options).await,
+        Ok(None) => {}
         Err(error) => {
             eprintln!("CatDesk: {error}");
             std::process::exit(2);
@@ -2624,11 +3010,14 @@ fn render_toast(f: &mut Frame, palette: theme::Palette, msg: &str, pos: (u16, u1
 
 #[cfg(test)]
 mod tests {
+    #[cfg(windows)]
+    use super::verify_reviewed_candidate_listener_owner;
     use super::{
         ToolMode, acquire_reviewed_candidate_process_lock, is_canonical_production_worker_listener,
         key_is_clipboard_paste, loopback_http_origin, normalize_ngrok_authtoken_input,
         parse_auto_start_computer, parse_headless_mcp_options, parse_native_daemon_mode,
-        parse_reviewed_candidate_mcp_options, probe_reviewed_candidate_ready,
+        parse_owned_candidate_ready, parse_reviewed_candidate_mcp_options,
+        parse_reviewed_candidate_owner_options, probe_reviewed_candidate_ready,
         resolve_headless_workspace, safe_bind_identity, validate_headless_mcp_path,
         validate_isolated_fixture_scope,
     };
@@ -2700,6 +3089,87 @@ mod tests {
         }
     }
 
+    #[test]
+    fn reviewed_candidate_parent_accepts_only_exact_child_scope() {
+        let args = [
+            "--reviewed-candidate-owner",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0",
+            "--mcp-path",
+            "/dev/mcp",
+            "--workspace",
+            "C:\\source",
+            "--expected-commit",
+            "a123456789012345678901234567890123456789",
+            "--auth-token",
+            "0123456789abcdefghijklmnop",
+        ];
+        let args = args.map(str::to_owned).to_vec();
+        assert!(
+            parse_reviewed_candidate_owner_options(&args)
+                .expect("exact parent scope")
+                .is_some()
+        );
+        for (old, new) in [
+            ("127.0.0.1", "0.0.0.0"),
+            ("/dev/mcp", "/mcp"),
+            ("a123456789012345678901234567890123456789", "bad"),
+        ] {
+            let changed = args
+                .iter()
+                .map(|arg| {
+                    if arg == old {
+                        new.to_owned()
+                    } else {
+                        arg.clone()
+                    }
+                })
+                .collect::<Vec<_>>();
+            assert!(parse_reviewed_candidate_owner_options(&changed).is_err());
+        }
+        let mut duplicate = args;
+        duplicate.push("--reviewed-candidate-mcp".into());
+        assert!(parse_reviewed_candidate_owner_options(&duplicate).is_err());
+    }
+
+    #[test]
+    fn reviewed_candidate_parent_ready_is_bound_to_exact_pid_commit_and_loopback() {
+        let commit = "a123456789012345678901234567890123456789";
+        let ready = serde_json::json!({
+            "status":"ready",
+            "kind":"reviewed-candidate",
+            "snapshotId":"snapshot-1",
+            "sourceCommit":commit,
+            "runtimeGeneration":"generation-1",
+            "ownerPid":1234,
+            "mcpUrl":"http://127.0.0.1:41777/dev/mcp",
+            "auth":{"scheme":"bearer","tokenRedacted":true}
+        });
+        assert_eq!(
+            parse_owned_candidate_ready(&ready.to_string(), commit, 1234)
+                .expect("exact child record")
+                .port(),
+            41777
+        );
+        assert!(parse_owned_candidate_ready(&ready.to_string(), commit, 1235).is_err());
+        let mut changed = ready.clone();
+        changed["sourceCommit"] = serde_json::json!("b".repeat(40));
+        assert!(parse_owned_candidate_ready(&changed.to_string(), commit, 1234).is_err());
+        for url in [
+            "http://127.0.0.2:41777/dev/mcp",
+            "http://127.0.0.1:41777/dev/mcp?x=1",
+            "http://127.0.0.1:41777/other",
+            "https://127.0.0.1:41777/dev/mcp",
+            "http://user@127.0.0.1:41777/dev/mcp",
+        ] {
+            changed = ready.clone();
+            changed["mcpUrl"] = serde_json::json!(url);
+            assert!(parse_owned_candidate_ready(&changed.to_string(), commit, 1234).is_err());
+        }
+    }
+
     #[tokio::test]
     async fn reviewed_candidate_ready_probe_requires_authenticated_isolated_mcp() {
         use super::{AppState, SharedState, server};
@@ -2742,6 +3212,41 @@ mod tests {
         task.abort();
         let _ = task.await;
         std::fs::remove_dir_all(root).expect("remove exact test root");
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn reviewed_candidate_listener_owner_must_match_live_socket_pid() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind candidate loopback listener");
+        let address = listener.local_addr().expect("candidate address");
+        verify_reviewed_candidate_listener_owner(address, std::process::id())
+            .expect("Windows reports this process as the listener owner");
+        assert!(
+            verify_reviewed_candidate_listener_owner(address, u32::MAX).is_err(),
+            "foreign process ID must not pass owner verification"
+        );
+        assert!(
+            verify_reviewed_candidate_listener_owner(
+                SocketAddr::from(([0, 0, 0, 0], address.port())),
+                std::process::id(),
+            )
+            .is_err(),
+            "non-loopback address must not pass owner verification"
+        );
+        drop(listener);
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            if verify_reviewed_candidate_listener_owner(address, std::process::id()).is_err() {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "closed listener remained assigned to this PID"
+            );
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
     }
 
     #[test]
