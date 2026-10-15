@@ -1,5 +1,9 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-15 stopped Sol direct-parent ACL diagnosis (source only)
+
+The inert stopped candidate can now check one supplied pinned stage root and its direct parent for exact host/System ACLs while bracketing retained exited worker token/account and empty-Job readback. A broad Everyone ACE on the parent fails. Focused Sol 87 passed/two ignored and staging 14 passed; combined root 1,231 main passed/28 ignored, strict gates and independent review passed locally. See `T-0483_R34_STOPPED_SOL_DIRECT_PARENT_ACL_DIAGNOSTIC.md`. Pushed source `0ffd8d53015168a2fc9d2e8e4f2eaa5da1880b37` had zero exact GitHub check-runs. The fixed account/token provider, earlier ancestors, escaped processes, copied writable handles, burn/stage/repository-use and real Sol/medium→review_ready→Wake remain open.
+
 ## 2026-10-15 dormant fixed-account launch path (source only)
 
 The private prepared lifecycle can take a host-supplied restricted primary-token lease for fixed `CatDeskSolWorker`, reject weak/changed handle rights before reservation, and use suspended `CreateProcessAsUserW` with the pinned executable, no inherited handles and creation-time Job binding. It checks the returned child before resume and retains uncertain failures in ATTENTION. Token tests passed 10/one ignored, identity eight, lifecycle 32/one ignored; combined root Rust and strict gates passed locally. See `T-0483_R33_FIXED_ACCOUNT_SOL_LAUNCH_SOURCE.md`. Pushed source `3e869d3878c1386babe638e480e0638668286831` had zero exact GitHub runs/checks. This host lacks both the fixed account and trusted token provider, so no positive fixed-account launch or real Sol/medium→review_ready→Wake cycle is accepted. Lost-write and durable burn-to-stage proof remain open; candidate grants no stage/repository authority.

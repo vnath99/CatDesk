@@ -1,5 +1,9 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-15 retained moved-package pin (source only)
+
+The locked exact-resume diagnosis now holds the moved package, five leaves and both namespace parents through its final ledger recheck. Retained handles deny write/delete sharing; fixture cases reject ambiguous location, object/byte/ACL drift and mutation attempts. Full Wake 200 library passed/one ignored plus binaries/integrations, combined root 1,231 main passed/28 ignored, strict gates and independent review passed locally. See `T-0485_R27_RETAINED_MOVED_PACKAGE_PIN_SOURCE.md`. Pushed source `aac1c7e2e4e5a6e820b22098ca739f2a0a67c17b` had zero exact GitHub check-runs. The packages parent is not durably bound to STAGED; production rename/PUBLISHED/pointer/owner/reader and first-generation migration anchor remain open. Service/install holds stay closed.
+
 ## 2026-10-15 protected package publication seam (source only)
 
 Locked read-only exact-resume diagnosis now distinguishes the STAGED package at its staging slot from the exact signed package destination after a rename, retaining staging-parent and six package object bindings. A rename before PUBLISHED is sticky attention; altered or ambiguous physical state refuses. Focused and full Wake tests (200 library passed, one ignored, plus binaries/integrations), combined root Rust and strict gates passed locally; independent review found no blocking issue. See `T-0485_R26_PROTECTED_PACKAGE_PUBLICATION_SEAM_SOURCE.md`. Pushed source `aa8059c99adb5600b8d2e4af7abafcb61b5b17140` had zero exact GitHub runs/checks on immediate readback. The production writer, dev.84 connected owner/store anchor, signed broker, exact CI, protected dev.85 activation and fresh Chat53 remain open; service/install holds stay closed.

@@ -1,5 +1,11 @@
 # CatDesk — Important Command Reference
 
+## Current R27/R34 source gate (2026-10-15)
+
+- P0 `aac1c7e` retains moved-package read-only pins during locked resume; P1 `0ffd8d5` diagnoses one supplied stopped-worker staging parent/root ACL. Both have zero exact GitHub check-runs on immediate readback despite passing local Rust and strict gates. The package pin is not a production rename/PUBLISHED writer, and the ACL diagnostic grants no stage or repository use. See `docs/orchestrator/review_bundles/T-0485_R27_RETAINED_MOVED_PACKAGE_PIN_SOURCE.md` and `T-0483_R34_STOPPED_SOL_DIRECT_PARENT_ACL_DIAGNOSTIC.md`.
+- Exact-current three-job Windows CI and protected dev.84 owner/store reconciliation remain release gates. Read-only Actions permissions show enabled and `ci.yml` active, but its latest visible green run remains older source. The prior manual CLI HTTP 422 `Actions has been disabled for this repository` and absent `workflow_dispatch` are separate facts; no new dispatch or setting change. The last clean inert BuildOnly at `df5b5ec` predates R27/R34 and cannot authorize install.
+
+
 ## Current R26/R33 source gate (2026-10-15)
 
 - The latest source checkpoints are P0 `aa8059c` read-only STAGED→PUBLISHED package diagnosis and P1 `3e869d3` dormant fixed-account token/Job launch. Both passed local focused/full Rust and strict gates but had zero exact-SHA GitHub runs/checks. Neither creates protected install or Sol staging/repository-use authority. See `docs/orchestrator/review_bundles/T-0485_R26_PROTECTED_PACKAGE_PUBLICATION_SEAM_SOURCE.md` and `T-0483_R33_FIXED_ACCOUNT_SOL_LAUNCH_SOURCE.md`.
