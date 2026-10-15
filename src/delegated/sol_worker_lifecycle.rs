@@ -13,7 +13,10 @@
 //! Job drain. No production fixed-account launcher can call that route yet.
 //! The witness does not prove
 //! escaped descendants, inherited handles, or repository-write exclusion,
-//! and no nonce, staging, or repository-use path accepts it.
+//! and no nonce, staging, or repository-use path accepts it. Consuming a
+//! normally drained witness yields only an inert stopped-run candidate that
+//! retains its opened-process/token evidence and exact host-held context for
+//! later post-exit checks.
 
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -1172,6 +1175,30 @@ pub(crate) struct DrainedBoundFixedWorkerJobV1 {
     _executable: PinnedSolWorkerExecutableV1,
 }
 
+/// An inert post-drain handoff. This is constructed only by consuming the
+/// normal, bound Job-drain witness. The retained fixed-worker binding includes
+/// the exact opened process and its pre-resume restricted-token observation;
+/// the run and executable leases keep the selected task, nonce, pinned roots,
+/// launch reservation and reviewed image together. The live-process
+/// `revalidate` method cannot be used after normal exit. A future boundary
+/// must prove post-exit identity and loss of all write authority before it may
+/// consume output. This type exposes no burn, stage or repository-use method.
+pub(crate) struct StoppedBoundFixedWorkerCandidateV1 {
+    _bound_worker: BoundFixedLocalSolWorkerProcessV1,
+    _prepared_run: ReservedPreparedSolRunV1,
+    _executable: PinnedSolWorkerExecutableV1,
+}
+
+impl DrainedBoundFixedWorkerJobV1 {
+    pub(crate) fn into_stopped_candidate(self) -> StoppedBoundFixedWorkerCandidateV1 {
+        StoppedBoundFixedWorkerCandidateV1 {
+            _bound_worker: self._bound_worker,
+            _prepared_run: self._prepared_run,
+            _executable: self._executable,
+        }
+    }
+}
+
 /// The original process handle is the cleanup target. The diagnostic Command
 /// path can fail before Job assignment; the prepared native path starts in
 /// the Job. Neither may infer terminal state from Job close alone.
@@ -1899,6 +1926,8 @@ mod tests {
         )
             -> Result<NormalDrainedJobV1, ChildTransitionFailure<OwnedRunningJobChild>> =
             OwnedRunningJobChild::finish_normal;
+        let _: fn(DrainedBoundFixedWorkerJobV1) -> StoppedBoundFixedWorkerCandidateV1 =
+            DrainedBoundFixedWorkerJobV1::into_stopped_candidate;
     }
 
     #[test]

@@ -1,10 +1,11 @@
 //! Dormant host-side staging intended for a verified, stopped Sol worker export.
 //!
-//! The source keeps a supplied-SID ACL audit internal to this module. Its
-//! crate-visible stage path requires an opaque binding of the fixed local
-//! worker account to an opened restricted process primary token. This checks
-//! the opened root against that identity, but cannot prove that the process
-//! is the intended Codex worker or excludes its children.
+//! The source keeps both the supplied-SID ACL audit and the live-process
+//! fixed-worker stage path internal to this module. The latter requires an
+//! opaque binding of the fixed local worker account to an opened restricted
+//! process primary token, but its live revalidation cannot be used after a
+//! normal worker exit. It is a fixture and implementation helper, not a
+//! stopped-worker handoff or crate-visible staging authority.
 //! The caller must also prove the entire parent chain grants no worker
 //! DELETE_CHILD or rename authority, ACL takeover rights, inherited writable
 //! handles, or access through alternate groups or privileges.
@@ -91,21 +92,21 @@ impl PinnedSolWorkerStageV1 {
     }
 }
 
-/// Readback retains the opaque fixed-account/process binding. A caller cannot
-/// obtain this value from a supplied SID or an unbound token observation.
+/// Private live-process fixture. This cannot stand in for a post-drain stage
+/// because fixed-worker revalidation requires the original process to live.
 #[cfg(windows)]
-pub(crate) struct FixedWorkerBoundPinnedSolWorkerStageV1 {
+struct FixedWorkerBoundPinnedSolWorkerStageV1 {
     stage: PinnedSolWorkerStageV1,
     bound_worker: Arc<BoundFixedLocalSolWorkerProcessV1>,
 }
 
 #[cfg(windows)]
 impl FixedWorkerBoundPinnedSolWorkerStageV1 {
-    pub(crate) fn manifest(&self) -> &SolStagedOutputManifestV1 {
+    fn manifest(&self) -> &SolStagedOutputManifestV1 {
         self.stage.manifest()
     }
 
-    pub(crate) fn readback(&self) -> Result<BTreeMap<String, Vec<u8>>, String> {
+    fn readback(&self) -> Result<BTreeMap<String, Vec<u8>>, String> {
         validate_bound_fixed_worker_for_stage_acl(
             &self.stage.acl_audited_root,
             &self.bound_worker,
@@ -151,18 +152,16 @@ fn validate_bound_fixed_worker_for_stage_acl(
     worker.revalidate()
 }
 
-/// Binds the root ACL audit to a pinned process primary token whose TokenUser
-/// was matched to the fixed local Sol worker account. The host must separately
-/// prove this is the intended worker and that it and its descendants lost all
-/// relevant write authority before repository use.
+/// Private live-process root audit. It cannot establish the post-exit
+/// identity and lost-write boundary needed by a stopped-worker handoff.
 #[cfg(windows)]
-pub(crate) struct AclAuditedSolStageRootForBoundFixedLocalWorkerV1 {
+struct AclAuditedSolStageRootForBoundFixedLocalWorkerV1 {
     supplied_sid_audit: AclAuditedSolStageRootForSuppliedSidV1,
     bound_worker: Arc<BoundFixedLocalSolWorkerProcessV1>,
 }
 
 #[cfg(windows)]
-pub(crate) fn bind_sol_stage_root_acl_to_fixed_local_worker(
+fn bind_sol_stage_root_acl_to_fixed_local_worker(
     root: &ProtectedDirectoryGuard,
     worker: BoundFixedLocalSolWorkerProcessV1,
 ) -> Result<AclAuditedSolStageRootForBoundFixedLocalWorkerV1, String> {
@@ -437,12 +436,11 @@ fn stage_verified_sol_worker_output(
     stage_verified_sol_worker_output_with_id(acl_audited_root, expected, burned, &stage_id)
 }
 
-/// The only crate-visible path from a burned Sol output to a host stage. The
-/// fixed local worker/process binding is revalidated around staging and held
-/// for readback; this does not prove worker or descendant exit, nor ancestor
-/// and inherited-handle write exclusion.
+/// Private live-process staging helper. This does not prove worker or
+/// descendant exit, nor ancestor and inherited-handle write exclusion. No
+/// crate-visible path may consume burned output for staging yet.
 #[cfg(windows)]
-pub(crate) fn stage_verified_sol_worker_output_for_bound_fixed_local_worker(
+fn stage_verified_sol_worker_output_for_bound_fixed_local_worker(
     bound_root: &AclAuditedSolStageRootForBoundFixedLocalWorkerV1,
     expected: &ExpectedSolWorkerOutputV1,
     burned: BurnedSolWorkerOutputV1,
@@ -555,7 +553,7 @@ mod tests {
     }
 
     #[test]
-    fn exposed_stage_boundary_requires_fixed_account_process_binding() {
+    fn private_live_stage_helper_requires_fixed_account_process_binding() {
         let _: fn(
             &ProtectedDirectoryGuard,
             BoundFixedLocalSolWorkerProcessV1,
