@@ -1,5 +1,9 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+# 2026-10-15 dormant output handoff verifier
+
+The source now includes a host-side verifier for a proposed Sol worker output manifest. It binds the exact host-held task ID, baseline commit, native turn ID, handoff nonce and allowed paths to a bounded, pinned directory inventory, then returns verified file bytes for a future trusted staging step. Five focused Windows tests passed. It is not wired to a worker service or launch path. The required restricted worker identity, proof the worker stopped and lost write authority, durable nonce replay ledger, trusted staging transaction, real Codex deliverable, natural review event and Wake receipt remain open. See `docs/orchestrator/review_bundles/T-0483_R13_SOL_OUTPUT_HANDOFF_VERIFIER_SOURCE.md`.
+
 # 2026-10-15 broker and CI hold
 
 Wake installation now fails at `WAKE_INSTALL_BROKER_UNPROVISIONED` in both the PowerShell entry and all four mutating host CLI commands. The current same-user store has no protected caller or direct-write boundary; a broker/namespace and independent approval are required before dev.85 activation. The connected CatDesk transport is presently unavailable, so installed build/generation cannot be freshly verified this turn. The previous dev.84/Chat53 generation-34 evidence is historical. Exact commit `448836b` had zero GitHub check/workflow runs; the prior dispatch returned HTTP 422. No real Sol task, natural review event, or fresh Wake receipt has been accepted. See `T-0483_R12_INSTALL_BROKER_HOLD.md` in the review bundles.

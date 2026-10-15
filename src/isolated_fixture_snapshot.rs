@@ -19,6 +19,8 @@ use crate::isolated_fixture_manifest::{
     MAX_FILE_BYTES, MAX_TOTAL_BYTES, SnapshotManifest, validate_manifest, verify_file_bytes,
 };
 use crate::reviewed_source_snapshot::query_relative_directory_names;
+#[cfg(windows)]
+use crate::reviewed_source_snapshot::query_relative_directory_names_bounded;
 use crate::windows_protected_fs::{
     PinnedDirectory, ProtectedDirectoryGuard, RetainedReviewedArtifact,
     read_optional_relative_regular, read_relative_regular_unique, retain_reviewed_regular_artifact,
@@ -30,6 +32,103 @@ use crate::windows_protected_fs::{dispose_opened_object, open_reviewed_regular_f
 const LABEL: &str = "isolated fixture source snapshot";
 #[cfg(windows)]
 const MAX_OWNER_RECORD_BYTES: u64 = 4 * 1024;
+#[cfg(windows)]
+const MAX_OWNER_JOURNAL_ENTRIES: usize = 7;
+
+#[cfg(windows)]
+#[repr(C)]
+#[derive(Default)]
+struct ProcessFileTime {
+    low: u32,
+    high: u32,
+}
+
+#[cfg(windows)]
+#[link(name = "kernel32")]
+unsafe extern "system" {
+    fn GetCurrentProcess() -> *mut std::ffi::c_void;
+    fn OpenProcess(access: u32, inherit_handle: i32, pid: u32) -> *mut std::ffi::c_void;
+    fn GetProcessTimes(
+        process: *mut std::ffi::c_void,
+        creation: *mut ProcessFileTime,
+        exit: *mut ProcessFileTime,
+        kernel: *mut ProcessFileTime,
+        user: *mut ProcessFileTime,
+    ) -> i32;
+    fn WaitForSingleObject(process: *mut std::ffi::c_void, timeout_ms: u32) -> u32;
+    fn GetLastError() -> u32;
+    fn CloseHandle(handle: *mut std::ffi::c_void) -> i32;
+}
+
+#[cfg(windows)]
+fn process_creation_time_100ns(process: *mut std::ffi::c_void) -> Result<u64, String> {
+    let mut creation = ProcessFileTime::default();
+    let mut exit = ProcessFileTime::default();
+    let mut kernel = ProcessFileTime::default();
+    let mut user = ProcessFileTime::default();
+    if unsafe { GetProcessTimes(process, &mut creation, &mut exit, &mut kernel, &mut user) } == 0 {
+        return Err("fixture owner process creation time unavailable".into());
+    }
+    let ticks = (u64::from(creation.high) << 32) | u64::from(creation.low);
+    if ticks == 0 {
+        return Err("fixture owner process creation time invalid".into());
+    }
+    Ok(ticks)
+}
+
+#[cfg(windows)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OwnerProcessInstance {
+    LiveExact,
+    Exited,
+    PidReused,
+}
+
+/// Inspect one kernel process object. A PID is never treated as an identity:
+/// its creation time must match the serving record, and the retained handle
+/// must still be unsignaled after the query.
+#[cfg(windows)]
+fn inspect_owner_process_instance(
+    pid: u32,
+    expected_creation_time_100ns: u64,
+) -> Result<OwnerProcessInstance, String> {
+    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    const SYNCHRONIZE: u32 = 0x0010_0000;
+    const WAIT_OBJECT_0: u32 = 0;
+    const WAIT_TIMEOUT: u32 = 258;
+    const ERROR_INVALID_PARAMETER: u32 = 87;
+    if pid == 0 || expected_creation_time_100ns == 0 {
+        return Err("fixture owner process identity invalid".into());
+    }
+    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, 0, pid) };
+    if handle.is_null() {
+        if unsafe { GetLastError() } == ERROR_INVALID_PARAMETER {
+            return Ok(OwnerProcessInstance::Exited);
+        }
+        return Err("fixture owner process cannot be inspected".into());
+    }
+    struct ProcessHandle(*mut std::ffi::c_void);
+    impl Drop for ProcessHandle {
+        fn drop(&mut self) {
+            unsafe { CloseHandle(self.0) };
+        }
+    }
+    let handle = ProcessHandle(handle);
+    match unsafe { WaitForSingleObject(handle.0, 0) } {
+        WAIT_OBJECT_0 => return Ok(OwnerProcessInstance::Exited),
+        WAIT_TIMEOUT => {}
+        _ => return Err("fixture owner process wait unavailable".into()),
+    }
+    let creation = process_creation_time_100ns(handle.0)?;
+    match unsafe { WaitForSingleObject(handle.0, 0) } {
+        WAIT_OBJECT_0 => Ok(OwnerProcessInstance::Exited),
+        WAIT_TIMEOUT if creation == expected_creation_time_100ns => {
+            Ok(OwnerProcessInstance::LiveExact)
+        }
+        WAIT_TIMEOUT => Ok(OwnerProcessInstance::PidReused),
+        _ => Err("fixture owner process wait unavailable".into()),
+    }
+}
 
 #[cfg(windows)]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -55,26 +154,28 @@ struct FixtureOwnerRootV1 {
 #[cfg(windows)]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-struct FixtureOwnerServingV1 {
+struct FixtureOwnerServingV2 {
     schema_version: u32,
     snapshot_id: String,
     intent_sha256: String,
     root_object_identity: String,
     runtime_generation: String,
     owner_pid: u32,
+    owner_creation_time_100ns: u64,
     loopback_port: u16,
 }
 
 #[cfg(windows)]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
-struct FixtureOwnerRuntimeAttentionV1 {
+struct FixtureOwnerRuntimeAttentionV2 {
     schema_version: u32,
     snapshot_id: String,
     intent_sha256: String,
     root_object_identity: String,
     runtime_generation: String,
     owner_pid: u32,
+    owner_creation_time_100ns: u64,
     loopback_port: u16,
     code: String,
 }
@@ -84,7 +185,7 @@ struct FixtureOwnerRuntimeAttentionV1 {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct FixtureOwnerRetirementV1 {
     schema_version: u32,
-    serving: FixtureOwnerServingV1,
+    serving: FixtureOwnerServingV2,
     status: String,
 }
 
@@ -116,19 +217,20 @@ fn write_fixture_owner_serving(
     root: &ProtectedDirectoryGuard,
     sid: &str,
     port: u16,
-) -> Result<FixtureOwnerServingV1, String> {
+) -> Result<FixtureOwnerServingV2, String> {
     if port == 0 {
         return Err("fixture owner serving port unavailable".into());
     }
     let (intent, binding) = read_fixture_owner_records(journal, manifest, Some(root), sid)?;
     let binding = binding.ok_or("fixture owner root binding missing")?;
-    let record = FixtureOwnerServingV1 {
-        schema_version: 1,
+    let record = FixtureOwnerServingV2 {
+        schema_version: 2,
         snapshot_id: intent.snapshot_id,
         intent_sha256: binding.intent_sha256,
         root_object_identity: binding.root_object_identity,
         runtime_generation: Uuid::new_v4().to_string(),
         owner_pid: std::process::id(),
+        owner_creation_time_100ns: process_creation_time_100ns(unsafe { GetCurrentProcess() })?,
         loopback_port: port,
     };
     let bytes =
@@ -151,7 +253,7 @@ fn read_fixture_owner_serving(
     manifest: &SnapshotManifest,
     root: &ProtectedDirectoryGuard,
     sid: &str,
-) -> Result<FixtureOwnerServingV1, String> {
+) -> Result<FixtureOwnerServingV2, String> {
     read_fixture_owner_serving_record(journal, manifest, Some(root), sid)
 }
 
@@ -161,20 +263,21 @@ fn read_fixture_owner_serving_record(
     manifest: &SnapshotManifest,
     root: Option<&ProtectedDirectoryGuard>,
     sid: &str,
-) -> Result<FixtureOwnerServingV1, String> {
+) -> Result<FixtureOwnerServingV2, String> {
     let (intent, binding) = read_fixture_owner_records(journal, manifest, root, sid)?;
     let binding = binding.ok_or("fixture owner root binding missing")?;
     let bytes =
         read_relative_regular_unique(journal, "serving.json", MAX_OWNER_RECORD_BYTES, LABEL)?;
-    let record: FixtureOwnerServingV1 =
+    let record: FixtureOwnerServingV2 =
         serde_json::from_slice(&bytes).map_err(|_| "fixture owner serving invalid")?;
     if bytes
         != serde_json::to_vec(&record).map_err(|_| "fixture owner serving encoding unavailable")?
-        || record.schema_version != 1
+        || record.schema_version != 2
         || record.snapshot_id != intent.snapshot_id
         || record.intent_sha256 != binding.intent_sha256
         || record.root_object_identity != binding.root_object_identity
         || record.owner_pid == 0
+        || record.owner_creation_time_100ns == 0
         || record.loopback_port == 0
         || Uuid::parse_str(&record.runtime_generation)
             .map(|uuid| uuid.to_string() != record.runtime_generation)
@@ -418,18 +521,19 @@ fn write_fixture_owner_runtime_attention(
     root: &ProtectedDirectoryGuard,
     sid: &str,
     code: &'static str,
-) -> Result<FixtureOwnerRuntimeAttentionV1, String> {
+) -> Result<FixtureOwnerRuntimeAttentionV2, String> {
     if !valid_runtime_attention_code(code) {
         return Err("fixture owner runtime attention code invalid".into());
     }
     let serving = read_fixture_owner_serving(journal, manifest, root, sid)?;
-    let record = FixtureOwnerRuntimeAttentionV1 {
-        schema_version: 1,
+    let record = FixtureOwnerRuntimeAttentionV2 {
+        schema_version: 2,
         snapshot_id: serving.snapshot_id,
         intent_sha256: serving.intent_sha256,
         root_object_identity: serving.root_object_identity,
         runtime_generation: serving.runtime_generation,
         owner_pid: serving.owner_pid,
+        owner_creation_time_100ns: serving.owner_creation_time_100ns,
         loopback_port: serving.loopback_port,
         code: code.into(),
     };
@@ -451,7 +555,7 @@ fn read_fixture_owner_runtime_attention(
     manifest: &SnapshotManifest,
     root: &ProtectedDirectoryGuard,
     sid: &str,
-) -> Result<FixtureOwnerRuntimeAttentionV1, String> {
+) -> Result<FixtureOwnerRuntimeAttentionV2, String> {
     let serving = read_fixture_owner_serving(journal, manifest, root, sid)?;
     let bytes = read_relative_regular_unique(
         journal,
@@ -459,17 +563,18 @@ fn read_fixture_owner_runtime_attention(
         MAX_OWNER_RECORD_BYTES,
         LABEL,
     )?;
-    let record: FixtureOwnerRuntimeAttentionV1 =
+    let record: FixtureOwnerRuntimeAttentionV2 =
         serde_json::from_slice(&bytes).map_err(|_| "fixture owner runtime attention invalid")?;
     if bytes
         != serde_json::to_vec(&record)
             .map_err(|_| "fixture owner runtime attention encoding unavailable")?
-        || record.schema_version != 1
+        || record.schema_version != 2
         || record.snapshot_id != serving.snapshot_id
         || record.intent_sha256 != serving.intent_sha256
         || record.root_object_identity != serving.root_object_identity
         || record.runtime_generation != serving.runtime_generation
         || record.owner_pid != serving.owner_pid
+        || record.owner_creation_time_100ns != serving.owner_creation_time_100ns
         || record.loopback_port != serving.loopback_port
         || !valid_runtime_attention_code(&record.code)
     {
@@ -761,6 +866,273 @@ fn read_fixture_owner_records(
         }
     }
     Ok((intent, Some(binding)))
+}
+
+/// Diagnostic result for exactly one witnessed snapshot ID. None of these
+/// states grants process control, adoption, or filesystem retirement.
+#[cfg(windows)]
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CandidateOwnerRecoveryClass {
+    NoJournal,
+    IntentBeforeRoot,
+    BoundBeforeServing,
+    OwnerProcessAlive,
+    OrphanedOwnerExited,
+    OrphanedPidReused,
+    RetiredJournalPresent,
+    Attention,
+}
+
+#[cfg(windows)]
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CandidateOwnerRecoveryReport {
+    pub(crate) snapshot_id: String,
+    pub(crate) class: CandidateOwnerRecoveryClass,
+    pub(crate) detail: Option<String>,
+}
+
+/// Reopen only the exact generated journal/root names derived from a validated
+/// manifest. All records and directory entries are bounded, canonical and
+/// read through pinned handles. A classification is forensic evidence only.
+#[cfg(windows)]
+#[allow(dead_code)]
+pub(crate) fn classify_candidate_owner_recovery(
+    manifest: &SnapshotManifest,
+) -> CandidateOwnerRecoveryReport {
+    let result = classify_candidate_owner_recovery_inner(manifest);
+    match result {
+        Ok(class) => CandidateOwnerRecoveryReport {
+            snapshot_id: manifest.snapshot_id.clone(),
+            class,
+            detail: None,
+        },
+        Err(detail) => CandidateOwnerRecoveryReport {
+            snapshot_id: manifest.snapshot_id.clone(),
+            class: CandidateOwnerRecoveryClass::Attention,
+            detail: Some(detail),
+        },
+    }
+}
+
+#[cfg(windows)]
+fn open_optional_owner_child_for_security(
+    mut parent: ProtectedDirectoryGuard,
+    name: &str,
+) -> Result<Option<ProtectedDirectoryGuard>, String> {
+    if !parent.descend_optional_existing(name, LABEL)? {
+        return Ok(None);
+    }
+    let original =
+        crate::windows_protected_fs::handle_information(parent.last_handle(LABEL)?, LABEL)?;
+    let mut secure = parent.direct_parent_guard(LABEL)?;
+    secure.descend_existing_for_security(name, LABEL)?;
+    let reopened =
+        crate::windows_protected_fs::handle_information(secure.last_handle(LABEL)?, LABEL)?;
+    if (
+        original.volume_serial_number,
+        original.file_index_high,
+        original.file_index_low,
+    ) != (
+        reopened.volume_serial_number,
+        reopened.file_index_high,
+        reopened.file_index_low,
+    ) {
+        return Err("fixture owner recovery child object changed".into());
+    }
+    Ok(Some(secure))
+}
+
+#[cfg(windows)]
+fn classify_candidate_owner_recovery_inner(
+    manifest: &SnapshotManifest,
+) -> Result<CandidateOwnerRecoveryClass, String> {
+    validate_manifest(manifest)?;
+    let sid =
+        crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+            .map_err(|_| "fixture owner recovery interactive SID unavailable")?;
+    let uuid = Uuid::parse_str(&manifest.snapshot_id)
+        .map_err(|_| "fixture owner recovery snapshot invalid")?;
+    let journal_name = format!("catdesk-fixture-journal-{}", uuid.simple());
+    let temp = std::fs::canonicalize(std::env::temp_dir())
+        .map_err(|_| "fixture owner recovery temp unavailable")?;
+    let Some(journal) = open_optional_owner_child_for_security(
+        ProtectedDirectoryGuard::acquire(&temp, LABEL)?,
+        &journal_name,
+    )?
+    else {
+        let root_name = format!("catdesk-dev-fixture-{}", uuid.simple());
+        if open_optional_owner_child_for_security(
+            ProtectedDirectoryGuard::acquire(&temp, LABEL)?,
+            &root_name,
+        )?
+        .is_some()
+        {
+            return Err("fixture owner recovery root exists without journal".into());
+        }
+        return Ok(CandidateOwnerRecoveryClass::NoJournal);
+    };
+    journal.verify_owner_only_fixture_journal_descriptor(&sid, LABEL)?;
+    let expected_leaves = [
+        "intent.json",
+        "root.json",
+        "serving.json",
+        "attention.json",
+        "runtime-attention.json",
+        "retirement-started.json",
+        "retirement-outcome.json",
+    ];
+    let inventory = query_relative_directory_names_bounded(&journal, MAX_OWNER_JOURNAL_ENTRIES)?;
+    if inventory.iter().any(|(name, attributes)| {
+        !expected_leaves.contains(&name.as_str()) || attributes & (0x10 | 0x400) != 0
+    }) {
+        return Err("fixture owner recovery journal inventory changed".into());
+    }
+    let has_only = |expected: &[&str]| {
+        inventory.len() == expected.len()
+            && inventory
+                .iter()
+                .all(|(name, _)| expected.contains(&name.as_str()))
+    };
+    let (intent, binding) = read_fixture_owner_records(&journal, manifest, None, &sid)?;
+    let intent_bytes =
+        read_relative_regular_unique(&journal, "intent.json", MAX_OWNER_RECORD_BYTES, LABEL)?;
+    let attention =
+        read_fixture_owner_attention(&journal, &intent, &intent_bytes, binding.as_ref(), &sid)?;
+    let root = open_optional_owner_child_for_security(
+        ProtectedDirectoryGuard::acquire(&temp, LABEL)?,
+        &intent.root_name,
+    )?;
+    let root_present = root.is_some();
+    if let Some(root) = root.as_ref() {
+        root.verify_owner_only_fixture_descriptor(&sid, LABEL)?;
+        if binding.is_none() {
+            return Err("fixture owner recovery root exists without binding".into());
+        }
+        read_fixture_owner_records(&journal, manifest, Some(root), &sid)?;
+    }
+    if attention.is_some() {
+        return Err("fixture owner recovery attention record present".into());
+    }
+    let Some(_binding) = binding else {
+        if root_present {
+            return Err("fixture owner recovery unbound root present".into());
+        }
+        if !has_only(&["intent.json"]) {
+            return Err("fixture owner recovery pre-root inventory inconsistent".into());
+        }
+        return Ok(CandidateOwnerRecoveryClass::IntentBeforeRoot);
+    };
+    let root_ref = root.as_ref();
+    let serving_bytes =
+        read_optional_relative_regular(&journal, "serving.json", MAX_OWNER_RECORD_BYTES, LABEL)?;
+    let Some(serving_bytes) = serving_bytes else {
+        if !root_present {
+            return Err("fixture owner recovery bound root absent before serving".into());
+        }
+        if !has_only(&["intent.json", "root.json"]) {
+            return Err("fixture owner recovery pre-serving inventory inconsistent".into());
+        }
+        return Ok(CandidateOwnerRecoveryClass::BoundBeforeServing);
+    };
+    let serving = read_fixture_owner_serving_record(&journal, manifest, root_ref, &sid)?;
+    if read_relative_regular_unique(&journal, "serving.json", MAX_OWNER_RECORD_BYTES, LABEL)?
+        != serving_bytes
+    {
+        return Err("fixture owner recovery serving record changed".into());
+    }
+    let runtime_attention = read_optional_relative_regular(
+        &journal,
+        "runtime-attention.json",
+        MAX_OWNER_RECORD_BYTES,
+        LABEL,
+    )?;
+    if runtime_attention.is_some() {
+        if let Some(root) = root.as_ref() {
+            read_fixture_owner_runtime_attention(&journal, manifest, root, &sid)?;
+        }
+        return Err("fixture owner recovery runtime attention present".into());
+    }
+    let started_bytes = read_optional_relative_regular(
+        &journal,
+        "retirement-started.json",
+        MAX_OWNER_RECORD_BYTES,
+        LABEL,
+    )?;
+    let outcome_bytes = read_optional_relative_regular(
+        &journal,
+        "retirement-outcome.json",
+        MAX_OWNER_RECORD_BYTES,
+        LABEL,
+    )?;
+    match (started_bytes, outcome_bytes) {
+        (None, None) => {}
+        (Some(_), Some(bytes)) => {
+            let started = read_fixture_owner_retirement_record(
+                &journal,
+                manifest,
+                root_ref,
+                &sid,
+                "retirement-started.json",
+                "started",
+            )?;
+            let outcome: FixtureOwnerRetirementV1 = serde_json::from_slice(&bytes)
+                .map_err(|_| "fixture owner recovery retirement outcome invalid")?;
+            let status = match outcome.status.as_str() {
+                "retired" => "retired",
+                "attention" => "attention",
+                _ => return Err("fixture owner recovery retirement status invalid".into()),
+            };
+            let outcome = read_fixture_owner_retirement_record(
+                &journal,
+                manifest,
+                root_ref,
+                &sid,
+                "retirement-outcome.json",
+                status,
+            )?;
+            if outcome.serving != started.serving || outcome.serving != serving {
+                return Err("fixture owner recovery retirement generation drifted".into());
+            }
+            if status == "retired" && !root_present {
+                if !has_only(&[
+                    "intent.json",
+                    "root.json",
+                    "serving.json",
+                    "retirement-started.json",
+                    "retirement-outcome.json",
+                ]) {
+                    return Err("fixture owner recovery retired inventory inconsistent".into());
+                }
+                return Ok(CandidateOwnerRecoveryClass::RetiredJournalPresent);
+            }
+            return Err("fixture owner recovery retirement needs attention".into());
+        }
+        _ => return Err("fixture owner recovery retirement incomplete".into()),
+    }
+    if !root_present {
+        return Err("fixture owner recovery serving root absent".into());
+    }
+    if !has_only(&["intent.json", "root.json", "serving.json"]) {
+        return Err("fixture owner recovery serving inventory inconsistent".into());
+    }
+    let process =
+        inspect_owner_process_instance(serving.owner_pid, serving.owner_creation_time_100ns)?;
+    let root = root
+        .as_ref()
+        .ok_or("fixture owner recovery root unavailable")?;
+    if read_fixture_owner_serving_record(&journal, manifest, Some(root), &sid)? != serving
+        || query_relative_directory_names_bounded(&journal, MAX_OWNER_JOURNAL_ENTRIES)? != inventory
+    {
+        return Err("fixture owner recovery evidence changed during inspection".into());
+    }
+    root.assert_stable(LABEL)?;
+    Ok(match process {
+        OwnerProcessInstance::LiveExact => CandidateOwnerRecoveryClass::OwnerProcessAlive,
+        OwnerProcessInstance::Exited => CandidateOwnerRecoveryClass::OrphanedOwnerExited,
+        OwnerProcessInstance::PidReused => CandidateOwnerRecoveryClass::OrphanedPidReused,
+    })
 }
 
 fn verify_disposable_root(root: &ProtectedDirectoryGuard) -> Result<(), String> {
@@ -1492,6 +1864,221 @@ mod tests {
     use super::*;
     use crate::isolated_fixture_manifest::{SOURCE_REPOSITORY, SnapshotFile};
     use sha2::{Digest, Sha256};
+
+    #[cfg(windows)]
+    #[test]
+    fn recovery_process_helper() {
+        if std::env::var_os("CATDESK_RECOVERY_PROCESS_HELPER").is_some() {
+            std::thread::sleep(std::time::Duration::from_secs(30));
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn owner_process_instance_distinguishes_exit_and_pid_reuse() {
+        use std::process::{Command, Stdio};
+        let mut child = Command::new(std::env::current_exe().expect("test executable"))
+            .args([
+                "--exact",
+                "isolated_fixture_snapshot::tests::recovery_process_helper",
+            ])
+            .env("CATDESK_RECOVERY_PROCESS_HELPER", "1")
+            .stdout(Stdio::null())
+            .spawn()
+            .expect("test owner process");
+        let pid = child.id();
+        assert!(child.try_wait().expect("child state").is_none());
+        const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+        let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+        assert!(!handle.is_null());
+        let creation = process_creation_time_100ns(handle).expect("creation time");
+        unsafe { CloseHandle(handle) };
+        assert_eq!(
+            inspect_owner_process_instance(pid, creation).expect("live owner"),
+            OwnerProcessInstance::LiveExact
+        );
+        assert_eq!(
+            inspect_owner_process_instance(pid, creation + 1).expect("reused PID"),
+            OwnerProcessInstance::PidReused
+        );
+        child.kill().expect("stop exact test child");
+        child.wait().expect("reap exact test child");
+        assert_eq!(
+            inspect_owner_process_instance(pid, creation).expect("exited owner"),
+            OwnerProcessInstance::Exited
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn recovery_classifies_exact_journal_without_modifying_it() {
+        let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .expect("interactive owner SID");
+        let manifest = SnapshotManifest {
+            schema_version: 1,
+            source_repository: SOURCE_REPOSITORY.into(),
+            source_commit: "abcdef0123456789abcdef0123456789abcdef01".into(),
+            snapshot_id: Uuid::new_v4().to_string(),
+            files: vec![SnapshotFile {
+                fixture_leaf: "Cargo.toml".into(),
+                source_path: "Cargo.toml".into(),
+                size_bytes: 0,
+                sha256: format!("{:x}", Sha256::digest([])),
+            }],
+        };
+        assert_eq!(
+            classify_candidate_owner_recovery(&manifest).class,
+            CandidateOwnerRecoveryClass::NoJournal
+        );
+        let (journal, intent, intent_bytes) =
+            create_fixture_owner_intent(&manifest, &sid).expect("test intent");
+        let journal_path = journal.path().to_path_buf();
+        let intent_report = classify_candidate_owner_recovery(&manifest);
+        assert_eq!(
+            intent_report.class,
+            CandidateOwnerRecoveryClass::IntentBeforeRoot,
+            "{intent_report:?}"
+        );
+        let parent = ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("test parent");
+        let (root, manifest) =
+            create_owned_candidate_root(parent, intent.root_name.clone(), &sid, manifest)
+                .unwrap_or_else(|_| panic!("test root"));
+        let root_path = root.path().to_path_buf();
+        bind_fixture_owner_root(&journal, &intent, &intent_bytes, &root, &sid)
+            .expect("bind test root");
+        assert_eq!(
+            classify_candidate_owner_recovery(&manifest).class,
+            CandidateOwnerRecoveryClass::BoundBeforeServing
+        );
+        let serving = write_fixture_owner_serving(&journal, &manifest, &root, &sid, 3209)
+            .expect("test serving");
+        let serving_path = journal_path.join("serving.json");
+        let serving_bytes = std::fs::read(&serving_path).expect("read test record");
+        assert_eq!(
+            classify_candidate_owner_recovery(&manifest).class,
+            CandidateOwnerRecoveryClass::OwnerProcessAlive
+        );
+        assert_eq!(
+            std::fs::read(&serving_path).expect("read unchanged record"),
+            serving_bytes
+        );
+        let mut reused = serving.clone();
+        reused.owner_creation_time_100ns += 1;
+        std::fs::write(&serving_path, serde_json::to_vec(&reused).unwrap())
+            .expect("alter only test record");
+        assert_eq!(
+            classify_candidate_owner_recovery(&manifest).class,
+            CandidateOwnerRecoveryClass::OrphanedPidReused
+        );
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "isolated_fixture_snapshot::tests::recovery_process_helper",
+            ])
+            .env("CATDESK_RECOVERY_PROCESS_HELPER", "1")
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .expect("test owner process");
+        const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+        let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, child.id()) };
+        assert!(!handle.is_null());
+        let child_creation = process_creation_time_100ns(handle).expect("child creation time");
+        unsafe { CloseHandle(handle) };
+        let mut exited = serving.clone();
+        exited.owner_pid = child.id();
+        exited.owner_creation_time_100ns = child_creation;
+        std::fs::write(&serving_path, serde_json::to_vec(&exited).unwrap())
+            .expect("write test child owner record");
+        child.kill().expect("stop exact test owner");
+        child.wait().expect("reap exact test owner");
+        assert_eq!(
+            classify_candidate_owner_recovery(&manifest).class,
+            CandidateOwnerRecoveryClass::OrphanedOwnerExited
+        );
+        let mut legacy = serde_json::to_value(&serving).unwrap();
+        legacy["schemaVersion"] = serde_json::json!(1);
+        legacy
+            .as_object_mut()
+            .unwrap()
+            .remove("ownerCreationTime100ns");
+        std::fs::write(&serving_path, serde_json::to_vec(&legacy).unwrap())
+            .expect("write legacy test record");
+        assert_eq!(
+            classify_candidate_owner_recovery(&manifest).class,
+            CandidateOwnerRecoveryClass::Attention,
+            "legacy PID-only record must not prove an owner instance"
+        );
+        std::fs::write(&serving_path, &serving_bytes).expect("restore test record");
+        std::fs::write(journal_path.join("foreign.txt"), b"test foreign leaf")
+            .expect("test foreign leaf");
+        assert_eq!(
+            classify_candidate_owner_recovery(&manifest).class,
+            CandidateOwnerRecoveryClass::Attention
+        );
+        std::fs::remove_file(journal_path.join("foreign.txt")).expect("remove test foreign leaf");
+        let started = write_fixture_owner_retirement_started(&journal, &manifest, &root, &sid)
+            .expect("test retirement start");
+        drop(root);
+        std::fs::remove_dir(&root_path).expect("remove empty test root");
+        write_fixture_owner_retirement_outcome(&journal, &manifest, &sid, &started, "retired")
+            .expect("test retirement outcome");
+        assert_eq!(
+            classify_candidate_owner_recovery(&manifest).class,
+            CandidateOwnerRecoveryClass::RetiredJournalPresent
+        );
+        assert_eq!(
+            std::fs::read(&serving_path).expect("serving record remains"),
+            serving_bytes,
+            "classification does not retire records"
+        );
+        drop(journal);
+        for leaf in [
+            "retirement-outcome.json",
+            "retirement-started.json",
+            "serving.json",
+            "root.json",
+            "intent.json",
+        ] {
+            std::fs::remove_file(journal_path.join(leaf)).expect("remove exact test record");
+        }
+        std::fs::remove_dir(journal_path).expect("remove empty test journal");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn recovery_refuses_generated_root_without_journal() {
+        let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .expect("interactive owner SID");
+        let manifest = SnapshotManifest {
+            schema_version: 1,
+            source_repository: SOURCE_REPOSITORY.into(),
+            source_commit: "abcdef0123456789abcdef0123456789abcdef01".into(),
+            snapshot_id: Uuid::new_v4().to_string(),
+            files: vec![SnapshotFile {
+                fixture_leaf: "Cargo.toml".into(),
+                source_path: "Cargo.toml".into(),
+                size_bytes: 0,
+                sha256: format!("{:x}", Sha256::digest([])),
+            }],
+        };
+        let name = format!(
+            "catdesk-dev-fixture-{}",
+            Uuid::parse_str(&manifest.snapshot_id).unwrap().simple()
+        );
+        let mut root = ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("test temp parent");
+        root.create_owner_only_fixture_child(&name, &sid, LABEL)
+            .expect("test root without journal");
+        let path = root.path().to_path_buf();
+        let report = classify_candidate_owner_recovery(&manifest);
+        assert_eq!(report.class, CandidateOwnerRecoveryClass::Attention);
+        assert!(path.is_dir(), "classifier must preserve root");
+        drop(root);
+        std::fs::remove_dir(path).expect("remove only empty test root");
+    }
 
     #[cfg(windows)]
     #[test]

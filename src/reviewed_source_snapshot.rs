@@ -898,6 +898,15 @@ fn enumerate_regular_files_inner(
 pub(crate) fn query_relative_directory_names(
     directory: &ProtectedDirectoryGuard,
 ) -> Result<Vec<(String, u32)>, String> {
+    query_relative_directory_names_bounded(directory, usize::MAX)
+}
+
+/// The caller can cap a pinned directory inventory before accumulating an
+/// attacker-expanded journal. This is a read-only check, not delete authority.
+pub(crate) fn query_relative_directory_names_bounded(
+    directory: &ProtectedDirectoryGuard,
+    max_entries: usize,
+) -> Result<Vec<(String, u32)>, String> {
     directory.assert_stable("reviewed source snapshot content")?;
     #[cfg(windows)]
     {
@@ -960,6 +969,9 @@ pub(crate) fn query_relative_directory_names(
                     .map_err(|_| "reviewed source snapshot path identity is invalid")?;
                 if name != "." && name != ".." {
                     validate_protected_component(&name, "reviewed source snapshot content")?;
+                    if result.len() >= max_entries {
+                        return Err("reviewed source snapshot content exceeds entry bound".into());
+                    }
                     result.push((name, attributes));
                 }
                 if next == 0 {
@@ -980,7 +992,7 @@ pub(crate) fn query_relative_directory_names(
     }
     #[cfg(not(windows))]
     {
-        let _ = directory;
+        let _ = (directory, max_entries);
         Err("reviewed source snapshot content stable identity is unavailable".into())
     }
 }
