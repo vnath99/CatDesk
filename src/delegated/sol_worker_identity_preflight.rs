@@ -14,7 +14,8 @@ use std::ptr;
 
 use super::sol_worker_staging_security;
 use super::sol_worker_token_security::{
-    ObservedRestrictedWorkerProcessTokenV1, observe_restricted_worker_process_token,
+    ObservedRestrictedWorkerProcessTokenV1, RetainedRestrictedPrimaryTokenV1,
+    observe_restricted_worker_process_token, retain_restricted_primary_token,
 };
 
 const LABEL: &str = "Sol worker local account preflight";
@@ -91,6 +92,44 @@ pub(crate) struct SolWorkerLocalAccountPreflightV1 {
 pub(crate) struct BoundFixedLocalSolWorkerProcessV1 {
     account: SolWorkerLocalAccountPreflightV1,
     observed_token: ObservedRestrictedWorkerProcessTokenV1,
+}
+
+/// A host-owned, restricted primary token bound to the fixed local account
+/// before process creation. Its source is a trusted caller-supplied handle;
+/// this type neither acquires account credentials nor grants output authority.
+pub(crate) struct FixedLocalSolWorkerPrimaryTokenV1 {
+    account: SolWorkerLocalAccountPreflightV1,
+    retained: RetainedRestrictedPrimaryTokenV1,
+}
+
+impl FixedLocalSolWorkerPrimaryTokenV1 {
+    pub(crate) fn revalidate(&self) -> Result<(), String> {
+        let first = preflight_catdesk_sol_worker_local_account()?;
+        require_same_account_and_token(&self.account, &first, self.retained.token_user_sid())?;
+        self.retained.require_unchanged()?;
+        let second = preflight_catdesk_sol_worker_local_account()?;
+        require_same_account_and_token(&self.account, &second, self.retained.token_user_sid())?;
+        self.retained.require_unchanged()
+    }
+
+    pub(crate) fn launch_handle(&self) -> Result<BorrowedHandle<'_>, String> {
+        self.revalidate()?;
+        Ok(self.retained.borrowed_handle())
+    }
+}
+
+/// Bind a trusted primary-token handle to the OS readback of the fixed local
+/// account. A host-user or otherwise unrestricted token fails before launch.
+pub(crate) fn bind_fixed_local_sol_worker_primary_token(
+    token: BorrowedHandle<'_>,
+) -> Result<FixedLocalSolWorkerPrimaryTokenV1, String> {
+    let account = preflight_catdesk_sol_worker_local_account()?;
+    let retained = retain_restricted_primary_token(token)?;
+    let fresh = preflight_catdesk_sol_worker_local_account()?;
+    require_same_account_and_token(&account, &fresh, retained.token_user_sid())?;
+    let bound = FixedLocalSolWorkerPrimaryTokenV1 { account, retained };
+    bound.revalidate()?;
+    Ok(bound)
 }
 
 impl BoundFixedLocalSolWorkerProcessV1 {

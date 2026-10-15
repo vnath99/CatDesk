@@ -36,7 +36,10 @@ use crate::windows_protected_fs::{
     ProtectedDirectoryGuard, RetainedReviewedArtifact, retain_reviewed_regular_artifact,
 };
 
-use super::sol_worker_identity_preflight::BoundFixedLocalSolWorkerProcessV1;
+use super::sol_worker_identity_preflight::{
+    BoundFixedLocalSolWorkerProcessV1, FixedLocalSolWorkerPrimaryTokenV1,
+    bind_fixed_local_sol_worker_primary_token, bind_fixed_local_sol_worker_to_opened_process,
+};
 use super::sol_worker_launch_journal::{SolLaunchBindingV1, SolLaunchReservationV1};
 use super::sol_worker_nonce::{
     SolWorkerNonceAuthorityV1, issue_sol_worker_nonce, read_active_sol_worker_nonce,
@@ -231,6 +234,23 @@ unsafe extern "system" {
     ) -> i32;
     fn TerminateProcess(process: *mut c_void, exit_code: u32) -> i32;
     fn GetExitCodeProcess(process: *mut c_void, exit_code: *mut u32) -> i32;
+}
+
+#[link(name = "advapi32")]
+unsafe extern "system" {
+    fn CreateProcessAsUserW(
+        token: *mut c_void,
+        application: *const u16,
+        command_line: *mut u16,
+        process_attributes: *mut c_void,
+        thread_attributes: *mut c_void,
+        inherit_handles: i32,
+        creation_flags: u32,
+        environment: *mut c_void,
+        current_directory: *const u16,
+        startup_info: *mut StartupInfoW,
+        process_information: *mut ProcessInformation,
+    ) -> i32;
 }
 
 #[link(name = "ntdll")]
@@ -439,6 +459,21 @@ struct OwnedRunningJobChild {
     // Job drops first on every early return and terminates active members.
     job: PrivateJob,
     child: Option<OwnedChildProcess>,
+}
+
+#[derive(Clone, Copy)]
+enum NativeLaunchPrincipal<'a> {
+    SameUserDiagnostic,
+    Fixed(&'a FixedLocalSolWorkerPrimaryTokenV1),
+}
+
+impl NativeLaunchPrincipal<'_> {
+    fn require_ready(self) -> Result<(), String> {
+        match self {
+            Self::SameUserDiagnostic => Ok(()),
+            Self::Fixed(token) => token.revalidate(),
+        }
+    }
 }
 
 /// A failed transition may be reported as clean only after the exact child
@@ -997,6 +1032,23 @@ impl PreparedSuspendedSolJobChild {
         executable: PinnedSolWorkerExecutableV1,
         inputs: &PreparedSolLaunchInputsV1,
     ) -> Result<Self, PreparedSolLifecycleFailure> {
+        Self::launch_for_principal(
+            prepared_run,
+            executable,
+            inputs,
+            NativeLaunchPrincipal::SameUserDiagnostic,
+        )
+    }
+
+    fn launch_for_principal(
+        prepared_run: ReservedPreparedSolRunV1,
+        executable: PinnedSolWorkerExecutableV1,
+        inputs: &PreparedSolLaunchInputsV1,
+        principal: NativeLaunchPrincipal<'_>,
+    ) -> Result<Self, PreparedSolLifecycleFailure> {
+        principal
+            .require_ready()
+            .map_err(PreparedSolLifecycleFailure::Clean)?;
         prepared_run
             .require_exact(&executable, inputs)
             .map_err(PreparedSolLifecycleFailure::Clean)?;
@@ -1008,6 +1060,7 @@ impl PreparedSuspendedSolJobChild {
             &prepared_run,
             &executable,
             inputs,
+            principal,
         ) {
             Ok(owner) => owner,
             Err(failure) => {
@@ -1035,6 +1088,16 @@ impl PreparedSuspendedSolJobChild {
             ));
         };
         let opened = unsafe { BorrowedHandle::borrow_raw(child.as_raw_handle()) };
+        if let Err(error) = principal.require_ready() {
+            return Err(prepared_failure(
+                suspended
+                    .abort(error)
+                    .map_attention_child(AttentionJobChild::Suspended),
+                prepared_run,
+                executable,
+                None,
+            ));
+        }
         if let Err(error) = executable.require_same_image_path(opened) {
             return Err(prepared_failure(
                 suspended
@@ -1132,6 +1195,79 @@ impl PreparedSuspendedSolJobChild {
             executable,
         })
     }
+}
+
+/// Dormant fixed-account route. The trusted host must provide an already
+/// authenticated primary token; there is no credential acquisition or
+/// same-user fallback. A bad token fails before the create-once reservation.
+/// Once reserved, every uncertain native-create or child transition retains
+/// the exact Job and process in ATTENTION through the ordinary owner path.
+#[allow(dead_code)] // The fixed-account token provider is not connected yet.
+fn launch_prepared_fixed_from_token(
+    prepared: PreparedSolRunV1,
+    executable: PinnedSolWorkerExecutableV1,
+    inputs: &PreparedSolLaunchInputsV1,
+    token: BorrowedHandle<'_>,
+) -> Result<BoundFixedWorkerJobChild, PreparedSolLifecycleFailure> {
+    let launch_token = bind_fixed_local_sol_worker_primary_token(token)
+        .map_err(PreparedSolLifecycleFailure::Clean)?;
+    launch_token
+        .revalidate()
+        .map_err(PreparedSolLifecycleFailure::Clean)?;
+    let reserved = prepared
+        .reserve_launch(&executable, inputs)
+        .map_err(PreparedSolLifecycleFailure::Clean)?;
+    let owner = PreparedSuspendedSolJobChild::launch_for_principal(
+        reserved,
+        executable,
+        inputs,
+        NativeLaunchPrincipal::Fixed(&launch_token),
+    )?;
+    let PreparedSuspendedSolJobChild {
+        suspended,
+        prepared_run,
+        executable,
+    } = owner;
+    let Some(child) = suspended.child.as_ref() else {
+        return Err(prepared_failure(
+            suspended
+                .abort(format!("{LABEL} original child missing"))
+                .map_attention_child(AttentionJobChild::Suspended),
+            prepared_run,
+            executable,
+            None,
+        ));
+    };
+    let opened = unsafe { BorrowedHandle::borrow_raw(child.as_raw_handle()) };
+    let bound_worker = match bind_fixed_local_sol_worker_to_opened_process(opened) {
+        Ok(bound_worker) => bound_worker,
+        Err(error) => {
+            return Err(prepared_failure(
+                suspended
+                    .abort(error)
+                    .map_attention_child(AttentionJobChild::Suspended),
+                prepared_run,
+                executable,
+                None,
+            ));
+        }
+    };
+    if let Err(error) = launch_token.revalidate() {
+        return Err(prepared_failure(
+            suspended
+                .abort(error)
+                .map_attention_child(AttentionJobChild::Suspended),
+            prepared_run,
+            executable,
+            Some(bound_worker),
+        ));
+    }
+    PreparedSuspendedSolJobChild {
+        suspended,
+        prepared_run,
+        executable,
+    }
+    .bind_and_resume_fixed(bound_worker)
 }
 
 impl PreparedSolRunV1 {
@@ -1392,7 +1528,11 @@ impl OwnedSuspendedJobChild {
         prepared_run: &ReservedPreparedSolRunV1,
         executable: &PinnedSolWorkerExecutableV1,
         inputs: &PreparedSolLaunchInputsV1,
+        principal: NativeLaunchPrincipal<'_>,
     ) -> Result<Self, ChildTransitionFailure<Self>> {
+        principal
+            .require_ready()
+            .map_err(ChildTransitionFailure::Clean)?;
         let application = executable.launch_path();
         let application_wide = nul_terminated_wide(application.as_os_str(), "application path")
             .map_err(ChildTransitionFailure::Clean)?;
@@ -1425,22 +1565,43 @@ impl OwnedSuspendedJobChild {
         let mut info: ProcessInformation = unsafe { std::mem::zeroed() };
         // lpApplicationName is the pinned executable's exact path. No handles
         // are inherited, even if another host handle is marked inheritable.
+        let flags = CREATE_SUSPENDED
+            | CREATE_NO_WINDOW
+            | CREATE_UNICODE_ENVIRONMENT
+            | EXTENDED_STARTUPINFO_PRESENT;
         let created = unsafe {
-            CreateProcessW(
-                application_wide.as_ptr(),
-                command_line.as_mut_ptr(),
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
-                0,
-                CREATE_SUSPENDED
-                    | CREATE_NO_WINDOW
-                    | CREATE_UNICODE_ENVIRONMENT
-                    | EXTENDED_STARTUPINFO_PRESENT,
-                environment.as_mut_ptr().cast(),
-                current_directory.as_ptr(),
-                &mut startup.startup,
-                &mut info,
-            )
+            match principal {
+                NativeLaunchPrincipal::SameUserDiagnostic => CreateProcessW(
+                    application_wide.as_ptr(),
+                    command_line.as_mut_ptr(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    0,
+                    flags,
+                    environment.as_mut_ptr().cast(),
+                    current_directory.as_ptr(),
+                    &mut startup.startup,
+                    &mut info,
+                ),
+                NativeLaunchPrincipal::Fixed(token) => {
+                    let launch_token = token
+                        .launch_handle()
+                        .map_err(ChildTransitionFailure::Clean)?;
+                    CreateProcessAsUserW(
+                        launch_token.as_raw_handle(),
+                        application_wide.as_ptr(),
+                        command_line.as_mut_ptr(),
+                        std::ptr::null_mut(),
+                        std::ptr::null_mut(),
+                        0,
+                        flags,
+                        environment.as_mut_ptr().cast(),
+                        current_directory.as_ptr(),
+                        &mut startup.startup,
+                        &mut info,
+                    )
+                }
+            }
         };
         drop(attributes);
         let thread =
@@ -1714,6 +1875,16 @@ mod tests {
     use uuid::Uuid;
 
     use super::super::sol_worker_identity_preflight::bind_fixed_local_sol_worker_to_opened_process;
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetCurrentProcess() -> *mut c_void;
+    }
+
+    #[link(name = "advapi32")]
+    unsafe extern "system" {
+        fn OpenProcessToken(process: *mut c_void, access: u32, token: *mut *mut c_void) -> i32;
+    }
     use super::super::sol_worker_launch_journal::reopen_attention;
     use super::super::sol_worker_token_security::require_same_opened_process_object;
 
@@ -2681,6 +2852,44 @@ mod tests {
         assert!(reopen_attention(&ledger, &fixture.authority).contains("ATTENTION"));
         drop(ledger);
         drop(executable);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn fixed_launch_rejects_host_token_before_reservation() {
+        let fixture = PreparationFixture::new();
+        let prepared = fixture.prepare().expect("prepare selected turn");
+        let executable = pin_current_test_executable();
+        let inputs = prepared_helper_inputs("success");
+        let mut raw = std::ptr::null_mut();
+        assert_ne!(
+            unsafe { OpenProcessToken(GetCurrentProcess(), 0x0001 | 0x0002 | 0x0008, &mut raw) },
+            0,
+            "open host primary token with launch rights"
+        );
+        let token = unsafe { OwnedHandle::from_raw_handle(raw) };
+        let result = launch_prepared_fixed_from_token(prepared, executable, &inputs, unsafe {
+            BorrowedHandle::borrow_raw(token.as_raw_handle())
+        });
+        assert!(matches!(result, Err(PreparedSolLifecycleFailure::Clean(_))));
+        assert!(
+            !fs::read_dir(&fixture.ledger_path)
+                .expect("list ledger")
+                .any(|entry| entry
+                    .expect("ledger entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("launch-started-")),
+            "host token must fail before the create-once launch reservation"
+        );
+        assert_eq!(
+            fs::read_dir(&fixture.output_path)
+                .expect("list output")
+                .count(),
+            0,
+            "rejected fixed launch must not create output"
+        );
+        drop(token);
         fixture.cleanup();
     }
 

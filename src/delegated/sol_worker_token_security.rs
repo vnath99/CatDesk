@@ -14,6 +14,9 @@ use std::ptr;
 
 const LABEL: &str = "Sol worker token security";
 const TOKEN_QUERY: u32 = 0x0008;
+const TOKEN_ASSIGN_PRIMARY: u32 = 0x0001;
+const TOKEN_DUPLICATE: u32 = 0x0002;
+const OBJECT_BASIC_INFORMATION: i32 = 0;
 const TOKEN_USER: u32 = 1;
 const TOKEN_GROUPS: u32 = 2;
 const TOKEN_PRIVILEGES: u32 = 3;
@@ -91,6 +94,15 @@ struct TokenStatistics {
     modified_id: Luid,
 }
 
+#[repr(C)]
+struct PublicObjectBasicInformation {
+    attributes: u32,
+    granted_access: u32,
+    handle_count: u32,
+    pointer_count: u32,
+    reserved: [u32; 10],
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct TokenGroupV1 {
     pub sid: String,
@@ -119,6 +131,82 @@ pub(crate) struct ObservedRestrictedWorkerProcessTokenV1 {
     process_id: u32,
     creation_time: FileTime,
     snapshot: TokenSnapshot,
+}
+
+/// Host-held launch token only. It is a copied, noninheritable handle with
+/// the three rights CreateProcessAsUserW needs. The exact restricted primary
+/// snapshot is rechecked before use; the fixed-account binding is separate.
+pub(crate) struct RetainedRestrictedPrimaryTokenV1 {
+    token: OwnedHandle,
+    snapshot: TokenSnapshot,
+}
+
+impl RetainedRestrictedPrimaryTokenV1 {
+    pub(crate) fn token_user_sid(&self) -> &str {
+        &self.snapshot.user_sid
+    }
+
+    pub(crate) fn require_unchanged(&self) -> Result<(), String> {
+        let fresh = read_snapshot(&self.token)?;
+        if fresh != self.snapshot {
+            return Err(format!("{LABEL} launch token changed"));
+        }
+        enforce_restricted_policy(&fresh)
+    }
+
+    pub(crate) fn borrowed_handle(&self) -> BorrowedHandle<'_> {
+        unsafe { BorrowedHandle::borrow_raw(self.token.as_raw_handle()) }
+    }
+}
+
+/// Retain a caller-supplied primary token without granting the caller a
+/// fixed-account claim. Its original handle must already carry launch rights.
+pub(crate) fn retain_restricted_primary_token(
+    token: BorrowedHandle<'_>,
+) -> Result<RetainedRestrictedPrimaryTokenV1, String> {
+    require_launch_token_handle_rights(token)?;
+    let mut raw = ptr::null_mut();
+    if unsafe {
+        DuplicateHandle(
+            GetCurrentProcess(),
+            token.as_raw_handle(),
+            GetCurrentProcess(),
+            &mut raw,
+            TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY,
+            0,
+            0,
+        )
+    } == 0
+    {
+        return Err(format!("{LABEL} launch token rights unavailable"));
+    }
+    let token = owned_handle(raw)?;
+    require_launch_token_handle_rights(unsafe {
+        BorrowedHandle::borrow_raw(token.as_raw_handle())
+    })?;
+    let snapshot = read_snapshot(&token)?;
+    enforce_restricted_policy(&snapshot)?;
+    let retained = RetainedRestrictedPrimaryTokenV1 { token, snapshot };
+    retained.require_unchanged()?;
+    Ok(retained)
+}
+
+fn require_launch_token_handle_rights(token: BorrowedHandle<'_>) -> Result<(), String> {
+    let mut basic: PublicObjectBasicInformation = unsafe { std::mem::zeroed() };
+    let status = unsafe {
+        NtQueryObject(
+            token.as_raw_handle(),
+            OBJECT_BASIC_INFORMATION,
+            (&mut basic as *mut PublicObjectBasicInformation).cast(),
+            size_of::<PublicObjectBasicInformation>() as u32,
+            ptr::null_mut(),
+        )
+    };
+    let required = TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY;
+    if status < 0 || basic.granted_access & required != required {
+        return Err(format!("{LABEL} launch token handle lacks required rights"));
+    }
+    Ok(())
 }
 
 impl ObservedRestrictedWorkerProcessTokenV1 {
@@ -265,6 +353,17 @@ unsafe extern "system" {
         options: u32,
     ) -> i32;
     fn LocalFree(memory: *mut c_void) -> *mut c_void;
+}
+
+#[link(name = "ntdll")]
+unsafe extern "system" {
+    fn NtQueryObject(
+        handle: *mut c_void,
+        information_class: i32,
+        information: *mut c_void,
+        information_length: u32,
+        returned_length: *mut u32,
+    ) -> i32;
 }
 
 // The installed Windows SDK exposes this KernelBase API through mincore.lib.
@@ -745,7 +844,7 @@ mod tests {
             unsafe {
                 OpenProcessToken(
                     GetCurrentProcess(),
-                    TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ADJUST_DEFAULT,
+                    TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY | TOKEN_ADJUST_DEFAULT,
                     &mut raw,
                 )
             },
@@ -796,6 +895,38 @@ mod tests {
         assert_eq!(snapshot.restricting_sids.len(), 1);
         assert_eq!(snapshot.integrity_rid, LOW_INTEGRITY_RID);
         enforce_restricted_policy(&snapshot).expect("restricted token policy");
+        let retained = retain_restricted_primary_token(unsafe {
+            BorrowedHandle::borrow_raw(restricted.as_raw_handle())
+        })
+        .expect("retain restricted primary launch token");
+        assert_eq!(retained.token_user_sid(), snapshot.user_sid);
+        let mut query_only_raw = ptr::null_mut();
+        assert_ne!(
+            unsafe {
+                DuplicateHandle(
+                    GetCurrentProcess(),
+                    restricted.as_raw_handle(),
+                    GetCurrentProcess(),
+                    &mut query_only_raw,
+                    TOKEN_QUERY,
+                    0,
+                    0,
+                )
+            },
+            0
+        );
+        let query_only = owned_handle(query_only_raw).expect("query-only token");
+        assert!(
+            retain_restricted_primary_token(unsafe {
+                BorrowedHandle::borrow_raw(query_only.as_raw_handle())
+            })
+            .is_err(),
+            "query-only token has no launch rights"
+        );
+        drop(restricted);
+        retained
+            .require_unchanged()
+            .expect("retained copy outlives source handle");
         let host_sid = read_snapshot(&host).expect("host identity").user_sid;
         assert!(reject_snapshot_stage_acl_trustees(&snapshot, &[&host_sid]).is_err());
     }
@@ -804,6 +935,25 @@ mod tests {
     fn current_process_is_not_a_restricted_worker_process() {
         let process = unsafe { BorrowedHandle::borrow_raw(GetCurrentProcess()) };
         assert!(observe_restricted_worker_process_token(process).is_err());
+        let mut raw = ptr::null_mut();
+        assert_ne!(
+            unsafe {
+                OpenProcessToken(
+                    GetCurrentProcess(),
+                    TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_ASSIGN_PRIMARY,
+                    &mut raw,
+                )
+            },
+            0
+        );
+        let host = owned_handle(raw).expect("host launch token handle");
+        assert!(
+            retain_restricted_primary_token(unsafe {
+                BorrowedHandle::borrow_raw(host.as_raw_handle())
+            })
+            .is_err(),
+            "an unrestricted host primary token cannot become a launch lease"
+        );
     }
 
     #[test]
