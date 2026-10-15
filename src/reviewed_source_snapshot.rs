@@ -20,6 +20,8 @@ use std::os::windows::fs::MetadataExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle};
 
 #[cfg(windows)]
+use crate::windows_protected_fs::dispose_opened_object;
+#[cfg(windows)]
 use crate::windows_protected_fs::{
     CloseHandle, IO_STATUS_BLOCK, UNICODE_STRING, handle_information,
     nt_open_relative_with_error_domain,
@@ -98,18 +100,8 @@ const FILE_NON_DIRECTORY_FILE: u32 = 0x0000_0040;
 const FILE_SYNCHRONOUS_IO_NONALERT: u32 = 0x0000_0020;
 const FILE_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
 const FILE_DIRECTORY_INFORMATION_CLASS: u32 = 1;
-const FILE_DISPOSITION_INFORMATION_CLASS: u32 = 13;
-const FILE_DISPOSITION_INFORMATION_EX_CLASS: u32 = 64;
-const FILE_DISPOSITION_DELETE: u32 = 0x0000_0001;
 #[cfg(windows)]
 unsafe extern "system" {
-    fn NtSetInformationFile(
-        file_handle: *mut c_void,
-        io_status_block: *mut IO_STATUS_BLOCK,
-        file_information: *mut c_void,
-        length: u32,
-        file_information_class: u32,
-    ) -> i32;
     fn NtQueryDirectoryFile(
         file_handle: *mut c_void,
         event: *mut c_void,
@@ -1157,54 +1149,6 @@ fn open_relative_regular_file_for_delete(
     }
 }
 
-fn dispose_opened_object(handle: *mut c_void, label: &str) -> Result<(), String> {
-    #[cfg(windows)]
-    {
-        let mut status = IO_STATUS_BLOCK {
-            status: 0,
-            information: 0,
-        };
-        let mut flags = FILE_DISPOSITION_DELETE;
-        let extended = unsafe {
-            NtSetInformationFile(
-                handle,
-                &mut status,
-                (&mut flags as *mut u32).cast(),
-                std::mem::size_of::<u32>() as u32,
-                FILE_DISPOSITION_INFORMATION_EX_CLASS,
-            )
-        };
-        if extended >= 0 {
-            return Ok(());
-        }
-        // Older supported Windows releases may not recognize the Ex class.
-        // The exact same already-opened DELETE handle is used for the native
-        // one-byte FileDispositionInformation fallback.
-        if extended != STATUS_INVALID_INFO_CLASS && extended != STATUS_INVALID_PARAMETER {
-            return Err(format!("{label} deletion is unavailable"));
-        }
-        let mut delete = 1_u8;
-        let fallback = unsafe {
-            NtSetInformationFile(
-                handle,
-                &mut status,
-                (&mut delete as *mut u8).cast(),
-                1,
-                FILE_DISPOSITION_INFORMATION_CLASS,
-            )
-        };
-        if fallback < 0 {
-            return Err(format!("{label} deletion is unavailable"));
-        }
-        Ok(())
-    }
-    #[cfg(not(windows))]
-    {
-        let _ = handle;
-        Err(format!("{label} stable identity is unavailable"))
-    }
-}
-
 fn cleanup_staging_tree(directory: &ProtectedDirectoryGuard) -> Result<(), String> {
     directory.assert_stable("reviewed source snapshot staging")?;
     for (name, attributes) in query_relative_directory_names(directory)? {
@@ -1250,11 +1194,6 @@ fn cleanup_staging_tree(directory: &ProtectedDirectoryGuard) -> Result<(), Strin
     directory.assert_stable("reviewed source snapshot staging")?;
     Ok(())
 }
-
-#[cfg(windows)]
-const STATUS_INVALID_INFO_CLASS: i32 = 0xc000_0003_u32 as i32;
-#[cfg(windows)]
-const STATUS_INVALID_PARAMETER: i32 = 0xc000_000d_u32 as i32;
 
 fn create_owned_staging(
     root: &ProtectedDirectoryGuard,

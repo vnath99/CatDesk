@@ -1,3 +1,8 @@
+## 2026-10-14 — T0478 exact delete-handle preflight (CURRENT)
+
+- Extracted the existing native opened-handle disposition code into shared protected filesystem logic. A new no-follow DELETE-handle preflight checks the previously retained Windows file identity, single-link count, exact bounded SHA-256 and size. Focused Windows negatives and positive disposition, reviewed-snapshot tests, full root Rust suite and strict Clippy pass. See `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2B_DELETE_HANDLE_PREFLIGHT.md`.
+- Fixture retirement is still disabled. Owner/DACL revalidation, whole-directory inventory and atomic all-file preparation, competing-owner exclusion and exact root retirement remain required before T0478-C. Current GitHub Actions outage prevents exact-commit independent CI acceptance.
+
 ## 2026-10-14 — P0 Wake root-object provenance source (CURRENT)
 
 - Extended read-only Wake store provenance with a hashed Windows directory-object identity. A replacement directory at the same displayed path now yields a different `root_object_sha256`; focused and full Wake/root Rust suites, formatting, strict Clippy, and inert `-BuildOnly -RebuildGui` passed. Candidate `1.0.0-dev.85-0e936b150e0f-6d74342e3f48` and artifact hashes are in `docs/orchestrator/review_bundles/T-0483_R6_WAKE_ROOT_OBJECT_PROVENANCE.md`.

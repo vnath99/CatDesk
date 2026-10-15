@@ -888,6 +888,69 @@ pub(crate) fn retain_reviewed_regular_artifact(
     })
 }
 
+/// Reopen a previously retained reviewed file for a future owner-bound
+/// retirement transaction. The caller must first release its read lease,
+/// retain the pinned parent, and compare every expected child before applying
+/// disposition to any handle. This function itself never deletes a file.
+#[cfg(windows)]
+#[allow(dead_code)] // B3B2B2B owner transaction is not connected to this primitive yet.
+pub(crate) fn open_reviewed_regular_for_delete<P: PinnedParent>(
+    parent: &P,
+    component: &str,
+    expected: &ReviewedArtifactIdentity,
+    max_bytes: u64,
+    label: &str,
+) -> Result<fs::File, String> {
+    if max_bytes == 0
+        || expected.byte_length > max_bytes
+        || expected.sha256.len() != 64
+        || !expected.sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
+        || expected.object_identity.len() != 26
+    {
+        return Err(format!("{label} identity is unsafe"));
+    }
+    validate_component(component, label)?;
+    parent.assert_stable(label)?;
+    let mut file = open_relative_regular_file_with_disposition_and_share(
+        parent,
+        component,
+        FILE_OPEN,
+        FILE_READ_DATA | FILE_READ_ATTRIBUTES | DELETE | SYNCHRONIZE,
+        FILE_SHARE_READ,
+        label,
+    )?;
+    let information = handle_information(file.as_raw_handle().cast(), label)?;
+    let identity = format!(
+        "{:08x}:{:08x}:{:08x}",
+        information.volume_serial_number, information.file_index_high, information.file_index_low
+    );
+    if information.file_attributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY) != 0
+        || information.number_of_links != 1
+        || identity != expected.object_identity
+    {
+        return Err(format!("{label} identity drifted"));
+    }
+    let length = file
+        .metadata()
+        .map_err(|_| format!("{label} is unavailable"))?
+        .len();
+    if length != expected.byte_length {
+        return Err(format!("{label} identity drifted"));
+    }
+    let mut bytes = Vec::with_capacity(length as usize);
+    Read::by_ref(&mut file)
+        .take(max_bytes.saturating_add(1))
+        .read_to_end(&mut bytes)
+        .map_err(|_| format!("{label} is unavailable"))?;
+    if bytes.len() as u64 != length
+        || format!("{:x}", Sha256::digest(&bytes)) != expected.sha256.to_ascii_lowercase()
+    {
+        return Err(format!("{label} digest drifted"));
+    }
+    parent.assert_stable(label)?;
+    Ok(file)
+}
+
 pub(crate) fn validate_component(component: &str, label: &str) -> Result<(), String> {
     if component.is_empty()
         || component.len() > 255
@@ -1247,23 +1310,7 @@ pub(crate) fn remove_exact_relative_regular_with_bytes<P: PinnedParent>(
                 return Err(format!("{label} identity is unsafe"));
             }
             parent.assert_stable(label)?;
-            let mut status = IO_STATUS_BLOCK {
-                status: 0,
-                information: 0,
-            };
-            let mut delete = 1_u8; // FILE_DISPOSITION_INFORMATION::DeleteFile
-            let result = unsafe {
-                NtSetInformationFile(
-                    file.as_raw_handle().cast(),
-                    &mut status,
-                    (&mut delete as *mut u8).cast(),
-                    1,
-                    FILE_DISPOSITION_INFO_CLASS,
-                )
-            };
-            if result < 0 {
-                return Err(format!("{label} is unavailable ({result:#x})"));
-            }
+            dispose_opened_object(file.as_raw_handle().cast(), label)?;
             // Closing this exact handle finalizes the disposition before the
             // postcondition below reopens the fixed direct child.
         }
@@ -1278,6 +1325,52 @@ pub(crate) fn remove_exact_relative_regular_with_bytes<P: PinnedParent>(
         let _ = (parent, name, expected);
         Err(format!("{label} stable identity is unavailable"))
     }
+}
+
+/// Apply native delete disposition to one already opened DELETE-authorized
+/// Windows object. The caller must independently prove ownership, type,
+/// identity, contents, and directory inventory before invoking this primitive.
+/// It accepts no pathname and never enumerates or opens another object.
+#[cfg(windows)]
+pub(crate) fn dispose_opened_object(handle: *mut c_void, label: &str) -> Result<(), String> {
+    const FILE_DISPOSITION_INFORMATION_EX_CLASS: u32 = 64;
+    const FILE_DISPOSITION_DELETE: u32 = 1;
+    const STATUS_INVALID_INFO_CLASS: i32 = 0xc000_0003_u32 as i32;
+    const STATUS_INVALID_PARAMETER: i32 = 0xc000_000d_u32 as i32;
+    let mut status = IO_STATUS_BLOCK {
+        status: 0,
+        information: 0,
+    };
+    let mut flags = FILE_DISPOSITION_DELETE;
+    let extended = unsafe {
+        NtSetInformationFile(
+            handle,
+            &mut status,
+            (&mut flags as *mut u32).cast(),
+            std::mem::size_of::<u32>() as u32,
+            FILE_DISPOSITION_INFORMATION_EX_CLASS,
+        )
+    };
+    if extended >= 0 {
+        return Ok(());
+    }
+    if extended != STATUS_INVALID_INFO_CLASS && extended != STATUS_INVALID_PARAMETER {
+        return Err(format!("{label} deletion is unavailable"));
+    }
+    let mut delete = 1_u8;
+    let fallback = unsafe {
+        NtSetInformationFile(
+            handle,
+            &mut status,
+            (&mut delete as *mut u8).cast(),
+            1,
+            FILE_DISPOSITION_INFO_CLASS,
+        )
+    };
+    if fallback < 0 {
+        return Err(format!("{label} deletion is unavailable"));
+    }
+    Ok(())
 }
 
 fn is_exact_nt_not_found(error: &str) -> bool {
@@ -1943,6 +2036,138 @@ fn security_descriptor_from_sddl(sddl: &str, label: &str) -> Result<*mut c_void,
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn reviewed_delete_handle_requires_exact_identity_and_digest() {
+        let dir = std::env::temp_dir().join(format!(
+            "catdesk-reviewed-delete-{}",
+            Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir(&dir).expect("create test-owned root");
+        let leaf = "candidate.txt";
+        let bytes = b"reviewed exact bytes";
+        std::fs::write(dir.join(leaf), bytes).expect("create test file");
+        let parent = PinnedDirectory::acquire(&dir, "test reviewed delete").expect("pin root");
+        let digest = format!("{:x}", Sha256::digest(bytes));
+        let retained = retain_reviewed_regular_artifact(
+            &parent,
+            leaf,
+            &digest,
+            512 * 1024,
+            "test reviewed delete",
+        )
+        .expect("retain exact file");
+        let expected = retained.identity.clone();
+        assert!(
+            open_reviewed_regular_for_delete(
+                &parent,
+                leaf,
+                &expected,
+                512 * 1024,
+                "test reviewed delete"
+            )
+            .is_err(),
+            "active read lease must block DELETE access"
+        );
+        drop(retained);
+        let mut wrong = expected.clone();
+        wrong.object_identity = "00000000:00000000:00000000".into();
+        assert!(
+            open_reviewed_regular_for_delete(
+                &parent,
+                leaf,
+                &wrong,
+                512 * 1024,
+                "test reviewed delete"
+            )
+            .is_err()
+        );
+        wrong = expected.clone();
+        wrong.sha256 = "0".repeat(64);
+        assert!(
+            open_reviewed_regular_for_delete(
+                &parent,
+                leaf,
+                &wrong,
+                512 * 1024,
+                "test reviewed delete"
+            )
+            .is_err()
+        );
+        let opened = open_reviewed_regular_for_delete(
+            &parent,
+            leaf,
+            &expected,
+            512 * 1024,
+            "test reviewed delete",
+        )
+        .expect("exact reviewed object opens for delete");
+        assert!(
+            std::fs::write(dir.join(leaf), b"replacement").is_err(),
+            "the delete handle must prevent later write access"
+        );
+        dispose_opened_object(opened.as_raw_handle().cast(), "test reviewed delete")
+            .expect("dispose exact test-owned file");
+        drop(opened);
+        assert!(!dir.join(leaf).exists());
+        drop(parent);
+        std::fs::remove_dir(&dir).expect("remove empty test root");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn reviewed_delete_handle_refuses_hardlink_and_changed_bytes() {
+        let dir = std::env::temp_dir().join(format!(
+            "catdesk-reviewed-delete-negative-{}",
+            Uuid::new_v4().simple()
+        ));
+        std::fs::create_dir(&dir).expect("create test-owned root");
+        let leaf = "candidate.txt";
+        let bytes = b"reviewed bytes";
+        std::fs::write(dir.join(leaf), bytes).expect("create test file");
+        let parent = PinnedDirectory::acquire(&dir, "test reviewed delete").expect("pin root");
+        let digest = format!("{:x}", Sha256::digest(bytes));
+        let retained = retain_reviewed_regular_artifact(
+            &parent,
+            leaf,
+            &digest,
+            512 * 1024,
+            "test reviewed delete",
+        )
+        .expect("retain exact file");
+        let expected = retained.identity.clone();
+        drop(retained);
+        std::fs::hard_link(dir.join(leaf), dir.join("alias.txt"))
+            .expect("add hardlink inside test root");
+        assert!(
+            open_reviewed_regular_for_delete(
+                &parent,
+                leaf,
+                &expected,
+                512 * 1024,
+                "test reviewed delete"
+            )
+            .is_err(),
+            "multi-link object must not be disposable"
+        );
+        std::fs::remove_file(dir.join("alias.txt")).expect("remove test alias");
+        std::fs::write(dir.join(leaf), b"changed bytes!").expect("change test file");
+        assert!(
+            open_reviewed_regular_for_delete(
+                &parent,
+                leaf,
+                &expected,
+                512 * 1024,
+                "test reviewed delete"
+            )
+            .is_err(),
+            "changed bytes must not be disposable"
+        );
+        drop(parent);
+        std::fs::remove_file(dir.join(leaf)).expect("remove test file");
+        std::fs::remove_dir(&dir).expect("remove empty test root");
+    }
 
     #[cfg(windows)]
     #[test]

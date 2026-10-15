@@ -1,5 +1,9 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — T0478 source-only delete-handle preflight
+
+- `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2B_DELETE_HANDLE_PREFLIGHT.md` records the shared native opened-handle disposition and exact reviewed-file DELETE open. It is a source primitive only; do not use pathname recursion or infer that disposable fixture retirement, T0478-C MCP manifest gating, or T0478-D worker lifecycle is accepted.
+
 ## 2026-10-14 — P0 root-object provenance source and CI hold
 
 - The source-only `CatDeskWakeHost.exe store-provenance` readback now includes `root_object_sha256`, a hash of the opened Windows root directory's volume/file-index identity. Compare connected and direct path, object, and bounded-file hashes only after both installed components expose the same reviewed build. See `docs/orchestrator/review_bundles/T-0483_R6_WAKE_ROOT_OBJECT_PROVENANCE.md`.
