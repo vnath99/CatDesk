@@ -80,7 +80,9 @@ if ($LASTEXITCODE -ne 0) { throw 'Wake Rust build failed' }
 
 $guiTarget = Join-Path $wakeSource 'target\catdesk-gui'
 $guiBuild = Join-Path $guiTarget 'release\catdesk.exe'
-if ($RebuildGui -or -not (Test-Path -LiteralPath $guiBuild -PathType Leaf)) {
+# An inert BuildOnly check must refresh both release binaries from current source;
+# an older GUI target is not evidence for the current working tree.
+if ($BuildOnly -or $RebuildGui -or -not (Test-Path -LiteralPath $guiBuild -PathType Leaf)) {
     & cargo build --release --locked --offline --manifest-path (Join-Path $repoSource 'Cargo.toml') --bin catdesk --target-dir $guiTarget
     if ($LASTEXITCODE -ne 0) { throw 'CatDesk Binagotchy build failed' }
 }

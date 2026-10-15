@@ -9,9 +9,13 @@
 
 use std::ffi::c_void;
 use std::mem::size_of;
+use std::os::windows::io::BorrowedHandle;
 use std::ptr;
 
 use super::sol_worker_staging_security;
+use super::sol_worker_token_security::{
+    ObservedRestrictedWorkerProcessTokenV1, observe_restricted_worker_process_token,
+};
 
 const LABEL: &str = "Sol worker local account preflight";
 const ACCOUNT: &str = "CatDeskSolWorker";
@@ -72,9 +76,79 @@ pub(crate) struct SolWorkerLocalAccountPreflightV1 {
     pub account_sid: String,
     pub host_sid: String,
     pub indirect_local_group_count: u32,
+    account_flags: u32,
+    indirect_local_groups: Vec<String>,
     pub diagnostic_only: bool,
     pub worker_process_token_proven: bool,
     pub account_privileges_proven: bool,
+}
+
+/// Read-only evidence that the fixed local account record and one opened,
+/// live restricted process currently have the same TokenUser SID. Private
+/// fields keep the caller from supplying a claimed account or token SID.
+/// This still does not prove which executable was launched or any descendant,
+/// inherited-handle, ancestor-ACL, or post-exit write boundary.
+pub(crate) struct BoundFixedLocalSolWorkerProcessV1 {
+    account: SolWorkerLocalAccountPreflightV1,
+    observed_token: ObservedRestrictedWorkerProcessTokenV1,
+}
+
+impl BoundFixedLocalSolWorkerProcessV1 {
+    pub(crate) fn process_id(&self) -> u32 {
+        self.observed_token.process_id()
+    }
+
+    pub(crate) fn token_user_sid(&self) -> &str {
+        self.observed_token.token_user_sid()
+    }
+
+    pub(crate) fn revalidate(&self) -> Result<(), String> {
+        self.observed_token.revalidate()?;
+        let fresh = preflight_catdesk_sol_worker_local_account()?;
+        require_same_account_and_token(
+            &self.account,
+            &fresh,
+            self.observed_token.token_user_sid(),
+        )?;
+        self.observed_token.revalidate()
+    }
+}
+
+fn require_same_account_and_token(
+    first: &SolWorkerLocalAccountPreflightV1,
+    fresh: &SolWorkerLocalAccountPreflightV1,
+    token_user_sid: &str,
+) -> Result<(), String> {
+    if first != fresh {
+        return Err(format!(
+            "{LABEL} fixed account changed during process binding"
+        ));
+    }
+    if token_user_sid != first.account_sid {
+        return Err(format!(
+            "{LABEL} process TokenUser is not the fixed account"
+        ));
+    }
+    Ok(())
+}
+
+/// Bind a caller-supplied opened process to the fixed local account, using
+/// independently observed primary-token readback. The caller must still
+/// prove that this process is the intended launched Codex worker. This
+/// dormant function performs no launch, staging, or repository write.
+pub(crate) fn bind_fixed_local_sol_worker_to_opened_process(
+    process: BorrowedHandle<'_>,
+) -> Result<BoundFixedLocalSolWorkerProcessV1, String> {
+    let account = preflight_catdesk_sol_worker_local_account()?;
+    let observed_token = observe_restricted_worker_process_token(process)?;
+    let fresh = preflight_catdesk_sol_worker_local_account()?;
+    require_same_account_and_token(&account, &fresh, observed_token.token_user_sid())?;
+    let bound = BoundFixedLocalSolWorkerProcessV1 {
+        account,
+        observed_token,
+    };
+    bound.revalidate()?;
+    Ok(bound)
 }
 
 #[link(name = "netapi32")]
@@ -500,7 +574,7 @@ pub(crate) fn preflight_catdesk_sol_worker_local_account()
         return Err(format!("{LABEL} Administrators alias unavailable"));
     }
     let host_sid = sol_worker_staging_security::current_host_sid()?;
-    let groups = indirect_local_groups(&computer)?;
+    let mut groups = indirect_local_groups(&computer)?;
     assess_identity(
         &account_sid,
         &host_sid,
@@ -514,12 +588,15 @@ pub(crate) fn preflight_catdesk_sol_worker_local_account()
     if again_sid != account_sid || again_flags != flags {
         return Err(format!("{LABEL} local account changed during readback"));
     }
+    groups.sort_unstable();
     Ok(SolWorkerLocalAccountPreflightV1 {
         account_name: ACCOUNT,
         local_computer: computer,
         account_sid,
         host_sid,
         indirect_local_group_count: groups.len() as u32,
+        account_flags: flags,
+        indirect_local_groups: groups,
         diagnostic_only: true,
         worker_process_token_proven: false,
         account_privileges_proven: false,
@@ -529,6 +606,62 @@ pub(crate) fn preflight_catdesk_sol_worker_local_account()
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::ffi::c_void;
+
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetCurrentProcess() -> *mut c_void;
+    }
+
+    #[test]
+    fn real_current_host_process_never_binds_as_fixed_worker() {
+        let process = unsafe { BorrowedHandle::borrow_raw(GetCurrentProcess()) };
+        assert!(bind_fixed_local_sol_worker_to_opened_process(process).is_err());
+    }
+
+    fn fixture_account() -> SolWorkerLocalAccountPreflightV1 {
+        SolWorkerLocalAccountPreflightV1 {
+            account_name: ACCOUNT,
+            local_computer: "FIXTURE".into(),
+            account_sid: "S-1-5-21-1-2-3-1001".into(),
+            host_sid: "S-1-5-21-1-2-3-1000".into(),
+            indirect_local_group_count: 1,
+            account_flags: UF_NORMAL_ACCOUNT,
+            indirect_local_groups: vec!["Users".into()],
+            diagnostic_only: true,
+            worker_process_token_proven: false,
+            account_privileges_proven: false,
+        }
+    }
+
+    #[test]
+    fn process_token_user_must_match_fixed_account_sid() {
+        let account = fixture_account();
+        assert!(require_same_account_and_token(&account, &account, &account.account_sid).is_ok());
+        assert!(require_same_account_and_token(&account, &account, &account.host_sid).is_err());
+        assert!(require_same_account_and_token(&account, &account, SYSTEM_SID).is_err());
+    }
+
+    #[test]
+    fn fixed_account_change_invalidates_process_binding() {
+        let account = fixture_account();
+        let mut changed = account.clone();
+        changed.account_sid = "S-1-5-21-1-2-3-2001".into();
+        assert!(require_same_account_and_token(&account, &changed, &account.account_sid).is_err());
+        changed = account.clone();
+        changed.indirect_local_group_count += 1;
+        assert!(require_same_account_and_token(&account, &changed, &account.account_sid).is_err());
+        changed = account.clone();
+        changed.indirect_local_groups[0] = "Remote Desktop Users".into();
+        assert!(require_same_account_and_token(&account, &changed, &account.account_sid).is_err());
+        changed = account.clone();
+        changed.account_flags |= 0x10000;
+        assert!(require_same_account_and_token(&account, &changed, &account.account_sid).is_err());
+        changed = account.clone();
+        changed.local_computer = "OTHER".into();
+        assert!(require_same_account_and_token(&account, &changed, &account.account_sid).is_err());
+    }
 
     #[test]
     fn real_fixed_account_preflight_is_diagnostic_or_fails_closed() {

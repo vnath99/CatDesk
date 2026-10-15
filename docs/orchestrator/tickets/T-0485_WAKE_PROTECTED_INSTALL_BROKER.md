@@ -1,5 +1,13 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-15 inert build freshness and one-shot service source checkpoint
+
+`wake/install.ps1 -BuildOnly` now rebuilds both WakeHost and the GUI from the working source, even when an earlier GUI target exists. The normal install path still refuses with `WAKE_INSTALL_BROKER_UNPROVISIONED` before either build. A PowerShell parse and mock-cargo probe passed; no protected state was touched. See `T-0485_R11_BUILDONLY_GUI_FRESHNESS.md`.
+
+`install_broker_service_core.rs` is a dormant, one-shot read-only wrapper. It consumes the fixed endpoint, checks the protected policy-root physical ID before request I/O, uses the immediate same-pipe operator-token admission, then verifies the signed envelope with the pinned policy key against **supplied** observations. The result explicitly says `NO_INSTALL_AUTHORITY` and lists missing trusted observations/clock, exact four candidate bytes, independent CI, ledger, owner handoff, and protected launch/service bootstrap. Two focused Windows tests, full independent Wake suite, strict Clippy and formatting passed. See `T-0485_R12_ONE_SHOT_READ_ONLY_SERVICE_CORE_SOURCE.md`.
+
+There is still no installed signed service, protected namespace/trust-root bootstrap, bounded connect/read server loop, independently fetched CI or approved package/pointer transaction. The supplied observation is not broker-owned evidence. Both install mutator holds remain; source-only tests and BuildOnly artifacts cannot authorize dev.85 promotion or a fresh Chat53 wake.
+
 ## 2026-10-15 connected client and single-message request source checkpoint
 
 `install_broker_client.rs` now has a dormant fixed-pipe client gate that sends no application bytes before checking the connected server against the exact running SCM service PID, a pinned live process, a LocalSystem primary token with enabled and restricting service SID, the fixed protected image and exact pipe DACL. Its consuming first approval write rechecks those observations on the same handle. Four focused Windows tests pass, including a same-user pipe squat that receives zero approval bytes. `install_broker_request.rs` reads only one bounded message from the already connected fixed server endpoint and immediately checks the last-read client token against pinned protected policy before decoding; three focused live-pipe tests pass. See `T-0485_R9_SINGLE_MESSAGE_BROKER_REQUEST_SOURCE.md` and `T-0485_R10_CONNECTED_BROKER_CLIENT_GATE_SOURCE.md`.

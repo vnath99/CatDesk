@@ -26,6 +26,9 @@ const TOKEN_PRIMARY: u32 = 1;
 const LOW_INTEGRITY_RID: u32 = 0x1000;
 const MANDATORY_NO_WRITE_UP: u32 = 0x1;
 const DUPLICATE_SAME_ACCESS: u32 = 0x2;
+const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+const SYNCHRONIZE: u32 = 0x0010_0000;
+const WAIT_TIMEOUT: u32 = 0x102;
 const SE_GROUP_ENABLED: u32 = 0x4;
 const SE_GROUP_USE_FOR_DENY_ONLY: u32 = 0x10;
 const MAX_TOKEN_INFORMATION: u32 = 64 * 1024;
@@ -37,6 +40,13 @@ const MAX_PRIVILEGES: usize = 256;
 struct Luid {
     low: u32,
     high: i32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct FileTime {
+    low: u32,
+    high: u32,
 }
 
 #[repr(C)]
@@ -106,6 +116,7 @@ pub(crate) struct ObservedRestrictedWorkerProcessTokenV1 {
     process: OwnedHandle,
     token: OwnedHandle,
     process_id: u32,
+    creation_time: FileTime,
     snapshot: TokenSnapshot,
 }
 
@@ -133,6 +144,12 @@ impl ObservedRestrictedWorkerProcessTokenV1 {
         if unsafe { GetProcessId(self.process.as_raw_handle()) } != self.process_id {
             return Err(format!("{LABEL} opened process identity changed"));
         }
+        require_live_process(&self.process)?;
+        if process_creation_time(&self.process)? != self.creation_time {
+            return Err(format!("{LABEL} opened process creation time changed"));
+        }
+        let reopened = reopen_same_live_process(self.process_id, self.creation_time)?;
+        require_live_process(&reopened)?;
         let fresh_token = open_process_token(&self.process)?;
         let fresh = read_snapshot(&fresh_token)?;
         let original = read_snapshot(&self.token)?;
@@ -189,6 +206,15 @@ unsafe extern "system" {
 unsafe extern "system" {
     fn GetCurrentProcess() -> *mut c_void;
     fn GetProcessId(process: *mut c_void) -> u32;
+    fn OpenProcess(access: u32, inherit: i32, process_id: u32) -> *mut c_void;
+    fn GetProcessTimes(
+        process: *mut c_void,
+        creation: *mut FileTime,
+        exit: *mut FileTime,
+        kernel: *mut FileTime,
+        user: *mut FileTime,
+    ) -> i32;
+    fn WaitForSingleObject(handle: *mut c_void, milliseconds: u32) -> u32;
     fn DuplicateHandle(
         source_process: *mut c_void,
         source: *mut c_void,
@@ -216,8 +242,57 @@ fn open_process_token(process: &OwnedHandle) -> Result<OwnedHandle, String> {
     owned_handle(raw)
 }
 
+fn require_live_process(process: &OwnedHandle) -> Result<(), String> {
+    if unsafe { WaitForSingleObject(process.as_raw_handle(), 0) } != WAIT_TIMEOUT {
+        return Err(format!("{LABEL} opened process is not live"));
+    }
+    Ok(())
+}
+
+fn process_creation_time(process: &OwnedHandle) -> Result<FileTime, String> {
+    let mut creation = FileTime { low: 0, high: 0 };
+    let mut exit = creation;
+    let mut kernel = creation;
+    let mut user = creation;
+    if unsafe {
+        GetProcessTimes(
+            process.as_raw_handle(),
+            &mut creation,
+            &mut exit,
+            &mut kernel,
+            &mut user,
+        )
+    } == 0
+        || creation == (FileTime { low: 0, high: 0 })
+    {
+        return Err(format!("{LABEL} opened process creation time unavailable"));
+    }
+    Ok(creation)
+}
+
+fn reopen_same_live_process(
+    process_id: u32,
+    creation_time: FileTime,
+) -> Result<OwnedHandle, String> {
+    let process = owned_handle(unsafe {
+        OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
+            0,
+            process_id,
+        )
+    })
+    .map_err(|_| format!("{LABEL} process reopen unavailable"))?;
+    if unsafe { GetProcessId(process.as_raw_handle()) } != process_id
+        || process_creation_time(&process)? != creation_time
+    {
+        return Err(format!("{LABEL} reopened process identity differs"));
+    }
+    require_live_process(&process)?;
+    Ok(process)
+}
+
 /// The host must supply a live borrowed handle to the intended worker process
-/// with PROCESS_QUERY_LIMITED_INFORMATION. This observes its actual primary
+/// with PROCESS_QUERY_LIMITED_INFORMATION and SYNCHRONIZE. This observes its actual primary
 /// token, but the caller still must bind the process handle to its launch and
 /// prove no descendant or inherited handle retains write authority.
 pub(crate) fn observe_restricted_worker_process_token(
@@ -243,6 +318,10 @@ pub(crate) fn observe_restricted_worker_process_token(
     if process_id == 0 {
         return Err(format!("{LABEL} opened handle is not a process"));
     }
+    require_live_process(&process)?;
+    let creation_time = process_creation_time(&process)?;
+    let reopened = reopen_same_live_process(process_id, creation_time)?;
+    require_live_process(&reopened)?;
     let token = open_process_token(&process)?;
     let snapshot = read_snapshot(&token)?;
     enforce_restricted_policy(&snapshot)?;
@@ -250,6 +329,7 @@ pub(crate) fn observe_restricted_worker_process_token(
         process,
         token,
         process_id,
+        creation_time,
         snapshot,
     };
     observed.revalidate()?;
@@ -519,6 +599,7 @@ fn enforce_restricted_policy(snapshot: &TokenSnapshot) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
 
     const TOKEN_DUPLICATE: u32 = 0x0002;
     const TOKEN_ADJUST_DEFAULT: u32 = 0x0080;
@@ -631,6 +712,66 @@ mod tests {
     fn current_process_is_not_a_restricted_worker_process() {
         let process = unsafe { BorrowedHandle::borrow_raw(GetCurrentProcess()) };
         assert!(observe_restricted_worker_process_token(process).is_err());
+    }
+
+    #[test]
+    fn live_process_reopen_is_bound_to_original_creation_time() {
+        let mut raw = ptr::null_mut();
+        assert_ne!(
+            unsafe {
+                DuplicateHandle(
+                    GetCurrentProcess(),
+                    GetCurrentProcess(),
+                    GetCurrentProcess(),
+                    &mut raw,
+                    0,
+                    0,
+                    DUPLICATE_SAME_ACCESS,
+                )
+            },
+            0
+        );
+        let process = owned_handle(raw).expect("duplicate current process");
+        require_live_process(&process).expect("current process remains live");
+        let pid = unsafe { GetProcessId(process.as_raw_handle()) };
+        let creation = process_creation_time(&process).expect("real creation time");
+        let reopened = reopen_same_live_process(pid, creation).expect("same live process");
+        assert_eq!(process_creation_time(&reopened).unwrap(), creation);
+        let wrong = FileTime {
+            low: creation.low ^ 1,
+            high: creation.high,
+        };
+        assert!(reopen_same_live_process(pid, wrong).is_err());
+        assert!(reopen_same_live_process(u32::MAX, creation).is_err());
+    }
+
+    #[test]
+    fn exited_process_is_refused_even_while_original_handle_remains_open() {
+        let mut child = Command::new("cmd.exe")
+            .args(["/C", "exit", "0"])
+            .spawn()
+            .expect("start short-lived child");
+        let mut raw = ptr::null_mut();
+        assert_ne!(
+            unsafe {
+                DuplicateHandle(
+                    GetCurrentProcess(),
+                    child.as_raw_handle(),
+                    GetCurrentProcess(),
+                    &mut raw,
+                    0,
+                    0,
+                    DUPLICATE_SAME_ACCESS,
+                )
+            },
+            0
+        );
+        let process = owned_handle(raw).expect("duplicate child process");
+        let pid = unsafe { GetProcessId(process.as_raw_handle()) };
+        let creation = process_creation_time(&process).expect("child creation time");
+        assert!(child.wait().expect("child exit").success());
+        assert!(require_live_process(&process).is_err());
+        assert!(reopen_same_live_process(pid, creation).is_err());
     }
 
     #[test]

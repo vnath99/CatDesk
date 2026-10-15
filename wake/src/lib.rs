@@ -16,6 +16,8 @@ pub mod install_broker_preflight;
 pub mod install_broker_reader;
 #[cfg(windows)]
 pub mod install_broker_request;
+#[cfg(windows)]
+pub mod install_broker_service_core;
 pub mod process_job;
 pub mod protocol;
 pub mod review_binding;
