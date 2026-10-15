@@ -973,6 +973,31 @@ pub(crate) struct RetainedReviewedArtifact {
     _file: fs::File,
 }
 
+#[cfg(windows)]
+impl RetainedReviewedArtifact {
+    /// Read the NT device pathname of the retained file object. A process
+    /// image-name comparison can reject a different launch path, but this
+    /// pathname does not itself attest the process's mapped image section.
+    pub(crate) fn native_final_path(&self, label: &str) -> Result<Vec<u16>, String> {
+        const MAX_PATH_WCHARS: usize = 32 * 1024;
+        const VOLUME_NAME_NT: u32 = 0x2;
+        let mut path = vec![0_u16; MAX_PATH_WCHARS];
+        let length = unsafe {
+            GetFinalPathNameByHandleW(
+                self._file.as_raw_handle(),
+                path.as_mut_ptr(),
+                path.len() as u32,
+                VOLUME_NAME_NT,
+            )
+        } as usize;
+        if length == 0 || length >= path.len() || path[..length].contains(&0) {
+            return Err(format!("{label} native pathname is unavailable"));
+        }
+        path.truncate(length);
+        Ok(path)
+    }
+}
+
 /// Bind one pre-existing reviewed artifact to its opened object identity and
 /// expected SHA-256.  This is the shared protected-filesystem counterpart to
 /// the reviewed-promotion evidence path; it deliberately accepts a pinned
@@ -1822,6 +1847,17 @@ unsafe extern "system" {
     ) -> i32;
     fn EqualSid(first: *mut c_void, second: *mut c_void) -> i32;
     fn LocalFree(memory: *mut c_void) -> *mut c_void;
+}
+
+#[cfg(windows)]
+#[link(name = "kernel32")]
+unsafe extern "system" {
+    fn GetFinalPathNameByHandleW(
+        file: *mut c_void,
+        path: *mut u16,
+        capacity: u32,
+        flags: u32,
+    ) -> u32;
 }
 #[cfg(windows)]
 fn handle_attributes(handle: *mut c_void, label: &str) -> Result<u32, String> {

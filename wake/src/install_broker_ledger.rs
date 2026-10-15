@@ -428,6 +428,22 @@ impl<'a> BrokerLedgerGuard<'a> {
         self.root
     }
 
+    /// Return the most recent protected acceptance time while retaining the
+    /// global lock. This is only a rollback floor for a future broker clock:
+    /// an empty ledger cannot establish trustworthy initial time or generation.
+    pub(crate) fn latest_accepted_at_utc_seconds(
+        &self,
+        policy: &BrokerProtectedPolicyV1,
+    ) -> Result<Option<u64>> {
+        let root_id = root_info(self.root)?;
+        if policy.readback()?.protected_root != root_id {
+            return Err("WAKE_LEDGER_ROOT_CHANGED".into());
+        }
+        let latest = validated_latest_accepted_at(self.root, &root_id)?;
+        policy.revalidate()?;
+        Ok(latest)
+    }
+
     /// Diagnose only an existing exact transaction while this guard retains
     /// the global lock. The observation callback is a future service seam: it
     /// must sample broker-owned pinned objects and a trusted clock. This
@@ -1017,6 +1033,44 @@ fn historical_intent(
     Ok((intent, current, binding.stage_binding))
 }
 
+/// Read the rollback floor only from a fully chained protected history. The
+/// caller holds the global lock and has bound this root to protected policy.
+fn validated_latest_accepted_at(
+    root: &OwnedHandle,
+    root_id: &ObjectIdentityV1,
+) -> Result<Option<u64>> {
+    let inventory = ledger_inventory(root)?;
+    let mut last_generation: Option<u64> = None;
+    let mut last_accepted: Option<u64> = None;
+    let mut last_phase = InstallPhaseV1::Complete;
+    let mut approval_ids = HashSet::new();
+    let mut approval_digests = HashSet::new();
+    for (&generation, present) in &inventory {
+        if last_generation.is_some_and(|prior| prior.checked_add(1) != Some(generation)) {
+            return Err("WAKE_LEDGER_STALE_GENERATION".into());
+        }
+        if last_phase != InstallPhaseV1::Complete {
+            return Err("WAKE_LEDGER_PRIOR_INCOMPLETE".into());
+        }
+        let (intent, phase, _) = historical_intent(root, generation, present, root_id)?;
+        if !approval_ids.insert(intent.approval_id.clone())
+            || !approval_digests.insert(intent.signed_approval_sha256.clone())
+        {
+            return Err("WAKE_LEDGER_APPROVAL_REPLAY".into());
+        }
+        if last_accepted.is_some_and(|prior| intent.accepted_at_utc_seconds < prior) {
+            return Err("WAKE_LEDGER_CLOCK_ROLLBACK".into());
+        }
+        last_generation = Some(generation);
+        last_accepted = Some(intent.accepted_at_utc_seconds);
+        last_phase = phase;
+    }
+    if ledger_inventory(root)? != inventory {
+        return Err("WAKE_LEDGER_INVENTORY_CHANGED".into());
+    }
+    Ok(last_accepted)
+}
+
 /// Validate every prior ledger generation and reject later records or reused
 /// approval IDs before creating a fresh intent. The fixed global lease is
 /// already held by the caller.
@@ -1594,6 +1648,68 @@ mod tests {
             &observed,
         )
         .expect("generation-specific signed approval")
+    }
+
+    #[test]
+    fn protected_clock_floor_reads_only_validated_history_under_lock() {
+        let (root, handle, approval, expected) = fixture();
+        let root_id = root_info(&handle).expect("root identity");
+        let guard = BrokerLedgerGuard::acquire(&handle).expect("global lock");
+        assert_eq!(
+            validated_latest_accepted_at(guard.root(), &root_id).unwrap(),
+            None
+        );
+        drop(guard);
+
+        let lease = BrokerLedgerLease::begin(&handle, &approval, &expected).expect("intent");
+        drop(lease);
+        let guard = BrokerLedgerGuard::acquire(&handle).expect("reopen global lock");
+        assert_eq!(
+            validated_latest_accepted_at(guard.root(), &root_id).unwrap(),
+            Some(expected.now_utc_seconds)
+        );
+        drop(guard);
+        drop(handle);
+        remove_fixture(&root, expected.next_install_generation);
+    }
+
+    #[test]
+    fn protected_clock_floor_refuses_backward_later_acceptance() {
+        let (root, handle, approval, expected) = fixture();
+        let first_generation = expected.next_install_generation;
+        let mut first =
+            BrokerLedgerLease::begin(&handle, &approval, &expected).expect("first intent");
+        for phase in InstallPhaseV1::ORDER.iter().copied().skip(1) {
+            first.advance(phase).expect("complete first generation");
+        }
+        drop(first);
+        let second_generation = first_generation + 1;
+        let second_approval =
+            signed_for_generation(&expected.protected_root, second_generation, 8787);
+        let second_expected = LedgerExpectationV1 {
+            next_install_generation: second_generation,
+            ..expected.clone()
+        };
+        let second = BrokerLedgerLease::begin(&handle, &second_approval, &second_expected)
+            .expect("second intent");
+        drop(second);
+        let second_intent = root.join(record_name(second_generation, InstallPhaseV1::Intent));
+        let mut record: LedgerRecordV1 =
+            serde_json::from_slice(&std::fs::read(&second_intent).unwrap()).unwrap();
+        record.accepted_at_utc_seconds = expected.now_utc_seconds - 1;
+        std::fs::write(&second_intent, canonical_bytes(&record).unwrap())
+            .expect("write exact isolated fixture intent");
+
+        let root_id = root_info(&handle).expect("root identity");
+        let guard = BrokerLedgerGuard::acquire(&handle).expect("global lock");
+        assert_eq!(
+            validated_latest_accepted_at(guard.root(), &root_id).unwrap_err(),
+            "WAKE_LEDGER_CLOCK_ROLLBACK"
+        );
+        drop(guard);
+        drop(handle);
+        remove_generation_records(&root, second_generation);
+        remove_fixture(&root, first_generation);
     }
 
     #[test]

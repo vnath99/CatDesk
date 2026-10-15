@@ -1,5 +1,11 @@
 # CatDesk — Important Command Reference
 
+## Current broker clock and Sol launch diagnostic boundary (2026-10-15)
+
+- R18's `BrokerSelfClockPin` is read-only and succeeds only inside the exact fixed running SCM service process with retained protected-root and ledger-lock pins. Its OS UTC and current image file are diagnostic, not independent time or mapped-image proof. Do not feed this readback into `accept_with_observation` or treat it as install authority. See `docs/orchestrator/review_bundles/T-0485_R18_BROKER_SELF_CLOCK_DIAGNOSTIC_SOURCE.md`.
+- R25's private pre-spawn Sol owner requires a retained digest-checked executable handle and host-prepared task context before constructing the suspended child. The digest needs an independent policy source and the fixed-account launcher/ambiguous-failure owner are absent; no nonce burn, staging or repository-use consumer accepts it. See `docs/orchestrator/review_bundles/T-0483_R25_PRESPAWN_SOL_EXECUTABLE_LEASE_SOURCE.md`.
+- The last clean committed `wake/install.ps1 -BuildOnly` at `b55a219` produced unsigned diagnostic `1.0.0-dev.85-f395cd34e188-3602f852e59e`. It predates R18/R25 and cannot authorize install. The exact `b55a219` GitHub workflow/check counts were zero on bounded readback. No manual dispatch or Actions settings change; preserve the prior HTTP422 and missing `workflow_dispatch` as distinct evidence.
+
 ## Current guarded resume and Sol preparation boundary (2026-10-15)
 
 - R17's `BrokerLedgerGuard::inspect_exact_resume` is read-only. It must run under the global lock with protected policy and current observations; its INTENT/STAGE_STARTED/STAGED dispositions never authorize a package, pointer or owner change. See `docs/orchestrator/review_bundles/T-0485_R17_GUARDED_READ_ONLY_EXACT_RESUME.md`.

@@ -1,3 +1,9 @@
+## 2026-10-15 — fixed broker self-clock and pre-spawn Sol executable lease (SOURCE ONLY, CURRENT)
+
+- P0 adds an opaque, read-only fixed-service-self process/UTC readback under the retained protected root and ledger lock. It checks current process/SCM/token/image/root pins and a validated historical ledger rollback floor. Five focused tests and independent read-only review passed. The service is unprovisioned; loaded-image and independent-time proof remain open. See `docs/orchestrator/review_bundles/T-0485_R18_BROKER_SELF_CLOCK_DIAGNOSTIC_SOURCE.md`.
+- P1 consumes the prepared task/nonce context before a private suspended launch, retains a reviewed digest-pinned executable and rejects a different or case-twin observed image path before resume. Focused lifecycle tests passed (15, with one helper ignored); no fixed-account positive route or repository-use consumer exists. Ambiguous cleanup needs retained ownership before authority. See `docs/orchestrator/review_bundles/T-0483_R25_PRESPAWN_SOL_EXECUTABLE_LEASE_SOURCE.md`.
+- Signed/provisioned protected broker, trusted image/time, independently approved executable and fixed worker, exact three-job Windows CI, dev.84 reconciliation, protected reader cutover, real Sol cycle and fresh Chat53 remain open. No installed or browser state changed; P2/P3/P4 remain ordered.
+
 ## 2026-10-15 — guarded Wake resume and prepared Sol run (SOURCE ONLY, CURRENT)
 
 - P0 adds a guarded, policy-bound, read-only exact-resume inspection. It requires an existing INTENT, current physical observation and complete ledger history under one global lock; INTENT needs empty staging, STAGE_STARTED stays attention, and STAGED compares exact bytes, protected ACLs and seven physical IDs. No lease or install authority is returned. Three integrated tests and the full Wake suite pass locally; see `docs/orchestrator/review_bundles/T-0485_R17_GUARDED_READ_ONLY_EXACT_RESUME.md`.

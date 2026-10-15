@@ -37,7 +37,7 @@ pub struct BrokerReadOnlySnapshotV1 {
 /// Read-only pins for the compiled ProgramData root. The ancestor handles stay
 /// open without delete sharing while a protected reader inspects children.
 #[cfg(windows)]
-pub(crate) struct FixedProtectedRootReadGuard {
+pub struct FixedProtectedRootReadGuard {
     _volume: OwnedHandle,
     _program_data: OwnedHandle,
     _catdesk: OwnedHandle,
@@ -1106,7 +1106,7 @@ pub fn inspect_fixed_broker_read_only() -> Result<BrokerReadOnlySnapshotV1> {
 }
 
 #[cfg(windows)]
-pub(crate) fn acquire_fixed_protected_root_for_reader() -> Result<FixedProtectedRootReadGuard> {
+pub fn acquire_fixed_protected_root_for_reader() -> Result<FixedProtectedRootReadGuard> {
     windows::acquire_fixed_root_for_reader()
 }
 

@@ -822,6 +822,16 @@ fn exact_process_token(process: &OwnedHandle, service_sid: &[u8]) -> Result<()> 
     Ok(())
 }
 
+/// Shared read-only attestation for the fixed service's live process object.
+/// This does not prove which file object was mapped as its image section.
+pub(crate) fn require_fixed_service_process_identity(
+    process: &OwnedHandle,
+    service_sid: &str,
+) -> Result<()> {
+    exact_process_image_path(process)?;
+    exact_process_token(process, &service_sid_bytes(service_sid)?)
+}
+
 /// Owns the one connected pipe, pinned service process and fixed image until
 /// the first approval write. It cannot be built from caller-provided identity.
 pub struct FixedBrokerApprovalClient<'a> {
