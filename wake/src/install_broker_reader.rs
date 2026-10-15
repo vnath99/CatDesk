@@ -192,6 +192,55 @@ struct ReaderPolicy {
     artifacts: [ExactSecurity; 4],
 }
 
+/// Retains the exact protected objects behind a read-only snapshot while a
+/// caller holds its separate ledger lock. This value has no launch, write, or
+/// install operation. Reopening the fixed names must still match these pins.
+pub(crate) struct ProtectedInstallPinV1 {
+    snapshot: ProtectedInstallReadOnlySnapshotV1,
+    policy: ReaderPolicy,
+    pointer: OwnedHandle,
+    packages: OwnedHandle,
+    packages_id: ObjectIdentityV1,
+    package: OwnedHandle,
+    manifest: OwnedHandle,
+    artifacts: [OwnedHandle; 4],
+}
+
+impl ProtectedInstallPinV1 {
+    pub(crate) fn snapshot(&self) -> &ProtectedInstallReadOnlySnapshotV1 {
+        &self.snapshot
+    }
+
+    pub(crate) fn revalidate(
+        &self,
+        root: &OwnedHandle,
+        expected_root: &ObjectIdentityV1,
+    ) -> Result<()> {
+        if self.snapshot.protected_root != *expected_root
+            || identity(&file_info(self.pointer.as_raw_handle(), false)?) != self.snapshot.pointer
+            || identity(&file_info(self.packages.as_raw_handle(), true)?) != self.packages_id
+            || identity(&file_info(self.package.as_raw_handle(), true)?)
+                != self.snapshot.package_directory
+            || identity(&file_info(self.manifest.as_raw_handle(), false)?)
+                != self.snapshot.manifest_file
+            || self.artifacts.iter().enumerate().any(|(index, handle)| {
+                file_info(handle.as_raw_handle(), false)
+                    .map(|info| identity(&info))
+                    .ok()
+                    != Some(self.snapshot.artifacts[index].object.clone())
+            })
+        {
+            return Err("WAKE_PROTECTED_READER_OBJECT_CHANGED".into());
+        }
+        // The old handles deny write/delete sharing. Independently reopen and
+        // rehash the same fixed names while those handles remain live.
+        if inspect_pinned(root, expected_root, &self.policy)? != self.snapshot {
+            return Err("WAKE_PROTECTED_READER_OBJECT_CHANGED".into());
+        }
+        Ok(())
+    }
+}
+
 impl ReaderPolicy {
     fn production(service_sid: &str) -> Result<Self> {
         let directory = ExactSecurity {
@@ -682,6 +731,83 @@ fn inspect_pinned(
     })
 }
 
+fn pin_pinned(
+    root: &OwnedHandle,
+    expected_root: &ObjectIdentityV1,
+    policy: ReaderPolicy,
+) -> Result<ProtectedInstallPinV1> {
+    let snapshot = inspect_pinned(root, expected_root, &policy)?;
+    let pointer = open_relative(root, "current.json", false)?;
+    let packages = open_relative(root, "packages", true)?;
+    let packages_id = identity(&file_info(packages.as_raw_handle(), true)?);
+    let package = open_relative(&packages, &snapshot.package_id, true)?;
+    let manifest = open_relative(&package, "manifest.json", false)?;
+    let artifacts: [OwnedHandle; 4] = ARTIFACT_NAMES
+        .into_iter()
+        .map(|name| open_relative(&package, name, false))
+        .collect::<Result<Vec<_>>>()?
+        .try_into()
+        .map_err(|_| "WAKE_PROTECTED_READER_INVENTORY_MISMATCH")?;
+    let pin = ProtectedInstallPinV1 {
+        snapshot,
+        policy,
+        pointer,
+        packages,
+        packages_id,
+        package,
+        manifest,
+        artifacts,
+    };
+    pin.revalidate(root, expected_root)?;
+    Ok(pin)
+}
+
+/// The caller must already hold the fixed protected root and broker ledger
+/// lock. The returned pins corroborate a package snapshot only; the ledger's
+/// pointer-switch record cannot yet prove the new pointer's file identity.
+pub(crate) fn pin_protected_install_under_guard(
+    root: &OwnedHandle,
+    expected_root: &ObjectIdentityV1,
+    service_sid: &str,
+) -> Result<ProtectedInstallPinV1> {
+    pin_pinned(root, expected_root, ReaderPolicy::production(service_sid)?)
+}
+
+#[cfg(test)]
+pub(crate) fn pin_protected_install_fixture(
+    root: &OwnedHandle,
+    expected_root: &ObjectIdentityV1,
+) -> Result<ProtectedInstallPinV1> {
+    // Test-only ACL expectations are captured from the isolated fixture.
+    // Production always uses ReaderPolicy::production and the fixed service SID.
+    let mut pointer = File::from(open_relative(root, "current.json", false)?);
+    let pointer_security = exact_security(pointer.as_raw_handle())?;
+    let (pointer_bytes, _) = read_bounded(&mut pointer, MAX_POINTER_BYTES, &pointer_security)?;
+    let pointer_data: ProtectedPointerV1 = canonical_json(&pointer_bytes)?;
+    validate_pointer(&pointer_data, expected_root)?;
+    let packages = open_relative(root, "packages", true)?;
+    let package = open_relative(&packages, &pointer_data.package_id, true)?;
+    let manifest = open_relative(&package, "manifest.json", false)?;
+    let artifact_security = ARTIFACT_NAMES
+        .into_iter()
+        .map(|name| {
+            let handle = open_relative(&package, name, false)?;
+            exact_security(handle.as_raw_handle())
+        })
+        .collect::<Result<Vec<_>>>()?
+        .try_into()
+        .map_err(|_| "WAKE_PROTECTED_READER_INVENTORY_MISMATCH")?;
+    let policy = ReaderPolicy {
+        root: exact_security(root.as_raw_handle())?,
+        packages: exact_security(packages.as_raw_handle())?,
+        package: exact_security(package.as_raw_handle())?,
+        pointer: pointer_security,
+        manifest: exact_security(manifest.as_raw_handle())?,
+        artifacts: artifact_security,
+    };
+    pin_pinned(root, expected_root, policy)
+}
+
 /// Inspect only the compiled protected ProgramData namespace. This function
 /// exposes no request-selected path and performs no install or launch action.
 pub fn inspect_fixed_protected_install_read_only() -> Result<ProtectedInstallReadOnlySnapshotV1> {
@@ -691,7 +817,7 @@ pub fn inspect_fixed_protected_install_read_only() -> Result<ProtectedInstallRea
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::install_broker_approval::ArtifactV1;
     use std::{
@@ -718,7 +844,7 @@ mod tests {
         ) -> *mut c_void;
     }
 
-    struct Fixture {
+    pub(crate) struct Fixture {
         root_path: PathBuf,
         root: OwnedHandle,
         root_id: ObjectIdentityV1,
@@ -728,7 +854,7 @@ mod tests {
     }
 
     impl Fixture {
-        fn new() -> Self {
+        pub(crate) fn new() -> Self {
             let root_path = std::env::temp_dir().join(format!(
                 "catdesk-protected-reader-test-{}-{}",
                 std::process::id(),
@@ -838,7 +964,30 @@ mod tests {
             }
         }
 
-        fn inspect(&self) -> Result<ProtectedInstallReadOnlySnapshotV1> {
+        pub(crate) fn root_path(&self) -> &std::path::Path {
+            &self.root_path
+        }
+
+        pub(crate) fn root(&self) -> &OwnedHandle {
+            &self.root
+        }
+
+        pub(crate) fn root_id(&self) -> &ObjectIdentityV1 {
+            &self.root_id
+        }
+
+        pub(crate) fn manifest(&self) -> &PackageManifestV1 {
+            &self.manifest
+        }
+
+        pub(crate) fn pointer_predecessor(&self) -> (&str, &ObjectIdentityV1) {
+            (
+                &self.pointer.predecessor_package_id,
+                &self.pointer.predecessor_pointer,
+            )
+        }
+
+        pub(crate) fn inspect(&self) -> Result<ProtectedInstallReadOnlySnapshotV1> {
             inspect_pinned(&self.root, &self.root_id, &self.policy)
         }
 
@@ -856,7 +1005,7 @@ mod tests {
             .expect("write fixture pointer");
         }
 
-        fn cleanup(self) {
+        pub(crate) fn cleanup(self) {
             let package_path = self.package_path();
             drop(self.root);
             std::fs::remove_file(self.root_path.join("current.json")).expect("remove pointer");
@@ -882,6 +1031,26 @@ mod tests {
             snapshot.disposition,
             "READ_ONLY_PROTECTED_PACKAGE_SNAPSHOT_NOT_LAUNCH_AUTHORITY"
         );
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn retained_package_pins_revalidate_fixed_names_and_refuse_wrong_root() {
+        let fixture = Fixture::new();
+        let pin = pin_pinned(&fixture.root, &fixture.root_id, fixture.policy.clone())
+            .expect("retained protected package");
+        assert_eq!(pin.snapshot().package_id, fixture.manifest.package_id);
+        pin.revalidate(&fixture.root, &fixture.root_id)
+            .expect("exact pinned readback");
+        let mut wrong_root = fixture.root_id.clone();
+        wrong_root.file_index_low = wrong_root.file_index_low.wrapping_add(1);
+        assert_eq!(
+            pin.revalidate(&fixture.root, &wrong_root).unwrap_err(),
+            "WAKE_PROTECTED_READER_OBJECT_CHANGED"
+        );
+        assert!(std::fs::write(fixture.root_path.join("current.json"), b"changed").is_err());
+        assert!(std::fs::write(fixture.package_path().join("adapter.py"), b"changed").is_err());
+        drop(pin);
         fixture.cleanup();
     }
 

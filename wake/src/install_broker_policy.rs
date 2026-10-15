@@ -649,7 +649,7 @@ pub fn load_fixed_broker_policy_read_only() -> Result<BrokerProtectedPolicyV1> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::install_broker_approval::{
         ArtifactV1, BrokerObservedStateV1, tests as approval_test,
@@ -875,6 +875,53 @@ mod tests {
                 .expect("remove fixture policy");
             std::fs::remove_dir(self.path).expect("remove fixture root");
         }
+    }
+
+    /// Build only an isolated test policy in an already pinned temporary root.
+    /// The production loader still accepts only the compiled protected path.
+    pub(crate) fn load_fixture_policy_for_existing_root(
+        path: &std::path::Path,
+        root: &OwnedHandle,
+        root_id: &ObjectIdentityV1,
+    ) -> Result<BrokerProtectedPolicyV1> {
+        let policy_path = path.join(FIXED_BROKER_POLICY_FILE);
+        std::fs::write(&policy_path, b"initial").expect("initial fixture policy");
+        let file = open_policy_relative(root)?;
+        let file_id = object_identity(&file_info(file.as_raw_handle(), false)?);
+        let root_security = security(root.as_raw_handle())?;
+        let file_security = security(file.as_raw_handle())?;
+        drop(file);
+        let service_sid = "S-1-5-80-1-2-3-4-5".to_owned();
+        let key = SigningKey::from_bytes(&[7u8; 32]).verifying_key();
+        let wire = PolicyWireV1 {
+            schema_version: 1,
+            purpose: POLICY_PURPOSE.into(),
+            protected_root: root_id.clone(),
+            policy_file: file_id,
+            service_sid: service_sid.clone(),
+            operator_sid: current_user_sid(),
+            approval_public_key_hex: key
+                .as_bytes()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect(),
+        };
+        std::fs::write(
+            &policy_path,
+            serde_json::to_vec(&wire).expect("policy wire"),
+        )
+        .expect("canonical fixture policy");
+        let pinned_root = root
+            .as_handle()
+            .try_clone_to_owned()
+            .expect("fixture root clone");
+        load_pinned(
+            RootPin::Fixture(pinned_root),
+            root_id.clone(),
+            service_sid,
+            root_security,
+            file_security,
+        )
     }
 
     const RESUME_ARTIFACTS: [&str; 4] = [
