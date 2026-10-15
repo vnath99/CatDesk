@@ -215,6 +215,9 @@ pub(crate) struct ProtectedPublishedPackageReadbackV1 {
     pub manifest_sha256: String,
     pub protected_root: ObjectIdentityV1,
     pub staging_directory: ObjectIdentityV1,
+    /// This physical parent is durable STAGED evidence only when the stage
+    /// binding also records it; older stages remain diagnostic-only.
+    pub packages_directory: ObjectIdentityV1,
     pub package_directory: ObjectIdentityV1,
     pub manifest_file: ObjectIdentityV1,
     pub artifacts: [ProtectedArtifactReadbackV1; 4],
@@ -970,7 +973,12 @@ fn inspect_publication_location_pinned(
     assert_security(staging.as_raw_handle(), &policy.staging)?;
     let packages = open_relative(root, "packages", true)?;
     let packages_before = file_info(packages.as_raw_handle(), true)?;
-    if packages_before.volume != root_before.volume {
+    if packages_before.volume != root_before.volume
+        || stage
+            .packages_directory
+            .as_ref()
+            .is_some_and(|expected| identity(&packages_before) != *expected)
+    {
         return Err("WAKE_PROTECTED_PUBLICATION_BINDING_INVALID".into());
     }
     assert_security(packages.as_raw_handle(), &policy.packages)?;
@@ -1032,6 +1040,7 @@ fn inspect_publication_location_pinned(
                 manifest_sha256: approval.payload().manifest_sha256.clone(),
                 protected_root: root_id.clone(),
                 staging_directory: stage.staging_directory.clone(),
+                packages_directory: identity(&packages_before),
                 package_directory: stage.candidate_directory.clone(),
                 manifest_file: stage.manifest_file.clone(),
                 artifacts,
@@ -1614,6 +1623,7 @@ pub(crate) mod tests {
         let installed = fixture.inspect().expect("physical package fixture");
         StageBindingV1 {
             staging_directory,
+            packages_directory: None,
             candidate_directory: installed.package_directory,
             manifest_file: installed.manifest_file,
             artifacts: std::array::from_fn(|index| installed.artifacts[index].object.clone()),

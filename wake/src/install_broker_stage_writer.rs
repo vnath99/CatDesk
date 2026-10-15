@@ -50,6 +50,7 @@ const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
 const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
 const INVALID_HANDLE_VALUE: *mut c_void = -1isize as *mut c_void;
 const STAGING: &str = "staging";
+const PACKAGES: &str = "packages";
 const CANDIDATE: &str = "candidate";
 const MANIFEST: &str = "manifest.json";
 const ARTIFACTS: [&str; 4] = [
@@ -402,6 +403,8 @@ pub struct BrokerStageReceiptV1<'p> {
     security: StageSecurityMode,
     snapshot: BrokerCandidateStageReadbackV1,
     _staging: OwnedHandle,
+    packages: OwnedHandle,
+    packages_id: ObjectIdentityV1,
     candidate: OwnedHandle,
     manifest: OwnedHandle,
     artifacts: [OwnedHandle; 4],
@@ -411,6 +414,7 @@ impl BrokerStageReceiptV1<'_> {
     pub(crate) fn stage_binding(&self) -> StageBindingV1 {
         StageBindingV1 {
             staging_directory: self.snapshot.staging_directory.clone(),
+            packages_directory: Some(self.packages_id.clone()),
             candidate_directory: self.snapshot.candidate_directory.clone(),
             manifest_file: self.snapshot.manifest_file.clone(),
             artifacts: std::array::from_fn(|index| self.snapshot.artifacts[index].object.clone()),
@@ -456,8 +460,21 @@ impl BrokerStageReceiptV1<'_> {
         }
         self.source.revalidate(&self.approval)?;
         let current = self.security.inspect(root, root_id, &self.approval)?;
+        let reopened_packages =
+            open_child(root, PACKAGES, true, false, self.security.service_sid())?;
+        if let Some(service_sid) = self.security.service_sid() {
+            let expected = canonical_protected_security(service_sid, true)?;
+            for packages in [&self.packages, &reopened_packages] {
+                let (owner, actual) = protected_security_raw(packages.as_raw_handle())?;
+                if owner != "S-1-5-18" || actual != expected {
+                    return Err("WAKE_BROKER_STAGE_ACL_MISMATCH".into());
+                }
+            }
+        }
         if current != self.snapshot
             || identity(self._staging.as_raw_handle(), true)? != self.snapshot.staging_directory
+            || identity(self.packages.as_raw_handle(), true)? != self.packages_id
+            || identity(reopened_packages.as_raw_handle(), true)? != self.packages_id
             || identity(self.candidate.as_raw_handle(), true)? != self.snapshot.candidate_directory
             || identity(self.manifest.as_raw_handle(), false)? != self.snapshot.manifest_file
             || self.artifacts.iter().enumerate().any(|(index, file)| {
@@ -546,8 +563,20 @@ fn materialize_pinned_candidate_stage<'p>(
     let service_sid = security.service_sid();
     let staging = open_child(lease.protected_root(), STAGING, true, false, service_sid)?;
     let staging_id = identity(staging.as_raw_handle(), true)?;
+    let packages = open_child(lease.protected_root(), PACKAGES, true, false, service_sid)?;
+    let packages_id = identity(packages.as_raw_handle(), true)?;
+    if packages_id.volume_serial != root_id.volume_serial
+        || packages_id == root_id
+        || packages_id == staging_id
+    {
+        return Err("WAKE_BROKER_STAGE_OBJECT_INVALID".into());
+    }
     if let Some(service_sid) = service_sid {
         let (owner, actual) = protected_security_raw(staging.as_raw_handle())?;
+        if owner != "S-1-5-18" || actual != canonical_protected_security(service_sid, true)? {
+            return Err("WAKE_BROKER_STAGE_ACL_MISMATCH".into());
+        }
+        let (owner, actual) = protected_security_raw(packages.as_raw_handle())?;
         if owner != "S-1-5-18" || actual != canonical_protected_security(service_sid, true)? {
             return Err("WAKE_BROKER_STAGE_ACL_MISMATCH".into());
         }
@@ -607,6 +636,8 @@ fn materialize_pinned_candidate_stage<'p>(
         security,
         snapshot,
         _staging: staging,
+        packages,
+        packages_id,
         candidate,
         manifest,
         artifacts,
@@ -677,6 +708,7 @@ mod tests {
             let source = base.join("WakeSubmissionV1").join("candidate");
             std::fs::create_dir_all(&source).expect("source fixture");
             std::fs::create_dir(base.join(STAGING)).expect("staging fixture");
+            std::fs::create_dir(base.join(PACKAGES)).expect("packages fixture");
             std::fs::write(base.join("install-ledger.lock"), b"").expect("global lock");
             let blobs: [&[u8]; 4] = [
                 b"host-binary",
@@ -753,6 +785,18 @@ mod tests {
         fn cleanup(self) {
             let base = self.base.clone();
             drop(self);
+            let resolved = base.canonicalize().expect("resolved transaction fixture");
+            let temp_root = std::env::temp_dir()
+                .canonicalize()
+                .expect("resolved temp root");
+            assert_eq!(resolved.parent(), Some(temp_root.as_path()));
+            assert!(
+                resolved
+                    .file_name()
+                    .expect("fixture name")
+                    .to_string_lossy()
+                    .starts_with("catdesk-stage-transaction-")
+            );
             std::fs::remove_dir_all(base).expect("fixture cleanup");
         }
     }
@@ -822,6 +866,18 @@ mod tests {
         )
         .expect("fresh protected-shape copy");
         let binding = receipt.stage_binding();
+        assert_eq!(
+            binding.packages_directory,
+            Some(
+                identity(
+                    open_child(&fixture.root, PACKAGES, true, false, None)
+                        .expect("pre-existing packages parent")
+                        .as_raw_handle(),
+                    true
+                )
+                .expect("same packages parent")
+            )
+        );
         assert!(lease.record_staged(&mut receipt).expect("typed STAGED"));
         assert_eq!(lease.phase(), InstallPhaseV1::Staged);
         drop(receipt);
@@ -837,12 +893,52 @@ mod tests {
             record["stageBinding"],
             serde_json::to_value(&binding).unwrap()
         );
+        assert_eq!(
+            record["stageBinding"]["packagesDirectory"],
+            serde_json::to_value(binding.packages_directory.as_ref().unwrap()).unwrap()
+        );
         let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("reopen lock");
         let resumed = guard
             .begin_fixture(&fixture.approval, &fixture.expectation)
             .expect("exact resume");
         assert_eq!(resumed.phase(), InstallPhaseV1::Staged);
         drop(resumed);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn missing_packages_parent_refuses_before_stage_marker_or_candidate() {
+        let fixture = TransactionFixture::new();
+        std::fs::remove_dir(fixture.base.join(PACKAGES)).expect("remove exact empty parent");
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("global lock");
+        let mut lease = guard
+            .begin_fixture(&fixture.approval, &fixture.expectation)
+            .expect("durable intent");
+        assert!(
+            materialize_pinned_candidate_stage(
+                &mut lease,
+                &fixture.approval,
+                fixture.source(),
+                StageSecurityMode::Fixture,
+                None,
+            )
+            .is_err()
+        );
+        assert_eq!(lease.phase(), InstallPhaseV1::Intent);
+        assert!(!fixture.staged_path().exists());
+        assert!(
+            !fixture
+                .base
+                .join("install-transaction-00000000000000000002-stage-started.json")
+                .exists()
+        );
+        assert!(
+            !fixture
+                .base
+                .join("install-transaction-00000000000000000002-staged.json")
+                .exists()
+        );
+        drop(lease);
         fixture.cleanup();
     }
 

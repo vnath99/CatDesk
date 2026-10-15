@@ -1645,6 +1645,7 @@ pub(crate) mod tests {
             .expect("exact fixture stage bytes");
         let binding = StageBindingV1 {
             staging_directory: snapshot.staging_directory,
+            packages_directory: None,
             candidate_directory: snapshot.candidate_directory,
             manifest_file: snapshot.manifest_file,
             artifacts: std::array::from_fn(|index| snapshot.artifacts[index].object.clone()),
@@ -1663,6 +1664,7 @@ pub(crate) mod tests {
             .expect("exact physical STAGED readback");
         assert_eq!(staged.phase, "staged");
         assert!(staged.ledger_stage_binding_matched);
+        assert!(!staged.packages_parent_object_verified);
         assert!(
             !staged
                 .stage
@@ -1809,8 +1811,27 @@ pub(crate) mod tests {
             .expect("canonical fixture manifest");
         let snapshot = inspect_stage_fixture(&fixture.root, &fixture.root_id, approved.verified())
             .expect("exact stage readback");
+        let packages_path = fixture.path.join("packages");
+        let packages_raw = unsafe {
+            CreateFileW(
+                wide(packages_path.to_str().expect("fixture packages UTF-8")).as_ptr(),
+                FILE_READ_DATA | FILE_READ_ATTRIBUTES | READ_CONTROL,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                ptr::null_mut(),
+                OPEN_EXISTING,
+                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                ptr::null_mut(),
+            )
+        };
+        assert!(!packages_raw.is_null() && packages_raw != INVALID_HANDLE_VALUE);
+        let packages_pin = unsafe { OwnedHandle::from_raw_handle(packages_raw) };
+        let packages_id = object_identity(
+            &file_info(packages_pin.as_raw_handle(), true).expect("packages parent identity"),
+        );
+        drop(packages_pin);
         let stage = StageBindingV1 {
             staging_directory: snapshot.staging_directory,
+            packages_directory: Some(packages_id),
             candidate_directory: snapshot.candidate_directory,
             manifest_file: snapshot.manifest_file,
             artifacts: std::array::from_fn(|index| snapshot.artifacts[index].object.clone()),
@@ -1863,6 +1884,7 @@ pub(crate) mod tests {
             assert!(staged.ledger_stage_binding_matched);
             assert!(!staged.published_package_binding_matched);
             assert!(staged.staging_parent_object_verified);
+            assert!(staged.packages_parent_object_verified);
             assert!(staged.stage.is_some());
 
             // Model a physical rename that completed before the PUBLISHED
@@ -1874,6 +1896,7 @@ pub(crate) mod tests {
             assert!(!moved.ledger_stage_binding_matched);
             assert!(moved.published_package_binding_matched);
             assert!(moved.staging_parent_object_verified);
+            assert!(moved.packages_parent_object_verified);
             assert_eq!(
                 moved.disposition,
                 "STAGED_PACKAGE_MOVED_PUBLISHED_RECORD_MISSING_ATTENTION_NO_INSTALL_AUTHORITY"
@@ -1986,6 +2009,48 @@ pub(crate) mod tests {
             );
             inspect().expect("original physical package restored");
 
+            let saved_packages = fixture.path.join("packages-saved-fixture");
+            checked_rename(
+                &packages_path,
+                &saved_packages,
+                &fixture_root,
+                &fixture_root,
+            );
+            std::fs::create_dir(&packages_path).expect("same-name packages parent replacement");
+            let saved_packages_parent = saved_packages
+                .canonicalize()
+                .expect("resolved displaced packages parent");
+            let saved_package = saved_packages.join(
+                package
+                    .file_name()
+                    .expect("signed fixture package component"),
+            );
+            checked_rename(
+                &saved_package,
+                &package,
+                &saved_packages_parent,
+                &fixture_packages,
+            );
+            assert_eq!(
+                inspect().unwrap_err(),
+                "WAKE_PROTECTED_PUBLICATION_BINDING_INVALID"
+            );
+            assert!(pin_moved().is_err());
+            checked_rename(
+                &package,
+                &saved_package,
+                &fixture_packages,
+                &saved_packages_parent,
+            );
+            std::fs::remove_dir(&packages_path).expect("remove empty replacement packages");
+            checked_rename(
+                &saved_packages,
+                &packages_path,
+                &fixture_root,
+                &fixture_root,
+            );
+            inspect().expect("original packages parent restored");
+
             let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("fixture phase lock");
             let (mut lease, _approved) = guard
                 .accept_with_observation_fixture(&policy, &envelope, |_| {
@@ -1999,6 +2064,7 @@ pub(crate) mod tests {
             let published = inspect().expect("recorded published package diagnosis");
             assert_eq!(published.phase, "published");
             assert!(published.published_package_binding_matched);
+            assert!(published.packages_parent_object_verified);
             assert!(!published.ledger_stage_binding_matched);
             assert_eq!(
                 published.disposition,

@@ -226,6 +226,11 @@ pub struct StageBindingV1 {
     pub candidate_directory: ObjectIdentityV1,
     pub manifest_file: ObjectIdentityV1,
     pub artifacts: [ObjectIdentityV1; 4],
+    /// Present only for stages whose fixed `packages` parent was pinned and
+    /// durably bound before publication. Omission preserves canonical older
+    /// V1 records, but cannot authorize a future package rename.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub packages_directory: Option<ObjectIdentityV1>,
 }
 
 /// Exact canonical bytes and physical file selected as the new current.json.
@@ -255,6 +260,10 @@ pub struct BrokerExactResumeReadbackV1 {
     pub published_package_binding_matched: bool,
     /// True only when the physical staging parent still matches STAGED.
     pub staging_parent_object_verified: bool,
+    /// True only when STAGED durably names the fixed packages parent and the
+    /// pinned readback matched that exact physical directory. Older STAGED
+    /// records remain readable but cannot supply this publication premise.
+    pub packages_parent_object_verified: bool,
     pub disposition: &'static str,
 }
 
@@ -880,6 +889,11 @@ impl<'a> BrokerLedgerGuard<'a> {
                         };
                         let observed_stage = StageBindingV1 {
                             staging_directory: snapshot.staging_directory.clone(),
+                            packages_directory: match stage_inspection {
+                                #[cfg(test)]
+                                ResumeStageInspection::Fixture => None,
+                                _ => durable_stage.packages_directory.clone(),
+                            },
                             candidate_directory: snapshot.candidate_directory.clone(),
                             manifest_file: snapshot.manifest_file.clone(),
                             artifacts: std::array::from_fn(|index| {
@@ -955,6 +969,10 @@ impl<'a> BrokerLedgerGuard<'a> {
             ledger_stage_binding_matched: stage.is_some(),
             published_package_binding_matched,
             staging_parent_object_verified,
+            packages_parent_object_verified: (stage.is_some() || published_pin.is_some())
+                && stage_binding
+                    .as_ref()
+                    .is_some_and(|binding| binding.packages_directory.is_some()),
             stage,
             disposition,
         })
@@ -978,11 +996,18 @@ pub(crate) fn valid_stage_binding(stage: &StageBindingV1, root: &ObjectIdentityV
         &stage.artifacts[2],
         &stage.artifacts[3],
     ];
-    objects.iter().enumerate().all(|(index, object)| {
+    let fixed_objects_valid = objects.iter().enumerate().all(|(index, object)| {
         object.volume_serial == root.volume_serial
             && (object.file_index_high != 0 || object.file_index_low != 0)
             && objects[..index].iter().all(|prior| *prior != *object)
-    })
+    });
+    fixed_objects_valid
+        && stage.packages_directory.as_ref().is_none_or(|packages| {
+            packages.volume_serial == root.volume_serial
+                && (packages.file_index_high != 0 || packages.file_index_low != 0)
+                && packages != root
+                && !objects.contains(&packages)
+        })
 }
 
 fn valid_pointer_switch_binding(
@@ -997,6 +1022,7 @@ fn valid_pointer_switch_binding(
         && file != root
         && file != predecessor
         && file != &stage.staging_directory
+        && stage.packages_directory.as_ref() != Some(file)
         && file != &stage.candidate_directory
         && file != &stage.manifest_file
         && !stage.artifacts.contains(file)
@@ -2103,6 +2129,7 @@ impl<'a> BrokerLedgerLease<'a> {
             };
             self.binding.stage_binding = Some(StageBindingV1 {
                 staging_directory: id(1),
+                packages_directory: None,
                 candidate_directory: id(2),
                 manifest_file: id(3),
                 artifacts: [id(4), id(5), id(6), id(7)],
@@ -2389,6 +2416,93 @@ mod tests {
             }),
             disposition: "READ_ONLY_PROTECTED_PACKAGE_SNAPSHOT_NOT_LAUNCH_AUTHORITY",
         }
+    }
+
+    #[test]
+    fn stage_parent_binding_preserves_legacy_v1_bytes_and_rejects_id_aliases() {
+        let id = |low| ObjectIdentityV1 {
+            volume_serial: 17,
+            file_index_high: 0,
+            file_index_low: low,
+        };
+        let root = id(1);
+        let mut stage = StageBindingV1 {
+            staging_directory: id(2),
+            candidate_directory: id(3),
+            manifest_file: id(4),
+            artifacts: [id(5), id(6), id(7), id(8)],
+            packages_directory: None,
+        };
+        let old_bytes = serde_json::to_vec(&stage).expect("old V1 stage binding");
+        assert!(!String::from_utf8_lossy(&old_bytes).contains("packagesDirectory"));
+        let replayed: StageBindingV1 =
+            serde_json::from_slice(&old_bytes).expect("readable old V1 binding");
+        assert_eq!(replayed, stage);
+        assert_eq!(serde_json::to_vec(&replayed).unwrap(), old_bytes);
+        assert!(valid_stage_binding(&replayed, &root));
+
+        stage.packages_directory = Some(id(9));
+        assert!(valid_stage_binding(&stage, &root));
+        let new_bytes = serde_json::to_vec(&stage).expect("new stage binding");
+        assert!(String::from_utf8_lossy(&new_bytes).contains("packagesDirectory"));
+        assert_eq!(
+            serde_json::from_slice::<StageBindingV1>(&new_bytes).unwrap(),
+            stage
+        );
+        for alias in [
+            root,
+            stage.staging_directory.clone(),
+            stage.candidate_directory.clone(),
+            stage.manifest_file.clone(),
+            stage.artifacts[0].clone(),
+        ] {
+            stage.packages_directory = Some(alias);
+            assert!(!valid_stage_binding(&stage, &id(1)));
+        }
+    }
+
+    #[test]
+    fn legacy_staged_record_replays_without_rewriting_canonical_bytes() {
+        let (root, handle, approval, expected) = fixture();
+        let mut lease = BrokerLedgerLease::begin(&handle, &approval, &expected).expect("intent");
+        lease
+            .advance(InstallPhaseV1::StageStarted)
+            .expect("stage marker");
+        lease.advance(InstallPhaseV1::Staged).expect("legacy stage");
+        drop(lease);
+        let path = root.join(record_name(
+            expected.next_install_generation,
+            InstallPhaseV1::Staged,
+        ));
+        let bytes = std::fs::read(&path).expect("historic STAGED bytes");
+        assert!(!String::from_utf8_lossy(&bytes).contains("packagesDirectory"));
+        let (record, _) = read_record(&mut File::open(&path).expect("historic STAGED file"))
+            .expect("strict historic record replay");
+        assert_eq!(canonical_bytes(&record).unwrap(), bytes);
+        assert_eq!(
+            record
+                .stage_binding
+                .as_ref()
+                .expect("historic stage binding")
+                .packages_directory,
+            None
+        );
+        let inventory = ledger_inventory(&handle).expect("historic inventory");
+        let present = inventory
+            .get(&expected.next_install_generation)
+            .expect("historic generation");
+        let (_, phase, stage, _) = historical_intent(
+            &handle,
+            expected.next_install_generation,
+            present,
+            &expected.protected_root,
+        )
+        .expect("strict historic chain replay");
+        assert_eq!(phase, InstallPhaseV1::Staged);
+        assert_eq!(stage.unwrap().packages_directory, None);
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        drop(handle);
+        remove_fixture(&root, expected.next_install_generation);
     }
 
     #[test]
@@ -2876,6 +2990,7 @@ mod tests {
             .wrapping_add(10_000);
         let stage = StageBindingV1 {
             staging_directory: unverified_staging_parent,
+            packages_directory: None,
             candidate_directory: installed.package_directory.clone(),
             manifest_file: installed.manifest_file.clone(),
             artifacts: std::array::from_fn(|index| installed.artifacts[index].object.clone()),
