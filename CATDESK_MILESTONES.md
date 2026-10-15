@@ -1,8 +1,15 @@
+## 2026-10-15 — legacy owner inventory and normal Sol completion (SOURCE ONLY, CURRENT)
+
+- P0 adds a zero-argument read-only inventory of named WakeHost process candidates and fixed current-token direct/LocalCache root/lock physical IDs. Its `NO_MATCHING_NAMED_PROCESS_IN_SNAPSHOT`, `AMBIGUOUS` and `UNPROVEN_LEGACY_OWNER` states grant no old-owner or install authority. Four focused tests and independent review passed. See `docs/orchestrator/review_bundles/T-0485_R19_LEGACY_OWNER_CANDIDATE_INVENTORY_SOURCE.md`.
+- P1 separates successful child exit and empty Job from forced abort, and retains process/Job/prepared-run/executable ownership on uncertain cleanup in a private attention value. Focused tests (20 passed, one helper ignored) and independent review passed; no durable registry or fixed-account launch exists. See `docs/orchestrator/review_bundles/T-0483_R26_SOL_NORMAL_COMPLETION_ATTENTION_OWNER_SOURCE.md`.
+- Exact-source CI, signed broker and trusted old-owner anchor, protected install/reader cutover, approved dev.85/new Chat53, fixed Sol worker/digest/launch/lost-write authority and a real review/Wake cycle remain. P2/P3/P4 remain sequential after P0/P1 acceptance.
+
 ## 2026-10-15 — fixed broker self-clock and pre-spawn Sol executable lease (SOURCE ONLY, CURRENT)
 
 - P0 adds an opaque, read-only fixed-service-self process/UTC readback under the retained protected root and ledger lock. It checks current process/SCM/token/image/root pins and a validated historical ledger rollback floor. Five focused tests and independent read-only review passed. The service is unprovisioned; loaded-image and independent-time proof remain open. See `docs/orchestrator/review_bundles/T-0485_R18_BROKER_SELF_CLOCK_DIAGNOSTIC_SOURCE.md`.
 - P1 consumes the prepared task/nonce context before a private suspended launch, retains a reviewed digest-pinned executable and rejects a different or case-twin observed image path before resume. Focused lifecycle tests passed (15, with one helper ignored); no fixed-account positive route or repository-use consumer exists. Ambiguous cleanup needs retained ownership before authority. See `docs/orchestrator/review_bundles/T-0483_R25_PRESPAWN_SOL_EXECUTABLE_LEASE_SOURCE.md`.
 - Signed/provisioned protected broker, trusted image/time, independently approved executable and fixed worker, exact three-job Windows CI, dev.84 reconciliation, protected reader cutover, real Sol cycle and fresh Chat53 remain open. No installed or browser state changed; P2/P3/P4 remain ordered.
+- Published `d49d238bba6324db3cf0385134fdc3212d6359c9` with local/origin parity. Full local root/Wake/Python/strict/build gates passed; clean BuildOnly produced unsigned diagnostic `1.0.0-dev.85-eaab41b4f47d-36e5cb743d19`. Exact SHA still has zero GitHub runs/checks after the bounded post-build readback, so remote CI acceptance is absent.
 
 ## 2026-10-15 — guarded Wake resume and prepared Sol run (SOURCE ONLY, CURRENT)
 

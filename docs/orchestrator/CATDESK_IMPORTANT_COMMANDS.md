@@ -1,10 +1,16 @@
 # CatDesk — Important Command Reference
 
+## Current legacy owner and Sol completion diagnostic boundary (2026-10-15)
+
+- R19's `inspect_legacy_owner_candidates()` has no arguments or install/cleanup authority. `NO_MATCHING_NAMED_PROCESS_IN_SNAPSHOT` means only no fixed-name process in one Toolhelp snapshot; a per-user pointer, pathname-text hash or opened lock never proves the old connected owner. See `docs/orchestrator/review_bundles/T-0485_R19_LEGACY_OWNER_CANDIDATE_INVENTORY_SOURCE.md`.
+- R26's private Sol `finish_normal` requires exact child success and empty Job without forced termination. Uncertain cleanup retains a typed attention owner; it cannot mint a deliverable or reissue a nonce. The same-user launcher, post-create Job assignment and in-memory attention remain diagnostic only. See `docs/orchestrator/review_bundles/T-0483_R26_SOL_NORMAL_COMPLETION_ATTENTION_OWNER_SOURCE.md`.
+- The latest clean committed BuildOnly is still `d49d238` / unsigned `1.0.0-dev.85-eaab41b4f47d-36e5cb743d19`; R19/R26 source is newer and has no signed package or exact three-job Windows CI. Keep protected install and new Chat53 held.
+
 ## Current broker clock and Sol launch diagnostic boundary (2026-10-15)
 
 - R18's `BrokerSelfClockPin` is read-only and succeeds only inside the exact fixed running SCM service process with retained protected-root and ledger-lock pins. Its OS UTC and current image file are diagnostic, not independent time or mapped-image proof. Do not feed this readback into `accept_with_observation` or treat it as install authority. See `docs/orchestrator/review_bundles/T-0485_R18_BROKER_SELF_CLOCK_DIAGNOSTIC_SOURCE.md`.
 - R25's private pre-spawn Sol owner requires a retained digest-checked executable handle and host-prepared task context before constructing the suspended child. The digest needs an independent policy source and the fixed-account launcher/ambiguous-failure owner are absent; no nonce burn, staging or repository-use consumer accepts it. See `docs/orchestrator/review_bundles/T-0483_R25_PRESPAWN_SOL_EXECUTABLE_LEASE_SOURCE.md`.
-- The last clean committed `wake/install.ps1 -BuildOnly` at `b55a219` produced unsigned diagnostic `1.0.0-dev.85-f395cd34e188-3602f852e59e`. It predates R18/R25 and cannot authorize install. The exact `b55a219` GitHub workflow/check counts were zero on bounded readback. No manual dispatch or Actions settings change; preserve the prior HTTP422 and missing `workflow_dispatch` as distinct evidence.
+- The last clean committed `wake/install.ps1 -BuildOnly` at `d49d238` produced unsigned diagnostic `1.0.0-dev.85-eaab41b4f47d-36e5cb743d19` (WakeHost SHA-256 `eaab41b4f47da3e146233b01abcae82bfd26e0f4d32c3500f1088575dd6608cf`; GUI `36e5cb743d19a5782395e33ca2c4cb2a2ae5209792151e145d165612efce71a0`). This includes R18/R25 source but cannot authorize install. Exact `d49d238` GitHub workflow/check counts remained zero after a bounded post-build readback. No manual dispatch or Actions settings change; preserve the prior HTTP422 and missing `workflow_dispatch` as distinct evidence.
 
 ## Current guarded resume and Sol preparation boundary (2026-10-15)
 

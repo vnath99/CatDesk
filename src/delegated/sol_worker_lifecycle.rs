@@ -18,8 +18,11 @@ use std::ffi::c_void;
 use std::os::windows::io::{AsRawHandle, BorrowedHandle, FromRawHandle, OwnedHandle};
 use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
-use std::process::{Child, Command};
+use std::process::{Child, Command, ExitStatus};
 use std::time::{Duration, Instant};
+
+#[cfg(test)]
+use std::cell::Cell;
 
 use crate::reviewed_source_snapshot::query_relative_directory_names_bounded;
 use crate::windows_protected_fs::{
@@ -50,6 +53,12 @@ const MAX_APPROVED_EXECUTABLE_BYTES: u64 = 128 * 1024 * 1024;
 const MAX_IMAGE_PATH_WCHARS: usize = 32 * 1024;
 const PROCESS_NAME_NATIVE: u32 = 1;
 const CSTR_EQUAL: i32 = 2;
+
+#[cfg(test)]
+thread_local! {
+    static FORCE_JOB_TERMINATE_FAILURE: Cell<bool> = const { Cell::new(false) };
+    static FORCE_JOB_ACCOUNTING_FAILURE: Cell<bool> = const { Cell::new(false) };
+}
 
 #[repr(C)]
 #[derive(Default)]
@@ -232,6 +241,10 @@ impl PrivateJob {
     }
 
     fn terminate(&self) -> Result<(), String> {
+        #[cfg(test)]
+        if FORCE_JOB_TERMINATE_FAILURE.with(Cell::get) {
+            return Err(format!("{LABEL} injected Job termination failure"));
+        }
         self.require_limits()?;
         if unsafe { TerminateJobObject(self.0.as_raw_handle(), 1) } == 0 {
             return Err(format!("{LABEL} Job termination failed"));
@@ -240,6 +253,10 @@ impl PrivateJob {
     }
 
     fn accounting(&self) -> Result<BasicAccounting, String> {
+        #[cfg(test)]
+        if FORCE_JOB_ACCOUNTING_FAILURE.with(Cell::get) {
+            return Err(format!("{LABEL} injected Job accounting failure"));
+        }
         let mut accounting = BasicAccounting::default();
         if unsafe {
             QueryInformationJobObject(
@@ -286,6 +303,72 @@ struct OwnedRunningJobChild {
     // Job drops first on every early return and terminates active members.
     job: PrivateJob,
     child: Option<Child>,
+}
+
+/// A failed transition may be reported as clean only after the exact child
+/// and Job have both been observed empty. Otherwise the caller must retain
+/// the owner; a String error would release its process and Job handles.
+enum ChildTransitionFailure<T> {
+    Clean(String),
+    Attention { reason: String, owner: T },
+}
+
+impl<T> std::fmt::Debug for ChildTransitionFailure<T> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Clean(reason) => formatter.debug_tuple("Clean").field(reason).finish(),
+            Self::Attention { reason, .. } => {
+                formatter.debug_tuple("Attention").field(reason).finish()
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+struct NormalDrainedJobV1;
+
+enum AttentionJobChild {
+    Suspended(OwnedSuspendedJobChild),
+    Running(OwnedRunningJobChild),
+}
+
+/// A private, non-cloneable owner for a Sol turn with uncertain termination.
+/// It carries no output, nonce-burn, staging, or repository-use capability.
+/// A future service must retain it in its attention registry until a retry
+/// proves the exact child terminal and the Job empty. The create-once nonce
+/// remains spent even if the host process itself exits.
+struct SolJobAttentionOwner {
+    reason: String,
+    child: AttentionJobChild,
+    prepared_run: PreparedSolRunV1,
+    executable: PinnedSolWorkerExecutableV1,
+    bound_worker: Option<BoundFixedLocalSolWorkerProcessV1>,
+}
+
+impl std::fmt::Debug for SolJobAttentionOwner {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_tuple("SolJobAttentionOwner")
+            .field(&self.reason)
+            .finish()
+    }
+}
+
+enum PreparedSolLifecycleFailure {
+    Clean(String),
+    Attention(Box<SolJobAttentionOwner>),
+}
+
+impl std::fmt::Debug for PreparedSolLifecycleFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Clean(reason) => formatter.debug_tuple("Clean").field(reason).finish(),
+            Self::Attention(owner) => formatter
+                .debug_tuple("Attention")
+                .field(&owner.reason)
+                .finish(),
+        }
+    }
 }
 
 /// Necessary host-held context for one future fixed-account run. This type
@@ -429,13 +512,89 @@ fn valid_executable_component(component: &str) -> bool {
 
 /// Consumes the run and image lease before constructing the child command.
 /// The current `Command` path inherits the host user and remains diagnostic;
-/// it cannot create a fixed-account witness on this host. An error can release
-/// the lease without a proved terminal child when bounded cleanup fails. A
-/// future positive launcher needs a retained attention owner for that case.
+/// it cannot create a fixed-account witness on this host. Uncertain cleanup
+/// returns a retained attention owner; a future service must hold that owner
+/// durably before this can become a positive launcher.
 struct PreparedSuspendedSolJobChild {
     suspended: OwnedSuspendedJobChild,
     prepared_run: PreparedSolRunV1,
     executable: PinnedSolWorkerExecutableV1,
+}
+
+impl SolJobAttentionOwner {
+    /// Retry only a bounded abort. This never turns an uncertain run into a
+    /// deliverable or permits a second nonce. A failed retry keeps ownership.
+    fn retry_abort(self: Box<Self>) -> Result<(), Box<Self>> {
+        let Self {
+            reason,
+            child,
+            prepared_run,
+            executable,
+            bound_worker,
+        } = *self;
+        let result = match child {
+            AttentionJobChild::Suspended(owner) => owner
+                .abort(reason)
+                .map_attention_child(AttentionJobChild::Suspended),
+            AttentionJobChild::Running(owner) => {
+                match owner.abort_and_drain(FAILED_LAUNCH_CLEANUP) {
+                    Ok(()) => return Ok(()),
+                    Err(ChildTransitionFailure::Clean(cleanup)) => {
+                        ChildTransitionFailure::Clean(format!("{reason}; {cleanup}"))
+                    }
+                    Err(ChildTransitionFailure::Attention {
+                        reason: cleanup,
+                        owner,
+                    }) => ChildTransitionFailure::Attention {
+                        reason: format!("{reason}; {cleanup}"),
+                        owner: AttentionJobChild::Running(owner),
+                    },
+                }
+            }
+        };
+        match result {
+            ChildTransitionFailure::Clean(_) => Ok(()),
+            ChildTransitionFailure::Attention { reason, owner } => Err(Box::new(Self {
+                reason,
+                child: owner,
+                prepared_run,
+                executable,
+                bound_worker,
+            })),
+        }
+    }
+}
+
+impl<T> ChildTransitionFailure<T> {
+    fn map_attention_child<U>(self, into: impl FnOnce(T) -> U) -> ChildTransitionFailure<U> {
+        match self {
+            Self::Clean(reason) => ChildTransitionFailure::Clean(reason),
+            Self::Attention { reason, owner } => ChildTransitionFailure::Attention {
+                reason,
+                owner: into(owner),
+            },
+        }
+    }
+}
+
+fn prepared_failure(
+    failure: ChildTransitionFailure<AttentionJobChild>,
+    prepared_run: PreparedSolRunV1,
+    executable: PinnedSolWorkerExecutableV1,
+    bound_worker: Option<BoundFixedLocalSolWorkerProcessV1>,
+) -> PreparedSolLifecycleFailure {
+    match failure {
+        ChildTransitionFailure::Clean(reason) => PreparedSolLifecycleFailure::Clean(reason),
+        ChildTransitionFailure::Attention { reason, owner } => {
+            PreparedSolLifecycleFailure::Attention(Box::new(SolJobAttentionOwner {
+                reason,
+                child: owner,
+                prepared_run,
+                executable,
+                bound_worker,
+            }))
+        }
+    }
 }
 
 impl PreparedSuspendedSolJobChild {
@@ -443,24 +602,60 @@ impl PreparedSuspendedSolJobChild {
         prepared_run: PreparedSolRunV1,
         executable: PinnedSolWorkerExecutableV1,
         configure: F,
-    ) -> Result<Self, String>
+    ) -> Result<Self, PreparedSolLifecycleFailure>
     where
         F: FnOnce(&mut Command),
     {
-        prepared_run.require_ready()?;
-        executable.parent.assert_stable(LABEL)?;
+        prepared_run
+            .require_ready()
+            .map_err(PreparedSolLifecycleFailure::Clean)?;
+        executable
+            .parent
+            .assert_stable(LABEL)
+            .map_err(PreparedSolLifecycleFailure::Clean)?;
         let mut command = Command::new(executable.launch_path());
         configure(&mut command);
-        let suspended = OwnedSuspendedJobChild::launch_suspended(&mut command)?;
+        let suspended = match OwnedSuspendedJobChild::launch_suspended(&mut command) {
+            Ok(owner) => owner,
+            Err(failure) => {
+                return Err(prepared_failure(
+                    failure.map_attention_child(AttentionJobChild::Suspended),
+                    prepared_run,
+                    executable,
+                    None,
+                ));
+            }
+        };
         let Some(child) = suspended.child.as_ref() else {
-            return Err(suspended.abort(format!("{LABEL} original child missing")));
+            return Err(prepared_failure(
+                suspended
+                    .abort(format!("{LABEL} original child missing"))
+                    .map_attention_child(AttentionJobChild::Suspended),
+                prepared_run,
+                executable,
+                None,
+            ));
         };
         let opened = unsafe { BorrowedHandle::borrow_raw(child.as_raw_handle()) };
         if let Err(error) = executable.require_same_image_path(opened) {
-            return Err(suspended.abort(error));
+            return Err(prepared_failure(
+                suspended
+                    .abort(error)
+                    .map_attention_child(AttentionJobChild::Suspended),
+                prepared_run,
+                executable,
+                None,
+            ));
         }
         if let Err(error) = prepared_run.require_ready() {
-            return Err(suspended.abort(error));
+            return Err(prepared_failure(
+                suspended
+                    .abort(error)
+                    .map_attention_child(AttentionJobChild::Suspended),
+                prepared_run,
+                executable,
+                None,
+            ));
         }
         Ok(Self {
             suspended,
@@ -474,26 +669,64 @@ impl PreparedSuspendedSolJobChild {
     fn bind_and_resume_fixed(
         self,
         bound_worker: BoundFixedLocalSolWorkerProcessV1,
-    ) -> Result<BoundFixedWorkerJobChild, String> {
+    ) -> Result<BoundFixedWorkerJobChild, PreparedSolLifecycleFailure> {
         let Self {
             suspended,
             prepared_run,
             executable,
         } = self;
         let Some(child) = suspended.child.as_ref() else {
-            return Err(suspended.abort(format!("{LABEL} original child missing")));
+            return Err(prepared_failure(
+                suspended
+                    .abort(format!("{LABEL} original child missing"))
+                    .map_attention_child(AttentionJobChild::Suspended),
+                prepared_run,
+                executable,
+                Some(bound_worker),
+            ));
         };
         let opened = unsafe { BorrowedHandle::borrow_raw(child.as_raw_handle()) };
         if let Err(error) = bound_worker.require_same_opened_process(opened) {
-            return Err(suspended.abort(error));
+            return Err(prepared_failure(
+                suspended
+                    .abort(error)
+                    .map_attention_child(AttentionJobChild::Suspended),
+                prepared_run,
+                executable,
+                Some(bound_worker),
+            ));
         }
         if let Err(error) = executable.require_same_image_path(opened) {
-            return Err(suspended.abort(error));
+            return Err(prepared_failure(
+                suspended
+                    .abort(error)
+                    .map_attention_child(AttentionJobChild::Suspended),
+                prepared_run,
+                executable,
+                Some(bound_worker),
+            ));
         }
         if let Err(error) = prepared_run.require_ready() {
-            return Err(suspended.abort(error));
+            return Err(prepared_failure(
+                suspended
+                    .abort(error)
+                    .map_attention_child(AttentionJobChild::Suspended),
+                prepared_run,
+                executable,
+                Some(bound_worker),
+            ));
         }
-        let running = suspended.resume()?;
+        let running = match suspended.resume() {
+            Ok(owner) => owner,
+            Err(failure) => {
+                return Err(prepared_failure(
+                    failure.map_attention_child(AttentionJobChild::Suspended),
+                    prepared_run,
+                    executable,
+                    Some(bound_worker),
+                ));
+            }
+        };
         Ok(BoundFixedWorkerJobChild {
             running,
             bound_worker,
@@ -573,7 +806,17 @@ pub(crate) struct DrainedBoundFixedWorkerJobV1 {
 /// `Child::wait` after ignoring a termination failure.
 fn terminate_original_child_bounded(child: &mut Child) -> Result<(), String> {
     match unsafe { WaitForSingleObject(child.as_raw_handle(), 0) } {
-        WAIT_OBJECT_0 => return Ok(()),
+        WAIT_OBJECT_0 => {
+            return if child
+                .try_wait()
+                .map_err(|_| format!("{LABEL} original child status unavailable"))?
+                .is_some()
+            {
+                Ok(())
+            } else {
+                Err(format!("{LABEL} original child status is not terminal"))
+            };
+        }
         WAIT_TIMEOUT => {}
         _ => return Err(format!("{LABEL} original child state unavailable")),
     }
@@ -585,7 +828,17 @@ fn terminate_original_child_bounded(child: &mut Child) -> Result<(), String> {
     let deadline = Instant::now() + FAILED_LAUNCH_CLEANUP;
     loop {
         match unsafe { WaitForSingleObject(child.as_raw_handle(), 0) } {
-            WAIT_OBJECT_0 => return Ok(()),
+            WAIT_OBJECT_0 => {
+                return if child
+                    .try_wait()
+                    .map_err(|_| format!("{LABEL} original child status unavailable"))?
+                    .is_some()
+                {
+                    Ok(())
+                } else {
+                    Err(format!("{LABEL} original child status is not terminal"))
+                };
+            }
             WAIT_TIMEOUT if Instant::now() < deadline => std::thread::sleep(POLL),
             WAIT_TIMEOUT => return Err(format!("{LABEL} original child termination timed out")),
             _ => return Err(format!("{LABEL} original child wait unavailable")),
@@ -593,44 +846,106 @@ fn terminate_original_child_bounded(child: &mut Child) -> Result<(), String> {
     }
 }
 
-impl OwnedSuspendedJobChild {
-    fn launch_suspended(command: &mut Command) -> Result<Self, String> {
-        let job = PrivateJob::create()?;
-        command.creation_flags(CREATE_SUSPENDED);
-        let mut child = command
-            .spawn()
-            .map_err(|_| format!("{LABEL} suspended launch failed"))?;
-        if let Err(error) = job.assign_and_check(&child) {
-            return match terminate_original_child_bounded(&mut child) {
-                Ok(()) => Err(error),
-                Err(cleanup) => Err(format!("{error}; {cleanup}")),
-            };
+fn wait_original_child_until(
+    child: &mut Child,
+    deadline: Instant,
+) -> Result<Option<ExitStatus>, String> {
+    loop {
+        match unsafe { WaitForSingleObject(child.as_raw_handle(), 0) } {
+            WAIT_OBJECT_0 => {
+                return child
+                    .try_wait()
+                    .map_err(|_| format!("{LABEL} original child status unavailable"))?
+                    .map(Some)
+                    .ok_or_else(|| format!("{LABEL} original child status is not terminal"));
+            }
+            WAIT_TIMEOUT if Instant::now() < deadline => std::thread::sleep(POLL),
+            WAIT_TIMEOUT => return Ok(None),
+            _ => return Err(format!("{LABEL} original child wait unavailable")),
         }
-        Ok(Self {
+    }
+}
+
+fn job_empty_until(
+    job: &PrivateJob,
+    deadline: Instant,
+    require_member: bool,
+) -> Result<bool, String> {
+    loop {
+        job.require_limits()?;
+        let state = job.accounting()?;
+        if (!require_member || state.total_processes >= 1)
+            && state.active_processes == 0
+            && job.process_list_empty()?
+        {
+            return Ok(true);
+        }
+        if Instant::now() >= deadline {
+            return Ok(false);
+        }
+        std::thread::sleep(POLL);
+    }
+}
+
+impl OwnedSuspendedJobChild {
+    fn launch_suspended(command: &mut Command) -> Result<Self, ChildTransitionFailure<Self>> {
+        let job = PrivateJob::create().map_err(ChildTransitionFailure::Clean)?;
+        command.creation_flags(CREATE_SUSPENDED);
+        let child = command.spawn().map_err(|_| {
+            ChildTransitionFailure::Clean(format!("{LABEL} suspended launch failed"))
+        })?;
+        let owner = Self {
             job,
             child: Some(child),
-        })
+        };
+        if let Err(error) = owner
+            .job
+            .assign_and_check(owner.child.as_ref().expect("just assigned child"))
+        {
+            return Err(owner.abort(error));
+        }
+        Ok(owner)
     }
 
-    fn launch(command: &mut Command) -> Result<OwnedRunningJobChild, String> {
+    fn launch(command: &mut Command) -> Result<OwnedRunningJobChild, ChildTransitionFailure<Self>> {
         Self::launch_suspended(command)?.resume()
     }
 
-    fn abort(mut self, error: String) -> String {
-        let job_error = self.job.terminate().err();
-        let child_error = self
-            .child
-            .take()
-            .and_then(|mut child| terminate_original_child_bounded(&mut child).err());
-        match (job_error, child_error) {
-            (None, None) => error,
-            (Some(job), None) => format!("{error}; {job}"),
-            (None, Some(child)) => format!("{error}; {child}"),
-            (Some(job), Some(child)) => format!("{error}; {job}; {child}"),
+    fn abort(mut self, error: String) -> ChildTransitionFailure<Self> {
+        let mut reasons = vec![error];
+        if let Err(job_error) = self.job.terminate() {
+            reasons.push(job_error);
+        }
+        match self.child.as_mut() {
+            Some(child) => {
+                if let Err(child_error) = terminate_original_child_bounded(child) {
+                    reasons.push(child_error);
+                }
+            }
+            None => reasons.push(format!("{LABEL} original child missing")),
+        }
+        if reasons.len() > 1 {
+            return ChildTransitionFailure::Attention {
+                reason: reasons.join("; "),
+                owner: self,
+            };
+        }
+        match job_empty_until(&self.job, Instant::now() + FAILED_LAUNCH_CLEANUP, false) {
+            Ok(true) => {}
+            Ok(false) => reasons.push(format!("{LABEL} Job still has active processes")),
+            Err(job_error) => reasons.push(job_error),
+        }
+        if reasons.len() == 1 {
+            ChildTransitionFailure::Clean(reasons.remove(0))
+        } else {
+            ChildTransitionFailure::Attention {
+                reason: reasons.join("; "),
+                owner: self,
+            }
         }
     }
 
-    fn resume(self) -> Result<OwnedRunningJobChild, String> {
+    fn resume(self) -> Result<OwnedRunningJobChild, ChildTransitionFailure<Self>> {
         let Some(child) = self.child.as_ref() else {
             return Err(self.abort(format!("{LABEL} original child missing")));
         };
@@ -646,64 +961,139 @@ impl OwnedSuspendedJobChild {
 }
 
 impl OwnedRunningJobChild {
-    /// Consume the owner and return a diagnostic only. The child is waited
-    /// on through its original handle; its handle is then released before
-    /// checking the retained Job's active-process count and bounded process
-    /// ID list. Nonzero counts, unavailable queries or deadline expiry fail
-    /// closed.
-    fn finish(mut self, timeout: Duration) -> Result<(), String> {
+    /// Abort the exact child and all Job members, retaining every handle if
+    /// termination or drain cannot be proved. This path grants no witness.
+    fn abort_and_drain(mut self, timeout: Duration) -> Result<(), ChildTransitionFailure<Self>> {
         if timeout.is_zero() || timeout > MAX_DRAIN {
-            return Err(format!("{LABEL} drain deadline invalid"));
+            return Err(ChildTransitionFailure::Attention {
+                reason: format!("{LABEL} drain deadline invalid"),
+                owner: self,
+            });
         }
         let deadline = Instant::now() + timeout;
-        self.job.terminate()?;
-        let mut child = self
-            .child
-            .take()
-            .ok_or_else(|| format!("{LABEL} original child missing"))?;
-        loop {
-            match unsafe { WaitForSingleObject(child.as_raw_handle(), 0) } {
-                WAIT_OBJECT_0 => break,
-                WAIT_TIMEOUT if Instant::now() < deadline => std::thread::sleep(POLL),
-                WAIT_TIMEOUT => return Err(format!("{LABEL} original child still running")),
-                _ => return Err(format!("{LABEL} original child wait unavailable")),
+        let mut reasons = Vec::new();
+        if let Err(error) = self.job.terminate() {
+            reasons.push(error);
+            if let Some(child) = self.child.as_mut() {
+                if let Err(child_error) = terminate_original_child_bounded(child) {
+                    reasons.push(child_error);
+                }
+            }
+            return Err(ChildTransitionFailure::Attention {
+                reason: reasons.join("; "),
+                owner: self,
+            });
+        }
+        match self.child.as_mut() {
+            Some(child) => match wait_original_child_until(child, deadline) {
+                Ok(Some(_)) => {}
+                Ok(None) => reasons.push(format!("{LABEL} original child still running")),
+                Err(error) => reasons.push(error),
+            },
+            None => reasons.push(format!("{LABEL} original child missing")),
+        }
+        match job_empty_until(&self.job, deadline, true) {
+            Ok(true) => {}
+            Ok(false) => reasons.push(format!("{LABEL} Job still has active processes")),
+            Err(error) => reasons.push(error),
+        }
+        if reasons.is_empty() {
+            Ok(())
+        } else {
+            Err(ChildTransitionFailure::Attention {
+                reason: reasons.join("; "),
+                owner: self,
+            })
+        }
+    }
+
+    fn failed_normal_completion(self, reason: String) -> ChildTransitionFailure<Self> {
+        match self.abort_and_drain(FAILED_LAUNCH_CLEANUP) {
+            Ok(()) => ChildTransitionFailure::Clean(reason),
+            Err(ChildTransitionFailure::Attention {
+                reason: cleanup,
+                owner,
+            }) => ChildTransitionFailure::Attention {
+                reason: format!("{reason}; {cleanup}"),
+                owner,
+            },
+            Err(ChildTransitionFailure::Clean(cleanup)) => {
+                ChildTransitionFailure::Clean(format!("{reason}; {cleanup}"))
             }
         }
-        if child
-            .try_wait()
-            .map_err(|_| format!("{LABEL} original child status unavailable"))?
-            .is_none()
-        {
-            return Err(format!("{LABEL} original child status is not terminal"));
+    }
+
+    /// A normal witness requires the exact original process to exit zero and
+    /// the complete retained Job to empty without first killing its members.
+    /// Failure triggers a bounded abort; uncertain cleanup retains ownership.
+    fn finish_normal(
+        mut self,
+        timeout: Duration,
+    ) -> Result<NormalDrainedJobV1, ChildTransitionFailure<Self>> {
+        if timeout.is_zero() || timeout > MAX_DRAIN {
+            return Err(ChildTransitionFailure::Attention {
+                reason: format!("{LABEL} normal completion deadline invalid"),
+                owner: self,
+            });
         }
-        drop(child);
-        loop {
-            self.job.require_limits()?;
-            let state = self.job.accounting()?;
-            if state.total_processes >= 1
-                && state.active_processes == 0
-                && self.job.process_list_empty()?
-            {
-                return Ok(());
+        let deadline = Instant::now() + timeout;
+        let status = match self.child.as_mut() {
+            Some(child) => match wait_original_child_until(child, deadline) {
+                Ok(Some(status)) => status,
+                Ok(None) => {
+                    return Err(self.failed_normal_completion(format!(
+                        "{LABEL} normal original child timed out"
+                    )));
+                }
+                Err(error) => return Err(self.failed_normal_completion(error)),
+            },
+            None => {
+                return Err(
+                    self.failed_normal_completion(format!("{LABEL} original child missing"))
+                );
             }
-            if Instant::now() >= deadline {
-                return Err(format!("{LABEL} Job still has active processes"));
-            }
-            std::thread::sleep(POLL);
+        };
+        if !status.success() {
+            return Err(self.failed_normal_completion(format!(
+                "{LABEL} original child exited unsuccessfully"
+            )));
+        }
+        match job_empty_until(&self.job, deadline, true) {
+            Ok(true) => Ok(NormalDrainedJobV1),
+            Ok(false) => Err(self.failed_normal_completion(format!(
+                "{LABEL} Job did not drain after normal child exit"
+            ))),
+            Err(error) => Err(self.failed_normal_completion(error)),
         }
     }
 }
 
 impl BoundFixedWorkerJobChild {
-    /// A normal worker may already have exited at this point, so the live
-    /// token observation is intentionally checked before resume, not here.
-    /// This only drains the original and Job-associated processes.
-    fn finish(self, timeout: Duration) -> Result<DrainedBoundFixedWorkerJobV1, String> {
-        self.running.finish(timeout)?;
+    /// The process-token observation is checked before resume because a
+    /// normally completed worker has exited here. This accepts only a zero
+    /// exit and empty Job; failure or forced abort mints no drained witness.
+    fn finish(
+        self,
+        timeout: Duration,
+    ) -> Result<DrainedBoundFixedWorkerJobV1, PreparedSolLifecycleFailure> {
+        let Self {
+            running,
+            bound_worker,
+            prepared_run,
+            executable,
+        } = self;
+        if let Err(failure) = running.finish_normal(timeout) {
+            return Err(prepared_failure(
+                failure.map_attention_child(AttentionJobChild::Running),
+                prepared_run,
+                executable,
+                Some(bound_worker),
+            ));
+        }
         Ok(DrainedBoundFixedWorkerJobV1 {
-            _bound_worker: self.bound_worker,
-            _prepared_run: self.prepared_run,
-            _executable: self.executable,
+            _bound_worker: bound_worker,
+            _prepared_run: prepared_run,
+            _executable: executable,
         })
     }
 }
@@ -722,6 +1112,15 @@ mod tests {
     use super::super::sol_worker_token_security::require_same_opened_process_object;
 
     const HELPER: &str = "delegated::sol_worker_lifecycle::tests::sleep_helper";
+
+    fn assert_clean_failure<T>(failure: ChildTransitionFailure<T>, expected: &str) {
+        match failure {
+            ChildTransitionFailure::Clean(reason) => assert_eq!(reason, expected),
+            ChildTransitionFailure::Attention { reason, .. } => {
+                panic!("expected proved cleanup, received attention: {reason}")
+            }
+        }
+    }
 
     struct PreparationFixture {
         base: PathBuf,
@@ -821,7 +1220,9 @@ mod tests {
         let Ok(level) = std::env::var("CATDESK_SOL_LIFECYCLE_HELPER_LEVEL") else {
             return;
         };
-        if level == "parent" {
+        if level == "failure" {
+            std::process::exit(7);
+        } else if level == "parent" {
             let mut descendant = helper_command("descendant")
                 .spawn()
                 .expect("spawn descendant");
@@ -830,6 +1231,114 @@ mod tests {
         } else if level == "descendant" {
             std::thread::sleep(Duration::from_secs(20));
         }
+    }
+
+    #[test]
+    fn normal_success_drains_without_forced_job_termination() {
+        let mut command = helper_command("success");
+        let owner = OwnedSuspendedJobChild::launch(&mut command).expect("launch in exact Job");
+        FORCE_JOB_TERMINATE_FAILURE.with(|slot| slot.set(true));
+        let result = owner.finish_normal(Duration::from_secs(5));
+        FORCE_JOB_TERMINATE_FAILURE.with(|slot| slot.set(false));
+        result.expect("normal zero exit and empty Job without forced termination");
+    }
+
+    #[test]
+    fn nonzero_exit_cannot_mint_normal_drained_witness() {
+        let mut command = helper_command("failure");
+        let owner = OwnedSuspendedJobChild::launch(&mut command).expect("launch in exact Job");
+        match owner.finish_normal(Duration::from_secs(5)) {
+            Err(ChildTransitionFailure::Clean(reason)) => {
+                assert!(reason.contains("exited unsuccessfully"));
+            }
+            Err(ChildTransitionFailure::Attention { reason, .. }) => {
+                panic!("unexpected uncertain drain: {reason}")
+            }
+            Ok(_) => panic!("failed worker cannot mint normal witness"),
+        }
+    }
+
+    #[test]
+    fn timeout_with_failed_termination_retains_exact_running_owner() {
+        let mut command = helper_command("descendant");
+        let owner = OwnedSuspendedJobChild::launch(&mut command).expect("launch in exact Job");
+        FORCE_JOB_TERMINATE_FAILURE.with(|slot| slot.set(true));
+        let failure = owner
+            .finish_normal(Duration::from_millis(1))
+            .expect_err("sleeping child must not complete normally");
+        FORCE_JOB_TERMINATE_FAILURE.with(|slot| slot.set(false));
+        let owner = match failure {
+            ChildTransitionFailure::Attention { reason, owner } => {
+                assert!(reason.contains("timed out"));
+                assert!(reason.contains("injected Job termination failure"));
+                assert!(owner.child.is_some(), "exact child handle remains owned");
+                owner
+            }
+            ChildTransitionFailure::Clean(reason) => {
+                panic!("termination uncertainty lost its owner: {reason}")
+            }
+        };
+        owner
+            .abort_and_drain(Duration::from_secs(5))
+            .expect("retry abort proves exact child and Job drain");
+    }
+
+    #[test]
+    fn failed_job_readback_retains_owner_after_child_exit() {
+        let mut command = helper_command("success");
+        let owner = OwnedSuspendedJobChild::launch(&mut command).expect("launch in exact Job");
+        FORCE_JOB_ACCOUNTING_FAILURE.with(|slot| slot.set(true));
+        let failure = owner
+            .finish_normal(Duration::from_secs(5))
+            .expect_err("unavailable Job readback must reject witness");
+        FORCE_JOB_ACCOUNTING_FAILURE.with(|slot| slot.set(false));
+        let owner = match failure {
+            ChildTransitionFailure::Attention { reason, owner } => {
+                assert!(reason.contains("injected Job accounting failure"));
+                assert!(owner.child.is_some());
+                owner
+            }
+            ChildTransitionFailure::Clean(reason) => {
+                panic!("Job readback uncertainty lost its owner: {reason}")
+            }
+        };
+        owner
+            .abort_and_drain(Duration::from_secs(5))
+            .expect("retry obtains complete Job readback");
+    }
+
+    #[test]
+    fn prepared_launch_failure_retains_turn_and_image_lease_in_attention() {
+        let fixture = PreparationFixture::new();
+        let prepared = fixture.prepare().expect("prepare one host turn");
+        let selected = prepared.nonce.clone();
+        let executable = pin_current_test_executable();
+        let expected_image = executable.reviewed.identity.sha256.clone();
+        let added = fixture.output_path.join("late.txt");
+        FORCE_JOB_TERMINATE_FAILURE.with(|slot| slot.set(true));
+        let result = PreparedSuspendedSolJobChild::launch(prepared, executable, |command| {
+            configure_helper_command(command, "descendant");
+            fs::write(&added, b"late").expect("change output before launch recheck");
+        });
+        FORCE_JOB_TERMINATE_FAILURE.with(|slot| slot.set(false));
+        let attention = match result {
+            Err(PreparedSolLifecycleFailure::Attention(owner)) => owner,
+            Err(PreparedSolLifecycleFailure::Clean(reason)) => {
+                panic!("ambiguous cleanup lost prepared run: {reason}")
+            }
+            Ok(_) => panic!("changed output must reject prepared launch"),
+        };
+        assert_eq!(attention.prepared_run.nonce, selected);
+        assert_eq!(
+            attention.executable.reviewed.identity.sha256,
+            expected_image
+        );
+        assert!(matches!(&attention.child, AttentionJobChild::Suspended(_)));
+        attention
+            .retry_abort()
+            .expect("retry proves terminal suspended child and empty Job");
+        fs::remove_file(added).expect("remove exact test output");
+        fixture.cleanup();
     }
 
     #[test]
@@ -850,7 +1359,9 @@ mod tests {
         );
         assert_eq!(exact_member, 1);
         assert!(!owner.job.process_list_empty().expect("one Job member"));
-        owner.finish(Duration::from_secs(5)).expect("drain Job");
+        owner
+            .abort_and_drain(Duration::from_secs(5))
+            .expect("abort and drain Job");
     }
 
     #[test]
@@ -858,14 +1369,19 @@ mod tests {
         let _: fn(
             PreparedSuspendedSolJobChild,
             BoundFixedLocalSolWorkerProcessV1,
-        ) -> Result<BoundFixedWorkerJobChild, String> =
+        ) -> Result<BoundFixedWorkerJobChild, PreparedSolLifecycleFailure> =
             PreparedSuspendedSolJobChild::bind_and_resume_fixed;
         let _: fn(
             BoundFixedWorkerJobChild,
             Duration,
-        ) -> Result<DrainedBoundFixedWorkerJobV1, String> = BoundFixedWorkerJobChild::finish;
-        let _: fn(OwnedRunningJobChild, Duration) -> Result<(), String> =
-            OwnedRunningJobChild::finish;
+        ) -> Result<DrainedBoundFixedWorkerJobV1, PreparedSolLifecycleFailure> =
+            BoundFixedWorkerJobChild::finish;
+        let _: fn(
+            OwnedRunningJobChild,
+            Duration,
+        )
+            -> Result<NormalDrainedJobV1, ChildTransitionFailure<OwnedRunningJobChild>> =
+            OwnedRunningJobChild::finish_normal;
     }
 
     #[test]
@@ -965,7 +1481,7 @@ mod tests {
             prepared_run,
             executable,
         } = owner;
-        assert_eq!(suspended.abort("diagnostic only".into()), "diagnostic only");
+        assert_clean_failure(suspended.abort("diagnostic only".into()), "diagnostic only");
         drop(prepared_run);
         drop(executable);
         fixture.cleanup();
@@ -986,7 +1502,7 @@ mod tests {
         let child = owner.child.as_ref().expect("original child");
         let opened = unsafe { BorrowedHandle::borrow_raw(child.as_raw_handle()) };
         assert!(lease.require_same_image_path(opened).is_err());
-        assert_eq!(owner.abort("image mismatch".into()), "image mismatch");
+        assert_clean_failure(owner.abort("image mismatch".into()), "image mismatch");
         drop(lease);
         fs::remove_file(other).expect("remove other image");
         fixture.cleanup();
@@ -1119,8 +1635,8 @@ mod tests {
         prepared
             .require_ready()
             .expect("host context remains prepared");
-        assert_eq!(first.abort("diagnostic only".into()), "diagnostic only");
-        assert_eq!(second.abort("diagnostic only".into()), "diagnostic only");
+        assert_clean_failure(first.abort("diagnostic only".into()), "diagnostic only");
+        assert_clean_failure(second.abort("diagnostic only".into()), "diagnostic only");
         drop(prepared);
         fixture.cleanup();
     }
@@ -1139,7 +1655,7 @@ mod tests {
             std::thread::sleep(POLL);
         }
         owner
-            .finish(Duration::from_secs(5))
+            .abort_and_drain(Duration::from_secs(5))
             .expect("drain child and descendant");
     }
 
@@ -1158,7 +1674,7 @@ mod tests {
         };
         let observer = opened.try_clone_to_owned().expect("retain opened process");
         owner
-            .finish(Duration::from_secs(5))
+            .abort_and_drain(Duration::from_secs(5))
             .expect("drain despite retained process observation");
         drop(observer);
     }
@@ -1167,7 +1683,13 @@ mod tests {
     fn invalid_deadline_cannot_return_a_drain_observation() {
         let mut command = helper_command("descendant");
         let owner = OwnedSuspendedJobChild::launch(&mut command).expect("launch in exact Job");
-        assert!(owner.finish(Duration::ZERO).is_err());
+        let owner = match owner.abort_and_drain(Duration::ZERO) {
+            Err(ChildTransitionFailure::Attention { owner, .. }) => owner,
+            _ => panic!("invalid deadline must retain its exact Job owner"),
+        };
+        owner
+            .abort_and_drain(Duration::from_secs(5))
+            .expect("retry abort drains exact Job");
     }
 
     #[test]

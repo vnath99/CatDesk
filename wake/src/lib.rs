@@ -14,6 +14,8 @@ pub(crate) mod install_broker_durability;
 pub mod install_broker_endpoint;
 #[cfg(windows)]
 pub mod install_broker_ledger;
+#[cfg(windows)]
+pub mod install_broker_legacy_owner;
 pub mod install_broker_operator;
 #[cfg(windows)]
 pub mod install_broker_policy;
