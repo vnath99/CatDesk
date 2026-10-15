@@ -1,5 +1,9 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-15 private Sol process/Job drain source checkpoint
+
+A dormant private Windows owner creates a suspended helper, assigns and verifies it in an unnamed noninheritable kill-on-close/no-breakaway Job before resume, and returns only a bounded diagnostic after original-process exit, zero active Job processes and an empty PID list. Failed assignment cleanup is bounded. Four focused tests passed; see `docs/orchestrator/review_bundles/T-0483_R22_PRIVATE_SOL_JOB_DRAIN_SOURCE.md`. This is same-user mechanics, not a fixed-account restricted launcher or a stopped-worker repository-use proof. The worker account is absent, escaped descendants/inherited handles/ancestor ACL exclusion and durable burn-to-stage handoff remain, and no real Sol→review→Wake cycle is accepted.
+
 ## 2026-10-15 fixed-worker host stage boundary (source only)
 
 The dormant host-stage entry now requires the opaque R20 binding of the fixed `CatDeskSolWorker` account to an opened restricted process token. The supplied-SID ACL audit and bare stage/readback path became module-private; the crate-visible stage type retains and revalidates the fixed worker binding around readback. Eleven focused Windows stage tests and eight fixed-account tests passed, along with strict Clippy, formatting and diff checks. The fixed account is absent on this host, so there was no positive live worker stage. A trusted launch, descendants, ancestor and inherited-handle rights, durable burn-to-stage handoff, and a stopped-worker proof before repository use remain open; current readback still requires the process to be live. No live Sol review/Wake cycle occurred. See `docs/orchestrator/review_bundles/T-0483_R21_FIXED_WORKER_STAGE_BOUNDARY_SOURCE.md`.

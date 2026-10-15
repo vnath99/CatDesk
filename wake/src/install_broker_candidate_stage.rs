@@ -625,6 +625,77 @@ fn inspect_pinned(
     })
 }
 
+/// Inspect the exact fixed slot through a root already pinned by the broker's
+/// global transaction guard. This still proves bytes only; the writer must
+/// retain its fresh-create handles and bind their identities in the ledger.
+pub(crate) fn inspect_stage_under_guard(
+    root: &OwnedHandle,
+    root_id: &ObjectIdentityV1,
+    approval: &VerifiedApprovalV1,
+    service_sid: &str,
+) -> Result<BrokerCandidateStageReadbackV1> {
+    let policy = StagePolicy::production(service_sid)?;
+    inspect_pinned(root, root_id, approval, &policy)
+}
+
+/// Refuse every residual or foreign staging entry before the first stage
+/// create. A collision after this check is still a hard failure, never reuse.
+pub(crate) fn require_empty_staging_under_guard(
+    root: &OwnedHandle,
+    root_id: &ObjectIdentityV1,
+    service_sid: &str,
+) -> Result<()> {
+    let policy = StagePolicy::production(service_sid)?;
+    let root_info = info(root.as_raw_handle(), true)?;
+    if identity(&root_info) != *root_id {
+        return Err("WAKE_BROKER_STAGE_ROOT_CHANGED".into());
+    }
+    require_security(root.as_raw_handle(), &policy.root)?;
+    let staging = open_relative(root, STAGING_NAME, true)?;
+    let staging_info = info(staging.as_raw_handle(), true)?;
+    if staging_info.volume != root_info.volume {
+        return Err("WAKE_BROKER_STAGE_OBJECT_INVALID".into());
+    }
+    require_security(staging.as_raw_handle(), &policy.staging)?;
+    exact_inventory(&staging, &[])?;
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn require_empty_staging_fixture(root: &OwnedHandle) -> Result<()> {
+    let staging = open_relative(root, STAGING_NAME, true)?;
+    exact_inventory(&staging, &[])
+}
+
+#[cfg(test)]
+pub(crate) fn inspect_stage_fixture(
+    root: &OwnedHandle,
+    root_id: &ObjectIdentityV1,
+    approval: &VerifiedApprovalV1,
+) -> Result<BrokerCandidateStageReadbackV1> {
+    let staging = open_relative(root, STAGING_NAME, true)?;
+    let candidate = open_relative(&staging, SLOT_NAME, true)?;
+    let manifest = open_relative(&candidate, MANIFEST_NAME, false)?;
+    let mut artifacts = Vec::with_capacity(4);
+    for name in ARTIFACT_NAMES {
+        let file = open_relative(&candidate, name, false)?;
+        artifacts.push(security(file.as_raw_handle())?);
+    }
+    let policy = StagePolicy {
+        root: security(root.as_raw_handle())?,
+        staging: security(staging.as_raw_handle())?,
+        candidate: security(candidate.as_raw_handle())?,
+        manifest: security(manifest.as_raw_handle())?,
+        artifacts: artifacts
+            .try_into()
+            .map_err(|_| "WAKE_BROKER_STAGE_INVENTORY_MISMATCH")?,
+    };
+    drop(manifest);
+    drop(candidate);
+    drop(staging);
+    inspect_pinned(root, root_id, approval, &policy)
+}
+
 /// Inspect exactly `C:\ProgramData\CatDesk\WakeProtectedInstallV1\staging\candidate`.
 /// Verify the envelope with the independently pinned protected policy key and
 /// broker-owned observations, then inspect the fixed stage. This check grants

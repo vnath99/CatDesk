@@ -23,6 +23,8 @@ use crate::{
     install_broker_approval::{
         BrokerObservedStateV1, ObjectIdentityV1, VerifiedApprovalV1, verify_approval,
     },
+    install_broker_policy::{BrokerProtectedPolicyV1, PolicyVerifiedApprovalV1},
+    install_broker_stage_writer::BrokerStageReceiptV1,
 };
 use ed25519_dalek::VerifyingKey;
 use serde::{Deserialize, Serialize};
@@ -199,6 +201,65 @@ pub struct LedgerExpectationV1 {
     pub original_desired_state: OriginalDesiredStateV1,
 }
 
+/// Physical objects created and retained by the broker's protected stage
+/// writer. These identities are persisted in STAGED and every later phase.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StageBindingV1 {
+    pub staging_directory: ObjectIdentityV1,
+    pub candidate_directory: ObjectIdentityV1,
+    pub manifest_file: ObjectIdentityV1,
+    pub artifacts: [ObjectIdentityV1; 4],
+}
+
+/// The exact signature and protected trust root accepted with INTENT. Every
+/// subsequent record repeats this binding, including after crash recovery.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct ApprovalContinuityV1 {
+    pub(crate) signed_envelope_sha256: String,
+    pub(crate) policy_file: ObjectIdentityV1,
+    pub(crate) policy_sha256: String,
+    pub(crate) approval_public_key_sha256: String,
+}
+
+impl ApprovalContinuityV1 {
+    fn from_policy(approved: &PolicyVerifiedApprovalV1<'_>) -> Self {
+        let policy = approved.readback_snapshot();
+        Self {
+            signed_envelope_sha256: approved.verified().signed_envelope_sha256().into(),
+            policy_file: policy.policy_file.clone(),
+            policy_sha256: policy.policy_sha256.clone(),
+            approval_public_key_sha256: policy.approval_public_key_sha256.clone(),
+        }
+    }
+
+    #[cfg(test)]
+    fn fixture(approval: &VerifiedApprovalV1, root: &ObjectIdentityV1) -> Self {
+        let mut policy_file = root.clone();
+        policy_file.file_index_low = if root.file_index_low == u32::MAX {
+            u32::MAX - 1
+        } else {
+            root.file_index_low + 1
+        };
+        Self {
+            signed_envelope_sha256: approval.signed_envelope_sha256().into(),
+            policy_file,
+            policy_sha256: "0".repeat(64),
+            approval_public_key_sha256: approval.verification_key_sha256().into(),
+        }
+    }
+
+    fn valid_for(&self, root: &ObjectIdentityV1) -> bool {
+        lowercase_hex(&self.signed_envelope_sha256, 64)
+            && lowercase_hex(&self.policy_sha256, 64)
+            && lowercase_hex(&self.approval_public_key_sha256, 64)
+            && self.policy_file.volume_serial == root.volume_serial
+            && (self.policy_file.file_index_high != 0 || self.policy_file.file_index_low != 0)
+            && self.policy_file != *root
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct LedgerRecordV1 {
@@ -207,6 +268,7 @@ struct LedgerRecordV1 {
     install_generation: u64,
     approval_id: String,
     signed_approval_sha256: String,
+    approval_continuity: ApprovalContinuityV1,
     accepted_at_utc_seconds: u64,
     package_id: String,
     manifest_sha256: String,
@@ -220,6 +282,7 @@ struct LedgerRecordV1 {
     old_host_pid: u32,
     old_host_creation_time_100ns: u64,
     original_desired_state: OriginalDesiredStateV1,
+    stage_binding: Option<StageBindingV1>,
     phase: String,
     prior_record_sha256: String,
 }
@@ -229,6 +292,7 @@ struct Binding {
     install_generation: u64,
     approval_id: String,
     signed_approval_sha256: String,
+    approval_continuity: ApprovalContinuityV1,
     accepted_at_utc_seconds: u64,
     package_id: String,
     manifest_sha256: String,
@@ -242,6 +306,7 @@ struct Binding {
     old_host_pid: u32,
     old_host_creation_time_100ns: u64,
     original_desired_state: OriginalDesiredStateV1,
+    stage_binding: Option<StageBindingV1>,
 }
 
 impl Binding {
@@ -252,6 +317,7 @@ impl Binding {
             install_generation: self.install_generation,
             approval_id: self.approval_id.clone(),
             signed_approval_sha256: self.signed_approval_sha256.clone(),
+            approval_continuity: self.approval_continuity.clone(),
             accepted_at_utc_seconds: self.accepted_at_utc_seconds,
             package_id: self.package_id.clone(),
             manifest_sha256: self.manifest_sha256.clone(),
@@ -265,6 +331,7 @@ impl Binding {
             old_host_pid: self.old_host_pid,
             old_host_creation_time_100ns: self.old_host_creation_time_100ns,
             original_desired_state: self.original_desired_state,
+            stage_binding: self.stage_binding.clone(),
             phase: phase.name().into(),
             prior_record_sha256: prior_record_sha256.into(),
         }
@@ -283,11 +350,49 @@ pub struct BrokerLedgerLease<'a> {
     current_digest: String,
 }
 
+/// Owns the fixed global lock before the broker samples predecessor, old
+/// owner, clock, or source state. Only a guarded acceptance can write INTENT.
+pub struct BrokerLedgerGuard<'a> {
+    root: &'a OwnedHandle,
+    global_lock: File,
+}
+
+impl<'a> BrokerLedgerGuard<'a> {
+    pub fn acquire(root: &'a OwnedHandle) -> Result<Self> {
+        root_info(root)?;
+        let global_lock = acquire_global_lock(root)?;
+        Ok(Self { root, global_lock })
+    }
+
+    /// Use this pinned handle only for broker-owned observations while the
+    /// global lock is held. No request value is installation evidence.
+    pub fn root(&self) -> &OwnedHandle {
+        self.root
+    }
+}
+
 fn lowercase_hex(value: &str, length: usize) -> bool {
     value.len() == length
         && value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn valid_stage_binding(stage: &StageBindingV1, root: &ObjectIdentityV1) -> bool {
+    let objects = [
+        &stage.staging_directory,
+        &stage.candidate_directory,
+        &stage.manifest_file,
+        &stage.artifacts[0],
+        &stage.artifacts[1],
+        &stage.artifacts[2],
+        &stage.artifacts[3],
+    ];
+    objects.iter().enumerate().all(|(index, object)| {
+        object.volume_serial == root.volume_serial
+            && (object.file_index_high != 0 || object.file_index_low != 0)
+            && objects[..index].iter().all(|prior| *prior != *object)
+    })
 }
 
 fn root_info(root: &OwnedHandle) -> Result<ObjectIdentityV1> {
@@ -627,15 +732,20 @@ fn historical_intent(
         || intent.protected_root != *observed_root
         || !lowercase_hex(&intent.approval_id, 32)
         || !lowercase_hex(&intent.signed_approval_sha256, 64)
+        || !intent.approval_continuity.valid_for(observed_root)
         || !lowercase_hex(&intent.manifest_sha256, 64)
         || intent.accepted_at_utc_seconds == 0
     {
         return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
     }
-    let binding = Binding {
+    if intent.stage_binding.is_some() {
+        return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
+    }
+    let mut binding = Binding {
         install_generation: intent.install_generation,
         approval_id: intent.approval_id.clone(),
         signed_approval_sha256: intent.signed_approval_sha256.clone(),
+        approval_continuity: intent.approval_continuity.clone(),
         accepted_at_utc_seconds: intent.accepted_at_utc_seconds,
         package_id: intent.package_id.clone(),
         manifest_sha256: intent.manifest_sha256.clone(),
@@ -649,6 +759,7 @@ fn historical_intent(
         old_host_pid: intent.old_host_pid,
         old_host_creation_time_100ns: intent.old_host_creation_time_100ns,
         original_desired_state: intent.original_desired_state,
+        stage_binding: None,
     };
     let mut current = InstallPhaseV1::Intent;
     let mut gap = false;
@@ -662,8 +773,21 @@ fn historical_intent(
         }
         let mut file = open_optional(root, &record_name(generation, phase))?
             .ok_or("WAKE_LEDGER_RECORD_CORRUPT")?;
-        digest = read_exact(&mut file, &binding.record(phase, &digest))
-            .map_err(|_| "WAKE_LEDGER_RECORD_CORRUPT")?;
+        let (record, next_digest) = read_record(&mut file)?;
+        if phase == InstallPhaseV1::Staged {
+            let stage = record
+                .stage_binding
+                .as_ref()
+                .ok_or("WAKE_LEDGER_RECORD_CORRUPT")?;
+            if !valid_stage_binding(stage, observed_root) {
+                return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
+            }
+            binding.stage_binding = Some(stage.clone());
+        }
+        if record != binding.record(phase, &digest) {
+            return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
+        }
+        digest = next_digest;
         current = phase;
     }
     Ok((intent, current))
@@ -760,6 +884,13 @@ pub fn verify_exact_resume(
         old_host_creation_time_100ns: intent.old_host_creation_time_100ns,
     };
     let approval = verify_approval(envelope_bytes, broker_trust_root, &original)?;
+    if approval.signed_payload_sha256() != intent.signed_approval_sha256
+        || approval.signed_envelope_sha256() != intent.approval_continuity.signed_envelope_sha256
+        || approval.verification_key_sha256()
+            != intent.approval_continuity.approval_public_key_sha256
+    {
+        return Err("WAKE_LEDGER_APPROVAL_CONFLICT".into());
+    }
     let expectation = LedgerExpectationV1 {
         now_utc_seconds,
         next_install_generation: intent.install_generation,
@@ -784,12 +915,63 @@ fn write_new(file: &mut File, expected: &LedgerRecordV1) -> Result<String> {
     Ok(digest)
 }
 
-impl<'a> BrokerLedgerLease<'a> {
-    pub fn begin(
-        root: &'a OwnedHandle,
+impl<'a> BrokerLedgerGuard<'a> {
+    /// Invoke the observation provider only while this global lock is held,
+    /// then verify the envelope against the pinned protected policy before
+    /// creating INTENT. The future service must supply a fixed kernel-backed
+    /// provider that keeps its object/process pins alive through the returned
+    /// lease. A closure itself cannot prove observation provenance.
+    pub fn accept_with_observation<'p>(
+        self,
+        policy: &'p BrokerProtectedPolicyV1,
+        envelope: &[u8],
+        observe: impl FnOnce(&OwnedHandle) -> Result<(BrokerObservedStateV1, LedgerExpectationV1)>,
+    ) -> Result<(BrokerLedgerLease<'a>, PolicyVerifiedApprovalV1<'p>)> {
+        let (observed, expected) = observe(self.root)?;
+        let approved = policy.verify_approval_for_transaction(envelope, &observed)?;
+        let lease = self.begin(&approved, &expected)?;
+        Ok((lease, approved))
+    }
+
+    fn begin(
+        self,
+        approved: &PolicyVerifiedApprovalV1<'_>,
+        expected: &LedgerExpectationV1,
+    ) -> Result<BrokerLedgerLease<'a>> {
+        let policy = approved.policy();
+        let policy_root = policy.readback()?.protected_root;
+        if root_info(self.root)? != policy_root {
+            return Err("WAKE_LEDGER_ROOT_CHANGED".into());
+        }
+        let lease = self.begin_verified(
+            approved.verified(),
+            expected,
+            ApprovalContinuityV1::from_policy(approved),
+        )?;
+        policy.revalidate()?;
+        Ok(lease)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn begin_fixture(
+        self,
         approval: &VerifiedApprovalV1,
         expected: &LedgerExpectationV1,
-    ) -> Result<Self> {
+    ) -> Result<BrokerLedgerLease<'a>> {
+        self.begin_verified(
+            approval,
+            expected,
+            ApprovalContinuityV1::fixture(approval, &expected.protected_root),
+        )
+    }
+
+    fn begin_verified(
+        self,
+        approval: &VerifiedApprovalV1,
+        expected: &LedgerExpectationV1,
+        continuity: ApprovalContinuityV1,
+    ) -> Result<BrokerLedgerLease<'a>> {
+        let root = self.root;
         let payload = approval.payload();
         let observed_root = root_info(root)?;
         if expected.next_install_generation == 0
@@ -800,14 +982,18 @@ impl<'a> BrokerLedgerLease<'a> {
             || payload.target_protected_root != expected.protected_root
             || observed_root != expected.protected_root
             || !lowercase_hex(approval.signed_payload_sha256(), 64)
+            || !continuity.valid_for(&observed_root)
+            || continuity.signed_envelope_sha256 != approval.signed_envelope_sha256()
+            || continuity.approval_public_key_sha256 != approval.verification_key_sha256()
         {
             return Err("WAKE_LEDGER_PREDECESSOR_MISMATCH".into());
         }
-        let global_lock = acquire_global_lock(root)?;
+        let global_lock = self.global_lock;
         let binding = Binding {
             install_generation: payload.install_generation,
             approval_id: payload.approval_id.clone(),
             signed_approval_sha256: approval.signed_payload_sha256().into(),
+            approval_continuity: continuity,
             accepted_at_utc_seconds: approval.verified_at_utc_seconds(),
             package_id: payload.manifest.package_id.clone(),
             manifest_sha256: payload.manifest_sha256.clone(),
@@ -821,6 +1007,7 @@ impl<'a> BrokerLedgerLease<'a> {
             old_host_pid: payload.old_host_pid,
             old_host_creation_time_100ns: payload.old_host_creation_time_100ns,
             original_desired_state: expected.original_desired_state,
+            stage_binding: None,
         };
         let existing = preflight_history(root, &binding, &observed_root)?;
         if !existing
@@ -852,6 +1039,7 @@ impl<'a> BrokerLedgerLease<'a> {
             read_exact(&mut intent_file, &intent)?
         };
         let mut current = InstallPhaseV1::Intent;
+        let mut binding = binding;
         let mut gap = false;
         for phase in InstallPhaseV1::ORDER.iter().copied().skip(1) {
             let name = record_name(binding.install_generation, phase);
@@ -860,7 +1048,21 @@ impl<'a> BrokerLedgerLease<'a> {
                     if newly_created || gap {
                         return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
                     }
-                    digest = read_exact(&mut file, &binding.record(phase, &digest))?;
+                    let (record, next_digest) = read_record(&mut file)?;
+                    if phase == InstallPhaseV1::Staged {
+                        let stage = record
+                            .stage_binding
+                            .as_ref()
+                            .ok_or("WAKE_LEDGER_RECORD_CORRUPT")?;
+                        if !valid_stage_binding(stage, &observed_root) {
+                            return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
+                        }
+                        binding.stage_binding = Some(stage.clone());
+                    }
+                    if record != binding.record(phase, &digest) {
+                        return Err("WAKE_LEDGER_APPROVAL_CONFLICT".into());
+                    }
+                    digest = next_digest;
                     current = phase;
                 }
                 None => gap = true,
@@ -869,7 +1071,7 @@ impl<'a> BrokerLedgerLease<'a> {
         if root_info(root)? != observed_root {
             return Err("WAKE_LEDGER_ROOT_CHANGED".into());
         }
-        Ok(Self {
+        Ok(BrokerLedgerLease {
             root,
             _global_lock: global_lock,
             _intent_file: intent_file,
@@ -878,14 +1080,109 @@ impl<'a> BrokerLedgerLease<'a> {
             current_digest: digest,
         })
     }
+}
+
+impl<'a> BrokerLedgerLease<'a> {
+    #[cfg(test)]
+    fn begin(
+        root: &'a OwnedHandle,
+        approval: &VerifiedApprovalV1,
+        expected: &LedgerExpectationV1,
+    ) -> Result<Self> {
+        BrokerLedgerGuard::acquire(root)?.begin_fixture(approval, expected)
+    }
 
     pub fn phase(&self) -> InstallPhaseV1 {
         self.current
     }
 
-    /// Records exactly the next fixed phase. `Ok(false)` means the requested
-    /// phase is already current, including duplicate COMPLETE after reopen.
-    pub fn advance(&mut self, next: InstallPhaseV1) -> Result<bool> {
+    pub(crate) fn protected_root(&self) -> &OwnedHandle {
+        self.root
+    }
+
+    pub(crate) fn matches_approval(&self, approval: &VerifiedApprovalV1) -> bool {
+        let payload = approval.payload();
+        self.binding.install_generation == payload.install_generation
+            && self.binding.approval_id == payload.approval_id
+            && self.binding.signed_approval_sha256 == approval.signed_payload_sha256()
+            && self.binding.approval_continuity.signed_envelope_sha256
+                == approval.signed_envelope_sha256()
+            && self.binding.approval_continuity.approval_public_key_sha256
+                == approval.verification_key_sha256()
+            && self.binding.manifest_sha256 == payload.manifest_sha256
+            && self.binding.package_id == payload.manifest.package_id
+            && self.binding.protected_root == payload.target_protected_root
+    }
+
+    pub(crate) fn matches_policy_approval(&self, approved: &PolicyVerifiedApprovalV1<'_>) -> bool {
+        self.matches_approval(approved.verified())
+            && self.binding.approval_continuity == ApprovalContinuityV1::from_policy(approved)
+    }
+
+    pub(crate) fn approval_continuity(&self) -> &ApprovalContinuityV1 {
+        &self.binding.approval_continuity
+    }
+
+    /// The only production transition into STAGED. The opaque receipt owns
+    /// freshly created stage pins and rechecks all bytes/IDs while this lease
+    /// still holds the pre-provisioned global lock.
+    pub fn record_staged(&mut self, receipt: &mut BrokerStageReceiptV1<'_>) -> Result<bool> {
+        if self.current != InstallPhaseV1::Intent || self.binding.stage_binding.is_some() {
+            return Err("WAKE_LEDGER_PHASE_ORDER_INVALID".into());
+        }
+        receipt.revalidate_for_ledger(
+            self.root,
+            &self.binding.protected_root,
+            self.binding.install_generation,
+            &self.binding.approval_id,
+            &self.binding.signed_approval_sha256,
+            &self.binding.approval_continuity,
+        )?;
+        let stage = receipt.stage_binding();
+        if !valid_stage_binding(&stage, &self.binding.protected_root) {
+            return Err("WAKE_LEDGER_STAGE_BINDING_INVALID".into());
+        }
+        self.binding.stage_binding = Some(stage);
+        let written = self.advance_internal(InstallPhaseV1::Staged)?;
+        // The receipt retains every stage pin across the ledger write. A
+        // failed post-write check leaves the durable record for exact-only
+        // diagnosis; it never authorizes publication or silent cleanup.
+        receipt.revalidate_for_ledger(
+            self.root,
+            &self.binding.protected_root,
+            self.binding.install_generation,
+            &self.binding.approval_id,
+            &self.binding.signed_approval_sha256,
+            &self.binding.approval_continuity,
+        )?;
+        Ok(written)
+    }
+
+    #[cfg(test)]
+    fn advance(&mut self, next: InstallPhaseV1) -> Result<bool> {
+        if next == InstallPhaseV1::Staged && self.binding.stage_binding.is_none() {
+            // Ledger-only fixtures model a physically bound stage. Production
+            // has no generic phase advancement path.
+            let id = |offset: u32| ObjectIdentityV1 {
+                volume_serial: self.binding.protected_root.volume_serial,
+                file_index_high: self.binding.protected_root.file_index_high,
+                file_index_low: self
+                    .binding
+                    .protected_root
+                    .file_index_low
+                    .wrapping_add(offset),
+            };
+            self.binding.stage_binding = Some(StageBindingV1 {
+                staging_directory: id(1),
+                candidate_directory: id(2),
+                manifest_file: id(3),
+                artifacts: [id(4), id(5), id(6), id(7)],
+            });
+        }
+        self.advance_internal(next)
+    }
+
+    fn advance_internal(&mut self, next: InstallPhaseV1) -> Result<bool> {
         if next != self.current && next.index() != self.current.index() + 1 {
             return Err("WAKE_LEDGER_PHASE_ORDER_INVALID".into());
         }
@@ -1346,18 +1643,16 @@ mod tests {
         drop(resumed);
         payload.approval_id = "d".repeat(32);
         let changed_envelope = approval_test::envelope(&payload, &key);
-        let (changed, recovered) = verify_exact_resume(
-            &handle,
-            &changed_envelope,
-            &key.verifying_key(),
-            payload.install_generation,
-            observed.now_utc_seconds,
-        )
-        .expect("different signature still cryptographically valid");
         assert_eq!(
-            BrokerLedgerLease::begin(&handle, &changed, &recovered)
-                .err()
-                .unwrap(),
+            verify_exact_resume(
+                &handle,
+                &changed_envelope,
+                &key.verifying_key(),
+                payload.install_generation,
+                observed.now_utc_seconds,
+            )
+            .err()
+            .unwrap(),
             "WAKE_LEDGER_APPROVAL_CONFLICT"
         );
         drop(handle);

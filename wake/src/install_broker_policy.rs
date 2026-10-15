@@ -196,6 +196,29 @@ pub struct BrokerProtectedPolicyV1 {
     approval_key: VerifyingKey,
 }
 
+/// Opaque proof that this envelope was verified by the pinned, independently
+/// protected broker key. A standalone `VerifiedApprovalV1` from a caller key
+/// cannot be passed to the production ledger or stage writer.
+pub struct PolicyVerifiedApprovalV1<'p> {
+    policy: &'p BrokerProtectedPolicyV1,
+    verified: VerifiedApprovalV1,
+    readback: BrokerProtectedPolicyReadbackV1,
+}
+
+impl<'p> PolicyVerifiedApprovalV1<'p> {
+    pub(crate) fn verified(&self) -> &VerifiedApprovalV1 {
+        &self.verified
+    }
+
+    pub(crate) fn policy(&self) -> &'p BrokerProtectedPolicyV1 {
+        self.policy
+    }
+
+    pub(crate) fn readback_snapshot(&self) -> &BrokerProtectedPolicyReadbackV1 {
+        &self.readback
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BrokerProtectedPolicyReadbackV1 {
@@ -579,6 +602,28 @@ impl BrokerProtectedPolicyV1 {
         self.revalidate()?;
         approval
     }
+
+    /// Production transaction proof. Keep this value and its pinned policy
+    /// live throughout INTENT and stage creation; revalidation is repeated by
+    /// each consumer before mutating state.
+    pub fn verify_approval_for_transaction(
+        &self,
+        envelope: &[u8],
+        observed: &BrokerObservedStateV1,
+    ) -> Result<PolicyVerifiedApprovalV1<'_>> {
+        let readback = self.readback()?;
+        let verified = self.verify_approval(envelope, observed)?;
+        if self.readback()? != readback
+            || verified.verification_key_sha256() != readback.approval_public_key_sha256
+        {
+            return Err("WAKE_BROKER_POLICY_CHANGED".into());
+        }
+        Ok(PolicyVerifiedApprovalV1 {
+            policy: self,
+            verified,
+            readback,
+        })
+    }
 }
 
 /// Zero-argument fixed-root loader. It performs no file or service mutation.
@@ -606,6 +651,10 @@ pub fn load_fixed_broker_policy_read_only() -> Result<BrokerProtectedPolicyV1> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::install_broker_approval::tests as approval_test;
+    use crate::install_broker_ledger::{
+        BrokerLedgerGuard, InstallPhaseV1, LedgerExpectationV1, OriginalDesiredStateV1,
+    };
     use ed25519_dalek::SigningKey;
     use std::{
         os::windows::io::AsHandle,
@@ -840,6 +889,170 @@ mod tests {
             fixture.wire.operator_sid
         );
         drop(policy);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn transaction_proof_uses_only_the_pinned_policy_key() {
+        let fixture = Fixture::new();
+        let policy = fixture.load().expect("pinned policy");
+        let (mut payload, mut observed, key) = approval_test::fixture();
+        payload.target_protected_root = fixture.root_id.clone();
+        observed.target_protected_root = fixture.root_id.clone();
+        let envelope = approval_test::envelope(&payload, &key);
+        let approved = policy
+            .verify_approval_for_transaction(&envelope, &observed)
+            .expect("policy key verifies transaction");
+        assert_eq!(
+            approved.verified().payload().approval_id,
+            payload.approval_id
+        );
+        assert_eq!(
+            approved.policy().readback().unwrap().protected_root,
+            fixture.root_id
+        );
+        let unrelated = SigningKey::from_bytes(&[8u8; 32]);
+        let self_signed = approval_test::envelope(&payload, &unrelated);
+        assert_eq!(
+            policy
+                .verify_approval_for_transaction(&self_signed, &observed)
+                .err()
+                .unwrap(),
+            "WAKE_APPROVAL_SIGNATURE_INVALID"
+        );
+        drop(approved);
+        drop(policy);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn transaction_observation_runs_with_global_lock_and_pinned_policy() {
+        let fixture = Fixture::new();
+        std::fs::write(fixture.path.join("install-ledger.lock"), b"").expect("fixture lock");
+        let policy = fixture.load().expect("pinned policy");
+        let (mut payload, mut observed, key) = approval_test::fixture();
+        payload.target_protected_root = fixture.root_id.clone();
+        observed.target_protected_root = fixture.root_id.clone();
+        let expectation = LedgerExpectationV1 {
+            now_utc_seconds: observed.now_utc_seconds,
+            next_install_generation: payload.install_generation,
+            predecessor_package_id: payload.predecessor_package_id.clone(),
+            predecessor_pointer: payload.predecessor_pointer.clone(),
+            protected_root: fixture.root_id.clone(),
+            original_desired_state: OriginalDesiredStateV1::Running,
+        };
+        let envelope = approval_test::envelope(&payload, &key);
+        let mut observed_under_lock = false;
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("global lock");
+        let (lease, approved) = guard
+            .accept_with_observation(&policy, &envelope, |root| {
+                observed_under_lock = true;
+                assert!(BrokerLedgerGuard::acquire(root).is_err());
+                Ok((observed.clone(), expectation.clone()))
+            })
+            .expect("policy-bound intent");
+        assert!(observed_under_lock);
+        assert_eq!(lease.phase(), InstallPhaseV1::Intent);
+        assert_eq!(approved.verified().signed_payload_sha256().len(), 64);
+        drop(lease);
+        drop(approved);
+        drop(policy);
+        std::fs::remove_file(
+            fixture
+                .path
+                .join("install-transaction-00000000000000000002-intent.json"),
+        )
+        .expect("remove fixture intent");
+        std::fs::remove_file(fixture.path.join("install-ledger.lock"))
+            .expect("remove fixture lock");
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn same_payload_rotated_policy_key_cannot_resume_original_intent() {
+        let fixture = Fixture::new();
+        std::fs::write(fixture.path.join("install-ledger.lock"), b"").expect("fixture lock");
+        let first_policy = fixture.load().expect("first protected policy");
+        let (mut payload, mut observed, first_key) = approval_test::fixture();
+        payload.target_protected_root = fixture.root_id.clone();
+        observed.target_protected_root = fixture.root_id.clone();
+        let expectation = LedgerExpectationV1 {
+            now_utc_seconds: observed.now_utc_seconds,
+            next_install_generation: payload.install_generation,
+            predecessor_package_id: payload.predecessor_package_id.clone(),
+            predecessor_pointer: payload.predecessor_pointer.clone(),
+            protected_root: fixture.root_id.clone(),
+            original_desired_state: OriginalDesiredStateV1::Running,
+        };
+        let first_envelope = approval_test::envelope(&payload, &first_key);
+        let (first_lease, first_approved) = BrokerLedgerGuard::acquire(&fixture.root)
+            .expect("global lock")
+            .accept_with_observation(&first_policy, &first_envelope, |_| {
+                Ok((observed.clone(), expectation.clone()))
+            })
+            .expect("first protected intent");
+        let first_payload_digest = first_approved.verified().signed_payload_sha256().to_owned();
+        let first_envelope_digest = first_approved
+            .verified()
+            .signed_envelope_sha256()
+            .to_owned();
+        let first_policy_file = first_approved.readback_snapshot().policy_file.clone();
+        drop(first_lease);
+        drop(first_approved);
+        drop(first_policy);
+
+        let rotated_key = SigningKey::from_bytes(&[8u8; 32]);
+        let mut rotated_wire = fixture.wire.clone();
+        rotated_wire.approval_public_key_hex = rotated_key
+            .verifying_key()
+            .as_bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        fixture.write_wire(&rotated_wire);
+        let rotated_policy = fixture.load().expect("rotated protected policy");
+        let rotated_envelope = approval_test::envelope(&payload, &rotated_key);
+        let rotated_proof = rotated_policy
+            .verify_approval_for_transaction(&rotated_envelope, &observed)
+            .expect("new policy accepts its own signature");
+        assert_eq!(
+            rotated_proof.verified().signed_payload_sha256(),
+            first_payload_digest
+        );
+        assert_ne!(
+            rotated_proof.verified().signed_envelope_sha256(),
+            first_envelope_digest
+        );
+        assert_eq!(
+            rotated_proof.readback_snapshot().policy_file,
+            first_policy_file
+        );
+        assert_eq!(
+            BrokerLedgerGuard::acquire(&fixture.root)
+                .expect("global lock")
+                .accept_with_observation(&rotated_policy, &rotated_envelope, |_| {
+                    Ok((observed.clone(), expectation.clone()))
+                })
+                .err()
+                .unwrap(),
+            "WAKE_LEDGER_APPROVAL_CONFLICT"
+        );
+        assert!(
+            !fixture
+                .path
+                .join("install-transaction-00000000000000000002-staged.json")
+                .exists()
+        );
+        drop(rotated_proof);
+        drop(rotated_policy);
+        std::fs::remove_file(
+            fixture
+                .path
+                .join("install-transaction-00000000000000000002-intent.json"),
+        )
+        .expect("remove original intent");
+        std::fs::remove_file(fixture.path.join("install-ledger.lock"))
+            .expect("remove fixture lock");
         fixture.cleanup();
     }
 

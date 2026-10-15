@@ -20,6 +20,10 @@ pub mod install_broker_reader;
 pub mod install_broker_request;
 #[cfg(windows)]
 pub mod install_broker_service_core;
+#[cfg(windows)]
+pub(crate) mod install_broker_source;
+#[cfg(windows)]
+pub mod install_broker_stage_writer;
 pub mod process_job;
 pub mod protocol;
 pub mod review_binding;

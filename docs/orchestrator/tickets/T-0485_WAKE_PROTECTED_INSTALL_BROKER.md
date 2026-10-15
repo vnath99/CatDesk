@@ -1,5 +1,9 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-15 fixed-source INTENT→STAGED transaction source checkpoint
+
+The dormant broker transaction now acquires the pre-provisioned global lock before calling a future trusted observer, requires a policy-key-verified opaque approval, pins exact five-file source bytes, creates and rechecks the fixed protected `staging/candidate`, then records its seven physical IDs in a typed STAGED phase. A residual partial stage is sticky attention. The temp-root integrated test covers fresh copy/record/reopen and partial-stage refusal, but uses a test-only owner/security mode. See `T-0485_R15_FIXED_SOURCE_TO_STAGED_TRANSACTION.md`. The callback and exact CI fetch are not implemented by a signed service, parent-directory power-loss durability is unproven, and no package/pointer/owner publication or protected activation is enabled. Both install mutators still refuse with `WAKE_INSTALL_BROKER_UNPROVISIONED`.
+
 ## 2026-10-15 exact-source CI scheduling audit
 
 Authenticated read-only CLI inspection finds the repository active, Actions permission `enabled:true`/`allowed_actions:all`, workflow `311012404` active, and no repository execution policy. `ci.yml` has push and pull-request triggers but **no `workflow_dispatch`**. The prior `gh workflow run` attempt's retained CLI error text is HTTP 422 `Actions has been disabled for this repository`; its raw response was not retained, and the missing manual trigger is a distinct issue. The latest green push run is still for older `4e9a2e2`, while the pushed `7dafbf1` has zero exact runs/checks. The personal Actions billing endpoint returned 404 with a missing `user` scope, so billing/account restriction state is unknown. No new dispatch, scope refresh or settings change was attempted. See `T-0485_R14_CI_SCHEDULING_READ_ONLY_TRIAGE.md`; exact-source Windows CI remains mandatory.

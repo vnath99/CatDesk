@@ -1,5 +1,11 @@
 # CatDesk — Important Command Reference
 
+## Current source-only transaction and worker boundary (2026-10-15)
+
+- R15 adds `BrokerLedgerGuard::accept_with_observation` and a fixed-source-to-`STAGED` path that requires an opaque approval verified by the pinned policy key. A real broker observer, CI fetch, protected bootstrap and full owner/pointer transaction are still absent; do not run protected installation. The fixed source inbox is `C:\ProgramData\CatDesk\WakeSubmissionV1\candidate`, not a caller-selected path. See `docs/orchestrator/review_bundles/T-0485_R15_FIXED_SOURCE_TO_STAGED_TRANSACTION.md`.
+- R22 adds only private Sol Job/process-drain mechanics. It neither creates the missing `CatDeskSolWorker` account nor proves escaped descendants, inherited-handle denial or ancestor lost-write authority; it grants no repository-use capability. See `docs/orchestrator/review_bundles/T-0483_R22_PRIVATE_SOL_JOB_DRAIN_SOURCE.md`.
+- The last clean `wake/install.ps1 -BuildOnly` candidate at tracked `7de5940` was `1.0.0-dev.85-36ad2d4adc8f-818748eeee6a`; both executables are unsigned. This diagnostic candidate predates R15/R22, so rebuild before any later package review. Exact new-source Windows CI remains required; no manual workflow dispatch or settings change.
+
 ## Current authority and release hold (2026-10-15)
 
 - The dormant fixed `staging/candidate` reader checks signed canonical manifest and exact four pinned artifact bytes/ACLs, but returns `stageCreationAndLedgerBindingProven:false` and `NO_INSTALL_AUTHORITY`; identical stale bytes cannot prove a fresh broker-owned copy. See `docs/orchestrator/review_bundles/T-0485_R13_FIXED_CANDIDATE_STAGE_READBACK_SOURCE.md`.

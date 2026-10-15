@@ -137,6 +137,8 @@ pub struct BrokerObservedStateV1 {
 pub struct VerifiedApprovalV1 {
     payload: WakeInstallApprovalV1,
     signed_payload_sha256: String,
+    signed_envelope_sha256: String,
+    verification_key_sha256: String,
     verified_at_utc_seconds: u64,
 }
 
@@ -147,6 +149,17 @@ impl VerifiedApprovalV1 {
 
     pub fn signed_payload_sha256(&self) -> &str {
         &self.signed_payload_sha256
+    }
+
+    /// Digest of the exact canonical envelope, including its signature.
+    pub fn signed_envelope_sha256(&self) -> &str {
+        &self.signed_envelope_sha256
+    }
+
+    /// Digest of the verification key used for this proof. A transaction
+    /// must also bind that key to the independently protected broker policy.
+    pub fn verification_key_sha256(&self) -> &str {
+        &self.verification_key_sha256
     }
 
     /// Time checked by the verifier. A future broker must supply its own
@@ -342,6 +355,8 @@ pub fn verify_approval(
     Ok(VerifiedApprovalV1 {
         payload: envelope.payload,
         signed_payload_sha256: format!("{:x}", Sha256::digest(signed)),
+        signed_envelope_sha256: format!("{:x}", Sha256::digest(envelope_bytes)),
+        verification_key_sha256: format!("{:x}", Sha256::digest(broker_trust_root.as_bytes())),
         verified_at_utc_seconds: observed.now_utc_seconds,
     })
 }

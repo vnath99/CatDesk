@@ -30,6 +30,8 @@ pub mod provider_router;
 pub mod runtime;
 #[cfg(windows)]
 pub(crate) mod sol_worker_identity_preflight;
+#[cfg(windows)]
+pub(crate) mod sol_worker_lifecycle;
 pub(crate) mod sol_worker_nonce;
 pub(crate) mod sol_worker_output;
 pub(crate) mod sol_worker_staging;
