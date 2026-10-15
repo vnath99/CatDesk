@@ -1,4 +1,9 @@
-## 2026-10-14 — T0478 owner-bound fixture retirement source (CURRENT)
+## 2026-10-14 — T0478 partial-stage ownership lease (CURRENT)
+
+- The dormant witnessed-candidate stage now returns a distinct owned failure containing its pinned disposable root, manifest and reason after any post-create error. A two-file collision regression proves the first write can fail later without overwriting the foreign second file or losing the in-process root handle. See `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2D_OWNED_STAGE_FAILURE_LEASE.md`.
+- This is not crash persistence. Write-ahead root-object ownership evidence and durable operator attention are still required before any live cleanup path; exact-commit GitHub CI remains unavailable while Actions dispatch is disabled.
+
+## 2026-10-14 — T0478 owner-bound fixture retirement source (HISTORICAL)
 
 - Added a consuming source-only transaction that verifies the token-derived owner and actual pinned-root DACL, native enumerated manifest inventory, all retained file IDs/sizes/SHA hashes and exact opened DELETE handles before any file disposition. It deletes only those handles, reopens the now-empty direct child under the pinned temp parent with an unchanged object identity, rechecks the DACL and disposes the exact root handle. Positive two-file, foreign-leaf and same-name root-replacement tests pass. See `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2C_OWNER_RETIREMENT_SOURCE.md`.
 - This is not a live fixture cleanup route. Durable owner/failure state, crash residue attention and worker integration are still required, as is exact-commit independent Windows CI (GitHub Actions remains disabled).

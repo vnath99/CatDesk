@@ -149,6 +149,92 @@ pub(crate) struct StagedCandidateSnapshot {
     _leases: Vec<RetainedReviewedArtifact>,
 }
 
+/// A stage that created an exact disposable root but could not finish. The
+/// caller keeps its pinned owner handle and manifest; it must record attention
+/// and may not infer deletion authority from the generated pathname.
+#[allow(dead_code)]
+pub(crate) struct OwnedCandidateStageFailure {
+    pub(crate) root: ProtectedDirectoryGuard,
+    pub(crate) manifest: SnapshotManifest,
+    pub(crate) reason: String,
+}
+
+/// Create may have materialized a child before a later native/identity check
+/// failed. The returned guard may pin only the parent or also the child;
+/// the generated name is diagnostic only and grants no retirement authority.
+#[allow(dead_code)]
+pub(crate) struct IndeterminateCandidateCreation {
+    pub(crate) guard: ProtectedDirectoryGuard,
+    pub(crate) generated_name: String,
+    pub(crate) manifest: SnapshotManifest,
+    pub(crate) reason: String,
+}
+
+#[allow(dead_code)]
+pub(crate) enum CandidateStageError {
+    BeforeOwnership(String),
+    CreationIndeterminate(Box<IndeterminateCandidateCreation>),
+    Owned(Box<OwnedCandidateStageFailure>),
+}
+
+fn finish_owned_candidate_stage(
+    root: ProtectedDirectoryGuard,
+    manifest: SnapshotManifest,
+    candidates: &[(String, Vec<u8>)],
+) -> Result<StagedCandidateSnapshot, Box<OwnedCandidateStageFailure>> {
+    if let Err(reason) = stage_candidate_into_owned_root(&root, &manifest, candidates) {
+        return Err(Box::new(OwnedCandidateStageFailure {
+            root,
+            manifest,
+            reason,
+        }));
+    }
+    let leases = match retain_staged_artifacts(&root, &manifest) {
+        Ok(leases) => leases,
+        Err(reason) => {
+            return Err(Box::new(OwnedCandidateStageFailure {
+                root,
+                manifest,
+                reason,
+            }));
+        }
+    };
+    Ok(StagedCandidateSnapshot {
+        root,
+        manifest,
+        _leases: leases,
+    })
+}
+
+#[cfg(windows)]
+fn create_owned_candidate_root(
+    mut guard: ProtectedDirectoryGuard,
+    child_name: String,
+    sid: &str,
+    manifest: SnapshotManifest,
+) -> Result<(ProtectedDirectoryGuard, SnapshotManifest), CandidateStageError> {
+    if let Err(reason) = guard.create_owner_only_fixture_child(&child_name, sid, LABEL) {
+        return Err(CandidateStageError::CreationIndeterminate(Box::new(
+            IndeterminateCandidateCreation {
+                guard,
+                generated_name: child_name,
+                manifest,
+                reason,
+            },
+        )));
+    }
+    if let Err(reason) = guard.verify_owner_only_fixture_descriptor(sid, LABEL) {
+        return Err(CandidateStageError::Owned(Box::new(
+            OwnedCandidateStageFailure {
+                root: guard,
+                manifest,
+                reason,
+            },
+        )));
+    }
+    Ok((guard, manifest))
+}
+
 /// Read-only evidence used by a future owner/handle-bound cleanup engine.
 // Not a delete token. The in-process owner must separately prove the opened
 // root ACL, exact file DELETE handles and single-generation authority.
@@ -342,9 +428,10 @@ impl StagedCandidateSnapshot {
 pub(crate) async fn stage_witnessed_candidate_snapshot(
     workspace: &Path,
     expected_commit: &str,
-) -> Result<StagedCandidateSnapshot, String> {
-    let witness =
-        crate::isolated_fixture_github_authority::fetch_live_witness(expected_commit).await?;
+) -> Result<StagedCandidateSnapshot, CandidateStageError> {
+    let witness = crate::isolated_fixture_github_authority::fetch_live_witness(expected_commit)
+        .await
+        .map_err(CandidateStageError::BeforeOwnership)?;
     let snapshot_id = Uuid::new_v4().to_string();
     let (manifest, candidates) =
         crate::isolated_fixture_git_objects::read_witnessed_candidate_git_objects(
@@ -352,34 +439,38 @@ pub(crate) async fn stage_witnessed_candidate_snapshot(
             &witness,
             &snapshot_id,
         )
-        .await?;
+        .await
+        .map_err(CandidateStageError::BeforeOwnership)?;
     if manifest.source_commit != witness.commit_sha() {
-        return Err("isolated fixture source witness mismatch".into());
+        return Err(CandidateStageError::BeforeOwnership(
+            "isolated fixture source witness mismatch".into(),
+        ));
     }
-    let temp = std::fs::canonicalize(std::env::temp_dir())
-        .map_err(|_| "isolated fixture temp unavailable")?;
+    let temp = std::fs::canonicalize(std::env::temp_dir()).map_err(|_| {
+        CandidateStageError::BeforeOwnership("isolated fixture temp unavailable".into())
+    })?;
     // Atomically create exactly one private, generated temp root relative to
     // an already opened parent. No existing directory is adopted.
-    let mut root = ProtectedDirectoryGuard::acquire(&temp, LABEL)?;
+    let root = ProtectedDirectoryGuard::acquire(&temp, LABEL)
+        .map_err(CandidateStageError::BeforeOwnership)?;
     let child_name = format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple());
     #[cfg(windows)]
     {
         let sid =
             crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
-                .map_err(|_| "isolated fixture interactive owner identity unavailable")?;
-        root.create_owner_only_fixture_child(&child_name, &sid, LABEL)?;
-        root.verify_owner_only_fixture_descriptor(&sid, LABEL)?;
+                .map_err(|_| {
+                    CandidateStageError::BeforeOwnership(
+                        "isolated fixture interactive owner identity unavailable".into(),
+                    )
+                })?;
+        let (root, manifest) = create_owned_candidate_root(root, child_name, &sid, manifest)?;
+        finish_owned_candidate_stage(root, manifest, &candidates)
+            .map_err(CandidateStageError::Owned)
     }
     #[cfg(not(windows))]
-    return Err("isolated fixture owner-only creation is Windows-only".into());
-
-    stage_candidate_into_owned_root(&root, &manifest, &candidates)?;
-    let leases = retain_staged_artifacts(&root, &manifest)?;
-    Ok(StagedCandidateSnapshot {
-        root,
-        manifest,
-        _leases: leases,
-    })
+    return Err(CandidateStageError::BeforeOwnership(
+        "isolated fixture owner-only creation is Windows-only".into(),
+    ));
 }
 
 #[cfg(test)]
@@ -597,18 +688,125 @@ mod tests {
             .iter()
             .map(|(_, source, bytes)| ((*source).into(), bytes.to_vec()))
             .collect::<Vec<_>>();
-        stage_candidate_into_owned_root(&root, &manifest, &candidates)
-            .expect("stage two manifest files");
-        let leases = retain_staged_artifacts(&root, &manifest).expect("retain reviewed files");
-        let staged = StagedCandidateSnapshot {
-            root,
-            manifest,
-            _leases: leases,
-        };
+        let staged = finish_owned_candidate_stage(root, manifest, &candidates)
+            .unwrap_or_else(|failure| panic!("owned stage failed: {}", failure.reason));
         staged
             .retire_owned_root()
             .expect("retire only exact owned files and root");
         assert!(!temp.join(name).exists(), "owned root must be absent");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn owned_root_create_collision_is_indeterminate_without_delete_authority() {
+        let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .expect("ordinary interactive test owner SID required");
+        let name = format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple());
+        let dir = temp.join(&name);
+        std::fs::create_dir(&dir).expect("create test-owned collision root");
+        std::fs::write(dir.join("foreign.txt"), b"do not touch")
+            .expect("create test-owned foreign bytes");
+        let manifest = SnapshotManifest {
+            schema_version: 1,
+            source_repository: SOURCE_REPOSITORY.into(),
+            source_commit: "abcdef0123456789abcdef0123456789abcdef01".into(),
+            snapshot_id: Uuid::new_v4().to_string(),
+            files: vec![SnapshotFile {
+                fixture_leaf: "Cargo.toml".into(),
+                source_path: "Cargo.toml".into(),
+                size_bytes: 0,
+                sha256: format!("{:x}", Sha256::digest([])),
+            }],
+        };
+        let expected_id = manifest.snapshot_id.clone();
+        let parent = ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp");
+        let failure = match create_owned_candidate_root(parent, name.clone(), &sid, manifest) {
+            Err(CandidateStageError::CreationIndeterminate(failure)) => failure,
+            _ => panic!("existing name must be indeterminate, not an owned root"),
+        };
+        assert_eq!(failure.generated_name, name);
+        assert_eq!(failure.manifest.snapshot_id, expected_id);
+        assert!(!failure.reason.is_empty());
+        failure
+            .guard
+            .assert_stable(LABEL)
+            .expect("parent stays pinned");
+        assert_eq!(
+            std::fs::read(dir.join("foreign.txt")).unwrap(),
+            b"do not touch"
+        );
+        drop(failure);
+        std::fs::remove_file(dir.join("foreign.txt")).expect("remove test file");
+        std::fs::remove_dir(dir).expect("remove empty test root");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn partial_owned_stage_returns_pinned_root_for_attention() {
+        let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .expect("ordinary interactive test owner SID required");
+        let name = format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple());
+        let dir = temp.join(&name);
+        let mut root = ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp");
+        root.create_owner_only_fixture_child(&name, &sid, LABEL)
+            .expect("create owner-only disposable root");
+        // A preexisting second leaf causes a partial create-only stage after
+        // the first reviewed leaf was written. It must never be overwritten.
+        std::fs::write(dir.join("main.rs"), b"preexisting foreign bytes")
+            .expect("create test collision");
+        let cargo = b"[package]\nname='partial'\n".to_vec();
+        let main = b"fn main() {}\n".to_vec();
+        let manifest = SnapshotManifest {
+            schema_version: 1,
+            source_repository: SOURCE_REPOSITORY.into(),
+            source_commit: "abcdef0123456789abcdef0123456789abcdef01".into(),
+            snapshot_id: Uuid::new_v4().to_string(),
+            files: vec![
+                SnapshotFile {
+                    fixture_leaf: "Cargo.toml".into(),
+                    source_path: "Cargo.toml".into(),
+                    size_bytes: cargo.len() as u64,
+                    sha256: format!("{:x}", Sha256::digest(&cargo)),
+                },
+                SnapshotFile {
+                    fixture_leaf: "main.rs".into(),
+                    source_path: "src/main.rs".into(),
+                    size_bytes: main.len() as u64,
+                    sha256: format!("{:x}", Sha256::digest(&main)),
+                },
+            ],
+        };
+        let snapshot_id = manifest.snapshot_id.clone();
+        let failure = match finish_owned_candidate_stage(
+            root,
+            manifest,
+            &[
+                ("Cargo.toml".into(), cargo.clone()),
+                ("src/main.rs".into(), main),
+            ],
+        ) {
+            Ok(_) => panic!("collision must fail the owned stage"),
+            Err(failure) => failure,
+        };
+        assert_eq!(failure.manifest.snapshot_id, snapshot_id);
+        failure
+            .root
+            .assert_stable(LABEL)
+            .expect("owner handle retained");
+        assert!(!failure.reason.is_empty());
+        assert_eq!(std::fs::read(dir.join("Cargo.toml")).unwrap(), cargo);
+        assert_eq!(
+            std::fs::read(dir.join("main.rs")).unwrap(),
+            b"preexisting foreign bytes"
+        );
+        drop(failure);
+        std::fs::remove_file(dir.join("Cargo.toml")).expect("remove test-created first file");
+        std::fs::remove_file(dir.join("main.rs")).expect("remove test-owned collision file");
+        std::fs::remove_dir(dir).expect("remove empty test root");
     }
 
     #[cfg(windows)]

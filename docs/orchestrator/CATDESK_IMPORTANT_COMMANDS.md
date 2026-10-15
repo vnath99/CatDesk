@@ -1,5 +1,9 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — T0478 owned stage failure
+
+- `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2D_OWNED_STAGE_FAILURE_LEASE.md` records the source-only post-create failure lease. It has no operator command. A crash still requires durable write-ahead ownership evidence; do not locate and delete orphan roots by generated-name scan.
+
 ## 2026-10-14 — T0478 dormant owner-bound retirement
 
 - `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2C_OWNER_RETIREMENT_SOURCE.md` records the source-only, consuming exact-handle retirement path and test results. It has no operator command or live MCP route. Never scan generated temp names or use recursive pathname cleanup to recover a crash residue; a future owner lifecycle must hold trusted durable identities and record operator attention on uncertain failure.
