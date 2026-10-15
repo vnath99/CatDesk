@@ -197,6 +197,7 @@ struct ReaderPolicy {
 /// install operation. Reopening the fixed names must still match these pins.
 pub(crate) struct ProtectedInstallPinV1 {
     snapshot: ProtectedInstallReadOnlySnapshotV1,
+    pointer_sha256: String,
     policy: ReaderPolicy,
     pointer: OwnedHandle,
     packages: OwnedHandle,
@@ -209,6 +210,10 @@ pub(crate) struct ProtectedInstallPinV1 {
 impl ProtectedInstallPinV1 {
     pub(crate) fn snapshot(&self) -> &ProtectedInstallReadOnlySnapshotV1 {
         &self.snapshot
+    }
+
+    pub(crate) fn pointer_sha256(&self) -> &str {
+        &self.pointer_sha256
     }
 
     pub(crate) fn revalidate(
@@ -234,7 +239,8 @@ impl ProtectedInstallPinV1 {
         }
         // The old handles deny write/delete sharing. Independently reopen and
         // rehash the same fixed names while those handles remain live.
-        if inspect_pinned(root, expected_root, &self.policy)? != self.snapshot {
+        let (snapshot, pointer_sha256) = inspect_pinned(root, expected_root, &self.policy)?;
+        if snapshot != self.snapshot || pointer_sha256 != self.pointer_sha256 {
             return Err("WAKE_PROTECTED_READER_OBJECT_CHANGED".into());
         }
         Ok(())
@@ -627,7 +633,7 @@ fn inspect_pinned(
     root: &OwnedHandle,
     expected_root: &ObjectIdentityV1,
     policy: &ReaderPolicy,
-) -> Result<ProtectedInstallReadOnlySnapshotV1> {
+) -> Result<(ProtectedInstallReadOnlySnapshotV1, String)> {
     let root_info_before = file_info(root.as_raw_handle(), true)?;
     if identity(&root_info_before) != *expected_root {
         return Err("WAKE_PROTECTED_READER_ROOT_MISMATCH".into());
@@ -713,7 +719,8 @@ fn inspect_pinned(
         return Err("WAKE_PROTECTED_READER_OBJECT_CHANGED".into());
     }
     exact_package_inventory(&package)?;
-    Ok(ProtectedInstallReadOnlySnapshotV1 {
+    let pointer_sha256 = format!("{:x}", Sha256::digest(&pointer_bytes));
+    let snapshot = ProtectedInstallReadOnlySnapshotV1 {
         schema_version: 1,
         install_generation: pointer.install_generation,
         approval_id: pointer.approval_id,
@@ -728,7 +735,8 @@ fn inspect_pinned(
         manifest_file: pointer.manifest_file,
         artifacts,
         disposition: "READ_ONLY_PROTECTED_PACKAGE_SNAPSHOT_NOT_LAUNCH_AUTHORITY",
-    })
+    };
+    Ok((snapshot, pointer_sha256))
 }
 
 fn pin_pinned(
@@ -736,7 +744,7 @@ fn pin_pinned(
     expected_root: &ObjectIdentityV1,
     policy: ReaderPolicy,
 ) -> Result<ProtectedInstallPinV1> {
-    let snapshot = inspect_pinned(root, expected_root, &policy)?;
+    let (snapshot, pointer_sha256) = inspect_pinned(root, expected_root, &policy)?;
     let pointer = open_relative(root, "current.json", false)?;
     let packages = open_relative(root, "packages", true)?;
     let packages_id = identity(&file_info(packages.as_raw_handle(), true)?);
@@ -750,6 +758,7 @@ fn pin_pinned(
         .map_err(|_| "WAKE_PROTECTED_READER_INVENTORY_MISMATCH")?;
     let pin = ProtectedInstallPinV1 {
         snapshot,
+        pointer_sha256,
         policy,
         pointer,
         packages,
@@ -763,8 +772,9 @@ fn pin_pinned(
 }
 
 /// The caller must already hold the fixed protected root and broker ledger
-/// lock. The returned pins corroborate a package snapshot only; the ledger's
-/// pointer-switch record cannot yet prove the new pointer's file identity.
+/// lock. The returned pins retain the current pointer's physical ID and exact
+/// canonical-byte digest for a read-only ledger comparison. They do not prove
+/// the broker performed the switch or grant install or launch authority.
 pub(crate) fn pin_protected_install_under_guard(
     root: &OwnedHandle,
     expected_root: &ObjectIdentityV1,
@@ -813,7 +823,7 @@ pub(crate) fn pin_protected_install_fixture(
 pub fn inspect_fixed_protected_install_read_only() -> Result<ProtectedInstallReadOnlySnapshotV1> {
     let guard = acquire_fixed_protected_root_for_reader()?;
     let policy = ReaderPolicy::production(guard.service_sid())?;
-    inspect_pinned(guard.root(), guard.root_identity(), &policy)
+    inspect_pinned(guard.root(), guard.root_identity(), &policy).map(|(snapshot, _)| snapshot)
 }
 
 #[cfg(test)]
@@ -988,7 +998,7 @@ pub(crate) mod tests {
         }
 
         pub(crate) fn inspect(&self) -> Result<ProtectedInstallReadOnlySnapshotV1> {
-            inspect_pinned(&self.root, &self.root_id, &self.policy)
+            inspect_pinned(&self.root, &self.root_id, &self.policy).map(|(snapshot, _)| snapshot)
         }
 
         fn package_path(&self) -> PathBuf {

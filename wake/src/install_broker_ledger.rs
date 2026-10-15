@@ -224,6 +224,16 @@ pub struct StageBindingV1 {
     pub artifacts: [ObjectIdentityV1; 4],
 }
 
+/// Exact canonical bytes and physical file selected as the new current.json.
+/// This is journal evidence only; a future broker-owned switch writer must
+/// retain and revalidate the pointer handle across recording the phase.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PointerSwitchBindingV1 {
+    pub pointer_file: ObjectIdentityV1,
+    pub pointer_sha256: String,
+}
+
 /// A point-in-time diagnosis of one existing transaction. The stage reader's
 /// own provenance flag remains false; matching protected ledger IDs here does
 /// not retain the stage, owner or pointer pins needed for install mutation.
@@ -240,8 +250,8 @@ pub struct BrokerExactResumeReadbackV1 {
 }
 
 /// A completed ledger head and six installed package object IDs agree at one
-/// locked readback. The staging parent is not checked and the pointer-switch
-/// record lacks the new pointer's file ID/digest. Even a contiguous ledger
+/// locked readback. The staging parent is not checked. Older completed records
+/// may lack a pointer-switch binding, and even a contiguous ledger
 /// beginning above generation one is not a migration anchor. This value is
 /// diagnostic; it does not reverify the historical signed approval envelope
 /// or become an install observation.
@@ -254,6 +264,8 @@ pub struct BrokerCompletedPredecessorReadbackV1 {
     pub protected_install: ProtectedInstallReadOnlySnapshotV1,
     pub installed_package_object_ids_matched: bool,
     pub staging_parent_object_verified: bool,
+    /// True only when the recorded new file ID and SHA-256 match the pinned
+    /// current.json object and exact canonical bytes at this readback.
     pub pointer_switch_record_binding_present: bool,
     pub first_generation_migration_anchor_verified: bool,
     pub disposition: &'static str,
@@ -344,6 +356,10 @@ struct LedgerRecordV1 {
     old_host_creation_time_100ns: u64,
     original_desired_state: OriginalDesiredStateV1,
     stage_binding: Option<StageBindingV1>,
+    // Omit None so the exact canonical bytes of pre-binding V1 records still
+    // round-trip. A missing binding never grants a new transaction authority.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pointer_switch_binding: Option<PointerSwitchBindingV1>,
     phase: String,
     prior_record_sha256: String,
 }
@@ -368,6 +384,7 @@ struct Binding {
     old_host_creation_time_100ns: u64,
     original_desired_state: OriginalDesiredStateV1,
     stage_binding: Option<StageBindingV1>,
+    pointer_switch_binding: Option<PointerSwitchBindingV1>,
 }
 
 impl Binding {
@@ -396,6 +413,7 @@ impl Binding {
             old_host_creation_time_100ns: payload.old_host_creation_time_100ns,
             original_desired_state,
             stage_binding: None,
+            pointer_switch_binding: None,
         }
     }
 
@@ -421,6 +439,7 @@ impl Binding {
             old_host_creation_time_100ns: self.old_host_creation_time_100ns,
             original_desired_state: self.original_desired_state,
             stage_binding: self.stage_binding.clone(),
+            pointer_switch_binding: self.pointer_switch_binding.clone(),
             phase: phase.name().into(),
             prior_record_sha256: prior_record_sha256.into(),
         }
@@ -503,7 +522,7 @@ impl<'a> BrokerLedgerGuard<'a> {
         if policy_before.protected_root != root_id {
             return Err("WAKE_LEDGER_ROOT_CHANGED".into());
         }
-        let (inventory, head, stage) = completed_head(self.root, &root_id)?;
+        let (inventory, head, stage, pointer_binding) = completed_head(self.root, &root_id)?;
         if head.approval_continuity.policy_file != policy_before.policy_file
             || head.approval_continuity.policy_sha256 != policy_before.policy_sha256
             || head.approval_continuity.approval_public_key_sha256
@@ -522,10 +541,21 @@ impl<'a> BrokerLedgerGuard<'a> {
             }
         };
         let protected_install = pin.snapshot().clone();
-        compare_completed_head(&head, &stage, &protected_install)?;
+        compare_completed_head(
+            &head,
+            &stage,
+            pointer_binding.as_ref(),
+            &protected_install,
+            pin.pointer_sha256(),
+        )?;
         pin.revalidate(self.root, &root_id)?;
-        let (after_inventory, after_head, after_stage) = completed_head(self.root, &root_id)?;
-        if after_inventory != inventory || after_head != head || after_stage != stage {
+        let (after_inventory, after_head, after_stage, after_pointer_binding) =
+            completed_head(self.root, &root_id)?;
+        if after_inventory != inventory
+            || after_head != head
+            || after_stage != stage
+            || after_pointer_binding != pointer_binding
+        {
             return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
         }
         if root_info(self.root)? != root_id || policy.readback()? != policy_before {
@@ -540,9 +570,13 @@ impl<'a> BrokerLedgerGuard<'a> {
             protected_install,
             installed_package_object_ids_matched: true,
             staging_parent_object_verified: false,
-            pointer_switch_record_binding_present: false,
+            pointer_switch_record_binding_present: pointer_binding.is_some(),
             first_generation_migration_anchor_verified: false,
-            disposition: "COMPLETE_HEAD_AND_INSTALLED_PACKAGE_IDS_MATCH_STAGING_POINTER_AND_MIGRATION_UNPROVEN_NO_INSTALL_AUTHORITY",
+            disposition: if pointer_binding.is_some() {
+                "COMPLETE_POINTER_BINDING_MATCHES_READBACK_NO_INSTALL_AUTHORITY"
+            } else {
+                "COMPLETE_PACKAGE_IDS_MATCH_POINTER_UNBOUND_NO_INSTALL_AUTHORITY"
+            },
         })
     }
 
@@ -609,7 +643,7 @@ impl<'a> BrokerLedgerGuard<'a> {
         let present = inventory
             .get(&generation)
             .ok_or("WAKE_LEDGER_NO_PRIOR_INTENT")?;
-        let (intent, phase, stage_binding) =
+        let (intent, phase, stage_binding, pointer_binding) =
             historical_intent(self.root, generation, present, &root_id)?;
         let original = original_observation(&intent);
         let approved = policy.verify_approval_for_transaction(envelope, &original)?;
@@ -692,9 +726,13 @@ impl<'a> BrokerLedgerGuard<'a> {
         if ledger_inventory(self.root)? != inventory {
             return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
         }
-        let (last_intent, last_phase, last_binding) =
+        let (last_intent, last_phase, last_binding, last_pointer_binding) =
             historical_intent(self.root, generation, present, &root_id)?;
-        if last_intent != intent || last_phase != phase || last_binding != stage_binding {
+        if last_intent != intent
+            || last_phase != phase
+            || last_binding != stage_binding
+            || last_pointer_binding != pointer_binding
+        {
             return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
         }
         policy.revalidate()?;
@@ -735,6 +773,24 @@ fn valid_stage_binding(stage: &StageBindingV1, root: &ObjectIdentityV1) -> bool 
             && (object.file_index_high != 0 || object.file_index_low != 0)
             && objects[..index].iter().all(|prior| *prior != *object)
     })
+}
+
+fn valid_pointer_switch_binding(
+    pointer: &PointerSwitchBindingV1,
+    root: &ObjectIdentityV1,
+    predecessor: &ObjectIdentityV1,
+    stage: &StageBindingV1,
+) -> bool {
+    let file = &pointer.pointer_file;
+    file.volume_serial == root.volume_serial
+        && (file.file_index_high != 0 || file.file_index_low != 0)
+        && file != root
+        && file != predecessor
+        && file != &stage.staging_directory
+        && file != &stage.candidate_directory
+        && file != &stage.manifest_file
+        && !stage.artifacts.contains(file)
+        && lowercase_hex(&pointer.pointer_sha256, 64)
 }
 
 fn root_info(root: &OwnedHandle) -> Result<ObjectIdentityV1> {
@@ -1059,7 +1115,12 @@ fn historical_intent(
     generation: u64,
     present: &[bool; 8],
     observed_root: &ObjectIdentityV1,
-) -> Result<(LedgerRecordV1, InstallPhaseV1, Option<StageBindingV1>)> {
+) -> Result<(
+    LedgerRecordV1,
+    InstallPhaseV1,
+    Option<StageBindingV1>,
+    Option<PointerSwitchBindingV1>,
+)> {
     if !present[0] {
         return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
     }
@@ -1080,7 +1141,7 @@ fn historical_intent(
     {
         return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
     }
-    if intent.stage_binding.is_some() {
+    if intent.stage_binding.is_some() || intent.pointer_switch_binding.is_some() {
         return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
     }
     let mut binding = Binding {
@@ -1102,6 +1163,7 @@ fn historical_intent(
         old_host_creation_time_100ns: intent.old_host_creation_time_100ns,
         original_desired_state: intent.original_desired_state,
         stage_binding: None,
+        pointer_switch_binding: None,
     };
     let mut current = InstallPhaseV1::Intent;
     let mut gap = false;
@@ -1126,13 +1188,35 @@ fn historical_intent(
             }
             binding.stage_binding = Some(stage.clone());
         }
+        if phase == InstallPhaseV1::PointerSwitched
+            && let Some(pointer) = record.pointer_switch_binding.as_ref()
+        {
+            let stage = binding
+                .stage_binding
+                .as_ref()
+                .ok_or("WAKE_LEDGER_RECORD_CORRUPT")?;
+            if !valid_pointer_switch_binding(
+                pointer,
+                observed_root,
+                &binding.predecessor_pointer,
+                stage,
+            ) {
+                return Err("WAKE_LEDGER_POINTER_BINDING_INVALID".into());
+            }
+            binding.pointer_switch_binding = Some(pointer.clone());
+        }
         if record != binding.record(phase, &digest) {
             return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
         }
         digest = next_digest;
         current = phase;
     }
-    Ok((intent, current, binding.stage_binding))
+    Ok((
+        intent,
+        current,
+        binding.stage_binding,
+        binding.pointer_switch_binding,
+    ))
 }
 
 /// Read the rollback floor only from a fully chained protected history. The
@@ -1154,7 +1238,7 @@ fn validated_latest_accepted_at(
         if last_phase != InstallPhaseV1::Complete {
             return Err("WAKE_LEDGER_PRIOR_INCOMPLETE".into());
         }
-        let (intent, phase, _) = historical_intent(root, generation, present, root_id)?;
+        let (intent, phase, _, _) = historical_intent(root, generation, present, root_id)?;
         if !approval_ids.insert(intent.approval_id.clone())
             || !approval_digests.insert(intent.signed_approval_sha256.clone())
         {
@@ -1173,10 +1257,14 @@ fn validated_latest_accepted_at(
     Ok(last_accepted)
 }
 
-fn completed_head(
-    root: &OwnedHandle,
-    root_id: &ObjectIdentityV1,
-) -> Result<(BTreeMap<u64, [bool; 8]>, LedgerRecordV1, StageBindingV1)> {
+type CompletedHeadV1 = (
+    BTreeMap<u64, [bool; 8]>,
+    LedgerRecordV1,
+    StageBindingV1,
+    Option<PointerSwitchBindingV1>,
+);
+
+fn completed_head(root: &OwnedHandle, root_id: &ObjectIdentityV1) -> Result<CompletedHeadV1> {
     let inventory = ledger_inventory(root)?;
     let (&generation, present) = inventory
         .last_key_value()
@@ -1185,17 +1273,23 @@ fn completed_head(
     // not just the final record. It also checks a second inventory readback.
     validated_latest_accepted_at(root, root_id)?;
     let mut prior_package: Option<String> = None;
+    let mut prior_pointer: Option<ObjectIdentityV1> = None;
     for (&past_generation, past_present) in &inventory {
-        let (past, _, _) = historical_intent(root, past_generation, past_present, root_id)?;
+        let (past, _, _, switched_pointer) =
+            historical_intent(root, past_generation, past_present, root_id)?;
         if prior_package
             .as_ref()
             .is_some_and(|package| package != &past.predecessor_package_id)
+            || prior_pointer
+                .as_ref()
+                .is_some_and(|pointer| pointer != &past.predecessor_pointer)
         {
             return Err("WAKE_BROKER_PREDECESSOR_HISTORY_MISMATCH".into());
         }
         prior_package = Some(past.package_id);
+        prior_pointer = switched_pointer.map(|pointer| pointer.pointer_file);
     }
-    let (head, phase, stage) = historical_intent(root, generation, present, root_id)?;
+    let (head, phase, stage, pointer) = historical_intent(root, generation, present, root_id)?;
     if phase != InstallPhaseV1::Complete {
         return Err("WAKE_BROKER_PREDECESSOR_INCOMPLETE".into());
     }
@@ -1203,13 +1297,15 @@ fn completed_head(
     if ledger_inventory(root)? != inventory {
         return Err("WAKE_LEDGER_INVENTORY_CHANGED".into());
     }
-    Ok((inventory, head, stage))
+    Ok((inventory, head, stage, pointer))
 }
 
 fn compare_completed_head(
     head: &LedgerRecordV1,
     stage: &StageBindingV1,
+    pointer_binding: Option<&PointerSwitchBindingV1>,
     snapshot: &ProtectedInstallReadOnlySnapshotV1,
+    pointer_sha256: &str,
 ) -> Result<()> {
     if snapshot.install_generation != head.install_generation
         || snapshot.approval_id != head.approval_id
@@ -1228,6 +1324,11 @@ fn compare_completed_head(
     {
         return Err("WAKE_BROKER_PREDECESSOR_MISMATCH".into());
     }
+    if pointer_binding.is_some_and(|binding| {
+        snapshot.pointer != binding.pointer_file || pointer_sha256 != binding.pointer_sha256
+    }) {
+        return Err("WAKE_BROKER_PREDECESSOR_POINTER_MISMATCH".into());
+    }
     Ok(())
 }
 
@@ -1244,6 +1345,7 @@ fn preflight_history(
     let mut same_generation_exists = false;
     let mut seen_approval_ids = HashSet::new();
     let mut seen_approval_digests = HashSet::new();
+    let mut prior_output: Option<(String, ObjectIdentityV1)> = None;
     for (generation, present) in inventory {
         if generation > binding.install_generation {
             return Err("WAKE_LEDGER_STALE_GENERATION".into());
@@ -1251,7 +1353,13 @@ fn preflight_history(
         if last_prior.is_some_and(|prior| prior.checked_add(1) != Some(generation)) {
             return Err("WAKE_LEDGER_STALE_GENERATION".into());
         }
-        let (intent, phase, _) = historical_intent(root, generation, &present, observed_root)?;
+        let (intent, phase, _, pointer) =
+            historical_intent(root, generation, &present, observed_root)?;
+        if prior_output.as_ref().is_some_and(|(package, pointer)| {
+            intent.predecessor_package_id != *package || intent.predecessor_pointer != *pointer
+        }) {
+            return Err("WAKE_LEDGER_PREDECESSOR_MISMATCH".into());
+        }
         if !seen_approval_ids.insert(intent.approval_id.clone())
             || !seen_approval_digests.insert(intent.signed_approval_sha256.clone())
         {
@@ -1263,16 +1371,23 @@ fn preflight_history(
             if phase != InstallPhaseV1::Complete {
                 return Err("WAKE_LEDGER_PRIOR_INCOMPLETE".into());
             }
+            let pointer = pointer.ok_or("WAKE_LEDGER_PRIOR_POINTER_UNBOUND")?;
             if intent.approval_id == binding.approval_id
                 || intent.signed_approval_sha256 == binding.signed_approval_sha256
             {
                 return Err("WAKE_LEDGER_APPROVAL_REPLAY".into());
             }
             last_prior = Some(generation);
+            prior_output = Some((intent.package_id, pointer.pointer_file));
         }
     }
     if last_prior.is_some_and(|prior| prior.checked_add(1) != Some(binding.install_generation)) {
         return Err("WAKE_LEDGER_STALE_GENERATION".into());
+    }
+    if prior_output.as_ref().is_some_and(|(package, pointer)| {
+        binding.predecessor_package_id != *package || binding.predecessor_pointer != *pointer
+    }) {
+        return Err("WAKE_LEDGER_PREDECESSOR_MISMATCH".into());
     }
     Ok(same_generation_exists)
 }
@@ -1287,7 +1402,7 @@ fn read_intent_for_resume(root: &OwnedHandle, generation: u64) -> Result<Option<
     let Some(present) = inventory.get(&generation) else {
         return Ok(None);
     };
-    let (intent, _, _) = historical_intent(root, generation, present, &observed_root)?;
+    let (intent, _, _, _) = historical_intent(root, generation, present, &observed_root)?;
     Ok(Some(intent))
 }
 
@@ -1486,6 +1601,7 @@ impl<'a> BrokerLedgerGuard<'a> {
             old_host_creation_time_100ns: payload.old_host_creation_time_100ns,
             original_desired_state: expected.original_desired_state,
             stage_binding: None,
+            pointer_switch_binding: None,
         };
         let existing = preflight_history(root, &binding, &observed_root)?;
         if !existing
@@ -1540,6 +1656,23 @@ impl<'a> BrokerLedgerGuard<'a> {
                             return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
                         }
                         binding.stage_binding = Some(stage.clone());
+                    }
+                    if phase == InstallPhaseV1::PointerSwitched
+                        && let Some(pointer) = record.pointer_switch_binding.as_ref()
+                    {
+                        let stage = binding
+                            .stage_binding
+                            .as_ref()
+                            .ok_or("WAKE_LEDGER_RECORD_CORRUPT")?;
+                        if !valid_pointer_switch_binding(
+                            pointer,
+                            &observed_root,
+                            &binding.predecessor_pointer,
+                            stage,
+                        ) {
+                            return Err("WAKE_LEDGER_POINTER_BINDING_INVALID".into());
+                        }
+                        binding.pointer_switch_binding = Some(pointer.clone());
                     }
                     if record != binding.record(phase, &digest) {
                         return Err("WAKE_LEDGER_APPROVAL_CONFLICT".into());
@@ -1686,7 +1819,65 @@ impl<'a> BrokerLedgerLease<'a> {
                 artifacts: [id(4), id(5), id(6), id(7)],
             });
         }
+        if next == InstallPhaseV1::PointerSwitched && self.binding.pointer_switch_binding.is_none()
+        {
+            // Ledger-only tests model the future writer's private pointer
+            // receipt. This fabricated ID never enters a production record.
+            let stage = self.binding.stage_binding.as_ref().expect("fixture stage");
+            let mut pointer = self.binding.protected_root.clone();
+            for offset in 8..=32 {
+                pointer.file_index_low = self
+                    .binding
+                    .protected_root
+                    .file_index_low
+                    .wrapping_add(offset);
+                let candidate = PointerSwitchBindingV1 {
+                    pointer_file: pointer.clone(),
+                    pointer_sha256: "1".repeat(64),
+                };
+                if valid_pointer_switch_binding(
+                    &candidate,
+                    &self.binding.protected_root,
+                    &self.binding.predecessor_pointer,
+                    stage,
+                ) {
+                    self.binding.pointer_switch_binding = Some(candidate);
+                    break;
+                }
+            }
+            if self.binding.pointer_switch_binding.is_none() {
+                return Err("WAKE_LEDGER_POINTER_BINDING_INVALID".into());
+            }
+        }
         self.advance_internal(next)
+    }
+
+    #[cfg(test)]
+    fn advance_legacy_without_pointer(&mut self, next: InstallPhaseV1) -> Result<bool> {
+        if next == InstallPhaseV1::PointerSwitched {
+            self.advance_internal(next)
+        } else {
+            self.advance(next)
+        }
+    }
+
+    #[cfg(test)]
+    fn record_pointer_switched_fixture(&mut self, pointer: PointerSwitchBindingV1) -> Result<bool> {
+        if self.current != InstallPhaseV1::OldOwnerStopped
+            || self.binding.pointer_switch_binding.is_some()
+            || !self.binding.stage_binding.as_ref().is_some_and(|stage| {
+                valid_pointer_switch_binding(
+                    &pointer,
+                    &self.binding.protected_root,
+                    &self.binding.predecessor_pointer,
+                    stage,
+                )
+            })
+        {
+            return Err("WAKE_LEDGER_POINTER_BINDING_INVALID".into());
+        }
+        self.binding.pointer_switch_binding = Some(pointer);
+        self.advance_internal(InstallPhaseV1::PointerSwitched)
     }
 
     fn advance_internal(&mut self, next: InstallPhaseV1) -> Result<bool> {
@@ -1846,6 +2037,31 @@ mod tests {
         .expect("generation-specific signed approval")
     }
 
+    fn signed_for_generation_after(
+        protected_root: &ObjectIdentityV1,
+        generation: u64,
+        id: u128,
+        predecessor_package_id: &str,
+        predecessor_pointer: &ObjectIdentityV1,
+    ) -> VerifiedApprovalV1 {
+        let (mut payload, mut observed, key) = approval_test::fixture();
+        payload.target_protected_root = protected_root.clone();
+        observed.target_protected_root = protected_root.clone();
+        payload.install_generation = generation;
+        observed.next_install_generation = generation;
+        payload.approval_id = format!("{id:032x}");
+        payload.predecessor_package_id = predecessor_package_id.into();
+        observed.predecessor_package_id = predecessor_package_id.into();
+        payload.predecessor_pointer = predecessor_pointer.clone();
+        observed.predecessor_pointer = predecessor_pointer.clone();
+        verify_approval(
+            &approval_test::envelope(&payload, &key),
+            &key.verifying_key(),
+            &observed,
+        )
+        .expect("predecessor-bound signed approval")
+    }
+
     fn completed_snapshot_fixture(
         head: &LedgerRecordV1,
         stage: &StageBindingV1,
@@ -1915,7 +2131,9 @@ mod tests {
         let (root, handle, approval, expected) = fixture();
         let mut lease = BrokerLedgerLease::begin(&handle, &approval, &expected).expect("intent");
         for phase in InstallPhaseV1::ORDER.iter().copied().skip(1) {
-            lease.advance(phase).expect("complete fixture transaction");
+            lease
+                .advance_legacy_without_pointer(phase)
+                .expect("complete legacy fixture transaction");
         }
         drop(lease);
         let ledger_bytes_before: [Vec<u8>; 8] = std::array::from_fn(|index| {
@@ -1926,40 +2144,41 @@ mod tests {
             .expect("original record bytes")
         });
         let guard = BrokerLedgerGuard::acquire(&handle).expect("global lock");
-        let (before, head, stage) =
+        let (before, head, stage, pointer_binding) =
             completed_head(guard.root(), &expected.protected_root).expect("complete head");
+        assert!(pointer_binding.is_none(), "legacy V1 fixture is unbound");
         let snapshot = completed_snapshot_fixture(&head, &stage, &approval);
-        compare_completed_head(&head, &stage, &snapshot).expect("exact physical correspondence");
-        // The ledger deliberately has no field for the newly switched pointer
-        // object. This can only corroborate the package, not attest the switch.
+        compare_completed_head(&head, &stage, None, &snapshot, "")
+            .expect("exact installed package correspondence");
+        // An older complete record corroborates the installed package only.
         let mut other_pointer = snapshot.clone();
         other_pointer.pointer.file_index_low = other_pointer.pointer.file_index_low.wrapping_add(1);
-        compare_completed_head(&head, &stage, &other_pointer)
-            .expect("new pointer identity is absent from ledger schema");
+        compare_completed_head(&head, &stage, None, &other_pointer, "")
+            .expect("legacy pointer binding is absent");
         let mut wrong = snapshot.clone();
         wrong.package_directory.file_index_low =
             wrong.package_directory.file_index_low.wrapping_add(1);
         assert_eq!(
-            compare_completed_head(&head, &stage, &wrong).unwrap_err(),
+            compare_completed_head(&head, &stage, None, &wrong, "").unwrap_err(),
             "WAKE_BROKER_PREDECESSOR_MISMATCH"
         );
         let mut wrong = snapshot.clone();
         wrong.artifacts[2].object.file_index_low =
             wrong.artifacts[2].object.file_index_low.wrapping_add(1);
         assert_eq!(
-            compare_completed_head(&head, &stage, &wrong).unwrap_err(),
+            compare_completed_head(&head, &stage, None, &wrong, "").unwrap_err(),
             "WAKE_BROKER_PREDECESSOR_MISMATCH"
         );
         let mut wrong = snapshot.clone();
         wrong.approval_id = "f".repeat(32);
         assert_eq!(
-            compare_completed_head(&head, &stage, &wrong).unwrap_err(),
+            compare_completed_head(&head, &stage, None, &wrong, "").unwrap_err(),
             "WAKE_BROKER_PREDECESSOR_MISMATCH"
         );
         let mut wrong = snapshot.clone();
         wrong.manifest_sha256 = "f".repeat(64);
         assert_eq!(
-            compare_completed_head(&head, &stage, &wrong).unwrap_err(),
+            compare_completed_head(&head, &stage, None, &wrong, "").unwrap_err(),
             "WAKE_BROKER_PREDECESSOR_MISMATCH"
         );
         assert_eq!(ledger_inventory(guard.root()).unwrap(), before);
@@ -1971,6 +2190,30 @@ mod tests {
             .expect("unchanged record bytes")
         });
         assert_eq!(ledger_bytes_after, ledger_bytes_before);
+        assert!(ledger_bytes_before.iter().all(|bytes| {
+            !bytes
+                .windows(b"pointerSwitchBinding".len())
+                .any(|part| part == b"pointerSwitchBinding")
+        }));
+        let intent_name = record_name(expected.next_install_generation, InstallPhaseV1::Intent);
+        let intent_path = root.join(&intent_name);
+        let old_intent = std::fs::read(&intent_path).expect("original V1 intent");
+        let old_text = String::from_utf8(old_intent.clone()).expect("canonical UTF-8");
+        let with_explicit_null = old_text.replace(
+            "\"stageBinding\":null,\"phase\":",
+            "\"stageBinding\":null,\"pointerSwitchBinding\":null,\"phase\":",
+        );
+        assert_ne!(with_explicit_null, old_text);
+        std::fs::write(&intent_path, with_explicit_null).expect("explicit null fixture");
+        let mut opened = open_optional(guard.root(), &intent_name)
+            .expect("open fixture record")
+            .expect("intent exists");
+        assert_eq!(
+            read_record(&mut opened).unwrap_err(),
+            "WAKE_LEDGER_RECORD_CORRUPT"
+        );
+        drop(opened);
+        std::fs::write(intent_path, old_intent).expect("restore canonical V1 bytes");
         assert!(
             !root
                 .join(record_name(
@@ -1980,8 +2223,227 @@ mod tests {
                 .exists()
         );
         drop(guard);
+        let next_generation = expected.next_install_generation + 1;
+        let next = signed_for_generation(&expected.protected_root, next_generation, 707);
+        let next_expected = LedgerExpectationV1 {
+            next_install_generation: next_generation,
+            ..expected.clone()
+        };
+        assert_eq!(
+            BrokerLedgerLease::begin(&handle, &next, &next_expected)
+                .err()
+                .unwrap(),
+            "WAKE_LEDGER_PRIOR_POINTER_UNBOUND"
+        );
+        assert!(
+            !root
+                .join(record_name(next_generation, InstallPhaseV1::Intent))
+                .exists()
+        );
         drop(handle);
         remove_fixture(&root, expected.next_install_generation);
+    }
+
+    #[test]
+    fn bound_pointer_requires_both_exact_file_id_and_digest() {
+        let (root, handle, approval, expected) = fixture();
+        let mut lease = BrokerLedgerLease::begin(&handle, &approval, &expected).expect("intent");
+        for phase in InstallPhaseV1::ORDER.iter().copied().skip(1) {
+            lease.advance(phase).expect("bound fixture history");
+        }
+        drop(lease);
+        let guard = BrokerLedgerGuard::acquire(&handle).expect("global lock");
+        let (_, head, stage, pointer) =
+            completed_head(guard.root(), &expected.protected_root).expect("bound complete head");
+        let pointer = pointer.expect("switched pointer binding");
+        let mut snapshot = completed_snapshot_fixture(&head, &stage, &approval);
+        snapshot.pointer = pointer.pointer_file.clone();
+        compare_completed_head(
+            &head,
+            &stage,
+            Some(&pointer),
+            &snapshot,
+            &pointer.pointer_sha256,
+        )
+        .expect("both physical ID and exact bytes match");
+        assert_eq!(
+            compare_completed_head(&head, &stage, Some(&pointer), &snapshot, &"f".repeat(64))
+                .unwrap_err(),
+            "WAKE_BROKER_PREDECESSOR_POINTER_MISMATCH"
+        );
+        snapshot.pointer.file_index_low = snapshot.pointer.file_index_low.wrapping_add(1);
+        assert_eq!(
+            compare_completed_head(
+                &head,
+                &stage,
+                Some(&pointer),
+                &snapshot,
+                &pointer.pointer_sha256,
+            )
+            .unwrap_err(),
+            "WAKE_BROKER_PREDECESSOR_POINTER_MISMATCH"
+        );
+        drop(guard);
+        drop(handle);
+        remove_fixture(&root, expected.next_install_generation);
+    }
+
+    #[test]
+    fn pointer_binding_cannot_appear_early_disappear_or_change_after_switch() {
+        let (root, handle, approval, expected) = fixture();
+        let mut lease = BrokerLedgerLease::begin(&handle, &approval, &expected).expect("intent");
+        for phase in InstallPhaseV1::ORDER.iter().copied().skip(1) {
+            lease.advance(phase).expect("bound fixture history");
+        }
+        drop(lease);
+        let generation = expected.next_install_generation;
+        let switched: LedgerRecordV1 = serde_json::from_slice(
+            &std::fs::read(root.join(record_name(generation, InstallPhaseV1::PointerSwitched)))
+                .expect("switched bytes"),
+        )
+        .expect("switched record");
+        let valid_pointer = switched.pointer_switch_binding.expect("bound switch");
+        for (phase, change, error) in [
+            (
+                InstallPhaseV1::Published,
+                Some(valid_pointer.clone()),
+                "WAKE_LEDGER_RECORD_CORRUPT",
+            ),
+            (
+                InstallPhaseV1::PointerSwitched,
+                None,
+                "WAKE_LEDGER_RECORD_CORRUPT",
+            ),
+            (
+                InstallPhaseV1::NewOwnerProven,
+                None,
+                "WAKE_LEDGER_RECORD_CORRUPT",
+            ),
+            (
+                InstallPhaseV1::Complete,
+                Some(PointerSwitchBindingV1 {
+                    pointer_sha256: "f".repeat(64),
+                    ..valid_pointer.clone()
+                }),
+                "WAKE_LEDGER_RECORD_CORRUPT",
+            ),
+        ] {
+            let path = root.join(record_name(generation, phase));
+            let original = std::fs::read(&path).expect("original canonical record");
+            let mut record: LedgerRecordV1 =
+                serde_json::from_slice(&original).expect("record JSON");
+            record.pointer_switch_binding = change;
+            std::fs::write(
+                &path,
+                canonical_bytes(&record).expect("canonical altered record"),
+            )
+            .expect("alter isolated phase");
+            let guard = BrokerLedgerGuard::acquire(&handle).expect("global lock");
+            assert_eq!(
+                completed_head(guard.root(), &expected.protected_root).unwrap_err(),
+                error
+            );
+            drop(guard);
+            std::fs::write(path, original).expect("restore exact record bytes");
+        }
+        let switched_path = root.join(record_name(generation, InstallPhaseV1::PointerSwitched));
+        let original = std::fs::read(&switched_path).expect("original switch record");
+        let mut invalid: LedgerRecordV1 =
+            serde_json::from_slice(&original).expect("switch record JSON");
+        invalid
+            .pointer_switch_binding
+            .as_mut()
+            .expect("binding")
+            .pointer_sha256 = "F".repeat(64);
+        std::fs::write(
+            &switched_path,
+            canonical_bytes(&invalid).expect("invalid binding encoded"),
+        )
+        .expect("alter switch binding");
+        let guard = BrokerLedgerGuard::acquire(&handle).expect("global lock");
+        assert_eq!(
+            completed_head(guard.root(), &expected.protected_root).unwrap_err(),
+            "WAKE_LEDGER_POINTER_BINDING_INVALID"
+        );
+        drop(guard);
+        std::fs::write(switched_path, original).expect("restore exact switch bytes");
+        assert!(
+            !root
+                .join(record_name(generation + 1, InstallPhaseV1::Intent))
+                .exists()
+        );
+        drop(handle);
+        remove_fixture(&root, generation);
+    }
+
+    #[test]
+    fn switched_and_complete_parent_flush_failures_reopen_exact_bound_records() {
+        let (root, handle, approval, expected) = fixture();
+        let generation = expected.next_install_generation;
+        let mut lease = BrokerLedgerLease::begin(&handle, &approval, &expected).expect("intent");
+        for phase in [
+            InstallPhaseV1::StageStarted,
+            InstallPhaseV1::Staged,
+            InstallPhaseV1::Published,
+            InstallPhaseV1::OldOwnerStopped,
+        ] {
+            lease.advance(phase).expect("pre-switch phase");
+        }
+        fail_next_flush(ParentFlushPoint::LaterLedgerPhase);
+        assert_eq!(
+            lease.advance(InstallPhaseV1::PointerSwitched).unwrap_err(),
+            "WAKE_BROKER_PARENT_FLUSH_FAILED"
+        );
+        assert_eq!(lease.phase(), InstallPhaseV1::OldOwnerStopped);
+        assert!(
+            root.join(record_name(generation, InstallPhaseV1::PointerSwitched))
+                .exists()
+        );
+        assert!(
+            !root
+                .join(record_name(generation, InstallPhaseV1::NewOwnerProven))
+                .exists()
+        );
+        drop(lease);
+        let mut lease = BrokerLedgerLease::begin(&handle, &approval, &expected)
+            .expect("exact switched replay and parent reflush");
+        assert_eq!(lease.phase(), InstallPhaseV1::PointerSwitched);
+        assert!(
+            !lease
+                .advance(InstallPhaseV1::PointerSwitched)
+                .expect("idempotent exact phase")
+        );
+        lease
+            .advance(InstallPhaseV1::NewOwnerProven)
+            .expect("bound owner proof fixture");
+        fail_next_flush(ParentFlushPoint::LaterLedgerPhase);
+        assert_eq!(
+            lease.advance(InstallPhaseV1::Complete).unwrap_err(),
+            "WAKE_BROKER_PARENT_FLUSH_FAILED"
+        );
+        assert_eq!(lease.phase(), InstallPhaseV1::NewOwnerProven);
+        drop(lease);
+        let mut lease = BrokerLedgerLease::begin(&handle, &approval, &expected)
+            .expect("exact complete replay and parent reflush");
+        assert_eq!(lease.phase(), InstallPhaseV1::Complete);
+        assert!(
+            !lease
+                .advance(InstallPhaseV1::Complete)
+                .expect("idempotent complete")
+        );
+        drop(lease);
+        let guard = BrokerLedgerGuard::acquire(&handle).expect("global lock");
+        let (_, _, _, pointer) =
+            completed_head(guard.root(), &expected.protected_root).expect("complete bound head");
+        assert!(pointer.is_some());
+        drop(guard);
+        assert!(
+            !root
+                .join(record_name(generation + 1, InstallPhaseV1::Intent))
+                .exists()
+        );
+        drop(handle);
+        remove_fixture(&root, generation);
     }
 
     #[test]
@@ -1991,6 +2453,13 @@ mod tests {
         for phase in InstallPhaseV1::ORDER.iter().copied().skip(1) {
             first.advance(phase).expect("complete first");
         }
+        let first_pointer = first
+            .binding
+            .pointer_switch_binding
+            .as_ref()
+            .expect("fixture switched pointer")
+            .pointer_file
+            .clone();
         drop(first);
         let second_generation = expected.next_install_generation + 1;
         let (mut second_payload, mut second_observed, second_key) = approval_test::fixture();
@@ -2001,6 +2470,8 @@ mod tests {
         second_payload.approval_id = format!("{:032x}", 9090);
         second_payload.predecessor_package_id = approval.payload().manifest.package_id.clone();
         second_observed.predecessor_package_id = second_payload.predecessor_package_id.clone();
+        second_payload.predecessor_pointer = first_pointer.clone();
+        second_observed.predecessor_pointer = first_pointer.clone();
         let second_approval = verify_approval(
             &approval_test::envelope(&second_payload, &second_key),
             &second_key.verifying_key(),
@@ -2010,18 +2481,32 @@ mod tests {
         let second_expected = LedgerExpectationV1 {
             next_install_generation: second_generation,
             predecessor_package_id: second_payload.predecessor_package_id,
+            predecessor_pointer: first_pointer,
             ..expected.clone()
         };
         let second = BrokerLedgerLease::begin(&handle, &second_approval, &second_expected)
             .expect("second intent");
         drop(second);
         let second_path = root.join(record_name(second_generation, InstallPhaseV1::Intent));
-        let mut second_intent: LedgerRecordV1 =
-            serde_json::from_slice(&std::fs::read(&second_path).unwrap()).unwrap();
+        let original_second = std::fs::read(&second_path).expect("second intent bytes");
+        let mut second_intent: LedgerRecordV1 = serde_json::from_slice(&original_second).unwrap();
         second_intent.predecessor_package_id = "other-package".into();
         std::fs::write(&second_path, canonical_bytes(&second_intent).unwrap())
             .expect("isolated fixture drift");
         let guard = BrokerLedgerGuard::acquire(&handle).expect("global lock");
+        assert_eq!(
+            completed_head(guard.root(), &expected.protected_root).unwrap_err(),
+            "WAKE_BROKER_PREDECESSOR_HISTORY_MISMATCH"
+        );
+        drop(guard);
+        let mut second_intent: LedgerRecordV1 = serde_json::from_slice(&original_second).unwrap();
+        second_intent.predecessor_pointer.file_index_low = second_intent
+            .predecessor_pointer
+            .file_index_low
+            .wrapping_add(1);
+        std::fs::write(&second_path, canonical_bytes(&second_intent).unwrap())
+            .expect("isolated physical pointer drift");
+        let guard = BrokerLedgerGuard::acquire(&handle).expect("pointer history lock");
         assert_eq!(
             completed_head(guard.root(), &expected.protected_root).unwrap_err(),
             "WAKE_BROKER_PREDECESSOR_HISTORY_MISMATCH"
@@ -2091,9 +2576,73 @@ mod tests {
         lease
             .record_staged_fixture(stage)
             .expect("fixture staged binding");
-        for phase in InstallPhaseV1::ORDER.iter().copied().skip(3) {
-            lease.advance(phase).expect("fixture complete");
-        }
+        lease
+            .advance(InstallPhaseV1::Published)
+            .expect("published fixture");
+        lease
+            .advance(InstallPhaseV1::OldOwnerStopped)
+            .expect("old-owner-stopped fixture");
+        drop(lease);
+        // A valid current.json by itself cannot fill a missing durable
+        // POINTER_SWITCHED record after a crash at this seam.
+        let guard = BrokerLedgerGuard::acquire(fixture.root()).expect("pre-switch reopen lock");
+        assert_eq!(
+            completed_head(guard.root(), fixture.root_id()).unwrap_err(),
+            "WAKE_BROKER_PREDECESSOR_INCOMPLETE"
+        );
+        drop(guard);
+        assert!(
+            !root_path
+                .join(record_name(
+                    payload.install_generation,
+                    InstallPhaseV1::PointerSwitched
+                ))
+                .exists()
+        );
+        let guard = BrokerLedgerGuard::acquire(fixture.root()).expect("exact pre-switch reopen");
+        let (mut lease, _) = guard
+            .accept_with_observation_fixture(&policy, &envelope, |_| {
+                Ok((observed.clone(), expected.clone()))
+            })
+            .expect("exact stopped phase replay");
+        assert_eq!(lease.phase(), InstallPhaseV1::OldOwnerStopped);
+        let pin = crate::install_broker_reader::pin_protected_install_fixture(
+            fixture.root(),
+            fixture.root_id(),
+        )
+        .expect("real pointer pin");
+        let pointer_binding = PointerSwitchBindingV1 {
+            pointer_file: pin.snapshot().pointer.clone(),
+            pointer_sha256: pin.pointer_sha256().into(),
+        };
+        lease
+            .record_pointer_switched_fixture(pointer_binding)
+            .expect("durable fixture pointer binding");
+        pin.revalidate(fixture.root(), fixture.root_id())
+            .expect("pointer stays pinned through record");
+        drop(pin);
+        drop(lease);
+        let guard = BrokerLedgerGuard::acquire(fixture.root()).expect("switched reopen lock");
+        let (mut lease, _) = guard
+            .accept_with_observation_fixture(&policy, &envelope, |_| {
+                Ok((observed.clone(), expected.clone()))
+            })
+            .expect("exact switched record replay");
+        assert_eq!(lease.phase(), InstallPhaseV1::PointerSwitched);
+        lease
+            .advance(InstallPhaseV1::NewOwnerProven)
+            .expect("new-owner-proven fixture");
+        lease
+            .advance(InstallPhaseV1::Complete)
+            .expect("complete fixture");
+        drop(lease);
+        let guard = BrokerLedgerGuard::acquire(fixture.root()).expect("complete reopen lock");
+        let (lease, _) = guard
+            .accept_with_observation_fixture(&policy, &envelope, |_| {
+                Ok((observed.clone(), expected.clone()))
+            })
+            .expect("exact complete record replay");
+        assert_eq!(lease.phase(), InstallPhaseV1::Complete);
         drop(lease);
         let ledger_bytes_before: [Vec<u8>; 8] = std::array::from_fn(|index| {
             std::fs::read(root_path.join(record_name(
@@ -2110,9 +2659,26 @@ mod tests {
         assert_eq!(result.protected_install, installed);
         assert!(result.installed_package_object_ids_matched);
         assert!(!result.staging_parent_object_verified);
-        assert!(!result.pointer_switch_record_binding_present);
+        assert!(result.pointer_switch_record_binding_present);
         assert!(!result.first_generation_migration_anchor_verified);
         assert!(result.disposition.ends_with("NO_INSTALL_AUTHORITY"));
+        let pointer_path = root_path.join("current.json");
+        let original_pointer_bytes = std::fs::read(&pointer_path).expect("pointer bytes");
+        let saved_pointer = root_path.join("original-pointer-fixture.json");
+        std::fs::rename(&pointer_path, &saved_pointer).expect("save exact pointer file ID");
+        std::fs::write(&pointer_path, &original_pointer_bytes)
+            .expect("same canonical bytes in a new pointer file");
+        assert_eq!(
+            guard
+                .inspect_completed_predecessor_fixture(&policy)
+                .unwrap_err(),
+            "WAKE_BROKER_PREDECESSOR_POINTER_MISMATCH"
+        );
+        std::fs::remove_file(&pointer_path).expect("remove replacement pointer");
+        std::fs::rename(&saved_pointer, &pointer_path).expect("restore exact pointer file ID");
+        guard
+            .inspect_completed_predecessor_fixture(&policy)
+            .expect("original pointer binding restored");
         let changed_artifact = root_path
             .join("packages")
             .join(&payload.manifest.package_id)
@@ -2181,12 +2747,26 @@ mod tests {
         for phase in InstallPhaseV1::ORDER.iter().copied().skip(1) {
             first.advance(phase).expect("complete first generation");
         }
+        let predecessor_pointer = first
+            .binding
+            .pointer_switch_binding
+            .as_ref()
+            .expect("fixture switched pointer")
+            .pointer_file
+            .clone();
         drop(first);
         let second_generation = first_generation + 1;
-        let second_approval =
-            signed_for_generation(&expected.protected_root, second_generation, 8787);
+        let second_approval = signed_for_generation_after(
+            &expected.protected_root,
+            second_generation,
+            8787,
+            &approval.payload().manifest.package_id,
+            &predecessor_pointer,
+        );
         let second_expected = LedgerExpectationV1 {
             next_install_generation: second_generation,
+            predecessor_package_id: approval.payload().manifest.package_id.clone(),
+            predecessor_pointer,
             ..expected.clone()
         };
         let second = BrokerLedgerLease::begin(&handle, &second_approval, &second_expected)
@@ -2500,14 +3080,27 @@ mod tests {
         for phase in InstallPhaseV1::ORDER.iter().copied().skip(1) {
             first.advance(phase).expect("complete prior");
         }
+        let predecessor_pointer = first
+            .binding
+            .pointer_switch_binding
+            .as_ref()
+            .expect("fixture switched pointer")
+            .pointer_file
+            .clone();
         drop(first);
         let (mut payload, mut observed, key) = approval_test::fixture();
         payload.target_protected_root = expected.protected_root.clone();
         observed.target_protected_root = expected.protected_root.clone();
         payload.install_generation += 1;
         observed.next_install_generation = payload.install_generation;
+        payload.predecessor_package_id = approval.payload().manifest.package_id.clone();
+        observed.predecessor_package_id = payload.predecessor_package_id.clone();
+        payload.predecessor_pointer = predecessor_pointer.clone();
+        observed.predecessor_pointer = predecessor_pointer.clone();
         let next = LedgerExpectationV1 {
             next_install_generation: payload.install_generation,
+            predecessor_package_id: payload.predecessor_package_id.clone(),
+            predecessor_pointer,
             ..expected.clone()
         };
         let same_id = verify_approval(
@@ -2653,18 +3246,31 @@ mod tests {
     #[test]
     fn deleted_middle_generation_blocks_later_approval_before_intent() {
         let (root, handle, first_approval, first_expected) = fixture();
+        let mut prior_output: Option<(String, ObjectIdentityV1)> = None;
         for generation in 2..=4 {
             let approval = if generation == 2 {
                 first_approval.clone()
             } else {
-                signed_for_generation(
+                let (package, pointer) = prior_output.as_ref().expect("prior fixture output");
+                signed_for_generation_after(
                     &first_expected.protected_root,
                     generation,
                     generation as u128,
+                    package,
+                    pointer,
                 )
             };
+            let (predecessor_package_id, predecessor_pointer) =
+                prior_output.as_ref().cloned().unwrap_or_else(|| {
+                    (
+                        first_expected.predecessor_package_id.clone(),
+                        first_expected.predecessor_pointer.clone(),
+                    )
+                });
             let expected = LedgerExpectationV1 {
                 next_install_generation: generation,
+                predecessor_package_id,
+                predecessor_pointer,
                 ..first_expected.clone()
             };
             let mut lease =
@@ -2672,6 +3278,16 @@ mod tests {
             for phase in InstallPhaseV1::ORDER.iter().copied().skip(1) {
                 lease.advance(phase).expect("complete history");
             }
+            prior_output = Some((
+                approval.payload().manifest.package_id.clone(),
+                lease
+                    .binding
+                    .pointer_switch_binding
+                    .as_ref()
+                    .expect("fixture switched pointer")
+                    .pointer_file
+                    .clone(),
+            ));
         }
         remove_generation_records(&root, 3);
         let fifth = signed_for_generation(&first_expected.protected_root, 5, 5);
@@ -2695,14 +3311,31 @@ mod tests {
     #[test]
     fn duplicate_historical_approval_id_blocks_a_third_unique_candidate() {
         let (root, handle, first_approval, first_expected) = fixture();
+        let mut prior_output: Option<(String, ObjectIdentityV1)> = None;
         for generation in 2..=3 {
             let approval = if generation == 2 {
                 first_approval.clone()
             } else {
-                signed_for_generation(&first_expected.protected_root, generation, 3)
+                let (package, pointer) = prior_output.as_ref().expect("prior fixture output");
+                signed_for_generation_after(
+                    &first_expected.protected_root,
+                    generation,
+                    3,
+                    package,
+                    pointer,
+                )
             };
+            let (predecessor_package_id, predecessor_pointer) =
+                prior_output.as_ref().cloned().unwrap_or_else(|| {
+                    (
+                        first_expected.predecessor_package_id.clone(),
+                        first_expected.predecessor_pointer.clone(),
+                    )
+                });
             let expected = LedgerExpectationV1 {
                 next_install_generation: generation,
+                predecessor_package_id,
+                predecessor_pointer,
                 ..first_expected.clone()
             };
             let mut lease =
@@ -2710,6 +3343,16 @@ mod tests {
             for phase in InstallPhaseV1::ORDER.iter().copied().skip(1) {
                 lease.advance(phase).expect("complete history");
             }
+            prior_output = Some((
+                approval.payload().manifest.package_id.clone(),
+                lease
+                    .binding
+                    .pointer_switch_binding
+                    .as_ref()
+                    .expect("fixture switched pointer")
+                    .pointer_file
+                    .clone(),
+            ));
         }
         // Corrupt only this isolated test fixture into an internally canonical
         // and correctly chained history that reuses generation 2's ID.
