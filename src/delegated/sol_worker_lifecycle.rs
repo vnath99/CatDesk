@@ -15,6 +15,7 @@
 //! escaped descendants, inherited handles, or repository-write exclusion,
 //! and no nonce, staging, or repository-use path accepts it.
 
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString, c_void};
 use std::os::windows::ffi::OsStrExt;
@@ -33,6 +34,7 @@ use crate::windows_protected_fs::{
 };
 
 use super::sol_worker_identity_preflight::BoundFixedLocalSolWorkerProcessV1;
+use super::sol_worker_launch_journal::{SolLaunchBindingV1, SolLaunchReservationV1};
 use super::sol_worker_nonce::{
     SolWorkerNonceAuthorityV1, issue_sol_worker_nonce, read_active_sol_worker_nonce,
 };
@@ -471,7 +473,7 @@ enum AttentionJobChild {
 struct SolJobAttentionOwner {
     reason: String,
     child: AttentionJobChild,
-    prepared_run: PreparedSolRunV1,
+    prepared_run: ReservedPreparedSolRunV1,
     executable: PinnedSolWorkerExecutableV1,
     bound_worker: Option<BoundFixedLocalSolWorkerProcessV1>,
 }
@@ -512,6 +514,40 @@ struct PreparedSolRunV1 {
     nonce: String,
     ledger: ProtectedDirectoryGuard,
     output_root: ProtectedDirectoryGuard,
+}
+
+/// Only this spent, non-cloneable state can enter the prepared native spawn.
+/// Losing it never permits re-reservation because the create-once ledger name
+/// remains occupied, including after process restart.
+struct ReservedPreparedSolRunV1 {
+    prepared: PreparedSolRunV1,
+    reservation: SolLaunchReservationV1,
+}
+
+impl std::ops::Deref for ReservedPreparedSolRunV1 {
+    type Target = PreparedSolRunV1;
+
+    fn deref(&self) -> &Self::Target {
+        &self.prepared
+    }
+}
+
+impl ReservedPreparedSolRunV1 {
+    fn require_still_reserved(&self) -> Result<(), String> {
+        self.prepared.require_ready()?;
+        self.reservation.require_unchanged(&self.prepared.ledger)
+    }
+
+    fn require_exact(
+        &self,
+        executable: &PinnedSolWorkerExecutableV1,
+        inputs: &PreparedSolLaunchInputsV1,
+    ) -> Result<(), String> {
+        self.prepared.require_ready()?;
+        let binding = self.prepared.launch_binding(executable, inputs)?;
+        self.reservation
+            .require_exact(&self.prepared.ledger, &binding)
+    }
 }
 
 /// Explicit inputs for the private same-user creation-time Job probe. A
@@ -801,7 +837,7 @@ fn valid_executable_component(component: &str) -> bool {
 /// a future service must hold that owner durably before a positive launcher.
 struct PreparedSuspendedSolJobChild {
     suspended: OwnedSuspendedJobChild,
-    prepared_run: PreparedSolRunV1,
+    prepared_run: ReservedPreparedSolRunV1,
     executable: PinnedSolWorkerExecutableV1,
 }
 
@@ -863,7 +899,7 @@ impl<T> ChildTransitionFailure<T> {
 
 fn prepared_failure(
     failure: ChildTransitionFailure<AttentionJobChild>,
-    prepared_run: PreparedSolRunV1,
+    prepared_run: ReservedPreparedSolRunV1,
     executable: PinnedSolWorkerExecutableV1,
     bound_worker: Option<BoundFixedLocalSolWorkerProcessV1>,
 ) -> PreparedSolLifecycleFailure {
@@ -883,12 +919,12 @@ fn prepared_failure(
 
 impl PreparedSuspendedSolJobChild {
     fn launch(
-        prepared_run: PreparedSolRunV1,
+        prepared_run: ReservedPreparedSolRunV1,
         executable: PinnedSolWorkerExecutableV1,
         inputs: &PreparedSolLaunchInputsV1,
     ) -> Result<Self, PreparedSolLifecycleFailure> {
         prepared_run
-            .require_ready()
+            .require_exact(&executable, inputs)
             .map_err(PreparedSolLifecycleFailure::Clean)?;
         executable
             .parent
@@ -935,7 +971,7 @@ impl PreparedSuspendedSolJobChild {
                 None,
             ));
         }
-        if let Err(error) = prepared_run.require_ready() {
+        if let Err(error) = prepared_run.require_exact(&executable, inputs) {
             return Err(prepared_failure(
                 suspended
                     .abort(error)
@@ -994,7 +1030,7 @@ impl PreparedSuspendedSolJobChild {
                 Some(bound_worker),
             ));
         }
-        if let Err(error) = prepared_run.require_ready() {
+        if let Err(error) = prepared_run.require_still_reserved() {
             return Err(prepared_failure(
                 suspended
                     .abort(error)
@@ -1025,6 +1061,54 @@ impl PreparedSuspendedSolJobChild {
 }
 
 impl PreparedSolRunV1 {
+    fn launch_binding(
+        &self,
+        executable: &PinnedSolWorkerExecutableV1,
+        inputs: &PreparedSolLaunchInputsV1,
+    ) -> Result<SolLaunchBindingV1, String> {
+        self.require_ready()?;
+        executable.parent.assert_stable(LABEL)?;
+        executable.reviewed.native_final_path(LABEL)?;
+        let application = executable.launch_path();
+        let application_wide = nul_terminated_wide(application.as_os_str(), "application path")?;
+        let command_line = inputs.command_line(application.as_os_str())?;
+        let environment = inputs.environment_block()?;
+        let directory =
+            nul_terminated_wide(self.output_root.path().as_os_str(), "working directory")?;
+        let mut digest = Sha256::new();
+        digest.update(b"catdesk.sol.launch-inputs.v1");
+        for wide in [&application_wide, &command_line, &environment, &directory] {
+            digest.update((wide.len() as u64).to_le_bytes());
+            for unit in wide {
+                digest.update(unit.to_le_bytes());
+            }
+        }
+        Ok(SolLaunchBindingV1 {
+            authority: self.authority.clone(),
+            nonce: self.nonce.clone(),
+            ledger_identity: self.ledger.physical_identity(LABEL)?,
+            output_identity: self.output_root.physical_identity(LABEL)?,
+            executable_parent_identity: executable.parent.physical_identity(LABEL)?,
+            executable_component: executable.component.clone(),
+            executable_object_identity: executable.reviewed.identity.object_identity.clone(),
+            executable_sha256: executable.reviewed.identity.sha256.clone(),
+            launch_input_sha256: format!("{:x}", digest.finalize()),
+        })
+    }
+
+    fn reserve_launch(
+        self,
+        executable: &PinnedSolWorkerExecutableV1,
+        inputs: &PreparedSolLaunchInputsV1,
+    ) -> Result<ReservedPreparedSolRunV1, String> {
+        let binding = self.launch_binding(executable, inputs)?;
+        let reservation = SolLaunchReservationV1::reserve(&self.ledger, binding)?;
+        Ok(ReservedPreparedSolRunV1 {
+            prepared: self,
+            reservation,
+        })
+    }
+
     fn prepare(
         ledger: ProtectedDirectoryGuard,
         output_root: ProtectedDirectoryGuard,
@@ -1074,7 +1158,7 @@ impl PreparedSolRunV1 {
 struct BoundFixedWorkerJobChild {
     running: OwnedRunningJobChild,
     bound_worker: BoundFixedLocalSolWorkerProcessV1,
-    prepared_run: PreparedSolRunV1,
+    prepared_run: ReservedPreparedSolRunV1,
     executable: PinnedSolWorkerExecutableV1,
 }
 
@@ -1084,7 +1168,7 @@ struct BoundFixedWorkerJobChild {
 /// Private fields and the lack of `Clone` prevent a caller-created claim.
 pub(crate) struct DrainedBoundFixedWorkerJobV1 {
     _bound_worker: BoundFixedLocalSolWorkerProcessV1,
-    _prepared_run: PreparedSolRunV1,
+    _prepared_run: ReservedPreparedSolRunV1,
     _executable: PinnedSolWorkerExecutableV1,
 }
 
@@ -1180,7 +1264,7 @@ fn job_empty_until(
 
 impl OwnedSuspendedJobChild {
     fn launch_suspended_at_creation(
-        prepared_run: &PreparedSolRunV1,
+        prepared_run: &ReservedPreparedSolRunV1,
         executable: &PinnedSolWorkerExecutableV1,
         inputs: &PreparedSolLaunchInputsV1,
     ) -> Result<Self, ChildTransitionFailure<Self>> {
@@ -1202,7 +1286,7 @@ impl OwnedSuspendedJobChild {
         let mut attributes =
             JobAttributeList::for_job(&job).map_err(ChildTransitionFailure::Clean)?;
         prepared_run
-            .require_ready()
+            .require_exact(executable, inputs)
             .map_err(ChildTransitionFailure::Clean)?;
         executable
             .parent
@@ -1501,6 +1585,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::super::sol_worker_identity_preflight::bind_fixed_local_sol_worker_to_opened_process;
+    use super::super::sol_worker_launch_journal::reopen_attention;
     use super::super::sol_worker_token_security::require_same_opened_process_object;
 
     const HELPER: &str = "delegated::sol_worker_lifecycle::tests::sleep_helper";
@@ -1512,6 +1597,17 @@ mod tests {
                 panic!("expected proved cleanup, received attention: {reason}")
             }
         }
+    }
+
+    fn launch_prepared(
+        prepared: PreparedSolRunV1,
+        executable: PinnedSolWorkerExecutableV1,
+        inputs: &PreparedSolLaunchInputsV1,
+    ) -> Result<PreparedSuspendedSolJobChild, PreparedSolLifecycleFailure> {
+        let reserved = prepared
+            .reserve_launch(&executable, inputs)
+            .map_err(PreparedSolLifecycleFailure::Clean)?;
+        PreparedSuspendedSolJobChild::launch(reserved, executable, inputs)
     }
 
     struct PreparationFixture {
@@ -1739,11 +1835,7 @@ mod tests {
         let added = fixture.output_path.join("late.txt");
         FORCE_JOB_TERMINATE_FAILURE.with(|slot| slot.set(true));
         FORCE_PREPARED_OUTPUT_TAMPER_AFTER_SPAWN.with(|slot| slot.set(true));
-        let result = PreparedSuspendedSolJobChild::launch(
-            prepared,
-            executable,
-            &prepared_helper_inputs("descendant"),
-        );
+        let result = launch_prepared(prepared, executable, &prepared_helper_inputs("descendant"));
         FORCE_PREPARED_OUTPUT_TAMPER_AFTER_SPAWN.with(|slot| slot.set(false));
         FORCE_JOB_TERMINATE_FAILURE.with(|slot| slot.set(false));
         let attention = match result {
@@ -1889,12 +1981,8 @@ mod tests {
         let prepared = fixture.prepare().expect("prepare host turn");
         let selected = prepared.nonce.clone();
         let executable = pin_current_test_executable();
-        let owner = PreparedSuspendedSolJobChild::launch(
-            prepared,
-            executable,
-            &prepared_helper_inputs("descendant"),
-        )
-        .expect("launch same-user diagnostic from retained image");
+        let owner = launch_prepared(prepared, executable, &prepared_helper_inputs("descendant"))
+            .expect("launch same-user diagnostic from retained image");
         assert_eq!(owner.prepared_run.nonce, selected);
         let child = owner.suspended.child.as_ref().expect("original child");
         let opened = unsafe { BorrowedHandle::borrow_raw(child.as_raw_handle()) };
@@ -1919,12 +2007,8 @@ mod tests {
         let fixture = PreparationFixture::new();
         let prepared = fixture.prepare().expect("prepare one run");
         let executable = pin_current_test_executable();
-        let owner = PreparedSuspendedSolJobChild::launch(
-            prepared,
-            executable,
-            &prepared_helper_inputs("success"),
-        )
-        .expect("creation-time Job launch");
+        let owner = launch_prepared(prepared, executable, &prepared_helper_inputs("success"))
+            .expect("creation-time Job launch");
         let child = owner.suspended.child.as_ref().expect("retained child");
         assert!(matches!(child, OwnedChildProcess::Native(_)));
         owner
@@ -1958,6 +2042,13 @@ mod tests {
         result.expect("zero exit and empty Job without forced termination");
         drop(prepared_run);
         drop(executable);
+        let reopened = ProtectedDirectoryGuard::acquire(&fixture.ledger_path, LABEL)
+            .expect("reopen after native child exit");
+        assert!(
+            reopen_attention(&reopened, &fixture.authority).contains("ATTENTION"),
+            "a completed diagnostic child has no terminal handoff protocol"
+        );
+        drop(reopened);
         fixture.cleanup();
     }
 
@@ -1982,7 +2073,7 @@ mod tests {
             "CATDESK_SOL_INHERIT_MARKER".into(),
             (marker.as_raw_handle() as usize).to_string(),
         );
-        let owner = PreparedSuspendedSolJobChild::launch(
+        let owner = launch_prepared(
             fixture.prepare().expect("prepare one run"),
             pin_current_test_executable(),
             &inputs,
@@ -2023,7 +2114,7 @@ mod tests {
             inputs
                 .environment
                 .insert("CATDESK_SOL_EXPECTED_ARG".into(), expected.into());
-            let owner = PreparedSuspendedSolJobChild::launch(
+            let owner = launch_prepared(
                 fixture.prepare().expect("prepare one run"),
                 pin_current_test_executable(),
                 &inputs,
@@ -2048,7 +2139,7 @@ mod tests {
     #[test]
     fn prepared_native_descendant_remains_in_creation_time_job() {
         let fixture = PreparationFixture::new();
-        let owner = PreparedSuspendedSolJobChild::launch(
+        let owner = launch_prepared(
             fixture.prepare().expect("prepare one run"),
             pin_current_test_executable(),
             &prepared_helper_inputs("parent"),
@@ -2090,7 +2181,7 @@ mod tests {
         let parent = ProtectedDirectoryGuard::acquire(&fixture.base, LABEL).expect("pin parent");
         let fake = PinnedSolWorkerExecutableV1::pin(parent, "fake.exe", &digest)
             .expect("pin diagnostic invalid image");
-        let result = PreparedSuspendedSolJobChild::launch(
+        let result = launch_prepared(
             fixture.prepare().expect("prepare one run"),
             fake,
             &prepared_helper_inputs("success"),
@@ -2122,11 +2213,7 @@ mod tests {
         let selected = fixture.prepare().expect("prepare one run");
         let nonce = selected.nonce.clone();
         FORCE_JOB_ACCOUNTING_FAILURE.with(|slot| slot.set(true));
-        let result = PreparedSuspendedSolJobChild::launch(
-            selected,
-            fake,
-            &prepared_helper_inputs("success"),
-        );
+        let result = launch_prepared(selected, fake, &prepared_helper_inputs("success"));
         FORCE_JOB_ACCOUNTING_FAILURE.with(|slot| slot.set(false));
         let attention = match result {
             Err(PreparedSolLifecycleFailure::Attention(owner)) => owner,
@@ -2217,6 +2304,61 @@ mod tests {
             fixture.prepare().is_err(),
             "a second preparation cannot select a replacement nonce"
         );
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn reserved_prepared_launch_rejects_changed_inputs_before_child_creation() {
+        let fixture = PreparationFixture::new();
+        let prepared = fixture.prepare().expect("prepare turn");
+        let executable = pin_current_test_executable();
+        let inputs = prepared_helper_inputs("success");
+        let reserved = prepared
+            .reserve_launch(&executable, &inputs)
+            .expect("durable reservation");
+        assert!(reopen_attention(&reserved.ledger, &reserved.authority).contains("ATTENTION"));
+        let mut changed = prepared_helper_inputs("success");
+        changed.arguments.push(OsString::from("different"));
+        FORCE_PREPARED_OUTPUT_TAMPER_AFTER_SPAWN.with(|slot| slot.set(true));
+        let result = PreparedSuspendedSolJobChild::launch(reserved, executable, &changed);
+        FORCE_PREPARED_OUTPUT_TAMPER_AFTER_SPAWN.with(|slot| slot.set(false));
+        assert!(matches!(result, Err(PreparedSolLifecycleFailure::Clean(_))));
+        assert!(
+            !fixture.output_path.join("late.txt").exists(),
+            "native create must not run"
+        );
+        assert!(
+            fixture.prepare().is_err(),
+            "reservation and nonce cannot be replayed"
+        );
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn invalid_launch_input_cannot_create_a_reservation_or_child() {
+        let fixture = PreparationFixture::new();
+        let prepared = fixture.prepare().expect("prepare selected turn");
+        let executable = pin_current_test_executable();
+        let inputs = PreparedSolLaunchInputsV1 {
+            arguments: vec![OsString::from("invalid\0argument")],
+            environment: BTreeMap::new(),
+        };
+        assert!(prepared.reserve_launch(&executable, &inputs).is_err());
+        assert!(
+            !fs::read_dir(&fixture.ledger_path)
+                .expect("list ledger")
+                .any(|entry| entry
+                    .expect("entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("launch-started-")),
+            "invalid inputs must stop before the create-once launch record"
+        );
+        let ledger =
+            ProtectedDirectoryGuard::acquire(&fixture.ledger_path, LABEL).expect("reopen ledger");
+        assert!(reopen_attention(&ledger, &fixture.authority).contains("ATTENTION"));
+        drop(ledger);
+        drop(executable);
         fixture.cleanup();
     }
 

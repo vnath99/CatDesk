@@ -845,6 +845,12 @@ impl ProtectedDirectoryGuard {
             .as_raw_handle())
     }
 
+    #[cfg(windows)]
+    pub(crate) fn physical_identity(&self, label: &str) -> Result<(u32, u32, u32), String> {
+        self.assert_stable(label)?;
+        Ok(self.directories.last().expect("guard has root").identity)
+    }
+
     /// Renames the exact opened direct child under the exact pinned parent.
     /// The native mutation is rooted in already-open handles; caller-selected
     /// pathnames never become authority for the rename.
@@ -1180,6 +1186,101 @@ pub(crate) fn write_new_regular_in<P: PinnedParent>(
         return Err(format!("{label} is unsafe"));
     }
     parent.assert_stable(label)
+}
+
+/// Flush the directory entry on the exact pinned directory after a synced
+/// create-once record. A filesystem that cannot perform this operation must
+/// stop the transaction; success is not a hardware power-loss proof.
+#[cfg(windows)]
+pub(crate) fn flush_pinned_directory_metadata(
+    parent: &ProtectedDirectoryGuard,
+    label: &str,
+) -> Result<(), String> {
+    let expected = parent.physical_identity(label)?;
+    let pinned = parent.last_handle(label)?;
+    // Empty relative name reopens the already-pinned directory itself with
+    // the write and synchronize access required for a directory flush.
+    let mut name = UNICODE_STRING {
+        length: 0,
+        maximum_length: 0,
+        buffer: std::ptr::null_mut(),
+    };
+    let mut attributes = OBJECT_ATTRIBUTES {
+        length: std::mem::size_of::<OBJECT_ATTRIBUTES>() as u32,
+        root_directory: pinned,
+        object_name: &mut name,
+        attributes: 0x40,
+        security_descriptor: std::ptr::null_mut(),
+        security_quality_of_service: std::ptr::null_mut(),
+    };
+    let mut status = IO_STATUS_BLOCK {
+        status: 0,
+        information: 0,
+    };
+    let mut raw = std::ptr::null_mut();
+    let result = unsafe {
+        NtCreateFile(
+            &mut raw,
+            FILE_ADD_FILE | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+            &mut attributes,
+            &mut status,
+            std::ptr::null_mut(),
+            0,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            FILE_OPEN,
+            FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if result != 0 || status.status != 0 || raw.is_null() || raw == INVALID_HANDLE_VALUE {
+        if !raw.is_null() && raw != INVALID_HANDLE_VALUE {
+            drop(unsafe { OwnedHandle::from_raw_handle(raw) });
+        }
+        return Err(format!(
+            "{label} parent directory flush handle is unavailable"
+        ));
+    }
+    let flush_handle = unsafe { OwnedHandle::from_raw_handle(raw) };
+    let info = handle_information(flush_handle.as_raw_handle(), label)?;
+    if info.file_attributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)
+        != FILE_ATTRIBUTE_DIRECTORY
+        || (
+            info.volume_serial_number,
+            info.file_index_high,
+            info.file_index_low,
+        ) != expected
+    {
+        return Err(format!("{label} parent directory identity changed"));
+    }
+    let mut flush_status = IO_STATUS_BLOCK {
+        status: 0,
+        information: 0,
+    };
+    if unsafe {
+        NtFlushBuffersFileEx(
+            flush_handle.as_raw_handle(),
+            0,
+            std::ptr::null_mut(),
+            0,
+            &mut flush_status,
+        )
+    } != 0
+        || flush_status.status != 0
+    {
+        return Err(format!("{label} parent directory flush failed"));
+    }
+    let info = handle_information(flush_handle.as_raw_handle(), label)?;
+    if (
+        info.volume_serial_number,
+        info.file_index_high,
+        info.file_index_low,
+    ) != expected
+        || parent.physical_identity(label)? != expected
+    {
+        return Err(format!("{label} parent directory identity changed"));
+    }
+    Ok(())
 }
 
 /// A newly-created regular file whose open handle remains authoritative until
@@ -1847,6 +1948,18 @@ unsafe extern "system" {
     ) -> i32;
     fn EqualSid(first: *mut c_void, second: *mut c_void) -> i32;
     fn LocalFree(memory: *mut c_void) -> *mut c_void;
+}
+
+#[cfg(windows)]
+#[link(name = "ntdll")]
+unsafe extern "system" {
+    fn NtFlushBuffersFileEx(
+        handle: *mut c_void,
+        flags: u32,
+        parameters: *mut c_void,
+        parameters_size: u32,
+        status: *mut IO_STATUS_BLOCK,
+    ) -> i32;
 }
 
 #[cfg(windows)]
