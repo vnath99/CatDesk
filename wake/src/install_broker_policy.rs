@@ -948,6 +948,7 @@ pub(crate) mod tests {
         let fixture = Fixture::new();
         std::fs::write(fixture.path.join("install-ledger.lock"), b"").expect("global lock");
         std::fs::create_dir(fixture.path.join("staging")).expect("staging directory");
+        std::fs::create_dir(fixture.path.join("packages")).expect("package directory");
         let policy = fixture.load().expect("pinned fixture policy");
         let (mut payload, mut observed, key) = approval_test::fixture();
         payload.target_protected_root = fixture.root_id.clone();
@@ -1028,6 +1029,8 @@ pub(crate) mod tests {
             std::fs::remove_dir(candidate).expect("remove empty fixture candidate");
         }
         std::fs::remove_dir(staging).expect("remove empty fixture staging");
+        std::fs::remove_dir(fixture.path.join("packages"))
+            .expect("remove empty fixture package directory");
         std::fs::remove_file(fixture.path.join("install-ledger.lock"))
             .expect("remove fixture lock");
         fixture.cleanup();
@@ -1703,6 +1706,292 @@ pub(crate) mod tests {
             "WAKE_LEDGER_STAGE_BINDING_INVALID"
         );
         drop(guard);
+        cleanup_resume_fixture(fixture, policy);
+    }
+
+    #[test]
+    fn guarded_publication_seam_distinguishes_exact_move_and_ambiguous_restart() {
+        use crate::install_broker_reader::publication_fixture_policy_before_rename;
+
+        let (fixture, policy, envelope, observed, expected, manifest) = resume_fixture();
+        let candidate = fixture.path.join("staging").join("candidate");
+        let pointer = fixture.path.join("current.json");
+        std::fs::write(&pointer, b"unchanged predecessor pointer")
+            .expect("fixture predecessor pointer");
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("fixture ledger lock");
+        let (mut lease, approved) = guard
+            .accept_with_observation_fixture(&policy, &envelope, |_| {
+                Ok((observed.clone(), expected.clone()))
+            })
+            .expect("fixture INTENT");
+        let package = fixture
+            .path
+            .join("packages")
+            .join(&approved.verified().payload().manifest.package_id);
+        let fixture_root = fixture.path.canonicalize().expect("fixture root path");
+        let fixture_staging = fixture
+            .path
+            .join("staging")
+            .canonicalize()
+            .expect("fixture staging parent path");
+        let fixture_packages = fixture
+            .path
+            .join("packages")
+            .canonicalize()
+            .expect("fixture packages parent path");
+        let exact_package_path = fixture_packages.join(
+            package
+                .file_name()
+                .expect("signed fixture package component"),
+        );
+        let checked_rename =
+            |source: &std::path::Path,
+             destination: &std::path::Path,
+             expected_source_parent: &std::path::Path,
+             expected_destination_parent: &std::path::Path| {
+                assert_eq!(
+                    source
+                        .parent()
+                        .expect("rename source parent")
+                        .canonicalize()
+                        .expect("resolved rename source parent"),
+                    expected_source_parent
+                );
+                assert_eq!(
+                    destination
+                        .parent()
+                        .expect("rename destination parent")
+                        .canonicalize()
+                        .expect("resolved rename destination parent"),
+                    expected_destination_parent
+                );
+                std::fs::rename(source, destination).expect("contained fixture rename");
+            };
+        let remove_exact_package = |path: &std::path::Path| {
+            assert_eq!(
+                path.parent()
+                    .expect("package parent")
+                    .canonicalize()
+                    .expect("resolved package parent"),
+                fixture_packages
+            );
+            assert_eq!(path, package);
+            for name in [
+                "manifest.json",
+                RESUME_ARTIFACTS[0],
+                RESUME_ARTIFACTS[1],
+                RESUME_ARTIFACTS[2],
+                RESUME_ARTIFACTS[3],
+            ] {
+                // Refuse a junction or symlink substituted at the package
+                // name before each leaf deletion. The resolved directory
+                // must remain the fixture's exact final package directory.
+                assert_eq!(
+                    path.canonicalize().expect("resolved fixture package"),
+                    exact_package_path
+                );
+                std::fs::remove_file(path.join(name)).expect("remove exact fixture package leaf");
+            }
+            assert_eq!(
+                path.canonicalize().expect("resolved fixture package"),
+                exact_package_path
+            );
+            std::fs::remove_dir(path).expect("remove empty fixture package directory");
+        };
+        lease.record_stage_started().expect("stage marker");
+        std::fs::create_dir(&candidate).expect("candidate slot");
+        for (name, bytes) in RESUME_ARTIFACTS.into_iter().zip(RESUME_BLOBS) {
+            std::fs::write(candidate.join(name), bytes).expect("signed fixture artifact");
+        }
+        std::fs::write(candidate.join("manifest.json"), manifest)
+            .expect("canonical fixture manifest");
+        let snapshot = inspect_stage_fixture(&fixture.root, &fixture.root_id, approved.verified())
+            .expect("exact stage readback");
+        let stage = StageBindingV1 {
+            staging_directory: snapshot.staging_directory,
+            candidate_directory: snapshot.candidate_directory,
+            manifest_file: snapshot.manifest_file,
+            artifacts: std::array::from_fn(|index| snapshot.artifacts[index].object.clone()),
+        };
+        let publication_policy =
+            publication_fixture_policy_before_rename(&fixture.root, approved.verified(), &stage)
+                .expect("stage ACL and package-parent fixture policy");
+        lease
+            .record_staged_fixture(stage)
+            .expect("durable fixture STAGED");
+        drop(lease);
+        drop(approved);
+
+        let ledger_before: Vec<Vec<u8>> = ["intent", "stage-started", "staged"]
+            .into_iter()
+            .map(|phase| {
+                std::fs::read(fixture.path.join(format!(
+                    "install-transaction-00000000000000000002-{phase}.json"
+                )))
+                .expect("fixture ledger bytes")
+            })
+            .collect();
+        let pointer_before = std::fs::read(&pointer).expect("pointer bytes");
+        let mut later = observed.clone();
+        later.now_utc_seconds = 2_001;
+        {
+            let inspect = || {
+                let guard = BrokerLedgerGuard::acquire(&fixture.root)?;
+                guard.inspect_publication_seam_fixture(
+                    &policy,
+                    &envelope,
+                    2,
+                    |_| Ok((later.clone(), OriginalDesiredStateV1::Running)),
+                    &publication_policy,
+                )
+            };
+            let staged = inspect().expect("intact stage diagnosis");
+            assert_eq!(staged.phase, "staged");
+            assert!(staged.ledger_stage_binding_matched);
+            assert!(!staged.published_package_binding_matched);
+            assert!(staged.staging_parent_object_verified);
+            assert!(staged.stage.is_some());
+
+            // Model a physical rename that completed before the PUBLISHED
+            // record. This fixture operation is never a production writer.
+            checked_rename(&candidate, &package, &fixture_staging, &fixture_packages);
+            let moved = inspect().expect("exact orphan package diagnosis");
+            assert_eq!(moved.phase, "staged");
+            assert!(moved.stage.is_none());
+            assert!(!moved.ledger_stage_binding_matched);
+            assert!(moved.published_package_binding_matched);
+            assert!(moved.staging_parent_object_verified);
+            assert_eq!(
+                moved.disposition,
+                "STAGED_PACKAGE_MOVED_PUBLISHED_RECORD_MISSING_ATTENTION_NO_INSTALL_AUTHORITY"
+            );
+
+            std::fs::create_dir(&candidate).expect("ambiguous second slot");
+            assert_eq!(
+                inspect().unwrap_err(),
+                "WAKE_PROTECTED_PUBLICATION_LOCATION_INVALID"
+            );
+            std::fs::remove_dir(&candidate).expect("remove exact extra slot");
+
+            let displaced = fixture.path.join("packages").join("displaced-fixture");
+            checked_rename(&package, &displaced, &fixture_packages, &fixture_packages);
+            assert_eq!(
+                inspect().unwrap_err(),
+                "WAKE_PROTECTED_PUBLICATION_LOCATION_INVALID"
+            );
+            checked_rename(&displaced, &package, &fixture_packages, &fixture_packages);
+
+            let artifact = package.join("adapter.py");
+            std::fs::write(&artifact, b"adapter-codz").expect("same-size drift");
+            assert_eq!(
+                inspect().unwrap_err(),
+                "WAKE_PROTECTED_READER_HASH_MISMATCH"
+            );
+            std::fs::write(&artifact, RESUME_BLOBS[2]).expect("restore signed bytes");
+            std::fs::write(package.join("unexpected"), b"x").expect("extra package entry");
+            assert_eq!(
+                inspect().unwrap_err(),
+                "WAKE_PROTECTED_READER_INVENTORY_MISMATCH"
+            );
+            std::fs::remove_file(package.join("unexpected")).expect("remove extra entry");
+
+            checked_rename(&package, &displaced, &fixture_packages, &fixture_packages);
+            std::fs::create_dir(&package).expect("same-byte replacement directory");
+            for name in [
+                "manifest.json",
+                RESUME_ARTIFACTS[0],
+                RESUME_ARTIFACTS[1],
+                RESUME_ARTIFACTS[2],
+                RESUME_ARTIFACTS[3],
+            ] {
+                std::fs::copy(displaced.join(name), package.join(name)).expect("same-byte copy");
+            }
+            assert_eq!(
+                inspect().unwrap_err(),
+                "WAKE_PROTECTED_PUBLICATION_BINDING_INVALID"
+            );
+            remove_exact_package(&package);
+            checked_rename(&displaced, &package, &fixture_packages, &fixture_packages);
+
+            let saved_staging = fixture.path.join("staging-saved-fixture");
+            checked_rename(
+                &fixture.path.join("staging"),
+                &saved_staging,
+                &fixture_root,
+                &fixture_root,
+            );
+            std::fs::create_dir(fixture.path.join("staging"))
+                .expect("same-name replacement staging parent");
+            assert_eq!(
+                inspect().unwrap_err(),
+                "WAKE_PROTECTED_PUBLICATION_BINDING_INVALID"
+            );
+            std::fs::remove_dir(fixture.path.join("staging"))
+                .expect("remove replacement staging parent");
+            checked_rename(
+                &saved_staging,
+                &fixture.path.join("staging"),
+                &fixture_root,
+                &fixture_root,
+            );
+            inspect().expect("original physical package restored");
+
+            let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("fixture phase lock");
+            let (mut lease, _approved) = guard
+                .accept_with_observation_fixture(&policy, &envelope, |_| {
+                    Ok((observed.clone(), expected.clone()))
+                })
+                .expect("exact fixture replay");
+            lease
+                .advance(InstallPhaseV1::Published)
+                .expect("fixture PUBLISHED record");
+            drop(lease);
+            let published = inspect().expect("recorded published package diagnosis");
+            assert_eq!(published.phase, "published");
+            assert!(published.published_package_binding_matched);
+            assert!(!published.ledger_stage_binding_matched);
+            assert_eq!(
+                published.disposition,
+                "PUBLISHED_PACKAGE_IDS_MATCH_NO_INSTALL_AUTHORITY"
+            );
+            checked_rename(&package, &candidate, &fixture_packages, &fixture_staging);
+            assert_eq!(
+                inspect().unwrap_err(),
+                "WAKE_BROKER_PUBLICATION_PHASE_MISMATCH"
+            );
+            checked_rename(&candidate, &package, &fixture_staging, &fixture_packages);
+            inspect().expect("exact published location restored");
+            set_file_dacl(&artifact, "D:P(A;;FA;;;SY)(A;;FA;;;WD)");
+            assert_eq!(inspect().unwrap_err(), "WAKE_PROTECTED_READER_ACL_MISMATCH");
+        }
+        let ledger_after: Vec<Vec<u8>> = ["intent", "stage-started", "staged"]
+            .into_iter()
+            .map(|phase| {
+                std::fs::read(fixture.path.join(format!(
+                    "install-transaction-00000000000000000002-{phase}.json"
+                )))
+                .expect("unchanged ledger bytes")
+            })
+            .collect();
+        assert_eq!(ledger_after, ledger_before);
+        assert_eq!(
+            std::fs::read(&pointer).expect("unchanged pointer"),
+            pointer_before
+        );
+        assert!(
+            !fixture
+                .path
+                .join("install-transaction-00000000000000000003-intent.json")
+                .exists()
+        );
+        std::fs::remove_file(pointer).expect("remove fixture pointer");
+        std::fs::remove_file(
+            fixture
+                .path
+                .join("install-transaction-00000000000000000002-published.json"),
+        )
+        .expect("remove fixture PUBLISHED record");
+        remove_exact_package(&package);
         cleanup_resume_fixture(fixture, policy);
     }
 

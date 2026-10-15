@@ -36,6 +36,7 @@ use std::{
 const MAX_POINTER_BYTES: usize = 4096;
 const MAX_MANIFEST_BYTES: usize = 4096;
 const MAX_DIRECTORY_ENTRIES: usize = 16;
+const MAX_PACKAGE_CONTAINER_ENTRIES: usize = 256;
 const FILE_OPEN: u32 = 1;
 const FILE_READ_DATA: u32 = 1;
 const FILE_READ_ATTRIBUTES: u32 = 0x80;
@@ -200,6 +201,32 @@ pub struct ProtectedInstallReadOnlySnapshotV1 {
     pub disposition: &'static str,
 }
 
+/// Point-in-time physical readback of a signed package at its final name.
+/// It is compared with durable STAGED IDs by the ledger reader, and carries
+/// no retained writer handle, publication authority, or pointer authority.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProtectedPublishedPackageReadbackV1 {
+    pub schema_version: u32,
+    pub approval_id: String,
+    pub install_generation: u64,
+    pub package_id: String,
+    pub signed_payload_sha256: String,
+    pub manifest_sha256: String,
+    pub protected_root: ObjectIdentityV1,
+    pub staging_directory: ObjectIdentityV1,
+    pub package_directory: ObjectIdentityV1,
+    pub manifest_file: ObjectIdentityV1,
+    pub artifacts: [ProtectedArtifactReadbackV1; 4],
+    pub disposition: &'static str,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum PublicationLocationV1 {
+    Stage,
+    Moved(Box<ProtectedPublishedPackageReadbackV1>),
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ExactSecurity {
     owner: String,
@@ -215,6 +242,21 @@ struct ReaderPolicy {
     manifest: ExactSecurity,
     artifacts: [ExactSecurity; 4],
 }
+
+#[derive(Clone)]
+struct PublicationPolicy {
+    root: ExactSecurity,
+    staging: ExactSecurity,
+    packages: ExactSecurity,
+    package: ExactSecurity,
+    manifest: ExactSecurity,
+    artifacts: [ExactSecurity; 4],
+}
+
+/// ACL expectations captured from an isolated test stage before moving it.
+/// Production always derives expectations from the protected service SID.
+#[cfg(test)]
+pub(crate) struct PublicationFixturePolicyV1(PublicationPolicy);
 
 /// Retains the exact protected objects behind a read-only snapshot while a
 /// caller holds its separate ledger lock. This value has no launch, write, or
@@ -288,6 +330,20 @@ impl ReaderPolicy {
             pointer: file.clone(),
             manifest: file.clone(),
             artifacts: std::array::from_fn(|_| file.clone()),
+        })
+    }
+}
+
+impl PublicationPolicy {
+    fn production(service_sid: &str) -> Result<Self> {
+        let reader = ReaderPolicy::production(service_sid)?;
+        Ok(Self {
+            root: reader.root.clone(),
+            staging: reader.root,
+            packages: reader.packages,
+            package: reader.package,
+            manifest: reader.manifest,
+            artifacts: reader.artifacts,
         })
     }
 }
@@ -467,20 +523,10 @@ fn reopen_directory_for_inventory(directory: &OwnedHandle) -> Result<OwnedHandle
     Ok(reopened)
 }
 
-fn exact_package_inventory(package: &OwnedHandle) -> Result<()> {
-    let fresh = reopen_directory_for_inventory(package)?;
-    let expected: BTreeSet<String> = [
-        "manifest.json",
-        ARTIFACT_NAMES[0],
-        ARTIFACT_NAMES[1],
-        ARTIFACT_NAMES[2],
-        ARTIFACT_NAMES[3],
-    ]
-    .into_iter()
-    .map(str::to_string)
-    .collect();
+fn directory_inventory(directory: &OwnedHandle, limit: usize) -> Result<BTreeSet<String>> {
+    let fresh = reopen_directory_for_inventory(directory)?;
     let mut seen = BTreeSet::new();
-    for index in 0..=MAX_DIRECTORY_ENTRIES {
+    for index in 0..=limit {
         let mut aligned = [0u64; 128];
         let mut status = IoStatusBlock {
             status: 0,
@@ -502,14 +548,10 @@ fn exact_package_inventory(package: &OwnedHandle) -> Result<()> {
             )
         } as u32;
         if result == STATUS_NO_MORE_FILES || (index == 0 && result == STATUS_NO_SUCH_FILE) {
-            return if seen == expected {
-                Ok(())
-            } else {
-                Err("WAKE_PROTECTED_READER_INVENTORY_MISMATCH".into())
-            };
+            return Ok(seen);
         }
         if result != 0
-            || index == MAX_DIRECTORY_ENTRIES
+            || index == limit
             || status.information < 12
             || status.information > std::mem::size_of_val(&aligned)
         {
@@ -536,11 +578,28 @@ fn exact_package_inventory(package: &OwnedHandle) -> Result<()> {
         if matches!(name.as_str(), "." | "..") {
             continue;
         }
-        if !expected.contains(name.as_str()) || !seen.insert(name) {
+        if !seen.insert(name) {
             return Err("WAKE_PROTECTED_READER_INVENTORY_MISMATCH".into());
         }
     }
     Err("WAKE_PROTECTED_READER_INVENTORY_UNAVAILABLE".into())
+}
+
+fn exact_package_inventory(package: &OwnedHandle) -> Result<()> {
+    let expected: BTreeSet<String> = [
+        "manifest.json",
+        ARTIFACT_NAMES[0],
+        ARTIFACT_NAMES[1],
+        ARTIFACT_NAMES[2],
+        ARTIFACT_NAMES[3],
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect();
+    if directory_inventory(package, MAX_DIRECTORY_ENTRIES)? != expected {
+        return Err("WAKE_PROTECTED_READER_INVENTORY_MISMATCH".into());
+    }
+    Ok(())
 }
 
 fn read_bounded(
@@ -710,6 +769,292 @@ pub fn plan_protected_pointer_from_stage(
         canonical_bytes,
         sha256,
     })
+}
+
+fn inspect_publication_package(
+    parent: &OwnedHandle,
+    package_name: &str,
+    root_volume: u32,
+    approval: &VerifiedApprovalV1,
+    stage: &StageBindingV1,
+    policy: &PublicationPolicy,
+    canonical_manifest: &[u8],
+) -> Result<[ProtectedArtifactReadbackV1; 4]> {
+    let package = open_relative(parent, package_name, true)?;
+    let package_before = file_info(package.as_raw_handle(), true)?;
+    if identity(&package_before) != stage.candidate_directory
+        || package_before.volume != root_volume
+    {
+        return Err("WAKE_PROTECTED_PUBLICATION_BINDING_INVALID".into());
+    }
+    assert_security(package.as_raw_handle(), &policy.package)?;
+    exact_package_inventory(&package)?;
+
+    let manifest_handle = open_relative(&package, "manifest.json", false)?;
+    let mut manifest = File::from(manifest_handle);
+    let (manifest_bytes, manifest_before) =
+        read_bounded(&mut manifest, MAX_MANIFEST_BYTES, &policy.manifest)?;
+    if identity(&manifest_before) != stage.manifest_file
+        || manifest_before.volume != root_volume
+        || manifest_bytes != canonical_manifest
+        || format!("{:x}", Sha256::digest(&manifest_bytes)) != approval.payload().manifest_sha256
+    {
+        return Err("WAKE_PROTECTED_PUBLICATION_MANIFEST_MISMATCH".into());
+    }
+    let parsed: PackageManifestV1 = canonical_json(&manifest_bytes)?;
+    if parsed != approval.payload().manifest {
+        return Err("WAKE_PROTECTED_PUBLICATION_MANIFEST_MISMATCH".into());
+    }
+
+    // Pin all leaves before hashing any leaf. The pins deny write/delete
+    // sharing while the first and second complete readbacks run.
+    let mut files = ARTIFACT_NAMES
+        .into_iter()
+        .map(|name| open_relative(&package, name, false).map(File::from))
+        .collect::<Result<Vec<_>>>()?;
+    let mut artifacts = Vec::with_capacity(ARTIFACT_NAMES.len());
+    for (index, file) in files.iter_mut().enumerate() {
+        let signed = &approval.payload().manifest.artifacts[index];
+        let readback = hash_artifact(
+            file,
+            ARTIFACT_NAMES[index],
+            signed.byte_length,
+            &signed.sha256,
+            &policy.artifacts[index],
+            root_volume,
+        )?;
+        if readback.object != stage.artifacts[index] {
+            return Err("WAKE_PROTECTED_PUBLICATION_BINDING_INVALID".into());
+        }
+        artifacts.push(readback);
+    }
+    let artifacts: [ProtectedArtifactReadbackV1; 4] = artifacts
+        .try_into()
+        .map_err(|_| "WAKE_PROTECTED_READER_INVENTORY_MISMATCH")?;
+
+    let (manifest_after, _) = read_bounded(&mut manifest, MAX_MANIFEST_BYTES, &policy.manifest)?;
+    let reopened_package = open_relative(parent, package_name, true)?;
+    let mut reopened_manifest =
+        File::from(open_relative(&reopened_package, "manifest.json", false)?);
+    let (reopened_bytes, reopened_manifest_info) =
+        read_bounded(&mut reopened_manifest, MAX_MANIFEST_BYTES, &policy.manifest)?;
+    let mut reopened_files = ARTIFACT_NAMES
+        .into_iter()
+        .map(|name| open_relative(&reopened_package, name, false).map(File::from))
+        .collect::<Result<Vec<_>>>()?;
+    for (index, file) in reopened_files.iter_mut().enumerate() {
+        let signed = &approval.payload().manifest.artifacts[index];
+        if hash_artifact(
+            file,
+            ARTIFACT_NAMES[index],
+            signed.byte_length,
+            &signed.sha256,
+            &policy.artifacts[index],
+            root_volume,
+        )? != artifacts[index]
+        {
+            return Err("WAKE_PROTECTED_PUBLICATION_OBJECT_CHANGED".into());
+        }
+    }
+    if manifest_after != manifest_bytes
+        || reopened_bytes != manifest_bytes
+        || identity(&reopened_manifest_info) != stage.manifest_file
+        || identity(&file_info(reopened_package.as_raw_handle(), true)?)
+            != stage.candidate_directory
+        || !stable_file_info(&package_before, &file_info(package.as_raw_handle(), true)?)
+        || exact_security(package.as_raw_handle())? != policy.package
+        || exact_security(reopened_package.as_raw_handle())? != policy.package
+    {
+        return Err("WAKE_PROTECTED_PUBLICATION_OBJECT_CHANGED".into());
+    }
+    for (index, file) in files.iter().enumerate() {
+        if identity(&file_info(file.as_raw_handle(), false)?) != stage.artifacts[index]
+            || exact_security(file.as_raw_handle())? != policy.artifacts[index]
+        {
+            return Err("WAKE_PROTECTED_PUBLICATION_OBJECT_CHANGED".into());
+        }
+    }
+    exact_package_inventory(&package)?;
+    exact_package_inventory(&reopened_package)?;
+    Ok(artifacts)
+}
+
+fn inspect_publication_location_pinned(
+    root: &OwnedHandle,
+    root_id: &ObjectIdentityV1,
+    approval: &VerifiedApprovalV1,
+    stage: &StageBindingV1,
+    policy: &PublicationPolicy,
+) -> Result<PublicationLocationV1> {
+    // The approval and stage IDs are supplied claims. The caller must bind
+    // the approval key to protected policy and the stage to durable STAGED.
+    plan_protected_pointer_from_stage(approval, stage)?;
+    if approval.payload().target_protected_root != *root_id {
+        return Err("WAKE_PROTECTED_PUBLICATION_APPROVAL_MISMATCH".into());
+    }
+    let canonical_manifest = serde_json::to_vec(&approval.payload().manifest)
+        .map_err(|_| "WAKE_PROTECTED_PUBLICATION_MANIFEST_MISMATCH")?;
+    if format!("{:x}", Sha256::digest(&canonical_manifest)) != approval.payload().manifest_sha256 {
+        return Err("WAKE_PROTECTED_PUBLICATION_MANIFEST_MISMATCH".into());
+    }
+    let root_before = file_info(root.as_raw_handle(), true)?;
+    if identity(&root_before) != *root_id {
+        return Err("WAKE_PROTECTED_PUBLICATION_ROOT_CHANGED".into());
+    }
+    assert_security(root.as_raw_handle(), &policy.root)?;
+
+    let staging = open_relative(root, "staging", true)?;
+    let staging_before = file_info(staging.as_raw_handle(), true)?;
+    if identity(&staging_before) != stage.staging_directory
+        || staging_before.volume != root_before.volume
+    {
+        return Err("WAKE_PROTECTED_PUBLICATION_BINDING_INVALID".into());
+    }
+    assert_security(staging.as_raw_handle(), &policy.staging)?;
+    let packages = open_relative(root, "packages", true)?;
+    let packages_before = file_info(packages.as_raw_handle(), true)?;
+    if packages_before.volume != root_before.volume {
+        return Err("WAKE_PROTECTED_PUBLICATION_BINDING_INVALID".into());
+    }
+    assert_security(packages.as_raw_handle(), &policy.packages)?;
+
+    let stage_entries = directory_inventory(&staging, MAX_DIRECTORY_ENTRIES)?;
+    let package_entries = directory_inventory(&packages, MAX_PACKAGE_CONTAINER_ENTRIES)?;
+    let package_id = &approval.payload().manifest.package_id;
+    if package_entries
+        .iter()
+        .any(|name| name.eq_ignore_ascii_case(package_id) && name != package_id)
+    {
+        return Err("WAKE_PROTECTED_PUBLICATION_LOCATION_INVALID".into());
+    }
+    let at_stage = stage_entries.len() == 1 && stage_entries.contains("candidate");
+    let stage_empty = stage_entries.is_empty();
+    let at_package = package_entries.contains(package_id);
+    if (!at_stage && !stage_empty) || at_stage == at_package {
+        return Err("WAKE_PROTECTED_PUBLICATION_LOCATION_INVALID".into());
+    }
+    let (parent, name) = if at_stage {
+        (&staging, "candidate")
+    } else {
+        (&packages, package_id.as_str())
+    };
+    let artifacts = inspect_publication_package(
+        parent,
+        name,
+        root_before.volume,
+        approval,
+        stage,
+        policy,
+        &canonical_manifest,
+    )?;
+
+    let final_stage_entries = directory_inventory(&staging, MAX_DIRECTORY_ENTRIES)?;
+    let final_package_entries = directory_inventory(&packages, MAX_PACKAGE_CONTAINER_ENTRIES)?;
+    if final_stage_entries != stage_entries
+        || final_package_entries != package_entries
+        || !stable_file_info(&root_before, &file_info(root.as_raw_handle(), true)?)
+        || !stable_file_info(&staging_before, &file_info(staging.as_raw_handle(), true)?)
+        || !stable_file_info(
+            &packages_before,
+            &file_info(packages.as_raw_handle(), true)?,
+        )
+        || exact_security(root.as_raw_handle())? != policy.root
+        || exact_security(staging.as_raw_handle())? != policy.staging
+        || exact_security(packages.as_raw_handle())? != policy.packages
+    {
+        return Err("WAKE_PROTECTED_PUBLICATION_OBJECT_CHANGED".into());
+    }
+    if at_package {
+        Ok(PublicationLocationV1::Moved(Box::new(
+            ProtectedPublishedPackageReadbackV1 {
+                schema_version: 1,
+                approval_id: approval.payload().approval_id.clone(),
+                install_generation: approval.payload().install_generation,
+                package_id: package_id.clone(),
+                signed_payload_sha256: approval.signed_payload_sha256().into(),
+                manifest_sha256: approval.payload().manifest_sha256.clone(),
+                protected_root: root_id.clone(),
+                staging_directory: stage.staging_directory.clone(),
+                package_directory: stage.candidate_directory.clone(),
+                manifest_file: stage.manifest_file.clone(),
+                artifacts,
+                disposition: "MATCHED_SIGNED_PUBLISHED_BYTES_READ_ONLY_NO_INSTALL_AUTHORITY",
+            },
+        )))
+    } else {
+        Ok(PublicationLocationV1::Stage)
+    }
+}
+
+/// Classify the exact STAGED object while the broker's ledger lock and root
+/// pin are held. This is a physical diagnostic only. `VerifiedApprovalV1`
+/// alone does not prove protected-policy key provenance; the caller must also
+/// compare the durable STAGED record. No writer, INTENT, or pointer authority
+/// is returned.
+pub(crate) fn inspect_publication_location_under_guard(
+    root: &OwnedHandle,
+    root_id: &ObjectIdentityV1,
+    approval: &VerifiedApprovalV1,
+    stage: &StageBindingV1,
+    service_sid: &str,
+) -> Result<PublicationLocationV1> {
+    let policy = PublicationPolicy::production(service_sid)?;
+    inspect_publication_location_pinned(root, root_id, approval, stage, &policy)
+}
+
+#[cfg(test)]
+pub(crate) fn publication_fixture_policy_before_rename(
+    root: &OwnedHandle,
+    approval: &VerifiedApprovalV1,
+    stage: &StageBindingV1,
+) -> Result<PublicationFixturePolicyV1> {
+    let staging = open_relative(root, "staging", true)?;
+    let packages = open_relative(root, "packages", true)?;
+    let candidate = open_relative(&staging, "candidate", true)?;
+    let manifest = open_relative(&candidate, "manifest.json", false)?;
+    let artifacts = ARTIFACT_NAMES
+        .into_iter()
+        .map(|name| {
+            let file = open_relative(&candidate, name, false)?;
+            exact_security(file.as_raw_handle())
+        })
+        .collect::<Result<Vec<_>>>()?
+        .try_into()
+        .map_err(|_| "WAKE_PROTECTED_READER_INVENTORY_MISMATCH")?;
+    let policy = PublicationPolicy {
+        root: exact_security(root.as_raw_handle())?,
+        staging: exact_security(staging.as_raw_handle())?,
+        packages: exact_security(packages.as_raw_handle())?,
+        package: exact_security(candidate.as_raw_handle())?,
+        manifest: exact_security(manifest.as_raw_handle())?,
+        artifacts,
+    };
+    drop(manifest);
+    drop(candidate);
+    drop(packages);
+    drop(staging);
+    if inspect_publication_location_pinned(
+        root,
+        &approval.payload().target_protected_root,
+        approval,
+        stage,
+        &policy,
+    )? != PublicationLocationV1::Stage
+    {
+        return Err("WAKE_PROTECTED_PUBLICATION_LOCATION_INVALID".into());
+    }
+    Ok(PublicationFixturePolicyV1(policy))
+}
+
+#[cfg(test)]
+pub(crate) fn inspect_publication_location_fixture(
+    root: &OwnedHandle,
+    root_id: &ObjectIdentityV1,
+    approval: &VerifiedApprovalV1,
+    stage: &StageBindingV1,
+    policy: &PublicationFixturePolicyV1,
+) -> Result<PublicationLocationV1> {
+    inspect_publication_location_pinned(root, root_id, approval, stage, &policy.0)
 }
 
 fn inspect_pinned(

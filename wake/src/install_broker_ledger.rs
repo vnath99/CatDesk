@@ -32,8 +32,8 @@ use crate::{
     install_broker_durability::{ParentFlushPoint, flush_pinned_directory},
     install_broker_policy::{BrokerProtectedPolicyV1, PolicyVerifiedApprovalV1},
     install_broker_reader::{
-        ProtectedInstallPinV1, ProtectedInstallReadOnlySnapshotV1,
-        pin_protected_install_under_guard,
+        ProtectedInstallPinV1, ProtectedInstallReadOnlySnapshotV1, PublicationLocationV1,
+        inspect_publication_location_under_guard, pin_protected_install_under_guard,
     },
     install_broker_stage_writer::BrokerStageReceiptV1,
 };
@@ -236,9 +236,9 @@ pub struct PointerSwitchBindingV1 {
     pub pointer_sha256: String,
 }
 
-/// A point-in-time diagnosis of one existing transaction. The stage reader's
-/// own provenance flag remains false; matching protected ledger IDs here does
-/// not retain the stage, owner or pointer pins needed for install mutation.
+/// A point-in-time diagnosis of one existing transaction. Matching STAGED IDs
+/// at either the original slot or the signed package destination does not
+/// retain the package, owner or pointer pins needed for install mutation.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BrokerExactResumeReadbackV1 {
@@ -248,6 +248,11 @@ pub struct BrokerExactResumeReadbackV1 {
     pub phase: &'static str,
     pub stage: Option<BrokerCandidateStageReadbackV1>,
     pub ledger_stage_binding_matched: bool,
+    /// True only when the signed package destination's exact bytes, security
+    /// and six physical package object IDs match the durable STAGED binding.
+    pub published_package_binding_matched: bool,
+    /// True only when the physical staging parent still matches STAGED.
+    pub staging_parent_object_verified: bool,
     pub disposition: &'static str,
 }
 
@@ -283,10 +288,40 @@ enum PredecessorReaderMode {
 }
 
 #[derive(Clone, Copy)]
-enum ResumeStageInspection {
-    Protected,
+enum ResumeStageInspection<'a> {
+    Protected(std::marker::PhantomData<&'a ()>),
     #[cfg(test)]
     Fixture,
+    #[cfg(test)]
+    FixturePublication(&'a crate::install_broker_reader::PublicationFixturePolicyV1),
+}
+
+fn inspect_publication_for_resume(
+    root: &OwnedHandle,
+    root_id: &ObjectIdentityV1,
+    policy: &BrokerProtectedPolicyV1,
+    approved: &VerifiedApprovalV1,
+    stage: &StageBindingV1,
+    mode: ResumeStageInspection<'_>,
+) -> Result<PublicationLocationV1> {
+    match mode {
+        ResumeStageInspection::Protected(_) => {
+            let (service_sid, _) = policy.checked_endpoint_sids()?;
+            inspect_publication_location_under_guard(root, root_id, approved, stage, service_sid)
+        }
+        #[cfg(test)]
+        ResumeStageInspection::FixturePublication(fixture_policy) => {
+            crate::install_broker_reader::inspect_publication_location_fixture(
+                root,
+                root_id,
+                approved,
+                stage,
+                fixture_policy,
+            )
+        }
+        #[cfg(test)]
+        ResumeStageInspection::Fixture => Err("WAKE_LEDGER_RESUME_PHASE_UNSUPPORTED".into()),
+    }
 }
 
 /// The exact signature and protected trust root accepted with INTENT. Every
@@ -638,7 +673,7 @@ impl<'a> BrokerLedgerGuard<'a> {
             envelope,
             generation,
             observe_current,
-            ResumeStageInspection::Protected,
+            ResumeStageInspection::Protected(std::marker::PhantomData),
         )
     }
 
@@ -661,6 +696,26 @@ impl<'a> BrokerLedgerGuard<'a> {
         )
     }
 
+    #[cfg(test)]
+    pub(crate) fn inspect_publication_seam_fixture(
+        &self,
+        policy: &BrokerProtectedPolicyV1,
+        envelope: &[u8],
+        generation: u64,
+        observe_current: impl FnOnce(
+            &OwnedHandle,
+        ) -> Result<(BrokerObservedStateV1, OriginalDesiredStateV1)>,
+        publication_policy: &crate::install_broker_reader::PublicationFixturePolicyV1,
+    ) -> Result<BrokerExactResumeReadbackV1> {
+        self.inspect_exact_resume_with(
+            policy,
+            envelope,
+            generation,
+            observe_current,
+            ResumeStageInspection::FixturePublication(publication_policy),
+        )
+    }
+
     fn inspect_exact_resume_with(
         &self,
         policy: &BrokerProtectedPolicyV1,
@@ -669,7 +724,7 @@ impl<'a> BrokerLedgerGuard<'a> {
         observe_current: impl FnOnce(
             &OwnedHandle,
         ) -> Result<(BrokerObservedStateV1, OriginalDesiredStateV1)>,
-        stage_inspection: ResumeStageInspection,
+        stage_inspection: ResumeStageInspection<'_>,
     ) -> Result<BrokerExactResumeReadbackV1> {
         if generation == 0 {
             return Err("WAKE_LEDGER_GENERATION_INVALID".into());
@@ -706,58 +761,123 @@ impl<'a> BrokerLedgerGuard<'a> {
         if current != expected_current || desired != intent.original_desired_state {
             return Err("WAKE_LEDGER_RESUME_PHYSICAL_MISMATCH".into());
         }
-        let (stage, disposition) = match phase {
-            InstallPhaseV1::Intent => {
-                match stage_inspection {
-                    ResumeStageInspection::Protected => {
-                        let (service_sid, _) = policy.checked_endpoint_sids()?;
-                        require_empty_staging_under_guard(self.root, &root_id, service_sid)?;
+        let (stage, published_package_binding_matched, staging_parent_object_verified, disposition) =
+            match phase {
+                InstallPhaseV1::Intent => {
+                    match stage_inspection {
+                        ResumeStageInspection::Protected(_) => {
+                            let (service_sid, _) = policy.checked_endpoint_sids()?;
+                            require_empty_staging_under_guard(self.root, &root_id, service_sid)?;
+                        }
+                        #[cfg(test)]
+                        ResumeStageInspection::Fixture
+                        | ResumeStageInspection::FixturePublication(_) => {
+                            crate::install_broker_candidate_stage::require_empty_staging_fixture(
+                                self.root,
+                            )?;
+                        }
                     }
-                    #[cfg(test)]
-                    ResumeStageInspection::Fixture => {
-                        crate::install_broker_candidate_stage::require_empty_staging_fixture(
-                            self.root,
-                        )?;
-                    }
+                    (
+                        None,
+                        false,
+                        false,
+                        "INTENT_STAGING_EMPTY_NO_INSTALL_AUTHORITY",
+                    )
                 }
-                (None, "INTENT_STAGING_EMPTY_NO_INSTALL_AUTHORITY")
-            }
-            InstallPhaseV1::StageStarted => (None, "STAGE_STARTED_ATTENTION_NO_INSTALL_AUTHORITY"),
-            InstallPhaseV1::Staged => {
-                let snapshot = match stage_inspection {
-                    ResumeStageInspection::Protected => {
-                        let (service_sid, _) = policy.checked_endpoint_sids()?;
-                        inspect_stage_under_guard(
+                InstallPhaseV1::StageStarted => (
+                    None,
+                    false,
+                    false,
+                    "STAGE_STARTED_ATTENTION_NO_INSTALL_AUTHORITY",
+                ),
+                InstallPhaseV1::Staged => {
+                    let durable_stage = stage_binding
+                        .as_ref()
+                        .ok_or("WAKE_LEDGER_STAGE_BINDING_INVALID")?;
+                    let location = match stage_inspection {
+                        #[cfg(test)]
+                        ResumeStageInspection::Fixture => None,
+                        _ => Some(inspect_publication_for_resume(
                             self.root,
                             &root_id,
+                            policy,
                             approved.verified(),
-                            service_sid,
-                        )?
+                            durable_stage,
+                            stage_inspection,
+                        )?),
+                    };
+                    if let Some(PublicationLocationV1::Moved(_)) = location {
+                        (
+                            None,
+                            true,
+                            true,
+                            "STAGED_PACKAGE_MOVED_PUBLISHED_RECORD_MISSING_ATTENTION_NO_INSTALL_AUTHORITY",
+                        )
+                    } else {
+                        let snapshot = match stage_inspection {
+                            ResumeStageInspection::Protected(_) => {
+                                let (service_sid, _) = policy.checked_endpoint_sids()?;
+                                inspect_stage_under_guard(
+                                    self.root,
+                                    &root_id,
+                                    approved.verified(),
+                                    service_sid,
+                                )?
+                            }
+                            #[cfg(test)]
+                            ResumeStageInspection::Fixture
+                            | ResumeStageInspection::FixturePublication(_) => {
+                                crate::install_broker_candidate_stage::inspect_stage_fixture(
+                                    self.root,
+                                    &root_id,
+                                    approved.verified(),
+                                )?
+                            }
+                        };
+                        let observed_stage = StageBindingV1 {
+                            staging_directory: snapshot.staging_directory.clone(),
+                            candidate_directory: snapshot.candidate_directory.clone(),
+                            manifest_file: snapshot.manifest_file.clone(),
+                            artifacts: std::array::from_fn(|index| {
+                                snapshot.artifacts[index].object.clone()
+                            }),
+                        };
+                        if durable_stage != &observed_stage {
+                            return Err("WAKE_LEDGER_STAGE_BINDING_INVALID".into());
+                        }
+                        (
+                            Some(snapshot),
+                            false,
+                            true,
+                            "STAGED_IDS_MATCH_NO_INSTALL_AUTHORITY",
+                        )
                     }
-                    #[cfg(test)]
-                    ResumeStageInspection::Fixture => {
-                        crate::install_broker_candidate_stage::inspect_stage_fixture(
-                            self.root,
-                            &root_id,
-                            approved.verified(),
-                        )?
-                    }
-                };
-                let observed_stage = StageBindingV1 {
-                    staging_directory: snapshot.staging_directory.clone(),
-                    candidate_directory: snapshot.candidate_directory.clone(),
-                    manifest_file: snapshot.manifest_file.clone(),
-                    artifacts: std::array::from_fn(|index| {
-                        snapshot.artifacts[index].object.clone()
-                    }),
-                };
-                if stage_binding.as_ref() != Some(&observed_stage) {
-                    return Err("WAKE_LEDGER_STAGE_BINDING_INVALID".into());
                 }
-                (Some(snapshot), "STAGED_IDS_MATCH_NO_INSTALL_AUTHORITY")
-            }
-            _ => return Err("WAKE_LEDGER_RESUME_PHASE_UNSUPPORTED".into()),
-        };
+                InstallPhaseV1::Published => {
+                    let durable_stage = stage_binding
+                        .as_ref()
+                        .ok_or("WAKE_LEDGER_STAGE_BINDING_INVALID")?;
+                    match inspect_publication_for_resume(
+                        self.root,
+                        &root_id,
+                        policy,
+                        approved.verified(),
+                        durable_stage,
+                        stage_inspection,
+                    )? {
+                        PublicationLocationV1::Moved(_) => (
+                            None,
+                            true,
+                            true,
+                            "PUBLISHED_PACKAGE_IDS_MATCH_NO_INSTALL_AUTHORITY",
+                        ),
+                        PublicationLocationV1::Stage => {
+                            return Err("WAKE_BROKER_PUBLICATION_PHASE_MISMATCH".into());
+                        }
+                    }
+                }
+                _ => return Err("WAKE_LEDGER_RESUME_PHASE_UNSUPPORTED".into()),
+            };
         // The result is a point-in-time diagnosis. Reopen this generation's
         // records and the policy after stage I/O. Prior history was checked
         // under the cooperative global lock, not snapshotted against a
@@ -784,6 +904,8 @@ impl<'a> BrokerLedgerGuard<'a> {
             approval_id: intent.approval_id,
             phase: phase.name(),
             ledger_stage_binding_matched: stage.is_some(),
+            published_package_binding_matched,
+            staging_parent_object_verified,
             stage,
             disposition,
         })
@@ -1917,7 +2039,7 @@ impl<'a> BrokerLedgerLease<'a> {
     }
 
     #[cfg(test)]
-    fn advance(&mut self, next: InstallPhaseV1) -> Result<bool> {
+    pub(crate) fn advance(&mut self, next: InstallPhaseV1) -> Result<bool> {
         if next == InstallPhaseV1::Staged && self.binding.stage_binding.is_none() {
             // Ledger-only fixtures model a physically bound stage. Production
             // has no generic phase advancement path.
