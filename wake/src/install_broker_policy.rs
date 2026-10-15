@@ -1003,7 +1003,7 @@ pub(crate) mod tests {
             fixture.root_id
         );
         drop(reopened);
-        for phase in ["intent", "stage-started", "staged"] {
+        for phase in ["intent", "stage-started", "staged", "publication-attempt"] {
             let path = fixture.path.join(format!(
                 "install-transaction-00000000000000000002-{phase}.json"
             ));
@@ -2057,6 +2057,11 @@ pub(crate) mod tests {
                     Ok((observed.clone(), expected.clone()))
                 })
                 .expect("exact fixture replay");
+            checked_rename(&package, &candidate, &fixture_packages, &fixture_staging);
+            lease
+                .record_publication_attempt_fixture()
+                .expect("fixture pre-rename attempt marker");
+            checked_rename(&candidate, &package, &fixture_staging, &fixture_packages);
             lease
                 .advance(InstallPhaseV1::Published)
                 .expect("fixture PUBLISHED record");
@@ -2065,6 +2070,7 @@ pub(crate) mod tests {
             assert_eq!(published.phase, "published");
             assert!(published.published_package_binding_matched);
             assert!(published.packages_parent_object_verified);
+            assert!(published.publication_attempt_record_present);
             assert!(!published.ledger_stage_binding_matched);
             assert_eq!(
                 published.disposition,
@@ -2116,6 +2122,102 @@ pub(crate) mod tests {
         )
         .expect("remove fixture PUBLISHED record");
         remove_exact_package(&package);
+        cleanup_resume_fixture(fixture, policy);
+    }
+
+    #[test]
+    fn guarded_staged_attempt_marker_reports_attention_without_retry_authority() {
+        use crate::install_broker_reader::publication_fixture_policy_before_rename;
+
+        let (fixture, policy, envelope, observed, expected, manifest) = resume_fixture();
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("fixture ledger lock");
+        let (mut lease, approved) = guard
+            .accept_with_observation_fixture(&policy, &envelope, |_| {
+                Ok((observed.clone(), expected.clone()))
+            })
+            .expect("fixture INTENT");
+        lease.record_stage_started().expect("stage marker");
+        let candidate = fixture.path.join("staging").join("candidate");
+        std::fs::create_dir(&candidate).expect("fixed candidate slot");
+        for (name, bytes) in RESUME_ARTIFACTS.into_iter().zip(RESUME_BLOBS) {
+            std::fs::write(candidate.join(name), bytes).expect("signed fixture artifact");
+        }
+        std::fs::write(candidate.join("manifest.json"), manifest)
+            .expect("canonical fixture manifest");
+        let snapshot = inspect_stage_fixture(&fixture.root, &fixture.root_id, approved.verified())
+            .expect("exact stage readback");
+        let packages_path = fixture.path.join("packages");
+        let packages_raw = unsafe {
+            CreateFileW(
+                wide(packages_path.to_str().expect("fixture packages UTF-8")).as_ptr(),
+                FILE_READ_DATA | FILE_READ_ATTRIBUTES | READ_CONTROL,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                ptr::null_mut(),
+                OPEN_EXISTING,
+                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                ptr::null_mut(),
+            )
+        };
+        assert!(!packages_raw.is_null() && packages_raw != INVALID_HANDLE_VALUE);
+        let packages_pin = unsafe { OwnedHandle::from_raw_handle(packages_raw) };
+        let packages_id = object_identity(
+            &file_info(packages_pin.as_raw_handle(), true).expect("packages parent identity"),
+        );
+        drop(packages_pin);
+        let stage = StageBindingV1 {
+            staging_directory: snapshot.staging_directory,
+            candidate_directory: snapshot.candidate_directory,
+            manifest_file: snapshot.manifest_file,
+            artifacts: std::array::from_fn(|index| snapshot.artifacts[index].object.clone()),
+            packages_directory: Some(packages_id),
+        };
+        let publication_policy =
+            publication_fixture_policy_before_rename(&fixture.root, approved.verified(), &stage)
+                .expect("fixed stage and packages policy");
+        lease.record_staged_fixture(stage).expect("durable STAGED");
+        lease
+            .record_publication_attempt_fixture()
+            .expect("durable publication attempt");
+        drop(lease);
+        drop(approved);
+
+        let mut later = observed.clone();
+        later.now_utc_seconds = 2_001;
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("diagnostic lock");
+        let readback = guard
+            .inspect_publication_seam_fixture(
+                &policy,
+                &envelope,
+                2,
+                |_| Ok((later, OriginalDesiredStateV1::Running)),
+                &publication_policy,
+            )
+            .expect("marked STAGED diagnosis");
+        assert_eq!(readback.phase, "staged");
+        assert!(readback.ledger_stage_binding_matched);
+        assert!(readback.packages_parent_object_verified);
+        assert!(readback.publication_attempt_record_present);
+        assert_eq!(
+            readback.disposition,
+            "STAGED_PUBLICATION_ATTEMPT_ATTENTION_NO_INSTALL_AUTHORITY"
+        );
+        drop(guard);
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("retry lock");
+        assert_eq!(
+            guard
+                .accept_with_observation_fixture(&policy, &envelope, |_| {
+                    Ok((observed.clone(), expected.clone()))
+                })
+                .err()
+                .unwrap(),
+            "WAKE_BROKER_PUBLICATION_ATTEMPT_ATTENTION"
+        );
+        assert!(
+            !fixture
+                .path
+                .join("install-transaction-00000000000000000002-published.json")
+                .exists()
+        );
         cleanup_resume_fixture(fixture, policy);
     }
 

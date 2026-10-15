@@ -31,6 +31,7 @@ pub(crate) enum ParentFlushPoint {
     StageCandidateEntry,
     StageLeafEntries,
     Staged,
+    PublicationAttempt,
     LaterLedgerPhase,
 }
 

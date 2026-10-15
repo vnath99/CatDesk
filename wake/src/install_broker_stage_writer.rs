@@ -907,6 +907,110 @@ mod tests {
     }
 
     #[test]
+    fn typed_publication_attempt_marker_is_create_once_and_reopen_attention() {
+        let fixture = TransactionFixture::new();
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("global lock");
+        let mut lease = guard
+            .begin_fixture(&fixture.approval, &fixture.expectation)
+            .expect("durable intent");
+        let mut receipt = materialize_pinned_candidate_stage(
+            &mut lease,
+            &fixture.approval,
+            fixture.source(),
+            StageSecurityMode::Fixture,
+            None,
+        )
+        .expect("fresh typed stage");
+        lease.record_staged(&mut receipt).expect("durable STAGED");
+        let marker = fixture
+            .base
+            .join("install-transaction-00000000000000000002-publication-attempt.json");
+        assert!(!marker.exists());
+        lease
+            .record_publication_attempt(&mut receipt)
+            .expect("durable attempt marker");
+        assert_eq!(lease.phase(), InstallPhaseV1::Staged);
+        let bytes = std::fs::read(&marker).expect("marker bytes");
+        let value: serde_json::Value = serde_json::from_slice(&bytes).expect("canonical marker");
+        assert_eq!(
+            value["stageBinding"]["packagesDirectory"],
+            serde_json::to_value(receipt.stage_binding().packages_directory.unwrap()).unwrap()
+        );
+        assert_eq!(
+            lease.record_publication_attempt(&mut receipt).unwrap_err(),
+            "WAKE_BROKER_PUBLICATION_ATTEMPT_ATTENTION"
+        );
+        assert!(
+            !fixture
+                .base
+                .join("install-transaction-00000000000000000002-published.json")
+                .exists()
+        );
+        drop(receipt);
+        drop(lease);
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("reopen global lock");
+        assert_eq!(
+            guard
+                .begin_fixture(&fixture.approval, &fixture.expectation)
+                .err()
+                .unwrap(),
+            "WAKE_BROKER_PUBLICATION_ATTEMPT_ATTENTION"
+        );
+        assert_eq!(std::fs::read(&marker).unwrap(), bytes);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn publication_attempt_parent_flush_failure_is_sticky_on_reopen() {
+        let fixture = TransactionFixture::new();
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("global lock");
+        let mut lease = guard
+            .begin_fixture(&fixture.approval, &fixture.expectation)
+            .expect("durable intent");
+        let mut receipt = materialize_pinned_candidate_stage(
+            &mut lease,
+            &fixture.approval,
+            fixture.source(),
+            StageSecurityMode::Fixture,
+            None,
+        )
+        .expect("fresh typed stage");
+        lease.record_staged(&mut receipt).expect("durable STAGED");
+        fail_next_flush(ParentFlushPoint::PublicationAttempt);
+        assert_eq!(
+            lease.record_publication_attempt(&mut receipt).unwrap_err(),
+            "WAKE_BROKER_PARENT_FLUSH_FAILED"
+        );
+        assert_eq!(
+            lease.record_publication_attempt(&mut receipt).unwrap_err(),
+            "WAKE_BROKER_PUBLICATION_ATTEMPT_ATTENTION"
+        );
+        assert!(
+            fixture
+                .base
+                .join("install-transaction-00000000000000000002-publication-attempt.json")
+                .exists()
+        );
+        assert!(
+            !fixture
+                .base
+                .join("install-transaction-00000000000000000002-published.json")
+                .exists()
+        );
+        drop(receipt);
+        drop(lease);
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("reopen global lock");
+        assert_eq!(
+            guard
+                .begin_fixture(&fixture.approval, &fixture.expectation)
+                .err()
+                .unwrap(),
+            "WAKE_BROKER_PUBLICATION_ATTEMPT_ATTENTION"
+        );
+        fixture.cleanup();
+    }
+
+    #[test]
     fn missing_packages_parent_refuses_before_stage_marker_or_candidate() {
         let fixture = TransactionFixture::new();
         std::fs::remove_dir(fixture.base.join(PACKAGES)).expect("remove exact empty parent");

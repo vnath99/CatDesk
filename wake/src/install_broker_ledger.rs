@@ -55,6 +55,8 @@ const MAX_RECORD_BYTES: usize = 4096;
 const MAX_DIRECTORY_ENTRIES: usize = 4096;
 const DOMAIN: &[u8] = b"CatDeskWakeInstallLedgerV1\0";
 const GLOBAL_LOCK_NAME: &str = "install-ledger.lock";
+const PUBLICATION_ATTEMPT_SLOT: usize = InstallPhaseV1::ORDER.len();
+const LEDGER_SLOT_COUNT: usize = PUBLICATION_ATTEMPT_SLOT + 1;
 const FILE_OPEN: u32 = 1;
 const FILE_CREATE: u32 = 2;
 const FILE_READ_DATA: u32 = 1;
@@ -164,6 +166,12 @@ pub enum InstallPhaseV1 {
     Complete,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LedgerRecordKindV1 {
+    Phase(InstallPhaseV1),
+    PublicationAttempt,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum OriginalDesiredStateV1 {
@@ -233,6 +241,22 @@ pub struct StageBindingV1 {
     pub packages_directory: Option<ObjectIdentityV1>,
 }
 
+/// A create-once write-ahead boundary before any future package rename. It
+/// does not prove that a rename was attempted or completed. Once present, a
+/// reopened STAGED transaction is attention-only and cannot retry publication.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PublicationAttemptRecordV1 {
+    schema_version: u32,
+    purpose: String,
+    install_generation: u64,
+    approval_id: String,
+    signed_approval_sha256: String,
+    protected_root: ObjectIdentityV1,
+    stage_binding: StageBindingV1,
+    staged_record_sha256: String,
+}
+
 /// Exact canonical bytes and physical file selected as the new current.json.
 /// This is journal evidence only; a future broker-owned switch writer must
 /// retain and revalidate the pointer handle across recording the phase.
@@ -264,6 +288,9 @@ pub struct BrokerExactResumeReadbackV1 {
     /// pinned readback matched that exact physical directory. Older STAGED
     /// records remain readable but cannot supply this publication premise.
     pub packages_parent_object_verified: bool,
+    /// A durable pre-rename attempt marker is present. This never proves a
+    /// rename completed and gives no retry or PUBLISHED-write authority.
+    pub publication_attempt_record_present: bool,
     pub disposition: &'static str,
 }
 
@@ -533,6 +560,29 @@ impl Binding {
     }
 }
 
+fn expected_publication_attempt(
+    binding: &Binding,
+    staged_digest: &str,
+) -> Result<PublicationAttemptRecordV1> {
+    let stage = binding
+        .stage_binding
+        .as_ref()
+        .ok_or("WAKE_LEDGER_PUBLICATION_ATTEMPT_INVALID")?;
+    if stage.packages_directory.is_none() || !lowercase_hex(staged_digest, 64) {
+        return Err("WAKE_LEDGER_PUBLICATION_ATTEMPT_INVALID".into());
+    }
+    Ok(PublicationAttemptRecordV1 {
+        schema_version: 1,
+        purpose: "catdesk-wake-protected-publication-attempt".into(),
+        install_generation: binding.install_generation,
+        approval_id: binding.approval_id.clone(),
+        signed_approval_sha256: binding.signed_approval_sha256.clone(),
+        protected_root: binding.protected_root.clone(),
+        stage_binding: stage.clone(),
+        staged_record_sha256: staged_digest.into(),
+    })
+}
+
 /// Holds the intent record with share mode zero for the complete transaction
 /// observation. Dropping it releases the process lease but never erases a
 /// record. A different approval at the same generation remains a conflict.
@@ -543,6 +593,7 @@ pub struct BrokerLedgerLease<'a> {
     binding: Binding,
     current: InstallPhaseV1,
     current_digest: String,
+    publication_attempt_started: bool,
 }
 
 /// Owns the fixed global lock before the broker samples predecessor, old
@@ -785,6 +836,7 @@ impl<'a> BrokerLedgerGuard<'a> {
         let present = inventory
             .get(&generation)
             .ok_or("WAKE_LEDGER_NO_PRIOR_INTENT")?;
+        let publication_attempt_record_present = present[PUBLICATION_ATTEMPT_SLOT];
         let (intent, phase, stage_binding, pointer_binding) =
             historical_intent(self.root, generation, present, &root_id)?;
         let original = original_observation(&intent);
@@ -907,7 +959,11 @@ impl<'a> BrokerLedgerGuard<'a> {
                             Some(snapshot),
                             false,
                             true,
-                            "STAGED_IDS_MATCH_NO_INSTALL_AUTHORITY",
+                            if publication_attempt_record_present {
+                                "STAGED_PUBLICATION_ATTEMPT_ATTENTION_NO_INSTALL_AUTHORITY"
+                            } else {
+                                "STAGED_IDS_MATCH_NO_INSTALL_AUTHORITY"
+                            },
                         )
                     }
                 }
@@ -973,6 +1029,7 @@ impl<'a> BrokerLedgerGuard<'a> {
                 && stage_binding
                     .as_ref()
                     .is_some_and(|binding| binding.packages_directory.is_some()),
+            publication_attempt_record_present,
             stage,
             disposition,
         })
@@ -1065,6 +1122,10 @@ fn file_info(file: &File, expected_length: Option<usize>) -> Result<()> {
 
 fn record_name(generation: u64, phase: InstallPhaseV1) -> String {
     format!("install-transaction-{generation:020}-{}.json", phase.name())
+}
+
+fn publication_attempt_name(generation: u64) -> String {
+    format!("install-transaction-{generation:020}-publication-attempt.json")
 }
 
 fn open_relative(
@@ -1205,7 +1266,7 @@ fn open_fresh_inventory_directory(root: &OwnedHandle) -> Result<OwnedHandle> {
     Ok(fresh)
 }
 
-fn parse_record_name(name: &str) -> Result<(u64, InstallPhaseV1)> {
+fn parse_record_name(name: &str) -> Result<(u64, LedgerRecordKindV1)> {
     let rest = name
         .strip_prefix("install-transaction-")
         .ok_or("WAKE_LEDGER_RECORD_CORRUPT")?;
@@ -1219,21 +1280,31 @@ fn parse_record_name(name: &str) -> Result<(u64, InstallPhaseV1)> {
         .and_then(|value| value.strip_prefix('-'))
         .and_then(|value| value.strip_suffix(".json"))
         .ok_or("WAKE_LEDGER_RECORD_CORRUPT")?;
-    let phase = InstallPhaseV1::ORDER
-        .iter()
-        .copied()
-        .find(|phase| phase.name() == suffix)
-        .ok_or("WAKE_LEDGER_RECORD_CORRUPT")?;
-    if generation == 0 || record_name(generation, phase) != name {
+    let kind = if suffix == "publication-attempt" {
+        LedgerRecordKindV1::PublicationAttempt
+    } else {
+        LedgerRecordKindV1::Phase(
+            InstallPhaseV1::ORDER
+                .iter()
+                .copied()
+                .find(|phase| phase.name() == suffix)
+                .ok_or("WAKE_LEDGER_RECORD_CORRUPT")?,
+        )
+    };
+    let canonical_name = match kind {
+        LedgerRecordKindV1::Phase(phase) => record_name(generation, phase),
+        LedgerRecordKindV1::PublicationAttempt => publication_attempt_name(generation),
+    };
+    if generation == 0 || canonical_name != name {
         return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
     }
-    Ok((generation, phase))
+    Ok((generation, kind))
 }
 
 /// Enumerate only the fixed record prefix through the pinned directory handle.
 /// The caller holds the pre-provisioned global lock throughout the scan and
 /// subsequent transaction, so another cooperating broker cannot race it.
-fn ledger_inventory(root: &OwnedHandle) -> Result<BTreeMap<u64, [bool; 8]>> {
+fn ledger_inventory(root: &OwnedHandle) -> Result<BTreeMap<u64, [bool; LEDGER_SLOT_COUNT]>> {
     let fresh = open_fresh_inventory_directory(root)?;
     let mut pattern: Vec<u16> = "install-transaction-*".encode_utf16().collect();
     let mut filter = UnicodeString {
@@ -1293,12 +1364,18 @@ fn ledger_inventory(root: &OwnedHandle) -> Result<BTreeMap<u64, [bool; 8]>> {
             .map(|pair| u16::from_ne_bytes([pair[0], pair[1]]))
             .collect();
         let name = String::from_utf16(&units).map_err(|_| "WAKE_LEDGER_RECORD_CORRUPT")?;
-        let (generation, phase) = parse_record_name(&name)?;
-        let slots = found.entry(generation).or_insert([false; 8]);
-        if slots[phase.index()] {
+        let (generation, kind) = parse_record_name(&name)?;
+        let index = match kind {
+            LedgerRecordKindV1::Phase(phase) => phase.index(),
+            LedgerRecordKindV1::PublicationAttempt => PUBLICATION_ATTEMPT_SLOT,
+        };
+        let slots = found
+            .entry(generation)
+            .or_insert([false; LEDGER_SLOT_COUNT]);
+        if slots[index] {
             return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
         }
-        slots[phase.index()] = true;
+        slots[index] = true;
     }
     Err("WAKE_LEDGER_INVENTORY_UNAVAILABLE".into())
 }
@@ -1338,6 +1415,48 @@ fn read_record(file: &mut File) -> Result<(LedgerRecordV1, String)> {
     Ok((actual, record_digest(&bytes)))
 }
 
+fn read_publication_attempt(file: &mut File) -> Result<PublicationAttemptRecordV1> {
+    file_info(file, None)?;
+    file.seek(SeekFrom::Start(0))
+        .map_err(|_| "WAKE_LEDGER_RECORD_UNAVAILABLE")?;
+    let mut bytes = Vec::new();
+    file.take(MAX_RECORD_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "WAKE_LEDGER_RECORD_UNAVAILABLE")?;
+    if bytes.is_empty() || bytes.len() > MAX_RECORD_BYTES {
+        return Err("WAKE_LEDGER_PUBLICATION_ATTEMPT_INVALID".into());
+    }
+    file_info(file, Some(bytes.len()))?;
+    let actual: PublicationAttemptRecordV1 =
+        serde_json::from_slice(&bytes).map_err(|_| "WAKE_LEDGER_PUBLICATION_ATTEMPT_INVALID")?;
+    if serde_json::to_vec(&actual).map_err(|_| "WAKE_LEDGER_PUBLICATION_ATTEMPT_INVALID")? != bytes
+    {
+        return Err("WAKE_LEDGER_PUBLICATION_ATTEMPT_INVALID".into());
+    }
+    Ok(actual)
+}
+
+fn validate_publication_attempt(
+    root: &OwnedHandle,
+    binding: &Binding,
+    staged_digest: Option<&str>,
+    present: bool,
+) -> Result<()> {
+    if !present {
+        return Ok(());
+    }
+    let expected = expected_publication_attempt(
+        binding,
+        staged_digest.ok_or("WAKE_LEDGER_PUBLICATION_ATTEMPT_INVALID")?,
+    )?;
+    let mut file = open_optional(root, &publication_attempt_name(binding.install_generation))?
+        .ok_or("WAKE_LEDGER_PUBLICATION_ATTEMPT_INVALID")?;
+    if read_publication_attempt(&mut file)? != expected {
+        return Err("WAKE_LEDGER_PUBLICATION_ATTEMPT_INVALID".into());
+    }
+    Ok(())
+}
+
 fn read_exact(file: &mut File, expected: &LedgerRecordV1) -> Result<String> {
     let (actual, digest) = read_record(file)?;
     if actual != *expected {
@@ -1349,7 +1468,7 @@ fn read_exact(file: &mut File, expected: &LedgerRecordV1) -> Result<String> {
 fn historical_intent(
     root: &OwnedHandle,
     generation: u64,
-    present: &[bool; 8],
+    present: &[bool; LEDGER_SLOT_COUNT],
     observed_root: &ObjectIdentityV1,
 ) -> Result<(
     LedgerRecordV1,
@@ -1403,6 +1522,7 @@ fn historical_intent(
     };
     let mut current = InstallPhaseV1::Intent;
     let mut gap = false;
+    let mut staged_digest = None;
     for phase in InstallPhaseV1::ORDER.iter().copied().skip(1) {
         if !present[phase.index()] {
             gap = true;
@@ -1444,8 +1564,26 @@ fn historical_intent(
         if record != binding.record(phase, &digest) {
             return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
         }
+        if phase == InstallPhaseV1::Staged {
+            staged_digest = Some(next_digest.clone());
+        }
         digest = next_digest;
         current = phase;
+    }
+    validate_publication_attempt(
+        root,
+        &binding,
+        staged_digest.as_deref(),
+        present[PUBLICATION_ATTEMPT_SLOT],
+    )?;
+    if current.index() >= InstallPhaseV1::Published.index()
+        && binding
+            .stage_binding
+            .as_ref()
+            .is_some_and(|stage| stage.packages_directory.is_some())
+        && !present[PUBLICATION_ATTEMPT_SLOT]
+    {
+        return Err("WAKE_LEDGER_PUBLICATION_ATTEMPT_MISSING".into());
     }
     Ok((
         intent,
@@ -1494,7 +1632,7 @@ fn validated_latest_accepted_at(
 }
 
 type CompletedHeadV1 = (
-    BTreeMap<u64, [bool; 8]>,
+    BTreeMap<u64, [bool; LEDGER_SLOT_COUNT]>,
     LedgerRecordV1,
     StageBindingV1,
     Option<PointerSwitchBindingV1>,
@@ -1738,6 +1876,24 @@ fn write_new(file: &mut File, expected: &LedgerRecordV1) -> Result<String> {
     Ok(digest)
 }
 
+fn write_new_publication_attempt(
+    file: &mut File,
+    expected: &PublicationAttemptRecordV1,
+) -> Result<()> {
+    file_info(file, Some(0))?;
+    let bytes = serde_json::to_vec(expected).map_err(|_| "WAKE_LEDGER_ENCODING_INVALID")?;
+    if bytes.is_empty() || bytes.len() > MAX_RECORD_BYTES {
+        return Err("WAKE_LEDGER_ENCODING_INVALID".into());
+    }
+    file.write_all(&bytes)
+        .and_then(|_| file.sync_all())
+        .map_err(|_| "WAKE_LEDGER_WRITE_FAILED")?;
+    if read_publication_attempt(file)? != *expected {
+        return Err("WAKE_LEDGER_PUBLICATION_ATTEMPT_INVALID".into());
+    }
+    Ok(())
+}
+
 impl<'a> BrokerLedgerGuard<'a> {
     /// Invoke the observation provider only while this global lock is held,
     /// then verify the envelope against the pinned protected policy. A fresh
@@ -1954,6 +2110,7 @@ impl<'a> BrokerLedgerGuard<'a> {
         let mut current = InstallPhaseV1::Intent;
         let mut binding = binding;
         let mut gap = false;
+        let mut staged_digest = None;
         for phase in InstallPhaseV1::ORDER.iter().copied().skip(1) {
             let name = record_name(binding.install_generation, phase);
             match open_optional(root, &name)? {
@@ -1992,11 +2149,28 @@ impl<'a> BrokerLedgerGuard<'a> {
                     if record != binding.record(phase, &digest) {
                         return Err("WAKE_LEDGER_APPROVAL_CONFLICT".into());
                     }
+                    if phase == InstallPhaseV1::Staged {
+                        staged_digest = Some(next_digest.clone());
+                    }
                     digest = next_digest;
                     current = phase;
                 }
                 None => gap = true,
             }
+        }
+        let inventory = ledger_inventory(root)?;
+        let present = inventory
+            .get(&binding.install_generation)
+            .ok_or("WAKE_LEDGER_RECORD_CORRUPT")?;
+        let publication_attempt_started = present[PUBLICATION_ATTEMPT_SLOT];
+        validate_publication_attempt(
+            root,
+            &binding,
+            staged_digest.as_deref(),
+            publication_attempt_started,
+        )?;
+        if publication_attempt_started && current == InstallPhaseV1::Staged {
+            return Err("WAKE_BROKER_PUBLICATION_ATTEMPT_ATTENTION".into());
         }
         if root_info(root)? != observed_root {
             return Err("WAKE_LEDGER_ROOT_CHANGED".into());
@@ -2008,6 +2182,7 @@ impl<'a> BrokerLedgerGuard<'a> {
             binding,
             current,
             current_digest: digest,
+            publication_attempt_started,
         })
     }
 }
@@ -2099,6 +2274,114 @@ impl<'a> BrokerLedgerLease<'a> {
             &self.binding.approval_continuity,
         )?;
         Ok(written)
+    }
+
+    /// Create the durable no-retry boundary before a future package rename.
+    /// Only the fresh typed stage receipt can reach this method. A successful
+    /// marker deliberately leaves this source-only lease at STAGED: no native
+    /// rename, PUBLISHED record or install authority follows from it yet.
+    pub fn record_publication_attempt(
+        &mut self,
+        receipt: &mut BrokerStageReceiptV1<'_>,
+    ) -> Result<()> {
+        if self.publication_attempt_started {
+            return Err("WAKE_BROKER_PUBLICATION_ATTEMPT_ATTENTION".into());
+        }
+        if self.current != InstallPhaseV1::Staged
+            || self.binding.stage_binding.as_ref() != Some(&receipt.stage_binding())
+            || self
+                .binding
+                .stage_binding
+                .as_ref()
+                .is_none_or(|stage| stage.packages_directory.is_none())
+        {
+            return Err("WAKE_LEDGER_PUBLICATION_ATTEMPT_INVALID".into());
+        }
+        receipt.revalidate_for_ledger(
+            self.root,
+            &self.binding.protected_root,
+            self.binding.install_generation,
+            &self.binding.approval_id,
+            &self.binding.signed_approval_sha256,
+            &self.binding.approval_continuity,
+        )?;
+        self.write_publication_attempt_marker()?;
+        receipt.revalidate_for_ledger(
+            self.root,
+            &self.binding.protected_root,
+            self.binding.install_generation,
+            &self.binding.approval_id,
+            &self.binding.signed_approval_sha256,
+            &self.binding.approval_continuity,
+        )?;
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn record_publication_attempt_fixture(&mut self) -> Result<()> {
+        self.write_publication_attempt_marker()
+    }
+
+    fn write_publication_attempt_marker(&mut self) -> Result<()> {
+        if self.publication_attempt_started {
+            return Err("WAKE_BROKER_PUBLICATION_ATTEMPT_ATTENTION".into());
+        }
+        if self.current != InstallPhaseV1::Staged
+            || self
+                .binding
+                .stage_binding
+                .as_ref()
+                .is_none_or(|stage| stage.packages_directory.is_none())
+        {
+            return Err("WAKE_LEDGER_PUBLICATION_ATTEMPT_INVALID".into());
+        }
+        let inventory = ledger_inventory(self.root)?;
+        let present = inventory
+            .get(&self.binding.install_generation)
+            .ok_or("WAKE_LEDGER_RECORD_CORRUPT")?;
+        if present[PUBLICATION_ATTEMPT_SLOT] {
+            return Err("WAKE_BROKER_PUBLICATION_ATTEMPT_ATTENTION".into());
+        }
+        if !present[InstallPhaseV1::Intent.index()]
+            || !present[InstallPhaseV1::StageStarted.index()]
+            || !present[InstallPhaseV1::Staged.index()]
+            || InstallPhaseV1::ORDER[InstallPhaseV1::Published.index()..]
+                .iter()
+                .any(|phase| present[phase.index()])
+        {
+            return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
+        }
+        let name = record_name(self.binding.install_generation, InstallPhaseV1::Staged);
+        let mut staged_file =
+            open_optional(self.root, &name)?.ok_or("WAKE_LEDGER_RECORD_CORRUPT")?;
+        let staged_digest = read_record(&mut staged_file)?.1;
+        if staged_digest != self.current_digest {
+            return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
+        }
+        let expected = expected_publication_attempt(&self.binding, &staged_digest)?;
+        let mut marker = match open_relative(
+            self.root,
+            &publication_attempt_name(self.binding.install_generation),
+            FILE_CREATE,
+        ) {
+            Ok(file) => file,
+            Err(STATUS_OBJECT_NAME_COLLISION | STATUS_SHARING_VIOLATION) => {
+                return Err("WAKE_BROKER_PUBLICATION_ATTEMPT_ATTENTION".into());
+            }
+            Err(_) => return Err("WAKE_LEDGER_CREATE_FAILED".into()),
+        };
+        // Any failure after create leaves a visible marker or corrupt residue.
+        // Neither this live lease nor a reopened STAGED lease may try again.
+        self.publication_attempt_started = true;
+        write_new_publication_attempt(&mut marker, &expected)?;
+        flush_pinned_directory(
+            self.root,
+            &self.binding.protected_root,
+            ParentFlushPoint::PublicationAttempt,
+        )?;
+        drop(marker);
+        validate_publication_attempt(self.root, &self.binding, Some(&staged_digest), true)?;
+        Ok(())
     }
 
     #[cfg(test)]
@@ -2199,6 +2482,16 @@ impl<'a> BrokerLedgerLease<'a> {
     fn advance_internal(&mut self, next: InstallPhaseV1) -> Result<bool> {
         if next != self.current && next.index() != self.current.index() + 1 {
             return Err("WAKE_LEDGER_PHASE_ORDER_INVALID".into());
+        }
+        if next == InstallPhaseV1::Published
+            && self
+                .binding
+                .stage_binding
+                .as_ref()
+                .is_some_and(|stage| stage.packages_directory.is_some())
+            && !self.publication_attempt_started
+        {
+            return Err("WAKE_LEDGER_PUBLICATION_ATTEMPT_MISSING".into());
         }
         if root_info(self.root)? != self.binding.protected_root {
             return Err("WAKE_LEDGER_ROOT_CHANGED".into());
@@ -2330,6 +2623,10 @@ mod tests {
 
     fn remove_fixture(root: &Path, generation: u64) {
         remove_generation_records(root, generation);
+        let marker = root.join(publication_attempt_name(generation));
+        if marker.exists() {
+            std::fs::remove_file(marker).expect("remove exact fixture attempt marker");
+        }
         std::fs::remove_file(root.join(GLOBAL_LOCK_NAME)).expect("remove fixture lock");
         std::fs::remove_dir(root).expect("remove fixture directory");
     }
@@ -2501,6 +2798,189 @@ mod tests {
         assert_eq!(phase, InstallPhaseV1::Staged);
         assert_eq!(stage.unwrap().packages_directory, None);
         assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        drop(handle);
+        remove_fixture(&root, expected.next_install_generation);
+    }
+
+    #[test]
+    fn publication_attempt_marker_binds_exact_stage_and_rejects_tamper() {
+        let (root, handle, approval, expected) = fixture();
+        let id = |offset| ObjectIdentityV1 {
+            volume_serial: expected.protected_root.volume_serial,
+            file_index_high: expected.protected_root.file_index_high,
+            file_index_low: expected.protected_root.file_index_low.wrapping_add(offset),
+        };
+        let mut lease = BrokerLedgerLease::begin(&handle, &approval, &expected).expect("intent");
+        lease.record_stage_started().expect("stage marker");
+        lease
+            .record_staged_fixture(StageBindingV1 {
+                staging_directory: id(1),
+                candidate_directory: id(2),
+                manifest_file: id(3),
+                artifacts: [id(4), id(5), id(6), id(7)],
+                packages_directory: Some(id(8)),
+            })
+            .expect("bound fixture STAGED");
+        assert_eq!(
+            lease.advance(InstallPhaseV1::Published).unwrap_err(),
+            "WAKE_LEDGER_PUBLICATION_ATTEMPT_MISSING"
+        );
+        assert!(
+            !root
+                .join(record_name(
+                    expected.next_install_generation,
+                    InstallPhaseV1::Published
+                ))
+                .exists()
+        );
+        lease
+            .record_publication_attempt_fixture()
+            .expect("durable attempt marker");
+        drop(lease);
+        let marker_path = root.join(publication_attempt_name(expected.next_install_generation));
+        let original = std::fs::read(&marker_path).expect("marker bytes");
+        let mut marker =
+            read_publication_attempt(&mut File::open(&marker_path).expect("marker file"))
+                .expect("canonical marker");
+        assert_eq!(marker.stage_binding.packages_directory, Some(id(8)));
+        marker.staged_record_sha256 = "0".repeat(64);
+        std::fs::write(&marker_path, serde_json::to_vec(&marker).unwrap())
+            .expect("canonical but false stage digest");
+        let guard = BrokerLedgerGuard::acquire(&handle).expect("reopen global lock");
+        assert_eq!(
+            guard.begin_fixture(&approval, &expected).err().unwrap(),
+            "WAKE_LEDGER_PUBLICATION_ATTEMPT_INVALID"
+        );
+        assert!(
+            !root
+                .join(record_name(
+                    expected.next_install_generation,
+                    InstallPhaseV1::Published
+                ))
+                .exists()
+        );
+        std::fs::write(&marker_path, &original).expect("restore exact fixture marker");
+        let mut marker =
+            read_publication_attempt(&mut File::open(&marker_path).expect("restored marker file"))
+                .expect("restored canonical marker");
+        marker.stage_binding.packages_directory = Some(id(9));
+        std::fs::write(&marker_path, serde_json::to_vec(&marker).unwrap())
+            .expect("canonical but false parent ID");
+        let guard = BrokerLedgerGuard::acquire(&handle).expect("parent-drift replay lock");
+        assert_eq!(
+            guard.begin_fixture(&approval, &expected).err().unwrap(),
+            "WAKE_LEDGER_PUBLICATION_ATTEMPT_INVALID"
+        );
+        std::fs::write(&marker_path, &original).expect("restore exact fixture marker again");
+        let guard = BrokerLedgerGuard::acquire(&handle).expect("reopen valid marker");
+        assert_eq!(
+            guard.begin_fixture(&approval, &expected).err().unwrap(),
+            "WAKE_BROKER_PUBLICATION_ATTEMPT_ATTENTION"
+        );
+        drop(handle);
+        remove_fixture(&root, expected.next_install_generation);
+    }
+
+    #[test]
+    fn bound_published_history_refuses_missing_attempt_marker_on_replay() {
+        let (root, handle, approval, expected) = fixture();
+        let id = |offset| ObjectIdentityV1 {
+            volume_serial: expected.protected_root.volume_serial,
+            file_index_high: expected.protected_root.file_index_high,
+            file_index_low: expected.protected_root.file_index_low.wrapping_add(offset),
+        };
+        let mut lease = BrokerLedgerLease::begin(&handle, &approval, &expected).expect("intent");
+        lease.record_stage_started().expect("stage marker");
+        lease
+            .record_staged_fixture(StageBindingV1 {
+                staging_directory: id(1),
+                candidate_directory: id(2),
+                manifest_file: id(3),
+                artifacts: [id(4), id(5), id(6), id(7)],
+                packages_directory: Some(id(8)),
+            })
+            .expect("bound STAGED");
+        lease
+            .record_publication_attempt_fixture()
+            .expect("durable attempt marker");
+        lease
+            .advance(InstallPhaseV1::Published)
+            .expect("fixture PUBLISHED");
+        drop(lease);
+        let marker = root.join(publication_attempt_name(expected.next_install_generation));
+        let bytes = std::fs::read(&marker).expect("marker bytes");
+        std::fs::remove_file(&marker).expect("remove exact fixture marker");
+        let inventory = ledger_inventory(&handle).expect("missing-marker inventory");
+        let present = inventory.get(&expected.next_install_generation).unwrap();
+        assert_eq!(
+            historical_intent(
+                &handle,
+                expected.next_install_generation,
+                present,
+                &expected.protected_root,
+            )
+            .unwrap_err(),
+            "WAKE_LEDGER_PUBLICATION_ATTEMPT_MISSING"
+        );
+        let guard = BrokerLedgerGuard::acquire(&handle).expect("reopen lock");
+        assert_eq!(
+            guard.begin_fixture(&approval, &expected).err().unwrap(),
+            "WAKE_LEDGER_PUBLICATION_ATTEMPT_MISSING"
+        );
+        assert!(
+            !root
+                .join(record_name(
+                    expected.next_install_generation + 1,
+                    InstallPhaseV1::Intent
+                ))
+                .exists()
+        );
+        std::fs::write(&marker, bytes).expect("restore exact fixture marker");
+        let guard = BrokerLedgerGuard::acquire(&handle).expect("reopen restored history");
+        let resumed = guard
+            .begin_fixture(&approval, &expected)
+            .expect("bound history replay");
+        assert_eq!(resumed.phase(), InstallPhaseV1::Published);
+        drop(resumed);
+        drop(handle);
+        remove_fixture(&root, expected.next_install_generation);
+    }
+
+    #[test]
+    fn legacy_unbound_stage_and_orphan_marker_never_begin_publication() {
+        let (root, handle, approval, expected) = fixture();
+        let mut lease = BrokerLedgerLease::begin(&handle, &approval, &expected).expect("intent");
+        lease.record_stage_started().expect("stage marker");
+        lease
+            .advance(InstallPhaseV1::Staged)
+            .expect("legacy STAGED");
+        assert_eq!(
+            lease.record_publication_attempt_fixture().unwrap_err(),
+            "WAKE_LEDGER_PUBLICATION_ATTEMPT_INVALID"
+        );
+        let marker = root.join(publication_attempt_name(expected.next_install_generation));
+        assert!(!marker.exists());
+        drop(lease);
+        let guard = BrokerLedgerGuard::acquire(&handle).expect("legacy reopen");
+        let reopened = guard
+            .begin_fixture(&approval, &expected)
+            .expect("old V1 stage readable");
+        assert_eq!(reopened.phase(), InstallPhaseV1::Staged);
+        drop(reopened);
+        std::fs::write(&marker, b"{}").expect("orphan marker residue");
+        let guard = BrokerLedgerGuard::acquire(&handle).expect("orphan reopen");
+        assert_eq!(
+            guard.begin_fixture(&approval, &expected).err().unwrap(),
+            "WAKE_LEDGER_PUBLICATION_ATTEMPT_INVALID"
+        );
+        assert!(
+            !root
+                .join(record_name(
+                    expected.next_install_generation,
+                    InstallPhaseV1::Published
+                ))
+                .exists()
+        );
         drop(handle);
         remove_fixture(&root, expected.next_install_generation);
     }
