@@ -1,9 +1,13 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — T0478 reviewed-candidate runtime attention
+
+- After a ready event, the source-only reviewed-candidate launcher writes create-only `runtime-attention.json` for bounded listener/signal/shutdown/source-lease failure paths. Inspect it with `serving.json`, `root.json` and `intent.json`; do not infer current liveness or deletion authority from its PID/port. Startup and retirement failures can still lack this record. See `docs/orchestrator/review_bundles/T-0478_R3B4C6_RUNTIME_FAILURE_ATTENTION.md`.
+
+
 ## 2026-10-14 — T0478 reviewed candidate serving generation
 
 - The source-only `--reviewed-candidate-mcp` command now persists an owner-only `serving.json` after its ephemeral loopback bind and before its ready output. The ready JSON includes `runtimeGeneration` and `ownerPid`; preserve the journal for forensic inspection after an uncertain exit. Neither the PID/port record nor the ready JSON grants automatic orphan cleanup authority. See `docs/orchestrator/review_bundles/T-0478_R3B4C5_DURABLE_SERVING_RECORD.md`.
-
 
 ## 2026-10-14 — T0478 reviewed candidate source command
 

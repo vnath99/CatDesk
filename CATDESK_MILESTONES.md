@@ -1,3 +1,8 @@
+## 2026-10-14 — T0478 create-only post-ready failure attention (CURRENT)
+
+- Source-only reviewed-candidate startup now writes a create-only, owner-only `runtime-attention.json` when the listener exits unexpectedly, signal handling fails, shutdown fails, or source leases remain after serving. It binds the failure code to the persisted serving generation, exact root identity, snapshot, owner PID and loopback port; the error reports whether persistence succeeded. Windows crash-readback testing rejects a second writer and a changed generation. Signal and shutdown error paths abort and briefly await the server task.
+- The record is forensic evidence, not proof that the process or port is live. Startup errors before serving, retirement failure, clean journal retirement, cross-process exclusion and a successful witnessed launch still need work. Exact three-job CI remains unavailable while Actions dispatch returns HTTP 422. No installed runtime or tunnel was changed. See `docs/orchestrator/review_bundles/T-0478_R3B4C6_RUNTIME_FAILURE_ATTENTION.md`.
+
 ## 2026-10-14 — T0478 durable reviewed-candidate serving generation (CURRENT)
 
 - The reviewed-candidate launcher now retains its owner-only journal and writes a create-only, file-synced `serving.json` after loopback bind and before reporting ready. The record binds the snapshot and intent hash to the opened root object, a fresh runtime generation, owner PID and loopback port. Windows crash-reopen testing verifies the serving record, rejects a second writer and rejects a changed root identity. This is source-level forensic evidence; it does not prove a live PID/port after a crash.

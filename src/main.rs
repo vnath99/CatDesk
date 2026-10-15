@@ -1430,6 +1430,21 @@ fn reviewed_candidate_stage_error(
     std::io::Error::other(reason)
 }
 
+fn reviewed_candidate_runtime_error(
+    snapshot: &isolated_fixture_snapshot::StagedCandidateSnapshot,
+    code: &'static str,
+    reason: impl std::fmt::Display,
+) -> std::io::Error {
+    match snapshot.mark_runtime_attention(code) {
+        Ok(()) => std::io::Error::other(format!(
+            "reviewed candidate {reason}; durable runtime attention recorded"
+        )),
+        Err(attention_error) => std::io::Error::other(format!(
+            "reviewed candidate {reason}; runtime attention unavailable: {attention_error}"
+        )),
+    }
+}
+
 async fn run_reviewed_candidate_mcp(
     options: ReviewedCandidateMcpOptions,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -1507,11 +1522,19 @@ async fn run_reviewed_candidate_mcp(
             .await
     });
     tokio::select! {
-        signal = tokio::signal::ctrl_c() => signal?,
+        signal = tokio::signal::ctrl_c() => {
+            if let Err(error) = signal {
+                serve.abort();
+                let _ = tokio::time::timeout(Duration::from_secs(2), &mut serve).await;
+                return Err(reviewed_candidate_runtime_error(&snapshot, "signal_failed", error).into());
+            }
+        },
         result = &mut serve => {
-            return Err(std::io::Error::other(format!(
-                "reviewed candidate listener exited unexpectedly: {result:?}"
-            )).into());
+            return Err(reviewed_candidate_runtime_error(
+                &snapshot,
+                "listener_exited",
+                format!("listener exited unexpectedly: {result:?}"),
+            ).into());
         }
     }
     let _ = shutdown_tx.send(());
@@ -1519,15 +1542,27 @@ async fn run_reviewed_candidate_mcp(
         Ok(Ok(Ok(()))) => {}
         other => {
             serve.abort();
-            return Err(std::io::Error::other(format!(
-                "reviewed candidate shutdown requires attention: {other:?}"
-            ))
+            let _ = tokio::time::timeout(Duration::from_secs(2), &mut serve).await;
+            return Err(reviewed_candidate_runtime_error(
+                &snapshot,
+                "shutdown_failed",
+                format!("shutdown requires attention: {other:?}"),
+            )
             .into());
         }
     }
     state.lock().await.server_running = false;
-    let staged = Arc::try_unwrap(snapshot)
-        .map_err(|_| std::io::Error::other("reviewed candidate still has active source leases"))?;
+    let staged = match Arc::try_unwrap(snapshot) {
+        Ok(staged) => staged,
+        Err(snapshot) => {
+            return Err(reviewed_candidate_runtime_error(
+                &snapshot,
+                "source_leases_active",
+                "still has active source leases",
+            )
+            .into());
+        }
+    };
     staged.retire_owned_root().map_err(std::io::Error::other)?;
     Ok(())
 }

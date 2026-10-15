@@ -66,6 +66,28 @@ struct FixtureOwnerServingV1 {
 }
 
 #[cfg(windows)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct FixtureOwnerRuntimeAttentionV1 {
+    schema_version: u32,
+    snapshot_id: String,
+    intent_sha256: String,
+    root_object_identity: String,
+    runtime_generation: String,
+    owner_pid: u32,
+    loopback_port: u16,
+    code: String,
+}
+
+#[cfg(windows)]
+fn valid_runtime_attention_code(code: &str) -> bool {
+    matches!(
+        code,
+        "listener_exited" | "signal_failed" | "shutdown_failed" | "source_leases_active"
+    )
+}
+
+#[cfg(windows)]
 struct FixtureOwnerJournal {
     guard: ProtectedDirectoryGuard,
     intent: FixtureOwnerIntentV1,
@@ -136,6 +158,73 @@ fn read_fixture_owner_serving(
             .unwrap_or(true)
     {
         return Err("fixture owner serving identity drifted".into());
+    }
+    Ok(record)
+}
+
+#[cfg(windows)]
+fn write_fixture_owner_runtime_attention(
+    journal: &ProtectedDirectoryGuard,
+    manifest: &SnapshotManifest,
+    root: &ProtectedDirectoryGuard,
+    sid: &str,
+    code: &'static str,
+) -> Result<FixtureOwnerRuntimeAttentionV1, String> {
+    if !valid_runtime_attention_code(code) {
+        return Err("fixture owner runtime attention code invalid".into());
+    }
+    let serving = read_fixture_owner_serving(journal, manifest, root, sid)?;
+    let record = FixtureOwnerRuntimeAttentionV1 {
+        schema_version: 1,
+        snapshot_id: serving.snapshot_id,
+        intent_sha256: serving.intent_sha256,
+        root_object_identity: serving.root_object_identity,
+        runtime_generation: serving.runtime_generation,
+        owner_pid: serving.owner_pid,
+        loopback_port: serving.loopback_port,
+        code: code.into(),
+    };
+    let bytes = serde_json::to_vec(&record)
+        .map_err(|_| "fixture owner runtime attention encoding unavailable")?;
+    if bytes.len() as u64 > MAX_OWNER_RECORD_BYTES {
+        return Err("fixture owner runtime attention too large".into());
+    }
+    write_new_regular_in(journal, "runtime-attention.json", &bytes, LABEL)?;
+    if read_fixture_owner_runtime_attention(journal, manifest, root, sid)? != record {
+        return Err("fixture owner runtime attention readback drifted".into());
+    }
+    Ok(record)
+}
+
+#[cfg(windows)]
+fn read_fixture_owner_runtime_attention(
+    journal: &ProtectedDirectoryGuard,
+    manifest: &SnapshotManifest,
+    root: &ProtectedDirectoryGuard,
+    sid: &str,
+) -> Result<FixtureOwnerRuntimeAttentionV1, String> {
+    let serving = read_fixture_owner_serving(journal, manifest, root, sid)?;
+    let bytes = read_relative_regular_unique(
+        journal,
+        "runtime-attention.json",
+        MAX_OWNER_RECORD_BYTES,
+        LABEL,
+    )?;
+    let record: FixtureOwnerRuntimeAttentionV1 =
+        serde_json::from_slice(&bytes).map_err(|_| "fixture owner runtime attention invalid")?;
+    if bytes
+        != serde_json::to_vec(&record)
+            .map_err(|_| "fixture owner runtime attention encoding unavailable")?
+        || record.schema_version != 1
+        || record.snapshot_id != serving.snapshot_id
+        || record.intent_sha256 != serving.intent_sha256
+        || record.root_object_identity != serving.root_object_identity
+        || record.runtime_generation != serving.runtime_generation
+        || record.owner_pid != serving.owner_pid
+        || record.loopback_port != serving.loopback_port
+        || !valid_runtime_attention_code(&record.code)
+    {
+        return Err("fixture owner runtime attention drifted".into());
     }
     Ok(record)
 }
@@ -697,6 +786,29 @@ impl StagedCandidateSnapshot {
         {
             let _ = port;
             Err("fixture owner serving is Windows-only".into())
+        }
+    }
+
+    pub(crate) fn mark_runtime_attention(&self, code: &'static str) -> Result<(), String> {
+        #[cfg(windows)]
+        {
+            let owner = self
+                .owner_journal
+                .as_ref()
+                .ok_or("fixture owner journal unavailable")?;
+            write_fixture_owner_runtime_attention(
+                &owner.guard,
+                &self.manifest,
+                &self.root,
+                &owner.sid,
+                code,
+            )?;
+            Ok(())
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = code;
+            Err("fixture owner runtime attention is Windows-only".into())
         }
     }
 
@@ -1509,6 +1621,72 @@ mod tests {
                 .expect("read serving generation after crash"),
             serving
         );
+        assert!(
+            write_fixture_owner_runtime_attention(
+                &reopened_journal,
+                &manifest,
+                &reopened_root,
+                &sid,
+                "unrecognized_code"
+            )
+            .is_err(),
+            "unknown attention code must not create a record"
+        );
+        let runtime_attention = write_fixture_owner_runtime_attention(
+            &reopened_journal,
+            &manifest,
+            &reopened_root,
+            &sid,
+            "listener_exited",
+        )
+        .expect("persist runtime attention");
+        assert_eq!(
+            runtime_attention.runtime_generation,
+            serving.runtime_generation
+        );
+        assert_eq!(
+            read_fixture_owner_runtime_attention(
+                &reopened_journal,
+                &manifest,
+                &reopened_root,
+                &sid
+            )
+            .expect("read runtime attention"),
+            runtime_attention
+        );
+        assert!(
+            write_fixture_owner_runtime_attention(
+                &reopened_journal,
+                &manifest,
+                &reopened_root,
+                &sid,
+                "shutdown_failed"
+            )
+            .is_err(),
+            "another runtime failure cannot overwrite the first"
+        );
+        drop(reopened_root);
+        drop(reopened_journal);
+        let mut reopened_journal =
+            ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp after runtime crash");
+        reopened_journal
+            .descend_existing_for_security(&journal_name, LABEL)
+            .expect("reopen runtime journal");
+        let mut reopened_root =
+            ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp after runtime crash");
+        reopened_root
+            .descend_existing_for_security(&intent.root_name, LABEL)
+            .expect("reopen runtime root");
+        assert_eq!(
+            read_fixture_owner_runtime_attention(
+                &reopened_journal,
+                &manifest,
+                &reopened_root,
+                &sid
+            )
+            .expect("read runtime attention after crash"),
+            runtime_attention
+        );
 
         record_fixture_owner_attention(
             &reopened_journal,
@@ -1560,6 +1738,24 @@ mod tests {
             "attention for another root identity must not verify"
         );
 
+        let mut altered_runtime = runtime_attention;
+        altered_runtime.runtime_generation = Uuid::new_v4().to_string();
+        std::fs::write(
+            temp.join(&journal_name).join("runtime-attention.json"),
+            serde_json::to_vec(&altered_runtime).unwrap(),
+        )
+        .expect("tamper only test-owned runtime attention");
+        assert!(
+            read_fixture_owner_runtime_attention(
+                &reopened_journal,
+                &manifest,
+                &reopened_root,
+                &sid
+            )
+            .is_err(),
+            "runtime attention for another serving generation must not verify"
+        );
+
         let mut altered_serving = serving;
         altered_serving.root_object_identity = "00000000:00000000:00000000".into();
         std::fs::write(
@@ -1570,6 +1766,16 @@ mod tests {
         assert!(
             read_fixture_owner_serving(&reopened_journal, &manifest, &reopened_root, &sid).is_err(),
             "serving for another root identity must not verify"
+        );
+        assert!(
+            read_fixture_owner_runtime_attention(
+                &reopened_journal,
+                &manifest,
+                &reopened_root,
+                &sid
+            )
+            .is_err(),
+            "runtime attention cannot verify with tampered serving identity"
         );
 
         let mut altered = binding;
@@ -1589,6 +1795,8 @@ mod tests {
         drop(reopened_journal);
         std::fs::remove_file(temp.join(&journal_name).join("serving.json"))
             .expect("remove test serving record");
+        std::fs::remove_file(temp.join(&journal_name).join("runtime-attention.json"))
+            .expect("remove test runtime attention record");
         std::fs::remove_file(temp.join(&journal_name).join("attention.json"))
             .expect("remove test attention record");
         std::fs::remove_file(temp.join(&journal_name).join("root.json"))
