@@ -1,5 +1,9 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — T0478 dormant owner-bound retirement
+
+- `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2C_OWNER_RETIREMENT_SOURCE.md` records the source-only, consuming exact-handle retirement path and test results. It has no operator command or live MCP route. Never scan generated temp names or use recursive pathname cleanup to recover a crash residue; a future owner lifecycle must hold trusted durable identities and record operator attention on uncertain failure.
+
 ## 2026-10-14 — T0478 source-only delete-handle preflight
 
 - `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2B_DELETE_HANDLE_PREFLIGHT.md` records the shared native opened-handle disposition and exact reviewed-file DELETE open. It is a source primitive only; do not use pathname recursion or infer that disposable fixture retirement, T0478-C MCP manifest gating, or T0478-D worker lifecycle is accepted.

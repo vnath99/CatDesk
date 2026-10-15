@@ -1,4 +1,9 @@
-## 2026-10-14 — T0478 exact delete-handle preflight (CURRENT)
+## 2026-10-14 — T0478 owner-bound fixture retirement source (CURRENT)
+
+- Added a consuming source-only transaction that verifies the token-derived owner and actual pinned-root DACL, native enumerated manifest inventory, all retained file IDs/sizes/SHA hashes and exact opened DELETE handles before any file disposition. It deletes only those handles, reopens the now-empty direct child under the pinned temp parent with an unchanged object identity, rechecks the DACL and disposes the exact root handle. Positive two-file, foreign-leaf and same-name root-replacement tests pass. See `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2C_OWNER_RETIREMENT_SOURCE.md`.
+- This is not a live fixture cleanup route. Durable owner/failure state, crash residue attention and worker integration are still required, as is exact-commit independent Windows CI (GitHub Actions remains disabled).
+
+## 2026-10-14 — T0478 exact delete-handle preflight (HISTORICAL)
 
 - Extracted the existing native opened-handle disposition code into shared protected filesystem logic. A new no-follow DELETE-handle preflight checks the previously retained Windows file identity, single-link count, exact bounded SHA-256 and size. Focused Windows negatives and positive disposition, reviewed-snapshot tests, full root Rust suite and strict Clippy pass. See `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2B_DELETE_HANDLE_PREFLIGHT.md`.
 - Fixture retirement is still disabled. Owner/DACL revalidation, whole-directory inventory and atomic all-file preparation, competing-owner exclusion and exact root retirement remain required before T0478-C. Current GitHub Actions outage prevents exact-commit independent CI acceptance.

@@ -5,6 +5,8 @@
 //! trusted runner must create/own the temporary root, obtain a live GitHub
 //! witness, and hold the root lease before this module can be activated.
 
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
 use std::path::Path;
 
 use uuid::Uuid;
@@ -12,10 +14,13 @@ use uuid::Uuid;
 use crate::isolated_fixture_manifest::{
     MAX_FILE_BYTES, MAX_TOTAL_BYTES, SnapshotManifest, validate_manifest, verify_file_bytes,
 };
+use crate::reviewed_source_snapshot::query_relative_directory_names;
 use crate::windows_protected_fs::{
     PinnedDirectory, ProtectedDirectoryGuard, RetainedReviewedArtifact,
     read_relative_regular_unique, retain_reviewed_regular_artifact, write_new_regular_in,
 };
+#[cfg(windows)]
+use crate::windows_protected_fs::{dispose_opened_object, open_reviewed_regular_for_delete};
 
 const LABEL: &str = "isolated fixture source snapshot";
 
@@ -220,15 +225,10 @@ impl StagedCandidateSnapshot {
     pub(crate) fn review_retirement_inventory(&self) -> Result<(), String> {
         verify_disposable_root(&self.root)?;
         validate_manifest(&self.manifest)?;
-        let directory = std::fs::read_dir(self.root.path())
+        let directory = query_relative_directory_names(&self.root)
             .map_err(|_| "disposable snapshot inventory unavailable")?;
         let mut observed = std::collections::BTreeSet::new();
-        for item in directory {
-            let entry = item.map_err(|_| "disposable snapshot inventory unavailable")?;
-            let name = entry
-                .file_name()
-                .into_string()
-                .map_err(|_| "disposable snapshot foreign leaf name")?;
+        for (name, attributes) in directory {
             if !self
                 .manifest
                 .files
@@ -238,24 +238,8 @@ impl StagedCandidateSnapshot {
             {
                 return Err("disposable snapshot contains unexpected leaf".into());
             }
-            let file_type = entry
-                .file_type()
-                .map_err(|_| "disposable snapshot inventory changed")?;
-            if !file_type.is_file() || file_type.is_symlink() {
-                return Err("disposable snapshot contains nonregular leaf".into());
-            }
-            // Never follow an unreviewed symlink simply to classify it.
-            let metadata = std::fs::symlink_metadata(entry.path())
-                .map_err(|_| "disposable snapshot inventory changed")?;
-            if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
-                return Err("disposable snapshot contains nonregular leaf".into());
-            }
-            #[cfg(windows)]
-            {
-                use std::os::windows::fs::MetadataExt;
-                if metadata.file_attributes() & 0x400 != 0 {
-                    return Err("disposable snapshot contains reparse leaf".into());
-                }
+            if attributes & (0x10 | 0x400) != 0 {
+                return Err("disposable snapshot contains nonregular or reparse leaf".into());
             }
         }
         if observed.len() != self.manifest.files.len() {
@@ -265,6 +249,86 @@ impl StagedCandidateSnapshot {
             self.read_manifest_leaf(&file.fixture_leaf)?;
         }
         self.root.assert_stable(LABEL)?;
+        Ok(())
+    }
+
+    /// Consume one producer-owned snapshot and retire only its exact
+    /// manifest files. This remains dormant until the fixture owner lifecycle
+    /// records durable failure/attention and owns the entire operation.
+    #[cfg(windows)]
+    pub(crate) fn retire_owned_root(self) -> Result<(), String> {
+        let evidence = self.review_retirement_object_identities()?;
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .map_err(|_| "disposable snapshot owner identity unavailable")?;
+        self.root
+            .verify_owner_only_fixture_descriptor(&sid, LABEL)?;
+        let StagedCandidateSnapshot {
+            root,
+            manifest,
+            _leases,
+        } = self;
+        let expected = _leases
+            .iter()
+            .map(|lease| lease.identity.clone())
+            .collect::<Vec<_>>();
+        drop(_leases);
+
+        // Open and validate every DELETE-capable child handle before the
+        // first disposition. An absent, changed, aliased or leased child
+        // refuses the whole operation while all manifest files remain.
+        let mut opened = Vec::with_capacity(manifest.files.len());
+        for (entry, identity) in manifest.files.iter().zip(&expected) {
+            opened.push(open_reviewed_regular_for_delete(
+                &root,
+                &entry.fixture_leaf,
+                identity,
+                MAX_FILE_BYTES,
+                LABEL,
+            )?);
+        }
+        if query_relative_directory_names(&root)?
+            .iter()
+            .map(|(name, attributes)| (name.as_str(), *attributes & (0x10 | 0x400)))
+            .collect::<Vec<_>>()
+            != manifest
+                .files
+                .iter()
+                .map(|entry| (entry.fixture_leaf.as_str(), 0))
+                .collect::<Vec<_>>()
+        {
+            return Err("disposable snapshot inventory drifted before retirement".into());
+        }
+        root.verify_owner_only_fixture_descriptor(&sid, LABEL)?;
+        if evidence.snapshot_id != manifest.snapshot_id || evidence.files.len() != opened.len() {
+            return Err("disposable snapshot retirement evidence drifted".into());
+        }
+
+        for file in opened {
+            dispose_opened_object(file.as_raw_handle().cast(), LABEL)?;
+            drop(file);
+        }
+        if !query_relative_directory_names(&root)?.is_empty() {
+            return Err("disposable snapshot root not empty after file disposition".into());
+        }
+        root.verify_owner_only_fixture_descriptor(&sid, LABEL)?;
+        let root = root.reopen_direct_child_for_delete(LABEL)?;
+        root.verify_owner_only_fixture_descriptor(&sid, LABEL)?;
+        if !query_relative_directory_names(&root)?.is_empty() {
+            return Err("disposable snapshot root changed before disposition".into());
+        }
+        let mut parent = root.direct_parent_guard(LABEL)?;
+        let name = root
+            .path()
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or("disposable snapshot root name unavailable")?
+            .to_owned();
+        dispose_opened_object(root.last_handle(LABEL)?, LABEL)?;
+        drop(root);
+        if parent.descend_optional_existing(&name, LABEL)? {
+            return Err("disposable snapshot root identity drifted after disposition".into());
+        }
         Ok(())
     }
 }
@@ -493,6 +557,199 @@ mod tests {
         );
         drop(snapshot);
         std::fs::remove_dir_all(dir).expect("cleanup own empty test-only fixture");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn owned_fixture_retirement_deletes_only_exact_manifest_files_and_empty_root() {
+        let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .expect("ordinary interactive test owner SID required");
+        let name = format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple());
+        let mut root = ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp");
+        root.create_owner_only_fixture_child(&name, &sid, LABEL)
+            .expect("create owner-only disposable root");
+        let entries = [
+            (
+                "Cargo.toml",
+                "Cargo.toml",
+                b"[package]\nname='fixture'\n".as_slice(),
+            ),
+            ("main.rs", "src/main.rs", b"fn main() {}\n".as_slice()),
+        ];
+        let manifest = SnapshotManifest {
+            schema_version: 1,
+            source_repository: SOURCE_REPOSITORY.into(),
+            source_commit: "abcdef0123456789abcdef0123456789abcdef01".into(),
+            snapshot_id: Uuid::new_v4().to_string(),
+            files: entries
+                .iter()
+                .map(|(leaf, source, bytes)| SnapshotFile {
+                    fixture_leaf: (*leaf).into(),
+                    source_path: (*source).into(),
+                    size_bytes: bytes.len() as u64,
+                    sha256: format!("{:x}", Sha256::digest(bytes)),
+                })
+                .collect(),
+        };
+        let candidates = entries
+            .iter()
+            .map(|(_, source, bytes)| ((*source).into(), bytes.to_vec()))
+            .collect::<Vec<_>>();
+        stage_candidate_into_owned_root(&root, &manifest, &candidates)
+            .expect("stage two manifest files");
+        let leases = retain_staged_artifacts(&root, &manifest).expect("retain reviewed files");
+        let staged = StagedCandidateSnapshot {
+            root,
+            manifest,
+            _leases: leases,
+        };
+        staged
+            .retire_owned_root()
+            .expect("retire only exact owned files and root");
+        assert!(!temp.join(name).exists(), "owned root must be absent");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn owned_fixture_retirement_refuses_foreign_dacl_before_any_disposition() {
+        let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .expect("ordinary interactive test owner SID required");
+        let name = format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple());
+        let mut root = ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp");
+        let wrong_dacl =
+            format!("O:{sid}G:{sid}D:P(A;OICI;FA;;;{sid})(A;OICI;FA;;;SY)(A;OICI;FA;;;BU)");
+        root.create_child_with_security_descriptor(&name, &wrong_dacl, LABEL)
+            .expect("create only test-owned malformed ACL root");
+        assert!(
+            root.verify_owner_only_fixture_descriptor(&sid, LABEL)
+                .is_err()
+        );
+        let bytes = b"reviewed bytes".to_vec();
+        let manifest = SnapshotManifest {
+            schema_version: 1,
+            source_repository: SOURCE_REPOSITORY.into(),
+            source_commit: "abcdef0123456789abcdef0123456789abcdef01".into(),
+            snapshot_id: Uuid::new_v4().to_string(),
+            files: vec![SnapshotFile {
+                fixture_leaf: "Cargo.toml".into(),
+                source_path: "Cargo.toml".into(),
+                size_bytes: bytes.len() as u64,
+                sha256: format!("{:x}", Sha256::digest(&bytes)),
+            }],
+        };
+        stage_candidate_into_owned_root(&root, &manifest, &[("Cargo.toml".into(), bytes.clone())])
+            .expect("stage exact test bytes");
+        let leases = retain_staged_artifacts(&root, &manifest).expect("retain test file");
+        let dir = temp.join(&name);
+        let staged = StagedCandidateSnapshot {
+            root,
+            manifest,
+            _leases: leases,
+        };
+        assert!(staged.retire_owned_root().is_err());
+        assert_eq!(std::fs::read(dir.join("Cargo.toml")).unwrap(), bytes);
+        std::fs::remove_file(dir.join("Cargo.toml")).expect("remove test file");
+        std::fs::remove_dir(dir).expect("remove empty test root");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn owned_fixture_retirement_refuses_replaced_root_after_release() {
+        let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .expect("ordinary interactive test owner SID required");
+        let name = format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple());
+        let dir = temp.join(&name);
+        let retired = temp.join(format!("catdesk-retired-test-{}", Uuid::new_v4().simple()));
+        let mut root = ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp");
+        root.create_owner_only_fixture_child(&name, &sid, LABEL)
+            .expect("create owner-only disposable root");
+        let bytes = b"reviewed bytes".to_vec();
+        let manifest = SnapshotManifest {
+            schema_version: 1,
+            source_repository: SOURCE_REPOSITORY.into(),
+            source_commit: "abcdef0123456789abcdef0123456789abcdef01".into(),
+            snapshot_id: Uuid::new_v4().to_string(),
+            files: vec![SnapshotFile {
+                fixture_leaf: "Cargo.toml".into(),
+                source_path: "Cargo.toml".into(),
+                size_bytes: bytes.len() as u64,
+                sha256: format!("{:x}", Sha256::digest(&bytes)),
+            }],
+        };
+        stage_candidate_into_owned_root(&root, &manifest, &[("Cargo.toml".into(), bytes)])
+            .expect("stage exact source");
+        let leases = retain_staged_artifacts(&root, &manifest).expect("retain reviewed file");
+        let move_from = dir.clone();
+        let move_to = retired.clone();
+        crate::windows_protected_fs::replace_reopen_delete_test_hook(Some(Box::new(move || {
+            std::fs::rename(&move_from, &move_to).expect("move empty owned test root");
+            std::fs::create_dir(&move_from).expect("create replacement test root");
+        })));
+        let staged = StagedCandidateSnapshot {
+            root,
+            manifest,
+            _leases: leases,
+        };
+        assert!(
+            staged.retire_owned_root().is_err(),
+            "a replacement at the same name must not gain delete authority"
+        );
+        assert!(dir.is_dir(), "replacement must remain");
+        assert!(retired.is_dir(), "original empty root must remain");
+        std::fs::remove_dir(&dir).expect("remove empty test replacement");
+        std::fs::remove_dir(&retired).expect("remove empty retired test root");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn owned_fixture_retirement_refuses_foreign_leaf_before_any_disposition() {
+        let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .expect("ordinary interactive test owner SID required");
+        let name = format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple());
+        let mut root = ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp");
+        root.create_owner_only_fixture_child(&name, &sid, LABEL)
+            .expect("create owner-only disposable root");
+        let bytes = b"reviewed bytes".to_vec();
+        let manifest = SnapshotManifest {
+            schema_version: 1,
+            source_repository: SOURCE_REPOSITORY.into(),
+            source_commit: "abcdef0123456789abcdef0123456789abcdef01".into(),
+            snapshot_id: Uuid::new_v4().to_string(),
+            files: vec![SnapshotFile {
+                fixture_leaf: "Cargo.toml".into(),
+                source_path: "Cargo.toml".into(),
+                size_bytes: bytes.len() as u64,
+                sha256: format!("{:x}", Sha256::digest(&bytes)),
+            }],
+        };
+        stage_candidate_into_owned_root(&root, &manifest, &[("Cargo.toml".into(), bytes.clone())])
+            .expect("stage exact source");
+        let leases = retain_staged_artifacts(&root, &manifest).expect("retain reviewed file");
+        let dir = temp.join(&name);
+        std::fs::write(dir.join("foreign.txt"), b"outside manifest")
+            .expect("inject test-owned foreign leaf");
+        let staged = StagedCandidateSnapshot {
+            root,
+            manifest,
+            _leases: leases,
+        };
+        assert!(staged.retire_owned_root().is_err());
+        assert_eq!(std::fs::read(dir.join("Cargo.toml")).unwrap(), bytes);
+        assert_eq!(
+            std::fs::read(dir.join("foreign.txt")).unwrap(),
+            b"outside manifest"
+        );
+        std::fs::remove_file(dir.join("foreign.txt")).expect("remove test foreign file");
+        std::fs::remove_file(dir.join("Cargo.toml")).expect("remove test source file");
+        std::fs::remove_dir(dir).expect("remove empty test root");
     }
 
     #[cfg(windows)]

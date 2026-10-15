@@ -11,6 +11,17 @@ use std::path::{Path, PathBuf};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+#[cfg(all(test, windows))]
+thread_local! {
+    static REOPEN_DELETE_TEST_HOOK: std::cell::RefCell<Option<Box<dyn FnOnce()>>> =
+        std::cell::RefCell::new(None);
+}
+
+#[cfg(all(test, windows))]
+pub(crate) fn replace_reopen_delete_test_hook(hook: Option<Box<dyn FnOnce()>>) {
+    REOPEN_DELETE_TEST_HOOK.with(|slot| *slot.borrow_mut() = hook);
+}
+
 #[cfg(windows)]
 use std::ffi::c_void;
 #[cfg(windows)]
@@ -257,7 +268,11 @@ impl PinnedDirectory {
                     | FILE_ADD_SUBDIRECTORY
                     | FILE_READ_ATTRIBUTES
                     | SYNCHRONIZE
-                    | if allow_delete_share { DELETE } else { 0 },
+                    | if allow_delete_share {
+                        DELETE | READ_CONTROL
+                    } else {
+                        0
+                    },
                 FILE_SHARE_READ
                     | FILE_SHARE_WRITE
                     | if allow_delete_share {
@@ -420,6 +435,58 @@ impl ProtectedDirectoryGuard {
 
     pub(crate) fn path(&self) -> &Path {
         &self.directories.last().expect("guard has root").path
+    }
+
+    /// Clone only the pinned parent of one direct child. This is used for a
+    /// post-disposition absence check without retaining a second child handle.
+    #[cfg(windows)]
+    pub(crate) fn direct_parent_guard(&self, label: &str) -> Result<Self, String> {
+        if self.directories.len() != 2 {
+            return Err(format!("{label} is not a direct child"));
+        }
+        self.assert_stable(label)?;
+        Ok(Self::from_pinned_root(
+            self.directories[0].try_clone(label)?,
+        ))
+    }
+
+    /// Replace a pinned direct-child handle with a DELETE-capable handle
+    /// under the same pinned parent. The old handle prevents opening DELETE,
+    /// so it is dropped first; the reopened volume/file index must match or
+    /// no deletion authority is returned. A concurrent namespace replacement
+    /// can only make this fail closed.
+    #[cfg(windows)]
+    pub(crate) fn reopen_direct_child_for_delete(mut self, label: &str) -> Result<Self, String> {
+        if self.directories.len() != 2 {
+            return Err(format!("{label} is not a direct child"));
+        }
+        self.assert_stable(label)?;
+        let child = self.directories.pop().expect("checked child count");
+        let expected = child.identity;
+        let name = child
+            .path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| format!("{label} child name unavailable"))?
+            .to_owned();
+        drop(child);
+        #[cfg(test)]
+        REOPEN_DELETE_TEST_HOOK.with(|slot| {
+            if let Some(hook) = slot.borrow_mut().take() {
+                hook();
+            }
+        });
+        let reopened = PinnedDirectory::open_relative_for_delete(
+            self.directories.last().expect("checked parent count"),
+            &name,
+            label,
+        )?;
+        if reopened.identity != expected {
+            return Err(format!("{label} child identity drifted"));
+        }
+        self.directories.push(reopened);
+        self.assert_stable(label)?;
+        Ok(self)
     }
 
     pub(crate) fn assert_stable(&self, label: &str) -> Result<(), String> {

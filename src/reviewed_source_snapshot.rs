@@ -895,7 +895,7 @@ fn enumerate_regular_files_inner(
 
 /// Enumerates entries from the pinned directory handle.  No directory
 /// pathname is re-opened after its guard has been acquired.
-fn query_relative_directory_names(
+pub(crate) fn query_relative_directory_names(
     directory: &ProtectedDirectoryGuard,
 ) -> Result<Vec<(String, u32)>, String> {
     directory.assert_stable("reviewed source snapshot content")?;
