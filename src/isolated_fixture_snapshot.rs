@@ -52,6 +52,127 @@ struct FixtureOwnerRootV1 {
     root_object_identity: String,
 }
 
+#[cfg(windows)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct FixtureOwnerAttentionV1 {
+    schema_version: u32,
+    snapshot_id: String,
+    intent_sha256: String,
+    root_object_identity: Option<String>,
+    code: String,
+}
+
+#[cfg(windows)]
+fn record_fixture_owner_attention(
+    journal: &ProtectedDirectoryGuard,
+    intent: &FixtureOwnerIntentV1,
+    intent_bytes: &[u8],
+    root_binding: Option<&FixtureOwnerRootV1>,
+    code: &'static str,
+    sid: &str,
+) -> Result<(), String> {
+    if !matches!(
+        code,
+        "parent_unavailable"
+            | "creation_indeterminate"
+            | "root_binding_unavailable"
+            | "partial_stage"
+    ) || (code == "partial_stage") != root_binding.is_some()
+    {
+        return Err("fixture owner attention code invalid".into());
+    }
+    journal.verify_owner_only_fixture_journal_descriptor(sid, LABEL)?;
+    if read_relative_regular_unique(journal, "intent.json", MAX_OWNER_RECORD_BYTES, LABEL)?
+        != intent_bytes
+    {
+        return Err("fixture owner attention intent drifted".into());
+    }
+    if root_binding.is_some_and(|binding| {
+        binding.snapshot_id != intent.snapshot_id
+            || binding.intent_sha256 != format!("{:x}", sha2::Sha256::digest(intent_bytes))
+    }) {
+        return Err("fixture owner attention root binding drifted".into());
+    }
+    let attention = FixtureOwnerAttentionV1 {
+        schema_version: 1,
+        snapshot_id: intent.snapshot_id.clone(),
+        intent_sha256: format!("{:x}", sha2::Sha256::digest(intent_bytes)),
+        root_object_identity: root_binding.map(|binding| binding.root_object_identity.clone()),
+        code: code.into(),
+    };
+    let bytes = serde_json::to_vec(&attention)
+        .map_err(|_| "fixture owner attention encoding unavailable")?;
+    if bytes.len() as u64 > MAX_OWNER_RECORD_BYTES {
+        return Err("fixture owner attention too large".into());
+    }
+    write_new_regular_in(journal, "attention.json", &bytes, LABEL)?;
+    if read_relative_regular_unique(journal, "attention.json", MAX_OWNER_RECORD_BYTES, LABEL)?
+        != bytes
+    {
+        return Err("fixture owner attention readback drifted".into());
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn read_fixture_owner_attention(
+    journal: &ProtectedDirectoryGuard,
+    intent: &FixtureOwnerIntentV1,
+    intent_bytes: &[u8],
+    binding: Option<&FixtureOwnerRootV1>,
+    sid: &str,
+) -> Result<Option<FixtureOwnerAttentionV1>, String> {
+    journal.verify_owner_only_fixture_journal_descriptor(sid, LABEL)?;
+    let uuid = Uuid::parse_str(&intent.snapshot_id)
+        .map_err(|_| "fixture owner attention snapshot invalid")?;
+    if journal.path().file_name().and_then(|name| name.to_str())
+        != Some(format!("catdesk-fixture-journal-{}", uuid.simple()).as_str())
+        || read_relative_regular_unique(journal, "intent.json", MAX_OWNER_RECORD_BYTES, LABEL)?
+            != intent_bytes
+    {
+        return Err("fixture owner attention journal drifted".into());
+    }
+    if binding.is_some_and(|binding| {
+        binding.snapshot_id != intent.snapshot_id
+            || binding.intent_sha256 != format!("{:x}", sha2::Sha256::digest(intent_bytes))
+    }) {
+        return Err("fixture owner attention root binding drifted".into());
+    }
+    let Some(bytes) =
+        read_optional_relative_regular(journal, "attention.json", MAX_OWNER_RECORD_BYTES, LABEL)?
+    else {
+        return Ok(None);
+    };
+    if bytes
+        != read_relative_regular_unique(journal, "attention.json", MAX_OWNER_RECORD_BYTES, LABEL)?
+    {
+        return Err("fixture owner attention changed".into());
+    }
+    let attention: FixtureOwnerAttentionV1 =
+        serde_json::from_slice(&bytes).map_err(|_| "fixture owner attention invalid")?;
+    if bytes
+        != serde_json::to_vec(&attention)
+            .map_err(|_| "fixture owner attention encoding unavailable")?
+        || attention.schema_version != 1
+        || attention.snapshot_id != intent.snapshot_id
+        || attention.intent_sha256 != format!("{:x}", sha2::Sha256::digest(intent_bytes))
+        || attention.root_object_identity
+            != binding.map(|binding| binding.root_object_identity.clone())
+        || !matches!(
+            attention.code.as_str(),
+            "parent_unavailable"
+                | "creation_indeterminate"
+                | "root_binding_unavailable"
+                | "partial_stage"
+        )
+        || (attention.code == "partial_stage") != binding.is_some()
+    {
+        return Err("fixture owner attention drifted".into());
+    }
+    Ok(Some(attention))
+}
+
 /// Create the owner-only write-ahead intent before a candidate root exists.
 /// These records are forensic evidence only; they never authorize a path scan
 /// or automatic cleanup after a crash.
@@ -658,26 +779,84 @@ pub(crate) async fn stage_witnessed_candidate_snapshot(
                 ))
             })?;
         let root = ProtectedDirectoryGuard::acquire(&temp, LABEL).map_err(|reason| {
+            let attention = record_fixture_owner_attention(
+                &journal, &intent, &intent_bytes, None, "parent_unavailable", &sid,
+            );
             CandidateStageError::BeforeOwnership(format!(
-                "fixture owner intent {} persisted; candidate parent unavailable: {reason}",
+                "fixture owner intent {} persisted; candidate parent unavailable: {reason}; attention: {attention:?}",
                 manifest.snapshot_id
             ))
         })?;
-        let (root, manifest) =
-            create_owned_candidate_root(root, intent.root_name.clone(), &sid, manifest)?;
-        if let Err(reason) = bind_fixture_owner_root(&journal, &intent, &intent_bytes, &root, &sid)
-        {
-            return Err(CandidateStageError::Owned(Box::new(
-                OwnedCandidateStageFailure {
-                    root,
-                    manifest,
-                    reason,
-                },
-            )));
-        }
-        drop(journal);
-        finish_owned_candidate_stage(root, manifest, &candidates)
-            .map_err(CandidateStageError::Owned)
+        let (root, manifest) = create_owned_candidate_root(
+            root,
+            intent.root_name.clone(),
+            &sid,
+            manifest,
+        )
+        .map_err(|mut failure| {
+            let code = match &failure {
+                CandidateStageError::CreationIndeterminate(_) => "creation_indeterminate",
+                CandidateStageError::Owned(_) => "root_binding_unavailable",
+                CandidateStageError::BeforeOwnership(_) => "parent_unavailable",
+            };
+            if let Err(attention_error) =
+                record_fixture_owner_attention(&journal, &intent, &intent_bytes, None, code, &sid)
+            {
+                match &mut failure {
+                    CandidateStageError::CreationIndeterminate(failure) => {
+                        failure.reason.push_str(&format!(
+                            "; attention record unavailable: {attention_error}"
+                        ));
+                    }
+                    CandidateStageError::Owned(failure) => {
+                        failure.reason.push_str(&format!(
+                            "; attention record unavailable: {attention_error}"
+                        ));
+                    }
+                    CandidateStageError::BeforeOwnership(reason) => {
+                        reason.push_str(&format!(
+                            "; attention record unavailable: {attention_error}"
+                        ));
+                    }
+                }
+            }
+            failure
+        })?;
+        let binding = match bind_fixture_owner_root(&journal, &intent, &intent_bytes, &root, &sid) {
+            Ok(binding) => binding,
+            Err(reason) => {
+                let attention = record_fixture_owner_attention(
+                    &journal,
+                    &intent,
+                    &intent_bytes,
+                    None,
+                    "root_binding_unavailable",
+                    &sid,
+                );
+                return Err(CandidateStageError::Owned(Box::new(
+                    OwnedCandidateStageFailure {
+                        root,
+                        manifest,
+                        reason: format!("{reason}; attention: {attention:?}"),
+                    },
+                )));
+            }
+        };
+        finish_owned_candidate_stage(root, manifest, &candidates).map_err(|mut failure| {
+            if let Err(attention_error) = record_fixture_owner_attention(
+                &journal,
+                &intent,
+                &intent_bytes,
+                Some(&binding),
+                "partial_stage",
+                &sid,
+            ) {
+                failure.reason.push_str(&format!(
+                    "; attention record unavailable: {attention_error}"
+                ));
+            }
+            CandidateStageError::Owned(failure)
+        })
     }
     #[cfg(not(windows))]
     return Err(CandidateStageError::BeforeOwnership(
@@ -910,6 +1089,63 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn owner_journal_records_pre_root_attention_without_delete_authority() {
+        let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .expect("ordinary interactive test owner SID required");
+        let manifest = SnapshotManifest {
+            schema_version: 1,
+            source_repository: SOURCE_REPOSITORY.into(),
+            source_commit: "abcdef0123456789abcdef0123456789abcdef01".into(),
+            snapshot_id: Uuid::new_v4().to_string(),
+            files: vec![SnapshotFile {
+                fixture_leaf: "Cargo.toml".into(),
+                source_path: "Cargo.toml".into(),
+                size_bytes: 0,
+                sha256: format!("{:x}", Sha256::digest([])),
+            }],
+        };
+        let journal_name = format!(
+            "catdesk-fixture-journal-{}",
+            Uuid::parse_str(&manifest.snapshot_id).unwrap().simple()
+        );
+        let (journal, intent, intent_bytes) =
+            create_fixture_owner_intent(&manifest, &sid).expect("persist intent");
+        record_fixture_owner_attention(
+            &journal,
+            &intent,
+            &intent_bytes,
+            None,
+            "creation_indeterminate",
+            &sid,
+        )
+        .expect("persist attention before root binding");
+        drop(journal);
+
+        let mut reopened = ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp");
+        reopened
+            .descend_existing_for_security(&journal_name, LABEL)
+            .expect("reopen journal after crash");
+        let (_, root_binding) = read_fixture_owner_records(&reopened, &manifest, None, &sid)
+            .expect("read pre-root intent");
+        assert!(root_binding.is_none());
+        let attention = read_fixture_owner_attention(&reopened, &intent, &intent_bytes, None, &sid)
+            .expect("read attention")
+            .expect("attention present");
+        assert_eq!(attention.code, "creation_indeterminate");
+        assert!(attention.root_object_identity.is_none());
+        assert!(!temp.join(&intent.root_name).exists());
+        drop(reopened);
+        std::fs::remove_file(temp.join(&journal_name).join("attention.json"))
+            .expect("remove own attention");
+        std::fs::remove_file(temp.join(&journal_name).join("intent.json"))
+            .expect("remove own intent");
+        std::fs::remove_dir(temp.join(&journal_name)).expect("remove empty own journal");
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn owner_journal_survives_pre_root_and_bound_root_crash_windows() {
         let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
         let sid =
@@ -974,6 +1210,56 @@ mod tests {
                 .expect("verify exact bound root");
         assert_eq!(read_binding, Some(binding.clone()));
 
+        record_fixture_owner_attention(
+            &reopened_journal,
+            &intent,
+            &intent_bytes,
+            Some(&binding),
+            "partial_stage",
+            &sid,
+        )
+        .expect("persist bounded attention");
+        let attention = read_fixture_owner_attention(
+            &reopened_journal,
+            &intent,
+            &intent_bytes,
+            Some(&binding),
+            &sid,
+        )
+        .expect("read bounded attention")
+        .expect("attention present");
+        assert_eq!(attention.code, "partial_stage");
+        assert!(
+            record_fixture_owner_attention(
+                &reopened_journal,
+                &intent,
+                &intent_bytes,
+                Some(&binding),
+                "partial_stage",
+                &sid,
+            )
+            .is_err(),
+            "a second writer may not overwrite attention"
+        );
+        let mut altered_attention = attention;
+        altered_attention.root_object_identity = None;
+        std::fs::write(
+            temp.join(&journal_name).join("attention.json"),
+            serde_json::to_vec(&altered_attention).unwrap(),
+        )
+        .expect("tamper only test-owned attention record");
+        assert!(
+            read_fixture_owner_attention(
+                &reopened_journal,
+                &intent,
+                &intent_bytes,
+                Some(&binding),
+                &sid
+            )
+            .is_err(),
+            "attention for another root identity must not verify"
+        );
+
         let mut altered = binding;
         altered.root_object_identity = "00000000:00000000:00000000".into();
         std::fs::write(
@@ -989,6 +1275,8 @@ mod tests {
         assert!(temp.join(&intent.root_name).is_dir());
         drop(reopened_root);
         drop(reopened_journal);
+        std::fs::remove_file(temp.join(&journal_name).join("attention.json"))
+            .expect("remove test attention record");
         std::fs::remove_file(temp.join(&journal_name).join("root.json"))
             .expect("remove test root record");
         std::fs::remove_file(temp.join(&journal_name).join("intent.json"))

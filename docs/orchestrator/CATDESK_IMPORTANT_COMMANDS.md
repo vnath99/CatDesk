@@ -1,5 +1,9 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — T0478 bounded owner attention
+
+- `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2F_BOUNDED_OWNER_ATTENTION.md` records the source-only attention record. There is no operator command or cleanup authority. A missing record after a crash is unknown state, and a present record is forensic evidence only.
+
 ## 2026-10-14 — T0478 owner journal source
 
 - `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2E_OWNER_WRITE_AHEAD_JOURNAL.md` records the dormant owner-only write-ahead source and crash simulation. It has no operator command. Neither a generated journal name nor a validated forensic record grants deletion authority; keep crash residue for bounded operator attention until a trusted owner lifecycle exists.
