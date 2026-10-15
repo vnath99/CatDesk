@@ -18,6 +18,8 @@ pub mod install_broker_ledger;
 pub mod install_broker_legacy_owner;
 pub mod install_broker_operator;
 #[cfg(windows)]
+pub(crate) mod install_broker_pipe_io;
+#[cfg(windows)]
 pub mod install_broker_policy;
 pub mod install_broker_preflight;
 #[cfg(windows)]
@@ -26,6 +28,8 @@ pub mod install_broker_reader;
 pub mod install_broker_request;
 #[cfg(windows)]
 pub mod install_broker_service_core;
+#[cfg(windows)]
+pub mod install_broker_service_runtime;
 #[cfg(windows)]
 pub(crate) mod install_broker_source;
 #[cfg(windows)]

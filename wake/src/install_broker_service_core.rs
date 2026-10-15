@@ -14,6 +14,8 @@
 #![cfg(windows)]
 
 use serde::Serialize;
+use std::sync::atomic::AtomicBool;
+use std::time::Duration;
 
 use crate::Result;
 use crate::install_broker_approval::{BrokerObservedStateV1, ObjectIdentityV1, VerifiedApprovalV1};
@@ -93,7 +95,12 @@ pub fn inspect_one_connected_submission_read_only(
 ) -> Result<BrokerSignatureBindingReadbackV1> {
     let policy_root = policy.readback()?.protected_root;
     require_policy_root_before_read(&policy_root, observed)?;
-    let frame = read_admitted_approval_frame(&mut endpoint, &policy)?;
+    let frame = read_admitted_approval_frame(
+        &mut endpoint,
+        &policy,
+        Duration::from_secs(10),
+        &AtomicBool::new(false),
+    )?;
     let approval = policy.verify_approval(frame.approval_envelope(), observed)?;
     // The readback remains advisory. The service has no trusted candidate
     // stage, independent fixed GitHub fetcher, or phase transaction here.

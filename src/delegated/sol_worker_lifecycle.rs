@@ -1,8 +1,9 @@
 //! Dormant Windows process-tree ownership mechanics for a future Sol launcher.
 //!
-//! This private owner creates a suspended child, assigns it to an unnamed,
-//! noninheritable kill-on-close Job, checks exact membership, and only then
-//! resumes it. The same-user diagnostic route returns no capability. A
+//! The prepared path creates a suspended child inside an unnamed,
+//! noninheritable kill-on-close Job with a creation-time Job-list attribute,
+//! checks exact membership, and only then resumes it. An older same-user
+//! Command diagnostic still assigns after creation and returns no capability. A
 //! separate dormant route can bind the still-suspended process object to the
 //! opaque fixed-account restricted-token observation before resume, then
 //! consume that owner to obtain a narrow drained-Job witness. A private run
@@ -14,9 +15,11 @@
 //! escaped descendants, inherited handles, or repository-write exclusion,
 //! and no nonce, staging, or repository-use path accepts it.
 
-use std::ffi::c_void;
+use std::collections::BTreeMap;
+use std::ffi::{OsStr, OsString, c_void};
+use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::{AsRawHandle, BorrowedHandle, FromRawHandle, OwnedHandle};
-use std::os::windows::process::CommandExt;
+use std::os::windows::process::{CommandExt, ExitStatusExt};
 use std::path::PathBuf;
 use std::process::{Child, Command, ExitStatus};
 use std::time::{Duration, Instant};
@@ -37,6 +40,10 @@ use super::sol_worker_output::validate_sol_worker_allowed_paths;
 
 const LABEL: &str = "Sol worker lifecycle";
 const CREATE_SUSPENDED: u32 = 0x0000_0004;
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+const CREATE_UNICODE_ENVIRONMENT: u32 = 0x0000_0400;
+const EXTENDED_STARTUPINFO_PRESENT: u32 = 0x0008_0000;
+const PROC_THREAD_ATTRIBUTE_JOB_LIST: usize = 0x0002_000d;
 const HANDLE_FLAG_INHERIT: u32 = 0x0000_0001;
 const JOB_OBJECT_BASIC_ACCOUNTING_INFORMATION: i32 = 1;
 const JOB_OBJECT_BASIC_PROCESS_ID_LIST: i32 = 3;
@@ -53,11 +60,50 @@ const MAX_APPROVED_EXECUTABLE_BYTES: u64 = 128 * 1024 * 1024;
 const MAX_IMAGE_PATH_WCHARS: usize = 32 * 1024;
 const PROCESS_NAME_NATIVE: u32 = 1;
 const CSTR_EQUAL: i32 = 2;
+const MAX_LAUNCH_WCHARS: usize = 32_767;
+const MAX_ATTRIBUTE_LIST_BYTES: usize = 64 * 1024;
+
+#[repr(C)]
+struct StartupInfoW {
+    cb: u32,
+    reserved: *mut u16,
+    desktop: *mut u16,
+    title: *mut u16,
+    x: u32,
+    y: u32,
+    x_size: u32,
+    y_size: u32,
+    x_count_chars: u32,
+    y_count_chars: u32,
+    fill_attribute: u32,
+    flags: u32,
+    show_window: u16,
+    cb_reserved2: u16,
+    reserved2: *mut u8,
+    std_input: *mut c_void,
+    std_output: *mut c_void,
+    std_error: *mut c_void,
+}
+
+#[repr(C)]
+struct StartupInfoExW {
+    startup: StartupInfoW,
+    attributes: *mut c_void,
+}
+
+#[repr(C)]
+struct ProcessInformation {
+    process: *mut c_void,
+    thread: *mut c_void,
+    process_id: u32,
+    thread_id: u32,
+}
 
 #[cfg(test)]
 thread_local! {
     static FORCE_JOB_TERMINATE_FAILURE: Cell<bool> = const { Cell::new(false) };
     static FORCE_JOB_ACCOUNTING_FAILURE: Cell<bool> = const { Cell::new(false) };
+    static FORCE_PREPARED_OUTPUT_TAMPER_AFTER_SPAWN: Cell<bool> = const { Cell::new(false) };
 }
 
 #[repr(C)]
@@ -150,6 +196,36 @@ unsafe extern "system" {
         second_length: i32,
         ignore_case: i32,
     ) -> i32;
+    fn InitializeProcThreadAttributeList(
+        list: *mut c_void,
+        count: u32,
+        flags: u32,
+        size: *mut usize,
+    ) -> i32;
+    fn UpdateProcThreadAttribute(
+        list: *mut c_void,
+        flags: u32,
+        attribute: usize,
+        value: *mut c_void,
+        size: usize,
+        previous: *mut c_void,
+        returned: *mut usize,
+    ) -> i32;
+    fn DeleteProcThreadAttributeList(list: *mut c_void);
+    fn CreateProcessW(
+        application: *const u16,
+        command_line: *mut u16,
+        process_attributes: *mut c_void,
+        thread_attributes: *mut c_void,
+        inherit_handles: i32,
+        creation_flags: u32,
+        environment: *mut c_void,
+        current_directory: *const u16,
+        startup_info: *mut StartupInfoW,
+        process_information: *mut ProcessInformation,
+    ) -> i32;
+    fn TerminateProcess(process: *mut c_void, exit_code: u32) -> i32;
+    fn GetExitCodeProcess(process: *mut c_void, exit_code: *mut u32) -> i32;
 }
 
 #[link(name = "ntdll")]
@@ -215,7 +291,7 @@ impl PrivateJob {
         Ok(())
     }
 
-    fn assign_and_check(&self, child: &Child) -> Result<(), String> {
+    fn assign_and_check(&self, child: &OwnedChildProcess) -> Result<(), String> {
         self.require_limits()?;
         if unsafe { AssignProcessToJobObject(self.0.as_raw_handle(), child.as_raw_handle()) } == 0 {
             return Err(format!("{LABEL} Job assignment failed"));
@@ -223,7 +299,7 @@ impl PrivateJob {
         self.require_exact_member(child)
     }
 
-    fn require_exact_member(&self, child: &Child) -> Result<(), String> {
+    fn require_exact_member(&self, child: &OwnedChildProcess) -> Result<(), String> {
         self.require_limits()?;
         let mut exact_member = 0;
         if unsafe {
@@ -291,18 +367,73 @@ impl PrivateJob {
     }
 }
 
+/// The native variant is created already inside the Job. `Child` remains only
+/// for the older same-user Command diagnostic. Both variants retain the exact
+/// process object, including on a failed cleanup transition.
+enum OwnedChildProcess {
+    Command(Child),
+    Native(OwnedHandle),
+}
+
+impl AsRawHandle for OwnedChildProcess {
+    fn as_raw_handle(&self) -> *mut c_void {
+        match self {
+            Self::Command(child) => child.as_raw_handle(),
+            Self::Native(process) => process.as_raw_handle(),
+        }
+    }
+}
+
+impl OwnedChildProcess {
+    fn try_wait(&mut self) -> std::io::Result<Option<ExitStatus>> {
+        match self {
+            Self::Command(child) => child.try_wait(),
+            Self::Native(process) => {
+                match unsafe { WaitForSingleObject(process.as_raw_handle(), 0) } {
+                    WAIT_TIMEOUT => Ok(None),
+                    WAIT_OBJECT_0 => {
+                        let mut code = 0;
+                        if unsafe { GetExitCodeProcess(process.as_raw_handle(), &mut code) } == 0 {
+                            Err(std::io::Error::last_os_error())
+                        } else {
+                            Ok(Some(ExitStatus::from_raw(code)))
+                        }
+                    }
+                    _ => Err(std::io::Error::last_os_error()),
+                }
+            }
+        }
+    }
+
+    fn kill(&mut self) -> std::io::Result<()> {
+        match self {
+            Self::Command(child) => child.kill(),
+            Self::Native(process) => {
+                if unsafe { TerminateProcess(process.as_raw_handle(), 1) } == 0 {
+                    Err(std::io::Error::last_os_error())
+                } else {
+                    Ok(())
+                }
+            }
+        }
+    }
+}
+
 /// Private diagnostic launcher. Its `Command` inherits the current user and
 /// cannot by itself create the fixed-account worker or the drained witness.
 struct OwnedSuspendedJobChild {
     // Job drops first on every early return and terminates active members.
     job: PrivateJob,
-    child: Option<Child>,
+    child: Option<OwnedChildProcess>,
+    // Only CreateProcessW's documented failure with no returned process handle
+    // permits retrying an empty-Job observation without an original handle.
+    creation_failed_without_handle: bool,
 }
 
 struct OwnedRunningJobChild {
     // Job drops first on every early return and terminates active members.
     job: PrivateJob,
-    child: Option<Child>,
+    child: Option<OwnedChildProcess>,
 }
 
 /// A failed transition may be reported as clean only after the exact child
@@ -381,6 +512,160 @@ struct PreparedSolRunV1 {
     nonce: String,
     ledger: ProtectedDirectoryGuard,
     output_root: ProtectedDirectoryGuard,
+}
+
+/// Explicit inputs for the private same-user creation-time Job probe. A
+/// future fixed-account launch must use reviewed, policy-pinned inputs and a
+/// fixed-account token; constructing this value confers no such authority.
+struct PreparedSolLaunchInputsV1 {
+    arguments: Vec<OsString>,
+    environment: BTreeMap<String, String>,
+}
+
+struct JobAttributeList {
+    buffer: Vec<usize>,
+    job_handle: Box<*mut c_void>,
+}
+
+impl JobAttributeList {
+    fn for_job(job: &PrivateJob) -> Result<Self, String> {
+        let mut size = 0;
+        unsafe { InitializeProcThreadAttributeList(std::ptr::null_mut(), 1, 0, &mut size) };
+        if size == 0 || size > MAX_ATTRIBUTE_LIST_BYTES {
+            return Err(format!("{LABEL} Job launch attribute size unavailable"));
+        }
+        let mut buffer = vec![0_usize; size.div_ceil(std::mem::size_of::<usize>())];
+        let list = buffer.as_mut_ptr().cast();
+        if unsafe { InitializeProcThreadAttributeList(list, 1, 0, &mut size) } == 0 {
+            return Err(format!(
+                "{LABEL} Job launch attribute initialization failed"
+            ));
+        }
+        let mut attributes = Self {
+            buffer,
+            job_handle: Box::new(job.0.as_raw_handle()),
+        };
+        if unsafe {
+            UpdateProcThreadAttribute(
+                attributes.as_mut_ptr(),
+                0,
+                PROC_THREAD_ATTRIBUTE_JOB_LIST,
+                attributes.job_handle.as_mut() as *mut *mut c_void as *mut c_void,
+                std::mem::size_of::<*mut c_void>(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        } == 0
+        {
+            return Err(format!("{LABEL} creation-time Job assignment unavailable"));
+        }
+        Ok(attributes)
+    }
+
+    fn as_mut_ptr(&mut self) -> *mut c_void {
+        self.buffer.as_mut_ptr().cast()
+    }
+}
+
+impl Drop for JobAttributeList {
+    fn drop(&mut self) {
+        unsafe { DeleteProcThreadAttributeList(self.as_mut_ptr()) };
+    }
+}
+
+fn nul_terminated_wide(value: &OsStr, label: &str) -> Result<Vec<u16>, String> {
+    let mut wide: Vec<u16> = value.encode_wide().collect();
+    if wide.is_empty() || wide.len() >= MAX_LAUNCH_WCHARS || wide.contains(&0) {
+        return Err(format!("{LABEL} {label} is invalid"));
+    }
+    wide.push(0);
+    Ok(wide)
+}
+
+/// Windows command-line quoting for an explicit application and arguments.
+/// The application is separately passed as lpApplicationName, so parsing the
+/// first argument cannot select a different executable.
+fn quote_windows_argument(value: &OsStr) -> Result<Vec<u16>, String> {
+    let wide: Vec<u16> = value.encode_wide().collect();
+    if wide.contains(&0) {
+        return Err(format!("{LABEL} launch argument contains NUL"));
+    }
+    let quoted = wide.is_empty() || wide.iter().any(|unit| matches!(*unit, 9 | 32 | 34));
+    if !quoted {
+        return Ok(wide);
+    }
+    let mut result = vec![34];
+    let mut backslashes = 0;
+    for unit in wide {
+        if unit == 92 {
+            backslashes += 1;
+            continue;
+        }
+        if unit == 34 {
+            result.extend(std::iter::repeat_n(92, backslashes * 2 + 1));
+            result.push(34);
+        } else {
+            result.extend(std::iter::repeat_n(92, backslashes));
+            result.push(unit);
+        }
+        backslashes = 0;
+    }
+    result.extend(std::iter::repeat_n(92, backslashes * 2));
+    result.push(34);
+    Ok(result)
+}
+
+impl PreparedSolLaunchInputsV1 {
+    fn command_line(&self, application: &OsStr) -> Result<Vec<u16>, String> {
+        let mut command_line = quote_windows_argument(application)?;
+        for argument in &self.arguments {
+            command_line.push(32);
+            command_line.extend(quote_windows_argument(argument)?);
+            if command_line.len() >= MAX_LAUNCH_WCHARS {
+                return Err(format!("{LABEL} command line is too long"));
+            }
+        }
+        if command_line.len() >= MAX_LAUNCH_WCHARS {
+            return Err(format!("{LABEL} command line is too long"));
+        }
+        command_line.push(0);
+        Ok(command_line)
+    }
+
+    fn environment_block(&self) -> Result<Vec<u16>, String> {
+        let mut block = Vec::new();
+        let mut names = std::collections::BTreeSet::new();
+        for (name, value) in &self.environment {
+            let normalized = name.to_ascii_uppercase();
+            if name.is_empty()
+                || name.len() > 128
+                || *name != normalized
+                || !name
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+                || !names.insert(normalized)
+                || value.contains('\0')
+            {
+                return Err(format!("{LABEL} explicit environment is invalid"));
+            }
+            block.extend(name.encode_utf16());
+            block.push(61);
+            block.extend(value.encode_utf16());
+            block.push(0);
+            if block.len() >= MAX_LAUNCH_WCHARS {
+                return Err(format!("{LABEL} explicit environment is too long"));
+            }
+        }
+        // An empty environment still requires two terminating WCHARs.
+        block.push(0);
+        if self.environment.is_empty() {
+            block.push(0);
+        }
+        if block.len() > MAX_LAUNCH_WCHARS {
+            return Err(format!("{LABEL} explicit environment is too long"));
+        }
+        Ok(block)
+    }
 }
 
 /// Launch-scoped input only. A future trusted host must supply the approved
@@ -510,11 +795,10 @@ fn valid_executable_component(component: &str) -> bool {
     )
 }
 
-/// Consumes the run and image lease before constructing the child command.
-/// The current `Command` path inherits the host user and remains diagnostic;
-/// it cannot create a fixed-account witness on this host. Uncertain cleanup
-/// returns a retained attention owner; a future service must hold that owner
-/// durably before this can become a positive launcher.
+/// Consumes the run and image lease before a suspended creation-time Job
+/// launch. This still inherits the host user; it cannot create a fixed-account
+/// witness on this host. Uncertain cleanup returns a retained attention owner;
+/// a future service must hold that owner durably before a positive launcher.
 struct PreparedSuspendedSolJobChild {
     suspended: OwnedSuspendedJobChild,
     prepared_run: PreparedSolRunV1,
@@ -598,14 +882,11 @@ fn prepared_failure(
 }
 
 impl PreparedSuspendedSolJobChild {
-    fn launch<F>(
+    fn launch(
         prepared_run: PreparedSolRunV1,
         executable: PinnedSolWorkerExecutableV1,
-        configure: F,
-    ) -> Result<Self, PreparedSolLifecycleFailure>
-    where
-        F: FnOnce(&mut Command),
-    {
+        inputs: &PreparedSolLaunchInputsV1,
+    ) -> Result<Self, PreparedSolLifecycleFailure> {
         prepared_run
             .require_ready()
             .map_err(PreparedSolLifecycleFailure::Clean)?;
@@ -613,9 +894,11 @@ impl PreparedSuspendedSolJobChild {
             .parent
             .assert_stable(LABEL)
             .map_err(PreparedSolLifecycleFailure::Clean)?;
-        let mut command = Command::new(executable.launch_path());
-        configure(&mut command);
-        let suspended = match OwnedSuspendedJobChild::launch_suspended(&mut command) {
+        let suspended = match OwnedSuspendedJobChild::launch_suspended_at_creation(
+            &prepared_run,
+            &executable,
+            inputs,
+        ) {
             Ok(owner) => owner,
             Err(failure) => {
                 return Err(prepared_failure(
@@ -626,6 +909,11 @@ impl PreparedSuspendedSolJobChild {
                 ));
             }
         };
+        #[cfg(test)]
+        if FORCE_PREPARED_OUTPUT_TAMPER_AFTER_SPAWN.with(Cell::get) {
+            std::fs::write(prepared_run.output_root.path().join("late.txt"), b"late")
+                .expect("inject post-spawn output drift");
+        }
         let Some(child) = suspended.child.as_ref() else {
             return Err(prepared_failure(
                 suspended
@@ -800,11 +1088,10 @@ pub(crate) struct DrainedBoundFixedWorkerJobV1 {
     _executable: PinnedSolWorkerExecutableV1,
 }
 
-/// The original process handle is the cleanup target. A failed assignment
-/// leaves the process suspended and outside the Job, so Job close is not a
-/// substitute for an exact-handle termination attempt. Never call blocking
-/// `Child::wait` after ignoring a termination failure.
-fn terminate_original_child_bounded(child: &mut Child) -> Result<(), String> {
+/// The original process handle is the cleanup target. The diagnostic Command
+/// path can fail before Job assignment; the prepared native path starts in
+/// the Job. Neither may infer terminal state from Job close alone.
+fn terminate_original_child_bounded(child: &mut OwnedChildProcess) -> Result<(), String> {
     match unsafe { WaitForSingleObject(child.as_raw_handle(), 0) } {
         WAIT_OBJECT_0 => {
             return if child
@@ -820,11 +1107,10 @@ fn terminate_original_child_bounded(child: &mut Child) -> Result<(), String> {
         WAIT_TIMEOUT => {}
         _ => return Err(format!("{LABEL} original child state unavailable")),
     }
-    if child.kill().is_err()
-        && unsafe { WaitForSingleObject(child.as_raw_handle(), 0) } != WAIT_OBJECT_0
-    {
-        return Err(format!("{LABEL} original child termination failed"));
-    }
+    // TerminateJobObject may have initiated asynchronous teardown already.
+    // TerminateProcess can then fail while the exact child is still becoming
+    // signaled; only the bounded wait below decides whether cleanup proved it.
+    let kill_failed = child.kill().is_err();
     let deadline = Instant::now() + FAILED_LAUNCH_CLEANUP;
     loop {
         match unsafe { WaitForSingleObject(child.as_raw_handle(), 0) } {
@@ -840,14 +1126,19 @@ fn terminate_original_child_bounded(child: &mut Child) -> Result<(), String> {
                 };
             }
             WAIT_TIMEOUT if Instant::now() < deadline => std::thread::sleep(POLL),
-            WAIT_TIMEOUT => return Err(format!("{LABEL} original child termination timed out")),
+            WAIT_TIMEOUT => {
+                return Err(format!(
+                    "{LABEL} original child termination {}",
+                    if kill_failed { "failed" } else { "timed out" }
+                ));
+            }
             _ => return Err(format!("{LABEL} original child wait unavailable")),
         }
     }
 }
 
 fn wait_original_child_until(
-    child: &mut Child,
+    child: &mut OwnedChildProcess,
     deadline: Instant,
 ) -> Result<Option<ExitStatus>, String> {
     loop {
@@ -888,6 +1179,105 @@ fn job_empty_until(
 }
 
 impl OwnedSuspendedJobChild {
+    fn launch_suspended_at_creation(
+        prepared_run: &PreparedSolRunV1,
+        executable: &PinnedSolWorkerExecutableV1,
+        inputs: &PreparedSolLaunchInputsV1,
+    ) -> Result<Self, ChildTransitionFailure<Self>> {
+        let application = executable.launch_path();
+        let application_wide = nul_terminated_wide(application.as_os_str(), "application path")
+            .map_err(ChildTransitionFailure::Clean)?;
+        let mut command_line = inputs
+            .command_line(application.as_os_str())
+            .map_err(ChildTransitionFailure::Clean)?;
+        let mut environment = inputs
+            .environment_block()
+            .map_err(ChildTransitionFailure::Clean)?;
+        let current_directory = nul_terminated_wide(
+            prepared_run.output_root.path().as_os_str(),
+            "working directory",
+        )
+        .map_err(ChildTransitionFailure::Clean)?;
+        let job = PrivateJob::create().map_err(ChildTransitionFailure::Clean)?;
+        let mut attributes =
+            JobAttributeList::for_job(&job).map_err(ChildTransitionFailure::Clean)?;
+        prepared_run
+            .require_ready()
+            .map_err(ChildTransitionFailure::Clean)?;
+        executable
+            .parent
+            .assert_stable(LABEL)
+            .map_err(ChildTransitionFailure::Clean)?;
+        job.require_limits()
+            .map_err(ChildTransitionFailure::Clean)?;
+        let mut startup: StartupInfoExW = unsafe { std::mem::zeroed() };
+        startup.startup.cb = std::mem::size_of::<StartupInfoExW>() as u32;
+        startup.attributes = attributes.as_mut_ptr();
+        let mut info: ProcessInformation = unsafe { std::mem::zeroed() };
+        // lpApplicationName is the pinned executable's exact path. No handles
+        // are inherited, even if another host handle is marked inheritable.
+        let created = unsafe {
+            CreateProcessW(
+                application_wide.as_ptr(),
+                command_line.as_mut_ptr(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                0,
+                CREATE_SUSPENDED
+                    | CREATE_NO_WINDOW
+                    | CREATE_UNICODE_ENVIRONMENT
+                    | EXTENDED_STARTUPINFO_PRESENT,
+                environment.as_mut_ptr().cast(),
+                current_directory.as_ptr(),
+                &mut startup.startup,
+                &mut info,
+            )
+        };
+        drop(attributes);
+        let thread =
+            (!info.thread.is_null()).then(|| unsafe { OwnedHandle::from_raw_handle(info.thread) });
+        let child = (!info.process.is_null()).then(|| {
+            OwnedChildProcess::Native(unsafe { OwnedHandle::from_raw_handle(info.process) })
+        });
+        drop(thread);
+        let creation_failed_without_handle = created == 0 && child.is_none();
+        let owner = Self {
+            job,
+            child,
+            creation_failed_without_handle,
+        };
+        if created == 0 {
+            if owner.child.is_some() {
+                return Err(owner.abort(format!("{LABEL} creation-time Job launch failed")));
+            }
+            return match job_empty_until(&owner.job, Instant::now() + FAILED_LAUNCH_CLEANUP, false)
+            {
+                Ok(true) => Err(ChildTransitionFailure::Clean(format!(
+                    "{LABEL} creation-time Job launch failed"
+                ))),
+                _ => Err(ChildTransitionFailure::Attention {
+                    reason: format!("{LABEL} failed launch Job state unavailable"),
+                    owner,
+                }),
+            };
+        }
+        if owner.child.is_none() || info.thread.is_null() {
+            // Win32 promises both handles on success. If that contract is
+            // violated, an absent process handle cannot prove exact-child
+            // termination: abort retains the Job in Attention even when its
+            // termination request succeeds. A missing thread handle permits
+            // clean failure only after exact process and Job drain.
+            return Err(owner.abort(format!("{LABEL} created process handles unavailable")));
+        }
+        if let Err(error) = owner
+            .job
+            .require_exact_member(owner.child.as_ref().expect("created process handle"))
+        {
+            return Err(owner.abort(error));
+        }
+        Ok(owner)
+    }
+
     fn launch_suspended(command: &mut Command) -> Result<Self, ChildTransitionFailure<Self>> {
         let job = PrivateJob::create().map_err(ChildTransitionFailure::Clean)?;
         command.creation_flags(CREATE_SUSPENDED);
@@ -896,7 +1286,8 @@ impl OwnedSuspendedJobChild {
         })?;
         let owner = Self {
             job,
-            child: Some(child),
+            child: Some(OwnedChildProcess::Command(child)),
+            creation_failed_without_handle: false,
         };
         if let Err(error) = owner
             .job
@@ -922,6 +1313,7 @@ impl OwnedSuspendedJobChild {
                     reasons.push(child_error);
                 }
             }
+            None if self.creation_failed_without_handle => {}
             None => reasons.push(format!("{LABEL} original child missing")),
         }
         if reasons.len() > 1 {
@@ -955,7 +1347,7 @@ impl OwnedSuspendedJobChild {
         if unsafe { NtResumeProcess(child.as_raw_handle()) } < 0 {
             return Err(self.abort(format!("{LABEL} child resume failed")));
         }
-        let Self { job, child } = self;
+        let Self { job, child, .. } = self;
         Ok(OwnedRunningJobChild { job, child })
     }
 }
@@ -1198,6 +1590,19 @@ mod tests {
         command
     }
 
+    fn prepared_helper_inputs(level: &str) -> PreparedSolLaunchInputsV1 {
+        PreparedSolLaunchInputsV1 {
+            arguments: ["--ignored", "--exact", HELPER]
+                .into_iter()
+                .map(OsString::from)
+                .collect(),
+            environment: BTreeMap::from([(
+                "CATDESK_SOL_LIFECYCLE_HELPER_LEVEL".into(),
+                level.into(),
+            )]),
+        }
+    }
+
     fn pin_current_test_executable() -> PinnedSolWorkerExecutableV1 {
         let path = std::env::current_exe().expect("test executable");
         let approved_sha256 = format!("{:x}", Sha256::digest(fs::read(&path).expect("read exe")));
@@ -1222,6 +1627,23 @@ mod tests {
         };
         if level == "failure" {
             std::process::exit(7);
+        } else if level == "inherit-check" {
+            let raw = std::env::var("CATDESK_SOL_INHERIT_MARKER")
+                .expect("explicit marker value")
+                .parse::<usize>()
+                .expect("numeric marker handle") as *mut c_void;
+            let mut flags = 0;
+            if unsafe { GetHandleInformation(raw, &mut flags) } != 0 {
+                std::process::exit(7);
+            }
+        } else if level == "argv-check" {
+            let expected =
+                std::env::var_os("CATDESK_SOL_EXPECTED_ARG").expect("explicit expected argv value");
+            let mut args = std::env::args_os();
+            let actual = args.find(|arg| arg == "--skip").and_then(|_| args.next());
+            if actual.as_ref() != Some(&expected) {
+                std::process::exit(7);
+            }
         } else if level == "parent" {
             let mut descendant = helper_command("descendant")
                 .spawn()
@@ -1316,10 +1738,13 @@ mod tests {
         let expected_image = executable.reviewed.identity.sha256.clone();
         let added = fixture.output_path.join("late.txt");
         FORCE_JOB_TERMINATE_FAILURE.with(|slot| slot.set(true));
-        let result = PreparedSuspendedSolJobChild::launch(prepared, executable, |command| {
-            configure_helper_command(command, "descendant");
-            fs::write(&added, b"late").expect("change output before launch recheck");
-        });
+        FORCE_PREPARED_OUTPUT_TAMPER_AFTER_SPAWN.with(|slot| slot.set(true));
+        let result = PreparedSuspendedSolJobChild::launch(
+            prepared,
+            executable,
+            &prepared_helper_inputs("descendant"),
+        );
+        FORCE_PREPARED_OUTPUT_TAMPER_AFTER_SPAWN.with(|slot| slot.set(false));
         FORCE_JOB_TERMINATE_FAILURE.with(|slot| slot.set(false));
         let attention = match result {
             Err(PreparedSolLifecycleFailure::Attention(owner)) => owner,
@@ -1464,9 +1889,11 @@ mod tests {
         let prepared = fixture.prepare().expect("prepare host turn");
         let selected = prepared.nonce.clone();
         let executable = pin_current_test_executable();
-        let owner = PreparedSuspendedSolJobChild::launch(prepared, executable, |command| {
-            configure_helper_command(command, "descendant");
-        })
+        let owner = PreparedSuspendedSolJobChild::launch(
+            prepared,
+            executable,
+            &prepared_helper_inputs("descendant"),
+        )
         .expect("launch same-user diagnostic from retained image");
         assert_eq!(owner.prepared_run.nonce, selected);
         let child = owner.suspended.child.as_ref().expect("original child");
@@ -1485,6 +1912,270 @@ mod tests {
         drop(prepared_run);
         drop(executable);
         fixture.cleanup();
+    }
+
+    #[test]
+    fn prepared_native_child_starts_in_job_and_finishes_without_forced_termination() {
+        let fixture = PreparationFixture::new();
+        let prepared = fixture.prepare().expect("prepare one run");
+        let executable = pin_current_test_executable();
+        let owner = PreparedSuspendedSolJobChild::launch(
+            prepared,
+            executable,
+            &prepared_helper_inputs("success"),
+        )
+        .expect("creation-time Job launch");
+        let child = owner.suspended.child.as_ref().expect("retained child");
+        assert!(matches!(child, OwnedChildProcess::Native(_)));
+        owner
+            .suspended
+            .job
+            .require_exact_member(child)
+            .expect("exact membership before any resume");
+        assert_eq!(
+            unsafe { WaitForSingleObject(child.as_raw_handle(), 0) },
+            WAIT_TIMEOUT,
+            "original process remains suspended"
+        );
+        assert!(
+            owner
+                .suspended
+                .job
+                .accounting()
+                .expect("Job accounting")
+                .total_processes
+                >= 1
+        );
+        let PreparedSuspendedSolJobChild {
+            suspended,
+            prepared_run,
+            executable,
+        } = owner;
+        let running = suspended.resume().expect("resume exact member");
+        FORCE_JOB_TERMINATE_FAILURE.with(|slot| slot.set(true));
+        let result = running.finish_normal(Duration::from_secs(5));
+        FORCE_JOB_TERMINATE_FAILURE.with(|slot| slot.set(false));
+        result.expect("zero exit and empty Job without forced termination");
+        drop(prepared_run);
+        drop(executable);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn prepared_native_launch_does_not_inherit_other_host_handles() {
+        let fixture = PreparationFixture::new();
+        let marker_path = fixture.base.join("inheritable-marker.txt");
+        fs::write(&marker_path, b"marker").expect("marker fixture");
+        let marker = fs::File::open(&marker_path).expect("open marker");
+        assert_ne!(
+            unsafe {
+                SetHandleInformation(
+                    marker.as_raw_handle(),
+                    HANDLE_FLAG_INHERIT,
+                    HANDLE_FLAG_INHERIT,
+                )
+            },
+            0
+        );
+        let mut inputs = prepared_helper_inputs("inherit-check");
+        inputs.environment.insert(
+            "CATDESK_SOL_INHERIT_MARKER".into(),
+            (marker.as_raw_handle() as usize).to_string(),
+        );
+        let owner = PreparedSuspendedSolJobChild::launch(
+            fixture.prepare().expect("prepare one run"),
+            pin_current_test_executable(),
+            &inputs,
+        )
+        .expect("creation-time Job launch");
+        let PreparedSuspendedSolJobChild {
+            suspended,
+            prepared_run,
+            executable,
+        } = owner;
+        suspended
+            .resume()
+            .expect("resume exact member")
+            .finish_normal(Duration::from_secs(5))
+            .expect("child could not use parent's inheritable handle");
+        drop(prepared_run);
+        drop(executable);
+        assert_ne!(
+            unsafe { SetHandleInformation(marker.as_raw_handle(), HANDLE_FLAG_INHERIT, 0) },
+            0
+        );
+        drop(marker);
+        fs::remove_file(marker_path).expect("remove marker fixture");
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn prepared_native_launch_round_trips_windows_quoted_argv() {
+        // --skip accepts an arbitrary filter while leaving the exact ignored
+        // helper selected. The helper compares the argv value received after
+        // CreateProcessW, rather than only checking our formatter's output.
+        for expected in [r"C:\path with spaces\\", r#"embedded "quote" value"#] {
+            let fixture = PreparationFixture::new();
+            let mut inputs = prepared_helper_inputs("argv-check");
+            inputs
+                .arguments
+                .extend([OsString::from("--skip"), OsString::from(expected)]);
+            inputs
+                .environment
+                .insert("CATDESK_SOL_EXPECTED_ARG".into(), expected.into());
+            let owner = PreparedSuspendedSolJobChild::launch(
+                fixture.prepare().expect("prepare one run"),
+                pin_current_test_executable(),
+                &inputs,
+            )
+            .expect("native launch with quoted argv");
+            let PreparedSuspendedSolJobChild {
+                suspended,
+                prepared_run,
+                executable,
+            } = owner;
+            suspended
+                .resume()
+                .expect("resume exact Job member")
+                .finish_normal(Duration::from_secs(5))
+                .expect("helper received exact quoted argv and exited zero");
+            drop(prepared_run);
+            drop(executable);
+            fixture.cleanup();
+        }
+    }
+
+    #[test]
+    fn prepared_native_descendant_remains_in_creation_time_job() {
+        let fixture = PreparationFixture::new();
+        let owner = PreparedSuspendedSolJobChild::launch(
+            fixture.prepare().expect("prepare one run"),
+            pin_current_test_executable(),
+            &prepared_helper_inputs("parent"),
+        )
+        .expect("creation-time Job launch");
+        let PreparedSuspendedSolJobChild {
+            suspended,
+            prepared_run,
+            executable,
+        } = owner;
+        let running = suspended.resume().expect("resume original member");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let state = running.job.accounting().expect("retained Job accounting");
+            if state.total_processes >= 2 && state.active_processes >= 2 {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "native child descendant did not join Job"
+            );
+            std::thread::sleep(POLL);
+        }
+        running
+            .abort_and_drain(Duration::from_secs(5))
+            .expect("terminate both Job members and retain no witness");
+        drop(prepared_run);
+        drop(executable);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn failed_creation_time_spawn_proves_empty_job_before_clean_failure() {
+        let fixture = PreparationFixture::new();
+        let fake_path = fixture.base.join("fake.exe");
+        let fake_bytes = b"not a Windows executable";
+        fs::write(&fake_path, fake_bytes).expect("fake image fixture");
+        let digest = format!("{:x}", Sha256::digest(fake_bytes));
+        let parent = ProtectedDirectoryGuard::acquire(&fixture.base, LABEL).expect("pin parent");
+        let fake = PinnedSolWorkerExecutableV1::pin(parent, "fake.exe", &digest)
+            .expect("pin diagnostic invalid image");
+        let result = PreparedSuspendedSolJobChild::launch(
+            fixture.prepare().expect("prepare one run"),
+            fake,
+            &prepared_helper_inputs("success"),
+        );
+        match result {
+            Err(PreparedSolLifecycleFailure::Clean(reason)) => {
+                assert!(reason.contains("creation-time Job launch failed"));
+            }
+            Err(PreparedSolLifecycleFailure::Attention(owner)) => {
+                panic!("unexpected uncertain native create: {}", owner.reason)
+            }
+            Ok(_) => panic!("invalid image unexpectedly created a child"),
+        }
+        fs::remove_file(fake_path).expect("remove exact fake image");
+        assert!(fixture.prepare().is_err(), "selected nonce stays spent");
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn failed_native_create_with_unavailable_job_readback_retains_retry_owner() {
+        let fixture = PreparationFixture::new();
+        let fake_path = fixture.base.join("fake.exe");
+        let fake_bytes = b"not a Windows executable";
+        fs::write(&fake_path, fake_bytes).expect("fake image fixture");
+        let digest = format!("{:x}", Sha256::digest(fake_bytes));
+        let parent = ProtectedDirectoryGuard::acquire(&fixture.base, LABEL).expect("pin parent");
+        let fake = PinnedSolWorkerExecutableV1::pin(parent, "fake.exe", &digest)
+            .expect("pin diagnostic invalid image");
+        let selected = fixture.prepare().expect("prepare one run");
+        let nonce = selected.nonce.clone();
+        FORCE_JOB_ACCOUNTING_FAILURE.with(|slot| slot.set(true));
+        let result = PreparedSuspendedSolJobChild::launch(
+            selected,
+            fake,
+            &prepared_helper_inputs("success"),
+        );
+        FORCE_JOB_ACCOUNTING_FAILURE.with(|slot| slot.set(false));
+        let attention = match result {
+            Err(PreparedSolLifecycleFailure::Attention(owner)) => owner,
+            Err(PreparedSolLifecycleFailure::Clean(reason)) => {
+                panic!("uncertain Job readback lost owner: {reason}")
+            }
+            Ok(_) => panic!("invalid image unexpectedly created a child"),
+        };
+        assert_eq!(attention.prepared_run.nonce, nonce);
+        assert!(matches!(
+            &attention.child,
+            AttentionJobChild::Suspended(owner)
+                if owner.creation_failed_without_handle && owner.child.is_none()
+        ));
+        attention.retry_abort().expect("retry proves empty Job");
+        fs::remove_file(fake_path).expect("remove exact fake image");
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn native_launch_rejects_invalid_arguments_and_environment_before_spawn() {
+        let invalid_argument = PreparedSolLaunchInputsV1 {
+            arguments: vec![OsString::from("bad\0argument")],
+            environment: BTreeMap::new(),
+        };
+        assert!(
+            invalid_argument
+                .command_line(OsStr::new("approved.exe"))
+                .is_err()
+        );
+        let invalid_environment = PreparedSolLaunchInputsV1 {
+            arguments: Vec::new(),
+            environment: BTreeMap::from([("PATH=OTHER".into(), "value".into())]),
+        };
+        assert!(invalid_environment.environment_block().is_err());
+        let duplicate_case = PreparedSolLaunchInputsV1 {
+            arguments: Vec::new(),
+            environment: BTreeMap::from([
+                ("CATDESK_TEST".into(), "first".into()),
+                ("catdesk_test".into(), "second".into()),
+            ]),
+        };
+        assert!(duplicate_case.environment_block().is_err());
+        let quoted =
+            quote_windows_argument(OsStr::new("a b\\\"c")).expect("quote explicit argument");
+        assert_eq!(
+            String::from_utf16(&quoted).expect("UTF-16"),
+            "\"a b\\\\\\\"c\""
+        );
     }
 
     #[test]
@@ -1696,7 +2387,8 @@ mod tests {
     fn suspended_child_cleanup_uses_its_original_handle_without_running_it() {
         let mut command = helper_command("descendant");
         command.creation_flags(CREATE_SUSPENDED);
-        let mut child = command.spawn().expect("suspended test child");
+        let child = command.spawn().expect("suspended test child");
+        let mut child = OwnedChildProcess::Command(child);
         terminate_original_child_bounded(&mut child).expect("bounded exact-handle cleanup");
         assert_eq!(
             unsafe { WaitForSingleObject(child.as_raw_handle(), 0) },

@@ -1,12 +1,11 @@
-//! Dormant constructor and readback for the fixed Wake install-broker pipe.
+//! Constructor and readback for the fixed Wake install-broker pipe.
 //!
 //! The operator SID comes only from the pinned, independently protected
 //! `BrokerProtectedPolicyV1` loader. The endpoint's security readback is not
-//! an install authorization. A future service must prove its image/token,
-//! serialize each request
-//! read with connected-client impersonation, and verify signed approval and
-//! transaction state. This module does not start a service or alter the
-//! protected package namespace.
+//! an install authorization. The separately provisioned service verifies its
+//! fixed image/token before creating this endpoint and serializes the one
+//! request read with connected-client impersonation. This module does not
+//! start a service or alter the protected package namespace.
 //! A same-user process can squat the pipe name before service startup; the
 //! first-instance flag makes the service fail closed, but a future client must
 //! authenticate the connected server's process/image/token before sending an
@@ -34,6 +33,7 @@ pub const FIXED_BROKER_PIPE_NAME: &str = r"\\.\pipe\CatDeskWakeInstallBrokerV1";
 const SYSTEM_SID: &str = "S-1-5-18";
 const PIPE_ACCESS_DUPLEX: u32 = 3;
 const FILE_FLAG_FIRST_PIPE_INSTANCE: u32 = 0x0008_0000;
+const FILE_FLAG_OVERLAPPED: u32 = 0x4000_0000;
 const PIPE_TYPE_MESSAGE: u32 = 4;
 const PIPE_READMODE_MESSAGE: u32 = 2;
 const PIPE_REJECT_REMOTE_CLIENTS: u32 = 8;
@@ -429,7 +429,7 @@ fn create_endpoint(
     let raw = unsafe {
         CreateNamedPipeW(
             wide(name_value).as_ptr(),
-            PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
+            PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED,
             PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_REJECT_REMOTE_CLIENTS,
             1,
             4096,
