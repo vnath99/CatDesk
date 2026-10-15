@@ -25,7 +25,7 @@ const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
 /// This expectation must come from the trusted host's task/native-turn state,
 /// never from the worker-supplied manifest. `allowed_paths` is the exact
 /// contract allowlist, not a worker-selected expansion of it.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ExpectedSolWorkerOutputV1 {
     pub task_id: String,
     pub baseline_commit: String,
@@ -64,15 +64,23 @@ pub(crate) fn parse_sol_worker_output_manifest(
     serde_json::from_slice(bytes).map_err(|_| format!("{LABEL} manifest is invalid"))
 }
 
-/// The only output of the verifier. File bytes are owned by the host and
-/// consumed once by a later staging operation; worker pathnames are not kept.
+/// The only output of the verifier. File bytes and the exact host expectation
+/// are owned by the host and consumed once by a later staging operation.
 pub(crate) struct VerifiedSolWorkerOutputV1 {
+    expected: ExpectedSolWorkerOutputV1,
     files: BTreeMap<String, Vec<u8>>,
 }
 
 impl VerifiedSolWorkerOutputV1 {
     pub(crate) fn into_files(self) -> BTreeMap<String, Vec<u8>> {
         self.files
+    }
+
+    /// Preserve the exact host authority used at verification. A later
+    /// staging caller may not relabel verified bytes for a different task,
+    /// baseline, native turn, nonce, or path allowlist.
+    pub(crate) fn into_parts(self) -> (ExpectedSolWorkerOutputV1, BTreeMap<String, Vec<u8>>) {
+        (self.expected, self.files)
     }
 }
 
@@ -255,7 +263,10 @@ pub(crate) fn verify_exact_sol_worker_output(
     if observed != manifest_paths {
         return Err(format!("{LABEL} inventory changed while verifying"));
     }
-    Ok(VerifiedSolWorkerOutputV1 { files })
+    Ok(VerifiedSolWorkerOutputV1 {
+        expected: expected.clone(),
+        files,
+    })
 }
 
 #[cfg(all(test, windows))]

@@ -30,6 +30,7 @@ pub mod provider_router;
 pub mod runtime;
 pub(crate) mod sol_worker_nonce;
 pub(crate) mod sol_worker_output;
+pub(crate) mod sol_worker_staging;
 pub mod state_machine;
 pub mod supervisor;
 pub mod worker_provider;

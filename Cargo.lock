@@ -402,6 +402,7 @@ dependencies = [
 name = "catdesk-wake"
 version = "1.0.0-dev.85"
 dependencies = [
+ "ed25519-dalek",
  "serde",
  "serde_json",
  "sha2",

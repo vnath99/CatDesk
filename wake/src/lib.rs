@@ -1,5 +1,7 @@
 //! Independent Wake protocol and durable state. No CatDesk schemas or processes.
 pub mod install_authority;
+pub mod install_broker_approval;
+pub mod install_broker_preflight;
 pub mod process_job;
 pub mod protocol;
 pub mod review_binding;

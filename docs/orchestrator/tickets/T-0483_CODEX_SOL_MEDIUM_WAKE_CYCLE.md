@@ -1,5 +1,13 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-15 dormant host-owned staging (source only)
+
+`sol_worker_staging.rs` now consumes verified bytes into a fresh pinned host stage with exact manifest, bounded inventory and no-follow byte/hash readback. `VerifiedSolWorkerOutputV1` retains the original host expectation, and staging refuses a different task, baseline, native turn, nonce or allowlist before creating a stage. Seven focused staging and five output-verifier tests passed. This still requires independently proven restricted worker termination/lost write authority and staging root/child ACL exclusion, plus a durable burn-to-stage transaction; no live Sol launch or review/Wake cycle occurred. See `docs/orchestrator/review_bundles/T-0483_R16_SOL_HOST_STAGING_SOURCE.md`.
+
+## 2026-10-15 active nonce selection (source only)
+
+The dormant Sol handoff now writes a create-once host-turn active selection **before** its issue record and before returning a nonce. Concurrent issuers have one winner and a loser creates no issue residue; native-turn bind and output verification both require the exact selected nonce. A crash after active selection but before the issue record leaves that host turn unusable and requires explicit attention/abandonment. Eleven focused Windows tests passed; see `docs/orchestrator/review_bundles/T-0483_R15_ACTIVE_SOL_NONCE_SELECTION_SOURCE.md`. Worker OS isolation, parent-directory power-loss durability, stopped-worker proof, protected staging ACL, crash-safe handoff and the real task→review→Wake cycle are still outstanding. No launch gate was opened.
+
 # 2026-10-15 dormant handoff nonce journal and candidate diagnosis
 
 The source now has a host-pinned, create-once Sol nonce journal. It records trusted task, session, host turn, contract, baseline and path authority on issue; separately binds a trusted exact Sol/medium native CLI turn; then verifies output and creates a burn marker before returning host-owned bytes. Seven focused Windows tests cover concurrent contenders, replay after reopening, native-turn substitution/bind replay, wrong model/effort, and torn/missing records. This is not connected to a worker service or staging path. Parent-directory power-loss durability, durable selection of the active issued nonce, restricted worker identity and lost-write-authority proof remain open. See `docs/orchestrator/review_bundles/T-0483_R14_SOL_NONCE_JOURNAL_SOURCE.md`.

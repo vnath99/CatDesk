@@ -1,5 +1,13 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-15 fixed broker read-only preflight checkpoint
+
+The source now includes a zero-argument diagnostic of the proposed fixed SCM service and protected ProgramData/Program Files objects. It uses pinned no-follow relative opens, exact leaf owner/DACL policy and image identity/hash readback. A real invocation on this host failed closed at `WAKE_BROKER_SERVICE_UNPROVISIONED`; no service was installed. Three focused policy tests and the final full Wake suite passed. The snapshot explicitly says it is **not installation authority**; ancestor effective access, signature/integrity, worker-token denial, service protocol, protected key/ledger and launch-reader migration remain. See `docs/orchestrator/review_bundles/T-0485_R2_WAKE_BROKER_READ_ONLY_PREFLIGHT.md`.
+
+## 2026-10-15 source approval verifier checkpoint
+
+`wake/src/install_broker_approval.rs` now verifies a bounded canonical, purpose-specific Ed25519 approval envelope. Its signed payload binds the exact four-artifact manifest, independent-source/CI claims, predecessor pointer/package, protected and old runtime physical objects, old host image/PID/creation time and install generation. Six focused tests and the final full independent Wake suite passed locally. This is a dormant verifier, not an issuer, service, installed key, transaction or launch selector. Both production `WAKE_INSTALL_BROKER_UNPROVISIONED` holds remain. See `docs/orchestrator/review_bundles/T-0485_R1_WAKE_APPROVAL_VERIFIER_SOURCE.md`. Exact source commit CI, fixed broker service/namespace, worker-token denial, replay ledger and live migration remain required.
+
 **Priority:** P0 prerequisite for installing dev.85 and accepting T-0483's real review-to-Wake cycle.
 **Status:** Implementation ticket; broker, protected namespace, approval issuer, and live migration are **not provisioned**.
 **Evidence base:** [T-0483 R10](../review_bundles/T-0483_R10_WAKE_CALLER_APPROVAL_BOUNDARY_HOLD.md), [R11](../review_bundles/T-0483_R11_WAKE_OWNER_CHALLENGE_SOURCE.md), [R12](../review_bundles/T-0483_R12_INSTALL_BROKER_HOLD.md), and [R3](../review_bundles/T-0483_R3_WAKE_STORE_AUTHORITY_PROVENANCE.md).

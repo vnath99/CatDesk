@@ -4,15 +4,20 @@
 //! The journal uses create-once, synced records, never a mutable status file:
 //! an incomplete burn record after a process crash is still spent and cannot
 //! be removed or retried on reopen. Parent-directory metadata durability
-//! across power loss is unproven. This module does not prove the caller's
-//! directory ACL, the worker's identity, process exit, or lost write
-//! authority. The host must separately persist which issued nonce belongs to
-//! its active turn; an abandoned, unburned issue record is not automatically
-//! revoked. This module grants no Sol launch capability or staging authority.
+//! across power loss is unproven. The active record selects one nonce for a
+//! session/host turn before its issue record is created and before it can be
+//! returned to a worker. A crash after selection but before issue leaves the
+//! turn in attention with no issuable nonce. This module does not prove the
+//! caller's directory ACL, the worker's identity, process exit, or lost write
+//! authority. An issue record without a matching active record is never a
+//! valid handoff. The post-burn value may enter dormant staging, but it grants
+//! no Sol launch or repository authority and cannot prove the staging ACL or
+//! a crash-safe staging transaction.
 
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::windows_protected_fs::{
@@ -28,6 +33,24 @@ use super::sol_worker_output::{
 const LABEL: &str = "Sol worker nonce journal";
 const MAX_RECORD_BYTES: usize = 256 * 1024;
 const MAX_ALLOWED_PATHS: usize = 256;
+
+/// This value exists only after the create-once burn record has been synced
+/// and read back. Its private field prevents the plain output verifier from
+/// being passed to the later staging transaction without nonce consumption.
+pub(crate) struct BurnedSolWorkerOutputV1 {
+    verified: VerifiedSolWorkerOutputV1,
+}
+
+impl BurnedSolWorkerOutputV1 {
+    pub(super) fn into_parts(
+        self,
+    ) -> (
+        ExpectedSolWorkerOutputV1,
+        std::collections::BTreeMap<String, Vec<u8>>,
+    ) {
+        self.verified.into_parts()
+    }
+}
 
 /// Host-held authority for one logical task. It is captured before the
 /// worker receives its nonce and must be reconstructed from trusted session
@@ -46,6 +69,15 @@ pub(crate) struct SolWorkerNonceAuthorityV1 {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct IssuedNonceRecordV1 {
+    schema_version: u32,
+    purpose: String,
+    nonce: String,
+    authority: SolWorkerNonceAuthorityV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct ActiveNonceRecordV1 {
     schema_version: u32,
     purpose: String,
     nonce: String,
@@ -115,6 +147,18 @@ fn issue_name(nonce: &str) -> String {
     format!("issued-{nonce}.json")
 }
 
+fn active_name(authority: &SolWorkerNonceAuthorityV1) -> String {
+    // Length-prefix the two IDs before hashing so delimiter placement cannot
+    // alias a different session/turn pair. The fixed digest keeps the Windows
+    // component below its filename limit even for maximum-length IDs.
+    let mut digest = Sha256::new();
+    digest.update((authority.session_id.len() as u64).to_le_bytes());
+    digest.update(authority.session_id.as_bytes());
+    digest.update((authority.host_turn_id.len() as u64).to_le_bytes());
+    digest.update(authority.host_turn_id.as_bytes());
+    format!("active-{:x}.json", digest.finalize())
+}
+
 fn burn_name(nonce: &str) -> String {
     format!("burned-{nonce}.json")
 }
@@ -152,11 +196,58 @@ fn require_matching_issue(
     {
         return Err(format!("{LABEL} issue record does not match"));
     }
+    let active_bytes = read_relative_regular_unique(
+        ledger,
+        &active_name(authority),
+        MAX_RECORD_BYTES as u64,
+        LABEL,
+    )?;
+    let active: ActiveNonceRecordV1 = serde_json::from_slice(&active_bytes)
+        .map_err(|_| format!("{LABEL} active record is invalid"))?;
+    if active.schema_version != 1
+        || active.purpose != "sol-worker-handoff-active"
+        || active.nonce != nonce
+        || active.authority != *authority
+        || serialize_bounded(&active)? != active_bytes
+    {
+        return Err(format!("{LABEL} active nonce does not match"));
+    }
     Ok(())
 }
 
-/// Write and sync the authority before giving this host-generated nonce to a
-/// worker.
+/// Recover the one selected nonce for this trusted host turn after a process
+/// restart. The caller must still prove the worker stopped and invoke the
+/// one-shot burn path; reading an active nonce is not a launch permit.
+pub(crate) fn read_active_sol_worker_nonce(
+    ledger: &ProtectedDirectoryGuard,
+    authority: &SolWorkerNonceAuthorityV1,
+) -> Result<String, String> {
+    if !valid_authority(authority) {
+        return Err(format!("{LABEL} authority is invalid"));
+    }
+    ledger.assert_stable(LABEL)?;
+    let bytes = read_relative_regular_unique(
+        ledger,
+        &active_name(authority),
+        MAX_RECORD_BYTES as u64,
+        LABEL,
+    )?;
+    let active: ActiveNonceRecordV1 =
+        serde_json::from_slice(&bytes).map_err(|_| format!("{LABEL} active record is invalid"))?;
+    if active.schema_version != 1
+        || active.purpose != "sol-worker-handoff-active"
+        || active.authority != *authority
+        || !valid_nonce(&active.nonce)
+        || serialize_bounded(&active)? != bytes
+    {
+        return Err(format!("{LABEL} active record does not match"));
+    }
+    require_matching_issue(ledger, authority, &active.nonce)?;
+    Ok(active.nonce)
+}
+
+/// Write and sync the authority and one active selection before giving this
+/// host-generated nonce to a worker.
 /// The caller keeps the same pinned, worker-inaccessible ledger object for the
 /// later handoff. A collision or any incomplete write is a terminal error.
 pub(crate) fn issue_sol_worker_nonce(
@@ -168,6 +259,23 @@ pub(crate) fn issue_sol_worker_nonce(
     }
     ledger.assert_stable(LABEL)?;
     let nonce = Uuid::new_v4().hyphenated().to_string();
+    let active = ActiveNonceRecordV1 {
+        schema_version: 1,
+        purpose: "sol-worker-handoff-active".into(),
+        nonce: nonce.clone(),
+        authority: authority.clone(),
+    };
+    let active_bytes = serialize_bounded(&active)?;
+    let name = active_name(authority);
+    // This FILE_CREATE is the single-selection point. A collision is
+    // terminal before any issue record is created. A crash after selecting
+    // but before issuing leaves a blocked turn; it cannot silently mint a
+    // replacement nonce after restart.
+    write_new_regular_in(ledger, &name, &active_bytes, LABEL)?;
+    let observed = read_relative_regular_unique(ledger, &name, MAX_RECORD_BYTES as u64, LABEL)?;
+    if observed != active_bytes {
+        return Err(format!("{LABEL} active record changed"));
+    }
     let record = IssuedNonceRecordV1 {
         schema_version: 1,
         purpose: "sol-worker-handoff-issued".into(),
@@ -176,14 +284,14 @@ pub(crate) fn issue_sol_worker_nonce(
     };
     let bytes = serialize_bounded(&record)?;
     write_new_regular_in(ledger, &issue_name(&nonce), &bytes, LABEL)?;
-    // A successful create and file flush is followed by a same-object,
-    // bounded no-follow read. An incomplete issue record left by a process
-    // crash cannot be interpreted as a valid nonce by the consumer.
+    // The selected nonce is returned only after a same-object, bounded
+    // no-follow read of the complete synced issue record.
     let observed =
         read_relative_regular_unique(ledger, &issue_name(&nonce), MAX_RECORD_BYTES as u64, LABEL)?;
     if observed != bytes {
         return Err(format!("{LABEL} issue record changed"));
     }
+    require_matching_issue(ledger, authority, &nonce)?;
     Ok(nonce)
 }
 
@@ -236,7 +344,7 @@ pub(crate) fn verify_and_burn_sol_worker_output(
     authority: &SolWorkerNonceAuthorityV1,
     expected: &ExpectedSolWorkerOutputV1,
     manifest: &SolWorkerOutputManifestV1,
-) -> Result<VerifiedSolWorkerOutputV1, String> {
+) -> Result<BurnedSolWorkerOutputV1, String> {
     if !valid_authority(authority)
         || !valid_nonce(&expected.handoff_nonce)
         || authority.task_id != expected.task_id
@@ -288,7 +396,7 @@ pub(crate) fn verify_and_burn_sol_worker_output(
     if observed != bytes {
         return Err(format!("{LABEL} burn record changed"));
     }
-    Ok(output)
+    Ok(BurnedSolWorkerOutputV1 { verified: output })
 }
 
 #[cfg(all(test, windows))]
@@ -372,7 +480,7 @@ mod tests {
             }
         }
 
-        fn verify(&self) -> Result<VerifiedSolWorkerOutputV1, String> {
+        fn verify(&self) -> Result<BurnedSolWorkerOutputV1, String> {
             let ledger = ProtectedDirectoryGuard::acquire(&self.ledger_path, LABEL)?;
             let output = ProtectedDirectoryGuard::acquire(&self.output_path, LABEL)?;
             verify_and_burn_sol_worker_output(
@@ -388,6 +496,7 @@ mod tests {
             let issued = self
                 .ledger_path
                 .join(issue_name(&self.expected.handoff_nonce));
+            let active = self.ledger_path.join(active_name(&self.authority));
             let burned = self
                 .ledger_path
                 .join(burn_name(&self.expected.handoff_nonce));
@@ -396,6 +505,9 @@ mod tests {
                 .join(bound_name(&self.expected.handoff_nonce));
             if issued.exists() {
                 fs::remove_file(issued).expect("remove issued fixture record");
+            }
+            if active.exists() {
+                fs::remove_file(active).expect("remove active fixture record");
             }
             if burned.exists() {
                 fs::remove_file(burned).expect("remove burned fixture record");
@@ -416,14 +528,164 @@ mod tests {
     fn first_handoff_burns_nonce_before_return_and_replay_fails_after_reopen() {
         let fixture = Fixture::new();
         assert!(valid_nonce(&fixture.expected.handoff_nonce));
+        let ledger = ProtectedDirectoryGuard::acquire(&fixture.ledger_path, LABEL).expect("ledger");
         assert_eq!(
-            fixture.verify().expect("first handoff").into_files()["src/lib.rs"],
+            read_active_sol_worker_nonce(&ledger, &fixture.authority)
+                .expect("recover active nonce"),
+            fixture.expected.handoff_nonce
+        );
+        drop(ledger);
+        assert_eq!(
+            fixture.verify().expect("first handoff").into_parts().1["src/lib.rs"],
             b"changed\n"
         );
         assert!(
             fixture.verify().is_err(),
             "reopened ledger must reject replay"
         );
+        let ledger = ProtectedDirectoryGuard::acquire(&fixture.ledger_path, LABEL).expect("ledger");
+        assert_eq!(
+            read_active_sol_worker_nonce(&ledger, &fixture.authority)
+                .expect("selection remains visible after burn"),
+            fixture.expected.handoff_nonce,
+            "selected means bound, not unspent"
+        );
+        drop(ledger);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn second_issue_for_same_host_turn_fails_without_creating_residue() {
+        let fixture = Fixture::new();
+        let before: BTreeSet<PathBuf> = fs::read_dir(&fixture.ledger_path)
+            .expect("list fixture ledger")
+            .map(|entry| entry.expect("fixture entry").path())
+            .collect();
+        let ledger = ProtectedDirectoryGuard::acquire(&fixture.ledger_path, LABEL).expect("ledger");
+        assert!(issue_sol_worker_nonce(&ledger, &fixture.authority).is_err());
+        assert_eq!(
+            read_active_sol_worker_nonce(&ledger, &fixture.authority)
+                .expect("original active nonce"),
+            fixture.expected.handoff_nonce
+        );
+        drop(ledger);
+        let after: BTreeSet<PathBuf> = fs::read_dir(&fixture.ledger_path)
+            .expect("list fixture ledger")
+            .map(|entry| entry.expect("fixture entry").path())
+            .collect();
+        assert_eq!(after, before, "failed contender created no issue residue");
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn concurrent_issuance_selects_one_nonce_and_only_that_issue_exists() {
+        let base = std::env::temp_dir().join(format!("catdesk-sol-issue-{}", Uuid::new_v4()));
+        let ledger_path = base.join("ledger");
+        fs::create_dir(&base).expect("fixture base");
+        fs::create_dir(&ledger_path).expect("fixture ledger");
+        let authority = SolWorkerNonceAuthorityV1 {
+            session_id: "session-concurrent".into(),
+            task_id: "T-0483".into(),
+            host_turn_id: "turn-concurrent".into(),
+            contract_hash: "b".repeat(64),
+            baseline_commit: "a".repeat(40),
+            allowed_paths: BTreeSet::from(["src/lib.rs".into()]),
+        };
+        let ledger = ProtectedDirectoryGuard::acquire(&ledger_path, LABEL).expect("ledger");
+        let (first, second) = std::thread::scope(|scope| {
+            let first = scope.spawn(|| issue_sol_worker_nonce(&ledger, &authority));
+            let second = scope.spawn(|| issue_sol_worker_nonce(&ledger, &authority));
+            (
+                first.join().expect("first issuer"),
+                second.join().expect("second issuer"),
+            )
+        });
+        assert_ne!(first.is_ok(), second.is_ok(), "exactly one issue succeeds");
+        let winner = first.or(second).expect("selected nonce");
+        assert_eq!(
+            read_active_sol_worker_nonce(&ledger, &authority).expect("read winner"),
+            winner
+        );
+        let files: BTreeSet<String> = fs::read_dir(&ledger_path)
+            .expect("list ledger")
+            .map(|entry| {
+                entry
+                    .expect("ledger entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        assert_eq!(
+            files,
+            BTreeSet::from([active_name(&authority), issue_name(&winner)])
+        );
+        drop(ledger);
+        fs::remove_file(ledger_path.join(issue_name(&winner))).expect("remove fixture issue");
+        fs::remove_file(ledger_path.join(active_name(&authority))).expect("remove fixture active");
+        fs::remove_dir(&ledger_path).expect("remove fixture ledger");
+        fs::remove_dir(&base).expect("remove fixture base");
+    }
+
+    #[test]
+    fn valid_unselected_issue_cannot_bind_or_return_output() {
+        let mut fixture = Fixture::new();
+        let selected_nonce = fixture.expected.handoff_nonce.clone();
+        let other_nonce = Uuid::new_v4().hyphenated().to_string();
+        let other_issue = IssuedNonceRecordV1 {
+            schema_version: 1,
+            purpose: "sol-worker-handoff-issued".into(),
+            nonce: other_nonce.clone(),
+            authority: fixture.authority.clone(),
+        };
+        let ledger = ProtectedDirectoryGuard::acquire(&fixture.ledger_path, LABEL).expect("ledger");
+        write_new_regular_in(
+            &ledger,
+            &issue_name(&other_nonce),
+            &serialize_bounded(&other_issue).expect("issue bytes"),
+            LABEL,
+        )
+        .expect("write test orphan");
+        let profile = CodexCliTurnProfileEvidenceV1 {
+            codex_thread_id: "thread-abc".into(),
+            codex_turn_id: "turn-123".into(),
+            model_id: SOL_MEDIUM_MODEL.into(),
+            reasoning_effort: "medium".into(),
+            evidence_sha256: "c".repeat(64),
+        };
+        assert!(
+            bind_sol_worker_native_turn(
+                &ledger,
+                &fixture.authority,
+                &other_nonce,
+                "thread-abc",
+                &profile,
+            )
+            .is_err()
+        );
+        drop(ledger);
+        fixture.expected.handoff_nonce = other_nonce.clone();
+        fixture.manifest.handoff_nonce = other_nonce.clone();
+        assert!(fixture.verify().is_err());
+        fs::remove_file(fixture.ledger_path.join(issue_name(&other_nonce)))
+            .expect("remove exact test orphan");
+        fixture.expected.handoff_nonce = selected_nonce;
+        fixture.manifest.handoff_nonce = fixture.expected.handoff_nonce.clone();
+        assert!(fixture.verify().is_ok());
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn missing_or_torn_active_selection_never_authorizes_handoff() {
+        let fixture = Fixture::new();
+        let active_path = fixture.ledger_path.join(active_name(&fixture.authority));
+        fs::write(&active_path, b"{").expect("simulate torn active record");
+        assert!(fixture.verify().is_err());
+        let ledger = ProtectedDirectoryGuard::acquire(&fixture.ledger_path, LABEL).expect("ledger");
+        assert!(read_active_sol_worker_nonce(&ledger, &fixture.authority).is_err());
+        drop(ledger);
+        fs::remove_file(&active_path).expect("remove fixture active record");
+        assert!(fixture.verify().is_err());
         fixture.cleanup();
     }
 
@@ -493,6 +755,13 @@ mod tests {
         assert!(fixture.verify().is_err());
         fs::remove_file(&issued).expect("remove fixture issue record");
         assert!(fixture.verify().is_err());
+        let ledger = ProtectedDirectoryGuard::acquire(&fixture.ledger_path, LABEL).expect("ledger");
+        assert!(
+            issue_sol_worker_nonce(&ledger, &fixture.authority).is_err(),
+            "an active selection without its issue is attention, not a new issuance"
+        );
+        assert!(read_active_sol_worker_nonce(&ledger, &fixture.authority).is_err());
+        drop(ledger);
         fixture.cleanup();
     }
 
