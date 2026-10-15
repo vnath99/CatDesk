@@ -256,6 +256,33 @@ impl PinnedDirectory {
         allow_delete_share: bool,
         label: &str,
     ) -> Result<Self, String> {
+        Self::open_relative_with_security(
+            parent,
+            component,
+            disposition,
+            allow_delete_share,
+            false,
+            label,
+        )
+    }
+
+    #[allow(dead_code)] // The owner journal reader is absent from standalone helper binaries.
+    pub(crate) fn open_relative_for_security(
+        parent: &Self,
+        component: &str,
+        label: &str,
+    ) -> Result<Self, String> {
+        Self::open_relative_with_security(parent, component, FILE_OPEN, false, true, label)
+    }
+
+    fn open_relative_with_security(
+        parent: &Self,
+        component: &str,
+        disposition: u32,
+        allow_delete_share: bool,
+        read_control: bool,
+        label: &str,
+    ) -> Result<Self, String> {
         validate_protected_component(component, label)?;
         parent.assert_stable(label)?;
         #[cfg(windows)]
@@ -268,6 +295,7 @@ impl PinnedDirectory {
                     | FILE_ADD_SUBDIRECTORY
                     | FILE_READ_ATTRIBUTES
                     | SYNCHRONIZE
+                    | if read_control { READ_CONTROL } else { 0 }
                     | if allow_delete_share {
                         DELETE | READ_CONTROL
                     } else {
@@ -305,7 +333,13 @@ impl PinnedDirectory {
         }
         #[cfg(not(windows))]
         {
-            let _ = (parent, component, disposition, allow_delete_share);
+            let _ = (
+                parent,
+                component,
+                disposition,
+                allow_delete_share,
+                read_control,
+            );
             Err(format!("{label} stable identity is unavailable"))
         }
     }
@@ -507,6 +541,23 @@ impl ProtectedDirectoryGuard {
         Ok(())
     }
 
+    #[allow(dead_code)] // Used by the dormant fixture journal crash reader.
+    pub(crate) fn descend_existing_for_security(
+        &mut self,
+        component: &str,
+        label: &str,
+    ) -> Result<(), String> {
+        validate_protected_component(component, label)?;
+        self.assert_stable(label)?;
+        self.directories
+            .push(PinnedDirectory::open_relative_for_security(
+                self.directories.last().expect("guard has root"),
+                component,
+                label,
+            )?);
+        self.assert_stable(label)
+    }
+
     pub(crate) fn descend_optional_existing(
         &mut self,
         component: &str,
@@ -580,12 +631,45 @@ impl ProtectedDirectoryGuard {
         os_derived_interactive_sid: &str,
         label: &str,
     ) -> Result<(), String> {
+        self.create_owner_only_generated_child(
+            component,
+            "catdesk-dev-fixture-",
+            os_derived_interactive_sid,
+            label,
+        )
+    }
+
+    /// Separate generated owner-only directory for a write-ahead fixture
+    /// journal. It is not a candidate source root or a cleanup authority.
+    #[cfg(windows)]
+    pub(crate) fn create_owner_only_fixture_journal_child(
+        &mut self,
+        component: &str,
+        os_derived_interactive_sid: &str,
+        label: &str,
+    ) -> Result<(), String> {
+        self.create_owner_only_generated_child(
+            component,
+            "catdesk-fixture-journal-",
+            os_derived_interactive_sid,
+            label,
+        )
+    }
+
+    #[cfg(windows)]
+    fn create_owner_only_generated_child(
+        &mut self,
+        component: &str,
+        prefix: &str,
+        os_derived_interactive_sid: &str,
+        label: &str,
+    ) -> Result<(), String> {
         let temp = fs::canonicalize(std::env::temp_dir())
             .map_err(|_| format!("{label} temp authority unavailable"))?;
         if self.path() != temp {
             return Err(format!("{label} parent is outside OS temp"));
         }
-        let Some(id) = component.strip_prefix("catdesk-dev-fixture-") else {
+        let Some(id) = component.strip_prefix(prefix) else {
             return Err(format!("{label} component outside generated scope"));
         };
         let parsed =
@@ -618,6 +702,33 @@ impl ProtectedDirectoryGuard {
         os_derived_interactive_sid: &str,
         label: &str,
     ) -> Result<(), String> {
+        self.verify_owner_only_generated_descriptor(
+            "catdesk-dev-fixture-",
+            os_derived_interactive_sid,
+            label,
+        )
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn verify_owner_only_fixture_journal_descriptor(
+        &self,
+        os_derived_interactive_sid: &str,
+        label: &str,
+    ) -> Result<(), String> {
+        self.verify_owner_only_generated_descriptor(
+            "catdesk-fixture-journal-",
+            os_derived_interactive_sid,
+            label,
+        )
+    }
+
+    #[cfg(windows)]
+    fn verify_owner_only_generated_descriptor(
+        &self,
+        prefix: &str,
+        os_derived_interactive_sid: &str,
+        label: &str,
+    ) -> Result<(), String> {
         let temp = fs::canonicalize(std::env::temp_dir())
             .map_err(|_| format!("{label} temp authority unavailable"))?;
         if self.directories.len() != 2 || self.directories[0].path != temp {
@@ -626,7 +737,7 @@ impl ProtectedDirectoryGuard {
         let Some(name) = self.path().file_name().and_then(|name| name.to_str()) else {
             return Err(format!("{label} owner name is invalid"));
         };
-        let Some(id) = name.strip_prefix("catdesk-dev-fixture-") else {
+        let Some(id) = name.strip_prefix(prefix) else {
             return Err(format!("{label} owner name is invalid"));
         };
         if self.path().parent() != Some(temp.as_path())

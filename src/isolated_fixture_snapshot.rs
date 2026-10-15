@@ -9,6 +9,10 @@
 use std::os::windows::io::AsRawHandle;
 use std::path::Path;
 
+#[cfg(windows)]
+use serde::{Deserialize, Serialize};
+#[cfg(windows)]
+use sha2::Digest;
 use uuid::Uuid;
 
 use crate::isolated_fixture_manifest::{
@@ -17,12 +21,197 @@ use crate::isolated_fixture_manifest::{
 use crate::reviewed_source_snapshot::query_relative_directory_names;
 use crate::windows_protected_fs::{
     PinnedDirectory, ProtectedDirectoryGuard, RetainedReviewedArtifact,
-    read_relative_regular_unique, retain_reviewed_regular_artifact, write_new_regular_in,
+    read_optional_relative_regular, read_relative_regular_unique, retain_reviewed_regular_artifact,
+    write_new_regular_in,
 };
 #[cfg(windows)]
 use crate::windows_protected_fs::{dispose_opened_object, open_reviewed_regular_for_delete};
 
 const LABEL: &str = "isolated fixture source snapshot";
+#[cfg(windows)]
+const MAX_OWNER_RECORD_BYTES: u64 = 4 * 1024;
+
+#[cfg(windows)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct FixtureOwnerIntentV1 {
+    schema_version: u32,
+    snapshot_id: String,
+    source_commit: String,
+    manifest_sha256: String,
+    root_name: String,
+}
+
+#[cfg(windows)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct FixtureOwnerRootV1 {
+    schema_version: u32,
+    snapshot_id: String,
+    intent_sha256: String,
+    root_object_identity: String,
+}
+
+/// Create the owner-only write-ahead intent before a candidate root exists.
+/// These records are forensic evidence only; they never authorize a path scan
+/// or automatic cleanup after a crash.
+#[cfg(windows)]
+fn create_fixture_owner_intent(
+    manifest: &SnapshotManifest,
+    sid: &str,
+) -> Result<(ProtectedDirectoryGuard, FixtureOwnerIntentV1, Vec<u8>), String> {
+    validate_manifest(manifest)?;
+    let uuid =
+        Uuid::parse_str(&manifest.snapshot_id).map_err(|_| "fixture owner snapshot id invalid")?;
+    let journal_name = format!("catdesk-fixture-journal-{}", uuid.simple());
+    let root_name = format!("catdesk-dev-fixture-{}", uuid.simple());
+    let manifest_bytes =
+        serde_json::to_vec(manifest).map_err(|_| "fixture owner manifest unavailable")?;
+    let intent = FixtureOwnerIntentV1 {
+        schema_version: 1,
+        snapshot_id: manifest.snapshot_id.clone(),
+        source_commit: manifest.source_commit.clone(),
+        manifest_sha256: format!("{:x}", sha2::Sha256::digest(&manifest_bytes)),
+        root_name,
+    };
+    let bytes =
+        serde_json::to_vec(&intent).map_err(|_| "fixture owner intent encoding unavailable")?;
+    if bytes.len() as u64 > MAX_OWNER_RECORD_BYTES {
+        return Err("fixture owner intent too large".into());
+    }
+    let temp = std::fs::canonicalize(std::env::temp_dir())
+        .map_err(|_| "fixture owner temp unavailable")?;
+    let mut journal = ProtectedDirectoryGuard::acquire(&temp, LABEL)?;
+    journal.create_owner_only_fixture_journal_child(&journal_name, sid, LABEL)?;
+    journal.verify_owner_only_fixture_journal_descriptor(sid, LABEL)?;
+    write_new_regular_in(&journal, "intent.json", &bytes, LABEL)?;
+    if read_relative_regular_unique(&journal, "intent.json", MAX_OWNER_RECORD_BYTES, LABEL)?
+        != bytes
+    {
+        return Err("fixture owner intent readback drifted".into());
+    }
+    Ok((journal, intent, bytes))
+}
+
+#[cfg(windows)]
+fn bind_fixture_owner_root(
+    journal: &ProtectedDirectoryGuard,
+    intent: &FixtureOwnerIntentV1,
+    intent_bytes: &[u8],
+    root: &ProtectedDirectoryGuard,
+    sid: &str,
+) -> Result<FixtureOwnerRootV1, String> {
+    journal.verify_owner_only_fixture_journal_descriptor(sid, LABEL)?;
+    root.verify_owner_only_fixture_descriptor(sid, LABEL)?;
+    if root.path().file_name().and_then(|name| name.to_str()) != Some(intent.root_name.as_str())
+        || read_relative_regular_unique(journal, "intent.json", MAX_OWNER_RECORD_BYTES, LABEL)?
+            != intent_bytes
+    {
+        return Err("fixture owner intent or root drifted".into());
+    }
+    let information =
+        crate::windows_protected_fs::handle_information(root.last_handle(LABEL)?, LABEL)?;
+    let binding = FixtureOwnerRootV1 {
+        schema_version: 1,
+        snapshot_id: intent.snapshot_id.clone(),
+        intent_sha256: format!("{:x}", sha2::Sha256::digest(intent_bytes)),
+        root_object_identity: format!(
+            "{:08x}:{:08x}:{:08x}",
+            information.volume_serial_number,
+            information.file_index_high,
+            information.file_index_low
+        ),
+    };
+    let bytes =
+        serde_json::to_vec(&binding).map_err(|_| "fixture owner root encoding unavailable")?;
+    if bytes.len() as u64 > MAX_OWNER_RECORD_BYTES {
+        return Err("fixture owner root record too large".into());
+    }
+    write_new_regular_in(journal, "root.json", &bytes, LABEL)?;
+    if read_relative_regular_unique(journal, "root.json", MAX_OWNER_RECORD_BYTES, LABEL)? != bytes {
+        return Err("fixture owner root readback drifted".into());
+    }
+    Ok(binding)
+}
+
+/// Reopen only a caller-pinned journal and verify its canonical records against
+/// the witnessed manifest and, when supplied, the already opened root object.
+/// A valid record is forensic evidence, never a cleanup token.
+#[cfg(windows)]
+fn read_fixture_owner_records(
+    journal: &ProtectedDirectoryGuard,
+    manifest: &SnapshotManifest,
+    root: Option<&ProtectedDirectoryGuard>,
+    sid: &str,
+) -> Result<(FixtureOwnerIntentV1, Option<FixtureOwnerRootV1>), String> {
+    validate_manifest(manifest)?;
+    journal.verify_owner_only_fixture_journal_descriptor(sid, LABEL)?;
+    let uuid =
+        Uuid::parse_str(&manifest.snapshot_id).map_err(|_| "fixture owner snapshot id invalid")?;
+    let expected_journal = format!("catdesk-fixture-journal-{}", uuid.simple());
+    if journal.path().file_name().and_then(|name| name.to_str()) != Some(expected_journal.as_str())
+    {
+        return Err("fixture owner journal identity drifted".into());
+    }
+    let intent_bytes =
+        read_relative_regular_unique(journal, "intent.json", MAX_OWNER_RECORD_BYTES, LABEL)?;
+    let intent: FixtureOwnerIntentV1 =
+        serde_json::from_slice(&intent_bytes).map_err(|_| "fixture owner intent invalid")?;
+    let canonical =
+        serde_json::to_vec(&intent).map_err(|_| "fixture owner intent encoding unavailable")?;
+    let manifest_bytes =
+        serde_json::to_vec(manifest).map_err(|_| "fixture owner manifest unavailable")?;
+    if intent_bytes != canonical
+        || intent.schema_version != 1
+        || intent.snapshot_id != manifest.snapshot_id
+        || intent.source_commit != manifest.source_commit
+        || intent.manifest_sha256 != format!("{:x}", sha2::Sha256::digest(&manifest_bytes))
+        || intent.root_name != format!("catdesk-dev-fixture-{}", uuid.simple())
+    {
+        return Err("fixture owner intent identity drifted".into());
+    }
+    let Some(root_bytes) =
+        read_optional_relative_regular(journal, "root.json", MAX_OWNER_RECORD_BYTES, LABEL)?
+    else {
+        if root.is_some() {
+            return Err("fixture owner root binding missing".into());
+        }
+        return Ok((intent, None));
+    };
+    if root_bytes
+        != read_relative_regular_unique(journal, "root.json", MAX_OWNER_RECORD_BYTES, LABEL)?
+    {
+        return Err("fixture owner root binding changed".into());
+    }
+    let binding: FixtureOwnerRootV1 =
+        serde_json::from_slice(&root_bytes).map_err(|_| "fixture owner root binding invalid")?;
+    if root_bytes
+        != serde_json::to_vec(&binding).map_err(|_| "fixture owner root encoding unavailable")?
+        || binding.schema_version != 1
+        || binding.snapshot_id != manifest.snapshot_id
+        || binding.intent_sha256 != format!("{:x}", sha2::Sha256::digest(&intent_bytes))
+    {
+        return Err("fixture owner root binding drifted".into());
+    }
+    if let Some(root) = root {
+        root.verify_owner_only_fixture_descriptor(sid, LABEL)?;
+        if root.path().file_name().and_then(|name| name.to_str()) != Some(intent.root_name.as_str())
+        {
+            return Err("fixture owner root name drifted".into());
+        }
+        let info =
+            crate::windows_protected_fs::handle_information(root.last_handle(LABEL)?, LABEL)?;
+        if binding.root_object_identity
+            != format!(
+                "{:08x}:{:08x}:{:08x}",
+                info.volume_serial_number, info.file_index_high, info.file_index_low
+            )
+        {
+            return Err("fixture owner root object drifted".into());
+        }
+    }
+    Ok((intent, Some(binding)))
+}
 
 fn verify_disposable_root(root: &ProtectedDirectoryGuard) -> Result<(), String> {
     root.assert_stable(LABEL)?;
@@ -449,11 +638,6 @@ pub(crate) async fn stage_witnessed_candidate_snapshot(
     let temp = std::fs::canonicalize(std::env::temp_dir()).map_err(|_| {
         CandidateStageError::BeforeOwnership("isolated fixture temp unavailable".into())
     })?;
-    // Atomically create exactly one private, generated temp root relative to
-    // an already opened parent. No existing directory is adopted.
-    let root = ProtectedDirectoryGuard::acquire(&temp, LABEL)
-        .map_err(CandidateStageError::BeforeOwnership)?;
-    let child_name = format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple());
     #[cfg(windows)]
     {
         let sid =
@@ -463,7 +647,35 @@ pub(crate) async fn stage_witnessed_candidate_snapshot(
                         "isolated fixture interactive owner identity unavailable".into(),
                     )
                 })?;
-        let (root, manifest) = create_owned_candidate_root(root, child_name, &sid, manifest)?;
+        // The independent owner-only intent is durably written before the
+        // candidate root can be created. A crash at any later point leaves
+        // read-only forensic evidence, never automatic delete authority.
+        let (journal, intent, intent_bytes) = create_fixture_owner_intent(&manifest, &sid)
+            .map_err(|reason| {
+                CandidateStageError::BeforeOwnership(format!(
+                    "fixture owner intent {} unavailable: {reason}",
+                    manifest.snapshot_id
+                ))
+            })?;
+        let root = ProtectedDirectoryGuard::acquire(&temp, LABEL).map_err(|reason| {
+            CandidateStageError::BeforeOwnership(format!(
+                "fixture owner intent {} persisted; candidate parent unavailable: {reason}",
+                manifest.snapshot_id
+            ))
+        })?;
+        let (root, manifest) =
+            create_owned_candidate_root(root, intent.root_name.clone(), &sid, manifest)?;
+        if let Err(reason) = bind_fixture_owner_root(&journal, &intent, &intent_bytes, &root, &sid)
+        {
+            return Err(CandidateStageError::Owned(Box::new(
+                OwnedCandidateStageFailure {
+                    root,
+                    manifest,
+                    reason,
+                },
+            )));
+        }
+        drop(journal);
         finish_owned_candidate_stage(root, manifest, &candidates)
             .map_err(CandidateStageError::Owned)
     }
@@ -694,6 +906,95 @@ mod tests {
             .retire_owned_root()
             .expect("retire only exact owned files and root");
         assert!(!temp.join(name).exists(), "owned root must be absent");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn owner_journal_survives_pre_root_and_bound_root_crash_windows() {
+        let temp = std::fs::canonicalize(std::env::temp_dir()).expect("canonical temp");
+        let sid =
+            crate::windows_supervisor_control_pipe::fixed_interactive_supervisor_startup_user_sid()
+                .expect("ordinary interactive test owner SID required");
+        let manifest = SnapshotManifest {
+            schema_version: 1,
+            source_repository: SOURCE_REPOSITORY.into(),
+            source_commit: "abcdef0123456789abcdef0123456789abcdef01".into(),
+            snapshot_id: Uuid::new_v4().to_string(),
+            files: vec![SnapshotFile {
+                fixture_leaf: "Cargo.toml".into(),
+                source_path: "Cargo.toml".into(),
+                size_bytes: 0,
+                sha256: format!("{:x}", Sha256::digest([])),
+            }],
+        };
+        let uuid = Uuid::parse_str(&manifest.snapshot_id).unwrap();
+        let journal_name = format!("catdesk-fixture-journal-{}", uuid.simple());
+        let (journal, intent, intent_bytes) =
+            create_fixture_owner_intent(&manifest, &sid).expect("persist pre-root intent");
+        assert!(!temp.join(&intent.root_name).exists());
+        drop(journal);
+
+        // Simulate a crash before root creation: the owner-only intent must
+        // survive, while the absence of a root binding grants no deletion.
+        let mut reopened_journal =
+            ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp after crash");
+        reopened_journal
+            .descend_existing_for_security(&journal_name, LABEL)
+            .expect("reopen exact journal");
+        let (read_intent, pre_root) =
+            read_fixture_owner_records(&reopened_journal, &manifest, None, &sid)
+                .expect("read pre-root forensic intent");
+        assert_eq!(read_intent, intent);
+        assert!(pre_root.is_none());
+
+        let root_parent = ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp");
+        let (root, manifest) =
+            create_owned_candidate_root(root_parent, intent.root_name.clone(), &sid, manifest)
+                .unwrap_or_else(|_| panic!("create exact test root"));
+        let binding =
+            bind_fixture_owner_root(&reopened_journal, &intent, &intent_bytes, &root, &sid)
+                .expect("persist opened root identity");
+        drop(root);
+        drop(reopened_journal);
+
+        // Simulate a later crash: both records must reread and bind only the
+        // exact opened root object, with no cleanup side effect.
+        let mut reopened_journal =
+            ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp after crash");
+        reopened_journal
+            .descend_existing_for_security(&journal_name, LABEL)
+            .expect("reopen exact journal");
+        let mut reopened_root =
+            ProtectedDirectoryGuard::acquire(&temp, LABEL).expect("pin temp after crash");
+        reopened_root
+            .descend_existing_for_security(&intent.root_name, LABEL)
+            .expect("reopen exact root");
+        let (_, read_binding) =
+            read_fixture_owner_records(&reopened_journal, &manifest, Some(&reopened_root), &sid)
+                .expect("verify exact bound root");
+        assert_eq!(read_binding, Some(binding.clone()));
+
+        let mut altered = binding;
+        altered.root_object_identity = "00000000:00000000:00000000".into();
+        std::fs::write(
+            temp.join(&journal_name).join("root.json"),
+            serde_json::to_vec(&altered).unwrap(),
+        )
+        .expect("tamper only test-owned journal record");
+        assert!(
+            read_fixture_owner_records(&reopened_journal, &manifest, Some(&reopened_root), &sid)
+                .is_err(),
+            "a changed root object ID must not verify"
+        );
+        assert!(temp.join(&intent.root_name).is_dir());
+        drop(reopened_root);
+        drop(reopened_journal);
+        std::fs::remove_file(temp.join(&journal_name).join("root.json"))
+            .expect("remove test root record");
+        std::fs::remove_file(temp.join(&journal_name).join("intent.json"))
+            .expect("remove test intent");
+        std::fs::remove_dir(temp.join(&journal_name)).expect("remove empty test journal");
+        std::fs::remove_dir(temp.join(&intent.root_name)).expect("remove empty test root");
     }
 
     #[cfg(windows)]

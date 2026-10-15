@@ -1,3 +1,8 @@
+## 2026-10-14 — T0478 owner write-ahead journal (CURRENT)
+
+- Dormant witnessed candidate staging now writes a separate owner-only, create-only, file-synced intent record before candidate-root creation, then binds a second record to the opened root volume/file identity before source-byte staging. A read-only reopen verifies snapshot/manifest/commit, protected owner/DACL, canonical records, and exact root identity; the Windows crash simulation passes pre-root, bound-root, and tampered-identity cases. Focused snapshot suite 12/12, full local Rust suite, strict Clippy pass. See `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2E_OWNER_WRITE_AHEAD_JOURNAL.md`.
+- This provides process-crash forensic evidence only. Durable owner generation, operator-attention state, power-loss durability proof, journal retirement, cross-process owner exclusion, worker/MCP integration and exact three-job GitHub Windows CI remain outstanding. No automatic name-based cleanup, installed release, or live Wake action occurred.
+
 ## 2026-10-14 — T0478 partial-stage ownership lease (CURRENT)
 
 - The dormant witnessed-candidate stage now returns a distinct owned failure containing its pinned disposable root, manifest and reason after any post-create error. A two-file collision regression proves the first write can fail later without overwriting the foreign second file or losing the in-process root handle. See `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2D_OWNED_STAGE_FAILURE_LEASE.md`.

@@ -1,5 +1,9 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — T0478 owner journal source
+
+- `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2E_OWNER_WRITE_AHEAD_JOURNAL.md` records the dormant owner-only write-ahead source and crash simulation. It has no operator command. Neither a generated journal name nor a validated forensic record grants deletion authority; keep crash residue for bounded operator attention until a trusted owner lifecycle exists.
+
 ## 2026-10-14 — T0478 owned stage failure
 
 - `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2D_OWNED_STAGE_FAILURE_LEASE.md` records the source-only post-create failure lease. It has no operator command. A crash still requires durable write-ahead ownership evidence; do not locate and delete orphan roots by generated-name scan.
