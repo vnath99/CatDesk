@@ -1,5 +1,9 @@
 # CatDesk — Important Command Reference
 
+## 2026-10-14 — T0478 manifest-bound MCP source
+
+- `docs/orchestrator/review_bundles/T-0478_R3B4C1_MANIFEST_BOUND_MCP_DISPATCH.md` describes a producer-owned snapshot dispatch function and adversarial tests. There is no new operator command or serving route yet. The existing `--isolated-dev-fixture` listener still uses its older pathname-based read/search path; do not treat it as a reviewed candidate worker.
+
 ## 2026-10-14 — T0478 bounded owner attention
 
 - `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2F_BOUNDED_OWNER_ATTENTION.md` records the source-only attention record. There is no operator command or cleanup authority. A missing record after a crash is unknown state, and a present record is forensic evidence only.

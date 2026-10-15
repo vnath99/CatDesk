@@ -244,13 +244,20 @@ fn handle_isolated_fixture_file_tool(
     req: &JsonRpcRequest,
     fixture_root: &str,
     tool: &str,
+    snapshot: Option<&crate::isolated_fixture_snapshot::StagedCandidateSnapshot>,
 ) -> JsonRpcResponse {
     let args = tool_arguments(req);
     let name = match required_string_argument(&args, "path") {
         Ok(name) => name,
         Err(_) => return tool_error_response(req, "isolated fixture file path required".into()),
     };
-    let data = match fixture_read_data(fixture_root, name) {
+    let data = match snapshot {
+        Some(snapshot) => snapshot.read_manifest_leaf(name).and_then(|bytes| {
+            String::from_utf8(bytes).map_err(|_| "isolated fixture file must be UTF-8".into())
+        }),
+        None => fixture_read_data(fixture_root, name),
+    };
+    let data = match data {
         Ok(data) => data,
         Err(error) => return tool_error_response(req, error),
     };
@@ -375,6 +382,35 @@ pub async fn handle_isolated_fixture_request(
     req: &JsonRpcRequest,
     fixture_root: &str,
 ) -> Option<JsonRpcResponse> {
+    handle_isolated_fixture_request_inner(req, fixture_root).await
+}
+
+/// A trusted producer may hold its staged snapshot in process and dispatch
+/// only through its immutable manifest. This does not accept a manifest from
+/// JSON-RPC or a fixture pathname as proof of reviewed source.
+#[allow(dead_code)]
+pub async fn handle_isolated_fixture_request_with_snapshot(
+    req: &JsonRpcRequest,
+    snapshot: &crate::isolated_fixture_snapshot::StagedCandidateSnapshot,
+) -> Option<JsonRpcResponse> {
+    if req.method == "tools/call" {
+        let name = req.params.get("name").and_then(Value::as_str).unwrap_or("");
+        return Some(match name {
+            "read" | "search" => handle_isolated_fixture_file_tool(req, "", name, Some(snapshot)),
+            _ => JsonRpcResponse::error(
+                req.id.clone(),
+                -32602,
+                "isolated fixture tool denied".into(),
+            ),
+        });
+    }
+    handle_isolated_fixture_request(req, "").await
+}
+
+async fn handle_isolated_fixture_request_inner(
+    req: &JsonRpcRequest,
+    fixture_root: &str,
+) -> Option<JsonRpcResponse> {
     match req.method.as_str() {
         "initialize" => Some(JsonRpcResponse::success(
             req.id.clone(),
@@ -413,7 +449,9 @@ pub async fn handle_isolated_fixture_request(
         "tools/call" => {
             let name = req.params.get("name").and_then(Value::as_str).unwrap_or("");
             Some(match name {
-                "read" | "search" => handle_isolated_fixture_file_tool(req, fixture_root, name),
+                "read" | "search" => {
+                    handle_isolated_fixture_file_tool(req, fixture_root, name, None)
+                }
                 _ => JsonRpcResponse::error(
                     req.id.clone(),
                     -32602,

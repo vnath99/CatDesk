@@ -870,8 +870,8 @@ mod tests {
     use crate::isolated_fixture_manifest::{SOURCE_REPOSITORY, SnapshotFile};
     use sha2::{Digest, Sha256};
 
-    #[test]
-    fn staged_bytes_roundtrip_only_inside_test_owned_root() {
+    #[tokio::test]
+    async fn staged_bytes_roundtrip_only_inside_test_owned_root() {
         let temp = std::fs::canonicalize(std::env::temp_dir()).unwrap();
         let dir = temp.join(format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple()));
         std::fs::create_dir(&dir).expect("create only test-owned temp fixture root");
@@ -920,6 +920,34 @@ mod tests {
             staged.read_manifest_leaf("Cargo.toml").unwrap(),
             b"source tracked bytes"
         );
+        let call = |tool: &str, leaf: &str| crate::mcp::JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(serde_json::json!(1)),
+            method: "tools/call".into(),
+            params: serde_json::json!({
+                "name": tool,
+                "arguments": {"path": leaf, "pattern": "tracked"}
+            }),
+        };
+        for tool in ["read", "search"] {
+            let allowed = crate::mcp::handle_isolated_fixture_request_with_snapshot(
+                &call(tool, "Cargo.toml"),
+                &staged,
+            )
+            .await
+            .expect("fixture tool response");
+            assert_eq!(
+                allowed.result.as_ref().unwrap()["isError"],
+                serde_json::Value::Null
+            );
+            let denied = crate::mcp::handle_isolated_fixture_request_with_snapshot(
+                &call(tool, "secret.txt"),
+                &staged,
+            )
+            .await
+            .expect("fixture denied response");
+            assert_eq!(denied.result.as_ref().unwrap()["isError"], true);
+        }
         staged
             .review_retirement_inventory()
             .expect("intact test-owned fixture has expected inventory");
@@ -964,6 +992,69 @@ mod tests {
         std::fs::write(dir.join("Cargo.toml"), b"modified")
             .expect("source write allowed only after retired file lease");
         std::fs::remove_dir_all(dir).expect("cleanup only own released fixture root");
+    }
+
+    #[tokio::test]
+    async fn manifest_bound_mcp_read_and_search_reject_changed_and_new_leaves() {
+        let temp = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+        let dir = temp.join(format!("catdesk-dev-fixture-{}", Uuid::new_v4().simple()));
+        std::fs::create_dir(&dir).expect("create own fixture");
+        let expected = b"reviewed source";
+        std::fs::write(dir.join("Cargo.toml"), expected).expect("write own leaf");
+        let root = ProtectedDirectoryGuard::acquire(&dir, LABEL).expect("pin own fixture");
+        let staged = StagedCandidateSnapshot {
+            root,
+            manifest: SnapshotManifest {
+                schema_version: 1,
+                source_repository: SOURCE_REPOSITORY.into(),
+                source_commit: "abcdef0123456789abcdef0123456789abcdef01".into(),
+                snapshot_id: Uuid::new_v4().to_string(),
+                files: vec![SnapshotFile {
+                    fixture_leaf: "Cargo.toml".into(),
+                    source_path: "Cargo.toml".into(),
+                    size_bytes: expected.len() as u64,
+                    sha256: format!("{:x}", Sha256::digest(expected)),
+                }],
+            },
+            // Deliberately omit read leases in this adversarial test so a
+            // same-user writer can change bytes between tool calls.
+            _leases: Vec::new(),
+        };
+        let call = |tool: &str, leaf: &str| crate::mcp::JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(serde_json::json!(1)),
+            method: "tools/call".into(),
+            params: serde_json::json!({
+                "name": tool,
+                "arguments": {"path": leaf, "pattern": "reviewed"}
+            }),
+        };
+        for tool in ["read", "search"] {
+            let result = crate::mcp::handle_isolated_fixture_request_with_snapshot(
+                &call(tool, "Cargo.toml"),
+                &staged,
+            )
+            .await
+            .unwrap();
+            assert!(result.result.unwrap()["isError"].is_null());
+        }
+        std::fs::write(dir.join("Cargo.toml"), b"changed source").expect("mutate own leaf");
+        std::fs::write(dir.join("new.txt"), b"reviewed source").expect("add foreign leaf");
+        for tool in ["read", "search"] {
+            for leaf in ["Cargo.toml", "new.txt"] {
+                let result = crate::mcp::handle_isolated_fixture_request_with_snapshot(
+                    &call(tool, leaf),
+                    &staged,
+                )
+                .await
+                .unwrap();
+                assert_eq!(result.result.unwrap()["isError"], true);
+            }
+        }
+        drop(staged);
+        std::fs::remove_file(dir.join("new.txt")).expect("remove own injected leaf");
+        std::fs::remove_file(dir.join("Cargo.toml")).expect("remove own source leaf");
+        std::fs::remove_dir(dir).expect("remove empty own fixture");
     }
 
     #[test]

@@ -1,3 +1,8 @@
+## 2026-10-14 — T0478 manifest-bound MCP dispatch bridge (CURRENT)
+
+- Added a separate source-only isolated MCP dispatcher that takes the producer-owned `StagedCandidateSnapshot` directly. Both read and search now use its pinned manifest leaf reader, rejecting unknown/new leaves and changed size/hash before exposing bytes; JSON-RPC cannot supply the manifest. Focused adversarial tests pass, strict Clippy passes, and the full local Rust all-features suite exits 0 (main binary 1,079 passed, 26 ignored). See `docs/orchestrator/review_bundles/T-0478_R3B4C1_MANIFEST_BOUND_MCP_DISPATCH.md`.
+- The real HTTP server still invokes its older pathname fixture handler; no reviewed snapshot is yet held in listener state. Thread-safe handle ownership, root owner/DACL recheck, real HTTP adversarial tests and exact three-job Windows CI remain before T0478-C acceptance. P0/P1 and worker lifecycle remain open.
+
 ## 2026-10-14 — T0478 bounded owner-attention record (CURRENT)
 
 - Dormant candidate staging now attempts a create-only bounded `attention.json` on explicit post-intent failure, with fixed reason code, snapshot/intent hash and optional bound root object identity. It keeps the typed in-process owner handle and records attention-write failure in the returned error. Read-only verification rejects overwritten, malformed or mismatched evidence. Focused snapshot 13/13, full local Rust suite and strict Clippy pass. See `docs/orchestrator/review_bundles/T-0478_R3B4B3B2B2F_BOUNDED_OWNER_ATTENTION.md`.
