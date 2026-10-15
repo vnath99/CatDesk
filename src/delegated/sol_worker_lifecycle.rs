@@ -551,6 +551,23 @@ impl ReservedPreparedSolRunV1 {
         self.reservation
             .require_exact(&self.prepared.ledger, &binding)
     }
+
+    fn diagnose_retained_post_run_context(
+        &self,
+        executable: &PinnedSolWorkerExecutableV1,
+    ) -> Result<(), String> {
+        executable.require_original_native_path()?;
+        self.reservation.diagnose_retained_objects(
+            &self.prepared.ledger,
+            &self.prepared.output_root,
+            &executable.parent,
+            &executable.component,
+            &executable.reviewed.identity.object_identity,
+            &executable.reviewed.identity.sha256,
+        )?;
+        executable.diagnose_retained_artifact()?;
+        Ok(())
+    }
 }
 
 /// Explicit inputs for the private same-user creation-time Job probe. A
@@ -716,6 +733,7 @@ struct PinnedSolWorkerExecutableV1 {
     parent: ProtectedDirectoryGuard,
     component: String,
     reviewed: RetainedReviewedArtifact,
+    native_final_path: Vec<u16>,
 }
 
 impl PinnedSolWorkerExecutableV1 {
@@ -734,13 +752,42 @@ impl PinnedSolWorkerExecutableV1 {
             MAX_APPROVED_EXECUTABLE_BYTES,
             LABEL,
         )?;
-        reviewed.native_final_path(LABEL)?;
+        let native_final_path = reviewed.native_final_path(LABEL)?;
         parent.assert_stable(LABEL)?;
         Ok(Self {
             parent,
             component: component.into(),
             reviewed,
+            native_final_path,
         })
+    }
+
+    fn require_original_native_path(&self) -> Result<(), String> {
+        self.parent.assert_stable(LABEL)?;
+        if self.reviewed.native_final_path(LABEL)? != self.native_final_path {
+            return Err(format!("{LABEL} retained executable path changed"));
+        }
+        Ok(())
+    }
+
+    /// Diagnostic readback through the pinned parent. This rehashes the exact
+    /// named artifact and compares it with the original retained file; it
+    /// does not attest the process's mapped image section.
+    fn diagnose_retained_artifact(&self) -> Result<(), String> {
+        self.require_original_native_path()?;
+        let reopened = retain_reviewed_regular_artifact(
+            &self.parent,
+            &self.component,
+            &self.reviewed.identity.sha256,
+            MAX_APPROVED_EXECUTABLE_BYTES,
+            LABEL,
+        )?;
+        if reopened.identity != self.reviewed.identity
+            || reopened.native_final_path(LABEL)? != self.native_final_path
+        {
+            return Err(format!("{LABEL} retained executable changed"));
+        }
+        self.require_original_native_path()
     }
 
     fn launch_path(&self) -> PathBuf {
@@ -1195,6 +1242,14 @@ impl StoppedBoundFixedWorkerCandidateV1 {
     /// outside-Job process or writable handle survived the normal drain.
     pub(crate) fn diagnose_retained_exited_identity(&self) -> Result<(), String> {
         self._bound_worker.require_retained_exited_identity()
+    }
+
+    /// Diagnostic only. This checks retained host launch objects and the
+    /// selected reservation after output may have been written. It does not
+    /// attest output contents or grant staging or repository authority.
+    pub(crate) fn diagnose_retained_host_context(&self) -> Result<(), String> {
+        self._prepared_run
+            .diagnose_retained_post_run_context(&self._executable)
     }
 }
 
@@ -1939,6 +1994,8 @@ mod tests {
             DrainedBoundFixedWorkerJobV1::into_stopped_candidate;
         let _: fn(&StoppedBoundFixedWorkerCandidateV1) -> Result<(), String> =
             StoppedBoundFixedWorkerCandidateV1::diagnose_retained_exited_identity;
+        let _: fn(&StoppedBoundFixedWorkerCandidateV1) -> Result<(), String> =
+            StoppedBoundFixedWorkerCandidateV1::diagnose_retained_host_context;
     }
 
     #[test]
@@ -1994,6 +2051,9 @@ mod tests {
             fs::OpenOptions::new().write(true).open(&path).is_err(),
             "retained handle denies a new writer"
         );
+        lease
+            .diagnose_retained_artifact()
+            .expect("original artifact can be rehashed through pinned parent");
         let renamed = fixture.base.join("renamed.exe");
         assert!(fs::rename(&path, &renamed).is_err());
         drop(lease);
@@ -2371,6 +2431,138 @@ mod tests {
             fixture.prepare().is_err(),
             "reservation and nonce cannot be replayed"
         );
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn retained_post_run_context_accepts_output_but_rejects_object_and_record_drift() {
+        let fixture = PreparationFixture::new();
+        let prepared = fixture.prepare().expect("prepare selected turn");
+        let mut executable = pin_current_test_executable();
+        let reserved = prepared
+            .reserve_launch(&executable, &prepared_helper_inputs("success"))
+            .expect("durable reservation");
+        let output_file = fixture.output_path.join("worker-output.txt");
+        fs::write(&output_file, b"diagnostic output").expect("populate output after reserve");
+        assert!(reserved.require_still_reserved().is_err());
+        reserved
+            .diagnose_retained_post_run_context(&executable)
+            .expect("retained host context survives output creation");
+
+        let reservation = &reserved.reservation;
+        let ledger = &reserved.ledger;
+        let output = &reserved.output_root;
+        let parent = &executable.parent;
+        let component = &executable.component;
+        let object = &executable.reviewed.identity.object_identity;
+        let digest = &executable.reviewed.identity.sha256;
+        assert!(
+            reservation
+                .diagnose_retained_objects(ledger, ledger, parent, component, object, digest)
+                .is_err(),
+            "a different retained output directory must fail"
+        );
+        assert!(
+            reservation
+                .diagnose_retained_objects(ledger, output, output, component, object, digest)
+                .is_err(),
+            "a different executable parent must fail"
+        );
+        assert!(
+            reservation
+                .diagnose_retained_objects(ledger, output, parent, "other.exe", object, digest)
+                .is_err(),
+            "a different executable component must fail"
+        );
+        assert!(
+            reservation
+                .diagnose_retained_objects(
+                    ledger,
+                    output,
+                    parent,
+                    component,
+                    "other-object",
+                    digest
+                )
+                .is_err(),
+            "a different executable object must fail"
+        );
+        assert!(
+            reservation
+                .diagnose_retained_objects(
+                    ledger,
+                    output,
+                    parent,
+                    component,
+                    object,
+                    &"0".repeat(64)
+                )
+                .is_err(),
+            "a different executable digest must fail"
+        );
+
+        let original_native_path = executable.native_final_path.clone();
+        executable.native_final_path = "different native path".encode_utf16().collect();
+        assert!(
+            reserved
+                .diagnose_retained_post_run_context(&executable)
+                .is_err(),
+            "a changed native path observation must fail"
+        );
+        executable.native_final_path = original_native_path;
+
+        let alternate_path = fixture.base.join("alternate.exe");
+        let alternate_bytes = b"other diagnostic executable";
+        fs::write(&alternate_path, alternate_bytes).expect("alternate executable fixture");
+        let alternate_parent =
+            ProtectedDirectoryGuard::acquire(&fixture.base, LABEL).expect("pin alternate parent");
+        let alternate = PinnedSolWorkerExecutableV1::pin(
+            alternate_parent,
+            "alternate.exe",
+            &format!("{:x}", Sha256::digest(alternate_bytes)),
+        )
+        .expect("pin alternate executable");
+        assert!(
+            reserved
+                .diagnose_retained_post_run_context(&alternate)
+                .is_err(),
+            "a different retained executable cannot satisfy the launch record"
+        );
+        drop(alternate);
+        fs::remove_file(alternate_path).expect("remove exact alternate executable");
+
+        let active = fs::read_dir(&fixture.ledger_path)
+            .expect("list nonce ledger")
+            .map(|entry| entry.expect("ledger entry").path())
+            .find(|path| {
+                path.file_name()
+                    .is_some_and(|name| name.to_string_lossy().starts_with("active-"))
+            })
+            .expect("active nonce record");
+        let active_bytes = fs::read(&active).expect("read active nonce");
+        fs::write(&active, b"{").expect("tamper selected nonce");
+        assert!(
+            reserved
+                .diagnose_retained_post_run_context(&executable)
+                .is_err(),
+            "selected nonce drift must fail"
+        );
+        fs::write(&active, active_bytes).expect("restore exact selected nonce fixture");
+
+        let record = fixture
+            .ledger_path
+            .join(format!("launch-started-{}.json", reserved.nonce));
+        let mut bytes = fs::read(&record).expect("read reservation");
+        bytes[0] ^= 1;
+        fs::write(&record, bytes).expect("tamper reservation");
+        assert!(
+            reserved
+                .diagnose_retained_post_run_context(&executable)
+                .is_err()
+        );
+        fs::remove_file(output_file).expect("remove exact diagnostic output");
+        drop(reserved);
+        drop(executable);
         fixture.cleanup();
     }
 

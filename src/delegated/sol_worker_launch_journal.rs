@@ -133,6 +133,38 @@ impl SolLaunchReservationV1 {
     pub(super) fn require_unchanged(&self, ledger: &ProtectedDirectoryGuard) -> Result<(), String> {
         self.require_exact(ledger, &self.binding)
     }
+
+    /// Read-only post-run comparison with the objects retained across launch.
+    /// Worker output may exist now, so the pre-spawn empty-root check cannot
+    /// be repeated. This receipt does not authorize reading or staging output.
+    pub(super) fn diagnose_retained_objects(
+        &self,
+        ledger: &ProtectedDirectoryGuard,
+        output: &ProtectedDirectoryGuard,
+        executable_parent: &ProtectedDirectoryGuard,
+        executable_component: &str,
+        executable_object_identity: &str,
+        executable_sha256: &str,
+    ) -> Result<(), String> {
+        self.require_unchanged(ledger)?;
+        if output.physical_identity(LABEL)? != self.binding.output_identity
+            || executable_parent.physical_identity(LABEL)?
+                != self.binding.executable_parent_identity
+            || executable_component != self.binding.executable_component
+            || executable_object_identity != self.binding.executable_object_identity
+            || executable_sha256 != self.binding.executable_sha256
+        {
+            return Err(format!("{LABEL} retained object changed"));
+        }
+        self.require_unchanged(ledger)?;
+        if output.physical_identity(LABEL)? != self.binding.output_identity
+            || executable_parent.physical_identity(LABEL)?
+                != self.binding.executable_parent_identity
+        {
+            return Err(format!("{LABEL} retained directory changed"));
+        }
+        Ok(())
+    }
 }
 
 /// Reading after process restart is diagnostic only. Every selected turn is
