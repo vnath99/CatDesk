@@ -435,6 +435,8 @@ impl QueueJob {
             "projectId": self.binding.project_id, "taskId": self.task_id,
             "workspace": self.binding.workspace, "threadId": self.binding.thread_id,
             "targetSha256": self.binding.target_sha256,
+            "gitIdentitySha256": format!("{:x}", Sha256::digest(self.binding.git_identity.as_bytes())),
+            "verificationProfile": self.binding.verification_profile,
             "promptSha256": self.prompt_sha256, "state": self.state,
             "createdAtUnix": self.created_at_unix,
             "attemptId": self.attempt.as_ref().map(|attempt| &attempt.attempt_id),
@@ -3852,7 +3854,9 @@ async fn dispatch_one(control: &AutonomousProjectV1) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::delegated::autonomy_projects::project_chat_target_digest;
+    use crate::delegated::autonomy_projects::{
+        AutonomousProjectRegistryV1, project_chat_target_digest,
+    };
     use crate::delegated::autonomy_state::{
         AutonomousQueueTaskStateV1, AutonomousQueueTaskV1, AutonomousQueueV1,
         AutonomousSessionStateV1, AutonomousStateStoreV1,
@@ -5422,8 +5426,18 @@ mod tests {
         )
         .expect("changed");
         assert!(!job.same_request(&changed));
-        let summary = job.summary().to_string();
-        assert!(!summary.contains("private prompt text"));
+        let summary = job.summary();
+        assert_eq!(
+            summary["verificationProfile"],
+            projects[1].verification_profile
+        );
+        assert_eq!(
+            summary["gitIdentitySha256"],
+            format!("{:x}", Sha256::digest(projects[1].git_identity.as_bytes()))
+        );
+        let summary_text = summary.to_string();
+        assert!(!summary_text.contains("private prompt text"));
+        assert!(!summary_text.contains(&projects[1].git_identity));
         let stored = fs::read_to_string(queue.job_path("alpha", "task_one")).unwrap();
         assert!(!stored.contains("https://chatgpt.com/c/"));
         assert_eq!(queue.jobs().expect("enumerate").len(), 1);
@@ -5695,6 +5709,61 @@ mod tests {
             .unwrap()
             .release_workspace_lease(&claimed.attempt.unwrap().lease)
             .unwrap();
+        cleanup(fixture);
+    }
+
+    #[test]
+    fn profile_drift_never_claims_ready_job() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        for project in projects.iter().skip(1) {
+            queue
+                .save_job(
+                    &QueueJob::new(
+                        format!("job_{}", project.project_id),
+                        project,
+                        "fixture edit".into(),
+                        None,
+                        None,
+                    )
+                    .expect("job"),
+                )
+                .expect("persist job");
+        }
+        let registry_path = projects[0]
+            .workspace
+            .join(".catdesk/projects/projects.json");
+        let mut registry: AutonomousProjectRegistryV1 =
+            serde_json::from_slice(&fs::read(&registry_path).expect("registry"))
+                .expect("registry JSON");
+        registry
+            .projects
+            .iter_mut()
+            .find(|project| project.project_id == "alpha")
+            .expect("alpha registration")
+            .verification_profile = "python_uv_group_dev_v1".into();
+        fs::write(
+            &registry_path,
+            serde_json::to_vec(&registry).expect("registry JSON"),
+        )
+        .expect("profile drift fixture");
+
+        let claimed = claim_one(&projects[0].workspace, &queue)
+            .expect("claim")
+            .expect("other project remains ready");
+        assert_eq!(claimed.binding.project_id, "beta");
+        assert_eq!(
+            queue
+                .load_job("alpha", "job_alpha")
+                .expect("alpha job")
+                .expect("persisted alpha job")
+                .state,
+            QueueState::Attention
+        );
+        assert!(!projects[1].workspace.join(".catdesk").exists());
+        scheduler(&projects[0].workspace)
+            .expect("fixture scheduler")
+            .release_workspace_lease(&claimed.attempt.expect("exact attempt").lease)
+            .expect("release fixture lease");
         cleanup(fixture);
     }
 

@@ -744,9 +744,7 @@ fn render_operator_codex_queue(
             .iter()
             .find(|project| project.project_id == project_id)
             .is_some_and(|project| {
-                project.workspace.to_str() == job["workspace"].as_str()
-                    && project.codex_thread_id.as_deref() == job["threadId"].as_str()
-                    && project.chatgpt_target_sha256.as_deref() == job["targetSha256"].as_str()
+                operator_job_matches_project_binding(project, job)
                     && resolve_registered_project_from_control_root(workspace, project_id)
                         .is_ok_and(|scope| scope.project == *project)
             });
@@ -766,6 +764,30 @@ fn render_operator_codex_queue(
         .map_err(|_| "CLI_OUTPUT_FAILED")?;
     }
     Ok(())
+}
+
+fn operator_job_matches_project_binding(project: &AutonomousProjectV1, job: &Value) -> bool {
+    let Some(thread_id) = project.codex_thread_id.as_deref() else {
+        return false;
+    };
+    let Some(workspace) = project.workspace.to_str() else {
+        return false;
+    };
+    let target_matches = match (
+        project.chatgpt_target_sha256.as_deref(),
+        job.get("targetSha256"),
+    ) {
+        (Some(expected), Some(Value::String(observed))) => observed == expected,
+        (None, Some(Value::Null)) => true,
+        _ => false,
+    };
+    let git_identity_sha256 = format!("{:x}", Sha256::digest(project.git_identity.as_bytes()));
+    job["projectId"].as_str() == Some(project.project_id.as_str())
+        && job["workspace"].as_str() == Some(workspace)
+        && job["threadId"].as_str() == Some(thread_id)
+        && target_matches
+        && job["gitIdentitySha256"].as_str() == Some(git_identity_sha256.as_str())
+        && job["verificationProfile"].as_str() == Some(project.verification_profile.as_str())
 }
 
 #[derive(Clone, Copy)]
@@ -1366,8 +1388,10 @@ mod tests {
         AutonomousProjectRegistryV1, AutonomousProjectV1, PROJECT_REGISTRY_SCHEMA_VERSION,
         project_chat_target_digest,
     };
+    use sha2::Digest;
     use std::fs;
     use std::path::Path;
+    use std::process::Command;
     use uuid::Uuid;
 
     fn remove_fixture_tree(path: &Path) {
@@ -1598,6 +1622,146 @@ mod tests {
         assert!(!rendered.contains('\u{001b}'));
         report["action"] = serde_json::json!("codex_queue_dispatch");
         assert!(render_operator_codex_queue(&root, &registry, &report, &mut Vec::new()).is_err());
+    }
+
+    #[test]
+    fn operator_queue_view_requires_full_current_binding_without_exposing_origin() {
+        let fixture =
+            std::env::temp_dir().join(format!("catdesk-binagotchy-binding-{}", Uuid::new_v4()));
+        let control = fixture.join("control");
+        let alpha = fixture.join("alpha");
+        for (root, origin) in [
+            (&control, "https://example.test/control.git"),
+            (&alpha, "https://example.test/alpha.git"),
+        ] {
+            fs::create_dir_all(root).expect("fixture Git root");
+            for args in [
+                &["init", "-q"][..],
+                &["remote", "add", "origin", origin][..],
+            ] {
+                assert!(
+                    Command::new("git")
+                        .arg("-C")
+                        .arg(root)
+                        .args(args)
+                        .status()
+                        .expect("fixture Git")
+                        .success()
+                );
+            }
+        }
+        let control = control.canonicalize().expect("control root");
+        let alpha = alpha.canonicalize().expect("alpha root");
+        let target = "https://chatgpt.com/c/6ac6cbe8-6f0c-83e9-9f7d-13489d4d87f5";
+        let project = AutonomousProjectV1 {
+            project_id: "alpha".into(),
+            workspace: alpha.clone(),
+            git_identity: "https://example.test/alpha.git".into(),
+            verification_profile: "python_uv_group_dev_v1".into(),
+            codex_thread_id: Some(Uuid::new_v4().to_string()),
+            chatgpt_target_url: Some(target.into()),
+            chatgpt_target_sha256: Some(project_chat_target_digest(target)),
+        };
+        let registry = AutonomousProjectRegistryV1 {
+            schema_version: PROJECT_REGISTRY_SCHEMA_VERSION,
+            maximum_codex_workers: 1,
+            maximum_qwen_workers: 1,
+            projects: vec![
+                AutonomousProjectV1 {
+                    project_id: "catdesk".into(),
+                    workspace: control.clone(),
+                    git_identity: "https://example.test/control.git".into(),
+                    verification_profile: "rust_full".into(),
+                    codex_thread_id: Some(Uuid::new_v4().to_string()),
+                    chatgpt_target_url: None,
+                    chatgpt_target_sha256: None,
+                },
+                project.clone(),
+            ],
+        };
+        let registry_root = control.join(".catdesk/projects");
+        fs::create_dir_all(&registry_root).expect("registry directory");
+        let registry_bytes = serde_json::to_vec(&registry).expect("registry JSON");
+        fs::write(registry_root.join("projects.json"), &registry_bytes).expect("registry fixture");
+        let original_job = serde_json::json!({
+            "projectId":"alpha", "taskId":"one", "state":"READY",
+            "workspace":project.workspace, "threadId":project.codex_thread_id,
+            "targetSha256":project.chatgpt_target_sha256,
+            "verificationProfile":project.verification_profile,
+            "gitIdentitySha256":format!("{:x}", sha2::Sha256::digest(project.git_identity.as_bytes())),
+        });
+        let mut report = serde_json::json!({"action":"codex_queue_status", "jobs":[original_job]});
+        assert!(super::operator_job_matches_project_binding(
+            &project,
+            &report["jobs"][0]
+        ));
+        assert_eq!(
+            super::resolve_registered_project_from_control_root(&control, "alpha")
+                .expect("registered fixture scope")
+                .project,
+            project
+        );
+        let mut out = Vec::new();
+        render_operator_codex_queue(&control, &registry, &report, &mut out).expect("bound report");
+        let rendered = String::from_utf8(out).expect("UTF-8 output");
+        assert!(
+            rendered.contains("alpha / one  state=READY  identity=VERIFIED"),
+            "{rendered}"
+        );
+        assert!(!rendered.contains(&project.git_identity));
+
+        for (field, replacement) in [
+            ("verificationProfile", serde_json::json!("rust_full")),
+            ("gitIdentitySha256", serde_json::json!("0".repeat(64))),
+            (
+                "verificationProfile",
+                serde_json::json!(["python_uv_group_dev_v1"]),
+            ),
+            ("gitIdentitySha256", serde_json::Value::Null),
+            ("threadId", serde_json::Value::Null),
+            ("workspace", serde_json::json!([])),
+            ("targetSha256", serde_json::Value::Null),
+        ] {
+            let saved = report["jobs"][0][field].clone();
+            report["jobs"][0][field] = replacement;
+            let mut out = Vec::new();
+            render_operator_codex_queue(&control, &registry, &report, &mut out)
+                .expect("drifted report");
+            assert!(
+                String::from_utf8(out)
+                    .expect("UTF-8 output")
+                    .contains("alpha / one  state=READY  identity=UNVERIFIED")
+            );
+            report["jobs"][0][field] = saved;
+        }
+        for field in [
+            "projectId",
+            "workspace",
+            "threadId",
+            "targetSha256",
+            "verificationProfile",
+            "gitIdentitySha256",
+        ] {
+            let mut missing = report.clone();
+            missing["jobs"][0]
+                .as_object_mut()
+                .expect("job object")
+                .remove(field);
+            let mut out = Vec::new();
+            render_operator_codex_queue(&control, &registry, &missing, &mut out)
+                .expect("missing binding field");
+            assert!(
+                String::from_utf8(out)
+                    .expect("UTF-8 output")
+                    .contains("identity=UNVERIFIED")
+            );
+        }
+        assert_eq!(
+            fs::read(registry_root.join("projects.json")).expect("unchanged registry"),
+            registry_bytes
+        );
+        assert!(!alpha.join(".catdesk").exists());
+        remove_fixture_tree(&fixture);
     }
 
     #[test]
