@@ -462,6 +462,70 @@ async fn bounded_probe(mut command: Command, args: &[&str]) -> Result<(bool, Str
     Ok((output.status.success(), version))
 }
 
+fn unavailable_recorded_turn_gate(reason: &str) -> Value {
+    json!({
+        "recordedState":"EVIDENCE_UNAVAILABLE", "reason":reason,
+        "sessionBlockerCount":null, "queueBlockerCount":null,
+        "accountingReviewRowCount":null, "pendingWriterMarkerPresent":null,
+        "readOnly":true, "transactional":false,
+        "launchAuthorized":false, "writerLockChecked":false,
+    })
+}
+
+fn recorded_turn_gate_summary(project: &AutonomousProjectV1) -> Value {
+    let report = match recovery::report(project, false) {
+        Ok(report) => report,
+        Err(reason) => return unavailable_recorded_turn_gate(&reason),
+    };
+    let Some(recorded_state) = report["status"].as_str() else {
+        return unavailable_recorded_turn_gate("CODEX_RECOVERY: report status is unavailable");
+    };
+    let (Some(sessions), Some(queues), Some(accounting), Some(marker)) = (
+        report["sessionBlockers"].as_array(),
+        report["queueBlockers"].as_array(),
+        report["accountingReviewRows"].as_array(),
+        report["pendingWriterMarker"]["present"].as_bool(),
+    ) else {
+        return unavailable_recorded_turn_gate("CODEX_RECOVERY: report structure is unavailable");
+    };
+    let blockers_present =
+        !sessions.is_empty() || !queues.is_empty() || !accounting.is_empty() || marker;
+    if report["readOnly"] != true
+        || report["launchAuthorized"] != false
+        || !matches!(
+            (recorded_state, blockers_present),
+            ("NEEDS_OWNER_RECOVERY", true) | ("NO_RECORDED_BLOCKER_OBSERVED", false)
+        )
+    {
+        return unavailable_recorded_turn_gate("CODEX_RECOVERY: report state is inconsistent");
+    }
+    json!({
+        "recordedState":recorded_state,
+        "sessionBlockerCount":sessions.len(), "queueBlockerCount":queues.len(),
+        "accountingReviewRowCount":accounting.len(), "pendingWriterMarkerPresent":marker,
+        "readOnly":true, "transactional":false,
+        "launchAuthorized":false, "writerLockChecked":false,
+    })
+}
+
+fn status_response(
+    project: &AutonomousProjectV1,
+    executable: &Path,
+    version: &str,
+    authenticated: bool,
+) -> Result<Value, String> {
+    let binding_sha256 = project_binding_sha256(project)?;
+    Ok(json!({
+        "action":"codex_status", "status":"success", "projectId":project.project_id,
+        "workspace":project.workspace, "threadId":project.codex_thread_id,
+        "verificationProfile":project.verification_profile,
+        "bindingSha256":binding_sha256,
+        "executable":executable, "version":version, "authenticated":authenticated,
+        "route":"current_user_native_cli",
+        "recordedTurnGate":recorded_turn_gate_summary(project),
+    }))
+}
+
 async fn write_native_prompt(
     child: &mut tokio::process::Child,
     task: &str,
@@ -531,15 +595,7 @@ pub(crate) async fn execute_action(
             &["login", "status"],
         )
         .await?;
-        let binding_sha256 = project_binding_sha256(&selected)?;
-        return Ok(json!({
-            "action":"codex_status", "status":"success", "projectId":selected.project_id,
-            "workspace":selected.workspace, "threadId":selected.codex_thread_id,
-            "verificationProfile":selected.verification_profile,
-            "bindingSha256":binding_sha256,
-            "executable":executable, "version":version, "authenticated":authenticated,
-            "route":"current_user_native_cli",
-        }));
+        return status_response(&selected, &executable, &version, authenticated);
     }
     let mut writer = acquire_project_writer_lock(&selected.workspace).map_err(|_| {
         "CODEX_LOCK: project workspace has an active or unresolved writer; inspect recovery before direct Codex"
@@ -672,6 +728,7 @@ mod tests {
     use super::*;
     use crate::delegated::autonomy_accounting::{ActivityActorV1, ActivityEvidenceV1};
     use crate::delegated::autonomy_projects::AutonomousProjectRegistryStoreV1;
+    use crate::delegated::autonomy_runtime::inspect_project_writer_pending_marker;
     use crate::delegated::autonomy_state::{AutonomousQueueTaskV1, AutonomousQueueV1};
     use std::fs;
     use std::process::Command as StdCommand;
@@ -687,6 +744,129 @@ mod tests {
             .expect("canonical temp root");
         assert!(resolved != temp && resolved.starts_with(&temp));
         fs::remove_dir_all(resolved).expect("fixture cleanup");
+    }
+
+    fn status_fixture_project(root: &Path) -> AutonomousProjectV1 {
+        AutonomousProjectV1 {
+            project_id: "fixture".into(),
+            workspace: root.canonicalize().expect("canonical project"),
+            git_identity: "fixture".into(),
+            verification_profile: "rust_full".into(),
+            codex_thread_id: None,
+            chatgpt_target_url: None,
+            chatgpt_target_sha256: None,
+        }
+    }
+
+    #[test]
+    fn status_reports_clean_recorded_state_without_launch_authority_or_writes() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-status-clean-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&root).expect("fixture root");
+        let project = status_fixture_project(&root);
+        assert!(!root.join(".catdesk").exists());
+        let status = status_response(
+            &project,
+            Path::new("codex-fixture.exe"),
+            "codex-cli fixture",
+            true,
+        )
+        .expect("status");
+        assert_eq!(status["status"], "success");
+        assert_eq!(status["authenticated"], true);
+        let gate = &status["recordedTurnGate"];
+        assert_eq!(gate["recordedState"], "NO_RECORDED_BLOCKER_OBSERVED");
+        assert_eq!(gate["sessionBlockerCount"], 0);
+        assert_eq!(gate["queueBlockerCount"], 0);
+        assert_eq!(gate["accountingReviewRowCount"], 0);
+        assert_eq!(gate["pendingWriterMarkerPresent"], false);
+        assert_eq!(gate["readOnly"], true);
+        assert_eq!(gate["transactional"], false);
+        assert_eq!(gate["launchAuthorized"], false);
+        assert_eq!(gate["writerLockChecked"], false);
+        assert!(!root.join(".catdesk").exists());
+        assert_eq!(inspect_project_writer_pending_marker(&root).unwrap(), None);
+        remove_operator_fixture(root);
+    }
+
+    #[test]
+    fn status_reports_recorded_blockers_without_touching_evidence() {
+        let (root, project, store) = terminal_accounting_fixture();
+        start_accounting_record(&store);
+        let mut queue = store.load_queue("historical-task").expect("queue");
+        queue.tasks[0].state = AutonomousQueueTaskStateV1::WorkerRunning;
+        store
+            .save_queue("historical-task", &queue)
+            .expect("in-flight queue");
+        let ledger = root.join(".catdesk/autonomy/execution-accounting.json");
+        let queue_path = root.join(".catdesk/autonomy/historical-task/queue.json");
+        let state_path = root.join(".catdesk/autonomy/historical-task/state.json");
+        let ledger_before = fs::read(&ledger).expect("ledger before status");
+        let queue_before = fs::read(&queue_path).expect("queue before status");
+        let state_before = fs::read(&state_path).expect("state before status");
+        let status = status_response(
+            &project,
+            Path::new("codex-fixture.exe"),
+            "codex-cli fixture",
+            true,
+        )
+        .expect("status");
+        let gate = &status["recordedTurnGate"];
+        assert_eq!(status["authenticated"], true);
+        assert_eq!(gate["recordedState"], "NEEDS_OWNER_RECOVERY");
+        assert_eq!(gate["sessionBlockerCount"], 0);
+        assert_eq!(gate["queueBlockerCount"], 1);
+        assert_eq!(gate["accountingReviewRowCount"], 1);
+        assert_eq!(gate["pendingWriterMarkerPresent"], false);
+        assert_eq!(gate["transactional"], false);
+        assert_eq!(gate["launchAuthorized"], false);
+        assert_eq!(gate["writerLockChecked"], false);
+        assert_eq!(
+            fs::read(&ledger).expect("ledger after status"),
+            ledger_before
+        );
+        assert_eq!(
+            fs::read(&queue_path).expect("queue after status"),
+            queue_before
+        );
+        assert_eq!(
+            fs::read(&state_path).expect("state after status"),
+            state_before
+        );
+        assert_eq!(inspect_project_writer_pending_marker(&root).unwrap(), None);
+        remove_operator_fixture(root);
+    }
+
+    #[test]
+    fn status_marks_malformed_recovery_evidence_unavailable_without_writes() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-status-malformed-{}", uuid::Uuid::new_v4()));
+        let state = root.join(".catdesk/autonomy");
+        fs::create_dir_all(&state).expect("fixture state root");
+        let ledger = state.join("execution-accounting.json");
+        let malformed = b"not JSON";
+        fs::write(&ledger, malformed).expect("malformed fixture ledger");
+        let project = status_fixture_project(&root);
+        let status = status_response(
+            &project,
+            Path::new("codex-fixture.exe"),
+            "codex-cli fixture",
+            true,
+        )
+        .expect("status");
+        let gate = &status["recordedTurnGate"];
+        assert_eq!(status["status"], "success");
+        assert_eq!(gate["recordedState"], "EVIDENCE_UNAVAILABLE");
+        assert!(gate["sessionBlockerCount"].is_null());
+        assert!(gate["queueBlockerCount"].is_null());
+        assert!(gate["accountingReviewRowCount"].is_null());
+        assert!(gate["pendingWriterMarkerPresent"].is_null());
+        assert_eq!(gate["transactional"], false);
+        assert_eq!(gate["launchAuthorized"], false);
+        assert_eq!(gate["writerLockChecked"], false);
+        assert_eq!(fs::read(&ledger).expect("ledger after status"), malformed);
+        assert_eq!(inspect_project_writer_pending_marker(&root).unwrap(), None);
+        remove_operator_fixture(root);
     }
 
     #[tokio::test]
