@@ -1,5 +1,13 @@
 # CatDesk — Important Command Reference
 
+## October 16 source-only public MCP call regression
+
+Integrated `0cafc07` from independently reviewed `1733467` adds a disposable `tools/call` test for the reader described below. The fixture checks absent-grant and mode denial, granted prompt/metadata, revoked denial and failed re-grant, and unchanged job/package bytes. It injects a disposable queue reader and fixture grant; it is not a local `DISCLOSE` terminal, HTTP/tunnel or installed-runtime test.
+
+Isolated focused handler test passed 1/1 and seven adjacent reader tests passed 7/7; isolated strict Clippy and format passed. Exact integrated serial `cargo test --locked --workspace --all-features --quiet -- --test-threads=1` exited 0 (main 1,368 passed, 0 failed, 28 ignored; every enabled integration target passed). Strict integrated `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all -- --check`, and `cargo build --locked --all-features --bin catdesk` exited 0. Debug image SHA-256: `8F22C6F6BB6026E4A811DEA366B80C88ED1D8BC43E20153CC7AD6110D696741E`. No live grant, independent review decision, Wake approval or installed acceptance is claimed.
+
+Read-only final integrated binary status remains authenticated but `NEEDS_OWNER_RECOVERY`: 35 historical queue claims, 85 accounting rows and `launchAuthorized:false`. Independent recovery audit found all 35 missing recorded owner identity, source-bound child-exit proof and ended accounting, with 13 open spans and 27 incomplete profiles. Existing `recovery.rs` reports the gaps; no reset or clear was performed.
+
 ## October 16 source-only MCP review reader
 
 For an exact verified queue package, the direct local operator CLI exposes these source-only commands from the CatDesk control root. They require an interactive terminal; the grant asks for `DISCLOSE <uuid>` and the revoke asks for `REVOKE <uuid>`:
