@@ -1682,6 +1682,24 @@ fn verify_reviewed_candidate_listener_owner(
     }
 }
 
+/// A live PID and bound port alone do not prove that the candidate is still
+/// answering its isolated MCP route. Check the socket owner on both sides of
+/// the bounded authenticated probe so a port handoff cannot pass a watch tick.
+async fn verify_reviewed_candidate_service_health(
+    local_addr: std::net::SocketAddr,
+    auth_token: &str,
+    expected_pid: u32,
+) -> Result<(), String> {
+    verify_reviewed_candidate_listener_owner(local_addr, expected_pid)?;
+    tokio::time::timeout(
+        Duration::from_secs(6),
+        probe_reviewed_candidate_ready(local_addr, auth_token),
+    )
+    .await
+    .map_err(|_| "reviewed candidate service health probe timed out")??;
+    verify_reviewed_candidate_listener_owner(local_addr, expected_pid)
+}
+
 #[cfg(windows)]
 fn reviewed_candidate_ipv4_loopback_listener_owners(port: u16) -> Result<Vec<u32>, String> {
     use std::ffi::c_void;
@@ -1904,8 +1922,7 @@ async fn run_reviewed_candidate_owner(
             std::io::Error::other("reviewed candidate child exited before owner ready").into(),
         );
     }
-    verify_reviewed_candidate_listener_owner(address, pid).map_err(std::io::Error::other)?;
-    probe_reviewed_candidate_ready(address, &options.auth_token)
+    verify_reviewed_candidate_service_health(address, &options.auth_token, pid)
         .await
         .map_err(std::io::Error::other)?;
     if owned.child_mut().try_wait()?.is_some() {
@@ -1917,6 +1934,13 @@ async fn run_reviewed_candidate_owner(
 
     let mut watch = tokio::time::interval(Duration::from_secs(1));
     watch.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    // The one-second owner check is cheap. Run the two-request MCP probe less
+    // often so ordinary read/search requests are not continuously contended.
+    // Its six-second deadline bounds detection of a wedged but still-bound
+    // listener to about one interval plus one probe.
+    let mut service_watch = tokio::time::interval(Duration::from_secs(15));
+    service_watch.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    service_watch.tick().await; // initial readiness probe already succeeded
     loop {
         tokio::select! {
             signal = tokio::signal::ctrl_c() => {
@@ -1931,6 +1955,13 @@ async fn run_reviewed_candidate_owner(
                 }
                 verify_reviewed_candidate_listener_owner(address, pid)
                     .map_err(std::io::Error::other)?;
+            }
+            _ = service_watch.tick() => {
+                verify_reviewed_candidate_service_health(address, &options.auth_token, pid)
+                    .await
+                    .map_err(|error| std::io::Error::other(format!(
+                        "reviewed candidate service health failed ({error}); owner exits and its journal requires read-only diagnosis"
+                    )))?;
             }
         }
     }
@@ -3243,6 +3274,8 @@ mod tests {
     use super::format_candidate_owner_diagnostic_report;
     #[cfg(windows)]
     use super::verify_reviewed_candidate_listener_owner;
+    #[cfg(windows)]
+    use super::verify_reviewed_candidate_service_health;
     use super::{
         ToolMode, acquire_reviewed_candidate_process_lock, is_canonical_production_worker_listener,
         key_is_clipboard_paste, loopback_http_origin, normalize_ngrok_authtoken_input,
@@ -3434,6 +3467,10 @@ mod tests {
         probe_reviewed_candidate_ready(addr, "fixture-private-token")
             .await
             .expect("authenticated isolated read/search catalog");
+        #[cfg(windows)]
+        verify_reviewed_candidate_service_health(addr, "fixture-private-token", std::process::id())
+            .await
+            .expect("healthy route remains owned by this process");
         assert!(
             probe_reviewed_candidate_ready(addr, "wrong-token")
                 .await
@@ -3443,6 +3480,39 @@ mod tests {
         task.abort();
         let _ = task.await;
         std::fs::remove_dir_all(root).expect("remove exact test root");
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn reviewed_candidate_service_watch_rejects_wedged_listener_with_live_pid() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("loopback listener");
+        let address = listener.local_addr().expect("bound address");
+        verify_reviewed_candidate_listener_owner(address, std::process::id())
+            .expect("socket still belongs to live test process");
+        let stalled = tokio::spawn(async move {
+            let (_stream, _) = listener.accept().await.expect("accept health probe");
+            tokio::time::sleep(Duration::from_secs(10)).await;
+        });
+        let started = std::time::Instant::now();
+        let outcome = tokio::time::timeout(
+            Duration::from_secs(8),
+            verify_reviewed_candidate_service_health(
+                address,
+                "fixture-private-token",
+                std::process::id(),
+            ),
+        )
+        .await
+        .expect("owner health watch has an outer deadline");
+        assert!(
+            outcome.is_err(),
+            "a bound but wedged listener is not healthy"
+        );
+        assert!(started.elapsed() < Duration::from_secs(8));
+        stalled.abort();
+        let _ = stalled.await;
     }
 
     #[cfg(windows)]
