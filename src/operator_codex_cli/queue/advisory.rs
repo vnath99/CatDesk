@@ -21,6 +21,8 @@ const REVIEW_ARGS: &[&str] = &[
     "read-only",
     "--ask-for-approval",
     "never",
+    "--disable",
+    "shell_tool",
     "exec",
     "--json",
     "--ignore-user-config",
@@ -1054,6 +1056,23 @@ mod tests {
     use super::super::tests::{cleanup, completed_verified_fixture};
     use super::*;
     use std::process::Command as StdCommand;
+
+    #[test]
+    fn reviewer_launch_disables_shell_tool_before_exec() {
+        let exec = REVIEW_ARGS.iter().position(|arg| *arg == "exec").unwrap();
+        assert_eq!(
+            &REVIEW_ARGS[..exec],
+            &[
+                "--sandbox",
+                "read-only",
+                "--ask-for-approval",
+                "never",
+                "--disable",
+                "shell_tool",
+            ]
+        );
+        assert_eq!(REVIEW_ARGS.last(), Some(&"-"));
+    }
 
     #[tokio::test]
     async fn reviewer_request_closes_stdin_before_waiting_for_child() {
