@@ -1831,18 +1831,24 @@ mod review_discovery_tests {
     }
 
     fn fixture() -> (PathBuf, PathBuf, Store, Activation, u64) {
-        let base = std::env::temp_dir().join(format!(
-            "catdesk-wake-review-discovery-{}-{}",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
+        let base = loop {
+            let candidate = std::env::temp_dir().join(format!(
+                "catdesk-wake-review-discovery-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            match std::fs::create_dir(&candidate) {
+                Ok(()) => break candidate,
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => panic!("fixture parent: {error}"),
+            }
+        };
         let root = base.join("wake");
         let workspace = base.join("workspace");
         // Production Store::open intentionally validates every ancestor from
         // the volume root. This feature-gated test fixture instead starts
         // beneath its already-existing canonical parent while retaining the
         // same descendant no-link/no-reparse checks.
-        std::fs::create_dir_all(&base).expect("fixture parent");
         std::fs::create_dir_all(workspace.join(".catdesk/autonomy")).expect("inbox parent");
         let store = Store::open_scoped_for_test(&root, &base).expect("store");
         store.initialize().expect("initialize");
