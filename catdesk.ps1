@@ -222,6 +222,19 @@ function Get-LifecycleCodexCliVerificationResult {
     }
 }
 
+function Add-LifecycleCodexCliDiagnosticLayer {
+    param([Collections.Generic.List[object]]$Layers)
+    # Current-user CLI availability is independent of the release pair; it
+    # does not grant project writer ownership or recovery authority.
+    try {
+        $codex = Get-LifecycleCodexCliVerificationResult
+        $state = if ($codex.Ready) { 'READY' } else { 'FAILED' }
+        [void]$Layers.Add((New-LifecycleDiagnosticLayer -Layer 'CODEX_CLI' -State $state -Gate ([string]$codex.Gate)))
+    } catch {
+        [void]$Layers.Add((New-LifecycleDiagnosticLayer -Layer 'CODEX_CLI' -State 'FAILED' -Gate 'CODEX_CLI_CHECK_UNAVAILABLE'))
+    }
+}
+
 function Get-LifecycleCanonicalIdentity {
     Invoke-LifecycleSeam -Name 'CanonicalIdentity' -Arguments @($Workspace, $ExpectedBuildSha256, $BuildFingerprintPath) -Default {
         param($root, $expected, $manifest)
@@ -787,27 +800,32 @@ function Invoke-LayeredDiagnosis {
                 'RECOVERY_READY' {
                     $authorityGate = if ($assessment.RecoverySource) { [string]$assessment.RecoverySource } else { 'RECOVERY_READY' }
                     [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'RECOVERY_AUTHORITY' -State 'READY' -Gate $authorityGate))
+                    Add-LifecycleCodexCliDiagnosticLayer -Layers $layers
                     Write-LifecycleDiagnosis -State 'RECOVERY_AVAILABLE' -PrimaryLayer 'CANONICAL_RELEASE' -NextAction 'RUN_RECOVER' -Layers $layers
                     return
                 }
                 'LKG_AUTHORITY_MISSING' {
                     [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'RECOVERY_AUTHORITY' -State 'FAILED' -Gate 'LKG_AUTHORITY_MISSING'))
+                    Add-LifecycleCodexCliDiagnosticLayer -Layers $layers
                     Write-LifecycleDiagnosis -State 'ACTION_REQUIRED' -PrimaryLayer 'RECOVERY_AUTHORITY' -NextAction 'OPERATOR_ATTENTION' -Layers $layers
                     return
                 }
                 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED' {
                     [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'RECOVERY_AUTHORITY' -State 'FAILED' -Gate 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED'))
+                    Add-LifecycleCodexCliDiagnosticLayer -Layers $layers
                     Write-LifecycleDiagnosis -State 'ACTION_REQUIRED' -PrimaryLayer 'RECOVERY_AUTHORITY' -NextAction 'OPERATOR_ATTENTION' -Layers $layers
                     return
                 }
                 'RECOVERY_RELEASE_AUTHORITY_REQUIRED' {
                     [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'RECOVERY_AUTHORITY' -State 'FAILED' -Gate 'RECOVERY_AUTHORITY_REQUIRED'))
+                    Add-LifecycleCodexCliDiagnosticLayer -Layers $layers
                     Write-LifecycleDiagnosis -State 'ACTION_REQUIRED' -PrimaryLayer 'RECOVERY_AUTHORITY' -NextAction 'OPERATOR_ATTENTION' -Layers $layers
                     return
                 }
             }
         }
         [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'RECOVERY_AUTHORITY' -State 'FAILED' -Gate 'RECOVERY_AUTHORITY_UNAVAILABLE'))
+        Add-LifecycleCodexCliDiagnosticLayer -Layers $layers
         Write-LifecycleDiagnosis -State 'ACTION_REQUIRED' -PrimaryLayer 'CANONICAL_RELEASE' -NextAction 'OPERATOR_ATTENTION' -Layers $layers
         return
     }
@@ -873,16 +891,8 @@ function Invoke-LayeredDiagnosis {
         [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'OFFICIAL_RUNTIME' -State 'FAILED' -Gate $runtimeGate))
     }
 
-    $codexReady = $false
-    $codexGate = 'CODEX_CLI_CHECK_UNAVAILABLE'
-    try {
-        $codex = Get-LifecycleCodexCliVerificationResult
-        $codexReady = [bool]$codex.Ready
-        $codexGate = [string]$codex.Gate
-        [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'CODEX_CLI' -State $(if ($codexReady) { 'READY' } else { 'FAILED' }) -Gate $codexGate))
-    } catch {
-        [void]$layers.Add((New-LifecycleDiagnosticLayer -Layer 'CODEX_CLI' -State 'FAILED' -Gate $codexGate))
-    }
+    Add-LifecycleCodexCliDiagnosticLayer -Layers $layers
+    $codexReady = $layers[$layers.Count - 1].state -eq 'READY'
 
     if (-not $localDaemonReady) {
         Write-LifecycleDiagnosis -State 'DEGRADED' -PrimaryLayer 'LOCAL_DAEMON' -NextAction 'RUN_RECOVER' -Layers $layers

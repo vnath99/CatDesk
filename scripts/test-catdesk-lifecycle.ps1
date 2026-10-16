@@ -234,7 +234,23 @@ try {
     $recoverableDiagnosis = Invoke-FixtureFacade -Command 'diagnose' -Seams $recoverableRelease | ConvertFrom-Json
     Require ($recoverableDiagnosis.state -eq 'RECOVERY_AVAILABLE' -and $recoverableDiagnosis.primaryLayer -eq 'CANONICAL_RELEASE' -and $recoverableDiagnosis.nextAction -eq 'RUN_RECOVER') 'diagnose turns a broken canonical pair with reviewed LKG into one clear recovery action'
     Require ((@($recoverableDiagnosis.layers) | Where-Object { $_.layer -eq 'RECOVERY_AUTHORITY' }).gate -eq 'LAST_KNOWN_GOOD') 'diagnose reports the bounded reviewed recovery source without paths'
+    Require ((@($recoverableDiagnosis.layers) | Where-Object { $_.layer -eq 'CODEX_CLI' }).state -eq 'READY') 'faulted canonical release still reports independent authenticated Codex readiness'
     Require ($actions.Count -eq 0) 'recoverable diagnosis remains non-mutating'
+
+    $forbiddenActions = [Collections.Generic.List[string]]::new()
+    $unavailableCodexRelease = $missingRelease.Clone()
+    $unavailableCodexRelease.RecoveryReadiness = { param($engine, $root, $config, $expected, $manifest, $timeout) '{"State":"LKG_AUTHORITY_MISSING"}' }
+    $unavailableCodexRelease.CodexStatus = { [pscustomobject]@{ Ready = $false; Gate = 'CODEX_CLI_UNAVAILABLE' } }
+    $unavailableCodexRelease.Recovery = { [void]$forbiddenActions.Add('recover'); throw 'recovery must not execute during diagnosis' }
+    $unavailableCodexRelease.StopProcess = { [void]$forbiddenActions.Add('stop'); throw 'stop must not execute during diagnosis' }
+    $unavailableCodexRelease.WakeRuntime = { [void]$forbiddenActions.Add('wake'); throw 'Wake must not execute during canonical failure diagnosis' }
+    $unavailableCodexDiagnosis = Invoke-FixtureFacade -Command 'diagnose' -Seams $unavailableCodexRelease | ConvertFrom-Json
+    Require ($unavailableCodexDiagnosis.state -eq 'ACTION_REQUIRED' -and $unavailableCodexDiagnosis.primaryLayer -eq 'RECOVERY_AUTHORITY' -and $unavailableCodexDiagnosis.nextAction -eq 'OPERATOR_ATTENTION') 'Codex unavailability does not weaken the failed release authority gate'
+    Require ((@($unavailableCodexDiagnosis.layers) | Where-Object { $_.layer -eq 'CANONICAL_RELEASE' }).state -eq 'FAILED') 'diagnosis retains the canonical release failure'
+    Require ((@($unavailableCodexDiagnosis.layers) | Where-Object { $_.layer -eq 'RECOVERY_AUTHORITY' }).gate -eq 'LKG_AUTHORITY_MISSING') 'diagnosis retains missing reviewed recovery authority'
+    Require ((@($unavailableCodexDiagnosis.layers) | Where-Object { $_.layer -eq 'CODEX_CLI' }).gate -eq 'CODEX_CLI_UNAVAILABLE') 'faulted canonical release reports the fixed independent Codex failure gate'
+    Require ($forbiddenActions.Count -eq 0 -and $actions.Count -eq 0) 'diagnosis does not recover, stop, or start Wake while release authority is missing'
+    Require (($unavailableCodexDiagnosis | ConvertTo-Json -Compress -Depth 5) -notmatch '(?i)secret|token|route_|https?://') 'faulted-release diagnosis remains redacted'
 
     $interruptedRelease = $recoverableRelease.Clone()
     $interruptedRelease.RecoveryReadiness = { param($engine, $root, $config, $expected, $manifest, $timeout) '{"State":"RECOVERY_READY","RecoverySource":"INTERRUPTED_PROMOTION"}' }
