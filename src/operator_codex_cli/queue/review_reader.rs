@@ -61,7 +61,7 @@ fn valid_request(project_id: &str, receipt_id: &str, expected_sha256: &str) -> R
     Ok(())
 }
 
-fn bound_package(
+pub(super) fn bound_package(
     store: &QueueStore,
     project: &AutonomousProjectV1,
     receipt_id: &str,

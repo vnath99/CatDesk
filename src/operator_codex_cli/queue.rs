@@ -44,6 +44,7 @@ use super::{
 };
 
 mod advisory;
+mod operator_review;
 mod review_reader;
 
 pub(crate) use review_reader::read_for_mcp as read_review_package_for_mcp;
@@ -101,6 +102,15 @@ pub(crate) enum QueueAction {
     AdvisoryReview {
         receipt_id: String,
     },
+    OperatorReview {
+        scope: CodexScope,
+        receipt_id: String,
+        expected_package_sha256: String,
+        decision: String,
+    },
+    OperatorReviewReceipt {
+        receipt_id: String,
+    },
     ReviewDisclosureGrant {
         scope: CodexScope,
         receipt_id: String,
@@ -131,7 +141,7 @@ pub(crate) enum QueueAction {
 
 pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
     let verb = args.get(3).map(String::as_str).ok_or_else(|| {
-        "CODEX_QUEUE_USAGE: expected add, status, receipt, review, verify, review-package, advisory-review, review-disclosure-grant, review-disclosure-revoke, profile-bind, dispatch, pause, or resume"
+        "CODEX_QUEUE_USAGE: expected add, status, receipt, review, verify, review-package, advisory-review, operator-review, operator-review-receipt, review-disclosure-grant, review-disclosure-revoke, profile-bind, dispatch, pause, or resume"
             .to_string()
     })?;
     if !matches!(
@@ -143,6 +153,8 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             | "verify"
             | "review-package"
             | "advisory-review"
+            | "operator-review"
+            | "operator-review-receipt"
             | "review-disclosure-grant"
             | "review-disclosure-revoke"
             | "profile-bind"
@@ -166,6 +178,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
                 | "--effort"
                 | "--receipt-id"
                 | "--expected-package-sha256"
+                | "--decision"
                 | "--expected-profile"
                 | "--new-profile"
                 | "--expected-binding-sha256"
@@ -196,17 +209,21 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
     }
     if matches!(
         verb,
-        "receipt" | "review" | "verify" | "review-package" | "advisory-review"
+        "receipt"
+            | "review"
+            | "verify"
+            | "review-package"
+            | "advisory-review"
+            | "operator-review-receipt"
     ) {
-        let receipt_id = values.remove("--receipt-id").ok_or(
-            "CODEX_QUEUE_USAGE: receipt, review, verify, review-package, or advisory-review requires --receipt-id",
-        )?;
+        let receipt_id = values
+            .remove("--receipt-id")
+            .ok_or("CODEX_QUEUE_USAGE: receipt read actions require --receipt-id")?;
         if !values.is_empty()
             || !Uuid::parse_str(&receipt_id).is_ok_and(|id| id.to_string() == receipt_id)
         {
             return Err(
-                "CODEX_QUEUE_USAGE: receipt, review, verify, review-package, or advisory-review requires one canonical receipt UUID"
-                    .into(),
+                "CODEX_QUEUE_USAGE: receipt read actions require one canonical receipt UUID".into(),
             );
         }
         return Ok(match verb {
@@ -214,6 +231,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             "review" => QueueAction::Review { receipt_id },
             "review-package" => QueueAction::ReviewPackage { receipt_id },
             "advisory-review" => QueueAction::AdvisoryReview { receipt_id },
+            "operator-review-receipt" => QueueAction::OperatorReviewReceipt { receipt_id },
             _ => QueueAction::Verify { receipt_id },
         });
     }
@@ -221,18 +239,21 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
         .remove("--project-id")
         .ok_or("CODEX_QUEUE_USAGE: --project-id is required")?;
     valid_slug(&project_id)?;
-    let disclosure = if matches!(verb, "review-disclosure-grant" | "review-disclosure-revoke") {
+    let package_binding = if matches!(
+        verb,
+        "review-disclosure-grant" | "review-disclosure-revoke" | "operator-review"
+    ) {
         let receipt_id = values
             .remove("--receipt-id")
-            .ok_or("CODEX_QUEUE_USAGE: disclosure action requires --receipt-id")?;
+            .ok_or("CODEX_QUEUE_USAGE: package-bound action requires --receipt-id")?;
         let expected_package_sha256 = values
             .remove("--expected-package-sha256")
-            .ok_or("CODEX_QUEUE_USAGE: disclosure action requires --expected-package-sha256")?;
+            .ok_or("CODEX_QUEUE_USAGE: package-bound action requires --expected-package-sha256")?;
         if !Uuid::parse_str(&receipt_id).is_ok_and(|id| id.to_string() == receipt_id)
             || !valid_sha256_hex(&expected_package_sha256)
             || expected_package_sha256 != expected_package_sha256.to_ascii_lowercase()
         {
-            return Err("CODEX_QUEUE_USAGE: disclosure action requires canonical receipt UUID and lowercase package SHA-256".into());
+            return Err("CODEX_QUEUE_USAGE: package-bound action requires canonical receipt UUID and lowercase package SHA-256".into());
         }
         Some((receipt_id, expected_package_sha256))
     } else {
@@ -244,8 +265,8 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
                 "CODEX_QUEUE_USAGE: disclosure revoke takes no workspace or extra options".into(),
             );
         }
-        let (receipt_id, expected_package_sha256) =
-            disclosure.ok_or("CODEX_QUEUE_USAGE: disclosure revoke identity is unavailable")?;
+        let (receipt_id, expected_package_sha256) = package_binding
+            .ok_or("CODEX_QUEUE_USAGE: disclosure revoke identity is unavailable")?;
         return Ok(QueueAction::ReviewDisclosureRevoke {
             project_id,
             receipt_id,
@@ -264,7 +285,23 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
         project_id,
         workspace,
     };
-    if let Some((receipt_id, expected_package_sha256)) = disclosure {
+    if let Some((receipt_id, expected_package_sha256)) = package_binding {
+        if verb == "operator-review" {
+            let decision = values
+                .remove("--decision")
+                .ok_or("CODEX_QUEUE_USAGE: operator-review requires --decision")?;
+            if !matches!(decision.as_str(), "ACCEPT" | "REJECT" | "INCONCLUSIVE")
+                || !values.is_empty()
+            {
+                return Err("CODEX_QUEUE_USAGE: operator-review requires ACCEPT, REJECT, or INCONCLUSIVE and no extra options".into());
+            }
+            return Ok(QueueAction::OperatorReview {
+                scope,
+                receipt_id,
+                expected_package_sha256,
+                decision,
+            });
+        }
         if !values.is_empty() {
             return Err("CODEX_QUEUE_USAGE: disclosure grant takes no extra options".into());
         }
@@ -1693,6 +1730,27 @@ pub(crate) async fn execute_action(
         QueueAction::AdvisoryReview { receipt_id } => {
             advisory::review_package_advisory(&control.project, &receipt_id).await
         }
+        QueueAction::OperatorReview {
+            scope,
+            receipt_id,
+            expected_package_sha256,
+            decision,
+        } => {
+            let project = registered_project(&control.control_workspace, &scope)?;
+            operator_review::record_local_decision(
+                &control.control_workspace,
+                &control.project,
+                &project,
+                &receipt_id,
+                &expected_package_sha256,
+                &decision,
+            )
+        }
+        QueueAction::OperatorReviewReceipt { receipt_id } => operator_review::read_local_decision(
+            &control.control_workspace,
+            &control.project,
+            &receipt_id,
+        ),
         QueueAction::ReviewDisclosureGrant {
             scope,
             receipt_id,
@@ -3953,6 +4011,7 @@ mod tests {
         AutonomousQueueTaskStateV1, AutonomousQueueTaskV1, AutonomousQueueV1,
         AutonomousSessionStateV1, AutonomousStateStoreV1,
     };
+    use std::io::IsTerminal;
     use std::process::Command as StdCommand;
 
     fn parse(items: &[&str]) -> Result<QueueAction, String> {
@@ -4580,6 +4639,247 @@ mod tests {
         assert_eq!(second["idempotent"], true);
         assert_eq!(second["package"]["artifactSha256"], original_digest);
         cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn operator_review_is_create_once_bound_and_never_promotes_wake() {
+        let (fixture, projects, queue, receipt_id, cargo) = completed_verified_fixture(false).await;
+        assert!(
+            operator_review::test_decide_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                &"a".repeat(64),
+                "ACCEPT",
+                true
+            )
+            .is_err()
+        );
+        verify_receipt_in_store_with_executable(&projects[0], &queue, &receipt_id, Some(&cargo))
+            .await
+            .unwrap();
+        let packaged = package_verified_receipt_in_store(&queue, &receipt_id).unwrap();
+        let sha = packaged["package"]["artifactSha256"].as_str().unwrap();
+        let package_path = queue.review_package_path(&receipt_id);
+        let job_path = queue.job_path("alpha", "verified_fixture");
+        let package_before = fs::read(&package_path).unwrap();
+        let job_before = fs::read(&job_path).unwrap();
+        let mut drifted = projects[1].clone();
+        drifted.chatgpt_target_sha256 = Some("a".repeat(64));
+        assert!(
+            operator_review::test_decide_in_store(
+                &queue,
+                &drifted,
+                &receipt_id,
+                sha,
+                "ACCEPT",
+                true
+            )
+            .is_err()
+        );
+        assert!(
+            operator_review::test_decide_in_store(
+                &queue,
+                &projects[2],
+                &receipt_id,
+                sha,
+                "ACCEPT",
+                true
+            )
+            .is_err()
+        );
+        fs::write(&package_path, b"{\n").unwrap();
+        assert!(
+            operator_review::test_decide_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "ACCEPT",
+                true
+            )
+            .is_err()
+        );
+        fs::write(&package_path, &package_before).unwrap();
+        fs::write(
+            projects[1].workspace.join("source.txt"),
+            b"changed since capture\n",
+        )
+        .unwrap();
+        assert!(
+            operator_review::test_decide_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "ACCEPT",
+                false
+            )
+            .unwrap()
+            .is_none()
+        );
+        let first = operator_review::test_decide_in_store(
+            &queue,
+            &projects[1],
+            &receipt_id,
+            sha,
+            "ACCEPT",
+            true,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(first["idempotent"], false);
+        assert_eq!(first["authority"], "OPERATOR_REVIEW_ONLY");
+        assert_eq!(first["decision"], "ACCEPT");
+        assert_eq!(first["independentReview"], "PENDING");
+        assert_eq!(first["wakeReady"], false);
+        let saved =
+            operator_review::test_read_in_store(&queue, &projects[1], &receipt_id, sha).unwrap();
+        assert_eq!(saved["recordSha256"], first["recordSha256"]);
+        assert_eq!(saved["idempotent"], true);
+        fs::write(projects[1].workspace.join("source.txt"), b"later edit\n").unwrap();
+        let historical =
+            operator_review::test_read_in_store(&queue, &projects[1], &receipt_id, sha).unwrap();
+        assert_eq!(historical["recordSha256"], first["recordSha256"]);
+        fs::write(&package_path, b"{\n").unwrap();
+        assert!(
+            operator_review::test_read_in_store(&queue, &projects[1], &receipt_id, sha).is_err()
+        );
+        fs::write(&package_path, &package_before).unwrap();
+        let again = operator_review::test_decide_in_store(
+            &queue,
+            &projects[1],
+            &receipt_id,
+            sha,
+            "ACCEPT",
+            true,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(again["recordSha256"], first["recordSha256"]);
+        assert_eq!(again["idempotent"], true);
+        assert!(
+            operator_review::test_decide_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "REJECT",
+                true
+            )
+            .unwrap_err()
+            .contains("different decision")
+        );
+        assert!(
+            operator_review::test_decide_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                &"f".repeat(64),
+                "ACCEPT",
+                true
+            )
+            .is_err()
+        );
+        assert!(operator_review::test_read_in_store(&queue, &drifted, &receipt_id, sha).is_err());
+        assert!(
+            operator_review::test_read_in_store(&queue, &projects[2], &receipt_id, sha).is_err()
+        );
+        assert_eq!(fs::read(&package_path).unwrap(), package_before);
+        assert_eq!(fs::read(&job_path).unwrap(), job_before);
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn operator_review_action_requires_a_local_terminal() {
+        assert!(
+            !std::io::stdin().is_terminal() || !std::io::stderr().is_terminal(),
+            "this test requires noninteractive stdio"
+        );
+        let (fixture, projects, queue, receipt_id, cargo) = completed_verified_fixture(false).await;
+        verify_receipt_in_store_with_executable(&projects[0], &queue, &receipt_id, Some(&cargo))
+            .await
+            .unwrap();
+        let packaged = package_verified_receipt_in_store(&queue, &receipt_id).unwrap();
+        let sha = packaged["package"]["artifactSha256"].as_str().unwrap();
+        let error = operator_review::test_record_local_decision_in_store(
+            &queue,
+            &projects[0].workspace,
+            &projects[0],
+            &projects[1],
+            &receipt_id,
+            sha,
+            "ACCEPT",
+        )
+        .unwrap_err();
+        assert!(
+            error.contains("interactive local terminal is required"),
+            "{error}"
+        );
+        assert!(
+            !queue
+                .root
+                .join("receipts")
+                .join(format!("{receipt_id}.operator-review.json"))
+                .exists()
+        );
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn operator_review_rejects_modified_or_partial_decision_records() {
+        for decision in ["REJECT", "INCONCLUSIVE"] {
+            let (fixture, projects, queue, receipt_id, cargo) =
+                completed_verified_fixture(false).await;
+            verify_receipt_in_store_with_executable(
+                &projects[0],
+                &queue,
+                &receipt_id,
+                Some(&cargo),
+            )
+            .await
+            .unwrap();
+            let packaged = package_verified_receipt_in_store(&queue, &receipt_id).unwrap();
+            let sha = packaged["package"]["artifactSha256"].as_str().unwrap();
+            let created = operator_review::test_decide_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                decision,
+                true,
+            )
+            .unwrap()
+            .unwrap();
+            assert_eq!(created["decision"], decision);
+            let path = queue
+                .root
+                .join("receipts")
+                .join(format!("{receipt_id}.operator-review.json"));
+            let original = fs::read(&path).unwrap();
+            let modified = String::from_utf8(original.clone())
+                .unwrap()
+                .replace(decision, "ACCEPT");
+            fs::write(&path, modified).unwrap();
+            assert!(
+                operator_review::test_read_in_store(&queue, &projects[1], &receipt_id, sha)
+                    .is_err()
+            );
+            fs::write(&path, b"{\n").unwrap();
+            assert!(
+                operator_review::test_decide_in_store(
+                    &queue,
+                    &projects[1],
+                    &receipt_id,
+                    sha,
+                    decision,
+                    true
+                )
+                .is_err()
+            );
+            fs::write(&path, original).unwrap();
+            cleanup(fixture);
+        }
     }
 
     #[tokio::test]
@@ -5919,6 +6219,44 @@ mod tests {
             ]),
             Ok(QueueAction::AdvisoryReview { .. })
         ));
+        assert!(matches!(
+            parse(&[
+                "operator",
+                "codex",
+                "queue",
+                "operator-review-receipt",
+                "--receipt-id",
+                &receipt_id
+            ]),
+            Ok(QueueAction::OperatorReviewReceipt { .. })
+        ));
+        let operator_review = [
+            "operator",
+            "codex",
+            "queue",
+            "operator-review",
+            "--project-id",
+            "alpha",
+            "--workspace",
+            "C:/alpha",
+            "--receipt-id",
+            &receipt_id,
+            "--expected-package-sha256",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "--decision",
+            "ACCEPT",
+        ];
+        assert!(matches!(
+            parse(&operator_review),
+            Ok(QueueAction::OperatorReview { .. })
+        ));
+        assert!(parse(&[&operator_review[..], &["--task", "unexpected"]].concat()).is_err());
+        let mut wrong_decision = operator_review.to_vec();
+        *wrong_decision.last_mut().unwrap() = "APPROVE_WAKE";
+        assert!(parse(&wrong_decision).is_err());
+        let mut wrong_package = operator_review.to_vec();
+        wrong_package[11] = "A";
+        assert!(parse(&wrong_package).is_err());
         let grant = [
             "operator",
             "codex",
