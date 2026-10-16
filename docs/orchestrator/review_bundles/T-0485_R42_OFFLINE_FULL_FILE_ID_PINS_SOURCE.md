@@ -1,6 +1,6 @@
 # T-0485 R42 — Offline V2 full file identity and retained role pins
 
-Date: 2026-10-16. Source baseline `6d602bdef28f374588ff65e24efc2d440d243aa4`; isolated source commit `1a2f12845c051608d15e2e332400e791f8269257`. Status: source-only, read-only, pending independent review and main integration. This is not a first-generation migration admission, dev.85 install, or natural Wake receipt.
+Date: 2026-10-16. Source baseline `6d602bdef28f374588ff65e24efc2d440d243aa4`; isolated source commit `1a2f12845c051608d15e2e332400e791f8269257`. Status: source-only, read-only; independent source review passed and the change is integrated in main as fbe8fb5 and 15427a8. This is not a first-generation migration admission, dev.85 install, or natural Wake receipt.
 
 The signed V2 anchor and package approval now bind each object role to both the existing legacy identity and `FILE_ID_INFO`: a 64-bit volume serial and 128-bit file ID. The canonical signed JSON uses lowercase hex for the 128-bit ID. Missing full identities, invalid IDs, duplicate role IDs, changed observations, or a changed anchor/package link refuse verification. V1 wire and ledger semantics are unchanged.
 
