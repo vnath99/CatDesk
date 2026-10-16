@@ -62,6 +62,7 @@ const MAX_VERIFICATION_BYTES: u64 = 72 * 1024 * 1024;
 const MAX_REVIEW_PACKAGE_BYTES: u64 = 76 * 1024 * 1024;
 const MAX_VERIFY_STREAM_BYTES: usize = 16 * 1024 * 1024;
 const VERIFY_COMMAND_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const BYOVD_PYTEST_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const BUG_BOUNTY_PYTEST_TIMEOUT: Duration = Duration::from_secs(90 * 60);
 const NATIVE_STDOUT_EOF_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_NATIVE_STDOUT_LINE_BYTES: usize = 64 * 1024;
@@ -3423,6 +3424,63 @@ fn verification_profile(profile: &str) -> Result<VerificationProfile, String> {
             "-q",
         ],
     ];
+    const PYTHON_GROUP_DEV_TOUCHED_V2: &[&[&str]] = &[
+        &[
+            "uv",
+            "run",
+            "--locked",
+            "--offline",
+            "--no-python-downloads",
+            "--no-env-file",
+            "--no-config",
+            "--group",
+            "dev",
+            "--extra",
+            "analysis",
+            "ruff",
+            "--isolated",
+            "format",
+            "--check",
+            ".",
+        ],
+        &[
+            "uv",
+            "run",
+            "--locked",
+            "--offline",
+            "--no-python-downloads",
+            "--no-env-file",
+            "--no-config",
+            "--group",
+            "dev",
+            "--extra",
+            "analysis",
+            "ruff",
+            "--isolated",
+            "check",
+            ".",
+        ],
+        &[
+            "uv",
+            "run",
+            "--locked",
+            "--offline",
+            "--no-python-downloads",
+            "--no-env-file",
+            "--no-config",
+            "--group",
+            "dev",
+            "--extra",
+            "analysis",
+            "python",
+            "-B",
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+        ],
+    ];
     const PYTHON_EXTRAS_DEV_LAB: &[&[&str]] = &[
         &[
             "uv",
@@ -3501,7 +3559,7 @@ fn verification_profile(profile: &str) -> Result<VerificationProfile, String> {
         }),
         "python_uv_group_dev_touched_v2" => Ok(VerificationProfile {
             tool: VerificationTool::Uv,
-            commands: PYTHON_GROUP_DEV,
+            commands: PYTHON_GROUP_DEV_TOUCHED_V2,
             inputs: &["pyproject.toml", "uv.lock"],
             package_name: Some("byovd-driver-pipeline"),
         }),
@@ -3516,15 +3574,21 @@ fn verification_profile(profile: &str) -> Result<VerificationProfile, String> {
 }
 
 fn verification_command_timeout(profile: &str, argv: &[String]) -> Duration {
-    // The Bug Bounty full suite has exceeded the generic bound. Match its
-    // entire fixed argv so Ruff and every other profile retain that bound.
-    if profile == "python_uv_extras_dev_lab_touched_v2"
-        && verification_profile(profile)
-            .ok()
-            .and_then(|specification| specification.commands.last().copied())
-            .is_some_and(|expected| argv.iter().map(String::as_str).eq(expected.iter().copied()))
+    // Extend only each named v2 profile's entire fixed pytest argv. Ruff,
+    // legacy profiles, and any modified command retain the generic bound.
+    if matches!(
+        profile,
+        "python_uv_group_dev_touched_v2" | "python_uv_extras_dev_lab_touched_v2"
+    ) && verification_profile(profile)
+        .ok()
+        .and_then(|specification| specification.commands.last().copied())
+        .is_some_and(|expected| argv.iter().map(String::as_str).eq(expected.iter().copied()))
     {
-        BUG_BOUNTY_PYTEST_TIMEOUT
+        match profile {
+            "python_uv_group_dev_touched_v2" => BYOVD_PYTEST_TIMEOUT,
+            "python_uv_extras_dev_lab_touched_v2" => BUG_BOUNTY_PYTEST_TIMEOUT,
+            _ => unreachable!(),
+        }
     } else {
         VERIFY_COMMAND_TIMEOUT
     }
@@ -7951,7 +8015,7 @@ mod tests {
     }
 
     #[test]
-    fn only_fixed_bug_bounty_touched_v2_pytest_has_extended_timeout() {
+    fn only_exact_touched_v2_pytest_commands_have_extended_timeouts() {
         let changed = [GitChangedPath {
             path: "source.py".into(),
             kind: "file".into(),
@@ -7966,31 +8030,125 @@ mod tests {
         ] {
             let commands = verification_commands(profile, &changed).unwrap();
             for (index, argv) in commands.iter().enumerate() {
-                let expected = if profile == "python_uv_extras_dev_lab_touched_v2"
-                    && index == commands.len() - 1
-                {
-                    BUG_BOUNTY_PYTEST_TIMEOUT
+                let expected = if index == commands.len() - 1 {
+                    match profile {
+                        "python_uv_group_dev_touched_v2" => BYOVD_PYTEST_TIMEOUT,
+                        "python_uv_extras_dev_lab_touched_v2" => BUG_BOUNTY_PYTEST_TIMEOUT,
+                        _ => VERIFY_COMMAND_TIMEOUT,
+                    }
                 } else {
                     VERIFY_COMMAND_TIMEOUT
                 };
                 assert_eq!(verification_command_timeout(profile, argv), expected);
             }
         }
-        let documentation_only =
-            verification_commands("python_uv_extras_dev_lab_touched_v2", &[]).unwrap();
-        assert_eq!(documentation_only.len(), 1);
-        assert_eq!(
-            verification_command_timeout(
+        for (profile, expected_timeout) in [
+            ("python_uv_group_dev_touched_v2", BYOVD_PYTEST_TIMEOUT),
+            (
                 "python_uv_extras_dev_lab_touched_v2",
-                &documentation_only[0]
+                BUG_BOUNTY_PYTEST_TIMEOUT,
             ),
-            BUG_BOUNTY_PYTEST_TIMEOUT
-        );
-        let mut modified = documentation_only[0].clone();
-        modified.push("--unexpected".into());
+        ] {
+            let documentation_only = verification_commands(profile, &[]).unwrap();
+            assert_eq!(documentation_only.len(), 1);
+            assert_eq!(
+                verification_command_timeout(profile, &documentation_only[0]),
+                expected_timeout
+            );
+            let mut modified = documentation_only[0].clone();
+            modified.push("--unexpected".into());
+            assert_eq!(
+                verification_command_timeout(profile, &modified),
+                VERIFY_COMMAND_TIMEOUT
+            );
+        }
+    }
+
+    #[test]
+    fn byovd_touched_v2_uses_fixed_analysis_and_bytecode_safe_pytest() {
+        let expected_pytest = [
+            "uv",
+            "run",
+            "--locked",
+            "--offline",
+            "--no-python-downloads",
+            "--no-env-file",
+            "--no-config",
+            "--group",
+            "dev",
+            "--extra",
+            "analysis",
+            "python",
+            "-B",
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+        ]
+        .map(str::to_owned)
+        .to_vec();
+        let documentation_only = verification_commands("python_uv_group_dev_touched_v2", &[])
+            .expect("BYOVD v2 documentation-only verification");
+        assert_eq!(documentation_only, vec![expected_pytest.clone()]);
+
+        let changed_python = [GitChangedPath {
+            path: "src/changed.py".into(),
+            kind: "file".into(),
+            sha256: Some("a".repeat(64)),
+        }];
+        let commands = verification_commands("python_uv_group_dev_touched_v2", &changed_python)
+            .expect("BYOVD v2 changed-Python verification");
+        assert_eq!(commands.len(), 3);
+        assert_eq!(commands[2], expected_pytest);
+        for command in &commands[..2] {
+            assert!(command.windows(2).any(|part| part == ["--group", "dev"]));
+            assert!(
+                command
+                    .windows(2)
+                    .any(|part| part == ["--extra", "analysis"])
+            );
+            assert!(
+                command
+                    .windows(2)
+                    .any(|part| part == ["--", "src/changed.py"])
+            );
+            assert_eq!(
+                verification_command_timeout("python_uv_group_dev_touched_v2", command),
+                VERIFY_COMMAND_TIMEOUT
+            );
+        }
+
         assert_eq!(
-            verification_command_timeout("python_uv_extras_dev_lab_touched_v2", &modified),
-            VERIFY_COMMAND_TIMEOUT
+            verification_profile("python_uv_group_dev_v1")
+                .unwrap()
+                .commands
+                .last()
+                .copied(),
+            Some(
+                &[
+                    "uv",
+                    "run",
+                    "--locked",
+                    "--offline",
+                    "--no-python-downloads",
+                    "--no-env-file",
+                    "--no-config",
+                    "--group",
+                    "dev",
+                    "pytest",
+                    "-q",
+                ][..]
+            )
+        );
+        assert_eq!(
+            verification_profile("python_uv_extras_dev_lab_v1")
+                .unwrap()
+                .commands,
+            verification_profile("python_uv_extras_dev_lab_touched_v2")
+                .unwrap()
+                .commands,
+            "Bug Bounty's fixed commands remain unchanged"
         );
     }
 
@@ -8034,7 +8192,14 @@ mod tests {
                 assert!(command.iter().any(|arg| arg == "--locked"));
                 assert!(command.iter().any(|arg| arg == "--offline"));
             }
-            assert_eq!(commands[2].last().map(String::as_str), Some("-q"));
+            assert_eq!(
+                commands[2].last().map(String::as_str),
+                Some(if profile == "python_uv_group_dev_touched_v2" {
+                    "no:cacheprovider"
+                } else {
+                    "-q"
+                })
+            );
         }
         let documentation_only = [GitChangedPath {
             path: "docs/note.md".into(),
