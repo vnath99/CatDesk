@@ -7,7 +7,12 @@
 //! protected approval-key policy, or a replay ledger. WakeHost's production
 //! mutation hold remains independent of any result returned here.
 
-use crate::{Result, install_broker_approval::ObjectIdentityV1};
+#[cfg(windows)]
+use crate::install_broker_offline_pins::full_identity_of_handle;
+use crate::{
+    Result, install_broker_approval::ObjectIdentityV1,
+    install_broker_offline_v2::FullFileIdentityV2,
+};
 use serde::Serialize;
 #[cfg(windows)]
 use std::{ffi::c_void, os::windows::io::OwnedHandle};
@@ -26,8 +31,12 @@ pub struct BrokerReadOnlySnapshotV1 {
     pub service_name: &'static str,
     pub service_image_sha256: String,
     pub service_image: ObjectIdentityV1,
+    #[serde(skip_serializing)]
+    pub(crate) service_image_full: FullFileIdentityV2,
     pub service_image_security_sha256: String,
     pub protected_root: ObjectIdentityV1,
+    #[serde(skip_serializing)]
+    pub(crate) protected_root_full: FullFileIdentityV2,
     pub service_security_sha256: String,
     pub protected_root_security_sha256: String,
     pub image_parent_security_sha256: String,
@@ -862,6 +871,7 @@ mod windows {
         let protected = open_relative(&data_catdesk, "WakeProtectedInstallV1", true)?;
         let root_security = assert_exact_leaf(&protected, &expected_namespace_sddl(&service_sid))?;
         let protected_root = object_identity(&file_info(&protected, true)?)?;
+        let protected_root_full = full_identity_of_handle(protected.as_raw_handle())?;
 
         let program_files = open_relative(&volume, "Program Files", true)?;
         assert_ancestor(&program_files)?;
@@ -872,6 +882,7 @@ mod windows {
             assert_exact_leaf(&image_parent, &expected_image_parent_sddl(&service_sid))?;
         let image = open_relative(&image_parent, "CatDeskWakeInstallBroker.exe", false)?;
         let service_image = object_identity(&file_info(&image, false)?)?;
+        let service_image_full = full_identity_of_handle(image.as_raw_handle())?;
         let (service_image_sha256, service_image_security_sha256) =
             image_digest(image, &service_sid)?;
 
@@ -880,8 +891,10 @@ mod windows {
             service_name: SERVICE_NAME,
             service_image_sha256,
             service_image,
+            service_image_full,
             service_image_security_sha256,
             protected_root,
+            protected_root_full,
             service_security_sha256: format!(
                 "{:x}",
                 Sha256::digest(service.security_sddl.as_bytes())

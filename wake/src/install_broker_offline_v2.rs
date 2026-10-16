@@ -6,10 +6,11 @@
 //! deliberately returns no ledger lease, owner proof or installation token.
 //! The supplied old-store observation must later be replaced by retained
 //! broker-owned physical pins before any transaction can be enabled.
-//! ObjectIdentityV1 carries only the legacy 32-bit volume/64-bit file ID;
-//! these signed fields are comparison claims, not ReFS-safe physical pins.
-//! Admission needs handle-observed full FileIdInfo (or reviewed equivalent)
-//! bound to the reviewer-authorized roles before an INTENT is written.
+//! The V2 signed object roles carry both the legacy identity and full
+//! handle-observed FileIdInfo. The policy-facing diagnostic also retains
+//! no-write/delete-share handles while comparing those claims. These pins do
+//! not establish a closed old-store inventory or old-owner absence, and must
+//! never be promoted to installation authority by themselves.
 
 use crate::{
     Result,
@@ -46,6 +47,24 @@ pub enum AmbiguousEventDispositionV2 {
     QuarantinedNoReplay,
 }
 
+/// The complete FILE_ID_INFO identity, including the 128-bit file identifier.
+/// It is serialized as lowercase hex so signed JSON has one canonical form.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FullFileIdentityV2 {
+    pub volume_serial: u64,
+    pub file_id_hex: String,
+}
+
+/// V1 identity is retained for comparison with the existing protected reader;
+/// full identity is the V2 reviewer-bound physical object claim.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OfflineObjectIdentityV2 {
+    pub legacy: ObjectIdentityV1,
+    pub full: FullFileIdentityV2,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct OfflineMigrationAnchorV2 {
@@ -58,17 +77,17 @@ pub struct OfflineMigrationAnchorV2 {
     pub reviewer_identity: String,
     pub install_generation: u64,
     pub predecessor_package_id: String,
-    pub predecessor_pointer: ObjectIdentityV1,
+    pub predecessor_pointer: OfflineObjectIdentityV2,
     pub predecessor_pointer_sha256: String,
-    pub old_runtime_root: ObjectIdentityV1,
-    pub old_runtime_lock: ObjectIdentityV1,
-    pub old_host_image: ObjectIdentityV1,
+    pub old_runtime_root: OfflineObjectIdentityV2,
+    pub old_runtime_lock: OfflineObjectIdentityV2,
+    pub old_host_image: OfflineObjectIdentityV2,
     pub old_host_image_sha256: String,
     pub target_conversation_id: String,
     pub target_generation: u64,
     pub target_snapshot_sha256: String,
     pub project_id: String,
-    pub project_registration_object: ObjectIdentityV1,
+    pub project_registration_object: OfflineObjectIdentityV2,
     pub project_target_conversation_id: String,
     pub project_target_generation: u64,
     pub project_target_snapshot_sha256: String,
@@ -77,10 +96,10 @@ pub struct OfflineMigrationAnchorV2 {
     pub desired_state: OfflineDesiredStateV2,
     pub closed_store_inventory_sha256: String,
     pub quarantined_launch_entrypoints_sha256: String,
-    pub target_protected_root: ObjectIdentityV1,
-    pub broker_policy_file: ObjectIdentityV1,
+    pub target_protected_root: OfflineObjectIdentityV2,
+    pub broker_policy_file: OfflineObjectIdentityV2,
     pub broker_policy_sha256: String,
-    pub broker_service_image: ObjectIdentityV1,
+    pub broker_service_image: OfflineObjectIdentityV2,
     pub broker_service_image_sha256: String,
     pub candidate_manifest_sha256: String,
     pub source_commit: String,
@@ -100,8 +119,8 @@ pub struct WakeOfflineInstallApprovalV2 {
     pub anchor_id: String,
     pub anchor_envelope_sha256: String,
     pub predecessor_package_id: String,
-    pub predecessor_pointer: ObjectIdentityV1,
-    pub target_protected_root: ObjectIdentityV1,
+    pub predecessor_pointer: OfflineObjectIdentityV2,
+    pub target_protected_root: OfflineObjectIdentityV2,
     pub manifest: PackageManifestV1,
     pub manifest_sha256: String,
     pub source_commit: String,
@@ -115,17 +134,17 @@ pub struct WakeOfflineInstallApprovalV2 {
 pub struct OfflineMigrationObservationV2 {
     pub now_utc_seconds: u64,
     pub predecessor_package_id: String,
-    pub predecessor_pointer: ObjectIdentityV1,
+    pub predecessor_pointer: OfflineObjectIdentityV2,
     pub predecessor_pointer_sha256: String,
-    pub old_runtime_root: ObjectIdentityV1,
-    pub old_runtime_lock: ObjectIdentityV1,
-    pub old_host_image: ObjectIdentityV1,
+    pub old_runtime_root: OfflineObjectIdentityV2,
+    pub old_runtime_lock: OfflineObjectIdentityV2,
+    pub old_host_image: OfflineObjectIdentityV2,
     pub old_host_image_sha256: String,
     pub target_conversation_id: String,
     pub target_generation: u64,
     pub target_snapshot_sha256: String,
     pub project_id: String,
-    pub project_registration_object: ObjectIdentityV1,
+    pub project_registration_object: OfflineObjectIdentityV2,
     pub project_target_conversation_id: String,
     pub project_target_generation: u64,
     pub project_target_snapshot_sha256: String,
@@ -134,10 +153,10 @@ pub struct OfflineMigrationObservationV2 {
     pub desired_state: OfflineDesiredStateV2,
     pub closed_store_inventory_sha256: String,
     pub quarantined_launch_entrypoints_sha256: String,
-    pub target_protected_root: ObjectIdentityV1,
-    pub broker_policy_file: ObjectIdentityV1,
+    pub target_protected_root: OfflineObjectIdentityV2,
+    pub broker_policy_file: OfflineObjectIdentityV2,
     pub broker_policy_sha256: String,
-    pub broker_service_image: ObjectIdentityV1,
+    pub broker_service_image: OfflineObjectIdentityV2,
     pub broker_service_image_sha256: String,
 }
 
@@ -176,8 +195,12 @@ fn identifier(value: &str, max: usize) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'@'))
 }
 
-fn valid_object(value: &ObjectIdentityV1) -> bool {
-    value.volume_serial != 0 && (value.file_index_high != 0 || value.file_index_low != 0)
+fn valid_object(value: &OfflineObjectIdentityV2) -> bool {
+    value.legacy.volume_serial != 0
+        && (value.legacy.file_index_high != 0 || value.legacy.file_index_low != 0)
+        && value.full.volume_serial != 0
+        && lowercase_hex(&value.full.file_id_hex, 32)
+        && value.full.file_id_hex != "0".repeat(32)
 }
 
 fn valid_time(issued: u64, expires: u64, now: u64) -> bool {
@@ -226,6 +249,16 @@ fn validate_anchor(
     anchor: &OfflineMigrationAnchorV2,
     observed: &OfflineMigrationObservationV2,
 ) -> Result<()> {
+    let roles = [
+        &anchor.predecessor_pointer,
+        &anchor.old_runtime_root,
+        &anchor.old_runtime_lock,
+        &anchor.old_host_image,
+        &anchor.project_registration_object,
+        &anchor.target_protected_root,
+        &anchor.broker_policy_file,
+        &anchor.broker_service_image,
+    ];
     if anchor.schema_version != 2
         || anchor.purpose != "catdesk-wake-first-generation-offline-anchor"
         || anchor.operation != "MIGRATE_DEV84_OFFLINE"
@@ -249,18 +282,11 @@ fn validate_anchor(
         || !lowercase_hex(&anchor.broker_service_image_sha256, 64)
         || !lowercase_hex(&anchor.candidate_manifest_sha256, 64)
         || !lowercase_hex(&anchor.source_commit, 40)
-        || [
-            &anchor.predecessor_pointer,
-            &anchor.old_runtime_root,
-            &anchor.old_runtime_lock,
-            &anchor.old_host_image,
-            &anchor.project_registration_object,
-            &anchor.target_protected_root,
-            &anchor.broker_policy_file,
-            &anchor.broker_service_image,
-        ]
-        .iter()
-        .any(|object| !valid_object(object))
+        || roles.iter().any(|object| !valid_object(object))
+        || roles
+            .iter()
+            .enumerate()
+            .any(|(index, object)| roles[..index].iter().any(|prior| prior.full == object.full))
         || anchor.predecessor_pointer == anchor.old_runtime_root
         || anchor.predecessor_pointer == anchor.old_runtime_lock
         || anchor.predecessor_pointer == anchor.old_host_image
@@ -269,8 +295,13 @@ fn validate_anchor(
         || anchor.old_runtime_root == anchor.old_host_image
         || anchor.old_runtime_root == anchor.target_protected_root
         || anchor.old_runtime_lock == anchor.old_host_image
-        || anchor.predecessor_pointer.volume_serial != anchor.old_runtime_root.volume_serial
-        || anchor.old_runtime_lock.volume_serial != anchor.old_runtime_root.volume_serial
+        || anchor.predecessor_pointer.legacy.volume_serial
+            != anchor.old_runtime_root.legacy.volume_serial
+        || anchor.old_runtime_lock.legacy.volume_serial
+            != anchor.old_runtime_root.legacy.volume_serial
+        || anchor.predecessor_pointer.full.volume_serial
+            != anchor.old_runtime_root.full.volume_serial
+        || anchor.old_runtime_lock.full.volume_serial != anchor.old_runtime_root.full.volume_serial
     {
         return Err("WAKE_OFFLINE_ANCHOR_INVALID".into());
     }
@@ -422,11 +453,17 @@ mod tests {
     use crate::install_broker_approval::tests as v1_test;
     use ed25519_dalek::{Signer, SigningKey};
 
-    fn object(index: u32) -> ObjectIdentityV1 {
-        ObjectIdentityV1 {
-            volume_serial: 7,
-            file_index_high: 0,
-            file_index_low: index,
+    fn object(index: u32) -> OfflineObjectIdentityV2 {
+        OfflineObjectIdentityV2 {
+            legacy: ObjectIdentityV1 {
+                volume_serial: 7,
+                file_index_high: 0,
+                file_index_low: index,
+            },
+            full: FullFileIdentityV2 {
+                volume_serial: 7,
+                file_id_hex: format!("{index:032x}"),
+            },
         }
     }
 
@@ -627,8 +664,24 @@ mod tests {
                 "WAKE_OFFLINE_ENCODING_INVALID"
             );
         }
+        let mut legacy_only: serde_json::Value =
+            serde_json::from_slice(&anchor_wire).expect("V2 JSON");
+        legacy_only["payload"]["predecessorPointer"]
+            .as_object_mut()
+            .expect("object role")
+            .remove("full");
+        assert_eq!(
+            verify_offline_pair_read_only(
+                &serde_json::to_vec(&legacy_only).expect("legacy-only JSON"),
+                &approval_wire,
+                &key.verifying_key(),
+                &observed,
+            )
+            .unwrap_err(),
+            "WAKE_OFFLINE_ENCODING_INVALID"
+        );
         let mut changed = anchor.clone();
-        changed.old_runtime_lock.file_index_low += 1;
+        changed.old_runtime_lock.legacy.file_index_low += 1;
         let tampered = SignedEnvelope {
             payload: changed,
             signature_hex: serde_json::from_slice::<SignedEnvelope<OfflineMigrationAnchorV2>>(
@@ -654,7 +707,10 @@ mod tests {
         let (anchor, approval, observed, key) = fixture();
         let mut cases = Vec::new();
         let mut bad = observed.clone();
-        bad.old_runtime_lock.file_index_low += 1;
+        bad.old_runtime_lock.legacy.file_index_low += 1;
+        cases.push(bad);
+        let mut bad = observed.clone();
+        bad.old_runtime_lock.full.file_id_hex = "a".repeat(32);
         cases.push(bad);
         let mut bad = observed.clone();
         bad.predecessor_pointer_sha256 = "0".repeat(64);
@@ -663,7 +719,7 @@ mod tests {
         bad.project_target_snapshot_sha256 = "0".repeat(64);
         cases.push(bad);
         let mut bad = observed.clone();
-        bad.project_registration_object.file_index_low += 1;
+        bad.project_registration_object.legacy.file_index_low += 1;
         cases.push(bad);
         let mut bad = observed.clone();
         bad.unresolved_events_sha256 = "0".repeat(64);
@@ -709,6 +765,12 @@ mod tests {
             check(&bad, &approval, &observed, &key).unwrap_err(),
             "WAKE_OFFLINE_ANCHOR_INVALID"
         );
+        let mut bad = anchor.clone();
+        bad.old_runtime_lock.full = bad.old_runtime_root.full.clone();
+        assert_eq!(
+            check(&bad, &approval, &observed, &key).unwrap_err(),
+            "WAKE_OFFLINE_ANCHOR_INVALID"
+        );
         let anchor_wire = signed(&anchor, ANCHOR_DOMAIN, &key);
         let mut value: serde_json::Value = serde_json::from_slice(&anchor_wire).unwrap();
         value["payload"]["oldHostPid"] = 42.into();
@@ -727,14 +789,15 @@ mod tests {
     #[test]
     fn signed_old_image_may_reside_on_another_volume_but_must_match_observation() {
         let (mut anchor, mut approval, mut observed, key) = fixture();
-        anchor.old_host_image.volume_serial += 1;
+        anchor.old_host_image.legacy.volume_serial += 1;
+        anchor.old_host_image.full.volume_serial += 1;
         approval.anchor_envelope_sha256 =
             format!("{:x}", Sha256::digest(signed(&anchor, ANCHOR_DOMAIN, &key)));
         observed.old_host_image = anchor.old_host_image.clone();
         let readback =
             check(&anchor, &approval, &observed, &key).expect("signed cross-volume image");
         assert!(readback.disposition.ends_with("NO_INSTALL_AUTHORITY"));
-        observed.old_host_image.volume_serial += 1;
+        observed.old_host_image.full.volume_serial += 1;
         assert_eq!(
             check(&anchor, &approval, &observed, &key).unwrap_err(),
             "WAKE_OFFLINE_ANCHOR_OBSERVATION_MISMATCH"
@@ -749,7 +812,7 @@ mod tests {
         bad.anchor_envelope_sha256 = "0".repeat(64);
         cases.push((bad, "WAKE_OFFLINE_APPROVAL_ANCHOR_MISMATCH"));
         let mut bad = approval.clone();
-        bad.predecessor_pointer.file_index_low += 1;
+        bad.predecessor_pointer.legacy.file_index_low += 1;
         cases.push((bad, "WAKE_OFFLINE_APPROVAL_ANCHOR_MISMATCH"));
         let mut bad = approval.clone();
         bad.source_commit = "0".repeat(40);

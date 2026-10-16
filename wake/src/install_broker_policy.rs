@@ -14,8 +14,10 @@ use crate::{
     install_broker_approval::{
         BrokerObservedStateV1, ObjectIdentityV1, VerifiedApprovalV1, verify_approval,
     },
+    install_broker_offline_pins::{OfflineMigrationPinsV2, full_identity_of_handle},
     install_broker_offline_v2::{
-        OfflineMigrationObservationV2, OfflinePairReadbackV2, verify_offline_pair_read_only,
+        FullFileIdentityV2, OfflineMigrationObservationV2, OfflinePairReadbackV2,
+        verify_offline_pair_read_only,
     },
     install_broker_operator::{OperatorTokenEvidenceV1, inspect_connected_pipe_operator},
     install_broker_preflight::{
@@ -533,6 +535,16 @@ fn load_pinned(
 }
 
 impl BrokerProtectedPolicyV1 {
+    fn fixed_full_ids(&self) -> Result<(FullFileIdentityV2, FullFileIdentityV2)> {
+        let root = full_identity_of_handle(self.root.handle().as_raw_handle())?;
+        let file = self
+            .file
+            .lock()
+            .map_err(|_| "WAKE_BROKER_POLICY_READ_FAILED")?;
+        let policy = full_identity_of_handle(file.as_raw_handle())?;
+        Ok((root, policy))
+    }
+
     pub fn revalidate(&self) -> Result<()> {
         let root = self.root.handle();
         if object_identity(&file_info(root.as_raw_handle(), true)?) != self.root_id {
@@ -629,22 +641,29 @@ impl BrokerProtectedPolicyV1 {
         })
     }
 
-    /// Compare two V2 signatures using only the protected policy key and
-    /// fixed service preflight. The old-store observation is still supplied
-    /// comparison data: this returns a read-only summary, never a typed
-    /// approval, ledger lease, offline-owner proof or install capability.
+    /// Compare two V2 signatures using the protected policy key, fixed service
+    /// preflight and retained full FileIdInfo role pins. The old-store path
+    /// selection and closed-inventory claims still need independent proof:
+    /// this returns no approval, ledger lease, owner proof or install capability.
     pub fn inspect_offline_pair_read_only(
         &self,
         anchor_wire: &[u8],
         approval_wire: &[u8],
         observed: &OfflineMigrationObservationV2,
+        pins: &OfflineMigrationPinsV2,
     ) -> Result<OfflinePairReadbackV2> {
         let before = self.readback()?;
+        let fixed_full_ids = self.fixed_full_ids()?;
         let service = inspect_fixed_broker_read_only()?;
-        if observed.target_protected_root != before.protected_root
-            || observed.broker_policy_file != before.policy_file
+        pins.revalidate_matching(observed)?;
+        if observed.target_protected_root.legacy != before.protected_root
+            || observed.target_protected_root.full != fixed_full_ids.0
+            || observed.target_protected_root.full != service.protected_root_full
+            || observed.broker_policy_file.legacy != before.policy_file
+            || observed.broker_policy_file.full != fixed_full_ids.1
             || observed.broker_policy_sha256 != before.policy_sha256
-            || observed.broker_service_image != service.service_image
+            || observed.broker_service_image.legacy != service.service_image
+            || observed.broker_service_image.full != service.service_image_full
             || observed.broker_service_image_sha256 != service.service_image_sha256
             || service.protected_root != before.protected_root
         {
@@ -657,11 +676,13 @@ impl BrokerProtectedPolicyV1 {
             observed,
         )?;
         if self.readback()? != before
+            || self.fixed_full_ids()? != fixed_full_ids
             || inspect_fixed_broker_read_only()? != service
             || result.verification_key_sha256 != before.approval_public_key_sha256
         {
             return Err("WAKE_OFFLINE_PROTECTED_POLICY_CHANGED".into());
         }
+        pins.revalidate_matching(observed)?;
         Ok(result)
     }
 }
@@ -1092,6 +1113,26 @@ pub(crate) mod tests {
             policy.checked_endpoint_sids().unwrap().1,
             fixture.wire.operator_sid
         );
+        drop(policy);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn offline_full_ids_come_from_the_fixed_policy_handles() {
+        let fixture = Fixture::new();
+        let policy = fixture.load().expect("pinned policy");
+        let (root_full, policy_full) = policy.fixed_full_ids().expect("full fixed IDs");
+        assert_eq!(
+            root_full,
+            full_identity_of_handle(fixture.root.as_raw_handle()).expect("fixture root full ID")
+        );
+        let policy_file = open_policy_relative(&fixture.root).expect("fixed policy leaf");
+        assert_eq!(
+            policy_full,
+            full_identity_of_handle(policy_file.as_raw_handle()).expect("policy full ID")
+        );
+        assert_ne!(root_full, policy_full);
+        drop(policy_file);
         drop(policy);
         fixture.cleanup();
     }
