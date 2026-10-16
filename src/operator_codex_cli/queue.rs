@@ -391,7 +391,10 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             || expected_profile != "rust_full"
             || !matches!(
                 new_profile.as_str(),
-                "python_uv_group_dev_v1" | "python_uv_extras_dev_lab_v1"
+                "python_uv_group_dev_v1"
+                    | "python_uv_extras_dev_lab_v1"
+                    | "python_uv_group_dev_touched_v2"
+                    | "python_uv_extras_dev_lab_touched_v2"
             )
             || !valid_sha256_hex(&expected_binding_sha256)
             || expected_binding_sha256 != expected_binding_sha256.to_ascii_lowercase()
@@ -1292,7 +1295,10 @@ impl QueueStore {
                         _ => false,
                     }
             });
-        let expected_commands = verification_profile(&verification.verification_profile)?.commands;
+        let expected_commands = verification_commands(
+            &verification.verification_profile,
+            &candidate.after.changed_paths,
+        )?;
         let command_status_valid = verification.commands.len() == expected_commands.len()
             && verification
                 .commands
@@ -1303,7 +1309,7 @@ impl QueueStore {
                         .argv
                         .iter()
                         .map(String::as_str)
-                        .eq(expected.iter().copied())
+                        .eq(expected.iter().map(String::as_str))
                 })
             && verification.commands.iter().all(|command| {
                 valid_sha256_hex(&command.executable_sha256)
@@ -2507,11 +2513,18 @@ async fn bind_profile_in_store(
     if expected_profile != "rust_full"
         || !matches!(
             new_profile,
-            "python_uv_group_dev_v1" | "python_uv_extras_dev_lab_v1"
+            "python_uv_group_dev_v1"
+                | "python_uv_extras_dev_lab_v1"
+                | "python_uv_group_dev_touched_v2"
+                | "python_uv_extras_dev_lab_touched_v2"
         )
         || !matches!(
             selected.verification_profile.as_str(),
-            "rust_full" | "python_uv_group_dev_v1" | "python_uv_extras_dev_lab_v1"
+            "rust_full"
+                | "python_uv_group_dev_v1"
+                | "python_uv_extras_dev_lab_v1"
+                | "python_uv_group_dev_touched_v2"
+                | "python_uv_extras_dev_lab_touched_v2"
         )
     {
         return Err("CODEX_QUEUE_PROFILE: requested profile transition is unsupported".into());
@@ -2918,6 +2931,12 @@ async fn verify_receipt_in_store_with_executable(
         return Err("CODEX_QUEUE_VERIFY: project writer or registration changed".into());
     }
     let git = resolve_trusted_git(&project.workspace, control_workspace)?;
+    if matches!(
+        job.binding.verification_profile.as_str(),
+        "python_uv_group_dev_touched_v2" | "python_uv_extras_dev_lab_touched_v2"
+    ) {
+        preflight_profile_inputs_tracked(&project, &git).await?;
+    }
     for name in profile.inputs {
         let path = project.workspace.join(name);
         let metadata = fs::symlink_metadata(&path).map_err(
@@ -2966,11 +2985,15 @@ async fn verify_receipt_in_store_with_executable(
     } else {
         resolve_trusted_verifier(&project.workspace, control_workspace, profile.tool)?
     };
+    let commands = verification_commands(
+        &job.binding.verification_profile,
+        &candidate.after.changed_paths,
+    )?;
     writer
         .begin_writer_turn()
         .map_err(|_| "CODEX_QUEUE_VERIFY: writer marker could not be persisted".to_string())?;
     let mut command_results = Vec::new();
-    for argv in profile.commands {
+    for argv in &commands {
         match execute_fixed_verification_command(
             &project.workspace,
             &executable,
@@ -3459,8 +3482,103 @@ fn verification_profile(profile: &str) -> Result<VerificationProfile, String> {
             inputs: &["pyproject.toml", "uv.lock"],
             package_name: Some("bug-bounty-security-research-platform"),
         }),
+        "python_uv_group_dev_touched_v2" => Ok(VerificationProfile {
+            tool: VerificationTool::Uv,
+            commands: PYTHON_GROUP_DEV,
+            inputs: &["pyproject.toml", "uv.lock"],
+            package_name: Some("byovd-driver-pipeline"),
+        }),
+        "python_uv_extras_dev_lab_touched_v2" => Ok(VerificationProfile {
+            tool: VerificationTool::Uv,
+            commands: PYTHON_EXTRAS_DEV_LAB,
+            inputs: &["pyproject.toml", "uv.lock"],
+            package_name: Some("bug-bounty-security-research-platform"),
+        }),
         _ => Err("CODEX_QUEUE_VERIFY: registered verification profile is unsupported".into()),
     }
+}
+
+/// V2 keeps the locked, offline full test command but scopes Ruff to every
+/// Python file in the immutable post-turn Git witness.  A documentation-only
+/// turn records only the pytest command; it makes no Ruff claim.  Deleted
+/// Python files are refused because Ruff cannot inspect their missing bytes.
+/// The source snapshot validates every retained path and file type before any
+/// verifier starts; this lexical check also keeps historical readback free of
+/// dependence on the current worktree.
+fn verification_commands(
+    profile: &str,
+    changed_paths: &[GitChangedPath],
+) -> Result<Vec<Vec<String>>, String> {
+    let specification = verification_profile(profile)?;
+    let mut commands = specification
+        .commands
+        .iter()
+        .map(|command| {
+            command
+                .iter()
+                .map(|part| (*part).to_owned())
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    if !matches!(
+        profile,
+        "python_uv_group_dev_touched_v2" | "python_uv_extras_dev_lab_touched_v2"
+    ) {
+        return Ok(commands);
+    }
+    let mut python_paths = Vec::new();
+    let mut previous: Option<&str> = None;
+    for changed in changed_paths {
+        if changed.path.is_empty()
+            || changed.path.len() > 1024
+            || changed.path.contains(['\\', ':', '\0'])
+            || changed
+                .path
+                .split('/')
+                .any(|part| part.is_empty() || part == "." || part == "..")
+            || previous.is_some_and(|path| path >= changed.path.as_str())
+        {
+            return Err("CODEX_QUEUE_VERIFY: changed Git path is unsafe or out of order".into());
+        }
+        previous = Some(&changed.path);
+        if matches!(changed.path.as_str(), "pyproject.toml" | "uv.lock") {
+            return Err(
+                "CODEX_QUEUE_VERIFY: touched v2 profile cannot verify changed toolchain inputs"
+                    .into(),
+            );
+        }
+        if changed.path.to_ascii_lowercase().ends_with(".py") {
+            if changed.kind != "file" || !changed.sha256.as_deref().is_some_and(valid_sha256_hex) {
+                return Err(
+                    "CODEX_QUEUE_VERIFY: changed Python source is absent or unsupported".into(),
+                );
+            }
+            python_paths.push(changed.path.clone());
+        }
+    }
+    if python_paths.is_empty() {
+        return Ok(vec![commands.remove(2)]);
+    }
+    let argv_bytes = commands[0].iter().map(String::len).sum::<usize>()
+        + python_paths.iter().map(String::len).sum::<usize>();
+    if python_paths.len() > MAX_GIT_PATHS || argv_bytes > 16 * 1024 {
+        return Err("CODEX_QUEUE_VERIFY: changed Python path arguments exceed the bound".into());
+    }
+    for command in &mut commands[..2] {
+        // The explicit separator prevents a Git filename beginning with '-'
+        // from becoming a Ruff option.
+        command.pop(); // v1's whole-tree "." selector
+        let subcommand = command
+            .iter()
+            .position(|part| part == "format" || part == "check")
+            .ok_or("CODEX_QUEUE_VERIFY: fixed Ruff subcommand is absent")?;
+        command.insert(subcommand + 1, "--no-cache".into());
+        command.insert(subcommand + 2, "--no-respect-gitignore".into());
+        command.insert(subcommand + 3, "--no-force-exclude".into());
+        command.push("--".into());
+        command.extend(python_paths.iter().cloned());
+    }
+    Ok(commands)
 }
 
 fn validate_python_profile_manifest(workspace: &Path, profile: &str) -> Result<(), String> {
@@ -3482,11 +3600,11 @@ fn validate_python_profile_manifest(workspace: &Path, profile: &str) -> Result<(
         );
     }
     let development_dependencies = match profile {
-        "python_uv_group_dev_v1" => manifest
+        "python_uv_group_dev_v1" | "python_uv_group_dev_touched_v2" => manifest
             .get("dependency-groups")
             .and_then(|groups| groups.get("dev"))
             .and_then(toml::Value::as_array),
-        "python_uv_extras_dev_lab_v1" => {
+        "python_uv_extras_dev_lab_v1" | "python_uv_extras_dev_lab_touched_v2" => {
             let extras = manifest
                 .get("project")
                 .and_then(|project| project.get("optional-dependencies"));
@@ -3689,7 +3807,7 @@ async fn execute_fixed_verification_command(
     workspace: &Path,
     executable: &TrustedVerificationExecutable,
     tool: VerificationTool,
-    argv: &[&str],
+    argv: &[String],
 ) -> Result<QueueVerificationCommand, VerifyCommandError> {
     if native_executable_sha256(&executable.executable)
         .ok()
@@ -3750,7 +3868,7 @@ async fn execute_fixed_verification_command(
         VerifyCommandError::Safe("CODEX_QUEUE_VERIFY: command stderr exceeded its bound".into())
     })?;
     Ok(QueueVerificationCommand {
-        argv: argv.iter().map(|part| (*part).into()).collect(),
+        argv: argv.to_vec(),
         executable: executable.executable.clone(),
         executable_sha256: executable.sha256.clone(),
         environment_sha256,
@@ -3989,17 +4107,46 @@ fn changed_paths_from_status(
         };
         changed.push(observation);
         index += 1;
-        if matches!(prefix[0], b'R' | b'C') || matches!(prefix[1], b'R' | b'C') {
+        let renamed = prefix[0] == b'R' || prefix[1] == b'R';
+        let copied = prefix[0] == b'C' || prefix[1] == b'C';
+        if renamed || copied {
             let old = records
                 .get(index)
                 .ok_or("CODEX_QUEUE_REVIEW: Git rename record is incomplete")?;
             let old = std::str::from_utf8(old)
                 .map_err(|_| "CODEX_QUEUE_REVIEW: Git rename path is not UTF-8")?;
-            checked_git_path(workspace, old)?;
+            let old_path = checked_git_path(workspace, old)?;
+            if renamed {
+                // Porcelain -z reports the destination first.  Retain the
+                // source-side deletion in the immutable witness so a Python
+                // rename to a non-Python filename cannot evade touched-v2
+                // Ruff selection.  A recreated source produces another Git
+                // record and is ambiguous here, so refuse it.
+                if old == relative
+                    || !fs::symlink_metadata(&old_path)
+                        .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+                {
+                    return Err("CODEX_QUEUE_REVIEW: renamed source is not absent".into());
+                }
+                if changed.len() >= MAX_GIT_PATHS {
+                    return Err("CODEX_QUEUE_REVIEW: too many changed paths".into());
+                }
+                changed.push(GitChangedPath {
+                    path: old.into(),
+                    kind: "absent".into(),
+                    sha256: None,
+                });
+            }
             index += 1;
         }
     }
     changed.sort_by(|left, right| left.path.cmp(&right.path));
+    if changed
+        .windows(2)
+        .any(|paths| paths[0].path == paths[1].path)
+    {
+        return Err("CODEX_QUEUE_REVIEW: duplicate changed Git path".into());
+    }
     Ok(changed)
 }
 
@@ -5395,11 +5542,11 @@ mod tests {
 
     fn fixture_python_profile_inputs(project: &AutonomousProjectV1, profile: &str) {
         let (name, manifest) = match profile {
-            "python_uv_group_dev_v1" => (
+            "python_uv_group_dev_v1" | "python_uv_group_dev_touched_v2" => (
                 "byovd-driver-pipeline",
                 "[project]\nname = \"byovd-driver-pipeline\"\nversion = \"0.1.0\"\n[dependency-groups]\ndev = [\"pytest>=8\", \"ruff>=0.8\"]\n",
             ),
-            "python_uv_extras_dev_lab_v1" => (
+            "python_uv_extras_dev_lab_v1" | "python_uv_extras_dev_lab_touched_v2" => (
                 "bug-bounty-security-research-platform",
                 "[project]\nname = \"bug-bounty-security-research-platform\"\nversion = \"0.1.0\"\n[project.optional-dependencies]\ndev = [\"pytest>=8\", \"ruff>=0.9\"]\nlab = [\"flask>=3\"]\n",
             ),
@@ -5631,7 +5778,7 @@ mod tests {
                 for flag in ["--locked", "--offline", "--no-python-downloads", "--no-env-file", "--no-config"] {
                     if !args.iter().any(|arg| arg == flag) { std::process::exit(42); }
                 }
-                if PROFILE == "python_uv_group_dev_v1" {
+                if PROFILE == "python_uv_group_dev_v1" || PROFILE == "python_uv_group_dev_touched_v2" {
                     if !args.windows(2).any(|pair| pair == ["--group", "dev"]) {
                         std::process::exit(43);
                     }
@@ -5640,19 +5787,30 @@ mod tests {
                     || !args.iter().any(|arg| arg == "--no-default-groups") {
                     std::process::exit(44);
                 }
-                let ruff_format = args.windows(2).any(|pair| pair == ["format", "--check"]);
-                let ruff_check = args.windows(2).any(|pair| pair == ["check", "."]);
+                let ruff_format = args.iter().any(|arg| arg == "format")
+                    && args.iter().any(|arg| arg == "--check");
+                let ruff_check = args.iter().any(|arg| arg == "check");
                 let pytest = args.windows(2).any(|pair| pair == ["pytest", "-q"]);
                 if !ruff_format && !ruff_check && !pytest {
                     std::process::exit(45);
                 }
-                if (ruff_format || ruff_check) && PROFILE == "python_uv_group_dev_v1"
+                if (ruff_format || ruff_check) &&
+                    (PROFILE == "python_uv_group_dev_v1" || PROFILE == "python_uv_group_dev_touched_v2")
                     && !args.windows(2).any(|pair| pair == ["ruff", "--isolated"]) {
                     std::process::exit(46);
                 }
-                if (ruff_format || ruff_check) && PROFILE == "python_uv_extras_dev_lab_v1"
+                if (ruff_format || ruff_check) &&
+                    (PROFILE == "python_uv_extras_dev_lab_v1" || PROFILE == "python_uv_extras_dev_lab_touched_v2")
                     && !args.windows(3).any(|triple| triple == ["ruff", "--config", "pyproject.toml"]) {
                     std::process::exit(47);
+                }
+                if (ruff_format || ruff_check) && PROFILE.ends_with("_touched_v2")
+                    && (!args.windows(2).any(|pair| pair == ["--", "source.py"])
+                        || !args.iter().any(|arg| arg == "--no-cache")
+                        || !args.iter().any(|arg| arg == "--no-respect-gitignore")
+                        || !args.iter().any(|arg| arg == "--no-force-exclude")
+                        || args.iter().any(|arg| arg == ".")) {
+                    std::process::exit(48);
                 }
                 println!("fixture uv {}", args.join(" "));
                 eprintln!("fixture stderr");
@@ -5729,17 +5887,22 @@ mod tests {
                 ).unwrap();
                 fs::write(workspace.join("Cargo.lock"), b"# fixture lock\n").unwrap();
             }
-            "python_uv_group_dev_v1" => {
+            "python_uv_group_dev_v1" | "python_uv_group_dev_touched_v2" => {
                 fs::write(workspace.join("pyproject.toml"), b"[project]\nname = \"byovd-driver-pipeline\"\nversion = \"0.1.0\"\n[dependency-groups]\ndev = [\"pytest>=8\", \"ruff>=0.8\"]\n").unwrap();
                 fs::write(workspace.join("uv.lock"), b"version = 1\n").unwrap();
             }
-            "python_uv_extras_dev_lab_v1" => {
+            "python_uv_extras_dev_lab_v1" | "python_uv_extras_dev_lab_touched_v2" => {
                 fs::write(workspace.join("pyproject.toml"), b"[project]\nname = \"bug-bounty-security-research-platform\"\nversion = \"0.1.0\"\n[project.optional-dependencies]\ndev = [\"pytest>=8\", \"ruff>=0.9\"]\nlab = [\"flask>=3\"]\n").unwrap();
                 fs::write(workspace.join("uv.lock"), b"version = 1\n").unwrap();
             }
             _ => panic!("unknown test profile"),
         }
-        fs::write(workspace.join("source.txt"), b"before\n").unwrap();
+        let source_name = if profile.ends_with("_touched_v2") {
+            "source.py"
+        } else {
+            "source.txt"
+        };
+        fs::write(workspace.join(source_name), b"before\n").unwrap();
         fixture_commit(workspace);
         let git = resolve_trusted_git(workspace, &projects[0].workspace).unwrap();
         let before = capture_git_review_witness(workspace, &git).await.unwrap();
@@ -5755,7 +5918,7 @@ mod tests {
         let mut claimed = claim_one(&projects[0].workspace, &queue).unwrap().unwrap();
         let attempt = claimed.attempt.as_ref().unwrap();
         let receipt_id = attempt.attempt_id.clone();
-        fs::write(workspace.join("source.txt"), source_after).unwrap();
+        fs::write(workspace.join(source_name), source_after).unwrap();
         fs::write(workspace.join("new.txt"), b"new\n").unwrap();
         let after = capture_git_review_witness(workspace, &git).await.unwrap();
         let receipt = QueueReceipt {
@@ -7556,6 +7719,199 @@ mod tests {
         }
     }
 
+    #[test]
+    fn touched_python_profile_builds_exact_receipt_bound_ruff_argv() {
+        let sha = Some("a".repeat(64));
+        let changes = vec![
+            GitChangedPath {
+                path: "README.md".into(),
+                kind: "file".into(),
+                sha256: sha.clone(),
+            },
+            GitChangedPath {
+                path: "-new.py".into(),
+                kind: "file".into(),
+                sha256: sha.clone(),
+            },
+            GitChangedPath {
+                path: "src/old.PY".into(),
+                kind: "file".into(),
+                sha256: sha.clone(),
+            },
+        ];
+        // The Git witness sorts paths bytewise; a hyphen-leading filename is
+        // safe only because Ruff sees the explicit end-of-options separator.
+        let mut changes = changes;
+        changes.sort_by(|left, right| left.path.cmp(&right.path));
+        for profile in [
+            "python_uv_group_dev_touched_v2",
+            "python_uv_extras_dev_lab_touched_v2",
+        ] {
+            let commands = verification_commands(profile, &changes).unwrap();
+            assert_eq!(commands.len(), 3);
+            for command in &commands[..2] {
+                assert!(
+                    command
+                        .windows(3)
+                        .any(|args| args == ["--", "-new.py", "src/old.PY"])
+                );
+                assert!(!command.iter().any(|arg| arg == "."));
+                assert!(command.iter().any(|arg| arg == "--locked"));
+                assert!(command.iter().any(|arg| arg == "--offline"));
+            }
+            assert_eq!(commands[2].last().map(String::as_str), Some("-q"));
+        }
+        let documentation_only = [GitChangedPath {
+            path: "docs/note.md".into(),
+            kind: "file".into(),
+            sha256: sha.clone(),
+        }];
+        let commands =
+            verification_commands("python_uv_group_dev_touched_v2", &documentation_only).unwrap();
+        assert_eq!(
+            commands.len(),
+            1,
+            "documentation-only turns make no Ruff claim"
+        );
+        assert!(commands[0].windows(2).any(|args| args == ["pytest", "-q"]));
+
+        let mut deleted_python = changes.clone();
+        deleted_python[0].kind = "absent".into();
+        deleted_python[0].sha256 = None;
+        assert!(
+            verification_commands("python_uv_group_dev_touched_v2", &deleted_python)
+                .unwrap_err()
+                .contains("changed Python source is absent")
+        );
+        for bad in [
+            "../escape.py",
+            "src\\escape.py",
+            "C:escape.py",
+            "src//escape.py",
+        ] {
+            let changes = [GitChangedPath {
+                path: bad.into(),
+                kind: "file".into(),
+                sha256: sha.clone(),
+            }];
+            assert!(verification_commands("python_uv_group_dev_touched_v2", &changes).is_err());
+        }
+        for input in ["pyproject.toml", "uv.lock"] {
+            let changes = [GitChangedPath {
+                path: input.into(),
+                kind: "file".into(),
+                sha256: sha.clone(),
+            }];
+            assert!(
+                verification_commands("python_uv_group_dev_touched_v2", &changes)
+                    .unwrap_err()
+                    .contains("changed toolchain inputs")
+            );
+        }
+    }
+
+    #[test]
+    fn staged_python_rename_to_text_keeps_deleted_source_in_witness_and_refuses_v2() {
+        let fixture = fixture_root();
+        let project = fixture.join("project");
+        fixture_git(&project, "https://example.test/python-rename.git");
+        let project = project.canonicalize().unwrap();
+        fs::write(project.join("source.py"), b"value = 1\n").unwrap();
+        fixture_commit(&project);
+        fixture_git_command(&project, &["mv", "--", "source.py", "source.txt"]);
+        let status = StdCommand::new("git")
+            .arg("-C")
+            .arg(&project)
+            .args(["status", "--porcelain=v1", "-z", "--untracked-files=all"])
+            .output()
+            .unwrap();
+        assert!(status.status.success());
+        let paths = changed_paths_from_status(&project, &status.stdout).unwrap();
+        assert_eq!(paths.len(), 2);
+        assert_eq!(paths[0].path, "source.py");
+        assert_eq!(paths[0].kind, "absent");
+        assert_eq!(paths[1].path, "source.txt");
+        assert_eq!(paths[1].kind, "file");
+        assert!(
+            verification_commands("python_uv_group_dev_touched_v2", &paths)
+                .unwrap_err()
+                .contains("changed Python source is absent")
+        );
+
+        // Recreating the old pathname makes the rename source ambiguous.
+        fs::write(project.join("source.py"), b"replacement = 2\n").unwrap();
+        let status = StdCommand::new("git")
+            .arg("-C")
+            .arg(&project)
+            .args(["status", "--porcelain=v1", "-z", "--untracked-files=all"])
+            .output()
+            .unwrap();
+        assert!(status.status.success());
+        assert!(
+            changed_paths_from_status(&project, &status.stdout)
+                .unwrap_err()
+                .contains("renamed source is not absent")
+        );
+        fs::write(project.join("copy.txt"), b"value = 1\n").unwrap();
+        let copied = changed_paths_from_status(&project, b"C  copy.txt\0source.py\0").unwrap();
+        assert_eq!(copied.len(), 1, "a copy does not delete its source");
+        assert_eq!(copied[0].path, "copy.txt");
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn touched_python_profiles_verify_changed_source_and_refuse_omitted_ruff_path() {
+        for profile in [
+            "python_uv_group_dev_touched_v2",
+            "python_uv_extras_dev_lab_touched_v2",
+        ] {
+            let (fixture, projects, queue, receipt_id, uv) =
+                completed_verified_fixture_for_profile(profile, false).await;
+            let result = verify_receipt_in_store_with_executable(
+                &projects[0],
+                &queue,
+                &receipt_id,
+                Some(&uv),
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                result["verification"]["status"],
+                "LOCAL_COMMANDS_EXITED_ZERO_SOURCE_RECHECKED"
+            );
+            let receipt = queue.read_receipt(&receipt_id).unwrap();
+            let candidate = queue.read_review_candidate(&receipt).unwrap();
+            let (artifact, _) = queue
+                .read_verification(&receipt, &candidate)
+                .unwrap()
+                .unwrap();
+            assert_eq!(artifact.commands.len(), 3);
+            for command in &artifact.commands[..2] {
+                assert!(
+                    command
+                        .argv
+                        .windows(2)
+                        .any(|args| args == ["--", "source.py"])
+                );
+                assert!(command.argv.iter().any(|arg| arg == "--locked"));
+                assert!(command.argv.iter().any(|arg| arg == "--offline"));
+            }
+            let mut tampered = artifact;
+            tampered.commands[0].argv.pop();
+            let mut bytes = serde_json::to_vec_pretty(&tampered).unwrap();
+            bytes.push(b'\n');
+            fs::write(queue.verification_path(&receipt_id), &bytes).unwrap();
+            let mut job = queue
+                .load_job("alpha", "verified_fixture")
+                .unwrap()
+                .unwrap();
+            job.verification_sha256 = Some(format!("{:x}", Sha256::digest(&bytes)));
+            queue.save_job(&job).unwrap();
+            assert!(queue.read_verification(&receipt, &candidate).is_err());
+            cleanup(fixture);
+        }
+    }
+
     #[tokio::test]
     async fn nonzero_python_profile_stays_pending_and_not_wake_ready() {
         for profile in ["python_uv_group_dev_v1", "python_uv_extras_dev_lab_v1"] {
@@ -8228,6 +8584,40 @@ mod tests {
                     .expect("registry after retry"),
                 registry_bytes
             );
+        }
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn profile_bind_accepts_explicit_touched_python_v2_without_touching_siblings() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let control = &projects[0];
+        let registry = AutonomousProjectRegistryStoreV1::open_read_only(
+            control.workspace.join(".catdesk/projects"),
+        )
+        .unwrap();
+        for (project, profile) in [
+            (&projects[1], "python_uv_group_dev_touched_v2"),
+            (&projects[2], "python_uv_extras_dev_lab_touched_v2"),
+        ] {
+            fixture_python_profile_inputs(project, profile);
+            fixture_commit(&project.workspace);
+            let original = registry.load_registry().unwrap();
+            let expected_hash = project_binding_sha256(project).unwrap();
+            let result =
+                fixture_profile_bind(&control.workspace, &queue, project, profile, &expected_hash)
+                    .await
+                    .unwrap();
+            assert_eq!(result["verificationProfile"], profile);
+            let updated = registry.load_registry().unwrap();
+            assert_eq!(original.projects.len(), updated.projects.len());
+            for sibling in original
+                .projects
+                .iter()
+                .filter(|entry| entry.project_id != project.project_id)
+            {
+                assert!(updated.projects.contains(sibling));
+            }
         }
         cleanup(fixture);
     }

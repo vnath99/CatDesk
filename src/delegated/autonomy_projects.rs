@@ -496,7 +496,10 @@ impl AutonomousProjectRegistryStoreV1 {
         if old_profile != "rust_full"
             || !matches!(
                 new_profile,
-                "python_uv_group_dev_v1" | "python_uv_extras_dev_lab_v1"
+                "python_uv_group_dev_v1"
+                    | "python_uv_extras_dev_lab_v1"
+                    | "python_uv_group_dev_touched_v2"
+                    | "python_uv_extras_dev_lab_touched_v2"
             )
             || (observed.verification_profile != old_profile
                 && observed.verification_profile != new_profile)
