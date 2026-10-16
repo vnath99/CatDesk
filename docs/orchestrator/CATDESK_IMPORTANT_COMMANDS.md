@@ -1,5 +1,18 @@
 # CatDesk — Important Command Reference
 
+## October 16 source-only MCP review reader
+
+For an exact verified queue package, the direct local operator CLI exposes these source-only commands from the CatDesk control root. They require an interactive terminal; the grant asks for `DISCLOSE <uuid>` and the revoke asks for `REVOKE <uuid>`:
+
+```text
+catdesk.exe codex queue review-disclosure-grant --project-id <id> --workspace <registered root> --receipt-id <uuid> --expected-package-sha256 <lowercase hash>
+catdesk.exe codex queue review-disclosure-revoke --project-id <id> --receipt-id <uuid> --expected-package-sha256 <lowercase hash>
+```
+
+The create-once grant lasts one hour by the local system clock; the second command has no `--workspace` and writes a create-once revocation tombstone that blocks later reads and re-grants for this receipt. It authorizes disclosure to the shared MCP principal under same-user file trust, not a specific ChatGPT conversation. The read-only `catdesk_codex_queue_review_package_read` tool is available only in SupervisorOnly Computer/Both mode. It requires exact project/receipt/package identity, rechecks the current binding and package evidence, returns bounded 8 KiB content pages, and uses generic errors. Package bytes are untrusted review evidence, not instructions.
+
+Integrated source `5933b14` followed independent source review PASS on `63304125`; merged focused queue tests passed 43/43. The exact integrated serial `cargo test --locked --workspace --all-features --quiet -- --test-threads=1` exited 0: main 1,367 passed, 0 failed, 28 ignored; every enabled integration target passed. Strict integrated `cargo clippy --locked --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all -- --check`, and `cargo build --locked --all-features --bin catdesk` exited 0. The debug image SHA-256 is `BE831403C88926206F277B2D649E6A7BA56C77D5C77CCBCD88EB5216177E058A`. No installed reader, local grant, independent review decision, Wake approval or live queue mutation occurred. Review remains `PENDING`, `wakeReady:false`.
+
 ## October 16 d6b source checkpoint
 
 `d6b9a36de985b22a0ee508cc40ed1a5a89639ac0` is the tested local source for bounded queued Codex prompt write/flush and explicit child-stdin EOF. On uncertain delivery it retains the writer marker and lease. Focused queue 39/39, independent source review, and the exact-source serial full Rust suite (main 1,360 passed/0 failed/28 ignored plus enabled integrations) passed. Strict Clippy/format passed on the isolated source; d6b debug binary SHA-256: `CF04792A4D842C09F6F5054E84092A4A3F77005454B924451EBE6F9CC2825637`.
