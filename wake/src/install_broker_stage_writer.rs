@@ -756,7 +756,18 @@ fn materialize_pinned_candidate_stage<'p>(
 enum PublicationProofMode {
     Protected(String),
     #[cfg(test)]
-    Fixture(Box<crate::install_broker_reader::PublicationFixturePolicyV1>),
+    Fixture {
+        reader_policy: Box<crate::install_broker_reader::PublicationFixturePolicyV1>,
+        candidate_security: (String, String),
+    },
+}
+
+fn require_protected_publication_acl(handle: &OwnedHandle, service_sid: &str) -> Result<()> {
+    let (owner, actual) = protected_security_raw(handle.as_raw_handle())?;
+    if owner != "S-1-5-18" || actual != canonical_protected_security(service_sid, true)? {
+        return Err("WAKE_BROKER_PUBLICATION_ACL_MISMATCH".into());
+    }
+    Ok(())
 }
 
 fn valid_publication_component(component: &str) -> bool {
@@ -916,16 +927,23 @@ fn publish_pinned_candidate<'p>(
             PublicationProofMode::Protected(service_sid.clone())
         }
         #[cfg(test)]
-        StageSecurityMode::Fixture => PublicationProofMode::Fixture(Box::new(
-            crate::install_broker_reader::publication_fixture_policy_before_rename(
-                root, &approval, &stage,
-            )?,
-        )),
+        StageSecurityMode::Fixture => PublicationProofMode::Fixture {
+            reader_policy: Box::new(
+                crate::install_broker_reader::publication_fixture_policy_before_rename(
+                    root, &approval, &stage,
+                )?,
+            ),
+            candidate_security: protected_security_raw(receipt.candidate.as_raw_handle())?,
+        },
     };
     // This marker is flushed before any delete-denying stage pin is dropped.
     // Its presence prevents a second publication attempt after any failure.
     lease.record_publication_attempt(&mut receipt)?;
     drop(receipt);
+    #[cfg(test)]
+    if let Some(hook) = AFTER_STAGE_RELEASE.with(|slot| slot.borrow_mut().take()) {
+        hook();
+    }
     let root = lease.protected_root();
 
     let staging = open_publication_child(root, STAGING, false)?;
@@ -937,20 +955,31 @@ fn publish_pinned_candidate<'p>(
     }
     match &proof {
         PublicationProofMode::Protected(service_sid) => {
-            let expected = canonical_protected_security(service_sid, true)?;
             for parent in [&staging, &packages] {
-                let (owner, actual) = protected_security_raw(parent.as_raw_handle())?;
-                if owner != "S-1-5-18" || actual != expected {
-                    return Err("WAKE_BROKER_PUBLICATION_ACL_MISMATCH".into());
-                }
+                require_protected_publication_acl(parent, service_sid)?;
             }
         }
         #[cfg(test)]
-        PublicationProofMode::Fixture(_) => {}
+        PublicationProofMode::Fixture { .. } => {}
     }
     let candidate = open_publication_child(&staging, CANDIDATE, true)?;
     if identity(candidate.as_raw_handle(), true)? != stage.candidate_directory {
         return Err("WAKE_BROKER_PUBLICATION_OBJECT_CHANGED".into());
+    }
+    // The STAGED read pins were released to obtain DELETE access. Require
+    // the exact reopened candidate's owner/DACL before the native rename.
+    match &proof {
+        PublicationProofMode::Protected(service_sid) => {
+            require_protected_publication_acl(&candidate, service_sid)?;
+        }
+        #[cfg(test)]
+        PublicationProofMode::Fixture {
+            candidate_security, ..
+        } => {
+            if protected_security_raw(candidate.as_raw_handle())? != *candidate_security {
+                return Err("WAKE_BROKER_PUBLICATION_ACL_MISMATCH".into());
+            }
+        }
     }
     rename_candidate_noreplace(
         &candidate,
@@ -981,13 +1010,13 @@ fn publish_pinned_candidate<'p>(
             pin_published_package_under_guard(root, &root_id, &approval, &stage, &service_sid)?
         }
         #[cfg(test)]
-        PublicationProofMode::Fixture(fixture_policy) => {
+        PublicationProofMode::Fixture { reader_policy, .. } => {
             crate::install_broker_reader::pin_published_package_fixture(
                 root,
                 &root_id,
                 &approval,
                 &stage,
-                &fixture_policy,
+                &reader_policy,
             )?
         }
     };
@@ -1005,6 +1034,7 @@ fn publish_pinned_candidate<'p>(
 #[cfg(test)]
 thread_local! {
     static FAIL_AFTER_ARTIFACT: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+    static AFTER_STAGE_RELEASE: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = std::cell::RefCell::new(None);
 }
 
 #[cfg(test)]
@@ -1610,6 +1640,109 @@ mod tests {
         drop(package);
         drop(packages);
         drop(resumed);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn typed_publication_refuses_candidate_acl_drift_before_rename() {
+        let fixture = TransactionFixture::new();
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("global lock");
+        let mut lease = guard
+            .begin_fixture(&fixture.approval, &fixture.expectation)
+            .expect("durable intent");
+        let mut staged = materialize_pinned_candidate_stage(
+            &mut lease,
+            &fixture.approval,
+            fixture.source(),
+            StageSecurityMode::Fixture,
+            None,
+        )
+        .expect("fresh typed stage");
+        lease.record_staged(&mut staged).expect("durable STAGED");
+        let stage = staged.stage_binding();
+        let candidate_path = fixture.staged_path();
+        AFTER_STAGE_RELEASE.with(|slot| {
+            assert!(slot.borrow().is_none());
+            *slot.borrow_mut() = Some(Box::new(move || {
+                let mut raw = ptr::null_mut();
+                let mut size = 0;
+                let alternate = "D:P(A;;FA;;;WD)"
+                    .encode_utf16()
+                    .chain([0])
+                    .collect::<Vec<_>>();
+                assert_ne!(
+                    unsafe {
+                        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                            alternate.as_ptr(),
+                            1,
+                            &mut raw,
+                            &mut size,
+                        )
+                    },
+                    0
+                );
+                assert!(!raw.is_null() && size > 0);
+                let alternate_descriptor = LocalDescriptor(raw);
+                let wide = candidate_path
+                    .as_os_str()
+                    .encode_wide()
+                    .chain([0])
+                    .collect::<Vec<_>>();
+                assert_ne!(
+                    unsafe { SetFileSecurityW(wide.as_ptr(), 4, alternate_descriptor.0) },
+                    0,
+                    "fixture candidate DACL drift"
+                );
+            }));
+        });
+        assert_eq!(
+            publish_pinned_candidate(&mut lease, staged).err().unwrap(),
+            "WAKE_BROKER_PUBLICATION_ACL_MISMATCH"
+        );
+        assert_eq!(lease.phase(), InstallPhaseV1::Staged);
+        assert!(fixture.staged_path().is_dir());
+        assert!(
+            !fixture
+                .base
+                .join(PACKAGES)
+                .join(&fixture.approval.payload().manifest.package_id)
+                .exists()
+        );
+        assert_eq!(
+            identity(
+                open_publication_child(
+                    &open_publication_child(&fixture.root, STAGING, false).unwrap(),
+                    CANDIDATE,
+                    true,
+                )
+                .unwrap()
+                .as_raw_handle(),
+                true,
+            )
+            .unwrap(),
+            stage.candidate_directory
+        );
+        assert!(
+            fixture
+                .base
+                .join("install-transaction-00000000000000000002-publication-attempt.json")
+                .is_file()
+        );
+        assert!(
+            !fixture
+                .base
+                .join("install-transaction-00000000000000000002-published.json")
+                .exists()
+        );
+        drop(lease);
+        let guard = BrokerLedgerGuard::acquire(&fixture.root).expect("reopen lock");
+        assert_eq!(
+            guard
+                .begin_fixture(&fixture.approval, &fixture.expectation)
+                .err()
+                .unwrap(),
+            "WAKE_BROKER_PUBLICATION_ATTEMPT_ATTENTION"
+        );
         fixture.cleanup();
     }
 
