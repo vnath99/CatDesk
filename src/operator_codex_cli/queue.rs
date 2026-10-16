@@ -15,7 +15,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 use uuid::Uuid;
 
@@ -40,6 +40,13 @@ const MAX_JOB_BYTES: u64 = 64 * 1024;
 const MAX_JOBS: usize = 512;
 const MAX_DIR_ENTRIES: usize = 1024;
 const MAX_RECEIPT_BYTES: u64 = 16 * 1024;
+const MAX_REVIEW_BYTES: u64 = 64 * 1024;
+const MAX_GIT_STATUS_BYTES: usize = 1024 * 1024;
+const MAX_GIT_DIFF_BYTES: usize = 16 * 1024 * 1024;
+const MAX_GIT_FILE_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_GIT_FILES_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_GIT_PATHS: usize = 256;
+const GIT_WITNESS_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_NATIVE_EXE_BYTES: u64 = 512 * 1024 * 1024;
 // Expiry is an operator recovery signal only; the scheduler never reclaims
 // this lease based on time. The window exceeds the maximum native turn bound.
@@ -61,6 +68,9 @@ pub(crate) enum QueueAction {
     Receipt {
         receipt_id: String,
     },
+    Review {
+        receipt_id: String,
+    },
     Dispatch,
     Pause {
         scope: CodexScope,
@@ -74,11 +84,12 @@ pub(crate) enum QueueAction {
 
 pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
     let verb = args.get(3).map(String::as_str).ok_or_else(|| {
-        "CODEX_QUEUE_USAGE: expected add, status, receipt, dispatch, pause, or resume".to_string()
+        "CODEX_QUEUE_USAGE: expected add, status, receipt, review, dispatch, pause, or resume"
+            .to_string()
     })?;
     if !matches!(
         verb,
-        "add" | "status" | "receipt" | "dispatch" | "pause" | "resume"
+        "add" | "status" | "receipt" | "review" | "dispatch" | "pause" | "resume"
     ) {
         return Err("CODEX_QUEUE_USAGE: unsupported queue action".into());
     }
@@ -119,16 +130,22 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             QueueAction::Dispatch
         });
     }
-    if verb == "receipt" {
+    if matches!(verb, "receipt" | "review") {
         let receipt_id = values
             .remove("--receipt-id")
-            .ok_or("CODEX_QUEUE_USAGE: receipt requires --receipt-id")?;
+            .ok_or("CODEX_QUEUE_USAGE: receipt or review requires --receipt-id")?;
         if !values.is_empty()
             || !Uuid::parse_str(&receipt_id).is_ok_and(|id| id.to_string() == receipt_id)
         {
-            return Err("CODEX_QUEUE_USAGE: receipt requires one canonical receipt UUID".into());
+            return Err(
+                "CODEX_QUEUE_USAGE: receipt or review requires one canonical receipt UUID".into(),
+            );
         }
-        return Ok(QueueAction::Receipt { receipt_id });
+        return Ok(if verb == "receipt" {
+            QueueAction::Receipt { receipt_id }
+        } else {
+            QueueAction::Review { receipt_id }
+        });
     }
     let project_id = values
         .remove("--project-id")
@@ -263,6 +280,8 @@ struct QueueJob {
     created_at_unix: u64,
     attempt: Option<QueueAttempt>,
     receipt_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    review_candidate_sha256: Option<String>,
 }
 
 impl QueueJob {
@@ -286,6 +305,7 @@ impl QueueJob {
             created_at_unix: unix_now()?,
             attempt: None,
             receipt_id: None,
+            review_candidate_sha256: None,
         })
     }
     fn same_request(&self, other: &Self) -> bool {
@@ -304,6 +324,7 @@ impl QueueJob {
             "createdAtUnix": self.created_at_unix,
             "attemptId": self.attempt.as_ref().map(|attempt| &attempt.attempt_id),
             "receiptId": self.receipt_id,
+            "reviewCandidateSha256": self.review_candidate_sha256,
         })
     }
 }
@@ -331,6 +352,96 @@ struct QueueReceipt {
     binding_still_matches: bool,
     outcome: String,
     recorded_at_unix: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitChangedPath {
+    path: String,
+    kind: String,
+    sha256: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GitReviewWitness {
+    head_commit: Option<String>,
+    status_sha256: String,
+    tracked_diff_sha256: String,
+    changed_paths: Vec<GitChangedPath>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct QueueReviewCandidate {
+    schema_version: u32,
+    receipt_id: String,
+    receipt_sha256: String,
+    project_id: String,
+    task_id: String,
+    workspace: PathBuf,
+    thread_id: String,
+    prompt_sha256: String,
+    requested_model: Option<String>,
+    requested_effort: Option<String>,
+    before: GitReviewWitness,
+    after: GitReviewWitness,
+    baseline_dirty: bool,
+    head_changed: bool,
+    changed_during_turn: Vec<String>,
+    review_status: String,
+    verification_status: String,
+    wake_ready: bool,
+}
+
+impl QueueReviewCandidate {
+    fn from_observed_turn(
+        job: &QueueJob,
+        receipt: &QueueReceipt,
+        receipt_sha256: String,
+        before: GitReviewWitness,
+        after: GitReviewWitness,
+    ) -> Self {
+        let before_paths = before
+            .changed_paths
+            .iter()
+            .map(|item| (item.path.as_str(), item))
+            .collect::<BTreeMap<_, _>>();
+        let after_paths = after
+            .changed_paths
+            .iter()
+            .map(|item| (item.path.as_str(), item))
+            .collect::<BTreeMap<_, _>>();
+        let changed_during_turn = before_paths
+            .keys()
+            .chain(after_paths.keys())
+            .copied()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .filter(|path| before_paths.get(path) != after_paths.get(path))
+            .map(str::to_owned)
+            .collect();
+        Self {
+            schema_version: QUEUE_SCHEMA_VERSION,
+            receipt_id: receipt.receipt_id.clone(),
+            receipt_sha256,
+            project_id: job.binding.project_id.clone(),
+            task_id: job.task_id.clone(),
+            workspace: job.binding.workspace.clone(),
+            thread_id: job.binding.thread_id.clone(),
+            prompt_sha256: job.prompt_sha256.clone(),
+            requested_model: job.model.clone(),
+            requested_effort: job.effort.clone(),
+            baseline_dirty: before.head_commit.is_none() || !before.changed_paths.is_empty(),
+            head_changed: before.head_commit != after.head_commit,
+            changed_during_turn,
+            before,
+            after,
+            review_status: "UNREVIEWED".into(),
+            verification_status: "NOT_VERIFIED_BY_CATDESK".into(),
+            wake_ready: false,
+        }
+    }
 }
 
 struct QueueStore {
@@ -528,6 +639,81 @@ impl QueueStore {
             return Err("CODEX_QUEUE: receipt record is oversized".into());
         }
         create_new_record(&path, &bytes)
+    }
+    fn persisted_receipt_sha256(&self, receipt: &QueueReceipt) -> Result<String, String> {
+        let bytes = read_regular_bounded(
+            &self
+                .root
+                .join("receipts")
+                .join(format!("{}.json", receipt.receipt_id)),
+            MAX_RECEIPT_BYTES,
+        )?
+        .ok_or("CODEX_QUEUE_REVIEW: process receipt is unavailable")?;
+        let observed: QueueReceipt = serde_json::from_slice(&bytes)
+            .map_err(|_| "CODEX_QUEUE_REVIEW: process receipt is corrupt")?;
+        if &observed != receipt {
+            return Err("CODEX_QUEUE_REVIEW: process receipt changed before review capture".into());
+        }
+        Ok(format!("{:x}", Sha256::digest(&bytes)))
+    }
+    fn review_path(&self, receipt_id: &str) -> PathBuf {
+        self.root
+            .join("receipts")
+            .join(format!("{receipt_id}.review.json"))
+    }
+    fn write_review_candidate(&self, candidate: &QueueReviewCandidate) -> Result<String, String> {
+        let bytes = serde_json::to_vec_pretty(candidate)
+            .map_err(|_| "CODEX_QUEUE_REVIEW: candidate could not be encoded")?;
+        if bytes.len().saturating_add(1) as u64 > MAX_REVIEW_BYTES {
+            return Err("CODEX_QUEUE_REVIEW: candidate is oversized".into());
+        }
+        let mut persisted = bytes.clone();
+        persisted.push(b'\n');
+        let digest = format!("{:x}", Sha256::digest(&persisted));
+        create_new_record(&self.review_path(&candidate.receipt_id), &bytes)?;
+        Ok(digest)
+    }
+    fn read_review_candidate(
+        &self,
+        receipt: &QueueReceipt,
+    ) -> Result<QueueReviewCandidate, String> {
+        let receipt_bytes = read_regular_bounded(
+            &self
+                .root
+                .join("receipts")
+                .join(format!("{}.json", receipt.receipt_id)),
+            MAX_RECEIPT_BYTES,
+        )?
+        .ok_or("CODEX_QUEUE_REVIEW: process receipt is unavailable")?;
+        let bytes = read_regular_bounded(&self.review_path(&receipt.receipt_id), MAX_REVIEW_BYTES)?
+            .ok_or("CODEX_QUEUE_REVIEW: bound candidate is unavailable")?;
+        let candidate: QueueReviewCandidate = serde_json::from_slice(&bytes)
+            .map_err(|_| "CODEX_QUEUE_REVIEW: candidate is corrupt".to_string())?;
+        let job = self
+            .load_job(&receipt.project_id, &receipt.task_id)?
+            .ok_or("CODEX_QUEUE_REVIEW: bound job is unavailable")?;
+        let observed_sha = format!("{:x}", Sha256::digest(&bytes));
+        if candidate.schema_version != QUEUE_SCHEMA_VERSION
+            || job.review_candidate_sha256.as_deref() != Some(observed_sha.as_str())
+            || candidate.receipt_id != receipt.receipt_id
+            || candidate.receipt_sha256 != format!("{:x}", Sha256::digest(&receipt_bytes))
+            || candidate.project_id != receipt.project_id
+            || candidate.task_id != receipt.task_id
+            || candidate.workspace != receipt.workspace
+            || candidate.thread_id != receipt.thread_id
+            || candidate.prompt_sha256 != receipt.prompt_sha256
+            || candidate.requested_model != receipt.requested_model
+            || candidate.requested_effort != receipt.requested_effort
+            || candidate.review_status != "UNREVIEWED"
+            || candidate.verification_status != "NOT_VERIFIED_BY_CATDESK"
+            || candidate.wake_ready
+            || receipt.outcome != "NATIVE_EXIT_ZERO"
+            || !receipt.child_exit_observed
+            || !receipt.binding_still_matches
+        {
+            return Err("CODEX_QUEUE_REVIEW: candidate and process receipt disagree".into());
+        }
+        Ok(candidate)
     }
     fn read_receipt(&self, receipt_id: &str) -> Result<QueueReceipt, String> {
         let path = self
@@ -773,6 +959,10 @@ fn validate_job(job: &QueueJob) -> Result<(), String> {
             .as_deref()
             .is_some_and(|value| !valid_effort(value))
         || job.binding.workspace.as_os_str().is_empty()
+        || job
+            .review_candidate_sha256
+            .as_deref()
+            .is_some_and(|sha| sha.len() != 64 || !sha.bytes().all(|byte| byte.is_ascii_hexdigit()))
     {
         return Err("CODEX_QUEUE: job record is invalid".into());
     }
@@ -842,6 +1032,39 @@ pub(crate) async fn execute_action(
             Ok(
                 json!({ "action":"codex_queue_receipt", "receipt":store.read_receipt(&receipt_id)? }),
             )
+        }
+        QueueAction::Review { receipt_id } => {
+            let store = QueueStore::open_read_only(&control.project)?
+                .ok_or("CODEX_QUEUE: queue state is unavailable")?;
+            let receipt = store.read_receipt(&receipt_id)?;
+            let candidate = store.read_review_candidate(&receipt)?;
+            let job = store
+                .load_job(&receipt.project_id, &receipt.task_id)?
+                .ok_or("CODEX_QUEUE_REVIEW: bound job is unavailable")?;
+            let binding_matches = registered_project(
+                &control.control_workspace,
+                &CodexScope {
+                    project_id: receipt.project_id.clone(),
+                    workspace: receipt.workspace.clone(),
+                },
+            )
+            .as_ref()
+            .is_ok_and(|project| job.binding.matches(project));
+            let current_matches =
+                match resolve_trusted_git(&receipt.workspace, &control.control_workspace) {
+                    Ok(git) => capture_git_review_witness(&receipt.workspace, &git)
+                        .await
+                        .ok()
+                        .map(|current| current == candidate.after),
+                    Err(_) => None,
+                };
+            Ok(json!({
+                "action":"codex_queue_review", "candidate":candidate,
+                "jobState":job.state,
+                "scopeBindingMatchesNow":binding_matches,
+                "worktreeMatchesCapturedAfter":current_matches,
+                "meaning":"UNREVIEWED same-user Git observations. Revalidate current files before review; project tests, effective model proof, independent review, and Wake remain unverified. Ignored files and submodule contents are excluded.",
+            }))
         }
         QueueAction::Pause { scope, task_id } | QueueAction::Resume { scope, task_id } => {
             let pause = pause_action;
@@ -974,6 +1197,7 @@ fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<Queu
     }
     job.state = QueueState::Claimed;
     job.receipt_id = None;
+    job.review_candidate_sha256 = None;
     job.attempt = Some(QueueAttempt {
         attempt_id: Uuid::new_v4().to_string(),
         lease: lease.clone(),
@@ -998,6 +1222,8 @@ struct TurnResult {
     native_executable: Option<PathBuf>,
     native_version: Option<String>,
     native_executable_sha256: Option<String>,
+    review_before: Option<GitReviewWitness>,
+    review_after: Option<GitReviewWitness>,
 }
 
 impl TurnResult {
@@ -1011,6 +1237,8 @@ impl TurnResult {
             native_executable: None,
             native_version: None,
             native_executable_sha256: None,
+            review_before: None,
+            review_after: None,
         }
     }
     fn unknown(outcome: &'static str) -> Self {
@@ -1023,6 +1251,8 @@ impl TurnResult {
             native_executable: None,
             native_version: None,
             native_executable_sha256: None,
+            review_before: None,
+            review_after: None,
         }
     }
     fn with_cli(mut self, cli: &NativeCliPreflight) -> Self {
@@ -1086,6 +1316,303 @@ fn native_executable_sha256(path: &Path) -> Result<String, String> {
         return Err("CODEX_QUEUE_CLI: native executable changed".into());
     }
     Ok(format!("{:x}", digest.finalize()))
+}
+
+/// Bounded, local Git observations. These are review inputs, not proof that
+/// the native child authored every byte: another same-user writer can edit a
+/// workspace outside CatDesk's cooperative lock.
+struct TrustedGit {
+    executable: PathBuf,
+    sha256: String,
+}
+
+fn resolve_trusted_git(workspace: &Path, control_workspace: &Path) -> Result<TrustedGit, String> {
+    let registered_roots = scheduler(control_workspace)?
+        .load_registry()
+        .map_err(|_| "CODEX_QUEUE_REVIEW: registered project roots are unavailable")?
+        .projects
+        .into_iter()
+        .map(|project| project.workspace)
+        .collect::<Vec<_>>();
+    if !registered_roots.contains(&workspace.to_path_buf()) {
+        return Err("CODEX_QUEUE_REVIEW: selected workspace is not registered".into());
+    }
+    let path = std::env::var_os("PATH").ok_or("CODEX_QUEUE_REVIEW: Git PATH is unavailable")?;
+    let basename = if cfg!(windows) { "git.exe" } else { "git" };
+    for directory in std::env::split_paths(&path) {
+        if !directory.is_absolute() {
+            continue;
+        }
+        let candidate = directory.join(basename);
+        let Ok(metadata) = fs::symlink_metadata(&candidate) else {
+            continue;
+        };
+        if !metadata.is_file() || redirected(&metadata) {
+            continue;
+        }
+        let Ok(executable) = candidate.canonicalize() else {
+            continue;
+        };
+        if registered_roots
+            .iter()
+            .any(|project_root| executable.starts_with(project_root))
+        {
+            continue;
+        }
+        let sha256 = native_executable_sha256(&executable)
+            .map_err(|_| "CODEX_QUEUE_REVIEW: Git executable cannot be pinned")?;
+        return Ok(TrustedGit { executable, sha256 });
+    }
+    Err("CODEX_QUEUE_REVIEW: no trusted Git executable outside the project".into())
+}
+
+async fn git_witness_output(
+    git: &TrustedGit,
+    workspace: &Path,
+    args: &[&str],
+    limit: usize,
+) -> Result<(bool, Vec<u8>), String> {
+    if native_executable_sha256(&git.executable).ok().as_deref() != Some(&git.sha256) {
+        return Err("CODEX_QUEUE_REVIEW: pinned Git executable changed".into());
+    }
+    let mut command = Command::new(&git.executable);
+    command
+        .args([
+            "--no-optional-locks",
+            "--no-pager",
+            "-c",
+            "core.fsmonitor=false",
+        ])
+        .args(args)
+        .current_dir(workspace)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    for name in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_COMMON_DIR",
+        "GIT_PREFIX",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_CONFIG_PARAMETERS",
+        "GIT_CONFIG_COUNT",
+    ] {
+        command.env_remove(name);
+    }
+    let mut child = command
+        .spawn()
+        .map_err(|_| "CODEX_QUEUE_REVIEW: Git could not start".to_string())?;
+    tokio::time::timeout(GIT_WITNESS_TIMEOUT, async {
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or("CODEX_QUEUE_REVIEW: Git output is unavailable")?;
+        let mut bytes = Vec::new();
+        stdout
+            .take(limit.saturating_add(1) as u64)
+            .read_to_end(&mut bytes)
+            .await
+            .map_err(|_| "CODEX_QUEUE_REVIEW: Git output could not be read")?;
+        if bytes.len() > limit {
+            return Err("CODEX_QUEUE_REVIEW: Git output exceeds the review bound".into());
+        }
+        let status = child
+            .wait()
+            .await
+            .map_err(|_| "CODEX_QUEUE_REVIEW: Git exit is unavailable")?;
+        Ok((status.success(), bytes))
+    })
+    .await
+    .map_err(|_| "CODEX_QUEUE_REVIEW: Git witness timed out".to_string())?
+}
+
+fn checked_git_path(workspace: &Path, relative: &str) -> Result<PathBuf, String> {
+    if relative.is_empty()
+        || relative.len() > 1024
+        || relative.contains('\\')
+        || relative.contains(':')
+        || relative
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return Err("CODEX_QUEUE_REVIEW: Git reported an unsafe path".into());
+    }
+    let mut path = workspace.to_path_buf();
+    let parts = relative.split('/').collect::<Vec<_>>();
+    let mut parent_missing = false;
+    for (index, part) in parts.iter().enumerate() {
+        path.push(part);
+        if index + 1 == parts.len() || parent_missing {
+            continue;
+        }
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) if metadata.is_dir() && !redirected(&metadata) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => parent_missing = true,
+            _ => return Err("CODEX_QUEUE_REVIEW: Git path has a redirected ancestor".into()),
+        }
+    }
+    Ok(path)
+}
+
+fn changed_paths_from_status(
+    workspace: &Path,
+    status: &[u8],
+) -> Result<Vec<GitChangedPath>, String> {
+    let records = status
+        .split(|byte| *byte == 0)
+        .filter(|record| !record.is_empty())
+        .collect::<Vec<_>>();
+    let mut changed = Vec::new();
+    let mut total_file_bytes = 0u64;
+    let mut index = 0;
+    while index < records.len() {
+        let record = std::str::from_utf8(records[index])
+            .map_err(|_| "CODEX_QUEUE_REVIEW: Git path is not UTF-8")?;
+        let prefix = record.as_bytes();
+        if prefix.len() < 4 || prefix[2] != b' ' {
+            return Err("CODEX_QUEUE_REVIEW: Git status format is invalid".into());
+        }
+        let relative = &record[3..];
+        let path = checked_git_path(workspace, relative)?;
+        if changed.len() >= MAX_GIT_PATHS {
+            return Err("CODEX_QUEUE_REVIEW: too many changed paths".into());
+        }
+        let observation = match fs::symlink_metadata(&path) {
+            Ok(metadata) if metadata.is_file() && !redirected(&metadata) => {
+                if !path
+                    .canonicalize()
+                    .is_ok_and(|physical| physical.starts_with(workspace))
+                {
+                    return Err("CODEX_QUEUE_REVIEW: changed path left its project root".into());
+                }
+                total_file_bytes = total_file_bytes
+                    .checked_add(metadata.len())
+                    .ok_or("CODEX_QUEUE_REVIEW: changed files are oversized")?;
+                if metadata.len() > MAX_GIT_FILE_BYTES || total_file_bytes > MAX_GIT_FILES_BYTES {
+                    return Err("CODEX_QUEUE_REVIEW: changed files exceed the review bound".into());
+                }
+                let bytes = read_regular_bounded(&path, MAX_GIT_FILE_BYTES)?
+                    .ok_or("CODEX_QUEUE_REVIEW: changed file disappeared")?;
+                GitChangedPath {
+                    path: relative.into(),
+                    kind: "file".into(),
+                    sha256: Some(format!("{:x}", Sha256::digest(&bytes))),
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => GitChangedPath {
+                path: relative.into(),
+                kind: "absent".into(),
+                sha256: None,
+            },
+            _ => {
+                return Err("CODEX_QUEUE_REVIEW: changed path is redirected or unsupported".into());
+            }
+        };
+        changed.push(observation);
+        index += 1;
+        if matches!(prefix[0], b'R' | b'C') || matches!(prefix[1], b'R' | b'C') {
+            let old = records
+                .get(index)
+                .ok_or("CODEX_QUEUE_REVIEW: Git rename record is incomplete")?;
+            let old = std::str::from_utf8(old)
+                .map_err(|_| "CODEX_QUEUE_REVIEW: Git rename path is not UTF-8")?;
+            checked_git_path(workspace, old)?;
+            index += 1;
+        }
+    }
+    changed.sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(changed)
+}
+
+async fn capture_git_review_witness(
+    workspace: &Path,
+    git: &TrustedGit,
+) -> Result<GitReviewWitness, String> {
+    let (ok, top) =
+        git_witness_output(git, workspace, &["rev-parse", "--show-toplevel"], 4096).await?;
+    let top = std::str::from_utf8(&top)
+        .map_err(|_| "CODEX_QUEUE_REVIEW: Git root is not UTF-8")?
+        .trim();
+    if !ok || Path::new(top).canonicalize().ok().as_deref() != Some(workspace) {
+        return Err("CODEX_QUEUE_REVIEW: Git top level is not the registered workspace".into());
+    }
+    let (has_head, head) =
+        git_witness_output(git, workspace, &["rev-parse", "--verify", "HEAD"], 128).await?;
+    let head_commit = if has_head {
+        let value = std::str::from_utf8(&head)
+            .map_err(|_| "CODEX_QUEUE_REVIEW: Git HEAD is invalid")?
+            .trim();
+        if !matches!(value.len(), 40 | 64) || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err("CODEX_QUEUE_REVIEW: Git HEAD is invalid".into());
+        }
+        Some(value.to_owned())
+    } else {
+        None
+    };
+    let (ok, status) = git_witness_output(
+        git,
+        workspace,
+        &[
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            "--ignore-submodules=none",
+        ],
+        MAX_GIT_STATUS_BYTES,
+    )
+    .await?;
+    if !ok {
+        return Err("CODEX_QUEUE_REVIEW: Git status failed".into());
+    }
+    let changed_paths = changed_paths_from_status(workspace, &status)?;
+    let diff_args: &[&str] = if head_commit.is_some() {
+        &[
+            "diff",
+            "--binary",
+            "--no-ext-diff",
+            "--no-textconv",
+            "HEAD",
+            "--",
+        ]
+    } else {
+        &["diff", "--binary", "--no-ext-diff", "--no-textconv", "--"]
+    };
+    let (ok, diff) = git_witness_output(git, workspace, diff_args, MAX_GIT_DIFF_BYTES).await?;
+    if !ok {
+        return Err("CODEX_QUEUE_REVIEW: Git diff failed".into());
+    }
+    let mut diff_hash = Sha256::new();
+    diff_hash.update(&diff);
+    if head_commit.is_none() {
+        let (ok, staged) = git_witness_output(
+            git,
+            workspace,
+            &[
+                "diff",
+                "--cached",
+                "--binary",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--",
+            ],
+            MAX_GIT_DIFF_BYTES,
+        )
+        .await?;
+        if !ok {
+            return Err("CODEX_QUEUE_REVIEW: staged Git diff failed".into());
+        }
+        diff_hash.update(&staged);
+    }
+    Ok(GitReviewWitness {
+        head_commit,
+        status_sha256: format!("{:x}", Sha256::digest(&status)),
+        tracked_diff_sha256: format!("{:x}", diff_hash.finalize()),
+        changed_paths,
+    })
 }
 
 async fn preflight_native_cli(workspace: &Path) -> Result<NativeCliPreflight, String> {
@@ -1186,6 +1713,14 @@ async fn run_queued_turn(
     if ensure_no_interrupted_managed_writer(&project).is_err() {
         return TurnResult::before_spawn("MANAGED_WRITER_UNRESOLVED");
     }
+    let git = match resolve_trusted_git(&project.workspace, control_workspace) {
+        Ok(git) => git,
+        Err(_) => return TurnResult::before_spawn("REVIEW_BASELINE_UNAVAILABLE"),
+    };
+    let review_before = match capture_git_review_witness(&project.workspace, &git).await {
+        Ok(witness) => witness,
+        Err(_) => return TurnResult::before_spawn("REVIEW_BASELINE_UNAVAILABLE"),
+    };
     let action = OperatorCodexAction::Run {
         scope,
         task: job.prompt.clone(),
@@ -1247,9 +1782,18 @@ async fn run_queued_turn(
             return TurnResult::unknown("NATIVE_TIMEOUT_DESCENDANTS_UNPROVEN");
         }
     };
+    let review_after = if status.success() {
+        capture_git_review_witness(&project.workspace, &git)
+            .await
+            .ok()
+    } else {
+        None
+    };
     let retired = writer.finish_writer_turn().is_ok();
     TurnResult {
-        outcome: if status.success() {
+        outcome: if status.success() && review_after.is_none() {
+            "REVIEW_POST_SNAPSHOT_UNAVAILABLE"
+        } else if status.success() {
             "NATIVE_EXIT_ZERO"
         } else {
             "NATIVE_EXIT_NONZERO"
@@ -1261,6 +1805,8 @@ async fn run_queued_turn(
         native_executable: Some(executable.clone()),
         native_version: None,
         native_executable_sha256: None,
+        review_before: Some(review_before),
+        review_after,
     }
 }
 
@@ -1319,9 +1865,37 @@ fn complete_attempt(
     };
     queue.write_receipt(&receipt)?;
     job.receipt_id = Some(receipt_id);
+    // Preserve the process receipt even if evidence capture or sidecar
+    // publication fails. A review candidate is never a completion verdict.
+    job.review_candidate_sha256 =
+        if turn.outcome == "NATIVE_EXIT_ZERO" && binding_still_matches && turn.marker_retired {
+            turn.review_before
+                .clone()
+                .zip(turn.review_after.clone())
+                .and_then(|(before, after)| {
+                    let receipt_sha = queue.persisted_receipt_sha256(&receipt).ok()?;
+                    let candidate = QueueReviewCandidate::from_observed_turn(
+                        &job,
+                        &receipt,
+                        receipt_sha,
+                        before,
+                        after,
+                    );
+                    queue.write_review_candidate(&candidate).ok()
+                })
+        } else {
+            None
+        };
+    let review_missing =
+        turn.outcome == "NATIVE_EXIT_ZERO" && job.review_candidate_sha256.is_none();
     let final_state = if !turn.child_exit_observed && !turn.child_absent_proven {
         QueueState::Unknown
-    } else if !binding_still_matches || !turn.marker_retired || turn.outcome.contains("DRIFT") {
+    } else if !binding_still_matches
+        || !turn.marker_retired
+        || turn.outcome.contains("DRIFT")
+        || turn.outcome.starts_with("REVIEW_")
+        || review_missing
+    {
         QueueState::Attention
     } else if turn.outcome == "NATIVE_EXIT_ZERO" {
         QueueState::NativeExitedZero
@@ -1397,6 +1971,15 @@ mod tests {
                 .map(|item| (*item).to_string())
                 .collect::<Vec<_>>(),
         )
+    }
+
+    fn mock_git_witness() -> GitReviewWitness {
+        GitReviewWitness {
+            head_commit: None,
+            status_sha256: format!("{:x}", Sha256::digest([])),
+            tracked_diff_sha256: format!("{:x}", Sha256::digest([])),
+            changed_paths: Vec::new(),
+        }
     }
 
     fn fixture_root() -> PathBuf {
@@ -1526,6 +2109,17 @@ mod tests {
                 &receipt_id
             ]),
             Ok(QueueAction::Receipt { .. })
+        ));
+        assert!(matches!(
+            parse(&[
+                "operator",
+                "codex",
+                "queue",
+                "review",
+                "--receipt-id",
+                &receipt_id
+            ]),
+            Ok(QueueAction::Review { .. })
         ));
         assert!(
             parse(&[
@@ -1668,6 +2262,8 @@ mod tests {
                 native_executable: None,
                 native_version: None,
                 native_executable_sha256: None,
+                review_before: Some(mock_git_witness()),
+                review_after: Some(mock_git_witness()),
             };
             let receipt = complete_attempt(control, &queue, &claimed, result).expect("receipt");
             assert_eq!(receipt["leaseReleased"], true);
@@ -2183,6 +2779,8 @@ mod tests {
                 native_executable: None,
                 native_version: None,
                 native_executable_sha256: None,
+                review_before: Some(mock_git_witness()),
+                review_after: Some(mock_git_witness()),
             },
         )
         .expect_err("exact release missing");
@@ -2250,9 +2848,114 @@ mod tests {
         cleanup(fixture);
     }
 
+    #[test]
+    fn review_snapshot_failures_keep_process_receipts_and_need_attention() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        for (task_id, turn) in [
+            (
+                "no_baseline",
+                TurnResult::before_spawn("REVIEW_BASELINE_UNAVAILABLE"),
+            ),
+            (
+                "no_post_snapshot",
+                TurnResult {
+                    outcome: "REVIEW_POST_SNAPSHOT_UNAVAILABLE",
+                    exit_code: Some(0),
+                    child_exit_observed: true,
+                    child_absent_proven: false,
+                    marker_retired: true,
+                    native_executable: None,
+                    native_version: None,
+                    native_executable_sha256: None,
+                    review_before: Some(mock_git_witness()),
+                    review_after: None,
+                },
+            ),
+        ] {
+            queue
+                .save_job(
+                    &QueueJob::new(task_id.into(), &projects[1], "fixture".into(), None, None)
+                        .unwrap(),
+                )
+                .unwrap();
+            let claimed = claim_one(&projects[0].workspace, &queue).unwrap().unwrap();
+            let result = complete_attempt(&projects[0].workspace, &queue, &claimed, turn).unwrap();
+            assert_eq!(result["job"]["state"], "ATTENTION");
+            assert_eq!(result["leaseReleased"], true);
+            let receipt_id = result["receipt"]["receiptId"].as_str().unwrap();
+            let receipt = queue
+                .read_receipt(receipt_id)
+                .expect("process receipt survives");
+            assert!(queue.read_review_candidate(&receipt).is_err());
+        }
+        cleanup(fixture);
+    }
+
+    #[test]
+    fn zero_exit_with_drift_or_unretired_marker_never_publishes_review_candidate() {
+        for drift in [false, true] {
+            let (fixture, projects, queue) = three_project_fixture(1);
+            queue
+                .save_job(
+                    &QueueJob::new(
+                        "review_hold".into(),
+                        &projects[1],
+                        "fixture".into(),
+                        None,
+                        None,
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+            let claimed = claim_one(&projects[0].workspace, &queue).unwrap().unwrap();
+            if drift {
+                assert!(
+                    StdCommand::new("git")
+                        .arg("-C")
+                        .arg(&projects[1].workspace)
+                        .args([
+                            "remote",
+                            "set-url",
+                            "origin",
+                            "https://example.test/drift.git"
+                        ])
+                        .status()
+                        .unwrap()
+                        .success()
+                );
+            }
+            let result = complete_attempt(
+                &projects[0].workspace,
+                &queue,
+                &claimed,
+                TurnResult {
+                    outcome: "NATIVE_EXIT_ZERO",
+                    exit_code: Some(0),
+                    child_exit_observed: true,
+                    child_absent_proven: false,
+                    marker_retired: drift,
+                    native_executable: None,
+                    native_version: None,
+                    native_executable_sha256: None,
+                    review_before: Some(mock_git_witness()),
+                    review_after: Some(mock_git_witness()),
+                },
+            )
+            .unwrap();
+            assert_eq!(result["job"]["state"], "ATTENTION");
+            assert_eq!(result["job"]["reviewCandidateSha256"], Value::Null);
+            let receipt_id = result["receipt"]["receiptId"].as_str().unwrap();
+            let receipt = queue.read_receipt(receipt_id).unwrap();
+            assert!(queue.read_review_candidate(&receipt).is_err());
+            cleanup(fixture);
+        }
+    }
+
     #[tokio::test]
     async fn fake_native_child_produces_project_scoped_receipts_and_proofs() {
         let (fixture, projects, queue) = three_project_fixture(1);
+        fs::write(projects[1].workspace.join("preexisting.txt"), "before")
+            .expect("dirty baseline fixture");
         let executable = fake_native_cli(&fixture);
         let cli = preflight_selected_cli(executable, None, &projects[0].workspace)
             .await
@@ -2289,6 +2992,42 @@ mod tests {
             assert_eq!(result["receipt"]["nativeVersion"], "codex-cli fake-fixture");
             assert_eq!(result["receipt"]["nativeExecutableSha256"], cli.sha256);
             assert_eq!(result["receipt"]["evidenceLevel"], "NATIVE_EXIT_OBSERVED");
+            let receipt_id = result["receipt"]["receiptId"].as_str().unwrap();
+            let receipt = queue
+                .read_receipt(receipt_id)
+                .expect("durable process receipt");
+            let candidate = queue
+                .read_review_candidate(&receipt)
+                .expect("bound unreviewed candidate");
+            assert_eq!(candidate.review_status, "UNREVIEWED");
+            assert_eq!(candidate.verification_status, "NOT_VERIFIED_BY_CATDESK");
+            assert!(!candidate.wake_ready);
+            assert!(
+                candidate
+                    .changed_during_turn
+                    .contains(&format!("queue-proof-{}.txt", claimed.binding.thread_id))
+            );
+            if expected == "alpha" {
+                assert!(candidate.baseline_dirty);
+                assert!(
+                    candidate
+                        .before
+                        .changed_paths
+                        .iter()
+                        .any(|path| path.path == "preexisting.txt")
+                );
+                assert!(
+                    !candidate
+                        .changed_during_turn
+                        .contains(&"preexisting.txt".into())
+                );
+            }
+            assert_eq!(candidate.before.head_commit, candidate.after.head_commit);
+            let path = queue.review_path(receipt_id);
+            let mut tampered: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            tampered["reviewStatus"] = "REVIEWED".into();
+            fs::write(&path, serde_json::to_vec_pretty(&tampered).unwrap()).unwrap();
+            assert!(queue.read_review_candidate(&receipt).is_err());
             let project = projects
                 .iter()
                 .find(|project| project.project_id == expected)
@@ -2299,6 +3038,21 @@ mod tests {
             assert_eq!(
                 fs::read_to_string(proof).unwrap(),
                 format!("edit only {expected}")
+            );
+            fs::write(
+                project
+                    .workspace
+                    .join(format!("queue-proof-{}.txt", claimed.binding.thread_id)),
+                "later edit",
+            )
+            .unwrap();
+            let git = resolve_trusted_git(&project.workspace, &projects[0].workspace).unwrap();
+            assert_ne!(
+                capture_git_review_witness(&project.workspace, &git)
+                    .await
+                    .unwrap(),
+                candidate.after,
+                "a later same-path edit must fail the current-worktree comparison"
             );
             for other in projects
                 .iter()
