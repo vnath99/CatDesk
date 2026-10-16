@@ -9,10 +9,20 @@
 
 use crate::core_host_acceptance_preflight::read_fixed_core_host_acceptance_preflight;
 use crate::delegated::autonomy_observability::read_snapshot as read_autonomy_snapshot;
+use crate::delegated::autonomy_projects::{
+    AutonomousProjectRegistryStoreV1, AutonomousProjectRegistryV1, AutonomousProjectV1,
+    AutonomousWorkspaceLeaseV1, resolve_registered_project_from_control_root,
+};
+use crate::delegated::autonomy_state::{
+    AUTONOMY_STATE_SCHEMA_VERSION, AutonomousQueueV1, AutonomousSessionStateV1,
+};
 use crate::mcp::{DesignatedChatTargetErrorV1, DesignatedChatTargetV1};
 use crate::state::load_app_config;
-use std::io::{self, BufRead, Write};
-use std::path::Path;
+use serde::Deserialize;
+use sha2::{Digest, Sha256};
+use std::fs::{self, File};
+use std::io::{self, BufRead, Read, Write};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 pub const BINAGOTCHY_CLI_MODE_FLAG: &str = "--catdesk-binagotchy-cli";
@@ -260,7 +270,15 @@ fn print_status(workspace: &Path, out: &mut impl Write) -> Result<(), String> {
         Err(error) => writeln!(out, "  target:     {}", target_error(error))
             .map_err(|_| "CLI_OUTPUT_FAILED")?,
     }
-    print_wake_status(out)
+    match print_wake_status(out) {
+        Ok(()) => Ok(()),
+        Err(error) if error == "CLI_OUTPUT_FAILED" => Err(error),
+        Err(_) => writeln!(
+            out,
+            "WakeHost unavailable (independent status read failed)."
+        )
+        .map_err(|_| "CLI_OUTPUT_FAILED".into()),
+    }
 }
 
 fn print_acceptance(workspace: &Path, out: &mut impl Write) -> Result<(), String> {
@@ -315,6 +333,345 @@ fn print_queue(out: &mut impl Write) -> Result<(), String> {
     Ok(())
 }
 
+fn registered_projects(workspace: &Path) -> Result<AutonomousProjectRegistryV1, String> {
+    let catdesk_root = workspace.join(".catdesk");
+    let registry_root = catdesk_root.join("projects");
+    if !safe_directory(workspace)
+        || !safe_directory(&catdesk_root)
+        || !safe_directory(&registry_root)
+    {
+        return Err("PROJECT_REGISTRY_UNAVAILABLE".into());
+    }
+    AutonomousProjectRegistryStoreV1::open_read_only(registry_root)
+        .and_then(|store| store.load_registry())
+        .map_err(|_| "PROJECT_REGISTRY_UNAVAILABLE".into())
+}
+
+fn print_projects(workspace: &Path, out: &mut impl Write) -> Result<(), String> {
+    let registry = registered_projects(workspace)?;
+    writeln!(out, "Registered projects ({}):", registry.projects.len())
+        .map_err(|_| "CLI_OUTPUT_FAILED")?;
+    for project in registry.projects {
+        let verified = resolve_registered_project_from_control_root(workspace, &project.project_id)
+            .is_ok_and(|scope| scope.project == project);
+        writeln!(
+            out,
+            "  {}  identity={}  workspace={}  Codex thread recorded={}  conversation recorded={}",
+            project.project_id,
+            if verified { "VERIFIED" } else { "UNVERIFIED" },
+            project.workspace.display(),
+            project.codex_thread_id.is_some(),
+            project.chatgpt_target_url.is_some(),
+        )
+        .map_err(|_| "CLI_OUTPUT_FAILED")?;
+    }
+    writeln!(
+        out,
+        "  Registry bindings are not live worker or Wake receipts."
+    )
+    .map_err(|_| "CLI_OUTPUT_FAILED".into())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SchedulerCursorView {
+    schema_version: u32,
+    last_granted_project_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SessionView {
+    schema_version: u32,
+    session_id: String,
+    state: AutonomousSessionStateV1,
+    current_task_id: Option<String>,
+    active: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ContractProjectView {
+    project_id: String,
+    workspace: PathBuf,
+    expected_origin: String,
+}
+
+fn regular_file_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
+    let metadata = fs::symlink_metadata(path).map_err(|_| "PROJECT_STATE_UNAVAILABLE")?;
+    #[cfg(windows)]
+    let reparse = {
+        use std::os::windows::fs::MetadataExt;
+        metadata.file_attributes() & 0x400 != 0
+    };
+    #[cfg(not(windows))]
+    let reparse = false;
+    if !metadata.is_file()
+        || metadata.file_type().is_symlink()
+        || reparse
+        || metadata.len() > 1024 * 1024
+    {
+        return Err("PROJECT_STATE_UNAVAILABLE".into());
+    }
+    let mut bytes = Vec::new();
+    File::open(path)
+        .map_err(|_| "PROJECT_STATE_UNAVAILABLE")?
+        .take(1024 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "PROJECT_STATE_UNAVAILABLE")?;
+    if bytes.len() > 1024 * 1024 {
+        return Err("PROJECT_STATE_UNAVAILABLE".into());
+    }
+    serde_json::from_slice(&bytes).map_err(|_| "PROJECT_STATE_UNAVAILABLE".into())
+}
+
+fn conservative_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+}
+
+fn safe_directory(path: &Path) -> bool {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return false;
+    };
+    #[cfg(windows)]
+    let reparse = {
+        use std::os::windows::fs::MetadataExt;
+        metadata.file_attributes() & 0x400 != 0
+    };
+    #[cfg(not(windows))]
+    let reparse = false;
+    metadata.is_dir() && !metadata.file_type().is_symlink() && !reparse
+}
+
+fn scheduler_cursor(
+    root: &Path,
+    registry: &AutonomousProjectRegistryV1,
+) -> Result<Option<String>, String> {
+    let path = root.join("scheduler-cursor.json");
+    if !path
+        .try_exists()
+        .map_err(|_| "SCHEDULER_CURSOR_UNAVAILABLE")?
+    {
+        return Ok(None);
+    }
+    let cursor: SchedulerCursorView = regular_file_json(&path)?;
+    if cursor.schema_version != 1
+        || !registry
+            .projects
+            .iter()
+            .any(|project| project.project_id == cursor.last_granted_project_id)
+    {
+        return Err("SCHEDULER_CURSOR_UNAVAILABLE".into());
+    }
+    Ok(Some(cursor.last_granted_project_id))
+}
+
+fn scheduler_leases(
+    root: &Path,
+    registry: &AutonomousProjectRegistryV1,
+) -> Result<Vec<AutonomousWorkspaceLeaseV1>, String> {
+    let directory = root.join("leases");
+    if !directory
+        .try_exists()
+        .map_err(|_| "SCHEDULER_LEASES_UNAVAILABLE")?
+    {
+        return Ok(Vec::new());
+    }
+    if !safe_directory(&directory) {
+        return Err("SCHEDULER_LEASES_UNAVAILABLE".into());
+    }
+    let mut leases = Vec::new();
+    for entry in fs::read_dir(directory).map_err(|_| "SCHEDULER_LEASES_UNAVAILABLE")? {
+        let entry = entry.map_err(|_| "SCHEDULER_LEASES_UNAVAILABLE")?;
+        if leases.len() >= 128 {
+            return Err("SCHEDULER_LEASES_UNAVAILABLE".into());
+        }
+        let lease: AutonomousWorkspaceLeaseV1 = regular_file_json(&entry.path())?;
+        let registered = registry.projects.iter().any(|project| {
+            project.project_id == lease.project_id && project.workspace == lease.workspace
+        });
+        let expected_filename = format!(
+            "{:x}.json",
+            Sha256::digest(lease.workspace.to_string_lossy().as_bytes())
+        );
+        if !registered
+            || entry.file_name() != expected_filename.as_str()
+            || !conservative_id(&lease.owner_id)
+        {
+            return Err("SCHEDULER_LEASES_UNAVAILABLE".into());
+        }
+        leases.push(lease);
+    }
+    leases.sort_by(|left, right| left.project_id.cmp(&right.project_id));
+    Ok(leases)
+}
+
+fn project_task_rows(project: &AutonomousProjectV1) -> Result<(Vec<String>, usize, usize), String> {
+    if !safe_directory(&project.workspace) {
+        return Err("PROJECT_QUEUE_UNAVAILABLE".into());
+    }
+    let catdesk_root = project.workspace.join(".catdesk");
+    if !catdesk_root
+        .try_exists()
+        .map_err(|_| "PROJECT_QUEUE_UNAVAILABLE")?
+    {
+        return Ok((Vec::new(), 0, 0));
+    }
+    if !safe_directory(&catdesk_root) {
+        return Err("PROJECT_QUEUE_UNAVAILABLE".into());
+    }
+    let root = catdesk_root.join("autonomy");
+    if !root.try_exists().map_err(|_| "PROJECT_QUEUE_UNAVAILABLE")? {
+        return Ok((Vec::new(), 0, 0));
+    }
+    if !safe_directory(&root) {
+        return Err("PROJECT_QUEUE_UNAVAILABLE".into());
+    }
+    let mut rows = Vec::new();
+    let mut omitted = 0;
+    let mut scope_rejected = 0;
+    let mut entries = fs::read_dir(root)
+        .map_err(|_| "PROJECT_QUEUE_UNAVAILABLE")?
+        .take(4097)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| "PROJECT_QUEUE_UNAVAILABLE")?;
+    if entries.len() > 4096 {
+        return Err("PROJECT_QUEUE_UNAVAILABLE".into());
+    }
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let session_id = entry.file_name().to_string_lossy().into_owned();
+        if !conservative_id(&session_id) || !safe_directory(&entry.path()) {
+            continue;
+        }
+        let state_path = entry.path().join("state.json");
+        if !state_path
+            .try_exists()
+            .map_err(|_| "PROJECT_QUEUE_UNAVAILABLE")?
+        {
+            continue;
+        }
+        let session: SessionView = regular_file_json(&state_path)?;
+        if session.schema_version != AUTONOMY_STATE_SCHEMA_VERSION
+            || session.session_id != session_id
+            || session.active == session.state.is_terminal()
+            || session
+                .current_task_id
+                .as_deref()
+                .is_some_and(|id| !conservative_id(id))
+        {
+            return Err("PROJECT_QUEUE_UNAVAILABLE".into());
+        }
+        if !session.active {
+            continue;
+        }
+        let contract_path = entry.path().join("contract.json");
+        if !contract_path
+            .try_exists()
+            .map_err(|_| "PROJECT_QUEUE_UNAVAILABLE")?
+        {
+            omitted += 1;
+            continue;
+        }
+        let contract: ContractProjectView = match regular_file_json(&contract_path) {
+            Ok(contract) => contract,
+            Err(_) => {
+                scope_rejected += 1;
+                continue;
+            }
+        };
+        if contract.project_id != project.project_id
+            || contract.expected_origin != project.git_identity
+            || contract.workspace.canonicalize().ok().as_deref()
+                != Some(project.workspace.as_path())
+        {
+            scope_rejected += 1;
+            continue;
+        }
+        let queue: AutonomousQueueV1 = regular_file_json(&entry.path().join("queue.json"))?;
+        queue.validate().map_err(|_| "PROJECT_QUEUE_UNAVAILABLE")?;
+        for task in queue.tasks {
+            if rows.len() < 64 {
+                rows.push(format!(
+                    "{} / {}  task={}  state={:?}",
+                    project.project_id, session_id, task.task_id, task.state
+                ));
+            } else {
+                omitted += 1;
+            }
+        }
+    }
+    rows.sort();
+    Ok((rows, omitted, scope_rejected))
+}
+
+fn print_project_queue(workspace: &Path, out: &mut impl Write) -> Result<(), String> {
+    let registry = registered_projects(workspace)?;
+    let root = workspace.join(".catdesk/projects");
+    let cursor = scheduler_cursor(&root, &registry)?;
+    let leases = scheduler_leases(&root, &registry)?;
+    writeln!(out, "Project queue (read-only durable state):").map_err(|_| "CLI_OUTPUT_FAILED")?;
+    writeln!(
+        out,
+        "  fair selector last grant: {}",
+        cursor.as_deref().unwrap_or("none")
+    )
+    .map_err(|_| "CLI_OUTPUT_FAILED")?;
+    writeln!(out, "  workspace leases: {}", leases.len()).map_err(|_| "CLI_OUTPUT_FAILED")?;
+    for lease in &leases {
+        writeln!(
+            out,
+            "    {}  provider={:?}  expires={}",
+            lease.project_id, lease.provider, lease.expires_at_unix
+        )
+        .map_err(|_| "CLI_OUTPUT_FAILED")?;
+    }
+    for project in registry.projects {
+        let scope =
+            match resolve_registered_project_from_control_root(workspace, &project.project_id) {
+                Ok(scope) => scope,
+                Err(_) => {
+                    writeln!(
+                        out,
+                        "  {}: PROJECT_IDENTITY_UNAVAILABLE",
+                        project.project_id
+                    )
+                    .map_err(|_| "CLI_OUTPUT_FAILED")?;
+                    continue;
+                }
+            };
+        let (rows, omitted, scope_rejected) = match project_task_rows(&scope.project) {
+            Ok(tasks) => tasks,
+            Err(error) => {
+                writeln!(out, "  {}: {error}", project.project_id)
+                    .map_err(|_| "CLI_OUTPUT_FAILED")?;
+                continue;
+            }
+        };
+        writeln!(
+            out,
+            "  {}: {} task(s) shown, {} omitted, {} scope-rejected session(s)",
+            project.project_id,
+            rows.len(),
+            omitted,
+            scope_rejected
+        )
+        .map_err(|_| "CLI_OUTPUT_FAILED")?;
+        for row in rows {
+            writeln!(out, "    {row}").map_err(|_| "CLI_OUTPUT_FAILED")?;
+        }
+    }
+    writeln!(
+        out,
+        "  Durable state is not proof that a worker is running."
+    )
+    .map_err(|_| "CLI_OUTPUT_FAILED".into())
+}
+
 fn send_manual_test(out: &mut impl Write) -> Result<(), String> {
     let store = independent_wake_store()?;
     let message = normalized_manual_message();
@@ -333,6 +690,8 @@ fn print_help(out: &mut impl Write) -> Result<(), String> {
     for line in [
         "Commands:",
         "  status                         CatDesk + independent WakeHost status",
+        "  projects                       Show registered project paths and binding presence",
+        "  queue                          Show fair selector, leases and scoped task IDs",
         "  target                         Show authoritative designated ChatGPT URL",
         "  target <url>                   Set designated URL through paired CAS authority",
         "  target set <url>               Same as above",
@@ -354,6 +713,8 @@ fn print_help(out: &mut impl Write) -> Result<(), String> {
 #[derive(Debug, PartialEq, Eq)]
 enum ParsedCommand<'a> {
     Status,
+    Projects,
+    ProjectQueue,
     TargetShow,
     TargetSet(&'a str),
     WakeStatus,
@@ -379,6 +740,8 @@ fn parse_command(input: &str) -> ParsedCommand<'_> {
     }
     match trimmed {
         "status" => return ParsedCommand::Status,
+        "projects" => return ParsedCommand::Projects,
+        "queue" => return ParsedCommand::ProjectQueue,
         "target" => return ParsedCommand::TargetShow,
         "acceptance" => return ParsedCommand::Acceptance,
         "help" | "?" => return ParsedCommand::Help,
@@ -426,6 +789,8 @@ fn execute_command(
 ) -> Result<bool, String> {
     match command {
         ParsedCommand::Status => print_status(workspace, out)?,
+        ParsedCommand::Projects => print_projects(workspace, out)?,
+        ParsedCommand::ProjectQueue => print_project_queue(workspace, out)?,
         ParsedCommand::TargetShow => match read_target(workspace) {
             Ok(target) => {
                 writeln!(out, "{}", target.url).map_err(|_| "CLI_OUTPUT_FAILED")?;
@@ -584,8 +949,33 @@ pub fn run_cli(workspace: &Path) -> Result<(), String> {
 mod tests {
     use super::{
         BINAGOTCHY_CLI_MODE_FLAG, ParsedCommand, normalized_manual_message,
-        parse_binagotchy_cli_mode, parse_command, validated_wake_predecessor_digest,
+        parse_binagotchy_cli_mode, parse_command, print_projects, project_task_rows,
+        scheduler_cursor, scheduler_leases, validated_wake_predecessor_digest,
     };
+    use crate::delegated::autonomy_projects::{
+        AutonomousProjectRegistryV1, AutonomousProjectV1, PROJECT_REGISTRY_SCHEMA_VERSION,
+        project_chat_target_digest,
+    };
+    use std::fs;
+    use std::path::Path;
+    use uuid::Uuid;
+
+    fn remove_fixture_tree(path: &Path) {
+        let target = path
+            .canonicalize()
+            .expect("canonical fixture cleanup target");
+        let temp = std::env::temp_dir()
+            .canonicalize()
+            .expect("canonical temporary directory");
+        assert!(target.starts_with(&temp) && target != temp);
+        assert!(
+            target
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("catdesk-binagotchy-"))
+        );
+        fs::remove_dir_all(target).expect("cleanup fixture");
+    }
 
     #[test]
     fn cli_mode_is_closed_and_zero_parameter() {
@@ -613,6 +1003,9 @@ mod tests {
     #[test]
     fn command_parser_keeps_mutation_surfaces_explicit() {
         assert_eq!(parse_command("status"), ParsedCommand::Status);
+        assert_eq!(parse_command("projects"), ParsedCommand::Projects);
+        assert_eq!(parse_command("queue"), ParsedCommand::ProjectQueue);
+        assert_eq!(parse_command("queue all"), ParsedCommand::Unknown);
         assert_eq!(parse_command("target"), ParsedCommand::TargetShow);
         assert_eq!(
             parse_command("target set https://chatgpt.com/c/example"),
@@ -630,6 +1023,193 @@ mod tests {
             ParsedCommand::WakeRetire("old-event-1")
         );
         assert_eq!(parse_command("rm -rf ."), ParsedCommand::Unknown);
+    }
+
+    #[test]
+    fn projects_view_redacts_targets_threads_and_git_identity() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-binagotchy-projects-{}", Uuid::new_v4()));
+        let registry_root = root.join(".catdesk/projects");
+        fs::create_dir_all(&registry_root).expect("registry directory");
+        let target = "https://chatgpt.com/c/6ac6cbe8-6f0c-83e9-9f7d-13489d4d87f5";
+        let registry = AutonomousProjectRegistryV1 {
+            schema_version: PROJECT_REGISTRY_SCHEMA_VERSION,
+            maximum_codex_workers: 1,
+            maximum_qwen_workers: 1,
+            projects: vec![AutonomousProjectV1 {
+                project_id: "catdesk".into(),
+                workspace: root.clone(),
+                git_identity: "secret-git-identity".into(),
+                verification_profile: "cargo-test".into(),
+                codex_thread_id: Some("secret-thread-id".into()),
+                chatgpt_target_url: Some(target.into()),
+                chatgpt_target_sha256: Some(project_chat_target_digest(target)),
+            }],
+        };
+        fs::write(
+            registry_root.join("projects.json"),
+            serde_json::to_vec(&registry).expect("encode"),
+        )
+        .expect("registry fixture");
+        let mut out = Vec::new();
+        print_projects(&root, &mut out).expect("projects readback");
+        let rendered = String::from_utf8(out).expect("utf8");
+        assert!(rendered.contains("catdesk  identity=UNVERIFIED  workspace="));
+        assert!(rendered.contains("Codex thread recorded=true"));
+        assert!(!rendered.contains("secret-git-identity"));
+        assert!(!rendered.contains("secret-thread-id"));
+        assert!(!rendered.contains(target));
+        remove_fixture_tree(&root);
+    }
+
+    #[test]
+    fn queue_reader_keeps_task_ids_scoped_and_detects_wrong_contract() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-binagotchy-queue-{}", Uuid::new_v4()));
+        let session = root.join(".catdesk/autonomy/session-one");
+        fs::create_dir_all(&session).expect("session directory");
+        let project = AutonomousProjectV1 {
+            project_id: "catdesk".into(),
+            workspace: root.canonicalize().expect("canonical workspace"),
+            git_identity: "https://example.test/catdesk.git".into(),
+            verification_profile: "cargo-test".into(),
+            codex_thread_id: None,
+            chatgpt_target_url: None,
+            chatgpt_target_sha256: None,
+        };
+        fs::write(session.join("state.json"), br#"{"schemaVersion":1,"sessionId":"session-one","state":"QUEUED","currentTaskId":"task-one","active":true}"#)
+            .expect("state fixture");
+        let valid_contract = serde_json::json!({
+            "projectId": "catdesk",
+            "workspace": root,
+            "expectedOrigin": project.git_identity,
+        });
+        fs::write(session.join("contract.json"), valid_contract.to_string())
+            .expect("contract fixture");
+        fs::write(session.join("queue.json"), br#"{"schemaVersion":1,"tasks":[{"taskId":"task-one","priority":1,"dependsOn":[],"state":"READY"}]}"#)
+            .expect("queue fixture");
+        let (rows, omitted, rejected) = project_task_rows(&project).expect("scoped queue");
+        assert_eq!(omitted, 0);
+        assert_eq!(rejected, 0);
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].contains("catdesk / session-one  task=task-one"));
+        let wrong_project = serde_json::json!({
+            "projectId": "another-project", "workspace": root,
+            "expectedOrigin": project.git_identity,
+        });
+        fs::write(session.join("contract.json"), wrong_project.to_string()).expect("wrong project");
+        let (rows, _, rejected) = project_task_rows(&project).expect("wrong project skipped");
+        assert!(rows.is_empty());
+        assert_eq!(rejected, 1);
+        let wrong_workspace = serde_json::json!({
+            "projectId": "catdesk", "workspace": root.join("sibling"),
+            "expectedOrigin": project.git_identity,
+        });
+        fs::create_dir_all(root.join("sibling")).expect("sibling fixture");
+        fs::write(session.join("contract.json"), wrong_workspace.to_string())
+            .expect("wrong workspace");
+        let (rows, _, rejected) = project_task_rows(&project).expect("wrong workspace skipped");
+        assert!(rows.is_empty());
+        assert_eq!(rejected, 1);
+        let wrong_origin = serde_json::json!({
+            "projectId": "catdesk", "workspace": root,
+            "expectedOrigin": "https://example.test/sibling.git",
+        });
+        fs::write(session.join("contract.json"), wrong_origin.to_string()).expect("wrong origin");
+        let (rows, _, rejected) = project_task_rows(&project).expect("wrong origin skipped");
+        assert!(rows.is_empty());
+        assert_eq!(rejected, 1);
+        remove_fixture_tree(&root);
+    }
+
+    #[test]
+    fn project_readers_reject_redirected_or_nondirectory_catdesk_parent() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-binagotchy-parent-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("workspace fixture");
+        let project = AutonomousProjectV1 {
+            project_id: "catdesk".into(),
+            workspace: root.canonicalize().expect("canonical workspace"),
+            git_identity: "https://example.test/catdesk.git".into(),
+            verification_profile: "cargo-test".into(),
+            codex_thread_id: None,
+            chatgpt_target_url: None,
+            chatgpt_target_sha256: None,
+        };
+        fs::write(root.join(".catdesk"), b"not a directory").expect("nondirectory parent");
+        assert_eq!(
+            project_task_rows(&project).unwrap_err(),
+            "PROJECT_QUEUE_UNAVAILABLE"
+        );
+        assert_eq!(
+            super::registered_projects(&root).unwrap_err(),
+            "PROJECT_REGISTRY_UNAVAILABLE"
+        );
+        fs::remove_file(root.join(".catdesk")).expect("remove file fixture");
+
+        let outside =
+            std::env::temp_dir().join(format!("catdesk-binagotchy-outside-{}", Uuid::new_v4()));
+        fs::create_dir_all(&outside).expect("outside fixture");
+        #[cfg(windows)]
+        let link = std::os::windows::fs::symlink_dir(&outside, root.join(".catdesk"));
+        #[cfg(not(windows))]
+        let link = std::os::unix::fs::symlink(&outside, root.join(".catdesk"));
+        if link.is_ok() {
+            assert_eq!(
+                project_task_rows(&project).unwrap_err(),
+                "PROJECT_QUEUE_UNAVAILABLE"
+            );
+            assert_eq!(
+                super::registered_projects(&root).unwrap_err(),
+                "PROJECT_REGISTRY_UNAVAILABLE"
+            );
+            #[cfg(windows)]
+            fs::remove_dir(root.join(".catdesk")).expect("remove link fixture");
+            #[cfg(not(windows))]
+            fs::remove_file(root.join(".catdesk")).expect("remove link fixture");
+        }
+        remove_fixture_tree(&root);
+        remove_fixture_tree(&outside);
+    }
+
+    #[test]
+    fn scheduler_view_rejects_unregistered_cursor_without_writing_state() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-binagotchy-scheduler-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("scheduler directory");
+        let registry = AutonomousProjectRegistryV1 {
+            schema_version: PROJECT_REGISTRY_SCHEMA_VERSION,
+            maximum_codex_workers: 1,
+            maximum_qwen_workers: 1,
+            projects: vec![AutonomousProjectV1 {
+                project_id: "catdesk".into(),
+                workspace: root.clone(),
+                git_identity: "fixture-git".into(),
+                verification_profile: "cargo-test".into(),
+                codex_thread_id: None,
+                chatgpt_target_url: None,
+                chatgpt_target_sha256: None,
+            }],
+        };
+        assert_eq!(
+            scheduler_cursor(&root, &registry).expect("empty cursor"),
+            None
+        );
+        assert!(
+            scheduler_leases(&root, &registry)
+                .expect("absent leases directory means zero leases")
+                .is_empty()
+        );
+        fs::write(
+            root.join("scheduler-cursor.json"),
+            br#"{"schemaVersion":1,"lastGrantedProjectId":"sibling"}"#,
+        )
+        .expect("cursor fixture");
+        assert_eq!(
+            scheduler_cursor(&root, &registry).unwrap_err(),
+            "SCHEDULER_CURSOR_UNAVAILABLE"
+        );
+        remove_fixture_tree(&root);
     }
 
     #[test]
