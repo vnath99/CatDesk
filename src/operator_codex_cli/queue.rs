@@ -33,11 +33,13 @@ use crate::delegated::codex_cli::{
     CodexCliNativeStdoutEvidenceV1, prepare_resumed_native_turn_readback,
 };
 use crate::delegated::codex_model_policy::CodexCliTurnProfileEvidenceV1;
+use crate::delegated::runtime::RuntimeError;
 
 use super::{
     CodexScope, OperatorCodexAction, bounded_probe, codex_command,
     ensure_no_interrupted_managed_writer, ensure_same_project_binding, exact_thread,
-    invocation_args, registered_project, resolve_native_cli, valid_effort, valid_model,
+    invocation_args, project_binding_sha256, registered_project, resolve_native_cli, valid_effort,
+    valid_model,
 };
 
 mod advisory;
@@ -94,6 +96,12 @@ pub(crate) enum QueueAction {
     AdvisoryReview {
         receipt_id: String,
     },
+    ProfileBind {
+        scope: CodexScope,
+        expected_profile: String,
+        new_profile: String,
+        expected_binding_sha256: String,
+    },
     Dispatch,
     Pause {
         scope: CodexScope,
@@ -107,7 +115,7 @@ pub(crate) enum QueueAction {
 
 pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
     let verb = args.get(3).map(String::as_str).ok_or_else(|| {
-        "CODEX_QUEUE_USAGE: expected add, status, receipt, review, verify, review-package, advisory-review, dispatch, pause, or resume"
+        "CODEX_QUEUE_USAGE: expected add, status, receipt, review, verify, review-package, advisory-review, profile-bind, dispatch, pause, or resume"
             .to_string()
     })?;
     if !matches!(
@@ -119,6 +127,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             | "verify"
             | "review-package"
             | "advisory-review"
+            | "profile-bind"
             | "dispatch"
             | "pause"
             | "resume"
@@ -138,6 +147,9 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
                 | "--model"
                 | "--effort"
                 | "--receipt-id"
+                | "--expected-profile"
+                | "--new-profile"
+                | "--expected-binding-sha256"
         ) {
             return Err("CODEX_QUEUE_USAGE: unsupported option".into());
         }
@@ -205,6 +217,34 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
         project_id,
         workspace,
     };
+    if verb == "profile-bind" {
+        let expected_profile = values
+            .remove("--expected-profile")
+            .ok_or("CODEX_QUEUE_USAGE: profile-bind requires --expected-profile")?;
+        let new_profile = values
+            .remove("--new-profile")
+            .ok_or("CODEX_QUEUE_USAGE: profile-bind requires --new-profile")?;
+        let expected_binding_sha256 = values
+            .remove("--expected-binding-sha256")
+            .ok_or("CODEX_QUEUE_USAGE: profile-bind requires --expected-binding-sha256")?;
+        if !values.is_empty()
+            || expected_profile != "rust_full"
+            || !matches!(
+                new_profile.as_str(),
+                "python_uv_group_dev_v1" | "python_uv_extras_dev_lab_v1"
+            )
+            || !valid_sha256_hex(&expected_binding_sha256)
+            || expected_binding_sha256 != expected_binding_sha256.to_ascii_lowercase()
+        {
+            return Err("CODEX_QUEUE_USAGE: profile-bind requires the old rust_full binding hash and one fixed Python profile".into());
+        }
+        return Ok(QueueAction::ProfileBind {
+            scope,
+            expected_profile,
+            new_profile,
+            expected_binding_sha256,
+        });
+    }
     if verb == "pause" || verb == "resume" {
         if !values.is_empty() {
             return Err("CODEX_QUEUE_USAGE: pause and resume only accept scope and task ID".into());
@@ -1560,6 +1600,24 @@ pub(crate) async fn execute_action(
         QueueAction::AdvisoryReview { receipt_id } => {
             advisory::review_package_advisory(&control.project, &receipt_id).await
         }
+        QueueAction::ProfileBind {
+            scope,
+            expected_profile,
+            new_profile,
+            expected_binding_sha256,
+        } => {
+            let project = registered_project(&control.control_workspace, &scope)?;
+            let store = QueueStore::open_for_operator(&control.project, &project.workspace)?;
+            bind_profile_in_store(
+                &control.control_workspace,
+                &store,
+                &project,
+                &expected_profile,
+                &new_profile,
+                &expected_binding_sha256,
+            )
+            .await
+        }
         QueueAction::Pause { scope, task_id } | QueueAction::Resume { scope, task_id } => {
             let pause = pause_action;
             let project = registered_project(&control.control_workspace, &scope)?;
@@ -1591,6 +1649,250 @@ pub(crate) async fn execute_action(
         }
         QueueAction::Dispatch => dispatch_one(&control.project).await,
     }
+}
+
+fn profile_binding_inputs(
+    workspace: &Path,
+    profile_name: &str,
+) -> Result<Vec<(String, String)>, String> {
+    let profile = verification_profile(profile_name)?;
+    if profile.tool != VerificationTool::Uv || profile.inputs.len() != 2 {
+        return Err("CODEX_QUEUE_PROFILE: only the two fixed Python profiles can be bound".into());
+    }
+    validate_python_profile_manifest(workspace, profile_name)?;
+    let mut inputs = Vec::new();
+    for name in profile.inputs {
+        let bytes = read_regular_bounded(&workspace.join(name), MAX_GIT_FILES_BYTES)?
+            .ok_or("CODEX_QUEUE_PROFILE: tracked manifest or lock is unavailable")?;
+        if *name == "uv.lock" {
+            let text = std::str::from_utf8(&bytes)
+                .map_err(|_| "CODEX_QUEUE_PROFILE: uv.lock is not UTF-8")?;
+            let lock: toml::Value =
+                toml::from_str(text).map_err(|_| "CODEX_QUEUE_PROFILE: uv.lock is invalid TOML")?;
+            let root_name = profile
+                .package_name
+                .ok_or("CODEX_QUEUE_PROFILE: Python package name is unavailable")?;
+            let root_locked = lock
+                .get("package")
+                .and_then(toml::Value::as_array)
+                .is_some_and(|packages| {
+                    packages.iter().any(|package| {
+                        package.get("name").and_then(toml::Value::as_str) == Some(root_name)
+                    })
+                });
+            if lock
+                .get("version")
+                .and_then(toml::Value::as_integer)
+                .is_none()
+                || !root_locked
+            {
+                return Err(
+                    "CODEX_QUEUE_PROFILE: uv.lock does not bind the selected package".into(),
+                );
+            }
+        }
+        inputs.push(((*name).into(), format!("{:x}", Sha256::digest(&bytes))));
+    }
+    Ok(inputs)
+}
+
+async fn bind_profile_in_store(
+    control_workspace: &Path,
+    queue: &QueueStore,
+    selected: &AutonomousProjectV1,
+    expected_profile: &str,
+    new_profile: &str,
+    expected_binding_sha256: &str,
+) -> Result<Value, String> {
+    if expected_profile != "rust_full"
+        || !matches!(
+            new_profile,
+            "python_uv_group_dev_v1" | "python_uv_extras_dev_lab_v1"
+        )
+        || !matches!(
+            selected.verification_profile.as_str(),
+            "rust_full" | "python_uv_group_dev_v1" | "python_uv_extras_dev_lab_v1"
+        )
+    {
+        return Err("CODEX_QUEUE_PROFILE: requested profile transition is unsupported".into());
+    }
+    let mut expected_old = selected.clone();
+    expected_old.verification_profile = expected_profile.into();
+    if project_binding_sha256(&expected_old)? != expected_binding_sha256 {
+        return Err("CODEX_QUEUE_PROFILE: expected full project binding hash differs".into());
+    }
+    if selected.verification_profile != expected_profile
+        && selected.verification_profile != new_profile
+    {
+        return Err(
+            "CODEX_QUEUE_PROFILE: current profile differs from the expected transition".into(),
+        );
+    }
+    let _queue_lock = queue.lock()?;
+    let _writer = acquire_project_writer_lock(&selected.workspace)
+        .map_err(|_| "CODEX_QUEUE_PROFILE: project writer or pending marker is present")?;
+    let current = registered_project(
+        control_workspace,
+        &CodexScope {
+            project_id: selected.project_id.clone(),
+            workspace: selected.workspace.clone(),
+        },
+    )?;
+    ensure_same_project_binding(selected, &current)?;
+    ensure_no_interrupted_managed_writer(selected)?;
+    if queue
+        .jobs()?
+        .iter()
+        .any(|job| job.binding.project_id == selected.project_id)
+    {
+        return Err("CODEX_QUEUE_PROFILE: project has queued or historical jobs".into());
+    }
+    let inputs = profile_binding_inputs(&selected.workspace, new_profile)?;
+    let git = resolve_trusted_git(&selected.workspace, control_workspace)?;
+    let (tracked, _) = git_witness_output(
+        &git,
+        &selected.workspace,
+        &[
+            "ls-files",
+            "--error-unmatch",
+            "--",
+            "pyproject.toml",
+            "uv.lock",
+        ],
+        4096,
+    )
+    .await?;
+    if !tracked {
+        return Err("CODEX_QUEUE_PROFILE: pyproject.toml and uv.lock must be tracked".into());
+    }
+    let (status_ok, dirty_inputs) = git_witness_output(
+        &git,
+        &selected.workspace,
+        &[
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+            "--",
+            "pyproject.toml",
+            "uv.lock",
+        ],
+        4096,
+    )
+    .await?;
+    if !status_ok || !dirty_inputs.is_empty() {
+        return Err(
+            "CODEX_QUEUE_PROFILE: pyproject.toml and uv.lock must have clean index and worktree states"
+                .into(),
+        );
+    }
+    let registry = AutonomousProjectRegistryStoreV1::open_read_only(
+        control_workspace.join(".catdesk/projects"),
+    )
+    .map_err(|_| "CODEX_QUEUE_PROFILE: project registry is unavailable")?;
+    let (updated, idempotent) = registry
+        .bind_verification_profile_after(selected, expected_profile, new_profile, || {
+            if queue
+                .jobs()
+                .map_err(RuntimeError::Validation)?
+                .iter()
+                .any(|job| job.binding.project_id == selected.project_id)
+            {
+                return Err(RuntimeError::Validation(
+                    "project jobs appeared during profile binding".into(),
+                ));
+            }
+            let observed_inputs = profile_binding_inputs(&selected.workspace, new_profile)
+                .map_err(RuntimeError::Validation)?;
+            if observed_inputs != inputs {
+                return Err(RuntimeError::Validation(
+                    "Python profile inputs changed during binding".into(),
+                ));
+            }
+            profile_git_inputs_clean_under_lock(&git, &selected.workspace)?;
+            Ok(())
+        })
+        .map_err(|_| "CODEX_QUEUE_PROFILE: binding, lease, jobs, or profile inputs changed")?;
+    Ok(json!({
+        "action":"codex_queue_profile_bind", "idempotent":idempotent,
+        "projectId":updated.project_id, "workspace":updated.workspace,
+        "verificationProfile":updated.verification_profile,
+        "bindingSha256":project_binding_sha256(&updated)?,
+        "threadId":updated.codex_thread_id,
+        "targetSha256":updated.chatgpt_target_sha256,
+        "meaning":"Fixed verification profile metadata only; no native turn, queue job, reviewer, or Wake event was launched.",
+        "chatQuiescence":"OPERATOR_CONFIRMATION_REQUIRED",
+    }))
+}
+
+/// The registry callback is synchronous while the scheduler and registration
+/// locks are held. Recheck the exact tracked inputs' index and worktree state
+/// there so an index-only edit after preflight cannot be published.
+fn profile_git_inputs_clean_under_lock(
+    git: &TrustedGit,
+    workspace: &Path,
+) -> Result<(), RuntimeError> {
+    let refusal = || RuntimeError::Validation("Python profile inputs have Git drift".into());
+    if native_executable_sha256(&git.executable).ok().as_deref() != Some(&git.sha256) {
+        return Err(refusal());
+    }
+    let mut command = std::process::Command::new(&git.executable);
+    command
+        .args([
+            "--no-optional-locks",
+            "--no-pager",
+            "-c",
+            "core.fsmonitor=false",
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+            "--",
+            "pyproject.toml",
+            "uv.lock",
+        ])
+        .current_dir(workspace)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    for name in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_COMMON_DIR",
+        "GIT_PREFIX",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_CONFIG_PARAMETERS",
+        "GIT_CONFIG_COUNT",
+    ] {
+        command.env_remove(name);
+    }
+    let mut child = command.spawn().map_err(|_| refusal())?;
+    let start = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if start.elapsed() < GIT_WITNESS_TIMEOUT => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(refusal());
+            }
+        }
+    };
+    let mut bytes = Vec::new();
+    child
+        .stdout
+        .take()
+        .ok_or_else(refusal)?
+        .take(4097)
+        .read_to_end(&mut bytes)
+        .map_err(|_| refusal())?;
+    if !status.success() || !bytes.is_empty() {
+        return Err(refusal());
+    }
+    Ok(())
 }
 
 fn package_verified_receipt(
@@ -3621,6 +3923,44 @@ mod tests {
         );
     }
 
+    fn fixture_python_profile_inputs(project: &AutonomousProjectV1, profile: &str) {
+        let (name, manifest) = match profile {
+            "python_uv_group_dev_v1" => (
+                "byovd-driver-pipeline",
+                "[project]\nname = \"byovd-driver-pipeline\"\nversion = \"0.1.0\"\n[dependency-groups]\ndev = [\"pytest>=8\", \"ruff>=0.8\"]\n",
+            ),
+            "python_uv_extras_dev_lab_v1" => (
+                "bug-bounty-security-research-platform",
+                "[project]\nname = \"bug-bounty-security-research-platform\"\nversion = \"0.1.0\"\n[project.optional-dependencies]\ndev = [\"pytest>=8\", \"ruff>=0.9\"]\nlab = [\"flask>=3\"]\n",
+            ),
+            _ => panic!("unsupported fixture profile"),
+        };
+        fs::write(project.workspace.join("pyproject.toml"), manifest).expect("fixture manifest");
+        fs::write(
+            project.workspace.join("uv.lock"),
+            format!("version = 1\n\n[[package]]\nname = \"{name}\"\nversion = \"0.1.0\"\n"),
+        )
+        .expect("fixture lock");
+    }
+
+    async fn fixture_profile_bind(
+        control_workspace: &Path,
+        queue: &QueueStore,
+        selected: &AutonomousProjectV1,
+        profile: &str,
+        hash: &str,
+    ) -> Result<Value, String> {
+        bind_profile_in_store(
+            control_workspace,
+            queue,
+            selected,
+            "rust_full",
+            profile,
+            hash,
+        )
+        .await
+    }
+
     fn fixture_candidate(
         project: &AutonomousProjectV1,
         before: GitReviewWitness,
@@ -4629,6 +4969,268 @@ mod tests {
             ])
             .is_err()
         );
+        let profile_bind = [
+            "operator",
+            "codex",
+            "queue",
+            "profile-bind",
+            "--project-id",
+            "alpha",
+            "--workspace",
+            "C:/alpha",
+            "--expected-profile",
+            "rust_full",
+            "--new-profile",
+            "python_uv_group_dev_v1",
+            "--expected-binding-sha256",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ];
+        assert!(matches!(
+            parse(&profile_bind),
+            Ok(QueueAction::ProfileBind { .. })
+        ));
+        assert!(parse(&[&profile_bind[..], &["--task", "unexpected"]].concat()).is_err());
+        let mut invalid = profile_bind;
+        invalid[9] = "python_freeform";
+        assert!(parse(&invalid).is_err());
+    }
+
+    #[tokio::test]
+    async fn profile_bind_changes_only_exact_quiescent_python_projects_and_retries_idempotently() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let control = &projects[0];
+        let registry = AutonomousProjectRegistryStoreV1::open_read_only(
+            control.workspace.join(".catdesk/projects"),
+        )
+        .expect("registry");
+        for (project, profile) in [
+            (&projects[1], "python_uv_group_dev_v1"),
+            (&projects[2], "python_uv_extras_dev_lab_v1"),
+        ] {
+            fixture_python_profile_inputs(project, profile);
+            fixture_commit(&project.workspace);
+            let expected_hash = project_binding_sha256(project).expect("old binding hash");
+            let before = registry.load_registry().expect("before registry");
+            let first = bind_profile_in_store(
+                &control.workspace,
+                &queue,
+                project,
+                "rust_full",
+                profile,
+                &expected_hash,
+            )
+            .await
+            .expect("first binding");
+            assert_eq!(first["idempotent"], false);
+            assert_eq!(first["verificationProfile"], profile);
+            let after = registry.load_registry().expect("after registry");
+            assert_eq!(before.projects.len(), after.projects.len());
+            for unchanged in before
+                .projects
+                .iter()
+                .filter(|entry| entry.project_id != project.project_id)
+            {
+                assert!(
+                    after.projects.contains(unchanged),
+                    "sibling binding changed"
+                );
+            }
+            let rebound = after
+                .projects
+                .iter()
+                .find(|entry| entry.project_id == project.project_id)
+                .expect("rebound project");
+            let mut expected_rebound = project.clone();
+            expected_rebound.verification_profile = profile.into();
+            assert_eq!(rebound, &expected_rebound);
+            let registry_bytes =
+                fs::read(control.workspace.join(".catdesk/projects/projects.json"))
+                    .expect("registry bytes");
+            let retry = bind_profile_in_store(
+                &control.workspace,
+                &queue,
+                rebound,
+                "rust_full",
+                profile,
+                &expected_hash,
+            )
+            .await
+            .expect("exact retry");
+            assert_eq!(retry["idempotent"], true);
+            assert_eq!(
+                fs::read(control.workspace.join(".catdesk/projects/projects.json"))
+                    .expect("registry after retry"),
+                registry_bytes
+            );
+        }
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn profile_bind_refuses_binding_manifest_and_job_drift_without_registry_change() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let control = &projects[0];
+        let project = &projects[1];
+        let profile = "python_uv_group_dev_v1";
+        fixture_python_profile_inputs(project, profile);
+        fixture_commit(&project.workspace);
+        let expected_hash = project_binding_sha256(project).expect("binding hash");
+        let registry_path = control.workspace.join(".catdesk/projects/projects.json");
+        let original = fs::read(&registry_path).expect("registry");
+        let git = resolve_trusted_git(&project.workspace, &control.workspace).expect("fixture Git");
+        profile_git_inputs_clean_under_lock(&git, &project.workspace).expect("clean inputs");
+        assert!(
+            fixture_profile_bind(
+                &control.workspace,
+                &queue,
+                project,
+                profile,
+                &"0".repeat(64)
+            )
+            .await
+            .is_err()
+        );
+        let mut drifted = project.clone();
+        drifted.chatgpt_target_sha256 = Some("a".repeat(64));
+        let drift_hash = project_binding_sha256(&drifted).expect("drift hash");
+        assert!(
+            fixture_profile_bind(&control.workspace, &queue, &drifted, profile, &drift_hash)
+                .await
+                .is_err()
+        );
+        for name in ["pyproject.toml", "uv.lock"] {
+            for staged in [false, true] {
+                let path = project.workspace.join(name);
+                let mut modified = fs::read(&path).expect("profile input");
+                modified.extend_from_slice(b"\n# valid but dirty profile input\n");
+                fs::write(&path, modified).expect("dirty input");
+                if staged {
+                    fixture_git_command(&project.workspace, &["add", "--", name]);
+                }
+                assert!(profile_git_inputs_clean_under_lock(&git, &project.workspace).is_err());
+                assert!(
+                    fixture_profile_bind(
+                        &control.workspace,
+                        &queue,
+                        project,
+                        profile,
+                        &expected_hash
+                    )
+                    .await
+                    .is_err()
+                );
+                fixture_git_command(
+                    &project.workspace,
+                    &["restore", "--staged", "--worktree", "--", name],
+                );
+                profile_git_inputs_clean_under_lock(&git, &project.workspace)
+                    .expect("restored clean inputs");
+            }
+        }
+        fs::write(
+            project.workspace.join("pyproject.toml"),
+            b"[project]\nname = \"foreign\"\n",
+        )
+        .expect("mismatched manifest");
+        assert!(
+            fixture_profile_bind(&control.workspace, &queue, project, profile, &expected_hash)
+                .await
+                .is_err()
+        );
+        fixture_python_profile_inputs(project, profile);
+        fs::write(project.workspace.join("uv.lock"), b"version = 1\n").expect("mismatched lock");
+        assert!(
+            fixture_profile_bind(&control.workspace, &queue, project, profile, &expected_hash)
+                .await
+                .is_err()
+        );
+        fixture_python_profile_inputs(project, profile);
+        let job = QueueJob::new(
+            "pending".into(),
+            project,
+            "approved task".into(),
+            None,
+            None,
+        )
+        .expect("job");
+        queue.save_job(&job).expect("queued job");
+        assert!(
+            fixture_profile_bind(&control.workspace, &queue, project, profile, &expected_hash)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            fs::read(&registry_path).expect("registry after refusals"),
+            original
+        );
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn profile_bind_refuses_held_writer_lease_and_stale_registry_cas() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let control = &projects[0];
+        let project = &projects[1];
+        let profile = "python_uv_group_dev_v1";
+        fixture_python_profile_inputs(project, profile);
+        fixture_commit(&project.workspace);
+        let expected_hash = project_binding_sha256(project).expect("binding hash");
+        let registry_path = control.workspace.join(".catdesk/projects/projects.json");
+        let registry = AutonomousProjectRegistryStoreV1::open_read_only(
+            control.workspace.join(".catdesk/projects"),
+        )
+        .expect("registry");
+        let original = fs::read(&registry_path).expect("registry before refusals");
+
+        let writer = acquire_project_writer_lock(&project.workspace).expect("held fixture writer");
+        assert!(
+            fixture_profile_bind(&control.workspace, &queue, project, profile, &expected_hash)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            fs::read(&registry_path).expect("registry with writer"),
+            original
+        );
+        drop(writer);
+
+        let lease = match registry
+            .schedule_mutating_worker("alpha", "fixture-owner", ScheduledProviderV1::Codex, 1, 2)
+            .expect("fixture lease")
+        {
+            GlobalScheduleDecisionV1::Granted(lease) => lease,
+            other => panic!("expected lease, got {other:?}"),
+        };
+        assert!(
+            fixture_profile_bind(&control.workspace, &queue, project, profile, &expected_hash)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            fs::read(&registry_path).expect("registry with lease"),
+            original
+        );
+        registry
+            .release_workspace_lease(&lease)
+            .expect("release fixture lease");
+
+        // Simulate a registry update after the operator read the old binding.
+        let (updated, idempotent) = registry
+            .bind_verification_profile_after(project, "rust_full", profile, || Ok(()))
+            .expect("fixture registry change");
+        assert!(!idempotent);
+        assert_eq!(updated.verification_profile, profile);
+        let changed = fs::read(&registry_path).expect("changed registry");
+        assert!(
+            fixture_profile_bind(&control.workspace, &queue, project, profile, &expected_hash)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            fs::read(&registry_path).expect("registry after stale request"),
+            changed
+        );
+        cleanup(fixture);
     }
 
     #[test]

@@ -475,6 +475,73 @@ impl AutonomousProjectRegistryStoreV1 {
         self.save_registry(&registry)
     }
 
+    /// Change only a CatDesk queue/writer-idle project's fixed verification
+    /// profile. The caller holds the operator queue and project writer locks;
+    /// the scheduler and registration locks exclude a concurrent CatDesk lease
+    /// or binding mutation until the replacement registry is published. These
+    /// source guards cannot establish whether a bound Codex chat is active.
+    pub(crate) fn bind_verification_profile_after<F>(
+        &self,
+        observed: &AutonomousProjectV1,
+        old_profile: &str,
+        new_profile: &str,
+        before_commit: F,
+    ) -> Result<(AutonomousProjectV1, bool), RuntimeError>
+    where
+        F: FnOnce() -> Result<(), RuntimeError>,
+    {
+        validate_project(observed)?;
+        validate_registration_profile(old_profile)?;
+        validate_registration_profile(new_profile)?;
+        if old_profile != "rust_full"
+            || !matches!(
+                new_profile,
+                "python_uv_group_dev_v1" | "python_uv_extras_dev_lab_v1"
+            )
+            || (observed.verification_profile != old_profile
+                && observed.verification_profile != new_profile)
+        {
+            return Err(RuntimeError::Validation(
+                "verification profile transition is invalid".into(),
+            ));
+        }
+        let _scheduler_lock = self.acquire_scheduler_lock()?;
+        let _registration_lock = self.acquire_registration_lock()?;
+        let mut registry = self.load_registry()?;
+        let index = registry
+            .projects
+            .iter()
+            .position(|project| project.project_id == observed.project_id)
+            .ok_or_else(|| RuntimeError::Validation("project is not registered".into()))?;
+        if registry.projects[index] != *observed {
+            return Err(RuntimeError::Validation(
+                "verification profile binding changed before confirmation".into(),
+            ));
+        }
+        if self.all_leases()?.iter().any(|lease| {
+            lease.project_id == observed.project_id || lease.workspace == observed.workspace
+        }) {
+            return Err(RuntimeError::Validation(
+                "verification profile change requires no project lease".into(),
+            ));
+        }
+        before_commit()?;
+        // The locks coordinate CatDesk writers. Preserve fail-closed behavior
+        // if an out-of-band same-user edit changed the registry anyway.
+        if self.load_registry()? != registry {
+            return Err(RuntimeError::Validation(
+                "verification profile registry changed before publication".into(),
+            ));
+        }
+        if registry.projects[index].verification_profile == new_profile {
+            return Ok((registry.projects[index].clone(), true));
+        }
+        registry.projects[index].verification_profile = new_profile.into();
+        let updated = registry.projects[index].clone();
+        self.save_registry(&registry)?;
+        Ok((updated, false))
+    }
+
     pub fn bind_codex_thread(&self, project_id: &str, thread_id: &str) -> Result<(), RuntimeError> {
         valid_slug(project_id, "project id")?;
         valid_slug(thread_id, "Codex thread id")?;

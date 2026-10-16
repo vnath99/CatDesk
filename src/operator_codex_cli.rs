@@ -13,6 +13,7 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
@@ -223,6 +224,15 @@ fn ensure_same_project_binding(
         );
     }
     Ok(())
+}
+
+fn project_binding_sha256(project: &AutonomousProjectV1) -> Result<String, String> {
+    let encoded = serde_json::to_vec(project)
+        .map_err(|_| "CODEX_SCOPE: project binding cannot be encoded".to_string())?;
+    let mut hasher = Sha256::new();
+    hasher.update(b"catdesk-operator-project-binding-v1\0");
+    hasher.update(encoded);
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 fn redirected_path(metadata: &fs::Metadata) -> bool {
@@ -494,9 +504,12 @@ pub(crate) async fn execute_action(
             &["login", "status"],
         )
         .await?;
+        let binding_sha256 = project_binding_sha256(&selected)?;
         return Ok(json!({
             "action":"codex_status", "status":"success", "projectId":selected.project_id,
             "workspace":selected.workspace, "threadId":selected.codex_thread_id,
+            "verificationProfile":selected.verification_profile,
+            "bindingSha256":binding_sha256,
             "executable":executable, "version":version, "authenticated":authenticated,
             "route":"current_user_native_cli",
         }));
