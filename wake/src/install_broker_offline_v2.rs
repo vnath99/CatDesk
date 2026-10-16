@@ -6,6 +6,10 @@
 //! deliberately returns no ledger lease, owner proof or installation token.
 //! The supplied old-store observation must later be replaced by retained
 //! broker-owned physical pins before any transaction can be enabled.
+//! ObjectIdentityV1 carries only the legacy 32-bit volume/64-bit file ID;
+//! these signed fields are comparison claims, not ReFS-safe physical pins.
+//! Admission needs handle-observed full FileIdInfo (or reviewed equivalent)
+//! bound to the reviewer-authorized roles before an INTENT is written.
 
 use crate::{
     Result,
