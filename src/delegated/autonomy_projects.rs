@@ -1693,6 +1693,19 @@ impl AutonomousProjectRegistryStoreV1 {
             .map_err(|_| "project thread transition is already in progress".to_string())?;
         operation()
     }
+
+    /// Queue-local review publication holds its queue locks first, then this
+    /// registration lock while it checks the current project and writes its
+    /// bound record. Target CAS and profile changes use the same lock.
+    pub(crate) fn with_registration_lock<T, F>(&self, operation: F) -> Result<T, String>
+    where
+        F: FnOnce() -> Result<T, String>,
+    {
+        let _lock = self
+            .acquire_registration_lock()
+            .map_err(|_| "project registration is already in progress".to_string())?;
+        operation()
+    }
 }
 
 struct RegistrationLockV1 {

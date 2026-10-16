@@ -4827,6 +4827,87 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn operator_review_registration_lock_rejects_stale_target_on_create_and_readback() {
+        for create_before_drift in [false, true] {
+            let (fixture, projects, queue, receipt_id, cargo) =
+                completed_verified_fixture(false).await;
+            verify_receipt_in_store_with_executable(
+                &projects[0],
+                &queue,
+                &receipt_id,
+                Some(&cargo),
+            )
+            .await
+            .unwrap();
+            let packaged = package_verified_receipt_in_store(&queue, &receipt_id).unwrap();
+            let sha = packaged["package"]["artifactSha256"].as_str().unwrap();
+            let record_path = queue
+                .root
+                .join("receipts")
+                .join(format!("{receipt_id}.operator-review.json"));
+            let registry = AutonomousProjectRegistryStoreV1::open_read_only(
+                projects[0].workspace.join(".catdesk/projects"),
+            )
+            .unwrap();
+            registry
+                .with_registration_lock(|| {
+                    assert!(
+                        operator_review::test_decide_with_registration_in_store(
+                            &queue,
+                            &projects[0].workspace,
+                            &projects[0],
+                            &projects[1],
+                            &receipt_id,
+                            sha,
+                            "ACCEPT",
+                            true,
+                        )
+                        .is_err()
+                    );
+                    Ok(())
+                })
+                .unwrap();
+            assert!(!record_path.exists());
+            if create_before_drift {
+                operator_review::test_decide_with_registration_in_store(
+                    &queue,
+                    &projects[0].workspace,
+                    &projects[0],
+                    &projects[1],
+                    &receipt_id,
+                    sha,
+                    "ACCEPT",
+                    true,
+                )
+                .unwrap()
+                .unwrap();
+                assert!(record_path.exists());
+            }
+            registry
+                .bind_project_chat_target(
+                    "alpha",
+                    "https://chatgpt.com/c/alpha-after-capture",
+                    projects[1].chatgpt_target_sha256.as_deref(),
+                )
+                .unwrap();
+            let error = operator_review::test_decide_with_registration_in_store(
+                &queue,
+                &projects[0].workspace,
+                &projects[0],
+                &projects[1],
+                &receipt_id,
+                sha,
+                "ACCEPT",
+                true,
+            )
+            .unwrap_err();
+            assert!(error.contains("registration changed"), "{error}");
+            assert_eq!(record_path.exists(), create_before_drift);
+            cleanup(fixture);
+        }
+    }
+
+    #[tokio::test]
     async fn operator_review_rejects_modified_or_partial_decision_records() {
         for decision in ["REJECT", "INCONCLUSIVE"] {
             let (fixture, projects, queue, receipt_id, cargo) =

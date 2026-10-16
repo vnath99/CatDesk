@@ -151,7 +151,7 @@ fn summary(record: &OperatorReviewRecordV1, digest: &str, idempotent: bool) -> V
     })
 }
 
-fn decide_in_store(
+fn decide_locked(
     store: &QueueStore,
     project: &AutonomousProjectV1,
     receipt_id: &str,
@@ -164,8 +164,6 @@ fn decide_in_store(
             "CODEX_QUEUE_OPERATOR_REVIEW: decision must be ACCEPT, REJECT, or INCONCLUSIVE".into(),
         );
     }
-    let _receipt_lock = store.verification_lock(receipt_id)?;
-    let _queue_lock = store.lock()?;
     let package =
         review_reader::bound_package(store, project, receipt_id, expected_package_sha256)?;
     if let Some((record, digest)) = read_record(store, project, &package, expected_package_sha256)?
@@ -199,6 +197,51 @@ fn decide_in_store(
     Ok(Some(summary(&record, &digest, false)))
 }
 
+fn ensure_current_registration(
+    control_workspace: &Path,
+    control: &AutonomousProjectV1,
+    project: &AutonomousProjectV1,
+) -> Result<(), String> {
+    let current_control =
+        resolve_registered_project_from_control_root(control_workspace, "catdesk")
+            .map_err(|_| "CODEX_QUEUE_OPERATOR_REVIEW: control registration changed")?;
+    let current_project =
+        resolve_registered_project_from_control_root(control_workspace, &project.project_id)
+            .map_err(|_| "CODEX_QUEUE_OPERATOR_REVIEW: project registration changed")?;
+    if current_control.project != *control || current_project.project != *project {
+        return Err("CODEX_QUEUE_OPERATOR_REVIEW: registration changed during review".into());
+    }
+    Ok(())
+}
+
+fn decide_with_registration_in_store(
+    store: &QueueStore,
+    control_workspace: &Path,
+    control: &AutonomousProjectV1,
+    project: &AutonomousProjectV1,
+    receipt_id: &str,
+    expected_package_sha256: &str,
+    decision: &str,
+    create_after_confirmation: bool,
+) -> Result<Option<Value>, String> {
+    let _receipt_lock = store.verification_lock(receipt_id)?;
+    let _queue_lock = store.lock()?;
+    let registry = scheduler(control_workspace)?;
+    // Target CAS and profile binding hold this registry lock when publishing.
+    // Keep it through the final package check, create-once write and readback.
+    registry.with_registration_lock(|| {
+        ensure_current_registration(control_workspace, control, project)?;
+        decide_locked(
+            store,
+            project,
+            receipt_id,
+            expected_package_sha256,
+            decision,
+            create_after_confirmation,
+        )
+    })
+}
+
 pub(super) fn record_local_decision(
     control_workspace: &Path,
     control: &AutonomousProjectV1,
@@ -229,8 +272,10 @@ fn record_local_decision_in_store(
     expected_package_sha256: &str,
     decision: &str,
 ) -> Result<Value, String> {
-    if let Some(existing) = decide_in_store(
+    if let Some(existing) = decide_with_registration_in_store(
         store,
+        control_workspace,
+        control,
         project,
         receipt_id,
         expected_package_sha256,
@@ -262,19 +307,12 @@ fn record_local_decision_in_store(
     if !exact_confirmation(&answer, decision, receipt_id, expected_package_sha256) {
         return Err("CODEX_QUEUE_OPERATOR_REVIEW: exact decision was not confirmed".into());
     }
-    // The human pause grants no stale state authority. Recheck the control,
-    // project registration and package under the locks before publication.
-    let current_control =
-        resolve_registered_project_from_control_root(control_workspace, "catdesk")
-            .map_err(|_| "CODEX_QUEUE_OPERATOR_REVIEW: control registration changed")?;
-    let current_project =
-        resolve_registered_project_from_control_root(control_workspace, &project.project_id)
-            .map_err(|_| "CODEX_QUEUE_OPERATOR_REVIEW: project registration changed")?;
-    if current_control.project != *control || current_project.project != *project {
-        return Err("CODEX_QUEUE_OPERATOR_REVIEW: registration changed during confirmation".into());
-    }
-    decide_in_store(
+    // The human pause grants no stale state authority. The final registration
+    // comparison and package validation happen while all three locks are held.
+    decide_with_registration_in_store(
         store,
+        control_workspace,
+        control,
         project,
         receipt_id,
         expected_package_sha256,
@@ -317,19 +355,34 @@ pub(super) fn read_local_decision(
         .ok_or("CODEX_QUEUE_OPERATOR_REVIEW: queue state is unavailable")?;
     let _receipt_lock = store.verification_lock(receipt_id)?;
     let _queue_lock = store.lock()?;
-    let receipt = store.read_receipt(receipt_id)?;
-    let current =
-        resolve_registered_project_from_control_root(control_workspace, &receipt.project_id)
-            .map_err(|_| "CODEX_QUEUE_OPERATOR_REVIEW: project registration is unavailable")?;
-    let bytes = read_regular_bounded(&record_path(&store, receipt_id), MAX_OPERATOR_REVIEW_BYTES)?
-        .ok_or("CODEX_QUEUE_OPERATOR_REVIEW: decision record is unavailable")?;
-    let saved: OperatorReviewRecordV1 = serde_json::from_slice(&bytes)
-        .map_err(|_| "CODEX_QUEUE_OPERATOR_REVIEW: decision record is invalid")?;
-    let package =
-        review_reader::bound_package(&store, &current.project, receipt_id, &saved.package_sha256)?;
-    let (record, digest) = read_record(&store, &current.project, &package, &saved.package_sha256)?
-        .ok_or("CODEX_QUEUE_OPERATOR_REVIEW: decision record is unavailable")?;
-    Ok(summary(&record, &digest, true))
+    let registry = scheduler(control_workspace)?;
+    registry.with_registration_lock(|| {
+        let current_control =
+            resolve_registered_project_from_control_root(control_workspace, "catdesk")
+                .map_err(|_| "CODEX_QUEUE_OPERATOR_REVIEW: control registration changed")?;
+        if current_control.project != *control {
+            return Err("CODEX_QUEUE_OPERATOR_REVIEW: control registration changed".into());
+        }
+        let receipt = store.read_receipt(receipt_id)?;
+        let current =
+            resolve_registered_project_from_control_root(control_workspace, &receipt.project_id)
+                .map_err(|_| "CODEX_QUEUE_OPERATOR_REVIEW: project registration is unavailable")?;
+        let bytes =
+            read_regular_bounded(&record_path(&store, receipt_id), MAX_OPERATOR_REVIEW_BYTES)?
+                .ok_or("CODEX_QUEUE_OPERATOR_REVIEW: decision record is unavailable")?;
+        let saved: OperatorReviewRecordV1 = serde_json::from_slice(&bytes)
+            .map_err(|_| "CODEX_QUEUE_OPERATOR_REVIEW: decision record is invalid")?;
+        let package = review_reader::bound_package(
+            &store,
+            &current.project,
+            receipt_id,
+            &saved.package_sha256,
+        )?;
+        let (record, digest) =
+            read_record(&store, &current.project, &package, &saved.package_sha256)?
+                .ok_or("CODEX_QUEUE_OPERATOR_REVIEW: decision record is unavailable")?;
+        Ok(summary(&record, &digest, true))
+    })
 }
 
 #[cfg(test)]
@@ -341,8 +394,33 @@ pub(super) fn test_decide_in_store(
     decision: &str,
     create: bool,
 ) -> Result<Option<Value>, String> {
-    decide_in_store(
+    let _receipt_lock = store.verification_lock(receipt_id)?;
+    let _queue_lock = store.lock()?;
+    decide_locked(
         store,
+        project,
+        receipt_id,
+        expected_package_sha256,
+        decision,
+        create,
+    )
+}
+
+#[cfg(test)]
+pub(super) fn test_decide_with_registration_in_store(
+    store: &QueueStore,
+    control_workspace: &Path,
+    control: &AutonomousProjectV1,
+    project: &AutonomousProjectV1,
+    receipt_id: &str,
+    expected_package_sha256: &str,
+    decision: &str,
+    create: bool,
+) -> Result<Option<Value>, String> {
+    decide_with_registration_in_store(
+        store,
+        control_workspace,
+        control,
         project,
         receipt_id,
         expected_package_sha256,
