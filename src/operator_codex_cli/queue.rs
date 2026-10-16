@@ -63,6 +63,7 @@ const MAX_GIT_FILE_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_GIT_FILES_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_GIT_PATHS: usize = 256;
 const GIT_WITNESS_TIMEOUT: Duration = Duration::from_secs(30);
+const PROFILE_INPUTS_TAGGED: &[u8] = b"H pyproject.toml\nH uv.lock\n";
 const MAX_NATIVE_EXE_BYTES: u64 = 512 * 1024 * 1024;
 // Expiry is an operator recovery signal only; the scheduler never reclaims
 // this lease based on time. The window exceeds the maximum native turn bound.
@@ -101,6 +102,7 @@ pub(crate) enum QueueAction {
         expected_profile: String,
         new_profile: String,
         expected_binding_sha256: String,
+        confirmed_quiescent_thread: String,
     },
     Dispatch,
     Pause {
@@ -150,6 +152,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
                 | "--expected-profile"
                 | "--new-profile"
                 | "--expected-binding-sha256"
+                | "--confirm-chat-quiescent"
         ) {
             return Err("CODEX_QUEUE_USAGE: unsupported option".into());
         }
@@ -209,10 +212,6 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
     if !workspace.is_absolute() {
         return Err("CODEX_SCOPE: --workspace must be absolute".into());
     }
-    let task_id = values
-        .remove("--task-id")
-        .ok_or("CODEX_QUEUE_USAGE: --task-id is required")?;
-    valid_slug(&task_id)?;
     let scope = CodexScope {
         project_id,
         workspace,
@@ -227,6 +226,9 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
         let expected_binding_sha256 = values
             .remove("--expected-binding-sha256")
             .ok_or("CODEX_QUEUE_USAGE: profile-bind requires --expected-binding-sha256")?;
+        let confirmed_quiescent_thread = values
+            .remove("--confirm-chat-quiescent")
+            .ok_or("CODEX_QUEUE_USAGE: profile-bind requires --confirm-chat-quiescent with the exact bound thread ID")?;
         if !values.is_empty()
             || expected_profile != "rust_full"
             || !matches!(
@@ -235,16 +237,23 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             )
             || !valid_sha256_hex(&expected_binding_sha256)
             || expected_binding_sha256 != expected_binding_sha256.to_ascii_lowercase()
+            || !Uuid::parse_str(&confirmed_quiescent_thread)
+                .is_ok_and(|id| id.to_string() == confirmed_quiescent_thread)
         {
-            return Err("CODEX_QUEUE_USAGE: profile-bind requires the old rust_full binding hash and one fixed Python profile".into());
+            return Err("CODEX_QUEUE_USAGE: profile-bind requires an old rust_full binding hash, one fixed Python profile, and the exact bound thread assertion".into());
         }
         return Ok(QueueAction::ProfileBind {
             scope,
             expected_profile,
             new_profile,
             expected_binding_sha256,
+            confirmed_quiescent_thread,
         });
     }
+    let task_id = values
+        .remove("--task-id")
+        .ok_or("CODEX_QUEUE_USAGE: --task-id is required")?;
+    valid_slug(&task_id)?;
     if verb == "pause" || verb == "resume" {
         if !values.is_empty() {
             return Err("CODEX_QUEUE_USAGE: pause and resume only accept scope and task ID".into());
@@ -1605,6 +1614,7 @@ pub(crate) async fn execute_action(
             expected_profile,
             new_profile,
             expected_binding_sha256,
+            confirmed_quiescent_thread,
         } => {
             let project = registered_project(&control.control_workspace, &scope)?;
             let store = QueueStore::open_for_operator(&control.project, &project.workspace)?;
@@ -1615,6 +1625,7 @@ pub(crate) async fn execute_action(
                 &expected_profile,
                 &new_profile,
                 &expected_binding_sha256,
+                &confirmed_quiescent_thread,
             )
             .await
         }
@@ -1703,6 +1714,7 @@ async fn bind_profile_in_store(
     expected_profile: &str,
     new_profile: &str,
     expected_binding_sha256: &str,
+    confirmed_quiescent_thread: &str,
 ) -> Result<Value, String> {
     if expected_profile != "rust_full"
         || !matches!(
@@ -1720,6 +1732,11 @@ async fn bind_profile_in_store(
     expected_old.verification_profile = expected_profile.into();
     if project_binding_sha256(&expected_old)? != expected_binding_sha256 {
         return Err("CODEX_QUEUE_PROFILE: expected full project binding hash differs".into());
+    }
+    if exact_thread(selected)? != confirmed_quiescent_thread {
+        return Err(
+            "CODEX_QUEUE_PROFILE: quiescence assertion names a different bound thread".into(),
+        );
     }
     if selected.verification_profile != expected_profile
         && selected.verification_profile != new_profile
@@ -1749,11 +1766,12 @@ async fn bind_profile_in_store(
     }
     let inputs = profile_binding_inputs(&selected.workspace, new_profile)?;
     let git = resolve_trusted_git(&selected.workspace, control_workspace)?;
-    let (tracked, _) = git_witness_output(
+    let (tracked, input_tags) = git_witness_output(
         &git,
         &selected.workspace,
         &[
             "ls-files",
+            "-v",
             "--error-unmatch",
             "--",
             "pyproject.toml",
@@ -1762,8 +1780,8 @@ async fn bind_profile_in_store(
         4096,
     )
     .await?;
-    if !tracked {
-        return Err("CODEX_QUEUE_PROFILE: pyproject.toml and uv.lock must be tracked".into());
+    if !tracked || input_tags != PROFILE_INPUTS_TAGGED {
+        return Err("CODEX_QUEUE_PROFILE: pyproject.toml and uv.lock must be tracked without assume-unchanged or skip-worktree bits".into());
     }
     let (status_ok, dirty_inputs) = git_witness_output(
         &git,
@@ -1820,17 +1838,54 @@ async fn bind_profile_in_store(
         "threadId":updated.codex_thread_id,
         "targetSha256":updated.chatgpt_target_sha256,
         "meaning":"Fixed verification profile metadata only; no native turn, queue job, reviewer, or Wake event was launched.",
-        "chatQuiescence":"OPERATOR_CONFIRMATION_REQUIRED",
+        "chatQuiescence":"OPERATOR_ASSERTED_UNVERIFIED",
     }))
 }
 
 /// The registry callback is synchronous while the scheduler and registration
-/// locks are held. Recheck the exact tracked inputs' index and worktree state
-/// there so an index-only edit after preflight cannot be published.
+/// locks are held. Recheck both index flags and porcelain there so an
+/// index-only edit after preflight cannot be published.
 fn profile_git_inputs_clean_under_lock(
     git: &TrustedGit,
     workspace: &Path,
 ) -> Result<(), RuntimeError> {
+    let tagged = profile_git_output_under_lock(
+        git,
+        workspace,
+        &[
+            "ls-files",
+            "-v",
+            "--error-unmatch",
+            "--",
+            "pyproject.toml",
+            "uv.lock",
+        ],
+    )?;
+    let status = profile_git_output_under_lock(
+        git,
+        workspace,
+        &[
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+            "--",
+            "pyproject.toml",
+            "uv.lock",
+        ],
+    )?;
+    if tagged != PROFILE_INPUTS_TAGGED || !status.is_empty() {
+        return Err(RuntimeError::Validation(
+            "Python profile inputs have Git index or worktree drift".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn profile_git_output_under_lock(
+    git: &TrustedGit,
+    workspace: &Path,
+    args: &[&str],
+) -> Result<Vec<u8>, RuntimeError> {
     let refusal = || RuntimeError::Validation("Python profile inputs have Git drift".into());
     if native_executable_sha256(&git.executable).ok().as_deref() != Some(&git.sha256) {
         return Err(refusal());
@@ -1842,13 +1897,8 @@ fn profile_git_inputs_clean_under_lock(
             "--no-pager",
             "-c",
             "core.fsmonitor=false",
-            "status",
-            "--porcelain=v1",
-            "--untracked-files=all",
-            "--",
-            "pyproject.toml",
-            "uv.lock",
         ])
+        .args(args)
         .current_dir(workspace)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -1889,10 +1939,10 @@ fn profile_git_inputs_clean_under_lock(
         .take(4097)
         .read_to_end(&mut bytes)
         .map_err(|_| refusal())?;
-    if !status.success() || !bytes.is_empty() {
+    if !status.success() || bytes.len() > 4096 {
         return Err(refusal());
     }
-    Ok(())
+    Ok(bytes)
 }
 
 fn package_verified_receipt(
@@ -3957,6 +4007,7 @@ mod tests {
             "rust_full",
             profile,
             hash,
+            exact_thread(selected)?,
         )
         .await
     }
@@ -4984,15 +5035,21 @@ mod tests {
             "python_uv_group_dev_v1",
             "--expected-binding-sha256",
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "--confirm-chat-quiescent",
+            "00000000-0000-0000-0000-000000000001",
         ];
         assert!(matches!(
             parse(&profile_bind),
             Ok(QueueAction::ProfileBind { .. })
         ));
         assert!(parse(&[&profile_bind[..], &["--task", "unexpected"]].concat()).is_err());
+        assert!(parse(&profile_bind[..profile_bind.len() - 2]).is_err());
         let mut invalid = profile_bind;
         invalid[9] = "python_freeform";
         assert!(parse(&invalid).is_err());
+        let mut wrong_thread = profile_bind;
+        wrong_thread[15] = "not-a-thread";
+        assert!(parse(&wrong_thread).is_err());
     }
 
     #[tokio::test]
@@ -5018,6 +5075,7 @@ mod tests {
                 "rust_full",
                 profile,
                 &expected_hash,
+                exact_thread(project).expect("bound fixture thread"),
             )
             .await
             .expect("first binding");
@@ -5053,6 +5111,7 @@ mod tests {
                 "rust_full",
                 profile,
                 &expected_hash,
+                exact_thread(rebound).expect("bound fixture thread"),
             )
             .await
             .expect("exact retry");
@@ -5086,6 +5145,19 @@ mod tests {
                 project,
                 profile,
                 &"0".repeat(64)
+            )
+            .await
+            .is_err()
+        );
+        assert!(
+            bind_profile_in_store(
+                &control.workspace,
+                &queue,
+                project,
+                "rust_full",
+                profile,
+                &expected_hash,
+                "00000000-0000-0000-0000-000000000001",
             )
             .await
             .is_err()
@@ -5126,6 +5198,34 @@ mod tests {
                 profile_git_inputs_clean_under_lock(&git, &project.workspace)
                     .expect("restored clean inputs");
             }
+        }
+        for (name, set_bit, clear_bit) in [
+            (
+                "pyproject.toml",
+                "--assume-unchanged",
+                "--no-assume-unchanged",
+            ),
+            ("uv.lock", "--skip-worktree", "--no-skip-worktree"),
+        ] {
+            fixture_git_command(&project.workspace, &["update-index", set_bit, "--", name]);
+            let path = project.workspace.join(name);
+            let mut modified = fs::read(&path).expect("profile input");
+            modified.extend_from_slice(b"\n# valid hidden edit\n");
+            fs::write(&path, modified).expect("hidden edit");
+            profile_binding_inputs(&project.workspace, profile).expect("valid hidden input");
+            assert!(profile_git_inputs_clean_under_lock(&git, &project.workspace).is_err());
+            assert!(
+                fixture_profile_bind(&control.workspace, &queue, project, profile, &expected_hash)
+                    .await
+                    .is_err()
+            );
+            fixture_git_command(&project.workspace, &["update-index", clear_bit, "--", name]);
+            fixture_git_command(
+                &project.workspace,
+                &["restore", "--staged", "--worktree", "--", name],
+            );
+            profile_git_inputs_clean_under_lock(&git, &project.workspace)
+                .expect("restored clean inputs");
         }
         fs::write(
             project.workspace.join("pyproject.toml"),
