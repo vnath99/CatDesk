@@ -62,6 +62,7 @@ const MAX_VERIFICATION_BYTES: u64 = 72 * 1024 * 1024;
 const MAX_REVIEW_PACKAGE_BYTES: u64 = 76 * 1024 * 1024;
 const MAX_VERIFY_STREAM_BYTES: usize = 16 * 1024 * 1024;
 const VERIFY_COMMAND_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const BUG_BOUNTY_PYTEST_TIMEOUT: Duration = Duration::from_secs(90 * 60);
 const NATIVE_STDOUT_EOF_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_NATIVE_STDOUT_LINE_BYTES: usize = 64 * 1024;
 const MAX_GIT_STATUS_BYTES: usize = 1024 * 1024;
@@ -3011,6 +3012,7 @@ async fn verify_receipt_in_store_with_executable(
             &executable,
             profile.tool,
             argv,
+            verification_command_timeout(&job.binding.verification_profile, argv),
         )
         .await
         {
@@ -3513,6 +3515,21 @@ fn verification_profile(profile: &str) -> Result<VerificationProfile, String> {
     }
 }
 
+fn verification_command_timeout(profile: &str, argv: &[String]) -> Duration {
+    // The Bug Bounty full suite has exceeded the generic bound. Match its
+    // entire fixed argv so Ruff and every other profile retain that bound.
+    if profile == "python_uv_extras_dev_lab_touched_v2"
+        && verification_profile(profile)
+            .ok()
+            .and_then(|specification| specification.commands.last().copied())
+            .is_some_and(|expected| argv.iter().map(String::as_str).eq(expected.iter().copied()))
+    {
+        BUG_BOUNTY_PYTEST_TIMEOUT
+    } else {
+        VERIFY_COMMAND_TIMEOUT
+    }
+}
+
 /// V2 keeps the locked, offline full test command but scopes Ruff to every
 /// Python file in the immutable post-turn Git witness.  A documentation-only
 /// turn records only the pytest command; it makes no Ruff claim.  Deleted
@@ -3823,6 +3840,7 @@ async fn execute_fixed_verification_command(
     executable: &TrustedVerificationExecutable,
     tool: VerificationTool,
     argv: &[String],
+    timeout: Duration,
 ) -> Result<QueueVerificationCommand, VerifyCommandError> {
     if native_executable_sha256(&executable.executable)
         .ok()
@@ -3855,7 +3873,7 @@ async fn execute_fixed_verification_command(
         VerifyCommandError::Uncertain("CODEX_QUEUE_VERIFY: stderr ownership is unknown".into())
     })?;
     let started = Instant::now();
-    let result = tokio::time::timeout(VERIFY_COMMAND_TIMEOUT, async {
+    let result = tokio::time::timeout(timeout, async {
         tokio::join!(
             digest_verification_stream(stdout),
             digest_verification_stream(stderr),
@@ -7930,6 +7948,50 @@ mod tests {
             assert!(queue.read_verification(&receipt, &candidate).is_err());
             cleanup(fixture);
         }
+    }
+
+    #[test]
+    fn only_fixed_bug_bounty_touched_v2_pytest_has_extended_timeout() {
+        let changed = [GitChangedPath {
+            path: "source.py".into(),
+            kind: "file".into(),
+            sha256: Some("a".repeat(64)),
+        }];
+        for profile in [
+            "rust_full",
+            "python_uv_group_dev_v1",
+            "python_uv_extras_dev_lab_v1",
+            "python_uv_group_dev_touched_v2",
+            "python_uv_extras_dev_lab_touched_v2",
+        ] {
+            let commands = verification_commands(profile, &changed).unwrap();
+            for (index, argv) in commands.iter().enumerate() {
+                let expected = if profile == "python_uv_extras_dev_lab_touched_v2"
+                    && index == commands.len() - 1
+                {
+                    BUG_BOUNTY_PYTEST_TIMEOUT
+                } else {
+                    VERIFY_COMMAND_TIMEOUT
+                };
+                assert_eq!(verification_command_timeout(profile, argv), expected);
+            }
+        }
+        let documentation_only =
+            verification_commands("python_uv_extras_dev_lab_touched_v2", &[]).unwrap();
+        assert_eq!(documentation_only.len(), 1);
+        assert_eq!(
+            verification_command_timeout(
+                "python_uv_extras_dev_lab_touched_v2",
+                &documentation_only[0]
+            ),
+            BUG_BOUNTY_PYTEST_TIMEOUT
+        );
+        let mut modified = documentation_only[0].clone();
+        modified.push("--unexpected".into());
+        assert_eq!(
+            verification_command_timeout("python_uv_extras_dev_lab_touched_v2", &modified),
+            VERIFY_COMMAND_TIMEOUT
+        );
     }
 
     #[test]
