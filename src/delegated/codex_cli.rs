@@ -2835,6 +2835,9 @@ mod tests {
         }
         stdout.mark_eof();
         let launched_at = SystemTime::now();
+        // On Windows, a new file's creation timestamp can briefly precede
+        // SystemTime::now(). Leave a clear postlaunch gap for this fixture.
+        std::thread::sleep(Duration::from_millis(20));
         let epoch = launched_at.duration_since(UNIX_EPOCH).unwrap().as_secs();
         let contents = format!(
             "{}{}",
@@ -2850,6 +2853,7 @@ mod tests {
         );
         let first = day_one.join(format!("rollout-2026-10-16T00-00-00-{thread_id}.jsonl"));
         fs::write(&first, &contents).unwrap();
+        assert!(fs::metadata(&first).unwrap().created().unwrap() >= launched_at);
         let exit_observed_at = SystemTime::now();
         let profile = read_fresh_native_turn_profile(
             Some(&base),
