@@ -1,5 +1,16 @@
 # CatDesk — Important Command Reference
 
+## October 16 source-only operator package decision
+
+From the registered CatDesk control root, a human who has inspected an exact verified queue package can record one local decision in an interactive terminal:
+
+```text
+catdesk.exe codex queue operator-review --project-id <id> --workspace <registered root> --receipt-id <uuid> --expected-package-sha256 <lowercase hash> --decision ACCEPT
+catdesk.exe codex queue operator-review-receipt --receipt-id <uuid>
+```
+
+The first command also accepts `REJECT` or `INCONCLUSIVE` and asks for `<DECISION> <uuid> <lowercase hash>` on the terminal. Read the package and choose its exact digest first; do not rerun a consumed receipt with another decision. The record judges captured verified bytes only and is `OPERATOR_REVIEW_ONLY`, with `independentReview=PENDING` and `wakeReady:false`. It does not post `review_ready`, wake ChatGPT, or approve another task. Source `46912f7` passed the full serial local Rust suite (main 1,374/0/28 and integrations), strict Clippy/fmt/build; no installed or live operator decision is claimed. See the October acceptance record for the exact image hash and remaining gates.
+
 ## October 16 source-only public MCP call regression
 
 Integrated `0cafc07` from independently reviewed `1733467` adds a disposable `tools/call` test for the reader described below. The fixture checks absent-grant and mode denial, granted prompt/metadata, revoked denial and failed re-grant, and unchanged job/package bytes. It injects a disposable queue reader and fixture grant; it is not a local `DISCLOSE` terminal, HTTP/tunnel or installed-runtime test.
