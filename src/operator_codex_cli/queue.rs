@@ -3513,6 +3513,26 @@ async fn drain_native_jsonl_stdout(
     }
 }
 
+async fn write_queued_prompt(
+    child: &mut tokio::process::Child,
+    prompt: &str,
+    limit: Duration,
+) -> bool {
+    let Some(mut stdin) = child.stdin.take() else {
+        return false;
+    };
+    let accepted = tokio::time::timeout(limit, async {
+        stdin.write_all(prompt.as_bytes()).await?;
+        stdin.flush().await
+    })
+    .await
+    .is_ok_and(|write| write.is_ok());
+    // The native `exec -` reader needs the pipe handle closed to observe
+    // EOF. AsyncWriteExt::shutdown alone does not close ChildStdin on Windows.
+    drop(stdin);
+    accepted
+}
+
 async fn run_queued_turn(
     job: &QueueJob,
     control_workspace: &Path,
@@ -3624,15 +3644,7 @@ async fn run_queued_turn(
         return TurnResult::unknown("NATIVE_STDOUT_UNAVAILABLE");
     };
     let stdout_reader = tokio::spawn(drain_native_jsonl_stdout(stdout, stdout_evidence));
-    let prompt_accepted = match child.stdin.take() {
-        Some(mut stdin) => tokio::time::timeout(PROMPT_TIMEOUT, async {
-            stdin.write_all(job.prompt.as_bytes()).await?;
-            stdin.shutdown().await
-        })
-        .await
-        .is_ok_and(|result| result.is_ok()),
-        None => false,
-    };
+    let prompt_accepted = write_queued_prompt(&mut child, &job.prompt, PROMPT_TIMEOUT).await;
     if !prompt_accepted {
         let _ = tokio::time::timeout(KILL_TIMEOUT, child.kill()).await;
         // The native parent may have descendants. Keep the pending writer
@@ -3940,6 +3952,101 @@ mod tests {
                 .success()
         );
         executable
+    }
+
+    #[tokio::test]
+    async fn queued_prompt_closes_native_pipe_and_times_out_a_blocked_write() {
+        let root = fixture_root();
+        let source = root.join("prompt-child.rs");
+        let executable = root.join(if cfg!(windows) {
+            "prompt-child.exe"
+        } else {
+            "prompt-child"
+        });
+        fs::write(
+            &source,
+            r#"
+                use std::io::Read;
+                use std::time::Duration;
+                fn main() {
+                    match std::env::args().nth(1).as_deref() {
+                        Some("eof") => {
+                            let mut bytes = Vec::new();
+                            std::io::stdin().read_to_end(&mut bytes).unwrap();
+                            if bytes != b"queued prompt through EOF" {
+                                std::process::exit(42);
+                            }
+                            std::fs::write("prompt-proof.txt", bytes).unwrap();
+                        }
+                        Some("blocked") => std::thread::sleep(Duration::from_secs(10)),
+                        _ => std::process::exit(43),
+                    }
+                }
+            "#,
+        )
+        .expect("write prompt child source");
+        assert!(
+            StdCommand::new("rustc")
+                .arg(&source)
+                .arg("-o")
+                .arg(&executable)
+                .status()
+                .expect("rustc available")
+                .success()
+        );
+
+        let mut eof_child = Command::new(&executable)
+            .arg("eof")
+            .current_dir(&root)
+            .stdin(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .expect("EOF reader starts");
+        assert!(
+            write_queued_prompt(
+                &mut eof_child,
+                "queued prompt through EOF",
+                Duration::from_secs(5),
+            )
+            .await
+        );
+        assert!(eof_child.stdin.is_none(), "parent stdin handle must close");
+        let status = tokio::time::timeout(Duration::from_secs(5), eof_child.wait())
+            .await
+            .expect("EOF reader exits promptly")
+            .expect("EOF reader status");
+        assert!(status.success());
+        assert_eq!(
+            fs::read(root.join("prompt-proof.txt")).expect("exact prompt proof"),
+            b"queued prompt through EOF"
+        );
+
+        let mut blocked_child = Command::new(&executable)
+            .arg("blocked")
+            .current_dir(&root)
+            .stdin(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .expect("blocked reader starts");
+        let oversized_prompt = "P".repeat(4 * 1024 * 1024);
+        assert!(
+            !write_queued_prompt(
+                &mut blocked_child,
+                &oversized_prompt,
+                Duration::from_millis(100),
+            )
+            .await,
+            "blocked prompt must time out without an EOF claim"
+        );
+        assert!(
+            blocked_child.stdin.is_none(),
+            "failed prompt still closes the parent handle"
+        );
+        tokio::time::timeout(Duration::from_secs(5), blocked_child.kill())
+            .await
+            .expect("blocked child stop is bounded")
+            .expect("blocked child stopped");
+        cleanup(root);
     }
 
     fn fixture_project(id: &str, root: &Path) -> AutonomousProjectV1 {
@@ -5949,6 +6056,68 @@ mod tests {
         scheduler(&projects[0].workspace)
             .unwrap()
             .release_workspace_lease(&first.attempt.unwrap().lease)
+            .unwrap();
+        cleanup(fixture);
+    }
+
+    #[test]
+    fn uncertain_prompt_keeps_writer_marker_and_lease_for_owner_recovery() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        for project in projects.iter().skip(1) {
+            queue
+                .save_job(
+                    &QueueJob::new(
+                        format!("job_{}", project.project_id),
+                        project,
+                        "fixture edit".into(),
+                        None,
+                        None,
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+        }
+        let first = claim_one(&projects[0].workspace, &queue).unwrap().unwrap();
+        let attempt = first.attempt.as_ref().expect("claimed attempt");
+        let mut writer = acquire_project_writer_lock(&projects[1].workspace)
+            .expect("claimed project writer is available");
+        writer
+            .begin_queue_writer_turn(&attempt.attempt_id)
+            .expect("exact attempt marker");
+        let marker = inspect_project_writer_pending_marker(&projects[1].workspace)
+            .expect("writer marker readback")
+            .expect("writer marker exists");
+        assert!(attempt.matches_writer_marker(Some(&marker)));
+
+        let outcome = complete_attempt(
+            &projects[0].workspace,
+            &queue,
+            &first,
+            TurnResult::unknown("PROMPT_PIPE_DESCENDANTS_UNPROVEN"),
+        )
+        .expect("uncertain prompt receipt");
+        assert_eq!(outcome["leaseReleased"], false);
+        assert_eq!(outcome["job"]["state"], "UNKNOWN");
+        assert_eq!(
+            outcome["receipt"]["outcome"],
+            "PROMPT_PIPE_DESCENDANTS_UNPROVEN"
+        );
+        assert_eq!(outcome["receipt"]["evidenceLevel"], "PROCESS_STATE_UNKNOWN");
+        assert_eq!(
+            inspect_project_writer_pending_marker(&projects[1].workspace)
+                .expect("marker after uncertain prompt")
+                .as_deref(),
+            Some(marker.as_str())
+        );
+        let error = claim_one(&projects[0].workspace, &queue).expect_err("lease blocks replay");
+        assert!(error.contains("CAPACITY"), "{error}");
+
+        // Fixture teardown is an explicit owner action; the runtime path did
+        // not retire this marker or release the lease on ambiguous delivery.
+        writer.finish_writer_turn().expect("retire fixture marker");
+        scheduler(&projects[0].workspace)
+            .unwrap()
+            .release_workspace_lease(&attempt.lease)
             .unwrap();
         cleanup(fixture);
     }
