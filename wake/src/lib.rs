@@ -18,6 +18,7 @@ pub mod install_broker_endpoint;
 pub mod install_broker_ledger;
 #[cfg(windows)]
 pub mod install_broker_legacy_owner;
+pub mod install_broker_offline_v2;
 pub mod install_broker_operator;
 #[cfg(windows)]
 pub(crate) mod install_broker_pipe_io;

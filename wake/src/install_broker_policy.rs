@@ -14,10 +14,14 @@ use crate::{
     install_broker_approval::{
         BrokerObservedStateV1, ObjectIdentityV1, VerifiedApprovalV1, verify_approval,
     },
+    install_broker_offline_v2::{
+        OfflineMigrationObservationV2, OfflinePairReadbackV2, verify_offline_pair_read_only,
+    },
     install_broker_operator::{OperatorTokenEvidenceV1, inspect_connected_pipe_operator},
     install_broker_preflight::{
         FixedProtectedRootReadGuard, acquire_fixed_protected_root_for_reader,
-        canonical_broker_policy_security, canonical_protected_security, protected_security_raw,
+        canonical_broker_policy_security, canonical_protected_security,
+        inspect_fixed_broker_read_only, protected_security_raw,
     },
 };
 use ed25519_dalek::VerifyingKey;
@@ -623,6 +627,42 @@ impl BrokerProtectedPolicyV1 {
             verified,
             readback,
         })
+    }
+
+    /// Compare two V2 signatures using only the protected policy key and
+    /// fixed service preflight. The old-store observation is still supplied
+    /// comparison data: this returns a read-only summary, never a typed
+    /// approval, ledger lease, offline-owner proof or install capability.
+    pub fn inspect_offline_pair_read_only(
+        &self,
+        anchor_wire: &[u8],
+        approval_wire: &[u8],
+        observed: &OfflineMigrationObservationV2,
+    ) -> Result<OfflinePairReadbackV2> {
+        let before = self.readback()?;
+        let service = inspect_fixed_broker_read_only()?;
+        if observed.target_protected_root != before.protected_root
+            || observed.broker_policy_file != before.policy_file
+            || observed.broker_policy_sha256 != before.policy_sha256
+            || observed.broker_service_image != service.service_image
+            || observed.broker_service_image_sha256 != service.service_image_sha256
+            || service.protected_root != before.protected_root
+        {
+            return Err("WAKE_OFFLINE_PROTECTED_POLICY_MISMATCH".into());
+        }
+        let result = verify_offline_pair_read_only(
+            anchor_wire,
+            approval_wire,
+            &self.approval_key,
+            observed,
+        )?;
+        if self.readback()? != before
+            || inspect_fixed_broker_read_only()? != service
+            || result.verification_key_sha256 != before.approval_public_key_sha256
+        {
+            return Err("WAKE_OFFLINE_PROTECTED_POLICY_CHANGED".into());
+        }
+        Ok(result)
     }
 }
 
