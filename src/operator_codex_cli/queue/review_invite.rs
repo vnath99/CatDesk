@@ -139,6 +139,7 @@ fn prepare_locked(
     project: &AutonomousProjectV1,
     receipt_id: &str,
     expected_package_sha256: &str,
+    clock: impl FnOnce() -> Result<u64, String>,
 ) -> Result<Value, String> {
     let package =
         review_reader::bound_package(store, project, receipt_id, expected_package_sha256)?;
@@ -146,16 +147,15 @@ fn prepare_locked(
     if package.receipt.target_sha256.as_deref() != Some(target_sha256) {
         return Err("CODEX_QUEUE_REVIEW_INVITE: receipt target differs from registration".into());
     }
-    let disclosure_expires_at_unix = review_reader::active_disclosure_expiry(
-        store,
-        project,
-        receipt_id,
-        expected_package_sha256,
-    )?;
-    let observed_at_unix = unix_now()?;
-    if observed_at_unix >= disclosure_expires_at_unix {
-        return Err("CODEX_QUEUE_REVIEW_INVITE: disclosure expired during preparation".into());
-    }
+    let observed_at_unix = clock()?;
+    let (disclosure_created_at_unix, disclosure_expires_at_unix) =
+        review_reader::active_disclosure_window_at(
+            store,
+            project,
+            receipt_id,
+            expected_package_sha256,
+            observed_at_unix,
+        )?;
     let (record, invitation_sha256, idempotent) = if let Some((record, digest)) = read_record(
         store,
         project,
@@ -200,6 +200,7 @@ fn prepare_locked(
         "invitation":record,
         "invitationSha256":invitation_sha256,
         "artifactPath":record_path(store, receipt_id),
+        "disclosureCreatedAtUnixObserved":disclosure_created_at_unix,
         "disclosureExpiresAtUnixObserved":disclosure_expires_at_unix,
         "observedAtUnix":observed_at_unix,
         "meaning":"Exact-package review request persisted under current registration and local disclosure. No Wake event, ChatGPT ACK, independent decision, or next-task authorization was created.",
@@ -234,7 +235,13 @@ pub(super) fn prepare(
         if !crate::wake_protocol_client::selected(control_workspace) {
             return Err("CODEX_QUEUE_REVIEW_INVITE: Wake owner selection changed".into());
         }
-        prepare_locked(&store, project, receipt_id, expected_package_sha256)
+        prepare_locked(
+            &store,
+            project,
+            receipt_id,
+            expected_package_sha256,
+            unix_now,
+        )
     })
 }
 
@@ -245,5 +252,24 @@ pub(super) fn prepare_in_store_for_test(
     receipt_id: &str,
     expected_package_sha256: &str,
 ) -> Result<Value, String> {
-    prepare_locked(store, project, receipt_id, expected_package_sha256)
+    prepare_locked(
+        store,
+        project,
+        receipt_id,
+        expected_package_sha256,
+        unix_now,
+    )
+}
+
+#[cfg(test)]
+pub(super) fn prepare_in_store_at_for_test(
+    store: &QueueStore,
+    project: &AutonomousProjectV1,
+    receipt_id: &str,
+    expected_package_sha256: &str,
+    observed_at_unix: u64,
+) -> Result<Value, String> {
+    prepare_locked(store, project, receipt_id, expected_package_sha256, || {
+        Ok(observed_at_unix)
+    })
 }

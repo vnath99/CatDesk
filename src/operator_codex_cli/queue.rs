@@ -4728,15 +4728,54 @@ mod tests {
                 .unwrap_err()
                 .contains("disclosure grant is required")
         );
-        review_reader::grant_in_store(&queue, &projects[1], &receipt_id, sha).unwrap();
-        let first =
-            review_invite::prepare_in_store_for_test(&queue, &projects[1], &receipt_id, sha)
-                .unwrap();
+        let grant = review_reader::grant_in_store(&queue, &projects[1], &receipt_id, sha).unwrap();
+        let grant_created_at_unix = grant["createdAtUnix"].as_u64().unwrap();
+        let grant_expires_at_unix = grant["expiresAtUnix"].as_u64().unwrap();
         let invitation_path = queue
             .root
             .join("receipts")
             .join(format!("{receipt_id}.review-invitation.json"));
+        assert!(grant_created_at_unix > 0);
+        for outside_grant in [grant_created_at_unix - 1, grant_expires_at_unix] {
+            assert!(
+                review_invite::prepare_in_store_at_for_test(
+                    &queue,
+                    &projects[1],
+                    &receipt_id,
+                    sha,
+                    outside_grant,
+                )
+                .unwrap_err()
+                .contains("outside its lifetime")
+            );
+            assert!(!invitation_path.exists());
+        }
+        let first =
+            review_invite::prepare_in_store_for_test(&queue, &projects[1], &receipt_id, sha)
+                .unwrap();
+        assert_eq!(
+            first["disclosureCreatedAtUnixObserved"],
+            grant_created_at_unix
+        );
+        assert_eq!(
+            first["disclosureExpiresAtUnixObserved"],
+            grant_expires_at_unix
+        );
         let invitation_before = fs::read(&invitation_path).unwrap();
+        for outside_grant in [grant_created_at_unix - 1, grant_expires_at_unix] {
+            assert!(
+                review_invite::prepare_in_store_at_for_test(
+                    &queue,
+                    &projects[1],
+                    &receipt_id,
+                    sha,
+                    outside_grant,
+                )
+                .unwrap_err()
+                .contains("outside its lifetime")
+            );
+            assert_eq!(fs::read(&invitation_path).unwrap(), invitation_before);
+        }
         let second =
             review_invite::prepare_in_store_for_test(&queue, &projects[1], &receipt_id, sha)
                 .unwrap();

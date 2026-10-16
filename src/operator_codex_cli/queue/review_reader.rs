@@ -399,11 +399,12 @@ fn read_revocation_for_grant(
     Ok(Some(revocation))
 }
 
-fn read_grant(
+fn read_grant_with_clock(
     store: &QueueStore,
     project: &AutonomousProjectV1,
     receipt_id: &str,
     package_sha256: &str,
+    clock: impl FnOnce() -> Result<u64, String>,
 ) -> Result<Option<ReviewDisclosureGrantV1>, String> {
     if read_revocation(store, project, receipt_id, package_sha256)?.is_some() {
         return Err("CODEX_QUEUE_REVIEW_READ: disclosure was revoked".into());
@@ -412,26 +413,38 @@ fn read_grant(
     else {
         return Ok(None);
     };
-    let now = unix_now()?;
+    let now = clock()?;
     if now < grant.created_at_unix || now >= grant.expires_at_unix {
         return Err("CODEX_QUEUE_REVIEW_READ: disclosure grant is outside its lifetime".into());
     }
     Ok(Some(grant))
 }
 
-/// Snapshot the active local consent for a prepared invitation. Callers hold
-/// the receipt and queue locks so a concurrent revocation cannot pass between
-/// this check and their bound-package read. This is not a promise that the
-/// grant will still be live when a future Wake message is delivered.
-pub(super) fn active_disclosure_expiry(
+fn read_grant(
     store: &QueueStore,
     project: &AutonomousProjectV1,
     receipt_id: &str,
     package_sha256: &str,
-) -> Result<u64, String> {
-    let grant = read_grant(store, project, receipt_id, package_sha256)?
-        .ok_or("CODEX_QUEUE_REVIEW_INVITE: an active local disclosure grant is required")?;
-    Ok(grant.expires_at_unix)
+) -> Result<Option<ReviewDisclosureGrantV1>, String> {
+    read_grant_with_clock(store, project, receipt_id, package_sha256, unix_now)
+}
+
+/// Snapshot the active local consent for a prepared invitation. Callers hold
+/// the receipt and queue locks so a concurrent revocation cannot pass between
+/// this check and their bound-package read. This is not a promise that the
+/// grant will still be live when a future Wake message is delivered.
+pub(super) fn active_disclosure_window_at(
+    store: &QueueStore,
+    project: &AutonomousProjectV1,
+    receipt_id: &str,
+    package_sha256: &str,
+    observed_at_unix: u64,
+) -> Result<(u64, u64), String> {
+    let grant = read_grant_with_clock(store, project, receipt_id, package_sha256, || {
+        Ok(observed_at_unix)
+    })?
+    .ok_or("CODEX_QUEUE_REVIEW_INVITE: an active local disclosure grant is required")?;
+    Ok((grant.created_at_unix, grant.expires_at_unix))
 }
 
 pub(super) fn grant_in_store(
