@@ -9,7 +9,7 @@ mod recovery;
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
+use std::process::{ExitStatus, Stdio};
 use std::time::Duration;
 
 use serde_json::{Value, json};
@@ -21,7 +21,7 @@ use crate::delegated::autonomy_projects::{
     AutonomousProjectV1, resolve_registered_project_from_control_root,
 };
 use crate::delegated::autonomy_runtime::{
-    acquire_project_writer_lock, operator_codex_home, resolve_codex_executable,
+    ProjectWriterGuard, acquire_project_writer_lock, operator_codex_home, resolve_codex_executable,
 };
 use crate::delegated::autonomy_state::{
     AutonomousQueueTaskStateV1, AutonomousSessionStateV1, AutonomousStateStoreV1,
@@ -32,6 +32,9 @@ const MAX_PROFILE_BYTES: usize = 128;
 const CODEX_PROBE_TIMEOUT: Duration = Duration::from_secs(15);
 const CODEX_PROMPT_TIMEOUT: Duration = Duration::from_secs(30);
 const CODEX_KILL_TIMEOUT: Duration = Duration::from_secs(20);
+// Direct `run` is noninteractive. Leave the native, user-driven `resume` TUI
+// open until its user exits it, but bound a stalled `exec resume -` turn.
+const CODEX_RUN_TIMEOUT: Duration = Duration::from_secs(12 * 60 * 60);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CodexScope {
@@ -551,6 +554,34 @@ async fn write_native_prompt(
     }
 }
 
+async fn wait_native_run(
+    child: &mut tokio::process::Child,
+    writer: &mut ProjectWriterGuard,
+    limit: Duration,
+) -> Result<ExitStatus, String> {
+    match tokio::time::timeout(limit, child.wait()).await {
+        Ok(Ok(status)) => {
+            writer.finish_writer_turn().map_err(|_| {
+                "CODEX_LOCK: native Codex writer marker could not be retired".to_string()
+            })?;
+            Ok(status)
+        }
+        Ok(Err(_)) => {
+            let _ = tokio::time::timeout(CODEX_KILL_TIMEOUT, child.kill()).await;
+            Err("CODEX_IO: native Codex run exit status is unavailable; writer marker retained for recovery".into())
+        }
+        Err(_) => {
+            let _ = tokio::time::timeout(CODEX_KILL_TIMEOUT, child.kill()).await;
+            // A killed parent cannot establish that its descendants exited.
+            // Retain the durable marker even if `kill` observes parent exit.
+            Err(format!(
+                "CODEX_TIMEOUT: native Codex run exceeded {} seconds after prompt delivery; writer marker retained for recovery",
+                limit.as_secs()
+            ))
+        }
+    }
+}
+
 pub(crate) async fn execute_action(
     action: OperatorCodexAction,
     catdesk_workspace: &Path,
@@ -638,13 +669,19 @@ pub(crate) async fn execute_action(
             return Err(error.into());
         }
     }
-    let status = child
-        .wait()
-        .await
-        .map_err(|_| "CODEX_IO: native Codex exit status is unavailable".to_string())?;
-    writer
-        .finish_writer_turn()
-        .map_err(|_| "CODEX_LOCK: native Codex writer marker could not be retired".to_string())?;
+    let status = if matches!(action, OperatorCodexAction::Run { .. }) {
+        wait_native_run(&mut child, &mut writer, CODEX_RUN_TIMEOUT).await?
+    } else {
+        // `resume` is an interactive native session, not a timed model turn.
+        let status = child.wait().await.map_err(|_| {
+            "CODEX_IO: native Codex resume exit status is unavailable; writer marker retained"
+                .to_string()
+        })?;
+        writer.finish_writer_turn().map_err(|_| {
+            "CODEX_LOCK: native Codex writer marker could not be retired".to_string()
+        })?;
+        status
+    };
     if !status.success() {
         return Err(format!(
             "CODEX_EXIT: native Codex returned {}; inspect its terminal output for auth, quota, approval, or task errors",
@@ -870,7 +907,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn native_prompt_has_bounded_write_and_explicit_eof() {
+    async fn native_prompt_and_direct_run_wait_are_bounded() {
         let root =
             std::env::temp_dir().join(format!("catdesk-operator-prompt-{}", uuid::Uuid::new_v4()));
         fs::create_dir(&root).expect("fixture root");
@@ -911,6 +948,8 @@ mod tests {
                 .success()
         );
 
+        let mut writer = acquire_project_writer_lock(&root).expect("scratch writer lock");
+        writer.begin_writer_turn().expect("scratch writer marker");
         let mut eof_child = Command::new(&executable)
             .arg("eof")
             .stdin(Stdio::piped())
@@ -924,11 +963,12 @@ mod tests {
         )
         .await
         .expect("prompt accepted");
-        let status = tokio::time::timeout(Duration::from_secs(5), eof_child.wait())
+        let status = wait_native_run(&mut eof_child, &mut writer, Duration::from_secs(5))
             .await
-            .expect("EOF reader exits after prompt handle drops")
-            .expect("EOF reader status");
+            .expect("EOF reader exits after prompt handle drops");
         assert!(status.success());
+        assert_eq!(inspect_project_writer_pending_marker(&root).unwrap(), None);
+        drop(writer);
 
         let mut idle_child = Command::new(&executable)
             .arg("idle")
@@ -951,6 +991,46 @@ mod tests {
             .await
             .expect("bounded fixture kill")
             .expect("fixture child terminated");
+
+        // The short prompt fits the pipe, but the native process never exits.
+        // A timed-out run kills the known fixture parent and leaves its marker
+        // for an owner to review; the production path cannot assume its own
+        // native process has no descendants as this fixture does.
+        let mut writer = acquire_project_writer_lock(&root).expect("scratch writer lock");
+        writer.begin_writer_turn().expect("scratch writer marker");
+        let marker = inspect_project_writer_pending_marker(&root)
+            .expect("scratch marker readback")
+            .expect("marker before native wait");
+        let mut stalled_child = Command::new(&executable)
+            .arg("idle")
+            .stdin(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .expect("idle native child starts");
+        write_native_prompt(&mut stalled_child, "small prompt", Duration::from_secs(5))
+            .await
+            .expect("small prompt accepted");
+        let started = std::time::Instant::now();
+        let error = wait_native_run(&mut stalled_child, &mut writer, Duration::from_secs(1))
+            .await
+            .expect_err("stalled native run must time out");
+        assert!(error.starts_with("CODEX_TIMEOUT:"), "{error}");
+        assert!(error.contains("writer marker retained"), "{error}");
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert!(
+            stalled_child
+                .try_wait()
+                .expect("fixture child status")
+                .is_some()
+        );
+        assert_eq!(
+            inspect_project_writer_pending_marker(&root).expect("marker after timeout"),
+            Some(marker)
+        );
+        // Test-only cleanup is justified by this fixture's single process,
+        // whose exit was observed above. Production timeout never does this.
+        writer.finish_writer_turn().expect("retire fixture marker");
+        drop(writer);
         remove_operator_fixture(root);
     }
 
