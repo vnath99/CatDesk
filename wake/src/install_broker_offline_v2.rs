@@ -267,7 +267,6 @@ fn validate_anchor(
         || anchor.old_runtime_lock == anchor.old_host_image
         || anchor.predecessor_pointer.volume_serial != anchor.old_runtime_root.volume_serial
         || anchor.old_runtime_lock.volume_serial != anchor.old_runtime_root.volume_serial
-        || anchor.old_host_image.volume_serial != anchor.old_runtime_root.volume_serial
     {
         return Err("WAKE_OFFLINE_ANCHOR_INVALID".into());
     }
@@ -706,12 +705,6 @@ mod tests {
             check(&bad, &approval, &observed, &key).unwrap_err(),
             "WAKE_OFFLINE_ANCHOR_INVALID"
         );
-        let mut bad = anchor.clone();
-        bad.old_host_image.volume_serial += 1;
-        assert_eq!(
-            check(&bad, &approval, &observed, &key).unwrap_err(),
-            "WAKE_OFFLINE_ANCHOR_INVALID"
-        );
         let anchor_wire = signed(&anchor, ANCHOR_DOMAIN, &key);
         let mut value: serde_json::Value = serde_json::from_slice(&anchor_wire).unwrap();
         value["payload"]["oldHostPid"] = 42.into();
@@ -724,6 +717,23 @@ mod tests {
             )
             .unwrap_err(),
             "WAKE_OFFLINE_ENCODING_INVALID"
+        );
+    }
+
+    #[test]
+    fn signed_old_image_may_reside_on_another_volume_but_must_match_observation() {
+        let (mut anchor, mut approval, mut observed, key) = fixture();
+        anchor.old_host_image.volume_serial += 1;
+        approval.anchor_envelope_sha256 =
+            format!("{:x}", Sha256::digest(signed(&anchor, ANCHOR_DOMAIN, &key)));
+        observed.old_host_image = anchor.old_host_image.clone();
+        let readback =
+            check(&anchor, &approval, &observed, &key).expect("signed cross-volume image");
+        assert!(readback.disposition.ends_with("NO_INSTALL_AUTHORITY"));
+        observed.old_host_image.volume_serial += 1;
+        assert_eq!(
+            check(&anchor, &approval, &observed, &key).unwrap_err(),
+            "WAKE_OFFLINE_ANCHOR_OBSERVATION_MISMATCH"
         );
     }
 
