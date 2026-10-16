@@ -1669,7 +1669,7 @@ fn validate_job(job: &QueueJob) -> Result<(), String> {
 /// marker. This is a diagnostic snapshot: a later dispatch must recheck all
 /// conditions under its real locks, and the native CLI is not launched here.
 async fn preflight_project(control_workspace: &Path, scope: &CodexScope) -> Result<Value, String> {
-    let project = registered_project(control_workspace, scope)?;
+    let (project, git_executable) = preflight_registered_project(control_workspace, scope).await?;
     let mut blockers = Vec::new();
     if exact_thread(&project).is_err() {
         blockers.push("THREAD_UNBOUND");
@@ -1702,19 +1702,8 @@ async fn preflight_project(control_workspace: &Path, scope: &CodexScope) -> Resu
         blockers.push("VERIFICATION_PROFILE_INPUTS_UNAVAILABLE");
     }
 
-    let (git_result, tracked_result) =
-        match resolve_trusted_git(&project.workspace, control_workspace) {
-            Ok(git) => (
-                capture_git_review_witness(&project.workspace, &git).await,
-                preflight_profile_inputs_tracked(&project, &git).await,
-            ),
-            Err(error) => (
-                Err(error),
-                Err(
-                    "CODEX_QUEUE_PREFLIGHT: trusted Git is unavailable for profile tracking".into(),
-                ),
-            ),
-        };
+    let git_result = capture_git_review_witness(&project.workspace, &git_executable).await;
+    let tracked_result = preflight_profile_inputs_tracked(&project, &git_executable).await;
     if tracked_result.is_err() {
         blockers.push("VERIFICATION_PROFILE_INPUTS_UNTRACKED_OR_UNSAFE");
     }
@@ -1754,6 +1743,118 @@ async fn preflight_project(control_workspace: &Path, scope: &CodexScope) -> Resu
         "ignoredFilesChecked":false,
         "meaning":"Recorded prerequisites at observation time only. A later dispatch rechecks exact binding, writer ownership, queue and scheduler capacity, CLI identity and Git; this report grants no launch, review or Wake authority.",
     }))
+}
+
+/// The diagnostic route has a stricter first Git boundary than dispatch:
+/// registry data is read without Git, then every identity probe uses the same
+/// external, pinned executable as the later review witness. No generic scope
+/// resolver (which searches PATH for `git`) runs on this route.
+async fn preflight_registered_project(
+    control_workspace: &Path,
+    scope: &CodexScope,
+) -> Result<(AutonomousProjectV1, TrustedGit), String> {
+    let control = preflight_checked_root(control_workspace)?;
+    let selected = preflight_checked_root(&scope.workspace)?;
+    let registry = scheduler(&control)?
+        .load_registry()
+        .map_err(|_| "CODEX_QUEUE_PREFLIGHT: control registry is invalid".to_string())?;
+    let controller = registry
+        .projects
+        .iter()
+        .find(|project| project.project_id == "catdesk")
+        .ok_or("CODEX_QUEUE_PREFLIGHT: CatDesk control project is not registered")?;
+    if controller.workspace != control {
+        return Err(
+            "CODEX_QUEUE_PREFLIGHT: CatDesk control workspace differs from registration".into(),
+        );
+    }
+    let project = registry
+        .projects
+        .iter()
+        .find(|project| project.project_id == scope.project_id)
+        .ok_or("CODEX_QUEUE_PREFLIGHT: selected project is not registered")?;
+    if selected != project.workspace {
+        return Err("CODEX_QUEUE_PREFLIGHT: selected workspace differs from registration".into());
+    }
+
+    // This resolver only reads the validated registry and hashes executable
+    // candidates outside every registered root; it does not invoke Git.
+    let git = resolve_trusted_git(&control, &control)?;
+    if registry
+        .projects
+        .iter()
+        .any(|registered| git.executable.starts_with(&registered.workspace))
+    {
+        return Err("CODEX_QUEUE_PREFLIGHT: Git executable overlaps a registered workspace".into());
+    }
+    preflight_pinned_git_identity(&git, &control, &controller.git_identity).await?;
+    if project.workspace != control {
+        preflight_pinned_git_identity(&git, &project.workspace, &project.git_identity).await?;
+    } else if project.git_identity != controller.git_identity {
+        return Err(
+            "CODEX_QUEUE_PREFLIGHT: selected control Git identity differs from registration".into(),
+        );
+    }
+    Ok((project.clone(), git))
+}
+
+fn preflight_checked_root(raw: &Path) -> Result<PathBuf, String> {
+    let text = raw
+        .to_str()
+        .ok_or("CODEX_QUEUE_PREFLIGHT: workspace path is not UTF-8")?;
+    if text.is_empty() || text.len() > 4096 || !raw.is_absolute() {
+        return Err("CODEX_QUEUE_PREFLIGHT: workspace path is unbounded or relative".into());
+    }
+    let metadata = fs::symlink_metadata(raw)
+        .map_err(|_| "CODEX_QUEUE_PREFLIGHT: workspace root is unavailable".to_string())?;
+    if !metadata.is_dir() || redirected(&metadata) {
+        return Err("CODEX_QUEUE_PREFLIGHT: workspace root is redirected or unsafe".into());
+    }
+    raw.canonicalize()
+        .map_err(|_| "CODEX_QUEUE_PREFLIGHT: workspace root cannot be canonicalized".into())
+}
+
+async fn preflight_pinned_git_identity(
+    git: &TrustedGit,
+    workspace: &Path,
+    expected_origin: &str,
+) -> Result<(), String> {
+    if expected_origin.is_empty() || expected_origin.len() > 1024 {
+        return Err("CODEX_QUEUE_PREFLIGHT: registered Git origin is unbounded".into());
+    }
+    let (ok, top) =
+        git_witness_output(git, workspace, &["rev-parse", "--show-toplevel"], 4096).await?;
+    let top = preflight_git_metadata(ok, &top)?;
+    let root = Path::new(&top)
+        .canonicalize()
+        .map_err(|_| "CODEX_QUEUE_PREFLIGHT: Git top level is unavailable".to_string())?;
+    if root != workspace {
+        return Err("CODEX_QUEUE_PREFLIGHT: workspace is not the exact Git root".into());
+    }
+    let (ok, origin) = git_witness_output(
+        git,
+        workspace,
+        &["config", "--local", "--get", "remote.origin.url"],
+        4096,
+    )
+    .await?;
+    if preflight_git_metadata(ok, &origin)? != expected_origin {
+        return Err("CODEX_QUEUE_PREFLIGHT: registered Git origin has drifted".into());
+    }
+    Ok(())
+}
+
+fn preflight_git_metadata(ok: bool, bytes: &[u8]) -> Result<String, String> {
+    if !ok || bytes.is_empty() || bytes.len() > 4096 {
+        return Err("CODEX_QUEUE_PREFLIGHT: Git metadata is unavailable or oversized".into());
+    }
+    let value = std::str::from_utf8(bytes)
+        .map_err(|_| "CODEX_QUEUE_PREFLIGHT: Git metadata is not UTF-8".to_string())?
+        .trim();
+    if value.is_empty() || value.contains('\0') {
+        return Err("CODEX_QUEUE_PREFLIGHT: Git metadata is invalid".into());
+    }
+    Ok(value.into())
 }
 
 async fn preflight_profile_inputs_tracked(
@@ -1796,13 +1897,14 @@ pub(crate) async fn execute_action(
     action: QueueAction,
     control_workspace: &Path,
 ) -> Result<Value, String> {
-    if matches!(&action, QueueAction::Preflight { .. }) {
+    if let QueueAction::Preflight { scope } = &action {
         crate::delegated::autonomy_supervisor::reject_inherited_git_output_redirects().map_err(
             |_| {
                 "CODEX_QUEUE_PREFLIGHT: inherited Git trace or stdio redirect must be unset"
                     .to_string()
             },
         )?;
+        return preflight_project(control_workspace, scope).await;
     }
     // A queue verb never accepts a caller-selected control plane. All state
     // below is anchored to the registered CatDesk Git root.
@@ -1812,8 +1914,8 @@ pub(crate) async fn execute_action(
         })?;
     let pause_action = matches!(&action, QueueAction::Pause { .. });
     match action {
-        QueueAction::Preflight { scope } => {
-            preflight_project(&control.control_workspace, &scope).await
+        QueueAction::Preflight { .. } => {
+            unreachable!("preflight returned before generic scope resolution")
         }
         QueueAction::Add {
             scope,
@@ -3404,6 +3506,47 @@ fn resolve_trusted_git(workspace: &Path, control_workspace: &Path) -> Result<Tru
     Err("CODEX_QUEUE_REVIEW: no trusted Git executable outside the project".into())
 }
 
+fn git_witness_identity_override(name: &std::ffi::OsStr) -> bool {
+    let upper = name.to_string_lossy().to_ascii_uppercase();
+    matches!(
+        upper.as_str(),
+        "GIT_DIR"
+            | "GIT_WORK_TREE"
+            | "GIT_INDEX_FILE"
+            | "GIT_COMMON_DIR"
+            | "GIT_PREFIX"
+            | "GIT_OBJECT_DIRECTORY"
+            | "GIT_ALTERNATE_OBJECT_DIRECTORIES"
+            | "GIT_CONFIG_PARAMETERS"
+            | "GIT_CONFIG_COUNT"
+    ) || upper.starts_with("GIT_CONFIG_KEY_")
+        || upper.starts_with("GIT_CONFIG_VALUE_")
+}
+
+fn clear_git_witness_identity_overrides(command: &mut std::process::Command) -> Result<(), String> {
+    let mut names = Vec::new();
+    for (index, (name, _)) in std::env::vars_os().enumerate() {
+        if index >= 4096 {
+            return Err("CODEX_QUEUE_REVIEW: Git environment is oversized".into());
+        }
+        if git_witness_identity_override(&name) {
+            names.push(name);
+        }
+    }
+    for (name, _) in command.get_envs() {
+        if names.len() >= 4096 {
+            return Err("CODEX_QUEUE_REVIEW: Git command environment is oversized".into());
+        }
+        if git_witness_identity_override(name) {
+            names.push(name.to_os_string());
+        }
+    }
+    for name in names {
+        command.env_remove(name);
+    }
+    Ok(())
+}
+
 async fn git_witness_output(
     git: &TrustedGit,
     workspace: &Path,
@@ -3429,6 +3572,7 @@ async fn git_witness_output(
         .kill_on_drop(true);
     crate::delegated::autonomy_supervisor::configure_read_only_git_command(command.as_std_mut())
         .map_err(|_| "CODEX_QUEUE_REVIEW: Git environment is unsafe".to_string())?;
+    clear_git_witness_identity_overrides(command.as_std_mut())?;
     let mut child = command
         .spawn()
         .map_err(|_| "CODEX_QUEUE_REVIEW: Git could not start".to_string())?;
@@ -4549,6 +4693,8 @@ mod tests {
         let leases = control.join(".catdesk/projects/leases");
         fs::remove_dir(&leases).expect("empty fixture leases removed");
         let before = snapshot_non_git_tree(&fixture);
+        let before_git = [control, &alpha.workspace]
+            .map(|workspace| snapshot_non_git_tree(&workspace.join(".git")));
         let report = execute_action(
             QueueAction::Preflight {
                 scope: CodexScope {
@@ -4570,6 +4716,11 @@ mod tests {
         assert_eq!(report["operatorQueueAndLeaseChecked"], false);
         assert!(!leases.exists());
         assert_eq!(snapshot_non_git_tree(&fixture), before);
+        assert_eq!(
+            [control, &alpha.workspace]
+                .map(|workspace| snapshot_non_git_tree(&workspace.join(".git"))),
+            before_git
+        );
         assert!(queue.jobs().unwrap().is_empty());
 
         fs::write(alpha.workspace.join("untracked.txt"), b"owner work").unwrap();
@@ -4591,6 +4742,11 @@ mod tests {
                 .contains(&json!("REVIEW_BASELINE_DIRTY_OR_UNBORN"))
         );
         assert_eq!(snapshot_non_git_tree(&fixture), before_dirty);
+        assert_eq!(
+            [control, &alpha.workspace]
+                .map(|workspace| snapshot_non_git_tree(&workspace.join(".git"))),
+            before_git
+        );
         cleanup(fixture);
     }
 
@@ -4766,6 +4922,75 @@ mod tests {
         assert_eq!(report["status"], "CANDIDATE_ONLY");
         assert_eq!(report["git"]["clean"], true);
         assert_eq!(report["launchAuthorized"], false);
+    }
+
+    #[tokio::test]
+    async fn queue_preflight_path_shadow_child() {
+        let Some(control) = std::env::var_os("CATDESK_PREFLIGHT_SHADOW_CONTROL") else {
+            return;
+        };
+        let alpha = PathBuf::from(
+            std::env::var_os("CATDESK_PREFLIGHT_SHADOW_ALPHA").expect("fixture workspace"),
+        );
+        let report = execute_action(
+            QueueAction::Preflight {
+                scope: CodexScope {
+                    project_id: "alpha".into(),
+                    workspace: alpha,
+                },
+            },
+            Path::new(&control),
+        )
+        .await
+        .expect("preflight uses pinned Git beyond registered PATH shadow");
+        assert_eq!(report["status"], "CANDIDATE_ONLY");
+    }
+
+    #[test]
+    fn queue_preflight_does_not_execute_git_shadow_inside_registered_root() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let control = &projects[0].workspace;
+        let alpha = &projects[1];
+        fs::write(
+            alpha.workspace.join("Cargo.toml"),
+            "[package]\nname = \"preflight_fixture\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        fs::write(alpha.workspace.join("Cargo.lock"), "version = 3\n").unwrap();
+        fixture_commit(&alpha.workspace);
+        let shadow = control.join(if cfg!(windows) { "git.exe" } else { "git" });
+        fs::write(&shadow, b"invalid shadow Git executable").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&shadow, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let mut path = vec![control.clone()];
+        path.extend(std::env::split_paths(
+            &std::env::var_os("PATH").expect("existing Git PATH"),
+        ));
+        let path = std::env::join_paths(path).expect("shadow PATH");
+        let before = snapshot_non_git_tree(&fixture);
+        let child = StdCommand::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "operator_codex_cli::queue::tests::queue_preflight_path_shadow_child",
+            ])
+            .env("CATDESK_PREFLIGHT_SHADOW_CONTROL", control)
+            .env("CATDESK_PREFLIGHT_SHADOW_ALPHA", &alpha.workspace)
+            .env("PATH", path)
+            .output()
+            .expect("isolated shadow-path child");
+        assert!(
+            child.status.success(),
+            "stdout={} stderr={}",
+            String::from_utf8_lossy(&child.stdout),
+            String::from_utf8_lossy(&child.stderr)
+        );
+        assert_eq!(fs::read(&shadow).unwrap(), b"invalid shadow Git executable");
+        assert_eq!(snapshot_non_git_tree(&fixture), before);
+        assert!(queue.jobs().unwrap().is_empty());
+        cleanup(fixture);
     }
 
     #[test]

@@ -3843,26 +3843,6 @@ pub(crate) fn reject_inherited_git_output_redirects() -> Result<(), &'static str
     Ok(())
 }
 
-fn git_execution_override_key(name: &OsStr) -> bool {
-    if git_output_redirect_key(name) {
-        return true;
-    }
-    let upper = name.to_string_lossy().to_ascii_uppercase();
-    matches!(
-        upper.as_str(),
-        "GIT_DIR"
-            | "GIT_WORK_TREE"
-            | "GIT_INDEX_FILE"
-            | "GIT_COMMON_DIR"
-            | "GIT_PREFIX"
-            | "GIT_OBJECT_DIRECTORY"
-            | "GIT_ALTERNATE_OBJECT_DIRECTORIES"
-            | "GIT_CONFIG_PARAMETERS"
-            | "GIT_CONFIG_COUNT"
-    ) || upper.starts_with("GIT_CONFIG_KEY_")
-        || upper.starts_with("GIT_CONFIG_VALUE_")
-}
-
 /// Shared read-only Git child environment for project identity and queue
 /// witnesses. Trace2 reads system/global config and ignores command-line
 /// `-c`, so the three fixed environment values are required to suppress it.
@@ -3872,7 +3852,7 @@ pub(crate) fn configure_read_only_git_command(command: &mut Command) -> Result<(
         if index >= 4096 {
             return Err("Git environment is oversized");
         }
-        if git_execution_override_key(&name) {
+        if git_output_redirect_key(&name) {
             keys.push(name);
         }
     }
@@ -3880,7 +3860,7 @@ pub(crate) fn configure_read_only_git_command(command: &mut Command) -> Result<(
         if keys.len() >= 4096 {
             return Err("Git command environment is oversized");
         }
-        if git_execution_override_key(name) {
+        if git_output_redirect_key(name) {
             keys.push(name.to_os_string());
         }
     }
@@ -4076,7 +4056,10 @@ mod tests {
         }
         assert_eq!(overrides["GIT_TRACE"], None);
         assert_eq!(overrides["GIT_REDIRECT_STDOUT"], None);
-        assert_eq!(overrides["GIT_CONFIG_COUNT"], None);
+        assert_eq!(
+            overrides["GIT_CONFIG_COUNT"].as_deref(),
+            Some(OsStr::new("1"))
+        );
     }
 
     #[test]
