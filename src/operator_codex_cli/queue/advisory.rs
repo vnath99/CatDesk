@@ -832,6 +832,32 @@ fn reviewer_command(attempt: &AdvisoryAttempt) -> Command {
     command
 }
 
+async fn write_reviewer_request(
+    child: &mut tokio::process::Child,
+    request: &str,
+) -> Result<(), String> {
+    let mut stdin = child
+        .stdin
+        .take()
+        .ok_or("CODEX_QUEUE_ADVISORY_ATTENTION: reviewer prompt pipe is unavailable")?;
+    let accepted = tokio::time::timeout(PROMPT_TIMEOUT, async {
+        stdin.write_all(request.as_bytes()).await?;
+        stdin.flush().await
+    })
+    .await
+    .is_ok_and(|write| write.is_ok());
+    // AsyncWriteExt::shutdown does not close a ChildStdin pipe on Windows.
+    // The native `exec -` reader needs this handle dropped to observe EOF.
+    drop(stdin);
+    if !accepted {
+        return Err(
+            "CODEX_QUEUE_ADVISORY_ATTENTION: reviewer prompt was not accepted; descendants unproven"
+                .into(),
+        );
+    }
+    Ok(())
+}
+
 async fn run_native_advisory(
     attempt: &AdvisoryAttempt,
     package: &QueueReviewPackage,
@@ -858,21 +884,11 @@ async fn run_native_advisory(
         .ok_or("CODEX_QUEUE_ADVISORY_ATTENTION: reviewer stderr ownership is unknown")?;
     let mut stdout_task = tokio::spawn(drain_review_stdout(stdout));
     let mut stderr_task = tokio::spawn(digest_review_stderr(stderr));
-    let mut stdin = child
-        .stdin
-        .take()
-        .ok_or("CODEX_QUEUE_ADVISORY_ATTENTION: reviewer prompt pipe is unavailable")?;
-    if !tokio::time::timeout(PROMPT_TIMEOUT, async {
-        stdin.write_all(request.as_bytes()).await?;
-        stdin.shutdown().await
-    })
-    .await
-    .is_ok_and(|write| write.is_ok())
-    {
+    if let Err(error) = write_reviewer_request(&mut child, request).await {
         let _ = tokio::time::timeout(KILL_TIMEOUT, child.kill()).await;
         stdout_task.abort();
         stderr_task.abort();
-        return Err("CODEX_QUEUE_ADVISORY_ATTENTION: reviewer prompt was not accepted; descendants unproven".into());
+        return Err(error);
     }
     let status = match tokio::time::timeout(REVIEW_TIMEOUT, child.wait()).await {
         Ok(Ok(status)) => status,
@@ -978,6 +994,71 @@ async fn run_native_advisory(
 mod tests {
     use super::super::tests::{cleanup, completed_verified_fixture};
     use super::*;
+    use std::process::Command as StdCommand;
+
+    #[tokio::test]
+    async fn reviewer_request_closes_stdin_before_waiting_for_child() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-advisory-stdin-eof-{}", Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        let source = root.join("read-to-eof.rs");
+        let executable = root.join(if cfg!(windows) {
+            "read-to-eof.exe"
+        } else {
+            "read-to-eof"
+        });
+        fs::write(
+            &source,
+            r#"
+                use std::io::Read;
+                fn main() {
+                    let mut request = Vec::new();
+                    std::io::stdin().read_to_end(&mut request).unwrap();
+                    if request != b"bounded review request" {
+                        std::process::exit(1);
+                    }
+                    println!("stdin-eof-received");
+                }
+            "#,
+        )
+        .unwrap();
+        assert!(
+            StdCommand::new("rustc")
+                .arg(&source)
+                .arg("-o")
+                .arg(&executable)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let mut child = Command::new(&executable)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        write_reviewer_request(&mut child, "bounded review request")
+            .await
+            .unwrap();
+        let status = match tokio::time::timeout(Duration::from_secs(5), child.wait()).await {
+            Ok(Ok(status)) => status,
+            other => {
+                let _ = child.kill().await;
+                panic!("EOF-reading reviewer did not exit promptly: {other:?}");
+            }
+        };
+        assert!(status.success());
+        let mut stdout = Vec::new();
+        child
+            .stdout
+            .take()
+            .unwrap()
+            .read_to_end(&mut stdout)
+            .await
+            .unwrap();
+        assert_eq!(stdout, b"stdin-eof-received\n");
+        cleanup(root);
+    }
 
     struct RecordFixture {
         root: PathBuf,
