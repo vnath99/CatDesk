@@ -142,6 +142,14 @@ pub(crate) enum QueueAction {
         expected_binding_sha256: String,
         confirmed_quiescent_thread: String,
     },
+    WorkspaceBindPreflight {
+        scope: CodexScope,
+        new_workspace: PathBuf,
+        expected_old_head: String,
+        expected_new_head: String,
+        expected_binding_sha256: String,
+        expected_thread_id: String,
+    },
     Dispatch,
     Pause {
         scope: CodexScope,
@@ -155,7 +163,7 @@ pub(crate) enum QueueAction {
 
 pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
     let verb = args.get(3).map(String::as_str).ok_or_else(|| {
-        "CODEX_QUEUE_USAGE: expected preflight, add, status, receipt, review, verify, review-package, review-invite-prepare, advisory-review, operator-review, operator-review-receipt, review-disclosure-grant, review-disclosure-renew, review-disclosure-revoke, profile-bind, dispatch, pause, or resume"
+        "CODEX_QUEUE_USAGE: expected preflight, add, status, receipt, review, verify, review-package, review-invite-prepare, advisory-review, operator-review, operator-review-receipt, review-disclosure-grant, review-disclosure-renew, review-disclosure-revoke, profile-bind, workspace-bind-preflight, dispatch, pause, or resume"
             .to_string()
     })?;
     if !matches!(
@@ -175,6 +183,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             | "review-disclosure-renew"
             | "review-disclosure-revoke"
             | "profile-bind"
+            | "workspace-bind-preflight"
             | "dispatch"
             | "pause"
             | "resume"
@@ -200,6 +209,10 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
                 | "--new-profile"
                 | "--expected-binding-sha256"
                 | "--confirm-chat-quiescent"
+                | "--new-workspace"
+                | "--expected-old-head"
+                | "--expected-new-head"
+                | "--expected-thread-id"
         ) {
             return Err("CODEX_QUEUE_USAGE: unsupported option".into());
         }
@@ -395,6 +408,45 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             confirmed_quiescent_thread,
         });
     }
+    if verb == "workspace-bind-preflight" {
+        let new_workspace = PathBuf::from(
+            values
+                .remove("--new-workspace")
+                .ok_or("CODEX_QUEUE_USAGE: workspace-bind-preflight requires --new-workspace")?,
+        );
+        let expected_old_head = values
+            .remove("--expected-old-head")
+            .ok_or("CODEX_QUEUE_USAGE: workspace-bind-preflight requires --expected-old-head")?;
+        let expected_new_head = values
+            .remove("--expected-new-head")
+            .ok_or("CODEX_QUEUE_USAGE: workspace-bind-preflight requires --expected-new-head")?;
+        let expected_binding_sha256 = values.remove("--expected-binding-sha256").ok_or(
+            "CODEX_QUEUE_USAGE: workspace-bind-preflight requires --expected-binding-sha256",
+        )?;
+        let expected_thread_id = values
+            .remove("--expected-thread-id")
+            .ok_or("CODEX_QUEUE_USAGE: workspace-bind-preflight requires --expected-thread-id")?;
+        if !values.is_empty()
+            || !new_workspace.is_absolute()
+            || new_workspace == scope.workspace
+            || !valid_git_commit_hex(&expected_old_head)
+            || !valid_git_commit_hex(&expected_new_head)
+            || !valid_sha256_hex(&expected_binding_sha256)
+            || expected_binding_sha256 != expected_binding_sha256.to_ascii_lowercase()
+            || !Uuid::parse_str(&expected_thread_id)
+                .is_ok_and(|id| id.to_string() == expected_thread_id)
+        {
+            return Err("CODEX_QUEUE_USAGE: workspace-bind-preflight requires exact old/new roots and lowercase HEADs, old binding hash, and bound thread assertion".into());
+        }
+        return Ok(QueueAction::WorkspaceBindPreflight {
+            scope,
+            new_workspace,
+            expected_old_head,
+            expected_new_head,
+            expected_binding_sha256,
+            expected_thread_id,
+        });
+    }
     let task_id = values
         .remove("--task-id")
         .ok_or("CODEX_QUEUE_USAGE: --task-id is required")?;
@@ -443,6 +495,13 @@ fn valid_slug(value: &str) -> Result<(), String> {
     } else {
         Ok(())
     }
+}
+
+fn valid_git_commit_hex(value: &str) -> bool {
+    matches!(value.len(), 40 | 64)
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1669,7 +1728,8 @@ fn validate_job(job: &QueueJob) -> Result<(), String> {
 /// marker. This is a diagnostic snapshot: a later dispatch must recheck all
 /// conditions under its real locks, and the native CLI is not launched here.
 async fn preflight_project(control_workspace: &Path, scope: &CodexScope) -> Result<Value, String> {
-    let (project, git_executable) = preflight_registered_project(control_workspace, scope).await?;
+    let (_, project, git_executable) =
+        preflight_registered_project(control_workspace, scope).await?;
     let mut blockers = Vec::new();
     if exact_thread(&project).is_err() {
         blockers.push("THREAD_UNBOUND");
@@ -1752,7 +1812,7 @@ async fn preflight_project(control_workspace: &Path, scope: &CodexScope) -> Resu
 async fn preflight_registered_project(
     control_workspace: &Path,
     scope: &CodexScope,
-) -> Result<(AutonomousProjectV1, TrustedGit), String> {
+) -> Result<(AutonomousProjectV1, AutonomousProjectV1, TrustedGit), String> {
     let control = preflight_checked_root(control_workspace)?;
     let selected = preflight_checked_root(&scope.workspace)?;
     let registry = scheduler(&control)?
@@ -1795,7 +1855,7 @@ async fn preflight_registered_project(
             "CODEX_QUEUE_PREFLIGHT: selected control Git identity differs from registration".into(),
         );
     }
-    Ok((project.clone(), git))
+    Ok((controller.clone(), project.clone(), git))
 }
 
 fn preflight_checked_root(raw: &Path) -> Result<PathBuf, String> {
@@ -1906,6 +1966,32 @@ pub(crate) async fn execute_action(
         )?;
         return preflight_project(control_workspace, scope).await;
     }
+    if let QueueAction::WorkspaceBindPreflight {
+        scope,
+        new_workspace,
+        expected_old_head,
+        expected_new_head,
+        expected_binding_sha256,
+        expected_thread_id,
+    } = &action
+    {
+        crate::delegated::autonomy_supervisor::reject_inherited_git_output_redirects().map_err(
+            |_| {
+                "CODEX_QUEUE_WORKSPACE: inherited Git trace or stdio redirect must be unset"
+                    .to_string()
+            },
+        )?;
+        return preflight_workspace_binding(
+            control_workspace,
+            scope,
+            new_workspace,
+            expected_old_head,
+            expected_new_head,
+            expected_binding_sha256,
+            expected_thread_id,
+        )
+        .await;
+    }
     // A queue verb never accepts a caller-selected control plane. All state
     // below is anchored to the registered CatDesk Git root.
     let control = resolve_registered_project_from_control_root(control_workspace, "catdesk")
@@ -1916,6 +2002,9 @@ pub(crate) async fn execute_action(
     match action {
         QueueAction::Preflight { .. } => {
             unreachable!("preflight returned before generic scope resolution")
+        }
+        QueueAction::WorkspaceBindPreflight { .. } => {
+            unreachable!("workspace binding returned before generic scope resolution")
         }
         QueueAction::Add {
             scope,
@@ -2188,6 +2277,222 @@ fn profile_binding_inputs(
         inputs.push(((*name).into(), format!("{:x}", Sha256::digest(&bytes))));
     }
     Ok(inputs)
+}
+
+fn workspace_binding_inputs(
+    project: &AutonomousProjectV1,
+) -> Result<Vec<(String, String)>, String> {
+    let profile = verification_profile(&project.verification_profile)?;
+    if profile.inputs.len() != 2 {
+        return Err(
+            "CODEX_QUEUE_WORKSPACE: verification profile input shape is unsupported".into(),
+        );
+    }
+    if profile.tool == VerificationTool::Uv {
+        return profile_binding_inputs(&project.workspace, &project.verification_profile);
+    }
+    let mut inputs = Vec::new();
+    for name in profile.inputs {
+        let bytes = read_regular_bounded(&project.workspace.join(name), MAX_GIT_FILES_BYTES)?
+            .ok_or("CODEX_QUEUE_WORKSPACE: Rust profile input is absent")?;
+        if *name == "Cargo.toml" {
+            let text = std::str::from_utf8(&bytes)
+                .map_err(|_| "CODEX_QUEUE_WORKSPACE: Cargo manifest is not UTF-8")?;
+            toml::from_str::<toml::Value>(text)
+                .map_err(|_| "CODEX_QUEUE_WORKSPACE: Cargo manifest is invalid TOML")?;
+        }
+        inputs.push(((*name).into(), format!("{:x}", Sha256::digest(&bytes))));
+    }
+    Ok(inputs)
+}
+
+async fn preflight_workspace_binding(
+    control_workspace: &Path,
+    scope: &CodexScope,
+    requested_new_workspace: &Path,
+    expected_old_head: &str,
+    expected_new_head: &str,
+    expected_binding_sha256: &str,
+    expected_thread_id: &str,
+) -> Result<Value, String> {
+    let (controller, selected, git) =
+        preflight_registered_project(control_workspace, scope).await?;
+    if selected.project_id == "catdesk"
+        || project_binding_sha256(&selected)? != expected_binding_sha256
+        || exact_thread(&selected)? != expected_thread_id
+    {
+        return Err("CODEX_QUEUE_WORKSPACE: exact old binding or thread assertion differs".into());
+    }
+    let replacement = preflight_checked_root(requested_new_workspace)?;
+    if replacement == selected.workspace
+        || replacement.starts_with(&selected.workspace)
+        || selected.workspace.starts_with(&replacement)
+    {
+        return Err("CODEX_QUEUE_WORKSPACE: replacement overlaps the preserved old root".into());
+    }
+    QueueStore::namespaced_path(&controller, &replacement)?;
+    let registry = AutonomousProjectRegistryStoreV1::open_read_only(
+        controller.workspace.join(".catdesk/projects"),
+    )
+    .map_err(|_| "CODEX_QUEUE_WORKSPACE: control registry is unavailable")?;
+    if registry
+        .load_registry()
+        .map_err(|_| "CODEX_QUEUE_WORKSPACE: registry is invalid")?
+        .projects
+        .iter()
+        .any(|project| {
+            replacement.starts_with(&project.workspace)
+                || project.workspace.starts_with(&replacement)
+        })
+    {
+        return Err("CODEX_QUEUE_WORKSPACE: replacement overlaps a registered root".into());
+    }
+    let mut candidate = selected.clone();
+    candidate.workspace = replacement.clone();
+    let ignored_path_count = workspace_bind_git_precheck(
+        &git,
+        &selected,
+        &candidate,
+        expected_old_head,
+        expected_new_head,
+    )
+    .await?;
+    workspace_binding_inputs(&candidate)?;
+    preflight_profile_inputs_tracked(&candidate, &git).await?;
+    preflight_all_candidate_index_flags(&candidate.workspace, &git).await?;
+    Ok(json!({
+        "action":"codex_queue_workspace_bind_preflight",
+        "status":"BLOCKED_NATIVE_WRITER_RELEASE_UNPROVED",
+        "projectId":selected.project_id,
+        "oldWorkspace":selected.workspace,
+        "newWorkspace":candidate.workspace,
+        "oldHead":expected_old_head,
+        "newHead":expected_new_head,
+        "gitIdentity":selected.git_identity,
+        "verificationProfile":selected.verification_profile,
+        "threadId":selected.codex_thread_id,
+        "bindingSha256":expected_binding_sha256,
+        "trackedAndNonignoredUntrackedClean":true,
+        "ignoredPathCount":ignored_path_count,
+        "ignoredContentsChecked":false,
+        "oldRootPreserved":true,
+        "chatQuiescence":"NOT_CHECKED",
+        "nativeWriterReleaseChecked":false,
+        "queueAndLeaseChecked":false,
+        "writerLockChecked":false,
+        "readOnly":true,
+        "transactional":false,
+        "registrationMutation":false,
+        "launchAuthorized":false,
+        "meaning":"The source candidate meets point-in-time Git and profile checks. Native thread-store ownership remains unproved, so this route does not bind the workspace or authorize dispatch.",
+    }))
+}
+
+async fn workspace_bind_git_precheck(
+    git: &TrustedGit,
+    selected: &AutonomousProjectV1,
+    candidate: &AutonomousProjectV1,
+    expected_old_head: &str,
+    expected_new_head: &str,
+) -> Result<usize, String> {
+    preflight_pinned_git_identity(git, &candidate.workspace, &selected.git_identity).await?;
+    for (workspace, expected) in [
+        (&selected.workspace, expected_old_head),
+        (&candidate.workspace, expected_new_head),
+    ] {
+        let (ok, head) =
+            git_witness_output(git, workspace, &["rev-parse", "--verify", "HEAD"], 128).await?;
+        if preflight_git_metadata(ok, &head)? != expected {
+            return Err("CODEX_QUEUE_WORKSPACE: old or replacement HEAD differs".into());
+        }
+    }
+    let (clean, status) = git_witness_output(
+        git,
+        &candidate.workspace,
+        &[
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            "--ignore-submodules=none",
+        ],
+        MAX_GIT_STATUS_BYTES,
+    )
+    .await?;
+    if !clean || !status.is_empty() {
+        return Err("CODEX_QUEUE_WORKSPACE: replacement Git tree is not clean".into());
+    }
+    let (ignored_ok, ignored) = git_witness_output(
+        git,
+        &candidate.workspace,
+        &[
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            "--ignored=matching",
+            "--ignore-submodules=none",
+        ],
+        MAX_GIT_STATUS_BYTES,
+    )
+    .await?;
+    if !ignored_ok || (!ignored.is_empty() && ignored.last() != Some(&0)) {
+        return Err("CODEX_QUEUE_WORKSPACE: ignored path inventory is unavailable".into());
+    }
+    let mut ignored_path_count = 0usize;
+    for record in ignored
+        .split(|byte| *byte == 0)
+        .filter(|record| !record.is_empty())
+    {
+        if !record.starts_with(b"!! ") || record.len() <= 3 {
+            return Err("CODEX_QUEUE_WORKSPACE: candidate changed during ignored inventory".into());
+        }
+        ignored_path_count += 1;
+        if ignored_path_count > MAX_DIR_ENTRIES {
+            return Err("CODEX_QUEUE_WORKSPACE: ignored path inventory exceeds bound".into());
+        }
+    }
+    let (descendant, _) = git_witness_output(
+        git,
+        &candidate.workspace,
+        &[
+            "merge-base",
+            "--is-ancestor",
+            expected_old_head,
+            expected_new_head,
+        ],
+        128,
+    )
+    .await?;
+    if !descendant {
+        return Err("CODEX_QUEUE_WORKSPACE: replacement HEAD lacks old-root ancestry".into());
+    }
+    Ok(ignored_path_count)
+}
+
+async fn preflight_all_candidate_index_flags(
+    workspace: &Path,
+    git: &TrustedGit,
+) -> Result<(), String> {
+    let (ok, tags) = git_witness_output(
+        git,
+        workspace,
+        &["ls-files", "-v", "-z"],
+        MAX_GIT_STATUS_BYTES,
+    )
+    .await?;
+    if !ok
+        || tags.is_empty()
+        || tags.last() != Some(&0)
+        || tags[..tags.len() - 1]
+            .split(|byte| *byte == 0)
+            .any(|record| !record.starts_with(b"H ") || record.len() <= 2)
+    {
+        return Err(
+            "CODEX_QUEUE_WORKSPACE: candidate has hidden or nonordinary Git index flags".into(),
+        );
+    }
+    Ok(())
 }
 
 async fn bind_profile_in_store(
@@ -4632,6 +4937,20 @@ mod tests {
         );
     }
 
+    fn fixture_head(root: &Path) -> String {
+        let output = StdCommand::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .expect("fixture HEAD available");
+        assert!(output.status.success());
+        String::from_utf8(output.stdout)
+            .expect("fixture HEAD UTF-8")
+            .trim()
+            .into()
+    }
+
     fn snapshot_non_git_tree(root: &Path) -> Vec<(PathBuf, Option<Vec<u8>>)> {
         fn visit(root: &Path, path: &Path, rows: &mut Vec<(PathBuf, Option<Vec<u8>>)>) {
             let relative = path.strip_prefix(root).expect("fixture relative path");
@@ -5092,6 +5411,109 @@ mod tests {
             format!("version = 1\n\n[[package]]\nname = \"{name}\"\nversion = \"0.1.0\"\n"),
         )
         .expect("fixture lock");
+    }
+
+    #[tokio::test]
+    async fn workspace_bind_preflight_refuses_hidden_flags_and_writes_no_state() {
+        let (fixture, projects, _queue) = three_project_fixture(1);
+        let controller = &projects[0];
+        let selected = &projects[1];
+        fs::write(
+            selected.workspace.join("Cargo.toml"),
+            "[package]\nname = \"workspace_bind_fixture\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        fs::write(selected.workspace.join("Cargo.lock"), "version = 3\n").unwrap();
+        fs::write(selected.workspace.join(".gitignore"), "generated/\n").unwrap();
+        fixture_commit(&selected.workspace);
+        let old_head = fixture_head(&selected.workspace);
+        let preserved = selected.workspace.join("owner-untracked.txt");
+        fs::write(&preserved, b"preserved owner input").unwrap();
+        let replacement = fixture.join("clean-checkpoint");
+        fixture_git_command(
+            &selected.workspace,
+            &[
+                "worktree",
+                "add",
+                "--detach",
+                replacement.to_str().unwrap(),
+                "HEAD",
+            ],
+        );
+        fs::write(replacement.join("checkpoint.txt"), b"checkpoint").unwrap();
+        fixture_commit(&replacement);
+        fs::create_dir(replacement.join("generated")).unwrap();
+        fs::write(replacement.join("generated/cache.bin"), b"ignored fixture").unwrap();
+        let new_head = fixture_head(&replacement);
+        let scope = CodexScope {
+            project_id: selected.project_id.clone(),
+            workspace: selected.workspace.clone(),
+        };
+        let binding = project_binding_sha256(selected).unwrap();
+        let thread = exact_thread(selected).unwrap().to_owned();
+        let registry = AutonomousProjectRegistryStoreV1::open_read_only(
+            controller.workspace.join(".catdesk/projects"),
+        )
+        .unwrap();
+        let before = registry.load_registry().unwrap();
+        assert!(QueueStore::open_read_only(controller).unwrap().is_none());
+
+        fixture_git_command(
+            &replacement,
+            &["update-index", "--skip-worktree", "checkpoint.txt"],
+        );
+        fs::write(replacement.join("checkpoint.txt"), b"hidden change").unwrap();
+        assert!(
+            preflight_workspace_binding(
+                &controller.workspace,
+                &scope,
+                &replacement,
+                &old_head,
+                &new_head,
+                &binding,
+                &thread,
+            )
+            .await
+            .is_err(),
+            "non-profile skip-worktree must not pass the clean claim"
+        );
+        fixture_git_command(
+            &replacement,
+            &["update-index", "--no-skip-worktree", "checkpoint.txt"],
+        );
+        fs::write(replacement.join("checkpoint.txt"), b"checkpoint").unwrap();
+
+        let report = execute_action(
+            QueueAction::WorkspaceBindPreflight {
+                scope,
+                new_workspace: replacement.canonicalize().unwrap(),
+                expected_old_head: old_head.clone(),
+                expected_new_head: new_head,
+                expected_binding_sha256: binding,
+                expected_thread_id: thread,
+            },
+            &controller.workspace,
+        )
+        .await
+        .expect("read-only candidate diagnostic");
+        assert_eq!(report["status"], "BLOCKED_NATIVE_WRITER_RELEASE_UNPROVED");
+        assert_eq!(report["trackedAndNonignoredUntrackedClean"], true);
+        assert_eq!(report["ignoredPathCount"], 1);
+        assert_eq!(report["ignoredContentsChecked"], false);
+        assert_eq!(report["registrationMutation"], false);
+        assert_eq!(report["launchAuthorized"], false);
+        assert_eq!(registry.load_registry().unwrap(), before);
+        assert!(QueueStore::open_read_only(controller).unwrap().is_none());
+        for root in [&selected.workspace, &replacement] {
+            assert!(
+                inspect_project_writer_pending_marker(root)
+                    .unwrap()
+                    .is_none()
+            );
+        }
+        assert_eq!(fs::read(preserved).unwrap(), b"preserved owner input");
+        assert_eq!(fixture_head(&selected.workspace), old_head);
+        cleanup(fixture);
     }
 
     async fn fixture_profile_bind(
@@ -7704,6 +8126,37 @@ mod tests {
         let mut wrong_thread = profile_bind;
         wrong_thread[15] = "not-a-thread";
         assert!(parse(&wrong_thread).is_err());
+        let workspace_bind = [
+            "operator",
+            "codex",
+            "queue",
+            "workspace-bind-preflight",
+            "--project-id",
+            "alpha",
+            "--workspace",
+            "C:/alpha-old",
+            "--new-workspace",
+            "C:/alpha-new",
+            "--expected-old-head",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "--expected-new-head",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "--expected-binding-sha256",
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "--expected-thread-id",
+            "00000000-0000-0000-0000-000000000001",
+        ];
+        assert!(matches!(
+            parse(&workspace_bind),
+            Ok(QueueAction::WorkspaceBindPreflight { .. })
+        ));
+        assert!(parse(&workspace_bind[..workspace_bind.len() - 2]).is_err());
+        let mut wrong_head = workspace_bind;
+        wrong_head[11] = "UPPERCASE_OR_SHORT";
+        assert!(parse(&wrong_head).is_err());
+        let mut same_root = workspace_bind;
+        same_root[9] = "C:/alpha-old";
+        assert!(parse(&same_root).is_err());
     }
 
     #[tokio::test]
