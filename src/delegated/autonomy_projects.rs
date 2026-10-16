@@ -129,6 +129,13 @@ pub enum GlobalScheduleDecisionV1 {
     Rejected { reason: &'static str },
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RoundRobinCursorV1 {
+    schema_version: u32,
+    last_granted_project_id: String,
+}
+
 #[derive(Clone, Debug)]
 pub struct AutonomousProjectRegistryStoreV1 {
     root: PathBuf,
@@ -995,6 +1002,112 @@ impl AutonomousProjectRegistryStoreV1 {
         now_unix: u64,
         expires_at_unix: u64,
     ) -> Result<GlobalScheduleDecisionV1, RuntimeError> {
+        let _lock = self.acquire_scheduler_lock()?;
+        self.schedule_mutating_worker_locked(
+            project_id,
+            owner_id,
+            provider,
+            now_unix,
+            expires_at_unix,
+        )
+    }
+
+    /// Grant one registered, ready project in persistent registry order. The
+    /// caller may mark projects ready, but cannot supply a workspace or change
+    /// their rotation order. A held lease is skipped without consuming a turn.
+    /// This only reserves a workspace; it never starts a provider or worker.
+    pub fn schedule_next_ready_worker(
+        &self,
+        ready_project_ids: &[&str],
+        owner_id: &str,
+        provider: ScheduledProviderV1,
+        now_unix: u64,
+        expires_at_unix: u64,
+    ) -> Result<GlobalScheduleDecisionV1, RuntimeError> {
+        valid_slug(owner_id, "lease owner id")?;
+        if expires_at_unix <= now_unix {
+            return Err(RuntimeError::Validation(
+                "lease expiry must be in the future".into(),
+            ));
+        }
+        let _lock = self.acquire_scheduler_lock()?;
+        let registry = self.load_registry()?;
+        for (index, project_id) in ready_project_ids.iter().enumerate() {
+            valid_slug(project_id, "project id")?;
+            if ready_project_ids[..index].contains(project_id)
+                || !registry
+                    .projects
+                    .iter()
+                    .any(|project| project.project_id == *project_id)
+            {
+                return Err(RuntimeError::Validation(
+                    "ready project ids must be unique registered projects".into(),
+                ));
+            }
+        }
+        if ready_project_ids.is_empty() || registry.projects.is_empty() {
+            return Ok(GlobalScheduleDecisionV1::Rejected {
+                reason: "NO_READY_PROJECTS",
+            });
+        }
+        let start = match self.load_round_robin_cursor()? {
+            Some(cursor) => {
+                registry
+                    .projects
+                    .iter()
+                    .position(|project| project.project_id == cursor.last_granted_project_id)
+                    .ok_or_else(|| {
+                        RuntimeError::Validation(
+                            "scheduler cursor project is not registered".into(),
+                        )
+                    })?
+                    .wrapping_add(1)
+                    % registry.projects.len()
+            }
+            None => 0,
+        };
+        for offset in 0..registry.projects.len() {
+            let project = &registry.projects[(start + offset) % registry.projects.len()];
+            if !ready_project_ids.contains(&project.project_id.as_str()) {
+                continue;
+            }
+            match self.schedule_mutating_worker_locked(
+                &project.project_id,
+                owner_id,
+                provider.clone(),
+                now_unix,
+                expires_at_unix,
+            )? {
+                GlobalScheduleDecisionV1::Granted(lease) => {
+                    if let Err(error) = self.save_round_robin_cursor(&project.project_id) {
+                        self.release_workspace_lease_locked(&lease)?;
+                        return Err(error);
+                    }
+                    return Ok(GlobalScheduleDecisionV1::Granted(lease));
+                }
+                GlobalScheduleDecisionV1::Rejected {
+                    reason: "GLOBAL_PROVIDER_CAPACITY_REACHED",
+                } => {
+                    return Ok(GlobalScheduleDecisionV1::Rejected {
+                        reason: "GLOBAL_PROVIDER_CAPACITY_REACHED",
+                    });
+                }
+                GlobalScheduleDecisionV1::Rejected { .. } => {}
+            }
+        }
+        Ok(GlobalScheduleDecisionV1::Rejected {
+            reason: "NO_READY_WORKSPACE_AVAILABLE",
+        })
+    }
+
+    fn schedule_mutating_worker_locked(
+        &self,
+        project_id: &str,
+        owner_id: &str,
+        provider: ScheduledProviderV1,
+        now_unix: u64,
+        expires_at_unix: u64,
+    ) -> Result<GlobalScheduleDecisionV1, RuntimeError> {
         valid_slug(project_id, "project id")?;
         valid_slug(owner_id, "lease owner id")?;
         if expires_at_unix <= now_unix {
@@ -1064,6 +1177,14 @@ impl AutonomousProjectRegistryStoreV1 {
         &self,
         lease: &AutonomousWorkspaceLeaseV1,
     ) -> Result<(), RuntimeError> {
+        let _lock = self.acquire_scheduler_lock()?;
+        self.release_workspace_lease_locked(lease)
+    }
+
+    fn release_workspace_lease_locked(
+        &self,
+        lease: &AutonomousWorkspaceLeaseV1,
+    ) -> Result<(), RuntimeError> {
         let path = self.lease_path(&lease.workspace);
         let file = OpenOptions::new()
             .read(true)
@@ -1114,6 +1235,55 @@ impl AutonomousProjectRegistryStoreV1 {
     }
     fn registration_lock_path(&self) -> PathBuf {
         self.root.join("registration-confirm.lock")
+    }
+    fn round_robin_cursor_path(&self) -> PathBuf {
+        self.root.join("scheduler-cursor.json")
+    }
+    fn load_round_robin_cursor(&self) -> Result<Option<RoundRobinCursorV1>, RuntimeError> {
+        let file = match OpenOptions::new()
+            .read(true)
+            .open(self.round_robin_cursor_path())
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(io_error(error)),
+        };
+        let cursor: RoundRobinCursorV1 = serde_json::from_reader(file)
+            .map_err(|_| RuntimeError::Validation("scheduler cursor is corrupted".into()))?;
+        if cursor.schema_version != 1
+            || valid_slug(
+                &cursor.last_granted_project_id,
+                "scheduler cursor project id",
+            )
+            .is_err()
+        {
+            return Err(RuntimeError::Validation(
+                "scheduler cursor is corrupted".into(),
+            ));
+        }
+        Ok(Some(cursor))
+    }
+    fn save_round_robin_cursor(&self, project_id: &str) -> Result<(), RuntimeError> {
+        let tmp = self
+            .root
+            .join(format!(".scheduler-cursor-{}.tmp", Uuid::new_v4()));
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)
+            .map_err(io_error)?;
+        serde_json::to_writer(
+            &mut file,
+            &RoundRobinCursorV1 {
+                schema_version: 1,
+                last_granted_project_id: project_id.into(),
+            },
+        )
+        .map_err(|_| RuntimeError::Validation("scheduler cursor serialization failed".into()))?;
+        file.write_all(b"\n").map_err(io_error)?;
+        file.sync_all().map_err(io_error)?;
+        drop(file);
+        fs::rename(tmp, self.round_robin_cursor_path()).map_err(io_error)
     }
     fn lease_path(&self, workspace: &Path) -> PathBuf {
         let mut hasher = Sha256::new();
@@ -1232,6 +1402,20 @@ impl AutonomousProjectRegistryStoreV1 {
             .map_err(io_error)?;
         file.try_lock().map_err(|_| {
             RuntimeError::Validation("project thread transition is already in progress".into())
+        })?;
+        Ok(file)
+    }
+
+    fn acquire_scheduler_lock(&self) -> Result<std::fs::File, RuntimeError> {
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(self.root.join("scheduler.lock"))
+            .map_err(io_error)?;
+        file.try_lock().map_err(|_| {
+            RuntimeError::Validation("project scheduler is already in progress".into())
         })?;
         Ok(file)
     }
@@ -1864,6 +2048,198 @@ mod tests {
                 reason: "WORKSPACE_WRITER_LEASE_HELD"
             }
         );
+    }
+
+    #[test]
+    fn round_robin_scheduler_persists_three_project_rotation_across_reopen() {
+        let root = std::env::temp_dir().join(format!("catdesk-round-robin-{}", Uuid::new_v4()));
+        let registry_root = root.join("registry");
+        let store = AutonomousProjectRegistryStoreV1::open(&registry_root).expect("store");
+        store.initialize(1, 1).expect("init");
+        for id in ["alpha", "beta", "gamma"] {
+            let workspace = root.join(id);
+            fs::create_dir_all(&workspace).expect("workspace");
+            store
+                .register_project(project(id, workspace))
+                .expect("register");
+            store
+                .bind_codex_thread(id, &format!("thread-{id}"))
+                .expect("bind thread");
+        }
+        let expected = ["alpha", "beta", "gamma", "alpha"];
+        for (turn, expected_id) in expected.iter().enumerate() {
+            let reopened = AutonomousProjectRegistryStoreV1::open(&registry_root).expect("reopen");
+            let now = 10 + turn as u64 * 10;
+            let granted = reopened
+                .schedule_next_ready_worker(
+                    &["gamma", "alpha", "beta"],
+                    &format!("owner-{turn}"),
+                    ScheduledProviderV1::Codex,
+                    now,
+                    now + 5,
+                )
+                .expect("next ready project");
+            let lease = match granted {
+                GlobalScheduleDecisionV1::Granted(lease) => lease,
+                other => panic!("expected a grant, got {other:?}"),
+            };
+            assert_eq!(lease.project_id, *expected_id);
+            assert_eq!(
+                lease.workspace,
+                root.join(expected_id).canonicalize().expect("root")
+            );
+            assert_eq!(lease.owner_id, format!("owner-{turn}"));
+            reopened.release_workspace_lease(&lease).expect("release");
+        }
+        let registry = store.load_registry().expect("registry");
+        for project in registry.projects {
+            assert_eq!(
+                project.codex_thread_id.as_deref(),
+                Some(format!("thread-{}", project.project_id).as_str())
+            );
+        }
+    }
+
+    #[test]
+    fn round_robin_scheduler_rejects_wrong_registration_and_skips_busy_project() {
+        let root = std::env::temp_dir().join(format!("catdesk-ready-{}", Uuid::new_v4()));
+        let store = AutonomousProjectRegistryStoreV1::open(root.join("registry")).expect("store");
+        store.initialize(2, 1).expect("init");
+        for id in ["alpha", "beta", "gamma"] {
+            let workspace = root.join(id);
+            fs::create_dir_all(&workspace).expect("workspace");
+            store
+                .register_project(project(id, workspace))
+                .expect("register");
+        }
+        for ready in [&["alpha", "missing"][..], &["alpha", "alpha"][..]] {
+            assert!(
+                store
+                    .schedule_next_ready_worker(
+                        ready,
+                        "owner-invalid",
+                        ScheduledProviderV1::Codex,
+                        10,
+                        20,
+                    )
+                    .is_err()
+            );
+        }
+        assert!(!store.round_robin_cursor_path().exists());
+        assert!(
+            fs::read_dir(root.join("registry/leases"))
+                .expect("leases")
+                .next()
+                .is_none()
+        );
+
+        let beta = match store
+            .schedule_next_ready_worker(
+                &["beta", "gamma"],
+                "owner-beta",
+                ScheduledProviderV1::Codex,
+                10,
+                20,
+            )
+            .expect("beta grant")
+        {
+            GlobalScheduleDecisionV1::Granted(lease) => lease,
+            other => panic!("expected beta grant, got {other:?}"),
+        };
+        assert_eq!(beta.project_id, "beta");
+        let gamma = match store
+            .schedule_next_ready_worker(
+                &["alpha", "beta", "gamma"],
+                "owner-gamma",
+                ScheduledProviderV1::Codex,
+                11,
+                21,
+            )
+            .expect("gamma grant")
+        {
+            GlobalScheduleDecisionV1::Granted(lease) => lease,
+            other => panic!("expected gamma grant, got {other:?}"),
+        };
+        assert_eq!(gamma.project_id, "gamma");
+        store
+            .release_workspace_lease(&gamma)
+            .expect("release gamma");
+        let alpha = match store
+            .schedule_next_ready_worker(
+                &["alpha", "beta", "gamma"],
+                "owner-alpha",
+                ScheduledProviderV1::Codex,
+                12,
+                22,
+            )
+            .expect("alpha grant")
+        {
+            GlobalScheduleDecisionV1::Granted(lease) => lease,
+            other => panic!("expected alpha grant, got {other:?}"),
+        };
+        assert_eq!(alpha.project_id, "alpha");
+        assert_eq!(
+            store
+                .schedule_next_ready_worker(
+                    &["alpha", "beta"],
+                    "owner-blocked",
+                    ScheduledProviderV1::Codex,
+                    13,
+                    23,
+                )
+                .expect("capacity response"),
+            GlobalScheduleDecisionV1::Rejected {
+                reason: "NO_READY_WORKSPACE_AVAILABLE"
+            }
+        );
+        store
+            .release_workspace_lease(&alpha)
+            .expect("release alpha");
+        store.release_workspace_lease(&beta).expect("release beta");
+    }
+
+    #[test]
+    fn round_robin_scheduler_moves_past_expired_project_lease() {
+        let root = std::env::temp_dir().join(format!("catdesk-ready-expiry-{}", Uuid::new_v4()));
+        let store = AutonomousProjectRegistryStoreV1::open(root.join("registry")).expect("store");
+        store.initialize(1, 1).expect("init");
+        for id in ["alpha", "beta", "gamma"] {
+            let workspace = root.join(id);
+            fs::create_dir_all(&workspace).expect("workspace");
+            store
+                .register_project(project(id, workspace))
+                .expect("register");
+        }
+        let alpha = match store
+            .schedule_next_ready_worker(
+                &["alpha", "beta", "gamma"],
+                "owner-alpha",
+                ScheduledProviderV1::Codex,
+                10,
+                11,
+            )
+            .expect("alpha grant")
+        {
+            GlobalScheduleDecisionV1::Granted(lease) => lease,
+            other => panic!("expected alpha grant, got {other:?}"),
+        };
+        let beta = match store
+            .schedule_next_ready_worker(
+                &["alpha", "beta", "gamma"],
+                "owner-beta",
+                ScheduledProviderV1::Codex,
+                12,
+                22,
+            )
+            .expect("beta grant after alpha expiry")
+        {
+            GlobalScheduleDecisionV1::Granted(lease) => lease,
+            other => panic!("expected beta grant, got {other:?}"),
+        };
+        assert_eq!(alpha.project_id, "alpha");
+        assert_eq!(beta.project_id, "beta");
+        assert!(store.release_workspace_lease(&alpha).is_err());
+        store.release_workspace_lease(&beta).expect("release beta");
     }
 
     #[test]
