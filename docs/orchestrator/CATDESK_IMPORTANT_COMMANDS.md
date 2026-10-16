@@ -1,5 +1,13 @@
 # CatDesk — Important Command Reference
 
+## October 16 d6b source checkpoint
+
+`d6b9a36de985b22a0ee508cc40ed1a5a89639ac0` is the tested local source for bounded queued Codex prompt write/flush and explicit child-stdin EOF. On uncertain delivery it retains the writer marker and lease. Focused queue 39/39, independent source review, and the exact-source serial full Rust suite (main 1,360 passed/0 failed/28 ignored plus enabled integrations) passed. Strict Clippy/format passed on the isolated source; d6b debug binary SHA-256: `CF04792A4D842C09F6F5054E84092A4A3F77005454B924451EBE6F9CC2825637`.
+
+From the repository root, repeat the full local regression with `cargo test --locked --workspace --all-features --quiet -- --test-threads=1`. Read-only `target/debug/catdesk.exe codex status` on the actual Desktop control still reports authenticated `codex-cli 0.160.0`, `NEEDS_OWNER_RECOVERY`, 35 queue blockers, 85 accounting rows and `launchAuthorized:false`. Treat status as a blocker readback, not a run permit.
+
+Read-only GitHub inspection found zero workflow runs/checks for d6b. Repository Actions permissions are enabled/all and the active CI workflow has push/PR triggers but no `workflow_dispatch`. The earlier HTTP 422 disabled-Actions response is separate, with raw body unavailable; billing/account restriction remains unknown to the current token. Do not dispatch again or alter settings to force CI. No protected install, Wake action or real-project queue mutation was made at this checkpoint.
+
 ## October 16 working-loop update
 
 The ordinary authenticated Codex CLI remains the P0 operator route. The source-built `target/debug/catdesk.exe codex status`, `codex run`, and exact-project `codex resume` have been exercised in approved scratch registrations. The operator queue now has a native `codex queue add`/`dispatch` path with persisted receipts, local `verify`, private `review-package`, and a same-user advisory `advisory-review`; the October 15 statement below that the scheduler had no runtime dispatch caller is historical. At source `82ba2bb`, a one-shot fake-origin fixture produced a distinct Sol/medium `NO_FINDINGS_REPORTED` native advisory after an exact verified package was supplied inline. The reviewer rollout had zero tool-call events, but the short verdict does not prove thoroughness, and the stored state remains `independentReview=PENDING`, `wakeReady=false`. The full private package is retained in the Codex rollout; `--disable shell_tool` does not prove all-tools isolation. See `docs/OCTOBER_2026_MVP_ACCEPTANCE.md` for exact source, binary, fixture, and receipt hashes.

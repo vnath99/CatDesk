@@ -1,5 +1,11 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 16 d6b queued prompt checkpoint (TESTED_LOCAL_SOURCE; PARTIAL)
+
+- Exact integrated commit `d6b9a36de985b22a0ee508cc40ed1a5a89639ac0` (tree `b021f7b4b511d79bd4b598d10e4a5e82f781c447`) gives queued native Codex prompt delivery a bounded write/flush and an explicit stdin close. Failure preserves UNKNOWN writer/lease state for owner recovery; it never infers child exit or replays an uncertain attempt. Focused queue tests passed 39/39 and independent source review passed. The exact committed source passed serial all-feature Rust (main 1,360/0/28 plus all enabled integrations). Strict Clippy/format passed on the isolated source; the d6b debug build SHA-256 is `CF04792A4D842C09F6F5054E84092A4A3F77005454B924451EBE6F9CC2825637`.
+- The actual Desktop root read-only `codex status` remains authenticated with `codex-cli 0.160.0`, but `NEEDS_OWNER_RECOVERY` holds 35 historical queue blockers and 85 accounting rows; `launchAuthorized:false`. This source checkpoint does not establish an authorized live Desktop turn, three-project deliverable review, installed recovery or Wake receipt.
+- Read-only GitHub inspection found zero workflow runs/checks for d6b. Actions permissions report enabled/all and the CI workflow is active for push and PR, with no `workflow_dispatch` trigger. The earlier HTTP 422 disabled-Actions response is a distinct observation; its raw body was not retained. Billing/account restrictions remain unknown under the current token. No dispatch retry, settings change, protected install, Wake action or live queue mutation was made. Exact-source remote CI and overall MVP acceptance remain `PARTIAL`.
+
 **Evidence snapshot:** 2026-10-16, including the receipt-bound local verifier, fixed Python verification profiles, a private advisory reviewer route, guarded profile binding, and disposable native continuations below (America/New_York). **Overall: `PARTIAL`.** This is an interim October 31 working-loop record; it is not installed, live three-project, Wake, or remote CI acceptance. Historical rows below retain their October 15 source identities.
 
 ## October 16 source and local verification continuation
