@@ -134,6 +134,83 @@ pub struct AutonomousProjectRegistryStoreV1 {
     root: PathBuf,
 }
 
+/// Read-only identity resolved from the CatDesk control registry. This is not
+/// a worker lease or permission to mutate either workspace; execution must
+/// recheck the binding when it acquires its own task authority.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedProjectScopeV1 {
+    pub control_workspace: PathBuf,
+    pub project: AutonomousProjectV1,
+}
+
+/// Resolve an execution root from the already registered CatDesk project ID.
+/// The caller supplies the trusted CatDesk control workspace, never an
+/// arbitrary candidate execution path or a replacement Git identity. The
+/// registry is opened read-only and no state is initialized in external roots.
+pub fn resolve_registered_project_from_control_root(
+    control_workspace: &Path,
+    project_id: &str,
+) -> Result<ResolvedProjectScopeV1, RuntimeError> {
+    valid_slug(project_id, "project id")?;
+    let control_workspace = control_workspace
+        .canonicalize()
+        .map_err(|_| RuntimeError::Validation("CatDesk control workspace is unavailable".into()))?;
+    let store = AutonomousProjectRegistryStoreV1::open_read_only(
+        control_workspace.join(".catdesk").join("projects"),
+    )?;
+    let registry = store.load_registry()?;
+    let controller = registry
+        .projects
+        .iter()
+        .find(|project| project.project_id == CATDESK_PROJECT_ID_V1)
+        .ok_or_else(|| {
+            RuntimeError::Validation("CatDesk control project is not registered".into())
+        })?;
+    if controller.workspace != control_workspace {
+        return Err(RuntimeError::Validation(
+            "CatDesk control registry is bound to a different workspace".into(),
+        ));
+    }
+    let control_path = controller
+        .workspace
+        .to_str()
+        .ok_or_else(|| RuntimeError::Validation("CatDesk control workspace is not UTF-8".into()))?;
+    let observed_control = super::autonomy_supervisor::verified_external_git_workspace(
+        control_path,
+        &controller.git_identity,
+    )
+    .map_err(|_| RuntimeError::Validation("CatDesk control Git identity is unavailable".into()))?;
+    if observed_control != control_workspace {
+        return Err(RuntimeError::Validation(
+            "CatDesk control workspace identity drifted".into(),
+        ));
+    }
+    let project = registry
+        .projects
+        .into_iter()
+        .find(|project| project.project_id == project_id)
+        .ok_or_else(|| RuntimeError::Validation("project is not registered".into()))?;
+    let registered_path = project.workspace.to_str().ok_or_else(|| {
+        RuntimeError::Validation("registered project workspace is not UTF-8".into())
+    })?;
+    let observed_workspace = super::autonomy_supervisor::verified_external_git_workspace(
+        registered_path,
+        &project.git_identity,
+    )
+    .map_err(|_| {
+        RuntimeError::Validation("registered project Git identity is unavailable".into())
+    })?;
+    if observed_workspace != project.workspace {
+        return Err(RuntimeError::Validation(
+            "registered project workspace identity drifted".into(),
+        ));
+    }
+    Ok(ResolvedProjectScopeV1 {
+        control_workspace,
+        project,
+    })
+}
+
 impl AutonomousProjectRegistryStoreV1 {
     /// Opens an existing registry root without creating any children.  Views
     /// such as the native operator GUI use this form so a status/readback
@@ -1564,6 +1641,8 @@ fn io_error(error: std::io::Error) -> RuntimeError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
+
     fn project(id: &str, workspace: PathBuf) -> AutonomousProjectV1 {
         AutonomousProjectV1 {
             project_id: id.into(),
@@ -1574,6 +1653,184 @@ mod tests {
             chatgpt_target_url: None,
             chatgpt_target_sha256: None,
         }
+    }
+
+    fn fixture_git_root(root: &Path, origin: &str) {
+        fs::create_dir_all(root).expect("fixture root");
+        for args in [
+            &["init", "-q"][..],
+            &["remote", "add", "origin", origin][..],
+        ] {
+            assert!(
+                Command::new("git")
+                    .arg("-C")
+                    .arg(root)
+                    .args(args)
+                    .status()
+                    .expect("fixture Git available")
+                    .success()
+            );
+        }
+    }
+
+    fn cleanup_control_resolver_fixture(root: &Path) {
+        let temp_root = std::env::temp_dir()
+            .canonicalize()
+            .expect("canonical temp root");
+        let exact = root.canonicalize().expect("canonical fixture root");
+        assert_eq!(exact.parent(), Some(temp_root.as_path()));
+        assert!(
+            exact
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("catdesk-control-resolver-"))
+        );
+        fs::remove_dir_all(exact).expect("remove verified fixture root");
+    }
+
+    #[test]
+    fn control_root_resolves_three_git_projects_without_external_registry_writes() {
+        let fixture =
+            std::env::temp_dir().join(format!("catdesk-control-resolver-{}", Uuid::new_v4()));
+        let control = fixture.join("catdesk");
+        let driver = fixture.join("driver");
+        let bounty = fixture.join("bounty");
+        let roots = [
+            (
+                "catdesk",
+                control.as_path(),
+                "https://example.test/catdesk.git",
+                "thread-catdesk",
+                "https://chatgpt.com/c/6ace36d3-8634-8333-a79c-1a4cba32caeb",
+            ),
+            (
+                "BYOVD_DRIVER_PIPELINE",
+                driver.as_path(),
+                "https://example.test/driver.git",
+                "thread-driver",
+                "https://chatgpt.com/c/69e7a205-23c4-83ea-a93a-38344c7f9ff7",
+            ),
+            (
+                "BUG_BOUNTY_RECON_PLATFORM",
+                bounty.as_path(),
+                "https://example.test/bounty.git",
+                "thread-bounty",
+                "https://chatgpt.com/c/6a763063-adcc-83ea-9400-ea5689b5c910",
+            ),
+        ];
+        for (_, root, origin, _, _) in roots {
+            fixture_git_root(root, origin);
+        }
+        let store = AutonomousProjectRegistryStoreV1::open(control.join(".catdesk/projects"))
+            .expect("control registry");
+        store.initialize(1, 1).expect("registry");
+        for (id, root, origin, thread, target) in roots {
+            let mut registered = project(id, root.to_path_buf());
+            registered.git_identity = origin.into();
+            registered.codex_thread_id = Some(thread.into());
+            registered.chatgpt_target_url = Some(target.into());
+            registered.chatgpt_target_sha256 = Some(project_chat_target_digest(target));
+            store
+                .register_project(registered)
+                .expect("register fixture");
+        }
+        let registry_path = control.join(".catdesk/projects/projects.json");
+        let before = fs::read(&registry_path).expect("registry bytes before read");
+        for (id, root, origin, thread, target) in roots {
+            let resolved = resolve_registered_project_from_control_root(&control, id)
+                .expect("registered project resolution");
+            assert_eq!(
+                resolved.control_workspace,
+                control.canonicalize().expect("control")
+            );
+            assert_eq!(resolved.project.project_id, id);
+            assert_eq!(
+                resolved.project.workspace,
+                root.canonicalize().expect("project")
+            );
+            assert_eq!(resolved.project.git_identity, origin);
+            assert_eq!(resolved.project.codex_thread_id.as_deref(), Some(thread));
+            assert_eq!(resolved.project.chatgpt_target_url.as_deref(), Some(target));
+        }
+        assert!(resolve_registered_project_from_control_root(&control, "unregistered").is_err());
+        assert!(resolve_registered_project_from_control_root(&driver, "catdesk").is_err());
+        assert_eq!(
+            fs::read(&registry_path).expect("registry bytes after read"),
+            before
+        );
+        for root in [&driver, &bounty] {
+            assert!(!root.join(".catdesk").exists());
+        }
+        cleanup_control_resolver_fixture(&fixture);
+    }
+
+    #[test]
+    fn control_root_rejects_registered_project_git_origin_drift() {
+        let fixture =
+            std::env::temp_dir().join(format!("catdesk-control-resolver-{}", Uuid::new_v4()));
+        let control = fixture.join("catdesk");
+        let driver = fixture.join("driver");
+        fixture_git_root(&control, "https://example.test/catdesk.git");
+        fixture_git_root(&driver, "https://example.test/driver.git");
+        let store = AutonomousProjectRegistryStoreV1::open(control.join(".catdesk/projects"))
+            .expect("control registry");
+        store.initialize(1, 1).expect("registry");
+        for (id, root, origin) in [
+            ("catdesk", &control, "https://example.test/catdesk.git"),
+            ("driver", &driver, "https://example.test/driver.git"),
+        ] {
+            let mut registered = project(id, root.to_path_buf());
+            registered.git_identity = origin.into();
+            store
+                .register_project(registered)
+                .expect("register fixture");
+        }
+        assert!(
+            Command::new("git")
+                .arg("-C")
+                .arg(&driver)
+                .args([
+                    "remote",
+                    "set-url",
+                    "origin",
+                    "https://example.test/changed.git",
+                ])
+                .status()
+                .expect("fixture Git available")
+                .success()
+        );
+        assert!(resolve_registered_project_from_control_root(&control, "driver").is_err());
+        assert!(
+            Command::new("git")
+                .arg("-C")
+                .arg(&driver)
+                .args([
+                    "remote",
+                    "set-url",
+                    "origin",
+                    "https://example.test/driver.git"
+                ])
+                .status()
+                .expect("restore fixture Git origin")
+                .success()
+        );
+        assert!(
+            Command::new("git")
+                .arg("-C")
+                .arg(&control)
+                .args([
+                    "remote",
+                    "set-url",
+                    "origin",
+                    "https://example.test/changed.git"
+                ])
+                .status()
+                .expect("change control Git origin")
+                .success()
+        );
+        assert!(resolve_registered_project_from_control_root(&control, "driver").is_err());
+        assert!(!driver.join(".catdesk").exists());
+        cleanup_control_resolver_fixture(&fixture);
     }
     #[test]
     fn independent_projects_schedule_concurrently_but_same_workspace_writer_is_rejected() {

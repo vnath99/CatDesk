@@ -3662,7 +3662,7 @@ fn supervisor_now_unix() -> u64 {
 
 /// Bounded Git-only identity inspection for a candidate external workspace.
 /// It deliberately does not evaluate caller commands or read repository files.
-fn verified_external_git_workspace(
+pub(super) fn verified_external_git_workspace(
     candidate: &str,
     expected_origin: &str,
 ) -> Result<PathBuf, String> {
