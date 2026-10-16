@@ -4821,6 +4821,47 @@ mod tests {
                 .contains("bytes changed")
         );
         fs::write(&invitation_path, &invitation_before).unwrap();
+        let original_text = String::from_utf8(invitation_before.clone()).unwrap();
+        let original_record: Value = serde_json::from_str(&original_text).unwrap();
+        let prepared_at_unix = original_record["preparedAtUnix"].as_u64().unwrap();
+        let old_checksum = original_record["checksumSha256"].as_str().unwrap();
+        let restamp = |new_time: u64| {
+            let without_checksum = original_text
+                .trim_end_matches('\n')
+                .replacen(
+                    &format!("\"preparedAtUnix\":{prepared_at_unix}"),
+                    &format!("\"preparedAtUnix\":{new_time}"),
+                    1,
+                )
+                .replacen(
+                    &format!("\"checksumSha256\":\"{old_checksum}\""),
+                    "\"checksumSha256\":\"\"",
+                    1,
+                );
+            let mut hasher = Sha256::new();
+            hasher.update(b"CATDESK_QUEUE_REVIEW_INVITATION_V1\0");
+            hasher.update(without_checksum.as_bytes());
+            let checksum = format!("{:x}", hasher.finalize());
+            format!(
+                "{}\n",
+                without_checksum.replacen(
+                    "\"checksumSha256\":\"\"",
+                    &format!("\"checksumSha256\":\"{checksum}\""),
+                    1,
+                )
+            )
+            .into_bytes()
+        };
+        assert_eq!(restamp(prepared_at_unix), invitation_before);
+        for impossible_time in [1, u64::MAX] {
+            fs::write(&invitation_path, restamp(impossible_time)).unwrap();
+            assert!(
+                review_invite::prepare_in_store_for_test(&queue, &projects[1], &receipt_id, sha)
+                    .unwrap_err()
+                    .contains("invalid preparation chronology")
+            );
+        }
+        fs::write(&invitation_path, &invitation_before).unwrap();
         let grant_path = review_reader::grant_path(&queue, &receipt_id);
         let grant_before = fs::read(&grant_path).unwrap();
         let mut expired: Value = serde_json::from_slice(&grant_before).unwrap();

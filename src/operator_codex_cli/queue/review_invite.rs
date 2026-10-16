@@ -64,9 +64,10 @@ fn expected_record(
     package_sha256: &str,
     target_sha256: &str,
     prepared_at_unix: u64,
+    observed_at_unix: u64,
 ) -> Result<ReviewInvitationV1, String> {
-    if prepared_at_unix == 0 {
-        return Err("CODEX_QUEUE_REVIEW_INVITE: invalid preparation clock".into());
+    if prepared_at_unix < package.recorded_at_unix || prepared_at_unix > observed_at_unix {
+        return Err("CODEX_QUEUE_REVIEW_INVITE: invalid preparation chronology".into());
     }
     let message = format!(
         "CatDesk queue review request for project {}, receipt {}, package SHA-256 {}. Read this exact package with catdesk_codex_queue_review_package_read and inspect the captured source and verification evidence. This request is not an independent review decision or approval.",
@@ -102,6 +103,7 @@ fn read_record(
     package: &QueueReviewPackage,
     package_sha256: &str,
     target_sha256: &str,
+    observed_at_unix: u64,
 ) -> Result<Option<(ReviewInvitationV1, String)>, String> {
     let Some(bytes) = read_regular_bounded(
         &record_path(store, &package.receipt_id),
@@ -118,6 +120,7 @@ fn read_record(
         package_sha256,
         target_sha256,
         record.prepared_at_unix,
+        observed_at_unix,
     )?;
     if record != expected {
         return Err("CODEX_QUEUE_REVIEW_INVITE: persisted invitation binding changed".into());
@@ -159,6 +162,7 @@ fn prepare_locked(
         &package,
         expected_package_sha256,
         target_sha256,
+        observed_at_unix,
     )? {
         (record, digest, true)
     } else {
@@ -167,6 +171,7 @@ fn prepare_locked(
             &package,
             expected_package_sha256,
             target_sha256,
+            observed_at_unix,
             observed_at_unix,
         )?;
         let encoded = serde_json::to_vec(&record)
@@ -181,6 +186,7 @@ fn prepare_locked(
             &package,
             expected_package_sha256,
             target_sha256,
+            observed_at_unix,
         )?
         .ok_or("CODEX_QUEUE_REVIEW_INVITE: invitation readback is missing")?;
         if readback != record {
