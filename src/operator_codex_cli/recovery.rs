@@ -25,6 +25,7 @@ use crate::delegated::autonomy_state::{
     AutonomousQueueTaskStateV1, AutonomousQueueV1, AutonomousSessionSnapshotV1,
     AutonomousSessionStateV1, validate_passed_verification_checkpoint,
 };
+use crate::delegated::codex_cli::CodexCliExecutionDiagnosticV1;
 
 const MAX_SESSION_COUNT: usize = 1_024;
 const MAX_DIRECTORY_ENTRIES: usize = 2_048;
@@ -34,6 +35,8 @@ const MAX_AGGREGATE_EVIDENCE_BYTES: u64 = 32 * 1024 * 1024;
 const MAX_ACCOUNTING_RECORDS: usize = 1_024;
 const MAX_SPANS_PER_RECORD: usize = 256;
 const MAX_REPORT_ROWS: usize = 4_096;
+const MAX_CANDIDATE_DIAGNOSTIC_BYTES: u64 = 256 * 1024;
+const MAX_CANDIDATE_DIAGNOSTICS_TOTAL_BYTES: u64 = 4 * 1024 * 1024;
 
 fn redirected(metadata: &fs::Metadata) -> bool {
     if metadata.file_type().is_symlink() {
@@ -265,11 +268,112 @@ struct SessionFacts {
     current_task_id: Option<String>,
     provider_thread_id: Option<String>,
     expected_codex_thread_id: Option<String>,
+    provider_handle_id: Option<String>,
     approved_contract_hash: Option<String>,
     provider_turn_count: u32,
     codex_profile_tracking_started: bool,
     codex_profile_violation: bool,
     checkpoint: Option<CheckpointFacts>,
+}
+
+/// Auxiliary native diagnostics help an owner find a possible current-turn
+/// process exit. They never replace the durable queue, accounting, or owner
+/// evidence required to reconcile a claim.
+fn candidate_native_diagnostic(
+    diagnostics_dir: &Path,
+    project_workspace: &Path,
+    claim: &ClaimFacts,
+    records: &[ExecutionAccountingRecordV1],
+    total_bytes: &mut u64,
+) -> Value {
+    let session = &claim.session;
+    let unavailable = |state: &str| json!({"state":state, "candidateOnly":true});
+    if safe_id(&session.session_id) != session.session_id
+        || safe_id(&claim.task_id) != claim.task_id
+        || session.current_task_id.as_deref() != Some(claim.task_id.as_str())
+        || session.provider_turn_count == 0
+    {
+        return unavailable("NO_CURRENT_TURN_BINDING");
+    }
+    let Some(handle) = session.provider_handle_id.as_deref() else {
+        return unavailable("NO_CURRENT_HANDLE");
+    };
+    let Some(sequence) = handle.strip_prefix("codex-cli-turn-") else {
+        return unavailable("NO_CODEX_HANDLE");
+    };
+    let Ok(sequence_number) = sequence.parse::<u64>() else {
+        return unavailable("INVALID_CODEX_HANDLE");
+    };
+    if sequence_number == 0 || format!("codex-cli-turn-{sequence_number}") != handle {
+        return unavailable("INVALID_CODEX_HANDLE");
+    }
+    let (Some(thread), Some(expected_thread)) = (
+        session.provider_thread_id.as_deref(),
+        session.expected_codex_thread_id.as_deref(),
+    ) else {
+        return unavailable("NO_EXACT_THREAD_BINDING");
+    };
+    if thread != expected_thread {
+        return unavailable("NO_EXACT_THREAD_BINDING");
+    }
+    let mut matching_records = records.iter().filter(|record| {
+        record.catdesk_session_id == session.session_id && record.task_id == claim.task_id
+    });
+    let Some(record) = matching_records.next() else {
+        return unavailable("NO_UNIQUE_CODEX_ACCOUNTING_BINDING");
+    };
+    if matching_records.next().is_some()
+        || record.provider_id != "codex-cli"
+        || record.provider_turns == 0
+        || record.provider_session_id.as_deref() != Some(thread)
+    {
+        return unavailable("NO_UNIQUE_CODEX_ACCOUNTING_BINDING");
+    }
+    match checked_directory(diagnostics_dir) {
+        Ok(true) => {}
+        Ok(false) => return unavailable("ABSENT"),
+        Err(_) => return unavailable("DIAGNOSTIC_DIRECTORY_UNSAFE"),
+    }
+    let path = diagnostics_dir.join(format!(
+        "codex-autonomy-{}-{handle}.json",
+        session.session_id
+    ));
+    let remaining = MAX_CANDIDATE_DIAGNOSTICS_TOTAL_BYTES.saturating_sub(*total_bytes);
+    if remaining == 0 {
+        return unavailable("READ_BUDGET_EXHAUSTED");
+    }
+    let bytes = match checked_file_bytes(&path, remaining.min(MAX_CANDIDATE_DIAGNOSTIC_BYTES)) {
+        Ok(Some(bytes)) => bytes,
+        Ok(None) => return unavailable("ABSENT"),
+        Err(_) => return unavailable("DIAGNOSTIC_UNSAFE_OR_OVERSIZED"),
+    };
+    *total_bytes += bytes.len() as u64;
+    let digest = format!("{:x}", Sha256::digest(&bytes));
+    let Ok(diagnostic) = serde_json::from_slice::<CodexCliExecutionDiagnosticV1>(&bytes) else {
+        return json!({"state":"DIAGNOSTIC_INVALID", "candidateOnly":true, "contentSha256":digest});
+    };
+    let expected_turn = format!("{}-turn-{}", claim.task_id, session.provider_turn_count);
+    if diagnostic.schema_version != 1
+        || diagnostic.catdesk_session_id != format!("autonomy-{}", session.session_id)
+        || diagnostic.catdesk_turn_id != expected_turn
+        || diagnostic.invocation_id != handle
+        || diagnostic.codex_thread_id.as_deref() != Some(thread)
+        || Path::new(&diagnostic.canonical_working_directory) != project_workspace
+    {
+        return json!({"state":"BINDING_MISMATCH", "candidateOnly":true, "contentSha256":digest});
+    }
+    json!({
+        "state":"EXACT_CURRENT_TURN_DIAGNOSTIC",
+        "candidateOnly":true,
+        "contentSha256":digest,
+        "directParentExitCode":diagnostic.process_exit_code,
+        "turnCompletedEventObserved":diagnostic.events.iter().any(|event| {
+            event.event_type == "turn.completed"
+                && event.thread_id.as_deref().is_none_or(|event_thread| event_thread == thread)
+        }),
+        "ownerIdentityProven":false,
+        "descendantExitProven":false,
+    })
 }
 
 fn claim_hash(session_id: &str, task_id: &str) -> String {
@@ -440,6 +544,7 @@ pub(super) fn report(project: &AutonomousProjectV1, prepare: bool) -> Result<Val
     let mut total_sessions = 0usize;
     let mut total_accounting_records = 0usize;
     let mut total_bytes = 0u64;
+    let mut candidate_diagnostic_bytes = 0u64;
     let mut total_rows = 0usize;
     let catdesk_root = project.workspace.join(".catdesk");
     if checked_directory(&catdesk_root)? {
@@ -548,6 +653,7 @@ pub(super) fn report(project: &AutonomousProjectV1, prepare: bool) -> Result<Val
                     current_task_id: snapshot.current_task_id.clone(),
                     provider_thread_id: snapshot.provider_thread_id.clone(),
                     expected_codex_thread_id: snapshot.expected_codex_thread_id.clone(),
+                    provider_handle_id: snapshot.provider_handle_id.clone(),
                     approved_contract_hash: snapshot.approved_contract_hash.clone(),
                     provider_turn_count: snapshot.provider_turn_count,
                     codex_profile_tracking_started: snapshot.codex_turn_profile_tracking_started,
@@ -650,16 +756,24 @@ pub(super) fn report(project: &AutonomousProjectV1, prepare: bool) -> Result<Val
                 for code in &gaps {
                     *claim_gap_counts.entry(code).or_default() += 1;
                 }
-                push_bounded_row(
-                    &mut claim_rows,
-                    json!({
-                        "claimSha256":claim_hash(&claim.session.session_id, &claim.task_id),
-                        "sessionState":claim.session.session_state,
-                        "taskState":claim.task_state,
-                        "gapCodes":gaps,
-                    }),
-                    &mut total_rows,
-                )?;
+                let mut row = json!({
+                    "claimSha256":claim_hash(&claim.session.session_id, &claim.task_id),
+                    "sessionState":claim.session.session_state,
+                    "taskState":claim.task_state,
+                    "gapCodes":gaps,
+                });
+                if prepare {
+                    row["candidateNativeDiagnosticV1"] = candidate_native_diagnostic(
+                        &state_root.join("diagnostics"),
+                        &project.workspace,
+                        &claim,
+                        ledger
+                            .as_ref()
+                            .map_or(&[][..], |ledger| ledger.records.as_slice()),
+                        &mut candidate_diagnostic_bytes,
+                    );
+                }
+                push_bounded_row(&mut claim_rows, row, &mut total_rows)?;
             }
         }
     }
@@ -684,6 +798,9 @@ pub(super) fn report(project: &AutonomousProjectV1, prepare: bool) -> Result<Val
         "observationLimit":"Nontransactional read-only snapshot; concurrent same-user directory replacement may race preflight. Process exit and OS lock ownership are not proven. evidenceSha256 is a diagnostic digest, not a recovery compare-and-swap token.",
     });
     if prepare {
+        response["candidateDiagnosticObservationLimit"] = json!(
+            "Candidate-only exact current-turn native diagnostic readback. A direct parent exit code or turn.completed event does not prove owner identity, descendant exit, accounting closure, or launch authority. Same-user parent replacement may race this nontransactional read. Each candidate contentSha256 hashes that diagnostic file; the report evidenceSha256 excludes auxiliary diagnostics. No raw diagnostic text, path, argv, stderr, or events are returned."
+        );
         response["requiredEvidence"] = json!([
             "Identify the exact owning process and session for every in-flight queue task.",
             "Prove native child exit or reviewed ownership handoff before changing durable state.",
@@ -699,6 +816,9 @@ mod tests {
     use super::*;
     use crate::delegated::autonomy_accounting::{ActivityActorV1, ActivityEvidenceV1};
     use crate::delegated::autonomy_state::{AutonomousQueueTaskV1, AutonomousStateStoreV1};
+    use crate::delegated::codex_cli::{
+        CodexCliApprovalPolicyV1, CodexCliEventV1, CodexCliSandboxV1,
+    };
     use crate::delegated::codex_model_policy::{CodexCliTurnProfileEvidenceV1, SOL_MEDIUM_MODEL};
     use crate::delegated::coordinator::{VerificationStatusV1, VerificationSummaryV1};
     use crate::reviewed_source_snapshot::{
@@ -781,6 +901,327 @@ mod tests {
         assert!(has_gap(&report, 0, "ACCOUNTING_RECORD_MISSING"));
         assert_eq!(report["launchAuthorized"], false);
         assert_eq!(fs::read(&state_path).expect("after"), before);
+        remove_fixture(&root);
+    }
+
+    fn fixture_native_candidate(root: &Path, turn_id: &str, thread_id: &str) -> Vec<u8> {
+        let diagnostic = CodexCliExecutionDiagnosticV1 {
+            schema_version: 1,
+            executable: "private-executable-path".into(),
+            cli_version: "codex-cli fixture".into(),
+            argv: vec!["private-argv".into()],
+            cwd: "private-cwd".into(),
+            canonical_working_directory: root
+                .canonicalize()
+                .expect("fixture workspace")
+                .to_string_lossy()
+                .into_owned(),
+            sandbox: CodexCliSandboxV1::WorkspaceWrite,
+            approval_policy: CodexCliApprovalPolicyV1::Never,
+            model_id: Some("private-model".into()),
+            codex_thread_id: Some(thread_id.into()),
+            catdesk_session_id: "autonomy-session_one".into(),
+            catdesk_turn_id: turn_id.into(),
+            invocation_id: "codex-cli-turn-1".into(),
+            environment_variable_names: vec!["PRIVATE_ENV_NAME".into()],
+            process_exit_code: Some(0),
+            elapsed_millis: 5,
+            stderr: "private-stderr".into(),
+            events: vec![CodexCliEventV1 {
+                event_type: "turn.completed".into(),
+                thread_id: Some(thread_id.into()),
+                item_type: None,
+                text: Some("private-event-text".into()),
+                retry_after_seconds: None,
+                bounded_summary: "private-event-summary".into(),
+            }],
+        };
+        let bytes = serde_json::to_vec(&diagnostic).expect("diagnostic fixture");
+        let diagnostics = root.join(".catdesk/autonomy/diagnostics");
+        fs::create_dir_all(&diagnostics).expect("diagnostics directory");
+        fs::write(
+            diagnostics.join("codex-autonomy-session_one-codex-cli-turn-1.json"),
+            &bytes,
+        )
+        .expect("diagnostic fixture write");
+        bytes
+    }
+
+    fn native_candidate_claim(root: &Path) {
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).expect("state fixture");
+        store
+            .create_session(
+                "session_one",
+                AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                    task_id: "task_one".into(),
+                    priority: 1,
+                    depends_on: Vec::new(),
+                    state: AutonomousQueueTaskStateV1::WorkerRunning,
+                }])
+                .expect("queue"),
+            )
+            .expect("session");
+        let mut snapshot = store.load_session("session_one").expect("snapshot");
+        snapshot.state = AutonomousSessionStateV1::Cancelled;
+        snapshot.active = false;
+        snapshot.current_task_id = Some("task_one".into());
+        snapshot.provider_thread_id = Some("thread_one".into());
+        snapshot.expected_codex_thread_id = Some("thread_one".into());
+        snapshot.provider_handle_id = Some("codex-cli-turn-1".into());
+        snapshot.provider_turn_count = 1;
+        write_fixture_snapshot(root, &snapshot);
+        store
+            .execution_accounting_store()
+            .expect("accounting fixture")
+            .record_task_started(
+                "fixture",
+                "task_one",
+                "session_one",
+                Some("thread_one"),
+                "codex-cli",
+                None,
+                None,
+                100,
+            )
+            .expect("accounting record");
+    }
+
+    #[test]
+    fn prepare_reports_only_sanitized_current_turn_candidate_without_recovery_authority() {
+        let root = std::env::temp_dir().join(format!("catdesk-recovery-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("fixture root");
+        native_candidate_claim(&root);
+        let bytes = fixture_native_candidate(&root, "task_one-turn-1", "thread_one");
+        let project = fixture_project(&root);
+        let status = report(&project, false).expect("status");
+        let prepare = report(&project, true).expect("prepare");
+        let candidate = &prepare["claimEvidenceGapsV1"][0]["candidateNativeDiagnosticV1"];
+        assert_eq!(candidate["state"], "EXACT_CURRENT_TURN_DIAGNOSTIC");
+        assert_eq!(
+            candidate["contentSha256"],
+            format!("{:x}", Sha256::digest(&bytes))
+        );
+        assert_eq!(candidate["directParentExitCode"], 0);
+        assert_eq!(candidate["turnCompletedEventObserved"], true);
+        assert_eq!(candidate["ownerIdentityProven"], false);
+        assert_eq!(candidate["descendantExitProven"], false);
+        assert!(status["claimEvidenceGapsV1"][0]["candidateNativeDiagnosticV1"].is_null());
+        assert_eq!(status["evidenceSha256"], prepare["evidenceSha256"]);
+        assert_eq!(status["queueBlockers"], prepare["queueBlockers"]);
+        assert_eq!(prepare["status"], "NEEDS_OWNER_RECOVERY");
+        assert_eq!(prepare["launchAuthorized"], false);
+        assert!(has_gap(&prepare, 0, "OWNER_PROCESS_IDENTITY_UNRECORDED"));
+        assert!(has_gap(&prepare, 0, "SOURCE_BOUND_CHILD_EXIT_UNPROVEN"));
+        for secret in [
+            "private-argv",
+            "private-cwd",
+            "private-stderr",
+            "private-event-text",
+        ] {
+            assert!(!prepare.to_string().contains(secret));
+        }
+        remove_fixture(&root);
+    }
+
+    #[test]
+    fn prepare_rejects_mismatched_or_oversized_diagnostic_as_candidate() {
+        let root = std::env::temp_dir().join(format!("catdesk-recovery-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("fixture root");
+        native_candidate_claim(&root);
+        fixture_native_candidate(&root, "other_task-turn-1", "thread_one");
+        let project = fixture_project(&root);
+        let mismatch = report(&project, true).expect("mismatch report");
+        assert_eq!(
+            mismatch["claimEvidenceGapsV1"][0]["candidateNativeDiagnosticV1"]["state"],
+            "BINDING_MISMATCH"
+        );
+        assert!(has_gap(&mismatch, 0, "SOURCE_BOUND_CHILD_EXIT_UNPROVEN"));
+        let path = root
+            .join(".catdesk/autonomy/diagnostics/codex-autonomy-session_one-codex-cli-turn-1.json");
+        fs::write(
+            path,
+            vec![b'x'; MAX_CANDIDATE_DIAGNOSTIC_BYTES as usize + 1],
+        )
+        .expect("oversized diagnostic fixture");
+        let oversized = report(&project, true).expect("oversized report");
+        assert_eq!(
+            oversized["claimEvidenceGapsV1"][0]["candidateNativeDiagnosticV1"]["state"],
+            "DIAGNOSTIC_UNSAFE_OR_OVERSIZED"
+        );
+        assert_eq!(oversized["status"], "NEEDS_OWNER_RECOVERY");
+        assert_eq!(oversized["launchAuthorized"], false);
+        remove_fixture(&root);
+    }
+
+    #[test]
+    fn prepare_requires_current_handle_and_thread_and_does_not_infer_exit() {
+        let root = std::env::temp_dir().join(format!("catdesk-recovery-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("fixture root");
+        native_candidate_claim(&root);
+        let path = root
+            .join(".catdesk/autonomy/diagnostics/codex-autonomy-session_one-codex-cli-turn-1.json");
+        let bytes = fixture_native_candidate(&root, "task_one-turn-1", "thread_one");
+        let mut diagnostic: CodexCliExecutionDiagnosticV1 =
+            serde_json::from_slice(&bytes).expect("fixture diagnostic");
+        diagnostic.process_exit_code = None;
+        diagnostic.events.clear();
+        fs::write(
+            &path,
+            serde_json::to_vec(&diagnostic).expect("encoded diagnostic"),
+        )
+        .expect("diagnostic update");
+        let project = fixture_project(&root);
+        let absent_exit = report(&project, true).expect("no-exit report");
+        let candidate = &absent_exit["claimEvidenceGapsV1"][0]["candidateNativeDiagnosticV1"];
+        assert_eq!(candidate["state"], "EXACT_CURRENT_TURN_DIAGNOSTIC");
+        assert!(candidate["directParentExitCode"].is_null());
+        assert_eq!(candidate["turnCompletedEventObserved"], false);
+        assert!(has_gap(&absent_exit, 0, "SOURCE_BOUND_CHILD_EXIT_UNPROVEN"));
+
+        diagnostic.process_exit_code = Some(0);
+        diagnostic.events.push(CodexCliEventV1 {
+            event_type: "turn.completed".into(),
+            thread_id: Some("other_thread".into()),
+            item_type: None,
+            text: None,
+            retry_after_seconds: None,
+            bounded_summary: String::new(),
+        });
+        fs::write(
+            &path,
+            serde_json::to_vec(&diagnostic).expect("encoded other-thread event"),
+        )
+        .expect("other-thread diagnostic update");
+        let wrong_event_thread = report(&project, true).expect("wrong event thread report");
+        assert_eq!(
+            wrong_event_thread["claimEvidenceGapsV1"][0]["candidateNativeDiagnosticV1"]["turnCompletedEventObserved"],
+            false
+        );
+
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).expect("state fixture");
+        let mut snapshot = store.load_session("session_one").expect("snapshot");
+        snapshot.provider_handle_id = Some("codex-cli-turn-2".into());
+        write_fixture_snapshot(&root, &snapshot);
+        let wrong_handle = report(&project, true).expect("wrong-handle report");
+        assert_eq!(
+            wrong_handle["claimEvidenceGapsV1"][0]["candidateNativeDiagnosticV1"]["state"],
+            "ABSENT"
+        );
+        snapshot.provider_handle_id = Some("codex-cli-turn-1".into());
+        snapshot.expected_codex_thread_id = Some("different_thread".into());
+        write_fixture_snapshot(&root, &snapshot);
+        let wrong_thread = report(&project, true).expect("wrong-thread report");
+        assert_eq!(
+            wrong_thread["claimEvidenceGapsV1"][0]["candidateNativeDiagnosticV1"]["state"],
+            "NO_EXACT_THREAD_BINDING"
+        );
+        assert_eq!(wrong_thread["launchAuthorized"], false);
+
+        snapshot.expected_codex_thread_id = Some("thread_one".into());
+        write_fixture_snapshot(&root, &snapshot);
+        diagnostic.canonical_working_directory = "other-workspace".into();
+        fs::write(
+            &path,
+            serde_json::to_vec(&diagnostic).expect("encoded wrong-workspace diagnostic"),
+        )
+        .expect("wrong-workspace diagnostic update");
+        let wrong_workspace = report(&project, true).expect("wrong-workspace report");
+        assert_eq!(
+            wrong_workspace["claimEvidenceGapsV1"][0]["candidateNativeDiagnosticV1"]["state"],
+            "BINDING_MISMATCH"
+        );
+
+        store
+            .execution_accounting_store()
+            .expect("accounting fixture")
+            .record_task_started(
+                "fixture",
+                "task_one",
+                "session_one",
+                Some("thread_one"),
+                "ollama",
+                None,
+                None,
+                110,
+            )
+            .expect("other-provider accounting update");
+        let wrong_provider = report(&project, true).expect("other-provider report");
+        assert_eq!(
+            wrong_provider["claimEvidenceGapsV1"][0]["candidateNativeDiagnosticV1"]["state"],
+            "NO_UNIQUE_CODEX_ACCOUNTING_BINDING"
+        );
+        assert!(has_gap(
+            &wrong_provider,
+            0,
+            "SOURCE_BOUND_CHILD_EXIT_UNPROVEN"
+        ));
+        remove_fixture(&root);
+    }
+
+    #[test]
+    fn prepare_refuses_diagnostic_directory_that_is_not_a_directory() {
+        let root = std::env::temp_dir().join(format!("catdesk-recovery-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("fixture root");
+        native_candidate_claim(&root);
+        fixture_native_candidate(&root, "task_one-turn-1", "thread_one");
+        let diagnostics = root.join(".catdesk/autonomy/diagnostics");
+        fs::remove_file(diagnostics.join("codex-autonomy-session_one-codex-cli-turn-1.json"))
+            .expect("remove fixture diagnostic");
+        fs::remove_dir(&diagnostics).expect("remove empty diagnostics directory");
+        fs::write(&diagnostics, b"redirected-path-fixture").expect("replace directory with file");
+        let project = fixture_project(&root);
+        let report = report(&project, true).expect("unsafe-directory report");
+        assert_eq!(
+            report["claimEvidenceGapsV1"][0]["candidateNativeDiagnosticV1"]["state"],
+            "DIAGNOSTIC_DIRECTORY_UNSAFE"
+        );
+        assert_eq!(report["status"], "NEEDS_OWNER_RECOVERY");
+        assert_eq!(report["launchAuthorized"], false);
+        remove_fixture(&root);
+    }
+
+    #[test]
+    fn prepare_refuses_diagnostic_leaf_and_directory_symlinks_when_supported() {
+        let root = std::env::temp_dir().join(format!("catdesk-recovery-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("fixture root");
+        native_candidate_claim(&root);
+        let bytes = fixture_native_candidate(&root, "task_one-turn-1", "thread_one");
+        let diagnostics = root.join(".catdesk/autonomy/diagnostics");
+        let name = "codex-autonomy-session_one-codex-cli-turn-1.json";
+        let leaf = diagnostics.join(name);
+        let target_file = root.join("fixture-diagnostic.json");
+        fs::write(&target_file, &bytes).expect("symlink target fixture");
+        fs::remove_file(&leaf).expect("remove regular diagnostic");
+        #[cfg(windows)]
+        let linked_leaf = std::os::windows::fs::symlink_file(&target_file, &leaf).is_ok();
+        #[cfg(unix)]
+        let linked_leaf = std::os::unix::fs::symlink(&target_file, &leaf).is_ok();
+        if !linked_leaf {
+            remove_fixture(&root);
+            return;
+        }
+        let project = fixture_project(&root);
+        let leaf_report = report(&project, true).expect("linked leaf report");
+        assert_eq!(
+            leaf_report["claimEvidenceGapsV1"][0]["candidateNativeDiagnosticV1"]["state"],
+            "DIAGNOSTIC_UNSAFE_OR_OVERSIZED"
+        );
+        fs::remove_file(&leaf).expect("remove linked leaf");
+        fs::remove_dir(&diagnostics).expect("remove empty diagnostic directory");
+        let target_dir = root.join("fixture-diagnostics-dir");
+        fs::create_dir(&target_dir).expect("directory target fixture");
+        fs::write(target_dir.join(name), &bytes).expect("directory target file");
+        #[cfg(windows)]
+        let linked_dir = std::os::windows::fs::symlink_dir(&target_dir, &diagnostics).is_ok();
+        #[cfg(unix)]
+        let linked_dir = std::os::unix::fs::symlink(&target_dir, &diagnostics).is_ok();
+        if linked_dir {
+            let error = report(&project, true).expect_err("linked directory is refused globally");
+            assert!(error.contains("redirected path"), "{error}");
+            fs::remove_dir(&diagnostics).expect("remove linked directory");
+        }
         remove_fixture(&root);
     }
 
