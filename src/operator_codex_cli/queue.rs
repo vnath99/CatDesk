@@ -27,7 +27,8 @@ use crate::delegated::autonomy_projects::{
 };
 use crate::delegated::autonomy_runtime::{
     acquire_project_writer_lock, fixed_current_user_catdesk_state_root,
-    fixed_current_user_catdesk_state_root_path,
+    fixed_current_user_catdesk_state_root_path, inspect_project_writer_pending_marker,
+    queue_writer_marker_sha256,
 };
 use crate::delegated::codex_cli::{
     CodexCliNativeStdoutEvidenceV1, prepare_resumed_native_turn_readback,
@@ -351,6 +352,24 @@ struct QueueAttempt {
     attempt_id: String,
     lease: AutonomousWorkspaceLeaseV1,
     started_at_unix: u64,
+    // Older attempts remain readable, but have no queue marker binding that
+    // future recovery code may use as evidence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    writer_marker_sha256: Option<String>,
+}
+
+impl QueueAttempt {
+    fn marker_binding_is_valid(&self) -> bool {
+        queue_writer_marker_sha256(&self.attempt_id)
+            .ok()
+            .is_some_and(|digest| self.writer_marker_sha256.as_deref() == Some(digest.as_str()))
+    }
+
+    fn matches_writer_marker(&self, observed_sha256: Option<&str>) -> bool {
+        self.marker_binding_is_valid()
+            && observed_sha256
+                .is_some_and(|observed| self.writer_marker_sha256.as_deref() == Some(observed))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1477,6 +1496,12 @@ fn validate_job(job: &QueueJob) -> Result<(), String> {
     if job.state == QueueState::Claimed && job.attempt.is_none() {
         return Err("CODEX_QUEUE: claimed job has no attempt".into());
     }
+    if job.attempt.as_ref().is_some_and(|attempt| {
+        queue_writer_marker_sha256(&attempt.attempt_id).is_err()
+            || attempt.writer_marker_sha256.is_some() && !attempt.marker_binding_is_valid()
+    }) {
+        return Err("CODEX_QUEUE: attempt writer marker binding is invalid".into());
+    }
     if job.review_package_sha256.is_some()
         && (job.state != QueueState::NativeExitedZero
             || job.receipt_id.is_none()
@@ -2328,6 +2353,10 @@ fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<Queu
         return Err("CODEX_QUEUE_SCOPE: registry changed before scheduler claim".into());
     }
     let now = unix_now()?;
+    // Prepare the complete attempt binding before taking a scheduler lease.
+    let attempt_id = Uuid::new_v4().to_string();
+    let writer_marker_sha256 = queue_writer_marker_sha256(&attempt_id)
+        .map_err(|_| "CODEX_QUEUE: new attempt marker binding is invalid".to_string())?;
     let owner = format!("queue-{}", Uuid::new_v4());
     let decision = scheduler
         .schedule_next_ready_worker(
@@ -2366,9 +2395,10 @@ fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<Queu
     job.receipt_id = None;
     job.review_candidate_sha256 = None;
     job.attempt = Some(QueueAttempt {
-        attempt_id: Uuid::new_v4().to_string(),
+        attempt_id,
         lease: lease.clone(),
         started_at_unix: now,
+        writer_marker_sha256: Some(writer_marker_sha256),
     });
     if let Err(error) = queue.save_job(&job) {
         scheduler.release_workspace_lease(&lease).map_err(|_| {
@@ -3545,11 +3575,34 @@ async fn run_queued_turn(
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .kill_on_drop(true);
-    if writer.begin_writer_turn().is_err() {
+    let Some(attempt) = job.attempt.as_ref() else {
+        return TurnResult {
+            marker_retired: false,
+            ..TurnResult::before_spawn("QUEUE_ATTEMPT_MARKER_UNBOUND")
+        };
+    };
+    if !attempt.marker_binding_is_valid() {
+        return TurnResult {
+            marker_retired: false,
+            ..TurnResult::before_spawn("QUEUE_ATTEMPT_MARKER_UNBOUND")
+        };
+    }
+    if writer.begin_queue_writer_turn(&attempt.attempt_id).is_err() {
         return TurnResult {
             marker_retired: false,
             native_executable: Some(executable.clone()),
             ..TurnResult::before_spawn("WRITER_MARKER_UNAVAILABLE")
+        };
+    }
+    let observed_marker = inspect_project_writer_pending_marker(&project.workspace);
+    if !observed_marker
+        .as_ref()
+        .is_ok_and(|observed| attempt.matches_writer_marker(observed.as_deref()))
+    {
+        return TurnResult {
+            marker_retired: false,
+            native_executable: Some(executable.clone()),
+            ..TurnResult::before_spawn("WRITER_MARKER_BINDING_MISMATCH")
         };
     }
     let launched_at = SystemTime::now();
@@ -5378,6 +5431,74 @@ mod tests {
     }
 
     #[test]
+    fn fresh_attempt_persists_exact_marker_binding_and_legacy_remains_readable() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let job = QueueJob::new(
+            "bound_task".into(),
+            &projects[1],
+            "fixture edit".into(),
+            None,
+            None,
+        )
+        .expect("job");
+        queue.save_job(&job).expect("persist ready job");
+        let claimed = claim_one(&projects[0].workspace, &queue)
+            .expect("claim")
+            .expect("selected job");
+        let attempt = claimed.attempt.as_ref().expect("attempt");
+        let expected = queue_writer_marker_sha256(&attempt.attempt_id).expect("marker digest");
+        assert_eq!(
+            attempt.writer_marker_sha256.as_deref(),
+            Some(expected.as_str())
+        );
+        assert!(attempt.matches_writer_marker(Some(&expected)));
+        assert!(!attempt.matches_writer_marker(None));
+        assert!(!attempt.matches_writer_marker(Some(&"0".repeat(64))));
+        assert_eq!(
+            queue
+                .load_job(&claimed.binding.project_id, &claimed.task_id)
+                .expect("loaded job")
+                .expect("stored job")
+                .attempt,
+            claimed.attempt
+        );
+
+        let mut legacy = claimed.clone();
+        legacy.attempt.as_mut().unwrap().writer_marker_sha256 = None;
+        queue
+            .save_job(&legacy)
+            .expect("legacy attempt stays readable");
+        let loaded = queue
+            .load_job(&legacy.binding.project_id, &legacy.task_id)
+            .expect("legacy loaded")
+            .expect("legacy job");
+        assert!(
+            !loaded
+                .attempt
+                .unwrap()
+                .matches_writer_marker(Some(&expected))
+        );
+
+        let mut tampered = claimed.clone();
+        tampered.attempt.as_mut().unwrap().writer_marker_sha256 = Some("0".repeat(64));
+        assert!(queue.save_job(&tampered).is_err());
+        let mut changed_attempt = claimed.clone();
+        changed_attempt.attempt.as_mut().unwrap().attempt_id = Uuid::new_v4().to_string();
+        assert!(queue.save_job(&changed_attempt).is_err());
+        fs::write(
+            queue.job_path(&claimed.binding.project_id, &claimed.task_id),
+            serde_json::to_vec(&tampered).unwrap(),
+        )
+        .expect("tamper fixture record");
+        assert!(
+            queue
+                .load_job(&claimed.binding.project_id, &claimed.task_id)
+                .is_err()
+        );
+        cleanup(fixture);
+    }
+
+    #[test]
     fn fair_claim_and_observed_failure_release_exact_lease() {
         let (fixture, projects, queue) = three_project_fixture(1);
         for project in &projects {
@@ -6102,6 +6223,59 @@ mod tests {
             assert!(queue.read_review_candidate(&receipt).is_err());
             cleanup(fixture);
         }
+    }
+
+    #[tokio::test]
+    async fn legacy_claim_without_marker_binding_never_spawns_native_child() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let executable = fake_native_cli(&fixture);
+        let cli = preflight_selected_cli(executable, None, &projects[0].workspace)
+            .await
+            .expect("fake native preflight");
+        queue
+            .save_job(
+                &QueueJob::new(
+                    "legacy_claim".into(),
+                    &projects[1],
+                    "fixture edit".into(),
+                    None,
+                    None,
+                )
+                .expect("job"),
+            )
+            .expect("ready job");
+        let mut claimed = claim_one(&projects[0].workspace, &queue)
+            .expect("claim")
+            .expect("selected job");
+        claimed.attempt.as_mut().unwrap().writer_marker_sha256 = None;
+        queue
+            .save_job(&claimed)
+            .expect("legacy record stays readable");
+        let turn = run_queued_turn(
+            &claimed,
+            &projects[0].workspace,
+            &cli,
+            Duration::from_secs(30),
+        )
+        .await;
+        assert_eq!(turn.outcome, "QUEUE_ATTEMPT_MARKER_UNBOUND");
+        assert!(turn.child_absent_proven);
+        assert!(!turn.marker_retired);
+        assert!(
+            !projects[1]
+                .workspace
+                .join(format!("queue-proof-{}.txt", claimed.binding.thread_id))
+                .exists()
+        );
+        let result = complete_attempt(&projects[0].workspace, &queue, &claimed, turn)
+            .expect("legacy refusal receipt");
+        assert_eq!(result["job"]["state"], "ATTENTION");
+        assert_eq!(result["leaseReleased"], true);
+        assert_eq!(
+            result["receipt"]["evidenceLevel"],
+            "CHILD_ABSENT_BEFORE_SPAWN"
+        );
+        cleanup(fixture);
     }
 
     #[tokio::test]

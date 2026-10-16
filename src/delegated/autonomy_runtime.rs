@@ -64,6 +64,23 @@ type LiveController = AutonomousControllerV1<
 type RuntimeRegistry = BTreeMap<String, Arc<Mutex<LiveControllerEntry>>>;
 const INTERRUPTED_PROVIDER_OWNERSHIP_UNPROVEN: &str =
     "interrupted provider process ownership is unproven; recover the prior turn before relaunch";
+const OPERATOR_QUEUE_WRITER_MARKER_V1: &str = "catdesk-operator-queue-v1:";
+
+fn queue_writer_marker_payload(attempt_id: &str) -> Result<String, RuntimeError> {
+    if !uuid::Uuid::parse_str(attempt_id).is_ok_and(|id| id.to_string() == attempt_id) {
+        return Err(RuntimeError::Validation(
+            "queue writer attempt ID must be a canonical UUID".into(),
+        ));
+    }
+    Ok(format!("{OPERATOR_QUEUE_WRITER_MARKER_V1}{attempt_id}"))
+}
+
+/// A persisted queue attempt can compare this digest with the durable marker.
+/// A match binds identities only; it cannot prove whether a child exited.
+pub(crate) fn queue_writer_marker_sha256(attempt_id: &str) -> Result<String, RuntimeError> {
+    let payload = queue_writer_marker_payload(attempt_id)?;
+    Ok(format!("{:x}", Sha256::digest(payload.as_bytes())))
+}
 
 struct LiveControllerEntry {
     controller: Option<LiveController>,
@@ -86,6 +103,25 @@ impl ProjectWriterGuard {
             return Ok(());
         }
         let nonce = uuid::Uuid::new_v4().to_string();
+        self.begin_writer_turn_with_payload(nonce)
+    }
+
+    /// The queue writes the exact attempt identity before spawning its child.
+    /// Direct and managed turns retain their random marker format.
+    pub(crate) fn begin_queue_writer_turn(&mut self, attempt_id: &str) -> Result<(), RuntimeError> {
+        let payload = queue_writer_marker_payload(attempt_id)?;
+        if let Some(existing) = &self.pending_nonce {
+            if existing == &payload {
+                return Ok(());
+            }
+            return Err(RuntimeError::Validation(
+                "project writer marker belongs to a different turn".into(),
+            ));
+        }
+        self.begin_writer_turn_with_payload(payload)
+    }
+
+    fn begin_writer_turn_with_payload(&mut self, payload: String) -> Result<(), RuntimeError> {
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -93,13 +129,13 @@ impl ProjectWriterGuard {
             .map_err(|_| {
                 RuntimeError::Validation("unresolved managed project writer marker exists".into())
             })?;
-        file.write_all(nonce.as_bytes()).map_err(|_| {
+        file.write_all(payload.as_bytes()).map_err(|_| {
             RuntimeError::Validation("managed writer marker could not be persisted".into())
         })?;
         file.sync_all().map_err(|_| {
             RuntimeError::Validation("managed writer marker could not be persisted".into())
         })?;
-        self.pending_nonce = Some(nonce);
+        self.pending_nonce = Some(payload);
         Ok(())
     }
 
@@ -4254,6 +4290,63 @@ mod tests {
             "process guard release alone cannot certify an unfinished child"
         );
         assert!(marker.is_file());
+        remove_writer_fixture(root);
+    }
+
+    #[test]
+    fn queue_writer_marker_binds_one_canonical_attempt_and_retires() {
+        let root = std::env::temp_dir().join(format!("catdesk-queue-writer-{}", Uuid::new_v4()));
+        let control = root.join("user-state");
+        let project = root.join("project");
+        fs::create_dir_all(&control).expect("control root");
+        fs::create_dir_all(&project).expect("project root");
+        let attempt = Uuid::new_v4().to_string();
+        let other = Uuid::new_v4().to_string();
+        let expected = queue_writer_marker_sha256(&attempt).expect("canonical attempt");
+        assert!(queue_writer_marker_sha256(&attempt.to_ascii_uppercase()).is_err());
+        let mut writer = acquire_project_writer_lock_at(&control, &project).expect("writer");
+        writer
+            .begin_queue_writer_turn(&attempt)
+            .expect("bound marker");
+        assert_eq!(
+            fs::read_to_string(&writer.pending_path).expect("marker bytes"),
+            format!("{OPERATOR_QUEUE_WRITER_MARKER_V1}{attempt}")
+        );
+        assert_eq!(
+            format!(
+                "{:x}",
+                Sha256::digest(fs::read(&writer.pending_path).unwrap())
+            ),
+            expected
+        );
+        assert!(writer.begin_queue_writer_turn(&other).is_err());
+        writer
+            .begin_queue_writer_turn(&attempt)
+            .expect("same attempt is idempotent");
+        writer.finish_writer_turn().expect("retired marker");
+        assert!(!writer.pending_path.exists());
+        drop(writer);
+        assert!(acquire_project_writer_lock_at(&control, &project).is_ok());
+        remove_writer_fixture(root);
+    }
+
+    #[test]
+    fn tampered_queue_marker_survives_interrupted_guard_and_blocks_restart() {
+        let root = std::env::temp_dir().join(format!("catdesk-queue-crash-{}", Uuid::new_v4()));
+        let control = root.join("user-state");
+        let project = root.join("project");
+        fs::create_dir_all(&control).expect("control root");
+        fs::create_dir_all(&project).expect("project root");
+        let mut writer = acquire_project_writer_lock_at(&control, &project).expect("writer");
+        writer
+            .begin_queue_writer_turn(&Uuid::new_v4().to_string())
+            .expect("bound marker");
+        let marker = writer.pending_path.clone();
+        fs::write(&marker, b"changed-under-guard").expect("tamper fixture marker");
+        assert!(writer.finish_writer_turn().is_err());
+        drop(writer);
+        assert!(marker.is_file());
+        assert!(acquire_project_writer_lock_at(&control, &project).is_err());
         remove_writer_fixture(root);
     }
 
