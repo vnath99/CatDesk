@@ -7,6 +7,8 @@
 mod queue;
 mod recovery;
 
+pub(crate) use queue::read_review_package_for_mcp;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Stdio};

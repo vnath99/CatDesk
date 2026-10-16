@@ -44,6 +44,9 @@ use super::{
 };
 
 mod advisory;
+mod review_reader;
+
+pub(crate) use review_reader::read_for_mcp as read_review_package_for_mcp;
 
 const QUEUE_SCHEMA_VERSION: u32 = 1;
 const MAX_TASK_BYTES: usize = 24 * 1024;
@@ -98,6 +101,16 @@ pub(crate) enum QueueAction {
     AdvisoryReview {
         receipt_id: String,
     },
+    ReviewDisclosureGrant {
+        scope: CodexScope,
+        receipt_id: String,
+        expected_package_sha256: String,
+    },
+    ReviewDisclosureRevoke {
+        project_id: String,
+        receipt_id: String,
+        expected_package_sha256: String,
+    },
     ProfileBind {
         scope: CodexScope,
         expected_profile: String,
@@ -118,7 +131,7 @@ pub(crate) enum QueueAction {
 
 pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
     let verb = args.get(3).map(String::as_str).ok_or_else(|| {
-        "CODEX_QUEUE_USAGE: expected add, status, receipt, review, verify, review-package, advisory-review, profile-bind, dispatch, pause, or resume"
+        "CODEX_QUEUE_USAGE: expected add, status, receipt, review, verify, review-package, advisory-review, review-disclosure-grant, review-disclosure-revoke, profile-bind, dispatch, pause, or resume"
             .to_string()
     })?;
     if !matches!(
@@ -130,6 +143,8 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             | "verify"
             | "review-package"
             | "advisory-review"
+            | "review-disclosure-grant"
+            | "review-disclosure-revoke"
             | "profile-bind"
             | "dispatch"
             | "pause"
@@ -150,6 +165,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
                 | "--model"
                 | "--effort"
                 | "--receipt-id"
+                | "--expected-package-sha256"
                 | "--expected-profile"
                 | "--new-profile"
                 | "--expected-binding-sha256"
@@ -205,6 +221,37 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
         .remove("--project-id")
         .ok_or("CODEX_QUEUE_USAGE: --project-id is required")?;
     valid_slug(&project_id)?;
+    let disclosure = if matches!(verb, "review-disclosure-grant" | "review-disclosure-revoke") {
+        let receipt_id = values
+            .remove("--receipt-id")
+            .ok_or("CODEX_QUEUE_USAGE: disclosure action requires --receipt-id")?;
+        let expected_package_sha256 = values
+            .remove("--expected-package-sha256")
+            .ok_or("CODEX_QUEUE_USAGE: disclosure action requires --expected-package-sha256")?;
+        if !Uuid::parse_str(&receipt_id).is_ok_and(|id| id.to_string() == receipt_id)
+            || !valid_sha256_hex(&expected_package_sha256)
+            || expected_package_sha256 != expected_package_sha256.to_ascii_lowercase()
+        {
+            return Err("CODEX_QUEUE_USAGE: disclosure action requires canonical receipt UUID and lowercase package SHA-256".into());
+        }
+        Some((receipt_id, expected_package_sha256))
+    } else {
+        None
+    };
+    if verb == "review-disclosure-revoke" {
+        if !values.is_empty() {
+            return Err(
+                "CODEX_QUEUE_USAGE: disclosure revoke takes no workspace or extra options".into(),
+            );
+        }
+        let (receipt_id, expected_package_sha256) =
+            disclosure.ok_or("CODEX_QUEUE_USAGE: disclosure revoke identity is unavailable")?;
+        return Ok(QueueAction::ReviewDisclosureRevoke {
+            project_id,
+            receipt_id,
+            expected_package_sha256,
+        });
+    }
     let workspace = PathBuf::from(
         values
             .remove("--workspace")
@@ -217,6 +264,16 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
         project_id,
         workspace,
     };
+    if let Some((receipt_id, expected_package_sha256)) = disclosure {
+        if !values.is_empty() {
+            return Err("CODEX_QUEUE_USAGE: disclosure grant takes no extra options".into());
+        }
+        return Ok(QueueAction::ReviewDisclosureGrant {
+            scope,
+            receipt_id,
+            expected_package_sha256,
+        });
+    }
     if verb == "profile-bind" {
         let expected_profile = values
             .remove("--expected-profile")
@@ -1636,6 +1693,29 @@ pub(crate) async fn execute_action(
         QueueAction::AdvisoryReview { receipt_id } => {
             advisory::review_package_advisory(&control.project, &receipt_id).await
         }
+        QueueAction::ReviewDisclosureGrant {
+            scope,
+            receipt_id,
+            expected_package_sha256,
+        } => {
+            let project = registered_project(&control.control_workspace, &scope)?;
+            review_reader::grant_local_disclosure(
+                &control.control_workspace,
+                &project,
+                &receipt_id,
+                &expected_package_sha256,
+            )
+        }
+        QueueAction::ReviewDisclosureRevoke {
+            project_id,
+            receipt_id,
+            expected_package_sha256,
+        } => review_reader::revoke_local_disclosure(
+            &control.control_workspace,
+            &project_id,
+            &receipt_id,
+            &expected_package_sha256,
+        ),
         QueueAction::ProfileBind {
             scope,
             expected_profile,
@@ -4346,6 +4426,20 @@ mod tests {
         String,
         TrustedVerificationExecutable,
     ) {
+        completed_verified_fixture_for_profile_with_source(profile, fail_command, b"after\n").await
+    }
+
+    async fn completed_verified_fixture_for_profile_with_source(
+        profile: &str,
+        fail_command: bool,
+        source_after: &[u8],
+    ) -> (
+        PathBuf,
+        Vec<AutonomousProjectV1>,
+        QueueStore,
+        String,
+        TrustedVerificationExecutable,
+    ) {
         let (fixture, projects, queue) = three_project_fixture_with_alpha_profile(1, profile);
         let workspace = &projects[1].workspace;
         match profile {
@@ -4382,7 +4476,7 @@ mod tests {
         let mut claimed = claim_one(&projects[0].workspace, &queue).unwrap().unwrap();
         let attempt = claimed.attempt.as_ref().unwrap();
         let receipt_id = attempt.attempt_id.clone();
-        fs::write(workspace.join("source.txt"), b"after\n").unwrap();
+        fs::write(workspace.join("source.txt"), source_after).unwrap();
         fs::write(workspace.join("new.txt"), b"new\n").unwrap();
         let after = capture_git_review_witness(workspace, &git).await.unwrap();
         let receipt = QueueReceipt {
@@ -4485,6 +4579,553 @@ mod tests {
         let second = package_verified_receipt_in_store(&queue, &receipt_id).unwrap();
         assert_eq!(second["idempotent"], true);
         assert_eq!(second["package"]["artifactSha256"], original_digest);
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn granted_review_reader_requires_exact_chain_and_never_mutates_queue() {
+        let (fixture, projects, queue, receipt_id, cargo) = completed_verified_fixture(false).await;
+        verify_receipt_in_store_with_executable(&projects[0], &queue, &receipt_id, Some(&cargo))
+            .await
+            .unwrap();
+        let created = package_verified_receipt_in_store(&queue, &receipt_id).unwrap();
+        let sha = created["package"]["artifactSha256"].as_str().unwrap();
+        let package_path = queue.review_package_path(&receipt_id);
+        let job_path = queue.job_path("alpha", "verified_fixture");
+        let grant_path = review_reader::grant_path(&queue, &receipt_id);
+        let package_before = fs::read(&package_path).unwrap();
+        let job_before = fs::read(&job_path).unwrap();
+        let receipt_count_before = fs::read_dir(queue.root.join("receipts")).unwrap().count();
+
+        assert!(
+            review_reader::read_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "metadata",
+                0,
+                None
+            )
+            .unwrap_err()
+            .contains("grant is required")
+        );
+        assert!(!grant_path.exists());
+        assert_eq!(
+            fs::read_dir(queue.root.join("receipts")).unwrap().count(),
+            receipt_count_before
+        );
+        assert_eq!(fs::read(&package_path).unwrap(), package_before);
+        assert_eq!(fs::read(&job_path).unwrap(), job_before);
+
+        let grant = review_reader::grant_in_store(&queue, &projects[1], &receipt_id, sha).unwrap();
+        assert_eq!(grant["independentReview"], "PENDING");
+        assert_eq!(grant["wakeReady"], false);
+        assert_eq!(
+            grant["expiresAtUnix"].as_u64().unwrap(),
+            grant["createdAtUnix"].as_u64().unwrap() + 3600
+        );
+        let grant_before = fs::read(&grant_path).unwrap();
+        let metadata = review_reader::read_in_store(
+            &queue,
+            &projects[1],
+            &receipt_id,
+            sha,
+            "metadata",
+            0,
+            None,
+        )
+        .unwrap();
+        assert_eq!(metadata["independentReview"], "PENDING");
+        assert_eq!(metadata["wakeReady"], false);
+        assert!(metadata["fileCount"].as_u64().unwrap() > 0);
+        assert!(serde_json::to_vec(&metadata).unwrap().len() <= 16 * 1024);
+        assert_eq!(metadata["receipt"]["childExitObserved"], true);
+        assert_eq!(metadata["receipt"]["outcome"], "NATIVE_EXIT_ZERO");
+        assert!(metadata.get("prompt").is_none());
+        assert!(metadata.get("pageBase64").is_none());
+        let file_metadata = review_reader::read_in_store(
+            &queue,
+            &projects[1],
+            &receipt_id,
+            sha,
+            "metadata",
+            0,
+            Some(0),
+        )
+        .unwrap();
+        assert_eq!(file_metadata["file"]["fileIndex"], 0);
+        assert!(file_metadata["file"]["pathPreview"].as_str().is_some());
+        assert!(file_metadata["file"]["pathSha256"].as_str().is_some());
+        let prompt =
+            review_reader::read_in_store(&queue, &projects[1], &receipt_id, sha, "prompt", 0, None)
+                .unwrap();
+        assert_eq!(prompt["pageTextUtf8"], "fixture edit");
+        assert_eq!(prompt["totalBytes"], 12);
+        assert_eq!(prompt["nextOffset"], Value::Null);
+        assert_eq!(prompt["independentReview"], "PENDING");
+        assert_eq!(prompt["wakeReady"], false);
+        let registered_page = review_reader::read_with_store_opener(
+            &projects[0].workspace,
+            "alpha",
+            &receipt_id,
+            sha,
+            "prompt",
+            (0, None),
+            |control| {
+                assert_eq!(control, &projects[0]);
+                Ok(QueueStore {
+                    root: queue.root.clone(),
+                })
+            },
+        )
+        .unwrap();
+        assert_eq!(registered_page["pageBase64"], prompt["pageBase64"]);
+        assert_eq!(fs::read(&grant_path).unwrap(), grant_before);
+        assert_eq!(fs::read(&package_path).unwrap(), package_before);
+        assert_eq!(fs::read(&job_path).unwrap(), job_before);
+
+        assert!(
+            review_reader::read_in_store(
+                &queue,
+                &projects[2],
+                &receipt_id,
+                sha,
+                "metadata",
+                0,
+                None
+            )
+            .is_err()
+        );
+        assert!(
+            review_reader::read_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                &"0".repeat(64),
+                "metadata",
+                0,
+                None
+            )
+            .is_err()
+        );
+        let mut rotated = projects[1].clone();
+        rotated.codex_thread_id = Some(Uuid::new_v4().to_string());
+        assert!(
+            review_reader::read_in_store(&queue, &rotated, &receipt_id, sha, "metadata", 0, None)
+                .is_err()
+        );
+        assert!(
+            review_reader::read_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "metadata",
+                1,
+                None
+            )
+            .is_err()
+        );
+        assert!(
+            review_reader::read_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "prompt",
+                13,
+                None
+            )
+            .is_err()
+        );
+        assert!(
+            review_reader::read_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "file",
+                0,
+                Some(255)
+            )
+            .is_err()
+        );
+        assert!(
+            review_reader::read_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "prompt",
+                0,
+                Some(0)
+            )
+            .is_err()
+        );
+
+        let now = unix_now().unwrap();
+        let mut expired: Value = serde_json::from_slice(&grant_before).unwrap();
+        expired["createdAtUnix"] = json!(now - 7200);
+        expired["expiresAtUnix"] = json!(now - 3600);
+        fs::write(&grant_path, serde_json::to_vec(&expired).unwrap()).unwrap();
+        assert!(
+            review_reader::read_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "metadata",
+                0,
+                None
+            )
+            .is_err()
+        );
+        assert!(review_reader::grant_in_store(&queue, &projects[1], &receipt_id, sha).is_err());
+        let mut future: Value = serde_json::from_slice(&grant_before).unwrap();
+        future["createdAtUnix"] = json!(now + 3600);
+        future["expiresAtUnix"] = json!(now + 7200);
+        fs::write(&grant_path, serde_json::to_vec(&future).unwrap()).unwrap();
+        assert!(
+            review_reader::read_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "metadata",
+                0,
+                None
+            )
+            .is_err()
+        );
+        fs::write(&grant_path, &grant_before).unwrap();
+        let mut tampered = grant_before.clone();
+        tampered[5] ^= 1;
+        fs::write(&grant_path, tampered).unwrap();
+        assert!(
+            review_reader::read_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "metadata",
+                0,
+                None
+            )
+            .is_err()
+        );
+        fs::write(&grant_path, grant_before).unwrap();
+        let mut tampered = package_before.clone();
+        tampered[5] ^= 1;
+        fs::write(&package_path, tampered).unwrap();
+        assert!(
+            review_reader::read_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "metadata",
+                0,
+                None
+            )
+            .is_err()
+        );
+        let revoked = review_reader::revoke_in_store(&queue, "alpha", &receipt_id, sha).unwrap();
+        assert_eq!(revoked["idempotent"], false);
+        assert_eq!(revoked["independentReview"], "PENDING");
+        assert_eq!(revoked["wakeReady"], false);
+        fs::write(&package_path, &package_before).unwrap();
+        assert_eq!(
+            review_reader::revoke_in_store(&queue, "alpha", &receipt_id, sha).unwrap()["idempotent"],
+            true
+        );
+        assert!(
+            review_reader::read_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "metadata",
+                0,
+                None
+            )
+            .is_err()
+        );
+        assert!(review_reader::grant_in_store(&queue, &projects[1], &receipt_id, sha).is_err());
+        let tombstone_path = review_reader::revocation_path(&queue, &receipt_id);
+        let mut tampered_tombstone = fs::read(&tombstone_path).unwrap();
+        tampered_tombstone[5] ^= 1;
+        fs::write(&tombstone_path, tampered_tombstone).unwrap();
+        assert!(
+            review_reader::read_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "metadata",
+                0,
+                None
+            )
+            .is_err()
+        );
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn review_reader_revocation_survives_project_removal_and_reregistration() {
+        let (fixture, projects, queue, receipt_id, cargo) = completed_verified_fixture(false).await;
+        verify_receipt_in_store_with_executable(&projects[0], &queue, &receipt_id, Some(&cargo))
+            .await
+            .unwrap();
+        let created = package_verified_receipt_in_store(&queue, &receipt_id).unwrap();
+        let sha = created["package"]["artifactSha256"].as_str().unwrap();
+        review_reader::grant_in_store(&queue, &projects[1], &receipt_id, sha).unwrap();
+        assert!(
+            review_reader::read_in_store(&queue, &projects[1], &receipt_id, sha, "prompt", 0, None)
+                .is_ok()
+        );
+        let control_workspace = &projects[0].workspace;
+        let registry =
+            AutonomousProjectRegistryStoreV1::open(control_workspace.join(".catdesk/projects"))
+                .unwrap();
+        let mut absent = registry.load_registry().unwrap();
+        absent
+            .projects
+            .retain(|project| project.project_id != "alpha");
+        fs::write(
+            control_workspace.join(".catdesk/projects/projects.json"),
+            serde_json::to_vec(&absent).unwrap(),
+        )
+        .unwrap();
+        assert!(resolve_registered_project_from_control_root(control_workspace, "alpha").is_err());
+        assert!(
+            review_reader::revoke_after_confirmation(
+                control_workspace,
+                &projects[0],
+                &queue,
+                "beta",
+                &receipt_id,
+                sha,
+            )
+            .is_err()
+        );
+        assert!(
+            review_reader::revoke_after_confirmation(
+                control_workspace,
+                &projects[0],
+                &queue,
+                "alpha",
+                &receipt_id,
+                &"0".repeat(64),
+            )
+            .is_err()
+        );
+        let revoked = review_reader::revoke_after_confirmation(
+            control_workspace,
+            &projects[0],
+            &queue,
+            "alpha",
+            &receipt_id,
+            sha,
+        )
+        .unwrap();
+        assert_eq!(revoked["idempotent"], false);
+        assert_eq!(revoked["independentReview"], "PENDING");
+        assert_eq!(revoked["wakeReady"], false);
+        registry.register_project(projects[1].clone()).unwrap();
+        assert_eq!(
+            resolve_registered_project_from_control_root(control_workspace, "alpha")
+                .unwrap()
+                .project,
+            projects[1]
+        );
+        assert!(
+            review_reader::read_in_store(&queue, &projects[1], &receipt_id, sha, "prompt", 0, None)
+                .is_err()
+        );
+        assert!(
+            review_reader::read_with_store_opener(
+                control_workspace,
+                "alpha",
+                &receipt_id,
+                sha,
+                "prompt",
+                (0, None),
+                |_| Ok(QueueStore {
+                    root: queue.root.clone(),
+                }),
+            )
+            .is_err()
+        );
+        assert!(review_reader::grant_in_store(&queue, &projects[1], &receipt_id, sha).is_err());
+        assert_eq!(
+            review_reader::revoke_after_confirmation(
+                control_workspace,
+                &projects[0],
+                &queue,
+                "alpha",
+                &receipt_id,
+                sha,
+            )
+            .unwrap()["idempotent"],
+            true
+        );
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn review_reader_rejects_redirected_package_or_grant() {
+        let (fixture, projects, queue, receipt_id, cargo) = completed_verified_fixture(false).await;
+        verify_receipt_in_store_with_executable(&projects[0], &queue, &receipt_id, Some(&cargo))
+            .await
+            .unwrap();
+        let created = package_verified_receipt_in_store(&queue, &receipt_id).unwrap();
+        let sha = created["package"]["artifactSha256"].as_str().unwrap();
+        review_reader::grant_in_store(&queue, &projects[1], &receipt_id, sha).unwrap();
+        let grant_path = review_reader::grant_path(&queue, &receipt_id);
+        let saved_grant = fixture.join("saved-grant.json");
+        fs::rename(&grant_path, &saved_grant).unwrap();
+        let linked = {
+            #[cfg(windows)]
+            {
+                std::os::windows::fs::symlink_file(&saved_grant, &grant_path).is_ok()
+            }
+            #[cfg(unix)]
+            {
+                std::os::unix::fs::symlink(&saved_grant, &grant_path).is_ok()
+            }
+        };
+        if linked {
+            assert!(
+                review_reader::read_in_store(
+                    &queue,
+                    &projects[1],
+                    &receipt_id,
+                    sha,
+                    "metadata",
+                    0,
+                    None
+                )
+                .is_err()
+            );
+            fs::remove_file(&grant_path).unwrap();
+        }
+        fs::rename(&saved_grant, &grant_path).unwrap();
+
+        let package_path = queue.review_package_path(&receipt_id);
+        let saved_package = fixture.join("saved-package.json");
+        fs::rename(&package_path, &saved_package).unwrap();
+        let linked = {
+            #[cfg(windows)]
+            {
+                std::os::windows::fs::symlink_file(&saved_package, &package_path).is_ok()
+            }
+            #[cfg(unix)]
+            {
+                std::os::unix::fs::symlink(&saved_package, &package_path).is_ok()
+            }
+        };
+        if linked {
+            assert!(
+                review_reader::read_in_store(
+                    &queue,
+                    &projects[1],
+                    &receipt_id,
+                    sha,
+                    "metadata",
+                    0,
+                    None
+                )
+                .is_err()
+            );
+            fs::remove_file(&package_path).unwrap();
+        }
+        fs::create_dir(&package_path).unwrap();
+        assert!(
+            review_reader::read_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "metadata",
+                0,
+                None
+            )
+            .is_err()
+        );
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn review_reader_reassembles_bounded_multibyte_file_pages() {
+        let source_after = format!("{}\n", "界".repeat(5000)).into_bytes();
+        let (fixture, projects, queue, receipt_id, cargo) =
+            completed_verified_fixture_for_profile_with_source("rust_full", false, &source_after)
+                .await;
+        verify_receipt_in_store_with_executable(&projects[0], &queue, &receipt_id, Some(&cargo))
+            .await
+            .unwrap();
+        let created = package_verified_receipt_in_store(&queue, &receipt_id).unwrap();
+        let sha = created["package"]["artifactSha256"].as_str().unwrap();
+        review_reader::grant_in_store(&queue, &projects[1], &receipt_id, sha).unwrap();
+        let grant_path = review_reader::grant_path(&queue, &receipt_id);
+        let package_path = queue.review_package_path(&receipt_id);
+        let job_path = queue.job_path("alpha", "verified_fixture");
+        let before = [
+            fs::read(&grant_path).unwrap(),
+            fs::read(&package_path).unwrap(),
+            fs::read(&job_path).unwrap(),
+        ];
+        let receipt = queue.read_receipt(&receipt_id).unwrap();
+        let candidate = queue.read_review_candidate(&receipt).unwrap();
+        let (verification, _) = queue
+            .read_verification(&receipt, &candidate)
+            .unwrap()
+            .unwrap();
+        let file_index = verification
+            .files
+            .iter()
+            .position(|file| file.path == "source.txt")
+            .unwrap();
+        let expected_sha = format!("{:x}", Sha256::digest(&source_after));
+        let mut assembled = Vec::new();
+        let mut offset = 0u64;
+        loop {
+            let page = review_reader::read_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "file",
+                offset,
+                Some(file_index),
+            )
+            .unwrap();
+            let bytes = BASE64.decode(page["pageBase64"].as_str().unwrap()).unwrap();
+            assert!(bytes.len() <= 8192);
+            assert_eq!(page["offset"].as_u64(), Some(offset));
+            assert_eq!(page["totalBytes"].as_u64(), Some(source_after.len() as u64));
+            assert_eq!(page["contentSha256"], expected_sha);
+            assert_eq!(page["pageSha256"], format!("{:x}", Sha256::digest(&bytes)));
+            assert!(serde_json::to_vec(&page).unwrap().len() <= 32 * 1024);
+            assembled.extend_from_slice(&bytes);
+            match page["nextOffset"].as_u64() {
+                Some(next) => {
+                    assert_eq!(next, offset + bytes.len() as u64);
+                    offset = next;
+                }
+                None => break,
+            }
+        }
+        assert_eq!(assembled, source_after);
+        assert_eq!(
+            before,
+            [
+                fs::read(&grant_path).unwrap(),
+                fs::read(&package_path).unwrap(),
+                fs::read(&job_path).unwrap(),
+            ]
+        );
         cleanup(fixture);
     }
 
@@ -5110,6 +5751,52 @@ mod tests {
             ]),
             Ok(QueueAction::AdvisoryReview { .. })
         ));
+        let grant = [
+            "operator",
+            "codex",
+            "queue",
+            "review-disclosure-grant",
+            "--project-id",
+            "alpha",
+            "--workspace",
+            "C:/alpha",
+            "--receipt-id",
+            &receipt_id,
+            "--expected-package-sha256",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ];
+        assert!(matches!(
+            parse(&grant),
+            Ok(QueueAction::ReviewDisclosureGrant { .. })
+        ));
+        let revoke = [
+            "operator",
+            "codex",
+            "queue",
+            "review-disclosure-revoke",
+            "--project-id",
+            "alpha",
+            "--receipt-id",
+            &receipt_id,
+            "--expected-package-sha256",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ];
+        assert!(matches!(
+            parse(&revoke),
+            Ok(QueueAction::ReviewDisclosureRevoke { .. })
+        ));
+        assert!(parse(&[&revoke[..], &["--workspace", "C:/alpha"]].concat()).is_err());
+        for disclosure in [&grant[..], &revoke[..]] {
+            assert!(parse(&[disclosure, &["--task", "unexpected"]].concat()).is_err());
+            let mut wrong_sha = disclosure.to_vec();
+            let sha_index = wrong_sha
+                .iter()
+                .position(|part| *part == "--expected-package-sha256")
+                .unwrap()
+                + 1;
+            wrong_sha[sha_index] = "A";
+            assert!(parse(&wrong_sha).is_err());
+        }
         assert!(
             parse(&[
                 "operator",
