@@ -4,6 +4,8 @@
 //! independent WakeHost. It never reads Codex credentials or launches through
 //! a shell. The native CLI owns its normal session and approval behavior.
 
+mod recovery;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -36,6 +38,10 @@ pub(crate) struct CodexScope {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum OperatorCodexAction {
     Status(CodexScope),
+    Recovery {
+        scope: CodexScope,
+        prepare: bool,
+    },
     Run {
         scope: CodexScope,
         task: String,
@@ -57,18 +63,27 @@ pub(crate) enum OperatorCodexAction {
 /// the explicit, manual `resume --all` native picker; it claims no project.
 pub(crate) fn parse_action(args: &[String]) -> Result<OperatorCodexAction, String> {
     let verb = args.get(2).map(String::as_str).ok_or_else(|| {
-        "CODEX_USAGE: expected status, run, or resume with --project-id and --workspace".to_string()
+        "CODEX_USAGE: expected status, run, resume, or recovery with --project-id and --workspace".to_string()
     })?;
-    if !matches!(verb, "status" | "run" | "resume") {
-        return Err("CODEX_USAGE: expected status, run, or resume".into());
+    if !matches!(verb, "status" | "run" | "resume" | "recovery") {
+        return Err("CODEX_USAGE: expected status, run, resume, or recovery".into());
     }
+    let recovery_prepare = if verb == "recovery" {
+        match args.get(3).map(String::as_str) {
+            Some("status") => Some(false),
+            Some("prepare") => Some(true),
+            _ => return Err("CODEX_USAGE: recovery accepts status or prepare".into()),
+        }
+    } else {
+        None
+    };
     let mut project_id = None;
     let mut workspace = None;
     let mut task = None;
     let mut model = None;
     let mut effort = None;
     let mut all = false;
-    let mut index = 3;
+    let mut index = if recovery_prepare.is_some() { 4 } else { 3 };
     while index < args.len() {
         let flag = args[index].as_str();
         if flag == "--all" {
@@ -126,6 +141,12 @@ pub(crate) fn parse_action(args: &[String]) -> Result<OperatorCodexAction, Strin
         );
     }
     match verb {
+        "recovery" if task.is_none() && model.is_none() && effort.is_none() && !all => {
+            Ok(OperatorCodexAction::Recovery {
+                scope,
+                prepare: recovery_prepare.expect("recovery verb has an action"),
+            })
+        }
         "status" if task.is_none() && model.is_none() && effort.is_none() && !all => {
             Ok(OperatorCodexAction::Status(scope))
         }
@@ -363,6 +384,7 @@ fn invocation_args(
     ];
     match action {
         OperatorCodexAction::Status(_) => return Ok(Vec::new()),
+        OperatorCodexAction::Recovery { .. } => return Ok(Vec::new()),
         OperatorCodexAction::Run { model, effort, .. } => {
             args.extend(["exec".into(), "resume".into()]);
             // An exec resume turn does not inherit the preceding turn's
@@ -419,6 +441,7 @@ pub(crate) async fn execute_action(
     }
     let scope = match &action {
         OperatorCodexAction::Status(scope)
+        | OperatorCodexAction::Recovery { scope, .. }
         | OperatorCodexAction::Run { scope, .. }
         | OperatorCodexAction::Resume { scope, .. } => scope,
         OperatorCodexAction::GlobalResumeAll => unreachable!(),
@@ -426,6 +449,9 @@ pub(crate) async fn execute_action(
     // Validate the registration before creating any current-user lock state.
     // Re-read the exact binding after acquisition to close the rotation race.
     let selected = registered_project(catdesk_workspace, scope)?;
+    if let OperatorCodexAction::Recovery { prepare, .. } = &action {
+        return recovery::report(&selected, *prepare);
+    }
     let (executable, codex_home) = resolve_native_cli()?;
     if let OperatorCodexAction::Status(_) = &action {
         let (version_ok, version) = bounded_probe(
@@ -520,6 +546,7 @@ pub(crate) async fn execute_action(
         OperatorCodexAction::Run { model, effort, .. } => ("run", model, effort),
         OperatorCodexAction::Resume { model, effort, .. } => ("resume", model, effort),
         OperatorCodexAction::Status(_) => unreachable!(),
+        OperatorCodexAction::Recovery { .. } => unreachable!(),
         OperatorCodexAction::GlobalResumeAll => unreachable!(),
     };
     Ok(json!({
@@ -745,6 +772,30 @@ mod tests {
             ])
             .is_err()
         );
+    }
+
+    #[test]
+    fn recovery_parser_is_scoped_and_read_only() {
+        let args = [
+            "operator",
+            "codex",
+            "recovery",
+            "prepare",
+            "--project-id",
+            "catdesk",
+            "--workspace",
+            "C:/work/catdesk",
+        ];
+        assert!(matches!(
+            parse(&args),
+            Ok(OperatorCodexAction::Recovery { prepare: true, .. })
+        ));
+        assert!(parse(&[&args[..], &["--task", "edit files"]].concat()).is_err());
+        assert!(parse(&[&args[..], &["--all"]].concat()).is_err());
+        assert!(parse(&args[..4]).is_err());
+        let mut invalid = args.to_vec();
+        invalid[3] = "clear";
+        assert!(parse(&invalid).is_err());
     }
 
     #[test]

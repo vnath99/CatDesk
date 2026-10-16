@@ -11,7 +11,7 @@ use std::ffi::{CStr, OsString};
 #[cfg(windows)]
 use std::ffi::{OsString, c_void};
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 #[cfg(unix)]
 use std::os::unix::ffi::OsStringExt;
 #[cfg(windows)]
@@ -233,6 +233,20 @@ fn os_current_user_home() -> Result<PathBuf, RuntimeError> {
 }
 
 fn fixed_project_writer_lock_root(project_workspace: &Path) -> Result<PathBuf, RuntimeError> {
+    let planned_root = project_writer_lock_root_path(project_workspace)?;
+    let app_root = checked_writer_state_dir(planned_root.parent().ok_or_else(|| {
+        RuntimeError::Validation("project writer state root is unavailable".into())
+    })?)?;
+    checked_writer_state_dir(&app_root.join("ProjectWriterLocks"))
+}
+
+/// Canonical, fixed current-user CatDesk state. A caller that creates a child
+/// must independently prove that child is outside every selected workspace.
+pub(crate) fn fixed_current_user_catdesk_state_root() -> Result<PathBuf, RuntimeError> {
+    checked_writer_state_dir(&fixed_current_user_catdesk_state_root_path()?)
+}
+
+fn fixed_current_user_catdesk_state_root_path() -> Result<PathBuf, RuntimeError> {
     #[cfg(windows)]
     let base = os_current_user_local_app_data()?;
     #[cfg(unix)]
@@ -256,14 +270,169 @@ fn fixed_project_writer_lock_root(project_workspace: &Path) -> Result<PathBuf, R
     let namespace = "CatDesk";
     #[cfg(not(windows))]
     let namespace = ".catdesk-user-state";
-    let planned_root = base.join(namespace).join("ProjectWriterLocks");
+    Ok(base.join(namespace))
+}
+
+/// Computes the fixed current-user location without creating lock state.
+fn project_writer_lock_root_path(project_workspace: &Path) -> Result<PathBuf, RuntimeError> {
+    let planned_root = fixed_current_user_catdesk_state_root_path()?.join("ProjectWriterLocks");
     if planned_root.starts_with(project_workspace) || project_workspace.starts_with(&planned_root) {
         return Err(RuntimeError::Validation(
             "project writer lock root overlaps a Codex workspace".into(),
         ));
     }
-    let app_root = checked_writer_state_dir(&base.join(namespace))?;
-    checked_writer_state_dir(&app_root.join("ProjectWriterLocks"))
+    Ok(planned_root)
+}
+
+fn open_writer_marker_no_follow(path: &Path) -> Result<File, RuntimeError> {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.custom_flags(0x0020_0000); // FILE_FLAG_OPEN_REPARSE_POINT
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    options
+        .open(path)
+        .map_err(|_| RuntimeError::Validation("project writer pending marker is unreadable".into()))
+}
+
+fn same_writer_marker_identity(
+    file: &File,
+    path: &Path,
+    opened: &fs::Metadata,
+    observed: &fs::Metadata,
+) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        let Ok(second) = open_writer_marker_no_follow(path) else {
+            return false;
+        };
+        let Ok(second_metadata) = second.metadata() else {
+            return false;
+        };
+        if !second_metadata.is_file() || path_is_reparse_or_symlink(&second_metadata) {
+            return false;
+        }
+        let Ok(first) = crate::windows_protected_fs::handle_information(
+            file.as_raw_handle(),
+            "Codex writer pending marker",
+        ) else {
+            return false;
+        };
+        let Ok(second) = crate::windows_protected_fs::handle_information(
+            second.as_raw_handle(),
+            "Codex writer pending marker",
+        ) else {
+            return false;
+        };
+        let _ = (opened, observed);
+        first.file_attributes & 0x400 == 0
+            && second.file_attributes & 0x400 == 0
+            && first.volume_serial_number == second.volume_serial_number
+            && first.file_index_high == second.file_index_high
+            && first.file_index_low == second.file_index_low
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let _ = (file, path);
+        opened.dev() == observed.dev() && opened.ino() == observed.ino()
+    }
+    #[cfg(not(any(windows, unix)))]
+    {
+        let _ = (file, path, opened, observed);
+        false
+    }
+}
+
+/// Read-only observation for recovery diagnostics. A pending marker may
+/// belong to a live child, and absence does not prove an OS lock is free.
+pub(crate) fn inspect_project_writer_pending_marker(
+    project_workspace: &Path,
+) -> Result<Option<String>, RuntimeError> {
+    let project_workspace = project_workspace
+        .canonicalize()
+        .map_err(|_| RuntimeError::Validation("project writer workspace is unavailable".into()))?;
+    let lock_root = project_writer_lock_root_path(&project_workspace)?;
+    for directory in [
+        lock_root.parent().ok_or_else(|| {
+            RuntimeError::Validation("project writer state root is unavailable".into())
+        })?,
+        lock_root.as_path(),
+    ] {
+        let metadata = match fs::symlink_metadata(directory) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(_) => {
+                return Err(RuntimeError::Validation(
+                    "project writer state is unreadable".into(),
+                ));
+            }
+        };
+        if !metadata.is_dir() || path_is_reparse_or_symlink(&metadata) {
+            return Err(RuntimeError::Validation(
+                "project writer state directory is unsafe".into(),
+            ));
+        }
+    }
+    let lock_root = lock_root
+        .canonicalize()
+        .map_err(|_| RuntimeError::Validation("project writer lock root is unavailable".into()))?;
+    if lock_root.starts_with(&project_workspace) || project_workspace.starts_with(&lock_root) {
+        return Err(RuntimeError::Validation(
+            "project writer lock root overlaps a Codex workspace".into(),
+        ));
+    }
+    let (_, pending_path) = project_writer_paths(&lock_root, &project_workspace);
+    let metadata = match fs::symlink_metadata(&pending_path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => {
+            return Err(RuntimeError::Validation(
+                "project writer pending marker is unreadable".into(),
+            ));
+        }
+    };
+    if !metadata.is_file() || path_is_reparse_or_symlink(&metadata) || metadata.len() > 128 {
+        return Err(RuntimeError::Validation(
+            "project writer pending marker is unsafe".into(),
+        ));
+    }
+    let file = open_writer_marker_no_follow(&pending_path)?;
+    let opened = file.metadata().map_err(|_| {
+        RuntimeError::Validation("project writer pending marker is unreadable".into())
+    })?;
+    let observed_path = fs::symlink_metadata(&pending_path).map_err(|_| {
+        RuntimeError::Validation("project writer pending marker is unreadable".into())
+    })?;
+    if !opened.is_file()
+        || opened.len() > 128
+        || path_is_reparse_or_symlink(&opened)
+        || !observed_path.is_file()
+        || path_is_reparse_or_symlink(&observed_path)
+        || !same_writer_marker_identity(&file, &pending_path, &opened, &observed_path)
+    {
+        return Err(RuntimeError::Validation(
+            "project writer pending marker is unsafe".into(),
+        ));
+    }
+    let mut bytes = Vec::new();
+    file.take(129).read_to_end(&mut bytes).map_err(|_| {
+        RuntimeError::Validation("project writer pending marker is unreadable".into())
+    })?;
+    if bytes.len() > 128 {
+        return Err(RuntimeError::Validation(
+            "project writer pending marker is unsafe".into(),
+        ));
+    }
+    Ok(Some(format!("{:x}", Sha256::digest(bytes))))
 }
 
 pub(crate) fn acquire_project_writer_lock(
