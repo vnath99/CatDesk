@@ -106,6 +106,10 @@ function Invoke-PublicLifecycle {
                 if ($parsed.detail -isnot [string]) { return 'ACTION_REQUIRED' }
                 return Get-SupervisorRecoveryGateClass -Detail $parsed.detail
             }
+            if ($state -ceq 'CORE_CONNECTED_WAKE_PENDING') {
+                if ($parsed.detail -isnot [string] -or $parsed.detail -cne 'gate=WAKE_RUNTIME_NOT_READY') { return 'ACTION_REQUIRED' }
+                return $state
+            }
             if (@('READY', 'LOCAL_READY_EXTERNAL_RUNTIME_PENDING', 'LOCAL_DAEMON_PENDING',
                 'CONNECTED_VERIFIED', 'ACTION_REQUIRED', 'STATUS_UNAVAILABLE') -ccontains $state) {
                 return $state
@@ -132,7 +136,7 @@ function Invoke-RecoveryBurst {
     $backoff = $InitialBackoff
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
         $recovery = Invoke-PublicLifecycle -Root $Root -Action recover
-        if ($recovery -in @('CONNECTED_VERIFIED', 'EXTERNAL_RUNTIME_VERIFICATION_FAILED',
+        if ($recovery -in @('CONNECTED_VERIFIED', 'CORE_CONNECTED_WAKE_PENDING', 'EXTERNAL_RUNTIME_VERIFICATION_FAILED',
             'LOCAL_MCP_VERIFICATION_FAILED', 'ACTION_REQUIRED')) { return $recovery }
         if ($attempt -lt $Attempts) {
             Wait-SupervisorDelay -Seconds $backoff
@@ -169,12 +173,26 @@ function Invoke-CatDeskAutostartSupervisor {
                 if ($MaximumMonitorCycles -eq 0 -or $cycles -lt $MaximumMonitorCycles) { Wait-SupervisorDelay -Seconds $HealthPollSeconds }
                 continue
             }
+            if ($status -eq 'CORE_CONNECTED_WAKE_PENDING') {
+                # Core health is already proven by the public facade. Wake is a
+                # separate degraded layer; wait for an owner-driven change.
+                Write-SupervisorState 'WAKE_PENDING'
+                $cycles++
+                if ($MaximumMonitorCycles -eq 0 -or $cycles -lt $MaximumMonitorCycles) { Wait-SupervisorDelay -Seconds $HealthPollSeconds }
+                continue
+            }
             # The public recovery facade owns canonical release validation. This
             # supervisor never compiles, provisions, or assumes ownership of
             # an externally started runtime.
             $recovery = Invoke-RecoveryBurst -Root $root -Attempts $MaximumAttempts -InitialBackoff $InitialBackoffSeconds -MaximumBackoff $MaximumBackoffSeconds
             if ($recovery -eq 'CONNECTED_VERIFIED') {
                 Write-SupervisorState 'RECOVERED'
+                $cycles++
+                if ($MaximumMonitorCycles -eq 0 -or $cycles -lt $MaximumMonitorCycles) { Wait-SupervisorDelay -Seconds $HealthPollSeconds }
+                continue
+            }
+            if ($recovery -eq 'CORE_CONNECTED_WAKE_PENDING') {
+                Write-SupervisorState 'WAKE_PENDING'
                 $cycles++
                 if ($MaximumMonitorCycles -eq 0 -or $cycles -lt $MaximumMonitorCycles) { Wait-SupervisorDelay -Seconds $HealthPollSeconds }
                 continue

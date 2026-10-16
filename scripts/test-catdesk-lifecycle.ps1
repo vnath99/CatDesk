@@ -118,6 +118,20 @@ try {
     Require ($actions.Count -eq 0) 'status did not invoke any lifecycle side effect'
     Require (($status | ConvertTo-Json -Compress) -notmatch '(?i)secret|token|route_|https?://') 'status output is redacted'
 
+    $coreReadyWakePending = $base.Clone()
+    $coreReadyWakePending.LocalMcpReadiness = { param($local, $identity) $true }
+    $coreReadyWakePending.RuntimeStatus = { param($root, $config) $true }
+    $coreReadyWakePending.WakeRuntime = { param($root) $false }
+    $partialStatus = Invoke-FixtureFacade -Command 'status' -Seams $coreReadyWakePending | ConvertFrom-Json
+    Require ($partialStatus.state -eq 'CORE_CONNECTED_WAKE_PENDING' -and $partialStatus.detail -eq 'gate=WAKE_RUNTIME_NOT_READY') 'healthy core status keeps unavailable Wake as a separate fixed gate'
+    Require ($actions.Count -eq 0) 'partial status did not repair Wake or mutate the daemon'
+    $coreReadyWakePending.WakeRuntime = { param($root) throw 'fixture Wake probe unavailable' }
+    $failedWakeProbe = Invoke-FixtureFacade -Command 'status' -Seams $coreReadyWakePending | ConvertFrom-Json
+    Require ($failedWakeProbe.state -eq 'CORE_CONNECTED_WAKE_PENDING' -and $failedWakeProbe.detail -eq 'gate=WAKE_RUNTIME_NOT_READY') 'Wake probe error does not hide verified core status'
+    $coreReadyWakePending.WakeRuntime = { param($root) $true }
+    $fullStatus = Invoke-FixtureFacade -Command 'status' -Seams $coreReadyWakePending | ConvertFrom-Json
+    Require ($fullStatus.state -eq 'READY') 'available Wake and healthy core can report READY'
+
     $diagnose = Invoke-FixtureFacade -Command 'diagnose' -Seams $base | ConvertFrom-Json
     Require ($diagnose.state -eq 'DEGRADED' -and $diagnose.primaryLayer -eq 'LOCAL_DAEMON' -and $diagnose.nextAction -eq 'RUN_RECOVER') 'diagnose identifies the first broken local-daemon layer and recommends one-command recovery'
     Require (@($diagnose.layers).Count -eq 9) 'diagnose returns the fixed nine-layer model including Codex CLI'
@@ -146,6 +160,24 @@ try {
     $localGate.Recovery = { param($engine, $root, $config, $expected, $manifest, $timeout, $command) '{"State":"TRANSPORT_VERIFICATION_FAILED","Gate":"LOCAL_MCP_RESPONSE_TIMEOUT"}' }
     $localGateResult = Invoke-FixtureFacade -Command 'recover' -Seams $localGate | ConvertFrom-Json
     Require ($localGateResult.state -eq 'TRANSPORT_VERIFICATION_FAILED' -and $localGateResult.detail -eq 'gate=LOCAL_MCP_RESPONSE_TIMEOUT') 'recovery preserves the same fixed local-MCP layer vocabulary used by diagnose'
+
+    $partialRecovery = $base.Clone()
+    $partialRecovery.Recovery = { param($engine, $root, $config, $expected, $manifest, $timeout, $command) '{"State":"CORE_CONNECTED_WAKE_PENDING","Gate":"WAKE_RUNTIME_NOT_READY"}' }
+    $partialRecoverResult = Invoke-FixtureFacade -Command 'recover' -Seams $partialRecovery | ConvertFrom-Json
+    Require ($partialRecoverResult.state -eq 'CORE_CONNECTED_WAKE_PENDING' -and $partialRecoverResult.detail -eq 'gate=WAKE_RUNTIME_NOT_READY') 'public recovery preserves verified core with a separate Wake gate'
+    $partialStartResult = Invoke-FixtureFacade -Command 'start' -Seams $partialRecovery | ConvertFrom-Json
+    Require ($partialStartResult.state -eq 'CORE_CONNECTED_WAKE_PENDING') 'public start does not promote partial Wake success to CONNECTED_VERIFIED'
+    foreach ($invalidPartial in @(
+        '{"State":"CORE_CONNECTED_WAKE_PENDING","Gate":"READY"}',
+        '{"State":"CORE_CONNECTED_WAKE_PENDING","Gate":["WAKE_RUNTIME_NOT_READY"]}',
+        '{"State":"CORE_CONNECTED_WAKE_PENDING","Gate":"WAKE_RUNTIME_NOT_READY","RecoverySource":"LAST_KNOWN_GOOD"}',
+        '{"State":["CORE_CONNECTED_WAKE_PENDING"],"Gate":"WAKE_RUNTIME_NOT_READY"}'
+    )) {
+        $invalidWakeRecovery = $base.Clone()
+        $invalidWakeRecovery.Recovery = { param($engine, $root, $config, $expected, $manifest, $timeout, $command) $invalidPartial }
+        $invalidWakeResult = Invoke-FixtureFacade -Command 'recover' -Seams $invalidWakeRecovery | ConvertFrom-Json
+        Require ($invalidWakeResult.state -eq 'TRANSPORT_VERIFICATION_FAILED' -and $invalidWakeResult.detail -eq 'redacted') 'malformed partial Wake result fails closed'
+    }
 
     $invalidRuntimeGate = $base.Clone()
     $invalidRuntimeGate.Recovery = { param($engine, $root, $config, $expected, $manifest, $timeout, $command) '{"State":"TRANSPORT_VERIFICATION_FAILED","Gate":"https://example.invalid/secret"}' }

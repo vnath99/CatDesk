@@ -620,6 +620,10 @@ function Invoke-CanonicalRecovery {
         Write-LifecycleStatus $state 'canonical local daemon and external runtime verified'
         return
     }
+    if ($null -ne $result -and $result.State -eq 'CORE_CONNECTED_WAKE_PENDING') {
+        Write-LifecycleStatus 'CORE_CONNECTED_WAKE_PENDING' 'gate=WAKE_RUNTIME_NOT_READY'
+        return
+    }
     if ($null -ne $result -and $result.State -eq 'TRANSPORT_VERIFICATION_FAILED') {
         Write-LifecycleStatus 'TRANSPORT_VERIFICATION_FAILED' "gate=$($result.Gate)"
         return
@@ -634,11 +638,14 @@ function Get-LifecycleRecoveryResult {
     try {
         $parsed = $text | ConvertFrom-Json -ErrorAction Stop
         if ($parsed -is [array] -or $null -eq $parsed) { return $null }
+        if ($parsed.State -isnot [string]) { return $null }
         $state = [string]$parsed.State
+        if ($parsed.PSObject.Properties['RecoverySource'] -and $parsed.RecoverySource -isnot [string]) { return $null }
         $source = if ($parsed.PSObject.Properties['RecoverySource']) { [string]$parsed.RecoverySource } else { '' }
-        if ($state -notin @('CONNECTED_VERIFIED', 'RECOVERY_READY', 'LKG_AUTHORITY_MISSING', 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED', 'RECOVERY_RELEASE_AUTHORITY_REQUIRED', 'TRANSPORT_VERIFICATION_FAILED')) {
+        if ($state -cnotin @('CONNECTED_VERIFIED', 'CORE_CONNECTED_WAKE_PENDING', 'RECOVERY_READY', 'LKG_AUTHORITY_MISSING', 'LKG_AUTHORITY_AMBIGUOUS_OR_DAMAGED', 'RECOVERY_RELEASE_AUTHORITY_REQUIRED', 'TRANSPORT_VERIFICATION_FAILED')) {
             return $null
         }
+        if ($parsed.PSObject.Properties['Gate'] -and $parsed.Gate -isnot [string]) { return $null }
         $gate = if ($parsed.PSObject.Properties['Gate']) { [string]$parsed.Gate } else { '' }
         $allowedGates = @(
             'RUNTIME_CLIENT_UNAVAILABLE', 'RUNTIME_STATUS_TIMEOUT',
@@ -654,7 +661,9 @@ function Get-LifecycleRecoveryResult {
             'LOCAL_MCP_PROTOCOL_UNREADY'
         )
         if ($state -eq 'TRANSPORT_VERIFICATION_FAILED') {
-            if ($gate -notin $allowedGates) { return $null }
+            if ($gate -cnotin $allowedGates) { return $null }
+        } elseif ($state -eq 'CORE_CONNECTED_WAKE_PENDING') {
+            if ($gate -cne 'WAKE_RUNTIME_NOT_READY' -or $source) { return $null }
         } elseif ($gate) {
             return $null
         }
@@ -717,7 +726,17 @@ function Get-NonMutatingStatus {
             if (-not $client) { return $false }
             Test-OfficialRuntimeVerified -Root $root -TimeoutSeconds 5 -Alias $alias -ClientPath $client
         }
-        if ($localReady -and $runtimeReady) { Write-LifecycleStatus 'READY' 'local daemon and external runtime verified'; return }
+        if ($localReady -and $runtimeReady) {
+            $wakeReady = $false
+            try {
+                $wakeReady = [bool](Invoke-LifecycleSeam -Name 'WakeRuntime' -Arguments @($Workspace) -Default {
+                    param($root) Test-WakeBridgeRuntime -Root $root
+                })
+            } catch {}
+            if ($wakeReady) { Write-LifecycleStatus 'READY' 'local daemon and external runtime verified; Wake runtime available' }
+            else { Write-LifecycleStatus 'CORE_CONNECTED_WAKE_PENDING' 'gate=WAKE_RUNTIME_NOT_READY' }
+            return
+        }
         if ($localReady) { Write-LifecycleStatus 'LOCAL_READY_EXTERNAL_RUNTIME_PENDING'; return }
         Write-LifecycleStatus 'LOCAL_DAEMON_PENDING'
     } catch {

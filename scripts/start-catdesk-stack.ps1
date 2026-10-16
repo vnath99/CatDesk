@@ -967,8 +967,14 @@ function Get-RedactedReadinessFailureGate {
 
 function Save-RedactedRecoveryEvidence {
     param([string]$Root,[string]$State,[string]$Gate)
-    if($State -notin @('CONNECTED_VERIFIED','TRANSPORT_VERIFICATION_FAILED')){throw 'recovery evidence state is invalid'}
-    [void](New-OfficialRuntimeVerificationResult -Verified ($State -eq 'CONNECTED_VERIFIED') -Gate $Gate)
+    if($State -notin @('CONNECTED_VERIFIED','CORE_CONNECTED_WAKE_PENDING','TRANSPORT_VERIFICATION_FAILED')){throw 'recovery evidence state is invalid'}
+    if($State -eq 'CORE_CONNECTED_WAKE_PENDING'){
+        if($Gate -cne 'WAKE_RUNTIME_NOT_READY'){throw 'recovery evidence gate is invalid'}
+    } elseif($State -eq 'TRANSPORT_VERIFICATION_FAILED' -and $Gate -clike 'LOCAL_MCP_*' -and $Gate -cne 'LOCAL_MCP_PENDING') {
+        [void](New-LocalMcpReadinessResult -Ready $false -Gate $Gate)
+    } else {
+        [void](New-OfficialRuntimeVerificationResult -Verified ($State -eq 'CONNECTED_VERIFIED') -Gate $Gate)
+    }
     $rootPath = Resolve-CatDeskRecoveryRoot $Root
     $control = Join-Path $rootPath '.catdesk'
     if(-not(Test-Path -LiteralPath $control)){New-Item -ItemType Directory -Path $control -ErrorAction Stop|Out-Null}
@@ -1098,7 +1104,6 @@ function Invoke-CanonicalStackBootstrap {
     Test-CodexOnDemandPrerequisites
     $wakeReady=Test-WakeBridgeRuntime -Root $root
     if($Mode -eq "plan"){
-        if(-not $wakeReady){Write-RedactedStatus "WAKE_RUNTIME_NOT_READY" "redacted preflight";return}
         if($diskMode -eq "external_foreground"){Write-RedactedStatus "ORDERED_MIGRATION_REQUIRED" "redacted preflight";return}
         if($diskMode -ne "official_runtime"){Write-RedactedStatus "OFFICIAL_RUNTIME_REQUIRED" "redacted preflight";return}
         if($existing -and -not $existing.MatchesCanonical){Write-RedactedStatus "CANONICAL_RELOAD_REQUIRED" "redacted preflight";return}
@@ -1106,11 +1111,11 @@ function Invoke-CanonicalStackBootstrap {
         if(-not $localPlan.Ready){Write-RedactedStatus "LOCAL_MCP_NOT_READY" "redacted preflight" "" ([string]$localPlan.Gate);return}
         $runtimePlan=Get-OfficialRuntimeVerification -Root $root -TimeoutSeconds 5 -Alias $runtimeAlias -ClientPath $client
         if(-not $runtimePlan.Verified){Write-RedactedStatus "OFFICIAL_RUNTIME_NOT_READY" "redacted preflight" "" ([string]$runtimePlan.Gate);return}
+        if(-not $wakeReady){Write-RedactedStatus "PREFLIGHT_CORE_READY_WAKE_PENDING" "local MCP and official runtime verified; Wake runtime pending" "" 'WAKE_RUNTIME_NOT_READY';return}
         Write-RedactedStatus "PREFLIGHT_READY" "local MCP and official runtime verified; Codex app-server remains on-demand"
         return
     }
     if(-not $Execute){throw "recovery requires -Execute after a successful plan"};if($diskMode -ne "official_runtime" -and $diskMode -ne "external_foreground"){throw "official runtime configuration is unavailable or unverified"}
-    if(-not $wakeReady){Invoke-WakeBridgeRuntimeRepair -Root $root;if(-not(Test-WakeBridgeRuntime -Root $root)){throw "wake runtime remains unavailable after bounded repair"}}
     # A daemon can remain alive after losing its listener.  Previously that shape
     # looked identical to "no daemon", so recovery launched a second copy that
     # could not converge while the stale canonical process still held runtime
@@ -1167,16 +1172,40 @@ function Invoke-CanonicalStackBootstrap {
     # authority is missing; broken-pair recovery still requires reviewed authority.
     $operationalPair=Get-CatDeskCanonicalPairEvidence $root
     try { [void](Save-CatDeskLastKnownGoodRelease -Root $root -Canonical $operationalPair -Source 'operational_verified') } catch {}
-    # Once the independent wake owner is selected, public recovery also heals
-    # the separately installed WakeHost. This does not make WakeHost a CatDesk
-    # daemon/tunnel child: the installed host owns its own lifetime and durable
-    # per-user state, while recovery only ensures it is running.
-    [void](Start-CatDeskWakeHost -Root $root)
-    Save-RedactedRecoveryEvidence -Root $root -State 'CONNECTED_VERIFIED' -Gate 'READY'
+    # Wake is a separate layer. Finish bounded core convergence first so an
+    # unavailable or unrepairable Wake runtime cannot prevent local MCP and
+    # official-runtime recovery. The installed host still owns its own state.
+    if(-not $wakeReady){
+        try {
+            Invoke-WakeBridgeRuntimeRepair -Root $root
+            $wakeReady=Test-WakeBridgeRuntime -Root $root
+        } catch { $wakeReady=$false }
+    }
+    if($wakeReady){
+        try { [void](Start-CatDeskWakeHost -Root $root) } catch { $wakeReady=$false }
+    }
+    # Wake repair or host start may outlast the first core observation. Recheck
+    # the exact daemon and externally owned runtime immediately before writing
+    # either full or partial recovery evidence.
+    try {
+        Wait-FullStackReadiness -Root $root -LocalMcp $localMcp -TimeoutSeconds $ReadyTimeoutSeconds -Canonical $canonical -Alias $runtimeAlias -ClientPath $client -Deadline ([DateTime]::UtcNow.AddSeconds($ReadyTimeoutSeconds)) -ExpectedDaemonProcess $launchedDaemonProcess|Out-Null
+    } catch {
+        $gate=Get-RedactedReadinessFailureGate -Message ([string]$_.Exception.Message)
+        Save-RedactedRecoveryEvidence -Root $root -State 'TRANSPORT_VERIFICATION_FAILED' -Gate $gate
+        Write-RedactedStatus 'TRANSPORT_VERIFICATION_FAILED' 'bounded local/runtime readiness did not converge' '' $gate
+        return
+    }
+    $recoveryState=if($wakeReady){'CONNECTED_VERIFIED'}else{'CORE_CONNECTED_WAKE_PENDING'}
+    $recoveryGate=if($wakeReady){'READY'}else{'WAKE_RUNTIME_NOT_READY'}
+    Save-RedactedRecoveryEvidence -Root $root -State $recoveryState -Gate $recoveryGate
     # A GUI failure must not alter the verified daemon/tunnel result.  The UI
     # is a separate observer/control surface that can be relaunched later.
     try { [void](Start-CatDeskBinagotchyGui -Canonical $canonical -Root $root) } catch {}
-    Write-RedactedStatus "CONNECTED_VERIFIED" "local MCP and official runtime verified" $releaseRecoverySource
+    if($wakeReady){
+        Write-RedactedStatus "CONNECTED_VERIFIED" "local MCP and official runtime verified" $releaseRecoverySource
+    } else {
+        Write-RedactedStatus "CORE_CONNECTED_WAKE_PENDING" "local MCP and official runtime verified; Wake runtime pending" '' 'WAKE_RUNTIME_NOT_READY'
+    }
 }
 
 if($MyInvocation.InvocationName -ne '.'){Invoke-CanonicalStackBootstrap}

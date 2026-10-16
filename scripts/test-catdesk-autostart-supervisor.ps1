@@ -104,6 +104,24 @@ $detail = if ($parts.Count -eq 2) { $parts[1] } else { 'redacted' }
 
     $calls.Clear(); $delays.Clear()
     [IO.File]::WriteAllText((Join-Path $workspace 'calls.log'), '')
+    [IO.File]::WriteAllLines((Join-Path $workspace 'states.txt'), [string[]]@('CORE_CONNECTED_WAKE_PENDING|gate=WAKE_RUNTIME_NOT_READY', 'READY'), [Text.UTF8Encoding]::new($false))
+    $wakePending = States (Invoke-CatDeskAutostartSupervisor -InitialDelaySeconds 0 -MaximumAttempts 3 -InitialBackoffSeconds 2 -MaximumBackoffSeconds 3 -HealthPollSeconds 15 -FailureCooldownSeconds 30 -MaximumMonitorCycles 2)
+    Require (($wakePending -join ',') -eq 'WAKE_PENDING,READY,MONITORING_COMPLETE') 'verified core with unavailable Wake remains a separate degraded supervisor state'
+    $wakeCalls = @([IO.File]::ReadAllLines((Join-Path $workspace 'calls.log')))
+    Require (($wakeCalls -join ',') -eq "status|$expectedWorkspace,status|$expectedWorkspace") 'Wake-only status does not cause repeated core recovery'
+    Require (([string]::Join(',', $delays)) -eq '15') 'Wake-only status uses ordinary health polling'
+
+    $calls.Clear(); $delays.Clear()
+    [IO.File]::WriteAllText((Join-Path $workspace 'calls.log'), '')
+    [IO.File]::WriteAllLines((Join-Path $workspace 'states.txt'), [string[]]@('LOCAL_DAEMON_PENDING', 'CORE_CONNECTED_WAKE_PENDING|gate=WAKE_RUNTIME_NOT_READY', 'READY'), [Text.UTF8Encoding]::new($false))
+    $wakeRecovered = States (Invoke-CatDeskAutostartSupervisor -InitialDelaySeconds 0 -MaximumAttempts 3 -InitialBackoffSeconds 2 -MaximumBackoffSeconds 3 -HealthPollSeconds 15 -FailureCooldownSeconds 30 -MaximumMonitorCycles 2)
+    Require (($wakeRecovered -join ',') -eq 'WAKE_PENDING,READY,MONITORING_COMPLETE') 'partial core recovery never becomes RECOVERED or READY while Wake is unavailable'
+    $wakeRecoveryCalls = @([IO.File]::ReadAllLines((Join-Path $workspace 'calls.log')))
+    Require (($wakeRecoveryCalls -join ',') -eq "status|$expectedWorkspace,recover|$expectedWorkspace,status|$expectedWorkspace") 'partial Wake recovery ends the burst after one public recover call'
+    Require (([string]::Join(',', $delays)) -eq '15') 'partial Wake recovery does not back off or enter degraded cooldown'
+
+    $calls.Clear(); $delays.Clear()
+    [IO.File]::WriteAllText((Join-Path $workspace 'calls.log'), '')
     [IO.File]::WriteAllLines((Join-Path $workspace 'states.txt'), [string[]]@('LOCAL_DAEMON_PENDING', 'TRANSPORT_VERIFICATION_FAILED|gate=LOCAL_MCP_RESPONSE_TIMEOUT', 'READY'), [Text.UTF8Encoding]::new($false))
     $localFailure = States (Invoke-CatDeskAutostartSupervisor -InitialDelaySeconds 0 -MaximumAttempts 3 -InitialBackoffSeconds 2 -MaximumBackoffSeconds 3 -HealthPollSeconds 15 -FailureCooldownSeconds 30 -MaximumMonitorCycles 2)
     Require (($localFailure -join ',') -eq 'DEGRADED,READY,MONITORING_COMPLETE') 'local MCP recovery failure does not become external runtime pending'
@@ -133,6 +151,16 @@ $detail = if ($parts.Count -eq 2) { $parts[1] } else { 'redacted' }
     )) {
         [IO.File]::WriteAllText((Join-Path $workspace 'states.txt'), $misboundJson, [Text.UTF8Encoding]::new($false))
         Require ((Invoke-PublicLifecycle -Root $expectedWorkspace -Action recover) -eq 'ACTION_REQUIRED') 'missing, mismatched or non-scalar recovery command fails closed'
+    }
+    foreach ($invalidWakeJson in @(
+        '{"command":"status","state":"CORE_CONNECTED_WAKE_PENDING","detail":"redacted"}',
+        '{"command":"status","state":"CORE_CONNECTED_WAKE_PENDING","detail":["gate=WAKE_RUNTIME_NOT_READY"]}',
+        '{"command":"recover","state":"CORE_CONNECTED_WAKE_PENDING","detail":{"gate":"WAKE_RUNTIME_NOT_READY"}}',
+        '{"command":"recover","state":"CORE_CONNECTED_WAKE_PENDING","detail":"gate=RUNTIME_STATUS_TIMEOUT"}'
+    )) {
+        [IO.File]::WriteAllText((Join-Path $workspace 'states.txt'), $invalidWakeJson, [Text.UTF8Encoding]::new($false))
+        $wakeAction = if ($invalidWakeJson -match '"command":"status"') { 'status' } else { 'recover' }
+        Require ((Invoke-PublicLifecycle -Root $expectedWorkspace -Action $wakeAction) -eq 'ACTION_REQUIRED') 'malformed or misclassified Wake gate fails closed'
     }
     [IO.File]::WriteAllText((Join-Path $workspace 'states.txt'), '{"command":"recover","state":"READY","detail":"redacted"}', [Text.UTF8Encoding]::new($false))
     Require ((Invoke-PublicLifecycle -Root $expectedWorkspace -Action status) -eq 'ACTION_REQUIRED') 'stale recover output cannot satisfy a status request'
