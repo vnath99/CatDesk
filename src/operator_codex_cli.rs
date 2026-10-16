@@ -30,6 +30,8 @@ use crate::delegated::autonomy_state::{
 const MAX_TASK_BYTES: usize = 24 * 1024;
 const MAX_PROFILE_BYTES: usize = 128;
 const CODEX_PROBE_TIMEOUT: Duration = Duration::from_secs(15);
+const CODEX_PROMPT_TIMEOUT: Duration = Duration::from_secs(30);
+const CODEX_KILL_TIMEOUT: Duration = Duration::from_secs(20);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CodexScope {
@@ -460,6 +462,31 @@ async fn bounded_probe(mut command: Command, args: &[&str]) -> Result<(bool, Str
     Ok((output.status.success(), version))
 }
 
+async fn write_native_prompt(
+    child: &mut tokio::process::Child,
+    task: &str,
+    limit: Duration,
+) -> Result<(), &'static str> {
+    let Some(mut stdin) = child.stdin.take() else {
+        return Err("CODEX_IO: native Codex prompt pipe is unavailable; writer marker retained");
+    };
+    let result = tokio::time::timeout(limit, async {
+        stdin.write_all(task.as_bytes()).await?;
+        stdin.flush().await
+    })
+    .await;
+    // ChildStdin::shutdown does not close the native pipe on Windows. The
+    // `exec -` reader needs the handle dropped before it can observe EOF.
+    drop(stdin);
+    match result {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(_)) => {
+            Err("CODEX_IO: native Codex did not accept the task prompt; writer marker retained")
+        }
+        Err(_) => Err("CODEX_IO: native Codex prompt write timed out; writer marker retained"),
+    }
+}
+
 pub(crate) async fn execute_action(
     action: OperatorCodexAction,
     catdesk_workspace: &Path,
@@ -548,21 +575,11 @@ pub(crate) async fn execute_action(
         }
     };
     if let OperatorCodexAction::Run { task, .. } = &action {
-        let Some(mut stdin) = child.stdin.take() else {
-            if child.kill().await.is_ok() {
-                writer.finish_writer_turn().map_err(|_| {
-                    "CODEX_LOCK: native Codex writer marker could not be retired".to_string()
-                })?;
-            }
-            return Err("CODEX_IO: native Codex prompt pipe is unavailable".into());
-        };
-        if stdin.write_all(task.as_bytes()).await.is_err() || stdin.shutdown().await.is_err() {
-            if child.kill().await.is_ok() {
-                writer.finish_writer_turn().map_err(|_| {
-                    "CODEX_LOCK: native Codex writer marker could not be retired".to_string()
-                })?;
-            }
-            return Err("CODEX_IO: native Codex did not accept the task prompt".into());
+        if let Err(error) = write_native_prompt(&mut child, task, CODEX_PROMPT_TIMEOUT).await {
+            // Killing the parent does not prove that its descendants stopped.
+            // Keep the durable writer marker for proof-based recovery.
+            let _ = tokio::time::timeout(CODEX_KILL_TIMEOUT, child.kill()).await;
+            return Err(error.into());
         }
     }
     let status = child
@@ -670,6 +687,91 @@ mod tests {
             .expect("canonical temp root");
         assert!(resolved != temp && resolved.starts_with(&temp));
         fs::remove_dir_all(resolved).expect("fixture cleanup");
+    }
+
+    #[tokio::test]
+    async fn native_prompt_has_bounded_write_and_explicit_eof() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-operator-prompt-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&root).expect("fixture root");
+        let source = root.join("prompt-child.rs");
+        let executable = root.join(if cfg!(windows) {
+            "prompt-child.exe"
+        } else {
+            "prompt-child"
+        });
+        fs::write(
+            &source,
+            r#"
+                use std::io::Read;
+                use std::time::Duration;
+                fn main() {
+                    match std::env::args().nth(1).as_deref() {
+                        Some("eof") => {
+                            let mut prompt = Vec::new();
+                            std::io::stdin().read_to_end(&mut prompt).unwrap();
+                            if prompt != b"bounded direct prompt" {
+                                std::process::exit(1);
+                            }
+                        }
+                        Some("idle") => std::thread::sleep(Duration::from_secs(30)),
+                        _ => std::process::exit(2),
+                    }
+                }
+            "#,
+        )
+        .expect("fixture source");
+        assert!(
+            StdCommand::new("rustc")
+                .arg(&source)
+                .arg("-o")
+                .arg(&executable)
+                .status()
+                .expect("rustc available")
+                .success()
+        );
+
+        let mut eof_child = Command::new(&executable)
+            .arg("eof")
+            .stdin(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .expect("EOF reader starts");
+        write_native_prompt(
+            &mut eof_child,
+            "bounded direct prompt",
+            Duration::from_secs(5),
+        )
+        .await
+        .expect("prompt accepted");
+        let status = tokio::time::timeout(Duration::from_secs(5), eof_child.wait())
+            .await
+            .expect("EOF reader exits after prompt handle drops")
+            .expect("EOF reader status");
+        assert!(status.success());
+
+        let mut idle_child = Command::new(&executable)
+            .arg("idle")
+            .stdin(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .expect("nonreading child starts");
+        let oversized_prompt = "P".repeat(4 * 1024 * 1024);
+        let started = std::time::Instant::now();
+        let error = write_native_prompt(
+            &mut idle_child,
+            &oversized_prompt,
+            Duration::from_millis(100),
+        )
+        .await
+        .expect_err("nonreading child's pipe must time out");
+        assert!(error.contains("timed out"), "{error}");
+        assert!(started.elapsed() < Duration::from_secs(5));
+        tokio::time::timeout(Duration::from_secs(5), idle_child.kill())
+            .await
+            .expect("bounded fixture kill")
+            .expect("fixture child terminated");
+        remove_operator_fixture(root);
     }
 
     fn terminal_accounting_fixture() -> (PathBuf, AutonomousProjectV1, AutonomousStateStoreV1) {
