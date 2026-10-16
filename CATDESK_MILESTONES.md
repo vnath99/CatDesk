@@ -1,3 +1,7 @@
+## 2026-10-16 — bounded native recovery candidates (TESTED_LOCAL_SOURCE; MVP PARTIAL)
+
+- Integrated `1d163fb` adds independently reviewed, read-only `codex recovery prepare` candidate metadata. Exact serial all-feature Rust passed (main 1,379/0/28 plus integrations); strict Clippy, format, diff and build passed. The integrated image SHA-256 is `92EDC3D09CBD4B00248202CF36BBE96F9221AF3EB25394EDE2705E68E1F80881`. Actual Desktop readback found four exact diagnostic candidates but retained 35 queue blockers, 85 accounting review rows and `launchAuthorized:false`. No owner reconciliation, installed recovery, real-project dispatch, Wake or remote CI acceptance follows; see `docs/OCTOBER_2026_MVP_ACCEPTANCE.md`.
+
 ## 2026-10-16 — local operator queue review decision (SOURCE ONLY; MVP PARTIAL)
 
 - Integrated `a6af161` and race fix `46912f7` add an interactive, create-once `OPERATOR_REVIEW_ONLY` decision bound to one verified native queue package and the current project/target registration. A separate readback revalidates the captured chain. The independent reviewer found a target-registry race; receipt→queue→registration locking fixed it and independent rereview passed. Six focused tests cover drift, lock contention, corrupted records, replay, terminal refusal and bounded input. No package mutation, independent approval, inbox event, Wake or next-task authority follows.
