@@ -745,7 +745,7 @@ impl CodexCliNativeStdoutEvidenceV1 {
         self.eof = true;
     }
 
-    fn completed_for(&self, thread_id: &str) -> bool {
+    pub(crate) fn completed_for(&self, thread_id: &str) -> bool {
         !self.invalid
             && self.eof
             && self.bound_thread_id == thread_id
@@ -1544,6 +1544,96 @@ pub(crate) fn prepare_resumed_native_turn_readback(
         bound_thread_id: bound_thread_id.to_owned(),
         anchor,
     })
+}
+
+/// A fresh `codex exec` has no prelaunch thread ID to anchor. The caller must
+/// observe exactly one new thread and one completed turn in the exact child's
+/// bounded JSONL stream. Only one rollout created after launch for that ID may
+/// supply the effective profile. This is advisory evidence, not a review or
+/// publication authority.
+pub(crate) fn read_fresh_native_turn_profile(
+    operator_codex_home: Option<&Path>,
+    thread_id: &str,
+    launched_at: SystemTime,
+    exit_observed_at: SystemTime,
+    stdout: &CodexCliNativeStdoutEvidenceV1,
+) -> Option<CodexCliTurnProfileEvidenceV1> {
+    if !stdout.completed_for(thread_id) || !valid_codex_thread_id(thread_id) {
+        return None;
+    }
+    let root = native_codex_rollout_root(operator_codex_home)?;
+    let paths = rollout_paths(&root, thread_id).ok()?;
+    let [path] = paths.as_slice() else {
+        return None;
+    };
+    let file = File::open(path).ok()?;
+    let before = file.metadata().ok()?;
+    if !before.is_file()
+        || before.created().ok()? < launched_at
+        || !same_fresh_rollout_file_identity(&file, path)
+    {
+        return None;
+    }
+    let profile =
+        read_rollout_profile_in_window(&file, 0, thread_id, launched_at, exit_observed_at)?;
+    let after = file.metadata().ok()?;
+    if before.len() != after.len()
+        || before.created().ok()? != after.created().ok()?
+        || !same_fresh_rollout_file_identity(&file, path)
+        || rollout_paths(&root, thread_id).ok()?.as_slice() != paths.as_slice()
+    {
+        return None;
+    }
+    Some(profile)
+}
+
+fn same_fresh_rollout_file_identity(opened: &File, path: &Path) -> bool {
+    let Ok(path_metadata) = fs::symlink_metadata(path) else {
+        return false;
+    };
+    if !path_metadata.is_file() || path_metadata.file_type().is_symlink() {
+        return false;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::{fs::MetadataExt, io::AsRawHandle};
+        if path_metadata.file_attributes() & 0x400 != 0 {
+            return false;
+        }
+        let Ok(current) = File::open(path) else {
+            return false;
+        };
+        let Ok(first) = crate::windows_protected_fs::handle_information(
+            opened.as_raw_handle(),
+            "fresh Codex rollout",
+        ) else {
+            return false;
+        };
+        let Ok(second) = crate::windows_protected_fs::handle_information(
+            current.as_raw_handle(),
+            "fresh Codex rollout",
+        ) else {
+            return false;
+        };
+        first.file_attributes & 0x400 == 0
+            && second.file_attributes & 0x400 == 0
+            && first.volume_serial_number == second.volume_serial_number
+            && first.file_index_high == second.file_index_high
+            && first.file_index_low == second.file_index_low
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let Ok(opened_metadata) = opened.metadata() else {
+            return false;
+        };
+        opened_metadata.dev() == path_metadata.dev() && opened_metadata.ino() == path_metadata.ino()
+    }
+    #[cfg(not(any(windows, unix)))]
+    {
+        let _ = opened;
+        false
+    }
 }
 
 impl CodexCliNativeTurnReadbackV1 {
@@ -2720,6 +2810,92 @@ mod tests {
         test(&path, &file);
         drop(file);
         fs::remove_file(&path).expect("remove rollout fixture");
+    }
+
+    #[test]
+    fn fresh_native_rollout_requires_one_new_file_and_exact_completed_thread() {
+        let thread_id = uuid::Uuid::new_v4().to_string();
+        let turn_id = uuid::Uuid::new_v4().to_string();
+        let base = std::env::temp_dir().join(format!(
+            "catdesk-fresh-native-rollout-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let day_one = base.join("sessions").join("2026").join("10").join("16");
+        let day_two = base.join("sessions").join("2026").join("10").join("17");
+        fs::create_dir_all(&day_one).unwrap();
+        fs::create_dir_all(&day_two).unwrap();
+        let mut stdout = CodexCliNativeStdoutEvidenceV1::new(&thread_id).unwrap();
+        for value in [
+            serde_json::json!({"type":"thread.started","thread_id":thread_id}),
+            serde_json::json!({"type":"turn.started"}),
+            serde_json::json!({"type":"item.completed","item":{"type":"agent_message","text":"{}"}}),
+            serde_json::json!({"type":"turn.completed"}),
+        ] {
+            stdout.observe_line(value.to_string().as_bytes());
+        }
+        stdout.mark_eof();
+        let launched_at = SystemTime::now();
+        let epoch = launched_at.duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let contents = format!(
+            "{}{}",
+            rollout_session(&thread_id),
+            rollout_turn_at_timestamp(
+                &turn_id,
+                "gpt-6.1-sol",
+                "medium",
+                epoch,
+                epoch,
+                &rollout_timestamp(SystemTime::now()),
+            )
+        );
+        let first = day_one.join(format!("rollout-2026-10-16T00-00-00-{thread_id}.jsonl"));
+        fs::write(&first, &contents).unwrap();
+        let exit_observed_at = SystemTime::now();
+        let profile = read_fresh_native_turn_profile(
+            Some(&base),
+            &thread_id,
+            launched_at,
+            exit_observed_at,
+            &stdout,
+        )
+        .expect("fresh exact rollout");
+        assert_eq!(profile.codex_turn_id, turn_id);
+        assert_eq!(profile.model_id, "gpt-6.1-sol");
+        assert!(
+            read_fresh_native_turn_profile(
+                Some(&base),
+                &thread_id,
+                SystemTime::now(),
+                SystemTime::now(),
+                &stdout,
+            )
+            .is_none()
+        );
+        let second = day_two.join(format!("rollout-2026-10-17T00-00-00-{thread_id}.jsonl"));
+        fs::write(&second, &contents).unwrap();
+        assert!(
+            read_fresh_native_turn_profile(
+                Some(&base),
+                &thread_id,
+                launched_at,
+                SystemTime::now(),
+                &stdout,
+            )
+            .is_none()
+        );
+        fs::remove_file(second).unwrap();
+        let wrong_thread = uuid::Uuid::new_v4().to_string();
+        assert!(
+            read_fresh_native_turn_profile(
+                Some(&base),
+                &wrong_thread,
+                launched_at,
+                SystemTime::now(),
+                &stdout,
+            )
+            .is_none()
+        );
+        fs::remove_dir_all(base).unwrap();
     }
 
     #[test]

@@ -40,6 +40,8 @@ use super::{
     invocation_args, registered_project, resolve_native_cli, valid_effort, valid_model,
 };
 
+mod advisory;
+
 const QUEUE_SCHEMA_VERSION: u32 = 1;
 const MAX_TASK_BYTES: usize = 24 * 1024;
 const MAX_JOB_BYTES: u64 = 64 * 1024;
@@ -89,6 +91,9 @@ pub(crate) enum QueueAction {
     ReviewPackage {
         receipt_id: String,
     },
+    AdvisoryReview {
+        receipt_id: String,
+    },
     Dispatch,
     Pause {
         scope: CodexScope,
@@ -102,7 +107,7 @@ pub(crate) enum QueueAction {
 
 pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
     let verb = args.get(3).map(String::as_str).ok_or_else(|| {
-        "CODEX_QUEUE_USAGE: expected add, status, receipt, review, verify, review-package, dispatch, pause, or resume"
+        "CODEX_QUEUE_USAGE: expected add, status, receipt, review, verify, review-package, advisory-review, dispatch, pause, or resume"
             .to_string()
     })?;
     if !matches!(
@@ -113,6 +118,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             | "review"
             | "verify"
             | "review-package"
+            | "advisory-review"
             | "dispatch"
             | "pause"
             | "resume"
@@ -156,15 +162,18 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             QueueAction::Dispatch
         });
     }
-    if matches!(verb, "receipt" | "review" | "verify" | "review-package") {
+    if matches!(
+        verb,
+        "receipt" | "review" | "verify" | "review-package" | "advisory-review"
+    ) {
         let receipt_id = values.remove("--receipt-id").ok_or(
-            "CODEX_QUEUE_USAGE: receipt, review, verify, or review-package requires --receipt-id",
+            "CODEX_QUEUE_USAGE: receipt, review, verify, review-package, or advisory-review requires --receipt-id",
         )?;
         if !values.is_empty()
             || !Uuid::parse_str(&receipt_id).is_ok_and(|id| id.to_string() == receipt_id)
         {
             return Err(
-                "CODEX_QUEUE_USAGE: receipt, review, verify, or review-package requires one canonical receipt UUID"
+                "CODEX_QUEUE_USAGE: receipt, review, verify, review-package, or advisory-review requires one canonical receipt UUID"
                     .into(),
             );
         }
@@ -172,6 +181,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             "receipt" => QueueAction::Receipt { receipt_id },
             "review" => QueueAction::Review { receipt_id },
             "review-package" => QueueAction::ReviewPackage { receipt_id },
+            "advisory-review" => QueueAction::AdvisoryReview { receipt_id },
             _ => QueueAction::Verify { receipt_id },
         });
     }
@@ -314,6 +324,8 @@ struct QueueJob {
     verification_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     review_package_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    advisory_outcome_sha256: Option<String>,
 }
 
 impl QueueJob {
@@ -340,6 +352,7 @@ impl QueueJob {
             review_candidate_sha256: None,
             verification_sha256: None,
             review_package_sha256: None,
+            advisory_outcome_sha256: None,
         })
     }
     fn same_request(&self, other: &Self) -> bool {
@@ -361,6 +374,7 @@ impl QueueJob {
             "reviewCandidateSha256": self.review_candidate_sha256,
             "verificationSha256": self.verification_sha256,
             "reviewPackageSha256": self.review_package_sha256,
+            "advisoryOutcomeSha256": self.advisory_outcome_sha256,
         })
     }
 }
@@ -1404,6 +1418,10 @@ fn validate_job(job: &QueueJob) -> Result<(), String> {
             .review_package_sha256
             .as_deref()
             .is_some_and(|sha| !valid_sha256_hex(sha))
+        || job
+            .advisory_outcome_sha256
+            .as_deref()
+            .is_some_and(|sha| !valid_sha256_hex(sha))
     {
         return Err("CODEX_QUEUE: job record is invalid".into());
     }
@@ -1417,6 +1435,11 @@ fn validate_job(job: &QueueJob) -> Result<(), String> {
             || job.verification_sha256.is_none())
     {
         return Err("CODEX_QUEUE: review package lacks its completed evidence chain".into());
+    }
+    if job.advisory_outcome_sha256.is_some()
+        && (job.state != QueueState::NativeExitedZero || job.review_package_sha256.is_none())
+    {
+        return Err("CODEX_QUEUE: advisory outcome lacks its completed package chain".into());
     }
     Ok(())
 }
@@ -1533,6 +1556,9 @@ pub(crate) async fn execute_action(
         QueueAction::Verify { receipt_id } => verify_receipt(&control.project, &receipt_id).await,
         QueueAction::ReviewPackage { receipt_id } => {
             package_verified_receipt(&control.project, &receipt_id)
+        }
+        QueueAction::AdvisoryReview { receipt_id } => {
+            advisory::review_package_advisory(&control.project, &receipt_id).await
         }
         QueueAction::Pause { scope, task_id } | QueueAction::Resume { scope, task_id } => {
             let pause = pause_action;
@@ -3453,7 +3479,7 @@ mod tests {
         root
     }
 
-    fn cleanup(root: PathBuf) {
+    pub(super) fn cleanup(root: PathBuf) {
         let root = root.canonicalize().expect("fixture root canonical");
         let temp = std::env::temp_dir().canonicalize().expect("temp canonical");
         assert!(root != temp && root.starts_with(&temp));
@@ -3743,7 +3769,7 @@ mod tests {
         TrustedVerificationExecutable { executable, sha256 }
     }
 
-    async fn completed_verified_fixture(
+    pub(super) async fn completed_verified_fixture(
         fail_clippy: bool,
     ) -> (
         PathBuf,
@@ -4517,6 +4543,17 @@ mod tests {
                 &receipt_id
             ]),
             Ok(QueueAction::ReviewPackage { .. })
+        ));
+        assert!(matches!(
+            parse(&[
+                "operator",
+                "codex",
+                "queue",
+                "advisory-review",
+                "--receipt-id",
+                &receipt_id
+            ]),
+            Ok(QueueAction::AdvisoryReview { .. })
         ));
         assert!(
             parse(&[
