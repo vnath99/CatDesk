@@ -42,6 +42,9 @@ const MAX_DIAGNOSTIC_EVENT_TEXT_BYTES: usize = 2 * 1024;
 const MAX_ROLLOUT_SCAN_BYTES: u64 = 128 * 1024 * 1024;
 const MAX_ROLLOUT_LINE_BYTES: usize = 1024 * 1024;
 const MAX_ROLLOUT_DIRECTORY_ENTRIES: usize = 50_000;
+const MAX_NATIVE_STDOUT_LINE_BYTES: usize = 64 * 1024;
+const MAX_NATIVE_STDOUT_EVENTS: usize = 50_000;
+const MAX_NATIVE_STDOUT_BYTES: usize = 32 * 1024 * 1024;
 const POST_EXIT_STREAM_DRAIN_WAIT: Duration = Duration::from_millis(500);
 const NATIVE_TIMESTAMP_SKEW_SECS: u64 = 1;
 const NATIVE_EVENT_TIMESTAMP_SKEW: Duration = Duration::from_millis(1);
@@ -637,6 +640,119 @@ struct RolloutAnchor {
     path: PathBuf,
     file: File,
     length: u64,
+}
+
+/// A retained byte boundary for an existing native Codex thread. The open
+/// handle is intentionally not serializable: a process receipt or a requested
+/// model flag cannot reconstruct post-launch evidence after a crash.
+#[derive(Debug)]
+pub(crate) struct CodexCliNativeTurnReadbackV1 {
+    rollout_root: PathBuf,
+    bound_thread_id: String,
+    anchor: RolloutAnchor,
+}
+
+/// Bounded stdout markers from the exact native child whose rollout is read.
+/// Callers must feed every JSONL stdout line and mark EOF only after draining
+/// the pipe. No transcript or authentication content is retained.
+#[derive(Debug)]
+pub(crate) struct CodexCliNativeStdoutEvidenceV1 {
+    bound_thread_id: String,
+    event_count: usize,
+    total_bytes: usize,
+    thread_started: bool,
+    turn_started: bool,
+    turn_completed: bool,
+    eof: bool,
+    invalid: bool,
+}
+
+impl CodexCliNativeStdoutEvidenceV1 {
+    pub(crate) fn new(bound_thread_id: &str) -> Option<Self> {
+        valid_codex_thread_id(bound_thread_id).then(|| Self {
+            bound_thread_id: bound_thread_id.to_owned(),
+            event_count: 0,
+            total_bytes: 0,
+            thread_started: false,
+            turn_started: false,
+            turn_completed: false,
+            eof: false,
+            invalid: false,
+        })
+    }
+
+    pub(crate) fn observe_line(&mut self, line: &[u8]) {
+        if self.invalid || self.eof {
+            self.invalid = true;
+            return;
+        }
+        self.event_count += 1;
+        self.total_bytes = self.total_bytes.saturating_add(line.len());
+        if self.event_count > MAX_NATIVE_STDOUT_EVENTS
+            || line.len() > MAX_NATIVE_STDOUT_LINE_BYTES
+            || self.total_bytes > MAX_NATIVE_STDOUT_BYTES
+        {
+            self.invalid = true;
+            return;
+        }
+        let line = line.strip_suffix(b"\r").unwrap_or(line);
+        let Ok(value) = serde_json::from_slice::<Value>(line) else {
+            self.invalid = true;
+            return;
+        };
+        let Some(event_type) = value.get("type").and_then(Value::as_str) else {
+            self.invalid = true;
+            return;
+        };
+        if event_type.is_empty() || event_type.len() > 128 {
+            self.invalid = true;
+            return;
+        }
+        if value
+            .get("thread_id")
+            .is_some_and(|thread| thread.as_str() != Some(self.bound_thread_id.as_str()))
+        {
+            self.invalid = true;
+            return;
+        }
+        match event_type {
+            "thread.started" if !self.thread_started && !self.turn_started => {
+                self.thread_started = value.get("thread_id").and_then(Value::as_str)
+                    == Some(self.bound_thread_id.as_str());
+                self.invalid = !self.thread_started;
+            }
+            "turn.started" if self.thread_started && !self.turn_started => {
+                self.turn_started = true;
+            }
+            "turn.completed" if self.turn_started && !self.turn_completed => {
+                self.turn_completed = true;
+            }
+            "thread.started" | "turn.started" | "turn.completed" | "turn.failed" | "error" => {
+                self.invalid = true;
+            }
+            _ if !self.turn_started || self.turn_completed => {
+                self.invalid = true;
+            }
+            _ => {}
+        }
+    }
+
+    pub(crate) fn invalidate(&mut self) {
+        self.invalid = true;
+    }
+
+    pub(crate) fn mark_eof(&mut self) {
+        self.eof = true;
+    }
+
+    fn completed_for(&self, thread_id: &str) -> bool {
+        !self.invalid
+            && self.eof
+            && self.bound_thread_id == thread_id
+            && self.thread_started
+            && self.turn_started
+            && self.turn_completed
+    }
 }
 
 /// Bounded evidence for an autonomous provider turn. It records process
@@ -1400,15 +1516,74 @@ fn apply_operator_codex_context(command: &mut Command, config: &CodexCliConfigV1
 }
 
 fn codex_rollout_root(config: &CodexCliConfigV1) -> Option<PathBuf> {
-    let home = config
-        .operator_codex_home
-        .clone()
+    native_codex_rollout_root(config.operator_codex_home.as_deref())
+}
+
+fn native_codex_rollout_root(operator_codex_home: Option<&Path>) -> Option<PathBuf> {
+    let home = operator_codex_home
+        .map(Path::to_path_buf)
         .or_else(|| std::env::var_os("CODEX_HOME").map(PathBuf::from))
         .or_else(|| {
             std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
                 .map(|home| PathBuf::from(home).join(".codex"))
         })?;
     Some(home.join("sessions"))
+}
+
+/// Capture the only existing rollout for an exact resumed thread immediately
+/// before launching the native child. Unknown, missing, or ambiguous layouts
+/// provide no evidence; callers may still run a turn with UNVERIFIED profile.
+pub(crate) fn prepare_resumed_native_turn_readback(
+    operator_codex_home: Option<&Path>,
+    bound_thread_id: &str,
+) -> Option<CodexCliNativeTurnReadbackV1> {
+    let rollout_root = native_codex_rollout_root(operator_codex_home)?;
+    let anchor = open_prelaunch_rollout(&rollout_root, bound_thread_id).ok()??;
+    Some(CodexCliNativeTurnReadbackV1 {
+        rollout_root,
+        bound_thread_id: bound_thread_id.to_owned(),
+        anchor,
+    })
+}
+
+impl CodexCliNativeTurnReadbackV1 {
+    /// Return native model/effort metadata only when this held prelaunch file
+    /// grew with one completed turn inside the observed child process window
+    /// and the child's bounded stdout independently completed on this thread.
+    pub(crate) fn read_completed(
+        &self,
+        launched_at: SystemTime,
+        exit_observed_at: SystemTime,
+        stdout: &CodexCliNativeStdoutEvidenceV1,
+    ) -> Option<CodexCliTurnProfileEvidenceV1> {
+        if !stdout.completed_for(&self.bound_thread_id)
+            || self.anchor.file.metadata().ok()?.len() <= self.anchor.length
+        {
+            return None;
+        }
+        let paths = rollout_paths(&self.rollout_root, &self.bound_thread_id).ok()?;
+        let [current_path] = paths.as_slice() else {
+            return None;
+        };
+        if current_path != &self.anchor.path
+            || File::open(current_path)
+                .ok()?
+                .metadata()
+                .ok()?
+                .created()
+                .ok()?
+                > launched_at
+        {
+            return None;
+        }
+        read_postlaunch_rollout_profile(
+            &self.rollout_root,
+            &self.bound_thread_id,
+            launched_at,
+            exit_observed_at,
+            Some(&self.anchor),
+        )
+    }
 }
 
 fn valid_codex_thread_id(thread_id: &str) -> bool {
@@ -2990,6 +3165,143 @@ mod tests {
         fs::remove_dir(root.join("2026").join("10")).expect("remove month");
         fs::remove_dir(root.join("2026")).expect("remove year");
         fs::remove_dir(&root).expect("remove sessions root");
+        fs::remove_dir(&base).expect("remove fixture root");
+    }
+
+    fn completed_native_stdout(thread_id: &str) -> CodexCliNativeStdoutEvidenceV1 {
+        let mut stdout = CodexCliNativeStdoutEvidenceV1::new(thread_id).expect("thread id");
+        stdout.observe_line(
+            serde_json::json!({"type":"thread.started","thread_id":thread_id})
+                .to_string()
+                .as_bytes(),
+        );
+        stdout.observe_line(br#"{"type":"turn.started"}"#);
+        stdout.observe_line(br#"{"type":"item.completed","item":{"text":"private transcript"}}"#);
+        stdout.observe_line(br#"{"type":"turn.completed"}"#);
+        stdout.mark_eof();
+        stdout
+    }
+
+    #[test]
+    fn native_stdout_markers_require_exact_thread_single_turn_and_eof() {
+        let thread_id = "01a139f3-ccac-7d00-bca6-8ec83668f752";
+        let mut no_eof = CodexCliNativeStdoutEvidenceV1::new(thread_id).expect("thread");
+        no_eof.observe_line(
+            serde_json::json!({"type":"thread.started","thread_id":thread_id})
+                .to_string()
+                .as_bytes(),
+        );
+        no_eof.observe_line(br#"{"type":"turn.started"}"#);
+        no_eof.observe_line(br#"{"type":"turn.completed"}"#);
+        assert!(!no_eof.completed_for(thread_id));
+        no_eof.mark_eof();
+        assert!(no_eof.completed_for(thread_id));
+        assert!(!no_eof.completed_for("01a139f5-e21f-7e31-b61c-9de39d2f7e2e"));
+
+        let mut duplicate = completed_native_stdout(thread_id);
+        duplicate.observe_line(br#"{"type":"turn.completed"}"#);
+        assert!(!duplicate.completed_for(thread_id));
+        let mut wrong_thread = CodexCliNativeStdoutEvidenceV1::new(thread_id).expect("thread");
+        wrong_thread.observe_line(
+            br#"{"type":"thread.started","thread_id":"01a139f5-e21f-7e31-b61c-9de39d2f7e2e"}"#,
+        );
+        wrong_thread.mark_eof();
+        assert!(!wrong_thread.completed_for(thread_id));
+        let mut oversized = CodexCliNativeStdoutEvidenceV1::new(thread_id).expect("thread");
+        oversized.observe_line(&vec![b'x'; MAX_NATIVE_STDOUT_LINE_BYTES + 1]);
+        oversized.mark_eof();
+        assert!(!oversized.completed_for(thread_id));
+        let mut failed = completed_native_stdout(thread_id);
+        failed.invalidate();
+        assert!(!failed.completed_for(thread_id));
+        let mut total_oversized = CodexCliNativeStdoutEvidenceV1::new(thread_id).expect("thread");
+        total_oversized.total_bytes = MAX_NATIVE_STDOUT_BYTES;
+        total_oversized.observe_line(br#"{"type":"thread.started"}"#);
+        total_oversized.mark_eof();
+        assert!(!total_oversized.completed_for(thread_id));
+    }
+
+    #[test]
+    fn resumed_native_readback_requires_held_growth_and_stdout_completion() {
+        let thread_id = "01a139f3-ccac-7d00-bca6-8ec83668f752";
+        let old_turn = "01a139f3-e21f-7e31-b61c-9de39d2f7e2e";
+        let new_turn = "01a139f5-e21f-7e31-b61c-9de39d2f7e2e";
+        let base = std::env::temp_dir().join(format!(
+            "catdesk-native-resume-readback-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let sessions = base.join("sessions");
+        let first_day = sessions.join("2026").join("10").join("15");
+        let second_day = sessions.join("2026").join("10").join("16");
+        fs::create_dir_all(&first_day).expect("create rollout directory");
+        let name = format!("rollout-2026-10-15T10-27-26-{thread_id}.jsonl");
+        let old_path = first_day.join(&name);
+        fs::write(
+            &old_path,
+            format!(
+                "{}{}",
+                rollout_session(thread_id),
+                rollout_turn(old_turn, "gpt-5.6-terra", "high")
+            ),
+        )
+        .expect("write prelaunch rollout");
+        let reader = prepare_resumed_native_turn_readback(Some(&base), thread_id)
+            .expect("held exact rollout");
+        let launch = SystemTime::now();
+        let stdout = completed_native_stdout(thread_id);
+        assert!(
+            reader
+                .read_completed(launch, SystemTime::now(), &stdout)
+                .is_none(),
+            "preexisting completed turn must not count as this child"
+        );
+        let now_epoch = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_secs();
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&old_path)
+            .expect("open rollout for append")
+            .write_all(
+                rollout_turn_at(new_turn, "gpt-6.1-sol", "medium", now_epoch, now_epoch).as_bytes(),
+            )
+            .expect("append new native turn");
+        let exit = SystemTime::now();
+        let profile = reader
+            .read_completed(launch, exit, &stdout)
+            .expect("postlaunch native metadata and stdout");
+        assert_eq!(profile.codex_turn_id, new_turn);
+        assert!(profile.matches(thread_id, "gpt-6.1-sol"));
+        assert!(!profile.matches(thread_id, "gpt-5.6-terra"));
+        let mut incomplete_stdout = CodexCliNativeStdoutEvidenceV1::new(thread_id).expect("thread");
+        incomplete_stdout.observe_line(
+            serde_json::json!({"type":"thread.started","thread_id":thread_id})
+                .to_string()
+                .as_bytes(),
+        );
+        incomplete_stdout.mark_eof();
+        assert!(
+            reader
+                .read_completed(launch, exit, &incomplete_stdout)
+                .is_none()
+        );
+
+        fs::create_dir_all(&second_day).expect("create second date");
+        let second_path = second_day.join(&name);
+        fs::write(&second_path, rollout_session(thread_id)).expect("ambiguous same-thread file");
+        assert!(
+            reader.read_completed(launch, exit, &stdout).is_none(),
+            "second matching rollout must refuse profile evidence"
+        );
+        drop(reader);
+        fs::remove_file(&old_path).expect("remove first rollout");
+        fs::remove_file(&second_path).expect("remove second rollout");
+        fs::remove_dir(&first_day).expect("remove first day");
+        fs::remove_dir(&second_day).expect("remove second day");
+        fs::remove_dir(sessions.join("2026").join("10")).expect("remove month");
+        fs::remove_dir(sessions.join("2026")).expect("remove year");
+        fs::remove_dir(&sessions).expect("remove sessions root");
         fs::remove_dir(&base).expect("remove fixture root");
     }
 
