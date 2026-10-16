@@ -691,7 +691,7 @@ struct QueueReceipt {
 struct NativeTurnProfileReadbackDiagnosticV1 {
     prelaunch_anchor_available: bool,
     stdout_completion_valid: bool,
-    rollout_profile_accepted: bool,
+    rollout_profile_read: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -4507,7 +4507,7 @@ fn read_queued_native_profile(
     let diagnostic = NativeTurnProfileReadbackDiagnosticV1 {
         prelaunch_anchor_available,
         stdout_completion_valid,
-        rollout_profile_accepted: profile.is_some(),
+        rollout_profile_read: profile.is_some(),
     };
     (profile, diagnostic)
 }
@@ -4986,7 +4986,7 @@ mod tests {
             NativeTurnProfileReadbackDiagnosticV1 {
                 prelaunch_anchor_available: false,
                 stdout_completion_valid: true,
-                rollout_profile_accepted: false,
+                rollout_profile_read: false,
             }
         );
         let (incomplete, no_growth) = read_queued_native_profile(
@@ -5002,7 +5002,7 @@ mod tests {
             NativeTurnProfileReadbackDiagnosticV1 {
                 prelaunch_anchor_available: true,
                 stdout_completion_valid: true,
-                rollout_profile_accepted: false,
+                rollout_profile_read: false,
             }
         );
 
@@ -5044,7 +5044,7 @@ mod tests {
             NativeTurnProfileReadbackDiagnosticV1 {
                 prelaunch_anchor_available: true,
                 stdout_completion_valid: true,
-                rollout_profile_accepted: true,
+                rollout_profile_read: true,
             }
         );
 
@@ -5062,11 +5062,55 @@ mod tests {
             NativeTurnProfileReadbackDiagnosticV1 {
                 prelaunch_anchor_available: true,
                 stdout_completion_valid: false,
-                rollout_profile_accepted: false,
+                rollout_profile_read: false,
             }
         );
         drop(held);
         cleanup(fixture);
+    }
+
+    #[test]
+    fn profile_readback_diagnostic_cannot_replace_actual_profile_for_verification() {
+        let receipt: QueueReceipt = serde_json::from_value(json!({
+            "schemaVersion":QUEUE_SCHEMA_VERSION,
+            "receiptId":Uuid::new_v4().to_string(),
+            "attemptId":Uuid::new_v4().to_string(),
+            "projectId":"fixture",
+            "taskId":"diagnostic_only",
+            "workspace":"fixture",
+            "threadId":Uuid::new_v4().to_string(),
+            "targetSha256":null,
+            "promptSha256":"0".repeat(64),
+            "requestedModel":"gpt-6.1-sol",
+            "requestedEffort":"medium",
+            "profileReadbackDiagnostic":{
+                "prelaunchAnchorAvailable":true,
+                "stdoutCompletionValid":true,
+                "rolloutProfileRead":true,
+            },
+            "nativeExecutable":null,
+            "nativeVersion":"codex-cli fixture",
+            "nativeExecutableSha256":null,
+            "evidenceLevel":"NATIVE_EXIT_OBSERVED",
+            "exitCode":0,
+            "childExitObserved":true,
+            "bindingStillMatches":true,
+            "outcome":"NATIVE_EXIT_ZERO",
+            "recordedAtUnix":1,
+        }))
+        .expect("diagnostic-only receipt");
+        assert!(receipt.actual_profile.is_none());
+        assert_eq!(
+            receipt
+                .profile_readback_diagnostic
+                .as_ref()
+                .map(|diagnostic| diagnostic.rollout_profile_read),
+            Some(true)
+        );
+        assert!(
+            !actual_profile_matches_receipt(&receipt),
+            "verify must require bound model and effort evidence, regardless of diagnostics"
+        );
     }
 
     #[tokio::test]
@@ -10081,7 +10125,7 @@ mod tests {
                 json!({
                     "prelaunchAnchorAvailable":false,
                     "stdoutCompletionValid":false,
-                    "rolloutProfileAccepted":false,
+                    "rolloutProfileRead":false,
                 })
             );
             let receipt_id = result["receipt"]["receiptId"].as_str().unwrap();
