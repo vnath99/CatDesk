@@ -4,10 +4,12 @@
 //! own their project-local state stores. The registry only coordinates
 //! workspace ownership, provider limits, and project/thread identity.
 
-use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::fs::{self, File, OpenOptions};
+use std::io::{Read, Write};
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 #[cfg(windows)]
-use std::os::windows::fs::MetadataExt;
+use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
 use reqwest::Url;
@@ -19,6 +21,99 @@ use super::codex_model_policy::required_effort;
 use super::runtime::RuntimeError;
 
 pub const PROJECT_REGISTRY_SCHEMA_VERSION: u32 = 1;
+const MAX_PROJECT_REGISTRY_BYTES: u64 = 1024 * 1024;
+const MAX_SCHEDULER_LEASE_BYTES: u64 = 128 * 1024;
+const MAX_SCHEDULER_CURSOR_BYTES: u64 = 4 * 1024;
+const MAX_SCHEDULER_LEASES: usize = 128;
+
+fn redirected_entry(metadata: &fs::Metadata) -> bool {
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        metadata.file_attributes() & 0x400 != 0
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
+/// Check each ancestor before creating a missing directory. `create_dir_all`
+/// would otherwise follow a redirected parent before the final root is read.
+fn checked_registry_directory(path: &Path, create: bool) -> Result<PathBuf, RuntimeError> {
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        checked_registry_directory(parent, create)?;
+    }
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if create && error.kind() == std::io::ErrorKind::NotFound => {
+            match fs::create_dir(path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(error) => return Err(io_error(error)),
+            }
+            fs::symlink_metadata(path).map_err(io_error)?
+        }
+        Err(error) => return Err(io_error(error)),
+    };
+    if !metadata.is_dir() || redirected_entry(&metadata) {
+        return Err(RuntimeError::Validation(
+            "project registry directory is redirected or unsafe".into(),
+        ));
+    }
+    path.canonicalize().map_err(io_error)
+}
+
+fn nofollow_read_options() -> OpenOptions {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(windows)]
+    options.custom_flags(0x0020_0000); // FILE_FLAG_OPEN_REPARSE_POINT
+    #[cfg(unix)]
+    options.custom_flags(libc::O_NOFOLLOW);
+    options
+}
+
+fn checked_registry_file(
+    path: &Path,
+    maximum_length: u64,
+    diagnostic: &'static str,
+) -> Result<Option<File>, RuntimeError> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(io_error(error)),
+    };
+    if !metadata.is_file() || redirected_entry(&metadata) || metadata.len() > maximum_length {
+        return Err(RuntimeError::Validation(diagnostic.into()));
+    }
+    let file = nofollow_read_options().open(path).map_err(io_error)?;
+    let opened = file.metadata().map_err(io_error)?;
+    if !opened.is_file() || redirected_entry(&opened) || opened.len() > maximum_length {
+        return Err(RuntimeError::Validation(diagnostic.into()));
+    }
+    Ok(Some(file))
+}
+
+fn read_bounded_registry_bytes(
+    file: File,
+    maximum_length: u64,
+    diagnostic: &'static str,
+) -> Result<Vec<u8>, RuntimeError> {
+    let mut bytes = Vec::new();
+    file.take(maximum_length + 1)
+        .read_to_end(&mut bytes)
+        .map_err(io_error)?;
+    if bytes.len() as u64 > maximum_length {
+        return Err(RuntimeError::Validation(diagnostic.into()));
+    }
+    Ok(bytes)
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -223,25 +318,15 @@ impl AutonomousProjectRegistryStoreV1 {
     /// such as the native operator GUI use this form so a status/readback
     /// refresh cannot initialize project authority as a side effect.
     pub fn open_read_only(root: impl AsRef<Path>) -> Result<Self, RuntimeError> {
-        let root = root.as_ref().to_path_buf();
-        let metadata = fs::symlink_metadata(&root).map_err(io_error)?;
-        #[cfg(windows)]
-        let is_reparse = metadata.file_attributes() & 0x400 != 0;
-        #[cfg(not(windows))]
-        let is_reparse = false;
-        if !metadata.is_dir() || metadata.file_type().is_symlink() || is_reparse {
-            return Err(RuntimeError::Validation(
-                "project registry root is unavailable for read-only access".into(),
-            ));
-        }
+        let root = checked_registry_directory(root.as_ref(), false)?;
         Ok(Self { root })
     }
 
     pub fn open(root: impl AsRef<Path>) -> Result<Self, RuntimeError> {
-        let root = root.as_ref().to_path_buf();
-        fs::create_dir_all(root.join("leases")).map_err(io_error)?;
-        fs::create_dir_all(root.join("registration-confirmations")).map_err(io_error)?;
-        fs::create_dir_all(root.join("thread-adoptions")).map_err(io_error)?;
+        let root = checked_registry_directory(root.as_ref(), true)?;
+        for child in ["leases", "registration-confirmations", "thread-adoptions"] {
+            checked_registry_directory(&root.join(child), true)?;
+        }
         Ok(Self { root })
     }
 
@@ -256,8 +341,10 @@ impl AutonomousProjectRegistryStoreV1 {
             ));
         }
         let path = self.registry_path();
-        if path.exists() {
-            return Ok(());
+        match fs::symlink_metadata(&path) {
+            Ok(_) => return self.load_registry().map(|_| ()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(io_error(error)),
         }
         self.save_registry(&AutonomousProjectRegistryV1 {
             schema_version: PROJECT_REGISTRY_SCHEMA_VERSION,
@@ -268,12 +355,19 @@ impl AutonomousProjectRegistryStoreV1 {
     }
 
     pub fn load_registry(&self) -> Result<AutonomousProjectRegistryV1, RuntimeError> {
-        let file = OpenOptions::new()
-            .read(true)
-            .open(self.registry_path())
-            .map_err(io_error)?;
+        let file = checked_registry_file(
+            &self.registry_path(),
+            MAX_PROJECT_REGISTRY_BYTES,
+            "project registry file is redirected or oversized",
+        )?
+        .ok_or_else(|| RuntimeError::Validation("project registry is unavailable".into()))?;
+        let bytes = read_bounded_registry_bytes(
+            file,
+            MAX_PROJECT_REGISTRY_BYTES,
+            "project registry file is oversized",
+        )?;
         let registry: AutonomousProjectRegistryV1 =
-            serde_json::from_reader(file).map_err(|error| {
+            serde_json::from_slice(&bytes).map_err(|error| {
                 RuntimeError::Validation(format!("project registry is corrupted: {error}"))
             })?;
         validate_registry(&registry)?;
@@ -1004,6 +1098,18 @@ impl AutonomousProjectRegistryStoreV1 {
         expires_at_unix: u64,
     ) -> Result<GlobalScheduleDecisionV1, RuntimeError> {
         let _lock = self.acquire_scheduler_lock()?;
+        if let Some(cursor) = self.load_round_robin_cursor()? {
+            let registry = self.load_registry()?;
+            if !registry
+                .projects
+                .iter()
+                .any(|project| project.project_id == cursor.last_granted_project_id)
+            {
+                return Err(RuntimeError::Validation(
+                    "scheduler cursor project is not registered".into(),
+                ));
+            }
+        }
         self.schedule_mutating_worker_locked(
             project_id,
             owner_id,
@@ -1160,6 +1266,11 @@ impl AutonomousProjectRegistryStoreV1 {
             .join(format!(".lease-draft-{}.tmp", Uuid::new_v4()));
         let encoded = serde_json::to_vec_pretty(&lease)
             .map_err(|_| RuntimeError::Validation("lease serialization failed".into()))?;
+        if encoded.len() as u64 + 1 > MAX_SCHEDULER_LEASE_BYTES {
+            return Err(RuntimeError::Validation(
+                "workspace lease exceeds the scheduler record limit".into(),
+            ));
+        }
         let mut draft = OpenOptions::new()
             .write(true)
             .create_new(true)
@@ -1202,34 +1313,69 @@ impl AutonomousProjectRegistryStoreV1 {
         lease: &AutonomousWorkspaceLeaseV1,
     ) -> Result<(), RuntimeError> {
         let path = self.lease_path(&lease.workspace);
-        let file = OpenOptions::new()
-            .read(true)
-            .open(&path)
-            .map_err(io_error)?;
-        let stored: AutonomousWorkspaceLeaseV1 = serde_json::from_reader(file)
+        checked_registry_directory(&self.root.join("leases"), false)?;
+        let file = checked_registry_file(
+            &path,
+            MAX_SCHEDULER_LEASE_BYTES,
+            "workspace lease is redirected or oversized",
+        )?
+        .ok_or_else(|| RuntimeError::Validation("workspace lease is unavailable".into()))?;
+        let bytes = read_bounded_registry_bytes(
+            file,
+            MAX_SCHEDULER_LEASE_BYTES,
+            "workspace lease is oversized",
+        )?;
+        let stored: AutonomousWorkspaceLeaseV1 = serde_json::from_slice(&bytes)
             .map_err(|_| RuntimeError::Validation("workspace lease is corrupted".into()))?;
         if &stored != lease {
             return Err(RuntimeError::Validation(
                 "workspace lease ownership mismatch".into(),
             ));
         }
+        checked_registry_file(
+            &path,
+            MAX_SCHEDULER_LEASE_BYTES,
+            "workspace lease is redirected or oversized",
+        )?
+        .ok_or_else(|| RuntimeError::Validation("workspace lease is unavailable".into()))?;
         fs::remove_file(path).map_err(io_error)
     }
 
     fn all_leases(&self) -> Result<Vec<AutonomousWorkspaceLeaseV1>, RuntimeError> {
+        checked_registry_directory(&self.root.join("leases"), false)?;
+        let registry = self.load_registry()?;
         let mut leases = Vec::new();
         for entry in fs::read_dir(self.root.join("leases")).map_err(io_error)? {
+            if leases.len() >= MAX_SCHEDULER_LEASES {
+                return Err(RuntimeError::Validation(
+                    "workspace lease set exceeds registered project limit".into(),
+                ));
+            }
             let entry = entry.map_err(io_error)?;
             let path = entry.path();
-            let file = OpenOptions::new()
-                .read(true)
-                .open(&path)
-                .map_err(io_error)?;
-            let lease: AutonomousWorkspaceLeaseV1 = serde_json::from_reader(file)
+            let file = checked_registry_file(
+                &path,
+                MAX_SCHEDULER_LEASE_BYTES,
+                "workspace lease is redirected or oversized",
+            )?
+            .ok_or_else(|| RuntimeError::Validation("workspace lease is unavailable".into()))?;
+            let bytes = read_bounded_registry_bytes(
+                file,
+                MAX_SCHEDULER_LEASE_BYTES,
+                "workspace lease is oversized",
+            )?;
+            let lease: AutonomousWorkspaceLeaseV1 = serde_json::from_slice(&bytes)
                 .map_err(|_| RuntimeError::Validation("workspace lease is corrupted".into()))?;
-            if path != self.lease_path(&lease.workspace) {
+            if path != self.lease_path(&lease.workspace)
+                || valid_slug(&lease.project_id, "workspace lease project id").is_err()
+                || valid_slug(&lease.owner_id, "workspace lease owner id").is_err()
+                || lease.expires_at_unix == 0
+                || !registry.projects.iter().any(|project| {
+                    project.project_id == lease.project_id && project.workspace == lease.workspace
+                })
+            {
                 return Err(RuntimeError::Validation(
-                    "workspace lease path does not match its scope".into(),
+                    "workspace lease does not match its registered scope".into(),
                 ));
             }
             leases.push(lease);
@@ -1257,15 +1403,20 @@ impl AutonomousProjectRegistryStoreV1 {
         self.root.join("scheduler-cursor.json")
     }
     fn load_round_robin_cursor(&self) -> Result<Option<RoundRobinCursorV1>, RuntimeError> {
-        let file = match OpenOptions::new()
-            .read(true)
-            .open(self.round_robin_cursor_path())
-        {
-            Ok(file) => file,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(io_error(error)),
+        let file = match checked_registry_file(
+            &self.round_robin_cursor_path(),
+            MAX_SCHEDULER_CURSOR_BYTES,
+            "scheduler cursor is redirected or oversized",
+        )? {
+            Some(file) => file,
+            None => return Ok(None),
         };
-        let cursor: RoundRobinCursorV1 = serde_json::from_reader(file)
+        let bytes = read_bounded_registry_bytes(
+            file,
+            MAX_SCHEDULER_CURSOR_BYTES,
+            "scheduler cursor is oversized",
+        )?;
+        let cursor: RoundRobinCursorV1 = serde_json::from_slice(&bytes)
             .map_err(|_| RuntimeError::Validation("scheduler cursor is corrupted".into()))?;
         if cursor.schema_version != 1
             || valid_slug(
@@ -1300,6 +1451,14 @@ impl AutonomousProjectRegistryStoreV1 {
         file.write_all(b"\n").map_err(io_error)?;
         file.sync_all().map_err(io_error)?;
         drop(file);
+        if let Err(error) = checked_registry_file(
+            &self.round_robin_cursor_path(),
+            MAX_SCHEDULER_CURSOR_BYTES,
+            "scheduler cursor is redirected or oversized",
+        ) {
+            let _ = fs::remove_file(&tmp);
+            return Err(error);
+        }
         fs::rename(tmp, self.round_robin_cursor_path()).map_err(io_error)
     }
     fn lease_path(&self, workspace: &Path) -> PathBuf {
@@ -1311,6 +1470,14 @@ impl AutonomousProjectRegistryStoreV1 {
     }
     fn save_registry(&self, registry: &AutonomousProjectRegistryV1) -> Result<(), RuntimeError> {
         validate_registry(registry)?;
+        let encoded = serde_json::to_vec_pretty(registry).map_err(|_| {
+            RuntimeError::Validation("project registry serialization failed".into())
+        })?;
+        if encoded.len() as u64 + 1 > MAX_PROJECT_REGISTRY_BYTES {
+            return Err(RuntimeError::Validation(
+                "project registry exceeds the record limit".into(),
+            ));
+        }
         let path = self.registry_path();
         let tmp = self.root.join(format!(".projects-{}.tmp", Uuid::new_v4()));
         let mut file = OpenOptions::new()
@@ -1318,9 +1485,7 @@ impl AutonomousProjectRegistryStoreV1 {
             .create_new(true)
             .open(&tmp)
             .map_err(io_error)?;
-        serde_json::to_writer_pretty(&mut file, registry).map_err(|_| {
-            RuntimeError::Validation("project registry serialization failed".into())
-        })?;
+        file.write_all(&encoded).map_err(io_error)?;
         file.write_all(b"\n").map_err(io_error)?;
         file.sync_all().map_err(io_error)?;
         drop(file);
@@ -1424,13 +1589,25 @@ impl AutonomousProjectRegistryStoreV1 {
     }
 
     fn acquire_scheduler_lock(&self) -> Result<std::fs::File, RuntimeError> {
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(self.root.join("scheduler.lock"))
-            .map_err(io_error)?;
+        checked_registry_directory(&self.root, false)?;
+        checked_registry_directory(&self.root.join("leases"), false)?;
+        let path = self.root.join("scheduler.lock");
+        checked_registry_file(&path, 0, "project scheduler lock is redirected or corrupt")?;
+        let mut options = OpenOptions::new();
+        options.read(true).write(true).create(true).truncate(false);
+        #[cfg(windows)]
+        options.custom_flags(0x0020_0000); // FILE_FLAG_OPEN_REPARSE_POINT
+        #[cfg(unix)]
+        options.custom_flags(libc::O_NOFOLLOW);
+        let file = options.open(&path).map_err(io_error)?;
+        let opened = file.metadata().map_err(io_error)?;
+        if !opened.is_file() || redirected_entry(&opened) || opened.len() != 0 {
+            return Err(RuntimeError::Validation(
+                "project scheduler lock is redirected or corrupt".into(),
+            ));
+        }
+        checked_registry_file(&path, 0, "project scheduler lock is redirected or corrupt")?
+            .ok_or_else(|| RuntimeError::Validation("project scheduler lock vanished".into()))?;
         file.try_lock().map_err(|_| {
             RuntimeError::Validation("project scheduler is already in progress".into())
         })?;
@@ -1853,6 +2030,66 @@ mod tests {
             codex_thread_id: None,
             chatgpt_target_url: None,
             chatgpt_target_sha256: None,
+        }
+    }
+
+    fn scheduler_preflight_fixture(
+        label: &str,
+    ) -> (PathBuf, AutonomousProjectRegistryStoreV1, PathBuf) {
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-scheduler-preflight-{label}-{}",
+            Uuid::new_v4()
+        ));
+        let workspace = root.join("alpha");
+        fs::create_dir_all(&workspace).expect("fixture workspace");
+        let store = AutonomousProjectRegistryStoreV1::open(root.join("registry"))
+            .expect("fixture registry");
+        store
+            .initialize(1, 1)
+            .expect("fixture registry initialized");
+        store
+            .register_project(project("alpha", workspace.clone()))
+            .expect("fixture project registered");
+        (
+            root,
+            store,
+            workspace.canonicalize().expect("canonical workspace"),
+        )
+    }
+
+    #[cfg(windows)]
+    fn symlink_file(target: &Path, link: &Path) -> std::io::Result<()> {
+        std::os::windows::fs::symlink_file(target, link)
+    }
+
+    #[cfg(unix)]
+    fn symlink_file(target: &Path, link: &Path) -> std::io::Result<()> {
+        std::os::unix::fs::symlink(target, link)
+    }
+
+    #[cfg(windows)]
+    fn symlink_dir(target: &Path, link: &Path) -> std::io::Result<()> {
+        std::os::windows::fs::symlink_dir(target, link)
+    }
+
+    #[cfg(unix)]
+    fn symlink_dir(target: &Path, link: &Path) -> std::io::Result<()> {
+        std::os::unix::fs::symlink(target, link)
+    }
+
+    fn symlink_available(result: std::io::Result<()>) -> bool {
+        match result {
+            Ok(()) => true,
+            Err(error)
+                if cfg!(windows)
+                    && (error.kind() == std::io::ErrorKind::PermissionDenied
+                        || error.raw_os_error() == Some(1314)) =>
+            {
+                // Windows hosts without Developer Mode or the symlink privilege
+                // cannot create this fixture. Type/size tests still run there.
+                false
+            }
+            Err(error) => panic!("fixture symlink creation failed: {error}"),
         }
     }
 
@@ -2862,6 +3099,276 @@ mod tests {
             "https://evil.example/c/thread",
         ] {
             assert!(canonical_project_chat_target(invalid).is_err(), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn scheduler_rejects_oversized_registry_cursor_and_lease_without_changing_them() {
+        for kind in ["registry", "cursor", "lease"] {
+            let (_root, store, workspace) = scheduler_preflight_fixture(kind);
+            let path = match kind {
+                "registry" => store.registry_path(),
+                "cursor" => store.round_robin_cursor_path(),
+                "lease" => store.lease_path(&workspace),
+                _ => unreachable!(),
+            };
+            let limit = match kind {
+                "registry" => MAX_PROJECT_REGISTRY_BYTES,
+                "cursor" => MAX_SCHEDULER_CURSOR_BYTES,
+                "lease" => MAX_SCHEDULER_LEASE_BYTES,
+                _ => unreachable!(),
+            };
+            let oversized = vec![b'x'; (limit + 1) as usize];
+            fs::write(&path, &oversized).expect("oversized fixture state");
+            let result = if kind == "cursor" {
+                store.schedule_next_ready_worker(
+                    &["alpha"],
+                    "owner",
+                    ScheduledProviderV1::Codex,
+                    10,
+                    20,
+                )
+            } else {
+                store.schedule_mutating_worker("alpha", "owner", ScheduledProviderV1::Codex, 10, 20)
+            };
+            assert!(result.is_err(), "oversized {kind} must block scheduling");
+            assert_eq!(fs::read(&path).expect("retained state"), oversized);
+            if kind != "lease" {
+                assert!(!store.lease_path(&workspace).exists());
+            }
+        }
+    }
+
+    #[test]
+    fn scheduler_rejects_nonempty_lock_and_redirected_directory_types() {
+        let (_root, store, workspace) = scheduler_preflight_fixture("lock");
+        let lock = store.root.join("scheduler.lock");
+        fs::write(&lock, b"unexpected lock payload").expect("lock fixture");
+        assert!(
+            store
+                .schedule_mutating_worker("alpha", "owner", ScheduledProviderV1::Codex, 10, 20)
+                .is_err()
+        );
+        assert_eq!(
+            fs::read(&lock).expect("retained lock"),
+            b"unexpected lock payload"
+        );
+        assert!(!store.lease_path(&workspace).exists());
+
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-scheduler-preflight-wrong-type-{}",
+            Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).expect("fixture parent");
+        let wrong_root = root.join("registry");
+        fs::write(&wrong_root, b"not a directory").expect("wrong root type");
+        assert!(AutonomousProjectRegistryStoreV1::open(&wrong_root).is_err());
+        assert_eq!(
+            fs::read(&wrong_root).expect("retained wrong root"),
+            b"not a directory"
+        );
+        let registry = root.join("registry-directory");
+        fs::create_dir_all(&registry).expect("registry parent");
+        let wrong_leases = registry.join("leases");
+        fs::write(&wrong_leases, b"not a directory").expect("wrong leases type");
+        assert!(AutonomousProjectRegistryStoreV1::open(&registry).is_err());
+        assert_eq!(
+            fs::read(&wrong_leases).expect("retained wrong leases"),
+            b"not a directory"
+        );
+    }
+
+    #[test]
+    fn scheduler_rejects_malformed_cursor_without_replacing_it() {
+        let (_root, store, workspace) = scheduler_preflight_fixture("malformed-cursor");
+        let cursor = store.round_robin_cursor_path();
+        let malformed = b"{\"schemaVersion\":1,\"lastGrantedProjectId\":";
+        fs::write(&cursor, malformed).expect("malformed cursor fixture");
+        assert!(
+            store
+                .schedule_next_ready_worker(
+                    &["alpha"],
+                    "owner",
+                    ScheduledProviderV1::Codex,
+                    10,
+                    20,
+                )
+                .is_err()
+        );
+        assert!(
+            store
+                .schedule_mutating_worker("alpha", "owner", ScheduledProviderV1::Codex, 10, 20)
+                .is_err()
+        );
+        assert_eq!(fs::read(&cursor).expect("retained cursor"), malformed);
+        assert!(!store.lease_path(&workspace).exists());
+    }
+
+    #[test]
+    fn scheduler_json_reader_stops_at_the_limit_even_if_open_file_is_larger() {
+        let (root, _store, _workspace) = scheduler_preflight_fixture("bounded-read");
+        let path = root.join("grown-after-open.json");
+        fs::write(&path, vec![b' '; 4097]).expect("oversized file");
+        let file = File::open(&path).expect("open before bounded read");
+        assert!(read_bounded_registry_bytes(file, 4096, "bounded read").is_err());
+    }
+
+    #[test]
+    fn registry_writer_refuses_a_record_that_its_reader_would_reject() {
+        let (_root, store, _workspace) = scheduler_preflight_fixture("registry-write-limit");
+        let before = fs::read(store.registry_path()).expect("existing registry");
+        let mut oversized = store.load_registry().expect("registered project");
+        oversized.projects[0].workspace = PathBuf::from("x".repeat(1_100_000));
+        assert!(store.save_registry(&oversized).is_err());
+        assert_eq!(
+            fs::read(store.registry_path()).expect("retained registry"),
+            before
+        );
+    }
+
+    #[test]
+    fn initialization_does_not_silently_accept_corrupt_existing_registry() {
+        let (_root, store, _workspace) = scheduler_preflight_fixture("corrupt-initialize");
+        let malformed = b"{\"schemaVersion\":1,";
+        fs::write(store.registry_path(), malformed).expect("malformed registry");
+        assert!(store.initialize(1, 1).is_err());
+        assert_eq!(
+            fs::read(store.registry_path()).expect("retained registry"),
+            malformed
+        );
+    }
+
+    #[test]
+    fn operator_supplied_registry_read_only_compatibility_probe() {
+        let Some(root) = std::env::var_os("CATDESK_PROJECT_REGISTRY_READ_ONLY_PROBE") else {
+            return;
+        };
+        let store = AutonomousProjectRegistryStoreV1::open_read_only(PathBuf::from(root))
+            .expect("existing registry opens without creating state");
+        let registry = store.load_registry().expect("existing registry validates");
+        let cursor = store
+            .load_round_robin_cursor()
+            .expect("existing scheduler cursor validates");
+        if let Some(cursor) = &cursor {
+            assert!(
+                registry
+                    .projects
+                    .iter()
+                    .any(|project| project.project_id == cursor.last_granted_project_id)
+            );
+        }
+        let leases = store.all_leases().expect("existing leases validate");
+        println!(
+            "read-only scheduler probe: projects={} leases={} cursor_present={}",
+            registry.projects.len(),
+            leases.len(),
+            cursor.is_some()
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn scheduler_rejects_windows_junction_root_and_leases_directory() {
+        fn quote(path: &Path) -> String {
+            path.to_string_lossy().replace('\'', "''")
+        }
+        fn junction(target: &Path, link: &Path) {
+            let script = format!(
+                "$ErrorActionPreference = 'Stop'; New-Item -ItemType Junction -Path '{}' -Target '{}' | Out-Null",
+                quote(link),
+                quote(target)
+            );
+            assert!(
+                Command::new("powershell")
+                    .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+                    .status()
+                    .expect("PowerShell junction fixture")
+                    .success()
+            );
+        }
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-scheduler-preflight-junction-{}",
+            Uuid::new_v4()
+        ));
+        let outside = root.join("outside");
+        fs::create_dir_all(&outside).expect("outside directory");
+        let root_alias = root.join("registry-alias");
+        junction(&outside, &root_alias);
+        assert!(AutonomousProjectRegistryStoreV1::open(&root_alias).is_err());
+        assert!(AutonomousProjectRegistryStoreV1::open_read_only(&root_alias).is_err());
+        assert!(!outside.join("leases").exists());
+
+        let registry = root.join("registry");
+        fs::create_dir_all(&registry).expect("registry directory");
+        let leases_alias = registry.join("leases");
+        junction(&outside, &leases_alias);
+        assert!(AutonomousProjectRegistryStoreV1::open(&registry).is_err());
+        assert!(!outside.join("scheduler.lock").exists());
+    }
+
+    #[test]
+    fn scheduler_rejects_redirected_root_cursor_lock_and_lease() {
+        let (root, store, workspace) = scheduler_preflight_fixture("redirected");
+        let outside = root.join("outside");
+        fs::create_dir_all(&outside).expect("outside fixture");
+        let alias = root.join("registry-alias");
+        if !symlink_available(symlink_dir(&store.root, &alias)) {
+            return;
+        }
+        assert!(AutonomousProjectRegistryStoreV1::open(&alias).is_err());
+        assert!(AutonomousProjectRegistryStoreV1::open_read_only(&alias).is_err());
+        assert!(!alias.join("unexpected").exists());
+
+        let cursor_target = outside.join("cursor.json");
+        let cursor_bytes = b"{\"schemaVersion\":1,\"lastGrantedProjectId\":\"alpha\"}";
+        fs::write(&cursor_target, cursor_bytes).expect("cursor target");
+        symlink_file(&cursor_target, &store.round_robin_cursor_path()).expect("cursor symlink");
+        assert!(
+            store
+                .schedule_next_ready_worker(
+                    &["alpha"],
+                    "owner",
+                    ScheduledProviderV1::Codex,
+                    10,
+                    20,
+                )
+                .is_err()
+        );
+        assert_eq!(
+            fs::read(&cursor_target).expect("cursor retained"),
+            cursor_bytes
+        );
+        assert!(!store.lease_path(&workspace).exists());
+
+        // The cursor is only the first obstruction. Keep it intact and use
+        // separate fresh stores for the other redirected entries.
+        for kind in ["lock", "lease"] {
+            let (root, store, workspace) = scheduler_preflight_fixture(kind);
+            let outside = root.join("outside.json");
+            let path = if kind == "lock" {
+                fs::write(&outside, b"").expect("lock target");
+                store.root.join("scheduler.lock")
+            } else {
+                let lease = AutonomousWorkspaceLeaseV1 {
+                    project_id: "alpha".into(),
+                    workspace: workspace.clone(),
+                    owner_id: "other-owner".into(),
+                    provider: ScheduledProviderV1::Codex,
+                    expires_at_unix: 20,
+                };
+                fs::write(&outside, serde_json::to_vec(&lease).expect("lease JSON"))
+                    .expect("lease target");
+                store.lease_path(&workspace)
+            };
+            let before = fs::read(&outside).expect("outside before");
+            symlink_file(&outside, &path).expect("scheduler state symlink");
+            assert!(
+                store
+                    .schedule_mutating_worker("alpha", "owner", ScheduledProviderV1::Codex, 10, 20,)
+                    .is_err(),
+                "redirected {kind} must block scheduling"
+            );
+            assert_eq!(fs::read(&outside).expect("outside retained"), before);
         }
     }
 }
