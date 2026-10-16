@@ -883,8 +883,8 @@ fn scheduler(control_workspace: &Path) -> Result<AutonomousProjectRegistryStoreV
 
 fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<QueueJob>, String> {
     let _lock = queue.lock()?;
-    let scheduler = scheduler(control_workspace)?;
-    let registry = scheduler
+    let read_only_scheduler = scheduler(control_workspace)?;
+    let registry = read_only_scheduler
         .load_registry()
         .map_err(|_| "CODEX_QUEUE: control registry is invalid".to_string())?;
     // The fixed user-state root must stay outside every registered project.
@@ -921,6 +921,21 @@ fn claim_one(control_workspace: &Path, queue: &QueueStore) -> Result<Option<Queu
         .collect::<Vec<_>>();
     if ready_ids.is_empty() {
         return Ok(None);
+    }
+    // Dispatch is the first queue operation allowed to initialize scheduler
+    // children. Validate the existing registry and every ready binding before
+    // opening the mutating store, then reject any registry change observed
+    // across that transition. `open` checks existing children before use and
+    // creates the absent leases directory required by scheduler claims.
+    let scheduler =
+        AutonomousProjectRegistryStoreV1::open(control_workspace.join(".catdesk/projects"))
+            .map_err(|_| "CODEX_QUEUE: scheduler state is unavailable or unsafe".to_string())?;
+    if scheduler
+        .load_registry()
+        .map_err(|_| "CODEX_QUEUE: control registry is invalid".to_string())?
+        != registry
+    {
+        return Err("CODEX_QUEUE_SCOPE: registry changed before scheduler claim".into());
     }
     let now = unix_now()?;
     let owner = format!("queue-{}", Uuid::new_v4());
@@ -1684,6 +1699,85 @@ mod tests {
         );
         assert!(!projects[1].workspace.join(".catdesk").exists());
         assert!(!projects[2].workspace.join(".catdesk").exists());
+        cleanup(fixture);
+    }
+
+    #[test]
+    fn valid_registry_without_scheduler_children_initializes_on_claim() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let control = &projects[0].workspace;
+        let registry_root = control.join(".catdesk/projects");
+        for child in ["leases", "registration-confirmations", "thread-adoptions"] {
+            fs::remove_dir(registry_root.join(child)).expect("remove empty fixture child");
+        }
+        queue
+            .save_job(
+                &QueueJob::new(
+                    "missing_leases".into(),
+                    &projects[1],
+                    "fixture task".into(),
+                    None,
+                    None,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let registered = scheduler(control)
+            .unwrap()
+            .load_registry()
+            .unwrap()
+            .projects;
+        assert_eq!(registered.len(), projects.len());
+        for project in &projects {
+            assert!(registered.contains(project));
+        }
+        assert!(!registry_root.join("leases").exists());
+        assert!(!registry_root.join("scheduler.lock").exists());
+
+        let claimed = claim_one(control, &queue)
+            .expect("claim")
+            .expect("ready job");
+        assert_eq!(claimed.binding.project_id, "alpha");
+        assert_eq!(claimed.state, QueueState::Claimed);
+        assert!(registry_root.join("leases").is_dir());
+        assert!(registry_root.join("scheduler.lock").is_file());
+        scheduler(control)
+            .unwrap()
+            .release_workspace_lease(&claimed.attempt.unwrap().lease)
+            .expect("release exact fixture lease");
+        cleanup(fixture);
+    }
+
+    #[test]
+    fn corrupt_scheduler_child_refuses_claim_without_consuming_job() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let control = &projects[0].workspace;
+        let registry_root = control.join(".catdesk/projects");
+        fs::remove_dir(registry_root.join("leases")).expect("remove empty fixture leases");
+        fs::write(registry_root.join("leases"), b"not a directory")
+            .expect("corrupt fixture scheduler child");
+        queue
+            .save_job(
+                &QueueJob::new(
+                    "corrupt_leases".into(),
+                    &projects[1],
+                    "fixture task".into(),
+                    None,
+                    None,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+
+        assert!(
+            claim_one(control, &queue)
+                .expect_err("unsafe scheduler child")
+                .contains("scheduler state is unavailable or unsafe")
+        );
+        let job = queue.load_job("alpha", "corrupt_leases").unwrap().unwrap();
+        assert_eq!(job.state, QueueState::Ready);
+        assert!(job.attempt.is_none());
+        assert!(!registry_root.join("scheduler.lock").exists());
         cleanup(fixture);
     }
 
