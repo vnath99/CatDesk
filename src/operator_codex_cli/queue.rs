@@ -3747,6 +3747,13 @@ async fn run_queued_turn(
             ..TurnResult::before_spawn("QUEUE_ATTEMPT_MARKER_UNBOUND")
         };
     }
+    // This queue promises an attributable, locally verifiable deliverable.
+    // A dirty or unborn baseline cannot satisfy that contract even if Codex
+    // exits successfully. Refuse after checking legacy attempt identity but
+    // before writing a marker or launching the native child.
+    if review_before.head_commit.is_none() || !review_before.changed_paths.is_empty() {
+        return TurnResult::before_spawn("REVIEW_BASELINE_DIRTY_BEFORE_SPAWN");
+    }
     if writer.begin_queue_writer_turn(&attempt.attempt_id).is_err() {
         return TurnResult {
             marker_retired: false,
@@ -7739,62 +7746,72 @@ mod tests {
 
     #[tokio::test]
     async fn legacy_claim_without_marker_binding_never_spawns_native_child() {
-        let (fixture, projects, queue) = three_project_fixture(1);
-        let executable = fake_native_cli(&fixture);
-        let cli = preflight_selected_cli(executable, None, &projects[0].workspace)
-            .await
-            .expect("fake native preflight");
-        queue
-            .save_job(
-                &QueueJob::new(
-                    "legacy_claim".into(),
-                    &projects[1],
-                    "fixture edit".into(),
-                    None,
-                    None,
+        for baseline in ["unborn", "untracked"] {
+            let (fixture, projects, queue) = three_project_fixture(1);
+            if baseline == "untracked" {
+                fs::write(projects[1].workspace.join("baseline.txt"), "clean").unwrap();
+                fixture_commit(&projects[1].workspace);
+                fs::write(projects[1].workspace.join("other-work.txt"), "untouched").unwrap();
+            }
+            let executable = fake_native_cli(&fixture);
+            let cli = preflight_selected_cli(executable, None, &projects[0].workspace)
+                .await
+                .expect("fake native preflight");
+            queue
+                .save_job(
+                    &QueueJob::new(
+                        "legacy_claim".into(),
+                        &projects[1],
+                        "fixture edit".into(),
+                        None,
+                        None,
+                    )
+                    .expect("job"),
                 )
-                .expect("job"),
+                .expect("ready job");
+            let mut claimed = claim_one(&projects[0].workspace, &queue)
+                .expect("claim")
+                .expect("selected job");
+            claimed.attempt.as_mut().unwrap().writer_marker_sha256 = None;
+            queue
+                .save_job(&claimed)
+                .expect("legacy record stays readable");
+            let turn = run_queued_turn(
+                &claimed,
+                &projects[0].workspace,
+                &cli,
+                Duration::from_secs(30),
             )
-            .expect("ready job");
-        let mut claimed = claim_one(&projects[0].workspace, &queue)
-            .expect("claim")
-            .expect("selected job");
-        claimed.attempt.as_mut().unwrap().writer_marker_sha256 = None;
-        queue
-            .save_job(&claimed)
-            .expect("legacy record stays readable");
-        let turn = run_queued_turn(
-            &claimed,
-            &projects[0].workspace,
-            &cli,
-            Duration::from_secs(30),
-        )
-        .await;
-        assert_eq!(turn.outcome, "QUEUE_ATTEMPT_MARKER_UNBOUND");
-        assert!(turn.child_absent_proven);
-        assert!(!turn.marker_retired);
-        assert!(
-            !projects[1]
-                .workspace
-                .join(format!("queue-proof-{}.txt", claimed.binding.thread_id))
-                .exists()
-        );
-        let result = complete_attempt(&projects[0].workspace, &queue, &claimed, turn)
-            .expect("legacy refusal receipt");
-        assert_eq!(result["job"]["state"], "ATTENTION");
-        assert_eq!(result["leaseReleased"], true);
-        assert_eq!(
-            result["receipt"]["evidenceLevel"],
-            "CHILD_ABSENT_BEFORE_SPAWN"
-        );
-        cleanup(fixture);
+            .await;
+            assert_eq!(turn.outcome, "QUEUE_ATTEMPT_MARKER_UNBOUND");
+            assert!(turn.child_absent_proven);
+            assert!(!turn.marker_retired);
+            assert!(
+                !projects[1]
+                    .workspace
+                    .join(format!("queue-proof-{}.txt", claimed.binding.thread_id))
+                    .exists()
+            );
+            let result = complete_attempt(&projects[0].workspace, &queue, &claimed, turn)
+                .expect("legacy refusal receipt");
+            assert_eq!(result["job"]["state"], "ATTENTION");
+            assert_eq!(result["leaseReleased"], true);
+            assert_eq!(
+                result["receipt"]["evidenceLevel"],
+                "CHILD_ABSENT_BEFORE_SPAWN"
+            );
+            assert_eq!(result["receipt"]["outcome"], "QUEUE_ATTEMPT_MARKER_UNBOUND");
+            cleanup(fixture);
+        }
     }
 
     #[tokio::test]
     async fn fake_native_child_produces_project_scoped_receipts_and_proofs() {
         let (fixture, projects, queue) = three_project_fixture(1);
-        fs::write(projects[1].workspace.join("preexisting.txt"), "before")
-            .expect("dirty baseline fixture");
+        for project in projects.iter().skip(1) {
+            fs::write(project.workspace.join("baseline.txt"), "before").expect("baseline fixture");
+            fixture_commit(&project.workspace);
+        }
         let executable = fake_native_cli(&fixture);
         let cli = preflight_selected_cli(executable, None, &projects[0].workspace)
             .await
@@ -7846,21 +7863,8 @@ mod tests {
                     .changed_during_turn
                     .contains(&format!("queue-proof-{}.txt", claimed.binding.thread_id))
             );
-            if expected == "alpha" {
-                assert!(candidate.baseline_dirty);
-                assert!(
-                    candidate
-                        .before
-                        .changed_paths
-                        .iter()
-                        .any(|path| path.path == "preexisting.txt")
-                );
-                assert!(
-                    !candidate
-                        .changed_during_turn
-                        .contains(&"preexisting.txt".into())
-                );
-            }
+            assert!(!candidate.baseline_dirty);
+            assert!(candidate.before.changed_paths.is_empty());
             assert_eq!(candidate.before.head_commit, candidate.after.head_commit);
             let path = queue.review_path(receipt_id);
             let mut tampered: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
@@ -7906,5 +7910,112 @@ mod tests {
             }
         }
         cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn unreviewable_project_refuses_child_and_does_not_starve_next_project() {
+        for baseline in ["unborn", "staged", "untracked"] {
+            let (fixture, projects, queue) = three_project_fixture(1);
+            let control = &projects[0].workspace;
+            let alpha = &projects[1];
+            let beta = &projects[2];
+            fs::write(beta.workspace.join("baseline.txt"), "clean").unwrap();
+            fixture_commit(&beta.workspace);
+            if baseline != "unborn" {
+                fs::write(alpha.workspace.join("baseline.txt"), "clean").unwrap();
+                fixture_commit(&alpha.workspace);
+                match baseline {
+                    "staged" => {
+                        fs::write(alpha.workspace.join("baseline.txt"), "staged change").unwrap();
+                        fixture_git_command(&alpha.workspace, &["add", "baseline.txt"]);
+                    }
+                    "untracked" => {
+                        fs::write(alpha.workspace.join("preexisting.txt"), "other work").unwrap();
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            let executable = fake_native_cli(&fixture);
+            let cli = preflight_selected_cli(executable, None, control)
+                .await
+                .expect("fixture native preflight");
+            let git = resolve_trusted_git(&alpha.workspace, control).unwrap();
+            let before = capture_git_review_witness(&alpha.workspace, &git)
+                .await
+                .unwrap();
+            match baseline {
+                "unborn" => assert!(before.head_commit.is_none()),
+                "staged" => assert!(
+                    before
+                        .changed_paths
+                        .iter()
+                        .any(|path| path.path == "baseline.txt")
+                ),
+                "untracked" => assert!(
+                    before
+                        .changed_paths
+                        .iter()
+                        .any(|path| path.path == "preexisting.txt")
+                ),
+                _ => unreachable!(),
+            }
+            for project in [alpha, beta] {
+                queue
+                    .save_job(
+                        &QueueJob::new(
+                            format!("job_{}", project.project_id),
+                            project,
+                            format!("edit only {}", project.project_id),
+                            None,
+                            None,
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap();
+            }
+
+            let refused = claim_one(control, &queue).unwrap().unwrap();
+            assert_eq!(refused.binding.project_id, "alpha");
+            let turn = run_queued_turn(&refused, control, &cli, Duration::from_secs(30)).await;
+            assert_eq!(turn.outcome, "REVIEW_BASELINE_DIRTY_BEFORE_SPAWN");
+            assert!(turn.child_absent_proven);
+            let result = complete_attempt(control, &queue, &refused, turn).unwrap();
+            assert_eq!(result["job"]["state"], "ATTENTION");
+            assert_eq!(result["leaseReleased"], true);
+            assert_eq!(
+                result["receipt"]["evidenceLevel"],
+                "CHILD_ABSENT_BEFORE_SPAWN"
+            );
+            assert!(
+                !alpha
+                    .workspace
+                    .join(format!("queue-proof-{}.txt", refused.binding.thread_id))
+                    .exists()
+            );
+            assert_eq!(
+                queue
+                    .read_receipt(&refused.attempt.as_ref().unwrap().attempt_id)
+                    .unwrap()
+                    .outcome,
+                "REVIEW_BASELINE_DIRTY_BEFORE_SPAWN"
+            );
+
+            let next = claim_one(control, &queue).unwrap().unwrap();
+            assert_eq!(next.binding.project_id, "beta");
+            let turn = run_queued_turn(&next, control, &cli, Duration::from_secs(30)).await;
+            assert!(turn.child_exit_observed, "{turn:?}");
+            let result = complete_attempt(control, &queue, &next, turn).unwrap();
+            assert_eq!(result["job"]["state"], "NATIVE_EXITED_ZERO");
+            assert_eq!(result["leaseReleased"], true);
+            assert_eq!(
+                fs::read_to_string(
+                    beta.workspace
+                        .join(format!("queue-proof-{}.txt", next.binding.thread_id))
+                )
+                .unwrap(),
+                "edit only beta"
+            );
+            cleanup(fixture);
+        }
     }
 }
