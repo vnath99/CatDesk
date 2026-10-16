@@ -15,9 +15,9 @@
 //! This code cannot prove the trustworthiness of a supplied root or clock.
 //! An empty history cannot attest its own first generation: bootstrap must
 //! bind that first generation to an independently protected predecessor pointer.
-//! Production has no generic phase advancement past STAGED. PUBLISHED and
-//! later writes remain fixture-only until their physical side effects and
-//! recovery invariants are proven by typed broker-owned receipts.
+//! Production has no generic phase advancement past STAGED. A typed retained
+//! physical publication receipt permits PUBLISHED; every later phase remains
+//! fixture-only until its side effects and recovery invariants are proven.
 
 use crate::{
     Result,
@@ -37,7 +37,7 @@ use crate::{
         PublicationLocationV1, inspect_publication_location_under_guard,
         pin_protected_install_under_guard, pin_published_package_under_guard,
     },
-    install_broker_stage_writer::BrokerStageReceiptV1,
+    install_broker_stage_writer::{BrokerPublishedReceiptV1, BrokerStageReceiptV1},
 };
 use ed25519_dalek::VerifyingKey;
 use serde::{Deserialize, Serialize};
@@ -2276,10 +2276,10 @@ impl<'a> BrokerLedgerLease<'a> {
         Ok(written)
     }
 
-    /// Create the durable no-retry boundary before a future package rename.
-    /// Only the fresh typed stage receipt can reach this method. A successful
-    /// marker deliberately leaves this source-only lease at STAGED: no native
-    /// rename, PUBLISHED record or install authority follows from it yet.
+    /// Create the durable no-retry boundary before a package rename. Only
+    /// the fresh typed stage receipt can reach this method. The marker alone
+    /// leaves the lease at STAGED; the separate publisher must retain exact
+    /// moved-package proof before `record_published` can advance it.
     pub fn record_publication_attempt(
         &mut self,
         receipt: &mut BrokerStageReceiptV1<'_>,
@@ -2382,6 +2382,38 @@ impl<'a> BrokerLedgerLease<'a> {
         drop(marker);
         validate_publication_attempt(self.root, &self.binding, Some(&staged_digest), true)?;
         Ok(())
+    }
+
+    /// Advance only from the exact marked STAGED transaction to PUBLISHED.
+    /// The receipt retains the moved package and all leaves under read pins
+    /// across the durable ledger write. A failed write/readback is sticky
+    /// attention; it never authorizes a second rename or pointer switch.
+    pub fn record_published(&mut self, receipt: &BrokerPublishedReceiptV1<'_>) -> Result<bool> {
+        if self.current != InstallPhaseV1::Staged
+            || !self.publication_attempt_started
+            || self.binding.stage_binding.as_ref() != Some(receipt.stage_binding())
+        {
+            return Err("WAKE_LEDGER_PUBLICATION_RECEIPT_INVALID".into());
+        }
+        validate_publication_attempt(self.root, &self.binding, Some(&self.current_digest), true)?;
+        receipt.revalidate_for_ledger(
+            self.root,
+            &self.binding.protected_root,
+            self.binding.install_generation,
+            &self.binding.approval_id,
+            &self.binding.signed_approval_sha256,
+            &self.binding.approval_continuity,
+        )?;
+        let written = self.advance_internal(InstallPhaseV1::Published)?;
+        receipt.revalidate_for_ledger(
+            self.root,
+            &self.binding.protected_root,
+            self.binding.install_generation,
+            &self.binding.approval_id,
+            &self.binding.signed_approval_sha256,
+            &self.binding.approval_continuity,
+        )?;
+        Ok(written)
     }
 
     #[cfg(test)]
