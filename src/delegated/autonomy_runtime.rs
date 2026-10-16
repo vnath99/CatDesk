@@ -246,7 +246,7 @@ pub(crate) fn fixed_current_user_catdesk_state_root() -> Result<PathBuf, Runtime
     checked_writer_state_dir(&fixed_current_user_catdesk_state_root_path()?)
 }
 
-fn fixed_current_user_catdesk_state_root_path() -> Result<PathBuf, RuntimeError> {
+pub(crate) fn fixed_current_user_catdesk_state_root_path() -> Result<PathBuf, RuntimeError> {
     #[cfg(windows)]
     let base = os_current_user_local_app_data()?;
     #[cfg(unix)]
@@ -3971,18 +3971,21 @@ fn resolve_codex_executable_from_paths(
     path: &OsStr,
 ) -> Result<PathBuf, RuntimeError> {
     if let Some(override_path) = override_path {
-        if is_direct_codex_executable(&override_path) {
-            return Ok(override_path);
+        if let Some(executable) = checked_direct_codex_executable(&override_path) {
+            return Ok(executable);
         }
         return Err(RuntimeError::Validation(
             "CATDESK_CODEX_CLI_EXECUTABLE must identify an existing direct executable, not a shell launcher".into(),
         ));
     }
     for directory in std::env::split_paths(&path) {
+        if !directory.is_absolute() {
+            continue;
+        }
         for executable in ["codex.exe", "codex"] {
             let candidate = directory.join(executable);
-            if is_direct_codex_executable(&candidate) {
-                return Ok(candidate);
+            if let Some(executable) = checked_direct_codex_executable(&candidate) {
+                return Ok(executable);
             }
         }
         for launcher in ["codex.cmd", "codex.ps1", "codex.bat"] {
@@ -3994,6 +3997,25 @@ fn resolve_codex_executable_from_paths(
     Err(RuntimeError::Validation(
         "current-user Codex executable was not found; CATDESK_CODEX_CLI_EXECUTABLE is an optional recovery override".into(),
     ))
+}
+
+fn checked_direct_codex_executable(path: &Path) -> Option<PathBuf> {
+    if !path.is_absolute() || !is_direct_codex_executable(path) {
+        return None;
+    }
+    let metadata = fs::symlink_metadata(path).ok()?;
+    if !metadata.is_file() || path_is_reparse_or_symlink(&metadata) {
+        return None;
+    }
+    let resolved = path.canonicalize().ok()?;
+    let resolved_metadata = fs::symlink_metadata(&resolved).ok()?;
+    if !resolved.is_absolute()
+        || !resolved_metadata.is_file()
+        || path_is_reparse_or_symlink(&resolved_metadata)
+    {
+        return None;
+    }
+    Some(resolved)
 }
 
 fn is_direct_codex_executable(path: &Path) -> bool {
@@ -4075,7 +4097,7 @@ fn resolve_npm_codex_launcher(launcher: &Path) -> Option<PathBuf> {
     ];
     native_candidates
         .into_iter()
-        .find(|candidate| is_direct_codex_executable(candidate))
+        .find_map(|candidate| checked_direct_codex_executable(&candidate))
 }
 
 /// Accepts only an operator-provided directory path for the existing Codex
@@ -6199,7 +6221,7 @@ mod tests {
 
         assert_eq!(
             resolve_codex_executable_from_paths(None, &path_of(&[npm_bin])),
-            Ok(native)
+            Ok(native.canonicalize().expect("canonical native fixture"))
         );
     }
 
@@ -6218,8 +6240,38 @@ mod tests {
                 Some(override_path.clone()),
                 &path_of(&[path_directory])
             ),
-            Ok(override_path)
+            Ok(override_path
+                .canonicalize()
+                .expect("canonical override fixture"))
         );
+    }
+
+    #[test]
+    fn direct_codex_resolver_rejects_relative_override_and_skips_relative_path() {
+        let root = resolver_root("absolute-only");
+        let native = root.join("codex.exe");
+        std::fs::write(&native, []).expect("native fixture");
+        assert!(checked_direct_codex_executable(Path::new("codex.exe")).is_none());
+        assert!(
+            resolve_codex_executable_from_paths(
+                Some(PathBuf::from("codex.exe")),
+                &path_of(std::slice::from_ref(&root))
+            )
+            .is_err()
+        );
+        let resolved = resolve_codex_executable_from_paths(
+            None,
+            &path_of(&[PathBuf::from("."), root.clone()]),
+        )
+        .expect("absolute PATH entry");
+        assert_eq!(resolved, native.canonicalize().expect("canonical fixture"));
+        assert!(resolved.is_absolute());
+        let resolved_root = root.canonicalize().expect("canonical fixture root");
+        let temp = std::env::temp_dir()
+            .canonicalize()
+            .expect("canonical temp root");
+        assert!(resolved_root != temp && resolved_root.starts_with(&temp));
+        std::fs::remove_dir_all(resolved_root).expect("fixture cleanup");
     }
 
     #[test]

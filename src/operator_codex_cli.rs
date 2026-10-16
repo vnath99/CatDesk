@@ -4,6 +4,7 @@
 //! independent WakeHost. It never reads Codex credentials or launches through
 //! a shell. The native CLI owns its normal session and approval behavior.
 
+mod queue;
 mod recovery;
 
 use std::fs;
@@ -37,6 +38,7 @@ pub(crate) struct CodexScope {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum OperatorCodexAction {
+    Queue(queue::QueueAction),
     Status(CodexScope),
     Recovery {
         scope: CodexScope,
@@ -65,6 +67,9 @@ pub(crate) fn parse_action(args: &[String]) -> Result<OperatorCodexAction, Strin
     let verb = args.get(2).map(String::as_str).ok_or_else(|| {
         "CODEX_USAGE: expected status, run, resume, or recovery with --project-id and --workspace".to_string()
     })?;
+    if verb == "queue" {
+        return queue::parse_action(args).map(OperatorCodexAction::Queue);
+    }
     if !matches!(verb, "status" | "run" | "resume" | "recovery") {
         return Err("CODEX_USAGE: expected status, run, resume, or recovery".into());
     }
@@ -383,6 +388,7 @@ fn invocation_args(
         approval.into(),
     ];
     match action {
+        OperatorCodexAction::Queue(_) => return Ok(Vec::new()),
         OperatorCodexAction::Status(_) => return Ok(Vec::new()),
         OperatorCodexAction::Recovery { .. } => return Ok(Vec::new()),
         OperatorCodexAction::Run { model, effort, .. } => {
@@ -436,10 +442,17 @@ pub(crate) async fn execute_action(
     action: OperatorCodexAction,
     catdesk_workspace: &Path,
 ) -> Result<Value, String> {
+    let action = match action {
+        OperatorCodexAction::Queue(queue_action) => {
+            return queue::execute_action(queue_action, catdesk_workspace).await;
+        }
+        action => action,
+    };
     if matches!(action, OperatorCodexAction::GlobalResumeAll) {
         return execute_global_resume_picker(catdesk_workspace).await;
     }
     let scope = match &action {
+        OperatorCodexAction::Queue(_) => unreachable!(),
         OperatorCodexAction::Status(scope)
         | OperatorCodexAction::Recovery { scope, .. }
         | OperatorCodexAction::Run { scope, .. }
@@ -543,6 +556,7 @@ pub(crate) async fn execute_action(
         ));
     }
     let (verb, model, effort) = match &action {
+        OperatorCodexAction::Queue(_) => unreachable!(),
         OperatorCodexAction::Run { model, effort, .. } => ("run", model, effort),
         OperatorCodexAction::Resume { model, effort, .. } => ("resume", model, effort),
         OperatorCodexAction::Status(_) => unreachable!(),
