@@ -55,7 +55,7 @@ try {
         param($root, $action)
         [void]$calls.Add($action)
         if ($action -eq 'status') { $script:statusIndex++; if ($script:statusIndex -eq 1) { 'LOCAL_READY_EXTERNAL_RUNTIME_PENDING' } else { 'READY' } }
-        else { 'TRANSPORT_VERIFICATION_FAILED' }
+        else { 'EXTERNAL_RUNTIME_VERIFICATION_FAILED' }
     }
     $externalPending = States (Invoke-CatDeskAutostartSupervisor -InitialDelaySeconds 0 -MaximumAttempts 3 -InitialBackoffSeconds 2 -MaximumBackoffSeconds 3 -HealthPollSeconds 15 -FailureCooldownSeconds 30 -MaximumMonitorCycles 2)
     Require (($externalPending -join ',') -eq 'EXTERNAL_RUNTIME_PENDING,READY,MONITORING_COMPLETE') 'bounded transport verification failure waits for the external runtime instead of cycling local recovery'
@@ -88,16 +88,64 @@ if ($queue.Count -gt 1) {
 } else {
     [IO.File]::WriteAllText($queuePath, '', [Text.UTF8Encoding]::new($false))
 }
-[pscustomobject]@{ state = $state } | ConvertTo-Json -Compress
+if ($state.StartsWith('{', [StringComparison]::Ordinal)) { $state; return }
+$parts = $state.Split('|', 2)
+$detail = if ($parts.Count -eq 2) { $parts[1] } else { 'redacted' }
+[pscustomobject]@{ command = $Action; state = $parts[0]; detail = $detail } | ConvertTo-Json -Compress
 '@
     [IO.File]::WriteAllText((Join-Path $workspace 'catdesk.ps1'), $fakeFacade, [Text.UTF8Encoding]::new($false))
-    [IO.File]::WriteAllLines((Join-Path $workspace 'states.txt'), [string[]]@('LOCAL_READY_EXTERNAL_RUNTIME_PENDING', 'TRANSPORT_VERIFICATION_FAILED', 'READY'), [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllLines((Join-Path $workspace 'states.txt'), [string[]]@('LOCAL_READY_EXTERNAL_RUNTIME_PENDING', 'TRANSPORT_VERIFICATION_FAILED|gate=RUNTIME_STATUS_TIMEOUT', 'READY'), [Text.UTF8Encoding]::new($false))
     $publicFacadePending = States (Invoke-CatDeskAutostartSupervisor -InitialDelaySeconds 0 -MaximumAttempts 3 -InitialBackoffSeconds 2 -MaximumBackoffSeconds 3 -HealthPollSeconds 15 -FailureCooldownSeconds 30 -MaximumMonitorCycles 2)
     Require (($publicFacadePending -join ',') -eq 'EXTERNAL_RUNTIME_PENDING,READY,MONITORING_COMPLETE') 'default public facade converges an external-runtime pending state without direct control seams'
     $publicCalls = @([IO.File]::ReadAllLines((Join-Path $workspace 'calls.log')))
     $expectedWorkspace = (Resolve-Path -LiteralPath $workspace).Path
     Require (($publicCalls -join ',') -eq "status|$expectedWorkspace,recover|$expectedWorkspace,status|$expectedWorkspace") 'default public facade receives only status/recover and the resolved workspace identity'
     Require (([string]::Join(',', $delays)) -eq '15') 'default public facade transport pending uses ordinary health polling'
+
+    $calls.Clear(); $delays.Clear()
+    [IO.File]::WriteAllText((Join-Path $workspace 'calls.log'), '')
+    [IO.File]::WriteAllLines((Join-Path $workspace 'states.txt'), [string[]]@('LOCAL_DAEMON_PENDING', 'TRANSPORT_VERIFICATION_FAILED|gate=LOCAL_MCP_RESPONSE_TIMEOUT', 'READY'), [Text.UTF8Encoding]::new($false))
+    $localFailure = States (Invoke-CatDeskAutostartSupervisor -InitialDelaySeconds 0 -MaximumAttempts 3 -InitialBackoffSeconds 2 -MaximumBackoffSeconds 3 -HealthPollSeconds 15 -FailureCooldownSeconds 30 -MaximumMonitorCycles 2)
+    Require (($localFailure -join ',') -eq 'DEGRADED,READY,MONITORING_COMPLETE') 'local MCP recovery failure does not become external runtime pending'
+    $localCalls = @([IO.File]::ReadAllLines((Join-Path $workspace 'calls.log')))
+    Require (($localCalls -join ',') -eq "status|$expectedWorkspace,recover|$expectedWorkspace,status|$expectedWorkspace") 'local MCP failure performs one bounded public recovery then returns to status polling'
+    Require (([string]::Join(',', $delays)) -eq '30') 'local MCP recovery failure uses degraded cooldown rather than external runtime health poll'
+
+    foreach ($invalidDetail in @('redacted', 'gate=RUNTIME_STATUS_TIMEOUT extra', 'gate=runtime_status_timeout', 'gate=https://example.invalid/secret')) {
+        [IO.File]::WriteAllText((Join-Path $workspace 'states.txt'), "TRANSPORT_VERIFICATION_FAILED|$invalidDetail", [Text.UTF8Encoding]::new($false))
+        Require ((Invoke-PublicLifecycle -Root $expectedWorkspace -Action recover) -eq 'ACTION_REQUIRED') 'unrecognized recovery gate fails closed'
+    }
+    foreach ($malformedJson in @(
+        '{"command":"recover","state":"TRANSPORT_VERIFICATION_FAILED","detail":["gate=RUNTIME_STATUS_TIMEOUT"]}',
+        '{"command":"recover","state":"TRANSPORT_VERIFICATION_FAILED","detail":{"value":"gate=RUNTIME_STATUS_TIMEOUT"}}',
+        '{"command":"recover","state":"TRANSPORT_VERIFICATION_FAILED","detail":1}',
+        '{"command":"recover","state":"TRANSPORT_VERIFICATION_FAILED","detail":null}',
+        '{"command":"recover","state":["TRANSPORT_VERIFICATION_FAILED"],"detail":"gate=RUNTIME_STATUS_TIMEOUT"}'
+    )) {
+        [IO.File]::WriteAllText((Join-Path $workspace 'states.txt'), $malformedJson, [Text.UTF8Encoding]::new($false))
+        Require ((Invoke-PublicLifecycle -Root $expectedWorkspace -Action recover) -eq 'ACTION_REQUIRED') 'non-scalar lifecycle state or recovery detail fails closed'
+    }
+    foreach ($misboundJson in @(
+        '{"state":"TRANSPORT_VERIFICATION_FAILED","detail":"gate=RUNTIME_STATUS_TIMEOUT"}',
+        '{"command":"status","state":"TRANSPORT_VERIFICATION_FAILED","detail":"gate=RUNTIME_STATUS_TIMEOUT"}',
+        '{"command":["recover"],"state":"TRANSPORT_VERIFICATION_FAILED","detail":"gate=RUNTIME_STATUS_TIMEOUT"}',
+        '{"command":null,"state":"TRANSPORT_VERIFICATION_FAILED","detail":"gate=RUNTIME_STATUS_TIMEOUT"}'
+    )) {
+        [IO.File]::WriteAllText((Join-Path $workspace 'states.txt'), $misboundJson, [Text.UTF8Encoding]::new($false))
+        Require ((Invoke-PublicLifecycle -Root $expectedWorkspace -Action recover) -eq 'ACTION_REQUIRED') 'missing, mismatched or non-scalar recovery command fails closed'
+    }
+    [IO.File]::WriteAllText((Join-Path $workspace 'states.txt'), '{"command":"recover","state":"READY","detail":"redacted"}', [Text.UTF8Encoding]::new($false))
+    Require ((Invoke-PublicLifecycle -Root $expectedWorkspace -Action status) -eq 'ACTION_REQUIRED') 'stale recover output cannot satisfy a status request'
+    Require ((Get-SupervisorRecoveryGateClass -Detail 'gate=LOCAL_MCP_PENDING') -eq 'LOCAL_MCP_VERIFICATION_FAILED') 'local pending gate cannot be classified as external runtime failure'
+
+    $delays.Clear()
+    [IO.File]::WriteAllText((Join-Path $workspace 'calls.log'), '')
+    [IO.File]::WriteAllLines((Join-Path $workspace 'states.txt'), [string[]]@('LOCAL_DAEMON_PENDING', 'TRANSPORT_VERIFICATION_FAILED|redacted', 'READY'), [Text.UTF8Encoding]::new($false))
+    $unknownGate = States (Invoke-CatDeskAutostartSupervisor -InitialDelaySeconds 0 -MaximumAttempts 3 -InitialBackoffSeconds 2 -MaximumBackoffSeconds 3 -HealthPollSeconds 15 -FailureCooldownSeconds 30 -MaximumMonitorCycles 2)
+    Require (($unknownGate -join ',') -eq 'DEGRADED,READY,MONITORING_COMPLETE') 'redacted transport gate stays action-required rather than external pending'
+    $unknownCalls = @([IO.File]::ReadAllLines((Join-Path $workspace 'calls.log')))
+    Require (($unknownCalls -join ',') -eq "status|$expectedWorkspace,recover|$expectedWorkspace,status|$expectedWorkspace") 'redacted transport gate does not trigger repeated recovery'
+    Require (([string]::Join(',', $delays)) -eq '30') 'redacted transport gate uses degraded cooldown'
 
     $calls.Clear(); $delays.Clear()
     $script:SupervisorSeams = @{}
@@ -108,12 +156,24 @@ if ($queue.Count -gt 1) {
         param($root, $action)
         [void]$calls.Add($action)
         if ($action -eq 'status') { $script:statusIndex++; if ($script:statusIndex -eq 1) { 'LOCAL_READY_EXTERNAL_RUNTIME_PENDING' } else { 'READY' } }
-        else { 'ACTION_REQUIRED' }
+        else { 'STATUS_UNAVAILABLE' }
     }
     $cooldown = States (Invoke-CatDeskAutostartSupervisor -InitialDelaySeconds 0 -MaximumAttempts 3 -InitialBackoffSeconds 2 -MaximumBackoffSeconds 3 -HealthPollSeconds 15 -FailureCooldownSeconds 30 -MaximumMonitorCycles 2)
     Require (($cooldown -join ',') -eq 'DEGRADED,READY,MONITORING_COMPLETE') 'exhausted burst cools down then later monitoring can recover'
-    Require (([string]::Join(',', $calls)) -eq 'status,recover,recover,recover,status') 'exhausted burst is bounded and next cycle resumes public status'
-    Require (([string]::Join(',', $delays)) -eq '2,3,30') 'backoff and cooldown are bounded and deterministic'
+    Require (([string]::Join(',', $calls)) -eq 'status,recover,recover,recover,status') 'transient unavailable recovery retries are bounded and later status polling resumes'
+    Require (([string]::Join(',', $delays)) -eq '2,3,30') 'retry backoff and degraded cooldown are bounded and deterministic'
+
+    $calls.Clear(); $delays.Clear(); $script:statusIndex = 0
+    $script:SupervisorSeams['Lifecycle'] = {
+        param($root, $action)
+        [void]$calls.Add($action)
+        if ($action -eq 'status') { $script:statusIndex++; if ($script:statusIndex -eq 1) { 'LOCAL_DAEMON_PENDING' } else { 'READY' } }
+        else { 'ACTION_REQUIRED' }
+    }
+    $actionRequired = States (Invoke-CatDeskAutostartSupervisor -InitialDelaySeconds 0 -MaximumAttempts 3 -InitialBackoffSeconds 2 -MaximumBackoffSeconds 3 -HealthPollSeconds 15 -FailureCooldownSeconds 30 -MaximumMonitorCycles 2)
+    Require (($actionRequired -join ',') -eq 'DEGRADED,READY,MONITORING_COMPLETE') 'action-required recovery remains degraded'
+    Require (([string]::Join(',', $calls)) -eq 'status,recover,status') 'action-required recovery stops without repeated mutation'
+    Require (([string]::Join(',', $delays)) -eq '30') 'action-required recovery uses degraded cooldown'
 
     try { Invoke-CatDeskAutostartSupervisor -InitialDelaySeconds 0 -MaximumAttempts 1 -InitialBackoffSeconds 1 -MaximumBackoffSeconds 1 -HealthPollSeconds 1 -FailureCooldownSeconds 30 -MaximumMonitorCycles 1 | Out-Null; throw 'invalid low poll accepted' } catch { if ($_.Exception.Message -match 'invalid low poll accepted') { throw } }
     try { Invoke-CatDeskAutostartSupervisor -InitialDelaySeconds 0 -MaximumAttempts 1 -InitialBackoffSeconds 1 -MaximumBackoffSeconds 1 -HealthPollSeconds 15 -FailureCooldownSeconds 1 -MaximumMonitorCycles 1 | Out-Null; throw 'invalid low cooldown accepted' } catch { if ($_.Exception.Message -match 'invalid low cooldown accepted') { throw } }

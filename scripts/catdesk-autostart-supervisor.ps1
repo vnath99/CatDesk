@@ -62,6 +62,32 @@ function Resolve-TrustedLifecycleFacadePath {
     return $observed
 }
 
+function Get-SupervisorRecoveryGateClass {
+    param([string]$Detail)
+    # The public facade emits only fixed, redacted gate codes. Match the whole
+    # field so an absent, malformed, or future gate cannot be mistaken for an
+    # externally owned runtime failure.
+    $runtimeGates = @(
+        'gate=RUNTIME_CLIENT_UNAVAILABLE', 'gate=RUNTIME_STATUS_TIMEOUT',
+        'gate=RUNTIME_STATUS_OVERSIZED', 'gate=RUNTIME_STATUS_COMMAND_FAILED',
+        'gate=RUNTIME_STATUS_INVALID', 'gate=RUNTIME_STATUS_UNAVAILABLE',
+        'gate=RUNTIME_STATUS_NOT_READY', 'gate=RUNTIME_STATUS_TRANSIENT',
+        'gate=RUNTIME_HEALTH_REFERENCE_INVALID', 'gate=RUNTIME_HEALTHZ_UNAVAILABLE',
+        'gate=RUNTIME_HEALTHZ_FAILED', 'gate=RUNTIME_READYZ_UNAVAILABLE',
+        'gate=RUNTIME_READYZ_FAILED'
+    )
+    $localGates = @(
+        'gate=LOCAL_MCP_PENDING', 'gate=LOCAL_MCP_LISTENER_MISSING',
+        'gate=LOCAL_MCP_LISTENER_IDENTITY_MISMATCH',
+        'gate=LOCAL_MCP_LAUNCHED_PROCESS_MISMATCH',
+        'gate=LOCAL_MCP_RESPONSE_TIMEOUT', 'gate=LOCAL_MCP_RESPONSE_UNAVAILABLE',
+        'gate=LOCAL_MCP_RESPONSE_INVALID', 'gate=LOCAL_MCP_PROTOCOL_UNREADY'
+    )
+    if ($runtimeGates -ccontains $Detail) { return 'EXTERNAL_RUNTIME_VERIFICATION_FAILED' }
+    if ($localGates -ccontains $Detail) { return 'LOCAL_MCP_VERIFICATION_FAILED' }
+    return 'ACTION_REQUIRED'
+}
+
 function Invoke-PublicLifecycle {
     param([string]$Root, [ValidateSet('status', 'recover')][string]$Action)
     Invoke-SupervisorSeam -Name 'Lifecycle' -Arguments @($Root, $Action) -Default {
@@ -72,8 +98,17 @@ function Invoke-PublicLifecycle {
         if ($text.Length -gt 4096) { return 'ACTION_REQUIRED' }
         try {
             $parsed = $text | ConvertFrom-Json -ErrorAction Stop
-            if ($parsed.state -in @('READY', 'LOCAL_READY_EXTERNAL_RUNTIME_PENDING', 'LOCAL_DAEMON_PENDING', 'CONNECTED_VERIFIED', 'TRANSPORT_VERIFICATION_FAILED', 'ACTION_REQUIRED', 'STATUS_UNAVAILABLE')) {
-                return [string]$parsed.state
+            if ($null -eq $parsed -or $parsed -is [array]) { return 'ACTION_REQUIRED' }
+            if ($parsed.command -isnot [string] -or $parsed.command -cne $command) { return 'ACTION_REQUIRED' }
+            if ($parsed.state -isnot [string]) { return 'ACTION_REQUIRED' }
+            $state = $parsed.state
+            if ($command -eq 'recover' -and $state -ceq 'TRANSPORT_VERIFICATION_FAILED') {
+                if ($parsed.detail -isnot [string]) { return 'ACTION_REQUIRED' }
+                return Get-SupervisorRecoveryGateClass -Detail $parsed.detail
+            }
+            if (@('READY', 'LOCAL_READY_EXTERNAL_RUNTIME_PENDING', 'LOCAL_DAEMON_PENDING',
+                'CONNECTED_VERIFIED', 'ACTION_REQUIRED', 'STATUS_UNAVAILABLE') -ccontains $state) {
+                return $state
             }
         } catch {}
         return 'ACTION_REQUIRED'
@@ -97,7 +132,8 @@ function Invoke-RecoveryBurst {
     $backoff = $InitialBackoff
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
         $recovery = Invoke-PublicLifecycle -Root $Root -Action recover
-        if ($recovery -in @('CONNECTED_VERIFIED', 'TRANSPORT_VERIFICATION_FAILED')) { return $recovery }
+        if ($recovery -in @('CONNECTED_VERIFIED', 'EXTERNAL_RUNTIME_VERIFICATION_FAILED',
+            'LOCAL_MCP_VERIFICATION_FAILED', 'ACTION_REQUIRED')) { return $recovery }
         if ($attempt -lt $Attempts) {
             Wait-SupervisorDelay -Seconds $backoff
             $backoff = [Math]::Min($MaximumBackoff, $backoff * 2)
@@ -143,7 +179,7 @@ function Invoke-CatDeskAutostartSupervisor {
                 if ($MaximumMonitorCycles -eq 0 -or $cycles -lt $MaximumMonitorCycles) { Wait-SupervisorDelay -Seconds $HealthPollSeconds }
                 continue
             }
-            if ($recovery -eq 'TRANSPORT_VERIFICATION_FAILED') {
+            if ($recovery -eq 'EXTERNAL_RUNTIME_VERIFICATION_FAILED') {
                 # The local daemon remains healthy and owns no external runtime.
                 # Wait for the official runtime's own recovery loop before the next
                 # public status probe; do not create a local restart/recovery storm.
