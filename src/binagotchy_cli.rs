@@ -19,6 +19,7 @@ use crate::delegated::autonomy_state::{
 use crate::mcp::{DesignatedChatTargetErrorV1, DesignatedChatTargetV1};
 use crate::state::load_app_config;
 use serde::Deserialize;
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
 use std::io::{self, BufRead, Read, Write};
@@ -433,6 +434,14 @@ fn conservative_id(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
 }
 
+fn repl_project_id(value: &str) -> bool {
+    conservative_id(value)
+        && value
+            .as_bytes()
+            .first()
+            .is_some_and(u8::is_ascii_alphanumeric)
+}
+
 fn safe_directory(path: &Path) -> bool {
     let Ok(metadata) = fs::symlink_metadata(path) else {
         return false;
@@ -615,6 +624,17 @@ fn print_project_queue(workspace: &Path, out: &mut impl Write) -> Result<(), Str
     let cursor = scheduler_cursor(&root, &registry)?;
     let leases = scheduler_leases(&root, &registry)?;
     writeln!(out, "Project queue (read-only durable state):").map_err(|_| "CLI_OUTPUT_FAILED")?;
+    // The explicit operator Codex queue is separate from historical managed
+    // session state. Read both so current tasks are visible without claiming a
+    // lease or dispatching a worker.
+    match read_operator_codex_queue(workspace) {
+        Ok(report) => render_operator_codex_queue(workspace, &registry, &report, out)?,
+        Err(_) => writeln!(
+            out,
+            "  operator Codex queue: unavailable (read-only status failed)"
+        )
+        .map_err(|_| "CLI_OUTPUT_FAILED")?,
+    }
     writeln!(
         out,
         "  fair selector last grant: {}",
@@ -672,6 +692,340 @@ fn print_project_queue(workspace: &Path, out: &mut impl Write) -> Result<(), Str
     .map_err(|_| "CLI_OUTPUT_FAILED".into())
 }
 
+fn read_operator_codex_action(workspace: &Path, args: Vec<String>) -> Result<Value, String> {
+    let action = crate::operator_codex_cli::parse_action(&args)?;
+    let control = workspace.to_path_buf();
+    // The REPL runs on CatDesk's Tokio thread. A short worker thread gives the
+    // existing async operator entry point its own runtime without nesting one.
+    std::thread::spawn(move || {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|_| "CODEX_OPERATOR: report runtime unavailable".to_string())?;
+        runtime.block_on(crate::operator_codex_cli::execute_action(action, &control))
+    })
+    .join()
+    .map_err(|_| "CODEX_OPERATOR: report worker failed".to_string())?
+}
+
+fn read_operator_codex_queue(workspace: &Path) -> Result<Value, String> {
+    read_operator_codex_action(
+        workspace,
+        vec![
+            "operator".into(),
+            "codex".into(),
+            "queue".into(),
+            "status".into(),
+        ],
+    )
+}
+
+fn render_operator_codex_queue(
+    workspace: &Path,
+    registry: &AutonomousProjectRegistryV1,
+    report: &Value,
+    out: &mut impl Write,
+) -> Result<(), String> {
+    if report["action"] != "codex_queue_status" {
+        return Err("CODEX_QUEUE: operator report action is invalid".into());
+    }
+    let jobs = report["jobs"]
+        .as_array()
+        .filter(|jobs| jobs.len() <= 512)
+        .ok_or("CODEX_QUEUE: operator report is invalid or oversized")?;
+    writeln!(out, "  operator Codex queue: {} job(s)", jobs.len())
+        .map_err(|_| "CLI_OUTPUT_FAILED")?;
+    for job in jobs.iter().take(24) {
+        let project_id = safe_report_token(&job["projectId"]);
+        let task_id = safe_report_token(&job["taskId"]);
+        let state = safe_report_token(&job["state"]);
+        let verified = registry
+            .projects
+            .iter()
+            .find(|project| project.project_id == project_id)
+            .is_some_and(|project| {
+                project.workspace.to_str() == job["workspace"].as_str()
+                    && project.codex_thread_id.as_deref() == job["threadId"].as_str()
+                    && project.chatgpt_target_sha256.as_deref() == job["targetSha256"].as_str()
+                    && resolve_registered_project_from_control_root(workspace, project_id)
+                        .is_ok_and(|scope| scope.project == *project)
+            });
+        writeln!(
+            out,
+            "    {project_id} / {task_id}  state={state}  identity={}",
+            if verified { "VERIFIED" } else { "UNVERIFIED" }
+        )
+        .map_err(|_| "CLI_OUTPUT_FAILED")?;
+    }
+    if jobs.len() > 24 {
+        writeln!(
+            out,
+            "    {} additional operator job(s) omitted.",
+            jobs.len() - 24
+        )
+        .map_err(|_| "CLI_OUTPUT_FAILED")?;
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+enum ScopedCodexVerb {
+    Resume,
+    RecoveryStatus,
+    RecoveryPrepare,
+}
+
+fn verified_codex_project(
+    workspace: &Path,
+    project_id: &str,
+) -> Result<AutonomousProjectV1, String> {
+    if !repl_project_id(project_id) {
+        return Err("CODEX_SCOPE: project ID is invalid".into());
+    }
+    let registry = registered_projects(workspace)?;
+    let registered = registry
+        .projects
+        .iter()
+        .find(|project| project.project_id == project_id)
+        .ok_or("CODEX_SCOPE: project ID is not registered")?;
+    let resolved = resolve_registered_project_from_control_root(workspace, project_id)
+        .map_err(|_| "CODEX_SCOPE: control or project Git identity is unavailable".to_string())?;
+    if &resolved.project != registered {
+        return Err("CODEX_SCOPE: project binding changed during verification".into());
+    }
+    Ok(resolved.project)
+}
+
+fn scoped_codex_args(
+    project: &AutonomousProjectV1,
+    verb: ScopedCodexVerb,
+) -> Result<Vec<String>, String> {
+    let workspace = project
+        .workspace
+        .to_str()
+        .ok_or("CODEX_SCOPE: project path is not Unicode")?;
+    let mut args = vec!["operator".into(), "codex".into()];
+    match verb {
+        ScopedCodexVerb::Resume => args.push("resume".into()),
+        ScopedCodexVerb::RecoveryStatus | ScopedCodexVerb::RecoveryPrepare => {
+            args.push("recovery".into());
+            args.push(
+                if matches!(verb, ScopedCodexVerb::RecoveryPrepare) {
+                    "prepare"
+                } else {
+                    "status"
+                }
+                .into(),
+            );
+        }
+    }
+    args.extend([
+        "--project-id".into(),
+        project.project_id.clone(),
+        "--workspace".into(),
+        workspace.into(),
+    ]);
+    Ok(args)
+}
+
+fn resume_codex_project(
+    workspace: &Path,
+    project_id: &str,
+    out: &mut impl Write,
+) -> Result<(), String> {
+    let project = verified_codex_project(workspace, project_id)?;
+    let thread = project
+        .codex_thread_id
+        .as_deref()
+        .ok_or("CODEX_THREAD: project has no bound Codex thread")?;
+    if !uuid::Uuid::parse_str(thread).is_ok_and(|id| id.to_string() == thread) {
+        return Err("CODEX_THREAD: bound thread ID is invalid".into());
+    }
+    let args = scoped_codex_args(&project, ScopedCodexVerb::Resume)?;
+    let executable = std::env::current_exe()
+        .and_then(|path| path.canonicalize())
+        .map_err(|_| "CODEX_UNAVAILABLE: CatDesk executable is unavailable".to_string())?;
+    if !executable.is_absolute() {
+        return Err("CODEX_UNAVAILABLE: CatDesk executable is not absolute".into());
+    }
+    writeln!(
+        out,
+        "Opening the bound native Codex thread for project {project_id}."
+    )
+    .map_err(|_| "CLI_OUTPUT_FAILED")?;
+    writeln!(out, "Binagotchy waits here until the native session exits.")
+        .map_err(|_| "CLI_OUTPUT_FAILED")?;
+    out.flush().map_err(|_| "CLI_OUTPUT_FAILED")?;
+    // The child rechecks the registration and writer guard. Passing arguments
+    // directly to this exact executable preserves the normal native CLI and
+    // approval behavior without a shell or a new authority surface.
+    let status = std::process::Command::new(executable)
+        .args(args)
+        .current_dir(workspace)
+        .status()
+        .map_err(|_| "CODEX_UNAVAILABLE: scoped CatDesk operator could not start".to_string())?;
+    if !status.success() {
+        return Err(format!(
+            "CODEX_EXIT: scoped operator returned {}; inspect the native session output and `recovery {project_id}`",
+            status
+                .code()
+                .map_or("signal".into(), |code| code.to_string())
+        ));
+    }
+    writeln!(
+        out,
+        "Scoped native Codex session exited zero for {project_id}."
+    )
+    .map_err(|_| "CLI_OUTPUT_FAILED".into())
+}
+
+fn read_codex_recovery(
+    workspace: &Path,
+    project: &AutonomousProjectV1,
+    prepare: bool,
+) -> Result<Value, String> {
+    let args = scoped_codex_args(
+        project,
+        if prepare {
+            ScopedCodexVerb::RecoveryPrepare
+        } else {
+            ScopedCodexVerb::RecoveryStatus
+        },
+    )?;
+    read_operator_codex_action(workspace, args)
+}
+
+fn safe_report_token(value: &Value) -> &str {
+    value
+        .as_str()
+        .filter(|token| conservative_id(token))
+        .unwrap_or("[redacted]")
+}
+
+fn print_codex_recovery(
+    workspace: &Path,
+    project_id: &str,
+    prepare: bool,
+    out: &mut impl Write,
+) -> Result<(), String> {
+    let project = verified_codex_project(workspace, project_id)?;
+    let report = read_codex_recovery(workspace, &project, prepare)?;
+    render_codex_recovery_report(&project, &report, prepare, out)
+}
+
+fn render_codex_recovery_report(
+    project: &AutonomousProjectV1,
+    report: &Value,
+    prepare: bool,
+    out: &mut impl Write,
+) -> Result<(), String> {
+    let project_id = &project.project_id;
+    if report["projectId"] != project.project_id
+        || report["readOnly"] != true
+        || report["launchAuthorized"] != false
+    {
+        return Err("CODEX_RECOVERY: report scope or authority is invalid".into());
+    }
+    let status = report["status"]
+        .as_str()
+        .filter(|status| {
+            matches!(
+                *status,
+                "NO_RECORDED_BLOCKER_OBSERVED" | "NEEDS_OWNER_RECOVERY"
+            )
+        })
+        .ok_or("CODEX_RECOVERY: report status is unavailable")?;
+    let sessions = report["sessionBlockers"]
+        .as_array()
+        .ok_or("CODEX_RECOVERY: session report is unavailable")?;
+    let queue = report["queueBlockers"]
+        .as_array()
+        .ok_or("CODEX_RECOVERY: queue report is unavailable")?;
+    let accounting = report["accountingReviewRows"]
+        .as_array()
+        .ok_or("CODEX_RECOVERY: accounting report is unavailable")?;
+    let marker = report["pendingWriterMarker"]["present"]
+        .as_bool()
+        .ok_or("CODEX_RECOVERY: writer marker report is unavailable")?;
+    let observed_sessions = report["observedSessionCount"]
+        .as_u64()
+        .filter(|count| *count <= 1_024)
+        .ok_or("CODEX_RECOVERY: observed session count is invalid")?;
+    if sessions.len() + queue.len() + accounting.len() > 4_096 {
+        return Err("CODEX_RECOVERY: report row count is invalid".into());
+    }
+    writeln!(out, "Codex recovery for {project_id}: {status}").map_err(|_| "CLI_OUTPUT_FAILED")?;
+    writeln!(
+        out,
+        "  observed sessions: {}  session blockers: {}  queue blockers: {}  accounting review: {}  writer marker: {}",
+        observed_sessions,
+        sessions.len(),
+        queue.len(),
+        accounting.len(),
+        if marker { "present" } else { "absent" }
+    )
+    .map_err(|_| "CLI_OUTPUT_FAILED")?;
+    let mut displayed = 0usize;
+    for (label, rows) in [
+        ("session", sessions),
+        ("queue", queue),
+        ("accounting", accounting),
+    ] {
+        for row in rows {
+            if displayed == 8 {
+                break;
+            }
+            writeln!(
+                out,
+                "  {label}: session={} task={} state={}",
+                safe_report_token(&row["sessionId"]),
+                safe_report_token(&row["taskId"]),
+                if row["taskState"].is_string() {
+                    safe_report_token(&row["taskState"])
+                } else if row["sessionState"].is_string() {
+                    safe_report_token(&row["sessionState"])
+                } else {
+                    "review"
+                },
+            )
+            .map_err(|_| "CLI_OUTPUT_FAILED")?;
+            displayed += 1;
+        }
+    }
+    let omitted = sessions.len() + queue.len() + accounting.len() - displayed;
+    if omitted > 0 {
+        writeln!(
+            out,
+            "  {omitted} additional row(s) omitted from this console view."
+        )
+        .map_err(|_| "CLI_OUTPUT_FAILED")?;
+    }
+    writeln!(
+        out,
+        "  Read-only observation; no writer state was cleared and no launch was authorized."
+    )
+    .map_err(|_| "CLI_OUTPUT_FAILED")?;
+    if prepare {
+        if let Some(required) = report["requiredEvidence"].as_array() {
+            for item in required.iter().take(4) {
+                if let Some(step) = item
+                    .as_str()
+                    .filter(|step| step.len() <= 240 && !step.chars().any(char::is_control))
+                {
+                    writeln!(out, "  required: {step}").map_err(|_| "CLI_OUTPUT_FAILED")?;
+                }
+            }
+        }
+    } else {
+        writeln!(
+            out,
+            "  Type `recovery prepare {project_id}` for owner handoff steps."
+        )
+        .map_err(|_| "CLI_OUTPUT_FAILED")?;
+    }
+    Ok(())
+}
+
 fn send_manual_test(out: &mut impl Write) -> Result<(), String> {
     let store = independent_wake_store()?;
     let message = normalized_manual_message();
@@ -692,6 +1046,9 @@ fn print_help(out: &mut impl Write) -> Result<(), String> {
         "  status                         CatDesk + independent WakeHost status",
         "  projects                       Show registered project paths and binding presence",
         "  queue                          Show fair selector, leases and scoped task IDs",
+        "  resume <project-id>            Resume that project's bound native Codex thread",
+        "  recovery <project-id>          Read scoped Codex blocker report",
+        "  recovery prepare <project-id>  Show owner recovery evidence steps",
         "  target                         Show authoritative designated ChatGPT URL",
         "  target <url>                   Set designated URL through paired CAS authority",
         "  target set <url>               Same as above",
@@ -715,6 +1072,10 @@ enum ParsedCommand<'a> {
     Status,
     Projects,
     ProjectQueue,
+    ResumeUsage,
+    Resume(&'a str),
+    RecoveryUsage,
+    Recovery { project_id: &'a str, prepare: bool },
     TargetShow,
     TargetSet(&'a str),
     WakeStatus,
@@ -742,6 +1103,8 @@ fn parse_command(input: &str) -> ParsedCommand<'_> {
         "status" => return ParsedCommand::Status,
         "projects" => return ParsedCommand::Projects,
         "queue" => return ParsedCommand::ProjectQueue,
+        "resume" => return ParsedCommand::ResumeUsage,
+        "recovery" => return ParsedCommand::RecoveryUsage,
         "target" => return ParsedCommand::TargetShow,
         "acceptance" => return ParsedCommand::Acceptance,
         "help" | "?" => return ParsedCommand::Help,
@@ -754,6 +1117,33 @@ fn parse_command(input: &str) -> ParsedCommand<'_> {
         "wake stop" => return ParsedCommand::WakeStop,
         "wake queue" => return ParsedCommand::WakeQueue,
         _ => {}
+    }
+    if let Some(project_id) = trimmed.strip_prefix("resume ").map(str::trim) {
+        return if repl_project_id(project_id) {
+            ParsedCommand::Resume(project_id)
+        } else {
+            ParsedCommand::Unknown
+        };
+    }
+    if let Some(project_id) = trimmed.strip_prefix("recovery prepare ").map(str::trim) {
+        return if repl_project_id(project_id) {
+            ParsedCommand::Recovery {
+                project_id,
+                prepare: true,
+            }
+        } else {
+            ParsedCommand::Unknown
+        };
+    }
+    if let Some(project_id) = trimmed.strip_prefix("recovery ").map(str::trim) {
+        return if repl_project_id(project_id) {
+            ParsedCommand::Recovery {
+                project_id,
+                prepare: false,
+            }
+        } else {
+            ParsedCommand::Unknown
+        };
     }
     if let Some(url) = trimmed.strip_prefix("target set ").map(str::trim) {
         return if url.is_empty() {
@@ -791,6 +1181,25 @@ fn execute_command(
         ParsedCommand::Status => print_status(workspace, out)?,
         ParsedCommand::Projects => print_projects(workspace, out)?,
         ParsedCommand::ProjectQueue => print_project_queue(workspace, out)?,
+        ParsedCommand::ResumeUsage => {
+            writeln!(
+                out,
+                "Usage: resume <project-id>. Type `projects` for verified IDs."
+            )
+            .map_err(|_| "CLI_OUTPUT_FAILED")?;
+        }
+        ParsedCommand::Resume(project_id) => resume_codex_project(workspace, project_id, out)?,
+        ParsedCommand::RecoveryUsage => {
+            writeln!(
+                out,
+                "Usage: recovery <project-id>. Type `projects` for verified IDs."
+            )
+            .map_err(|_| "CLI_OUTPUT_FAILED")?;
+        }
+        ParsedCommand::Recovery {
+            project_id,
+            prepare,
+        } => print_codex_recovery(workspace, project_id, prepare, out)?,
         ParsedCommand::TargetShow => match read_target(workspace) {
             Ok(target) => {
                 writeln!(out, "{}", target.url).map_err(|_| "CLI_OUTPUT_FAILED")?;
@@ -948,9 +1357,10 @@ pub fn run_cli(workspace: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        BINAGOTCHY_CLI_MODE_FLAG, ParsedCommand, normalized_manual_message,
+        BINAGOTCHY_CLI_MODE_FLAG, ParsedCommand, ScopedCodexVerb, normalized_manual_message,
         parse_binagotchy_cli_mode, parse_command, print_projects, project_task_rows,
-        scheduler_cursor, scheduler_leases, validated_wake_predecessor_digest,
+        render_codex_recovery_report, render_operator_codex_queue, scheduler_cursor,
+        scheduler_leases, scoped_codex_args, validated_wake_predecessor_digest,
     };
     use crate::delegated::autonomy_projects::{
         AutonomousProjectRegistryV1, AutonomousProjectV1, PROJECT_REGISTRY_SCHEMA_VERSION,
@@ -1006,6 +1416,37 @@ mod tests {
         assert_eq!(parse_command("projects"), ParsedCommand::Projects);
         assert_eq!(parse_command("queue"), ParsedCommand::ProjectQueue);
         assert_eq!(parse_command("queue all"), ParsedCommand::Unknown);
+        assert_eq!(parse_command("resume"), ParsedCommand::ResumeUsage);
+        assert_eq!(
+            parse_command("resume alpha"),
+            ParsedCommand::Resume("alpha")
+        );
+        assert_eq!(parse_command("recovery"), ParsedCommand::RecoveryUsage);
+        assert_eq!(
+            parse_command("recovery alpha"),
+            ParsedCommand::Recovery {
+                project_id: "alpha",
+                prepare: false
+            }
+        );
+        assert_eq!(
+            parse_command("recovery prepare alpha"),
+            ParsedCommand::Recovery {
+                project_id: "alpha",
+                prepare: true
+            }
+        );
+        for invalid in [
+            "resume alpha beta",
+            "resume alpha;rm",
+            "resume --all",
+            "resume ../alpha",
+            "recovery alpha beta",
+            "recovery prepare alpha;rm",
+            "recovery ../alpha",
+        ] {
+            assert_eq!(parse_command(invalid), ParsedCommand::Unknown);
+        }
         assert_eq!(parse_command("target"), ParsedCommand::TargetShow);
         assert_eq!(
             parse_command("target set https://chatgpt.com/c/example"),
@@ -1023,6 +1464,171 @@ mod tests {
             ParsedCommand::WakeRetire("old-event-1")
         );
         assert_eq!(parse_command("rm -rf ."), ParsedCommand::Unknown);
+    }
+
+    #[test]
+    fn codex_delegate_args_are_fixed_and_scoped() {
+        let project = AutonomousProjectV1 {
+            project_id: "alpha".into(),
+            workspace: std::env::temp_dir().join("catdesk-binagotchy-alpha space"),
+            git_identity: "fixture".into(),
+            verification_profile: "cargo-test".into(),
+            codex_thread_id: Some(Uuid::new_v4().to_string()),
+            chatgpt_target_url: None,
+            chatgpt_target_sha256: None,
+        };
+        let workspace = project.workspace.to_str().expect("Unicode fixture");
+        assert_eq!(
+            scoped_codex_args(&project, ScopedCodexVerb::Resume).unwrap(),
+            [
+                "operator",
+                "codex",
+                "resume",
+                "--project-id",
+                "alpha",
+                "--workspace",
+                workspace
+            ]
+        );
+        assert_eq!(
+            scoped_codex_args(&project, ScopedCodexVerb::RecoveryStatus).unwrap(),
+            [
+                "operator",
+                "codex",
+                "recovery",
+                "status",
+                "--project-id",
+                "alpha",
+                "--workspace",
+                workspace
+            ]
+        );
+        assert_eq!(
+            scoped_codex_args(&project, ScopedCodexVerb::RecoveryPrepare).unwrap(),
+            [
+                "operator",
+                "codex",
+                "recovery",
+                "prepare",
+                "--project-id",
+                "alpha",
+                "--workspace",
+                workspace
+            ]
+        );
+    }
+
+    #[test]
+    fn recovery_console_caps_rows_and_rejects_cross_project_or_launch_authority() {
+        let project = AutonomousProjectV1 {
+            project_id: "alpha".into(),
+            workspace: std::env::temp_dir().join("catdesk-binagotchy-report"),
+            git_identity: "fixture".into(),
+            verification_profile: "cargo-test".into(),
+            codex_thread_id: None,
+            chatgpt_target_url: None,
+            chatgpt_target_sha256: None,
+        };
+        let blockers = (0..20)
+            .map(|index| {
+                serde_json::json!({
+                    "sessionId":format!("session_{index}"),
+                    "taskId":format!("task_{index}"),
+                    "taskState":"WORKER_RUNNING"
+                })
+            })
+            .collect::<Vec<_>>();
+        let mut report = serde_json::json!({
+            "projectId":"alpha", "readOnly":true, "launchAuthorized":false,
+            "status":"NEEDS_OWNER_RECOVERY", "observedSessionCount":20,
+            "sessionBlockers":[], "queueBlockers":blockers,
+            "accountingReviewRows":[], "pendingWriterMarker":{"present":false},
+            "requiredEvidence":["Inspect owner process."]
+        });
+        let mut out = Vec::new();
+        render_codex_recovery_report(&project, &report, true, &mut out).unwrap();
+        let rendered = String::from_utf8(out).unwrap();
+        assert!(rendered.contains("queue blockers: 20"));
+        assert!(rendered.contains("12 additional row(s) omitted"));
+        assert!(rendered.contains("required: Inspect owner process."));
+        assert!(rendered.contains("no launch was authorized"));
+        assert!(!rendered.contains("task_8"));
+        report["queueBlockers"][0]["sessionId"] = serde_json::json!("bad\u{001b}[31m");
+        let mut out = Vec::new();
+        render_codex_recovery_report(&project, &report, false, &mut out).unwrap();
+        let rendered = String::from_utf8(out).unwrap();
+        assert!(rendered.contains("session=[redacted]"));
+        assert!(!rendered.contains('\u{001b}'));
+        report["projectId"] = serde_json::json!("beta");
+        assert!(render_codex_recovery_report(&project, &report, false, &mut Vec::new()).is_err());
+        report["projectId"] = serde_json::json!("alpha");
+        report["launchAuthorized"] = serde_json::json!(true);
+        assert!(render_codex_recovery_report(&project, &report, false, &mut Vec::new()).is_err());
+    }
+
+    #[test]
+    fn operator_queue_console_is_bounded_and_hides_prompt_and_unsafe_ids() {
+        let root = std::env::temp_dir().join("catdesk-binagotchy-operator-view");
+        let registry = AutonomousProjectRegistryV1 {
+            schema_version: PROJECT_REGISTRY_SCHEMA_VERSION,
+            maximum_codex_workers: 1,
+            maximum_qwen_workers: 1,
+            projects: Vec::new(),
+        };
+        let jobs = (0..30)
+            .map(|index| {
+                serde_json::json!({
+                    "projectId":"alpha", "taskId":format!("task_{index}"),
+                    "workspace":root, "threadId":"secret-thread",
+                    "targetSha256":null, "state":"READY",
+                    "prompt":"secret prompt must never appear"
+                })
+            })
+            .collect::<Vec<_>>();
+        let mut report = serde_json::json!({"action":"codex_queue_status", "jobs":jobs});
+        report["jobs"][0]["taskId"] = serde_json::json!("bad\u{001b}[31m");
+        let mut out = Vec::new();
+        render_operator_codex_queue(&root, &registry, &report, &mut out).unwrap();
+        let rendered = String::from_utf8(out).unwrap();
+        assert!(rendered.contains("operator Codex queue: 30 job(s)"));
+        assert!(rendered.contains("6 additional operator job(s) omitted"));
+        assert!(rendered.contains("alpha / [redacted]"));
+        assert!(!rendered.contains("task_24"));
+        assert!(!rendered.contains("secret prompt"));
+        assert!(!rendered.contains('\u{001b}'));
+        report["action"] = serde_json::json!("codex_queue_dispatch");
+        assert!(render_operator_codex_queue(&root, &registry, &report, &mut Vec::new()).is_err());
+    }
+
+    #[test]
+    fn codex_commands_refuse_unverified_registry_before_launch_or_report() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-binagotchy-unverified-{}", Uuid::new_v4()));
+        fs::create_dir_all(root.join(".catdesk/projects")).unwrap();
+        let project = AutonomousProjectV1 {
+            project_id: "alpha".into(),
+            workspace: root.clone(),
+            git_identity: "unknown-git-identity".into(),
+            verification_profile: "cargo-test".into(),
+            codex_thread_id: Some(Uuid::new_v4().to_string()),
+            chatgpt_target_url: None,
+            chatgpt_target_sha256: None,
+        };
+        let registry = AutonomousProjectRegistryV1 {
+            schema_version: PROJECT_REGISTRY_SCHEMA_VERSION,
+            maximum_codex_workers: 1,
+            maximum_qwen_workers: 1,
+            projects: vec![project],
+        };
+        fs::write(
+            root.join(".catdesk/projects/projects.json"),
+            serde_json::to_vec(&registry).unwrap(),
+        )
+        .unwrap();
+        assert!(super::resume_codex_project(&root, "alpha", &mut Vec::new()).is_err());
+        assert!(super::print_codex_recovery(&root, "alpha", false, &mut Vec::new()).is_err());
+        assert!(!root.join(".catdesk/autonomy").exists());
+        remove_fixture_tree(&root);
     }
 
     #[test]
