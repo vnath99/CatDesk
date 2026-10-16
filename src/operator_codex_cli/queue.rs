@@ -45,6 +45,7 @@ use super::{
 
 mod advisory;
 mod operator_review;
+mod review_invite;
 mod review_reader;
 
 pub(crate) use review_reader::read_for_mcp as read_review_package_for_mcp;
@@ -99,6 +100,11 @@ pub(crate) enum QueueAction {
     ReviewPackage {
         receipt_id: String,
     },
+    ReviewInvitePrepare {
+        scope: CodexScope,
+        receipt_id: String,
+        expected_package_sha256: String,
+    },
     AdvisoryReview {
         receipt_id: String,
     },
@@ -146,7 +152,7 @@ pub(crate) enum QueueAction {
 
 pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
     let verb = args.get(3).map(String::as_str).ok_or_else(|| {
-        "CODEX_QUEUE_USAGE: expected add, status, receipt, review, verify, review-package, advisory-review, operator-review, operator-review-receipt, review-disclosure-grant, review-disclosure-renew, review-disclosure-revoke, profile-bind, dispatch, pause, or resume"
+        "CODEX_QUEUE_USAGE: expected add, status, receipt, review, verify, review-package, review-invite-prepare, advisory-review, operator-review, operator-review-receipt, review-disclosure-grant, review-disclosure-renew, review-disclosure-revoke, profile-bind, dispatch, pause, or resume"
             .to_string()
     })?;
     if !matches!(
@@ -157,6 +163,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             | "review"
             | "verify"
             | "review-package"
+            | "review-invite-prepare"
             | "advisory-review"
             | "operator-review"
             | "operator-review-receipt"
@@ -250,6 +257,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
         "review-disclosure-grant"
             | "review-disclosure-renew"
             | "review-disclosure-revoke"
+            | "review-invite-prepare"
             | "operator-review"
     ) {
         let receipt_id = values
@@ -309,6 +317,19 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
                 receipt_id,
                 expected_package_sha256,
                 decision,
+            });
+        }
+        if verb == "review-invite-prepare" {
+            if !values.is_empty() {
+                return Err(
+                    "CODEX_QUEUE_USAGE: review invitation preparation takes no extra options"
+                        .into(),
+                );
+            }
+            return Ok(QueueAction::ReviewInvitePrepare {
+                scope,
+                receipt_id,
+                expected_package_sha256,
             });
         }
         if !values.is_empty() {
@@ -1743,6 +1764,20 @@ pub(crate) async fn execute_action(
         QueueAction::Verify { receipt_id } => verify_receipt(&control.project, &receipt_id).await,
         QueueAction::ReviewPackage { receipt_id } => {
             package_verified_receipt(&control.project, &receipt_id)
+        }
+        QueueAction::ReviewInvitePrepare {
+            scope,
+            receipt_id,
+            expected_package_sha256,
+        } => {
+            let project = registered_project(&control.control_workspace, &scope)?;
+            review_invite::prepare(
+                &control.control_workspace,
+                &control.project,
+                &project,
+                &receipt_id,
+                &expected_package_sha256,
+            )
         }
         QueueAction::AdvisoryReview { receipt_id } => {
             advisory::review_package_advisory(&control.project, &receipt_id).await
@@ -4679,6 +4714,136 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn review_invitation_preparation_requires_consent_and_carries_no_review_authority() {
+        let (fixture, projects, queue, receipt_id, cargo) = completed_verified_fixture(false).await;
+        verify_receipt_in_store_with_executable(&projects[0], &queue, &receipt_id, Some(&cargo))
+            .await
+            .unwrap();
+        let packaged = package_verified_receipt_in_store(&queue, &receipt_id).unwrap();
+        let sha = packaged["package"]["artifactSha256"].as_str().unwrap();
+        let package_before = fs::read(queue.review_package_path(&receipt_id)).unwrap();
+        let job_before = fs::read(queue.job_path("alpha", "verified_fixture")).unwrap();
+        assert!(
+            review_invite::prepare_in_store_for_test(&queue, &projects[1], &receipt_id, sha)
+                .unwrap_err()
+                .contains("disclosure grant is required")
+        );
+        review_reader::grant_in_store(&queue, &projects[1], &receipt_id, sha).unwrap();
+        let first =
+            review_invite::prepare_in_store_for_test(&queue, &projects[1], &receipt_id, sha)
+                .unwrap();
+        let invitation_path = queue
+            .root
+            .join("receipts")
+            .join(format!("{receipt_id}.review-invitation.json"));
+        let invitation_before = fs::read(&invitation_path).unwrap();
+        let second =
+            review_invite::prepare_in_store_for_test(&queue, &projects[1], &receipt_id, sha)
+                .unwrap();
+        assert_eq!(first["invitationSha256"], second["invitationSha256"]);
+        assert_eq!(first["idempotent"], false);
+        assert_eq!(second["idempotent"], true);
+        assert_eq!(first["invitation"]["wakePublication"], "NOT_PUBLISHED");
+        assert_eq!(first["invitation"]["independentReview"], "PENDING");
+        assert_eq!(first["invitation"]["wakeReady"], false);
+        assert_eq!(first["invitation"]["projectId"], "alpha");
+        assert_eq!(first["invitation"]["receiptId"], receipt_id);
+        assert_eq!(first["invitation"]["packageSha256"], sha);
+        assert_eq!(
+            catdesk_wake::protocol::digest(projects[1].chatgpt_target_url.as_deref().unwrap()),
+            project_chat_target_digest(projects[1].chatgpt_target_url.as_deref().unwrap())
+        );
+        assert_eq!(
+            first["invitation"]["targetSha256"],
+            projects[1].chatgpt_target_sha256.as_deref().unwrap()
+        );
+        assert!(
+            first["invitation"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("not an independent review decision or approval")
+        );
+        assert!(first["invitation"].get("targetUrl").is_none());
+        assert!(first["invitation"].get("prompt").is_none());
+        assert_eq!(
+            fs::read(queue.review_package_path(&receipt_id)).unwrap(),
+            package_before
+        );
+        assert_eq!(
+            fs::read(queue.job_path("alpha", "verified_fixture")).unwrap(),
+            job_before
+        );
+        assert_eq!(fs::read(&invitation_path).unwrap(), invitation_before);
+
+        assert!(
+            review_invite::prepare_in_store_for_test(&queue, &projects[2], &receipt_id, sha)
+                .is_err()
+        );
+        assert!(
+            review_invite::prepare_in_store_for_test(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                &"0".repeat(64)
+            )
+            .is_err()
+        );
+        let mut unsupported_target = projects[1].clone();
+        unsupported_target.chatgpt_target_url = Some("https://chatgpt.com/g/alpha/c/exact".into());
+        unsupported_target.chatgpt_target_sha256 = Some(project_chat_target_digest(
+            unsupported_target.chatgpt_target_url.as_deref().unwrap(),
+        ));
+        assert!(review_invite::registered_wake_target_sha256(&unsupported_target).is_err());
+        let mut rebound = projects[1].clone();
+        rebound.chatgpt_target_url = Some("https://chatgpt.com/c/alpha-rebound".into());
+        rebound.chatgpt_target_sha256 = Some(project_chat_target_digest(
+            rebound.chatgpt_target_url.as_deref().unwrap(),
+        ));
+        assert!(
+            review_invite::prepare_in_store_for_test(&queue, &rebound, &receipt_id, sha).is_err(),
+            "the original invitation cannot authorize a rebound target"
+        );
+        let mut altered: Value = serde_json::from_slice(&invitation_before).unwrap();
+        altered["message"] = json!("approval granted");
+        fs::write(&invitation_path, serde_json::to_vec(&altered).unwrap()).unwrap();
+        assert!(
+            review_invite::prepare_in_store_for_test(&queue, &projects[1], &receipt_id, sha)
+                .unwrap_err()
+                .contains("binding changed")
+        );
+        fs::write(&invitation_path, &invitation_before).unwrap();
+        let mut whitespace_tamper = invitation_before.clone();
+        whitespace_tamper.push(b' ');
+        fs::write(&invitation_path, whitespace_tamper).unwrap();
+        assert!(
+            review_invite::prepare_in_store_for_test(&queue, &projects[1], &receipt_id, sha)
+                .unwrap_err()
+                .contains("bytes changed")
+        );
+        fs::write(&invitation_path, &invitation_before).unwrap();
+        let grant_path = review_reader::grant_path(&queue, &receipt_id);
+        let grant_before = fs::read(&grant_path).unwrap();
+        let mut expired: Value = serde_json::from_slice(&grant_before).unwrap();
+        expired["createdAtUnix"] = json!(1);
+        expired["expiresAtUnix"] = json!(3601);
+        fs::write(&grant_path, serde_json::to_vec(&expired).unwrap()).unwrap();
+        assert!(
+            review_invite::prepare_in_store_for_test(&queue, &projects[1], &receipt_id, sha)
+                .unwrap_err()
+                .contains("outside its lifetime")
+        );
+        assert_eq!(fs::read(&invitation_path).unwrap(), invitation_before);
+        fs::write(&grant_path, &grant_before).unwrap();
+        review_reader::revoke_in_store(&queue, "alpha", &receipt_id, sha).unwrap();
+        assert!(
+            review_invite::prepare_in_store_for_test(&queue, &projects[1], &receipt_id, sha)
+                .unwrap_err()
+                .contains("revoked")
+        );
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
     async fn operator_review_is_create_once_bound_and_never_promotes_wake() {
         let (fixture, projects, queue, receipt_id, cargo) = completed_verified_fixture(false).await;
         assert!(
@@ -6588,6 +6753,13 @@ mod tests {
             parse(&grant),
             Ok(QueueAction::ReviewDisclosureGrant { .. })
         ));
+        let mut invitation = grant.to_vec();
+        invitation[3] = "review-invite-prepare";
+        assert!(matches!(
+            parse(&invitation),
+            Ok(QueueAction::ReviewInvitePrepare { .. })
+        ));
+        assert!(parse(&[&invitation[..], &["--task", "unexpected"]].concat()).is_err());
         let mut renew = grant.to_vec();
         renew[3] = "review-disclosure-renew";
         assert!(matches!(

@@ -1,5 +1,15 @@
 # CatDesk — Important Command Reference
 
+## October 16 source-only queue review invitation preparation
+
+After local verification, review-package creation, and a live local disclosure grant, the operator can prepare an exact-package review request:
+
+```text
+catdesk.exe codex queue review-invite-prepare --project-id <id> --workspace <registered root> --receipt-id <uuid> --expected-package-sha256 <lowercase hash>
+```
+
+The command writes one create-once queue receipt sidecar with the package, project binding and registered Wake-compatible target digest. Every repeat rechecks current registration, package and live disclosure; expiry, revocation, tampering or target drift refuse readback. The record remains `wakePublication=NOT_PUBLISHED`, `independentReview=PENDING`, and `wakeReady=false`. It does not bind a Wake target generation, post an event, deliver to ChatGPT, record a decision/ACK, or authorize another task. A future publisher must prove the installed Wake store, recheck registration and live disclosure, and bind the current target generation before an event can be produced.
+
 ## October 16 source-only queue review disclosure renewal
 
 If an exact queue package's one-hour local disclosure grant expires before ChatGPT finishes reading it, a human may renew that same grant in an interactive local terminal:

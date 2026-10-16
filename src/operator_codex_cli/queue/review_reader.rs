@@ -419,6 +419,21 @@ fn read_grant(
     Ok(Some(grant))
 }
 
+/// Snapshot the active local consent for a prepared invitation. Callers hold
+/// the receipt and queue locks so a concurrent revocation cannot pass between
+/// this check and their bound-package read. This is not a promise that the
+/// grant will still be live when a future Wake message is delivered.
+pub(super) fn active_disclosure_expiry(
+    store: &QueueStore,
+    project: &AutonomousProjectV1,
+    receipt_id: &str,
+    package_sha256: &str,
+) -> Result<u64, String> {
+    let grant = read_grant(store, project, receipt_id, package_sha256)?
+        .ok_or("CODEX_QUEUE_REVIEW_INVITE: an active local disclosure grant is required")?;
+    Ok(grant.expires_at_unix)
+}
+
 pub(super) fn grant_in_store(
     store: &QueueStore,
     project: &AutonomousProjectV1,
