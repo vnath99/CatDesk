@@ -338,6 +338,18 @@ fn ensure_no_interrupted_managed_writer(project: &AutonomousProjectV1) -> Result
             );
         }
     }
+    // The queue can look quiescent while a historical accounting record still
+    // has an unended task or an open activity span. Use the same bounded,
+    // no-follow readback as the operator recovery view before launching.
+    let recovery = recovery::report(project, false).map_err(|_| {
+        "CODEX_LOCK: managed recovery evidence is unavailable or unsafe".to_string()
+    })?;
+    if recovery["status"] != "NO_RECORDED_BLOCKER_OBSERVED" {
+        return Err(
+            "CODEX_LOCK: managed ownership or accounting remains unresolved; use recovery before direct Codex"
+                .into(),
+        );
+    }
     Ok(())
 }
 
@@ -628,6 +640,7 @@ async fn execute_global_resume_picker(catdesk_workspace: &Path) -> Result<Value,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::delegated::autonomy_accounting::{ActivityActorV1, ActivityEvidenceV1};
     use crate::delegated::autonomy_projects::AutonomousProjectRegistryStoreV1;
     use crate::delegated::autonomy_state::{AutonomousQueueTaskV1, AutonomousQueueV1};
     use std::fs;
@@ -644,6 +657,118 @@ mod tests {
             .expect("canonical temp root");
         assert!(resolved != temp && resolved.starts_with(&temp));
         fs::remove_dir_all(resolved).expect("fixture cleanup");
+    }
+
+    fn terminal_accounting_fixture() -> (PathBuf, AutonomousProjectV1, AutonomousStateStoreV1) {
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-operator-accounting-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).expect("fixture workspace");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).expect("autonomy store");
+        store
+            .create_session(
+                "historical-task",
+                AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                    task_id: "work".into(),
+                    priority: 1,
+                    depends_on: Vec::new(),
+                    state: AutonomousQueueTaskStateV1::Ready,
+                }])
+                .expect("queue"),
+            )
+            .expect("session");
+        let mut snapshot = store.load_session("historical-task").expect("snapshot");
+        snapshot.state = AutonomousSessionStateV1::Cancelled;
+        snapshot.active = false;
+        store.save_session(&snapshot).expect("terminal snapshot");
+        let project = AutonomousProjectV1 {
+            project_id: "fixture".into(),
+            workspace: root.canonicalize().expect("canonical project"),
+            git_identity: "fixture".into(),
+            verification_profile: "rust_full".into(),
+            codex_thread_id: None,
+            chatgpt_target_url: None,
+            chatgpt_target_sha256: None,
+        };
+        (root, project, store)
+    }
+
+    fn start_accounting_record(store: &AutonomousStateStoreV1) {
+        store
+            .execution_accounting_store()
+            .expect("accounting store")
+            .record_task_started(
+                "fixture",
+                "work",
+                "historical-task",
+                Some("thread"),
+                "codex-cli",
+                None,
+                None,
+                100,
+            )
+            .expect("accounting record");
+    }
+
+    #[test]
+    fn unended_accounting_blocks_native_after_terminal_session_and_ready_queue() {
+        let (root, project, store) = terminal_accounting_fixture();
+        start_accounting_record(&store);
+        let error = ensure_no_interrupted_managed_writer(&project)
+            .expect_err("unended accounting must block native launch");
+        assert!(error.contains("accounting"), "{error}");
+        remove_operator_fixture(root);
+    }
+
+    #[test]
+    fn ended_accounting_with_open_span_blocks_native_after_terminal_session() {
+        let (root, project, store) = terminal_accounting_fixture();
+        start_accounting_record(&store);
+        let accounting = store
+            .execution_accounting_store()
+            .expect("accounting store");
+        accounting
+            .activity_started(
+                "historical-task",
+                ActivityActorV1::CodexProviderActive,
+                ActivityEvidenceV1::ProviderLifecycle,
+                110,
+            )
+            .expect("open span");
+        accounting
+            .finish_task("historical-task", None, None, 120)
+            .expect("ended record");
+        let error = ensure_no_interrupted_managed_writer(&project)
+            .expect_err("open span must block native launch");
+        assert!(error.contains("accounting"), "{error}");
+        remove_operator_fixture(root);
+    }
+
+    #[test]
+    fn closed_accounting_permits_native_prelaunch_after_terminal_session() {
+        let (root, project, store) = terminal_accounting_fixture();
+        start_accounting_record(&store);
+        let accounting = store
+            .execution_accounting_store()
+            .expect("accounting store");
+        accounting
+            .activity_started(
+                "historical-task",
+                ActivityActorV1::CodexProviderActive,
+                ActivityEvidenceV1::ProviderLifecycle,
+                110,
+            )
+            .expect("span start");
+        accounting
+            .activity_finished("historical-task", ActivityActorV1::CodexProviderActive, 120)
+            .expect("span end");
+        accounting
+            .finish_task("historical-task", None, None, 130)
+            .expect("ended record");
+        ensure_no_interrupted_managed_writer(&project).expect("closed accounting preflight");
+        remove_operator_fixture(root);
     }
 
     #[test]

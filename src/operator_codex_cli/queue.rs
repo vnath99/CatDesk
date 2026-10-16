@@ -1384,6 +1384,10 @@ async fn dispatch_one(control: &AutonomousProjectV1) -> Result<Value, String> {
 mod tests {
     use super::*;
     use crate::delegated::autonomy_projects::project_chat_target_digest;
+    use crate::delegated::autonomy_state::{
+        AutonomousQueueTaskStateV1, AutonomousQueueTaskV1, AutonomousQueueV1,
+        AutonomousSessionStateV1, AutonomousStateStoreV1,
+    };
     use std::process::Command as StdCommand;
 
     fn parse(items: &[&str]) -> Result<QueueAction, String> {
@@ -1910,6 +1914,67 @@ mod tests {
             .unwrap()
             .release_workspace_lease(&next.attempt.unwrap().lease)
             .unwrap();
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn unresolved_accounting_refuses_queued_native_before_spawn() {
+        let (fixture, projects, _queue) = three_project_fixture(1);
+        let executable = fake_native_cli(&fixture);
+        let cli = preflight_selected_cli(executable, None, &projects[0].workspace)
+            .await
+            .expect("fixture native preflight");
+        let alpha = &projects[1];
+        let store = AutonomousStateStoreV1::open(alpha.workspace.join(".catdesk/autonomy"))
+            .expect("managed state fixture");
+        store
+            .create_session(
+                "historical-task",
+                AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                    task_id: "work".into(),
+                    priority: 1,
+                    depends_on: Vec::new(),
+                    state: AutonomousQueueTaskStateV1::Ready,
+                }])
+                .expect("managed queue"),
+            )
+            .expect("managed session");
+        let mut snapshot = store.load_session("historical-task").expect("snapshot");
+        snapshot.state = AutonomousSessionStateV1::Cancelled;
+        snapshot.active = false;
+        store.save_session(&snapshot).expect("terminal snapshot");
+        store
+            .execution_accounting_store()
+            .expect("accounting store")
+            .record_task_started(
+                "alpha",
+                "work",
+                "historical-task",
+                Some("thread"),
+                "codex-cli",
+                None,
+                None,
+                100,
+            )
+            .expect("unended accounting record");
+        let job = QueueJob::new(
+            "queued_work".into(),
+            alpha,
+            "fixture edit".into(),
+            None,
+            None,
+        )
+        .expect("queue job");
+        let turn =
+            run_queued_turn(&job, &projects[0].workspace, &cli, Duration::from_secs(30)).await;
+        assert_eq!(turn.outcome, "MANAGED_WRITER_UNRESOLVED");
+        assert!(turn.child_absent_proven);
+        assert!(
+            !alpha
+                .workspace
+                .join(format!("queue-proof-{}.txt", job.binding.thread_id))
+                .exists()
+        );
         cleanup(fixture);
     }
 
