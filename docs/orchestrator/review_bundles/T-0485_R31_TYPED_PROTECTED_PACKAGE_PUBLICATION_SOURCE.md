@@ -1,0 +1,18 @@
+# T-0485 R31 — Typed protected package publication (source only)
+
+## Change
+
+Isolated source commits `8d8fa4c429b101de4e25e09a31c47cf48a555e51` and `73256ed87e0105b3e60877e05e94773dd4fd5171` were integrated as `56536c2aff7ce6d7e036d5abf05a60586933bd3c` and `002c792062c5254012e2dce9109f19e1ab0a2f2f`. Both final source heads have tree `eb21e11d341a8dce515227e9e2227e0a3a883323`. The dormant fixed-broker transaction can now hand an exact STAGED candidate to a typed `BrokerPublishedReceiptV1`: it first writes and flushes the create-once publication-attempt marker, reopens and revalidates the candidate and both namespace parents, uses a handle-relative Windows no-replace rename, flushes both parents, pins and checks the moved package's exact bytes, ACL and physical identity, then records the bound PUBLISHED ledger phase. A failed or uncertain attempt remains sticky and cannot retry on reopen.
+
+The independent reviewer identified a candidate owner/DACL gap between dropping stage pins and the rename. The second commit rechecks the reopened candidate immediately before the rename. Its negative fixture drifts the DACL after pin release and verifies that no package move or PUBLISHED record occurs, the marker stays sticky, and the stage identity is unchanged. Independent rereview passed the final two-commit source diff.
+
+## Verification
+
+- On exact isolated source `73256ed`, standalone Wake format check, locked offline strict all-target/all-feature Clippy, release build and diff check exited 0. The full locked offline all-feature Wake suite passed outside the workspace sandbox: 217 library tests passed, one ignored, with all enabled binary, integration and Python bridge targets passing. The first sandboxed full run hit the existing temporary-root authority fixture (`WAKE_STORE_AUTHORITY_OBJECT_UNAVAILABLE`); repeating that fixture and the full suite with normal filesystem authority passed. This was not a production publication failure.
+- Focused fixtures cover the successful typed PUBLISHED transition, create-once marker/reopen attention, no-replace collision, both parent-flush failure points, PUBLISHED ledger flush failure, candidate ACL drift before rename and post-move ACL drift. They exercise the source transaction with disposable protected-store fixtures; they do not prove sudden power-loss durability on a provisioned machine or an installed service.
+
+At exact integrated source `002c792`, `cargo test --locked --workspace --all-features --quiet -- --test-threads=1` exited 0, including the enabled integration targets. An exact aggregate pass count was not retained for this quiet run. Integrated strict checks and the next BuildOnly gate were still in progress when this checkpoint was prepared; no result is claimed for them here.
+
+## Remaining gate
+
+The production broker service still refuses `WAKE_BROKER_TRANSACTION_GATES_UNAVAILABLE`, and ordinary `wake/install.ps1` still refuses `WAKE_INSTALL_BROKER_UNPROVISIONED`. No protected install, pointer or owner cutover, activation, Wake event, fresh Chat53 receipt, three live project jobs or exact-source GitHub CI acceptance is established. Reconcile the installed dev.84 owner/store anchor, provision and review the fixed broker and signed release, then verify the remaining protected install and natural Wake path before claiming P0 acceptance. No live target, tunnel or installation state was changed for this source increment.
