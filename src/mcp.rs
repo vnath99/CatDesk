@@ -1284,6 +1284,34 @@ async fn handle_tools_call(
     set_catdesk_as_co_author: bool,
     devtools: &Option<Arc<Mutex<DevtoolsBridge>>>,
 ) -> JsonRpcResponse {
+    handle_tools_call_with_queue_reader(
+        req,
+        workspace_root,
+        mascot_seed,
+        mode,
+        tool_mode,
+        set_catdesk_as_co_author,
+        devtools,
+        crate::operator_codex_cli::read_review_package_for_mcp,
+    )
+    .await
+}
+
+async fn handle_tools_call_with_queue_reader<F>(
+    req: &JsonRpcRequest,
+    workspace_root: &str,
+    mascot_seed: u64,
+    mode: Mode,
+    tool_mode: ToolMode,
+    set_catdesk_as_co_author: bool,
+    devtools: &Option<Arc<Mutex<DevtoolsBridge>>>,
+    queue_reader: F,
+) -> JsonRpcResponse
+where
+    F: FnOnce(&Path, &str, &str, &str, &str, u64, Option<usize>) -> Result<Value, String>
+        + Send
+        + 'static,
+{
     let params = &req.params;
     let tool_name = params
         .get("name")
@@ -1327,7 +1355,12 @@ async fn handle_tools_call(
                     QUEUE_REVIEW_PACKAGE_READ_TOOL
                         if matches!(tool_mode, ToolMode::SupervisorOnly) =>
                     {
-                        handle_queue_review_package_read(req, workspace_root).await
+                        handle_queue_review_package_read_with_reader(
+                            req,
+                            workspace_root,
+                            queue_reader,
+                        )
+                        .await
                     }
                     "search" => handle_search_text(req, workspace_root),
                     "project_memory_read" => handle_project_memory_read(req, workspace_root),
@@ -1469,6 +1502,38 @@ async fn handle_tools_call(
     }
 
     response
+}
+
+// A disposable queue fixture can exercise the public tools/call route without
+// resolving the current user's fixed queue namespace or issuing a real grant.
+#[cfg(test)]
+pub(crate) async fn test_queue_review_tool_call<F>(
+    req: &JsonRpcRequest,
+    workspace_root: &str,
+    supervisor: bool,
+    queue_reader: F,
+) -> JsonRpcResponse
+where
+    F: FnOnce(&Path, &str, &str, &str, &str, u64, Option<usize>) -> Result<Value, String>
+        + Send
+        + 'static,
+{
+    let tool_mode = if supervisor {
+        ToolMode::SupervisorOnly
+    } else {
+        ToolMode::ReadOnly
+    };
+    handle_tools_call_with_queue_reader(
+        req,
+        workspace_root,
+        0,
+        Mode::Computer,
+        tool_mode,
+        false,
+        &None,
+        queue_reader,
+    )
+    .await
 }
 
 async fn forward_to_devtools(
@@ -8245,10 +8310,16 @@ fn handle_read_file(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcRespon
     }
 }
 
-async fn handle_queue_review_package_read(
+async fn handle_queue_review_package_read_with_reader<F>(
     req: &JsonRpcRequest,
     workspace_root: &str,
-) -> JsonRpcResponse {
+    queue_reader: F,
+) -> JsonRpcResponse
+where
+    F: FnOnce(&Path, &str, &str, &str, &str, u64, Option<usize>) -> Result<Value, String>
+        + Send
+        + 'static,
+{
     let arguments = tool_arguments(req);
     let Some(object) = arguments.as_object() else {
         return tool_error_response(req, "Review package arguments must be an object".into());
@@ -8303,7 +8374,7 @@ async fn handle_queue_review_package_read(
     };
     let read_result = tokio::task::spawn_blocking(move || {
         let _lease = lease;
-        crate::operator_codex_cli::read_review_package_for_mcp(
+        queue_reader(
             Path::new(&control_workspace),
             &project_id,
             &receipt_id,

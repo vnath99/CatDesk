@@ -4871,6 +4871,174 @@ mod tests {
         cleanup(fixture);
     }
 
+    async fn disposable_public_review_call(
+        control_workspace: &Path,
+        queue_root: &Path,
+        arguments: Value,
+    ) -> crate::mcp::JsonRpcResponse {
+        let request = crate::mcp::JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!("disposable-review-call")),
+            method: "tools/call".into(),
+            params: json!({
+                "name":"catdesk_codex_queue_review_package_read",
+                "arguments":arguments,
+            }),
+        };
+        let queue_root = queue_root.to_path_buf();
+        crate::mcp::test_queue_review_tool_call(
+            &request,
+            control_workspace.to_str().expect("fixture path UTF-8"),
+            true,
+            move |workspace, project_id, receipt_id, sha256, part, offset, file_index| {
+                review_reader::read_with_store_opener(
+                    workspace,
+                    project_id,
+                    receipt_id,
+                    sha256,
+                    part,
+                    (offset, file_index),
+                    |_| Ok(QueueStore { root: queue_root }),
+                )
+            },
+        )
+        .await
+    }
+
+    #[tokio::test]
+    async fn disposable_public_mcp_review_call_requires_grant_then_revocation_denies() {
+        let (fixture, projects, queue, receipt_id, cargo) = completed_verified_fixture(false).await;
+        verify_receipt_in_store_with_executable(&projects[0], &queue, &receipt_id, Some(&cargo))
+            .await
+            .unwrap();
+        let created = package_verified_receipt_in_store(&queue, &receipt_id).unwrap();
+        let sha = created["package"]["artifactSha256"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let control = &projects[0].workspace;
+        let args = json!({
+            "projectId":"alpha",
+            "receiptId":receipt_id,
+            "expectedPackageSha256":sha,
+            "part":"prompt",
+            "offset":0,
+        });
+        let job_path = queue.job_path("alpha", "verified_fixture");
+        let package_path = queue.review_package_path(&receipt_id);
+        let job_before = fs::read(&job_path).unwrap();
+        let package_before = fs::read(&package_path).unwrap();
+
+        let denied = disposable_public_review_call(control, &queue.root, args.clone()).await;
+        assert_eq!(denied.result.as_ref().unwrap()["isError"], true);
+        let denied_text = serde_json::to_string(&denied.result).unwrap();
+        assert!(denied_text.contains("unavailable or local disclosure is not authorized"));
+        assert!(!denied_text.contains("fixture edit"));
+        assert!(!denied_text.contains(&sha));
+
+        // The same public call is invisible outside the SupervisorOnly mode.
+        // The panic closure proves the queue reader was never entered.
+        let denied_mode = crate::mcp::test_queue_review_tool_call(
+            &crate::mcp::JsonRpcRequest {
+                jsonrpc: "2.0".into(),
+                id: Some(json!("disposable-review-mode-denied")),
+                method: "tools/call".into(),
+                params: json!({
+                    "name":"catdesk_codex_queue_review_package_read",
+                    "arguments":args,
+                }),
+            },
+            control.to_str().expect("fixture path UTF-8"),
+            false,
+            |_, _, _, _, _, _, _| panic!("reader entered in denied mode"),
+        )
+        .await;
+        assert_eq!(denied_mode.result.as_ref().unwrap()["isError"], true);
+        assert!(
+            serde_json::to_string(&denied_mode.result)
+                .unwrap()
+                .contains("Unknown tool")
+        );
+
+        // Simulate the already confirmed local terminal action in the fixture;
+        // this does not grant disclosure in the current user's real queue.
+        let grant = review_reader::grant_in_store(&queue, &projects[1], &receipt_id, &sha).unwrap();
+        assert_eq!(grant["independentReview"], "PENDING");
+        assert_eq!(grant["wakeReady"], false);
+        let page = disposable_public_review_call(control, &queue.root, args.clone()).await;
+        assert_ne!(page.result.as_ref().unwrap()["isError"], true);
+        let structured = page
+            .result
+            .as_ref()
+            .unwrap()
+            .get("structuredContent")
+            .expect("MCP structured result");
+        assert_eq!(structured["part"], "prompt");
+        assert_eq!(structured["pageTextUtf8"], "fixture edit");
+        assert_eq!(structured["packageSha256"], sha);
+        assert_eq!(structured["independentReview"], "PENDING");
+        assert_eq!(structured["wakeReady"], false);
+        assert_eq!(structured["readOnly"], true);
+
+        let metadata = disposable_public_review_call(
+            control,
+            &queue.root,
+            json!({
+                "projectId":"alpha",
+                "receiptId":receipt_id,
+                "expectedPackageSha256":sha,
+            }),
+        )
+        .await;
+        let metadata = &metadata.result.as_ref().unwrap()["structuredContent"];
+        assert_eq!(metadata["part"], "metadata");
+        assert_eq!(metadata["receipt"]["childExitObserved"], true);
+        assert!(metadata.get("pageBase64").is_none());
+        assert!(metadata.get("prompt").is_none());
+
+        let revoked = review_reader::revoke_in_store(&queue, "alpha", &receipt_id, &sha).unwrap();
+        assert_eq!(revoked["independentReview"], "PENDING");
+        assert_eq!(revoked["wakeReady"], false);
+        let denied_after_revoke = disposable_public_review_call(
+            control,
+            &queue.root,
+            json!({
+                "projectId":"alpha",
+                "receiptId":receipt_id,
+                "expectedPackageSha256":sha,
+                "part":"prompt",
+            }),
+        )
+        .await;
+        assert_eq!(
+            denied_after_revoke.result.as_ref().unwrap()["isError"],
+            true
+        );
+        assert!(
+            serde_json::to_string(&denied_after_revoke.result)
+                .unwrap()
+                .contains("unavailable or local disclosure is not authorized")
+        );
+        let metadata_after_revoke = disposable_public_review_call(
+            control,
+            &queue.root,
+            json!({
+                "projectId":"alpha",
+                "receiptId":receipt_id,
+                "expectedPackageSha256":sha,
+            }),
+        )
+        .await;
+        assert_eq!(
+            metadata_after_revoke.result.as_ref().unwrap()["isError"],
+            true
+        );
+        assert!(review_reader::grant_in_store(&queue, &projects[1], &receipt_id, &sha).is_err());
+        assert_eq!(fs::read(&job_path).unwrap(), job_before);
+        assert_eq!(fs::read(&package_path).unwrap(), package_before);
+        cleanup(fixture);
+    }
+
     #[tokio::test]
     async fn review_reader_revocation_survives_project_removal_and_reregistration() {
         let (fixture, projects, queue, receipt_id, cargo) = completed_verified_fixture(false).await;
