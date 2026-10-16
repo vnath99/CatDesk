@@ -257,8 +257,17 @@ fn validate_anchor(
         ]
         .iter()
         .any(|object| !valid_object(object))
+        || anchor.predecessor_pointer == anchor.old_runtime_root
+        || anchor.predecessor_pointer == anchor.old_runtime_lock
+        || anchor.predecessor_pointer == anchor.old_host_image
+        || anchor.predecessor_pointer == anchor.target_protected_root
         || anchor.old_runtime_root == anchor.old_runtime_lock
+        || anchor.old_runtime_root == anchor.old_host_image
         || anchor.old_runtime_root == anchor.target_protected_root
+        || anchor.old_runtime_lock == anchor.old_host_image
+        || anchor.predecessor_pointer.volume_serial != anchor.old_runtime_root.volume_serial
+        || anchor.old_runtime_lock.volume_serial != anchor.old_runtime_root.volume_serial
+        || anchor.old_host_image.volume_serial != anchor.old_runtime_root.volume_serial
     {
         return Err("WAKE_OFFLINE_ANCHOR_INVALID".into());
     }
@@ -687,6 +696,18 @@ mod tests {
         );
         let mut bad = anchor.clone();
         bad.quarantined_launch_entrypoints_sha256.clear();
+        assert_eq!(
+            check(&bad, &approval, &observed, &key).unwrap_err(),
+            "WAKE_OFFLINE_ANCHOR_INVALID"
+        );
+        let mut bad = anchor.clone();
+        bad.predecessor_pointer = bad.old_runtime_lock.clone();
+        assert_eq!(
+            check(&bad, &approval, &observed, &key).unwrap_err(),
+            "WAKE_OFFLINE_ANCHOR_INVALID"
+        );
+        let mut bad = anchor.clone();
+        bad.old_host_image.volume_serial += 1;
         assert_eq!(
             check(&bad, &approval, &observed, &key).unwrap_err(),
             "WAKE_OFFLINE_ANCHOR_INVALID"
