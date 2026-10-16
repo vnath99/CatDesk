@@ -540,12 +540,16 @@ struct QueueVerification {
 
 impl QueueVerification {
     fn summary(&self, digest: &str) -> Value {
+        let process_evidence = match verification_profile(&self.verification_profile) {
+            Ok(profile) if profile.tool == VerificationTool::Uv => "DIRECT_UV_PARENT_EXIT_ONLY",
+            _ => "DIRECT_CARGO_PARENT_EXIT_ONLY",
+        };
         json!({
             "receiptId":self.receipt_id, "projectId":self.project_id,
             "taskId":self.task_id, "workspace":self.workspace,
             "threadId":self.thread_id, "verificationProfile":self.verification_profile,
             "actualProfile":self.actual_profile,
-            "status":self.status, "processEvidence":"DIRECT_CARGO_PARENT_EXIT_ONLY",
+            "status":self.status, "processEvidence":process_evidence,
             "independentReview":self.independent_review,
             "wakeReady":self.wake_ready, "artifactSha256":digest,
             "gitWitness":self.git_witness, "patchSha256":self.patch_sha256,
@@ -934,7 +938,7 @@ impl QueueStore {
                         _ => false,
                     }
             });
-        let expected_commands = rust_full_commands(&verification.verification_profile)?;
+        let expected_commands = verification_profile(&verification.verification_profile)?.commands;
         let command_status_valid = verification.commands.len() == expected_commands.len()
             && verification
                 .commands
@@ -1424,14 +1428,16 @@ async fn verify_receipt_in_store(
     store: &QueueStore,
     receipt_id: &str,
 ) -> Result<Value, String> {
-    verify_receipt_in_store_with_cargo(control, store, receipt_id, None).await
+    verify_receipt_in_store_with_executable(control, store, receipt_id, None).await
 }
 
-async fn verify_receipt_in_store_with_cargo(
+async fn verify_receipt_in_store_with_executable(
     control: &AutonomousProjectV1,
     store: &QueueStore,
     receipt_id: &str,
-    #[cfg_attr(not(test), allow(unused_variables))] fixture_cargo: Option<&TrustedCargo>,
+    #[cfg_attr(not(test), allow(unused_variables))] fixture_executable: Option<
+        &TrustedVerificationExecutable,
+    >,
 ) -> Result<Value, String> {
     let control_workspace = &control.workspace;
     let _receipt_lock = store.verification_lock(receipt_id)?;
@@ -1487,22 +1493,17 @@ async fn verify_receipt_in_store_with_cargo(
     if !job.binding.matches(&project) {
         return Err("CODEX_QUEUE_VERIFY: project registration changed after native turn".into());
     }
-    let commands = rust_full_commands(&job.binding.verification_profile)?;
-    let cargo_manifest = project.workspace.join("Cargo.toml");
-    let manifest = fs::symlink_metadata(&cargo_manifest).map_err(|_| {
-        "CODEX_QUEUE_VERIFY: rust_full requires a regular Cargo.toml; registered profile may not match this project"
-            .to_string()
-    })?;
-    if !manifest.is_file() || redirected(&manifest) {
-        return Err("CODEX_QUEUE_VERIFY: rust_full requires a regular Cargo.toml".into());
-    }
-    let cargo_lock = project.workspace.join("Cargo.lock");
-    let lock_metadata = fs::symlink_metadata(&cargo_lock).map_err(|_| {
-        "CODEX_QUEUE_VERIFY: rust_full requires a regular Cargo.lock for --locked commands"
-            .to_string()
-    })?;
-    if !lock_metadata.is_file() || redirected(&lock_metadata) {
-        return Err("CODEX_QUEUE_VERIFY: rust_full requires a regular Cargo.lock".into());
+    let profile = verification_profile(&job.binding.verification_profile)?;
+    for name in profile.inputs {
+        let metadata = fs::symlink_metadata(project.workspace.join(name)).map_err(|_| {
+            format!("CODEX_QUEUE_VERIFY: {} requires a regular {name}; registered profile may not match this project", job.binding.verification_profile)
+        })?;
+        if !metadata.is_file() || redirected(&metadata) {
+            return Err(format!(
+                "CODEX_QUEUE_VERIFY: {} requires a regular {name}",
+                job.binding.verification_profile
+            ));
+        }
     }
     let mut writer = acquire_project_writer_lock(&project.workspace)
         .map_err(|_| "CODEX_QUEUE_VERIFY: project writer is active or unresolved".to_string())?;
@@ -1514,13 +1515,17 @@ async fn verify_receipt_in_store_with_cargo(
         return Err("CODEX_QUEUE_VERIFY: project writer or registration changed".into());
     }
     let git = resolve_trusted_git(&project.workspace, control_workspace)?;
-    for name in ["Cargo.toml", "Cargo.lock"] {
+    for name in profile.inputs {
         let path = project.workspace.join(name);
-        let metadata = fs::symlink_metadata(&path)
-            .map_err(|_| "CODEX_QUEUE_VERIFY: Cargo manifest or lock vanished under writer lock")?;
+        let metadata = fs::symlink_metadata(&path).map_err(
+            |_| "CODEX_QUEUE_VERIFY: profile manifest or lock vanished under writer lock",
+        )?;
         if !metadata.is_file() || redirected(&metadata) {
-            return Err("CODEX_QUEUE_VERIFY: Cargo manifest or lock is redirected".into());
+            return Err("CODEX_QUEUE_VERIFY: profile manifest or lock is redirected".into());
         }
+    }
+    if profile.tool == VerificationTool::Uv {
+        validate_python_profile_manifest(&project.workspace, &job.binding.verification_profile)?;
     }
     let (tracked_inputs, _) = git_witness_output(
         &git,
@@ -1529,16 +1534,14 @@ async fn verify_receipt_in_store_with_cargo(
             "ls-files",
             "--error-unmatch",
             "--",
-            "Cargo.toml",
-            "Cargo.lock",
+            profile.inputs[0],
+            profile.inputs[1],
         ],
         4096,
     )
     .await?;
     if !tracked_inputs {
-        return Err(
-            "CODEX_QUEUE_VERIFY: rust_full requires tracked Cargo.toml and Cargo.lock".into(),
-        );
+        return Err("CODEX_QUEUE_VERIFY: profile requires tracked manifest and lock files".into());
     }
     if capture_git_review_witness(&project.workspace, &git).await? != candidate.after {
         return Err(
@@ -1547,23 +1550,32 @@ async fn verify_receipt_in_store_with_cargo(
     }
     let (patch, index_patch, files) =
         snapshot_verified_source(&project.workspace, &git, &candidate).await?;
-    let cargo = if cfg!(test) {
-        fixture_cargo
-            .map(|fixture| TrustedCargo {
+    let executable = if cfg!(test) {
+        fixture_executable
+            .map(|fixture| TrustedVerificationExecutable {
                 executable: fixture.executable.clone(),
                 sha256: fixture.sha256.clone(),
             })
             .map(Ok)
-            .unwrap_or_else(|| resolve_trusted_cargo(&project.workspace, control_workspace))?
+            .unwrap_or_else(|| {
+                resolve_trusted_verifier(&project.workspace, control_workspace, profile.tool)
+            })?
     } else {
-        resolve_trusted_cargo(&project.workspace, control_workspace)?
+        resolve_trusted_verifier(&project.workspace, control_workspace, profile.tool)?
     };
     writer
         .begin_writer_turn()
         .map_err(|_| "CODEX_QUEUE_VERIFY: writer marker could not be persisted".to_string())?;
     let mut command_results = Vec::new();
-    for argv in commands {
-        match execute_rust_full_command(&project.workspace, &cargo, argv).await {
+    for argv in profile.commands {
+        match execute_fixed_verification_command(
+            &project.workspace,
+            &executable,
+            profile.tool,
+            argv,
+        )
+        .await
+        {
             Ok(result) => command_results.push(result),
             Err(VerifyCommandError::Safe(reason)) => {
                 writer.finish_writer_turn().map_err(|_| {
@@ -1869,13 +1881,26 @@ struct TrustedGit {
     sha256: String,
 }
 
-struct TrustedCargo {
+struct TrustedVerificationExecutable {
     executable: PathBuf,
     sha256: String,
 }
 
-fn rust_full_commands(profile: &str) -> Result<&'static [&'static [&'static str]], String> {
-    const COMMANDS: &[&[&str]] = &[
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum VerificationTool {
+    Cargo,
+    Uv,
+}
+
+struct VerificationProfile {
+    tool: VerificationTool,
+    commands: &'static [&'static [&'static str]],
+    inputs: &'static [&'static str],
+    package_name: Option<&'static str>,
+}
+
+fn verification_profile(profile: &str) -> Result<VerificationProfile, String> {
+    const RUST_COMMANDS: &[&[&str]] = &[
         &["cargo", "fmt", "--all", "--", "--check"],
         &[
             "cargo",
@@ -1904,11 +1929,188 @@ fn rust_full_commands(profile: &str) -> Result<&'static [&'static [&'static str]
             "--all-features",
         ],
     ];
-    if profile == "rust_full" {
-        Ok(COMMANDS)
-    } else {
-        Err("CODEX_QUEUE_VERIFY: registered verification profile is unsupported".into())
+    const PYTHON_GROUP_DEV: &[&[&str]] = &[
+        &[
+            "uv",
+            "run",
+            "--locked",
+            "--offline",
+            "--no-python-downloads",
+            "--no-env-file",
+            "--no-config",
+            "--group",
+            "dev",
+            "ruff",
+            "--isolated",
+            "format",
+            "--check",
+            ".",
+        ],
+        &[
+            "uv",
+            "run",
+            "--locked",
+            "--offline",
+            "--no-python-downloads",
+            "--no-env-file",
+            "--no-config",
+            "--group",
+            "dev",
+            "ruff",
+            "--isolated",
+            "check",
+            ".",
+        ],
+        &[
+            "uv",
+            "run",
+            "--locked",
+            "--offline",
+            "--no-python-downloads",
+            "--no-env-file",
+            "--no-config",
+            "--group",
+            "dev",
+            "pytest",
+            "-q",
+        ],
+    ];
+    const PYTHON_EXTRAS_DEV_LAB: &[&[&str]] = &[
+        &[
+            "uv",
+            "run",
+            "--locked",
+            "--offline",
+            "--no-python-downloads",
+            "--no-env-file",
+            "--no-config",
+            "--no-default-groups",
+            "--extra",
+            "dev",
+            "--extra",
+            "lab",
+            "ruff",
+            "--config",
+            "pyproject.toml",
+            "format",
+            "--check",
+            ".",
+        ],
+        &[
+            "uv",
+            "run",
+            "--locked",
+            "--offline",
+            "--no-python-downloads",
+            "--no-env-file",
+            "--no-config",
+            "--no-default-groups",
+            "--extra",
+            "dev",
+            "--extra",
+            "lab",
+            "ruff",
+            "--config",
+            "pyproject.toml",
+            "check",
+            ".",
+        ],
+        &[
+            "uv",
+            "run",
+            "--locked",
+            "--offline",
+            "--no-python-downloads",
+            "--no-env-file",
+            "--no-config",
+            "--no-default-groups",
+            "--extra",
+            "dev",
+            "--extra",
+            "lab",
+            "pytest",
+            "-q",
+        ],
+    ];
+    match profile {
+        "rust_full" => Ok(VerificationProfile {
+            tool: VerificationTool::Cargo,
+            commands: RUST_COMMANDS,
+            inputs: &["Cargo.toml", "Cargo.lock"],
+            package_name: None,
+        }),
+        "python_uv_group_dev_v1" => Ok(VerificationProfile {
+            tool: VerificationTool::Uv,
+            commands: PYTHON_GROUP_DEV,
+            inputs: &["pyproject.toml", "uv.lock"],
+            package_name: Some("byovd-driver-pipeline"),
+        }),
+        "python_uv_extras_dev_lab_v1" => Ok(VerificationProfile {
+            tool: VerificationTool::Uv,
+            commands: PYTHON_EXTRAS_DEV_LAB,
+            inputs: &["pyproject.toml", "uv.lock"],
+            package_name: Some("bug-bounty-security-research-platform"),
+        }),
+        _ => Err("CODEX_QUEUE_VERIFY: registered verification profile is unsupported".into()),
     }
+}
+
+fn validate_python_profile_manifest(workspace: &Path, profile: &str) -> Result<(), String> {
+    let path = workspace.join("pyproject.toml");
+    let bytes = read_regular_bounded(&path, 1024 * 1024)?
+        .ok_or("CODEX_QUEUE_VERIFY: Python profile requires a regular pyproject.toml")?;
+    let text = String::from_utf8(bytes)
+        .map_err(|_| "CODEX_QUEUE_VERIFY: Python pyproject.toml is not UTF-8")?;
+    let manifest: toml::Value = toml::from_str(&text)
+        .map_err(|_| "CODEX_QUEUE_VERIFY: Python pyproject.toml is invalid TOML")?;
+    let specification = verification_profile(profile)?;
+    let name = manifest
+        .get("project")
+        .and_then(|project| project.get("name"))
+        .and_then(toml::Value::as_str);
+    if name != specification.package_name {
+        return Err(
+            "CODEX_QUEUE_VERIFY: Python verification profile and package name disagree".into(),
+        );
+    }
+    let development_dependencies = match profile {
+        "python_uv_group_dev_v1" => manifest
+            .get("dependency-groups")
+            .and_then(|groups| groups.get("dev"))
+            .and_then(toml::Value::as_array),
+        "python_uv_extras_dev_lab_v1" => {
+            let extras = manifest
+                .get("project")
+                .and_then(|project| project.get("optional-dependencies"));
+            if extras
+                .and_then(|extras| extras.get("lab"))
+                .and_then(toml::Value::as_array)
+                .is_none()
+            {
+                return Err("CODEX_QUEUE_VERIFY: Python lab extra is absent".into());
+            }
+            extras
+                .and_then(|extras| extras.get("dev"))
+                .and_then(toml::Value::as_array)
+        }
+        _ => None,
+    }
+    .ok_or("CODEX_QUEUE_VERIFY: Python development dependencies are absent")?;
+    let has_dependency = |package: &str| {
+        development_dependencies.iter().any(|dependency| {
+            dependency.as_str().is_some_and(|value| {
+                let lower = value.to_ascii_lowercase();
+                lower.strip_prefix(package).is_some_and(|suffix| {
+                    suffix.is_empty()
+                        || suffix.starts_with(['<', '>', '=', '!', '~', ';', '[', ' '])
+                })
+            })
+        })
+    };
+    if !has_dependency("pytest") || !has_dependency("ruff") {
+        return Err("CODEX_QUEUE_VERIFY: Python profile requires pytest and Ruff".into());
+    }
+    Ok(())
 }
 
 fn actual_profile_matches_receipt(receipt: &QueueReceipt) -> bool {
@@ -1943,24 +2145,43 @@ fn valid_sha256_hex(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-/// Pin the exact inherited environment passed to the fixed Cargo command,
-/// excluding explicit Cargo/Rust invocation overrides. The digest is audit
-/// evidence only: it does not prove the Rust toolchain or process descendants.
-fn cargo_command_environment() -> Result<(Vec<(OsString, OsString)>, String), String> {
+/// Pin the inherited environment passed to each fixed verification command.
+/// Exclude variables that can silently replace the profile's explicit Cargo
+/// or uv/Python/Ruff/pytest behavior. This digest is audit evidence only; it
+/// does not prove interpreters, toolchains, or process descendants.
+fn verification_command_environment(
+    tool: VerificationTool,
+) -> Result<(Vec<(OsString, OsString)>, String), String> {
     const MAX_ENV_BYTES: usize = 256 * 1024;
     const MAX_ENV_ENTRIES: usize = 512;
     let mut variables = std::env::vars_os()
         .filter(|(key, _)| {
             let upper = key.to_string_lossy().to_ascii_uppercase();
-            if matches!(upper.as_str(), "CARGO_HOME" | "RUSTUP_HOME") {
-                return true;
+            match tool {
+                VerificationTool::Cargo => {
+                    if matches!(upper.as_str(), "CARGO_HOME" | "RUSTUP_HOME") {
+                        return true;
+                    }
+                    !upper.starts_with("CARGO_")
+                        && !upper.starts_with("RUSTC")
+                        && !upper.starts_with("RUSTDOC")
+                        && !upper.starts_with("RUSTFLAGS")
+                        && !upper.starts_with("RUSTUP_")
+                        && !upper.starts_with("CLIPPY_")
+                }
+                VerificationTool::Uv => {
+                    !upper.starts_with("UV_")
+                        && !upper.starts_with("PYTHON")
+                        && !upper.starts_with("PYTEST_")
+                        && !upper.starts_with("PIP_")
+                        && !upper.starts_with("RUFF_")
+                        && !upper.starts_with("CONDA_")
+                        && !upper.starts_with("POETRY_")
+                        && !upper.starts_with("PDM_")
+                        && !upper.starts_with("RYE_")
+                        && upper != "VIRTUAL_ENV"
+                }
             }
-            !upper.starts_with("CARGO_")
-                && !upper.starts_with("RUSTC")
-                && !upper.starts_with("RUSTDOC")
-                && !upper.starts_with("RUSTFLAGS")
-                && !upper.starts_with("RUSTUP_")
-                && !upper.starts_with("CLIPPY_")
         })
         .collect::<Vec<_>>();
     if variables.len() > MAX_ENV_ENTRIES {
@@ -1980,10 +2201,11 @@ fn cargo_command_environment() -> Result<(Vec<(OsString, OsString)>, String), St
     Ok((variables, format!("{:x}", hasher.finalize())))
 }
 
-fn resolve_trusted_cargo(
+fn resolve_trusted_verifier(
     workspace: &Path,
     control_workspace: &Path,
-) -> Result<TrustedCargo, String> {
+    tool: VerificationTool,
+) -> Result<TrustedVerificationExecutable, String> {
     let registered_roots = scheduler(control_workspace)?
         .load_registry()
         .map_err(|_| "CODEX_QUEUE_VERIFY: registered project roots are unavailable")?
@@ -1994,8 +2216,14 @@ fn resolve_trusted_cargo(
     if !registered_roots.contains(&workspace.to_path_buf()) {
         return Err("CODEX_QUEUE_VERIFY: selected workspace is not registered".into());
     }
-    let path = std::env::var_os("PATH").ok_or("CODEX_QUEUE_VERIFY: Cargo PATH is unavailable")?;
-    let basename = if cfg!(windows) { "cargo.exe" } else { "cargo" };
+    let path =
+        std::env::var_os("PATH").ok_or("CODEX_QUEUE_VERIFY: verifier PATH is unavailable")?;
+    let basename = match (tool, cfg!(windows)) {
+        (VerificationTool::Cargo, true) => "cargo.exe",
+        (VerificationTool::Cargo, false) => "cargo",
+        (VerificationTool::Uv, true) => "uv.exe",
+        (VerificationTool::Uv, false) => "uv",
+    };
     for directory in std::env::split_paths(&path) {
         if !directory.is_absolute() {
             continue;
@@ -2017,10 +2245,10 @@ fn resolve_trusted_cargo(
             continue;
         }
         let sha256 = native_executable_sha256(&executable)
-            .map_err(|_| "CODEX_QUEUE_VERIFY: Cargo executable cannot be pinned")?;
-        return Ok(TrustedCargo { executable, sha256 });
+            .map_err(|_| "CODEX_QUEUE_VERIFY: verifier executable cannot be pinned")?;
+        return Ok(TrustedVerificationExecutable { executable, sha256 });
     }
-    Err("CODEX_QUEUE_VERIFY: no trusted Cargo executable outside projects".into())
+    Err("CODEX_QUEUE_VERIFY: no trusted verifier executable outside projects".into())
 }
 
 #[derive(Debug)]
@@ -2049,19 +2277,24 @@ async fn digest_verification_stream<R: tokio::io::AsyncRead + Unpin>(
     Ok((format!("{:x}", hasher.finalize()), count as u64))
 }
 
-async fn execute_rust_full_command(
+async fn execute_fixed_verification_command(
     workspace: &Path,
-    cargo: &TrustedCargo,
+    executable: &TrustedVerificationExecutable,
+    tool: VerificationTool,
     argv: &[&str],
 ) -> Result<QueueVerificationCommand, VerifyCommandError> {
-    if native_executable_sha256(&cargo.executable).ok().as_deref() != Some(&cargo.sha256) {
+    if native_executable_sha256(&executable.executable)
+        .ok()
+        .as_deref()
+        != Some(&executable.sha256)
+    {
         return Err(VerifyCommandError::Safe(
-            "CODEX_QUEUE_VERIFY: pinned Cargo executable changed".into(),
+            "CODEX_QUEUE_VERIFY: pinned verifier executable changed".into(),
         ));
     }
     let (environment, environment_sha256) =
-        cargo_command_environment().map_err(VerifyCommandError::Safe)?;
-    let mut command = Command::new(&cargo.executable);
+        verification_command_environment(tool).map_err(VerifyCommandError::Safe)?;
+    let mut command = Command::new(&executable.executable);
     command
         .args(&argv[1..])
         .env_clear()
@@ -2110,8 +2343,8 @@ async fn execute_rust_full_command(
     })?;
     Ok(QueueVerificationCommand {
         argv: argv.iter().map(|part| (*part).into()).collect(),
-        executable: cargo.executable.clone(),
-        executable_sha256: cargo.sha256.clone(),
+        executable: executable.executable.clone(),
+        executable_sha256: executable.sha256.clone(),
         environment_sha256,
         exit_code: status.code(),
         elapsed_ms: started.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
@@ -3053,6 +3286,13 @@ mod tests {
     fn three_project_fixture(
         max_codex_workers: u32,
     ) -> (PathBuf, Vec<AutonomousProjectV1>, QueueStore) {
+        three_project_fixture_with_alpha_profile(max_codex_workers, "rust_full")
+    }
+
+    fn three_project_fixture_with_alpha_profile(
+        max_codex_workers: u32,
+        alpha_profile: &str,
+    ) -> (PathBuf, Vec<AutonomousProjectV1>, QueueStore) {
         let fixture = fixture_root();
         let control = fixture.join("catdesk");
         let alpha = fixture.join("alpha");
@@ -3067,7 +3307,13 @@ mod tests {
             .expect("registry initialized");
         let projects = [(&"catdesk", &control), (&"alpha", &alpha), (&"beta", &beta)]
             .into_iter()
-            .map(|(id, root)| fixture_project(id, root))
+            .map(|(id, root)| {
+                let mut project = fixture_project(id, root);
+                if *id == "alpha" {
+                    project.verification_profile = alpha_profile.into();
+                }
+                project
+            })
             .collect::<Vec<_>>();
         for project in &projects {
             registry
@@ -3145,7 +3391,7 @@ mod tests {
         }
     }
 
-    fn fixture_cargo(root: &Path, fail_clippy: bool) -> TrustedCargo {
+    fn fixture_cargo(root: &Path, fail_clippy: bool) -> TrustedVerificationExecutable {
         let source = root.join("fake-cargo.rs");
         let executable = root.join(if cfg!(windows) {
             "fake-cargo.exe"
@@ -3185,7 +3431,79 @@ mod tests {
         );
         let executable = executable.canonicalize().unwrap();
         let sha256 = native_executable_sha256(&executable).unwrap();
-        TrustedCargo { executable, sha256 }
+        TrustedVerificationExecutable { executable, sha256 }
+    }
+
+    fn fixture_uv(
+        root: &Path,
+        profile: &str,
+        fail_ruff_check: bool,
+    ) -> TrustedVerificationExecutable {
+        let source = root.join("fake-uv.rs");
+        let executable = root.join(if cfg!(windows) {
+            "fake-uv.exe"
+        } else {
+            "fake-uv"
+        });
+        let program = r#"
+            fn main() {
+                let args = std::env::args().skip(1).collect::<Vec<_>>();
+                if args.first().map(String::as_str) != Some("run") {
+                    std::process::exit(41);
+                }
+                for flag in ["--locked", "--offline", "--no-python-downloads", "--no-env-file", "--no-config"] {
+                    if !args.iter().any(|arg| arg == flag) { std::process::exit(42); }
+                }
+                if PROFILE == "python_uv_group_dev_v1" {
+                    if !args.windows(2).any(|pair| pair == ["--group", "dev"]) {
+                        std::process::exit(43);
+                    }
+                } else if !args.windows(2).any(|pair| pair == ["--extra", "dev"])
+                    || !args.windows(2).any(|pair| pair == ["--extra", "lab"])
+                    || !args.iter().any(|arg| arg == "--no-default-groups") {
+                    std::process::exit(44);
+                }
+                let ruff_format = args.windows(2).any(|pair| pair == ["format", "--check"]);
+                let ruff_check = args.windows(2).any(|pair| pair == ["check", "."]);
+                let pytest = args.windows(2).any(|pair| pair == ["pytest", "-q"]);
+                if !ruff_format && !ruff_check && !pytest {
+                    std::process::exit(45);
+                }
+                if (ruff_format || ruff_check) && PROFILE == "python_uv_group_dev_v1"
+                    && !args.windows(2).any(|pair| pair == ["ruff", "--isolated"]) {
+                    std::process::exit(46);
+                }
+                if (ruff_format || ruff_check) && PROFILE == "python_uv_extras_dev_lab_v1"
+                    && !args.windows(3).any(|triple| triple == ["ruff", "--config", "pyproject.toml"]) {
+                    std::process::exit(47);
+                }
+                println!("fixture uv {}", args.join(" "));
+                eprintln!("fixture stderr");
+                if FAIL_RUFF_CHECK && ruff_check {
+                    std::process::exit(7);
+                }
+            }
+        "#;
+        fs::write(
+            &source,
+            program.replace("PROFILE", &format!("{profile:?}")).replace(
+                "FAIL_RUFF_CHECK",
+                if fail_ruff_check { "true" } else { "false" },
+            ),
+        )
+        .unwrap();
+        assert!(
+            StdCommand::new("rustc")
+                .arg(&source)
+                .arg("-o")
+                .arg(&executable)
+                .status()
+                .expect("rustc available")
+                .success()
+        );
+        let executable = executable.canonicalize().unwrap();
+        let sha256 = native_executable_sha256(&executable).unwrap();
+        TrustedVerificationExecutable { executable, sha256 }
     }
 
     async fn completed_verified_fixture(
@@ -3195,16 +3513,41 @@ mod tests {
         Vec<AutonomousProjectV1>,
         QueueStore,
         String,
-        TrustedCargo,
+        TrustedVerificationExecutable,
     ) {
-        let (fixture, projects, queue) = three_project_fixture(1);
+        completed_verified_fixture_for_profile("rust_full", fail_clippy).await
+    }
+
+    async fn completed_verified_fixture_for_profile(
+        profile: &str,
+        fail_command: bool,
+    ) -> (
+        PathBuf,
+        Vec<AutonomousProjectV1>,
+        QueueStore,
+        String,
+        TrustedVerificationExecutable,
+    ) {
+        let (fixture, projects, queue) = three_project_fixture_with_alpha_profile(1, profile);
         let workspace = &projects[1].workspace;
-        fs::write(
-            workspace.join("Cargo.toml"),
-            b"[package]\nname = \"queue-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
-        )
-        .unwrap();
-        fs::write(workspace.join("Cargo.lock"), b"# fixture lock\n").unwrap();
+        match profile {
+            "rust_full" => {
+                fs::write(
+                    workspace.join("Cargo.toml"),
+                    b"[package]\nname = \"queue-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+                ).unwrap();
+                fs::write(workspace.join("Cargo.lock"), b"# fixture lock\n").unwrap();
+            }
+            "python_uv_group_dev_v1" => {
+                fs::write(workspace.join("pyproject.toml"), b"[project]\nname = \"byovd-driver-pipeline\"\nversion = \"0.1.0\"\n[dependency-groups]\ndev = [\"pytest>=8\", \"ruff>=0.8\"]\n").unwrap();
+                fs::write(workspace.join("uv.lock"), b"version = 1\n").unwrap();
+            }
+            "python_uv_extras_dev_lab_v1" => {
+                fs::write(workspace.join("pyproject.toml"), b"[project]\nname = \"bug-bounty-security-research-platform\"\nversion = \"0.1.0\"\n[project.optional-dependencies]\ndev = [\"pytest>=8\", \"ruff>=0.9\"]\nlab = [\"flask>=3\"]\n").unwrap();
+                fs::write(workspace.join("uv.lock"), b"version = 1\n").unwrap();
+            }
+            _ => panic!("unknown test profile"),
+        }
         fs::write(workspace.join("source.txt"), b"before\n").unwrap();
         fixture_commit(workspace);
         let git = resolve_trusted_git(workspace, &projects[0].workspace).unwrap();
@@ -3266,17 +3609,25 @@ mod tests {
         claimed.receipt_id = Some(receipt_id.clone());
         claimed.review_candidate_sha256 = Some(candidate_sha);
         queue.save_job(&claimed).unwrap();
-        let cargo = fixture_cargo(&fixture, fail_clippy);
-        (fixture, projects, queue, receipt_id, cargo)
+        let executable = if profile == "rust_full" {
+            fixture_cargo(&fixture, fail_command)
+        } else {
+            fixture_uv(&fixture, profile, fail_command)
+        };
+        (fixture, projects, queue, receipt_id, executable)
     }
 
     #[tokio::test]
     async fn fixed_profile_persists_source_and_four_local_command_exits() {
         let (fixture, projects, queue, receipt_id, cargo) = completed_verified_fixture(false).await;
-        let result =
-            verify_receipt_in_store_with_cargo(&projects[0], &queue, &receipt_id, Some(&cargo))
-                .await
-                .unwrap();
+        let result = verify_receipt_in_store_with_executable(
+            &projects[0],
+            &queue,
+            &receipt_id,
+            Some(&cargo),
+        )
+        .await
+        .unwrap();
         assert_eq!(result["idempotent"], false);
         assert_eq!(
             result["verification"]["status"],
@@ -3310,10 +3661,14 @@ mod tests {
                 .unwrap(),
             b"after\n"
         );
-        let reread =
-            verify_receipt_in_store_with_cargo(&projects[0], &queue, &receipt_id, Some(&cargo))
-                .await
-                .unwrap();
+        let reread = verify_receipt_in_store_with_executable(
+            &projects[0],
+            &queue,
+            &receipt_id,
+            Some(&cargo),
+        )
+        .await
+        .unwrap();
         assert_eq!(reread["idempotent"], true);
         assert_eq!(reread["historicalReadback"], true);
         let path = queue.verification_path(&receipt_id);
@@ -3327,10 +3682,14 @@ mod tests {
     #[tokio::test]
     async fn nonzero_fixed_command_keeps_artifact_unreviewed_and_not_wake_ready() {
         let (fixture, projects, queue, receipt_id, cargo) = completed_verified_fixture(true).await;
-        let result =
-            verify_receipt_in_store_with_cargo(&projects[0], &queue, &receipt_id, Some(&cargo))
-                .await
-                .unwrap();
+        let result = verify_receipt_in_store_with_executable(
+            &projects[0],
+            &queue,
+            &receipt_id,
+            Some(&cargo),
+        )
+        .await
+        .unwrap();
         assert_eq!(result["verification"]["status"], "LOCAL_COMMAND_FAILURE");
         assert_eq!(result["verification"]["independentReview"], "PENDING");
         assert_eq!(result["verification"]["wakeReady"], false);
@@ -3358,6 +3717,187 @@ mod tests {
         job.verification_sha256 = Some(format!("{:x}", Sha256::digest(&bytes)));
         queue.save_job(&job).unwrap();
         assert!(queue.read_verification(&receipt, &candidate).is_err());
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn fixed_python_profiles_capture_source_command_exits_and_refuse_rebound_argv() {
+        for profile in ["python_uv_group_dev_v1", "python_uv_extras_dev_lab_v1"] {
+            let (fixture, projects, queue, receipt_id, uv) =
+                completed_verified_fixture_for_profile(profile, false).await;
+            let result = verify_receipt_in_store_with_executable(
+                &projects[0],
+                &queue,
+                &receipt_id,
+                Some(&uv),
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                result["verification"]["status"],
+                "LOCAL_COMMANDS_EXITED_ZERO_SOURCE_RECHECKED"
+            );
+            assert_eq!(
+                result["verification"]["processEvidence"],
+                "DIRECT_UV_PARENT_EXIT_ONLY"
+            );
+            assert_eq!(result["verification"]["independentReview"], "PENDING");
+            assert_eq!(result["verification"]["wakeReady"], false);
+            let receipt = queue.read_receipt(&receipt_id).unwrap();
+            let candidate = queue.read_review_candidate(&receipt).unwrap();
+            let (artifact, _) = queue
+                .read_verification(&receipt, &candidate)
+                .unwrap()
+                .unwrap();
+            assert_eq!(artifact.commands.len(), 3);
+            assert!(artifact.commands.iter().all(|command| {
+                command.status == "EXIT_ZERO_PARENT_OBSERVED"
+                    && command.argv.iter().any(|arg| arg == "--locked")
+                    && command.argv.iter().any(|arg| arg == "--offline")
+                    && valid_sha256_hex(&command.environment_sha256)
+                    && command.executable_sha256 == uv.sha256
+            }));
+            for command in &artifact.commands[..2] {
+                if profile == "python_uv_group_dev_v1" {
+                    assert!(
+                        command
+                            .argv
+                            .windows(2)
+                            .any(|args| args == ["ruff", "--isolated"])
+                    );
+                } else {
+                    assert!(
+                        command
+                            .argv
+                            .windows(3)
+                            .any(|args| args == ["ruff", "--config", "pyproject.toml"])
+                    );
+                }
+            }
+            assert_eq!(artifact.files.len(), 2);
+            assert_eq!(
+                verify_receipt_in_store_with_executable(
+                    &projects[0],
+                    &queue,
+                    &receipt_id,
+                    Some(&uv),
+                )
+                .await
+                .unwrap()["idempotent"],
+                true
+            );
+
+            // Even a matching job digest does not turn a changed command into
+            // a valid fixed-profile verification artifact.
+            let mut tampered = artifact;
+            tampered.commands[0].argv[1] = "shell".into();
+            let mut bytes = serde_json::to_vec_pretty(&tampered).unwrap();
+            bytes.push(b'\n');
+            fs::write(queue.verification_path(&receipt_id), &bytes).unwrap();
+            let mut job = queue
+                .load_job("alpha", "verified_fixture")
+                .unwrap()
+                .unwrap();
+            job.verification_sha256 = Some(format!("{:x}", Sha256::digest(&bytes)));
+            queue.save_job(&job).unwrap();
+            assert!(queue.read_verification(&receipt, &candidate).is_err());
+            cleanup(fixture);
+        }
+    }
+
+    #[tokio::test]
+    async fn nonzero_python_profile_stays_pending_and_not_wake_ready() {
+        for profile in ["python_uv_group_dev_v1", "python_uv_extras_dev_lab_v1"] {
+            let (fixture, projects, queue, receipt_id, uv) =
+                completed_verified_fixture_for_profile(profile, true).await;
+            let result = verify_receipt_in_store_with_executable(
+                &projects[0],
+                &queue,
+                &receipt_id,
+                Some(&uv),
+            )
+            .await
+            .unwrap();
+            assert_eq!(result["verification"]["status"], "LOCAL_COMMAND_FAILURE");
+            assert_eq!(result["verification"]["independentReview"], "PENDING");
+            assert_eq!(result["verification"]["wakeReady"], false);
+            let receipt = queue.read_receipt(&receipt_id).unwrap();
+            let candidate = queue.read_review_candidate(&receipt).unwrap();
+            let (artifact, _) = queue
+                .read_verification(&receipt, &candidate)
+                .unwrap()
+                .unwrap();
+            assert_eq!(artifact.commands[1].exit_code, Some(7));
+            assert_eq!(artifact.commands[1].status, "EXIT_NONZERO_PARENT_OBSERVED");
+            cleanup(fixture);
+        }
+    }
+
+    #[tokio::test]
+    async fn python_profile_package_mismatch_refuses_commands() {
+        let (fixture, projects, queue, receipt_id, uv) =
+            completed_verified_fixture_for_profile("python_uv_group_dev_v1", false).await;
+        let workspace = &projects[1].workspace;
+        fs::write(workspace.join("pyproject.toml"), b"[project]\nname = \"different-package\"\nversion = \"0.1.0\"\n[dependency-groups]\ndev = [\"pytest>=8\", \"ruff>=0.8\"]\n").unwrap();
+        let error =
+            verify_receipt_in_store_with_executable(&projects[0], &queue, &receipt_id, Some(&uv))
+                .await
+                .expect_err("mismatched Python profile must refuse verification");
+        assert!(error.contains("package name disagree"), "{error}");
+        assert!(!queue.verification_path(&receipt_id).exists());
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn python_profiles_require_their_declared_dependency_selection() {
+        for (profile, removed, expected_error) in [
+            (
+                "python_uv_group_dev_v1",
+                "dev = [\"pytest>=8\", \"ruff>=0.8\"]",
+                "development dependencies are absent",
+            ),
+            (
+                "python_uv_extras_dev_lab_v1",
+                "lab = [\"flask>=3\"]",
+                "lab extra is absent",
+            ),
+        ] {
+            let (fixture, projects, queue, receipt_id, uv) =
+                completed_verified_fixture_for_profile(profile, false).await;
+            let path = projects[1].workspace.join("pyproject.toml");
+            let manifest = fs::read_to_string(&path).unwrap();
+            assert!(manifest.contains(removed));
+            fs::write(&path, manifest.replace(removed, "")).unwrap();
+            let error = verify_receipt_in_store_with_executable(
+                &projects[0],
+                &queue,
+                &receipt_id,
+                Some(&uv),
+            )
+            .await
+            .expect_err("missing selected dependencies must refuse verification");
+            assert!(error.contains(expected_error), "{error}");
+            assert!(!queue.verification_path(&receipt_id).exists());
+            cleanup(fixture);
+        }
+    }
+
+    #[test]
+    fn python_manifest_reader_rejects_oversized_and_non_utf8_input() {
+        let fixture = fixture_root();
+        let manifest = fixture.join("pyproject.toml");
+        fs::write(&manifest, vec![b'x'; 1024 * 1024 + 1]).unwrap();
+        assert!(
+            validate_python_profile_manifest(&fixture, "python_uv_group_dev_v1")
+                .expect_err("oversized manifest must fail")
+                .contains("oversized")
+        );
+        fs::write(&manifest, [0xff, 0xfe]).unwrap();
+        assert!(
+            validate_python_profile_manifest(&fixture, "python_uv_group_dev_v1")
+                .expect_err("non-UTF-8 manifest must fail")
+                .contains("UTF-8")
+        );
         cleanup(fixture);
     }
 
