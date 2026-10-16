@@ -32,7 +32,7 @@ use super::autonomy_state::{
 use super::codex_app_server::CATDESK_REQUIRED_CODEX_REASONING_EFFORT_V1;
 use super::codex_app_server::{CATDESK_REQUIRED_CODEX_MODEL_V1, CodexRoutingTelemetryV1};
 use super::codex_cli::{
-    CodexAvailabilityFailureV1, classify_codex_availability_failure,
+    CodexAvailabilityFailureV1, CodexCliProviderV1, classify_codex_availability_failure,
     parse_codex_credits_reset_after, trusted_host_local_clock,
 };
 use super::codex_model_policy::{
@@ -44,8 +44,9 @@ use super::runtime::{
     NormalizedProviderEventKind, ProviderMessageV1, ProviderTurnRequestV1, RuntimeError,
 };
 use super::worker_provider::{
-    LocalQwenFallbackProviderV1, ProviderEventBatchV1, ProviderIdV1, ProviderTurnHandleV1,
-    WorkerProviderTurnRequestV1, WorkerProviderV1,
+    CodexQwenWorkerProviderV1, LocalQwenFallbackProviderV1, OllamaWorkerProviderV1,
+    ProviderEventBatchV1, ProviderIdV1, ProviderTurnHandleV1, WorkerProviderTurnRequestV1,
+    WorkerProviderV1,
 };
 
 pub trait AutonomousVerifierV1: Send {
@@ -84,6 +85,14 @@ pub struct AutonomousControllerV1<P, V> {
     repair_attempts: u32,
     cancel_requested: bool,
     qwen_tools: Option<AutonomousQwenToolLoopV1>,
+}
+
+impl<V: AutonomousVerifierV1>
+    AutonomousControllerV1<CodexQwenWorkerProviderV1<CodexCliProviderV1, OllamaWorkerProviderV1>, V>
+{
+    pub(crate) async fn has_unfinished_codex_turns(&mut self) -> Result<bool, RuntimeError> {
+        self.provider.has_unfinished_codex_turns().await
+    }
 }
 
 pub(crate) const MAX_TASK_OUTPUT_BYTES: u64 = 16 * 1024 * 1024;

@@ -298,6 +298,12 @@ impl<C, Q> CodexQwenWorkerProviderV1<C, Q> {
     }
 }
 
+impl<Q> CodexQwenWorkerProviderV1<super::codex_cli::CodexCliProviderV1, Q> {
+    pub(crate) async fn has_unfinished_codex_turns(&mut self) -> Result<bool, RuntimeError> {
+        self.codex.has_unfinished_turns().await
+    }
+}
+
 impl<C: WorkerProviderV1, Q: WorkerProviderV1> WorkerProviderV1
     for CodexQwenWorkerProviderV1<C, Q>
 {

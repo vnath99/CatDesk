@@ -694,6 +694,10 @@ impl AutonomousSupervisorV1 {
                 "project thread binding requires exact unowned direct-input evidence".into(),
             );
         }
+        let _writer = super::autonomy_runtime::acquire_project_writer_lock(&self.workspace)
+            .map_err(|_| {
+                "project thread binding requires exclusive writer ownership".to_string()
+            })?;
         let store = self.project_registry()?;
         let registry = store
             .load_registry()
@@ -1082,6 +1086,19 @@ impl AutonomousSupervisorV1 {
             &preflight.evidence.workspace.to_string_lossy(),
             &preflight.evidence.git_identity,
         )?;
+        let _writer = super::autonomy_runtime::acquire_project_writer_lock(&workspace)
+            .map_err(|_| "project registration requires exclusive writer ownership".to_string())?;
+        let current = store
+            .registration_preflight(confirmation_token)
+            .map_err(|_| "project registration confirmation is unavailable".to_string())?;
+        if current != preflight
+            || verified_external_git_workspace(
+                &current.evidence.workspace.to_string_lossy(),
+                &current.evidence.git_identity,
+            )? != workspace
+        {
+            return Err("project registration evidence changed before writer acquisition".into());
+        }
         let evidence = super::autonomy_runtime::host_observe_registration_thread_for_model(
             &workspace,
             &preflight.evidence.git_identity,
@@ -1187,6 +1204,24 @@ impl AutonomousSupervisorV1 {
         let preflight = store
             .load_thread_adoption_preflight(confirmation_token)
             .map_err(|_| "existing-thread adoption confirmation is unavailable".to_string())?;
+        let bound = store
+            .project_for_workspace(&preflight.project_id, &preflight.workspace)
+            .map_err(|_| "existing-thread adoption project binding is unavailable".to_string())?;
+        let _writer = super::autonomy_runtime::acquire_project_writer_lock(&preflight.workspace)
+            .map_err(|_| {
+                "thread adoption requires exclusive project writer ownership".to_string()
+            })?;
+        let current = store
+            .load_thread_adoption_preflight(confirmation_token)
+            .map_err(|_| "existing-thread adoption confirmation is unavailable".to_string())?;
+        let current_bound = store
+            .project_for_workspace(&current.project_id, &current.workspace)
+            .map_err(|_| "existing-thread adoption project binding is unavailable".to_string())?;
+        if current != preflight || current_bound != bound {
+            return Err(
+                "existing-thread adoption binding changed before writer acquisition".into(),
+            );
+        }
         let candidate = preflight
             .candidates
             .iter()
@@ -1226,6 +1261,8 @@ impl AutonomousSupervisorV1 {
         if workspace != self.workspace {
             return Err("rotation is limited to the supervisor's exact workspace".into());
         }
+        let _writer = super::autonomy_runtime::acquire_project_writer_lock(&workspace)
+            .map_err(|_| "rotation requires exclusive project writer ownership".to_string())?;
         let store = self.project_registry()?;
         let project = store
             .project_for_workspace(project_id, &workspace)
@@ -1286,6 +1323,8 @@ impl AutonomousSupervisorV1 {
         confirmation_token: &str,
         candidate_handle: &str,
     ) -> Result<Value, String> {
+        let _writer = super::autonomy_runtime::acquire_project_writer_lock(&self.workspace)
+            .map_err(|_| "rotation requires exclusive project writer ownership".to_string())?;
         let store = self.project_registry()?;
         let preflight = store
             .load_thread_adoption_preflight(confirmation_token)
@@ -3912,7 +3951,139 @@ fn reviewed_promotion_completion_artifact_ids(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::delegated::autonomy_projects::ProjectRegistrationEvidenceV1;
     use uuid::Uuid;
+
+    #[test]
+    fn external_registration_confirmation_requires_external_writer_guard() {
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-external-registration-writer-{}",
+            Uuid::new_v4()
+        ));
+        let control = root.join("control");
+        let external = root.join("external");
+        std::fs::create_dir_all(&control).expect("control workspace");
+        std::fs::create_dir_all(&external).expect("external workspace");
+        for args in [
+            &["init", "-q"][..],
+            &[
+                "remote",
+                "add",
+                "origin",
+                "https://example.test/external.git",
+            ][..],
+        ] {
+            assert!(
+                std::process::Command::new("git")
+                    .arg("-C")
+                    .arg(&external)
+                    .args(args)
+                    .status()
+                    .expect("fixture Git")
+                    .success()
+            );
+        }
+        let external = external
+            .canonicalize()
+            .expect("canonical external workspace");
+        let store = AutonomousProjectRegistryStoreV1::open(control.join(".catdesk/projects"))
+            .expect("control registry");
+        store.initialize(2, 1).expect("registry");
+        let preflight = store
+            .preflight_project_registration(
+                "external",
+                "rust_full",
+                ProjectRegistrationEvidenceV1 {
+                    workspace: external.clone(),
+                    git_identity: "https://example.test/external.git".into(),
+                    codex_thread_id: "thread-external".into(),
+                    selected_model: super::super::codex_model_policy::LEGACY_TERRA_MODEL.into(),
+                    reasoning_effort: "high".into(),
+                },
+                supervisor_now_unix(),
+            )
+            .expect("registration preflight");
+        let supervisor = AutonomousSupervisorV1::open(&control).expect("supervisor");
+        let writer = super::super::autonomy_runtime::acquire_project_writer_lock(&external)
+            .expect("external writer");
+        let error = supervisor
+            .project_registry_confirm(&preflight.confirmation_token)
+            .expect_err("external writer must exclude registration confirmation");
+        assert!(error.contains("exclusive writer ownership"), "{error}");
+        drop(writer);
+        let resolved = root.canonicalize().expect("canonical cleanup target");
+        let temp = std::env::temp_dir()
+            .canonicalize()
+            .expect("canonical temp root");
+        assert!(resolved != temp && resolved.starts_with(&temp));
+        std::fs::remove_dir_all(resolved).expect("fixture cleanup");
+    }
+
+    #[test]
+    fn external_thread_adoption_confirmation_uses_external_writer_guard() {
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-external-adoption-writer-{}",
+            Uuid::new_v4()
+        ));
+        let control = root.join("control");
+        let external = root.join("external");
+        std::fs::create_dir_all(&control).expect("control workspace");
+        std::fs::create_dir_all(&external).expect("external workspace");
+        let external = external
+            .canonicalize()
+            .expect("canonical external workspace");
+        let store = AutonomousProjectRegistryStoreV1::open(control.join(".catdesk/projects"))
+            .expect("control registry");
+        store.initialize(2, 1).expect("registry");
+        store
+            .register_project(AutonomousProjectV1 {
+                project_id: "external".into(),
+                workspace: external.clone(),
+                git_identity: "https://example.test/external.git".into(),
+                verification_profile: "rust_full".into(),
+                codex_thread_id: None,
+                chatgpt_target_url: None,
+                chatgpt_target_sha256: None,
+            })
+            .expect("external project");
+        let preflight = store
+            .preflight_thread_adoption(
+                "external",
+                &external,
+                vec![(
+                    None,
+                    ProjectRegistrationEvidenceV1 {
+                        workspace: external.clone(),
+                        git_identity: "https://example.test/external.git".into(),
+                        codex_thread_id: "thread-external".into(),
+                        selected_model: super::super::codex_model_policy::LEGACY_TERRA_MODEL.into(),
+                        reasoning_effort: "high".into(),
+                    },
+                )],
+                supervisor_now_unix(),
+            )
+            .expect("adoption preflight");
+        let supervisor = AutonomousSupervisorV1::open(&control).expect("supervisor");
+        let writer = super::super::autonomy_runtime::acquire_project_writer_lock(&external)
+            .expect("external writer");
+        let error = supervisor
+            .project_thread_adoption_confirm(
+                &preflight.confirmation_token,
+                &preflight.candidates[0].candidate_handle,
+            )
+            .expect_err("external project writer must exclude thread adoption");
+        assert!(
+            error.contains("exclusive project writer ownership"),
+            "{error}"
+        );
+        drop(writer);
+        let resolved = root.canonicalize().expect("canonical cleanup target");
+        let temp = std::env::temp_dir()
+            .canonicalize()
+            .expect("canonical temp root");
+        assert!(resolved != temp && resolved.starts_with(&temp));
+        std::fs::remove_dir_all(resolved).expect("fixture cleanup");
+    }
 
     #[test]
     fn registration_model_argument_never_silently_defaults_on_wrong_type() {

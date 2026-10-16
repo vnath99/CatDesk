@@ -4,20 +4,24 @@
 //! independent WakeHost. It never reads Codex credentials or launches through
 //! a shell. The native CLI owns its normal session and approval behavior.
 
-use std::fs::{File, OpenOptions};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
 use crate::delegated::autonomy_projects::{
     AutonomousProjectV1, resolve_registered_project_from_control_root,
 };
-use crate::delegated::autonomy_runtime::{operator_codex_home, resolve_codex_executable};
+use crate::delegated::autonomy_runtime::{
+    acquire_project_writer_lock, operator_codex_home, resolve_codex_executable,
+};
+use crate::delegated::autonomy_state::{
+    AutonomousQueueTaskStateV1, AutonomousSessionStateV1, AutonomousStateStoreV1,
+};
 
 const MAX_TASK_BYTES: usize = 24 * 1024;
 const MAX_PROFILE_BYTES: usize = 128;
@@ -183,6 +187,43 @@ fn registered_project(
     Ok(resolved.project)
 }
 
+fn ensure_same_project_binding(
+    selected: &AutonomousProjectV1,
+    observed: &AutonomousProjectV1,
+) -> Result<(), String> {
+    if selected != observed {
+        return Err(
+            "CODEX_SCOPE: project registration or bound thread changed before native launch".into(),
+        );
+    }
+    Ok(())
+}
+
+fn redirected_path(metadata: &fs::Metadata) -> bool {
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        metadata.file_attributes() & 0x400 != 0
+    }
+    #[cfg(not(windows))]
+    false
+}
+
+fn checked_autonomy_entry(path: &Path, directory: bool) -> Result<bool, String> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(_) => return Err("CODEX_LOCK: managed writer state is unreadable".into()),
+    };
+    if redirected_path(&metadata) || metadata.is_dir() != directory {
+        return Err("CODEX_LOCK: managed writer state is redirected or unsafe".into());
+    }
+    Ok(true)
+}
+
 fn exact_thread(project: &AutonomousProjectV1) -> Result<&str, String> {
     let thread = project.codex_thread_id.as_deref().ok_or_else(|| {
         "CODEX_THREAD: no thread is bound; use the existing project thread adoption action"
@@ -192,6 +233,86 @@ fn exact_thread(project: &AutonomousProjectV1) -> Result<&str, String> {
         return Err("CODEX_THREAD: bound thread ID is not a canonical UUID".into());
     }
     Ok(thread)
+}
+
+fn ensure_no_interrupted_managed_writer(project: &AutonomousProjectV1) -> Result<(), String> {
+    let catdesk_root = project.workspace.join(".catdesk");
+    if !checked_autonomy_entry(&catdesk_root, true)? {
+        return Ok(());
+    }
+    let state_root = catdesk_root.join("autonomy");
+    if !checked_autonomy_entry(&state_root, true)? {
+        return Ok(());
+    }
+    let observed_root = state_root
+        .canonicalize()
+        .map_err(|_| "CODEX_LOCK: managed writer state is unreadable".to_string())?;
+    let project_workspace = project
+        .workspace
+        .canonicalize()
+        .map_err(|_| "CODEX_LOCK: project workspace is unavailable".to_string())?;
+    if !observed_root.starts_with(&project_workspace) {
+        return Err("CODEX_LOCK: managed writer state escaped the project workspace".into());
+    }
+    for entry in fs::read_dir(&state_root)
+        .map_err(|_| "CODEX_LOCK: managed writer state is unreadable".to_string())?
+    {
+        let entry =
+            entry.map_err(|_| "CODEX_LOCK: managed writer state is unreadable".to_string())?;
+        let metadata = fs::symlink_metadata(entry.path())
+            .map_err(|_| "CODEX_LOCK: managed writer state is unreadable".to_string())?;
+        if redirected_path(&metadata) {
+            return Err("CODEX_LOCK: managed writer state contains a redirected path".into());
+        }
+        if metadata.is_dir()
+            && !matches!(
+                entry.file_name().to_string_lossy().as_ref(),
+                "diagnostics" | "qwen_tools"
+            )
+        {
+            for name in ["state.json", "queue.json"] {
+                if !checked_autonomy_entry(&entry.path().join(name), false)? {
+                    return Err("CODEX_LOCK: managed writer state is incomplete".into());
+                }
+            }
+        }
+    }
+    let store = AutonomousStateStoreV1::open(state_root)
+        .map_err(|_| "CODEX_LOCK: managed writer state is unavailable".to_string())?;
+    let sessions = store
+        .list_sessions_strict()
+        .map_err(|_| "CODEX_LOCK: managed writer state is unreadable".to_string())?;
+    for session in sessions {
+        if matches!(
+            session.state,
+            AutonomousSessionStateV1::Running | AutonomousSessionStateV1::Verifying
+        ) {
+            return Err(
+                "CODEX_LOCK: a managed turn or verification is unfinished; use recovery before direct Codex"
+                    .into(),
+            );
+        }
+        // A terminal snapshot alone does not prove that its provider child
+        // exited: cancellation can leave the queue task and span open.
+        let queue = store
+            .load_queue(&session.session_id)
+            .map_err(|_| "CODEX_LOCK: managed task ownership is unreadable".to_string())?;
+        if queue.tasks.iter().any(|task| {
+            matches!(
+                task.state,
+                AutonomousQueueTaskStateV1::WorkerRunning
+                    | AutonomousQueueTaskStateV1::Running
+                    | AutonomousQueueTaskStateV1::Verifying
+                    | AutonomousQueueTaskStateV1::Repairing
+            )
+        }) {
+            return Err(
+                "CODEX_LOCK: a durable managed task still claims provider ownership; use recovery before direct Codex"
+                    .into(),
+            );
+        }
+    }
+    Ok(())
 }
 
 fn resolve_native_cli() -> Result<(PathBuf, Option<PathBuf>), String> {
@@ -274,29 +395,6 @@ fn append_profile(args: &mut Vec<String>, model: Option<&str>, effort: Option<&s
     }
 }
 
-fn operator_run_lock(
-    catdesk_workspace: &Path,
-    project: &AutonomousProjectV1,
-) -> Result<File, String> {
-    let mut hasher = Sha256::new();
-    hasher.update(project.workspace.to_string_lossy().as_bytes());
-    let path = catdesk_workspace
-        .join(".catdesk")
-        .join("projects")
-        .join(format!("operator-codex-{:x}.lock", hasher.finalize()));
-    let file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(path)
-        .map_err(|_| "CODEX_LOCK: project operator lock is unavailable".to_string())?;
-    file.try_lock().map_err(|_| {
-        "CODEX_LOCK: another CatDesk operator Codex command is active for this project".to_string()
-    })?;
-    Ok(file)
-}
-
 async fn bounded_probe(mut command: Command, args: &[&str]) -> Result<(bool, String), String> {
     command.args(args).stdin(Stdio::null()).kill_on_drop(true);
     let output = tokio::time::timeout(CODEX_PROBE_TIMEOUT, command.output())
@@ -325,11 +423,13 @@ pub(crate) async fn execute_action(
         | OperatorCodexAction::Resume { scope, .. } => scope,
         OperatorCodexAction::GlobalResumeAll => unreachable!(),
     };
-    let project = registered_project(catdesk_workspace, scope)?;
+    // Validate the registration before creating any current-user lock state.
+    // Re-read the exact binding after acquisition to close the rotation race.
+    let selected = registered_project(catdesk_workspace, scope)?;
     let (executable, codex_home) = resolve_native_cli()?;
     if let OperatorCodexAction::Status(_) = &action {
         let (version_ok, version) = bounded_probe(
-            codex_command(&executable, &project.workspace, codex_home.as_deref()),
+            codex_command(&executable, &selected.workspace, codex_home.as_deref()),
             &["--version"],
         )
         .await?;
@@ -339,19 +439,25 @@ pub(crate) async fn execute_action(
             );
         }
         let (authenticated, _) = bounded_probe(
-            codex_command(&executable, &project.workspace, codex_home.as_deref()),
+            codex_command(&executable, &selected.workspace, codex_home.as_deref()),
             &["login", "status"],
         )
         .await?;
         return Ok(json!({
-            "action":"codex_status", "status":"success", "projectId":project.project_id,
-            "workspace":project.workspace, "threadId":project.codex_thread_id,
+            "action":"codex_status", "status":"success", "projectId":selected.project_id,
+            "workspace":selected.workspace, "threadId":selected.codex_thread_id,
             "executable":executable, "version":version, "authenticated":authenticated,
             "route":"current_user_native_cli",
         }));
     }
+    let mut writer = acquire_project_writer_lock(&selected.workspace).map_err(|_| {
+        "CODEX_LOCK: project workspace has an active or unresolved writer; inspect recovery before direct Codex"
+            .to_string()
+    })?;
+    let project = registered_project(catdesk_workspace, scope)?;
+    ensure_same_project_binding(&selected, &project)?;
+    ensure_no_interrupted_managed_writer(&project)?;
     let args = invocation_args(&action, &project)?;
-    let _lock = operator_run_lock(catdesk_workspace, &project)?;
     let mut command = codex_command(&executable, &project.workspace, codex_home.as_deref());
     command
         .args(&args)
@@ -365,15 +471,33 @@ pub(crate) async fn execute_action(
     } else {
         command.stdin(Stdio::inherit());
     }
-    let mut child = command
-        .spawn()
-        .map_err(|_| "CODEX_UNAVAILABLE: native Codex process could not start".to_string())?;
+    writer
+        .begin_writer_turn()
+        .map_err(|_| "CODEX_LOCK: native Codex writer marker is unavailable".to_string())?;
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(_) => {
+            writer.finish_writer_turn().map_err(|_| {
+                "CODEX_LOCK: native Codex writer marker could not be retired".to_string()
+            })?;
+            return Err("CODEX_UNAVAILABLE: native Codex process could not start".into());
+        }
+    };
     if let OperatorCodexAction::Run { task, .. } = &action {
         let Some(mut stdin) = child.stdin.take() else {
+            if child.kill().await.is_ok() {
+                writer.finish_writer_turn().map_err(|_| {
+                    "CODEX_LOCK: native Codex writer marker could not be retired".to_string()
+                })?;
+            }
             return Err("CODEX_IO: native Codex prompt pipe is unavailable".into());
         };
         if stdin.write_all(task.as_bytes()).await.is_err() || stdin.shutdown().await.is_err() {
-            let _ = child.kill().await;
+            if child.kill().await.is_ok() {
+                writer.finish_writer_turn().map_err(|_| {
+                    "CODEX_LOCK: native Codex writer marker could not be retired".to_string()
+                })?;
+            }
             return Err("CODEX_IO: native Codex did not accept the task prompt".into());
         }
     }
@@ -381,6 +505,9 @@ pub(crate) async fn execute_action(
         .wait()
         .await
         .map_err(|_| "CODEX_IO: native Codex exit status is unavailable".to_string())?;
+    writer
+        .finish_writer_turn()
+        .map_err(|_| "CODEX_LOCK: native Codex writer marker could not be retired".to_string())?;
     if !status.success() {
         return Err(format!(
             "CODEX_EXIT: native Codex returned {}; inspect its terminal output for auth, quota, approval, or task errors",
@@ -461,11 +588,106 @@ async fn execute_global_resume_picker(catdesk_workspace: &Path) -> Result<Value,
 mod tests {
     use super::*;
     use crate::delegated::autonomy_projects::AutonomousProjectRegistryStoreV1;
+    use crate::delegated::autonomy_state::{AutonomousQueueTaskV1, AutonomousQueueV1};
     use std::fs;
     use std::process::Command as StdCommand;
 
     fn parse(items: &[&str]) -> Result<OperatorCodexAction, String> {
         parse_action(&items.iter().map(|item| (*item).into()).collect::<Vec<_>>())
+    }
+
+    fn remove_operator_fixture(root: PathBuf) {
+        let resolved = root.canonicalize().expect("canonical fixture root");
+        let temp = std::env::temp_dir()
+            .canonicalize()
+            .expect("canonical temp root");
+        assert!(resolved != temp && resolved.starts_with(&temp));
+        fs::remove_dir_all(resolved).expect("fixture cleanup");
+    }
+
+    #[test]
+    fn redirected_autonomy_root_blocks_native_launch() {
+        let base = std::env::temp_dir().join(format!(
+            "catdesk-operator-redirected-state-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let project_root = base.join("project");
+        let outside = base.join("outside");
+        fs::create_dir_all(project_root.join(".catdesk")).expect("project state parent");
+        fs::create_dir_all(&outside).expect("outside directory");
+        let redirected = project_root.join(".catdesk/autonomy");
+        #[cfg(windows)]
+        let linked = std::os::windows::fs::symlink_dir(&outside, &redirected).is_ok();
+        #[cfg(unix)]
+        let linked = std::os::unix::fs::symlink(&outside, &redirected).is_ok();
+        #[cfg(not(any(windows, unix)))]
+        let linked = false;
+        if !linked {
+            fs::write(&redirected, b"unsafe state path").expect("unsafe file fixture");
+        }
+        let project = AutonomousProjectV1 {
+            project_id: "fixture".into(),
+            workspace: project_root,
+            git_identity: "fixture".into(),
+            verification_profile: "rust_full".into(),
+            codex_thread_id: None,
+            chatgpt_target_url: None,
+            chatgpt_target_sha256: None,
+        };
+        assert!(ensure_no_interrupted_managed_writer(&project).is_err());
+        if linked {
+            fs::remove_dir(&redirected).expect("remove fixture redirect");
+        } else {
+            fs::remove_file(&redirected).expect("remove unsafe fixture file");
+        }
+        remove_operator_fixture(base);
+    }
+
+    #[test]
+    fn inflight_task_blocks_direct_native_even_when_session_terminal() {
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-operator-durable-writer-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).expect("fixture workspace");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).expect("autonomy store");
+        store
+            .create_session(
+                "historical-task",
+                AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                    task_id: "work".into(),
+                    priority: 1,
+                    depends_on: Vec::new(),
+                    state: AutonomousQueueTaskStateV1::WorkerRunning,
+                }])
+                .expect("queue"),
+            )
+            .expect("session");
+        let mut snapshot = store.load_session("historical-task").expect("snapshot");
+        snapshot.state = AutonomousSessionStateV1::Queued;
+        store.save_session(&snapshot).expect("queued session");
+        let project = AutonomousProjectV1 {
+            project_id: "fixture".into(),
+            workspace: root.canonicalize().expect("canonical project"),
+            git_identity: "fixture".into(),
+            verification_profile: "rust_full".into(),
+            codex_thread_id: None,
+            chatgpt_target_url: None,
+            chatgpt_target_sha256: None,
+        };
+        let error = ensure_no_interrupted_managed_writer(&project)
+            .expect_err("nonterminal provider task must block direct Codex");
+        assert!(error.contains("durable managed task"), "{error}");
+        snapshot.state = AutonomousSessionStateV1::Cancelled;
+        snapshot.active = false;
+        store
+            .save_session(&snapshot)
+            .expect("durably terminal session");
+        let error = ensure_no_interrupted_managed_writer(&project)
+            .expect_err("terminal snapshot does not prove provider child exit");
+        assert!(error.contains("durable managed task"), "{error}");
+        remove_operator_fixture(root);
     }
 
     #[test]
@@ -692,6 +914,12 @@ mod tests {
                 .project_id,
             "sibling"
         );
+        let selected = registered_project(&catdesk, &sibling_scope).expect("pre-lock scope");
+        store
+            .bind_codex_thread("sibling", "new-thread")
+            .expect("rotate fixture binding");
+        let changed = registered_project(&catdesk, &sibling_scope).expect("post-lock scope");
+        assert!(ensure_same_project_binding(&selected, &changed).is_err());
         assert!(
             StdCommand::new("git")
                 .arg("-C")

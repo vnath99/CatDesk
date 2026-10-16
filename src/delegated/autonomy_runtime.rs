@@ -6,8 +6,16 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsStr;
-use std::fs;
+#[cfg(unix)]
+use std::ffi::{CStr, OsString};
+#[cfg(windows)]
+use std::ffi::{OsString, c_void};
+use std::fs::{self, File, OpenOptions};
 use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStringExt;
+#[cfg(windows)]
+use std::os::windows::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
@@ -53,7 +61,294 @@ type LiveController = AutonomousControllerV1<
     CodexQwenWorkerProviderV1<CodexCliProviderV1, OllamaWorkerProviderV1>,
     ContractVerifierV1,
 >;
-type RuntimeRegistry = BTreeMap<String, LiveController>;
+type RuntimeRegistry = BTreeMap<String, Arc<Mutex<LiveControllerEntry>>>;
+const INTERRUPTED_PROVIDER_OWNERSHIP_UNPROVEN: &str =
+    "interrupted provider process ownership is unproven; recover the prior turn before relaunch";
+
+struct LiveControllerEntry {
+    controller: Option<LiveController>,
+    writer: Option<ProjectWriterGuard>,
+    writer_reaper_active: bool,
+}
+
+/// One OS writer lock for a canonical project workspace. The lock and durable
+/// marker live in current-user state outside the workspace's Codex write root.
+/// Keep the returned guard alive for the entire native provider turn.
+pub(crate) struct ProjectWriterGuard {
+    _file: File,
+    pending_path: PathBuf,
+    pending_nonce: Option<String>,
+}
+
+impl ProjectWriterGuard {
+    pub(crate) fn begin_writer_turn(&mut self) -> Result<(), RuntimeError> {
+        if self.pending_nonce.is_some() {
+            return Ok(());
+        }
+        let nonce = uuid::Uuid::new_v4().to_string();
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&self.pending_path)
+            .map_err(|_| {
+                RuntimeError::Validation("unresolved managed project writer marker exists".into())
+            })?;
+        file.write_all(nonce.as_bytes()).map_err(|_| {
+            RuntimeError::Validation("managed writer marker could not be persisted".into())
+        })?;
+        file.sync_all().map_err(|_| {
+            RuntimeError::Validation("managed writer marker could not be persisted".into())
+        })?;
+        self.pending_nonce = Some(nonce);
+        Ok(())
+    }
+
+    pub(crate) fn finish_writer_turn(&mut self) -> Result<(), RuntimeError> {
+        let Some(nonce) = &self.pending_nonce else {
+            return Ok(());
+        };
+        let metadata = fs::symlink_metadata(&self.pending_path)
+            .map_err(|_| RuntimeError::Validation("project writer marker is unavailable".into()))?;
+        if !metadata.is_file() || path_is_reparse_or_symlink(&metadata) {
+            return Err(RuntimeError::Validation(
+                "project writer marker is unsafe".into(),
+            ));
+        }
+        let observed = fs::read(&self.pending_path)
+            .map_err(|_| RuntimeError::Validation("managed writer marker is unavailable".into()))?;
+        if observed != nonce.as_bytes() {
+            return Err(RuntimeError::Validation(
+                "managed writer marker ownership changed".into(),
+            ));
+        }
+        fs::remove_file(&self.pending_path).map_err(|_| {
+            RuntimeError::Validation("managed writer marker could not be retired".into())
+        })?;
+        self.pending_nonce = None;
+        Ok(())
+    }
+}
+
+fn checked_writer_state_dir(path: &Path) -> Result<PathBuf, RuntimeError> {
+    match fs::create_dir(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(_) => {
+            return Err(RuntimeError::Validation(
+                "project writer state directory is unavailable".into(),
+            ));
+        }
+    }
+    let metadata = fs::symlink_metadata(path).map_err(|_| {
+        RuntimeError::Validation("project writer state directory is unavailable".into())
+    })?;
+    if !metadata.is_dir() || path_is_reparse_or_symlink(&metadata) {
+        return Err(RuntimeError::Validation(
+            "project writer state directory is unsafe".into(),
+        ));
+    }
+    path.canonicalize().map_err(|_| {
+        RuntimeError::Validation("project writer state directory is unavailable".into())
+    })
+}
+
+#[cfg(windows)]
+fn os_current_user_local_app_data() -> Result<PathBuf, RuntimeError> {
+    #[repr(C)]
+    struct Guid {
+        data1: u32,
+        data2: u16,
+        data3: u16,
+        data4: [u8; 8],
+    }
+    #[link(name = "shell32")]
+    unsafe extern "system" {
+        fn SHGetKnownFolderPath(
+            id: *const Guid,
+            flags: u32,
+            token: *mut c_void,
+            path: *mut *mut u16,
+        ) -> i32;
+    }
+    #[link(name = "ole32")]
+    unsafe extern "system" {
+        fn CoTaskMemFree(memory: *mut c_void);
+    }
+    const FOLDERID_LOCAL_APP_DATA: Guid = Guid {
+        data1: 0xf1b3_2785,
+        data2: 0x6fba,
+        data3: 0x4fcf,
+        data4: [0x9d, 0x55, 0x7b, 0x8e, 0x7f, 0x15, 0x70, 0x91],
+    };
+    let mut raw = std::ptr::null_mut();
+    let status = unsafe {
+        SHGetKnownFolderPath(&FOLDERID_LOCAL_APP_DATA, 0, std::ptr::null_mut(), &mut raw)
+    };
+    if status < 0 || raw.is_null() {
+        if !raw.is_null() {
+            unsafe { CoTaskMemFree(raw.cast()) };
+        }
+        return Err(RuntimeError::Validation(
+            "current-user local app data is unavailable for project writer locks".into(),
+        ));
+    }
+    let mut length = 0_usize;
+    while length <= 32_768 && unsafe { *raw.add(length) } != 0 {
+        length += 1;
+    }
+    if length == 0 || length > 32_768 {
+        unsafe { CoTaskMemFree(raw.cast()) };
+        return Err(RuntimeError::Validation(
+            "current-user local app data is unavailable for project writer locks".into(),
+        ));
+    }
+    let path = PathBuf::from(OsString::from_wide(unsafe {
+        std::slice::from_raw_parts(raw, length)
+    }));
+    unsafe { CoTaskMemFree(raw.cast()) };
+    Ok(path)
+}
+
+#[cfg(unix)]
+fn os_current_user_home() -> Result<PathBuf, RuntimeError> {
+    let mut record = unsafe { std::mem::zeroed::<libc::passwd>() };
+    let mut result = std::ptr::null_mut();
+    let mut buffer = vec![0_u8; 65_536];
+    let status = unsafe {
+        libc::getpwuid_r(
+            libc::geteuid(),
+            &mut record,
+            buffer.as_mut_ptr().cast(),
+            buffer.len(),
+            &mut result,
+        )
+    };
+    if status != 0 || result.is_null() || record.pw_dir.is_null() {
+        return Err(RuntimeError::Validation(
+            "current-user home is unavailable for project writer locks".into(),
+        ));
+    }
+    let home = unsafe { CStr::from_ptr(record.pw_dir) };
+    Ok(PathBuf::from(OsString::from_vec(home.to_bytes().to_vec())))
+}
+
+fn fixed_project_writer_lock_root(project_workspace: &Path) -> Result<PathBuf, RuntimeError> {
+    #[cfg(windows)]
+    let base = os_current_user_local_app_data()?;
+    #[cfg(unix)]
+    let base = os_current_user_home()?;
+    #[cfg(not(any(windows, unix)))]
+    let base: PathBuf = return Err(RuntimeError::Validation(
+        "project writer locks are unsupported on this operating system".into(),
+    ));
+    let metadata = fs::symlink_metadata(&base).map_err(|_| {
+        RuntimeError::Validation("project writer user state root is unavailable".into())
+    })?;
+    if !base.is_absolute() || !metadata.is_dir() || path_is_reparse_or_symlink(&metadata) {
+        return Err(RuntimeError::Validation(
+            "project writer user state root is unsafe".into(),
+        ));
+    }
+    let base = base.canonicalize().map_err(|_| {
+        RuntimeError::Validation("project writer user state root is unavailable".into())
+    })?;
+    #[cfg(windows)]
+    let namespace = "CatDesk";
+    #[cfg(not(windows))]
+    let namespace = ".catdesk-user-state";
+    let planned_root = base.join(namespace).join("ProjectWriterLocks");
+    if planned_root.starts_with(project_workspace) || project_workspace.starts_with(&planned_root) {
+        return Err(RuntimeError::Validation(
+            "project writer lock root overlaps a Codex workspace".into(),
+        ));
+    }
+    let app_root = checked_writer_state_dir(&base.join(namespace))?;
+    checked_writer_state_dir(&app_root.join("ProjectWriterLocks"))
+}
+
+pub(crate) fn acquire_project_writer_lock(
+    project_workspace: &Path,
+) -> Result<ProjectWriterGuard, RuntimeError> {
+    let project_workspace = project_workspace
+        .canonicalize()
+        .map_err(|_| RuntimeError::Validation("project writer workspace is unavailable".into()))?;
+    let lock_root = fixed_project_writer_lock_root(&project_workspace)?;
+    acquire_project_writer_lock_at(&lock_root, &project_workspace)
+}
+
+fn acquire_project_writer_lock_at(
+    lock_root: &Path,
+    project_workspace: &Path,
+) -> Result<ProjectWriterGuard, RuntimeError> {
+    let project_workspace = project_workspace
+        .canonicalize()
+        .map_err(|_| RuntimeError::Validation("project writer workspace is unavailable".into()))?;
+    let metadata = fs::symlink_metadata(lock_root)
+        .map_err(|_| RuntimeError::Validation("project writer lock root is unavailable".into()))?;
+    if !metadata.is_dir() || path_is_reparse_or_symlink(&metadata) {
+        return Err(RuntimeError::Validation(
+            "project writer lock root is unsafe".into(),
+        ));
+    }
+    let lock_root = lock_root
+        .canonicalize()
+        .map_err(|_| RuntimeError::Validation("project writer lock root is unavailable".into()))?;
+    if lock_root.starts_with(&project_workspace) || project_workspace.starts_with(&lock_root) {
+        return Err(RuntimeError::Validation(
+            "project writer lock root overlaps a Codex workspace".into(),
+        ));
+    }
+    let (path, pending_path) = project_writer_paths(&lock_root, &project_workspace);
+    match fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Ok(metadata) if metadata.is_file() && !path_is_reparse_or_symlink(&metadata) => {}
+        _ => {
+            return Err(RuntimeError::Validation(
+                "project writer lock file is unsafe".into(),
+            ));
+        }
+    }
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)
+        .map_err(|_| RuntimeError::Validation("project writer lock could not be opened".into()))?;
+    let metadata = fs::symlink_metadata(&path)
+        .map_err(|_| RuntimeError::Validation("project writer lock file is unavailable".into()))?;
+    if !metadata.is_file() || path_is_reparse_or_symlink(&metadata) {
+        return Err(RuntimeError::Validation(
+            "project writer lock file is unsafe".into(),
+        ));
+    }
+    file.try_lock().map_err(|_| {
+        RuntimeError::Validation("project workspace already has an active Codex writer".into())
+    })?;
+    match fs::symlink_metadata(&pending_path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        _ => {
+            return Err(RuntimeError::Validation(
+                "unresolved managed project writer marker exists".into(),
+            ));
+        }
+    }
+    Ok(ProjectWriterGuard {
+        _file: file,
+        pending_path,
+        pending_nonce: None,
+    })
+}
+
+fn project_writer_paths(lock_root: &Path, project_workspace: &Path) -> (PathBuf, PathBuf) {
+    let mut hasher = Sha256::new();
+    hasher.update(project_workspace.to_string_lossy().as_bytes());
+    let digest = format!("{:x}", hasher.finalize());
+    (
+        lock_root.join(format!("project-codex-writer-{digest}.lock")),
+        lock_root.join(format!("project-codex-writer-{digest}.pending")),
+    )
+}
 
 static RUNTIME_REGISTRY: OnceLock<Arc<Mutex<RuntimeRegistry>>> = OnceLock::new();
 // Each live reviewer loop owns a generation.  A durable control-plane action
@@ -984,6 +1279,110 @@ fn refresh_post_codex_accounting_with_transport_for_model<T: CodexAppServerTrans
 
 fn registry() -> &'static Arc<Mutex<RuntimeRegistry>> {
     RUNTIME_REGISTRY.get_or_init(|| Arc::new(Mutex::new(BTreeMap::new())))
+}
+
+async fn controller_entry(key: &str) -> Arc<Mutex<LiveControllerEntry>> {
+    let mut registry = registry().lock().await;
+    registry
+        .entry(key.to_owned())
+        .or_insert_with(|| {
+            Arc::new(Mutex::new(LiveControllerEntry {
+                controller: None,
+                writer: None,
+                writer_reaper_active: false,
+            }))
+        })
+        .clone()
+}
+
+impl LiveControllerEntry {
+    async fn release_writer_after(
+        &mut self,
+        outcome: &AutonomousControllerOutcomeV1,
+    ) -> Result<(), RuntimeError> {
+        if matches!(
+            outcome.state,
+            AutonomousSessionStateV1::Running | AutonomousSessionStateV1::Verifying
+        ) {
+            return Ok(());
+        }
+        if let Some(controller) = &mut self.controller {
+            if controller.has_unfinished_codex_turns().await? {
+                return Ok(());
+            }
+        }
+        if let Some(writer) = &mut self.writer {
+            writer.finish_writer_turn()?;
+        }
+        self.writer = None;
+        Ok(())
+    }
+
+    async fn release_writer_after_error(&mut self, workspace: &Path, session_id: &str) {
+        let Some(controller) = &mut self.controller else {
+            if self
+                .writer
+                .as_mut()
+                .is_some_and(|writer| writer.finish_writer_turn().is_ok())
+            {
+                self.writer = None;
+            }
+            return;
+        };
+        if !matches!(controller.has_unfinished_codex_turns().await, Ok(false)) {
+            return;
+        }
+        let Ok(store) = AutonomousStateStoreV1::open(workspace.join(".catdesk/autonomy")) else {
+            return;
+        };
+        let Ok(snapshot) = store.load_session(session_id) else {
+            return;
+        };
+        if !matches!(
+            snapshot.state,
+            AutonomousSessionStateV1::Running | AutonomousSessionStateV1::Verifying
+        ) {
+            if self
+                .writer
+                .as_mut()
+                .is_some_and(|writer| writer.finish_writer_turn().is_ok())
+            {
+                self.writer = None;
+            }
+        }
+    }
+}
+
+async fn tick_resident_entry(
+    entry: &mut LiveControllerEntry,
+    workspace: &Path,
+    session_id: &str,
+) -> Result<AutonomousControllerOutcomeV1, RuntimeError> {
+    if entry.writer.is_none() {
+        entry.writer = Some(acquire_project_writer_lock(workspace)?);
+    }
+    entry
+        .writer
+        .as_mut()
+        .expect("writer was acquired")
+        .begin_writer_turn()?;
+    let result = entry
+        .controller
+        .as_mut()
+        .ok_or_else(|| RuntimeError::Validation("autonomous controller is unavailable".into()))?
+        .run_once(now_unix())
+        .await;
+    let outcome = match result {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            entry
+                .release_writer_after_error(workspace, session_id)
+                .await;
+            return Err(error);
+        }
+    };
+    entry.release_writer_after(&outcome).await?;
+    Ok(outcome)
 }
 
 fn reviewer_wakeups() -> &'static Arc<Mutex<BTreeMap<String, u64>>> {
@@ -2722,11 +3121,13 @@ pub async fn claim_direct_chatgpt_work(
         RuntimeError::Validation("autonomous workspace canonicalization failed".into())
     })?;
     let key = format!("{}:{session_id}", workspace.to_string_lossy());
-    let mut registry = registry().lock().await;
-    if let Some(controller) = registry.get_mut(&key) {
-        return controller.claim_direct_chatgpt_work(now_unix());
+    let existing = registry().lock().await.get(&key).cloned();
+    if let Some(existing) = existing {
+        let mut entry = existing.lock().await;
+        if let Some(controller) = &mut entry.controller {
+            return controller.claim_direct_chatgpt_work(now_unix());
+        }
     }
-    drop(registry);
 
     let store = AutonomousStateStoreV1::open(workspace.join(".catdesk").join("autonomy"))
         .map_err(RuntimeError::from)?;
@@ -2756,13 +3157,17 @@ pub async fn finalize_direct_chatgpt_work(
         RuntimeError::Validation("autonomous workspace canonicalization failed".into())
     })?;
     let key = format!("{}:{session_id}", workspace.to_string_lossy());
-    let mut registry = registry().lock().await;
-    let resident_outcome = if let Some(controller) = registry.get_mut(&key) {
-        Some(controller.finalize_direct_chatgpt_work(now_unix())?)
+    let existing = registry().lock().await.get(&key).cloned();
+    let resident_outcome = if let Some(existing) = existing {
+        let mut entry = existing.lock().await;
+        if let Some(controller) = &mut entry.controller {
+            Some(controller.finalize_direct_chatgpt_work(now_unix())?)
+        } else {
+            None
+        }
     } else {
         None
     };
-    drop(registry);
 
     let outcome = if let Some(outcome) = resident_outcome {
         outcome
@@ -2805,11 +3210,69 @@ pub async fn start_or_tick(
         RuntimeError::Validation("autonomous workspace canonicalization failed".into())
     })?;
     let key = format!("{}:{session_id}", workspace.to_string_lossy());
+    let entry = controller_entry(&key).await;
+    let mut entry = entry.lock().await;
+    if entry.writer.is_none() {
+        entry.writer = Some(acquire_project_writer_lock(&workspace)?);
+    }
+    entry
+        .writer
+        .as_mut()
+        .expect("writer was acquired")
+        .begin_writer_turn()?;
+    let result = start_or_tick_managed(&workspace, session_id, &mut entry).await;
+    match result {
+        Ok(outcome) => {
+            entry.release_writer_after(&outcome).await?;
+            Ok(outcome)
+        }
+        Err(RuntimeError::Validation(message))
+            if message == INTERRUPTED_PROVIDER_OWNERSHIP_UNPROVEN =>
+        {
+            // The fresh process has no authoritative child handle. Preserve
+            // the pending marker across this process's OS lock release, even
+            // if a later state transition changes the historical snapshot.
+            entry.writer = None;
+            Err(RuntimeError::Validation(message))
+        }
+        Err(error) => {
+            // No child can exist when controller construction was never
+            // reached. Otherwise retain ownership until explicit recovery.
+            entry
+                .release_writer_after_error(&workspace, session_id)
+                .await;
+            Err(error)
+        }
+    }
+}
+
+async fn start_or_tick_managed(
+    workspace: &Path,
+    session_id: &str,
+    entry: &mut LiveControllerEntry,
+) -> Result<AutonomousControllerOutcomeV1, RuntimeError> {
+    let workspace = workspace.canonicalize().map_err(|_| {
+        RuntimeError::Validation("autonomous workspace canonicalization failed".into())
+    })?;
+    let key = format!("{}:{session_id}", workspace.to_string_lossy());
     let preflight_store = AutonomousStateStoreV1::open(workspace.join(".catdesk").join("autonomy"))
         .map_err(RuntimeError::from)?;
     let preflight_snapshot = preflight_store
         .load_session(session_id)
         .map_err(RuntimeError::from)?;
+    // A process restart drops its OS file lock but does not prove that a
+    // previously spawned Codex child exited. A fresh runtime must never
+    // reconcile a durable RUNNING state into a second writer automatically.
+    if entry.controller.is_none()
+        && matches!(
+            preflight_snapshot.state,
+            AutonomousSessionStateV1::Running | AutonomousSessionStateV1::Verifying
+        )
+    {
+        return Err(RuntimeError::Validation(
+            INTERRUPTED_PROVIDER_OWNERSHIP_UNPROVEN.into(),
+        ));
+    }
     let post_codex_snapshot_pending = preflight_store
         .execution_accounting_store()
         .map_err(RuntimeError::from)?
@@ -2864,8 +3327,7 @@ pub async fn start_or_tick(
     {
         host_prepare_codex_app_server_thread(&workspace, session_id, now_unix())?;
     }
-    let mut registry = registry().lock().await;
-    if !registry.contains_key(&key) {
+    if entry.controller.is_none() {
         let store = AutonomousStateStoreV1::open(workspace.join(".catdesk").join("autonomy"))
             .map_err(RuntimeError::from)?;
         // This process owns no previous child process. Mark any durable
@@ -2893,17 +3355,20 @@ pub async fn start_or_tick(
         let qwen = OllamaWorkerProviderV1::new(&local_ollama_url()?, Some("5m".into()))?;
         let provider = CodexQwenWorkerProviderV1::new(codex, qwen);
         let verifier = ContractVerifierV1::new(policy.clone())?;
-        registry.insert(
-            key.clone(),
-            AutonomousControllerV1::new(policy, store, provider, verifier, session_id.into()),
-        );
+        entry.controller = Some(AutonomousControllerV1::new(
+            policy,
+            store,
+            provider,
+            verifier,
+            session_id.into(),
+        ));
     }
-    let outcome = registry
-        .get_mut(&key)
+    let outcome = entry
+        .controller
+        .as_mut()
         .expect("controller was inserted")
         .run_once(now_unix())
         .await?;
-    drop(registry);
     // A successful Codex provider turn has reached verification before this
     // point.  Capture exactly one read-only post-turn account snapshot only
     // after that boundary; failed/retried turns and local-Qwen turns neither
@@ -3134,12 +3599,16 @@ fn ensure_reviewer_wakeup(
         ticker.tick().await;
         loop {
             ticker.tick().await;
-            let outcome = {
-                let mut registry = registry().lock().await;
-                match registry.get_mut(&key) {
-                    Some(controller) => Some(controller.run_once(now_unix()).await),
-                    None => None,
+            let resident = registry().lock().await.get(&key).cloned();
+            let outcome = if let Some(resident) = resident {
+                let mut entry = resident.lock().await;
+                if entry.controller.is_some() {
+                    Some(tick_resident_entry(&mut entry, &workspace, &session_id).await)
+                } else {
+                    None
                 }
+            } else {
+                None
             };
             let Some(outcome) = outcome else {
                 match retire_or_adopt_reviewer_wakeup(&key, observed_generation).await {
@@ -3224,9 +3693,48 @@ pub async fn cancel_owned_turn(workspace: &Path, session_id: &str) -> Result<boo
         RuntimeError::Validation("autonomous workspace canonicalization failed".into())
     })?;
     let key = format!("{}:{session_id}", workspace.to_string_lossy());
-    let mut registry = registry().lock().await;
-    if let Some(controller) = registry.get_mut(&key) {
+    let resident = registry().lock().await.get(&key).cloned();
+    if let Some(resident) = resident {
+        let mut entry = resident.lock().await;
+        let Some(controller) = &mut entry.controller else {
+            return Ok(false);
+        };
         controller.cancel().await?;
+        entry
+            .release_writer_after(&AutonomousControllerOutcomeV1 {
+                state: AutonomousSessionStateV1::Cancelled,
+                provider_events: 0,
+                verification: None,
+                authoritative_diff: None,
+                final_review: None,
+            })
+            .await?;
+        let should_monitor = entry.writer.is_some() && !entry.writer_reaper_active;
+        if should_monitor {
+            entry.writer_reaper_active = true;
+        }
+        drop(entry);
+        if should_monitor {
+            let owner = resident.clone();
+            tokio::spawn(async move {
+                let cancelled = AutonomousControllerOutcomeV1 {
+                    state: AutonomousSessionStateV1::Cancelled,
+                    provider_events: 0,
+                    verification: None,
+                    authoritative_diff: None,
+                    final_review: None,
+                };
+                loop {
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    let mut entry = owner.lock().await;
+                    let _ = entry.release_writer_after(&cancelled).await;
+                    if entry.writer.is_none() {
+                        entry.writer_reaper_active = false;
+                        break;
+                    }
+                }
+            });
+        }
         Ok(true)
     } else {
         Ok(false)
@@ -3461,6 +3969,157 @@ mod tests {
     use crate::delegated::autonomy_state::{
         AutonomousQueueTaskStateV1, AutonomousQueueTaskV1, AutonomousQueueV1,
     };
+
+    fn remove_writer_fixture(root: PathBuf) {
+        let resolved = root.canonicalize().expect("canonical fixture root");
+        let temp = std::env::temp_dir()
+            .canonicalize()
+            .expect("canonical temp root");
+        assert!(resolved != temp && resolved.starts_with(&temp));
+        fs::remove_dir_all(resolved).expect("fixture cleanup");
+    }
+
+    #[cfg(any(windows, unix))]
+    #[test]
+    fn writer_lock_root_ignores_profile_environment_override() {
+        #[cfg(windows)]
+        const PROFILE_ENV: &str = "LOCALAPPDATA";
+        #[cfg(unix)]
+        const PROFILE_ENV: &str = "HOME";
+        let child_workspace = std::env::var_os("CATDESK_TEST_WRITER_WORKSPACE");
+        let workspace = child_workspace.map(PathBuf::from).unwrap_or_else(|| {
+            let root = std::env::temp_dir()
+                .join(format!("catdesk-known-folder-writer-{}", Uuid::new_v4()));
+            fs::create_dir_all(&root).expect("fixture workspace");
+            root
+        });
+        let expected = fixed_project_writer_lock_root(&workspace).expect("OS user lock root");
+        if std::env::var_os("CATDESK_TEST_WRITER_ROOT_CHILD").is_some() {
+            println!("CATDESK_WRITER_ROOT={}", expected.display());
+            return;
+        }
+        let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args([
+                "--exact",
+                "delegated::autonomy_runtime::tests::writer_lock_root_ignores_profile_environment_override",
+                "--nocapture",
+            ])
+            .env(PROFILE_ENV, workspace.join("spoofed-user-state"))
+            .env("CATDESK_TEST_WRITER_ROOT_CHILD", "1")
+            .env("CATDESK_TEST_WRITER_WORKSPACE", &workspace)
+            .output()
+            .expect("isolated override test process");
+        assert!(output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stdout)
+                .contains(&format!("CATDESK_WRITER_ROOT={}", expected.display())),
+            "current-user writer namespace changed with a profile environment override"
+        );
+        remove_writer_fixture(workspace);
+    }
+
+    #[test]
+    fn project_writer_lock_excludes_same_workspace_and_releases_after_drop() {
+        let root = std::env::temp_dir().join(format!("catdesk-writer-lock-{}", Uuid::new_v4()));
+        let control = root.join("user-state");
+        let project_a = root.join("project-a");
+        let project_b = root.join("project-b");
+        fs::create_dir_all(&control).expect("user lock root");
+        fs::create_dir_all(&project_a).expect("project a");
+        fs::create_dir_all(&project_b).expect("project b");
+
+        let mut first = acquire_project_writer_lock_at(&control, &project_a).expect("first writer");
+        first.begin_writer_turn().expect("durable managed claim");
+        assert!(
+            acquire_project_writer_lock_at(&control, &project_a).is_err(),
+            "the same project cannot acquire a second OS writer lock"
+        );
+        let independent =
+            acquire_project_writer_lock_at(&control, &project_b).expect("independent project");
+        first
+            .finish_writer_turn()
+            .expect("observed terminal release");
+        drop(first);
+        let renewed =
+            acquire_project_writer_lock_at(&control, &project_a).expect("released writer");
+        drop(renewed);
+        drop(independent);
+        remove_writer_fixture(root);
+    }
+
+    #[test]
+    fn unresolved_managed_marker_blocks_restart_even_after_os_guard_drops() {
+        let root = std::env::temp_dir().join(format!("catdesk-writer-crash-{}", Uuid::new_v4()));
+        let control = root.join("user-state");
+        let project = root.join("project");
+        fs::create_dir_all(&control).expect("control root");
+        fs::create_dir_all(&project).expect("project root");
+        let mut writer = acquire_project_writer_lock_at(&control, &project).expect("writer");
+        writer.begin_writer_turn().expect("durable pending marker");
+        let marker = writer.pending_path.clone();
+        drop(writer);
+        assert!(
+            acquire_project_writer_lock_at(&control, &project).is_err(),
+            "process guard release alone cannot certify an unfinished child"
+        );
+        assert!(marker.is_file());
+        remove_writer_fixture(root);
+    }
+
+    #[tokio::test]
+    async fn fresh_runtime_refuses_unproven_restart_and_keeps_writer_marker() {
+        for state in [
+            AutonomousSessionStateV1::Running,
+            AutonomousSessionStateV1::Verifying,
+        ] {
+            let root =
+                std::env::temp_dir().join(format!("catdesk-interrupted-writer-{}", Uuid::new_v4()));
+            fs::create_dir_all(&root).expect("workspace");
+            let store = AutonomousStateStoreV1::open(root.join(".catdesk/autonomy"))
+                .expect("autonomy store");
+            let session_id = "unproven-restart";
+            store
+                .create_session(
+                    session_id,
+                    AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                        task_id: "work".into(),
+                        priority: 1,
+                        depends_on: Vec::new(),
+                        state: AutonomousQueueTaskStateV1::Ready,
+                    }])
+                    .expect("queue"),
+                )
+                .expect("session");
+            let mut snapshot = store.load_session(session_id).expect("snapshot");
+            snapshot.state = state;
+            store
+                .save_session(&snapshot)
+                .expect("persist interrupted state");
+
+            assert!(matches!(
+                start_or_tick(&root, session_id).await,
+                Err(RuntimeError::Validation(ref reason))
+                    if reason == INTERRUPTED_PROVIDER_OWNERSHIP_UNPROVEN
+            ));
+            let mut changed = store.load_session(session_id).expect("snapshot");
+            changed.state = AutonomousSessionStateV1::Queued;
+            store
+                .save_session(&changed)
+                .expect("later state transition");
+            assert!(
+                acquire_project_writer_lock(&root).is_err(),
+                "a later state change cannot erase uncertain child ownership"
+            );
+            let canonical_root = root.canonicalize().expect("canonical fixture");
+            let lock_root =
+                fixed_project_writer_lock_root(&canonical_root).expect("fixed user lock root");
+            let (lock_path, marker_path) = project_writer_paths(&lock_root, &canonical_root);
+            assert!(marker_path.is_file());
+            fs::remove_file(marker_path).expect("fixture marker cleanup");
+            fs::remove_file(lock_path).expect("fixture lock cleanup");
+            remove_writer_fixture(root);
+        }
+    }
 
     struct FakeTransport {
         replies: VecDeque<Value>,

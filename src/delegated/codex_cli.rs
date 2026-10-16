@@ -609,6 +609,7 @@ enum StreamMessage {
 #[derive(Debug)]
 struct ActiveCodexTurn {
     child: Child,
+    turn_id: TurnId,
     receiver: mpsc::Receiver<StreamMessage>,
     events: Vec<CodexCliEventV1>,
     normalized_events: Vec<NormalizedProviderEventV1>,
@@ -771,6 +772,7 @@ impl CodexCliProviderV1 {
             .env_remove("OPENAI_API_KEY")
             .env_remove("CONTROL_PLANE_API_KEY")
             .env("NO_COLOR", "1");
+        command.kill_on_drop(true);
         // Take the resume byte boundary at the last possible point before
         // spawn; command construction may otherwise leave a measurable gap
         // in which another writer could append a turn to the same rollout.
@@ -818,6 +820,7 @@ impl CodexCliProviderV1 {
             handle.handle_id.clone(),
             ActiveCodexTurn {
                 child,
+                turn_id: handle.turn_id.clone(),
                 receiver,
                 events: Vec::new(),
                 normalized_events: Vec::new(),
@@ -902,6 +905,20 @@ impl CodexCliProviderV1 {
             state,
             actual_profile: active.actual_profile.clone(),
         })
+    }
+
+    /// A turn remains owned until both the direct Codex process has exited
+    /// and its output readers have closed. This readback also covers a child
+    /// spawned before its worker handle was returned to the controller.
+    pub(crate) async fn has_unfinished_turns(&mut self) -> Result<bool, RuntimeError> {
+        for active in self.active_turns.values_mut() {
+            let turn_id = active.turn_id.clone();
+            drain_active_turn(active, &turn_id, self.config.max_diagnostic_bytes).await?;
+        }
+        Ok(self
+            .active_turns
+            .values()
+            .any(|active| active.exited.is_none() || !active.stream_closed))
     }
 
     pub async fn cancel(&mut self, handle: &CodexCliTurnHandleV1) -> Result<(), RuntimeError> {
@@ -2040,10 +2057,10 @@ fn record_stream_message(
 }
 
 fn active_turn_state(active: &ActiveCodexTurn) -> CodexCliTurnStateV1 {
-    if active.cancelled {
-        CodexCliTurnStateV1::Cancelled
-    } else if active.exited.is_none() || !active.stream_closed {
+    if active.exited.is_none() || !active.stream_closed {
         CodexCliTurnStateV1::Running
+    } else if active.cancelled {
+        CodexCliTurnStateV1::Cancelled
     } else if active.events.iter().any(|event| {
         event.retry_after_seconds.is_some() || is_rate_limit_text(&event.bounded_summary)
     }) || is_rate_limit_text(&active.stderr)
@@ -2311,6 +2328,7 @@ mod tests {
         };
         ActiveCodexTurn {
             child,
+            turn_id: request.turn_id.clone(),
             receiver,
             events: Vec::new(),
             normalized_events: Vec::new(),
@@ -2383,6 +2401,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn cancelled_turn_retains_child_ownership_until_exit_and_reader_close() {
+        let (sender, receiver) = mpsc::channel(4);
+        let mut active = exited_test_turn(receiver).await;
+        active.cancelled = true;
+        assert_eq!(active_turn_state(&active), CodexCliTurnStateV1::Running);
+        drop(sender);
+        let turn_id = active.turn_id.clone();
+        drain_active_turn(&mut active, &turn_id, 1024)
+            .await
+            .expect("drain cancelled child");
+        assert_eq!(active_turn_state(&active), CodexCliTurnStateV1::Cancelled);
+    }
+
+    #[tokio::test]
     async fn pending_reader_can_be_cancelled_after_child_exit() {
         let (sender, receiver) = mpsc::channel(4);
         let active = exited_test_turn(receiver).await;
@@ -2408,6 +2440,12 @@ mod tests {
             .cancel(&handle)
             .await
             .expect("cancel pending drain");
+        assert!(
+            !provider
+                .has_unfinished_turns()
+                .await
+                .expect("observe drained cancelled child")
+        );
         let cancelled = provider
             .active_turns
             .get(&handle.handle_id)
