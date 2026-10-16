@@ -31,7 +31,8 @@ use crate::delegated::autonomy_runtime::{
     queue_writer_marker_sha256,
 };
 use crate::delegated::codex_cli::{
-    CodexCliNativeStdoutEvidenceV1, prepare_resumed_native_turn_readback,
+    CodexCliNativeStdoutEvidenceV1, CodexCliNativeTurnReadbackV1,
+    prepare_resumed_native_turn_readback,
 };
 use crate::delegated::codex_model_policy::CodexCliTurnProfileEvidenceV1;
 use crate::delegated::runtime::RuntimeError;
@@ -671,6 +672,9 @@ struct QueueReceipt {
     requested_effort: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     actual_profile: Option<CodexCliTurnProfileEvidenceV1>,
+    /// Diagnostic facts only. The verifier still requires `actual_profile`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    profile_readback_diagnostic: Option<NativeTurnProfileReadbackDiagnosticV1>,
     native_executable: Option<PathBuf>,
     native_version: Option<String>,
     native_executable_sha256: Option<String>,
@@ -680,6 +684,14 @@ struct QueueReceipt {
     binding_still_matches: bool,
     outcome: String,
     recorded_at_unix: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NativeTurnProfileReadbackDiagnosticV1 {
+    prelaunch_anchor_available: bool,
+    stdout_completion_valid: bool,
+    rollout_profile_accepted: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -3206,6 +3218,7 @@ struct TurnResult {
     native_version: Option<String>,
     native_executable_sha256: Option<String>,
     actual_profile: Option<CodexCliTurnProfileEvidenceV1>,
+    profile_readback_diagnostic: Option<NativeTurnProfileReadbackDiagnosticV1>,
     review_before: Option<GitReviewWitness>,
     review_after: Option<GitReviewWitness>,
 }
@@ -3222,6 +3235,7 @@ impl TurnResult {
             native_version: None,
             native_executable_sha256: None,
             actual_profile: None,
+            profile_readback_diagnostic: None,
             review_before: None,
             review_after: None,
         }
@@ -3237,6 +3251,7 @@ impl TurnResult {
             native_version: None,
             native_executable_sha256: None,
             actual_profile: None,
+            profile_readback_diagnostic: None,
             review_before: None,
             review_after: None,
         }
@@ -4472,6 +4487,31 @@ async fn write_queued_prompt(
     accepted
 }
 
+fn read_queued_native_profile(
+    readback: Option<&CodexCliNativeTurnReadbackV1>,
+    thread_id: &str,
+    launched_at: SystemTime,
+    exit_observed_at: SystemTime,
+    stdout: &CodexCliNativeStdoutEvidenceV1,
+) -> (
+    Option<CodexCliTurnProfileEvidenceV1>,
+    NativeTurnProfileReadbackDiagnosticV1,
+) {
+    let prelaunch_anchor_available = readback.is_some();
+    let stdout_completion_valid = stdout.completed_for(thread_id);
+    let profile = if stdout_completion_valid {
+        readback.and_then(|held| held.read_completed(launched_at, exit_observed_at, stdout))
+    } else {
+        None
+    };
+    let diagnostic = NativeTurnProfileReadbackDiagnosticV1 {
+        prelaunch_anchor_available,
+        stdout_completion_valid,
+        rollout_profile_accepted: profile.is_some(),
+    };
+    (profile, diagnostic)
+}
+
 async fn run_queued_turn(
     job: &QueueJob,
     control_workspace: &Path,
@@ -4623,17 +4663,23 @@ async fn run_queued_turn(
                 native_version: None,
                 native_executable_sha256: None,
                 actual_profile: None,
+                profile_readback_diagnostic: None,
                 review_before: Some(review_before),
                 review_after: None,
             };
         }
     };
-    let actual_profile = if status.success() {
-        profile_readback.as_ref().and_then(|readback| {
-            readback.read_completed(launched_at, exit_observed_at, &stdout_evidence)
-        })
+    let (actual_profile, profile_readback_diagnostic) = if status.success() {
+        let (profile, diagnostic) = read_queued_native_profile(
+            profile_readback.as_ref(),
+            &job.binding.thread_id,
+            launched_at,
+            exit_observed_at,
+            &stdout_evidence,
+        );
+        (profile, Some(diagnostic))
     } else {
-        None
+        (None, None)
     };
     let review_after = if status.success() {
         capture_git_review_witness(&project.workspace, &git)
@@ -4659,6 +4705,7 @@ async fn run_queued_turn(
         native_version: None,
         native_executable_sha256: None,
         actual_profile,
+        profile_readback_diagnostic,
         review_before: Some(review_before),
         review_after,
     }
@@ -4701,6 +4748,7 @@ fn complete_attempt(
         requested_model: job.model.clone(),
         requested_effort: job.effort.clone(),
         actual_profile: turn.actual_profile.clone(),
+        profile_readback_diagnostic: turn.profile_readback_diagnostic.clone(),
         native_executable: turn.native_executable.clone(),
         native_version: turn.native_version.clone(),
         native_executable_sha256: turn.native_executable_sha256.clone(),
@@ -4899,6 +4947,126 @@ mod tests {
                 .success()
         );
         executable
+    }
+
+    #[test]
+    fn queued_profile_diagnostic_reports_each_proof_gate_without_accepting_missing_evidence() {
+        let fixture = fixture_root();
+        let thread_id = Uuid::new_v4().to_string();
+        let turn_id = Uuid::new_v4().to_string();
+        let day = fixture.join("sessions").join("2026").join("10").join("16");
+        fs::create_dir_all(&day).expect("rollout day");
+        let rollout = day.join(format!("rollout-2026-10-16T00-00-00-{thread_id}.jsonl"));
+        fs::write(
+            &rollout,
+            format!(
+                "{}\n",
+                json!({"type":"session_meta","payload":{"id":thread_id}})
+            ),
+        )
+        .expect("prelaunch rollout");
+        let held = prepare_resumed_native_turn_readback(Some(&fixture), &thread_id)
+            .expect("held prelaunch rollout");
+        let launched_at = SystemTime::now();
+        let mut stdout = CodexCliNativeStdoutEvidenceV1::new(&thread_id).expect("stdout");
+        for event in [
+            json!({"type":"thread.started","thread_id":thread_id}),
+            json!({"type":"turn.started"}),
+            json!({"type":"turn.completed"}),
+        ] {
+            stdout.observe_line(event.to_string().as_bytes());
+        }
+        stdout.mark_eof();
+
+        let (absent, no_anchor) =
+            read_queued_native_profile(None, &thread_id, launched_at, SystemTime::now(), &stdout);
+        assert!(absent.is_none());
+        assert_eq!(
+            no_anchor,
+            NativeTurnProfileReadbackDiagnosticV1 {
+                prelaunch_anchor_available: false,
+                stdout_completion_valid: true,
+                rollout_profile_accepted: false,
+            }
+        );
+        let (incomplete, no_growth) = read_queued_native_profile(
+            Some(&held),
+            &thread_id,
+            launched_at,
+            SystemTime::now(),
+            &stdout,
+        );
+        assert!(incomplete.is_none());
+        assert_eq!(
+            no_growth,
+            NativeTurnProfileReadbackDiagnosticV1 {
+                prelaunch_anchor_available: true,
+                stdout_completion_valid: true,
+                rollout_profile_accepted: false,
+            }
+        );
+
+        let epoch = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("epoch")
+            .as_secs();
+        let timestamp = time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .expect("timestamp");
+        let mut appended = OpenOptions::new()
+            .append(true)
+            .open(&rollout)
+            .expect("append rollout");
+        for record in [
+            json!({"timestamp":timestamp,"type":"event_msg","payload":{
+                "type":"task_started","turn_id":turn_id,"root_turn_id":turn_id,
+                "started_at":epoch}}),
+            json!({"timestamp":timestamp,"type":"turn_context","payload":{
+                "turn_id":turn_id,"root_turn_id":turn_id,
+                "model":"gpt-6.1-sol","effort":"medium"}}),
+            json!({"timestamp":timestamp,"type":"event_msg","payload":{
+                "type":"task_complete","turn_id":turn_id,"root_turn_id":turn_id,
+                "started_at":epoch,"completed_at":epoch}}),
+        ] {
+            writeln!(appended, "{record}").expect("append metadata");
+        }
+        drop(appended);
+        let (accepted, complete) = read_queued_native_profile(
+            Some(&held),
+            &thread_id,
+            launched_at,
+            SystemTime::now(),
+            &stdout,
+        );
+        assert_eq!(accepted.expect("verified profile").codex_turn_id, turn_id);
+        assert_eq!(
+            complete,
+            NativeTurnProfileReadbackDiagnosticV1 {
+                prelaunch_anchor_available: true,
+                stdout_completion_valid: true,
+                rollout_profile_accepted: true,
+            }
+        );
+
+        let invalid_stdout = CodexCliNativeStdoutEvidenceV1::new(&thread_id).expect("stdout");
+        let (refused, invalid) = read_queued_native_profile(
+            Some(&held),
+            &thread_id,
+            launched_at,
+            SystemTime::now(),
+            &invalid_stdout,
+        );
+        assert!(refused.is_none());
+        assert_eq!(
+            invalid,
+            NativeTurnProfileReadbackDiagnosticV1 {
+                prelaunch_anchor_available: true,
+                stdout_completion_valid: false,
+                rollout_profile_accepted: false,
+            }
+        );
+        drop(held);
+        cleanup(fixture);
     }
 
     #[tokio::test]
@@ -5940,6 +6108,7 @@ mod tests {
                 reasoning_effort: "medium".into(),
                 evidence_sha256: "b".repeat(64),
             }),
+            profile_readback_diagnostic: None,
             native_executable: None,
             native_version: None,
             native_executable_sha256: None,
@@ -8158,6 +8327,7 @@ mod tests {
             requested_model: claimed.model.clone(),
             requested_effort: claimed.effort.clone(),
             actual_profile: Some(actual_profile),
+            profile_readback_diagnostic: None,
             native_executable: None,
             native_version: None,
             native_executable_sha256: None,
@@ -8985,6 +9155,7 @@ mod tests {
                 native_version: None,
                 native_executable_sha256: None,
                 actual_profile: None,
+                profile_readback_diagnostic: None,
                 review_before: Some(mock_git_witness()),
                 review_after: Some(mock_git_witness()),
             };
@@ -9560,6 +9731,7 @@ mod tests {
             native_version: None,
             native_executable_sha256: None,
             evidence_level: "NATIVE_EXIT_OBSERVED".into(),
+            profile_readback_diagnostic: None,
             exit_code: Some(0),
             child_exit_observed: true,
             binding_still_matches: true,
@@ -9621,6 +9793,7 @@ mod tests {
                 native_version: None,
                 native_executable_sha256: None,
                 actual_profile: None,
+                profile_readback_diagnostic: None,
                 review_before: Some(mock_git_witness()),
                 review_after: Some(mock_git_witness()),
             },
@@ -9669,6 +9842,7 @@ mod tests {
             native_version: None,
             native_executable_sha256: None,
             evidence_level: "CHILD_ABSENT_BEFORE_SPAWN".into(),
+            profile_readback_diagnostic: None,
             exit_code: None,
             child_exit_observed: false,
             binding_still_matches: false,
@@ -9711,6 +9885,7 @@ mod tests {
                     native_version: None,
                     native_executable_sha256: None,
                     actual_profile: None,
+                    profile_readback_diagnostic: None,
                     review_before: Some(mock_git_witness()),
                     review_after: None,
                 },
@@ -9782,6 +9957,7 @@ mod tests {
                     native_version: None,
                     native_executable_sha256: None,
                     actual_profile: None,
+                    profile_readback_diagnostic: None,
                     review_before: Some(mock_git_witness()),
                     review_after: Some(mock_git_witness()),
                 },
@@ -9900,10 +10076,26 @@ mod tests {
             assert_eq!(result["receipt"]["nativeVersion"], "codex-cli fake-fixture");
             assert_eq!(result["receipt"]["nativeExecutableSha256"], cli.sha256);
             assert_eq!(result["receipt"]["evidenceLevel"], "NATIVE_EXIT_OBSERVED");
+            assert_eq!(
+                result["receipt"]["profileReadbackDiagnostic"],
+                json!({
+                    "prelaunchAnchorAvailable":false,
+                    "stdoutCompletionValid":false,
+                    "rolloutProfileAccepted":false,
+                })
+            );
             let receipt_id = result["receipt"]["receiptId"].as_str().unwrap();
             let receipt = queue
                 .read_receipt(receipt_id)
                 .expect("durable process receipt");
+            let mut legacy_receipt = receipt.clone();
+            legacy_receipt.profile_readback_diagnostic = None;
+            let legacy_json = serde_json::to_value(&legacy_receipt).expect("legacy shape");
+            assert!(legacy_json.get("profileReadbackDiagnostic").is_none());
+            assert_eq!(
+                serde_json::from_value::<QueueReceipt>(legacy_json).expect("old receipt"),
+                legacy_receipt
+            );
             let candidate = queue
                 .read_review_candidate(&receipt)
                 .expect("bound unreviewed candidate");
