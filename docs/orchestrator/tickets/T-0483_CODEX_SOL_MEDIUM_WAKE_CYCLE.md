@@ -1,5 +1,9 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-15 private burn-to-stage journal (source only)
+
+The host-only staging path now records an exact stage intent before nonce burn, binds the selected task/turn, output and stage identities, writes a create-once burn marker, and verifies a staged completion record. Reopen is diagnostic ATTENTION and never reissues the burned output. Focused staging 21/21 and nonce 11/11 tests, full local Rust and strict gates passed. See `T-0483_R36_PRIVATE_SOL_BURN_STAGE_JOURNAL_SOURCE.md`. Pushed source `da58c72634322d638291989fbca6465cabecbb6a` had zero exact GitHub runs/checks. No fixed worker account, lost-write proof, repository-use authority or real Sol/medium→review_ready→Wake cycle exists. This optional isolated worker lane does not block the separately approved ordinary Codex CLI route in the October directive.
+
 ## 2026-10-15 stopped Sol full-ancestor ACL diagnosis (source only)
 
 The inert stopped candidate can now pin every local-drive ancestor to the supplied stage root, verify drive-volume root and final physical identity with 128-bit file IDs, and conservatively scan owner/write-capable allow ACE trustees twice against the retained exited worker token. Focused full-chain/staging/lifecycle tests and the full root suite (1,234 main passed/28 ignored), strict gates and independent review passed locally. See `T-0483_R35_STOPPED_SOL_FULL_ANCESTOR_ACL_DIAGNOSTIC.md`. Pushed source `c3ae701b1b04ea2243061e395bf275867c3a98e6` had zero exact GitHub check-runs. The fixed account/provider, outside-Job and copied-handle exclusion, later ACL drift, durable burn/stage and genuine Sol/medium→review_ready→Wake remain open.

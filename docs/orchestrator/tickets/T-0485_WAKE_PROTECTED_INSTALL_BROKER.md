@@ -1,5 +1,13 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-15 native no-replace publication fixture proof (source only)
+
+Four Windows fixtures prove a single handle-relative no-replace rename after the durable attempt marker, flush both pinned parents, and require exact post-move bytes, ACLs and physical IDs. Collision, injected parent-flush failure, actual DACL drift and same-byte object replacement stay fail closed. Full Wake 213 library tests passed/one ignored plus enabled targets; strict checks and independent review passed. See `T-0485_R30_NATIVE_RENAME_FIXTURE_PROOF.md`. Pushed source `ab67d390dee529e604904daac604ca1e161e34a5` had zero exact GitHub workflow/check runs. The rename is test-only: the stage receipt's delete-denying pins still need a safe production handoff to a typed writer receipt. No production PUBLISHED writer or install authority exists; service/install holds stay closed.
+
+## 2026-10-15 durable publication-attempt marker (source only)
+
+A separate canonical create-once marker now binds signed approval, STAGED digest, root and stage/parent physical IDs before any future rename. Record and parent flush/readback precede publication; reopen at STAGED returns sticky attention and bound PUBLISHED-or-later replay requires the marker. Historical unbound V1 records remain readable without future authority. Full Wake 209 library tests passed/one ignored plus enabled targets, strict checks and independent review passed. See `T-0485_R29_PUBLICATION_ATTEMPT_MARKER_SOURCE.md`. Pushed source `c8e9fa029ff5935d8a7b03c7d5535a240f296408` had zero exact GitHub runs/checks. Native production rename, typed PUBLISHED receipt, dev.84 anchor, signed broker and exact CI remain open.
+
 ## 2026-10-15 durable packages-parent STAGED binding (source only)
 
 New STAGED records durably bind the pre-existing protected `packages` parent physical ID. The typed stage receipt pins/revalidates its ACL and ID across the STAGED/root flush; locked read-only resume rejects same-name parent replacement. The optional trailing field preserves canonical old V1 replay, but unbound records cannot authorize a future publisher. Full Wake 204 library tests passed/one ignored plus binary/integration tests, strict gates and independent review passed locally. See `T-0485_R28_DURABLE_PACKAGES_PARENT_STAGE_BINDING.md`. Pushed source `b74ef2e00b1d21d9cd97a058af6fc94e431b5b7b` had zero exact GitHub check-runs. Pre-rename marker, no-replace rename/PUBLISHED receipt, dev.84 anchor, signed broker and exact CI remain open; service/install holds stay closed.

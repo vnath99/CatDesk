@@ -1,5 +1,11 @@
 # CatDesk — Important Command Reference
 
+## October 15 authenticated Codex route (source-local)
+
+From the CatDesk control Git root, use the locally built `target/debug/catdesk.exe codex status --project-id <registered-id> --workspace <exact-absolute-registered-root>` to check the current user's native Codex CLI and login. Use `codex run` with the same project/workspace plus `--task <approved-task>`, optionally `--model gpt-6.1-sol --effort medium`, to continue the exact bound project thread noninteractively. `codex resume` with the project/workspace opens that exact thread interactively; `codex resume --all` is an explicit manual picker across the user's sessions and claims no project. The task text is supplied to CatDesk on its command line, so keep credentials and other secrets out of it. The route never accepts an arbitrary shell command or an unregistered workspace.
+
+The exact-source scratch route completed two authenticated same-thread turns, including a 32-line test edit and a passing focused Rust test. See `docs/OCTOBER_2026_MVP_ACCEPTANCE.md` for the exact image/session hashes and demo. This is `TESTED_LOCAL` only. The source-only project scheduler has no live dispatch caller, and its lease/cross-controller writer authority requires repair before integrated use. The installed supervisor/Wake route and exact-current GitHub CI remain unavailable. Do not count the local CLI turn as a protected dev.85 installation or a natural Wake receipt.
+
 ## Current R28/R35 source gate (2026-10-15)
 
 - P0 `b74ef2e` durably binds the `packages` parent in STAGED; P1 `c3ae701` adds an inert full-ancestor ACL diagnostic. Local full Rust/strict gates passed and Python pytest exited 0, but neither exact source SHA has a GitHub check-run. See `docs/orchestrator/review_bundles/T-0485_R28_DURABLE_PACKAGES_PARENT_STAGE_BINDING.md` and `T-0483_R35_STOPPED_SOL_FULL_ANCESTOR_ACL_DIAGNOSTIC.md`.
