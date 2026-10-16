@@ -2491,7 +2491,7 @@ fn validate_task_output_baseline_authority(
     validate_task_output_baseline(&baseline, session_id)
 }
 
-fn validate_passed_verification_checkpoint(
+pub(crate) fn validate_passed_verification_checkpoint(
     checkpoint: &AutonomousPassedVerificationCheckpointV1,
     session_id: &str,
 ) -> Result<(), AutonomyStateError> {

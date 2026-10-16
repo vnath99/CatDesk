@@ -1173,7 +1173,7 @@ fn valid_codex_turn_profile(profile: &CodexCliTurnProfileEvidenceV1) -> bool {
 fn bounded(value: &str, limit: usize) -> String {
     value.chars().take(limit).collect()
 }
-fn validate(ledger: &ExecutionAccountingLedgerV1) -> Result<(), RuntimeError> {
+pub(crate) fn validate(ledger: &ExecutionAccountingLedgerV1) -> Result<(), RuntimeError> {
     if ledger.schema_version != EXECUTION_ACCOUNTING_SCHEMA_VERSION
         || ledger.records.len() > MAX_RECORDS
         || ledger.records.iter().any(|record| {

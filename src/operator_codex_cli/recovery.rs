@@ -4,10 +4,11 @@
 //! store (whose constructor creates directories), or infer that a native
 //! provider child has exited from a terminal session label.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read};
 use std::path::Path;
+use std::sync::Arc;
 
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -15,12 +16,14 @@ use sha2::{Digest, Sha256};
 
 use crate::delegated::autonomy_accounting::{
     ActivitySpanStatusV1, EXECUTION_ACCOUNTING_SCHEMA_VERSION, ExecutionAccountingLedgerV1,
+    ExecutionAccountingRecordV1, validate as validate_accounting_ledger,
 };
 use crate::delegated::autonomy_projects::AutonomousProjectV1;
 use crate::delegated::autonomy_runtime::inspect_project_writer_pending_marker;
 use crate::delegated::autonomy_state::{
-    AUTONOMY_STATE_SCHEMA_VERSION, AutonomousQueueTaskStateV1, AutonomousQueueV1,
-    AutonomousSessionSnapshotV1, AutonomousSessionStateV1,
+    AUTONOMY_STATE_SCHEMA_VERSION, AutonomousPassedVerificationCheckpointV1,
+    AutonomousQueueTaskStateV1, AutonomousQueueV1, AutonomousSessionSnapshotV1,
+    AutonomousSessionStateV1, validate_passed_verification_checkpoint,
 };
 
 const MAX_SESSION_COUNT: usize = 1_024;
@@ -210,6 +213,203 @@ fn inflight_task(state: &AutonomousQueueTaskStateV1) -> bool {
     )
 }
 
+/// Only bounded metadata needed to explain a claim. Checkpoint diff, review,
+/// provider handle and task text are never retained in the report rows.
+#[derive(Clone)]
+enum CheckpointFacts {
+    Invalid,
+    Valid(ValidatedCheckpointFacts),
+}
+
+#[derive(Clone)]
+struct ValidatedCheckpointFacts {
+    session_id: String,
+    project_id: String,
+    task_id: String,
+    contract_hash: String,
+    provider_id: String,
+    provider_turn_count: u32,
+    codex_profile_thread_id: Option<String>,
+    source_expectation_recorded: bool,
+}
+
+impl CheckpointFacts {
+    fn checked(checkpoint: AutonomousPassedVerificationCheckpointV1, session_id: &str) -> Self {
+        if validate_passed_verification_checkpoint(&checkpoint, session_id).is_err() {
+            return Self::Invalid;
+        }
+        Self::Valid(ValidatedCheckpointFacts {
+            session_id: checkpoint.session_id,
+            project_id: checkpoint.project_id,
+            task_id: checkpoint.logical_task_id,
+            contract_hash: checkpoint.approved_contract_hash,
+            provider_id: checkpoint.provider_id,
+            provider_turn_count: checkpoint.provider_turn_count,
+            codex_profile_thread_id: checkpoint
+                .codex_turn_profile
+                .map(|profile| profile.codex_thread_id),
+            source_expectation_recorded: checkpoint.reviewed_source_expectation.is_some(),
+        })
+    }
+}
+
+struct ClaimFacts {
+    session: Arc<SessionFacts>,
+    task_id: String,
+    task_state: AutonomousQueueTaskStateV1,
+}
+
+struct SessionFacts {
+    session_id: String,
+    session_state: AutonomousSessionStateV1,
+    current_task_id: Option<String>,
+    provider_thread_id: Option<String>,
+    expected_codex_thread_id: Option<String>,
+    approved_contract_hash: Option<String>,
+    provider_turn_count: u32,
+    codex_profile_tracking_started: bool,
+    codex_profile_violation: bool,
+    checkpoint: Option<CheckpointFacts>,
+}
+
+fn claim_hash(session_id: &str, task_id: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"catdesk-recovery-claim-v1\0");
+    hasher.update(session_id.as_bytes());
+    hasher.update([0]);
+    hasher.update(task_id.as_bytes());
+    format!("sha256:{:x}", hasher.finalize())
+}
+
+/// Gap codes describe missing or conflicting recorded evidence only. They do
+/// not certify that any provider process exited or that a checkpoint is valid.
+fn claim_gap_codes(
+    claim: &ClaimFacts,
+    records: &[ExecutionAccountingRecordV1],
+    project_id: &str,
+) -> BTreeSet<&'static str> {
+    let session = &claim.session;
+    let mut gaps = BTreeSet::from([
+        "OWNER_PROCESS_IDENTITY_UNRECORDED",
+        "SOURCE_BOUND_CHILD_EXIT_UNPROVEN",
+    ]);
+    if session.current_task_id.as_deref() != Some(claim.task_id.as_str()) {
+        gaps.insert("CURRENT_TASK_MISMATCH");
+    }
+    if session.codex_profile_violation {
+        gaps.insert("CODEX_TURN_PROFILE_VIOLATION");
+    }
+    let matching = records
+        .iter()
+        .filter(|record| {
+            record.catdesk_session_id == session.session_id && record.task_id == claim.task_id
+        })
+        .collect::<Vec<_>>();
+    if matching.is_empty() {
+        gaps.insert("ACCOUNTING_RECORD_MISSING");
+    } else if matching.len() > 1 {
+        gaps.insert("ACCOUNTING_RECORD_AMBIGUOUS");
+    }
+    for record in matching {
+        let open_span = record.activity_spans.iter().any(|span| {
+            span.status == ActivitySpanStatusV1::Open || span.ended_at_unix_millis.is_none()
+        });
+        if record.ended_at_unix_millis.is_none() {
+            gaps.insert("ACCOUNTING_RECORD_UNENDED");
+        }
+        if open_span {
+            gaps.insert("ACCOUNTING_OPEN_SPAN");
+            if record.ended_at_unix_millis.is_some() {
+                gaps.insert("ACCOUNTING_ENDED_WITH_OPEN_SPAN");
+            }
+        }
+        if record.activity_evidence_truncated {
+            gaps.insert("ACCOUNTING_ACTIVITY_TRUNCATED");
+        }
+        if record.provider_turns == 0 {
+            gaps.insert("ACCOUNTING_PROVIDER_TURN_COUNT_ZERO");
+        }
+        if record.provider_id == "codex-cli" {
+            if !session.codex_profile_tracking_started
+                || record.provider_turns == 0
+                || record.codex_turn_profiles.len() < record.provider_turns as usize
+            {
+                gaps.insert("CODEX_TURN_PROFILE_INCOMPLETE");
+            }
+            if !record.codex_turn_profiles.is_empty() && record.requested_model.is_none() {
+                gaps.insert("CODEX_TURN_PROFILE_BINDING_MISSING");
+            }
+            if record.codex_turn_profiles.iter().any(|profile| {
+                record
+                    .provider_session_id
+                    .as_deref()
+                    .is_some_and(|thread_id| profile.codex_thread_id != thread_id)
+                    || record
+                        .requested_model
+                        .as_deref()
+                        .is_some_and(|model_id| profile.model_id != model_id)
+            }) {
+                gaps.insert("CODEX_TURN_PROFILE_BINDING_MISMATCH");
+            }
+            if session.provider_thread_id.is_none()
+                || session.expected_codex_thread_id.is_none()
+                || record.provider_session_id.is_none()
+            {
+                gaps.insert("CODEX_THREAD_BINDING_MISSING");
+            }
+            if session.provider_thread_id != session.expected_codex_thread_id
+                || session.provider_thread_id != record.provider_session_id
+            {
+                gaps.insert("CODEX_THREAD_BINDING_MISMATCH");
+            }
+        } else if session.provider_thread_id.is_some()
+            && record.provider_session_id.is_some()
+            && session.provider_thread_id != record.provider_session_id
+        {
+            gaps.insert("PROVIDER_SESSION_MISMATCH");
+        }
+        if let Some(CheckpointFacts::Valid(checkpoint)) = &session.checkpoint {
+            if checkpoint.provider_id != record.provider_id {
+                gaps.insert("CHECKPOINT_PROVIDER_MISMATCH");
+            }
+        }
+    }
+    if matches!(session.checkpoint.as_ref(), Some(CheckpointFacts::Invalid)) {
+        gaps.insert("CHECKPOINT_INVALID");
+    }
+    if let Some(CheckpointFacts::Valid(checkpoint)) = &session.checkpoint {
+        if !matches!(
+            session.session_state,
+            AutonomousSessionStateV1::Queued
+                | AutonomousSessionStateV1::Verifying
+                | AutonomousSessionStateV1::RecoveringAfterRestart
+                | AutonomousSessionStateV1::WaitingForChatgpt
+                | AutonomousSessionStateV1::WaitingForUser
+        ) {
+            gaps.insert("CHECKPOINT_SESSION_STATE_INELIGIBLE");
+        }
+        if checkpoint.session_id != session.session_id
+            || checkpoint.project_id != project_id
+            || checkpoint.task_id != claim.task_id
+            || session.approved_contract_hash.as_deref() != Some(checkpoint.contract_hash.as_str())
+            || checkpoint.provider_turn_count != session.provider_turn_count
+        {
+            gaps.insert("CHECKPOINT_BINDING_MISMATCH");
+        }
+        if checkpoint.provider_id == "codex-cli" {
+            if checkpoint.codex_profile_thread_id.is_none() {
+                gaps.insert("CHECKPOINT_CODEX_PROFILE_MISSING");
+            } else if checkpoint.codex_profile_thread_id != session.provider_thread_id {
+                gaps.insert("CHECKPOINT_CODEX_PROFILE_THREAD_MISMATCH");
+            }
+        }
+        if !checkpoint.source_expectation_recorded {
+            gaps.insert("CHECKPOINT_SOURCE_EXPECTATION_MISSING");
+        }
+    }
+    gaps
+}
+
 fn push_bounded_row(
     rows: &mut Vec<Value>,
     row: Value,
@@ -234,6 +434,9 @@ pub(super) fn report(project: &AutonomousProjectV1, prepare: bool) -> Result<Val
     let mut session_rows = Vec::new();
     let mut queue_rows = Vec::new();
     let mut ledger_rows = Vec::new();
+    let mut claim_rows = Vec::new();
+    let mut claim_gap_counts = BTreeMap::<&'static str, usize>::new();
+    let mut observed_claims = Vec::new();
     let mut total_sessions = 0usize;
     let mut total_accounting_records = 0usize;
     let mut total_bytes = 0u64;
@@ -323,11 +526,44 @@ pub(super) fn report(project: &AutonomousProjectV1, prepare: bool) -> Result<Val
                         &mut total_rows,
                     )?;
                 }
+                let checkpoint = if queue.tasks.iter().any(|task| inflight_task(&task.state)) {
+                    let verification_dir = session_dir.join("verification");
+                    if checked_directory(&verification_dir)? {
+                        read_json::<AutonomousPassedVerificationCheckpointV1>(
+                            &verification_dir.join("passed-finalization.json"),
+                            MAX_SESSION_FILE_BYTES,
+                            &mut total_bytes,
+                            &mut evidence_hasher,
+                        )?
+                        .map(|checkpoint| CheckpointFacts::checked(checkpoint, &session_id))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                let session_facts = Arc::new(SessionFacts {
+                    session_id: session_id.clone(),
+                    session_state: snapshot.state.clone(),
+                    current_task_id: snapshot.current_task_id.clone(),
+                    provider_thread_id: snapshot.provider_thread_id.clone(),
+                    expected_codex_thread_id: snapshot.expected_codex_thread_id.clone(),
+                    approved_contract_hash: snapshot.approved_contract_hash.clone(),
+                    provider_turn_count: snapshot.provider_turn_count,
+                    codex_profile_tracking_started: snapshot.codex_turn_profile_tracking_started,
+                    codex_profile_violation: snapshot.codex_turn_profile_violation,
+                    checkpoint,
+                });
                 for task in queue
                     .tasks
                     .into_iter()
                     .filter(|task| inflight_task(&task.state))
                 {
+                    observed_claims.push(ClaimFacts {
+                        session: Arc::clone(&session_facts),
+                        task_id: task.task_id.clone(),
+                        task_state: task.state.clone(),
+                    });
                     push_bounded_row(
                         &mut queue_rows,
                         json!({
@@ -344,7 +580,7 @@ pub(super) fn report(project: &AutonomousProjectV1, prepare: bool) -> Result<Val
                 &mut total_bytes,
                 &mut evidence_hasher,
             )?;
-            if let Some(ledger) = ledger {
+            if let Some(ref ledger) = ledger {
                 if ledger.schema_version != EXECUTION_ACCOUNTING_SCHEMA_VERSION
                     || ledger.records.len() > MAX_ACCOUNTING_RECORDS
                 {
@@ -353,8 +589,10 @@ pub(super) fn report(project: &AutonomousProjectV1, prepare: bool) -> Result<Val
                             .into(),
                     );
                 }
+                validate_accounting_ledger(ledger)
+                    .map_err(|_| "CODEX_RECOVERY: accounting ledger is invalid".to_string())?;
                 total_accounting_records = ledger.records.len();
-                for record in ledger.records {
+                for record in &ledger.records {
                     if record.project_id != project.project_id {
                         return Err(
                             "CODEX_RECOVERY: accounting ledger contains a foreign project binding"
@@ -401,6 +639,28 @@ pub(super) fn report(project: &AutonomousProjectV1, prepare: bool) -> Result<Val
                     }
                 }
             }
+            for claim in observed_claims {
+                let gaps = claim_gap_codes(
+                    &claim,
+                    ledger
+                        .as_ref()
+                        .map_or(&[][..], |ledger| ledger.records.as_slice()),
+                    &project.project_id,
+                );
+                for code in &gaps {
+                    *claim_gap_counts.entry(code).or_default() += 1;
+                }
+                push_bounded_row(
+                    &mut claim_rows,
+                    json!({
+                        "claimSha256":claim_hash(&claim.session.session_id, &claim.task_id),
+                        "sessionState":claim.session.session_state,
+                        "taskState":claim.task_state,
+                        "gapCodes":gaps,
+                    }),
+                    &mut total_rows,
+                )?;
+            }
         }
     }
     let blocker_count = session_rows.len()
@@ -417,6 +677,8 @@ pub(super) fn report(project: &AutonomousProjectV1, prepare: bool) -> Result<Val
         "observedAccountingRecordCount":total_accounting_records,
         "sessionBlockers":session_rows, "queueBlockers":queue_rows,
         "accountingReviewRows":ledger_rows,
+        "claimEvidenceGapsV1":claim_rows,
+        "claimEvidenceGapCountsV1":claim_gap_counts,
         "pendingWriterMarker":marker_sha256.as_ref().map(|sha| json!({"present":true,"contentSha256":sha})).unwrap_or_else(|| json!({"present":false})),
         "evidenceSha256":format!("{:x}", evidence_hasher.finalize()),
         "observationLimit":"Nontransactional read-only snapshot; concurrent same-user directory replacement may race preflight. Process exit and OS lock ownership are not proven. evidenceSha256 is a diagnostic digest, not a recovery compare-and-swap token.",
@@ -437,6 +699,12 @@ mod tests {
     use super::*;
     use crate::delegated::autonomy_accounting::{ActivityActorV1, ActivityEvidenceV1};
     use crate::delegated::autonomy_state::{AutonomousQueueTaskV1, AutonomousStateStoreV1};
+    use crate::delegated::codex_model_policy::{CodexCliTurnProfileEvidenceV1, SOL_MEDIUM_MODEL};
+    use crate::delegated::coordinator::{VerificationStatusV1, VerificationSummaryV1};
+    use crate::reviewed_source_snapshot::{
+        ReviewedSourceBaselineObservationV1, ReviewedSourceCurrentOutputV1,
+        ReviewedSourceSnapshotExpectedV1,
+    };
 
     fn fixture_project(root: &Path) -> AutonomousProjectV1 {
         AutonomousProjectV1 {
@@ -455,6 +723,23 @@ mod tests {
         let temp = std::env::temp_dir().canonicalize().expect("temp root");
         assert!(resolved.starts_with(&temp) && resolved != temp);
         fs::remove_dir_all(resolved).expect("fixture cleanup");
+    }
+
+    fn write_fixture_snapshot(root: &Path, snapshot: &AutonomousSessionSnapshotV1) {
+        fs::write(
+            root.join(".catdesk/autonomy")
+                .join(&snapshot.session_id)
+                .join("state.json"),
+            serde_json::to_vec_pretty(snapshot).expect("snapshot JSON"),
+        )
+        .expect("fixture snapshot");
+    }
+
+    fn has_gap(report: &Value, claim_index: usize, code: &str) -> bool {
+        report["claimEvidenceGapsV1"][claim_index]["gapCodes"]
+            .as_array()
+            .expect("gap codes")
+            .contains(&json!(code))
     }
 
     #[test]
@@ -486,8 +771,750 @@ mod tests {
         assert_eq!(report["status"], "NEEDS_OWNER_RECOVERY");
         assert_eq!(report["queueBlockers"][0]["taskState"], "WORKER_RUNNING");
         assert_eq!(report["queueBlockers"][0]["sessionState"], "CANCELLED");
+        assert_eq!(report["claimEvidenceGapsV1"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            report["claimEvidenceGapsV1"][0]["claimSha256"],
+            claim_hash("session_one", "task_one")
+        );
+        assert!(has_gap(&report, 0, "OWNER_PROCESS_IDENTITY_UNRECORDED"));
+        assert!(has_gap(&report, 0, "SOURCE_BOUND_CHILD_EXIT_UNPROVEN"));
+        assert!(has_gap(&report, 0, "ACCOUNTING_RECORD_MISSING"));
         assert_eq!(report["launchAuthorized"], false);
         assert_eq!(fs::read(&state_path).expect("after"), before);
+        remove_fixture(&root);
+    }
+
+    #[test]
+    fn reports_historical_claim_mix_as_gaps_without_recovery_authority() {
+        let root = std::env::temp_dir().join(format!("catdesk-recovery-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("fixture root");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).expect("state fixture");
+        let accounting = store
+            .execution_accounting_store()
+            .expect("accounting store");
+        for index in 0..35 {
+            let session_id = format!("session_{index:02}");
+            let task_id = format!("task_{index:02}");
+            let task_state = if index < 30 {
+                AutonomousQueueTaskStateV1::WorkerRunning
+            } else {
+                AutonomousQueueTaskStateV1::Verifying
+            };
+            store
+                .create_session(
+                    &session_id,
+                    AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                        task_id: task_id.clone(),
+                        priority: 1,
+                        depends_on: Vec::new(),
+                        state: task_state,
+                    }])
+                    .expect("queue"),
+                )
+                .expect("session");
+            let provider_id = if index < 27 {
+                "codex-cli"
+            } else if index < 33 {
+                "chatgpt-direct"
+            } else {
+                "ollama"
+            };
+            let thread_id = format!("thread_{index:02}");
+            let provider_thread = (provider_id == "codex-cli").then_some(thread_id.as_str());
+            let mut snapshot = store.load_session(&session_id).expect("snapshot");
+            snapshot.state = if index < 29 {
+                AutonomousSessionStateV1::Cancelled
+            } else if index < 34 {
+                AutonomousSessionStateV1::LeaseExpired
+            } else {
+                AutonomousSessionStateV1::Paused
+            };
+            snapshot.active = !snapshot.state.is_terminal();
+            snapshot.current_task_id = Some(task_id.clone());
+            snapshot.provider_turn_count = 1;
+            snapshot.provider_thread_id = provider_thread.map(str::to_owned);
+            snapshot.expected_codex_thread_id = provider_thread.map(str::to_owned);
+            snapshot.codex_turn_profile_tracking_started = false;
+            write_fixture_snapshot(&root, &snapshot);
+            accounting
+                .record_task_started(
+                    "fixture",
+                    &task_id,
+                    &session_id,
+                    provider_thread,
+                    provider_id,
+                    None,
+                    None,
+                    100,
+                )
+                .expect("accounting record");
+            if index < 13 {
+                accounting
+                    .activity_started(
+                        &session_id,
+                        ActivityActorV1::CodexProviderActive,
+                        ActivityEvidenceV1::ProviderLifecycle,
+                        110,
+                    )
+                    .expect("open provider span");
+            }
+        }
+        let project = fixture_project(&root);
+        let report = report(&project, true).expect("historical fixture report");
+        assert_eq!(report["queueBlockers"].as_array().unwrap().len(), 35);
+        assert_eq!(report["accountingReviewRows"].as_array().unwrap().len(), 35);
+        assert_eq!(report["claimEvidenceGapsV1"].as_array().unwrap().len(), 35);
+        assert_eq!(
+            report["claimEvidenceGapCountsV1"]["ACCOUNTING_RECORD_UNENDED"],
+            35
+        );
+        assert_eq!(
+            report["claimEvidenceGapCountsV1"]["ACCOUNTING_OPEN_SPAN"],
+            13
+        );
+        assert_eq!(
+            report["claimEvidenceGapCountsV1"]["CODEX_TURN_PROFILE_INCOMPLETE"],
+            27
+        );
+        assert_eq!(
+            report["claimEvidenceGapCountsV1"]["OWNER_PROCESS_IDENTITY_UNRECORDED"],
+            35
+        );
+        assert_eq!(
+            report["claimEvidenceGapCountsV1"]["SOURCE_BOUND_CHILD_EXIT_UNPROVEN"],
+            35
+        );
+        assert_eq!(report["launchAuthorized"], false);
+        assert!(
+            report["claimEvidenceGapsV1"]
+                .to_string()
+                .contains("sha256:")
+        );
+        assert!(
+            !report["claimEvidenceGapsV1"]
+                .to_string()
+                .contains("session_00")
+        );
+        remove_fixture(&root);
+    }
+
+    #[test]
+    fn reports_mismatched_thread_task_and_checkpoint_bindings() {
+        let root = std::env::temp_dir().join(format!("catdesk-recovery-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("fixture root");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).expect("state fixture");
+        store
+            .create_session(
+                "session_one",
+                AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                    task_id: "task_one".into(),
+                    priority: 1,
+                    depends_on: Vec::new(),
+                    state: AutonomousQueueTaskStateV1::WorkerRunning,
+                }])
+                .expect("queue"),
+            )
+            .expect("session");
+        let mut snapshot = store.load_session("session_one").expect("snapshot");
+        snapshot.state = AutonomousSessionStateV1::Cancelled;
+        snapshot.active = false;
+        snapshot.current_task_id = Some("task_other".into());
+        snapshot.provider_thread_id = Some("thread_observed".into());
+        snapshot.expected_codex_thread_id = Some("thread_expected".into());
+        snapshot.approved_contract_hash = Some("fnv1a64:0000000000000000".into());
+        snapshot.provider_turn_count = 1;
+        write_fixture_snapshot(&root, &snapshot);
+        store
+            .execution_accounting_store()
+            .expect("accounting store")
+            .record_task_started(
+                "fixture",
+                "task_one",
+                "session_one",
+                Some("thread_recorded"),
+                "codex-cli",
+                None,
+                None,
+                100,
+            )
+            .expect("accounting record");
+        let checkpoint_contract = "fnv1a64:1111111111111111";
+        let diff = "fixture diff";
+        let attribution =
+            serde_json::to_vec(&(checkpoint_contract, "task_else", Option::<()>::None))
+                .expect("attribution JSON");
+        let checkpoint = AutonomousPassedVerificationCheckpointV1 {
+            schema_version: AUTONOMY_STATE_SCHEMA_VERSION,
+            session_id: "session_one".into(),
+            project_id: "fixture".into(),
+            approved_contract_hash: checkpoint_contract.into(),
+            logical_task_id: "task_else".into(),
+            provider_id: "codex-cli".into(),
+            provider_turn_count: 2,
+            verification_profile: "rust_full".into(),
+            verification: VerificationSummaryV1 {
+                status: VerificationStatusV1::Passed,
+                command: "cargo test".into(),
+                summary: "passed".into(),
+            },
+            authoritative_diff: diff.into(),
+            authoritative_diff_sha256: format!("{:x}", Sha256::digest(diff.as_bytes())),
+            attribution_digest: format!("{:x}", Sha256::digest(attribution)),
+            codex_turn_profile: None,
+            reviewed_source_expectation: None,
+        };
+        store
+            .write_passed_verification_checkpoint("session_one", &checkpoint)
+            .expect("checkpoint fixture");
+        let report = report(&fixture_project(&root), false).expect("mismatch report");
+        for code in [
+            "CURRENT_TASK_MISMATCH",
+            "CODEX_THREAD_BINDING_MISMATCH",
+            "CHECKPOINT_SESSION_STATE_INELIGIBLE",
+            "CHECKPOINT_BINDING_MISMATCH",
+            "CHECKPOINT_CODEX_PROFILE_MISSING",
+            "CHECKPOINT_SOURCE_EXPECTATION_MISSING",
+        ] {
+            assert!(has_gap(&report, 0, code), "missing {code}");
+        }
+        assert_eq!(report["launchAuthorized"], false);
+        assert!(
+            !report["claimEvidenceGapsV1"]
+                .to_string()
+                .contains("thread_observed")
+        );
+        remove_fixture(&root);
+    }
+
+    #[test]
+    fn tampered_checkpoint_is_only_reported_as_invalid() {
+        let root = std::env::temp_dir().join(format!("catdesk-recovery-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("fixture root");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).expect("state fixture");
+        store
+            .create_session(
+                "session_one",
+                AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                    task_id: "task_one".into(),
+                    priority: 1,
+                    depends_on: Vec::new(),
+                    state: AutonomousQueueTaskStateV1::Verifying,
+                }])
+                .expect("queue"),
+            )
+            .expect("session");
+        let contract_hash = "fnv1a64:1111111111111111";
+        let mut snapshot = store.load_session("session_one").expect("snapshot");
+        snapshot.state = AutonomousSessionStateV1::Cancelled;
+        snapshot.active = false;
+        snapshot.current_task_id = Some("task_one".into());
+        snapshot.approved_contract_hash = Some(contract_hash.into());
+        snapshot.provider_turn_count = 1;
+        write_fixture_snapshot(&root, &snapshot);
+        let expectation = ReviewedSourceSnapshotExpectedV1 {
+            session_id: "session_one".into(),
+            project_id: "fixture".into(),
+            approved_contract_hash: contract_hash.into(),
+            logical_task_id: "task_one".into(),
+            completion_artifact_ids: vec!["artifact_one".into()],
+            current_outputs: vec![ReviewedSourceCurrentOutputV1 {
+                artifact_id: "artifact_one".into(),
+                sha256: "0".repeat(64),
+            }],
+            baseline_observations: vec![ReviewedSourceBaselineObservationV1 {
+                artifact_id: "artifact_one".into(),
+                state: "ABSENT".into(),
+                sha256: None,
+            }],
+        };
+        let diff = "fixture diff";
+        let attribution = serde_json::to_vec(&(contract_hash, "task_one", Some(&expectation)))
+            .expect("attribution JSON");
+        let checkpoint = AutonomousPassedVerificationCheckpointV1 {
+            schema_version: AUTONOMY_STATE_SCHEMA_VERSION,
+            session_id: "session_one".into(),
+            project_id: "fixture".into(),
+            approved_contract_hash: contract_hash.into(),
+            logical_task_id: "task_one".into(),
+            provider_id: "chatgpt-direct".into(),
+            provider_turn_count: 1,
+            verification_profile: "rust_full".into(),
+            verification: VerificationSummaryV1 {
+                status: VerificationStatusV1::Passed,
+                command: "cargo test".into(),
+                summary: "passed".into(),
+            },
+            authoritative_diff: diff.into(),
+            authoritative_diff_sha256: format!("{:x}", Sha256::digest(diff.as_bytes())),
+            attribution_digest: format!("{:x}", Sha256::digest(attribution)),
+            codex_turn_profile: None,
+            reviewed_source_expectation: Some(expectation),
+        };
+        store
+            .write_passed_verification_checkpoint("session_one", &checkpoint)
+            .expect("valid checkpoint fixture");
+        let checkpoint_path =
+            root.join(".catdesk/autonomy/session_one/verification/passed-finalization.json");
+        for case in ["schema", "diff_hash", "attribution_hash", "expectation"] {
+            let mut tampered = checkpoint.clone();
+            match case {
+                "schema" => tampered.schema_version = 0,
+                "diff_hash" => tampered.authoritative_diff.push_str(" tampered"),
+                "attribution_hash" => tampered.attribution_digest = "0".repeat(64),
+                "expectation" => {
+                    tampered
+                        .reviewed_source_expectation
+                        .as_mut()
+                        .expect("expectation")
+                        .session_id = "foreign_session".into();
+                    let material = serde_json::to_vec(&(
+                        tampered.approved_contract_hash.as_str(),
+                        tampered.logical_task_id.as_str(),
+                        tampered.reviewed_source_expectation.as_ref(),
+                    ))
+                    .expect("updated attribution JSON");
+                    tampered.attribution_digest = format!("{:x}", Sha256::digest(material));
+                }
+                _ => unreachable!(),
+            }
+            fs::write(
+                &checkpoint_path,
+                serde_json::to_vec_pretty(&tampered).expect("tampered JSON"),
+            )
+            .expect("tampered checkpoint fixture");
+            let report = report(&fixture_project(&root), false).expect("tampered report");
+            assert!(has_gap(&report, 0, "CHECKPOINT_INVALID"), "case {case}");
+            assert!(!has_gap(&report, 0, "CHECKPOINT_BINDING_MISMATCH"));
+            assert_eq!(report["launchAuthorized"], false);
+        }
+        remove_fixture(&root);
+    }
+
+    #[test]
+    fn zero_record_turn_count_cannot_look_like_complete_codex_evidence() {
+        let root = std::env::temp_dir().join(format!("catdesk-recovery-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("fixture root");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).expect("state fixture");
+        store
+            .create_session(
+                "session_one",
+                AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                    task_id: "task_one".into(),
+                    priority: 1,
+                    depends_on: Vec::new(),
+                    state: AutonomousQueueTaskStateV1::WorkerRunning,
+                }])
+                .expect("queue"),
+            )
+            .expect("session");
+        let mut snapshot = store.load_session("session_one").expect("snapshot");
+        snapshot.state = AutonomousSessionStateV1::Cancelled;
+        snapshot.active = false;
+        snapshot.current_task_id = Some("task_one".into());
+        snapshot.provider_turn_count = 1;
+        snapshot.provider_thread_id = Some("thread_one".into());
+        snapshot.expected_codex_thread_id = Some("thread_one".into());
+        write_fixture_snapshot(&root, &snapshot);
+        store
+            .execution_accounting_store()
+            .expect("accounting store")
+            .record_task_started(
+                "fixture",
+                "task_one",
+                "session_one",
+                Some("thread_one"),
+                "codex-cli",
+                None,
+                None,
+                100,
+            )
+            .expect("accounting record");
+        let ledger_path = root.join(".catdesk/autonomy/execution-accounting.json");
+        let mut ledger: Value =
+            serde_json::from_slice(&fs::read(&ledger_path).expect("ledger")).expect("ledger JSON");
+        ledger["records"][0]["providerTurns"] = json!(0);
+        fs::write(
+            &ledger_path,
+            serde_json::to_vec_pretty(&ledger).expect("ledger JSON"),
+        )
+        .expect("fixture ledger mismatch");
+        let report = report(&fixture_project(&root), false).expect("zero-turn report");
+        assert!(has_gap(&report, 0, "ACCOUNTING_PROVIDER_TURN_COUNT_ZERO"));
+        assert!(has_gap(&report, 0, "CODEX_TURN_PROFILE_INCOMPLETE"));
+        assert_eq!(report["launchAuthorized"], false);
+        remove_fixture(&root);
+    }
+
+    #[test]
+    fn session_cumulative_turn_count_does_not_override_per_task_profile_count() {
+        let root = std::env::temp_dir().join(format!("catdesk-recovery-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("fixture root");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).expect("state fixture");
+        store
+            .create_session(
+                "session_one",
+                AutonomousQueueV1::new(vec![
+                    AutonomousQueueTaskV1 {
+                        task_id: "task_done".into(),
+                        priority: 1,
+                        depends_on: Vec::new(),
+                        state: AutonomousQueueTaskStateV1::CompletedVerified,
+                    },
+                    AutonomousQueueTaskV1 {
+                        task_id: "task_current".into(),
+                        priority: 2,
+                        depends_on: vec!["task_done".into()],
+                        state: AutonomousQueueTaskStateV1::WorkerRunning,
+                    },
+                ])
+                .expect("queue"),
+            )
+            .expect("session");
+        let mut snapshot = store.load_session("session_one").expect("snapshot");
+        snapshot.state = AutonomousSessionStateV1::Cancelled;
+        snapshot.active = false;
+        snapshot.current_task_id = Some("task_current".into());
+        snapshot.provider_turn_count = 2;
+        snapshot.provider_thread_id = Some("thread_one".into());
+        snapshot.expected_codex_thread_id = Some("thread_one".into());
+        write_fixture_snapshot(&root, &snapshot);
+        let accounting = store
+            .execution_accounting_store()
+            .expect("accounting store");
+        accounting
+            .record_task_started(
+                "fixture",
+                "task_current",
+                "session_one",
+                Some("thread_one"),
+                "codex-cli",
+                Some(SOL_MEDIUM_MODEL),
+                None,
+                100,
+            )
+            .expect("current task record");
+        accounting
+            .record_exact_codex_turn_profile(
+                "session_one",
+                &CodexCliTurnProfileEvidenceV1 {
+                    codex_thread_id: "thread_one".into(),
+                    codex_turn_id: "turn-current".into(),
+                    model_id: SOL_MEDIUM_MODEL.into(),
+                    reasoning_effort: "medium".into(),
+                    evidence_sha256: "b".repeat(64),
+                },
+            )
+            .expect("current task profile");
+        let report = report(&fixture_project(&root), false).expect("two-task report");
+        assert_eq!(report["claimEvidenceGapsV1"].as_array().unwrap().len(), 1);
+        assert!(!has_gap(&report, 0, "CODEX_TURN_PROFILE_INCOMPLETE"));
+        assert!(!has_gap(&report, 0, "ACCOUNTING_PROVIDER_TURN_COUNT_ZERO"));
+        assert!(has_gap(&report, 0, "ACCOUNTING_RECORD_UNENDED"));
+        assert_eq!(report["launchAuthorized"], false);
+        remove_fixture(&root);
+    }
+
+    #[test]
+    fn malformed_accounting_profile_fails_before_claim_classification() {
+        let root = std::env::temp_dir().join(format!("catdesk-recovery-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("fixture root");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).expect("state fixture");
+        store
+            .create_session(
+                "session_one",
+                AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                    task_id: "task_one".into(),
+                    priority: 1,
+                    depends_on: Vec::new(),
+                    state: AutonomousQueueTaskStateV1::WorkerRunning,
+                }])
+                .expect("queue"),
+            )
+            .expect("session");
+        store
+            .execution_accounting_store()
+            .expect("accounting store")
+            .record_task_started(
+                "fixture",
+                "task_one",
+                "session_one",
+                Some("thread_one"),
+                "codex-cli",
+                Some(SOL_MEDIUM_MODEL),
+                None,
+                100,
+            )
+            .expect("accounting record");
+        let ledger_path = root.join(".catdesk/autonomy/execution-accounting.json");
+        let mut ledger: Value =
+            serde_json::from_slice(&fs::read(&ledger_path).expect("ledger")).expect("ledger JSON");
+        ledger["records"][0]["codexTurnProfiles"] = json!([{
+            "codexThreadId":"thread_one",
+            "codexTurnId":"turn-one",
+            "modelId":SOL_MEDIUM_MODEL,
+            "reasoningEffort":"medium",
+            "evidenceSha256":"invalid-hash"
+        }]);
+        fs::write(
+            &ledger_path,
+            serde_json::to_vec_pretty(&ledger).expect("ledger JSON"),
+        )
+        .expect("tampered fixture ledger");
+        let error = report(&fixture_project(&root), false).expect_err("malformed profile");
+        assert!(error.contains("accounting ledger is invalid"));
+        assert!(!error.contains("thread_one"));
+        remove_fixture(&root);
+    }
+
+    #[test]
+    fn durable_profile_violation_is_reported_even_with_a_complete_profile_count() {
+        let root = std::env::temp_dir().join(format!("catdesk-recovery-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("fixture root");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).expect("state fixture");
+        store
+            .create_session(
+                "session_one",
+                AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                    task_id: "task_one".into(),
+                    priority: 1,
+                    depends_on: Vec::new(),
+                    state: AutonomousQueueTaskStateV1::WorkerRunning,
+                }])
+                .expect("queue"),
+            )
+            .expect("session");
+        let mut snapshot = store.load_session("session_one").expect("snapshot");
+        snapshot.state = AutonomousSessionStateV1::Cancelled;
+        snapshot.active = false;
+        snapshot.current_task_id = Some("task_one".into());
+        snapshot.provider_turn_count = 1;
+        snapshot.provider_thread_id = Some("thread_one".into());
+        snapshot.expected_codex_thread_id = Some("thread_one".into());
+        snapshot.codex_turn_profile_violation = true;
+        write_fixture_snapshot(&root, &snapshot);
+        let accounting = store
+            .execution_accounting_store()
+            .expect("accounting store");
+        accounting
+            .record_task_started(
+                "fixture",
+                "task_one",
+                "session_one",
+                Some("thread_one"),
+                "codex-cli",
+                Some(SOL_MEDIUM_MODEL),
+                None,
+                100,
+            )
+            .expect("accounting record");
+        accounting
+            .record_exact_codex_turn_profile(
+                "session_one",
+                &CodexCliTurnProfileEvidenceV1 {
+                    codex_thread_id: "thread_one".into(),
+                    codex_turn_id: "turn-one".into(),
+                    model_id: SOL_MEDIUM_MODEL.into(),
+                    reasoning_effort: "medium".into(),
+                    evidence_sha256: "a".repeat(64),
+                },
+            )
+            .expect("exact profile evidence");
+        let report = report(&fixture_project(&root), false).expect("violation report");
+        assert!(has_gap(&report, 0, "CODEX_TURN_PROFILE_VIOLATION"));
+        assert!(!has_gap(&report, 0, "CODEX_TURN_PROFILE_INCOMPLETE"));
+        assert_eq!(report["launchAuthorized"], false);
+        remove_fixture(&root);
+    }
+
+    #[test]
+    fn valid_shaped_profile_rebound_to_other_thread_or_model_is_a_gap() {
+        let root = std::env::temp_dir().join(format!("catdesk-recovery-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("fixture root");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).expect("state fixture");
+        store
+            .create_session(
+                "session_one",
+                AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                    task_id: "task_one".into(),
+                    priority: 1,
+                    depends_on: Vec::new(),
+                    state: AutonomousQueueTaskStateV1::WorkerRunning,
+                }])
+                .expect("queue"),
+            )
+            .expect("session");
+        let mut snapshot = store.load_session("session_one").expect("snapshot");
+        snapshot.state = AutonomousSessionStateV1::Cancelled;
+        snapshot.active = false;
+        snapshot.current_task_id = Some("task_one".into());
+        snapshot.provider_thread_id = Some("thread_one".into());
+        snapshot.expected_codex_thread_id = Some("thread_one".into());
+        write_fixture_snapshot(&root, &snapshot);
+        let accounting = store
+            .execution_accounting_store()
+            .expect("accounting store");
+        accounting
+            .record_task_started(
+                "fixture",
+                "task_one",
+                "session_one",
+                Some("thread_one"),
+                "codex-cli",
+                Some(SOL_MEDIUM_MODEL),
+                None,
+                100,
+            )
+            .expect("accounting record");
+        accounting
+            .record_exact_codex_turn_profile(
+                "session_one",
+                &CodexCliTurnProfileEvidenceV1 {
+                    codex_thread_id: "thread_one".into(),
+                    codex_turn_id: "turn-one".into(),
+                    model_id: SOL_MEDIUM_MODEL.into(),
+                    reasoning_effort: "medium".into(),
+                    evidence_sha256: "a".repeat(64),
+                },
+            )
+            .expect("exact profile");
+        let ledger_path = root.join(".catdesk/autonomy/execution-accounting.json");
+        let original: Value =
+            serde_json::from_slice(&fs::read(&ledger_path).expect("ledger")).expect("ledger JSON");
+        for case in ["thread", "model", "missing_model"] {
+            let mut rebound = original.clone();
+            if case == "thread" {
+                rebound["records"][0]["codexTurnProfiles"][0]["codexThreadId"] =
+                    json!("thread_rebound");
+            } else if case == "model" {
+                rebound["records"][0]["codexTurnProfiles"][0]["modelId"] = json!("gpt-5.6-terra");
+                rebound["records"][0]["codexTurnProfiles"][0]["reasoningEffort"] = json!("high");
+            } else {
+                rebound["records"][0]["requestedModel"] = Value::Null;
+            }
+            fs::write(
+                &ledger_path,
+                serde_json::to_vec_pretty(&rebound).expect("rebound JSON"),
+            )
+            .expect("rebound fixture ledger");
+            let report = report(&fixture_project(&root), false).expect("rebound report");
+            let expected = if case == "missing_model" {
+                "CODEX_TURN_PROFILE_BINDING_MISSING"
+            } else {
+                "CODEX_TURN_PROFILE_BINDING_MISMATCH"
+            };
+            assert!(has_gap(&report, 0, expected), "case {case}");
+            assert!(!has_gap(&report, 0, "CODEX_TURN_PROFILE_INCOMPLETE"));
+            assert_eq!(report["launchAuthorized"], false);
+        }
+        remove_fixture(&root);
+    }
+
+    #[test]
+    fn many_claims_share_oversized_session_metadata_without_exposing_it() {
+        let root = std::env::temp_dir().join(format!("catdesk-recovery-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("fixture root");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).expect("state fixture");
+        let tasks = (0..128)
+            .map(|index| AutonomousQueueTaskV1 {
+                task_id: format!("task_{index:03}"),
+                priority: 1,
+                depends_on: Vec::new(),
+                state: AutonomousQueueTaskStateV1::WorkerRunning,
+            })
+            .collect::<Vec<_>>();
+        store
+            .create_session("session_one", AutonomousQueueV1::new(tasks).expect("queue"))
+            .expect("session");
+        let mut snapshot = store.load_session("session_one").expect("snapshot");
+        snapshot.state = AutonomousSessionStateV1::Cancelled;
+        snapshot.active = false;
+        snapshot.current_task_id = Some("task_000".into());
+        let oversized = "private-provider-metadata-".repeat(16_000);
+        snapshot.provider_thread_id = Some(oversized.clone());
+        snapshot.expected_codex_thread_id = Some(oversized.clone());
+        snapshot.approved_contract_hash = Some(oversized);
+        snapshot.codex_turn_profile_violation = true;
+        write_fixture_snapshot(&root, &snapshot);
+        let report = report(&fixture_project(&root), false).expect("many-claim report");
+        assert_eq!(report["claimEvidenceGapsV1"].as_array().unwrap().len(), 128);
+        assert_eq!(
+            report["claimEvidenceGapCountsV1"]["CODEX_TURN_PROFILE_VIOLATION"],
+            128
+        );
+        assert_eq!(
+            report["claimEvidenceGapCountsV1"]["ACCOUNTING_RECORD_MISSING"],
+            128
+        );
+        assert!(!report.to_string().contains("private-provider-metadata-"));
+        assert!(report.to_string().len() < 100_000);
+        assert_eq!(report["launchAuthorized"], false);
+        remove_fixture(&root);
+    }
+
+    #[test]
+    fn reports_ended_accounting_record_with_open_span_as_inconsistent() {
+        let root = std::env::temp_dir().join(format!("catdesk-recovery-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("fixture root");
+        let store =
+            AutonomousStateStoreV1::open(root.join(".catdesk/autonomy")).expect("state fixture");
+        store
+            .create_session(
+                "session_one",
+                AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                    task_id: "task_one".into(),
+                    priority: 1,
+                    depends_on: Vec::new(),
+                    state: AutonomousQueueTaskStateV1::Verifying,
+                }])
+                .expect("queue"),
+            )
+            .expect("session");
+        let mut snapshot = store.load_session("session_one").expect("snapshot");
+        snapshot.state = AutonomousSessionStateV1::LeaseExpired;
+        snapshot.active = false;
+        snapshot.current_task_id = Some("task_one".into());
+        write_fixture_snapshot(&root, &snapshot);
+        let accounting = store
+            .execution_accounting_store()
+            .expect("accounting store");
+        accounting
+            .record_task_started(
+                "fixture",
+                "task_one",
+                "session_one",
+                None,
+                "chatgpt-direct",
+                None,
+                None,
+                100,
+            )
+            .expect("accounting record");
+        accounting
+            .activity_started(
+                "session_one",
+                ActivityActorV1::ChatgptWebActive,
+                ActivityEvidenceV1::ChatgptExactTargetGeneratingObservation,
+                110,
+            )
+            .expect("open span");
+        accounting
+            .finish_task("session_one", None, None, 120)
+            .expect("ended record");
+        let report = report(&fixture_project(&root), false).expect("ended/open report");
+        assert_eq!(report["accountingReviewRows"][0]["endedAtRecorded"], true);
+        assert!(has_gap(&report, 0, "ACCOUNTING_OPEN_SPAN"));
+        assert!(has_gap(&report, 0, "ACCOUNTING_ENDED_WITH_OPEN_SPAN"));
+        assert!(!has_gap(&report, 0, "ACCOUNTING_RECORD_UNENDED"));
+        assert_eq!(report["launchAuthorized"], false);
         remove_fixture(&root);
     }
 
