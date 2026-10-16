@@ -80,6 +80,9 @@ const DEFAULT_TURN_TIMEOUT: Duration = Duration::from_secs(2 * 60 * 60);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum QueueAction {
+    Preflight {
+        scope: CodexScope,
+    },
     Add {
         scope: CodexScope,
         task_id: String,
@@ -152,12 +155,13 @@ pub(crate) enum QueueAction {
 
 pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
     let verb = args.get(3).map(String::as_str).ok_or_else(|| {
-        "CODEX_QUEUE_USAGE: expected add, status, receipt, review, verify, review-package, review-invite-prepare, advisory-review, operator-review, operator-review-receipt, review-disclosure-grant, review-disclosure-renew, review-disclosure-revoke, profile-bind, dispatch, pause, or resume"
+        "CODEX_QUEUE_USAGE: expected preflight, add, status, receipt, review, verify, review-package, review-invite-prepare, advisory-review, operator-review, operator-review-receipt, review-disclosure-grant, review-disclosure-renew, review-disclosure-revoke, profile-bind, dispatch, pause, or resume"
             .to_string()
     })?;
     if !matches!(
         verb,
-        "add"
+        "preflight"
+            | "add"
             | "status"
             | "receipt"
             | "review"
@@ -302,6 +306,14 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
         project_id,
         workspace,
     };
+    if verb == "preflight" {
+        if !values.is_empty() {
+            return Err(
+                "CODEX_QUEUE_USAGE: preflight takes only --project-id and --workspace".into(),
+            );
+        }
+        return Ok(QueueAction::Preflight { scope });
+    }
     if let Some((receipt_id, expected_package_sha256)) = package_binding {
         if verb == "operator-review" {
             let decision = values
@@ -1652,6 +1664,134 @@ fn validate_job(job: &QueueJob) -> Result<(), String> {
     Ok(())
 }
 
+/// Observe the same registered root, managed-accounting gate and Git baseline
+/// used by a queued turn without creating a queue namespace, lease or writer
+/// marker. This is a diagnostic snapshot: a later dispatch must recheck all
+/// conditions under its real locks, and the native CLI is not launched here.
+async fn preflight_project(control_workspace: &Path, scope: &CodexScope) -> Result<Value, String> {
+    let project = registered_project(control_workspace, scope)?;
+    let mut blockers = Vec::new();
+    if exact_thread(&project).is_err() {
+        blockers.push("THREAD_UNBOUND");
+    }
+
+    let recorded_gate = super::recorded_turn_gate_summary(&project);
+    if recorded_gate["recordedState"] != "NO_RECORDED_BLOCKER_OBSERVED" {
+        blockers.push("MANAGED_OWNERSHIP_OR_ACCOUNTING_UNRESOLVED");
+    }
+
+    let profile_result = verification_profile(&project.verification_profile).and_then(|profile| {
+        if profile.tool == VerificationTool::Uv {
+            profile_binding_inputs(&project.workspace, &project.verification_profile).map(|_| ())
+        } else {
+            for name in profile.inputs {
+                let bytes =
+                    read_regular_bounded(&project.workspace.join(name), MAX_GIT_FILES_BYTES)?
+                        .ok_or("CODEX_QUEUE_PREFLIGHT: required Rust profile input is absent")?;
+                if *name == "Cargo.toml" {
+                    let text = std::str::from_utf8(&bytes)
+                        .map_err(|_| "CODEX_QUEUE_PREFLIGHT: Cargo manifest is not UTF-8")?;
+                    toml::from_str::<toml::Value>(text)
+                        .map_err(|_| "CODEX_QUEUE_PREFLIGHT: Cargo manifest is invalid TOML")?;
+                }
+            }
+            Ok(())
+        }
+    });
+    if profile_result.is_err() {
+        blockers.push("VERIFICATION_PROFILE_INPUTS_UNAVAILABLE");
+    }
+
+    let (git_result, tracked_result) =
+        match resolve_trusted_git(&project.workspace, control_workspace) {
+            Ok(git) => (
+                capture_git_review_witness(&project.workspace, &git).await,
+                preflight_profile_inputs_tracked(&project, &git).await,
+            ),
+            Err(error) => (
+                Err(error),
+                Err(
+                    "CODEX_QUEUE_PREFLIGHT: trusted Git is unavailable for profile tracking".into(),
+                ),
+            ),
+        };
+    if tracked_result.is_err() {
+        blockers.push("VERIFICATION_PROFILE_INPUTS_UNTRACKED_OR_UNSAFE");
+    }
+    let git = match git_result {
+        Ok(witness) => {
+            if witness.head_commit.is_none() || !witness.changed_paths.is_empty() {
+                blockers.push("REVIEW_BASELINE_DIRTY_OR_UNBORN");
+            }
+            json!({
+                "headCommit":witness.head_commit,
+                "changedPathCount":witness.changed_paths.len(),
+                "statusSha256":witness.status_sha256,
+                "clean":witness.head_commit.is_some() && witness.changed_paths.is_empty(),
+            })
+        }
+        Err(ref error) => {
+            blockers.push("REVIEW_BASELINE_UNAVAILABLE");
+            json!({"clean":false, "error":error})
+        }
+    };
+    Ok(json!({
+        "action":"codex_queue_preflight", "projectId":project.project_id,
+        "workspace":project.workspace, "threadId":project.codex_thread_id,
+        "verificationProfile":project.verification_profile,
+        "bindingSha256":project_binding_sha256(&project)?,
+        "recordedTurnGate":recorded_gate,
+        "profileInputsValid":profile_result.is_ok(),
+        "profileError":profile_result.err(),
+        "profileInputsTracked":tracked_result.is_ok(),
+        "profileTrackingError":tracked_result.err(),
+        "git":git,
+        "status":if blockers.is_empty() { "CANDIDATE_ONLY" } else { "BLOCKED" },
+        "blockers":blockers,
+        "readOnly":true, "transactional":false, "launchAuthorized":false,
+        "writerLockChecked":false, "nativeCliChecked":false,
+        "operatorQueueAndLeaseChecked":false, "ownerHandoffChecked":false,
+        "ignoredFilesChecked":false,
+        "meaning":"Recorded prerequisites at observation time only. A later dispatch rechecks exact binding, writer ownership, queue and scheduler capacity, CLI identity and Git; this report grants no launch, review or Wake authority.",
+    }))
+}
+
+async fn preflight_profile_inputs_tracked(
+    project: &AutonomousProjectV1,
+    git: &TrustedGit,
+) -> Result<(), String> {
+    let profile = verification_profile(&project.verification_profile)?;
+    if profile.inputs.len() != 2 {
+        return Err(
+            "CODEX_QUEUE_PREFLIGHT: verification profile input shape is unsupported".into(),
+        );
+    }
+    let (ok, tags) = git_witness_output(
+        git,
+        &project.workspace,
+        &[
+            "ls-files",
+            "-v",
+            "--error-unmatch",
+            "--",
+            profile.inputs[0],
+            profile.inputs[1],
+        ],
+        4096,
+    )
+    .await?;
+    let mut expected = profile
+        .inputs
+        .iter()
+        .map(|name| format!("H {name}\n"))
+        .collect::<Vec<_>>();
+    expected.sort();
+    if !ok || tags != expected.concat().as_bytes() {
+        return Err("CODEX_QUEUE_PREFLIGHT: profile inputs are untracked or have Git flags".into());
+    }
+    Ok(())
+}
+
 pub(crate) async fn execute_action(
     action: QueueAction,
     control_workspace: &Path,
@@ -1664,6 +1804,9 @@ pub(crate) async fn execute_action(
         })?;
     let pause_action = matches!(&action, QueueAction::Pause { .. });
     match action {
+        QueueAction::Preflight { scope } => {
+            preflight_project(&control.control_workspace, &scope).await
+        }
         QueueAction::Add {
             scope,
             task_id,
@@ -4346,6 +4489,215 @@ mod tests {
                 "fixture baseline",
             ],
         );
+    }
+
+    fn snapshot_non_git_tree(root: &Path) -> Vec<(PathBuf, Option<Vec<u8>>)> {
+        fn visit(root: &Path, path: &Path, rows: &mut Vec<(PathBuf, Option<Vec<u8>>)>) {
+            let relative = path.strip_prefix(root).expect("fixture relative path");
+            if relative.components().any(|part| part.as_os_str() == ".git") {
+                return;
+            }
+            let metadata = fs::symlink_metadata(path).expect("fixture metadata");
+            if metadata.is_dir() {
+                rows.push((relative.to_path_buf(), None));
+                let mut children = fs::read_dir(path)
+                    .expect("fixture directory")
+                    .map(|entry| entry.expect("fixture entry").path())
+                    .collect::<Vec<_>>();
+                children.sort();
+                for child in children {
+                    visit(root, &child, rows);
+                }
+            } else {
+                rows.push((
+                    relative.to_path_buf(),
+                    Some(fs::read(path).expect("fixture file")),
+                ));
+            }
+        }
+        let mut rows = Vec::new();
+        visit(root, root, &mut rows);
+        rows
+    }
+
+    #[tokio::test]
+    async fn queue_preflight_is_candidate_only_and_never_initializes_missing_scheduler() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let control = &projects[0].workspace;
+        let alpha = &projects[1];
+        fs::write(
+            alpha.workspace.join("Cargo.toml"),
+            "[package]\nname = \"preflight_fixture\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        fs::write(alpha.workspace.join("Cargo.lock"), "version = 3\n").unwrap();
+        fixture_commit(&alpha.workspace);
+        let command = [
+            "catdesk".to_string(),
+            "codex".into(),
+            "queue".into(),
+            "preflight".into(),
+            "--project-id".into(),
+            "alpha".into(),
+            "--workspace".into(),
+            alpha.workspace.to_string_lossy().into_owned(),
+        ];
+        assert!(matches!(
+            parse_action(&command),
+            Ok(QueueAction::Preflight { .. })
+        ));
+        let mut unsupported = command.to_vec();
+        unsupported.extend(["--task-id".into(), "unapproved".into()]);
+        assert!(parse_action(&unsupported).is_err());
+        let leases = control.join(".catdesk/projects/leases");
+        fs::remove_dir(&leases).expect("empty fixture leases removed");
+        let before = snapshot_non_git_tree(&fixture);
+        let report = execute_action(
+            QueueAction::Preflight {
+                scope: CodexScope {
+                    project_id: "alpha".into(),
+                    workspace: alpha.workspace.clone(),
+                },
+            },
+            control,
+        )
+        .await
+        .expect("read-only preflight");
+        assert_eq!(report["status"], "CANDIDATE_ONLY");
+        assert_eq!(report["blockers"], json!([]));
+        assert_eq!(report["profileInputsValid"], true);
+        assert_eq!(report["git"]["clean"], true);
+        assert_eq!(report["readOnly"], true);
+        assert_eq!(report["launchAuthorized"], false);
+        assert_eq!(report["writerLockChecked"], false);
+        assert_eq!(report["operatorQueueAndLeaseChecked"], false);
+        assert!(!leases.exists());
+        assert_eq!(snapshot_non_git_tree(&fixture), before);
+        assert!(queue.jobs().unwrap().is_empty());
+
+        fs::write(alpha.workspace.join("untracked.txt"), b"owner work").unwrap();
+        let before_dirty = snapshot_non_git_tree(&fixture);
+        let dirty = preflight_project(
+            control,
+            &CodexScope {
+                project_id: "alpha".into(),
+                workspace: alpha.workspace.clone(),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(dirty["status"], "BLOCKED");
+        assert!(
+            dirty["blockers"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("REVIEW_BASELINE_DIRTY_OR_UNBORN"))
+        );
+        assert_eq!(snapshot_non_git_tree(&fixture), before_dirty);
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn queue_preflight_reports_profile_and_managed_claim_without_mutation() {
+        let (fixture, projects, queue) =
+            three_project_fixture_with_alpha_profile(1, "python_uv_group_dev_v1");
+        let control = &projects[0].workspace;
+        let alpha = &projects[1];
+        fs::write(
+            alpha.workspace.join("pyproject.toml"),
+            "[project]\nname = \"wrong-package\"\nversion = \"0.1.0\"\n[dependency-groups]\ndev = [\"pytest>=8\", \"ruff>=0.8\"]\n",
+        )
+        .unwrap();
+        fs::write(
+            alpha.workspace.join("uv.lock"),
+            "version = 1\n\n[[package]]\nname = \"wrong-package\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        fixture_commit(&alpha.workspace);
+        let managed = AutonomousStateStoreV1::open(alpha.workspace.join(".catdesk/autonomy"))
+            .expect("managed state fixture");
+        managed
+            .create_session(
+                "session_one",
+                AutonomousQueueV1::new(vec![AutonomousQueueTaskV1 {
+                    task_id: "task_one".into(),
+                    priority: 1,
+                    depends_on: Vec::new(),
+                    state: AutonomousQueueTaskStateV1::WorkerRunning,
+                }])
+                .expect("managed queue"),
+            )
+            .expect("managed session");
+        let mut snapshot = managed.load_session("session_one").unwrap();
+        snapshot.state = AutonomousSessionStateV1::Cancelled;
+        snapshot.active = false;
+        managed.save_session(&snapshot).unwrap();
+        let before = snapshot_non_git_tree(&fixture);
+        let report = preflight_project(
+            control,
+            &CodexScope {
+                project_id: "alpha".into(),
+                workspace: alpha.workspace.clone(),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(report["status"], "BLOCKED");
+        assert_eq!(report["profileInputsValid"], false);
+        assert!(
+            report["blockers"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("VERIFICATION_PROFILE_INPUTS_UNAVAILABLE"))
+        );
+        assert!(
+            report["blockers"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("MANAGED_OWNERSHIP_OR_ACCOUNTING_UNRESOLVED"))
+        );
+        assert_eq!(report["recordedTurnGate"]["queueBlockerCount"], 1);
+        assert_eq!(snapshot_non_git_tree(&fixture), before);
+        assert!(queue.jobs().unwrap().is_empty());
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn queue_preflight_rejects_ignored_profile_input_on_clean_git() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let control = &projects[0].workspace;
+        let alpha = &projects[1];
+        fs::write(alpha.workspace.join(".gitignore"), "Cargo.lock\n").unwrap();
+        fs::write(
+            alpha.workspace.join("Cargo.toml"),
+            "[package]\nname = \"preflight_fixture\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        fixture_commit(&alpha.workspace);
+        fs::write(alpha.workspace.join("Cargo.lock"), "version = 3\n").unwrap();
+        let before = snapshot_non_git_tree(&fixture);
+        let report = preflight_project(
+            control,
+            &CodexScope {
+                project_id: "alpha".into(),
+                workspace: alpha.workspace.clone(),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(report["git"]["clean"], true);
+        assert_eq!(report["profileInputsValid"], true);
+        assert_eq!(report["profileInputsTracked"], false);
+        assert_eq!(report["status"], "BLOCKED");
+        assert!(
+            report["blockers"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("VERIFICATION_PROFILE_INPUTS_UNTRACKED_OR_UNSAFE"))
+        );
+        assert_eq!(snapshot_non_git_tree(&fixture), before);
+        assert!(queue.jobs().unwrap().is_empty());
+        cleanup(fixture);
     }
 
     fn fixture_python_profile_inputs(project: &AutonomousProjectV1, profile: &str) {
