@@ -48,6 +48,7 @@ const MAX_DIR_ENTRIES: usize = 1024;
 const MAX_RECEIPT_BYTES: u64 = 16 * 1024;
 const MAX_REVIEW_BYTES: u64 = 64 * 1024;
 const MAX_VERIFICATION_BYTES: u64 = 72 * 1024 * 1024;
+const MAX_REVIEW_PACKAGE_BYTES: u64 = 76 * 1024 * 1024;
 const MAX_VERIFY_STREAM_BYTES: usize = 16 * 1024 * 1024;
 const VERIFY_COMMAND_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const NATIVE_STDOUT_EOF_TIMEOUT: Duration = Duration::from_secs(10);
@@ -85,6 +86,9 @@ pub(crate) enum QueueAction {
     Verify {
         receipt_id: String,
     },
+    ReviewPackage {
+        receipt_id: String,
+    },
     Dispatch,
     Pause {
         scope: CodexScope,
@@ -98,12 +102,20 @@ pub(crate) enum QueueAction {
 
 pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
     let verb = args.get(3).map(String::as_str).ok_or_else(|| {
-        "CODEX_QUEUE_USAGE: expected add, status, receipt, review, verify, dispatch, pause, or resume"
+        "CODEX_QUEUE_USAGE: expected add, status, receipt, review, verify, review-package, dispatch, pause, or resume"
             .to_string()
     })?;
     if !matches!(
         verb,
-        "add" | "status" | "receipt" | "review" | "verify" | "dispatch" | "pause" | "resume"
+        "add"
+            | "status"
+            | "receipt"
+            | "review"
+            | "verify"
+            | "review-package"
+            | "dispatch"
+            | "pause"
+            | "resume"
     ) {
         return Err("CODEX_QUEUE_USAGE: unsupported queue action".into());
     }
@@ -144,21 +156,22 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             QueueAction::Dispatch
         });
     }
-    if matches!(verb, "receipt" | "review" | "verify") {
-        let receipt_id = values
-            .remove("--receipt-id")
-            .ok_or("CODEX_QUEUE_USAGE: receipt, review, or verify requires --receipt-id")?;
+    if matches!(verb, "receipt" | "review" | "verify" | "review-package") {
+        let receipt_id = values.remove("--receipt-id").ok_or(
+            "CODEX_QUEUE_USAGE: receipt, review, verify, or review-package requires --receipt-id",
+        )?;
         if !values.is_empty()
             || !Uuid::parse_str(&receipt_id).is_ok_and(|id| id.to_string() == receipt_id)
         {
             return Err(
-                "CODEX_QUEUE_USAGE: receipt, review, or verify requires one canonical receipt UUID"
+                "CODEX_QUEUE_USAGE: receipt, review, verify, or review-package requires one canonical receipt UUID"
                     .into(),
             );
         }
         return Ok(match verb {
             "receipt" => QueueAction::Receipt { receipt_id },
             "review" => QueueAction::Review { receipt_id },
+            "review-package" => QueueAction::ReviewPackage { receipt_id },
             _ => QueueAction::Verify { receipt_id },
         });
     }
@@ -299,6 +312,8 @@ struct QueueJob {
     review_candidate_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     verification_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    review_package_sha256: Option<String>,
 }
 
 impl QueueJob {
@@ -324,6 +339,7 @@ impl QueueJob {
             receipt_id: None,
             review_candidate_sha256: None,
             verification_sha256: None,
+            review_package_sha256: None,
         })
     }
     fn same_request(&self, other: &Self) -> bool {
@@ -344,6 +360,7 @@ impl QueueJob {
             "receiptId": self.receipt_id,
             "reviewCandidateSha256": self.review_candidate_sha256,
             "verificationSha256": self.verification_sha256,
+            "reviewPackageSha256": self.review_package_sha256,
         })
     }
 }
@@ -559,6 +576,56 @@ impl QueueVerification {
             })).collect::<Vec<_>>(),
             "commands":self.commands,
             "recordedAtUnix":self.recorded_at_unix,
+        })
+    }
+}
+
+/// A self-contained, create-once copy of the evidence a separate reviewer
+/// may inspect later. The source bytes and command results are copied from
+/// the already validated verification artifact. Packaging does not perform
+/// review or grant Wake authority.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct QueueReviewPackage {
+    schema_version: u32,
+    receipt_id: String,
+    receipt_sha256: String,
+    review_candidate_sha256: String,
+    verification_sha256: String,
+    prompt: String,
+    receipt: QueueReceipt,
+    candidate: QueueReviewCandidate,
+    verification: QueueVerification,
+    recorded_at_unix: u64,
+    independent_review: String,
+    wake_ready: bool,
+}
+
+impl QueueReviewPackage {
+    fn summary(&self, digest: &str) -> Value {
+        json!({
+            "receiptId":self.receipt_id,
+            "receiptSha256":self.receipt_sha256,
+            "reviewCandidateSha256":self.review_candidate_sha256,
+            "verificationSha256":self.verification_sha256,
+            "artifactSha256":digest,
+            "projectId":self.receipt.project_id,
+            "taskId":self.receipt.task_id,
+            "workspace":self.receipt.workspace,
+            "threadId":self.receipt.thread_id,
+            "actualProfile":self.receipt.actual_profile,
+            "verificationProfile":self.verification.verification_profile,
+            "verificationStatus":self.verification.status,
+            "gitWitness":self.verification.git_witness,
+            "patchSha256":self.verification.patch_sha256,
+            "indexPatchSha256":self.verification.index_patch_sha256,
+            "files":self.verification.files.iter().map(|file| json!({
+                "path":file.path,"kind":file.kind,"sha256":file.sha256,
+            })).collect::<Vec<_>>(),
+            "commands":self.verification.commands,
+            "recordedAtUnix":self.recorded_at_unix,
+            "independentReview":self.independent_review,
+            "wakeReady":self.wake_ready,
         })
     }
 }
@@ -1013,6 +1080,74 @@ impl QueueStore {
         }
         Ok(Some((verification, digest)))
     }
+    fn review_package_path(&self, receipt_id: &str) -> PathBuf {
+        self.root
+            .join("receipts")
+            .join(format!("{receipt_id}.review-package.json"))
+    }
+    fn write_review_package(&self, package: &QueueReviewPackage) -> Result<String, String> {
+        let bytes = serde_json::to_vec_pretty(package)
+            .map_err(|_| "CODEX_QUEUE_REVIEW_PACKAGE: package could not be encoded")?;
+        if bytes.len().saturating_add(1) as u64 > MAX_REVIEW_PACKAGE_BYTES {
+            return Err("CODEX_QUEUE_REVIEW_PACKAGE: package is oversized".into());
+        }
+        let mut persisted = bytes.clone();
+        persisted.push(b'\n');
+        let digest = format!("{:x}", Sha256::digest(&persisted));
+        create_new_record(&self.review_package_path(&package.receipt_id), &bytes)?;
+        Ok(digest)
+    }
+    fn read_review_package(
+        &self,
+        receipt: &QueueReceipt,
+        candidate: &QueueReviewCandidate,
+        verification: &QueueVerification,
+        verification_sha256: &str,
+    ) -> Result<Option<(QueueReviewPackage, String)>, String> {
+        let job = self
+            .load_job(&receipt.project_id, &receipt.task_id)?
+            .ok_or("CODEX_QUEUE_REVIEW_PACKAGE: bound job is unavailable")?;
+        let bytes = read_regular_bounded(
+            &self.review_package_path(&receipt.receipt_id),
+            MAX_REVIEW_PACKAGE_BYTES,
+        )?;
+        let Some(bytes) = bytes else {
+            return if job.review_package_sha256.is_none() {
+                Ok(None)
+            } else {
+                Err("CODEX_QUEUE_REVIEW_PACKAGE: bound package is missing".into())
+            };
+        };
+        let digest = format!("{:x}", Sha256::digest(&bytes));
+        let package: QueueReviewPackage = serde_json::from_slice(&bytes)
+            .map_err(|_| "CODEX_QUEUE_REVIEW_PACKAGE: package is corrupt")?;
+        if package.schema_version != QUEUE_SCHEMA_VERSION
+            || job.review_package_sha256.as_deref() != Some(digest.as_str())
+            || job.state != QueueState::NativeExitedZero
+            || job.receipt_id.as_deref() != Some(receipt.receipt_id.as_str())
+            || job.review_candidate_sha256.as_deref()
+                != Some(package.review_candidate_sha256.as_str())
+            || job.verification_sha256.as_deref() != Some(verification_sha256)
+            || package.receipt_id != receipt.receipt_id
+            || package.receipt_sha256 != self.persisted_receipt_sha256(receipt)?
+            || package.verification_sha256 != verification_sha256
+            || package.prompt != job.prompt
+            || package.prompt.is_empty()
+            || package.prompt.len() > MAX_TASK_BYTES
+            || format!("{:x}", Sha256::digest(package.prompt.as_bytes())) != receipt.prompt_sha256
+            || package.candidate.prompt_sha256 != receipt.prompt_sha256
+            || &package.receipt != receipt
+            || &package.candidate != candidate
+            || &package.verification != verification
+            || verification.status != "LOCAL_COMMANDS_EXITED_ZERO_SOURCE_RECHECKED"
+            || package.independent_review != "PENDING"
+            || package.wake_ready
+            || package.recorded_at_unix == 0
+        {
+            return Err("CODEX_QUEUE_REVIEW_PACKAGE: package and bound evidence disagree".into());
+        }
+        Ok(Some((package, digest)))
+    }
     fn read_receipt(&self, receipt_id: &str) -> Result<QueueReceipt, String> {
         let path = self
             .root
@@ -1265,11 +1400,23 @@ fn validate_job(job: &QueueJob) -> Result<(), String> {
             .verification_sha256
             .as_deref()
             .is_some_and(|sha| !valid_sha256_hex(sha))
+        || job
+            .review_package_sha256
+            .as_deref()
+            .is_some_and(|sha| !valid_sha256_hex(sha))
     {
         return Err("CODEX_QUEUE: job record is invalid".into());
     }
     if job.state == QueueState::Claimed && job.attempt.is_none() {
         return Err("CODEX_QUEUE: claimed job has no attempt".into());
+    }
+    if job.review_package_sha256.is_some()
+        && (job.state != QueueState::NativeExitedZero
+            || job.receipt_id.is_none()
+            || job.review_candidate_sha256.is_none()
+            || job.verification_sha256.is_none())
+    {
+        return Err("CODEX_QUEUE: review package lacks its completed evidence chain".into());
     }
     Ok(())
 }
@@ -1384,6 +1531,9 @@ pub(crate) async fn execute_action(
             }))
         }
         QueueAction::Verify { receipt_id } => verify_receipt(&control.project, &receipt_id).await,
+        QueueAction::ReviewPackage { receipt_id } => {
+            package_verified_receipt(&control.project, &receipt_id)
+        }
         QueueAction::Pause { scope, task_id } | QueueAction::Resume { scope, task_id } => {
             let pause = pause_action;
             let project = registered_project(&control.control_workspace, &scope)?;
@@ -1415,6 +1565,93 @@ pub(crate) async fn execute_action(
         }
         QueueAction::Dispatch => dispatch_one(&control.project).await,
     }
+}
+
+fn package_verified_receipt(
+    control: &AutonomousProjectV1,
+    receipt_id: &str,
+) -> Result<Value, String> {
+    let store = QueueStore::open_for_operator(control, &control.workspace)?;
+    package_verified_receipt_in_store(&store, receipt_id)
+}
+
+fn package_verified_receipt_in_store(
+    store: &QueueStore,
+    receipt_id: &str,
+) -> Result<Value, String> {
+    // This is a historical evidence copy. It never reads or writes the
+    // registered source worktree and never launches a reviewer process.
+    let _receipt_lock = store.verification_lock(receipt_id)?;
+    let _queue_lock = store.lock()?;
+    let receipt = store.read_receipt(receipt_id)?;
+    let candidate = store.read_review_candidate(&receipt)?;
+    let (verification, verification_sha256) = store
+        .read_verification(&receipt, &candidate)?
+        .ok_or("CODEX_QUEUE_REVIEW_PACKAGE: completed local verification is unavailable")?;
+    let job = store
+        .load_job(&receipt.project_id, &receipt.task_id)?
+        .ok_or("CODEX_QUEUE_REVIEW_PACKAGE: bound job is unavailable")?;
+    if job.state != QueueState::NativeExitedZero
+        || job.receipt_id.as_deref() != Some(receipt_id)
+        || verification.status != "LOCAL_COMMANDS_EXITED_ZERO_SOURCE_RECHECKED"
+    {
+        return Err(
+            "CODEX_QUEUE_REVIEW_PACKAGE: completed source-bound local verification is required"
+                .into(),
+        );
+    }
+    let package_path = store.review_package_path(receipt_id);
+    let package_exists = match fs::symlink_metadata(&package_path) {
+        Ok(_) => true,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(_) => return Err("CODEX_QUEUE_REVIEW_PACKAGE: package path is unreadable".into()),
+    };
+    if job.review_package_sha256.is_none() && package_exists {
+        // A crash between create-once record publication and the job digest
+        // update needs owner inspection. Replaying would adopt unknown bytes.
+        let mut attention = job;
+        attention.state = QueueState::Attention;
+        store.save_job(&attention)?;
+        return Err("CODEX_QUEUE_REVIEW_PACKAGE_ATTENTION: unbound package survived before job publication; owner recovery is required".into());
+    }
+    if let Some((package, digest)) =
+        store.read_review_package(&receipt, &candidate, &verification, &verification_sha256)?
+    {
+        return Ok(json!({
+            "action":"codex_queue_review_package", "idempotent":true,
+            "package":package.summary(&digest),
+            "artifactPath":store.review_package_path(receipt_id),
+            "meaning":"Historical source and local command evidence copied for later independent review. Independent review and Wake remain pending.",
+        }));
+    }
+    let package = QueueReviewPackage {
+        schema_version: QUEUE_SCHEMA_VERSION,
+        receipt_id: receipt_id.into(),
+        receipt_sha256: store.persisted_receipt_sha256(&receipt)?,
+        review_candidate_sha256: job
+            .review_candidate_sha256
+            .as_ref()
+            .ok_or("CODEX_QUEUE_REVIEW_PACKAGE: candidate digest is absent")?
+            .clone(),
+        verification_sha256,
+        prompt: job.prompt.clone(),
+        receipt,
+        candidate,
+        verification,
+        recorded_at_unix: unix_now()?,
+        independent_review: "PENDING".into(),
+        wake_ready: false,
+    };
+    let digest = store.write_review_package(&package)?;
+    let mut updated = job;
+    updated.review_package_sha256 = Some(digest.clone());
+    store.save_job(&updated)?;
+    Ok(json!({
+        "action":"codex_queue_review_package", "idempotent":false,
+        "package":package.summary(&digest),
+        "artifactPath":store.review_package_path(receipt_id),
+        "meaning":"Historical source and local command evidence copied for later independent review. Independent review and Wake remain pending.",
+    }))
 }
 
 async fn verify_receipt(control: &AutonomousProjectV1, receipt_id: &str) -> Result<Value, String> {
@@ -3618,6 +3855,124 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn review_package_copies_bound_source_and_is_idempotent_after_workspace_drift() {
+        let (fixture, projects, queue, receipt_id, cargo) = completed_verified_fixture(false).await;
+        verify_receipt_in_store_with_executable(&projects[0], &queue, &receipt_id, Some(&cargo))
+            .await
+            .unwrap();
+        let first = package_verified_receipt_in_store(&queue, &receipt_id).unwrap();
+        assert_eq!(first["idempotent"], false);
+        assert_eq!(first["package"]["independentReview"], "PENDING");
+        assert_eq!(first["package"]["wakeReady"], false);
+        assert_eq!(
+            first["package"]["verificationStatus"],
+            "LOCAL_COMMANDS_EXITED_ZERO_SOURCE_RECHECKED"
+        );
+        let bound_job = queue
+            .load_job("alpha", "verified_fixture")
+            .unwrap()
+            .unwrap();
+        let mut incomplete = bound_job.clone();
+        incomplete.verification_sha256 = None;
+        assert!(validate_job(&incomplete).is_err());
+        incomplete = bound_job;
+        incomplete.state = QueueState::Attention;
+        assert!(validate_job(&incomplete).is_err());
+        let original_digest = first["package"]["artifactSha256"].as_str().unwrap();
+        let receipt = queue.read_receipt(&receipt_id).unwrap();
+        let candidate = queue.read_review_candidate(&receipt).unwrap();
+        let (verification, verification_sha256) = queue
+            .read_verification(&receipt, &candidate)
+            .unwrap()
+            .unwrap();
+        let (package, readback_digest) = queue
+            .read_review_package(&receipt, &candidate, &verification, &verification_sha256)
+            .unwrap()
+            .unwrap();
+        assert_eq!(readback_digest, original_digest);
+        assert_eq!(package.verification.patch_base64, verification.patch_base64);
+        assert_eq!(
+            package.verification.index_patch_base64,
+            verification.index_patch_base64
+        );
+        assert_eq!(package.verification.files, verification.files);
+        assert_eq!(package.verification.commands, verification.commands);
+        assert_eq!(package.receipt.actual_profile, verification.actual_profile);
+        assert_eq!(package.prompt, "fixture edit");
+        assert!(first["package"].get("prompt").is_none());
+        fs::write(projects[1].workspace.join("source.txt"), b"changed later\n").unwrap();
+        let second = package_verified_receipt_in_store(&queue, &receipt_id).unwrap();
+        assert_eq!(second["idempotent"], true);
+        assert_eq!(second["package"]["artifactSha256"], original_digest);
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn review_package_refuses_rebound_tampering_and_orphaned_write() {
+        let (fixture, projects, queue, receipt_id, cargo) = completed_verified_fixture(false).await;
+        verify_receipt_in_store_with_executable(&projects[0], &queue, &receipt_id, Some(&cargo))
+            .await
+            .unwrap();
+        package_verified_receipt_in_store(&queue, &receipt_id).unwrap();
+        let path = queue.review_package_path(&receipt_id);
+        let original = fs::read(&path).unwrap();
+        let mut package: QueueReviewPackage = serde_json::from_slice(&original).unwrap();
+        package.verification.files[0].content_base64 = Some(BASE64.encode(b"forged"));
+        let mut tampered = serde_json::to_vec_pretty(&package).unwrap();
+        tampered.push(b'\n');
+        fs::write(&path, &tampered).unwrap();
+        let mut job = queue
+            .load_job("alpha", "verified_fixture")
+            .unwrap()
+            .unwrap();
+        job.review_package_sha256 = Some(format!("{:x}", Sha256::digest(&tampered)));
+        queue.save_job(&job).unwrap();
+        assert!(package_verified_receipt_in_store(&queue, &receipt_id).is_err());
+
+        let mut wrong_intent: QueueReviewPackage = serde_json::from_slice(&original).unwrap();
+        wrong_intent.prompt = "a different task".into();
+        let mut tampered = serde_json::to_vec_pretty(&wrong_intent).unwrap();
+        tampered.push(b'\n');
+        fs::write(&path, &tampered).unwrap();
+        job.review_package_sha256 = Some(format!("{:x}", Sha256::digest(&tampered)));
+        queue.save_job(&job).unwrap();
+        assert!(package_verified_receipt_in_store(&queue, &receipt_id).is_err());
+
+        // A persisted package with no durable job digest is never adopted.
+        fs::write(&path, original).unwrap();
+        job.review_package_sha256 = None;
+        queue.save_job(&job).unwrap();
+        let error = package_verified_receipt_in_store(&queue, &receipt_id).unwrap_err();
+        assert!(error.contains("ATTENTION"), "{error}");
+        assert_eq!(
+            queue
+                .load_job("alpha", "verified_fixture")
+                .unwrap()
+                .unwrap()
+                .state,
+            QueueState::Attention
+        );
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn failed_local_verification_cannot_create_review_package() {
+        let (fixture, projects, queue, receipt_id, cargo) = completed_verified_fixture(true).await;
+        let result = verify_receipt_in_store_with_executable(
+            &projects[0],
+            &queue,
+            &receipt_id,
+            Some(&cargo),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["verification"]["status"], "LOCAL_COMMAND_FAILURE");
+        assert!(package_verified_receipt_in_store(&queue, &receipt_id).is_err());
+        assert!(!queue.review_package_path(&receipt_id).exists());
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
     async fn fixed_profile_persists_source_and_four_local_command_exits() {
         let (fixture, projects, queue, receipt_id, cargo) = completed_verified_fixture(false).await;
         let result = verify_receipt_in_store_with_executable(
@@ -4152,6 +4507,28 @@ mod tests {
             ]),
             Ok(QueueAction::Review { .. })
         ));
+        assert!(matches!(
+            parse(&[
+                "operator",
+                "codex",
+                "queue",
+                "review-package",
+                "--receipt-id",
+                &receipt_id
+            ]),
+            Ok(QueueAction::ReviewPackage { .. })
+        ));
+        assert!(
+            parse(&[
+                "operator",
+                "codex",
+                "queue",
+                "review-package",
+                "--receipt-id",
+                "../../other"
+            ])
+            .is_err()
+        );
         assert!(
             parse(&[
                 "operator",
