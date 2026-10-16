@@ -2,6 +2,13 @@
 
 **Evidence snapshot:** 2026-10-15, after locally tested source `ad7f499`, its source-equivalent `fc15603` single-project review-candidate canary, prior exact-`2636f78` and `ab6a3f7` queue fixtures, and read-only registered-project/Wake audits (America/New_York). **Overall: `PARTIAL`.** This is an interim October 31 working-loop record; it is not installed, live three-project, Wake, or remote CI acceptance.
 
+## October 16 read-only continuation
+
+- At pushed `3a33c89`, the repository Actions setting is enabled and workflow `311012404` is active, but the exact commit has no run or check. The workflow has `push` and `pull_request` triggers and no `workflow_dispatch`. The earlier manual HTTP 422 text, `Actions has been disabled for this repository`, is a separate, unproven administrative signal; its raw response was not retained. No workflow dispatch or settings change was made.
+- The actual CatDesk control root still reports `NEEDS_OWNER_RECOVERY` with 35 historical in-flight queue claims and 85 accounting review rows. No source-bound child-exit or ownership-handoff evidence was found for those claims. BYOVD and Bug Bounty have no recorded managed recovery blocker, but their bound Codex chats are active and both worktrees contain ongoing changes. No registered-project queue task was dispatched.
+- The two Python projects are registered with `verificationProfile: rust_full` despite having root `pyproject.toml` and `uv.lock` rather than `Cargo.toml`. This profile must be migrated under reviewed project ownership before it can support their verified jobs; it must not silently select a different command.
+- The installed Wake facade still reports `LKG_AUTHORITY_MISSING` and `CANONICAL_HASH_MISMATCH`. Its dev.84 pointer hashes to its named image, while the direct store remains at stale dev.59 `STOPPED` with an unpaired target. The protected install broker is absent. No safe activation or fresh Wake receipt was established.
+
 ## Source and entry points
 
 | Item | Observed identity |
