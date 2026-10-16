@@ -992,8 +992,9 @@ impl AutonomousProjectRegistryStoreV1 {
     }
 
     /// Returns a durable one-writer lease, rejecting same-workspace work even
-    /// when it is registered under distinct project ids. Expired lease files
-    /// are safely reclaimed before provider budget decisions are made.
+    /// when it is registered under distinct project ids. Expiration is only a
+    /// recovery signal: the owner must explicitly release the lease after the
+    /// worker has stopped. Elapsed time alone cannot prove that it stopped.
     pub fn schedule_mutating_worker(
         &self,
         project_id: &str,
@@ -1121,7 +1122,7 @@ impl AutonomousProjectRegistryStoreV1 {
             .iter()
             .find(|project| project.project_id == project_id)
             .ok_or_else(|| RuntimeError::Validation("project is not registered".into()))?;
-        let leases = self.live_leases(now_unix)?;
+        let leases = self.all_leases()?;
         if leases
             .iter()
             .any(|lease| lease.workspace == project.workspace)
@@ -1151,19 +1152,34 @@ impl AutonomousProjectRegistryStoreV1 {
             expires_at_unix,
         };
         let lease_path = self.lease_path(&lease.workspace);
+        // Write outside the enumerated leases directory, then link the fully
+        // synced file into it. A crash before the link cannot expose partial
+        // JSON as a lease; a competing writer cannot replace an existing link.
+        let draft_path = self
+            .root
+            .join(format!(".lease-draft-{}.tmp", Uuid::new_v4()));
         let encoded = serde_json::to_vec_pretty(&lease)
             .map_err(|_| RuntimeError::Validation("lease serialization failed".into()))?;
-        match OpenOptions::new()
+        let mut draft = OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(&lease_path)
-        {
-            Ok(mut file) => {
-                file.write_all(&encoded).map_err(io_error)?;
-                file.write_all(b"\n").map_err(io_error)?;
-                file.sync_all().map_err(io_error)?;
-                Ok(GlobalScheduleDecisionV1::Granted(lease))
-            }
+            .open(&draft_path)
+            .map_err(io_error)?;
+        let write_result = draft
+            .write_all(&encoded)
+            .and_then(|()| draft.write_all(b"\n"))
+            .and_then(|()| draft.sync_all());
+        drop(draft);
+        if let Err(error) = write_result {
+            let _ = fs::remove_file(&draft_path);
+            return Err(io_error(error));
+        }
+        let publication = fs::hard_link(&draft_path, &lease_path);
+        // A failed cleanup may leave a complete draft outside leases, but the
+        // publication outcome remains authoritative to the caller.
+        let _ = fs::remove_file(&draft_path);
+        match publication {
+            Ok(()) => Ok(GlobalScheduleDecisionV1::Granted(lease)),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 Ok(GlobalScheduleDecisionV1::Rejected {
                     reason: "WORKSPACE_WRITER_LEASE_HELD",
@@ -1200,7 +1216,7 @@ impl AutonomousProjectRegistryStoreV1 {
         fs::remove_file(path).map_err(io_error)
     }
 
-    fn live_leases(&self, now_unix: u64) -> Result<Vec<AutonomousWorkspaceLeaseV1>, RuntimeError> {
+    fn all_leases(&self) -> Result<Vec<AutonomousWorkspaceLeaseV1>, RuntimeError> {
         let mut leases = Vec::new();
         for entry in fs::read_dir(self.root.join("leases")).map_err(io_error)? {
             let entry = entry.map_err(io_error)?;
@@ -1211,11 +1227,12 @@ impl AutonomousProjectRegistryStoreV1 {
                 .map_err(io_error)?;
             let lease: AutonomousWorkspaceLeaseV1 = serde_json::from_reader(file)
                 .map_err(|_| RuntimeError::Validation("workspace lease is corrupted".into()))?;
-            if lease.expires_at_unix <= now_unix {
-                fs::remove_file(path).map_err(io_error)?;
-            } else {
-                leases.push(lease);
+            if path != self.lease_path(&lease.workspace) {
+                return Err(RuntimeError::Validation(
+                    "workspace lease path does not match its scope".into(),
+                ));
             }
+            leases.push(lease);
         }
         Ok(leases)
     }
@@ -2033,7 +2050,11 @@ mod tests {
         let alpha = store
             .schedule_mutating_worker("alpha", "owner-a", ScheduledProviderV1::Codex, 10, 20)
             .expect("schedule");
-        assert!(matches!(alpha, GlobalScheduleDecisionV1::Granted(_)));
+        let alpha = match alpha {
+            GlobalScheduleDecisionV1::Granted(lease) => lease,
+            other => panic!("expected alpha grant, got {other:?}"),
+        };
+        let published = fs::read(store.lease_path(&alpha.workspace)).expect("published lease");
         assert!(matches!(
             store
                 .schedule_mutating_worker("beta", "owner-b", ScheduledProviderV1::Codex, 10, 20)
@@ -2048,6 +2069,16 @@ mod tests {
                 reason: "WORKSPACE_WRITER_LEASE_HELD"
             }
         );
+        assert_eq!(
+            fs::read(store.lease_path(&alpha.workspace)).expect("original lease retained"),
+            published
+        );
+        let mut wrong_owner = alpha.clone();
+        wrong_owner.owner_id = "owner-c".into();
+        assert!(store.release_workspace_lease(&wrong_owner).is_err());
+        store
+            .release_workspace_lease(&alpha)
+            .expect("owner release");
     }
 
     #[test]
@@ -2199,7 +2230,7 @@ mod tests {
     }
 
     #[test]
-    fn round_robin_scheduler_moves_past_expired_project_lease() {
+    fn round_robin_scheduler_keeps_expired_lease_until_explicit_release() {
         let root = std::env::temp_dir().join(format!("catdesk-ready-expiry-{}", Uuid::new_v4()));
         let store = AutonomousProjectRegistryStoreV1::open(root.join("registry")).expect("store");
         store.initialize(1, 1).expect("init");
@@ -2223,23 +2254,88 @@ mod tests {
             GlobalScheduleDecisionV1::Granted(lease) => lease,
             other => panic!("expected alpha grant, got {other:?}"),
         };
+        assert_eq!(
+            store
+                .schedule_next_ready_worker(
+                    &["alpha", "beta", "gamma"],
+                    "owner-beta",
+                    ScheduledProviderV1::Codex,
+                    12,
+                    22,
+                )
+                .expect("held lease response"),
+            GlobalScheduleDecisionV1::Rejected {
+                reason: "GLOBAL_PROVIDER_CAPACITY_REACHED"
+            }
+        );
+        assert!(store.lease_path(&alpha.workspace).exists());
+        store
+            .release_workspace_lease(&alpha)
+            .expect("owner release after worker stop");
         let beta = match store
             .schedule_next_ready_worker(
                 &["alpha", "beta", "gamma"],
                 "owner-beta",
                 ScheduledProviderV1::Codex,
-                12,
-                22,
+                13,
+                23,
             )
-            .expect("beta grant after alpha expiry")
+            .expect("beta grant after owner release")
         {
             GlobalScheduleDecisionV1::Granted(lease) => lease,
             other => panic!("expected beta grant, got {other:?}"),
         };
         assert_eq!(alpha.project_id, "alpha");
         assert_eq!(beta.project_id, "beta");
-        assert!(store.release_workspace_lease(&alpha).is_err());
         store.release_workspace_lease(&beta).expect("release beta");
+    }
+
+    #[test]
+    fn partial_published_lease_blocks_grants_but_orphan_draft_does_not() {
+        let root = std::env::temp_dir().join(format!("catdesk-partial-lease-{}", Uuid::new_v4()));
+        let a = root.join("alpha");
+        let b = root.join("beta");
+        fs::create_dir_all(&a).expect("alpha");
+        fs::create_dir_all(&b).expect("beta");
+        let store = AutonomousProjectRegistryStoreV1::open(root.join("registry")).expect("store");
+        store.initialize(2, 1).expect("init");
+        store.register_project(project("alpha", a)).expect("alpha");
+        store.register_project(project("beta", b)).expect("beta");
+
+        // A crash before the no-replace link may leave an incomplete draft.
+        // Drafts outside leases are inert and cannot claim a workspace.
+        let draft = root.join("registry/.lease-draft-orphan.tmp");
+        fs::write(&draft, b"{\"projectId\":").expect("partial draft");
+        let alpha = match store
+            .schedule_mutating_worker("alpha", "owner-a", ScheduledProviderV1::Codex, 10, 20)
+            .expect("grant despite orphan draft")
+        {
+            GlobalScheduleDecisionV1::Granted(lease) => lease,
+            other => panic!("expected alpha grant, got {other:?}"),
+        };
+        store
+            .release_workspace_lease(&alpha)
+            .expect("release alpha");
+
+        // A partial final lease from an older writer is uncertain authority.
+        // It must not be deleted or skipped to make progress elsewhere.
+        let partial_path = store.lease_path(&alpha.workspace);
+        let partial = b"{\"projectId\":\"alpha\",";
+        fs::write(&partial_path, partial).expect("partial final lease");
+        assert!(
+            store
+                .schedule_mutating_worker("beta", "owner-b", ScheduledProviderV1::Codex, 21, 30)
+                .is_err()
+        );
+        assert_eq!(
+            fs::read(&partial_path).expect("retained partial lease"),
+            partial
+        );
+        assert!(
+            !store
+                .lease_path(&root.join("beta").canonicalize().expect("beta root"))
+                .exists()
+        );
     }
 
     #[test]
@@ -2280,7 +2376,7 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
     #[test]
-    fn thread_bindings_and_expired_leases_are_project_scoped() {
+    fn thread_bindings_and_expired_leases_require_owner_release() {
         let root = std::env::temp_dir().join(format!("catdesk-projects-{}", Uuid::new_v4()));
         let a = root.join("a");
         let b = root.join("b");
@@ -2299,13 +2395,23 @@ mod tests {
             GlobalScheduleDecisionV1::Granted(lease) => lease,
             _ => panic!("grant"),
         };
-        assert!(matches!(
+        assert_eq!(
             store
                 .schedule_mutating_worker("alpha", "owner-b", ScheduledProviderV1::Codex, 12, 20)
-                .expect("reclaim"),
+                .expect("held expired lease"),
+            GlobalScheduleDecisionV1::Rejected {
+                reason: "WORKSPACE_WRITER_LEASE_HELD"
+            }
+        );
+        store
+            .release_workspace_lease(&lease)
+            .expect("explicit owner release");
+        assert!(matches!(
+            store
+                .schedule_mutating_worker("alpha", "owner-b", ScheduledProviderV1::Codex, 13, 20)
+                .expect("grant after release"),
             GlobalScheduleDecisionV1::Granted(_)
         ));
-        assert!(store.release_workspace_lease(&lease).is_err());
     }
 
     fn registration_evidence(workspace: PathBuf, thread: &str) -> ProjectRegistrationEvidenceV1 {
