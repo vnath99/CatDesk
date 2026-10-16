@@ -3,9 +3,13 @@
 //! Content disclosure requires a separate, interactive local operator grant.
 
 use super::*;
-use std::io::{self, IsTerminal};
+use std::io::{self, IsTerminal, Read};
 
 const MAX_DISCLOSURE_GRANT_BYTES: u64 = 1024;
+const MAX_DISCLOSURE_RENEWALS: u32 = 1024;
+const MAX_DISCLOSURE_RECEIPT_DIR_ENTRIES: usize = 8192;
+const MAX_CONFIRMATION_BYTES: usize = 256;
+const RENEWAL_EARLY_WINDOW_SECONDS: u64 = 5 * 60;
 const CONTENT_PAGE_BYTES: usize = 8 * 1024;
 const MAX_METADATA_RESPONSE_BYTES: usize = 16 * 1024;
 const MAX_CONTENT_RESPONSE_BYTES: usize = 32 * 1024;
@@ -34,6 +38,29 @@ struct ReviewDisclosureRevocationV1 {
     package_sha256: String,
     project_binding_sha256: String,
     revoked_at_unix: u64,
+}
+
+/// Each local renewal is a create-once, hash-linked record. The original
+/// grant remains immutable, and a revocation tombstone denies the whole chain.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReviewDisclosureRenewalV1 {
+    schema_version: u32,
+    sequence: u32,
+    receipt_id: String,
+    project_id: String,
+    package_sha256: String,
+    project_binding_sha256: String,
+    previous_record_sha256: String,
+    created_at_unix: u64,
+    expires_at_unix: u64,
+    scope: String,
+}
+
+fn renewal_path(store: &QueueStore, receipt_id: &str, sequence: u32) -> PathBuf {
+    store.root.join("receipts").join(format!(
+        "{receipt_id}.web-review-disclosure-renewal-{sequence:04}.json"
+    ))
 }
 
 pub(super) fn grant_path(store: &QueueStore, receipt_id: &str) -> PathBuf {
@@ -132,6 +159,144 @@ fn expected_revocation(
         project_binding_sha256: project_binding_sha256(project)?,
         revoked_at_unix,
     })
+}
+
+fn expected_renewal(
+    project: &AutonomousProjectV1,
+    receipt_id: &str,
+    package_sha256: &str,
+    sequence: u32,
+    previous_record_sha256: &str,
+    created_at_unix: u64,
+) -> Result<ReviewDisclosureRenewalV1, String> {
+    let expires_at_unix = created_at_unix
+        .checked_add(DISCLOSURE_LIFETIME_SECONDS)
+        .ok_or("CODEX_QUEUE_REVIEW_READ: disclosure expiry overflow")?;
+    Ok(ReviewDisclosureRenewalV1 {
+        schema_version: 1,
+        sequence,
+        receipt_id: receipt_id.into(),
+        project_id: project.project_id.clone(),
+        package_sha256: package_sha256.into(),
+        project_binding_sha256: project_binding_sha256(project)?,
+        previous_record_sha256: previous_record_sha256.into(),
+        created_at_unix,
+        expires_at_unix,
+        scope: DISCLOSURE_SCOPE.into(),
+    })
+}
+
+/// Validate the entire immutable renewal history, including gaps and
+/// unexpected names. The reader never trusts a renewal without the base grant
+/// and every preceding record's exact bytes.
+fn read_renewal_chain(
+    store: &QueueStore,
+    project: &AutonomousProjectV1,
+    receipt_id: &str,
+    package_sha256: &str,
+) -> Result<Option<(ReviewDisclosureGrantV1, u32, String)>, String> {
+    let Some(base) = read_grant_record(store, project, receipt_id, package_sha256)? else {
+        return Ok(None);
+    };
+    if base != expected_grant(project, receipt_id, package_sha256, base.created_at_unix)? {
+        return Err("CODEX_QUEUE_REVIEW_READ: disclosure grant binding changed".into());
+    }
+    let base_bytes =
+        read_regular_bounded(&grant_path(store, receipt_id), MAX_DISCLOSURE_GRANT_BYTES)?
+            .ok_or("CODEX_QUEUE_REVIEW_READ: disclosure base grant disappeared")?;
+    if serde_json::from_slice::<ReviewDisclosureGrantV1>(&base_bytes)
+        .ok()
+        .as_ref()
+        != Some(&base)
+    {
+        return Err("CODEX_QUEUE_REVIEW_READ: disclosure base grant changed".into());
+    }
+    let sequences = renewal_sequences(store, receipt_id, MAX_DISCLOSURE_RECEIPT_DIR_ENTRIES)?;
+    let mut current = base;
+    let mut previous_sha256 = format!("{:x}", Sha256::digest(&base_bytes));
+    let mut last_sequence = 0;
+    for sequence in sequences {
+        if sequence != last_sequence + 1 {
+            return Err("CODEX_QUEUE_REVIEW_READ: disclosure history has a gap".into());
+        }
+        let bytes = read_regular_bounded(
+            &renewal_path(store, receipt_id, sequence),
+            MAX_DISCLOSURE_GRANT_BYTES,
+        )?
+        .ok_or("CODEX_QUEUE_REVIEW_READ: disclosure renewal disappeared")?;
+        let renewal: ReviewDisclosureRenewalV1 = serde_json::from_slice(&bytes)
+            .map_err(|_| "CODEX_QUEUE_REVIEW_READ: disclosure renewal is invalid")?;
+        if renewal.created_at_unix < current.created_at_unix
+            || renewal
+                .created_at_unix
+                .saturating_add(RENEWAL_EARLY_WINDOW_SECONDS)
+                < current.expires_at_unix
+            || renewal
+                != expected_renewal(
+                    project,
+                    receipt_id,
+                    package_sha256,
+                    sequence,
+                    &previous_sha256,
+                    renewal.created_at_unix,
+                )?
+        {
+            return Err("CODEX_QUEUE_REVIEW_READ: disclosure renewal binding changed".into());
+        }
+        current = expected_grant(project, receipt_id, package_sha256, renewal.created_at_unix)?;
+        previous_sha256 = format!("{:x}", Sha256::digest(&bytes));
+        last_sequence = sequence;
+    }
+    Ok(Some((current, last_sequence, previous_sha256)))
+}
+
+fn renewal_sequences(
+    store: &QueueStore,
+    receipt_id: &str,
+    max_directory_entries: usize,
+) -> Result<BTreeSet<u32>, String> {
+    let prefix = format!("{receipt_id}.web-review-disclosure-renewal-");
+    let mut sequences = BTreeSet::new();
+    let mut inspected = 0usize;
+    for entry in fs::read_dir(store.root.join("receipts"))
+        .map_err(|_| "CODEX_QUEUE_REVIEW_READ: disclosure history is unavailable")?
+    {
+        inspected = inspected.saturating_add(1);
+        if inspected > max_directory_entries {
+            return Err(
+                "CODEX_QUEUE_REVIEW_READ: disclosure receipt directory limit reached".into(),
+            );
+        }
+        let entry =
+            entry.map_err(|_| "CODEX_QUEUE_REVIEW_READ: disclosure history is unavailable")?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        let Some(suffix) = name.strip_prefix(&prefix) else {
+            continue;
+        };
+        let Some(digits) = suffix.strip_suffix(".json") else {
+            return Err("CODEX_QUEUE_REVIEW_READ: disclosure history name is invalid".into());
+        };
+        if digits.len() != 4 || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+            return Err("CODEX_QUEUE_REVIEW_READ: disclosure history name is invalid".into());
+        }
+        let sequence = digits
+            .parse::<u32>()
+            .map_err(|_| "CODEX_QUEUE_REVIEW_READ: disclosure history name is invalid")?;
+        if sequence == 0 || sequence > MAX_DISCLOSURE_RENEWALS || !sequences.insert(sequence) {
+            return Err("CODEX_QUEUE_REVIEW_READ: disclosure history sequence is invalid".into());
+        }
+    }
+    Ok(sequences)
+}
+
+#[cfg(test)]
+pub(super) fn test_renewal_sequences_with_cap(
+    store: &QueueStore,
+    receipt_id: &str,
+    max_directory_entries: usize,
+) -> Result<(), String> {
+    renewal_sequences(store, receipt_id, max_directory_entries).map(|_| ())
 }
 
 fn read_revocation(
@@ -243,12 +408,10 @@ fn read_grant(
     if read_revocation(store, project, receipt_id, package_sha256)?.is_some() {
         return Err("CODEX_QUEUE_REVIEW_READ: disclosure was revoked".into());
     }
-    let Some(grant) = read_grant_record(store, project, receipt_id, package_sha256)? else {
+    let Some((grant, _, _)) = read_renewal_chain(store, project, receipt_id, package_sha256)?
+    else {
         return Ok(None);
     };
-    if grant != expected_grant(project, receipt_id, package_sha256, grant.created_at_unix)? {
-        return Err("CODEX_QUEUE_REVIEW_READ: disclosure grant binding changed".into());
-    }
     let now = unix_now()?;
     if now < grant.created_at_unix || now >= grant.expires_at_unix {
         return Err("CODEX_QUEUE_REVIEW_READ: disclosure grant is outside its lifetime".into());
@@ -300,6 +463,68 @@ pub(super) fn grant_in_store(
         "expiresAtUnix":grant.expires_at_unix,
         "revocation":"LOCAL_INTERACTIVE_TOMBSTONE",
         "scope":grant.scope,
+        "independentReview":package.independent_review,
+        "wakeReady":false,
+    }))
+}
+
+pub(super) fn renew_in_store(
+    store: &QueueStore,
+    project: &AutonomousProjectV1,
+    receipt_id: &str,
+    package_sha256: &str,
+) -> Result<Value, String> {
+    let package = bound_package(store, project, receipt_id, package_sha256)?;
+    if read_revocation(store, project, receipt_id, package_sha256)?.is_some() {
+        return Err("CODEX_QUEUE_REVIEW_READ: disclosure was revoked".into());
+    }
+    let (prior, sequence, previous_sha256) =
+        read_renewal_chain(store, project, receipt_id, package_sha256)?
+            .ok_or("CODEX_QUEUE_REVIEW_READ: first create an interactive disclosure grant")?;
+    if sequence >= MAX_DISCLOSURE_RENEWALS {
+        return Err("CODEX_QUEUE_REVIEW_READ: disclosure renewal history is full".into());
+    }
+    let now = unix_now()?;
+    if now < prior.created_at_unix
+        || now.saturating_add(RENEWAL_EARLY_WINDOW_SECONDS) < prior.expires_at_unix
+    {
+        return Err("CODEX_QUEUE_REVIEW_READ: renewal is allowed only in the last five minutes of the current grant or after expiry".into());
+    }
+    let next_sequence = sequence + 1;
+    let renewal = expected_renewal(
+        project,
+        receipt_id,
+        package_sha256,
+        next_sequence,
+        &previous_sha256,
+        now,
+    )?;
+    let encoded = serde_json::to_vec(&renewal)
+        .map_err(|_| "CODEX_QUEUE_REVIEW_READ: disclosure renewal cannot be encoded")?;
+    if encoded.len().saturating_add(1) as u64 > MAX_DISCLOSURE_GRANT_BYTES {
+        return Err("CODEX_QUEUE_REVIEW_READ: disclosure renewal is oversized".into());
+    }
+    create_new_record(&renewal_path(store, receipt_id, next_sequence), &encoded)?;
+    let expected = expected_grant(project, receipt_id, package_sha256, now)?;
+    let (observed, observed_sequence, _) =
+        read_renewal_chain(store, project, receipt_id, package_sha256)?
+            .ok_or("CODEX_QUEUE_REVIEW_READ: disclosure renewal readback is missing")?;
+    if observed_sequence != next_sequence || observed != expected {
+        return Err("CODEX_QUEUE_REVIEW_READ: disclosure renewal readback changed".into());
+    }
+    if read_grant(store, project, receipt_id, package_sha256)?.as_ref() != Some(&expected) {
+        return Err("CODEX_QUEUE_REVIEW_READ: disclosure renewal is unavailable".into());
+    }
+    Ok(json!({
+        "action":"codex_queue_review_disclosure_renew",
+        "projectId":project.project_id,
+        "receiptId":receipt_id,
+        "packageSha256":package_sha256,
+        "renewalSequence":next_sequence,
+        "createdAtUnix":renewal.created_at_unix,
+        "expiresAtUnix":renewal.expires_at_unix,
+        "revocation":"LOCAL_INTERACTIVE_TOMBSTONE",
+        "scope":renewal.scope,
         "independentReview":package.independent_review,
         "wakeReady":false,
     }))
@@ -364,6 +589,52 @@ pub(super) fn revoke_in_store(
     }))
 }
 
+fn read_confirmation_line(mut reader: impl Read) -> Result<String, String> {
+    let mut bytes = Vec::with_capacity(128);
+    for _ in 0..MAX_CONFIRMATION_BYTES {
+        let mut byte = [0];
+        reader.read_exact(&mut byte).map_err(|_| {
+            "CODEX_QUEUE_REVIEW_READ: terminal confirmation was incomplete".to_string()
+        })?;
+        bytes.push(byte[0]);
+        if byte[0] == b'\n' {
+            return String::from_utf8(bytes)
+                .map_err(|_| "CODEX_QUEUE_REVIEW_READ: terminal confirmation is not UTF-8".into());
+        }
+    }
+    Err("CODEX_QUEUE_REVIEW_READ: terminal confirmation exceeds 256 bytes".into())
+}
+
+pub(super) fn publish_after_confirmation(
+    control_workspace: &Path,
+    original_control: &AutonomousProjectV1,
+    project: &AutonomousProjectV1,
+    store: &QueueStore,
+    receipt_id: &str,
+    package_sha256: &str,
+    renew: bool,
+) -> Result<Value, String> {
+    let _receipt_lock = store.verification_lock(receipt_id)?;
+    let _queue_lock = store.lock()?;
+    let registry = scheduler(control_workspace)?;
+    registry.with_registration_lock(|| {
+        let current_control =
+            resolve_registered_project_from_control_root(control_workspace, "catdesk")
+                .map_err(|_| "CODEX_QUEUE_REVIEW_READ: control registration changed")?;
+        let current_project =
+            resolve_registered_project_from_control_root(control_workspace, &project.project_id)
+                .map_err(|_| "CODEX_QUEUE_REVIEW_READ: project registration changed")?;
+        if current_control.project != *original_control || current_project.project != *project {
+            return Err("CODEX_QUEUE_REVIEW_READ: registration changed during disclosure".into());
+        }
+        if renew {
+            renew_in_store(store, project, receipt_id, package_sha256)
+        } else {
+            grant_in_store(store, project, receipt_id, package_sha256)
+        }
+    })
+}
+
 /// Only the direct local operator CLI reaches this path. MCP and Binagotchy
 /// expose no grant action, and the interactive terminal challenge rejects
 /// captured, noninteractive MCP command invocations.
@@ -404,21 +675,77 @@ pub(super) fn grant_local_disclosure(
     io::stderr()
         .flush()
         .map_err(|_| "CODEX_QUEUE_REVIEW_READ: terminal prompt failed")?;
-    let mut answer = String::new();
-    io::stdin()
-        .read_line(&mut answer)
-        .map_err(|_| "CODEX_QUEUE_REVIEW_READ: terminal confirmation failed")?;
+    let answer = read_confirmation_line(io::stdin().lock())?;
     if answer.trim_end_matches(['\r', '\n']) != format!("DISCLOSE {receipt_id}") {
         return Err("CODEX_QUEUE_REVIEW_READ: operator did not confirm exact receipt".into());
     }
-    // Recheck every authority and byte chain after the human pause.
+    // The terminal pause grants no stale authority: all bindings are checked
+    // under the receipt, queue and registry locks through publication.
+    publish_after_confirmation(
+        control_workspace,
+        &control.project,
+        project,
+        &store,
+        receipt_id,
+        expected_sha256,
+        false,
+    )
+}
+
+/// Fresh exact-package local consent opens another bounded one-hour window.
+/// No MCP tool can renew and a revocation tombstone remains final.
+pub(super) fn renew_local_disclosure(
+    control_workspace: &Path,
+    project: &AutonomousProjectV1,
+    receipt_id: &str,
+    expected_sha256: &str,
+) -> Result<Value, String> {
+    if !io::stdin().is_terminal() || !io::stderr().is_terminal() {
+        return Err(
+            "CODEX_QUEUE_REVIEW_READ: disclosure renewal requires an interactive local terminal"
+                .into(),
+        );
+    }
+    let control = resolve_registered_project_from_control_root(control_workspace, "catdesk")
+        .map_err(|_| "CODEX_QUEUE_REVIEW_READ: CatDesk control registration is unavailable")?;
     let selected =
         resolve_registered_project_from_control_root(control_workspace, &project.project_id)
-            .map_err(|_| "CODEX_QUEUE_REVIEW_READ: project registration changed")?;
+            .map_err(|_| "CODEX_QUEUE_REVIEW_READ: project registration is unavailable")?;
     if selected.project != *project {
         return Err("CODEX_QUEUE_REVIEW_READ: project registration changed".into());
     }
-    grant_in_store(&store, project, receipt_id, expected_sha256)
+    let store = QueueStore::open_read_only(&control.project)?
+        .ok_or("CODEX_QUEUE_REVIEW_READ: queue state is unavailable")?;
+    bound_package(&store, project, receipt_id, expected_sha256)?;
+    if read_revocation(&store, project, receipt_id, expected_sha256)?.is_some() {
+        return Err("CODEX_QUEUE_REVIEW_READ: disclosure was revoked".into());
+    }
+    read_renewal_chain(&store, project, receipt_id, expected_sha256)?
+        .ok_or("CODEX_QUEUE_REVIEW_READ: first create an interactive disclosure grant")?;
+    eprintln!(
+        "Renew ChatGPT Web review-package disclosure for project {} for one hour?",
+        project.project_id
+    );
+    eprintln!("Receipt: {receipt_id}");
+    eprintln!("Package SHA-256: {expected_sha256}");
+    eprintln!("The shared MCP principal is not tied to a specific ChatGPT conversation.");
+    eprint!("Type RENEW {receipt_id} {expected_sha256} to continue: ");
+    io::stderr()
+        .flush()
+        .map_err(|_| "CODEX_QUEUE_REVIEW_READ: terminal prompt failed")?;
+    let answer = read_confirmation_line(io::stdin().lock())?;
+    if answer.trim_end_matches(['\r', '\n']) != format!("RENEW {receipt_id} {expected_sha256}") {
+        return Err("CODEX_QUEUE_REVIEW_READ: operator did not confirm exact package".into());
+    }
+    publish_after_confirmation(
+        control_workspace,
+        &control.project,
+        project,
+        &store,
+        receipt_id,
+        expected_sha256,
+        true,
+    )
 }
 
 /// A separate terminal challenge persists a create-once deny record. Once
@@ -452,10 +779,7 @@ pub(super) fn revoke_local_disclosure(
     io::stderr()
         .flush()
         .map_err(|_| "CODEX_QUEUE_REVIEW_READ: terminal prompt failed")?;
-    let mut answer = String::new();
-    io::stdin()
-        .read_line(&mut answer)
-        .map_err(|_| "CODEX_QUEUE_REVIEW_READ: terminal confirmation failed")?;
+    let answer = read_confirmation_line(io::stdin().lock())?;
     if answer.trim_end_matches(['\r', '\n']) != format!("REVOKE {receipt_id}") {
         return Err("CODEX_QUEUE_REVIEW_READ: operator did not confirm exact receipt".into());
     }
@@ -478,6 +802,10 @@ pub(super) fn revoke_after_confirmation(
     expected_sha256: &str,
 ) -> Result<Value, String> {
     valid_request(project_id, receipt_id, expected_sha256)?;
+    // The same lock order as grant/renew prevents a stale confirmed renewal
+    // from racing the final revocation tombstone.
+    let _receipt_lock = store.verification_lock(receipt_id)?;
+    let _queue_lock = store.lock()?;
     let current_control =
         resolve_registered_project_from_control_root(control_workspace, "catdesk")
             .map_err(|_| "CODEX_QUEUE_REVIEW_READ: CatDesk control registration changed")?;
@@ -693,6 +1021,17 @@ mod page_tests {
         assert_eq!(page_bounds(20_000, 20_000).unwrap(), (20_000, 20_000));
         assert!(page_bounds(20_000, 20_001).is_err());
         assert!(page_bounds(20_000, u64::MAX).is_err());
+    }
+
+    #[test]
+    fn terminal_confirmation_is_bounded_and_requires_complete_utf8_line() {
+        assert_eq!(
+            read_confirmation_line(b"RENEW receipt hash\n".as_slice()).unwrap(),
+            "RENEW receipt hash\n"
+        );
+        assert!(read_confirmation_line(b"RENEW receipt hash".as_slice()).is_err());
+        assert!(read_confirmation_line([b'x'; MAX_CONFIRMATION_BYTES + 1].as_slice()).is_err());
+        assert!(read_confirmation_line([0xff, b'\n'].as_slice()).is_err());
     }
 }
 

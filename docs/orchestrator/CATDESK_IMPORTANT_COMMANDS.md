@@ -1,5 +1,15 @@
 # CatDesk — Important Command Reference
 
+## October 16 source-only queue review disclosure renewal
+
+If an exact queue package's one-hour local disclosure grant expires before ChatGPT finishes reading it, a human may renew that same grant in an interactive local terminal:
+
+```text
+catdesk.exe codex queue review-disclosure-renew --project-id <id> --workspace <registered root> --receipt-id <uuid> --expected-package-sha256 <lowercase hash>
+```
+
+The terminal requires `RENEW <uuid> <lowercase hash>`. Renewal is available in the last five minutes of the current window or after expiry. Each renewal starts a new one-hour window and writes a create-once, hash-linked history record; the original grant remains. The command rechecks the current project, target and immutable package under receipt, queue and registration locks. A revoked disclosure cannot be renewed. MCP reads revalidate the whole history and reject a changed package or grant. This remains shared-principal read access to untrusted review evidence; `independentReview=PENDING` and `wakeReady:false` remain unchanged. This source increment has no installed disclosure, independent ChatGPT decision, Wake event or CI acceptance.
+
 ## October 16 source-only operator package decision
 
 From the registered CatDesk control root, a human who has inspected an exact verified queue package can record one local decision in an interactive terminal:

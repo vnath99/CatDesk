@@ -116,6 +116,11 @@ pub(crate) enum QueueAction {
         receipt_id: String,
         expected_package_sha256: String,
     },
+    ReviewDisclosureRenew {
+        scope: CodexScope,
+        receipt_id: String,
+        expected_package_sha256: String,
+    },
     ReviewDisclosureRevoke {
         project_id: String,
         receipt_id: String,
@@ -141,7 +146,7 @@ pub(crate) enum QueueAction {
 
 pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
     let verb = args.get(3).map(String::as_str).ok_or_else(|| {
-        "CODEX_QUEUE_USAGE: expected add, status, receipt, review, verify, review-package, advisory-review, operator-review, operator-review-receipt, review-disclosure-grant, review-disclosure-revoke, profile-bind, dispatch, pause, or resume"
+        "CODEX_QUEUE_USAGE: expected add, status, receipt, review, verify, review-package, advisory-review, operator-review, operator-review-receipt, review-disclosure-grant, review-disclosure-renew, review-disclosure-revoke, profile-bind, dispatch, pause, or resume"
             .to_string()
     })?;
     if !matches!(
@@ -156,6 +161,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             | "operator-review"
             | "operator-review-receipt"
             | "review-disclosure-grant"
+            | "review-disclosure-renew"
             | "review-disclosure-revoke"
             | "profile-bind"
             | "dispatch"
@@ -241,7 +247,10 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
     valid_slug(&project_id)?;
     let package_binding = if matches!(
         verb,
-        "review-disclosure-grant" | "review-disclosure-revoke" | "operator-review"
+        "review-disclosure-grant"
+            | "review-disclosure-renew"
+            | "review-disclosure-revoke"
+            | "operator-review"
     ) {
         let receipt_id = values
             .remove("--receipt-id")
@@ -303,12 +312,20 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
             });
         }
         if !values.is_empty() {
-            return Err("CODEX_QUEUE_USAGE: disclosure grant takes no extra options".into());
+            return Err("CODEX_QUEUE_USAGE: disclosure grant/renew takes no extra options".into());
         }
-        return Ok(QueueAction::ReviewDisclosureGrant {
-            scope,
-            receipt_id,
-            expected_package_sha256,
+        return Ok(if verb == "review-disclosure-renew" {
+            QueueAction::ReviewDisclosureRenew {
+                scope,
+                receipt_id,
+                expected_package_sha256,
+            }
+        } else {
+            QueueAction::ReviewDisclosureGrant {
+                scope,
+                receipt_id,
+                expected_package_sha256,
+            }
         });
     }
     if verb == "profile-bind" {
@@ -1758,6 +1775,19 @@ pub(crate) async fn execute_action(
         } => {
             let project = registered_project(&control.control_workspace, &scope)?;
             review_reader::grant_local_disclosure(
+                &control.control_workspace,
+                &project,
+                &receipt_id,
+                &expected_package_sha256,
+            )
+        }
+        QueueAction::ReviewDisclosureRenew {
+            scope,
+            receipt_id,
+            expected_package_sha256,
+        } => {
+            let project = registered_project(&control.control_workspace, &scope)?;
+            review_reader::renew_local_disclosure(
                 &control.control_workspace,
                 &project,
                 &receipt_id,
@@ -5259,6 +5289,201 @@ mod tests {
         cleanup(fixture);
     }
 
+    #[tokio::test]
+    async fn disclosure_renewal_restores_expired_exact_package_and_preserves_final_revocation() {
+        let (fixture, projects, queue, receipt_id, cargo) = completed_verified_fixture(false).await;
+        verify_receipt_in_store_with_executable(&projects[0], &queue, &receipt_id, Some(&cargo))
+            .await
+            .unwrap();
+        let packaged = package_verified_receipt_in_store(&queue, &receipt_id).unwrap();
+        let sha = packaged["package"]["artifactSha256"].as_str().unwrap();
+        let package_path = queue.review_package_path(&receipt_id);
+        let package_before = fs::read(&package_path).unwrap();
+        let job_path = queue.job_path("alpha", "verified_fixture");
+        let job_before = fs::read(&job_path).unwrap();
+        let receipt_entries = fs::read_dir(queue.root.join("receipts")).unwrap().count();
+        assert!(
+            review_reader::test_renewal_sequences_with_cap(&queue, &receipt_id, receipt_entries)
+                .is_ok()
+        );
+        assert!(
+            review_reader::test_renewal_sequences_with_cap(
+                &queue,
+                &receipt_id,
+                receipt_entries - 1
+            )
+            .unwrap_err()
+            .contains("directory limit")
+        );
+        review_reader::publish_after_confirmation(
+            &projects[0].workspace,
+            &projects[0],
+            &projects[1],
+            &queue,
+            &receipt_id,
+            sha,
+            false,
+        )
+        .unwrap();
+        assert!(
+            review_reader::renew_in_store(&queue, &projects[1], &receipt_id, sha)
+                .unwrap_err()
+                .contains("last five minutes")
+        );
+
+        // Move only the disposable fixture clock window into the past. The
+        // real grant is never edited by this test.
+        let grant_path = review_reader::grant_path(&queue, &receipt_id);
+        let mut expired: Value = serde_json::from_slice(&fs::read(&grant_path).unwrap()).unwrap();
+        let now = unix_now().unwrap();
+        expired["createdAtUnix"] = json!(now - 7200);
+        expired["expiresAtUnix"] = json!(now - 3600);
+        fs::write(&grant_path, serde_json::to_vec(&expired).unwrap()).unwrap();
+        let expired_bytes = fs::read(&grant_path).unwrap();
+        assert!(
+            review_reader::read_in_store(&queue, &projects[1], &receipt_id, sha, "prompt", 0, None)
+                .is_err()
+        );
+        let mut stale_target = projects[1].clone();
+        stale_target.chatgpt_target_sha256 = Some("0".repeat(64));
+        assert!(
+            review_reader::publish_after_confirmation(
+                &projects[0].workspace,
+                &projects[0],
+                &stale_target,
+                &queue,
+                &receipt_id,
+                sha,
+                true,
+            )
+            .unwrap_err()
+            .contains("registration changed")
+        );
+        let mut changed_package = package_before.clone();
+        changed_package[5] ^= 1;
+        fs::write(&package_path, &changed_package).unwrap();
+        assert!(
+            review_reader::publish_after_confirmation(
+                &projects[0].workspace,
+                &projects[0],
+                &projects[1],
+                &queue,
+                &receipt_id,
+                sha,
+                true,
+            )
+            .is_err()
+        );
+        fs::write(&package_path, &package_before).unwrap();
+        let renewal = review_reader::publish_after_confirmation(
+            &projects[0].workspace,
+            &projects[0],
+            &projects[1],
+            &queue,
+            &receipt_id,
+            sha,
+            true,
+        )
+        .expect("fresh local consent may renew exact expired package");
+        assert_eq!(renewal["renewalSequence"], 1);
+        assert_eq!(renewal["independentReview"], "PENDING");
+        assert_eq!(renewal["wakeReady"], false);
+        assert_eq!(fs::read(&grant_path).unwrap(), expired_bytes);
+        let page =
+            review_reader::read_in_store(&queue, &projects[1], &receipt_id, sha, "prompt", 0, None)
+                .unwrap();
+        assert_eq!(page["pageTextUtf8"], "fixture edit");
+        assert_eq!(page["independentReview"], "PENDING");
+        assert_eq!(page["wakeReady"], false);
+        assert!(
+            review_reader::renew_in_store(&queue, &projects[1], &receipt_id, sha)
+                .unwrap_err()
+                .contains("last five minutes")
+        );
+
+        let renewal_path = queue.root.join("receipts").join(format!(
+            "{receipt_id}.web-review-disclosure-renewal-0001.json"
+        ));
+        let renewal_bytes = fs::read(&renewal_path).unwrap();
+        let mut early: Value = serde_json::from_slice(&renewal_bytes).unwrap();
+        early["createdAtUnix"] = json!(now - 6900);
+        early["expiresAtUnix"] = json!(now - 3300);
+        fs::write(&renewal_path, serde_json::to_vec(&early).unwrap()).unwrap();
+        assert!(
+            review_reader::read_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "metadata",
+                0,
+                None
+            )
+            .unwrap_err()
+            .contains("binding changed")
+        );
+        fs::write(&renewal_path, &renewal_bytes).unwrap();
+
+        let mut bad_hash: Value = serde_json::from_slice(&renewal_bytes).unwrap();
+        bad_hash["previousRecordSha256"] = json!("0".repeat(64));
+        fs::write(&renewal_path, serde_json::to_vec(&bad_hash).unwrap()).unwrap();
+        assert!(
+            review_reader::read_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "metadata",
+                0,
+                None
+            )
+            .is_err()
+        );
+        fs::write(&renewal_path, &renewal_bytes).unwrap();
+
+        let gap_path = queue.root.join("receipts").join(format!(
+            "{receipt_id}.web-review-disclosure-renewal-0002.json"
+        ));
+        fs::rename(&renewal_path, &gap_path).unwrap();
+        assert!(
+            review_reader::read_in_store(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                "metadata",
+                0,
+                None
+            )
+            .unwrap_err()
+            .contains("gap")
+        );
+        fs::rename(&gap_path, &renewal_path).unwrap();
+
+        let revoked = review_reader::revoke_after_confirmation(
+            &projects[0].workspace,
+            &projects[0],
+            &queue,
+            "alpha",
+            &receipt_id,
+            sha,
+        )
+        .unwrap();
+        assert_eq!(revoked["wakeReady"], false);
+        assert!(
+            review_reader::renew_in_store(&queue, &projects[1], &receipt_id, sha)
+                .unwrap_err()
+                .contains("revoked")
+        );
+        assert!(
+            review_reader::read_in_store(&queue, &projects[1], &receipt_id, sha, "prompt", 0, None)
+                .is_err()
+        );
+        assert_eq!(fs::read(&package_path).unwrap(), package_before);
+        assert_eq!(fs::read(&job_path).unwrap(), job_before);
+        cleanup(fixture);
+    }
+
     async fn disposable_public_review_call(
         control_workspace: &Path,
         queue_root: &Path,
@@ -6363,6 +6588,12 @@ mod tests {
             parse(&grant),
             Ok(QueueAction::ReviewDisclosureGrant { .. })
         ));
+        let mut renew = grant.to_vec();
+        renew[3] = "review-disclosure-renew";
+        assert!(matches!(
+            parse(&renew),
+            Ok(QueueAction::ReviewDisclosureRenew { .. })
+        ));
         let revoke = [
             "operator",
             "codex",
@@ -6380,7 +6611,7 @@ mod tests {
             Ok(QueueAction::ReviewDisclosureRevoke { .. })
         ));
         assert!(parse(&[&revoke[..], &["--workspace", "C:/alpha"]].concat()).is_err());
-        for disclosure in [&grant[..], &revoke[..]] {
+        for disclosure in [&grant[..], &renew[..], &revoke[..]] {
             assert!(parse(&[disclosure, &["--task", "unexpected"]].concat()).is_err());
             let mut wrong_sha = disclosure.to_vec();
             let sha_index = wrong_sha
