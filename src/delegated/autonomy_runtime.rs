@@ -3277,7 +3277,7 @@ fn host_app_server_launch_config(
 /// Normal operation inherits the current user's Codex identity/config/history
 /// without inspecting it. Advanced recovery may explicitly override only the
 /// executable path; the override is validated as a direct executable.
-fn resolve_codex_executable() -> Result<PathBuf, RuntimeError> {
+pub(crate) fn resolve_codex_executable() -> Result<PathBuf, RuntimeError> {
     let override_path = std::env::var_os("CATDESK_CODEX_CLI_EXECUTABLE").map(PathBuf::from);
     let path = std::env::var_os("PATH").ok_or_else(|| {
         RuntimeError::Validation("current-user PATH is unavailable for Codex discovery".into())
@@ -3404,7 +3404,7 @@ fn resolve_npm_codex_launcher(launcher: &Path) -> Option<PathBuf> {
 /// Accepts only an operator-provided directory path for the existing Codex
 /// context. CatDesk does not inspect or copy auth/config files: the path is
 /// passed to its directly launched Codex children as `CODEX_HOME`.
-fn operator_codex_home() -> Result<Option<PathBuf>, RuntimeError> {
+pub(crate) fn operator_codex_home() -> Result<Option<PathBuf>, RuntimeError> {
     let Some(value) = std::env::var_os("CATDESK_CODEX_HOME") else {
         return Ok(None);
     };

@@ -53,6 +53,7 @@ mod mascot;
 mod mcp;
 mod ngrok;
 mod openai_tunnel;
+mod operator_codex_cli;
 mod operator_facade;
 #[allow(dead_code)] // T-0381 fixed reviewed artifact reader; bootstrap remains separate.
 mod ordinary_worker_artifact_provider;
@@ -2334,6 +2335,9 @@ async fn run_native_daemon() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    let operator_codex = args.first().is_some_and(|arg| arg == "codex")
+        || (args.first().is_some_and(|arg| arg == "operator")
+            && args.get(1).is_some_and(|arg| arg == "codex"));
     match operator_facade::parse_operator_action(args.clone()) {
         Ok(Some(action)) => {
             let workspace = std::env::current_dir()?;
@@ -2342,15 +2346,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("{result}");
                     return Ok(());
                 }
-                Err(_) => {
-                    println!("{{\"status\":\"attention\"}}");
+                Err(error) => {
+                    if operator_codex {
+                        println!(
+                            "{}",
+                            serde_json::json!({"status":"attention","error":error})
+                        );
+                    } else {
+                        println!("{{\"status\":\"attention\"}}");
+                    }
                     std::process::exit(2);
                 }
             }
         }
         Ok(None) => {}
-        Err(_) => {
-            println!("{{\"status\":\"attention\"}}");
+        Err(error) => {
+            if operator_codex {
+                println!(
+                    "{}",
+                    serde_json::json!({"status":"attention","error":error})
+                );
+            } else {
+                println!("{{\"status\":\"attention\"}}");
+            }
             std::process::exit(2);
         }
     }

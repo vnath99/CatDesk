@@ -20,6 +20,7 @@ const MAX_REPAIR_OUTPUT_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum OperatorAction {
+    Codex(crate::operator_codex_cli::OperatorCodexAction),
     SetWakeTarget {
         conversation_url: String,
         expected_current_target_sha256: Option<String>,
@@ -56,10 +57,20 @@ pub(crate) fn parse_operator_action(
     args: impl IntoIterator<Item = String>,
 ) -> Result<Option<OperatorAction>, String> {
     let args = args.into_iter().collect::<Vec<_>>();
+    if args.first().map(String::as_str) == Some("codex") {
+        let mut canonical = vec!["operator".to_string()];
+        canonical.extend(args);
+        return crate::operator_codex_cli::parse_action(&canonical)
+            .map(OperatorAction::Codex)
+            .map(Some);
+    }
     if args.first().map(String::as_str) != Some("operator") {
         return Ok(None);
     }
     match args.get(1).map(String::as_str) {
+        Some("codex") => crate::operator_codex_cli::parse_action(&args)
+            .map(OperatorAction::Codex)
+            .map(Some),
         Some("supervisor") => crate::supervisor_lifecycle::parse_supervisor_operator_action(&args)
             .map(OperatorAction::Supervisor)
             .map(Some),
@@ -314,6 +325,9 @@ pub(crate) async fn execute_operator_action(
     workspace: &Path,
 ) -> Result<serde_json::Value, String> {
     match action {
+        OperatorAction::Codex(action) => {
+            crate::operator_codex_cli::execute_action(action, workspace).await
+        }
         OperatorAction::Supervisor(action) => {
             let _ = workspace;
             Ok(crate::supervisor_lifecycle::execute_supervisor_operator_action(action))
@@ -973,6 +987,22 @@ mod tests {
 
     #[test]
     fn parser_accepts_only_closed_operator_actions() {
+        assert!(matches!(
+            parse_operator_action(
+                [
+                    "codex",
+                    "status",
+                    "--project-id",
+                    "catdesk",
+                    "--workspace",
+                    "C:/work/catdesk",
+                ]
+                .map(str::to_string)
+            ),
+            Ok(Some(OperatorAction::Codex(
+                crate::operator_codex_cli::OperatorCodexAction::Status(_)
+            )))
+        ));
         assert_eq!(
             parse_operator_action(
                 ["operator", "repair-wake-bridge-environment"].map(str::to_string)
