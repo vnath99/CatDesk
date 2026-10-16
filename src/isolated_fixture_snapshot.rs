@@ -194,6 +194,8 @@ fn valid_runtime_attention_code(code: &str) -> bool {
     matches!(
         code,
         "listener_exited"
+            | "owner_health_failed"
+            | "parent_channel_failed"
             | "signal_failed"
             | "shutdown_failed"
             | "source_leases_active"
@@ -2783,9 +2785,10 @@ mod tests {
             &manifest,
             &reopened_root,
             &sid,
-            "listener_exited",
+            "owner_health_failed",
         )
         .expect("persist runtime attention");
+        assert_eq!(runtime_attention.code, "owner_health_failed");
         assert_eq!(
             runtime_attention.runtime_generation,
             serving.runtime_generation

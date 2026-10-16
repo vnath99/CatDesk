@@ -1849,6 +1849,68 @@ fn parse_owned_candidate_ready(
 }
 
 #[cfg(windows)]
+async fn fail_owned_candidate_after_health_check(
+    mut owned: reviewed_candidate_owner::OwnedCandidateChild,
+    reason: &str,
+    wait_limit: Duration,
+) -> std::io::Error {
+    // This is the private parent-to-exact-child pipe created at spawn. One
+    // five-byte write cannot fill its initially empty OS pipe. Closing stdin
+    // afterwards also prevents a later command from changing the outcome.
+    let sent = owned
+        .child_mut()
+        .stdin
+        .as_mut()
+        .ok_or_else(|| std::io::Error::other("candidate control pipe unavailable"))
+        .and_then(|stdin| stdin.write_all(b"fail\n"));
+    drop(owned.child_mut().stdin.take());
+    let outcome = match sent {
+        Ok(()) => {
+            let deadline = Instant::now() + wait_limit;
+            loop {
+                match owned.child_mut().try_wait() {
+                    Ok(Some(status)) => {
+                        break format!("child exited after failure command ({status})");
+                    }
+                    Ok(None) if Instant::now() < deadline => {
+                        tokio::time::sleep(Duration::from_millis(25)).await;
+                    }
+                    Ok(None) => break "child did not exit after failure command".into(),
+                    Err(_) => break "child exit status unavailable after failure command".into(),
+                }
+            }
+        }
+        Err(_) => "failure command could not be sent".into(),
+    };
+    // Even a child that exited after the command cannot authorize cleanup or
+    // prove that its journal write succeeded. The retained exact Job/process
+    // handles provide bounded termination; diagnose the journal separately.
+    let cleanup = match owned.terminate_and_wait() {
+        Ok(()) => "exact child tree stopped".to_owned(),
+        Err(error) => format!("exact child cleanup requires attention: {error}"),
+    };
+    std::io::Error::other(format!(
+        "reviewed candidate health failed ({reason}); {outcome}; {cleanup}; journal requires read-only diagnosis"
+    ))
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum ReviewedCandidateParentControl {
+    Stop,
+    HealthFailure,
+}
+
+fn parse_reviewed_candidate_parent_control(
+    command: &[u8; 5],
+) -> Result<ReviewedCandidateParentControl, String> {
+    match command {
+        b"stop\n" => Ok(ReviewedCandidateParentControl::Stop),
+        b"fail\n" => Ok(ReviewedCandidateParentControl::HealthFailure),
+        _ => Err("reviewed candidate owner control signal invalid".into()),
+    }
+}
+
+#[cfg(windows)]
 async fn run_reviewed_candidate_owner(
     options: ReviewedCandidateMcpOptions,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -1922,9 +1984,17 @@ async fn run_reviewed_candidate_owner(
             std::io::Error::other("reviewed candidate child exited before owner ready").into(),
         );
     }
-    verify_reviewed_candidate_service_health(address, &options.auth_token, pid)
+    if let Err(error) =
+        verify_reviewed_candidate_service_health(address, &options.auth_token, pid).await
+    {
+        return Err(fail_owned_candidate_after_health_check(
+            owned,
+            &error,
+            Duration::from_secs(10),
+        )
         .await
-        .map_err(std::io::Error::other)?;
+        .into());
+    }
     if owned.child_mut().try_wait()?.is_some() {
         return Err(
             std::io::Error::other("reviewed candidate child exited during owner probe").into(),
@@ -1953,15 +2023,24 @@ async fn run_reviewed_candidate_owner(
                         "reviewed candidate child exited unexpectedly ({status}); journal requires attention"
                     )).into());
                 }
-                verify_reviewed_candidate_listener_owner(address, pid)
-                    .map_err(std::io::Error::other)?;
+                if let Err(error) = verify_reviewed_candidate_listener_owner(address, pid) {
+                    return Err(fail_owned_candidate_after_health_check(
+                        owned,
+                        &error,
+                        Duration::from_secs(10),
+                    ).await.into());
+                }
             }
             _ = service_watch.tick() => {
-                verify_reviewed_candidate_service_health(address, &options.auth_token, pid)
-                    .await
-                    .map_err(|error| std::io::Error::other(format!(
-                        "reviewed candidate service health failed ({error}); owner exits and its journal requires read-only diagnosis"
-                    )))?;
+                if let Err(error) =
+                    verify_reviewed_candidate_service_health(address, &options.auth_token, pid).await
+                {
+                    return Err(fail_owned_candidate_after_health_check(
+                        owned,
+                        &error,
+                        Duration::from_secs(10),
+                    ).await.into());
+                }
             }
         }
     }
@@ -2027,17 +2106,15 @@ async fn run_reviewed_candidate_owner(
     Err(std::io::Error::other("reviewed candidate owner requires Windows").into())
 }
 
-async fn wait_reviewed_candidate_parent_stop() -> Result<(), String> {
+async fn wait_reviewed_candidate_parent_control() -> Result<ReviewedCandidateParentControl, String>
+{
     use tokio::io::AsyncReadExt;
     let mut stop = [0_u8; 5];
     tokio::io::stdin()
         .read_exact(&mut stop)
         .await
         .map_err(|_| "reviewed candidate owner control channel closed")?;
-    if &stop != b"stop\n" {
-        return Err("reviewed candidate owner control signal invalid".into());
-    }
-    Ok(())
+    parse_reviewed_candidate_parent_control(&stop)
 }
 
 #[cfg(windows)]
@@ -2246,19 +2323,30 @@ async fn run_reviewed_candidate_mcp(
             "auth":{"scheme":"bearer","tokenRedacted":true}
         })
     );
-    let parent_stop = wait_reviewed_candidate_parent_stop();
-    tokio::pin!(parent_stop);
+    let parent_control = wait_reviewed_candidate_parent_control();
+    tokio::pin!(parent_control);
     let mut owner_watch = tokio::time::interval(Duration::from_secs(1));
     owner_watch.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
         tokio::select! {
-            parent_stop_result = &mut parent_stop, if parent_stdin_shutdown => {
-                if let Err(error) = parent_stop_result {
-                    serve.abort();
-                    let _ = tokio::time::timeout(Duration::from_secs(2), &mut serve).await;
-                    return Err(reviewed_candidate_runtime_error(&snapshot, "parent_channel_failed", error).into());
+            parent_control_result = &mut parent_control, if parent_stdin_shutdown => {
+                match parent_control_result {
+                    Ok(ReviewedCandidateParentControl::Stop) => break,
+                    Ok(ReviewedCandidateParentControl::HealthFailure) => {
+                        serve.abort();
+                        let _ = tokio::time::timeout(Duration::from_secs(2), &mut serve).await;
+                        return Err(reviewed_candidate_runtime_error(
+                            &snapshot,
+                            "owner_health_failed",
+                            "parent health check failed",
+                        ).into());
+                    }
+                    Err(error) => {
+                        serve.abort();
+                        let _ = tokio::time::timeout(Duration::from_secs(2), &mut serve).await;
+                        return Err(reviewed_candidate_runtime_error(&snapshot, "parent_channel_failed", error).into());
+                    }
                 }
-                break;
             }
             signal = tokio::signal::ctrl_c() => {
                 if let Err(error) = signal {
@@ -3271,23 +3359,125 @@ fn render_toast(f: &mut Frame, palette: theme::Palette, msg: &str, pos: (u16, u1
 #[cfg(test)]
 mod tests {
     #[cfg(windows)]
+    use super::fail_owned_candidate_after_health_check;
+    #[cfg(windows)]
     use super::format_candidate_owner_diagnostic_report;
     #[cfg(windows)]
     use super::verify_reviewed_candidate_listener_owner;
     #[cfg(windows)]
     use super::verify_reviewed_candidate_service_health;
     use super::{
-        ToolMode, acquire_reviewed_candidate_process_lock, is_canonical_production_worker_listener,
-        key_is_clipboard_paste, loopback_http_origin, normalize_ngrok_authtoken_input,
-        parse_auto_start_computer, parse_headless_mcp_options, parse_native_daemon_mode,
-        parse_owned_candidate_ready, parse_reviewed_candidate_mcp_options,
-        parse_reviewed_candidate_owner_diagnose_options, parse_reviewed_candidate_owner_options,
+        ReviewedCandidateParentControl, ToolMode, acquire_reviewed_candidate_process_lock,
+        is_canonical_production_worker_listener, key_is_clipboard_paste, loopback_http_origin,
+        normalize_ngrok_authtoken_input, parse_auto_start_computer, parse_headless_mcp_options,
+        parse_native_daemon_mode, parse_owned_candidate_ready,
+        parse_reviewed_candidate_mcp_options, parse_reviewed_candidate_owner_diagnose_options,
+        parse_reviewed_candidate_owner_options, parse_reviewed_candidate_parent_control,
         probe_reviewed_candidate_ready, resolve_headless_workspace, safe_bind_identity,
         validate_headless_mcp_path, validate_isolated_fixture_scope,
     };
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
     use std::time::Duration;
+
+    #[test]
+    fn reviewed_candidate_parent_control_is_exact() {
+        assert_eq!(
+            parse_reviewed_candidate_parent_control(b"stop\n"),
+            Ok(ReviewedCandidateParentControl::Stop)
+        );
+        assert_eq!(
+            parse_reviewed_candidate_parent_control(b"fail\n"),
+            Ok(ReviewedCandidateParentControl::HealthFailure)
+        );
+        for command in [b"quit\n", b"stop!", b"FAIL\n", b"fail "] {
+            assert!(parse_reviewed_candidate_parent_control(command).is_err());
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn reviewed_candidate_failure_control_child() {
+        use std::io::Read;
+        let Ok(mode) = std::env::var("CATDESK_REVIEWED_CANDIDATE_FAILURE_CHILD") else {
+            return;
+        };
+        match mode.as_str() {
+            "respond" => {
+                let mut command = [0u8; 5];
+                std::io::stdin()
+                    .read_exact(&mut command)
+                    .expect("receive private failure command");
+                std::process::exit(if &command == b"fail\n" { 17 } else { 18 });
+            }
+            "stall" => std::thread::sleep(Duration::from_secs(60)),
+            _ => panic!("unexpected failure control test mode"),
+        }
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn reviewed_candidate_health_failure_bounds_responsive_and_stalled_children() {
+        use super::reviewed_candidate_owner::OwnedCandidateChild;
+        use std::ffi::c_void;
+        use std::process::{Command, Stdio};
+
+        const SYNCHRONIZE: u32 = 0x0010_0000;
+        const WAIT_OBJECT_0: u32 = 0;
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut c_void;
+            fn WaitForSingleObject(handle: *mut c_void, timeout_ms: u32) -> u32;
+            fn CloseHandle(handle: *mut c_void) -> i32;
+        }
+
+        for (mode, expected, wait_limit) in [
+            (
+                "respond",
+                "child exited after failure command (exit code: 17)",
+                Duration::from_secs(3),
+            ),
+            (
+                "stall",
+                "child did not exit after failure command",
+                Duration::from_millis(200),
+            ),
+        ] {
+            let mut command = Command::new(std::env::current_exe().expect("test executable"));
+            command
+                .args([
+                    "--exact",
+                    "tests::reviewed_candidate_failure_control_child",
+                    "--nocapture",
+                ])
+                .env("CATDESK_REVIEWED_CANDIDATE_FAILURE_CHILD", mode)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            let owned = OwnedCandidateChild::spawn(&mut command).expect("own test child");
+            let process = unsafe { OpenProcess(SYNCHRONIZE, 0, owned.pid()) };
+            assert!(
+                !process.is_null(),
+                "retain exact child process for read-only check"
+            );
+            let started = std::time::Instant::now();
+            let error = fail_owned_candidate_after_health_check(
+                owned,
+                "fixture service probe failed",
+                wait_limit,
+            )
+            .await;
+            assert!(error.to_string().contains(expected), "{error}");
+            assert!(
+                error
+                    .to_string()
+                    .contains("journal requires read-only diagnosis")
+            );
+            assert!(started.elapsed() < Duration::from_secs(8));
+            assert_eq!(unsafe { WaitForSingleObject(process, 0) }, WAIT_OBJECT_0);
+            assert_ne!(unsafe { CloseHandle(process) }, 0);
+        }
+    }
 
     #[cfg(windows)]
     #[test]
