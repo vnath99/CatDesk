@@ -4,6 +4,7 @@
 //! configuration such as the direct Codex executable remains outside MCP.
 
 use std::collections::BTreeMap;
+use std::ffi::OsStr;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -3818,6 +3819,82 @@ fn project_origin_workspace_probe(
     Ok((workspace, origin))
 }
 
+/// Git's trace and Windows stdio redirection variables can create files even
+/// for metadata reads. Preflight refuses an inherited redirect before its
+/// first Git call; every bounded Git child also clears them independently.
+fn git_output_redirect_key(name: &OsStr) -> bool {
+    let upper = name.to_string_lossy().to_ascii_uppercase();
+    upper.starts_with("GIT_TRACE")
+        || matches!(
+            upper.as_str(),
+            "GIT_REDIRECT_STDIN" | "GIT_REDIRECT_STDOUT" | "GIT_REDIRECT_STDERR"
+        )
+}
+
+pub(crate) fn reject_inherited_git_output_redirects() -> Result<(), &'static str> {
+    for (index, (name, _)) in std::env::vars_os().enumerate() {
+        if index >= 4096 {
+            return Err("Git environment is oversized");
+        }
+        if git_output_redirect_key(&name) {
+            return Err("inherited Git output redirect is present");
+        }
+    }
+    Ok(())
+}
+
+fn git_execution_override_key(name: &OsStr) -> bool {
+    if git_output_redirect_key(name) {
+        return true;
+    }
+    let upper = name.to_string_lossy().to_ascii_uppercase();
+    matches!(
+        upper.as_str(),
+        "GIT_DIR"
+            | "GIT_WORK_TREE"
+            | "GIT_INDEX_FILE"
+            | "GIT_COMMON_DIR"
+            | "GIT_PREFIX"
+            | "GIT_OBJECT_DIRECTORY"
+            | "GIT_ALTERNATE_OBJECT_DIRECTORIES"
+            | "GIT_CONFIG_PARAMETERS"
+            | "GIT_CONFIG_COUNT"
+    ) || upper.starts_with("GIT_CONFIG_KEY_")
+        || upper.starts_with("GIT_CONFIG_VALUE_")
+}
+
+/// Shared read-only Git child environment for project identity and queue
+/// witnesses. Trace2 reads system/global config and ignores command-line
+/// `-c`, so the three fixed environment values are required to suppress it.
+pub(crate) fn configure_read_only_git_command(command: &mut Command) -> Result<(), &'static str> {
+    let mut keys = Vec::new();
+    for (index, (name, _)) in std::env::vars_os().enumerate() {
+        if index >= 4096 {
+            return Err("Git environment is oversized");
+        }
+        if git_execution_override_key(&name) {
+            keys.push(name);
+        }
+    }
+    for (name, _) in command.get_envs() {
+        if keys.len() >= 4096 {
+            return Err("Git command environment is oversized");
+        }
+        if git_execution_override_key(name) {
+            keys.push(name.to_os_string());
+        }
+    }
+    for name in keys {
+        command.env_remove(name);
+    }
+    command
+        .env("GIT_TRACE2", "0")
+        .env("GIT_TRACE2_PERF", "0")
+        .env("GIT_TRACE2_EVENT", "0")
+        .env("GIT_OPTIONAL_LOCKS", "0");
+    Ok(())
+}
+
 fn path_is_reparse_or_symlink(metadata: &std::fs::Metadata) -> bool {
     if metadata.file_type().is_symlink() {
         return true;
@@ -3838,10 +3915,16 @@ fn bounded_git_metadata<const N: usize>(
     stage: GitMetadataStage,
     args: [&str; N],
 ) -> Result<String, ProjectOriginProbeFailure> {
-    let output = Command::new("git")
+    let mut command = Command::new("git");
+    command
+        .arg("--no-optional-locks")
+        .arg("--no-pager")
         .arg("-C")
         .arg(workspace)
-        .args(args)
+        .args(args);
+    configure_read_only_git_command(&mut command)
+        .map_err(|_| ProjectOriginProbeFailure::GitMetadataInvalid)?;
+    let output = command
         .output()
         .map_err(|_| ProjectOriginProbeFailure::GitExecutableUnavailable)?;
     validate_bounded_git_metadata(
@@ -3953,6 +4036,48 @@ mod tests {
     use super::*;
     use crate::delegated::autonomy_projects::ProjectRegistrationEvidenceV1;
     use uuid::Uuid;
+
+    #[test]
+    fn read_only_git_child_clears_trace_and_stdio_overrides() {
+        for name in [
+            "GIT_TRACE",
+            "git_trace2_event",
+            "GIT_TRACE_PACK_ACCESS",
+            "GIT_REDIRECT_STDIN",
+            "Git_Redirect_Stdout",
+            "GIT_REDIRECT_STDERR",
+        ] {
+            assert!(git_output_redirect_key(OsStr::new(name)));
+        }
+        assert!(!git_output_redirect_key(OsStr::new("GIT_CONFIG_GLOBAL")));
+        let mut command = Command::new("git");
+        command
+            .env("GIT_TRACE", "would-write")
+            .env("GIT_TRACE2_EVENT", "would-write")
+            .env("GIT_REDIRECT_STDOUT", "would-write")
+            .env("GIT_CONFIG_COUNT", "1");
+        configure_read_only_git_command(&mut command).expect("bounded Git environment");
+        let overrides = command
+            .get_envs()
+            .map(|(name, value)| {
+                (
+                    name.to_string_lossy().into_owned(),
+                    value.map(OsStr::to_os_string),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        for name in [
+            "GIT_TRACE2",
+            "GIT_TRACE2_PERF",
+            "GIT_TRACE2_EVENT",
+            "GIT_OPTIONAL_LOCKS",
+        ] {
+            assert_eq!(overrides[name].as_deref(), Some(OsStr::new("0")));
+        }
+        assert_eq!(overrides["GIT_TRACE"], None);
+        assert_eq!(overrides["GIT_REDIRECT_STDOUT"], None);
+        assert_eq!(overrides["GIT_CONFIG_COUNT"], None);
+    }
 
     #[test]
     fn external_registration_confirmation_requires_external_writer_guard() {

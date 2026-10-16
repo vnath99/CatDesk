@@ -1796,6 +1796,14 @@ pub(crate) async fn execute_action(
     action: QueueAction,
     control_workspace: &Path,
 ) -> Result<Value, String> {
+    if matches!(&action, QueueAction::Preflight { .. }) {
+        crate::delegated::autonomy_supervisor::reject_inherited_git_output_redirects().map_err(
+            |_| {
+                "CODEX_QUEUE_PREFLIGHT: inherited Git trace or stdio redirect must be unset"
+                    .to_string()
+            },
+        )?;
+    }
     // A queue verb never accepts a caller-selected control plane. All state
     // below is anchored to the registered CatDesk Git root.
     let control = resolve_registered_project_from_control_root(control_workspace, "catdesk")
@@ -3419,19 +3427,8 @@ async fn git_witness_output(
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .kill_on_drop(true);
-    for name in [
-        "GIT_DIR",
-        "GIT_WORK_TREE",
-        "GIT_INDEX_FILE",
-        "GIT_COMMON_DIR",
-        "GIT_PREFIX",
-        "GIT_OBJECT_DIRECTORY",
-        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-        "GIT_CONFIG_PARAMETERS",
-        "GIT_CONFIG_COUNT",
-    ] {
-        command.env_remove(name);
-    }
+    crate::delegated::autonomy_supervisor::configure_read_only_git_command(command.as_std_mut())
+        .map_err(|_| "CODEX_QUEUE_REVIEW: Git environment is unsafe".to_string())?;
     let mut child = command
         .spawn()
         .map_err(|_| "CODEX_QUEUE_REVIEW: Git could not start".to_string())?;
@@ -4695,6 +4692,158 @@ mod tests {
                 .unwrap()
                 .contains(&json!("VERIFICATION_PROFILE_INPUTS_UNTRACKED_OR_UNSAFE"))
         );
+        assert_eq!(snapshot_non_git_tree(&fixture), before);
+        assert!(queue.jobs().unwrap().is_empty());
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn queue_preflight_trace_guard_child() {
+        if std::env::var_os("CATDESK_PREFLIGHT_TRACE_GUARD_CHILD").is_none() {
+            return;
+        }
+        let refused = execute_action(
+            QueueAction::Preflight {
+                scope: CodexScope {
+                    project_id: "alpha".into(),
+                    workspace: PathBuf::from("preflight-workspace-must-not-be-read"),
+                },
+            },
+            Path::new("preflight-control-must-not-be-read"),
+        )
+        .await
+        .unwrap_err();
+        assert!(refused.contains("inherited Git trace or stdio redirect"));
+    }
+
+    #[test]
+    fn queue_preflight_rejects_inherited_trace_before_control_git_probe() {
+        let fixture = fixture_root();
+        let trace = fixture.join("legacy-trace.log");
+        let trace2 = fixture.join("trace2-event.log");
+        let redirected = fixture.join("redirected-stdout.log");
+        let child = StdCommand::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "operator_codex_cli::queue::tests::queue_preflight_trace_guard_child",
+            ])
+            .env("CATDESK_PREFLIGHT_TRACE_GUARD_CHILD", "1")
+            .env("GIT_TRACE", &trace)
+            .env("GIT_TRACE2_EVENT", &trace2)
+            .env("GIT_REDIRECT_STDOUT", &redirected)
+            .output()
+            .expect("isolated test child");
+        assert!(
+            child.status.success(),
+            "{}",
+            String::from_utf8_lossy(&child.stderr)
+        );
+        assert!(!trace.exists());
+        assert!(!trace2.exists());
+        assert!(!redirected.exists());
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn queue_preflight_configured_trace_child() {
+        let Some(control) = std::env::var_os("CATDESK_PREFLIGHT_CONFIG_CONTROL") else {
+            return;
+        };
+        let alpha = PathBuf::from(
+            std::env::var_os("CATDESK_PREFLIGHT_CONFIG_ALPHA").expect("fixture workspace"),
+        );
+        let report = execute_action(
+            QueueAction::Preflight {
+                scope: CodexScope {
+                    project_id: "alpha".into(),
+                    workspace: alpha,
+                },
+            },
+            Path::new(&control),
+        )
+        .await
+        .expect("configured-trace preflight");
+        assert_eq!(report["status"], "CANDIDATE_ONLY");
+        assert_eq!(report["git"]["clean"], true);
+        assert_eq!(report["launchAuthorized"], false);
+    }
+
+    #[test]
+    fn queue_preflight_suppresses_global_and_local_trace_targets() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let control = &projects[0].workspace;
+        let alpha = &projects[1];
+        fs::write(
+            alpha.workspace.join("Cargo.toml"),
+            "[package]\nname = \"preflight_fixture\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        fs::write(alpha.workspace.join("Cargo.lock"), "version = 3\n").unwrap();
+        fixture_commit(&alpha.workspace);
+        let global_trace = fixture.join("global-trace2-event.log");
+        let local_trace = fixture.join("local-trace2-event.log");
+        let global_config = fixture.join("global-gitconfig");
+        fs::write(
+            &global_config,
+            format!(
+                "[trace2]\neventTarget = \"{}\"\n",
+                global_trace.to_string_lossy().replace('\\', "/")
+            ),
+        )
+        .unwrap();
+        for root in [control, &alpha.workspace] {
+            let mut config = OpenOptions::new()
+                .append(true)
+                .open(root.join(".git/config"))
+                .unwrap();
+            writeln!(
+                config,
+                "\n[trace2]\neventTarget = \"{}\"",
+                local_trace.to_string_lossy().replace('\\', "/")
+            )
+            .unwrap();
+        }
+        // Prove this fixture's global target would write without the Git-child
+        // override; otherwise absence after preflight would be a weak test.
+        let mut calibration = StdCommand::new("git");
+        calibration
+            .arg("-C")
+            .arg(control)
+            .args(["rev-parse", "--show-toplevel"])
+            .env("GIT_CONFIG_GLOBAL", &global_config);
+        for name in [
+            "GIT_TRACE",
+            "GIT_TRACE2",
+            "GIT_TRACE2_PERF",
+            "GIT_TRACE2_EVENT",
+            "GIT_REDIRECT_STDIN",
+            "GIT_REDIRECT_STDOUT",
+            "GIT_REDIRECT_STDERR",
+        ] {
+            calibration.env_remove(name);
+        }
+        assert!(calibration.output().unwrap().status.success());
+        assert!(global_trace.exists(), "global Trace2 target was not active");
+        fs::remove_file(&global_trace).unwrap();
+        let before = snapshot_non_git_tree(&fixture);
+        let child = StdCommand::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "operator_codex_cli::queue::tests::queue_preflight_configured_trace_child",
+            ])
+            .env("CATDESK_PREFLIGHT_CONFIG_CONTROL", control)
+            .env("CATDESK_PREFLIGHT_CONFIG_ALPHA", &alpha.workspace)
+            .env("GIT_CONFIG_GLOBAL", &global_config)
+            .output()
+            .expect("isolated configured-trace child");
+        assert!(
+            child.status.success(),
+            "stdout={} stderr={}",
+            String::from_utf8_lossy(&child.stdout),
+            String::from_utf8_lossy(&child.stderr)
+        );
+        assert!(!global_trace.exists());
+        assert!(!local_trace.exists());
         assert_eq!(snapshot_non_git_tree(&fixture), before);
         assert!(queue.jobs().unwrap().is_empty());
         cleanup(fixture);
