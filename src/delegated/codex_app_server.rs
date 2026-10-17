@@ -561,10 +561,10 @@ impl CodexAppServerReadClientV1 {
     }
 
     /// Bounded metadata-only discovery for an operator-confirmed adoption.
-    /// Unlike continuity resolution this intentionally does not send a
-    /// `sourceKinds` filter: `thread/list` is the supported app-server shared
-    /// history surface, and no GUI storage is read or inferred. Every result
-    /// is subsequently re-read/resumed before it can become authority.
+    /// It reads both the default desktop history and native `exec` history.
+    /// Codex 0.163 omits CLI `exec` threads from an unfiltered `thread/list`; both
+    /// bounded lists must be read before deciding that a workspace has no
+    /// existing thread. Every result is re-read/resumed before authority.
     pub fn discover_adoptable_threads<T: CodexAppServerTransportV1>(
         transport: &mut T,
         cwd: &str,
@@ -609,7 +609,7 @@ impl CodexAppServerReadClientV1 {
             ));
         }
         let expected_cwd = normalize_cwd(cwd)?;
-        let listed = transport.request(
+        let default_list = transport.request(
             "thread/list",
             json!({
                 "cwd": cwd,
@@ -618,8 +618,38 @@ impl CodexAppServerReadClientV1 {
                 "sortDirection": "desc"
             }),
         )?;
+        let exec_list = transport.request(
+            "thread/list",
+            json!({
+                "sourceKinds": ["exec"],
+                "cwd": cwd,
+                "limit": 8,
+                "sortKey": "recency_at",
+                "sortDirection": "desc"
+            }),
+        )?;
+        let mut listed: Vec<_> = parse_thread_list(&default_list)?
+            .into_iter()
+            .take(8)
+            .collect();
+        for exec_thread in parse_thread_list(&exec_list)?.into_iter().take(8) {
+            if let Some(existing) = listed
+                .iter()
+                .find(|thread| thread.thread_id == exec_thread.thread_id)
+            {
+                if normalize_cwd(&existing.cwd)? != normalize_cwd(&exec_thread.cwd)?
+                    || existing.concurrently_owned != exec_thread.concurrently_owned
+                {
+                    return Err(RuntimeError::Validation(
+                        "Codex discovery surfaces disagreed on thread scope or ownership".into(),
+                    ));
+                }
+            } else {
+                listed.push(exec_thread);
+            }
+        }
         let mut prepared = Vec::new();
-        for listed_thread in parse_thread_list(&listed)?.into_iter().take(8) {
+        for listed_thread in listed.into_iter() {
             if normalize_cwd(&listed_thread.cwd)? != expected_cwd {
                 continue;
             }
@@ -1622,10 +1652,105 @@ mod tests {
     }
 
     #[test]
+    fn adoption_discovers_exec_thread_missing_from_default_history() {
+        struct RecordingTransport {
+            replies: VecDeque<Value>,
+            calls: Vec<(String, Value)>,
+        }
+        impl CodexAppServerTransportV1 for RecordingTransport {
+            fn request(&mut self, method: &str, params: Value) -> Result<Value, RuntimeError> {
+                self.calls.push((method.into(), params));
+                self.replies
+                    .pop_front()
+                    .ok_or_else(|| RuntimeError::Validation("no reply".into()))
+            }
+        }
+        let mut transport = RecordingTransport {
+            replies: VecDeque::from([
+                json!({"data":[]}),
+                json!({"data":[{"id":"native-exec","cwd":"C:/work/project"}]}),
+                json!({"thread":{"id":"native-exec","cwd":"C:/work/project","canAcceptDirectInput":true}}),
+                json!({"rateLimits":[]}),
+                json!({"thread":{"id":"native-exec","cwd":"C:/work/project","canAcceptDirectInput":true},"cwd":"C:/work/project","model":"gpt-6.1-sol","reasoningEffort":"medium"}),
+            ]),
+            calls: Vec::new(),
+        };
+        let candidates = CodexAppServerReadClientV1::discover_adoptable_threads_for_model(
+            &mut transport,
+            "C:/work/project",
+            10,
+            "gpt-6.1-sol",
+        )
+        .expect("native exec thread discovered from its explicit history surface");
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].thread.thread_id, "native-exec");
+        assert_eq!(transport.calls[0].0, "thread/list");
+        assert!(transport.calls[0].1.get("sourceKinds").is_none());
+        assert_eq!(transport.calls[1].0, "thread/list");
+        assert_eq!(transport.calls[1].1["sourceKinds"], json!(["exec"]));
+        assert_eq!(transport.calls[1].1["cwd"], "C:/work/project");
+    }
+
+    #[test]
+    fn adoption_deduplicates_shared_history_and_rejects_ownership_drift() {
+        let same_thread =
+            json!({"data":[{"id":"shared","cwd":"C:/work/project","name":"Desktop thread"}]});
+        let mut transport = FakeTransport {
+            replies: VecDeque::from([
+                same_thread.clone(),
+                same_thread,
+                json!({"thread":{"id":"shared","cwd":"C:/work/project","canAcceptDirectInput":true}}),
+                json!({"rateLimits":[]}),
+                json!({"thread":{"id":"shared","cwd":"C:/work/project","canAcceptDirectInput":true},"cwd":"C:/work/project","model":"gpt-6.1-sol","reasoningEffort":"medium"}),
+            ]),
+            methods: Vec::new(),
+        };
+        let candidates = CodexAppServerReadClientV1::discover_adoptable_threads_for_model(
+            &mut transport,
+            "C:/work/project",
+            10,
+            "gpt-6.1-sol",
+        )
+        .expect("one shared thread is one candidate");
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            candidates[0].thread.title.as_deref(),
+            Some("Desktop thread")
+        );
+        assert_eq!(
+            transport
+                .methods
+                .iter()
+                .filter(|m| *m == "thread/read")
+                .count(),
+            1
+        );
+
+        let mut drift = FakeTransport {
+            replies: VecDeque::from([
+                json!({"data":[{"id":"shared","cwd":"C:/work/project","canAcceptDirectInput":true}]}),
+                json!({"data":[{"id":"shared","cwd":"C:/work/project","canAcceptDirectInput":false}]}),
+            ]),
+            methods: Vec::new(),
+        };
+        assert!(
+            CodexAppServerReadClientV1::discover_adoptable_threads_for_model(
+                &mut drift,
+                "C:/work/project",
+                10,
+                "gpt-6.1-sol",
+            )
+            .is_err()
+        );
+        assert_eq!(drift.methods, ["thread/list", "thread/list"]);
+    }
+
+    #[test]
     fn adoption_discovery_requires_requested_sol_medium_profile() {
         let replies = || {
             VecDeque::from([
                 json!({"threads":[{"id":"existing","cwd":"C:/work/project","name":"Sol thread"}]}),
+                json!({"data":[]}),
                 json!({"thread":{"id":"existing","cwd":"C:/work/project","canAcceptDirectInput":true}}),
                 json!({"rateLimits":[]}),
                 json!({"thread":{"id":"existing","cwd":"C:/work/project","canAcceptDirectInput":true},"cwd":"C:/work/project","model":"gpt-6.1-sol","reasoningEffort":"medium"}),
@@ -1680,6 +1805,7 @@ mod tests {
                     {"id":"terra","cwd":"C:/work/project"},
                     {"id":"sol","cwd":"C:/work/project"}
                 ]}),
+                json!({"data":[]}),
                 json!({"thread":{"id":"terra","cwd":"C:/work/project","canAcceptDirectInput":true}}),
                 json!({"rateLimits":[]}),
                 json!({"thread":{"id":"terra","cwd":"C:/work/project","canAcceptDirectInput":true},"cwd":"C:/work/project","model":"gpt-5.6-terra","reasoningEffort":"high"}),
@@ -1703,9 +1829,12 @@ mod tests {
     #[test]
     fn rotation_discovery_rejects_any_listed_owned_workspace_thread() {
         let mut transport = FakeTransport {
-            replies: VecDeque::from([json!({"threads":[{
-                "id":"other-writer", "cwd":"C:/work/project", "canAcceptDirectInput":false
-            }]})]),
+            replies: VecDeque::from([
+                json!({"threads":[{
+                    "id":"other-writer", "cwd":"C:/work/project", "canAcceptDirectInput":false
+                }]}),
+                json!({"data":[]}),
+            ]),
             methods: Vec::new(),
         };
         assert!(
@@ -1724,6 +1853,7 @@ mod tests {
         let mut transport = FakeTransport {
             replies: VecDeque::from([
                 json!({"threads":[{"id":"existing","cwd":"C:/work/project","name":"Visible thread"}]}),
+                json!({"data":[]}),
                 json!({"thread":{"id":"existing","cwd":"C:/work/project","canAcceptDirectInput":null}}),
                 json!({"rateLimits":[]}),
                 json!({"thread":{"id":"existing","cwd":"C:/work/project","canAcceptDirectInput":true},"cwd":"C:/work/project","model":"gpt-5.6-terra","reasoningEffort":"high"}),
@@ -1745,6 +1875,7 @@ mod tests {
         assert_eq!(
             transport.methods,
             [
+                "thread/list",
                 "thread/list",
                 "thread/read",
                 "account/rateLimits/read",
