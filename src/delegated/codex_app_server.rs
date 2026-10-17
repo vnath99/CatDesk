@@ -587,6 +587,16 @@ impl CodexAppServerReadClientV1 {
         Self::discover_threads_for_model(transport, cwd, observed_at_unix, expected_model, false)
     }
 
+    /// Registration cannot bootstrap beside an already owned workspace thread.
+    pub fn discover_registration_threads_for_model<T: CodexAppServerTransportV1>(
+        transport: &mut T,
+        cwd: &str,
+        observed_at_unix: u64,
+        expected_model: &str,
+    ) -> Result<Vec<CodexHostPreparationV1>, RuntimeError> {
+        Self::discover_threads_for_model(transport, cwd, observed_at_unix, expected_model, true)
+    }
+
     pub fn discover_quiescent_rotation_threads_for_model<T: CodexAppServerTransportV1>(
         transport: &mut T,
         cwd: &str,
@@ -628,11 +638,8 @@ impl CodexAppServerReadClientV1 {
                 "sortDirection": "desc"
             }),
         )?;
-        let mut listed: Vec<_> = parse_thread_list(&default_list)?
-            .into_iter()
-            .take(8)
-            .collect();
-        for exec_thread in parse_thread_list(&exec_list)?.into_iter().take(8) {
+        let mut listed = parse_complete_discovery_list(&default_list)?;
+        for exec_thread in parse_complete_discovery_list(&exec_list)? {
             if let Some(existing) = listed
                 .iter()
                 .find(|thread| thread.thread_id == exec_thread.thread_id)
@@ -656,7 +663,7 @@ impl CodexAppServerReadClientV1 {
             if listed_thread.concurrently_owned {
                 if reject_owned_workspace_threads {
                     return Err(RuntimeError::Validation(
-                        "Codex rotation blocked by a concurrently owned workspace thread".into(),
+                        "Codex workspace discovery blocked by a concurrently owned thread".into(),
                     ));
                 }
                 continue;
@@ -1206,6 +1213,29 @@ pub fn parse_thread_list(value: &Value) -> Result<Vec<CodexThreadMetadataV1>, Ru
     items.iter().take(128).map(parse_thread_metadata).collect()
 }
 
+/// Registration may bootstrap only after both exact-CWD lists are complete.
+/// An unexamined older page could contain an existing writer or candidate.
+fn parse_complete_discovery_list(
+    value: &Value,
+) -> Result<Vec<CodexThreadMetadataV1>, RuntimeError> {
+    let payload = value.get("result").unwrap_or(value);
+    if payload
+        .get("nextCursor")
+        .is_some_and(|value| !value.is_null())
+    {
+        return Err(RuntimeError::Validation(
+            "Codex discovery thread/list has an unexamined page".into(),
+        ));
+    }
+    let listed = parse_thread_list(value)?;
+    if listed.len() > 8 {
+        return Err(RuntimeError::Validation(
+            "Codex discovery thread/list exceeded its requested limit".into(),
+        ));
+    }
+    Ok(listed)
+}
+
 pub fn validate_telemetry(telemetry: &CodexRoutingTelemetryV1) -> Result<(), RuntimeError> {
     if !matches!(
         telemetry.source.as_str(),
@@ -1652,7 +1682,7 @@ mod tests {
     }
 
     #[test]
-    fn adoption_discovers_exec_thread_missing_from_default_history() {
+    fn registration_discovers_exec_thread_missing_from_default_history() {
         struct RecordingTransport {
             replies: VecDeque<Value>,
             calls: Vec<(String, Value)>,
@@ -1668,20 +1698,20 @@ mod tests {
         let mut transport = RecordingTransport {
             replies: VecDeque::from([
                 json!({"data":[]}),
-                json!({"data":[{"id":"native-exec","cwd":"C:/work/project"}]}),
+                json!({"data":[{"id":"native-exec","cwd":"C:/work/project"}],"nextCursor":null,"backwardsCursor":"latest-anchor"}),
                 json!({"thread":{"id":"native-exec","cwd":"C:/work/project","canAcceptDirectInput":true}}),
                 json!({"rateLimits":[]}),
                 json!({"thread":{"id":"native-exec","cwd":"C:/work/project","canAcceptDirectInput":true},"cwd":"C:/work/project","model":"gpt-6.1-sol","reasoningEffort":"medium"}),
             ]),
             calls: Vec::new(),
         };
-        let candidates = CodexAppServerReadClientV1::discover_adoptable_threads_for_model(
+        let candidates = CodexAppServerReadClientV1::discover_registration_threads_for_model(
             &mut transport,
             "C:/work/project",
             10,
             "gpt-6.1-sol",
         )
-        .expect("native exec thread discovered from its explicit history surface");
+        .expect("native exec thread discovered for registration");
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].thread.thread_id, "native-exec");
         assert_eq!(transport.calls[0].0, "thread/list");
@@ -1689,6 +1719,61 @@ mod tests {
         assert_eq!(transport.calls[1].0, "thread/list");
         assert_eq!(transport.calls[1].1["sourceKinds"], json!(["exec"]));
         assert_eq!(transport.calls[1].1["cwd"], "C:/work/project");
+    }
+
+    #[test]
+    fn registration_discovery_rejects_unexamined_default_or_exec_page() {
+        let candidate = json!({"id":"visible","cwd":"C:/work/project"});
+        for replies in [
+            [
+                json!({"data":[candidate.clone()],"nextCursor":"older-default-page"}),
+                json!({"data":[]}),
+            ],
+            [
+                json!({"data":[]}),
+                json!({"data":[candidate.clone()],"nextCursor":"older-exec-page"}),
+            ],
+        ] {
+            let mut transport = FakeTransport {
+                replies: VecDeque::from(replies),
+                methods: Vec::new(),
+            };
+            let outcome = CodexAppServerReadClientV1::discover_registration_threads_for_model(
+                &mut transport,
+                "C:/work/project",
+                10,
+                "gpt-6.1-sol",
+            );
+            assert!(matches!(
+                outcome,
+                Err(RuntimeError::Validation(reason)) if reason.contains("unexamined page")
+            ));
+            // The host's registration bootstrap branch runs only on Ok([]).
+            // No thread/start or metadata read is allowed after this cursor.
+            assert_eq!(transport.methods, ["thread/list", "thread/list"]);
+        }
+    }
+
+    #[test]
+    fn registration_discovery_rejects_owned_exec_thread_hidden_from_default_list() {
+        let mut transport = FakeTransport {
+            replies: VecDeque::from([
+                json!({"data":[]}),
+                json!({"data":[{"id":"native-writer","cwd":"C:/work/project","canAcceptDirectInput":false}]}),
+            ]),
+            methods: Vec::new(),
+        };
+        let outcome = CodexAppServerReadClientV1::discover_registration_threads_for_model(
+            &mut transport,
+            "C:/work/project",
+            10,
+            "gpt-6.1-sol",
+        );
+        assert!(matches!(
+            outcome,
+            Err(RuntimeError::Validation(reason)) if reason.contains("concurrently owned thread")
+        ));
+        assert_eq!(transport.methods, ["thread/list", "thread/list"]);
     }
 
     #[test]

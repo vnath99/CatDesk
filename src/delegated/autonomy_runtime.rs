@@ -964,7 +964,7 @@ pub fn host_observe_registration_thread_for_model(
     let mut transport = host_app_server_launch_config(&workspace)?.spawn_stdio_transport()?;
     transport.initialize()?;
     let cwd = workspace.to_string_lossy().into_owned();
-    let candidates = CodexAppServerReadClientV1::discover_adoptable_threads_for_model(
+    let candidates = CodexAppServerReadClientV1::discover_registration_threads_for_model(
         &mut transport,
         &cwd,
         observed_at_unix,
