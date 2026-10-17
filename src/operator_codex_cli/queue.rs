@@ -83,6 +83,7 @@ const LEASE_SECONDS: u64 = 24 * 60 * 60;
 const PROMPT_TIMEOUT: Duration = Duration::from_secs(30);
 const KILL_TIMEOUT: Duration = Duration::from_secs(20);
 const DEFAULT_TURN_TIMEOUT: Duration = Duration::from_secs(2 * 60 * 60);
+const SUPPORTED_CYBER_ACCESS_PROGRAM: &str = "standard";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum QueueAction {
@@ -95,6 +96,7 @@ pub(crate) enum QueueAction {
         task: String,
         model: Option<String>,
         effort: Option<String>,
+        cyber_access_program: Option<String>,
     },
     Status,
     Receipt {
@@ -208,6 +210,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
                 | "--task"
                 | "--model"
                 | "--effort"
+                | "--cyber-access-program"
                 | "--receipt-id"
                 | "--expected-package-sha256"
                 | "--decision"
@@ -479,11 +482,17 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
     }
     let model = values.remove("--model");
     let effort = values.remove("--effort");
+    let cyber_access_program = values.remove("--cyber-access-program");
     if model.as_deref().is_some_and(|value| !valid_model(value))
         || effort.as_deref().is_some_and(|value| !valid_effort(value))
+        || cyber_access_program
+            .as_deref()
+            .is_some_and(|value| value != SUPPORTED_CYBER_ACCESS_PROGRAM)
         || !values.is_empty()
     {
-        return Err("CODEX_QUEUE_USAGE: invalid model, effort, or option".into());
+        return Err(
+            "CODEX_QUEUE_USAGE: invalid model, effort, cyber access program, or option".into(),
+        );
     }
     Ok(QueueAction::Add {
         scope,
@@ -491,6 +500,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
         task,
         model,
         effort,
+        cyber_access_program,
     })
 }
 
@@ -595,6 +605,8 @@ struct QueueJob {
     prompt_sha256: String,
     model: Option<String>,
     effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    cyber_access_program: Option<String>,
     state: QueueState,
     created_at_unix: u64,
     attempt: Option<QueueAttempt>,
@@ -626,6 +638,7 @@ impl QueueJob {
             prompt_sha256,
             model,
             effort,
+            cyber_access_program: None,
             state: QueueState::Ready,
             created_at_unix: unix_now()?,
             attempt: None,
@@ -642,9 +655,10 @@ impl QueueJob {
             && self.prompt == other.prompt
             && self.model == other.model
             && self.effort == other.effort
+            && self.cyber_access_program == other.cyber_access_program
     }
     fn summary(&self) -> Value {
-        json!({
+        let mut summary = json!({
             "projectId": self.binding.project_id, "taskId": self.task_id,
             "workspace": self.binding.workspace, "threadId": self.binding.thread_id,
             "targetSha256": self.binding.target_sha256,
@@ -658,7 +672,11 @@ impl QueueJob {
             "verificationSha256": self.verification_sha256,
             "reviewPackageSha256": self.review_package_sha256,
             "advisoryOutcomeSha256": self.advisory_outcome_sha256,
-        })
+        });
+        if let Some(program) = &self.cyber_access_program {
+            summary["cyberAccessProgram"] = json!(program);
+        }
+        summary
     }
 }
 
@@ -676,6 +694,9 @@ struct QueueReceipt {
     prompt_sha256: String,
     requested_model: Option<String>,
     requested_effort: Option<String>,
+    /// Requested CLI override only; the native rollout profile does not attest this program.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    requested_cyber_access_program: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     actual_profile: Option<CodexCliTurnProfileEvidenceV1>,
     /// Diagnostic facts only. The verifier still requires `actual_profile`.
@@ -733,6 +754,8 @@ struct QueueReviewCandidate {
     requested_model: Option<String>,
     requested_effort: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    requested_cyber_access_program: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     actual_profile: Option<CodexCliTurnProfileEvidenceV1>,
     before: GitReviewWitness,
     after: GitReviewWitness,
@@ -765,6 +788,7 @@ impl QueueReviewCandidate {
             prompt_sha256: job.prompt_sha256.clone(),
             requested_model: job.model.clone(),
             requested_effort: job.effort.clone(),
+            requested_cyber_access_program: job.cyber_access_program.clone(),
             actual_profile: receipt.actual_profile.clone(),
             baseline_dirty,
             head_changed,
@@ -1230,6 +1254,7 @@ impl QueueStore {
             || candidate.prompt_sha256 != receipt.prompt_sha256
             || candidate.requested_model != receipt.requested_model
             || candidate.requested_effort != receipt.requested_effort
+            || candidate.requested_cyber_access_program != receipt.requested_cyber_access_program
             || candidate.actual_profile != receipt.actual_profile
             || candidate.baseline_dirty != baseline_dirty
             || candidate.head_changed != head_changed
@@ -1482,6 +1507,7 @@ impl QueueStore {
             || job.binding.thread_id != receipt.thread_id
             || job.binding.target_sha256 != receipt.target_sha256
             || job.prompt_sha256 != receipt.prompt_sha256
+            || job.cyber_access_program != receipt.requested_cyber_access_program
         {
             return Err("CODEX_QUEUE: receipt task binding changed".into());
         }
@@ -1702,6 +1728,10 @@ fn validate_job(job: &QueueJob) -> Result<(), String> {
             .effort
             .as_deref()
             .is_some_and(|value| !valid_effort(value))
+        || job
+            .cyber_access_program
+            .as_deref()
+            .is_some_and(|value| value != SUPPORTED_CYBER_ACCESS_PROGRAM)
         || job.binding.workspace.as_os_str().is_empty()
         || job
             .review_candidate_sha256
@@ -2036,11 +2066,13 @@ pub(crate) async fn execute_action(
             task,
             model,
             effort,
+            cyber_access_program,
         } => {
             let project = registered_project(&control.control_workspace, &scope)?;
             let store = QueueStore::open_for_operator(&control.project, &project.workspace)?;
             let _lock = store.lock()?;
-            let proposed = QueueJob::new(task_id, &project, task, model, effort)?;
+            let mut proposed = QueueJob::new(task_id, &project, task, model, effort)?;
+            proposed.cyber_access_program = cyber_access_program;
             if let Some(existing) =
                 store.load_job(&proposed.binding.project_id, &proposed.task_id)?
             {
@@ -4699,6 +4731,32 @@ fn read_queued_native_profile(
     (profile, diagnostic)
 }
 
+fn queued_native_invocation_args(
+    job: &QueueJob,
+    project: &AutonomousProjectV1,
+) -> Result<Vec<String>, String> {
+    let action = OperatorCodexAction::Run {
+        scope: job.binding.scope(),
+        task: job.prompt.clone(),
+        model: job.model.clone(),
+        effort: job.effort.clone(),
+    };
+    let mut args = invocation_args(&action, project)?;
+    let resume_index = args
+        .iter()
+        .position(|arg| arg == "resume")
+        .ok_or("CODEX_QUEUE: native resume invocation is unavailable")?;
+    args.insert(resume_index + 1, "--json".into());
+    if let Some(program) = job.cyber_access_program.as_deref() {
+        if program != SUPPORTED_CYBER_ACCESS_PROGRAM {
+            return Err("CODEX_QUEUE: unsupported cyber access program".into());
+        }
+        args.insert(resume_index + 2, "--cyber-access-program".into());
+        args.insert(resume_index + 3, program.into());
+    }
+    Ok(args)
+}
+
 async fn run_queued_turn(
     job: &QueueJob,
     control_workspace: &Path,
@@ -4738,20 +4796,10 @@ async fn run_queued_turn(
         Ok(witness) => witness,
         Err(_) => return TurnResult::before_spawn("REVIEW_BASELINE_UNAVAILABLE"),
     };
-    let action = OperatorCodexAction::Run {
-        scope,
-        task: job.prompt.clone(),
-        model: job.model.clone(),
-        effort: job.effort.clone(),
-    };
-    let mut args = match invocation_args(&action, &project) {
+    let args = match queued_native_invocation_args(job, &project) {
         Ok(args) => args,
         Err(_) => return TurnResult::before_spawn("NATIVE_INVOCATION_INVALID"),
     };
-    let Some(resume_index) = args.iter().position(|arg| arg == "resume") else {
-        return TurnResult::before_spawn("NATIVE_INVOCATION_INVALID");
-    };
-    args.insert(resume_index + 1, "--json".into());
     let profile_readback = prepare_resumed_native_turn_readback(codex_home, &job.binding.thread_id);
     let Some(stdout_evidence) = CodexCliNativeStdoutEvidenceV1::new(&job.binding.thread_id) else {
         return TurnResult::before_spawn("NATIVE_THREAD_INVALID");
@@ -4934,6 +4982,7 @@ fn complete_attempt(
         prompt_sha256: job.prompt_sha256.clone(),
         requested_model: job.model.clone(),
         requested_effort: job.effort.clone(),
+        requested_cyber_access_program: job.cyber_access_program.clone(),
         actual_profile: turn.actual_profile.clone(),
         profile_readback_diagnostic: turn.profile_readback_diagnostic.clone(),
         native_executable: turn.native_executable.clone(),
@@ -5287,6 +5336,13 @@ mod tests {
         }))
         .expect("diagnostic-only receipt");
         assert!(receipt.actual_profile.is_none());
+        assert!(receipt.requested_cyber_access_program.is_none());
+        assert!(
+            serde_json::to_value(&receipt)
+                .unwrap()
+                .get("requestedCyberAccessProgram")
+                .is_none()
+        );
         assert_eq!(
             receipt
                 .profile_readback_diagnostic
@@ -6106,6 +6162,7 @@ mod tests {
             prompt_sha256: "0".repeat(64),
             requested_model: None,
             requested_effort: None,
+            requested_cyber_access_program: None,
             actual_profile: None,
             baseline_dirty: before.head_commit.is_none() || !before.changed_paths.is_empty(),
             head_changed: before.head_commit != after.head_commit,
@@ -6342,6 +6399,7 @@ mod tests {
             prompt_sha256: claimed.prompt_sha256.clone(),
             requested_model: claimed.model.clone(),
             requested_effort: claimed.effort.clone(),
+            requested_cyber_access_program: None,
             actual_profile: Some(CodexCliTurnProfileEvidenceV1 {
                 codex_thread_id: claimed.binding.thread_id.clone(),
                 codex_turn_id: Uuid::new_v4().to_string(),
@@ -8903,6 +8961,7 @@ mod tests {
             prompt_sha256: claimed.prompt_sha256.clone(),
             requested_model: claimed.model.clone(),
             requested_effort: claimed.effort.clone(),
+            requested_cyber_access_program: None,
             actual_profile: Some(actual_profile),
             profile_readback_diagnostic: None,
             native_executable: None,
@@ -9162,6 +9221,31 @@ mod tests {
             "edit a test",
         ];
         assert!(matches!(parse(&add), Ok(QueueAction::Add { .. })));
+        assert!(matches!(
+            parse(&[&add[..], &["--cyber-access-program", "standard"]].concat()),
+            Ok(QueueAction::Add {
+                cyber_access_program: Some(program),
+                ..
+            }) if program == SUPPORTED_CYBER_ACCESS_PROGRAM
+        ));
+        for unsupported in ["daybreak_blue", "daybreak_red", "STANDARD", "standard;evil"] {
+            assert!(parse(&[&add[..], &["--cyber-access-program", unsupported]].concat()).is_err());
+        }
+        assert!(
+            parse(
+                &[
+                    &add[..],
+                    &[
+                        "--cyber-access-program",
+                        "standard",
+                        "--cyber-access-program",
+                        "standard"
+                    ]
+                ]
+                .concat()
+            )
+            .is_err()
+        );
         assert!(parse(&[&add[..], &["--sandbox", "danger-full-access"]].concat()).is_err());
         assert!(parse(&[&add[..], &["--task", "second"]].concat()).is_err());
         assert!(parse(&[&add[..], &["--model", "gpt;evil"]].concat()).is_err());
@@ -9661,6 +9745,22 @@ mod tests {
         )
         .expect("changed");
         assert!(!job.same_request(&changed));
+        let legacy_bytes = serde_json::to_vec(&job).expect("legacy job bytes");
+        assert!(!String::from_utf8_lossy(&legacy_bytes).contains("cyberAccessProgram"));
+        let legacy: QueueJob = serde_json::from_slice(&legacy_bytes).expect("legacy job readable");
+        assert!(legacy.cyber_access_program.is_none());
+        assert!(legacy.same_request(&job));
+        let mut opted_in = job.clone();
+        opted_in.cyber_access_program = Some(SUPPORTED_CYBER_ACCESS_PROGRAM.into());
+        assert!(!opted_in.same_request(&job));
+        assert_eq!(opted_in.summary()["cyberAccessProgram"], "standard");
+        assert_eq!(
+            serde_json::to_value(&opted_in).unwrap()["cyberAccessProgram"],
+            "standard"
+        );
+        let mut unsupported = opted_in.clone();
+        unsupported.cyber_access_program = Some("daybreak_blue".into());
+        assert!(queue.save_job(&unsupported).is_err());
         let summary = job.summary();
         assert_eq!(
             summary["verificationProfile"],
@@ -9676,6 +9776,103 @@ mod tests {
         let stored = fs::read_to_string(queue.job_path("alpha", "task_one")).unwrap();
         assert!(!stored.contains("https://chatgpt.com/c/"));
         assert_eq!(queue.jobs().expect("enumerate").len(), 1);
+        cleanup(fixture);
+    }
+
+    #[test]
+    fn queued_native_resume_uses_explicit_standard_only_for_opted_in_job() {
+        let (fixture, projects, _queue) = three_project_fixture(1);
+        let project = &projects[1];
+        let mut job = QueueJob::new(
+            "standard_turn".into(),
+            project,
+            "fixture task".into(),
+            Some("gpt-6.1-sol".into()),
+            Some("medium".into()),
+        )
+        .expect("job");
+        let default_args = queued_native_invocation_args(&job, project).expect("default argv");
+        assert!(
+            !default_args
+                .iter()
+                .any(|arg| arg == "--cyber-access-program")
+        );
+
+        job.cyber_access_program = Some(SUPPORTED_CYBER_ACCESS_PROGRAM.into());
+        let args = queued_native_invocation_args(&job, project).expect("standard argv");
+        let resume = args.iter().position(|arg| arg == "resume").unwrap();
+        assert_eq!(args[resume + 1], "--json");
+        assert_eq!(args[resume + 2], "--cyber-access-program");
+        assert_eq!(args[resume + 3], "standard");
+        assert_eq!(args[args.len() - 2], job.binding.thread_id);
+        assert_eq!(args[args.len() - 1], "-");
+        assert_eq!(
+            args.iter()
+                .filter(|arg| *arg == "--cyber-access-program")
+                .count(),
+            1
+        );
+
+        job.cyber_access_program = Some("daybreak_blue".into());
+        assert!(queued_native_invocation_args(&job, project).is_err());
+        cleanup(fixture);
+    }
+
+    #[test]
+    fn opted_in_receipt_and_review_bind_requested_program_without_effective_claim() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let mut job = QueueJob::new(
+            "standard_receipt".into(),
+            &projects[1],
+            "fixture task".into(),
+            Some("gpt-6.1-sol".into()),
+            Some("medium".into()),
+        )
+        .expect("job");
+        job.cyber_access_program = Some(SUPPORTED_CYBER_ACCESS_PROGRAM.into());
+        queue.save_job(&job).expect("persist opted-in job");
+        let claimed = claim_one(&projects[0].workspace, &queue)
+            .expect("claim")
+            .expect("selected job");
+        let turn = TurnResult {
+            outcome: "NATIVE_EXIT_ZERO",
+            exit_code: Some(0),
+            child_exit_observed: true,
+            child_absent_proven: false,
+            marker_retired: true,
+            native_executable: None,
+            native_version: None,
+            native_executable_sha256: None,
+            actual_profile: None,
+            profile_readback_diagnostic: None,
+            review_before: Some(mock_git_witness()),
+            review_after: Some(mock_git_witness()),
+        };
+        let completed = complete_attempt(&projects[0].workspace, &queue, &claimed, turn)
+            .expect("completed attempt");
+        let receipt_id = completed["receipt"]["receiptId"]
+            .as_str()
+            .expect("receipt id");
+        let receipt = queue.read_receipt(receipt_id).expect("bound receipt");
+        assert_eq!(
+            receipt.requested_cyber_access_program.as_deref(),
+            Some("standard")
+        );
+        assert_eq!(
+            completed["receipt"]["requestedCyberAccessProgram"],
+            "standard"
+        );
+        assert!(receipt.actual_profile.is_none());
+        let candidate = queue
+            .read_review_candidate(&receipt)
+            .expect("bound review candidate");
+        assert_eq!(
+            candidate.requested_cyber_access_program.as_deref(),
+            Some("standard")
+        );
+        let mut unbound = receipt.clone();
+        unbound.requested_cyber_access_program = None;
+        assert!(queue.read_review_candidate(&unbound).is_err());
         cleanup(fixture);
     }
 
@@ -10351,6 +10548,7 @@ mod tests {
             prompt_sha256: claimed.prompt_sha256.clone(),
             requested_model: None,
             requested_effort: None,
+            requested_cyber_access_program: None,
             actual_profile: None,
             native_executable: None,
             native_version: None,
@@ -10462,6 +10660,7 @@ mod tests {
             prompt_sha256: "0".repeat(64),
             requested_model: None,
             requested_effort: None,
+            requested_cyber_access_program: None,
             actual_profile: None,
             native_executable: None,
             native_version: None,
