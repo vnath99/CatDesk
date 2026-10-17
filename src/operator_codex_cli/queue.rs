@@ -31,7 +31,7 @@ use crate::delegated::autonomy_runtime::{
     queue_writer_marker_sha256,
 };
 use crate::delegated::codex_cli::{
-    CodexCliNativeStdoutEvidenceV1, CodexCliNativeTurnReadbackV1,
+    CodexCliNativeStdoutEvidenceV1, CodexCliNativeTurnReadbackV1, MAX_NATIVE_STDOUT_LINE_BYTES,
     prepare_resumed_native_turn_readback,
 };
 use crate::delegated::codex_model_policy::CodexCliTurnProfileEvidenceV1;
@@ -68,7 +68,6 @@ const BUG_BOUNTY_PYTEST_TIMEOUT: Duration = Duration::from_secs(90 * 60);
 const WAKE2_PYTEST_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 const WAKE2_PROFILE: &str = "python_uv_group_dev_wake2_touched_v2";
 const NATIVE_STDOUT_EOF_TIMEOUT: Duration = Duration::from_secs(10);
-const MAX_NATIVE_STDOUT_LINE_BYTES: usize = 64 * 1024;
 const MAX_GIT_STATUS_BYTES: usize = 1024 * 1024;
 const MAX_GIT_DIFF_BYTES: usize = 16 * 1024 * 1024;
 const MAX_GIT_FILE_BYTES: u64 = 4 * 1024 * 1024;

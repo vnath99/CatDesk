@@ -42,7 +42,10 @@ const MAX_DIAGNOSTIC_EVENT_TEXT_BYTES: usize = 2 * 1024;
 const MAX_ROLLOUT_SCAN_BYTES: u64 = 128 * 1024 * 1024;
 const MAX_ROLLOUT_LINE_BYTES: usize = 1024 * 1024;
 const MAX_ROLLOUT_DIRECTORY_ENTRIES: usize = 50_000;
-const MAX_NATIVE_STDOUT_LINE_BYTES: usize = 64 * 1024;
+// Native `item.completed` can include a bounded command result above 64 KiB.
+// The queue shares this cap with the evidence parser so its drain cannot
+// reject a line that the parser would accept. Larger events still fail closed.
+pub(crate) const MAX_NATIVE_STDOUT_LINE_BYTES: usize = 128 * 1024;
 const MAX_NATIVE_STDOUT_EVENTS: usize = 50_000;
 const MAX_NATIVE_STDOUT_BYTES: usize = 32 * 1024 * 1024;
 const POST_EXIT_STREAM_DRAIN_WAIT: Duration = Duration::from_millis(500);
@@ -3399,6 +3402,33 @@ mod tests {
         total_oversized.observe_line(br#"{"type":"thread.started"}"#);
         total_oversized.mark_eof();
         assert!(!total_oversized.completed_for(thread_id));
+    }
+
+    #[test]
+    fn native_stdout_accepts_bounded_large_item_and_still_requires_completion() {
+        let thread_id = "01a139f3-ccac-7d00-bca6-8ec83668f752";
+        let mut stdout = CodexCliNativeStdoutEvidenceV1::new(thread_id).expect("thread");
+        stdout.observe_line(
+            serde_json::json!({"type":"thread.started","thread_id":thread_id})
+                .to_string()
+                .as_bytes(),
+        );
+        stdout.observe_line(br#"{"type":"turn.started"}"#);
+        let command_item = serde_json::json!({
+            "type":"item.completed",
+            "item":{"type":"command_execution","aggregated_output":"x".repeat(70 * 1024)}
+        })
+        .to_string();
+        assert!(command_item.len() > 64 * 1024);
+        assert!(command_item.len() <= MAX_NATIVE_STDOUT_LINE_BYTES);
+        stdout.observe_line(command_item.as_bytes());
+        assert!(
+            !stdout.completed_for(thread_id),
+            "item is not a completion marker"
+        );
+        stdout.observe_line(br#"{"type":"turn.completed"}"#);
+        stdout.mark_eof();
+        assert!(stdout.completed_for(thread_id));
     }
 
     #[test]
