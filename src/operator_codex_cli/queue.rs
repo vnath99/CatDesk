@@ -64,6 +64,9 @@ const MAX_VERIFY_STREAM_BYTES: usize = 16 * 1024 * 1024;
 const VERIFY_COMMAND_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const BYOVD_PYTEST_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const BUG_BOUNTY_PYTEST_TIMEOUT: Duration = Duration::from_secs(90 * 60);
+// Wake2's last frozen full suite took 36m24s; keep a bounded 60m full-suite gate.
+const WAKE2_PYTEST_TIMEOUT: Duration = Duration::from_secs(60 * 60);
+const WAKE2_PROFILE: &str = "python_uv_group_dev_wake2_touched_v2";
 const NATIVE_STDOUT_EOF_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_NATIVE_STDOUT_LINE_BYTES: usize = 64 * 1024;
 const MAX_GIT_STATUS_BYTES: usize = 1024 * 1024;
@@ -398,6 +401,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
                     | "python_uv_extras_dev_lab_v1"
                     | "python_uv_group_dev_touched_v2"
                     | "python_uv_extras_dev_lab_touched_v2"
+                    | WAKE2_PROFILE
             )
             || !valid_sha256_hex(&expected_binding_sha256)
             || expected_binding_sha256 != expected_binding_sha256.to_ascii_lowercase()
@@ -2531,6 +2535,7 @@ async fn bind_profile_in_store(
                 | "python_uv_extras_dev_lab_v1"
                 | "python_uv_group_dev_touched_v2"
                 | "python_uv_extras_dev_lab_touched_v2"
+                | WAKE2_PROFILE
         )
         || !matches!(
             selected.verification_profile.as_str(),
@@ -2539,6 +2544,7 @@ async fn bind_profile_in_store(
                 | "python_uv_extras_dev_lab_v1"
                 | "python_uv_group_dev_touched_v2"
                 | "python_uv_extras_dev_lab_touched_v2"
+                | WAKE2_PROFILE
         )
     {
         return Err("CODEX_QUEUE_PROFILE: requested profile transition is unsupported".into());
@@ -2948,7 +2954,8 @@ async fn verify_receipt_in_store_with_executable(
     if matches!(
         job.binding.verification_profile.as_str(),
         "python_uv_group_dev_touched_v2" | "python_uv_extras_dev_lab_touched_v2"
-    ) {
+    ) || job.binding.verification_profile == WAKE2_PROFILE
+    {
         preflight_profile_inputs_tracked(&project, &git).await?;
     }
     for name in profile.inputs {
@@ -3012,6 +3019,7 @@ async fn verify_receipt_in_store_with_executable(
             &project.workspace,
             &executable,
             profile.tool,
+            &job.binding.verification_profile,
             argv,
             verification_command_timeout(&job.binding.verification_profile, argv),
         )
@@ -3481,6 +3489,76 @@ fn verification_profile(profile: &str) -> Result<VerificationProfile, String> {
             "no:cacheprovider",
         ],
     ];
+    const PYTHON_WAKE2_TOUCHED_V2: &[&[&str]] = &[
+        &[
+            "uv",
+            "run",
+            "--locked",
+            "--offline",
+            "--no-python-downloads",
+            "--no-env-file",
+            "--no-config",
+            "--group",
+            "dev",
+            "ruff",
+            "--config",
+            "pyproject.toml",
+            "format",
+            "--check",
+            ".",
+        ],
+        &[
+            "uv",
+            "run",
+            "--locked",
+            "--offline",
+            "--no-python-downloads",
+            "--no-env-file",
+            "--no-config",
+            "--group",
+            "dev",
+            "ruff",
+            "--config",
+            "pyproject.toml",
+            "check",
+            ".",
+        ],
+        &[
+            "uv",
+            "run",
+            "--locked",
+            "--offline",
+            "--no-python-downloads",
+            "--no-env-file",
+            "--no-config",
+            "--group",
+            "dev",
+            "python",
+            "-B",
+            "-m",
+            "mypy",
+            "--no-incremental",
+            "src",
+        ],
+        &[
+            "uv",
+            "run",
+            "--locked",
+            "--offline",
+            "--no-python-downloads",
+            "--no-env-file",
+            "--no-config",
+            "--group",
+            "dev",
+            "python",
+            "-B",
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+        ],
+    ];
     const PYTHON_EXTRAS_DEV_LAB: &[&[&str]] = &[
         &[
             "uv",
@@ -3563,6 +3641,12 @@ fn verification_profile(profile: &str) -> Result<VerificationProfile, String> {
             inputs: &["pyproject.toml", "uv.lock"],
             package_name: Some("byovd-driver-pipeline"),
         }),
+        WAKE2_PROFILE => Ok(VerificationProfile {
+            tool: VerificationTool::Uv,
+            commands: PYTHON_WAKE2_TOUCHED_V2,
+            inputs: &["pyproject.toml", "uv.lock"],
+            package_name: Some("wake2"),
+        }),
         "python_uv_extras_dev_lab_touched_v2" => Ok(VerificationProfile {
             tool: VerificationTool::Uv,
             commands: PYTHON_EXTRAS_DEV_LAB,
@@ -3579,24 +3663,28 @@ fn verification_command_timeout(profile: &str, argv: &[String]) -> Duration {
     if matches!(
         profile,
         "python_uv_group_dev_touched_v2" | "python_uv_extras_dev_lab_touched_v2"
-    ) && verification_profile(profile)
-        .ok()
-        .and_then(|specification| specification.commands.last().copied())
-        .is_some_and(|expected| argv.iter().map(String::as_str).eq(expected.iter().copied()))
+    ) || profile == WAKE2_PROFILE
     {
-        match profile {
-            "python_uv_group_dev_touched_v2" => BYOVD_PYTEST_TIMEOUT,
-            "python_uv_extras_dev_lab_touched_v2" => BUG_BOUNTY_PYTEST_TIMEOUT,
-            _ => unreachable!(),
+        if verification_profile(profile)
+            .ok()
+            .and_then(|specification| specification.commands.last().copied())
+            .is_some_and(|expected| argv.iter().map(String::as_str).eq(expected.iter().copied()))
+        {
+            return match profile {
+                "python_uv_group_dev_touched_v2" => BYOVD_PYTEST_TIMEOUT,
+                "python_uv_extras_dev_lab_touched_v2" => BUG_BOUNTY_PYTEST_TIMEOUT,
+                WAKE2_PROFILE => WAKE2_PYTEST_TIMEOUT,
+                _ => unreachable!(),
+            };
         }
-    } else {
-        VERIFY_COMMAND_TIMEOUT
     }
+    VERIFY_COMMAND_TIMEOUT
 }
 
 /// V2 keeps the locked, offline full test command but scopes Ruff to every
 /// Python file in the immutable post-turn Git witness.  A documentation-only
-/// turn records only the pytest command; it makes no Ruff claim.  Deleted
+/// turn records the full pytest command (and Wake2's whole-source mypy
+/// command); it makes no Ruff claim.  Deleted
 /// Python files are refused because Ruff cannot inspect their missing bytes.
 /// The source snapshot validates every retained path and file type before any
 /// verifier starts; this lexical check also keeps historical readback free of
@@ -3619,7 +3707,8 @@ fn verification_commands(
     if !matches!(
         profile,
         "python_uv_group_dev_touched_v2" | "python_uv_extras_dev_lab_touched_v2"
-    ) {
+    ) && profile != WAKE2_PROFILE
+    {
         return Ok(commands);
     }
     let mut python_paths = Vec::new();
@@ -3653,6 +3742,11 @@ fn verification_commands(
         }
     }
     if python_paths.is_empty() {
+        if profile == WAKE2_PROFILE {
+            // Wake2's mypy gate is a required whole-source check even for a
+            // documentation-only turn; the two Ruff commands are path-scoped.
+            return Ok(commands.into_iter().skip(2).collect());
+        }
         return Ok(vec![commands.remove(2)]);
     }
     let argv_bytes = commands[0].iter().map(String::len).sum::<usize>()
@@ -3696,7 +3790,7 @@ fn validate_python_profile_manifest(workspace: &Path, profile: &str) -> Result<(
         );
     }
     let development_dependencies = match profile {
-        "python_uv_group_dev_v1" | "python_uv_group_dev_touched_v2" => manifest
+        "python_uv_group_dev_v1" | "python_uv_group_dev_touched_v2" | WAKE2_PROFILE => manifest
             .get("dependency-groups")
             .and_then(|groups| groups.get("dev"))
             .and_then(toml::Value::as_array),
@@ -3731,6 +3825,9 @@ fn validate_python_profile_manifest(workspace: &Path, profile: &str) -> Result<(
     };
     if !has_dependency("pytest") || !has_dependency("ruff") {
         return Err("CODEX_QUEUE_VERIFY: Python profile requires pytest and Ruff".into());
+    }
+    if profile == WAKE2_PROFILE && !has_dependency("mypy") {
+        return Err("CODEX_QUEUE_VERIFY: Wake2 profile requires mypy".into());
     }
     Ok(())
 }
@@ -3771,39 +3868,46 @@ fn valid_sha256_hex(value: &str) -> bool {
 /// Exclude variables that can silently replace the profile's explicit Cargo
 /// or uv/Python/Ruff/pytest behavior. This digest is audit evidence only; it
 /// does not prove interpreters, toolchains, or process descendants.
+fn verification_env_key_allowed(tool: VerificationTool, profile: &str, upper: &str) -> bool {
+    match tool {
+        VerificationTool::Cargo => {
+            if matches!(upper, "CARGO_HOME" | "RUSTUP_HOME") {
+                return true;
+            }
+            !upper.starts_with("CARGO_")
+                && !upper.starts_with("RUSTC")
+                && !upper.starts_with("RUSTDOC")
+                && !upper.starts_with("RUSTFLAGS")
+                && !upper.starts_with("RUSTUP_")
+                && !upper.starts_with("CLIPPY_")
+        }
+        VerificationTool::Uv => {
+            !upper.starts_with("UV_")
+                && !upper.starts_with("PYTHON")
+                && !upper.starts_with("PYTEST_")
+                && !upper.starts_with("PIP_")
+                && !upper.starts_with("RUFF_")
+                && !upper.starts_with("CONDA_")
+                && !upper.starts_with("POETRY_")
+                && !upper.starts_with("PDM_")
+                && !upper.starts_with("RYE_")
+                && upper != "VIRTUAL_ENV"
+                && !(profile == WAKE2_PROFILE && upper.starts_with("WAKE2_"))
+                && !(profile == WAKE2_PROFILE && upper.starts_with("MYPY"))
+        }
+    }
+}
+
 fn verification_command_environment(
     tool: VerificationTool,
+    profile: &str,
 ) -> Result<(Vec<(OsString, OsString)>, String), String> {
     const MAX_ENV_BYTES: usize = 256 * 1024;
     const MAX_ENV_ENTRIES: usize = 512;
     let mut variables = std::env::vars_os()
         .filter(|(key, _)| {
             let upper = key.to_string_lossy().to_ascii_uppercase();
-            match tool {
-                VerificationTool::Cargo => {
-                    if matches!(upper.as_str(), "CARGO_HOME" | "RUSTUP_HOME") {
-                        return true;
-                    }
-                    !upper.starts_with("CARGO_")
-                        && !upper.starts_with("RUSTC")
-                        && !upper.starts_with("RUSTDOC")
-                        && !upper.starts_with("RUSTFLAGS")
-                        && !upper.starts_with("RUSTUP_")
-                        && !upper.starts_with("CLIPPY_")
-                }
-                VerificationTool::Uv => {
-                    !upper.starts_with("UV_")
-                        && !upper.starts_with("PYTHON")
-                        && !upper.starts_with("PYTEST_")
-                        && !upper.starts_with("PIP_")
-                        && !upper.starts_with("RUFF_")
-                        && !upper.starts_with("CONDA_")
-                        && !upper.starts_with("POETRY_")
-                        && !upper.starts_with("PDM_")
-                        && !upper.starts_with("RYE_")
-                        && upper != "VIRTUAL_ENV"
-                }
-            }
+            verification_env_key_allowed(tool, profile, &upper)
         })
         .collect::<Vec<_>>();
     if variables.len() > MAX_ENV_ENTRIES {
@@ -3903,6 +4007,7 @@ async fn execute_fixed_verification_command(
     workspace: &Path,
     executable: &TrustedVerificationExecutable,
     tool: VerificationTool,
+    profile: &str,
     argv: &[String],
     timeout: Duration,
 ) -> Result<QueueVerificationCommand, VerifyCommandError> {
@@ -3916,7 +4021,7 @@ async fn execute_fixed_verification_command(
         ));
     }
     let (environment, environment_sha256) =
-        verification_command_environment(tool).map_err(VerifyCommandError::Safe)?;
+        verification_command_environment(tool, profile).map_err(VerifyCommandError::Safe)?;
     let mut command = Command::new(&executable.executable);
     command
         .args(&argv[1..])
@@ -5840,6 +5945,10 @@ mod tests {
                 "byovd-driver-pipeline",
                 "[project]\nname = \"byovd-driver-pipeline\"\nversion = \"0.1.0\"\n[dependency-groups]\ndev = [\"pytest>=8\", \"ruff>=0.8\"]\n",
             ),
+            WAKE2_PROFILE => (
+                "wake2",
+                "[project]\nname = \"wake2\"\nversion = \"0.1.0\"\n[dependency-groups]\ndev = [\"pytest>=9\", \"ruff>=0.16\", \"mypy>=2\"]\n",
+            ),
             "python_uv_extras_dev_lab_v1" | "python_uv_extras_dev_lab_touched_v2" => (
                 "bug-bounty-security-research-platform",
                 "[project]\nname = \"bug-bounty-security-research-platform\"\nversion = \"0.1.0\"\n[project.optional-dependencies]\ndev = [\"pytest>=8\", \"ruff>=0.9\"]\nlab = [\"flask>=3\"]\n",
@@ -6072,7 +6181,7 @@ mod tests {
                 for flag in ["--locked", "--offline", "--no-python-downloads", "--no-env-file", "--no-config"] {
                     if !args.iter().any(|arg| arg == flag) { std::process::exit(42); }
                 }
-                if PROFILE == "python_uv_group_dev_v1" || PROFILE == "python_uv_group_dev_touched_v2" {
+                if PROFILE == "python_uv_group_dev_v1" || PROFILE == "python_uv_group_dev_touched_v2" || PROFILE == "python_uv_group_dev_wake2_touched_v2" {
                     if !args.windows(2).any(|pair| pair == ["--group", "dev"]) {
                         std::process::exit(43);
                     }
@@ -6085,7 +6194,9 @@ mod tests {
                     && args.iter().any(|arg| arg == "--check");
                 let ruff_check = args.iter().any(|arg| arg == "check");
                 let pytest = args.windows(2).any(|pair| pair == ["pytest", "-q"]);
-                if !ruff_format && !ruff_check && !pytest {
+                let mypy = args.windows(2).any(|pair| pair == ["mypy", "--no-incremental"])
+                    && args.iter().any(|arg| arg == "src");
+                if !ruff_format && !ruff_check && !pytest && !mypy {
                     std::process::exit(45);
                 }
                 if (ruff_format || ruff_check) &&
@@ -6094,7 +6205,7 @@ mod tests {
                     std::process::exit(46);
                 }
                 if (ruff_format || ruff_check) &&
-                    (PROFILE == "python_uv_extras_dev_lab_v1" || PROFILE == "python_uv_extras_dev_lab_touched_v2")
+                    (PROFILE == "python_uv_extras_dev_lab_v1" || PROFILE == "python_uv_extras_dev_lab_touched_v2" || PROFILE == "python_uv_group_dev_wake2_touched_v2")
                     && !args.windows(3).any(|triple| triple == ["ruff", "--config", "pyproject.toml"]) {
                     std::process::exit(47);
                 }
@@ -6183,6 +6294,10 @@ mod tests {
             }
             "python_uv_group_dev_v1" | "python_uv_group_dev_touched_v2" => {
                 fs::write(workspace.join("pyproject.toml"), b"[project]\nname = \"byovd-driver-pipeline\"\nversion = \"0.1.0\"\n[dependency-groups]\ndev = [\"pytest>=8\", \"ruff>=0.8\"]\n").unwrap();
+                fs::write(workspace.join("uv.lock"), b"version = 1\n").unwrap();
+            }
+            WAKE2_PROFILE => {
+                fs::write(workspace.join("pyproject.toml"), b"[project]\nname = \"wake2\"\nversion = \"0.1.0\"\n[dependency-groups]\ndev = [\"pytest>=9\", \"ruff>=0.16\", \"mypy>=2\"]\n").unwrap();
                 fs::write(workspace.join("uv.lock"), b"version = 1\n").unwrap();
             }
             "python_uv_extras_dev_lab_v1" | "python_uv_extras_dev_lab_touched_v2" => {
@@ -8065,6 +8180,197 @@ mod tests {
     }
 
     #[test]
+    fn wake2_touched_v2_commands_are_locked_scoped_and_bounded() {
+        let profile = verification_profile(WAKE2_PROFILE).unwrap();
+        assert_eq!(profile.package_name, Some("wake2"));
+        assert_eq!(profile.inputs, &["pyproject.toml", "uv.lock"]);
+        let changed = [GitChangedPath {
+            path: "src/wake2/changed.py".into(),
+            kind: "file".into(),
+            sha256: Some("a".repeat(64)),
+        }];
+        let commands = verification_commands(WAKE2_PROFILE, &changed).unwrap();
+        assert_eq!(commands.len(), 4);
+        for command in &commands {
+            for flag in [
+                "--locked",
+                "--offline",
+                "--no-python-downloads",
+                "--no-env-file",
+                "--no-config",
+            ] {
+                assert!(command.iter().any(|part| part == flag));
+            }
+            assert!(command.windows(2).any(|part| part == ["--group", "dev"]));
+        }
+        for command in &commands[..2] {
+            assert!(
+                command
+                    .windows(3)
+                    .any(|part| part == ["ruff", "--config", "pyproject.toml"])
+            );
+            assert!(
+                command
+                    .windows(2)
+                    .any(|part| part == ["--", "src/wake2/changed.py"])
+            );
+            assert!(!command.iter().any(|part| part == "."));
+            assert_eq!(
+                verification_command_timeout(WAKE2_PROFILE, command),
+                VERIFY_COMMAND_TIMEOUT
+            );
+        }
+        assert!(
+            commands[2]
+                .windows(2)
+                .any(|part| part == ["mypy", "--no-incremental"])
+        );
+        assert!(commands[2].iter().any(|part| part == "src"));
+        assert!(
+            commands[2]
+                .windows(3)
+                .any(|part| part == ["python", "-B", "-m"])
+        );
+        assert_eq!(
+            verification_command_timeout(WAKE2_PROFILE, &commands[2]),
+            VERIFY_COMMAND_TIMEOUT
+        );
+        assert!(commands[3].windows(2).any(|part| part == ["pytest", "-q"]));
+        assert!(
+            commands[3]
+                .windows(2)
+                .any(|part| part == ["-p", "no:cacheprovider"])
+        );
+        assert_eq!(
+            verification_command_timeout(WAKE2_PROFILE, &commands[3]),
+            WAKE2_PYTEST_TIMEOUT
+        );
+        let mut rebound = commands[3].clone();
+        rebound.push("--maxfail=1".into());
+        assert_eq!(
+            verification_command_timeout(WAKE2_PROFILE, &rebound),
+            VERIFY_COMMAND_TIMEOUT
+        );
+
+        let documentation_only = verification_commands(WAKE2_PROFILE, &[]).unwrap();
+        assert_eq!(documentation_only, commands[2..].to_vec());
+        let changed_lock = [GitChangedPath {
+            path: "uv.lock".into(),
+            kind: "file".into(),
+            sha256: Some("a".repeat(64)),
+        }];
+        assert!(verification_commands(WAKE2_PROFILE, &changed_lock).is_err());
+    }
+
+    #[test]
+    fn wake2_touched_v2_manifest_and_environment_reject_live_selectors() {
+        let (fixture, projects, _) = three_project_fixture_with_alpha_profile(1, WAKE2_PROFILE);
+        fixture_python_profile_inputs(&projects[1], WAKE2_PROFILE);
+        let workspace = &projects[1].workspace;
+        validate_python_profile_manifest(workspace, WAKE2_PROFILE).unwrap();
+        let manifest_path = workspace.join("pyproject.toml");
+        let manifest = fs::read_to_string(&manifest_path).unwrap();
+        fs::write(&manifest_path, manifest.replace(", \"mypy>=2\"", "")).unwrap();
+        assert!(
+            validate_python_profile_manifest(workspace, WAKE2_PROFILE)
+                .unwrap_err()
+                .contains("requires mypy")
+        );
+        fs::write(
+            &manifest_path,
+            manifest.replace("name = \"wake2\"", "name = \"other\""),
+        )
+        .unwrap();
+        assert!(
+            validate_python_profile_manifest(workspace, WAKE2_PROFILE)
+                .unwrap_err()
+                .contains("package name disagree")
+        );
+        for key in [
+            "WAKE2_WORKDAY_TEST_CREDENTIAL_FILE",
+            "WAKE2_RUNTIME_ROOT",
+            "WAKE2_INFERENCE_ROOT",
+            "WAKE2_OWNER_JOB",
+        ] {
+            assert!(!verification_env_key_allowed(
+                VerificationTool::Uv,
+                WAKE2_PROFILE,
+                key
+            ));
+            assert!(verification_env_key_allowed(
+                VerificationTool::Uv,
+                "python_uv_group_dev_touched_v2",
+                key
+            ));
+        }
+        assert!(!verification_env_key_allowed(
+            VerificationTool::Uv,
+            WAKE2_PROFILE,
+            "UV_PROJECT_ENVIRONMENT"
+        ));
+        assert!(!verification_env_key_allowed(
+            VerificationTool::Uv,
+            WAKE2_PROFILE,
+            "PYTEST_ADDOPTS"
+        ));
+        assert!(!verification_env_key_allowed(
+            VerificationTool::Uv,
+            WAKE2_PROFILE,
+            "MYPY_CACHE_DIR"
+        ));
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn wake2_touched_v2_verification_records_four_fixed_command_exits() {
+        let (fixture, projects, queue, receipt_id, uv) =
+            completed_verified_fixture_for_profile(WAKE2_PROFILE, false).await;
+        let result =
+            verify_receipt_in_store_with_executable(&projects[0], &queue, &receipt_id, Some(&uv))
+                .await
+                .unwrap();
+        assert_eq!(
+            result["verification"]["status"],
+            "LOCAL_COMMANDS_EXITED_ZERO_SOURCE_RECHECKED"
+        );
+        assert_eq!(result["verification"]["independentReview"], "PENDING");
+        assert_eq!(result["verification"]["wakeReady"], false);
+        let receipt = queue.read_receipt(&receipt_id).unwrap();
+        let candidate = queue.read_review_candidate(&receipt).unwrap();
+        let (artifact, _) = queue
+            .read_verification(&receipt, &candidate)
+            .unwrap()
+            .unwrap();
+        assert_eq!(artifact.commands.len(), 4);
+        assert!(
+            artifact
+                .commands
+                .iter()
+                .all(|command| command.status == "EXIT_ZERO_PARENT_OBSERVED")
+        );
+        assert_eq!(
+            artifact.commands[2].argv,
+            verification_profile(WAKE2_PROFILE).unwrap().commands[2]
+                .iter()
+                .map(|part| (*part).to_owned())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            artifact.commands[3].argv,
+            verification_profile(WAKE2_PROFILE).unwrap().commands[3]
+                .iter()
+                .map(|part| (*part).to_owned())
+                .collect::<Vec<_>>()
+        );
+        let reread =
+            verify_receipt_in_store_with_executable(&projects[0], &queue, &receipt_id, Some(&uv))
+                .await
+                .unwrap();
+        assert_eq!(reread["idempotent"], true);
+        cleanup(fixture);
+    }
+
+    #[test]
     fn byovd_touched_v2_uses_fixed_analysis_and_bytecode_safe_pytest() {
         let expected_pytest = [
             "uv",
@@ -8915,6 +9221,12 @@ mod tests {
             parse(&profile_bind),
             Ok(QueueAction::ProfileBind { .. })
         ));
+        let mut wake2_bind = profile_bind;
+        wake2_bind[11] = WAKE2_PROFILE;
+        assert!(matches!(
+            parse(&wake2_bind),
+            Ok(QueueAction::ProfileBind { .. })
+        ));
         assert!(parse(&[&profile_bind[..], &["--task", "unexpected"]].concat()).is_err());
         assert!(parse(&profile_bind[..profile_bind.len() - 2]).is_err());
         let mut invalid = profile_bind;
@@ -9060,6 +9372,48 @@ mod tests {
                 assert!(updated.projects.contains(sibling));
             }
         }
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn profile_bind_accepts_wake2_fixed_profile_without_touching_siblings() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let control = &projects[0];
+        let project = &projects[1];
+        fixture_python_profile_inputs(project, WAKE2_PROFILE);
+        fixture_commit(&project.workspace);
+        let registry = AutonomousProjectRegistryStoreV1::open_read_only(
+            control.workspace.join(".catdesk/projects"),
+        )
+        .unwrap();
+        let before = registry.load_registry().unwrap();
+        let expected_hash = project_binding_sha256(project).unwrap();
+        let result = fixture_profile_bind(
+            &control.workspace,
+            &queue,
+            project,
+            WAKE2_PROFILE,
+            &expected_hash,
+        )
+        .await
+        .unwrap();
+        assert_eq!(result["verificationProfile"], WAKE2_PROFILE);
+        assert_eq!(result["idempotent"], false);
+        let after = registry.load_registry().unwrap();
+        let rebound = after
+            .projects
+            .iter()
+            .find(|entry| entry.project_id == project.project_id)
+            .unwrap();
+        assert_eq!(rebound.verification_profile, WAKE2_PROFILE);
+        assert!(
+            before
+                .projects
+                .iter()
+                .filter(|entry| entry.project_id != project.project_id)
+                .all(|entry| after.projects.contains(entry))
+        );
+        assert!(queue.jobs().unwrap().is_empty());
         cleanup(fixture);
     }
 
