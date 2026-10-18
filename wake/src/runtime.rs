@@ -1763,6 +1763,28 @@ fn validate_bootstrap_receipt(
     Ok(())
 }
 
+// The adapter permits 90 minutes for response completion after a successful
+// submit. Allow a fixed ten minutes for source/home readiness, acceptance and
+// a fresh-document receipt; the 180-second progress watchdog still applies.
+const BOOTSTRAP_RESPONSE_BUDGET: Duration = Duration::from_secs(90 * 60);
+const BOOTSTRAP_SETUP_RECEIPT_ALLOWANCE: Duration = Duration::from_secs(10 * 60);
+const BOOTSTRAP_PROGRESS_WINDOW: Duration = Duration::from_secs(180);
+
+fn bootstrap_timeout_reason(
+    observed: Instant,
+    progress_deadline: Instant,
+    absolute_deadline: Instant,
+    submit_dispatched: bool,
+) -> Option<&'static str> {
+    if observed < progress_deadline && observed < absolute_deadline {
+        None
+    } else if submit_dispatched {
+        Some("BOOTSTRAP_OUTCOME_UNKNOWN")
+    } else {
+        Some("BOOTSTRAP_PRE_SUBMIT_TIMEOUT")
+    }
+}
+
 /// Run one preauthorized browser bootstrap in the reviewed installed Wake
 /// package. The callback must durably mark the root intent SUBMITTING while
 /// rechecking its paired source binding; it runs once before one submit ack.
@@ -1792,17 +1814,18 @@ pub fn bootstrap_conversation(
     let installed = installed_bootstrap_directory(store)?;
     let mut adapter = Adapter::spawn_from_installed(store.root(), &installed)?;
     adapter.send(request)?;
-    let absolute_deadline = Instant::now() + Duration::from_secs(15 * 60);
-    let mut deadline = Instant::now() + Duration::from_secs(180);
+    let absolute_deadline =
+        Instant::now() + BOOTSTRAP_RESPONSE_BUDGET + BOOTSTRAP_SETUP_RECEIPT_ALLOWANCE;
+    let mut deadline = Instant::now() + BOOTSTRAP_PROGRESS_WINDOW;
     let mut submit_dispatched = false;
     loop {
-        if Instant::now() >= deadline || Instant::now() >= absolute_deadline {
-            return Err(if submit_dispatched {
-                "BOOTSTRAP_OUTCOME_UNKNOWN"
-            } else {
-                "BOOTSTRAP_PRE_SUBMIT_TIMEOUT"
-            }
-            .into());
+        if let Some(reason) = bootstrap_timeout_reason(
+            Instant::now(),
+            deadline,
+            absolute_deadline,
+            submit_dispatched,
+        ) {
+            return Err(reason.into());
         }
         let observed = adapter.output.recv_timeout(Duration::from_millis(250));
         let value = match observed {
@@ -1834,7 +1857,7 @@ pub fn bootstrap_conversation(
                 adapter
                     .send(serde_json::json!({"submit": true}))
                     .map_err(|_| "BOOTSTRAP_OUTCOME_UNKNOWN")?;
-                deadline = Instant::now() + Duration::from_secs(180);
+                deadline = Instant::now() + BOOTSTRAP_PROGRESS_WINDOW;
             }
             Some("BOOTSTRAP_COMPLETE") if submit_dispatched => {
                 let receipt: BootstrapReceipt = serde_json::from_value(
@@ -1880,7 +1903,7 @@ pub fn bootstrap_conversation(
                 | "RESPONSE_COMPLETED"
                 | "RESPONSE_COMPLETED_AFTER_REOPEN",
             ) => {
-                deadline = Instant::now() + Duration::from_secs(180);
+                deadline = Instant::now() + BOOTSTRAP_PROGRESS_WINDOW;
             }
             _ if submit_dispatched => return Err("BOOTSTRAP_OUTCOME_UNKNOWN".into()),
             _ => return Err("BROWSER_ADAPTER_RESPONSE_INVALID".into()),
@@ -1895,6 +1918,40 @@ mod bootstrap_runtime_tests {
 
     fn source() -> Target {
         Target::new(7, "https://chatgpt.com/c/source-123".into()).expect("source")
+    }
+
+    #[test]
+    fn long_valid_response_keeps_one_shot_budget_and_stall_guard() {
+        let started = Instant::now();
+        let absolute = started + BOOTSTRAP_RESPONSE_BUDGET + BOOTSTRAP_SETUP_RECEIPT_ALLOWANCE;
+        let late_response = started + Duration::from_secs(75 * 60);
+        assert_eq!(
+            bootstrap_timeout_reason(
+                late_response,
+                late_response + BOOTSTRAP_PROGRESS_WINDOW,
+                absolute,
+                true,
+            ),
+            None
+        );
+        assert_eq!(
+            bootstrap_timeout_reason(
+                started + BOOTSTRAP_PROGRESS_WINDOW,
+                started + BOOTSTRAP_PROGRESS_WINDOW,
+                absolute,
+                false,
+            ),
+            Some("BOOTSTRAP_PRE_SUBMIT_TIMEOUT")
+        );
+        assert_eq!(
+            bootstrap_timeout_reason(
+                absolute,
+                absolute + BOOTSTRAP_PROGRESS_WINDOW,
+                absolute,
+                true,
+            ),
+            Some("BOOTSTRAP_OUTCOME_UNKNOWN")
+        );
     }
 
     #[test]
