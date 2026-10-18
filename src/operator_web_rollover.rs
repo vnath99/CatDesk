@@ -409,11 +409,16 @@ where
     if bound.url == record.source.url && bound.generation > record.source.generation {
         return Err("WEB_ROLLOVER_SOURCE_GENERATION_ADVANCED_RECONCILIATION_REQUIRED".into());
     }
-    if bound.url != destination.url
-        || bound.digest != destination.digest
-        || bound.generation < destination.generation
-    {
+    if bound.url != destination.url || bound.digest != destination.digest {
         return Err("WEB_ROLLOVER_TARGET_CHANGED_RECONCILIATION_REQUIRED".into());
+    }
+    if bound.generation != destination.generation && record.bound_target.as_ref() != Some(&bound) {
+        // A paired URL at a later generation is not evidence that this
+        // receipt caused that transition. Only a prior durable bound target
+        // can authorize reuse of a non-adjacent generation.
+        return Err(
+            "WEB_ROLLOVER_DESTINATION_GENERATION_UNVERIFIED_RECONCILIATION_REQUIRED".into(),
+        );
     }
     if record
         .bound_target
@@ -453,6 +458,9 @@ where
 }
 
 fn record_context_meter(workspace: &Path, record: &Record, bound: &Target) -> Result<(), String> {
+    if !matches!(paired(workspace, &record.project_id), Ok(current) if current == *bound) {
+        return Err("WEB_ROLLOVER_BOUND_TARGET_CHANGED_RECONCILIATION_REQUIRED".into());
+    }
     let meter = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
     let next_key = key(&record.project_id, bound);
     meter.bind_observed_target(
@@ -492,6 +500,29 @@ where
         ContextMeterStatus::RetryRequired
     };
     save(record)
+}
+
+fn retry_queued_context_meter_with<R, M, S>(
+    record: &mut Record,
+    bound: &Target,
+    mut read_paired: R,
+    meter: M,
+    mut save: S,
+) -> Result<(), String>
+where
+    R: FnMut() -> Result<Target, String>,
+    M: FnMut(&Record, &Target) -> Result<(), String>,
+    S: FnMut(&Record) -> Result<(), String>,
+{
+    if !matches!(read_paired(), Ok(current) if current == *bound) {
+        let reason = "WEB_ROLLOVER_BOUND_TARGET_CHANGED_RECONCILIATION_REQUIRED";
+        record.reconciliation_reason = Some(reason.into());
+        record.context_meter_status = ContextMeterStatus::RetryRequired;
+        save(record)?;
+        return Err(reason.into());
+    }
+    record.reconciliation_reason = None;
+    retry_context_meter_with(record, bound, meter, save)
 }
 
 fn queue_continuation_with<M, S>(
@@ -534,9 +565,10 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
                 .bound_target
                 .clone()
                 .ok_or("WEB_ROLLOVER_BOUND_TARGET_REQUIRED")?;
-            retry_context_meter_with(
+            retry_queued_context_meter_with(
                 &mut record,
                 &bound,
+                || paired(workspace, project),
                 |record, bound| record_context_meter(workspace, record, bound),
                 |record| store.save(record),
             )?;
@@ -739,22 +771,46 @@ mod tests {
         assert!(saved.reconciliation_reason.is_some());
         assert!(beta.active().unwrap().is_none());
 
-        // An operator can later pair the exact new URL at a newer generation.
-        // Its current paired value, rather than any historical entry, is used.
-        let reconciled = Target::new(4, destination.url.clone()).unwrap();
-        let bound = checkpoint_bound_with(
+        // Even the requested URL at a later generation is not proof that this
+        // receipt caused the transition. A separate verified repair is needed.
+        let unrelated_later_target = Target::new(4, destination.url.clone()).unwrap();
+        let error = checkpoint_bound_with(
             &alpha,
             &mut record,
             &destination,
-            || Ok(reconciled.clone()),
+            || Ok(unrelated_later_target.clone()),
             |_, _, _| panic!("a paired destination must not be rebound"),
         )
-        .unwrap();
-        assert_eq!(bound, reconciled);
+        .unwrap_err();
+        assert_eq!(
+            error,
+            "WEB_ROLLOVER_DESTINATION_GENERATION_UNVERIFIED_RECONCILIATION_REQUIRED"
+        );
         let saved = alpha.active().unwrap().unwrap();
-        assert_eq!(saved.bound_target, Some(reconciled));
-        assert!(saved.reconciliation_reason.is_none());
+        assert_eq!(saved.phase, Phase::Created);
+        assert_eq!(saved.bound_target, None);
+        assert!(saved.receipt.is_some());
+        assert_eq!(saved.reconciliation_reason.as_deref(), Some(error.as_str()));
         assert!(beta.active().unwrap().is_none());
+    }
+
+    #[test]
+    fn created_receipt_rejects_same_destination_at_unrelated_higher_generation() {
+        let mut record = record();
+        record.phase = Phase::Created;
+        record.receipt = Some(receipt_for(&record));
+        let destination = validate_receipt(&record, record.receipt.as_ref().unwrap()).unwrap();
+        let unrelated = Target::new(destination.generation + 1, destination.url.clone()).unwrap();
+        assert_eq!(
+            resolve_bound_target_with(
+                &record,
+                &destination,
+                || Ok(unrelated.clone()),
+                |_, _, _| panic!("the old witness must not be used for unrelated pairing"),
+            )
+            .unwrap_err(),
+            "WEB_ROLLOVER_DESTINATION_GENERATION_UNVERIFIED_RECONCILIATION_REQUIRED"
+        );
     }
 
     #[test]
@@ -843,6 +899,40 @@ mod tests {
             store.active().unwrap().unwrap().phase,
             Phase::ContinuationQueued
         );
+    }
+
+    #[test]
+    fn queued_meter_retry_rejects_stale_binding_before_any_mirror_write() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut record = record();
+        record.phase = Phase::ContinuationQueued;
+        record.context_meter_status = ContextMeterStatus::RetryRequired;
+        let bound = Target::new(2, "https://chatgpt.com/c/new".into()).unwrap();
+        record.bound_target = Some(bound.clone());
+        store.save(&record).unwrap();
+        atomic(&store.root.join("active.json"), &record.intent_id).unwrap();
+        let newer = Target::new(3, "https://chatgpt.com/c/later".into()).unwrap();
+        let error = retry_queued_context_meter_with(
+            &mut record,
+            &bound,
+            || Ok(newer.clone()),
+            |_, _| panic!("stale rollover must not write the meter"),
+            |record| store.save(record),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error,
+            "WEB_ROLLOVER_BOUND_TARGET_CHANGED_RECONCILIATION_REQUIRED"
+        );
+        let saved = store.active().unwrap().unwrap();
+        assert_eq!(saved.phase, Phase::ContinuationQueued);
+        assert_eq!(
+            saved.context_meter_status,
+            ContextMeterStatus::RetryRequired
+        );
+        assert_eq!(saved.reconciliation_reason.as_deref(), Some(error.as_str()));
+        assert_eq!(saved.bound_target, Some(bound));
     }
 
     #[test]
