@@ -108,6 +108,8 @@ class AttemptSink:
     def pre_typing_ready(self, cdp):
         if cdp.url != SOURCE or cdp.draft:
             raise bridge.Attention("BOOTSTRAP_SOURCE_DRIFT")
+        if cdp.scenario == "source_load_error":
+            raise bridge.Attention("BOOTSTRAP_SOURCE_LOAD_ERROR_PLACEHOLDER")
 
     def open_empty_home(self, cdp):
         cdp.get(bridge.NEW_CONVERSATION_HOME)
@@ -168,6 +170,8 @@ class AttemptSink:
 
     def prove_single_bootstrap_user(self, cdp, message):
         self._check_issued(cdp)
+        if cdp.scenario == "load_error_after_reload":
+            raise bridge.PostSubmitUnknown("BOOTSTRAP_ASSISTANT_LOAD_ERROR_PLACEHOLDER")
         if cdp.sent != 1:
             raise bridge.PostSubmitUnknown("BOOTSTRAP_RECEIPT_SEQUENCE_DRIFT")
 
@@ -262,6 +266,44 @@ class NewConversationTests(unittest.TestCase):
             with self.assertRaisesRegex(bridge.PostSubmitUnknown, "BOOTSTRAP_DESTINATION_DRIFT"):
                 sink.latch_issued_url(cdp)
 
+    def test_load_error_placeholder_is_neither_usable_source_nor_fresh_answer(self):
+        with tempfile.TemporaryDirectory() as profile:
+            sink = bridge.NewConversationSink(SOURCE, Path(profile), 1, 1)
+            cdp = StructuralCdp(SOURCE)
+            cdp.snapshot = [False, [["user", "handoff"], ["assistant", "This response couldn’t load"]]]
+            with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_SOURCE_LOAD_ERROR_PLACEHOLDER"):
+                sink.require_usable_latest_assistant(cdp, source=True)
+            with self.assertRaisesRegex(bridge.PostSubmitUnknown, "BOOTSTRAP_ASSISTANT_LOAD_ERROR_PLACEHOLDER"):
+                sink.require_usable_latest_assistant(cdp, source=False)
+            cdp.snapshot = [False, [["user", "handoff"], ["assistant", "Usable code and next step."]]]
+            sink.require_usable_latest_assistant(cdp, source=True)
+            sink.require_usable_latest_assistant(cdp, source=False)
+            cdp.snapshot = [False, [["user", "handoff"]]]
+            with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_SOURCE_ASSISTANT_UNAVAILABLE"):
+                sink.require_usable_latest_assistant(cdp, source=True)
+
+    def test_actual_source_and_fresh_receipt_gates_reject_placeholder(self):
+        with tempfile.TemporaryDirectory() as profile:
+            sink = bridge.NewConversationSink(SOURCE, Path(profile), 1, 1)
+            cdp = StructuralCdp(SOURCE)
+            message = "Exact bootstrap handoff"
+            cdp.snapshot = [False, [["user", message], ["assistant", "This response couldn’t load"]]]
+            with patch.object(bridge.CdpSink, "pre_typing_ready", return_value=None):
+                with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_SOURCE_LOAD_ERROR_PLACEHOLDER"):
+                    sink.pre_typing_ready(cdp)
+            with patch.object(sink, "user_message_digests", return_value=[bridge.digest(bridge.normalize_message(message))]), patch.object(
+                sink, "visible_role_counts", return_value=(1, 1, 1)
+            ):
+                with self.assertRaisesRegex(bridge.PostSubmitUnknown, "BOOTSTRAP_ASSISTANT_LOAD_ERROR_PLACEHOLDER"):
+                    sink.prove_single_bootstrap_user(cdp, message)
+
+    def test_response_snapshot_rejects_load_error_even_if_copy_action_exists(self):
+        with tempfile.TemporaryDirectory() as profile:
+            sink = bridge.NewConversationSink(SOURCE, Path(profile), 1, 1)
+            cdp = types.SimpleNamespace(evaluate=lambda script: ["load-error", 0, 0, True, False])
+            with self.assertRaisesRegex(bridge.PostSubmitUnknown, "RESPONSE_COMPLETION_UNPROVEN"):
+                sink.response_snapshot(cdp, "expected user turn")
+
     def test_private_source_snapshot_bounds_text_without_browser_write(self):
         with tempfile.TemporaryDirectory() as profile:
             sink = bridge.NewConversationSink(SOURCE, Path(profile), 1, 1)
@@ -327,6 +369,12 @@ class NewConversationTests(unittest.TestCase):
                 self.assertEqual(acknowledgements, [])
                 self.assertNotIn("BEFORE_BOOTSTRAP_SUBMIT", [item["stage"] for item in emitted])
 
+    def test_source_load_error_never_navigates_to_new_chat(self):
+        cdp, emitted, acknowledgements, error = self.run_attempt("source_load_error")
+        self.assertEqual(error, "BOOTSTRAP_SOURCE_LOAD_ERROR_PLACEHOLDER")
+        self.assertEqual((cdp.navigation, cdp.sent, acknowledgements), ([SOURCE], 0, []))
+        self.assertNotIn("BOOTSTRAP_HOME_READY", [item["stage"] for item in emitted])
+
     def test_parent_denial_never_submits(self):
         cdp, emitted, acknowledgements, error = self.run_attempt(ack={"submit": False})
         self.assertEqual(error, "SUBMISSION_NOT_AUTHORIZED")
@@ -334,7 +382,7 @@ class NewConversationTests(unittest.TestCase):
         self.assertEqual([x["stage"] for x in emitted].count("BEFORE_BOOTSTRAP_SUBMIT"), 1)
 
     def test_url_drift_and_ambiguous_click_are_single_send_unknown(self):
-        for scenario in ("source_revisited", "foreign_url", "click_unknown"):
+        for scenario in ("source_revisited", "foreign_url", "click_unknown", "load_error_after_reload"):
             with self.subTest(scenario=scenario):
                 cdp, emitted, acknowledgements, error = self.run_attempt(scenario)
                 self.assertIsNone(error)

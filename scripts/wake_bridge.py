@@ -1044,6 +1044,15 @@ class CdpSink:
             const fallbackAssistants = pairedTurn ? pairedAssistantUnits : turnsAfterWake;
             const assistants = roleAssistants.length ? roleAssistants : fallbackAssistants;
             const latestAssistant = assistants.length ? assistants[assistants.length - 1] : null;
+            const assistantText = latestAssistant
+                ? normalize(latestAssistant.innerText || latestAssistant.textContent)
+                    .replace(/[‘’]/g, "'")
+                : '';
+            // ChatGPT can render an old assistant as a load-error placeholder
+            // while retaining Copy/Regenerate controls. Those controls alone
+            // are not evidence of a usable completed response.
+            if (assistantText.toLowerCase().includes("this response couldn't load"))
+                return ['load-error', 0, 0, true, false];
             const latestAssistantTurn = latestAssistant
                 ? (latestAssistant.closest("[data-content-search-turn-key]") ||
                    latestAssistant.closest("[data-testid^='conversation-turn-']") ||
@@ -1077,12 +1086,14 @@ class CdpSink:
         except Exception as error:
             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED") from error
         if (not isinstance(value, list) or len(value) != 5 or
-                value[0] not in {"ready", "missing-user", "invalid"} or
+                value[0] not in {"ready", "missing-user", "invalid", "load-error"} or
                 not isinstance(value[1], int) or isinstance(value[1], bool) or
                 not isinstance(value[2], int) or isinstance(value[2], bool) or
                 not isinstance(value[3], bool) or
                 not isinstance(value[4], bool)):
             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
+        if value[0] == "load-error":
+            raise PostSubmitUnknown("RESPONSE_COMPLETION_UNPROVEN")
         if value[0] != "ready":
             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
         return value[1], value[2], value[3], value[4]
@@ -2072,6 +2083,10 @@ class NewConversationSink(CdpSink):
         self.source_url = self.url
         self.destination_url: str | None = None
 
+    def pre_typing_ready(self, cdp: Any) -> None:
+        super().pre_typing_ready(cdp)
+        self.require_usable_latest_assistant(cdp, source=True)
+
     @staticmethod
     def visible_role_counts(cdp: Any) -> tuple[int, int, int]:
         """Read bounded structural counts only; no transcript text leaves CDP."""
@@ -2116,7 +2131,7 @@ class NewConversationSink(CdpSink):
                 "article[data-turn='user'], article[data-turn='assistant']"
             )).filter(visible);
             const nodes = roles.length ? roles : articles;
-            if (nodes.length > 128) return ['invalid', []];
+            if (nodes.length > 1024) return ['invalid', []];
             return [nodes.length > 16, nodes.slice(-16).map(node => {
                 const role = node.getAttribute('data-message-author-role') || node.getAttribute('data-turn');
                 const content = node.querySelector('[data-message-content], .whitespace-pre-wrap') || node;
@@ -2153,6 +2168,23 @@ class NewConversationSink(CdpSink):
                 break
         messages.reverse()
         return {"messages": messages, "truncated": truncated}
+
+    def require_usable_latest_assistant(self, cdp: Any, *, source: bool) -> None:
+        """Fail closed if a source or freshly reloaded destination lost its answer."""
+        unavailable = "BOOTSTRAP_SOURCE_ASSISTANT_UNAVAILABLE" if source else "BOOTSTRAP_ASSISTANT_UNAVAILABLE"
+        load_error = "BOOTSTRAP_SOURCE_LOAD_ERROR_PLACEHOLDER" if source else "BOOTSTRAP_ASSISTANT_LOAD_ERROR_PLACEHOLDER"
+        error_type = Attention if source else PostSubmitUnknown
+        try:
+            messages = self.visible_message_snapshot(cdp)["messages"]
+        except Attention as error:
+            raise error_type(unavailable) from error
+        if not messages or messages[-1]["role"] != "ASSISTANT":
+            raise error_type(unavailable)
+        body = normalize_message(messages[-1]["text"]).replace("’", "'").replace("‘", "'")
+        if "this response couldn't load" in body.lower():
+            raise error_type(load_error)
+        if not body:
+            raise error_type(unavailable)
 
     def check_empty_home(self, cdp: Any) -> None:
         try:
@@ -2256,6 +2288,7 @@ class NewConversationSink(CdpSink):
             raise PostSubmitUnknown("BOOTSTRAP_RECEIPT_QUERY_FAILED") from error
         if user_digests != [expected] or users > 1 or assistants > 1:
             raise PostSubmitUnknown("BOOTSTRAP_RECEIPT_SEQUENCE_DRIFT")
+        self.require_usable_latest_assistant(cdp, source=False)
 
 def delivery_from_raw(value: Any) -> Delivery | None:
     if not isinstance(value, dict): return None
