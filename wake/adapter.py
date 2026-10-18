@@ -276,13 +276,26 @@ def source_snapshot(bridge, sb, request):
     if not sink.exact(cdp.get_current_url()) or sink.readiness_reason(cdp) is not None:
         raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
     snapshot = sink.visible_message_snapshot(cdp)
-    emit({
+    payload = {
         "stage": "SOURCE_SNAPSHOT",
         "projectId": request["projectId"],
         "sourceGeneration": source["generation"],
         "sourceDigest": source["digest"],
         "snapshot": snapshot,
-    })
+    }
+    # The parent reader has an 8192-byte line cap. JSON escapes may be much
+    # larger than the UTF-8 text budget enforced by the CDP snapshot helper.
+    while len(json.dumps(payload, separators=(",", ":")).encode("utf-8")) + 1 > 8192:
+        messages = snapshot["messages"]
+        snapshot["truncated"] = True
+        if len(messages) > 1:
+            del messages[0]
+        elif messages and messages[0]["text"]:
+            text = messages[0]["text"]
+            messages[0]["text"] = text[:len(text) // 2]
+        else:
+            raise bridge.Attention("SOURCE_SNAPSHOT_TOO_LARGE")
+    emit(payload)
 
 
 def reconcile_submission(bridge, sb, event, target):

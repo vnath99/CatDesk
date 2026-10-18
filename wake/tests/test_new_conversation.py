@@ -180,6 +180,8 @@ class AttemptSink:
 
     def visible_message_snapshot(self, cdp):
         cdp.timeline.append("snapshot")
+        if cdp.scenario == "large_snapshot":
+            return {"messages": [{"role": "ASSISTANT", "text": "😀" * 4096}], "truncated": False}
         return {"messages": [{"role": "ASSISTANT", "text": "bounded private status"}], "truncated": False}
 
 
@@ -287,6 +289,23 @@ class NewConversationTests(unittest.TestCase):
         self.assertEqual(cdp.timeline, ["snapshot"])
         self.assertEqual(emitted[-1]["stage"], "SOURCE_SNAPSHOT")
         self.assertEqual(emitted[-1]["sourceGeneration"], 7)
+
+    def test_snapshot_wire_frame_stays_within_parent_reader_bound(self):
+        cdp = AttemptCdp("large_snapshot")
+        sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
+        emitted = []
+        request = {"snapshot": True, "projectId": "project-one", "source": self.request()["source"]}
+        with patch.object(bridge, "NewConversationSink", AttemptSink), patch.object(
+            adapter, "emit", emitted.append
+        ):
+            adapter.source_snapshot(bridge, sb, request)
+        self.assertEqual(cdp.sent, 0)
+        self.assertTrue(emitted[-1]["snapshot"]["truncated"])
+        self.assertTrue(emitted[-1]["snapshot"]["messages"][0]["text"])
+        self.assertLessEqual(
+            len(json.dumps(emitted[-1], separators=(",", ":")).encode("utf-8")) + 1,
+            8192,
+        )
 
     def test_wrong_source_fails_before_browser_navigation(self):
         request = self.request()
