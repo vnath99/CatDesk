@@ -1,5 +1,51 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 18 completed continuation with advisory meter retry (TESTED_LOCAL_SOURCE; LIVE PARTIAL)
+
+Source `9102b9e` allows new work after a proved completed continuation when
+the context meter is still `RetryRequired`. It requires the exact paired
+destination, bootstrap receipt, continuation delivery and completed timer,
+unchanged native owner, verified saved source witness and no reconciliation
+reason. A single locked meter read must show either the exact predecessor
+intent or the destination without a new intent. Missing, corrupt, unrelated
+or pending current-generation state still refuses work.
+
+The real work-lease fixture uses a prepared development root, Git registrations
+and inert package files. It verifies the retry path, incomplete continuation
+refusal, corrupt-meter refusal and another project's independent lease. No
+browser or service starts. The Web operator filter passed 47/47, context ledger
+12/12 and Web work 13/13; these filters overlap. Final strict all-target/all-feature
+Clippy passed after correcting one redundant borrow, and the integrated
+continuation fixture passed again on that final source. Scoped formatting and
+diff checks passed. Private logs are in `checkpoints/web-advisory-retry-oct18`.
+The initial sandbox fixture attempt hit `CONFIG_ROOT_UNAVAILABLE`; its scoped
+normal-user rerun passed.
+
+The running manual-login executable and existing authenticated test profile
+were preserved. This source is not yet built into the live runtime. Draft
+inspection, actual replacement URL, paired binding and continuation remain
+live acceptance gates; other native project chats remain usable. **Overall:
+`PARTIAL`.**
+
+## October 18 retained rollover diagnosis (TESTED_LOCAL_SOURCE; LIVE PARTIAL)
+
+Pushed source `6c8c0b1` retains the last concrete automatic rollover failure
+through subsequent in-progress, stopped and policy-disabled ticks. Central
+status exposes bounded diagnostic metadata and requests draft inspection only
+when the saved PREPARED rollover still matches the current paired target.
+Legacy records remain readable; corrupt advisory status does not prevent a
+new truthful status write or disclose raw private data. Four focused tests,
+strict all-target/all-feature Clippy, scoped formatting and diff checks passed.
+The checkpoint includes one mechanical allocation lint fix in an existing
+operator parser test.
+
+This is source verification. The isolated development runtime still uses the
+earlier `bce01e9` package, with its existing authenticated profile open for the
+pending user draft inspection. No draft was cleared, replacement conversation
+accepted, target rebound or native project goal paused by this change.
+Installed release, exact-source remote CI and central connector acceptance
+remain separate and unproved. **Overall: `PARTIAL`.**
+
 ## October 18 seven-project live Web checkpoint (DEVELOPMENT_LIVE_PARTIAL; MVP PARTIAL)
 
 **Final live checkpoint: `PARTIAL`.** Registry and Wake contain seven guarded pairs: five original projects and two controlled canaries. Pushed source `bce01e974054646006520a598ed83d449d30afaa` passed main/Wake builds, 49 focused Python tests, three focused Rust STOP/recovery regressions (two STOP, one recovery) and strict Clippy. Exact-commit CI lookup returned `[]`; remote acceptance is missing. The v3 isolated development package was applied through supported update with authenticated profile and state preserved. Independent raw-file comparison against the original five-project snapshot found all five registry records and Wake targets exactly unchanged with stable read hashes (private `current-binding-comparison.json`, SHA-256 `83EF59A1DDC68F37C0E5E145DA20ED879545826B7D95086CA4248C99EAE6546F`).
