@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "ec1ec272f303be4847b397c3c0950ca3f031cca1",
+  "sourceTree": "ec78aaa39d57334fb5f3b378d39b5d041da252fb",
+  "localDate": "2026-10-17",
+  "recordedUtc": "2026-10-18T03:17:39.7470676Z",
+  "classification": "TESTED_LOCAL_SOURCE_LIVE_PARTIAL",
+  "sourceFiles": [
+    {
+      "path": "src/delegated/sol_worker_lifecycle.rs",
+      "sha256": "7D7CC39009EA4F421B707D79BF53315F522855FF823F57723790579088F005EB"
+    },
+    {
+      "path": "src/mcp.rs",
+      "sha256": "754F425D8D29AD3E79325782B097990EB40F413C9416B6F01D31538826ED1625"
+    },
+    {
+      "path": "src/operator_facade.rs",
+      "sha256": "1C354DCF6D37AF23A81D8D96E7216FDC6BE30CF10BD935A4F04FD89978C4992A"
+    },
+    {
+      "path": "src/operator_web_cli.rs",
+      "sha256": "1E5557A5791D99B07BFEBDEB16A82ED43EAD74C5668A2C146DCE842AA5C9A3DB"
+    },
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "B7A910E7C7C47B6D6727DB7261F83ED62580991F9AD450A0F8641497B7D7D95D"
+    }
+  ],
+  "debugImageSha256": "13353C6445FAB987BA6E7467AAF84C3941A6C456AB7F5E2FDF6896676ED89D27",
+  "fullCatDeskSuite": {
+    "log": "20261018T030932Z-catdesk-full.log",
+    "sha256": "8C269BAA7639960AB95B423A3803552C5D426D6E5891641C4BC4C9D9BC0069FB",
+    "passed": 1476,
+    "failed": 0,
+    "ignored": 28,
+    "sourceRelation": "BUILD_BEFORE_FINAL_STATUS_IDENTITY_REFINEMENT_AND_NEEDLESS_BORROW_CLEANUP",
+    "testBinarySha256": "EC0531F97271945D72954A3C77F086D859FF9CD95CB95960E776728F15AC2A68"
+  },
+  "finalSourceFocusedTests": [
+    {
+      "name": "web-operator",
+      "passed": 35,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "name": "web-context-mcp",
+      "passed": 18,
+      "failed": 0,
+      "ignored": 0
+    }
+  ],
+  "checks": [
+    {
+      "name": "web-operator",
+      "arguments": [
+        "test",
+        "--locked",
+        "--offline",
+        "--all-features",
+        "--bin",
+        "catdesk",
+        "operator_facade::web",
+        "--",
+        "--test-threads=1"
+      ],
+      "exitCode": 0,
+      "log": "20261018T031546Z-web-operator.log",
+      "sha256": "118CF66B7F32B8B10E32ECC11EF107FF77C0D660EAAAD616F2BFB6281395F18C"
+    },
+    {
+      "name": "web-context-mcp",
+      "arguments": [
+        "test",
+        "--locked",
+        "--offline",
+        "--all-features",
+        "--bin",
+        "catdesk",
+        "web_",
+        "--",
+        "--test-threads=1"
+      ],
+      "exitCode": 0,
+      "log": "20261018T031546Z-web-context-mcp.log",
+      "sha256": "A6D24ECC38E400FBAB46659629DF8EE18E5BF3DA576AE8DEE1929E927DE87E74"
+    },
+    {
+      "name": "clippy",
+      "arguments": [
+        "clippy",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exitCode": 0,
+      "log": "20261018T031546Z-clippy.log",
+      "sha256": "C73FD6EFD41CF7E98FF8E59AB32E0693967D0AA9AB6FFC6CF51C068284A5EC0E"
+    },
+    {
+      "name": "format",
+      "arguments": [
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exitCode": 0,
+      "log": "20261018T031546Z-format.log",
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "name": "build",
+      "arguments": [
+        "build",
+        "--locked",
+        "--offline",
+        "--all-features",
+        "--bin",
+        "catdesk"
+      ],
+      "exitCode": 0,
+      "log": "20261018T031546Z-build.log",
+      "sha256": "58E09BA9C6063600E4F285C3847E7E98FC76A05B3DF96D3B4E115A18A061BBF3"
+    }
+  ],
+  "verificationScope": "FULL_SUITE_BEFORE_FINAL_STATUS_IDENTITY_REFINEMENT_THEN_FOCUSED_WEB_MCP_AND_STRICT_CHECKS_ON_FINAL_UNCHANGED_SOURCE",
+  "postFullSuiteChanges": [
+    "REQUIRE_EXACT_ROLLOVER_TARGET_DIGEST_AND_LABEL_AUTOMATION_GENERATION_ONLY",
+    "REMOVE_UNUSED_MUTATING_STATUS_HELPER_AND_USE_READ_ONLY_READER_IN_ITS_TESTS",
+    "REMOVE_NEEDLESS_STATUS_READER_BORROW"
+  ],
+  "preliminaryClippy": "UNUSED_LEGACY_STATUS_HELPER_REMOVED_FINAL_STRICT_CHECK_PASSED",
+  "nativeHang": "TWO_BOUNDED_RUNS_CONFIRMED_MALFORMED_IMAGE_CREATEPROCESSW_DID_NOT_RETURN_WITHIN_15_SECONDS",
+  "nativeFix": "TEST_ONLY_SAME_USER_CREATE_FAILURE_INJECTION_PRESERVES_REAL_EMPTY_JOB_PROOF_AND_RETRY_OWNER",
+  "nativeFocusedWatchdogsPassed": 2,
+  "independentReview": "CONCRETE_STATUS_FINDINGS_FIXED_AND_REREVIEWED_NATIVE_DIFF_REVIEWED",
+  "wakeAndPythonSuites": "UNCHANGED_THIS_CHECKPOINT_NOT_RERUN_PRIOR_RESULTS_SEPARATE",
+  "remoteCi": "NOT_ACCEPTED_DISABLED_FORK_WORKFLOW_REENABLE_AUTHORIZATION_PENDING",
+  "installedActivationPerformed": false,
+  "productionWakeBindingChanged": false,
+  "liveRolloverAccepted": false,
+  "otherNativeChatsRequirePause": false,
+  "liveBlockers": [
+    "MAIN_CANONICAL_HASH_MISMATCH_AND_MISSING_REVIEWED_RECOVERY_AUTHORITY",
+    "WAKE_BROKER_TRANSACTION_NOT_IMPLEMENTED",
+    "THREE_PROJECT_WAKE_TARGETS_NOT_ALIGNED",
+    "CHATGPT_CANARY_ASSISTANT_BODY_FAILED_RELOAD"
+  ],
+  "nextSourceSlice": "EXISTING_BROKER_PUBLISHED_TO_PROTECTED_POINTER_SWITCH_AND_READBACK"
+}

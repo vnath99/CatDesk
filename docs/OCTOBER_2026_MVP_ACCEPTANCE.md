@@ -1,5 +1,42 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 17 central rollover status and native regression checkpoint (TESTED_LOCAL_SOURCE; LIVE PARTIAL)
+
+Source `ec1ec272f303be4847b397c3c0950ca3f031cca1` adds per-project durable
+rollover and automation progress to `autonomy_project_registry_read.webProjects`.
+The report includes handoff progress, pending responses, attention and stopped
+states without exposing handoff text or receipts. Missing, corrupt or busy
+state is reported for that project while siblings remain readable. Rollover
+target matching checks both generation and digest; automation's saved generation
+is labeled separately. The status reader opens existing state without creating
+directories or lock files. Independent review findings were corrected.
+
+The earlier full-suite hang was reproduced twice under 15-second watchdogs:
+the malformed-image test entered `CreateProcessW` and did not return. Both
+failure-cleanup tests now inject a failed create at that boundary in test builds
+only, retaining real empty-Job accounting, uncertain ownership and retry checks.
+The release launch path is unchanged. Successful native launch, descendant and
+handle-isolation tests also passed in the full regression run.
+
+Verification: the full CatDesk run passed **1,476 tests / 28 ignored** before
+the final target-identity reporting refinement and status-helper cleanup. The
+final unchanged source then passed **53 focused Web/MCP tests**, strict
+all-target/all-feature root Clippy, formatting, diff checks and build. This is
+full regression evidence plus focused verification of the final refinements,
+not a second full-suite run on the final commit. Exact scope, commands, source,
+binary and log hashes: `docs/acceptance/web_status_tests_20261017.json`. Unchanged
+Wake/Python suites were not rerun. Debug image SHA-256:
+`13353C6445FAB987BA6E7467AAF84C3941A6C456AB7F5E2FDF6896676ED89D27`.
+
+No installed activation, production target change or live rollover occurred.
+GitHub fork workflow re-enable authorization is still pending; no remote CI
+acceptance is claimed. The installed release/recovery and broker transaction
+blockers described below remain open. The next source slice is the existing
+broker's protected pointer switch after package publication, with a retained
+ledger lease, one-attempt marker and exact reader verification. Owner/migration
+acceptance and post-switch launch verification remain required. CatDesk's goal
+is active; existing native project chats do not need to pause for this work.
+
 ## October 17 recurring rollover and connected review publication (TESTED_LOCAL_SOURCE; LIVE PARTIAL)
 
 Source `aa1492c82d47e0edaedc936f26fc6d072b699829`, tree

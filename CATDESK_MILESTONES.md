@@ -1,3 +1,18 @@
+## 2026-10-17 — central rollover progress and native regression (TESTED_LOCAL_SOURCE; MVP PARTIAL)
+
+Source `ec1ec27` adds independent rollover/automation status to the central Web
+registry, including pending responses, handoff progress and stale-generation
+reporting. Rollover status reads do not create state. The native failure test
+hang was reproduced inside Windows' malformed-image launch; test-only failure
+injection now preserves cleanup coverage without that unbounded dependency.
+
+Full regression: 1,476 passed / 28 ignored before the final status refinements.
+Final source: 53 focused Web/MCP tests, strict lint, formatting and build passed.
+Evidence and exact scope: `docs/acceptance/web_status_tests_20261017.json`.
+Installed/live acceptance remains open. Continue the existing broker's protected
+pointer switch after publication, then required owner/migration and launch
+verification. Other project chats need no CatDesk pause; the goal stays active.
+
 ## 2026-10-17 — repeat rollover and connected project reviews (TESTED_LOCAL_SOURCE; MVP PARTIAL)
 
 Source `aa1492c` preserves the original task across later conversation rollovers
