@@ -5875,6 +5875,18 @@ fn bounded_autonomy_continuation_error(value: &str) -> String {
 /// are read independently and can change during this report; only an exact
 /// paired readback may be shown as paired. This never grants delivery authority.
 fn web_project_registry_status(workspace: &Path, registry: &Value) -> Value {
+    web_project_registry_status_with(
+        workspace,
+        registry,
+        crate::operator_facade::registry_rollover_status,
+    )
+}
+
+fn web_project_registry_status_with(
+    workspace: &Path,
+    registry: &Value,
+    rollover_status: impl Fn(&Path, &str) -> Value,
+) -> Value {
     let Some(projects) = registry.get("projects").and_then(Value::as_array) else {
         return json!({"status":"UNAVAILABLE","reason":"REGISTRY_RESPONSE_INVALID"});
     };
@@ -5915,6 +5927,8 @@ fn web_project_registry_status(workspace: &Path, registry: &Value) -> Value {
                 }
                 Err(reason) => json!({"status":"UNAVAILABLE","reason":reason}),
             };
+            let mut rollover = rollover_status(workspace, project_id);
+            annotate_rollover_current_target(&mut rollover, paired_target);
             Some(json!({
                 "projectId":project_id,
                 "registeredConversationUrl":registered_url,
@@ -5922,6 +5936,7 @@ fn web_project_registry_status(workspace: &Path, registry: &Value) -> Value {
                 "wake":wake,
                 "queue":queue,
                 "context":web_project_context_status(workspace, project_id, paired_target),
+                "rollover":rollover,
             }))
         })
         .collect();
@@ -5935,6 +5950,31 @@ fn web_project_registry_status(workspace: &Path, registry: &Value) -> Value {
         "installedAcceptance":"UNVERIFIED",
         "projects":statuses,
     })
+}
+
+fn annotate_rollover_current_target(
+    rollover: &mut Value,
+    paired_target: Option<&ProjectWebTargetV1>,
+) {
+    let Some(object) = rollover.as_object_mut() else {
+        return;
+    };
+    let record_generation = object.get("targetGeneration").and_then(Value::as_u64);
+    let record_digest = object
+        .remove("targetDigest")
+        .and_then(|value| value.as_str().map(str::to_owned));
+    let current = paired_target.and_then(|target| {
+        record_generation
+            .zip(record_digest.as_deref())
+            .map(|(generation, digest)| generation == target.generation && digest == target.sha256)
+    });
+    object.insert("matchesPairedTarget".into(), json!(current));
+    if let Some(automation) = object.get_mut("automation").and_then(Value::as_object_mut) {
+        let observed = automation.get("targetGeneration").and_then(Value::as_u64);
+        let current = paired_target
+            .and_then(|target| observed.map(|generation| generation == target.generation));
+        automation.insert("sameGenerationAsPairedTarget".into(), json!(current));
+    }
 }
 
 fn web_target_status_reason(error: DesignatedChatTargetErrorV1) -> &'static str {
@@ -10118,6 +10158,71 @@ mod tests {
             assert!(!serialized.contains("private beta task"));
             assert!(!serialized.contains("private gamma task"));
         }
+    }
+
+    #[test]
+    fn web_registry_read_keeps_rollover_and_automation_status_per_project() {
+        let registry = json!({"projects":[
+            {"projectId":"alpha"}, {"projectId":"beta"}, {"projectId":"gamma"}
+        ]});
+        let workspace =
+            std::env::temp_dir().join(format!("catdesk-web-registry-read-{}", Uuid::new_v4()));
+        let result =
+            web_project_registry_status_with(&workspace, &registry, |_, project| match project {
+                "alpha" => json!({"status":"DURABLE_SNAPSHOT","phase":"RESPONSE_PENDING",
+                    "automation":{"status":"RECORDED","stage":"AWAITING_RESPONSE"}}),
+                "beta" => json!({"status":"UNAVAILABLE_OR_BUSY","reason":"STATE_UNAVAILABLE"}),
+                "gamma" => json!({"status":"NO_ROLLOVER","phase":"NONE",
+                    "automation":{"status":"RECORDED","stage":"WAKE_STOPPED"}}),
+                _ => unreachable!("unexpected project"),
+            });
+        assert_eq!(result["projects"].as_array().unwrap().len(), 3);
+        assert_eq!(result["projects"][0]["projectId"], "alpha");
+        assert_eq!(
+            result["projects"][0]["rollover"]["phase"],
+            "RESPONSE_PENDING"
+        );
+        assert_eq!(result["projects"][1]["projectId"], "beta");
+        assert_eq!(
+            result["projects"][1]["rollover"]["status"],
+            "UNAVAILABLE_OR_BUSY"
+        );
+        assert_eq!(result["projects"][2]["projectId"], "gamma");
+        assert_eq!(
+            result["projects"][2]["rollover"]["automation"]["stage"],
+            "WAKE_STOPPED"
+        );
+        assert!(result["projects"][0]["rollover"]["matchesPairedTarget"].is_null());
+        assert!(
+            !workspace.exists(),
+            "MCP composition did not create status state"
+        );
+    }
+
+    #[test]
+    fn web_rollover_status_marks_historical_automation_after_rebind() {
+        let target = ProjectWebTargetV1 {
+            project_id: "alpha".into(),
+            url: "https://chatgpt.com/c/current".into(),
+            sha256: "a".repeat(64),
+            generation: 8,
+            historical_urls: Vec::new(),
+        };
+        let mut rollover = json!({"status":"DURABLE_SNAPSHOT","phase":"RESPONSE_PENDING",
+            "targetGeneration":8,"targetDigest":"a".repeat(64),
+            "automation":{"status":"RECORDED","stage":"AWAITING_RESPONSE",
+                "targetGeneration":7}});
+        annotate_rollover_current_target(&mut rollover, Some(&target));
+        assert_eq!(rollover["matchesPairedTarget"], true);
+        assert_eq!(
+            rollover["automation"]["sameGenerationAsPairedTarget"],
+            false
+        );
+        assert!(rollover.get("targetDigest").is_none());
+        let mut same_generation_wrong_digest = json!({"status":"DURABLE_SNAPSHOT",
+            "targetGeneration":8,"targetDigest":"b".repeat(64)});
+        annotate_rollover_current_target(&mut same_generation_wrong_digest, Some(&target));
+        assert_eq!(same_generation_wrong_digest["matchesPairedTarget"], false);
     }
 
     #[cfg(windows)]

@@ -211,22 +211,46 @@ fn directory(path: &Path) -> Result<(), String> {
     plain(path, true)
 }
 
+fn existing_directory(path: &Path) -> Result<(), String> {
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        existing_directory(parent)?;
+    }
+    plain(path, true)
+}
+
 impl ProjectStore {
     fn open(workspace: &Path, project: &str) -> Result<Self, String> {
+        Self::open_with_creation(workspace, project, true)
+    }
+
+    fn open_existing(workspace: &Path, project: &str) -> Result<Self, String> {
+        Self::open_with_creation(workspace, project, false)
+    }
+
+    fn open_with_creation(workspace: &Path, project: &str, create: bool) -> Result<Self, String> {
         if !valid_id(project) {
             return Err("WEB_PROJECT_INVALID".into());
         }
         let root = workspace.join(".catdesk/web-rollovers").join(project);
-        directory(&root)?;
+        if create {
+            directory(&root)?;
+        } else {
+            existing_directory(&root)?;
+        }
         let lock_path = root.join("project.lock");
-        if lock_path
-            .try_exists()
-            .map_err(|_| "WEB_ROLLOVER_LOCK_UNAVAILABLE")?
+        if !create
+            || lock_path
+                .try_exists()
+                .map_err(|_| "WEB_ROLLOVER_LOCK_UNAVAILABLE")?
         {
             plain(&lock_path, false)?;
         }
         let mut options = OpenOptions::new();
-        options.read(true).write(true).create(true).truncate(false);
+        options
+            .read(true)
+            .write(true)
+            .create(create)
+            .truncate(false);
         #[cfg(windows)]
         {
             use std::os::windows::fs::OpenOptionsExt;
@@ -567,8 +591,12 @@ fn read_auto_status(store: &ProjectStore) -> Result<Option<AutoStatus>, String> 
     Ok(Some(status))
 }
 
-pub(super) fn status(workspace: &Path, project: &str) -> Result<Value, String> {
-    let store = ProjectStore::open(workspace, project)?;
+pub(super) fn status_read_only(workspace: &Path, project: &str) -> Result<Value, String> {
+    let store = ProjectStore::open_existing(workspace, project)?;
+    status_from_store(&store, project)
+}
+
+fn status_from_store(store: &ProjectStore, project: &str) -> Result<Value, String> {
     let active = store.active()?;
     let mut result = match &active {
         Some(record) => summary(record),
@@ -589,7 +617,7 @@ pub(super) fn status(workspace: &Path, project: &str) -> Result<Value, String> {
         }
         result["handoffRequest"] = request_summary;
     }
-    result["automation"] = json!(read_auto_status(&store)?);
+    result["automation"] = json!(read_auto_status(store)?);
     Ok(result)
 }
 
@@ -1784,7 +1812,7 @@ mod tests {
         let project = ProjectStore::open(&root, "alpha").unwrap();
         project.save_handoff_request(&request).unwrap();
         drop(project);
-        let pending = status(&root, "alpha").unwrap();
+        let pending = status_read_only(&root, "alpha").unwrap();
         assert!(pending["handoffRequest"]["deliveryProved"].is_null());
         assert!(pending["handoffRequest"]["completionProved"].is_null());
         assert_eq!(pending["handoffRequest"]["handoffCollected"], false);
@@ -1795,7 +1823,7 @@ mod tests {
         project.save(&prepared).unwrap();
         atomic(&project.root.join("active.json"), &prepared.intent_id).unwrap();
         drop(project);
-        let collected = status(&root, "alpha").unwrap();
+        let collected = status_read_only(&root, "alpha").unwrap();
         assert_eq!(collected["handoffRequest"]["deliveryProved"], true);
         assert_eq!(collected["handoffRequest"]["completionProved"], true);
         assert_eq!(collected["handoffRequest"]["handoffCollected"], true);

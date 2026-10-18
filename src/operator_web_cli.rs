@@ -326,6 +326,134 @@ fn target_status(workspace: &Path, project_id: &str) -> Value {
     }
 }
 
+/// The central registry read uses the operator's validated rollover reader,
+/// then projects only durable progress codes. A missing project state must not
+/// create directories or a lock file merely because the registry was read.
+pub(crate) fn registry_rollover_status(workspace: &Path, project: &str) -> Value {
+    match rollover_status_read_only(workspace, project) {
+        Ok(Some(raw)) => registry_rollover_projection(&raw),
+        Ok(None) => json!({"status":"UNOBSERVED","phase":"NONE",
+            "automation":{"status":"UNOBSERVED"}}),
+        Err(_) => json!({"status":"UNAVAILABLE_OR_BUSY","reason":"STATE_UNAVAILABLE"}),
+    }
+}
+
+fn rollover_status_read_only(workspace: &Path, project: &str) -> Result<Option<Value>, String> {
+    if !catdesk_wake::protocol::valid_id(project) {
+        return Err("WEB_PROJECT_INVALID".into());
+    }
+    let root = workspace.join(".catdesk/web-rollovers").join(project);
+    match std::fs::symlink_metadata(&root) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err("WEB_ROLLOVER_STATE_UNAVAILABLE".into()),
+        Ok(_) => {}
+    }
+    rollover::status_read_only(workspace, project).map(Some)
+}
+
+fn operator_rollover_status(workspace: &Path, project: &str) -> Result<Value, String> {
+    Ok(rollover_status_read_only(workspace, project)?
+        .unwrap_or_else(|| json!({"projectId":project,"phase":"NONE","automation":null})))
+}
+
+fn registry_rollover_projection(raw: &Value) -> Value {
+    let Some(phase) = raw.get("phase").and_then(Value::as_str) else {
+        return json!({"status":"UNAVAILABLE_OR_BUSY","reason":"STATE_INVALID"});
+    };
+    if !matches!(
+        phase,
+        "NONE"
+            | "PREPARED"
+            | "SUBMITTING"
+            | "RESPONSE_PENDING"
+            | "CREATED"
+            | "BOUND"
+            | "CONTINUATION_QUEUED"
+    ) {
+        return json!({"status":"UNAVAILABLE_OR_BUSY","reason":"STATE_INVALID"});
+    }
+    let automation = match raw.get("automation") {
+        Some(Value::Object(status)) => {
+            let stage = status.get("stage").and_then(Value::as_str).unwrap_or("");
+            let stage = if matches!(
+                stage,
+                "OBSERVATION_DISABLED"
+                    | "IN_PROGRESS"
+                    | "OBSERVED"
+                    | "WAKE_STOPPED"
+                    | "WAKE_PAUSED"
+                    | "WAKE_HOST_NOT_RUNNING"
+                    | "WAKE_TARGET_CHANGED"
+                    | "AWAITING_BROWSER"
+                    | "AWAITING_QUIESCENCE"
+                    | "AWAITING_RESPONSE"
+                    | "AWAITING_HANDOFF"
+                    | "TASK_ANCHOR_REQUIRED"
+                    | "HANDOFF_REQUESTED"
+                    | "SOURCE_WITNESS_REQUIRED"
+                    | "SUBMISSION_UNKNOWN"
+                    | "ROLLOVER_ADVANCED"
+                    | "ATTENTION"
+            ) {
+                stage
+            } else {
+                "UNKNOWN_STAGE"
+            };
+            let reason = status
+                .get("reason")
+                .and_then(Value::as_str)
+                .filter(|reason| {
+                    reason.len() <= 128
+                        && reason
+                            .bytes()
+                            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+                });
+            json!({"status":"RECORDED","stage":stage,"reason":reason,
+                "tickUtc":status.get("tickUtc").and_then(Value::as_u64),
+                "targetGeneration":status.get("targetGeneration").and_then(Value::as_u64)})
+        }
+        Some(Value::Null) | None => json!({"status":"UNOBSERVED"}),
+        _ => json!({"status":"UNAVAILABLE"}),
+    };
+    let meter = raw
+        .get("contextMeterStatus")
+        .and_then(Value::as_str)
+        .filter(|value| matches!(*value, "PENDING" | "RECORDED" | "RETRY_REQUIRED"));
+    let source_target = raw.get("source");
+    let bound_target = raw.get("boundTarget").filter(|target| target.is_object());
+    let request_target = raw
+        .get("handoffRequest")
+        .and_then(|request| request.get("source"));
+    let observed_target = if matches!(phase, "BOUND" | "CONTINUATION_QUEUED") {
+        bound_target.or(source_target)
+    } else {
+        source_target.or(request_target)
+    };
+    let target_generation = observed_target
+        .and_then(|target| target.get("generation"))
+        .and_then(Value::as_u64);
+    let target_digest = observed_target
+        .and_then(|target| target.get("digest"))
+        .and_then(Value::as_str)
+        .filter(|digest| {
+            digest.len() == 64
+                && digest
+                    .bytes()
+                    .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+        });
+    json!({
+        "status":if phase == "NONE" && raw.get("handoffRequest").is_none() {"NO_ROLLOVER"} else {"DURABLE_SNAPSHOT"},
+        "phase":phase,
+        "targetGeneration":target_generation,
+        "targetDigest":target_digest,
+        "reconciliationRequired":raw.get("reconciliationRequired").and_then(Value::as_bool).unwrap_or(false),
+        "contextMeterStatus":meter,
+        "handoffRequested":raw.get("handoffRequest").is_some_and(Value::is_object),
+        "handoffCollected":raw.get("handoffRequest").and_then(|request| request.get("handoffCollected")).and_then(Value::as_bool),
+        "automation":automation,
+    })
+}
+
 pub(crate) fn execute(action: WebAction, workspace: &Path) -> Result<Value, String> {
     let workspace = workspace
         .canonicalize()
@@ -350,7 +478,7 @@ pub(crate) fn execute(action: WebAction, workspace: &Path) -> Result<Value, Stri
                         "conversationHistory":stored.get("chatgptTargetHistory"),
                         "wake":target_status(&workspace, &project.project_id),
                         "context":context_status(&workspace,&project.project_id),
-                        "rollover":rollover::status(&workspace,&project.project_id)
+                        "rollover":operator_rollover_status(&workspace,&project.project_id)
                             .unwrap_or_else(|_| json!({"status":"UNAVAILABLE_OR_BUSY"})),
                     })
                 })
@@ -434,7 +562,9 @@ pub(crate) fn execute(action: WebAction, workspace: &Path) -> Result<Value, Stri
                 json!({"action":"web_context_observe","pressure":store.pressure(&key)?,"originAuthenticated":false}),
             )
         }
-        WebAction::RolloverStatus { project_id } => rollover::status(&workspace, &project_id),
+        WebAction::RolloverStatus { project_id } => {
+            operator_rollover_status(&workspace, &project_id)
+        }
         WebAction::RolloverHandoffRequest {
             project_id,
             source_task_id,
@@ -588,5 +718,95 @@ mod tests {
             "true",
         ]);
         assert!(parse(&extra).is_err());
+    }
+
+    #[test]
+    fn registry_rollover_projection_exposes_progress_without_private_handoff() {
+        let raw = json!({
+            "phase":"RESPONSE_PENDING",
+            "source":{"url":"https://chatgpt.com/c/private-source"},
+            "receipt":{"assistantText":"private answer"},
+            "handoffRequest":{"handoffCollected":true,"message":"private handoff"},
+            "reconciliationRequired":false,
+            "contextMeterStatus":"PENDING",
+            "automation":{"stage":"WAKE_STOPPED","reason":"WAKE_CONTROL_CHANGED",
+                "tickUtc":123,"targetGeneration":7}
+        });
+        let summary = registry_rollover_projection(&raw);
+        assert_eq!(summary["status"], "DURABLE_SNAPSHOT");
+        assert_eq!(summary["phase"], "RESPONSE_PENDING");
+        assert_eq!(summary["automation"]["stage"], "WAKE_STOPPED");
+        assert_eq!(summary["automation"]["targetGeneration"], 7);
+        assert_eq!(summary["handoffCollected"], true);
+        let encoded = summary.to_string();
+        for private in ["private-source", "private answer", "private handoff"] {
+            assert!(!encoded.contains(private));
+        }
+        let bad = registry_rollover_projection(&json!({
+            "phase":"NONE","automation":{"stage":"C:\\private\\secret.txt",
+                "reason":"C:\\private\\secret.txt"}
+        }));
+        assert_eq!(bad["automation"]["stage"], "UNKNOWN_STAGE");
+        assert!(bad["automation"]["reason"].is_null());
+        assert!(!bad.to_string().contains("secret.txt"));
+        let requested = registry_rollover_projection(&json!({
+            "phase":"NONE","handoffRequest":{"source":{"generation":4},
+                "handoffCollected":false},"automation":null
+        }));
+        assert_eq!(requested["status"], "DURABLE_SNAPSHOT");
+        assert_eq!(requested["phase"], "NONE");
+        assert_eq!(requested["targetGeneration"], 4);
+        assert_eq!(requested["handoffRequested"], true);
+    }
+
+    #[test]
+    fn registry_rollover_status_missing_and_malformed_state_is_local_and_read_only() {
+        let workspace = std::env::temp_dir().join(format!(
+            "catdesk-web-registry-status-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let missing = registry_rollover_status(&workspace, "alpha");
+        assert_eq!(missing["status"], "UNOBSERVED");
+        assert!(
+            !workspace.exists(),
+            "read did not create an absent workspace"
+        );
+        let partial_root = workspace.join(".catdesk/web-rollovers/delta");
+        std::fs::create_dir_all(&partial_root).expect("partial project root");
+        assert!(rollover_status_read_only(&workspace, "delta").is_err());
+        assert!(
+            !partial_root.join("project.lock").exists(),
+            "read did not create a lock"
+        );
+        let project_root = workspace.join(".catdesk/web-rollovers/beta");
+        std::fs::create_dir_all(&project_root).expect("fixture project root");
+        std::fs::write(project_root.join("project.lock"), b"").expect("existing lock");
+        std::fs::write(project_root.join("active.json"), b"not-json").expect("malformed pointer");
+        let malformed = registry_rollover_status(&workspace, "beta");
+        assert_eq!(malformed["status"], "UNAVAILABLE_OR_BUSY");
+        assert_eq!(
+            registry_rollover_status(&workspace, "alpha")["status"],
+            "UNOBSERVED"
+        );
+        let healthy_root = workspace.join(".catdesk/web-rollovers/gamma");
+        std::fs::create_dir_all(&healthy_root).expect("healthy project root");
+        std::fs::write(healthy_root.join("project.lock"), b"").expect("healthy lock");
+        std::fs::write(
+            healthy_root.join("auto-status.json"),
+            serde_json::to_vec(&json!({"schemaVersion":1,"projectId":"gamma",
+                "tickUtc":42,"stage":"WAKE_STOPPED","targetGeneration":3,
+                "reason":"WAKE_CONTROL_CHANGED"}))
+            .unwrap(),
+        )
+        .expect("healthy automation status");
+        let healthy = registry_rollover_status(&workspace, "gamma");
+        assert_eq!(healthy["status"], "NO_ROLLOVER");
+        assert_eq!(healthy["phase"], "NONE");
+        assert_eq!(healthy["automation"]["stage"], "WAKE_STOPPED");
+        assert_eq!(
+            registry_rollover_status(&workspace, "beta")["status"],
+            "UNAVAILABLE_OR_BUSY"
+        );
+        std::fs::remove_dir_all(workspace).expect("fixture cleanup");
     }
 }

@@ -112,6 +112,7 @@ struct ProcessInformation {
 thread_local! {
     static FORCE_JOB_TERMINATE_FAILURE: Cell<bool> = const { Cell::new(false) };
     static FORCE_JOB_ACCOUNTING_FAILURE: Cell<bool> = const { Cell::new(false) };
+    static FORCE_SAME_USER_NATIVE_CREATE_FAILURE: Cell<bool> = const { Cell::new(false) };
     static FORCE_PREPARED_OUTPUT_TAMPER_AFTER_SPAWN: Cell<bool> = const { Cell::new(false) };
 }
 
@@ -1664,26 +1665,20 @@ impl OwnedSuspendedJobChild {
             | CREATE_NO_WINDOW
             | CREATE_UNICODE_ENVIRONMENT
             | EXTENDED_STARTUPINFO_PRESENT;
-        let created = unsafe {
-            match principal {
-                NativeLaunchPrincipal::SameUserDiagnostic => CreateProcessW(
-                    application_wide.as_ptr(),
-                    command_line.as_mut_ptr(),
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                    0,
-                    flags,
-                    environment.as_mut_ptr().cast(),
-                    current_directory.as_ptr(),
-                    &mut startup.startup,
-                    &mut info,
-                ),
-                NativeLaunchPrincipal::Fixed(token) => {
-                    let launch_token = token
-                        .launch_handle()
-                        .map_err(ChildTransitionFailure::Clean)?;
-                    CreateProcessAsUserW(
-                        launch_token.as_raw_handle(),
+        // A test can exercise the failed-create empty-Job proof without
+        // asking Windows to load a deliberately malformed image. On this
+        // host that CreateProcessW call did not return within 15 seconds.
+        #[cfg(test)]
+        let inject_create_failure = matches!(principal, NativeLaunchPrincipal::SameUserDiagnostic)
+            && FORCE_SAME_USER_NATIVE_CREATE_FAILURE.with(Cell::get);
+        #[cfg(not(test))]
+        let inject_create_failure = false;
+        let created = if inject_create_failure {
+            0
+        } else {
+            unsafe {
+                match principal {
+                    NativeLaunchPrincipal::SameUserDiagnostic => CreateProcessW(
                         application_wide.as_ptr(),
                         command_line.as_mut_ptr(),
                         std::ptr::null_mut(),
@@ -1694,7 +1689,25 @@ impl OwnedSuspendedJobChild {
                         current_directory.as_ptr(),
                         &mut startup.startup,
                         &mut info,
-                    )
+                    ),
+                    NativeLaunchPrincipal::Fixed(token) => {
+                        let launch_token = token
+                            .launch_handle()
+                            .map_err(ChildTransitionFailure::Clean)?;
+                        CreateProcessAsUserW(
+                            launch_token.as_raw_handle(),
+                            application_wide.as_ptr(),
+                            command_line.as_mut_ptr(),
+                            std::ptr::null_mut(),
+                            std::ptr::null_mut(),
+                            0,
+                            flags,
+                            environment.as_mut_ptr().cast(),
+                            current_directory.as_ptr(),
+                            &mut startup.startup,
+                            &mut info,
+                        )
+                    }
                 }
             }
         };
@@ -2641,18 +2654,14 @@ mod tests {
     #[test]
     fn failed_creation_time_spawn_proves_empty_job_before_clean_failure() {
         let fixture = PreparationFixture::new();
-        let fake_path = fixture.base.join("fake.exe");
-        let fake_bytes = b"not a Windows executable";
-        fs::write(&fake_path, fake_bytes).expect("fake image fixture");
-        let digest = format!("{:x}", Sha256::digest(fake_bytes));
-        let parent = ProtectedDirectoryGuard::acquire(&fixture.base, LABEL).expect("pin parent");
-        let fake = PinnedSolWorkerExecutableV1::pin(parent, "fake.exe", &digest)
-            .expect("pin diagnostic invalid image");
+        let executable = pin_current_test_executable();
+        FORCE_SAME_USER_NATIVE_CREATE_FAILURE.with(|slot| slot.set(true));
         let result = launch_prepared(
             fixture.prepare().expect("prepare one run"),
-            fake,
+            executable,
             &prepared_helper_inputs("success"),
         );
+        FORCE_SAME_USER_NATIVE_CREATE_FAILURE.with(|slot| slot.set(false));
         match result {
             Err(PreparedSolLifecycleFailure::Clean(reason)) => {
                 assert!(reason.contains("creation-time Job launch failed"));
@@ -2660,9 +2669,8 @@ mod tests {
             Err(PreparedSolLifecycleFailure::Attention(owner)) => {
                 panic!("unexpected uncertain native create: {}", owner.reason)
             }
-            Ok(_) => panic!("invalid image unexpectedly created a child"),
+            Ok(_) => panic!("injected create failure unexpectedly created a child"),
         }
-        fs::remove_file(fake_path).expect("remove exact fake image");
         assert!(fixture.prepare().is_err(), "selected nonce stays spent");
         fixture.cleanup();
     }
@@ -2670,24 +2678,20 @@ mod tests {
     #[test]
     fn failed_native_create_with_unavailable_job_readback_retains_retry_owner() {
         let fixture = PreparationFixture::new();
-        let fake_path = fixture.base.join("fake.exe");
-        let fake_bytes = b"not a Windows executable";
-        fs::write(&fake_path, fake_bytes).expect("fake image fixture");
-        let digest = format!("{:x}", Sha256::digest(fake_bytes));
-        let parent = ProtectedDirectoryGuard::acquire(&fixture.base, LABEL).expect("pin parent");
-        let fake = PinnedSolWorkerExecutableV1::pin(parent, "fake.exe", &digest)
-            .expect("pin diagnostic invalid image");
+        let executable = pin_current_test_executable();
         let selected = fixture.prepare().expect("prepare one run");
         let nonce = selected.nonce.clone();
+        FORCE_SAME_USER_NATIVE_CREATE_FAILURE.with(|slot| slot.set(true));
         FORCE_JOB_ACCOUNTING_FAILURE.with(|slot| slot.set(true));
-        let result = launch_prepared(selected, fake, &prepared_helper_inputs("success"));
+        let result = launch_prepared(selected, executable, &prepared_helper_inputs("success"));
         FORCE_JOB_ACCOUNTING_FAILURE.with(|slot| slot.set(false));
+        FORCE_SAME_USER_NATIVE_CREATE_FAILURE.with(|slot| slot.set(false));
         let attention = match result {
             Err(PreparedSolLifecycleFailure::Attention(owner)) => owner,
             Err(PreparedSolLifecycleFailure::Clean(reason)) => {
                 panic!("uncertain Job readback lost owner: {reason}")
             }
-            Ok(_) => panic!("invalid image unexpectedly created a child"),
+            Ok(_) => panic!("injected create failure unexpectedly created a child"),
         };
         assert_eq!(attention.prepared_run.nonce, nonce);
         assert!(matches!(
@@ -2696,7 +2700,6 @@ mod tests {
                 if owner.creation_failed_without_handle && owner.child.is_none()
         ));
         attention.retry_abort().expect("retry proves empty Job");
-        fs::remove_file(fake_path).expect("remove exact fake image");
         fixture.cleanup();
     }
 
