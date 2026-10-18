@@ -1,3 +1,20 @@
+## 2026-10-17 — retained offline Wake locks and exact-root evidence (TESTED_LOCAL_SOURCE; MVP PARTIAL)
+
+Source `d5e64f6` retains exact selected old-store locks across path and root-handle
+selection and verifies bounded predecessor-pointer/host-image hashes. Seven
+focused native tests and the full Wake suite passed (301 passed / 3 ignored),
+with strict root/Wake lint, formatting and builds on unchanged source. The
+initial sandbox metadata-access failure and unchanged successful rerun are
+preserved in `docs/acceptance/wake_offline_locks_tests_20261017.json`.
+
+File-ID probes recovered both historical roots. Their distinct lock objects
+and this token's shared config/status/control observations are documented in
+the acceptance report; no installed state changed. This prerequisite grants
+no migration authority. First-generation admission, protected genesis pointer,
+owner/launch proof and service wiring remain required for deployment, alongside
+exact CI and reviewed main-release recovery. Live three-project rollover remains
+unaccepted. Other native chats can continue independently; CatDesk remains active.
+
 ## 2026-10-17 — protected Wake pointer switch (TESTED_LOCAL_SOURCE; MVP PARTIAL)
 
 Source `fcabbe3` performs one marked protected pointer replacement after

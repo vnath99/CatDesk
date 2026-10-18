@@ -1,5 +1,42 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 17 retained offline Wake locks and historical-store evidence (TESTED_LOCAL_SOURCE; LIVE PARTIAL)
+
+Source `d5e64f6a0c05a9d555b547d0af919c1ad7e53822` extends the existing offline
+migration module with retained exclusion for a bounded set of exact old-store
+`host.lock` objects. Selection supports paths and already retained root handles,
+including a root recovered by file ID. Physical aliases are checked and only
+the same root/lock pair is deduplicated. The module also reads bounded SHA-256
+from the retained predecessor pointer and host image. Borrowed root handles
+keep their caller's share mode; these checks do not prove complete inventory,
+current launch-path ownership, durable restart prevention or install authority.
+
+Seven focused native tests and the full Wake suite passed: **301 passed / 3
+ignored**. Strict root/Wake lint, formatting and builds passed on unchanged
+source. An initial sandbox run failed in native object inspection in the existing
+installer fixture. The unchanged test and full suite passed outside the sandbox;
+parent-directory metadata restrictions are the diagnosed cause, inferred from
+the paired runs and a separate read-only probe. Both failure
+and successful verification evidence are retained in
+`docs/acceptance/wake_offline_locks_tests_20261017.json`; no check was weakened.
+
+Read-only file-ID probes located both recorded historical roots and their
+different lock objects. In this process/token's handle-relative snapshot,
+`config.json`, `status.json` and `control.json` opened the same respective
+physical objects under both roots. Only the historical root exposed a
+`current.json`, selecting dev84. The observed config has one CatDesk target at
+generation 1 and desired state `STOPPED`. The dev59 status file is stale and is
+not current process evidence. Each leaf was double-read and reopened with
+matching ID/size/hash; this was not an atomic snapshot across files or roots.
+The private evidence filename and hash are recorded in the manifest.
+
+No installed locks, bindings, images or services changed. First-generation V2
+admission, a no-replace protected genesis pointer, owner/launch proof and broker
+service wiring remain open. Exact CI and reviewed main-release recovery also
+remain required. Three-project Web delivery and autonomous rollover are still
+unaccepted. CatDesk's goal is active; other native chats need no reservation or
+pause. Their saved blocked goals are separate from CatDesk's earlier handoff.
+
 ## October 17 protected Wake pointer switch (TESTED_LOCAL_SOURCE; LIVE PARTIAL)
 
 Source `fcabbe3cbb4aa4b0d59a878bcb47fb239517eb82` implements one protected `current.json` switch
