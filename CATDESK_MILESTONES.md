@@ -1,3 +1,20 @@
+## 2026-10-17 — repeat rollover and connected project reviews (TESTED_LOCAL_SOURCE; MVP PARTIAL)
+
+Source `aa1492c` preserves the original task across later conversation rollovers
+and recovers saved handoff publication without duplicating the event. A fixed
+supervisor MCP tool now publishes an exact prepared review invitation to the
+registered project's paired Wake target. Package/disclosure checks, durable
+target binding and event idempotence preserve project isolation. Review caught
+and fixed ownership, retry and first-preparation timing issues. Fifty-four
+distinct focused tests, strict lint, formatting and build passed; see
+`docs/acceptance/web_continuation_tests_20261017.json`.
+
+The authenticated GitHub page confirms disabled fork workflows, with re-enable
+authorization pending. The main installed release lacks valid recovery
+authority; the Wake broker's installation transaction is still unimplemented.
+These live gates do not pause existing project development. Three-project live
+delivery and durable rollover remain unaccepted.
+
 ## 2026-10-17 — automatic Web observation and staged rollover (TESTED_LOCAL_SOURCE; MVP PARTIAL)
 
 The periodic per-project driver now connects context capture, exact handoff

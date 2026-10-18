@@ -37,13 +37,19 @@ These commands do not release or pause an existing native Codex
 conversation. Installed package approval, target alignment and live acceptance
 remain separate requirements; see `docs/OCTOBER_2026_MVP_ACCEPTANCE.md`.
 
+A completed continuation can supply the original task for a later rollover
+only when its saved handoff, native owner, destination, exact USER receipt and
+completed response timer agree. A saved handoff request is published again
+under the same event ID after a pre-publication interruption; it does not create
+a second request or authorize resubmitting an uncertain browser turn.
+
 ## October 16 read-only workspace candidate and Python v2 verification
 
 The source-built CLI accepts `catdesk.exe codex queue workspace-bind-preflight --project-id <registered-id> --workspace <exact-old-root> --new-workspace <absolute-candidate-root> --expected-old-head <lowercase-Git-SHA> --expected-new-head <lowercase-Git-SHA> --expected-binding-sha256 <lowercase-hash> --expected-thread-id <bound-UUID>`. It checks a point-in-time replacement candidate and always reports `BLOCKED_NATIVE_WRITER_RELEASE_UNPROVED`, `registrationMutation:false`, and `launchAuthorized:false` when its prerequisites pass. Ignored entries are counted, not content checked. This command cannot rebind a project or release its native thread writer. The currently registered Bug Bounty root still has `rust_full`, so its Python worktree cannot pass this profile check until an independently safe profile transition; no live transition was made.
 
 Two explicit source profiles, `python_uv_group_dev_touched_v2` and `python_uv_extras_dev_lab_touched_v2`, retain locked offline full pytest and scope Ruff to every changed Python file in the immutable queue review witness. Documentation-only turns make no Ruff claim; deleted or renamed-away Python files, changed toolchain inputs, unsafe paths, and altered command arguments are refused. Existing v1 profiles are unchanged. Bind a profile only through the existing guarded `codex queue profile-bind` flow after the bound chat is quiescent and its exact registered inputs pass; a source test does not authorize a live bind or dispatch.
 
-## October 16 source-only queue review invitation preparation
+## October 17 queue review invitation preparation and publication (source)
 
 After local verification, review-package creation, and a live local disclosure grant, the operator can prepare an exact-package review request:
 
@@ -51,7 +57,23 @@ After local verification, review-package creation, and a live local disclosure g
 catdesk.exe codex queue review-invite-prepare --project-id <id> --workspace <registered root> --receipt-id <uuid> --expected-package-sha256 <lowercase hash>
 ```
 
-The command writes one create-once queue receipt sidecar with the package, project binding and registered Wake-compatible target digest. Every repeat rechecks current registration, package and live disclosure; expiry, revocation, tampering or target drift refuse readback. The record remains `wakePublication=NOT_PUBLISHED`, `independentReview=PENDING`, and `wakeReady=false`. It does not bind a Wake target generation, post an event, deliver to ChatGPT, record a decision/ACK, or authorize another task. A future publisher must prove the installed Wake store, recheck registration and live disclosure, and bind the current target generation before an event can be produced.
+The command writes one create-once queue receipt sidecar with the package, project binding and registered Wake-compatible target digest. Every repeat rechecks current registration, package and live disclosure; expiry, revocation, tampering or target drift refuse readback. The preparation record remains `wakePublication=NOT_PUBLISHED`, `independentReview=PENDING`, and `wakeReady=false`. Preparation alone does not post an event or authorize another task.
+
+Before the first immutable write, preparation now requires the installed Wake
+owner, activation and paired project target, with its timestamp strictly after
+the current generation's cutoff. If binding just changed, wait before preparing.
+An older persisted invitation is preserved and requires a new receipt.
+
+The source now exposes `catdesk_codex_queue_review_invitation_publish` in
+SupervisorOnly Computer/Both MCP mode. Supply exactly `projectId`, `receiptId`
+and `expectedPackageSha256` for that prepared invitation. The publisher
+rechecks package bytes, the active local disclosure grant, project registration
+and installed Wake authority. It durably records the target before queuing the
+fixed review message. Retries retain the original event ID and target;
+`OUTCOME_UNKNOWN` requires reconciliation and never retargets the request.
+`WAKE_EVENT_ACCEPTED` proves queue acceptance only. Delivery, independent review,
+acknowledgement and next-task authorization still need their own evidence.
+Installed publication and three-project live acceptance remain unverified.
 
 ## October 16 source-only queue review disclosure renewal
 

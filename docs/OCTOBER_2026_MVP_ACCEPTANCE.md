@@ -1,5 +1,80 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 17 recurring rollover and connected review publication (TESTED_LOCAL_SOURCE; LIVE PARTIAL)
+
+Source `aa1492c82d47e0edaedc936f26fc6d072b699829`, tree
+`c14240c41f3b1636ffd38bb1547c7f88dae0eb9e`, adds two usable source paths:
+
+- A continuation-only conversation can carry its original task into a later
+  rollover using the saved handoff, exact completed continuation and unchanged
+  native owner. A saved current handoff request retries its original event ID
+  after interruption before publication. Ownership drift refuses a new request;
+  an uncertain browser submission still cannot be resent.
+- Supervisor MCP can publish one exact prepared queue review invitation to its
+  registered project's paired Wake target. Current package/disclosure/binding
+  checks precede a durable target intent and idempotent Wake event. Changed
+  targets or evidence require reconciliation; bounded refusal messages identify
+  missing prerequisites. Preparation checks Wake readiness before its first
+  immutable write. Queue acceptance is separate from delivery, review and any
+  next-task authority.
+
+Verification passed 54 distinct focused tests: 33 Web/operator, 16 context/MCP,
+four invitation tests and one exact Wake publication test. The refusal-classifier
+test was also repeated separately. Independent review findings were fixed and
+rereviewed; strict all-target/all-feature root Clippy, format, diff check and build
+passed on unchanged source. Exact commands, hashes and retained limitations:
+`docs/acceptance/web_continuation_tests_20261017.json`. Debug SHA-256:
+`FED1DA8D3A4ADC2785C158EF9BC2C6AC9DF09D01C28CDE9AF19F9FCDF5913053`.
+The full CatDesk suite was not rerun; its earlier native lifecycle hang remains
+unresolved. Unchanged Wake/Python suites were not rerun in this checkpoint.
+
+No installed activation, production target mutation, live review publication or
+live rollover acceptance occurred. CatDesk's goal remains active. Existing
+native chats need no CatDesk pause: BYOVD continued with a public-case report
+feature (88 passed/one skipped), and Bug Bounty reconciled its full offline
+regression (2,723 passed/30 skipped). Their work remains in their own chats and
+checkouts. PortfolioDesk's October 19 observation window remains independent.
+
+## October 17 authenticated GitHub Actions diagnosis (CI NOT ACCEPTED)
+
+After push `c3c5ffdb37b80c496f5202a75006ebe4787ad189`, the exact commit had
+zero Actions runs and zero check runs. The authenticated repository Actions
+page then displayed **Workflows on this fork have been disabled**, explaining
+that GitHub disables inherited fork workflows to avoid unnecessary compute.
+It offers a repository workflow re-enable button. No setting was changed;
+the user was asked for authorization because the prior investigation was
+limited to read-only checks. The screenshot and visible page text are retained
+privately under `CatDesk_v2/checkpoints/web-auto-oct17/github-actions-disabled.*`.
+
+This observed UI restriction is distinct from the API's enabled repository
+permissions and active workflow state, the historical reported HTTP 422, and
+the missing `workflow_dispatch` trigger. The old 422 response body was not
+preserved and was not recreated by another dispatch. The reviewed workflow has
+push/pull-request triggers and three Windows test jobs. Exact-source CI still
+requires a successful run after normal workflow operation is restored. No
+GitHub Support escalation is established as necessary while the supported
+repository re-enable action remains available.
+
+Fresh live-path inspection also distinguishes missing implementation from
+missing configuration. Normal `wake/install.ps1` and native installer entry
+remain unconditionally disabled outside build/test support. A broker binary
+exists, but its production service ends with
+`WAKE_BROKER_TRANSACTION_GATES_UNAVAILABLE`; the approved install transaction
+is not wired. Provisioning the service alone would not finish installation.
+The main daemon's canonical binary hash differs from its manifest, and its
+only recovery snapshot is `operational_verified`, which the current recovery
+path rejects as reviewed release authority. The supported diagnosis returns
+`RECOVERY_AUTHORITY` / `LKG_AUTHORITY_MISSING`. No manifest, recovery authority,
+installation, service, or project target was changed during this inspection.
+These are live activation blockers; they do not require pausing native project
+development or the CatDesk source goal.
+
+Evidence retention correction: a later helper invocation replaced the private
+`web-auto-oct17/root-web-tests.log` with a newer sandbox-denied fixture run.
+That one historical log no longer matches its hash in the earlier manifest;
+the manifest is retained unchanged as historical evidence. Other earlier logs
+were not overwritten. New source checks use `web-continuation-oct17` filenames.
+
 ## October 17 automatic Web driver checkpoint (TESTED_LOCAL_SOURCE; LIVE PARTIAL)
 
 Source `270bba669270f94c65b6305892769d0dafdd4508`, tree

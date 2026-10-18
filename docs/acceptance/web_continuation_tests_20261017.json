@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "aa1492c82d47e0edaedc936f26fc6d072b699829",
+  "sourceTree": "c14240c41f3b1636ffd38bb1547c7f88dae0eb9e",
+  "localDate": "2026-10-17",
+  "recordedUtc": "2026-10-18T03:00:04.7034585Z",
+  "classification": "TESTED_LOCAL_SOURCE_LIVE_PARTIAL",
+  "sourceFiles": [
+    {
+      "path": "src/mcp.rs",
+      "sha256": "45E94D5EE0FF203B668C3F73DEBBAA42B9080F2892BD59E349FED758A74ADC41"
+    },
+    {
+      "path": "src/operator_codex_cli.rs",
+      "sha256": "E982C1EBDE4900C5A69AB31DA79DFA2367734D5C171435C397BDD87A365B739F"
+    },
+    {
+      "path": "src/operator_codex_cli/queue.rs",
+      "sha256": "5F8D87C38FD20E42177C39BA0A846116DC863FE7A420C915A003778C47946E89"
+    },
+    {
+      "path": "src/operator_codex_cli/queue/review_invite.rs",
+      "sha256": "FB48CE69A373EAEF5F2B7A2A3173A255307AA7FBC105ADE466733266F363F5B9"
+    },
+    {
+      "path": "src/operator_web_auto.rs",
+      "sha256": "0CB3BF1F16F422D43561D1608DCD5C9FA98792F966365F15531E2F5BD7AE4321"
+    },
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "41DB918A5188E9D7902D17334B7B30C195935038F32178B0EA531D8DA799C362"
+    },
+    {
+      "path": "src/wake_protocol_client.rs",
+      "sha256": "C2494E212A394C2E8FA1C84CCCCBDA516C09447FCDBE12435F64E98B8120D5E9"
+    }
+  ],
+  "debugImageSha256": "FED1DA8D3A4ADC2785C158EF9BC2C6AC9DF09D01C28CDE9AF19F9FCDF5913053",
+  "focusedWebTests": {
+    "passed": 33,
+    "failed": 0,
+    "ignored": 0
+  },
+  "focusedContextTests": {
+    "passed": 16,
+    "failed": 0,
+    "ignored": 0
+  },
+  "focusedInvitationTests": {
+    "passed": 4,
+    "failed": 0,
+    "ignored": 0
+  },
+  "focusedWakePublicationTests": {
+    "passed": 1,
+    "failed": 0,
+    "ignored": 0
+  },
+  "focusedMcpRefusalTests": {
+    "passed": 1,
+    "failed": 0,
+    "ignored": 0
+  },
+  "focusedMcpRefusalRepeatedWithinInvitationFilter": true,
+  "uniqueFocusedTests": 54,
+  "strictRootClippy": "PASS_ALL_TARGETS_ALL_FEATURES_WARNINGS_DENIED",
+  "format": "PASS",
+  "build": "PASS",
+  "independentReview": "CONCRETE_FINDINGS_FIXED_AND_REREVIEWED",
+  "initialSandboxRun": "REGISTRY_FIXTURE_ANCESTOR_ACCESS_DENIED_NORMAL_ACCESS_RERUN_PASSED",
+  "supersededVerification": "SOURCE_CHANGED_DURING_FIRST_INTEGRATED_RUN_NOT_FINAL_EVIDENCE",
+  "fullCatDeskSuite": "NOT_RERUN_PRIOR_NATIVE_LIFECYCLE_HANG_REMAINS_UNRESOLVED",
+  "wakeAndPythonSuites": "UNCHANGED_THIS_CHECKPOINT_NOT_RERUN_PRIOR_RESULTS_SEPARATE",
+  "remoteCi": "NOT_ACCEPTED_GITHUB_DISABLED_FORK_BANNER_OBSERVED",
+  "githubWorkflowSettingsChanged": false,
+  "workflowDispatchAttempted": false,
+  "installedActivationPerformed": false,
+  "productionWakeBindingChanged": false,
+  "liveReviewPublicationPerformed": false,
+  "liveRolloverAccepted": false,
+  "installedPointer": "1.0.0-dev.84-02431feba5ed-1c6bcdfcedf0",
+  "installedDesired": "STOPPED",
+  "liveBlockers": [
+    "MAIN_CANONICAL_HASH_MISMATCH_AND_MISSING_REVIEWED_RECOVERY_AUTHORITY",
+    "WAKE_BROKER_TRANSACTION_NOT_IMPLEMENTED",
+    "THREE_PROJECT_WAKE_TARGETS_NOT_ALIGNED",
+    "CHATGPT_CANARY_ASSISTANT_BODY_FAILED_RELOAD"
+  ],
+  "priorEvidenceRetention": "web_auto_tests_20261017.json remains historical; its private root-web-tests.log was replaced by the later failed sandbox run. Other earlier logs are retained. See prior-log-retention-note.txt.",
+  "githubDisabledBannerScreenshotSha256": "9E10D1238FCFE19DB87B3F22969FDE2A83AB34DDF6346110796E6BD6B8EEF7B1",
+  "logs": [
+    {
+      "name": "focused-web-tests.txt",
+      "sha256": "847351A1C1B153A3F577B9C3DDD0A2A69867FDCF0FC9A6A1A3B694B1CE683B14"
+    },
+    {
+      "name": "publisher-review-invitation-tests.log",
+      "sha256": "59A8C0F696270E1F9DEDD1BEF1F99C109E490C14BC167B956C6A72B48203BBBD"
+    },
+    {
+      "name": "publisher-wake-publication-test.log",
+      "sha256": "E5AAD282265CF4AE7020AC3FE1B4CE0F17A0640AA448AB69F8AACF97586F5E44"
+    },
+    {
+      "name": "publisher-mcp-refusal-test.log",
+      "sha256": "EAB4D4B33C211DD7BFE07DF6719BBD851E55D020DA64793B32EC237269E91C31"
+    },
+    {
+      "name": "20261018T025851Z-web-context.log",
+      "sha256": "2ECA0FF071747B1ACBE342E8F786BBFA7C06D546D9F33B2DD5566C55F5AA0D49"
+    },
+    {
+      "name": "20261018T025851Z-clippy.log",
+      "sha256": "B0009FD42ED711994DA1FF71732FDE7AB3AA9AF252CBEAD9257A51AD52AB3FC8"
+    },
+    {
+      "name": "20261018T025851Z-format.log",
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "name": "20261018T025851Z-build.log",
+      "sha256": "324A465F6D254D8B4B4D034CFC95ACF278AD7C98F1CDCCDE1B9214F240A41FE1"
+    }
+  ],
+  "reproductionCommands": {
+    "web": "cargo test --locked --offline --all-features --bin catdesk operator_facade::web -- --test-threads=1",
+    "context": "cargo test --locked --offline --all-features --bin catdesk web_ -- --test-threads=1",
+    "invitation": "cargo test --quiet --bin catdesk review_invitation -- --nocapture",
+    "wakePublication": "cargo test --quiet --bin catdesk invitation_publication_reuses_exact_event_and_refuses_retargeting -- --nocapture",
+    "mcpRefusal": "cargo test --quiet --bin catdesk review_invitation_refusals_expose_only_bounded_prerequisites -- --nocapture",
+    "clippy": "cargo clippy --locked --offline --all-targets --all-features -- -D warnings",
+    "format": "cargo fmt --all -- --check",
+    "build": "cargo build --locked --offline --all-features --bin catdesk"
+  }
+}
