@@ -3,8 +3,8 @@ use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::fs::{self, OpenOptions};
 use std::hash::{Hash, Hasher};
@@ -5528,6 +5528,22 @@ async fn handle_autonomy_supervisor_mcp_tool(
 ) -> JsonRpcResponse {
     let tool_name = tool_name_from_request(req);
     let args = tool_arguments(req);
+    if tool_name == "autonomy_project_registry_read" {
+        return match handle_autonomy_mcp_tool(&tool_name, args, Path::new(workspace_root)) {
+            Ok(mut structured) => {
+                let web = web_project_registry_status(Path::new(workspace_root), &structured);
+                if let Some(object) = structured.as_object_mut() {
+                    object.insert("webProjects".into(), web);
+                }
+                tool_success_response_with_structured(
+                    req,
+                    "autonomy project registry and Web status read".into(),
+                    structured,
+                )
+            }
+            Err(error) => tool_error_response(req, format!("Autonomy MCP error: {error}")),
+        };
+    }
     if tool_name == "autonomy_session_start" {
         let session_id = match args.get("sessionId").and_then(Value::as_str) {
             Some(value) => value.to_owned(),
@@ -5758,6 +5774,243 @@ fn bounded_autonomy_continuation_error(value: &str) -> String {
     let mut bounded = value.replace(['\r', '\n'], " ");
     bounded.truncate(MAX_BYTES);
     bounded
+}
+
+/// Registry fields are the control-plane snapshot. Wake and the context ledger
+/// are read independently and can change during this report; only an exact
+/// paired readback may be shown as paired. This never grants delivery authority.
+fn web_project_registry_status(workspace: &Path, registry: &Value) -> Value {
+    let Some(projects) = registry.get("projects").and_then(Value::as_array) else {
+        return json!({"status":"UNAVAILABLE","reason":"REGISTRY_RESPONSE_INVALID"});
+    };
+    let wake_progress = load_wake_progress_snapshot(workspace);
+    let statuses: Vec<Value> = projects
+        .iter()
+        .filter_map(|project| {
+            let project_id = project.get("projectId")?.as_str()?;
+            let registered_url = project.get("chatgptTargetUrl").and_then(Value::as_str);
+            let registered_digest = project.get("chatgptTargetSha256").and_then(Value::as_str);
+            let history = project
+                .get("chatgptTargetHistory")
+                .cloned()
+                .unwrap_or_else(|| json!([]));
+            let paired = operator_read_project_web_target(workspace, project_id);
+            let wake = match &paired {
+                Ok(Some(target))
+                    if registered_url == Some(target.url.as_str())
+                        && registered_digest == Some(target.sha256.as_str()) =>
+                {
+                    json!({"status":"PAIRED","target":target,"deliveryProved":false})
+                }
+                Ok(None) if registered_url.is_none() && registered_digest.is_none() => {
+                    json!({"status":"UNBOUND","deliveryProved":false})
+                }
+                Ok(_) => json!({"status":"ATTENTION","reason":"REGISTRY_CHANGED_DURING_READ","deliveryProved":false}),
+                Err(error) => json!({"status":"ATTENTION","reason":web_target_status_reason(*error),"deliveryProved":false}),
+            };
+            let paired_target = match &paired {
+                Ok(Some(target)) if wake.get("status").and_then(Value::as_str) == Some("PAIRED") => {
+                    Some(target)
+                }
+                _ => None,
+            };
+            let queue = match &wake_progress {
+                Ok((events, deliveries)) => {
+                    wake_project_progress(project_id, events, deliveries)
+                }
+                Err(reason) => json!({"status":"UNAVAILABLE","reason":reason}),
+            };
+            Some(json!({
+                "projectId":project_id,
+                "registeredConversationUrl":registered_url,
+                "conversationHistory":history,
+                "wake":wake,
+                "queue":queue,
+                "context":web_project_context_status(workspace, project_id, paired_target),
+            }))
+        })
+        .collect();
+    if statuses.len() != projects.len() {
+        return json!({"status":"UNAVAILABLE","reason":"REGISTRY_RESPONSE_INVALID"});
+    }
+    json!({
+        "status":"SOURCE_STATUS_ONLY",
+        "readOnly":true,
+        "deliveryProved":false,
+        "installedAcceptance":"UNVERIFIED",
+        "projects":statuses,
+    })
+}
+
+fn web_target_status_reason(error: DesignatedChatTargetErrorV1) -> &'static str {
+    match error {
+        DesignatedChatTargetErrorV1::InvalidUrl => "INVALID_CONVERSATION_URL",
+        DesignatedChatTargetErrorV1::Stale => "STALE_TARGET_WITNESS",
+        DesignatedChatTargetErrorV1::ProtectedStateMismatch => "REGISTRY_WAKE_MISMATCH",
+        DesignatedChatTargetErrorV1::SynchronizationFailure => "TARGET_SYNCHRONIZATION_REQUIRED",
+        DesignatedChatTargetErrorV1::Unavailable => "TARGET_AUTHORITY_UNAVAILABLE",
+    }
+}
+
+fn web_project_context_status(
+    workspace: &Path,
+    project_id: &str,
+    paired_target: Option<&ProjectWebTargetV1>,
+) -> Value {
+    let root = workspace.join(".catdesk/web-context");
+    if ![
+        root.as_path(),
+        &root.join("projects"),
+        &root.join("conversations"),
+    ]
+    .iter()
+    .all(|path| path.is_dir())
+    {
+        return json!({"status":"UNOBSERVED","advisory":true});
+    }
+    let result = crate::web_conversation_context::WebContextStore::open(&root).and_then(|store| {
+        let active = store.active_key(project_id)?;
+        let history = store.project_history(project_id)?;
+        Ok((active, history))
+    });
+    let Ok((active, history)) = result else {
+        return json!({"status":"UNOBSERVED_OR_UNAVAILABLE","advisory":true});
+    };
+    let matches_paired = paired_target.is_some_and(|target| {
+        active.as_ref().is_some_and(|key| {
+            key.project_id == target.project_id
+                && key.conversation_url == target.url
+                && key.target_generation == target.generation
+        })
+    });
+    let current = if matches_paired {
+        history.iter().find(|pressure| pressure.is_current).cloned()
+    } else {
+        None
+    };
+    let count = history.len();
+    let recent: Vec<_> = history.into_iter().rev().take(8).collect();
+    json!({
+        "status":if matches_paired {"CURRENT_ADVISORY"} else {"STALE_OR_UNPAIRED_ADVISORY"},
+        "advisory":true,
+        "conversationCount":count,
+        "historyTruncated":count > recent.len(),
+        "currentPressure":current,
+        "recentConversations":recent,
+    })
+}
+
+/// Queue and delivery records are durable Wake state. We expose identifiers,
+/// phases, and counts only; event messages and browser contents stay private.
+fn load_wake_progress_snapshot(
+    workspace: &Path,
+) -> Result<
+    (
+        Vec<catdesk_wake::protocol::Event>,
+        Vec<catdesk_wake::store::Delivery>,
+    ),
+    &'static str,
+> {
+    if !crate::wake_protocol_client::selected(workspace) {
+        return Err("INDEPENDENT_WAKE_NOT_SELECTED");
+    }
+    let root = catdesk_wake::runtime::default_root().map_err(|_| "WAKE_ROOT_UNAVAILABLE")?;
+    if ![
+        root.as_path(),
+        &root.join("config.json"),
+        &root.join("queue"),
+        &root.join("deliveries"),
+    ]
+    .iter()
+    .all(|path| path.exists())
+    {
+        return Err("WAKE_STATE_UNAVAILABLE");
+    }
+    let store = catdesk_wake::store::Store::open(&root).map_err(|_| "WAKE_STATE_UNAVAILABLE")?;
+    store.config().map_err(|_| "WAKE_STATE_UNAVAILABLE")?;
+    let events = store.events().map_err(|_| "WAKE_QUEUE_UNAVAILABLE")?;
+    let mut deliveries = Vec::new();
+    for entry in
+        fs::read_dir(store.root().join("deliveries")).map_err(|_| "WAKE_PROGRESS_UNAVAILABLE")?
+    {
+        let entry = entry.map_err(|_| "WAKE_PROGRESS_UNAVAILABLE")?;
+        if entry.path().extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let id = entry.file_name();
+        let Some(id) = Path::new(&id).file_stem().and_then(|value| value.to_str()) else {
+            return Err("WAKE_PROGRESS_UNAVAILABLE");
+        };
+        if !catdesk_wake::protocol::valid_id(id) || deliveries.len() >= 10_000 {
+            return Err("WAKE_PROGRESS_UNAVAILABLE");
+        }
+        let delivery = store
+            .delivery(id)
+            .map_err(|_| "WAKE_PROGRESS_UNAVAILABLE")?
+            .ok_or("WAKE_PROGRESS_UNAVAILABLE")?;
+        deliveries.push(delivery);
+    }
+    Ok((events, deliveries))
+}
+
+fn wake_project_progress(
+    project_id: &str,
+    events: &[catdesk_wake::protocol::Event],
+    deliveries: &[catdesk_wake::store::Delivery],
+) -> Value {
+    let mut queued = 0usize;
+    let mut phases = BTreeMap::<String, usize>::new();
+    let mut recent = HashMap::<String, (u64, Value)>::new();
+    for event in events.iter().filter(|event| event.project_id == project_id) {
+        queued += 1;
+        recent.insert(
+            event.event_id.clone(),
+            (
+                event.created_utc,
+                json!({
+                    "eventId":event.event_id,
+                    "eventType":event.event_type,
+                    "createdUtc":event.created_utc,
+                    "targetGeneration":event.target_generation,
+                    "phase":"QUEUED",
+                    "receiptObserved":false,
+                }),
+            ),
+        );
+    }
+    for delivery in deliveries
+        .iter()
+        .filter(|delivery| delivery.event.project_id == project_id)
+    {
+        let phase = serde_json::to_value(&delivery.phase)
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_owned))
+            .unwrap_or_else(|| "UNKNOWN".into());
+        *phases.entry(phase.clone()).or_default() += 1;
+        recent.insert(
+            delivery.event.event_id.clone(),
+            (
+                delivery.updated_utc,
+                json!({
+                    "eventId":delivery.event.event_id,
+                    "eventType":delivery.event.event_type,
+                    "createdUtc":delivery.event.created_utc,
+                    "targetGeneration":delivery.event.target_generation,
+                    "phase":phase,
+                    "receiptObserved":delivery.receipt.is_some(),
+                }),
+            ),
+        );
+    }
+    let mut recent: Vec<_> = recent.into_values().collect();
+    recent.sort_by(|left, right| right.0.cmp(&left.0));
+    json!({
+        "status":"DURABLE_SNAPSHOT",
+        "queuedCount":queued,
+        "deliveryPhaseCounts":phases,
+        "recentEvents":recent.into_iter().take(8).map(|(_, event)| event).collect::<Vec<_>>(),
+        "recentEventsLimit":8,
+    })
 }
 
 fn autonomy_contract_model_id(workspace: &Path, session_id: &str) -> Result<String, String> {
