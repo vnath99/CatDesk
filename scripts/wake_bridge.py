@@ -22,6 +22,7 @@ MAX_BRIDGE_BYTES = 256 * 1024
 MAX_OWNER_SELECTOR_BYTES = 1024
 MAX_USER_MESSAGES = 512
 MAX_USER_MESSAGE_CHARS = 16 * 1024
+NEW_CONVERSATION_HOME = "https://chatgpt.com/"
 EDITOR_SELECTORS = (
     "#prompt-textarea",
     "div.ProseMirror[contenteditable='true']",
@@ -131,6 +132,26 @@ def normalize_message(value: str) -> str:
     return " ".join(value.split())
 def digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+def compose_bootstrap_message(project_id: str, intent_id: str, source_url: str, handoff: str) -> str:
+    """Build the exact message Rust must hash before authorizing one submit."""
+    if (not all(isinstance(value, str) and SAFE_ID.fullmatch(value)
+                for value in (project_id, intent_id)) or
+            not isinstance(handoff, str) or not handoff.strip()):
+        raise Attention("BOOTSTRAP_REQUEST_INVALID")
+    canonical = canonical_conversation_url(source_url)
+    if canonical != source_url:
+        raise Attention("BOOTSTRAP_SOURCE_INVALID")
+    message = (
+        "CatDesk project rollover bootstrap.\n"
+        f"Project: {project_id}\n"
+        f"Intent: {intent_id}\n"
+        f"Predecessor: {canonical}\n\n"
+        f"{handoff}"
+    )
+    if len(message) > MAX_USER_MESSAGE_CHARS or len(message.encode("utf-8")) > MAX_USER_MESSAGE_CHARS:
+        raise Attention("BOOTSTRAP_MESSAGE_TOO_LONG")
+    return message
 
 def bridge_sha256(path: Path) -> str:
     try:
@@ -1297,6 +1318,7 @@ class CdpSink:
         expected_message: str,
         *,
         observer: Callable[[str], None] | None = None,
+        allow_retry: bool = True,
         monotonic=time.monotonic,
         sleeper=time.sleep,
     ) -> None:
@@ -1419,6 +1441,8 @@ class CdpSink:
 
             if timeout_count != 1 or retry_count != 1:
                 raise PostSubmitUnknown("RESPONSE_TIMEOUT_RETRY_AMBIGUOUS")
+            if not allow_retry:
+                raise PostSubmitUnknown("BOOTSTRAP_RESPONSE_RETRY_REQUIRED")
             if retries >= RESPONSE_MAX_RETRIES:
                 raise PostSubmitUnknown("RESPONSE_RETRY_EXHAUSTED")
 
@@ -2039,6 +2063,199 @@ class CdpSink:
                     raise
                 time.sleep(READINESS_POLL_SECONDS)
         raise Attention("BROWSER_NETWORK_ERROR")
+
+class NewConversationSink(CdpSink):
+    """One owned, empty ChatGPT home -> one issued conversation; never binds Wake."""
+
+    def __init__(self, source_url: str, profile: Path, ui_timeout: float, submit_timeout: float):
+        super().__init__(source_url, profile, ui_timeout, submit_timeout)
+        self.source_url = self.url
+        self.destination_url: str | None = None
+
+    @staticmethod
+    def visible_role_counts(cdp: Any) -> tuple[int, int, int]:
+        """Read bounded structural counts only; no transcript text leaves CDP."""
+        script = """(() => {
+            const visible = element => {
+                const style = window.getComputedStyle(element);
+                return element.getClientRects().length > 0 &&
+                    style.visibility !== 'hidden' && style.display !== 'none';
+            };
+            const count = selector => Array.from(new Set(
+                document.querySelectorAll(selector)
+            )).filter(visible).length;
+            return [
+                count("[data-message-author-role='user'], article[data-turn='user']"),
+                count("[data-message-author-role='assistant'], article[data-turn='assistant']"),
+                count("[data-content-search-turn-key], [data-testid^='conversation-turn-'], article[id^='conversation-turn-']"),
+            ];
+        })()"""
+        try:
+            value = CdpSink.cdp_value(cdp.evaluate(script))
+        except Exception as error:
+            raise Attention("BOOTSTRAP_TURN_QUERY_FAILED") from error
+        if (not isinstance(value, list) or len(value) != 3 or
+                any(not isinstance(count, int) or isinstance(count, bool) or count < 0 or count > MAX_USER_MESSAGES
+                    for count in value)):
+            raise Attention("BOOTSTRAP_TURN_QUERY_FAILED")
+        return value[0], value[1], value[2]
+
+    @staticmethod
+    def visible_message_snapshot(cdp: Any) -> dict[str, Any]:
+        """Return only a bounded visible role transcript for an explicit private request."""
+        script = """(() => {
+            const visible = element => {
+                const style = window.getComputedStyle(element);
+                return element.getClientRects().length > 0 &&
+                    style.visibility !== 'hidden' && style.display !== 'none';
+            };
+            const roles = Array.from(document.querySelectorAll(
+                "[data-message-author-role='user'], [data-message-author-role='assistant']"
+            )).filter(visible);
+            const articles = Array.from(document.querySelectorAll(
+                "article[data-turn='user'], article[data-turn='assistant']"
+            )).filter(visible);
+            const nodes = roles.length ? roles : articles;
+            if (nodes.length > 128) return ['invalid', []];
+            return [nodes.length > 16, nodes.slice(-16).map(node => {
+                const role = node.getAttribute('data-message-author-role') || node.getAttribute('data-turn');
+                const content = node.querySelector('[data-message-content], .whitespace-pre-wrap') || node;
+                const text = content.innerText || content.textContent || '';
+                return [role, String(text).slice(-4096)];
+            })];
+        })()"""
+        try:
+            value = CdpSink.cdp_value(cdp.evaluate(script))
+        except Exception as error:
+            raise Attention("SOURCE_SNAPSHOT_QUERY_FAILED") from error
+        if (not isinstance(value, list) or len(value) != 2 or
+                not isinstance(value[0], bool) or not isinstance(value[1], list) or
+                len(value[1]) > 16):
+            raise Attention("SOURCE_SNAPSHOT_QUERY_FAILED")
+        truncated = value[0]
+        remaining = 8192
+        messages = []
+        for item in reversed(value[1]):
+            if (not isinstance(item, list) or len(item) != 2 or
+                    item[0] not in {"user", "assistant"} or
+                    not isinstance(item[1], str) or len(item[1]) > 4096):
+                raise Attention("SOURCE_SNAPSHOT_QUERY_FAILED")
+            text_bytes = item[1].encode("utf-8")
+            clipped = text_bytes[:min(4096, remaining)].decode("utf-8", errors="ignore")
+            if len(text_bytes) > len(clipped.encode("utf-8")):
+                truncated = True
+            if not clipped and text_bytes:
+                break
+            remaining -= len(clipped.encode("utf-8"))
+            messages.append({"role": item[0].upper(), "text": clipped})
+            if remaining == 0:
+                truncated = True
+                break
+        messages.reverse()
+        return {"messages": messages, "truncated": truncated}
+
+    def check_empty_home(self, cdp: Any) -> None:
+        try:
+            current = str(cdp.get_current_url())
+        except Exception as error:
+            raise Attention("BOOTSTRAP_HOME_DRIFT") from error
+        if current != NEW_CONVERSATION_HOME:
+            raise Attention("BOOTSTRAP_HOME_DRIFT")
+        if self.error(cdp, current):
+            raise Attention("BROWSER_NETWORK_ERROR")
+        if any(self.visible(cdp, selector) for selector in LOGIN):
+            raise Attention("LOGIN_OR_PROFILE_REQUIRED")
+        if any(self.visible(cdp, selector) for selector in CAPTCHA):
+            raise Attention("CAPTCHA_OR_SECURITY_CHECK")
+        if any(self.visible(cdp, selector) for selector in STOP):
+            raise Attention("CHATGPT_NOT_IDLE")
+        if self.document_ready_state(cdp) == "loading":
+            raise Attention("BOOTSTRAP_HOME_NOT_READY")
+        editor_status, editor_empty = self.editor_state(cdp)
+        if editor_status != "ready":
+            raise Attention("BOOTSTRAP_HOME_NOT_READY")
+        if not editor_empty:
+            raise Attention("EXISTING_DRAFT")
+        if any(self.visible_role_counts(cdp)):
+            raise Attention("BOOTSTRAP_HOME_HAS_TURNS")
+
+    def open_empty_home(self, cdp: Any, *, monotonic=time.monotonic, sleeper=time.sleep) -> None:
+        try:
+            cdp.get(NEW_CONVERSATION_HOME)
+        except Exception as error:
+            raise Attention("BOOTSTRAP_HOME_NAVIGATION_FAILED") from error
+        deadline = monotonic() + self.ui_timeout
+        while monotonic() < deadline:
+            try:
+                self.check_empty_home(cdp)
+                return
+            except Attention as error:
+                if str(error) != "BOOTSTRAP_HOME_NOT_READY":
+                    raise
+            sleeper(READINESS_POLL_SECONDS)
+        raise Attention("BOOTSTRAP_HOME_NOT_READY")
+
+    def check_typed_home(self, cdp: Any, message: str) -> None:
+        """Repeat home and exact-draft guards on both sides of parent ack."""
+        try:
+            current = str(cdp.get_current_url())
+        except Exception as error:
+            raise Attention("BOOTSTRAP_HOME_DRIFT") from error
+        if current != NEW_CONVERSATION_HOME:
+            raise Attention("BOOTSTRAP_HOME_DRIFT")
+        if self.error(cdp, current):
+            raise Attention("BROWSER_NETWORK_ERROR")
+        if any(self.visible(cdp, selector) for selector in LOGIN):
+            raise Attention("LOGIN_OR_PROFILE_REQUIRED")
+        if any(self.visible(cdp, selector) for selector in CAPTCHA):
+            raise Attention("CAPTCHA_OR_SECURITY_CHECK")
+        if any(self.visible(cdp, selector) for selector in STOP):
+            raise Attention("CHATGPT_NOT_IDLE")
+        if any(self.visible_role_counts(cdp)):
+            raise Attention("BOOTSTRAP_HOME_HAS_TURNS")
+        status, empty = self.editor_state(cdp)
+        if status != "ready" or empty:
+            raise Attention("BOOTSTRAP_EDITOR_DRIFT")
+        if normalize_message(self.text(cdp)) != normalize_message(message):
+            raise Attention("BOOTSTRAP_DRAFT_DRIFT")
+
+    def latch_issued_url(self, cdp: Any, *, monotonic=time.monotonic, sleeper=time.sleep) -> str:
+        """Latch only a browser-issued, canonical conversation ID unlike source."""
+        deadline = monotonic() + max(self.submit_timeout, POST_SUBMIT_RECEIPT_WINDOW_SECONDS)
+        while monotonic() < deadline:
+            try:
+                current = str(cdp.get_current_url())
+            except Exception as error:
+                raise PostSubmitUnknown("BOOTSTRAP_URL_QUERY_FAILED") from error
+            if current == NEW_CONVERSATION_HOME:
+                sleeper(READINESS_POLL_SECONDS)
+                continue
+            try:
+                canonical = canonical_conversation_url(current)
+            except Attention as error:
+                raise PostSubmitUnknown("BOOTSTRAP_URL_INVALID") from error
+            if canonical != current:
+                raise PostSubmitUnknown("BOOTSTRAP_URL_INVALID")
+            identity = conversation_identity(canonical)
+            if identity == conversation_identity(self.source_url):
+                raise PostSubmitUnknown("BOOTSTRAP_SOURCE_REVISITED")
+            if self.destination_url is not None and identity != conversation_identity(self.destination_url):
+                raise PostSubmitUnknown("BOOTSTRAP_DESTINATION_DRIFT")
+            self.destination_url = canonical
+            self.url = canonical
+            return canonical
+        raise PostSubmitUnknown("BOOTSTRAP_URL_UNISSUED")
+
+    def prove_single_bootstrap_user(self, cdp: Any, message: str) -> None:
+        """After a fresh document, require exactly one full USER digest."""
+        expected = digest(normalize_message(message))
+        try:
+            user_digests = self.user_message_digests(cdp)
+            users, assistants, _turns = self.visible_role_counts(cdp)
+        except Attention as error:
+            raise PostSubmitUnknown("BOOTSTRAP_RECEIPT_QUERY_FAILED") from error
+        if user_digests != [expected] or users > 1 or assistants > 1:
+            raise PostSubmitUnknown("BOOTSTRAP_RECEIPT_SEQUENCE_DRIFT")
 
 def delivery_from_raw(value: Any) -> Delivery | None:
     if not isinstance(value, dict): return None
