@@ -4,7 +4,9 @@
 use crate::{
     delegated::autonomy_projects::{AutonomousProjectRegistryStoreV1, AutonomousProjectV1},
     mcp,
-    web_conversation_context::{ConversationKey, Observation, VisibleSourceKind, WebContextStore},
+    web_conversation_context::{
+        ConversationKey, Observation, PressureStatus, VisibleSourceKind, WebContextStore,
+    },
     web_work_state::WorkLedger,
 };
 use catdesk_wake::{
@@ -234,9 +236,13 @@ fn continuation_ready_for_work(
     record: &Record,
 ) -> Result<(), String> {
     if record.phase != Phase::ContinuationQueued
-        || record.context_meter_status != ContextMeterStatus::Recorded
+        || record.context_meter_status == ContextMeterStatus::Pending
         || record.bound_target.as_ref() != Some(current)
         || record.handoff_event_id.is_none()
+        || (record.context_meter_status == ContextMeterStatus::RetryRequired
+            && (record.reconciliation_reason.is_some()
+                || !record.source_snapshot_verified
+                || record.source_fingerprint.is_none()))
     {
         return Err("WEB_WORK_ROLLOVER_PENDING".into());
     }
@@ -264,41 +270,76 @@ fn continuation_ready_for_work(
     Ok(())
 }
 
+fn completed_retry_context_allows_work(
+    pressure: Option<&PressureStatus>,
+    record: &Record,
+    current: &Target,
+) -> bool {
+    let Some(pressure) = pressure else {
+        return false;
+    };
+    // A failed advisory observation can leave the new key active. It must
+    // still be free of its own pending rollover before another task starts.
+    if pressure.key == key(&record.project_id, current) {
+        return pressure.rollover_intent.is_none();
+    }
+    // If binding the meter failed, only the exact predecessor request may
+    // remain active. The caller has already proved the new paired target and
+    // completed continuation before this exception is considered.
+    pressure.key == key(&record.project_id, &record.source)
+        && pressure.rollover_intent.as_ref().is_some_and(|intent| {
+            intent.intent_id == record.intent_id
+                && intent.key == pressure.key
+                && intent.target_sha256 == record.source.digest
+                && intent.source_task_id == record.source_task_id
+                && intent.status == "REQUESTED"
+        })
+}
+
 pub(crate) fn acquire_web_work_lease(workspace: &Path, project: &str) -> Result<WorkLease, String> {
     let store = ProjectStore::open(workspace, project)?;
-    // A new context intent can precede its handoff file, including after a
-    // previous rollover completed. Reserve either crash window for recovery.
-    let context_root = workspace.join(".catdesk/web-context");
-    if context_root
-        .try_exists()
-        .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
-    {
-        let meter =
-            WebContextStore::open(&context_root).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
-        if let Some(key) = meter
-            .active_key(project)
-            .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
-            && meter
-                .pressure(&key)
-                .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
-                .rollover_intent
-                .is_some()
-        {
-            return Err("WEB_WORK_ROLLOVER_PENDING".into());
-        }
-    }
-    let approved_target = match store.active()? {
+    let active = store.active()?;
+    let approved_target = match active.as_ref() {
         None if store.handoff_request()?.is_none() => None,
         Some(record) if record.phase == Phase::ContinuationQueued => {
             let current = paired(workspace, project).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
             let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)
                 .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
             let wake = Store::open(&root).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
-            continuation_ready_for_work(&store, &wake, workspace, project, &current, &record)?;
+            continuation_ready_for_work(&store, &wake, workspace, project, &current, record)?;
             Some(current)
         }
         _ => return Err("WEB_WORK_ROLLOVER_PENDING".into()),
     };
+    // A new context intent can precede its handoff file, including after a
+    // previous rollover completed. Sample its active key and intent together.
+    let context_root = workspace.join(".catdesk/web-context");
+    let pressure = if context_root
+        .try_exists()
+        .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
+    {
+        WebContextStore::open(&context_root)
+            .and_then(|meter| meter.active_pressure(project))
+            .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
+    } else {
+        None
+    };
+    match (active.as_ref(), approved_target.as_ref()) {
+        (Some(record), Some(current))
+            if record.context_meter_status == ContextMeterStatus::RetryRequired =>
+        {
+            if !completed_retry_context_allows_work(pressure.as_ref(), record, current) {
+                return Err("WEB_WORK_ROLLOVER_PENDING".into());
+            }
+        }
+        _ if pressure
+            .as_ref()
+            .is_some_and(|value| value.rollover_intent.is_some()) =>
+        {
+            return Err("WEB_WORK_ROLLOVER_PENDING".into());
+        }
+        _ => {}
+    }
     Ok(WorkLease {
         _store: store,
         approved_target,
@@ -1978,11 +2019,63 @@ fn execute_with_mode(workspace: &Path, project: &str, automatic: bool) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(windows)]
+    use catdesk_wake::development_runtime;
     use catdesk_wake::{protocol::Event, store::Receipt};
     fn fixture() -> PathBuf {
         let path = std::env::temp_dir().join(format!("web-rollover-{}", uuid::Uuid::new_v4()));
         fs::create_dir(&path).unwrap();
         path
+    }
+    #[cfg(windows)]
+    fn git_fixture(path: &Path, origin: &str) -> PathBuf {
+        fs::create_dir_all(path).unwrap();
+        for args in [
+            &["init", "-q"][..],
+            &["remote", "add", "origin", origin][..],
+        ] {
+            assert!(
+                std::process::Command::new("git")
+                    .arg("-C")
+                    .arg(path)
+                    .args(args)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
+        path.canonicalize().unwrap()
+    }
+    #[cfg(windows)]
+    fn prepared_dev_fixture(parent: &Path) -> (PathBuf, PathBuf) {
+        let control = parent.join("control");
+        let package = parent.join("package");
+        let python = parent.join("python");
+        fs::create_dir(&control).unwrap();
+        fs::create_dir(&package).unwrap();
+        fs::create_dir(&python).unwrap();
+        for (name, bytes) in [
+            ("CatDeskWakeHost.exe", b"fixture host".as_slice()),
+            ("CatDeskBinagotchy.exe", b"fixture gui".as_slice()),
+            (
+                "adapter.py",
+                include_bytes!("../wake/adapter.py").as_slice(),
+            ),
+            (
+                "wake_bridge.py",
+                include_bytes!("../scripts/wake_bridge.py").as_slice(),
+            ),
+        ] {
+            fs::write(package.join(name), bytes).unwrap();
+        }
+        fs::write(python.join("python.exe"), b"fixture Python").unwrap();
+        fs::write(python.join("__init__.py"), b"").unwrap();
+        development_runtime::prepare(&control, &package, &python).unwrap();
+        let control = git_fixture(&control, "https://example.test/catdesk.git");
+        let dev_root = development_runtime::root_for_workspace(&control)
+            .unwrap()
+            .unwrap();
+        (control, dev_root)
     }
     fn record() -> Record {
         let source = Target::new(1, "https://chatgpt.com/c/old".into()).unwrap();
@@ -2881,22 +2974,82 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
     #[test]
     fn persisted_completed_continuation_anchors_next_generation() {
-        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        let parent = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("target")
             .join(format!("web-continuation-{}", uuid::Uuid::new_v4()));
-        fs::create_dir_all(&root).unwrap();
-        let root = root.canonicalize().unwrap();
-        let request = handoff_request(&root);
+        fs::create_dir_all(&parent).unwrap();
+        let (root, dev_root) = prepared_dev_fixture(&parent);
+        let alpha_workspace = git_fixture(&parent.join("alpha"), "https://example.test/alpha.git");
         let current = Target::new(2, "https://chatgpt.com/c/new".into()).unwrap();
         let mut record = record();
+        let meter = WebContextStore::open(root.join(".catdesk/web-context")).unwrap();
+        meter
+            .configure_policy(
+                "alpha",
+                crate::web_conversation_context::ContextPressurePolicy {
+                    configured_budget_tokens: 128,
+                    safety_headroom_tokens: 127,
+                    unknown_source_reserve_tokens: 0,
+                    automatic_rollover_enabled: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let source_key = key("alpha", &record.source);
+        meter
+            .bind_observed_target(source_key.clone(), None)
+            .unwrap();
+        meter
+            .record_observation(
+                &source_key,
+                Observation {
+                    event_id: "source-message",
+                    revision: 1,
+                    dedup_key: "source-message",
+                    source_kind: VisibleSourceKind::UserMessage,
+                    visible_text: Some("source context before rollover"),
+                    observed_at_unix: 100,
+                },
+            )
+            .unwrap();
+        let intent = meter
+            .request_rollover_if_due(
+                &source_key,
+                &record.source.digest,
+                &record.source_task_id,
+                true,
+                101,
+            )
+            .unwrap()
+            .unwrap();
+        record.intent_id = intent.intent_id;
+        record.message_digest = message_digest(
+            &record.project_id,
+            &record.intent_id,
+            &record.source.url,
+            &record.handoff,
+        )
+        .unwrap();
+        let mut request = handoff_request(&alpha_workspace);
+        request.intent_id = record.intent_id.clone();
+        request.event_id = format!("web-handoff-{}", record.intent_id);
+        request.message = handoff_request_message(
+            "alpha",
+            &record.intent_id,
+            &record.source_task_id,
+            &request.native_thread_id,
+        );
         record.phase = Phase::ContinuationQueued;
         record.receipt = Some(receipt_for(&record));
         record.bound_target = Some(current.clone());
         record.handoff_event_id = Some(request.event_id.clone());
         record.continuation_event_id = format!("web-continue-{}", record.intent_id);
-        record.context_meter_status = ContextMeterStatus::Recorded;
+        record.context_meter_status = ContextMeterStatus::RetryRequired;
+        record.source_snapshot_verified = true;
+        record.source_fingerprint = Some("a".repeat(64));
         let project_store = ProjectStore::open(&root, "alpha").unwrap();
         project_store.save_handoff_request(&request).unwrap();
         project_store.save(&record).unwrap();
@@ -2908,9 +3061,21 @@ mod tests {
         registry.initialize(1, 1).unwrap();
         registry
             .register_project(AutonomousProjectV1 {
-                project_id: "alpha".into(),
+                project_id: "catdesk".into(),
                 workspace: root.clone(),
-                git_identity: "fixture".into(),
+                git_identity: "https://example.test/catdesk.git".into(),
+                verification_profile: "web_only_v1".into(),
+                codex_thread_id: None,
+                chatgpt_target_url: None,
+                chatgpt_target_sha256: None,
+                chatgpt_target_history: Vec::new(),
+            })
+            .unwrap();
+        registry
+            .register_project(AutonomousProjectV1 {
+                project_id: "alpha".into(),
+                workspace: alpha_workspace,
+                git_identity: "https://example.test/alpha.git".into(),
                 verification_profile: "fixture".into(),
                 codex_thread_id: Some("native-thread-a".into()),
                 chatgpt_target_url: Some(current.url.clone()),
@@ -2919,8 +3084,7 @@ mod tests {
             })
             .unwrap();
 
-        let wake = Store::open_scoped_for_test(&root.join("wake"), &root).unwrap();
-        wake.initialize().unwrap();
+        let wake = Store::open(&dev_root).unwrap();
         assert_eq!(
             wake.set_target("alpha", 0, &request.source.url).unwrap(),
             request.source
@@ -2933,6 +3097,11 @@ mod tests {
             "WEB_WORK_ROLLOVER_PENDING"
         );
         drop(pending_store);
+        assert_eq!(
+            acquire_web_work_lease(&root, "alpha").err().unwrap(),
+            "WEB_WORK_ROLLOVER_PENDING"
+        );
+        drop(acquire_web_work_lease(&root, "beta").unwrap());
         let message = continuation_message(&record, &current);
         let event = wake
             .produce_expected(
@@ -2976,25 +3145,78 @@ mod tests {
         let completed_store = ProjectStore::open(&root, "alpha").unwrap();
         continuation_ready_for_work(&completed_store, &wake, &root, "alpha", &current, &record)
             .unwrap();
+        let mut retry = record.clone();
+        retry.context_meter_status = ContextMeterStatus::RetryRequired;
+        retry.source_snapshot_verified = true;
+        retry.source_fingerprint = Some("a".repeat(64));
+        continuation_ready_for_work(&completed_store, &wake, &root, "alpha", &current, &retry)
+            .unwrap();
+        retry.reconciliation_reason = Some("WEB_ROLLOVER_BOUND_TARGET_CHANGED".into());
+        assert_eq!(
+            continuation_ready_for_work(&completed_store, &wake, &root, "alpha", &current, &retry)
+                .unwrap_err(),
+            "WEB_WORK_ROLLOVER_PENDING"
+        );
+        retry.reconciliation_reason = None;
+        retry.source_snapshot_verified = false;
+        assert!(
+            continuation_ready_for_work(&completed_store, &wake, &root, "alpha", &current, &retry)
+                .is_err()
+        );
+        retry.source_snapshot_verified = true;
+        retry.source_fingerprint = None;
+        assert!(
+            continuation_ready_for_work(&completed_store, &wake, &root, "alpha", &current, &retry)
+                .is_err()
+        );
+        retry.source_fingerprint = Some("a".repeat(64));
+        retry.context_meter_status = ContextMeterStatus::Pending;
+        assert!(
+            continuation_ready_for_work(&completed_store, &wake, &root, "alpha", &current, &retry)
+                .is_err()
+        );
+        retry.context_meter_status = ContextMeterStatus::RetryRequired;
+        let changed = Target::new(3, "https://chatgpt.com/c/later".into()).unwrap();
+        assert!(
+            continuation_ready_for_work(&completed_store, &wake, &root, "alpha", &changed, &retry)
+                .is_err()
+        );
         let approved = WorkLease {
             _store: completed_store,
             approved_target: Some(current.clone()),
         };
         approved.check_target(&current).unwrap();
-        let changed = Target::new(3, "https://chatgpt.com/c/later".into()).unwrap();
         assert_eq!(
             approved.check_target(&changed).unwrap_err(),
             "WEB_WORK_ROLLOVER_PENDING"
         );
         drop(approved);
+        let work = acquire_web_work_lease(&root, "alpha").unwrap();
+        work.check_target(&current).unwrap();
+        drop(work);
+        drop(acquire_web_work_lease(&root, "beta").unwrap());
+        let project_file = fs::read_dir(root.join(".catdesk/web-context/projects"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        let original_meter = fs::read(&project_file).unwrap();
+        fs::write(&project_file, b"corrupt").unwrap();
+        assert_eq!(
+            acquire_web_work_lease(&root, "alpha").err().unwrap(),
+            "WEB_WORK_ROLLOVER_PENDING"
+        );
+        drop(acquire_web_work_lease(&root, "beta").unwrap());
+        fs::write(&project_file, original_meter).unwrap();
+        drop(acquire_web_work_lease(&root, "alpha").unwrap());
         assert_eq!(
             completed_continuation_task_anchor(&root, &wake, "alpha", &current).unwrap(),
             Some("task-a".into())
         );
-        let meter = WebContextStore::open(root.join(".catdesk/web-context")).unwrap();
         let current_key = key("alpha", &current);
         meter
-            .bind_observed_target(current_key.clone(), None)
+            .bind_observed_target(current_key.clone(), Some(&source_key))
             .unwrap();
         let pressure = meter.pressure(&current_key).unwrap();
         assert!(pressure.rollover_intent.is_none());
@@ -3010,6 +3232,142 @@ mod tests {
             .unwrap(),
             Some("task-a".into())
         );
+        drop(lease);
+        drop(wake);
+        drop(meter);
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
+    fn completed_retry_context_accepts_only_exact_predecessor_or_unreserved_destination() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("web-retry-context-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let meter_root = root.join(".catdesk/web-context");
+        let meter = WebContextStore::open(&meter_root).unwrap();
+        meter
+            .configure_policy(
+                "alpha",
+                crate::web_conversation_context::ContextPressurePolicy {
+                    configured_budget_tokens: 128,
+                    safety_headroom_tokens: 127,
+                    unknown_source_reserve_tokens: 0,
+                    automatic_rollover_enabled: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let mut record = record();
+        let source_key = key("alpha", &record.source);
+        let current = Target::new(2, "https://chatgpt.com/c/new".into()).unwrap();
+        let current_key = key("alpha", &current);
+        assert!(meter.active_pressure("alpha").unwrap().is_none());
+        meter
+            .bind_observed_target(source_key.clone(), None)
+            .unwrap();
+        meter
+            .record_observation(
+                &source_key,
+                Observation {
+                    event_id: "user-a",
+                    revision: 1,
+                    dedup_key: "user-a",
+                    source_kind: VisibleSourceKind::UserMessage,
+                    visible_text: Some("A visible source message"),
+                    observed_at_unix: 100,
+                },
+            )
+            .unwrap();
+        let intent = meter
+            .request_rollover_if_due(
+                &source_key,
+                &record.source.digest,
+                &record.source_task_id,
+                true,
+                101,
+            )
+            .unwrap()
+            .unwrap();
+        record.intent_id = intent.intent_id.clone();
+        let pressure = meter.active_pressure("alpha").unwrap().unwrap();
+        assert_eq!(pressure.key, source_key);
+        assert_eq!(pressure.rollover_intent, Some(intent.clone()));
+        assert!(completed_retry_context_allows_work(
+            Some(&pressure),
+            &record,
+            &current
+        ));
+        assert!(!completed_retry_context_allows_work(
+            None, &record, &current
+        ));
+        let mut unrelated = pressure.clone();
+        unrelated.rollover_intent.as_mut().unwrap().intent_id = "another-intent".into();
+        assert!(!completed_retry_context_allows_work(
+            Some(&unrelated),
+            &record,
+            &current
+        ));
+        unrelated = pressure.clone();
+        unrelated.rollover_intent.as_mut().unwrap().source_task_id = "another-task".into();
+        assert!(!completed_retry_context_allows_work(
+            Some(&unrelated),
+            &record,
+            &current
+        ));
+        unrelated = pressure.clone();
+        unrelated.rollover_intent.as_mut().unwrap().target_sha256 = "0".repeat(64);
+        assert!(!completed_retry_context_allows_work(
+            Some(&unrelated),
+            &record,
+            &current
+        ));
+        meter
+            .bind_observed_target(current_key.clone(), Some(&source_key))
+            .unwrap();
+        let destination = meter.active_pressure("alpha").unwrap().unwrap();
+        assert_eq!(destination.key, current_key);
+        assert!(destination.rollover_intent.is_none());
+        assert!(completed_retry_context_allows_work(
+            Some(&destination),
+            &record,
+            &current
+        ));
+        meter
+            .record_observation(
+                &current_key,
+                Observation {
+                    event_id: "user-b",
+                    revision: 1,
+                    dedup_key: "user-b",
+                    source_kind: VisibleSourceKind::UserMessage,
+                    visible_text: Some("A new generation message"),
+                    observed_at_unix: 102,
+                },
+            )
+            .unwrap();
+        assert!(
+            meter
+                .request_rollover_if_due(&current_key, &current.digest, "task-b", true, 103)
+                .unwrap()
+                .is_some()
+        );
+        let new_intent = meter.active_pressure("alpha").unwrap().unwrap();
+        assert!(!completed_retry_context_allows_work(
+            Some(&new_intent),
+            &record,
+            &current
+        ));
+        let project_file = fs::read_dir(meter_root.join("projects"))
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        fs::write(project_file, b"corrupt").unwrap();
+        assert!(meter.active_pressure("alpha").is_err());
+        drop(meter);
+        fs::remove_dir_all(root).unwrap();
     }
     #[test]
     fn uncertain_submission_is_durable_and_other_project_lock_is_independent() {

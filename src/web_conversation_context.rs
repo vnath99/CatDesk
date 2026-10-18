@@ -496,6 +496,19 @@ impl WebContextStore {
         Ok(self.read_project_or_default(project_id)?.active)
     }
 
+    /// Read the active key and its pressure under one meter lock. A caller
+    /// deciding whether a rollover intent reserves the current conversation
+    /// must not combine two independently sampled generations.
+    pub fn active_pressure(&self, project_id: &str) -> Result<Option<PressureStatus>, String> {
+        valid_identifier(project_id)?;
+        let _lock = self.lock()?;
+        let project = self.read_project_or_default(project_id)?;
+        let Some(key) = project.active.as_ref() else {
+            return Ok(None);
+        };
+        Ok(Some(pressure_status(&project, &self.read_ledger(key)?)))
+    }
+
     /// Creates at most one advisory request for this exact conversation. The
     /// caller-reported quiescent point is a prerequisite, not trusted proof.
     pub fn request_rollover_if_due(
