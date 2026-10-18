@@ -746,7 +746,7 @@ fn hidden(command: &mut Command) {
 }
 
 #[cfg(windows)]
-fn browser_process_root(root: &Path) -> Result<PathBuf> {
+pub(crate) fn browser_process_root(root: &Path) -> Result<PathBuf> {
     use std::ffi::OsString;
     use std::os::windows::ffi::{OsStrExt, OsStringExt};
 
@@ -1453,7 +1453,7 @@ fn activate_reviewed_install_checked(
 
 const BROWSER_SESSION_LOCK_PROTOCOL: &str = "CATDESK_WAKE_BROWSER_SESSION_LOCK_V1";
 
-fn browser_session_lock(root: &Path, wait: Duration) -> Result<File> {
+pub(crate) fn browser_session_lock(root: &Path, wait: Duration) -> Result<File> {
     let path = root.join("browser-session.lock");
     if let Ok(metadata) = std::fs::symlink_metadata(&path) {
         #[cfg(windows)]

@@ -1,3 +1,14 @@
+## 2026-10-18 — development browser login (MANUAL_SIGN_IN_PENDING; MVP PARTIAL)
+
+The project-ID-only development login command now uses the existing paired
+target and isolated profile while holding host/browser locks through owned
+process cleanup. It reports no authentication or delivery proof. Focused checks
+passed (Wake 7, native Job 1, Python 3, application 3), as did strict lint,
+formatting and the all-features build. The live helper reported
+`LOGIN_BROWSER_OPEN` and awaits manual sign-in. Exact-target capture, real
+delivery and rollover remain the next gates. Other native project chats can
+continue; CatDesk's goal remains active. See the acceptance ledger for evidence.
+
 ## 2026-10-18 — isolated Web development runtime (DEVELOPMENT_LIVE_PARTIAL; MVP PARTIAL)
 
 Current source adds an opt-in `DEVELOPMENT_UNPROTECTED` Wake runtime in a new

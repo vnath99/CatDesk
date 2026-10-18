@@ -68,6 +68,9 @@ pub mod development_runtime {
     pub fn run_foreground(_: &Path) -> Result<Value> {
         Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
     }
+    pub fn login(_: &Path, _: &str) -> Result<Value> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
     pub fn run_host(_: &Path) -> Result<()> {
         Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
     }

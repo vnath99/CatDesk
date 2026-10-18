@@ -28,6 +28,22 @@ afterward, establish its ordinary Git root and exact `origin` with Git. Register
 <source-built-catdesk.exe> operator web status
 ```
 
+With the development host still `STOPPED`, open the development browser for
+manual ChatGPT sign-in using the already paired project target:
+
+```text
+<source-built-catdesk.exe> operator web-dev-runtime login --project-id PROJECT
+<source-built-catdesk.exe> operator web context capture --project-id PROJECT
+```
+
+The login command accepts no free conversation URL and uses the project's
+paired registry/Wake target. Sign in in the visible browser, then press Enter
+in the launching terminal so the command can close it. Successful browser
+cleanup proves only that the window closed; it is not authentication,
+target readiness, delivery or review evidence. Check the separate read-only
+context capture result for the exact target before sending work. This route
+does not operate the protected installed browser profile.
+
 Registration is create-only and checks the exact Git root/origin under the
 existing registry lock. It sets `nativeThreadId:null`, takes no Codex writer,
 and does not edit the project checkout. Existing native registrations cannot

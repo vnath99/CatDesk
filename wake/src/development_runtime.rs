@@ -17,14 +17,15 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     ffi::{OsStr, c_void},
     fs::{self, File, OpenOptions},
-    io::{Read, Write},
+    io::{BufReader, IsTerminal, Read, Write},
     os::windows::{
         ffi::OsStrExt,
         fs::MetadataExt,
         io::{AsRawHandle, FromRawHandle},
     },
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Child, Command, Stdio},
+    sync::mpsc,
     thread,
     time::Duration,
 };
@@ -545,6 +546,9 @@ fn validated_authority(workspace: &Path) -> Result<Option<(PathBuf, Authority)>>
         return Ok(None);
     }
     plain(&dev, true)?;
+    if present(&dev.join("login-active.json"))? {
+        return Err("DEV_LOGIN_CLEANUP_UNVERIFIED".into());
+    }
     let attempt = dev.join("prepare-attempt.json");
     let authority_path = dev.join("authority.json");
     if !present(&attempt)? || !present(&authority_path)? {
@@ -912,6 +916,237 @@ pub fn run_foreground(workspace: &Path) -> Result<Value> {
     )
 }
 
+struct LoginPreflight {
+    root: PathBuf,
+    python: PathBuf,
+    profile: PathBuf,
+    _host: crate::store::HostLease,
+    _browser: File,
+}
+
+fn require_login_target(store: &Store, url: &str) -> Result<()> {
+    let config = store.config()?;
+    let matched = config
+        .targets
+        .values()
+        .filter(|target| target.url == url)
+        .count();
+    match matched {
+        1 => Ok(()),
+        0 => Err("DEV_LOGIN_TARGET_NOT_REGISTERED".into()),
+        _ => Err("DEV_LOGIN_TARGET_AMBIGUOUS".into()),
+    }
+}
+
+fn require_stopped_control(root: &Path) -> Result<()> {
+    let control: runtime::Control = read_json(&root.join("control.json"), 4096)?;
+    if control.schema_version != 1 || control.desired != "STOPPED" {
+        return Err("DEV_LOGIN_HOST_NOT_STOPPED".into());
+    }
+    Ok(())
+}
+
+fn login_preflight(workspace: &Path, target_url: &str) -> Result<LoginPreflight> {
+    protocol::validate_target(target_url)?;
+    let (root, authority) = validated_authority(workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    validate_against_production(&authority, target_url)?;
+    let store = Store::open(&root)?;
+    require_stopped_control(&root)?;
+    require_login_target(&store, target_url)?;
+    let host = store.host_lock()?;
+    let browser = runtime::browser_session_lock(&root, Duration::ZERO)?;
+    // A target or control change while locks were acquired must not open a
+    // browser under a stale binding. The host lease prevents host startup.
+    let (checked_root, checked_authority) =
+        validated_authority(workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    if identity(&checked_root, true)? != identity(&root, true)? {
+        return Err("DEV_RUNTIME_SELECTED_ROOT_MISMATCH".into());
+    }
+    validate_against_production(&checked_authority, target_url)?;
+    require_stopped_control(&root)?;
+    require_login_target(&store, target_url)?;
+    let python = root.join("runtime/python.exe");
+    let profile = root.join("browser-profile");
+    plain(&profile, true)?;
+    Ok(LoginPreflight {
+        root,
+        python,
+        profile,
+        _host: host,
+        _browser: browser,
+    })
+}
+
+fn read_login_token(reader: &mut BufReader<impl Read>) -> Result<String> {
+    let mut token = Vec::new();
+    for _ in 0..128 {
+        let mut byte = [0u8; 1];
+        reader
+            .read_exact(&mut byte)
+            .map_err(|_| "DEV_LOGIN_HELPER_OUTPUT_UNAVAILABLE")?;
+        if byte[0] == b'\n' {
+            if token.last() == Some(&b'\r') {
+                token.pop();
+            }
+            return String::from_utf8(token).map_err(|_| "DEV_LOGIN_HELPER_OUTPUT_INVALID".into());
+        }
+        token.push(byte[0]);
+    }
+    Err("DEV_LOGIN_HELPER_OUTPUT_INVALID".into())
+}
+
+fn cleanup_login_child(
+    mut child: Child,
+    job: &crate::process_job::Job,
+    marker: &Path,
+) -> Result<std::process::ExitStatus> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    let mut exit = loop {
+        match child.try_wait() {
+            Ok(Some(exit)) => break Some(exit),
+            Ok(None) if std::time::Instant::now() < deadline => {
+                thread::sleep(Duration::from_millis(50));
+            }
+            _ => break None,
+        }
+    };
+    if exit.is_none() {
+        // The helper has not closed normally. Terminate only its retained Job.
+        let _ = job.terminate();
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while exit.is_none() && std::time::Instant::now() < deadline {
+            exit = child.try_wait().ok().flatten();
+            if exit.is_none() {
+                thread::sleep(Duration::from_millis(50));
+            }
+        }
+    }
+    let exit = exit.ok_or("DEV_LOGIN_CLEANUP_UNVERIFIED")?;
+    drop(child);
+    if job.wait_empty(Duration::from_secs(5)).is_err() {
+        job.terminate_and_wait_empty(Duration::from_secs(10))
+            .map_err(|_| "DEV_LOGIN_CLEANUP_UNVERIFIED")?;
+    }
+    plain(marker, false).map_err(|_| "DEV_LOGIN_CLEANUP_UNVERIFIED")?;
+    fs::remove_file(marker).map_err(|_| "DEV_LOGIN_CLEANUP_UNVERIFIED")?;
+    Ok(exit)
+}
+
+/// Open only the prepared development browser profile for manual sign-in.
+/// This intentionally never inspects authentication or reports readiness.
+/// The browser lock stays held until the private Job proves all descendants
+/// exited. Uncertain cleanup leaves a sticky marker requiring review.
+pub fn login(workspace: &Path, target_url: &str) -> Result<Value> {
+    let prepared = login_preflight(workspace, target_url)?;
+    if !std::io::stdin().is_terminal() {
+        return Err("DEV_LOGIN_INTERACTIVE_TERMINAL_REQUIRED".into());
+    }
+    let python = runtime::browser_process_root(&prepared.python)?;
+    let profile = runtime::browser_process_root(&prepared.profile)?;
+    let marker = dev_dir(&canonical_workspace(workspace)?).join("login-active.json");
+    write_json_new(
+        &marker,
+        &json!({"schemaVersion":1,"purpose":"DEV_LOGIN_OWNED_BROWSER_V1",
+            "targetSha256":protocol::digest(target_url),"startedUtc":now()}),
+    )?;
+    let mut command = Command::new(python);
+    command
+        .arg("-I")
+        .arg("-c")
+        .arg(include_str!("../../scripts/wake_development_login.py"))
+        .arg(profile)
+        .arg(target_url)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .current_dir(&prepared.root);
+    use std::os::windows::process::CommandExt;
+    command.creation_flags(0x0800_0000);
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(_) => {
+            fs::remove_file(&marker).map_err(|_| "DEV_LOGIN_CLEANUP_UNVERIFIED")?;
+            return Err("DEV_LOGIN_HELPER_START_FAILED".into());
+        }
+    };
+    // The helper waits for START before importing SeleniumBase or launching a
+    // browser, so assignment failure can only leave this exact idle process.
+    let job = match crate::process_job::Job::assign(&child) {
+        Ok(job) => job,
+        Err(error) => {
+            let _ = child.kill();
+            let stopped = child.wait().is_ok();
+            if !stopped {
+                return Err("DEV_LOGIN_CLEANUP_UNVERIFIED".into());
+            }
+            fs::remove_file(&marker).map_err(|_| "DEV_LOGIN_CLEANUP_UNVERIFIED")?;
+            return Err(error);
+        }
+    };
+    let interaction = (|| -> Result<()> {
+        let output = child
+            .stdout
+            .take()
+            .ok_or("DEV_LOGIN_HELPER_OUTPUT_UNAVAILABLE")?;
+        let (tx, rx) = mpsc::sync_channel(2);
+        thread::spawn(move || {
+            let mut reader = BufReader::new(output);
+            for _ in 0..2 {
+                if tx.send(read_login_token(&mut reader)).is_err() {
+                    break;
+                }
+            }
+        });
+        let mut input = child
+            .stdin
+            .take()
+            .ok_or("DEV_LOGIN_HELPER_INPUT_UNAVAILABLE")?;
+        input
+            .write_all(b"START\n")
+            .and_then(|_| input.flush())
+            .map_err(|_| "DEV_LOGIN_HELPER_INPUT_UNAVAILABLE")?;
+        let opened = rx
+            .recv_timeout(Duration::from_secs(120))
+            .map_err(|_| "DEV_LOGIN_BROWSER_OPEN_UNPROVEN")??;
+        if opened != "LOGIN_BROWSER_OPEN" {
+            return Err("DEV_LOGIN_BROWSER_OPEN_UNPROVEN".into());
+        }
+        println!(
+            "LOGIN_BROWSER_OPEN — sign in in the visible browser, then press Enter here to close it."
+        );
+        std::io::stdout()
+            .flush()
+            .map_err(|_| "DEV_LOGIN_TERMINAL_UNAVAILABLE")?;
+        let mut acknowledgement = String::new();
+        std::io::stdin()
+            .read_line(&mut acknowledgement)
+            .map_err(|_| "DEV_LOGIN_TERMINAL_UNAVAILABLE")?;
+        if !matches!(acknowledgement.as_str(), "\n" | "\r\n") {
+            return Err("DEV_LOGIN_ENTER_REQUIRED".into());
+        }
+        input
+            .write_all(b"\n")
+            .and_then(|_| input.flush())
+            .map_err(|_| "DEV_LOGIN_HELPER_INPUT_UNAVAILABLE")?;
+        let closed = rx
+            .recv_timeout(Duration::from_secs(30))
+            .map_err(|_| "DEV_LOGIN_BROWSER_CLOSE_UNPROVEN")??;
+        if closed != "LOGIN_BROWSER_CLOSED" {
+            return Err("DEV_LOGIN_BROWSER_CLOSE_UNPROVEN".into());
+        }
+        Ok(())
+    })();
+    // Even a helper success is insufficient until all Chrome descendants in
+    // this retained Job have exited. Any cleanup doubt keeps the sticky marker.
+    let exit = cleanup_login_child(child, &job, &marker)?;
+    interaction?;
+    if !exit.success() {
+        return Err("DEV_LOGIN_HELPER_FAILED".into());
+    }
+    Ok(json!({"mode":"DEVELOPMENT_UNPROTECTED",
+        "status":"LOGIN_WINDOW_CLOSED_UNVERIFIED","authenticationVerified":false}))
+}
+
 pub fn stop(workspace: &Path) -> Result<Value> {
     let (root, _) = validated_authority(workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
     let store = Store::open(&root)?;
@@ -1004,6 +1239,87 @@ mod tests {
 
     fn prepare_fixture(workspace: &Path, package: &Path, python: &Path) -> Value {
         prepare(workspace, package, python).unwrap()
+    }
+
+    #[test]
+    fn login_protocol_accepts_only_bounded_fixed_lines_with_windows_newlines() {
+        for line in ["LOGIN_BROWSER_OPEN\n", "LOGIN_BROWSER_OPEN\r\n"] {
+            assert_eq!(
+                read_login_token(&mut BufReader::new(line.as_bytes())).unwrap(),
+                "LOGIN_BROWSER_OPEN"
+            );
+        }
+        assert_eq!(
+            read_login_token(&mut BufReader::new(b"never-terminated".as_slice())).unwrap_err(),
+            "DEV_LOGIN_HELPER_OUTPUT_UNAVAILABLE"
+        );
+        let oversized = format!("{}\n", "x".repeat(129));
+        assert_eq!(
+            read_login_token(&mut BufReader::new(oversized.as_bytes())).unwrap_err(),
+            "DEV_LOGIN_HELPER_OUTPUT_INVALID"
+        );
+    }
+
+    #[test]
+    fn login_preflight_requires_exact_target_stopped_host_and_free_browser() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let store = Store::open(&root).unwrap();
+        let url = "https://chatgpt.com/g/canary-project/c/canary-unique-login-1";
+        assert_eq!(
+            login_preflight(&workspace, url).err().unwrap(),
+            "DEV_LOGIN_TARGET_NOT_REGISTERED"
+        );
+        store.set_target("canary-project", 0, url).unwrap();
+        assert_eq!(
+            login_preflight(&workspace, "https://chatgpt.com/c/other")
+                .err()
+                .unwrap(),
+            "DEV_LOGIN_TARGET_NOT_REGISTERED"
+        );
+        let selected = login_preflight(&workspace, url).unwrap();
+        assert_eq!(selected.root, root);
+        assert_eq!(
+            login_preflight(&workspace, url).err().unwrap(),
+            "HOST_ALREADY_RUNNING"
+        );
+        drop(selected);
+        let busy = runtime::browser_session_lock(&root, Duration::ZERO).unwrap();
+        assert_eq!(
+            login_preflight(&workspace, url).err().unwrap(),
+            "BROWSER_SESSION_BUSY"
+        );
+        drop(busy);
+        runtime::control(&store, "RUNNING").unwrap();
+        assert_eq!(
+            login_preflight(&workspace, url).err().unwrap(),
+            "DEV_LOGIN_HOST_NOT_STOPPED"
+        );
+        runtime::control(&store, "STOPPED").unwrap();
+        let selected = login_preflight(&workspace, url).unwrap();
+        drop(selected);
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn unresolved_login_marker_blocks_all_dev_authority_selection() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        write_json_new(
+            &dev_dir(&fs::canonicalize(&workspace).unwrap()).join("login-active.json"),
+            &json!({"schemaVersion":1,"purpose":"DEV_LOGIN_OWNED_BROWSER_V1"}),
+        )
+        .unwrap();
+        assert_eq!(
+            root_for_workspace(&workspace).unwrap_err(),
+            "DEV_LOGIN_CLEANUP_UNVERIFIED"
+        );
+        assert_eq!(
+            status(&workspace).unwrap_err(),
+            "DEV_LOGIN_CLEANUP_UNVERIFIED"
+        );
+        cleanup(&parent);
     }
 
     #[test]

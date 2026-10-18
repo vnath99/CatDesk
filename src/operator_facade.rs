@@ -64,6 +64,9 @@ pub(crate) enum WebDevelopmentAction {
         event_id: String,
         message_file: PathBuf,
     },
+    Login {
+        project_id: String,
+    },
     Status,
     Start,
     Stop,
@@ -140,6 +143,11 @@ pub(crate) fn parse_operator_action(
 
 fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction, String> {
     match args.get(2).map(String::as_str) {
+        Some("login") if args.len() == 5
+            && args[3] == "--project-id"
+            && catdesk_wake::protocol::valid_id(&args[4]) => Ok(WebDevelopmentAction::Login {
+                project_id: args[4].clone(),
+            }),
         Some("enqueue") if args.len() == 9
             && args[3] == "--project-id" && args[5] == "--event-id" && args[7] == "--message-file"
             && catdesk_wake::protocol::valid_id(&args[4])
@@ -164,8 +172,25 @@ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction,
         Some("start") if args.len() == 3 => Ok(WebDevelopmentAction::Start),
         Some("stop") if args.len() == 3 => Ok(WebDevelopmentAction::Stop),
         Some("run") if args.len() == 3 => Ok(WebDevelopmentAction::Run),
-        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, enqueue --project-id <id> --event-id <id> --message-file <file>, status, start, stop, or run".into()),
+        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, login --project-id <id>, enqueue --project-id <id> --event-id <id> --message-file <file>, status, start, stop, or run".into()),
     }
+}
+
+fn login_web_development(workspace: &Path, project_id: &str) -> Result<serde_json::Value, String> {
+    let workspace = workspace
+        .canonicalize()
+        .map_err(|_| "DEV_WORKSPACE_UNAVAILABLE")?;
+    let root = catdesk_wake::development_runtime::root_for_workspace(&workspace)?
+        .ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    let target = mcp::operator_read_project_web_target(&workspace, project_id)
+        .map_err(|_| "DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?
+        .ok_or("DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        &workspace,
+        &root,
+        &target.url,
+    )?;
+    catdesk_wake::development_runtime::login(&workspace, &target.url)
 }
 
 /// Explicit controlled work for live development tests. It uses the same
@@ -537,6 +562,9 @@ pub(crate) async fn execute_operator_action(
                     event_id,
                     message_file,
                 } => enqueue_web_development(workspace, &project_id, &event_id, &message_file),
+                WebDevelopmentAction::Login { project_id } => {
+                    login_web_development(workspace, &project_id)
+                }
                 WebDevelopmentAction::Status => development_runtime::status(workspace),
                 WebDevelopmentAction::Start => development_runtime::start(workspace),
                 WebDevelopmentAction::Stop => development_runtime::stop(workspace),
@@ -1385,6 +1413,64 @@ mod tests {
             )
             .is_err()
         );
+        assert!(matches!(
+            parse_operator_action(
+                ["operator", "web-dev-runtime", "login", "--project-id", "alpha"]
+                    .map(str::to_string)
+            ),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::Login { project_id }
+            ))) if project_id == "alpha"
+        ));
+        for invalid in [
+            vec!["operator", "web-dev-runtime", "login"],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "login",
+                "--project-id",
+                "../alpha",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "login",
+                "--conversation-url",
+                "https://chatgpt.com/c/other",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "login",
+                "--project-id",
+                "alpha",
+                "--root",
+                "C:/installed",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "login",
+                "--project-id",
+                "alpha",
+                "--project-id",
+                "beta",
+            ],
+        ] {
+            assert!(parse_operator_action(invalid.into_iter().map(str::to_string)).is_err());
+        }
+    }
+
+    #[test]
+    fn web_development_login_requires_prepared_root_before_any_browser_action() {
+        let workspace =
+            std::env::temp_dir().join(format!("catdesk-login-unprepared-{}", Uuid::new_v4()));
+        fs::create_dir(&workspace).unwrap();
+        assert_eq!(
+            login_web_development(&workspace, "alpha").unwrap_err(),
+            "DEV_RUNTIME_NOT_PREPARED"
+        );
+        fs::remove_dir(workspace).unwrap();
     }
 
     fn repair_fixture(label: &str) -> PathBuf {

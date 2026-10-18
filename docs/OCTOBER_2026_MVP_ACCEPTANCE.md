@@ -1,5 +1,34 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 18 guarded development login (TESTED_LOCAL_SOURCE; MANUAL_SIGN_IN_PENDING)
+
+`operator web-dev-runtime login --project-id PROJECT` now opens the selected
+project's paired ChatGPT target in the existing isolated development profile.
+It requires stopped control, exact development authority, current target
+isolation, and retained host/browser locks. The helper starts its browser only
+after assignment to the owned process Job. Closing it requires terminal Enter;
+the locks remain held until the helper is reaped and the Job reports no active
+processes. Uncertain cleanup retains an attention marker. No installed profile,
+authentication material, target binding or event receipt is copied or changed.
+
+Focused verification passed: Wake development runtime 7/7, native owned-Job
+cleanup 1/1, Python helper 3/3, and application development tests 3/3 (including
+the three-project registration/routing fixture). Strict root/Wake Clippy,
+formatting and the all-features application build passed. The final source
+hashes and logs are retained in private `20261018T052714Z-login-verification.json`.
+The existing broad regression was not repeated for this narrow change.
+
+The built operator (SHA-256
+`AB93E1BBA08BAD928AD415A5EE39495AE198E24B6B41EA2B0D69693E90D10B4F`)
+was launched against the existing prepared control workspace and reported
+`LOGIN_BROWSER_OPEN`. It is waiting for the operator's manual sign-in and
+terminal acknowledgement. This proves the guarded helper reached its open
+step; it does **not** establish authentication or exact-conversation readiness.
+After it closes, use read-only context capture before retrying delivery. The
+successful close result itself remains `LOGIN_WINDOW_CLOSED_UNVERIFIED` with
+`authenticationVerified:false`. Actual deliveries, context capture and genuine
+rollover remain open. Other projects' native conversations need no pause.
+
 ## October 18 isolated Web development runtime (TESTED_LOCAL_SOURCE; DEVELOPMENT_LIVE_PARTIAL)
 
 Source `7bfaab0c5d9980a48399998326f313fc03ad8269` adds an explicit
@@ -65,10 +94,11 @@ Wake control-file hashes matched before preparation and after the live run.
 **Still open:** exact-conversation readiness in the fresh development browser
 profile, three actual Wake deliveries, browser-derived context estimates,
 genuine rollover and continuation, and central ChatGPT access to the local MCP
-endpoint. HOME drift alone does not establish an authentication failure. A
-guarded manual login flow for this development profile is not yet exposed by
-the operator CLI; the legacy login helper must not be used to bypass the shared
-browser lock. No installed Wake release was activated, and exact remote CI
+endpoint. HOME drift alone does not establish an authentication failure. At
+this runtime checkpoint, a guarded manual login flow was not exposed; the
+subsequent login section above records its implementation and pending live
+sign-in. The legacy login helper must not bypass the shared browser lock.
+No installed Wake release was activated, and exact remote CI
 acceptance remains separate. Local evidence is retained in the private
 `checkpoints/web-development-oct18` directory outside the source checkout.
 The October milestone remains **PARTIAL**. Existing project conversations do
