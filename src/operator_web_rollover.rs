@@ -155,6 +155,16 @@ struct AutoStatus {
     stage: String,
     target_generation: Option<u64>,
     reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    last_failure: Option<AutoFailure>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AutoFailure {
+    reason: String,
+    tick_utc: u64,
+    target_generation: Option<u64>,
 }
 
 impl HandoffRequest {
@@ -662,32 +672,75 @@ pub(super) fn record_auto_status(
     target_generation: Option<u64>,
     reason: Option<&str>,
 ) -> Result<(), String> {
-    if !stage.bytes().all(|b| b.is_ascii_uppercase() || b == b'_') {
+    if !valid_auto_stage(stage) {
         return Err("WEB_AUTO_STATUS_INVALID".into());
     }
     let reason = reason.map(|value| {
-        if value.len() <= 128
-            && value
-                .bytes()
-                .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
-        {
+        if valid_auto_reason(value) {
             value.to_owned()
         } else {
             "WEB_AUTO_ATTENTION".into()
         }
     });
     let store = ProjectStore::open(workspace, project)?;
+    let tick_utc = now();
+    let previous_failure = read_auto_status(&store).ok().flatten().and_then(|status| {
+        status.last_failure.or_else(|| {
+            if status.stage == "ATTENTION" {
+                status
+                    .reason
+                    .as_deref()
+                    .filter(|reason| *reason != "WEB_ROLLOVER_NOT_DUE_OR_DISABLED")
+                    .map(|reason| AutoFailure {
+                        reason: reason.into(),
+                        tick_utc: status.tick_utc,
+                        target_generation: status.target_generation,
+                    })
+            } else {
+                None
+            }
+        })
+    });
+    let last_failure = if matches!(stage, "AWAITING_RESPONSE" | "ROLLOVER_ADVANCED") {
+        None
+    } else if stage == "ATTENTION"
+        && let Some(code) = reason.as_deref()
+        && code != "WEB_ROLLOVER_NOT_DUE_OR_DISABLED"
+    {
+        Some(AutoFailure {
+            reason: code.into(),
+            tick_utc,
+            target_generation,
+        })
+    } else {
+        previous_failure
+    };
     atomic(
         &store.root.join("auto-status.json"),
         &AutoStatus {
             schema_version: 1,
             project_id: project.into(),
-            tick_utc: now(),
+            tick_utc,
             stage: stage.into(),
             target_generation,
             reason,
+            last_failure,
         },
     )
+}
+
+fn valid_auto_stage(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value.bytes().all(|b| b.is_ascii_uppercase() || b == b'_')
+}
+
+fn valid_auto_reason(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
 }
 
 fn read_auto_status(store: &ProjectStore) -> Result<Option<AutoStatus>, String> {
@@ -707,6 +760,15 @@ fn read_auto_status(store: &ProjectStore) -> Result<Option<AutoStatus>, String> 
                 .and_then(|value| value.to_str())
                 .unwrap_or("")
         || status.tick_utc == 0
+        || !valid_auto_stage(&status.stage)
+        || status
+            .reason
+            .as_deref()
+            .is_some_and(|reason| !valid_auto_reason(reason))
+        || status
+            .last_failure
+            .as_ref()
+            .is_some_and(|failure| failure.tick_utc == 0 || !valid_auto_reason(&failure.reason))
     {
         return Err("WEB_AUTO_STATUS_INVALID".into());
     }
@@ -1961,6 +2023,92 @@ mod tests {
             evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
             completion: "RESPONSE_COMPLETED".into(),
         }
+    }
+
+    #[test]
+    fn auto_status_keeps_draft_failure_through_disabled_tick_then_clears_on_receipt() {
+        let root = fixture();
+        record_auto_status(&root, "alpha", "ATTENTION", Some(7), Some("EXISTING_DRAFT")).unwrap();
+        record_auto_status(&root, "alpha", "IN_PROGRESS", Some(7), None).unwrap();
+        record_auto_status(
+            &root,
+            "alpha",
+            "ATTENTION",
+            Some(7),
+            Some("WEB_ROLLOVER_NOT_DUE_OR_DISABLED"),
+        )
+        .unwrap();
+        let status = status_read_only(&root, "alpha").unwrap();
+        assert_eq!(
+            status["automation"]["reason"],
+            "WEB_ROLLOVER_NOT_DUE_OR_DISABLED"
+        );
+        assert_eq!(
+            status["automation"]["lastFailure"]["reason"],
+            "EXISTING_DRAFT"
+        );
+        assert_eq!(status["automation"]["lastFailure"]["targetGeneration"], 7);
+        assert!(
+            status["automation"]["lastFailure"]["tickUtc"]
+                .as_u64()
+                .is_some_and(|tick| tick > 0)
+        );
+        record_auto_status(&root, "beta", "OBSERVED", Some(3), None).unwrap();
+        assert!(status_read_only(&root, "beta").unwrap()["automation"]["lastFailure"].is_null());
+        record_auto_status(&root, "alpha", "AWAITING_RESPONSE", Some(7), None).unwrap();
+        assert!(status_read_only(&root, "alpha").unwrap()["automation"]["lastFailure"].is_null());
+    }
+
+    #[test]
+    fn auto_status_legacy_record_and_corrupt_failure_are_handled_without_disclosure() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        atomic(
+            &store.root.join("auto-status.json"),
+            &json!({"schemaVersion":1,"projectId":"alpha","tickUtc":42,
+                "stage":"WAKE_STOPPED","targetGeneration":7,"reason":"WAKE_CONTROL_CHANGED"}),
+        )
+        .unwrap();
+        drop(store);
+        assert!(status_read_only(&root, "alpha").unwrap()["automation"]["lastFailure"].is_null());
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        atomic(
+            &store.root.join("auto-status.json"),
+            &json!({"schemaVersion":1,"projectId":"alpha","tickUtc":43,
+                "stage":"ATTENTION","targetGeneration":7,"reason":"EXISTING_DRAFT"}),
+        )
+        .unwrap();
+        drop(store);
+        record_auto_status(&root, "alpha", "IN_PROGRESS", Some(7), None).unwrap();
+        let status = status_read_only(&root, "alpha").unwrap();
+        assert_eq!(
+            status["automation"]["lastFailure"]["reason"],
+            "EXISTING_DRAFT"
+        );
+        assert_eq!(status["automation"]["lastFailure"]["tickUtc"], 43);
+        record_auto_status(&root, "alpha", "ATTENTION", Some(7), Some("private/path")).unwrap();
+        let status = status_read_only(&root, "alpha").unwrap();
+        assert_eq!(
+            status["automation"]["lastFailure"]["reason"],
+            "WEB_AUTO_ATTENTION"
+        );
+        assert!(!status.to_string().contains("private/path"));
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        atomic(
+            &store.root.join("auto-status.json"),
+            &json!({"schemaVersion":1,"projectId":"alpha","tickUtc":43,
+                "stage":"ATTENTION","targetGeneration":7,"reason":"EXISTING_DRAFT",
+                "lastFailure":{"reason":"C:\\private\\secret.txt","tickUtc":42,
+                    "targetGeneration":7}}),
+        )
+        .unwrap();
+        drop(store);
+        assert!(status_read_only(&root, "alpha").is_err());
+        record_auto_status(&root, "alpha", "IN_PROGRESS", Some(7), None).unwrap();
+        let status = status_read_only(&root, "alpha").unwrap();
+        assert_eq!(status["automation"]["stage"], "IN_PROGRESS");
+        assert!(status["automation"]["lastFailure"].is_null());
+        assert!(!status.to_string().contains("private"));
     }
 
     #[test]

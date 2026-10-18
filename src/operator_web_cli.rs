@@ -475,14 +475,34 @@ fn registry_rollover_projection(raw: &Value) -> Value {
                 .get("reason")
                 .and_then(Value::as_str)
                 .filter(|reason| {
-                    reason.len() <= 128
+                    !reason.is_empty()
+                        && reason.len() <= 128
                         && reason
                             .bytes()
                             .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
                 });
+            let last_failure = status
+                .get("lastFailure")
+                .and_then(Value::as_object)
+                .and_then(|failure| {
+                    let reason = failure.get("reason")?.as_str()?;
+                    let tick_utc = failure.get("tickUtc")?.as_u64().filter(|tick| *tick > 0)?;
+                    if reason.is_empty()
+                        || reason.len() > 128
+                        || !reason
+                            .bytes()
+                            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+                    {
+                        return None;
+                    }
+                    Some(json!({"reason":reason,"tickUtc":tick_utc,
+                        "targetGeneration":failure.get("targetGeneration").and_then(Value::as_u64),
+                        "requiredAction":null}))
+                });
             json!({"status":"RECORDED","stage":stage,"reason":reason,
                 "tickUtc":status.get("tickUtc").and_then(Value::as_u64),
-                "targetGeneration":status.get("targetGeneration").and_then(Value::as_u64)})
+                "targetGeneration":status.get("targetGeneration").and_then(Value::as_u64),
+                "lastFailure":last_failure})
         }
         Some(Value::Null) | None => json!({"status":"UNOBSERVED"}),
         _ => json!({"status":"UNAVAILABLE"}),
@@ -916,6 +936,7 @@ mod tests {
         assert_eq!(summary["phase"], "RESPONSE_PENDING");
         assert_eq!(summary["automation"]["stage"], "WAKE_STOPPED");
         assert_eq!(summary["automation"]["targetGeneration"], 7);
+        assert!(summary["automation"]["lastFailure"].is_null());
         assert_eq!(summary["handoffCollected"], true);
         let encoded = summary.to_string();
         for private in ["private-source", "private answer", "private handoff"] {
@@ -928,6 +949,28 @@ mod tests {
         assert_eq!(bad["automation"]["stage"], "UNKNOWN_STAGE");
         assert!(bad["automation"]["reason"].is_null());
         assert!(!bad.to_string().contains("secret.txt"));
+        let failed = registry_rollover_projection(&json!({
+            "phase":"PREPARED", "source":{"generation":7,"digest":"a".repeat(64)},
+            "automation":{"stage":"ATTENTION","reason":"WEB_ROLLOVER_NOT_DUE_OR_DISABLED",
+                "targetGeneration":7,"lastFailure":{"reason":"EXISTING_DRAFT",
+                    "tickUtc":42,"targetGeneration":7}}
+        }));
+        assert_eq!(
+            failed["automation"]["reason"],
+            "WEB_ROLLOVER_NOT_DUE_OR_DISABLED"
+        );
+        assert_eq!(
+            failed["automation"]["lastFailure"]["reason"],
+            "EXISTING_DRAFT"
+        );
+        assert!(failed["automation"]["lastFailure"]["requiredAction"].is_null());
+        let malformed_failure = registry_rollover_projection(&json!({
+            "phase":"PREPARED", "automation":{"stage":"ATTENTION",
+                "lastFailure":{"reason":"C:\\private\\secret.txt", "tickUtc":42,
+                    "targetGeneration":7}}
+        }));
+        assert!(malformed_failure["automation"]["lastFailure"].is_null());
+        assert!(!malformed_failure.to_string().contains("secret.txt"));
         let requested = registry_rollover_projection(&json!({
             "phase":"NONE","handoffRequest":{"source":{"generation":4},
                 "handoffCollected":false},"automation":null

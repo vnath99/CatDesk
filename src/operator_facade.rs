@@ -1491,7 +1491,7 @@ mod tests {
             ),
             Ok(Some(OperatorAction::WebDevelopment(
                 WebDevelopmentAction::UpdatePackage { package }
-            ))) if package == PathBuf::from("C:/dev/new-package")
+            ))) if package == Path::new("C:/dev/new-package")
         ));
         for invalid in [
             vec!["operator", "web-dev-runtime", "update-package"],

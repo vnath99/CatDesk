@@ -6092,6 +6092,7 @@ fn annotate_rollover_current_target(
     let Some(object) = rollover.as_object_mut() else {
         return;
     };
+    let prepared = object.get("phase").and_then(Value::as_str) == Some("PREPARED");
     let record_generation = object.get("targetGeneration").and_then(Value::as_u64);
     let record_digest = object
         .remove("targetDigest")
@@ -6101,12 +6102,29 @@ fn annotate_rollover_current_target(
             .zip(record_digest.as_deref())
             .map(|(generation, digest)| generation == target.generation && digest == target.sha256)
     });
+    let paired_current = current == Some(true);
     object.insert("matchesPairedTarget".into(), json!(current));
     if let Some(automation) = object.get_mut("automation").and_then(Value::as_object_mut) {
         let observed = automation.get("targetGeneration").and_then(Value::as_u64);
         let current = paired_target
             .and_then(|target| observed.map(|generation| generation == target.generation));
         automation.insert("sameGenerationAsPairedTarget".into(), json!(current));
+        if let Some(failure) = automation
+            .get_mut("lastFailure")
+            .and_then(Value::as_object_mut)
+        {
+            let relevant = prepared
+                && paired_current
+                && failure.get("reason").and_then(Value::as_str) == Some("EXISTING_DRAFT")
+                && paired_target.is_some_and(|target| {
+                    failure.get("targetGeneration").and_then(Value::as_u64)
+                        == Some(target.generation)
+                });
+            failure.insert(
+                "requiredAction".into(),
+                json!(relevant.then_some("REVIEW_BROWSER_PROFILE_DRAFT")),
+            );
+        }
     }
 }
 
@@ -10472,6 +10490,48 @@ mod tests {
             "targetGeneration":8,"targetDigest":"b".repeat(64)});
         annotate_rollover_current_target(&mut same_generation_wrong_digest, Some(&target));
         assert_eq!(same_generation_wrong_digest["matchesPairedTarget"], false);
+    }
+
+    #[test]
+    fn web_rollover_draft_action_requires_current_prepared_target() {
+        let target = ProjectWebTargetV1 {
+            project_id: "alpha".into(),
+            url: "https://chatgpt.com/c/current".into(),
+            sha256: "a".repeat(64),
+            generation: 7,
+            historical_urls: Vec::new(),
+        };
+        let make = |phase: &str, generation: u64, digest: String| {
+            json!({"status":"DURABLE_SNAPSHOT","phase":phase,
+                "targetGeneration":generation,"targetDigest":digest,
+                "automation":{"status":"RECORDED","stage":"ATTENTION",
+                    "reason":"WEB_ROLLOVER_NOT_DUE_OR_DISABLED",
+                    "targetGeneration":generation,
+                    "lastFailure":{"reason":"EXISTING_DRAFT","tickUtc":42,
+                        "targetGeneration":generation,"requiredAction":null}}})
+        };
+        let mut current = make("PREPARED", 7, "a".repeat(64));
+        annotate_rollover_current_target(&mut current, Some(&target));
+        assert_eq!(
+            current["automation"]["lastFailure"]["requiredAction"],
+            "REVIEW_BROWSER_PROFILE_DRAFT"
+        );
+        assert_eq!(
+            current["automation"]["reason"],
+            "WEB_ROLLOVER_NOT_DUE_OR_DISABLED"
+        );
+        for mut historical in [
+            make("PREPARED", 6, "b".repeat(64)),
+            make("PREPARED", 7, "b".repeat(64)),
+            make("BOUND", 7, "a".repeat(64)),
+        ] {
+            annotate_rollover_current_target(&mut historical, Some(&target));
+            assert!(historical["automation"]["lastFailure"]["requiredAction"].is_null());
+            assert_eq!(
+                historical["automation"]["lastFailure"]["reason"],
+                "EXISTING_DRAFT"
+            );
+        }
     }
 
     #[cfg(windows)]
