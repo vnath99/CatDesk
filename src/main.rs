@@ -84,6 +84,8 @@ mod tunnel;
 mod user_worker_release;
 mod verification;
 mod wake_protocol_client;
+#[allow(dead_code)] // Advisory Web conversation meter; operator/browser integration follows.
+mod web_conversation_context;
 mod windows_gui;
 mod windows_protected_fs;
 #[allow(dead_code)]
