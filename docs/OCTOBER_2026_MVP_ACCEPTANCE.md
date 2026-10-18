@@ -1,5 +1,67 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 17 cooperative Web progress and handoff checkpoint (TESTED_LOCAL_SOURCE; MVP PARTIAL)
+
+Source `e97d5f0847104ea4a6fe7db9d0526bab84257782`, tree
+`60182a01787211d14b29f0e34446726f722cf94b`, adds these working source paths:
+
+- Wake schedules one oldest eligible event per project per round. A fresh-document
+  exact USER receipt commits delivery before waiting for the assistant. Durable
+  pending timers reserve only their own conversation; short, read-only response
+  probes allow other projects to receive work. Probe deadline is 90 seconds
+  including adapter startup. Restart resumes observation without resending.
+  An uncertain submission reserves its project even before an acceptance timer
+  exists. Its recovery window starts at the durable submission boundary, not
+  queue creation. Final receipt commit rechecks current target authority.
+- Browser completion requires usable assistant content and assistant-scoped
+  completion controls. Controls-only placeholders, load errors and a USER Copy
+  button cannot complete an assistant timer. A current UI with no provable
+  assistant-scoped control will remain pending; this needs live qualification.
+- Context status persists explicit history, identity, text and overflow gaps.
+  Recent excerpts remain `coverageKnown:false` and
+  `pressureAssessment:UNKNOWN_OR_INCOMPLETE`. Token estimates describe observed
+  content plus configured reserves, not a proven whole-chat upper bound.
+  Repeated incomplete polls do not add synthetic token reserves or erase earlier
+  observations. Optional `incompleteHistoryRollover` defaults false and requires
+  actual capture, automatic rollover enabled and a quiescent point. Its trigger
+  is allowed once per project lineage, preventing immediate repeated rollovers;
+  subsequent observed token pressure can still request rollover.
+- `operator web rollover handoff-request --project-id P --source-task-id T`
+  publishes one durable, idempotent handoff request on the exact paired source.
+  `operator web rollover handoff-collect --project-id P` requires its exact SENT
+  receipt, completed timer and fresh matching latest USER/ASSISTANT JSON before
+  preparing the existing rollover. It rechecks project, task, native owner and
+  source binding, and rejects unverified native path ownership claims. Unchecked
+  status proof is null; a matching collected record reports historical proof.
+  These commands replace manually authored handoff JSON for this path. They are
+  not yet automatically driven by the running host scheduler.
+
+Verification: 35 focused Web tests passed (19 operator, 16 context/MCP); Wake
+library 244 passed, one ignored; Python adapter 36 and bridge response 12 passed.
+The Node DOM regression checks controls-only, USER Copy and assistant Copy cases.
+Three disposable registry tests initially hit sandbox access denial and passed
+with normal Windows access. Strict root/Wake Clippy, formatting, diff check and
+all-feature CatDesk build passed. Exact commands, log hashes and source file hashes
+are in `docs/acceptance/web_cooperative_tests_20261017.json`; private log copies are
+under `CatDesk_v2/checkpoints/web-cooperative-oct17`. Debug image SHA-256:
+`26F23A5861A44FDA9D0FF077A2196175A0B002F97A719A9989AD641DFE3AE8D8`.
+The full CatDesk and legacy Python suites were not rerun; their prior incomplete
+runs remain incomplete. No exact-source remote CI pass is claimed.
+
+**Installed/live remains separate:** readback still shows
+`1.0.0-dev.84-02431feba5ed-1c6bcdfcedf0`, desired `STOPPED`. No package activation,
+production target change or fresh live Web delivery occurred in this checkpoint.
+The earlier controlled browser canary and its response-load limitation below
+remain the live evidence. Source capture and bootstrap still require the free
+global host lease; bootstrap still waits for its response. Running-host capture,
+handoff and cooperative bootstrap integration are the next source work, followed
+by reviewed installation/binding and the genuine three-project rollover demo.
+
+**Other project chats are free to resume.** CatDesk does not require the original
+Bug Bounty, BYOVD, Wake2 or PortfolioDesk conversations paused for this work. Their
+existing checkout/task ownership and PortfolioDesk observation-window constraints
+remain in effect. No duplicate native project work was dispatched.
+
 ## October 17 combined ChatGPT Web P3/P4 checkpoint (SOURCE CHECKPOINT; LIVE PARTIAL)
 
 The user's revised October 31 milestone requires per-project ChatGPT Web work,

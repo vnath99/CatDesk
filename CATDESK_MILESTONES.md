@@ -1,3 +1,22 @@
+## 2026-10-17 — cooperative Web scheduling and generated handoffs (TESTED_LOCAL_SOURCE; MVP PARTIAL)
+
+Checkpoint `e97d5f0` implements fair per-project delivery slices, durable pending
+response observation without resend, exact target checks at receipt commit,
+explicit incomplete context coverage and a one-shot uncertainty rollover guard.
+Operator handoff request/collection now obtains task-scoped JSON from the source
+Web chat with exact delivery and completion evidence. Focused checks passed:
+35 Web, 244 Wake (one ignored), 48 Python; strict Clippy, format and build passed.
+See `docs/acceptance/web_cooperative_tests_20261017.json` for source and log hashes.
+
+The original project chats can resume normal development; none is reserved for
+the queue demo. Installed dev84 remains stopped and unchanged. Next: integrate
+context capture and the handoff/rollover commands into running-host scheduling,
+release the shared browser during bootstrap response generation, then qualify
+three paired live Web projects and one rollover. Whole-history coverage and the
+installed/live milestone remain unaccepted; current bounded excerpts report
+unknown history. Earlier fixed-reserve and manual-handoff limitations below are
+historical descriptions of the prior source checkpoint.
+
 ## 2026-10-17 — combined ChatGPT Web P3/P4 priority (IN PROGRESS; MVP PARTIAL)
 
 The operator requires independent ChatGPT Web project agents and a demonstrated

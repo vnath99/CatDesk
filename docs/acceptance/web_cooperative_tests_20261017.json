@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "e97d5f0847104ea4a6fe7db9d0526bab84257782",
+  "sourceTree": "60182a01787211d14b29f0e34446726f722cf94b",
+  "localDate": "2026-10-17",
+  "recordedUtc": "2026-10-18T01:38:10.8333004Z",
+  "debugImageSha256": "26F23A5861A44FDA9D0FF077A2196175A0B002F97A719A9989AD641DFE3AE8D8",
+  "classification": "TESTED_LOCAL_SOURCE",
+  "focusedWebTests": {
+    "passed": 35,
+    "failed": 0,
+    "operator": 19,
+    "contextAndMcp": 16,
+    "initialPairingSandboxFailure": "ACCESS_DENIED",
+    "normalAccessRerun": "PASS"
+  },
+  "wakeLibraryTests": {
+    "passed": 244,
+    "failed": 0,
+    "ignored": 1
+  },
+  "pythonTests": {
+    "wakeAdapter": 36,
+    "bridgeResponse": 12,
+    "controlsOnlyAndUserCopyDomRegression": "PASS"
+  },
+  "clippy": "PASS_ALL_TARGET_ALL_FEATURE_ROOT_AND_WAKE",
+  "format": "PASS_ROOT_AND_WAKE",
+  "build": "PASS_ALL_FEATURE_CATDESK",
+  "mainFullSuite": "NOT_RERUN_PREVIOUS_RUN_INCOMPLETE",
+  "legacyPythonBridgeFullSuite": "NOT_RERUN_PREVIOUS_RUN_INCOMPLETE",
+  "remoteCI": "UNACCEPTED",
+  "installedActivationPerformed": false,
+  "productionWakeBindingChanged": false,
+  "liveRolloverAccepted": false,
+  "installedPointerReadback": "1.0.0-dev.84-02431feba5ed-1c6bcdfcedf0",
+  "installedDesiredReadback": "STOPPED",
+  "sourceFiles": [
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256": "1B621AC6CCEA5563D64E2E24904F30E47B1449A6E05FEB2BAF87299AF7CD60C1"
+    },
+    {
+      "path": "src/operator_web_cli.rs",
+      "sha256": "6A31D0D992DD2FDBEB8EDF47EFEBF5CC7040A58CE50DC093313CF801DBD8F45F"
+    },
+    {
+      "path": "src/operator_web_observe.rs",
+      "sha256": "101E6614723CDAD0E2ED886C0F7EEC2295BE19121EF98E65FC24DBCE7ABFCE65"
+    },
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "074EFF96EFFC653DA4F6A6846038509A5FC56EA6C3529CFC9B77A2B77096BF2C"
+    },
+    {
+      "path": "src/web_conversation_context.rs",
+      "sha256": "980AA5DB7B78C6688FA0EA7586C110161260DAB75F7EAC61C9E04FF850D86B46"
+    },
+    {
+      "path": "wake/adapter.py",
+      "sha256": "74F8106722963A7B00FD491A8128DFD87B5CEBD04846A789182C1BB4C79432F1"
+    },
+    {
+      "path": "wake/src/runtime.rs",
+      "sha256": "B29CDE9A2AA333821B7A75B3711AD51327508D86FE92F6FC9184A107F1775C6A"
+    },
+    {
+      "path": "wake/src/runtime_response.rs",
+      "sha256": "00E9EAECA80B45C5272998B04EA6EF57CACB1566FB2549CE6ADC494DD40D4189"
+    },
+    {
+      "path": "wake/src/runtime_scheduler.rs",
+      "sha256": "21692C568078124E1B0CACEDE7AFB723344FCAE57D19CAFB9A60BB1D63D4EBF0"
+    },
+    {
+      "path": "wake/src/store.rs",
+      "sha256": "44263ADD5C942538F61F0ABB5F542244C4918129D76C1AB1439EE848C6692443"
+    },
+    {
+      "path": "wake/tests/test_adapter.py",
+      "sha256": "85CABAA534A03021F393A0E86BD593FE038AA67AF49E5EB11F8FAE74BCDC80E3"
+    }
+  ],
+  "logs": [
+    {
+      "name": "web-cooperative-wake-lib.log",
+      "sha256": "7993A8F333C64E9C8B0F0149F78D52E6B6D50DA73F81559CE0F739AE0FF23483"
+    },
+    {
+      "name": "web-cooperative-root-web-final.log",
+      "sha256": "8B5F5674F7097A65F9B7D434D9795589190199360A4377C2DE07D1B9E04958B4"
+    },
+    {
+      "name": "web-cooperative-operator.log",
+      "sha256": "1495EF2B5D66510C34A0A928DE2DB7C2455EA8038E81944DCC11E0E69F3F32D9"
+    },
+    {
+      "name": "web-cooperative-adapter.log",
+      "sha256": "F3F5DD9F994B9364BDD6C5E7B9FB4F0F040A19EE104FD446356C778A4D4259A6"
+    },
+    {
+      "name": "web-cooperative-bridge-response.log",
+      "sha256": "4A8900A4098B11F2E0500C5AC8875C4F1CE413D281C7579E90301CFF435F8789"
+    },
+    {
+      "name": "web-cooperative-root-clippy.log",
+      "sha256": "6894D38291305A963ADE4C24FAE02C80103B5EDEA532699E7017F7692D26BB32"
+    },
+    {
+      "name": "web-cooperative-wake-clippy.log",
+      "sha256": "8A6F3BF9C9E60245B700CF588211D9673FA168C8A1BE56C49E49171B000E9F8A"
+    },
+    {
+      "name": "web-cooperative-build.log",
+      "sha256": "75AE4D03162CD1F0AA828492B9BBCB1695BA5567A9E11597EF8AE5032A2C663B"
+    }
+  ],
+  "reproductionCommands": {
+    "wakeLibrary": "cargo test --manifest-path wake/Cargo.toml --locked --offline --lib",
+    "contextAndMcp": "cargo test --locked --offline --all-features --bin catdesk web_ -- --test-threads=1",
+    "operator": "cargo test --locked --offline --all-features --bin catdesk operator_facade::web -- --test-threads=1",
+    "pythonAdapter": "python -B -m unittest discover -s wake/tests -p test_*.py -q",
+    "pythonBridgeResponse": "python -B -m unittest discover -s tests -p test_wake_bridge.py -k response -q",
+    "rootClippy": "cargo clippy --locked --offline --all-targets --all-features -- -D warnings",
+    "wakeClippy": "cargo clippy --manifest-path wake/Cargo.toml --locked --offline --all-targets --all-features -- -D warnings",
+    "build": "cargo build --locked --offline --all-features --bin catdesk",
+    "format": [
+      "cargo fmt --all -- --check",
+      "cargo fmt --manifest-path wake/Cargo.toml -- --check",
+      "git diff --check"
+    ]
+  }
+}
