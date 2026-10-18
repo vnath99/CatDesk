@@ -44,6 +44,15 @@ target readiness, delivery or review evidence. Check the separate read-only
 context capture result for the exact target before sending work. This route
 does not operate the protected installed browser profile.
 
+Ordinary `operator web` failures now include a bounded `errorCode` alongside
+`status:"attention"`; arbitrary error details are not echoed. For example,
+`DEV_LOGIN_CLEANUP_UNVERIFIED` means the development runtime's login cleanup
+guard is still present. If the original login process is live, finish that
+same sign-in flow and let it close normally; do not clear the guard or start a
+duplicate login. If it is terminal, inspect the existing cleanup evidence.
+Registration and browser work remain unavailable until the guard is resolved.
+This diagnostic is source-only until a matching application is built.
+
 Registration is create-only and checks the exact Git root/origin under the
 existing registry lock. It sets `nativeThreadId:null`, takes no Codex writer,
 and does not edit the project checkout. Existing native registrations cannot

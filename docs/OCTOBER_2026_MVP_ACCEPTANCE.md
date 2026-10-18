@@ -1,5 +1,52 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 18 HTTP work routing and five-project companion setup (PARTIAL)
+
+The existing three-project fixture now exercises an actual authenticated
+loopback MCP listener. One project's request, exact retry, conflict refusal,
+status and queued retirement use JSON-RPC HTTP while the other two retain
+their independent queued work. An unauthenticated request returns 401 and
+creates no event or work intent. Requests have a finite timeout. The focused
+fixture passed 1/1; strict root Clippy and formatting passed. Final verification
+retained unchanged Rust-source hashes in private
+`web-companions-r3-verification.json`, including the diagnostic test below and
+an exact project/event-ID check for the two remaining queue entries. An initial
+compile error in that new assertion was corrected; its failed log is retained.
+This verifies
+local HTTP composition, not central ChatGPT connectivity or browser delivery.
+
+Two additional browser-issued conversations were created for BYOVD and Bug
+Bounty. Both returned their requested readiness markers and a bounded review
+answer; their context preserves existing native development ownership. These
+are manual UI setup results. Their URLs and responses are retained privately,
+outside the repository. The previous three browser URLs match their stored
+bindings. All five now have companion conversations, but only the original
+three are registered and paired in the development runtime.
+
+The attempted BYOVD registration returned generic `attention`; a separate
+development-runtime status read identified `DEV_LOGIN_CLEANUP_UNVERIFIED`.
+The existing login session remains live and awaits the operator's sign-in
+confirmation. No lock or marker was cleared. Exact before/after comparison
+confirmed that the registry and Wake target configuration did not change.
+Bug Bounty registration was not attempted after that refusal. Private evidence
+is `companion-registration-attention.json`; finish registration through the
+supported commands after login cleanup and then verify paired readback.
+
+The observed generic response prompted a small source fix: `operator web`
+parse and execution failures now expose a bounded `errorCode`. A focused
+diagnostic test passed 1/1, including the actual login-guard code and rejection
+of raw/path-bearing detail. Legacy, Codex and development-runtime error output
+keep their existing behavior. The standalone application remains the prior
+build while its login process is live; the new CLI output is not yet a live
+binary result.
+
+The current v4 connector probe returned HTTP 429 from the provider gateway,
+and its exposed tool catalog lacks the new Web work tools. A loopback test
+does not establish provider routing or bearer-header compatibility. External
+tunnel ownership is preserved. Three real deliveries, browser-derived context
+estimates, genuine rollover/continuation and central initiation remain open;
+native Codex projects need no pause for this development work.
+
 ## October 18 central Web work requests (TESTED_LOCAL_SOURCE; LIVE UNVERIFIED)
 
 SupervisorOnly MCP now exposes `catdesk_web_work_request` and

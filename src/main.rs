@@ -2500,6 +2500,39 @@ async fn run_native_daemon() -> Result<(), Box<dyn std::error::Error>> {
 
 // ── Main ────────────────────────────────────────────────────
 
+fn operator_web_error_code(error: &str) -> &str {
+    const REFUSED: &str = "WEB_OPERATION_REFUSED";
+    let code = error.split_once(':').map_or(error, |(code, _)| code);
+    if code.len() < 5
+        || code.len() > 64
+        || !code.contains('_')
+        || !code
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_uppercase())
+        || !code
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
+        || ![
+            "WEB_",
+            "DEV_",
+            "WAKE_",
+            "STATE_",
+            "CONFIG_",
+            "TARGET_",
+            "SOURCE_",
+            "QUEUE_",
+            "BOOTSTRAP_",
+            "REGISTRY_",
+        ]
+        .iter()
+        .any(|prefix| code.starts_with(prefix))
+    {
+        return REFUSED;
+    }
+    code
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -2508,6 +2541,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             && args.get(1).is_some_and(|arg| arg == "codex"));
     let operator_web_development = args.first().is_some_and(|arg| arg == "operator")
         && args.get(1).is_some_and(|arg| arg == "web-dev-runtime");
+    let operator_web = args.first().is_some_and(|arg| arg == "operator")
+        && args.get(1).is_some_and(|arg| arg == "web");
     match operator_facade::parse_operator_action(args.clone()) {
         Ok(Some(action)) => {
             let workspace = std::env::current_dir()?;
@@ -2522,6 +2557,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             "{}",
                             serde_json::json!({"status":"attention","error":error})
                         );
+                    } else if operator_web {
+                        println!(
+                            "{}",
+                            serde_json::json!({"status":"attention","errorCode":operator_web_error_code(&error)})
+                        );
                     } else {
                         println!("{{\"status\":\"attention\"}}");
                     }
@@ -2535,6 +2575,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!(
                     "{}",
                     serde_json::json!({"status":"attention","error":error})
+                );
+            } else if operator_web {
+                println!(
+                    "{}",
+                    serde_json::json!({"status":"attention","errorCode":operator_web_error_code(&error)})
                 );
             } else {
                 println!("{{\"status\":\"attention\"}}");
@@ -3440,8 +3485,8 @@ mod tests {
     use super::{
         ReviewedCandidateParentControl, ToolMode, acquire_reviewed_candidate_process_lock,
         is_canonical_production_worker_listener, key_is_clipboard_paste, loopback_http_origin,
-        normalize_ngrok_authtoken_input, parse_auto_start_computer, parse_headless_mcp_options,
-        parse_native_daemon_mode, parse_owned_candidate_ready,
+        normalize_ngrok_authtoken_input, operator_web_error_code, parse_auto_start_computer,
+        parse_headless_mcp_options, parse_native_daemon_mode, parse_owned_candidate_ready,
         parse_reviewed_candidate_mcp_options, parse_reviewed_candidate_owner_diagnose_options,
         parse_reviewed_candidate_owner_options, parse_reviewed_candidate_parent_control,
         probe_reviewed_candidate_ready, resolve_headless_workspace, safe_bind_identity,
@@ -3450,6 +3495,34 @@ mod tests {
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use std::net::{SocketAddr, TcpListener, TcpStream, UdpSocket};
     use std::time::Duration;
+
+    #[test]
+    fn operator_web_attention_exposes_only_bounded_stable_codes() {
+        assert_eq!(
+            operator_web_error_code("DEV_LOGIN_CLEANUP_UNVERIFIED"),
+            "DEV_LOGIN_CLEANUP_UNVERIFIED"
+        );
+        assert_eq!(
+            operator_web_error_code("WEB_USAGE: invalid project ID"),
+            "WEB_USAGE"
+        );
+        assert_eq!(
+            operator_web_error_code("WEB_TARGET: C:\\private\\target.json"),
+            "WEB_TARGET"
+        );
+        for untrusted in [
+            "C:\\private\\token.txt",
+            "raw task text with a secret",
+            "SECRET_VALUE: private token",
+            "WEB_USAGE raw task text",
+            "web_scope: private path",
+            "WEB_SCOPE\nprivate path",
+        ] {
+            assert_eq!(operator_web_error_code(untrusted), "WEB_OPERATION_REFUSED");
+        }
+        let oversized = format!("WEB_{}", "A".repeat(61));
+        assert_eq!(operator_web_error_code(&oversized), "WEB_OPERATION_REFUSED");
+    }
 
     #[test]
     fn reviewed_candidate_parent_control_is_exact() {

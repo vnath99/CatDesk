@@ -2,7 +2,9 @@
 
 use crate::{
     delegated::autonomy_projects::AutonomousProjectRegistryStoreV1,
-    operator_facade, wake_protocol_client,
+    operator_facade,
+    state::{AppState, Mode, ToolMode},
+    wake_protocol_client,
     web_conversation_context::{
         ContextPressurePolicy, ConversationKey, Observation, VisibleSourceKind, WebContextStore,
     },
@@ -123,6 +125,43 @@ fn cleanup(parent: &Path) {
             .starts_with("catdesk-web-development-integration-")
     );
     fs::remove_dir_all(canonical).unwrap();
+}
+
+async fn web_mcp_request(
+    client: &reqwest::Client,
+    url: &str,
+    token: Option<&str>,
+    request: serde_json::Value,
+) -> (reqwest::StatusCode, serde_json::Value) {
+    let request = client.post(url).json(&request);
+    let request = match token {
+        Some(token) => request.bearer_auth(token),
+        None => request,
+    };
+    let response = request.send().await.unwrap();
+    let status = response.status();
+    (status, response.json().await.unwrap())
+}
+
+async fn web_mcp_tool(
+    client: &reqwest::Client,
+    url: &str,
+    token: &str,
+    name: &str,
+    arguments: serde_json::Value,
+) -> serde_json::Value {
+    let (status, response) = web_mcp_request(
+        client,
+        url,
+        Some(token),
+        serde_json::json!({
+            "jsonrpc":"2.0", "id":name, "method":"tools/call",
+            "params":{"name":name,"arguments":arguments}
+        }),
+    )
+    .await;
+    assert_eq!(status, reqwest::StatusCode::OK);
+    response
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -419,29 +458,132 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
             "taskText":"Review this project's current work; preserve the existing Codex task owner."
         })
     };
+
+    // Use the same disposable development control as the real HTTP MCP route.
+    // The listener is loopback-only, needs a bearer token, and has no tunnel.
+    let mut app = AppState::new_for_test(
+        0,
+        control.to_string_lossy().into_owned(),
+        control.join(".catdesk/web-development/catdesk.toml"),
+    )
+    .unwrap();
+    app.mode = Mode::Computer;
+    app.tool_mode = ToolMode::SupervisorOnly;
+    app.mcp_slug = "web-work-fixture".into();
+    let (ui_tx, _ui_rx) = tokio::sync::mpsc::unbounded_channel();
+    let mcp_path = "/web-work-fixture/mcp";
+    let token = "catdesk-web-work-fixture-token-1234567890";
+    let router = crate::server::router(
+        std::sync::Arc::new(tokio::sync::Mutex::new(app)),
+        None,
+        mcp_path.into(),
+        ui_tx,
+        Some(token.into()),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}{mcp_path}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move { axum::serve(listener, router).await });
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .unwrap();
+    let (denied_status, _) = web_mcp_request(
+        &client,
+        &url,
+        None,
+        json!({"jsonrpc":"2.0","id":"denied","method":"tools/call",
+            "params":{"name":"catdesk_web_work_request",
+                "arguments":arguments("beta", "same-request-id")}}),
+    )
+    .await;
+    assert_eq!(denied_status, reqwest::StatusCode::UNAUTHORIZED);
+    assert!(wake.events().unwrap().is_empty());
+    assert_eq!(
+        crate::web_work_state::WorkLedger::status(&control, "beta")["status"],
+        "UNOBSERVED"
+    );
+    let (list_status, listed) = web_mcp_request(
+        &client,
+        &url,
+        Some(token),
+        json!({"jsonrpc":"2.0","id":"list","method":"tools/list","params":{}}),
+    )
+    .await;
+    assert_eq!(list_status, reqwest::StatusCode::OK);
+    let names = listed["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|tool| tool["name"].as_str())
+        .collect::<Vec<_>>();
+    assert!(names.contains(&"catdesk_web_work_request"));
+    assert!(names.contains(&"catdesk_web_work_resolve"));
+    assert!(!names.contains(&"run_command"));
+
     let mut event_ids = std::collections::BTreeSet::new();
     for (project, _) in &projects {
         let input = arguments(project, "same-request-id");
-        let recorded = crate::web_work::request(&control, input.clone()).unwrap();
+        let recorded = if *project == "beta" {
+            let response = web_mcp_tool(
+                &client,
+                &url,
+                token,
+                "catdesk_web_work_request",
+                input.clone(),
+            )
+            .await;
+            assert_ne!(response["result"]["isError"], true);
+            response["result"]["structuredContent"].clone()
+        } else {
+            crate::web_work::request(&control, input.clone()).unwrap()
+        };
         assert_eq!(recorded["status"], "REQUEST_RECORDED");
         assert_eq!(recorded["nativeSessionAction"], "NONE");
         assert_eq!(recorded["deliveryProved"], false);
         assert_eq!(recorded["taskCompletionVerified"], false);
-        assert_eq!(
-            crate::web_work::request(&control, input.clone()).unwrap(),
-            recorded
-        );
+        let retried = if *project == "beta" {
+            let response = web_mcp_tool(
+                &client,
+                &url,
+                token,
+                "catdesk_web_work_request",
+                input.clone(),
+            )
+            .await;
+            assert_ne!(response["result"]["isError"], true);
+            response["result"]["structuredContent"].clone()
+        } else {
+            crate::web_work::request(&control, input.clone()).unwrap()
+        };
+        assert_eq!(retried, recorded);
         event_ids.insert(recorded["eventId"].as_str().unwrap().to_owned());
         let mut conflict = input;
         conflict["taskText"] = json!("A different task under the same request ID.");
-        assert_eq!(
-            crate::web_work::request(&control, conflict).unwrap_err(),
-            "WEB_WORK_REQUEST_CONFLICT"
-        );
-        assert_eq!(
-            crate::web_work::request(&control, arguments(project, "another-task")).unwrap_err(),
-            "WEB_WORK_ACTIVE_REQUEST"
-        );
+        if *project == "beta" {
+            let response =
+                web_mcp_tool(&client, &url, token, "catdesk_web_work_request", conflict).await;
+            assert_eq!(response["result"]["isError"], true);
+            assert!(response.to_string().contains("WEB_WORK_REQUEST_CONFLICT"));
+            let response = web_mcp_tool(
+                &client,
+                &url,
+                token,
+                "catdesk_web_work_request",
+                arguments(project, "another-task"),
+            )
+            .await;
+            assert_eq!(response["result"]["isError"], true);
+            assert!(response.to_string().contains("WEB_WORK_ACTIVE_REQUEST"));
+        } else {
+            assert_eq!(
+                crate::web_work::request(&control, conflict).unwrap_err(),
+                "WEB_WORK_REQUEST_CONFLICT"
+            );
+            assert_eq!(
+                crate::web_work::request(&control, arguments(project, "another-task")).unwrap_err(),
+                "WEB_WORK_ACTIVE_REQUEST"
+            );
+        }
     }
     assert_eq!(event_ids.len(), 3);
     let events = wake.events().unwrap();
@@ -460,6 +602,34 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
             1
         );
     }
+    let status = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "autonomy_project_registry_read",
+        json!({}),
+    )
+    .await;
+    assert_ne!(status["result"]["isError"], true);
+    let reported_projects = status["result"]["structuredContent"]["webProjects"]["projects"]
+        .as_array()
+        .unwrap();
+    assert_eq!(reported_projects.len(), 3);
+    for project in ["catdesk", "alpha", "beta"] {
+        let reported = reported_projects
+            .iter()
+            .find(|reported| reported["projectId"] == project)
+            .unwrap();
+        assert_eq!(
+            reported["workIntent"]["active"]["requestId"],
+            "same-request-id"
+        );
+        assert_eq!(reported["queue"]["workRequests"]["recordCount"], 1);
+        assert_eq!(
+            reported["queue"]["workRequests"]["taskCompletionVerified"],
+            false
+        );
+    }
     let resolution = |project: &str, outcome: &str| {
         json!({"projectId":project,"requestId":"same-request-id",
             "expectedTargetGeneration":1,"expectedTargetSha256":bindings[project].digest,
@@ -471,17 +641,78 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
     );
     // A queued request can be retired without claiming it was delivered. Its
     // archived transport and closed intent make an exact retry harmless.
-    let closed = crate::web_work::resolve(&control, resolution("beta", "retired")).unwrap();
+    let retired = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_work_resolve",
+        resolution("beta", "retired"),
+    )
+    .await;
+    assert_ne!(retired["result"]["isError"], true);
+    let closed = retired["result"]["structuredContent"].clone();
     assert_eq!(closed["taskCompletionVerified"], false);
+    let retired_retry = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_work_resolve",
+        resolution("beta", "retired"),
+    )
+    .await;
+    assert_eq!(retired_retry["result"]["structuredContent"], closed);
+    let already_closed = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_work_request",
+        arguments("beta", "same-request-id"),
+    )
+    .await;
     assert_eq!(
-        crate::web_work::resolve(&control, resolution("beta", "retired")).unwrap(),
-        closed
-    );
-    assert_eq!(
-        crate::web_work::request(&control, arguments("beta", "same-request-id")).unwrap()["status"],
+        already_closed["result"]["structuredContent"]["status"],
         "REQUEST_ALREADY_CLOSED"
     );
-    assert_eq!(wake.events().unwrap().len(), 2);
+    let remaining_events = wake.events().unwrap();
+    assert_eq!(remaining_events.len(), 2);
+    assert_eq!(
+        remaining_events
+            .iter()
+            .map(|event| (&event.project_id, &event.event_id))
+            .collect::<std::collections::BTreeSet<_>>(),
+        events
+            .iter()
+            .filter(|event| event.project_id != "beta")
+            .map(|event| (&event.project_id, &event.event_id))
+            .collect::<std::collections::BTreeSet<_>>()
+    );
+    let status = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "autonomy_project_registry_read",
+        json!({}),
+    )
+    .await;
+    let reported_projects = status["result"]["structuredContent"]["webProjects"]["projects"]
+        .as_array()
+        .unwrap();
+    for project in ["catdesk", "alpha"] {
+        let reported = reported_projects
+            .iter()
+            .find(|reported| reported["projectId"] == project)
+            .unwrap();
+        assert_eq!(
+            reported["workIntent"]["active"]["requestId"],
+            "same-request-id"
+        );
+    }
+    let beta = reported_projects
+        .iter()
+        .find(|reported| reported["projectId"] == "beta")
+        .unwrap();
+    assert!(beta["workIntent"]["active"].is_null());
+    assert_eq!(beta["workIntent"]["recordCount"], 1);
 
     // Synthetic receipt/timer evidence is confined to this disposable Store.
     // The coordinator cannot close delivered work while its response is active.
@@ -642,5 +873,7 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
         );
     }
     assert_eq!(production_snapshot(), production_before);
+    server.abort();
+    let _ = server.await;
     cleanup(&parent);
 }

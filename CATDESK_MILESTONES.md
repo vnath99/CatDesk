@@ -1,3 +1,23 @@
+## 2026-10-18 — HTTP composition and additional Web companions (MVP PARTIAL)
+
+The three-project fixture now drives one project's work request, idempotent
+retry, conflict, status and retirement through authenticated loopback MCP.
+Unauthenticated publication leaves durable state unchanged, and other project
+work remains queued. Focused fixture 1/1, strict root lint and formatting pass;
+this is local source evidence only.
+
+BYOVD and Bug Bounty now also have real browser-issued review companion URLs
+and observed readiness replies. Their native Codex development ownership is
+preserved. The existing login guard refused registration of the first new
+companion, leaving the original three registry records and Wake targets
+unchanged. Thus five conversations exist, with only three registered/paired.
+The pending login must finish before supported registration can continue.
+The generic CLI failure now has a source fix that exposes a bounded stable
+error code; the focused diagnostic test passed 1/1. A matching standalone
+application build remains pending while the existing login owns its executable.
+The v4 provider probe returned 429; central connectivity, live deliveries,
+context capture and rollover remain unaccepted. See the acceptance ledger.
+
 ## 2026-10-18 — central multi-project Web work controls (TESTED_LOCAL_SOURCE; MVP PARTIAL)
 
 Source now exposes SupervisorOnly MCP `catdesk_web_work_request` and
