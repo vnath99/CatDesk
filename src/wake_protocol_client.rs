@@ -1,10 +1,31 @@
 //! CatDesk publishes bounded events; independent Wake owns delivery and target.
 use catdesk_wake::{
+    development_runtime,
     protocol::{Event, Target},
     runtime::{Activation, default_root},
     store::{Config, Store, read},
 };
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+/// Select the explicitly prepared development Wake for this control workspace.
+/// A present but invalid binding is an error, never permission to use the
+/// installed Wake root instead.
+pub(crate) fn wake_root_for_workspace(workspace: &Path) -> Result<PathBuf, String> {
+    match development_runtime::root_for_workspace(workspace)? {
+        Some(root) => Ok(root),
+        None => default_root(),
+    }
+}
+
+pub(crate) fn wake_runtime_mode_for_workspace(workspace: &Path) -> Result<&'static str, String> {
+    Ok(
+        if development_runtime::root_for_workspace(workspace)?.is_some() {
+            "DEVELOPMENT_UNPROTECTED"
+        } else {
+            "INSTALLED_STORE"
+        },
+    )
+}
 
 /// The explicit project selector also makes earlier CatDesk generations fail
 /// closed (unknown owner), including a rollback to a pre-protocol executable.
@@ -54,8 +75,11 @@ pub(crate) fn current_generation_accept_after_at(
     generation_accept_after(&activation, &config, project)
 }
 
-pub(crate) fn current_generation_accept_after(project: &str) -> Result<u64, String> {
-    let root = default_root()?;
+pub(crate) fn current_generation_accept_after(
+    control_workspace: &Path,
+    project: &str,
+) -> Result<u64, String> {
+    let root = wake_root_for_workspace(control_workspace)?;
     current_generation_accept_after_at(&root, project)
 }
 
@@ -105,7 +129,7 @@ pub(crate) fn publish_registered(
         project,
     )
     .map_err(|_| "WAKE_PROJECT_NOT_REGISTERED".to_string())?;
-    let root = default_root()?;
+    let root = wake_root_for_workspace(control_workspace)?;
     let activation: Activation = read(&root.join("activation.json"))?;
     if activation.schema_version != 1
         || activation.owner != "CatDeskWake"
@@ -114,6 +138,13 @@ pub(crate) fn publish_registered(
         return Err("WAKE_ACTIVATION_INVALID".into());
     }
     let store = Store::open(&root)?;
+    if let Some(url) = scope.project.chatgpt_target_url.as_deref() {
+        development_runtime::validate_selected_target_isolation(
+            control_workspace,
+            store.root(),
+            url,
+        )?;
+    }
     publish_registered_with_store(
         &store,
         &activation,
@@ -182,21 +213,23 @@ fn registered_publication_context(
         project,
     )
     .map_err(|_| "WAKE_PROJECT_NOT_REGISTERED".to_string())?;
-    let root = default_root()?;
+    let registered_url = scope
+        .project
+        .chatgpt_target_url
+        .ok_or("TARGET_NOT_CONFIGURED")?;
+    let registered_sha256 = scope
+        .project
+        .chatgpt_target_sha256
+        .ok_or("TARGET_NOT_CONFIGURED")?;
+    let root = wake_root_for_workspace(control_workspace)?;
     let activation: Activation = read(&root.join("activation.json"))?;
     let store = Store::open(&root)?;
-    Ok((
-        store,
-        activation,
-        scope
-            .project
-            .chatgpt_target_url
-            .ok_or("TARGET_NOT_CONFIGURED")?,
-        scope
-            .project
-            .chatgpt_target_sha256
-            .ok_or("TARGET_NOT_CONFIGURED")?,
-    ))
+    development_runtime::validate_selected_target_isolation(
+        control_workspace,
+        store.root(),
+        &registered_url,
+    )?;
+    Ok((store, activation, registered_url, registered_sha256))
 }
 
 fn publication_target(
@@ -317,6 +350,25 @@ mod tests {
     use super::*;
     use catdesk_wake::{protocol::Target, store::TargetChange};
     use std::collections::BTreeMap;
+
+    #[test]
+    fn wake_root_uses_installed_default_only_when_development_binding_is_absent() {
+        let workspace =
+            std::env::temp_dir().join(format!("catdesk-wake-root-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&workspace).unwrap();
+        assert_eq!(wake_root_for_workspace(&workspace), default_root());
+        assert_eq!(
+            wake_runtime_mode_for_workspace(&workspace),
+            Ok("INSTALLED_STORE")
+        );
+
+        let authority = workspace.join(".catdesk/web-development/authority.json");
+        std::fs::create_dir_all(authority.parent().unwrap()).unwrap();
+        std::fs::write(authority, b"{}").unwrap();
+        assert!(wake_root_for_workspace(&workspace).is_err());
+        assert!(wake_runtime_mode_for_workspace(&workspace).is_err());
+        let _ = std::fs::remove_dir_all(workspace);
+    }
 
     #[test]
     fn project_publication_rechecks_target_and_deduplicates_exact_event() {

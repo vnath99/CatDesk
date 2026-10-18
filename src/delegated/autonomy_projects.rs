@@ -478,6 +478,90 @@ impl AutonomousProjectRegistryStoreV1 {
         self.save_registry(&registry)
     }
 
+    /// Register a Git project for independent Web work without claiming a
+    /// native Codex thread or project writer. The first registration must be
+    /// the exact Git control root; later registrations preserve that authority.
+    pub(crate) fn register_web_only_project(
+        &self,
+        control_workspace: &Path,
+        project_id: &str,
+        candidate_workspace: &Path,
+        expected_git_identity: &str,
+    ) -> Result<AutonomousProjectV1, RuntimeError> {
+        valid_slug(project_id, "project id")?;
+        let control_workspace = control_workspace
+            .canonicalize()
+            .map_err(|_| RuntimeError::Validation("Web control workspace is unavailable".into()))?;
+        let _lock = self.acquire_registration_lock()?;
+        if project_id == CATDESK_PROJECT_ID_V1 {
+            let candidate = candidate_workspace.to_str().ok_or_else(|| {
+                RuntimeError::Validation("Web project workspace is not UTF-8".into())
+            })?;
+            let observed = super::autonomy_supervisor::verified_external_git_workspace(
+                candidate,
+                expected_git_identity,
+            )
+            .map_err(|_| {
+                RuntimeError::Validation("Web project Git identity is unavailable".into())
+            })?;
+            if observed != control_workspace {
+                return Err(RuntimeError::Validation(
+                    "first Web project must be the CatDesk control Git root".into(),
+                ));
+            }
+            self.initialize(1, 1)?;
+        } else {
+            let registry = self.load_registry()?;
+            let controller = registry
+                .projects
+                .iter()
+                .find(|project| project.project_id == CATDESK_PROJECT_ID_V1)
+                .ok_or_else(|| {
+                    RuntimeError::Validation("CatDesk control project is not registered".into())
+                })?;
+            if controller.workspace != control_workspace {
+                return Err(RuntimeError::Validation(
+                    "CatDesk control registry is bound to a different workspace".into(),
+                ));
+            }
+            let controller_path = controller.workspace.to_str().ok_or_else(|| {
+                RuntimeError::Validation("CatDesk control workspace is not UTF-8".into())
+            })?;
+            if super::autonomy_supervisor::verified_external_git_workspace(
+                controller_path,
+                &controller.git_identity,
+            )
+            .ok()
+            .as_deref()
+                != Some(control_workspace.as_path())
+            {
+                return Err(RuntimeError::Validation(
+                    "CatDesk control Git identity is unavailable".into(),
+                ));
+            }
+        }
+        let candidate = candidate_workspace
+            .to_str()
+            .ok_or_else(|| RuntimeError::Validation("Web project workspace is not UTF-8".into()))?;
+        let workspace = super::autonomy_supervisor::verified_external_git_workspace(
+            candidate,
+            expected_git_identity,
+        )
+        .map_err(|_| RuntimeError::Validation("Web project Git identity is unavailable".into()))?;
+        let project = AutonomousProjectV1 {
+            project_id: project_id.into(),
+            workspace,
+            git_identity: expected_git_identity.into(),
+            verification_profile: "web_only_v1".into(),
+            codex_thread_id: None,
+            chatgpt_target_url: None,
+            chatgpt_target_sha256: None,
+            chatgpt_target_history: Vec::new(),
+        };
+        self.register_project(project.clone())?;
+        Ok(project)
+    }
+
     /// Change only a CatDesk queue/writer-idle project's fixed verification
     /// profile. The caller holds the operator queue and project writer locks;
     /// the scheduler and registration locks exclude a concurrent CatDesk lease
@@ -2250,6 +2334,114 @@ mod tests {
                     .success()
             );
         }
+    }
+
+    #[test]
+    fn web_only_registration_preserves_native_records_and_dirty_git_roots() {
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-control-resolver-web-only-{}",
+            Uuid::new_v4()
+        ));
+        let control = root.join("control");
+        let external = root.join("external");
+        let native_root = root.join("native");
+        let control_origin = "https://example.test/catdesk.git";
+        let external_origin = "https://example.test/external.git";
+        let native_origin = "https://example.test/native.git";
+        fixture_git_root(&control, control_origin);
+        fixture_git_root(&external, external_origin);
+        fixture_git_root(&native_root, native_origin);
+        fs::write(external.join("working-change.txt"), b"preserve me").unwrap();
+        let store = AutonomousProjectRegistryStoreV1::open(control.join(".catdesk/projects"))
+            .expect("Web registry root");
+        assert!(
+            store
+                .register_web_only_project(&control, "external", &external, external_origin)
+                .is_err()
+        );
+        assert!(
+            store
+                .register_web_only_project(&control, "catdesk", &external, external_origin)
+                .is_err()
+        );
+        assert!(!store.registry_path().exists());
+
+        let controller = store
+            .register_web_only_project(&control, "catdesk", &control, control_origin)
+            .expect("exact control registration");
+        assert_eq!(controller.workspace, control.canonicalize().unwrap());
+        assert_eq!(controller.verification_profile, "web_only_v1");
+        assert_eq!(controller.codex_thread_id, None);
+        let registered = store
+            .register_web_only_project(&control, "external", &external, external_origin)
+            .expect("dirty external Git root");
+        assert_eq!(registered.codex_thread_id, None);
+        assert!(registered.chatgpt_target_url.is_none());
+        assert_eq!(
+            fs::read(external.join("working-change.txt")).unwrap(),
+            b"preserve me"
+        );
+        assert!(!external.join(".catdesk").exists());
+        assert!(
+            store
+                .register_web_only_project(&control, "external", &native_root, native_origin)
+                .is_err()
+        );
+        assert!(
+            store
+                .register_web_only_project(&control, "alias", &external, external_origin)
+                .is_err()
+        );
+
+        let mut native = project("native", native_root.canonicalize().unwrap());
+        native.git_identity = native_origin.into();
+        native.verification_profile = "rust_full".into();
+        native.codex_thread_id = Some("existing-native-thread".into());
+        store
+            .register_project(native.clone())
+            .expect("native fixture record");
+        assert!(
+            store
+                .register_web_only_project(&control, "native", &native_root, native_origin)
+                .is_err()
+        );
+        assert!(
+            store
+                .register_web_only_project(&control, "native-alias", &native_root, native_origin)
+                .is_err()
+        );
+        assert_eq!(
+            store
+                .load_registry()
+                .unwrap()
+                .projects
+                .into_iter()
+                .find(|project| project.project_id == "native")
+                .unwrap(),
+            native
+        );
+
+        assert!(
+            Command::new("git")
+                .arg("-C")
+                .arg(&external)
+                .args([
+                    "remote",
+                    "set-url",
+                    "origin",
+                    "https://example.test/changed.git"
+                ])
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert!(
+            store
+                .register_web_only_project(&control, "drift", &external, external_origin)
+                .is_err()
+        );
+        assert_eq!(store.load_registry().unwrap().projects.len(), 3);
+        cleanup_control_resolver_fixture(&root);
     }
 
     fn cleanup_control_resolver_fixture(root: &Path) {

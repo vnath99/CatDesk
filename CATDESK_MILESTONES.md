@@ -1,3 +1,23 @@
+## 2026-10-18 — isolated Web development runtime (FOCUSED_LOCAL_SOURCE; MVP PARTIAL)
+
+Current source adds an opt-in `DEVELOPMENT_UNPROTECTED` Wake runtime in a new
+empty control workspace. Web target, queue, context and rollover paths select
+the development root only while its fixed authority remains valid; invalid or
+partial authority never silently falls back to installed Wake. An explicit
+Web-only operator registration binds an exact Git root/origin with no native
+thread or checkout edit. A local fixture prepared but did not launch the
+runtime, registered three projects through this command, exercised paired
+bindings and controlled queue events, and checked independent context and
+unchanged selected production control files. Broad pre-registration source
+verification passed (main 1,487 / 28 ignored); final delta checks passed Web
+36/36, registration 1/1 and integration 1/1, plus strict lint/format/build.
+The full root suite was not repeated after the registration delta. See
+`docs/OCTOBER_2026_MVP_ACCEPTANCE.md` and the operator runbook.
+
+Live three-project ChatGPT delivery and rollover, protected Wake release, and
+exact remote CI remain open. Existing Bug Bounty, BYOVD, Wake2 and PortfolioDesk
+conversations can continue independently without pausing for this lane.
+
 ## 2026-10-18 — reviewed canonical pair reconciliation (TESTED_LOCAL_SOURCE; MVP PARTIAL)
 
 Source `2cf2751` implements operator release-pair prepare/confirm/result using

@@ -1,5 +1,55 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 18 isolated Web development runtime (FOCUSED_LOCAL_SOURCE; LIVE OPEN)
+
+The current source adds an explicit `DEVELOPMENT_UNPROTECTED` Wake runtime for
+a **new, empty, separate control workspace**. `operator web-dev-runtime prepare`
+copies the source-matched Wake package and Python runtime into that workspace's
+`.catdesk/web-development/runtime`, records a fixed authority, and leaves the
+host `STOPPED`. It does not install or migrate protected Wake. Normal Web
+target, context, rollover and queue paths select this root when its authority
+is valid. Partial or invalid development authority fails closed rather than
+falling back to the installed store. Status labels the selected mode.
+
+The fixed development package, per-project paired target and isolation checks
+are required before controlled queue publication or browser work. Development
+targets are checked against known production current and historical ChatGPT
+conversation IDs, with another check by WakeHost immediately before submit.
+The `web-dev-runtime enqueue` command queues a bounded workspace-supplied
+`test` event for a paired project; its response explicitly leaves delivery and
+natural review **unproved**. The development lane uses ordinary user-owned
+files and does not provide protected install, global profile isolation or
+production release authority.
+
+The explicit `operator web project register` route now registers an exact Git
+root and origin as Web-only, with no Codex thread, native writer claim or
+checkout edit. It uses the existing exclusive registration lock and rejects
+duplicate IDs/workspaces; `catdesk` must first identify the control Git root.
+The local fixture uses this actual operator route for three projects.
+
+The unchanged pre-registration source passed the broad local Cargo regression
+(main binary 1,487 passed / 28 ignored, including nested Wake verification).
+After the Web-only registration delta, focused local checks passed: Web
+operator 36/36, real-Git registration 1/1, and the three-project native
+integration fixture 1/1. Strict root Clippy, formatting and final CatDesk build
+passed; Wake strict Clippy and host build passed after two mechanical lint
+fixes. The fixture prepares a runtime without launching it, binds and reads
+three Web targets, publishes controlled events through the operator route,
+records independent context, and checks that selected production control
+files were unchanged. It also checks replay/conflict and invalid-authority
+refusal. These are fixture conversations and queued events, **not** three live
+ChatGPT deliveries. The full root suite was not repeated after the narrow
+registration delta. The operator sequence is in
+`docs/orchestrator/CATDESK_IMPORTANT_COMMANDS.md`.
+
+**Live acceptance remains open:** no development host/browser conversation was
+launched for this fixture, no new ChatGPT URL or genuine rollover was verified,
+and no installed Wake release was activated. The installed old-owner/migration
+and service gates remain separate, as does exact remote CI acceptance. The
+October three-project Web milestone remains **PARTIAL**. Bug Bounty, BYOVD,
+Wake2 and PortfolioDesk may continue in their existing native conversations;
+this development lane does not require them to pause.
+
 ## October 18 canonical release-pair reconciliation (TESTED_LOCAL_SOURCE; LIVE PARTIAL)
 
 Source `2cf2751c72f491513760d21cd183a891f01d699d` adds the missing recovery path

@@ -1603,7 +1603,7 @@ fn reviewer_wakeups() -> &'static Arc<Mutex<BTreeMap<String, u64>>> {
 /// removal of a registration now owned by somebody else.
 fn project_wake_target(workspace: &Path, project_id: &str) -> Option<String> {
     if crate::wake_protocol_client::selected(workspace) {
-        let root = catdesk_wake::runtime::default_root().ok()?;
+        let root = crate::wake_protocol_client::wake_root_for_workspace(workspace).ok()?;
         return catdesk_wake::store::Store::open(&root)
             .ok()?
             .config()
@@ -2035,7 +2035,7 @@ fn persisted_completed_review_wake_candidates(
     workspace: &Path,
 ) -> Result<Vec<String>, RuntimeError> {
     persisted_completed_review_wake_candidates_with_cutoff(workspace, |project_id| {
-        crate::wake_protocol_client::current_generation_accept_after(project_id)
+        crate::wake_protocol_client::current_generation_accept_after(workspace, project_id)
     })
 }
 

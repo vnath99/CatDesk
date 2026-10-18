@@ -41,6 +41,11 @@ fn main() {
 }
 fn execute() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if let [command, workspace] = args.as_slice()
+        && command == "--dev-host"
+    {
+        return catdesk_wake::development_runtime::run_host(Path::new(workspace));
+    }
     let root = runtime::default_root()?;
     #[cfg(feature = "test-support")]
     if args.as_slice() == ["test-owner-proof-host"] {

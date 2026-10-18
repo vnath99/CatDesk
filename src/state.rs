@@ -1365,7 +1365,9 @@ impl AppState {
         let stable_wake =
             crate::stable_wake_bootstrap::workspace_readiness(Path::new(&self.workspace_root));
         let independent_wake = (|| -> serde_json::Value {
-            let root = match catdesk_wake::runtime::default_root() {
+            let root = match crate::wake_protocol_client::wake_root_for_workspace(Path::new(
+                &self.workspace_root,
+            )) {
                 Ok(root) => root,
                 Err(error) => {
                     return serde_json::json!({
@@ -1413,12 +1415,15 @@ impl AppState {
                 }),
             }
         })();
-        let independent_wake_store_provenance = match catdesk_wake::runtime::default_root()
+        let independent_wake_store_provenance =
+            match crate::wake_protocol_client::wake_root_for_workspace(Path::new(
+                &self.workspace_root,
+            ))
             .and_then(|root| catdesk_wake::runtime::store_provenance(&root))
-        {
-            Ok(value) => serde_json::json!({"available": true, "provenance": value}),
-            Err(error) => serde_json::json!({"available": false, "reason": error}),
-        };
+            {
+                Ok(value) => serde_json::json!({"available": true, "provenance": value}),
+                Err(error) => serde_json::json!({"available": false, "reason": error}),
+            };
         serde_json::json!({
             "toolName": "catdesk_transport_status",
             "transportMode": self.tunnel_config.mode.as_str(),
@@ -1451,6 +1456,11 @@ impl AppState {
                 "staleCount": stable_wake.stale_count,
             },
             "independentWake": independent_wake,
+            "wakeRuntimeMode": match catdesk_wake::development_runtime::root_for_workspace(Path::new(&self.workspace_root)) {
+                Ok(Some(_)) => "DEVELOPMENT_UNPROTECTED",
+                Ok(None) => "INSTALLED_STORE",
+                Err(_) => "DEVELOPMENT_AUTHORITY_UNAVAILABLE",
+            },
             "independentWakeStoreProvenance": independent_wake_store_provenance,
             "identity": {
                 "gitCommit": identity.git_commit,

@@ -30,6 +30,11 @@ pub(crate) fn start_auto_scheduler(state: crate::state::SharedState) {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WebAction {
     Status,
+    RegisterProject {
+        project_id: String,
+        workspace: PathBuf,
+        git_identity: String,
+    },
     ReadTarget {
         project_id: String,
     },
@@ -114,6 +119,29 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         return Err("WEB_USAGE: invalid project ID".into());
     }
     match (group, verb) {
+        ("project", "register") => {
+            let candidate = options
+                .remove("--workspace")
+                .ok_or("WEB_USAGE: --workspace is required")?;
+            let git_identity = options
+                .remove("--git-identity")
+                .ok_or("WEB_USAGE: --git-identity is required")?;
+            if candidate.is_empty()
+                || candidate.len() > 4096
+                || candidate.chars().any(char::is_control)
+                || git_identity.is_empty()
+                || git_identity.len() > 1024
+                || git_identity.chars().any(char::is_control)
+                || !options.is_empty()
+            {
+                return Err("WEB_USAGE: invalid project registration option".into());
+            }
+            Ok(WebAction::RegisterProject {
+                project_id: project_id.into(),
+                workspace: PathBuf::from(candidate),
+                git_identity: git_identity.into(),
+            })
+        }
         ("target", "read") if options.is_empty() => Ok(WebAction::ReadTarget {
             project_id: project_id.into(),
         }),
@@ -299,7 +327,13 @@ fn context_status(workspace: &Path, project: &str) -> Value {
 
 fn capture_context(workspace: &Path, project: &str) -> Result<Value, String> {
     let key = paired_key(workspace, project)?;
-    let wake = catdesk_wake::store::Store::open(&catdesk_wake::runtime::default_root()?)?;
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+    let wake = catdesk_wake::store::Store::open(&root)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &key.conversation_url,
+    )?;
     let source =
         catdesk_wake::protocol::Target::new(key.target_generation, key.conversation_url.clone())?;
     let snapshot = catdesk_wake::runtime::snapshot_conversation(&wake, project, &source)?;
@@ -318,11 +352,14 @@ fn capture_context(workspace: &Path, project: &str) -> Result<Value, String> {
     })
 }
 
-fn target_status(workspace: &Path, project_id: &str) -> Value {
+fn target_status(workspace: &Path, project_id: &str, runtime_mode: &str) -> Value {
     match mcp::operator_read_project_web_target(workspace, project_id) {
-        Ok(Some(target)) => json!({"status":"PAIRED", "target":target, "deliveryProved":false}),
-        Ok(None) => json!({"status":"UNBOUND", "deliveryProved":false}),
-        Err(error) => json!({"status":"ATTENTION", "reason":reason(error), "deliveryProved":false}),
+        Ok(Some(target)) => json!({"status":"PAIRED", "target":target, "deliveryProved":false,
+            "runtimeMode":runtime_mode}),
+        Ok(None) => json!({"status":"UNBOUND", "deliveryProved":false,
+            "runtimeMode":runtime_mode}),
+        Err(error) => json!({"status":"ATTENTION", "reason":reason(error), "deliveryProved":false,
+            "runtimeMode":runtime_mode}),
     }
 }
 
@@ -459,7 +496,37 @@ pub(crate) fn execute(action: WebAction, workspace: &Path) -> Result<Value, Stri
         .canonicalize()
         .map_err(|_| "WEB_SCOPE: control workspace is unavailable")?;
     match action {
+        WebAction::RegisterProject {
+            project_id,
+            workspace: project_workspace,
+            git_identity,
+        } => {
+            let runtime_mode =
+                crate::wake_protocol_client::wake_runtime_mode_for_workspace(&workspace)?;
+            let registry =
+                AutonomousProjectRegistryStoreV1::open(workspace.join(".catdesk/projects"))
+                    .map_err(|_| "WEB_PROJECT_REGISTRY_UNAVAILABLE")?;
+            let project = registry
+                .register_web_only_project(
+                    &workspace,
+                    &project_id,
+                    &project_workspace,
+                    &git_identity,
+                )
+                .map_err(|_| "WEB_PROJECT_REGISTER_REFUSED")?;
+            Ok(json!({
+                "action":"web_project_register", "status":"REGISTERED_WEB_ONLY",
+                "projectId":project.project_id, "workspace":project.workspace,
+                "gitIdentity":project.git_identity,
+                "verificationProfile":project.verification_profile,
+                "nativeThreadId":project.codex_thread_id,
+                "targetUnbound":true, "runtimeMode":runtime_mode,
+                "nativeSessionAction":"NONE", "wakeAction":"NONE",
+            }))
+        }
         WebAction::Status => {
+            let runtime_mode =
+                crate::wake_protocol_client::wake_runtime_mode_for_workspace(&workspace)?;
             let registry = AutonomousProjectRegistryStoreV1::open_read_only(
                 workspace.join(".catdesk/projects"),
             )
@@ -476,7 +543,7 @@ pub(crate) fn execute(action: WebAction, workspace: &Path) -> Result<Value, Stri
                         "nativeThreadId":project.codex_thread_id,
                         "registeredConversationUrl":project.chatgpt_target_url,
                         "conversationHistory":stored.get("chatgptTargetHistory"),
-                        "wake":target_status(&workspace, &project.project_id),
+                        "wake":target_status(&workspace, &project.project_id, runtime_mode),
                         "context":context_status(&workspace,&project.project_id),
                         "rollover":operator_rollover_status(&workspace,&project.project_id)
                             .unwrap_or_else(|_| json!({"status":"UNAVAILABLE_OR_BUSY"})),
@@ -485,19 +552,27 @@ pub(crate) fn execute(action: WebAction, workspace: &Path) -> Result<Value, Stri
                 .collect();
             Ok(
                 json!({"action":"web_status", "readOnly":true, "projects":projects,
+                "runtimeMode":runtime_mode,
                 "meaning":"Per-project registration and paired Wake readback. Browser authentication, delivery and continuation require their own receipts."}),
             )
         }
-        WebAction::ReadTarget { project_id } => Ok(json!({
-            "action":"web_target_read", "projectId":project_id,
-            "readOnly":true, "wake":target_status(&workspace, &project_id),
-        })),
+        WebAction::ReadTarget { project_id } => {
+            let runtime_mode =
+                crate::wake_protocol_client::wake_runtime_mode_for_workspace(&workspace)?;
+            Ok(json!({
+                "action":"web_target_read", "projectId":project_id,
+                "readOnly":true, "runtimeMode":runtime_mode,
+                "wake":target_status(&workspace, &project_id, runtime_mode),
+            }))
+        }
         WebAction::BindTarget {
             project_id,
             conversation_url,
             expected_sha256,
             expected_generation,
         } => {
+            let runtime_mode =
+                crate::wake_protocol_client::wake_runtime_mode_for_workspace(&workspace)?;
             let target = mcp::operator_bind_project_web_target(
                 &workspace,
                 &project_id,
@@ -508,7 +583,7 @@ pub(crate) fn execute(action: WebAction, workspace: &Path) -> Result<Value, Stri
             .map_err(|error| format!("WEB_TARGET: {}", reason(error)))?;
             Ok(
                 json!({"action":"web_target_bind", "status":"PAIRED", "target":target,
-                "deliveryProved":false, "browserAction":"NONE"}),
+                "runtimeMode":runtime_mode, "deliveryProved":false, "browserAction":"NONE"}),
             )
         }
         WebAction::ContextStatus { project_id } => Ok(context_status(&workspace, &project_id)),
@@ -620,6 +695,39 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn web_only_registration_requires_exact_project_git_scope() {
+        let complete = args(&[
+            "operator",
+            "web",
+            "project",
+            "register",
+            "--project-id",
+            "alpha",
+            "--workspace",
+            "C:\\Projects\\alpha",
+            "--git-identity",
+            "https://example.test/alpha.git",
+        ]);
+        assert!(matches!(
+            parse(&complete),
+            Ok(WebAction::RegisterProject {
+                project_id,
+                git_identity,
+                ..
+            }) if project_id == "alpha" && git_identity == "https://example.test/alpha.git"
+        ));
+        for invalid in [
+            &complete[..complete.len() - 2],
+            &complete[..complete.len() - 4],
+        ] {
+            assert!(parse(invalid).is_err());
+        }
+        let mut unexpected = complete;
+        unexpected.extend(args(&["--codex-thread-id", "some-thread"]));
+        assert!(parse(&unexpected).is_err());
     }
 
     #[test]

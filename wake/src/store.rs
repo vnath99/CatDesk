@@ -1632,6 +1632,12 @@ fn safe_directories(path: &Path) -> Result<()> {
             return Err("CONFIG_ROOT_INVALID".into());
         }
         current.push(part);
+        // Windows verbatim paths have a bare \\?\C: Prefix component that is
+        // not itself an openable directory. RootDir below is the first real
+        // object and every descendant still receives the same link check.
+        if matches!(part, std::path::Component::Prefix(_)) {
+            continue;
+        }
         reject_link(&current)?;
         if !current
             .try_exists()
@@ -1644,6 +1650,29 @@ fn safe_directories(path: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(all(test, windows))]
+mod canonical_store_root_tests {
+    use super::*;
+
+    #[test]
+    fn normal_and_verbatim_canonical_roots_open_same_store() {
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-wake-canonical-root-{}-{}",
+            std::process::id(),
+            now()
+        ));
+        fs::create_dir(&root).unwrap();
+        let normal = Store::open(&root).unwrap();
+        normal.initialize().unwrap();
+        let canonical = fs::canonicalize(&root).unwrap();
+        assert!(canonical.is_absolute());
+        let reopened = Store::open(&canonical).unwrap();
+        assert_eq!(normal.root(), reopened.root());
+        assert_eq!(reopened.config().unwrap().schema_version, PROTOCOL_VERSION);
+        fs::remove_dir_all(&root).unwrap();
+    }
 }
 
 #[cfg(any(test, feature = "test-support"))]

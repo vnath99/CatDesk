@@ -481,7 +481,9 @@ pub(super) fn automatic_recovery_authority(
         return Ok(None);
     };
     let registered = registered_project(workspace, project)?;
-    let wake = Store::open(&runtime::default_root()?)?;
+    let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
+        workspace,
+    )?)?;
     let current = wake.config()?.targets.get(project).cloned();
     let request = store.handoff_request()?;
     let Some(destination) =
@@ -700,7 +702,13 @@ pub(super) fn request_handoff(
         return Err("WEB_ROLLOVER_EXISTING_INTENT_REQUIRES_RESUME".into());
     }
     let registered = registered_project(workspace, project)?;
-    let wake = Store::open(&runtime::default_root()?)?;
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+    let wake = Store::open(&root)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &source.url,
+    )?;
     let meter = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
     if let Some(previous) =
         saved_current_handoff_request(&store, &source, source_task_id, &registered)?
@@ -709,6 +717,11 @@ pub(super) fn request_handoff(
         if paired(workspace, project)? != source {
             return Err("WEB_HANDOFF_SOURCE_CHANGED".into());
         }
+        catdesk_wake::development_runtime::validate_selected_target_isolation(
+            workspace,
+            wake.root(),
+            &source.url,
+        )?;
         wake.produce_expected(
             &previous.event_id,
             project,
@@ -726,7 +739,7 @@ pub(super) fn request_handoff(
         &registered,
     )?;
 
-    // The installed browser owner observes the exact idle source before the
+    // The selected Wake browser owner observes the exact idle source before the
     // advisory context ledger claims a quiescent point. This is a private read.
     let snapshot = runtime::snapshot_conversation(&wake, project, &source)?;
     source_ready_for_handoff(&snapshot)?;
@@ -771,6 +784,11 @@ pub(super) fn request_handoff(
     {
         return Err("WEB_HANDOFF_SOURCE_OR_OWNER_CHANGED".into());
     }
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &request.source.url,
+    )?;
     wake.produce_expected(
         &request.event_id,
         project,
@@ -937,7 +955,13 @@ pub(super) fn collect_handoff(workspace: &Path, project: &str) -> Result<Value, 
     }
     let meter = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
     request_policy_still_due(&meter, &request)?;
-    let wake = Store::open(&runtime::default_root()?)?;
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+    let wake = Store::open(&root)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &request.source.url,
+    )?;
     let delivery = wake
         .delivery(&request.event_id)?
         .ok_or("WEB_HANDOFF_EXACT_USER_RECEIPT_REQUIRED")?;
@@ -950,6 +974,11 @@ pub(super) fn collect_handoff(workspace: &Path, project: &str) -> Result<Value, 
     // The timer proves completion of the exact Wake turn. A fresh browser
     // snapshot still has to show that turn as the latest USER and the JSON
     // answer as its following ASSISTANT before preparing any replacement.
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &request.source.url,
+    )?;
     let snapshot = runtime::snapshot_conversation(&wake, project, &request.source)?;
     let handoff = handoff_from_source_snapshot(&request, &snapshot)?;
     if wake.source_progress_fingerprint(project, &request.source, &request.event_id)?
@@ -1451,6 +1480,11 @@ fn verify_source_handoff_still_latest(
             return Err("WEB_ROLLOVER_SOURCE_CHANGED_RECONCILIATION_REQUIRED".into());
         }
         let registered = registered_project(workspace, &record.project_id)?;
+        catdesk_wake::development_runtime::validate_selected_target_isolation(
+            workspace,
+            wake.root(),
+            &record.source.url,
+        )?;
         let snapshot = runtime::snapshot_conversation(wake, &record.project_id, &record.source)
             .map_err(|reason| {
                 if reason == "BROWSER_SESSION_BUSY" {
@@ -1497,7 +1531,13 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
         }
         return Ok(summary(&record));
     }
-    let wake = Store::open(&runtime::default_root()?)?;
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+    let wake = Store::open(&root)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &record.source.url,
+    )?;
     if record.phase == Phase::Prepared {
         confirm_request_enabled(workspace, &record)?;
         if paired(workspace, project)? != record.source {
@@ -1516,6 +1556,11 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
                 if paired(workspace, project)? != source {
                     return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
                 }
+                catdesk_wake::development_runtime::validate_selected_target_isolation(
+                    workspace,
+                    wake.root(),
+                    &source.url,
+                )?;
                 confirm_request_enabled(workspace, &record)?;
                 record.phase = Phase::Submitting;
                 store.save(&record)
@@ -1532,6 +1577,11 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
             .as_ref()
             .ok_or("WEB_BOOTSTRAP_RECEIPT_REQUIRED")?;
         validate_receipt_stage(&record, pending, "RESPONSE_PENDING")?;
+        catdesk_wake::development_runtime::validate_selected_target_isolation(
+            workspace,
+            wake.root(),
+            &record.source.url,
+        )?;
         let Some(completed) =
             runtime::bootstrap_probe_completion(&wake, &record.source, pending, &record.handoff)?
         else {
@@ -1587,6 +1637,7 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
                     )?;
                     mcp::operator_bind_project_web_target_with_witness(
                         workspace,
+                        wake.root(),
                         project,
                         url,
                         Some(digest),
@@ -1596,8 +1647,9 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
                         fingerprint,
                     )
                 }
-                None => mcp::operator_bind_project_web_target(
+                None => mcp::operator_bind_project_web_target_at_root(
                     workspace,
+                    Some(wake.root()),
                     project,
                     url,
                     Some(digest),
@@ -1619,6 +1671,11 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
         store.save(&record)?;
         return Err("WEB_ROLLOVER_TARGET_CHANGED_RECONCILIATION_REQUIRED".into());
     }
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &bound.url,
+    )?;
     queue_continuation_with(
         &wake,
         &mut record,

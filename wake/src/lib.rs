@@ -1,4 +1,6 @@
 //! Independent Wake protocol and durable state. No CatDesk schemas or processes.
+#[cfg(windows)]
+pub mod development_runtime;
 pub mod install_authority;
 pub mod install_broker_approval;
 #[cfg(windows)]
@@ -42,6 +44,43 @@ pub(crate) mod install_broker_source;
 #[cfg(windows)]
 pub mod install_broker_stage_writer;
 pub mod process_job;
+#[cfg(not(windows))]
+pub mod development_runtime {
+    use crate::Result;
+    use serde_json::Value;
+    use std::path::{Path, PathBuf};
+
+    pub fn prepare(_: &Path, _: &Path, _: &Path) -> Result<Value> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
+    pub fn root_for_workspace(_: &Path) -> Result<Option<PathBuf>> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
+    pub fn status(_: &Path) -> Result<Value> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
+    pub fn start(_: &Path) -> Result<Value> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
+    pub fn stop(_: &Path) -> Result<Value> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
+    pub fn run_foreground(_: &Path) -> Result<Value> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
+    pub fn run_host(_: &Path) -> Result<()> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
+    pub fn validate_target_isolation(_: &Path, _: &str) -> Result<()> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
+    pub fn validate_selected_target_isolation(_: &Path, _: &Path, _: &str) -> Result<()> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
+    pub fn validate_target_isolation_for_store(_: &Path, _: &str) -> Result<()> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
+}
 pub mod protocol;
 pub mod review_binding;
 pub mod runtime;

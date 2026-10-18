@@ -86,6 +86,8 @@ mod verification;
 mod wake_protocol_client;
 #[allow(dead_code)] // Advisory Web conversation meter; operator/browser integration follows.
 mod web_conversation_context;
+#[cfg(all(test, windows))]
+mod web_development_tests;
 mod windows_gui;
 mod windows_protected_fs;
 #[allow(dead_code)]
@@ -1396,6 +1398,45 @@ fn validate_isolated_fixture_scope(
 
 async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std::error::Error>> {
     let workspace_root = resolve_headless_workspace(&options.workspace)?;
+    if catdesk_wake::development_runtime::root_for_workspace(std::path::Path::new(&workspace_root))?
+        .is_some()
+    {
+        // Development state belongs to this explicit isolated workspace. Do
+        // not load or initialize a user-supplied production configuration.
+        let expected =
+            std::path::Path::new(&workspace_root).join(".catdesk/web-development/catdesk.toml");
+        let parent = options
+            .config_path
+            .parent()
+            .ok_or("WEB_DEVELOPMENT_CONFIG_SCOPE_INVALID")?
+            .canonicalize()?;
+        if parent
+            != expected
+                .parent()
+                .expect("fixed config parent")
+                .canonicalize()?
+            || options.config_path.file_name() != expected.file_name()
+            || options.isolated_dev_fixture
+        {
+            return Err("WEB_DEVELOPMENT_CONFIG_SCOPE_INVALID".into());
+        }
+        match std::fs::symlink_metadata(&options.config_path) {
+            Ok(metadata) => {
+                #[cfg(windows)]
+                let redirected = {
+                    use std::os::windows::fs::MetadataExt;
+                    metadata.file_attributes() & 0x400 != 0
+                };
+                #[cfg(not(windows))]
+                let redirected = metadata.file_type().is_symlink();
+                if !metadata.is_file() || redirected {
+                    return Err("WEB_DEVELOPMENT_CONFIG_SCOPE_INVALID".into());
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
     // Hold a no-delete-share Windows directory handle for the entire fixture
     // listener lifetime. Requests otherwise reopen the root path and could
     // follow a renamed/replaced directory after startup validation.
@@ -2463,6 +2504,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let operator_codex = args.first().is_some_and(|arg| arg == "codex")
         || (args.first().is_some_and(|arg| arg == "operator")
             && args.get(1).is_some_and(|arg| arg == "codex"));
+    let operator_web_development = args.first().is_some_and(|arg| arg == "operator")
+        && args.get(1).is_some_and(|arg| arg == "web-dev-runtime");
     match operator_facade::parse_operator_action(args.clone()) {
         Ok(Some(action)) => {
             let workspace = std::env::current_dir()?;
@@ -2472,7 +2515,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     return Ok(());
                 }
                 Err(error) => {
-                    if operator_codex {
+                    if operator_codex || operator_web_development {
                         println!(
                             "{}",
                             serde_json::json!({"status":"attention","error":error})
@@ -2486,7 +2529,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Ok(None) => {}
         Err(error) => {
-            if operator_codex {
+            if operator_codex || operator_web_development {
                 println!(
                     "{}",
                     serde_json::json!({"status":"attention","error":error})
@@ -2496,6 +2539,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             std::process::exit(2);
         }
+    }
+    if !args.iter().any(|arg| arg == "--headless-mcp")
+        && catdesk_wake::development_runtime::root_for_workspace(&std::env::current_dir()?)?
+            .is_some()
+    {
+        return Err("WEB_DEVELOPMENT_USE_OPERATOR_OR_HEADLESS_MODE".into());
     }
     match binagotchy_cli::parse_binagotchy_cli_mode(&args) {
         Ok(true) => {

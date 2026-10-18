@@ -33,6 +33,7 @@ const MAX_REPAIR_OUTPUT_BYTES: usize = 64 * 1024;
 pub(crate) enum OperatorAction {
     Codex(crate::operator_codex_cli::OperatorCodexAction),
     Web(web::WebAction),
+    WebDevelopment(WebDevelopmentAction),
     SetWakeTarget {
         conversation_url: String,
         expected_current_target_sha256: Option<String>,
@@ -50,6 +51,23 @@ pub(crate) enum OperatorAction {
         operation: &'static str,
         arguments: serde_json::Value,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum WebDevelopmentAction {
+    Prepare {
+        package: PathBuf,
+        python_runtime: PathBuf,
+    },
+    Enqueue {
+        project_id: String,
+        event_id: String,
+        message_file: PathBuf,
+    },
+    Status,
+    Start,
+    Stop,
+    Run,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,6 +112,9 @@ pub(crate) fn parse_operator_action(
         return Ok(None);
     }
     match args.get(1).map(String::as_str) {
+        Some("web-dev-runtime") => parse_web_development_action(&args)
+            .map(OperatorAction::WebDevelopment)
+            .map(Some),
         Some("web") => web::parse(&args).map(OperatorAction::Web).map(Some),
         Some("codex") => crate::operator_codex_cli::parse_action(&args)
             .map(OperatorAction::Codex)
@@ -115,6 +136,111 @@ pub(crate) fn parse_operator_action(
         Some("project") => parse_project_control_action(&args),
         _ => Err("unknown operator action".into()),
     }
+}
+
+fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction, String> {
+    match args.get(2).map(String::as_str) {
+        Some("enqueue") if args.len() == 9
+            && args[3] == "--project-id" && args[5] == "--event-id" && args[7] == "--message-file"
+            && catdesk_wake::protocol::valid_id(&args[4])
+            && catdesk_wake::protocol::valid_id(&args[6])
+            && args[6].starts_with("dev-")
+            && !args[8].is_empty() && args[8].len() <= 4096
+            && !args[8].chars().any(char::is_control) => Ok(WebDevelopmentAction::Enqueue {
+                project_id: args[4].clone(), event_id: args[6].clone(), message_file: PathBuf::from(&args[8]),
+            }),
+        Some("prepare")
+            if args.len() == 7
+                && args[3] == "--package"
+                && args[5] == "--python-runtime"
+                && [&args[4], &args[6]].iter().all(|value| {
+                    !value.is_empty() && value.len() <= 4096
+                        && !value.chars().any(char::is_control)
+                }) => Ok(WebDevelopmentAction::Prepare {
+                    package: PathBuf::from(&args[4]),
+                    python_runtime: PathBuf::from(&args[6]),
+                }),
+        Some("status") if args.len() == 3 => Ok(WebDevelopmentAction::Status),
+        Some("start") if args.len() == 3 => Ok(WebDevelopmentAction::Start),
+        Some("stop") if args.len() == 3 => Ok(WebDevelopmentAction::Stop),
+        Some("run") if args.len() == 3 => Ok(WebDevelopmentAction::Run),
+        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, enqueue --project-id <id> --event-id <id> --message-file <file>, status, start, stop, or run".into()),
+    }
+}
+
+/// Explicit controlled work for live development tests. It uses the same
+/// paired target and durable queue as normal delivery, but never manufactures
+/// a natural review record or a delivery receipt.
+fn enqueue_web_development(
+    workspace: &Path,
+    project: &str,
+    event: &str,
+    message_file: &Path,
+) -> Result<serde_json::Value, String> {
+    let workspace = workspace
+        .canonicalize()
+        .map_err(|_| "DEV_WORKSPACE_UNAVAILABLE")?;
+    let root = catdesk_wake::development_runtime::root_for_workspace(&workspace)?
+        .ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    let target = mcp::operator_read_project_web_target(&workspace, project)
+        .map_err(|_| "DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?
+        .ok_or("DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        &workspace,
+        &root,
+        &target.url,
+    )?;
+    let input = if message_file.is_absolute() {
+        message_file.to_path_buf()
+    } else {
+        workspace.join(message_file)
+    };
+    let metadata = fs::symlink_metadata(&input).map_err(|_| "DEV_MESSAGE_UNAVAILABLE")?;
+    if !metadata.is_file() || path_is_reparse_or_symlink(&metadata) || metadata.len() > 32 * 1024 {
+        return Err("DEV_MESSAGE_INVALID".into());
+    }
+    let input = input
+        .canonicalize()
+        .map_err(|_| "DEV_MESSAGE_UNAVAILABLE")?;
+    if !input.starts_with(&workspace) {
+        return Err("DEV_MESSAGE_OUTSIDE_WORKSPACE".into());
+    }
+    if input.starts_with(workspace.join(".catdesk")) || input.starts_with(workspace.join(".git")) {
+        return Err("DEV_MESSAGE_PRIVATE_STATE_REFUSED".into());
+    }
+    let mut bytes = Vec::new();
+    fs::File::open(&input)
+        .map_err(|_| "DEV_MESSAGE_UNAVAILABLE")?
+        .take(32 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "DEV_MESSAGE_UNAVAILABLE")?;
+    if bytes.is_empty() || bytes.len() > 32 * 1024 {
+        return Err("DEV_MESSAGE_INVALID".into());
+    }
+    let body = String::from_utf8(bytes).map_err(|_| "DEV_MESSAGE_INVALID")?;
+    let body = body.split_whitespace().collect::<Vec<_>>().join(" ");
+    if body.is_empty() {
+        return Err("DEV_MESSAGE_INVALID".into());
+    }
+    let message = format!(
+        "DEVELOPMENT CONTROLLED WORK — project {project} — event {event}. {body} This is an isolated development event, not evidence of installed release or natural review acceptance."
+    );
+    if message.len() > 2048 {
+        return Err("DEV_MESSAGE_TOO_LONG".into());
+    }
+    let store = catdesk_wake::store::Store::open(&root)?;
+    let expected = catdesk_wake::protocol::Target::new(target.generation, target.url)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        &workspace,
+        store.root(),
+        &expected.url,
+    )?;
+    let produced = store.produce_expected(event, project, "test", &message, &expected)?;
+    Ok(
+        json!({"mode":"DEVELOPMENT_UNPROTECTED","status":"QUEUED","eventId":produced.event_id,
+        "projectId":project,"targetGeneration":expected.generation,"targetDigest":expected.digest,
+        "deliveryProved":false,"naturalReviewProved":false}),
+    )
 }
 
 fn parse_release_pair_action(args: &[String]) -> Result<Option<OperatorAction>, String> {
@@ -385,7 +511,38 @@ pub(crate) async fn execute_operator_action(
     action: OperatorAction,
     workspace: &Path,
 ) -> Result<serde_json::Value, String> {
+    // A development control workspace cannot accidentally operate the
+    // installed supervisor, release slots, or legacy global Wake controls.
+    if !matches!(&action, OperatorAction::WebDevelopment(_))
+        && catdesk_wake::development_runtime::root_for_workspace(workspace)?.is_some()
+        && !matches!(
+            &action,
+            OperatorAction::Web(_)
+                | OperatorAction::Codex(_)
+                | OperatorAction::ProjectControl { .. }
+        )
+    {
+        return Err("WEB_DEVELOPMENT_INSTALLED_OPERATION_UNAVAILABLE".into());
+    }
     match action {
+        OperatorAction::WebDevelopment(action) => {
+            use catdesk_wake::development_runtime;
+            match action {
+                WebDevelopmentAction::Prepare {
+                    package,
+                    python_runtime,
+                } => development_runtime::prepare(workspace, &package, &python_runtime),
+                WebDevelopmentAction::Enqueue {
+                    project_id,
+                    event_id,
+                    message_file,
+                } => enqueue_web_development(workspace, &project_id, &event_id, &message_file),
+                WebDevelopmentAction::Status => development_runtime::status(workspace),
+                WebDevelopmentAction::Start => development_runtime::start(workspace),
+                WebDevelopmentAction::Stop => development_runtime::stop(workspace),
+                WebDevelopmentAction::Run => development_runtime::run_foreground(workspace),
+            }
+        }
         OperatorAction::Web(action) => web::execute(action, workspace),
         OperatorAction::Codex(action) => {
             crate::operator_codex_cli::execute_action(action, workspace).await
@@ -1165,6 +1322,70 @@ mod tests {
     use serde_json::Value;
     use sha2::Digest;
     use uuid::Uuid;
+
+    #[test]
+    fn web_development_requires_explicit_fixed_actions() {
+        let parsed = parse_operator_action(
+            [
+                "operator",
+                "web-dev-runtime",
+                "prepare",
+                "--package",
+                "C:/dev/package",
+                "--python-runtime",
+                "C:/dev/python",
+            ]
+            .map(str::to_string),
+        )
+        .expect("parse prepare");
+        assert!(matches!(
+            parsed,
+            Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::Prepare { .. }
+            ))
+        ));
+        for action in ["status", "start", "stop", "run"] {
+            assert!(
+                parse_operator_action(["operator", "web-dev-runtime", action].map(str::to_string))
+                    .expect("fixed action")
+                    .is_some()
+            );
+            assert!(
+                parse_operator_action(
+                    [
+                        "operator",
+                        "web-dev-runtime",
+                        action,
+                        "--root",
+                        "C:/production"
+                    ]
+                    .map(str::to_string)
+                )
+                .is_err()
+            );
+        }
+        for action in ["install", "resume", "publish-reviewed-install"] {
+            assert!(
+                parse_operator_action(["operator", "web-dev-runtime", action].map(str::to_string))
+                    .is_err()
+            );
+        }
+        assert!(
+            parse_operator_action(
+                [
+                    "operator",
+                    "web-dev-runtime",
+                    "prepare",
+                    "--package",
+                    "",
+                    "--python-runtime",
+                    "C:/python"
+                ]
+                .map(str::to_string)
+            )
+            .is_err()
+        );
+    }
 
     fn repair_fixture(label: &str) -> PathBuf {
         let root =

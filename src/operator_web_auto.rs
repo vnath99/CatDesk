@@ -218,7 +218,9 @@ fn run_step(
             if !pressure_due(&pressure) {
                 return Ok(("OBSERVED", observed));
             }
-            let wake = Store::open(&runtime::default_root()?)?;
+            let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
+                workspace,
+            )?)?;
             if running_wake_state(&wake, project, source)? != "RUNNING" {
                 return Ok(("WAKE_STOPPED", json!({"reason":"WAKE_CONTROL_CHANGED"})));
             }
@@ -289,8 +291,17 @@ fn tick_project_mode(workspace: &Path, project: &str, background: bool) -> Resul
         None,
     )?;
     let result = (|| {
-        let wake = Store::open(&runtime::default_root()?)?;
+        let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
+            workspace,
+        )?)?;
         let wake_state = running_wake_state(&wake, project, &source)?;
+        if wake_state == "RUNNING" {
+            catdesk_wake::development_runtime::validate_selected_target_isolation(
+                workspace,
+                wake.root(),
+                &source.url,
+            )?;
+        }
         gated_browser_step(wake_state, || run_step(workspace, project, &key, &source))
     })();
     match result {

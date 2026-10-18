@@ -1,5 +1,68 @@
 # CatDesk — Important Command Reference
 
+## October 18 isolated Web development runtime (source; live acceptance open)
+
+Run these from a **new, empty, separate control workspace**, using a
+source-matched package directory and Python runtime. The commands use the
+current working directory as the control workspace; prepare creates its own
+`.catdesk/web-development` authority and leaves Wake `STOPPED`.
+
+```text
+<source-built-catdesk.exe> operator web-dev-runtime prepare --package <source-package-directory> --python-runtime <python-runtime-directory>
+<source-built-catdesk.exe> operator web-dev-runtime status
+<source-built-catdesk.exe> operator web-dev-runtime start
+<source-built-catdesk.exe> operator web-dev-runtime stop
+<source-built-catdesk.exe> operator web-dev-runtime run
+```
+
+`start` requests a managed development host; `run` is foreground. Neither was
+used in the local three-project fixture. Prepare requires an empty workspace;
+afterward, establish its ordinary Git root and exact `origin` with Git. Register
+`catdesk` first, using that same control root, then each independent project:
+
+```text
+<source-built-catdesk.exe> operator web project register --project-id catdesk --workspace <exact-control-Git-root> --git-identity <exact-control-origin>
+<source-built-catdesk.exe> operator web project register --project-id PROJECT --workspace <exact-project-Git-root> --git-identity <exact-project-origin>
+<source-built-catdesk.exe> operator web target bind --project-id PROJECT --conversation-url <real-independent-ChatGPT-URL> --expected-current-target-sha256 none --expected-wake-generation 0
+<source-built-catdesk.exe> operator web target read --project-id PROJECT
+<source-built-catdesk.exe> operator web status
+```
+
+Registration is create-only and checks the exact Git root/origin under the
+existing registry lock. It sets `nativeThreadId:null`, takes no Codex writer,
+and does not edit the project checkout. Existing native registrations cannot
+be replaced by this route. Bind each project to its own real, independent
+ChatGPT conversation using the existing target CAS; later binds require the
+actual current digest and generation. Status reports
+`DEVELOPMENT_UNPROTECTED`. Use distinct targets from the protected installed
+store. Known production current and historical conversation IDs are rejected
+for development use. An invalid or partial development authority requires
+attention and does not redirect commands to the installed store.
+
+For a controlled event after an exact paired target exists:
+
+```text
+<source-built-catdesk.exe> operator web-dev-runtime enqueue --project-id PROJECT --event-id dev-UNIQUE_ID --message-file <workspace-contained-plain-text-file>
+<source-built-catdesk.exe> operator web status
+<source-built-catdesk.exe> operator web context configure --project-id PROJECT --input-file <policy-json>
+<source-built-catdesk.exe> operator web auto tick --project-id PROJECT
+```
+
+The event ID must begin with `dev-`. The message file must be a normal file
+inside the control workspace, outside `.catdesk` and `.git`; the normalized
+outgoing message is capped at 2,048 bytes. Exact same-ID retries are
+idempotent; changed content conflicts. A queued response reports
+`deliveryProved:false` and `naturalReviewProved:false`; inspect actual Wake
+delivery and the exact ChatGPT conversation before claiming either. Context
+capture and rollover policies are configured per project. Automatic
+observation is opt-in, and background browser work requires a running host.
+
+This is an unprotected development lane, not an installed release. The local
+fixture prepared no running host, performed no browser send, and established
+no live three-project delivery or rollover. The protected Wake migration and
+service gates and exact remote CI remain open. Existing native project chats
+need not pause. See `docs/OCTOBER_2026_MVP_ACCEPTANCE.md` for acceptance state.
+
 ## October 18 divergent canonical release-pair recovery (source; not installed acceptance)
 
 From the control workspace, use a new independently reviewed executable that

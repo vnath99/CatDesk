@@ -5134,6 +5134,10 @@ fn attempt(
                     if desired(store)? != "RUNNING" {
                         return Err("HOST_PAUSED_BEFORE_SUBMIT".into());
                     }
+                    crate::development_runtime::validate_target_isolation_for_store(
+                        store.root(),
+                        &d.target.url,
+                    )?;
                     store.transition(
                         &d.event.event_id,
                         lease.owner(),

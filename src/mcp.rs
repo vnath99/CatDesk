@@ -1438,12 +1438,20 @@ where
                                 "catdesk_wake_target_set" => {
                                     handle_wake_target_set(req, workspace_root)
                                 }
-                                "catdesk_wake_restart_installed" => {
-                                    handle_wake_restart_installed(req)
+                                "catdesk_wake_restart_installed" => installed_wake_command(
+                                    req,
+                                    workspace_root,
+                                    handle_wake_restart_installed,
+                                ),
+                                "catdesk_wake_delivery_status" => {
+                                    handle_wake_delivery_status(req, workspace_root)
                                 }
-                                "catdesk_wake_delivery_status" => handle_wake_delivery_status(req),
-                                "catdesk_turn_timer" => handle_turn_timer(req),
-                                "catdesk_binagotchy_command" => handle_binagotchy_command(req),
+                                "catdesk_turn_timer" => handle_turn_timer(req, workspace_root),
+                                "catdesk_binagotchy_command" => installed_wake_command(
+                                    req,
+                                    workspace_root,
+                                    handle_binagotchy_command,
+                                ),
                                 name if is_autonomy_mcp_tool(name) => {
                                     handle_autonomy_supervisor_mcp_tool(req, workspace_root).await
                                 }
@@ -3259,7 +3267,7 @@ fn independent_wake_target(
     if !crate::wake_protocol_client::selected(workspace) {
         return Ok(None);
     }
-    let root = catdesk_wake::runtime::default_root()?;
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
     let store = catdesk_wake::store::Store::open(&root)?;
     let config = store.config()?;
     let target = config
@@ -3302,7 +3310,16 @@ fn set_wake_target_locked(
     workspace: &Path,
     request: &WakeTargetSetRequest,
 ) -> Result<WakeTargetSetResult, String> {
+    catdesk_wake::development_runtime::validate_target_isolation(
+        workspace,
+        &request.conversation_url,
+    )?;
     if let Some((store, previous)) = independent_wake_target(workspace)? {
+        catdesk_wake::development_runtime::validate_selected_target_isolation(
+            workspace,
+            store.root(),
+            &request.conversation_url,
+        )?;
         if request
             .expected_current_target_sha256
             .as_deref()
@@ -3366,7 +3383,16 @@ fn set_wake_target_locked_quarantining_submitting(
     workspace: &Path,
     request: &WakeTargetSetRequest,
 ) -> Result<WakeTargetSetResult, String> {
+    catdesk_wake::development_runtime::validate_target_isolation(
+        workspace,
+        &request.conversation_url,
+    )?;
     if let Some((store, previous)) = independent_wake_target(workspace)? {
+        catdesk_wake::development_runtime::validate_selected_target_isolation(
+            workspace,
+            store.root(),
+            &request.conversation_url,
+        )?;
         if request
             .expected_current_target_sha256
             .as_deref()
@@ -3739,6 +3765,14 @@ fn project_web_store(
     control_workspace: &Path,
     project_id: &str,
 ) -> Result<(PathBuf, catdesk_wake::store::Store), DesignatedChatTargetErrorV1> {
+    project_web_store_expected(control_workspace, project_id, None)
+}
+
+fn project_web_store_expected(
+    control_workspace: &Path,
+    project_id: &str,
+    expected_root: Option<&Path>,
+) -> Result<(PathBuf, catdesk_wake::store::Store), DesignatedChatTargetErrorV1> {
     use crate::delegated::autonomy_projects::resolve_registered_project_from_control_root;
     let control_workspace = control_workspace
         .canonicalize()
@@ -3748,8 +3782,19 @@ fn project_web_store(
     {
         return Err(DesignatedChatTargetErrorV1::Unavailable);
     }
-    let root = catdesk_wake::runtime::default_root()
+    let root = crate::wake_protocol_client::wake_root_for_workspace(&control_workspace)
         .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    if let Some(expected) = expected_root {
+        if root
+            .canonicalize()
+            .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?
+            != expected
+                .canonicalize()
+                .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?
+        {
+            return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
+        }
+    }
     let store = catdesk_wake::store::Store::open(&root)
         .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
     Ok((control_workspace, store))
@@ -3781,6 +3826,12 @@ fn bind_project_web_target_locked_with_witness(
 
     let target_url = crate::delegated::autonomy_projects::canonical_project_chat_target(target_url)
         .map_err(|_| DesignatedChatTargetErrorV1::InvalidUrl)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        control_workspace,
+        wake_store.root(),
+        &target_url,
+    )
+    .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
     catdesk_wake::protocol::validate_target(&target_url)
         .map_err(|_| DesignatedChatTargetErrorV1::InvalidUrl)?;
     if expected_current_target_sha256.is_some_and(|digest| !is_sha256_hex(digest)) {
@@ -3970,6 +4021,7 @@ fn bind_project_web_target_locked(
 
 pub(crate) fn operator_bind_project_web_target_with_witness(
     control_workspace: &Path,
+    expected_wake_root: &Path,
     project_id: &str,
     target_url: &str,
     expected_current_target_sha256: Option<&str>,
@@ -3982,7 +4034,8 @@ pub(crate) fn operator_bind_project_web_target_with_witness(
         .get_or_init(|| StdMutex::new(()))
         .lock()
         .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
-    let (control_workspace, wake_store) = project_web_store(control_workspace, project_id)?;
+    let (control_workspace, wake_store) =
+        project_web_store_expected(control_workspace, project_id, Some(expected_wake_root))?;
     bind_project_web_target_locked_with_witness(
         &control_workspace,
         &wake_store,
@@ -4001,11 +4054,30 @@ pub(crate) fn operator_bind_project_web_target(
     expected_current_target_sha256: Option<&str>,
     expected_wake_generation: u64,
 ) -> Result<ProjectWebTargetV1, DesignatedChatTargetErrorV1> {
+    operator_bind_project_web_target_at_root(
+        control_workspace,
+        None,
+        project_id,
+        target_url,
+        expected_current_target_sha256,
+        expected_wake_generation,
+    )
+}
+
+pub(crate) fn operator_bind_project_web_target_at_root(
+    control_workspace: &Path,
+    expected_wake_root: Option<&Path>,
+    project_id: &str,
+    target_url: &str,
+    expected_current_target_sha256: Option<&str>,
+    expected_wake_generation: u64,
+) -> Result<ProjectWebTargetV1, DesignatedChatTargetErrorV1> {
     let _guard = WAKE_TARGET_SET_LOCK
         .get_or_init(|| StdMutex::new(()))
         .lock()
         .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
-    let (control_workspace, wake_store) = project_web_store(control_workspace, project_id)?;
+    let (control_workspace, wake_store) =
+        project_web_store_expected(control_workspace, project_id, expected_wake_root)?;
     bind_project_web_target_locked(
         &control_workspace,
         &wake_store,
@@ -4037,6 +4109,18 @@ fn handle_wake_target_set(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpc
             }),
         ),
         Err(_) => tool_error_response(req, "code: WAKE_TARGET_UPDATE_REJECTED\nmessage: wake target update was rejected without modifying protected wake state".into()),
+    }
+}
+
+fn installed_wake_command(
+    req: &JsonRpcRequest,
+    workspace_root: &str,
+    command: fn(&JsonRpcRequest) -> JsonRpcResponse,
+) -> JsonRpcResponse {
+    match catdesk_wake::development_runtime::root_for_workspace(Path::new(workspace_root)) {
+        Ok(None) => command(req),
+        Ok(Some(_)) | Err(_) => tool_error_response(req,
+            "WEB_DEVELOPMENT_INSTALLED_OPERATION_UNAVAILABLE: use the explicit development runtime operator commands".into()),
     }
 }
 
@@ -4156,7 +4240,7 @@ fn handle_wake_restart_installed(req: &JsonRpcRequest) -> JsonRpcResponse {
     )
 }
 
-fn handle_wake_delivery_status(req: &JsonRpcRequest) -> JsonRpcResponse {
+fn handle_wake_delivery_status(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
     let arguments = tool_arguments(req);
     let Some(object) = arguments.as_object() else {
         return tool_error_response(
@@ -4178,7 +4262,8 @@ fn handle_wake_delivery_status(req: &JsonRpcRequest) -> JsonRpcResponse {
     let Some(event_id) = event_id else {
         return tool_error_response(req, "WAKE_DELIVERY_STATUS_INVALID_REQUEST: eventId must be one exact non-empty ID of at most 200 bytes".into());
     };
-    let root = match catdesk_wake::runtime::default_root() {
+    let root = match crate::wake_protocol_client::wake_root_for_workspace(Path::new(workspace_root))
+    {
         Ok(root) => root,
         Err(error) => {
             return tool_error_response(
@@ -4224,7 +4309,7 @@ fn handle_wake_delivery_status(req: &JsonRpcRequest) -> JsonRpcResponse {
     )
 }
 
-fn handle_turn_timer(req: &JsonRpcRequest) -> JsonRpcResponse {
+fn handle_turn_timer(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
     use crate::delegated::autonomy_projects::CATDESK_PROJECT_ID_V1;
 
     let arguments = tool_arguments(req);
@@ -4276,7 +4361,7 @@ fn handle_turn_timer(req: &JsonRpcRequest) -> JsonRpcResponse {
     }
 
     let result: Result<catdesk_wake::store::TurnTimer, String> = (|| {
-        let root = catdesk_wake::runtime::default_root()?;
+        let root = crate::wake_protocol_client::wake_root_for_workspace(Path::new(workspace_root))?;
         let store = catdesk_wake::store::Store::open(&root)?;
         let config = store.config()?;
         let target = config
@@ -4321,9 +4406,11 @@ fn handle_turn_timer(req: &JsonRpcRequest) -> JsonRpcResponse {
             let status =
                 catdesk_wake::runtime::turn_timer_status(timer, catdesk_wake::store::now());
             let (delivery_read_state, delivery) = if origin == "WAKE_EVENT" && action == "STATUS" {
-                match catdesk_wake::runtime::default_root()
-                    .and_then(|root| catdesk_wake::store::Store::open(&root))
-                    .and_then(|store| store.delivery(&status.event_id))
+                match crate::wake_protocol_client::wake_root_for_workspace(Path::new(
+                    workspace_root,
+                ))
+                .and_then(|root| catdesk_wake::store::Store::open(&root))
+                .and_then(|store| store.delivery(&status.event_id))
                 {
                     Ok(Some(delivery)) => ("PRESENT", Some(delivery)),
                     Ok(None) => ("MISSING", None),
@@ -6050,7 +6137,8 @@ fn load_wake_progress_snapshot(
     if !crate::wake_protocol_client::selected(workspace) {
         return Err("INDEPENDENT_WAKE_NOT_SELECTED");
     }
-    let root = catdesk_wake::runtime::default_root().map_err(|_| "WAKE_ROOT_UNAVAILABLE")?;
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)
+        .map_err(|_| "WAKE_ROOT_UNAVAILABLE")?;
     if ![
         root.as_path(),
         &root.join("config.json"),
@@ -11016,10 +11104,26 @@ mod tests {
             "catdesk_turn_timer",
             json!({"action":"START","timerId":"manual-turn-caller-selected"}),
         );
-        let response = handle_turn_timer(&req);
+        let response = handle_turn_timer(&req, ".");
         let text = result_text(&response);
         assert!(text.contains("TURN_TIMER_INVALID_REQUEST"));
         assert!(text.contains("START generates its own timerId"));
+    }
+
+    #[test]
+    fn incomplete_development_authority_never_calls_installed_control() {
+        let root = std::env::temp_dir().join(format!("catdesk-dev-control-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join(".catdesk/web-development"))
+            .expect("partial development state");
+        let req = tool_call_request("catdesk_wake_restart_installed", json!({"confirm":true}));
+        let response = installed_wake_command(&req, root.to_str().expect("fixture path"), |_| {
+            panic!("installed control must not be invoked from incomplete development state")
+        });
+        assert!(result_text(&response).contains("WEB_DEVELOPMENT_INSTALLED_OPERATION_UNAVAILABLE"));
+        assert!(!root.join(".catdesk/web-development/runtime").exists());
+        std::fs::remove_dir(root.join(".catdesk/web-development")).expect("empty dev fixture");
+        std::fs::remove_dir(root.join(".catdesk")).expect("empty control fixture");
+        std::fs::remove_dir(root).expect("empty workspace fixture");
     }
 
     #[test]
@@ -11028,7 +11132,7 @@ mod tests {
             "catdesk_turn_timer",
             json!({"action":"STATUS","allow_without_plan":true}),
         );
-        let response = handle_turn_timer(&req);
+        let response = handle_turn_timer(&req, ".");
         let text = result_text(&response);
         assert!(text.contains("TURN_TIMER_INVALID_REQUEST"));
         assert!(text.contains("STATUS and STOP require one exact valid timerId"));
