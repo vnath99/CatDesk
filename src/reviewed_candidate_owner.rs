@@ -1,8 +1,10 @@
 //! Process ownership for the optional reviewed-candidate parent launcher.
 //!
 //! A suspended child is assigned to a private Windows kill-on-close job before
-//! any candidate code runs. The job handle stays in this process, so an owner
-//! crash closes it and Windows terminates the child process tree.
+//! any candidate code runs. An ordinary candidate remains owned until exit.
+//! A reviewed reconciliation may durably prepare a persistent handoff, then
+//! disarm and release the job while retaining explicit failure cleanup until
+//! the final handle close.
 
 #[cfg(windows)]
 mod windows {
@@ -15,6 +17,7 @@ mod windows {
     const CREATE_SUSPENDED: u32 = 0x0000_0004;
     const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
     const JOB_OBJECT_EXTENDED_LIMIT_INFORMATION: i32 = 9;
+    const JOB_OBJECT_BASIC_ACCOUNTING_INFORMATION: i32 = 1;
     const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: u32 = 0x0000_2000;
 
     #[repr(C)]
@@ -53,6 +56,19 @@ mod windows {
         peak_job_memory: usize,
     }
 
+    #[repr(C)]
+    #[derive(Default)]
+    struct BasicAccounting {
+        total_user_time: i64,
+        total_kernel_time: i64,
+        period_user_time: i64,
+        period_kernel_time: i64,
+        total_page_fault_count: u32,
+        total_processes: u32,
+        active_processes: u32,
+        total_terminated_processes: u32,
+    }
+
     #[link(name = "kernel32")]
     unsafe extern "system" {
         fn CreateJobObjectW(attributes: *const c_void, name: *const u16) -> *mut c_void;
@@ -64,6 +80,15 @@ mod windows {
         ) -> i32;
         fn AssignProcessToJobObject(job: *mut c_void, process: *mut c_void) -> i32;
         fn TerminateJobObject(job: *mut c_void, exit_code: u32) -> i32;
+        fn QueryInformationJobObject(
+            job: *mut c_void,
+            class: i32,
+            information: *mut c_void,
+            length: u32,
+            returned: *mut u32,
+        ) -> i32;
+        fn IsProcessInJob(process: *mut c_void, job: *mut c_void, result: *mut i32) -> i32;
+        fn GetCurrentProcess() -> *mut c_void;
         fn CloseHandle(handle: *mut c_void) -> i32;
     }
 
@@ -111,6 +136,99 @@ mod windows {
             Ok(())
         }
 
+        fn active_processes(&self) -> Result<u32, String> {
+            let mut accounting = BasicAccounting::default();
+            if self.0.is_null()
+                || unsafe {
+                    QueryInformationJobObject(
+                        self.0,
+                        JOB_OBJECT_BASIC_ACCOUNTING_INFORMATION,
+                        (&mut accounting as *mut BasicAccounting).cast(),
+                        std::mem::size_of::<BasicAccounting>() as u32,
+                        std::ptr::null_mut(),
+                    )
+                } == 0
+            {
+                return Err("reviewed candidate Job accounting unavailable".into());
+            }
+            Ok(accounting.active_processes)
+        }
+
+        fn contains(&self, child: &Child) -> Result<(), String> {
+            let mut member = 0;
+            if self.0.is_null()
+                || unsafe { IsProcessInJob(child.as_raw_handle().cast(), self.0, &mut member) } == 0
+                || member != 1
+            {
+                return Err("reviewed candidate child Job membership unavailable".into());
+            }
+            Ok(())
+        }
+
+        fn disarm(&self) -> Result<(), String> {
+            let mut limits = ExtendedLimits::default();
+            if self.0.is_null()
+                || unsafe {
+                    QueryInformationJobObject(
+                        self.0,
+                        JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+                        (&mut limits as *mut ExtendedLimits).cast(),
+                        std::mem::size_of::<ExtendedLimits>() as u32,
+                        std::ptr::null_mut(),
+                    )
+                } == 0
+                || limits.basic.flags != JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            {
+                return Err("reviewed candidate Job limits changed".into());
+            }
+            limits.basic.flags = 0;
+            if unsafe {
+                SetInformationJobObject(
+                    self.0,
+                    JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+                    (&mut limits as *mut ExtendedLimits).cast(),
+                    std::mem::size_of::<ExtendedLimits>() as u32,
+                )
+            } == 0
+            {
+                return Err("reviewed candidate Job release failed".into());
+            }
+            let mut observed = ExtendedLimits::default();
+            if unsafe {
+                QueryInformationJobObject(
+                    self.0,
+                    JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+                    (&mut observed as *mut ExtendedLimits).cast(),
+                    std::mem::size_of::<ExtendedLimits>() as u32,
+                    std::ptr::null_mut(),
+                )
+            } == 0
+                || observed.basic.flags != 0
+            {
+                return Err("reviewed candidate Job release is unproven".into());
+            }
+            Ok(())
+        }
+
+        fn require_disarmed(&self) -> Result<(), String> {
+            let mut observed = ExtendedLimits::default();
+            if self.0.is_null()
+                || unsafe {
+                    QueryInformationJobObject(
+                        self.0,
+                        JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+                        (&mut observed as *mut ExtendedLimits).cast(),
+                        std::mem::size_of::<ExtendedLimits>() as u32,
+                        std::ptr::null_mut(),
+                    )
+                } == 0
+                || observed.basic.flags != 0
+            {
+                return Err("reviewed candidate Job release is unproven".into());
+            }
+            Ok(())
+        }
+
         fn close(&mut self) -> Result<(), String> {
             if self.0.is_null() {
                 return Ok(());
@@ -130,9 +248,12 @@ mod windows {
     }
 
     pub(crate) struct OwnedCandidateChild {
-        child: Child,
-        // Dropping this handle kills the child even if the parent crashes.
+        child: Option<Child>,
+        // Initially kill-on-close; after disarm, explicit termination remains
+        // available until the final release closes this handle.
         job: KillOnCloseJob,
+        disarmed: bool,
+        released: bool,
     }
 
     impl OwnedCandidateChild {
@@ -155,20 +276,124 @@ mod windows {
                 let _ = child.wait();
                 return Err("reviewed candidate child resume failed".into());
             }
-            Ok(Self { child, job })
+            if let Err(error) = job.contains(&child) {
+                let _ = job.terminate();
+                let _ = child.wait();
+                return Err(error);
+            }
+            Ok(Self {
+                child: Some(child),
+                job,
+                disarmed: false,
+                released: false,
+            })
+        }
+
+        /// A reconciliation worker must not inherit a second, unrelated Job:
+        /// releasing this private Job cannot preserve a child owned elsewhere.
+        pub(crate) fn require_uncontained_owner() -> Result<(), String> {
+            let mut in_job = 0;
+            if unsafe { IsProcessInJob(GetCurrentProcess(), std::ptr::null_mut(), &mut in_job) }
+                == 0
+                || in_job != 0
+            {
+                return Err("reviewed candidate owner has an outer Job".into());
+            }
+            Ok(())
         }
 
         pub(crate) fn pid(&self) -> u32 {
-            self.child.id()
+            self.child.as_ref().expect("owned child exists").id()
         }
 
         pub(crate) fn child_mut(&mut self) -> &mut Child {
-            &mut self.child
+            self.child.as_mut().expect("owned child exists")
+        }
+
+        /// Terminate the complete owned Job and prove its active process count
+        /// reached zero before a caller restores any mapped release bytes.
+        pub(crate) fn terminate_tree_and_confirm_quiescent(&mut self) -> Result<(), String> {
+            if self.released || self.job.0.is_null() {
+                return Err("reviewed candidate Job is no longer owned".into());
+            }
+            let termination = self.job.terminate();
+            let deadline = Instant::now() + Duration::from_secs(10);
+            if !self.wait_until(deadline)? {
+                return Err("reviewed candidate child exit is unproven".into());
+            }
+            // Windows may retain a terminated process in Job accounting while
+            // our Child still holds its process handle. Close that exact handle
+            // before requiring zero active processes for the complete tree.
+            drop(self.child.take());
+            loop {
+                if self.job.active_processes()? == 0 {
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    return Err("reviewed candidate Job exit is unproven".into());
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            // If TerminateJobObject itself failed but exact accounting proves
+            // the tree has exited, there is no live process to restore under.
+            let _ = termination;
+            self.job.close()?;
+            self.released = true;
+            Ok(())
+        }
+
+        /// Clear kill-on-close only after the caller has durably recorded an
+        /// exact pending serving handoff. Keep the Job handle for a final
+        /// readback and explicit whole-tree termination on failure.
+        pub(crate) fn disarm_live_retaining_job(&mut self) -> Result<(), String> {
+            if self.released || self.disarmed || self.job.0.is_null() {
+                return Err("reviewed candidate Job is no longer owned".into());
+            }
+            if self
+                .child_mut()
+                .try_wait()
+                .map_err(|_| "reviewed candidate state unavailable")?
+                .is_some()
+            {
+                return Err("reviewed candidate exited before Job release".into());
+            }
+            self.job
+                .contains(self.child.as_ref().expect("owned child exists"))?;
+            self.job.disarm()?;
+            self.disarmed = true;
+            Ok(())
+        }
+
+        /// Close the disarmed Job after a caller readback. The caller must
+        /// independently prove the exact daemon is still serving after this
+        /// close before recording final reconciliation success.
+        pub(crate) fn release_live(&mut self) -> Result<(), String> {
+            if self.released || !self.disarmed || self.job.0.is_null() {
+                return Err("reviewed candidate Job release is unavailable".into());
+            }
+            if self
+                .child_mut()
+                .try_wait()
+                .map_err(|_| "reviewed candidate state unavailable")?
+                .is_some()
+            {
+                return Err("reviewed candidate exited before Job release".into());
+            }
+            self.job
+                .contains(self.child.as_ref().expect("owned child exists"))?;
+            self.job.require_disarmed()?;
+            // Keep explicit termination authority until this close succeeds.
+            self.job.close()?;
+            self.released = true;
+            Ok(())
         }
 
         fn wait_until(&mut self, deadline: Instant) -> Result<bool, String> {
+            let Some(child) = self.child.as_mut() else {
+                return Ok(true);
+            };
             loop {
-                match self.child.try_wait() {
+                match child.try_wait() {
                     Ok(Some(_)) => return Ok(true),
                     Ok(None) if Instant::now() < deadline => {
                         std::thread::sleep(Duration::from_millis(25));
@@ -180,8 +405,10 @@ mod windows {
         }
 
         fn shutdown_exact(&mut self) -> Result<(), String> {
-            // Close the exact job before dropping the child process handle.
-            // This also covers every early-return path in the owner launcher.
+            // Terminate explicitly because a failed release may already have
+            // cleared kill-on-close. Close remains the crash-safe fallback when
+            // the Job is still armed.
+            let termination = self.job.terminate();
             let job_closed = if self.job.close().is_ok() {
                 true
             } else {
@@ -191,12 +418,16 @@ mod windows {
                 self.job.close().is_ok()
             };
             if !job_closed {
-                let _ = self.child.kill();
+                if let Some(child) = self.child.as_mut() {
+                    let _ = child.kill();
+                }
             }
             if !self.wait_until(Instant::now() + Duration::from_secs(5))? {
                 // Child::kill uses the retained process handle, never a PID
                 // lookup. Reap it with a second bound after the fallback.
-                let _ = self.child.kill();
+                if let Some(child) = self.child.as_mut() {
+                    let _ = child.kill();
+                }
                 if !self.wait_until(Instant::now() + Duration::from_secs(2))? {
                     return Err("reviewed candidate child termination timed out".into());
                 }
@@ -204,6 +435,10 @@ mod windows {
             if !job_closed {
                 return Err("reviewed candidate child job close failed".into());
             }
+            if termination.is_err() {
+                return Err("reviewed candidate child tree termination unproven".into());
+            }
+            self.released = true;
             Ok(())
         }
 
@@ -214,6 +449,9 @@ mod windows {
 
     impl Drop for OwnedCandidateChild {
         fn drop(&mut self) {
+            if self.released {
+                return;
+            }
             if let Err(error) = self.shutdown_exact() {
                 eprintln!("reviewed candidate owner cleanup failed: {error}");
             }
@@ -277,6 +515,102 @@ mod windows {
             std::thread::sleep(Duration::from_secs(60));
             let _ = descendant.kill();
             let _ = descendant.wait();
+        }
+
+        fn spawn_with_descendant() -> (OwnedCandidateChild, u32) {
+            let mut command = Command::new(std::env::current_exe().expect("test executable"));
+            command
+                .args([
+                    "--exact",
+                    "reviewed_candidate_owner::windows::tests::child_with_descendant",
+                    "--nocapture",
+                ])
+                .env("CATDESK_OWNER_JOB_TEST_DESCENDANT", "1")
+                .stdout(Stdio::piped());
+            let mut owned = OwnedCandidateChild::spawn(&mut command).expect("owned child");
+            let stdout = owned.child_mut().stdout.take().expect("child stdout");
+            let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+            let reader = std::thread::spawn(move || {
+                let mut reader = BufReader::new(stdout);
+                let mut line = String::new();
+                loop {
+                    line.clear();
+                    if reader.read_line(&mut line).expect("child output") == 0 {
+                        return;
+                    }
+                    if let Some(value) = line.split("DESCENDANT_PID=").nth(1) {
+                        ready_tx
+                            .send(value.trim().parse::<u32>().expect("descendant PID"))
+                            .expect("send descendant PID");
+                        return;
+                    }
+                }
+            });
+            let descendant_pid = ready_rx
+                .recv_timeout(Duration::from_secs(10))
+                .expect("bounded descendant readiness");
+            reader.join().expect("ready reader");
+            (owned, descendant_pid)
+        }
+
+        #[test]
+        fn release_after_durable_commit_preserves_child_and_descendant() {
+            const PROCESS_TERMINATE: u32 = 0x0001;
+            const SYNCHRONIZE: u32 = 0x0010_0000;
+            const WAIT_OBJECT_0: u32 = 0;
+            const WAIT_TIMEOUT: u32 = 0x0000_0102;
+            let (mut owned, descendant_pid) = spawn_with_descendant();
+            let child = unsafe { OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, 0, owned.pid()) };
+            let descendant =
+                unsafe { OpenProcess(PROCESS_TERMINATE | SYNCHRONIZE, 0, descendant_pid) };
+            assert!(!child.is_null() && !descendant.is_null());
+            let disarm = owned.disarm_live_retaining_job();
+            let release = if disarm.is_ok() {
+                owned.release_live()
+            } else {
+                Err("reviewed candidate disarm failed".into())
+            };
+            drop(owned);
+            let child_outcome = unsafe { WaitForSingleObject(child, 250) };
+            let descendant_outcome = unsafe { WaitForSingleObject(descendant, 250) };
+            // These exact fixture handles are cleanup authority, including if
+            // a release assertion below fails.
+            unsafe { TerminateProcess(child, 1) };
+            unsafe { TerminateProcess(descendant, 1) };
+            let child_ended = unsafe { WaitForSingleObject(child, 5_000) };
+            let descendant_ended = unsafe { WaitForSingleObject(descendant, 5_000) };
+            unsafe { CloseHandle(child) };
+            unsafe { CloseHandle(descendant) };
+            disarm.expect("durable handoff disarm");
+            release.expect("durable handoff release");
+            assert_eq!(child_outcome, WAIT_TIMEOUT, "released child remains alive");
+            assert_eq!(
+                descendant_outcome, WAIT_TIMEOUT,
+                "released descendant remains alive"
+            );
+            assert_eq!(child_ended, WAIT_OBJECT_0);
+            assert_eq!(descendant_ended, WAIT_OBJECT_0);
+        }
+
+        #[test]
+        fn failed_handoff_proves_entire_owned_tree_exited() {
+            let (mut owned, _) = spawn_with_descendant();
+            owned
+                .terminate_tree_and_confirm_quiescent()
+                .expect("whole Job quiescence");
+            drop(owned);
+        }
+
+        #[test]
+        fn failed_post_disarm_handoff_still_terminates_entire_tree() {
+            let (mut owned, _) = spawn_with_descendant();
+            owned
+                .disarm_live_retaining_job()
+                .expect("disarm while retaining cleanup authority");
+            owned
+                .terminate_tree_and_confirm_quiescent()
+                .expect("post-disarm whole Job quiescence");
+            drop(owned);
         }
 
         #[test]

@@ -31,6 +31,7 @@ pub const DAEMON_MODE_FLAG: &str = "--catdesk-daemon";
 pub const LIFECYCLE_STOP_WORKER_FLAG: &str = "--catdesk-lifecycle-stop-worker";
 pub const CANONICAL_RECOVERY_WORKER_FLAG: &str = "--catdesk-canonical-recovery-worker";
 pub const REVIEWED_PROMOTION_WORKER_FLAG: &str = "--catdesk-reviewed-promotion-worker";
+pub const RELEASE_PAIR_RECONCILE_WORKER_FLAG: &str = "--catdesk-release-pair-reconcile-worker";
 const PREFLIGHT_TTL_SECONDS: u64 = 120;
 const GRACEFUL_EXIT_TIMEOUT: Duration = Duration::from_secs(4);
 const FORCED_EXIT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -115,6 +116,73 @@ pub struct ReviewedPromotionWorkerArgsV1 {
     pub candidate_relative_path: String,
     pub authorization_id: String,
     pub transaction_id: String,
+}
+
+/// This one-shot authority is deliberately separate from ordinary promotion:
+/// the old canonical binary and sidecar are measured independently and neither
+/// is accepted as a reviewed rollback image.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReleasePairReconcileAuthorizationV1 {
+    pub schema_version: u8,
+    pub authorization_id: String,
+    pub transaction_id: String,
+    pub expires_at_unix: u64,
+    pub reviewed_preflight_sha256: String,
+    pub reviewed_authorization_id: String,
+    pub candidate_relative_path: String,
+    pub candidate_sha256: String,
+    pub original_binary_sha256: String,
+    pub original_sidecar_file_sha256: String,
+    pub original_sidecar_value: String,
+    pub slot_a_binary_sha256: String,
+    pub slot_a_sidecar_file_sha256: String,
+    pub slot_a_manifest_sha256: String,
+    pub original_pointer_sha256: String,
+    pub script_sha256: String,
+    pub recovery_helper_sha256: String,
+    pub powershell_sha256: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReleasePairReconcilePreflightV1 {
+    pub schema_version: u8,
+    pub confirmation_token: String,
+    pub expires_at_unix: u64,
+    pub authorization: ReleasePairReconcileAuthorizationV1,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReleasePairReconcileClaimV1 {
+    schema_version: u8,
+    authorization_id: String,
+    transaction_id: String,
+    state: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReleasePairReconcileResultV1 {
+    pub schema_version: u8,
+    pub state: String,
+    pub transaction_id: String,
+    pub candidate_sha256: String,
+    pub owner_pid: Option<u32>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReleasePairReconcileWorkerArgsV1 {
+    pub workspace: PathBuf,
+    pub authorization_id: String,
+    pub transaction_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReleasePairReconcileConfirmationOutcomeV1 {
+    pub state: &'static str,
+    pub candidate_sha256: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -293,6 +361,35 @@ pub fn parse_reviewed_promotion_worker_args(
         candidate_relative_path: candidate.into(),
         authorization_id: authorization.into(),
         transaction_id: transaction.into(),
+    }))
+}
+
+pub fn parse_release_pair_reconcile_worker_args(
+    args: &[String],
+) -> Result<Option<ReleasePairReconcileWorkerArgsV1>, String> {
+    if !args
+        .iter()
+        .any(|arg| arg == RELEASE_PAIR_RECONCILE_WORKER_FLAG)
+    {
+        return Ok(None);
+    }
+    if args.len() != 7
+        || args[0] != RELEASE_PAIR_RECONCILE_WORKER_FLAG
+        || args[1] != "--workspace"
+        || args[3] != "--authorization"
+        || args[5] != "--transaction"
+        || args[2].is_empty()
+        || args[2].len() > 4096
+        || ![&args[4], &args[6]]
+            .iter()
+            .all(|value| value.len() == 32 && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+    {
+        return Err("CatDesk release-pair reconciliation worker arguments are invalid".into());
+    }
+    Ok(Some(ReleasePairReconcileWorkerArgsV1 {
+        workspace: PathBuf::from(&args[2]),
+        authorization_id: args[4].clone(),
+        transaction_id: args[6].clone(),
     }))
 }
 
@@ -692,6 +789,931 @@ pub fn reviewed_promotion_result(
         return Err("reviewed promotion result is malformed".into());
     }
     Ok(Some(result))
+}
+
+fn release_pair_control_dir(workspace: &Path) -> PathBuf {
+    workspace.join(".catdesk").join("release-pair-control")
+}
+
+fn release_pair_preflight_path(workspace: &Path) -> PathBuf {
+    release_pair_control_dir(workspace).join("preflight.json")
+}
+
+fn release_pair_authorization_path(workspace: &Path) -> PathBuf {
+    release_pair_control_dir(workspace).join("authorization.json")
+}
+
+fn release_pair_claim_path(workspace: &Path) -> PathBuf {
+    release_pair_control_dir(workspace).join("claim.json")
+}
+
+fn release_pair_worker_owner_path(workspace: &Path) -> PathBuf {
+    release_pair_control_dir(workspace).join("worker-owner")
+}
+
+fn release_pair_result_path(workspace: &Path) -> PathBuf {
+    release_pair_control_dir(workspace).join("result.json")
+}
+
+fn release_pair_pending_path(workspace: &Path) -> PathBuf {
+    release_pair_control_dir(workspace).join("serving-pending.json")
+}
+
+fn release_pair_released_path(workspace: &Path) -> PathBuf {
+    release_pair_control_dir(workspace).join("job-release.json")
+}
+
+fn release_pair_quiescence_path(workspace: &Path) -> PathBuf {
+    release_pair_control_dir(workspace).join("quiescence.json")
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReleasePairScriptResultV1 {
+    state: String,
+    transaction_id: String,
+    #[serde(default)]
+    owner_pid: Option<u32>,
+    #[serde(default)]
+    owner_started_at_utc: Option<String>,
+    #[serde(default)]
+    candidate_sha256: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReleasePairOwnerMarkerV1<'a> {
+    schema_version: u8,
+    state: &'a str,
+    authorization_id: &'a str,
+    transaction_id: &'a str,
+    owner_pid: u32,
+    owner_started_at_utc: &'a str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReleasePairQuiescenceV1<'a> {
+    schema_version: u8,
+    state: &'a str,
+    authorization_id: &'a str,
+    transaction_id: &'a str,
+}
+
+fn bounded_release_file(workspace: &Path, relative: &str, max: u64) -> Result<Vec<u8>, String> {
+    let path = workspace.join(relative);
+    let metadata = fs::symlink_metadata(&path)
+        .map_err(|_| "release-pair evidence is unavailable".to_string())?;
+    if !metadata.is_file()
+        || metadata.file_type().is_symlink()
+        || metadata.len() == 0
+        || metadata.len() > max
+    {
+        return Err("release-pair evidence is unsafe".into());
+    }
+    let canonical = canonical_workspace_regular_file(workspace, &path, "release-pair evidence")?;
+    let bytes =
+        fs::read(canonical).map_err(|_| "release-pair evidence is unreadable".to_string())?;
+    if bytes.is_empty() || bytes.len() as u64 > max || bytes.len() as u64 != metadata.len() {
+        return Err("release-pair evidence changed".into());
+    }
+    Ok(bytes)
+}
+
+fn sha256_bytes(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+fn release_sidecar_value(bytes: &[u8]) -> Result<String, String> {
+    let text =
+        std::str::from_utf8(bytes).map_err(|_| "release-pair sidecar is malformed".to_string())?;
+    let value = text.trim();
+    if value.len() != 64 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("release-pair sidecar is malformed".into());
+    }
+    Ok(value.to_ascii_lowercase())
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ReleasePairObservedV1 {
+    binary_sha256: String,
+    sidecar_file_sha256: String,
+    sidecar_value: String,
+    slot_a_binary_sha256: String,
+    slot_a_sidecar_file_sha256: String,
+    slot_a_manifest_sha256: String,
+    pointer_sha256: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct OperationalSlotManifestV1 {
+    schema_version: u8,
+    generation: u64,
+    sha256: String,
+    source: String,
+    captured_at_utc: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct OperationalSlotPointerV1 {
+    schema_version: u8,
+    generation: u64,
+    sha256: String,
+    slot: String,
+}
+
+fn measure_divergent_release_pair(workspace: &Path) -> Result<ReleasePairObservedV1, String> {
+    let canonical = canonical_workspace_file(
+        workspace,
+        &workspace.join("target/release/catdesk.exe"),
+        "canonical release",
+    )?;
+    let binary_sha256 = sha256_file(&canonical)?;
+    let sidecar = bounded_release_file(workspace, "target/release/catdesk.exe.sha256", 128)?;
+    let sidecar_value = release_sidecar_value(&sidecar)?;
+    if sidecar_value == binary_sha256 {
+        return Err("release-pair reconciliation requires an actual divergent pair".into());
+    }
+    let slot_a_binary = canonical_workspace_file(
+        workspace,
+        &workspace.join(".catdesk/release-recovery/slot-a/catdesk.exe"),
+        "existing operational slot-a",
+    )?;
+    let slot_a_binary_sha256 = sha256_file(&slot_a_binary)?;
+    let slot_a_sidecar = bounded_release_file(
+        workspace,
+        ".catdesk/release-recovery/slot-a/catdesk.exe.sha256",
+        128,
+    )?;
+    let slot_a_manifest = bounded_release_file(
+        workspace,
+        ".catdesk/release-recovery/slot-a/manifest.json",
+        4096,
+    )?;
+    let pointer = bounded_release_file(workspace, ".catdesk/release-recovery/current.json", 1024)?;
+    let manifest: OperationalSlotManifestV1 = serde_json::from_slice(&slot_a_manifest)
+        .map_err(|_| "operational slot-a evidence is malformed".to_string())?;
+    let current: OperationalSlotPointerV1 = serde_json::from_slice(&pointer)
+        .map_err(|_| "operational slot-a pointer is malformed".to_string())?;
+    if slot_a_binary_sha256 != sidecar_value
+        || release_sidecar_value(&slot_a_sidecar)? != sidecar_value
+        || manifest.schema_version != 1
+        || manifest.generation != 1
+        || manifest.source != "operational_verified"
+        || manifest.sha256 != sidecar_value
+        || manifest.captured_at_utc.is_empty()
+        || current.schema_version != 1
+        || current.generation != 1
+        || current.slot != "slot-a"
+        || current.sha256 != sidecar_value
+    {
+        return Err("operational slot-a evidence drifted".into());
+    }
+    if workspace.join(".catdesk/release-recovery/slot-b").exists()
+        || workspace
+            .join(".catdesk/promotion-recovery/promotion-transaction.json")
+            .exists()
+        || workspace
+            .join(".catdesk/release-pair-control/transaction.json")
+            .exists()
+    {
+        return Err("release-pair reconciliation requires an empty transaction boundary".into());
+    }
+    Ok(ReleasePairObservedV1 {
+        binary_sha256,
+        sidecar_file_sha256: sha256_bytes(&sidecar),
+        sidecar_value,
+        slot_a_binary_sha256,
+        slot_a_sidecar_file_sha256: sha256_bytes(&slot_a_sidecar),
+        slot_a_manifest_sha256: sha256_bytes(&slot_a_manifest),
+        pointer_sha256: sha256_bytes(&pointer),
+    })
+}
+
+fn validate_release_pair_review(
+    workspace: &Path,
+    authorization: &ReleasePairReconcileAuthorizationV1,
+) -> Result<ReviewedPromotionAuthorizationV1, String> {
+    let reviewed: ReviewedPromotionPreflightV1 = read_bounded_json(
+        &reviewed_promotion_preflight_path(workspace),
+        "independent reviewed promotion preflight",
+    )?;
+    if reviewed.schema_version != 1
+        || reviewed.expires_at_unix < now_unix()
+        || sha256_file(&reviewed_promotion_preflight_path(workspace))?
+            != authorization.reviewed_preflight_sha256
+        || reviewed.authorization.authorization_id != authorization.reviewed_authorization_id
+        || reviewed.authorization.candidate_relative_path != authorization.candidate_relative_path
+        || reviewed.authorization.candidate_sha256 != authorization.candidate_sha256
+        || reviewed.authorization.prior_canonical_sha256 != authorization.original_binary_sha256
+    {
+        return Err("release-pair independent review authority drifted".into());
+    }
+    crate::delegated::autonomy_supervisor::revalidate_release_pair_review_authority(
+        workspace,
+        &reviewed.authorization,
+    )?;
+    let attestation = validate_producer_attestation(
+        workspace,
+        &reviewed.authorization.review_session_id,
+        &reviewed.authorization.review_record_id,
+        &reviewed.authorization.review_record_sha256,
+        &reviewed.authorization.snapshot_expected,
+        &authorization.candidate_relative_path,
+        &authorization.candidate_sha256,
+    )
+    .map_err(|_| "release-pair reviewed build attestation drifted".to_string())?;
+    if attestation.attestation_digest != reviewed.authorization.build_attestation_sha256
+        || attestation.build_attempt_id != reviewed.authorization.build_attempt_id
+        || attestation.snapshot_id != reviewed.authorization.snapshot_id
+        || attestation.snapshot_authority_digest != reviewed.authorization.snapshot_authority_digest
+        || attestation.snapshot_manifest_digest != reviewed.authorization.snapshot_manifest_digest
+        || attestation.build_policy_sha256 != reviewed.authorization.build_policy_sha256
+        || attestation.cargo_sha256 != reviewed.authorization.cargo_sha256
+        || attestation.rustc_sha256 != reviewed.authorization.rustc_sha256
+    {
+        return Err("release-pair reviewed build attestation drifted".into());
+    }
+    let candidate = canonical_workspace_file(
+        workspace,
+        &workspace.join(&authorization.candidate_relative_path),
+        "release-pair candidate",
+    )?;
+    if sha256_file(&candidate)? != authorization.candidate_sha256 {
+        return Err("release-pair candidate drifted".into());
+    }
+    Ok(reviewed.authorization)
+}
+
+pub fn prepare_release_pair_reconcile(
+    workspace: &Path,
+) -> Result<ReleasePairReconcilePreflightV1, String> {
+    let workspace = canonical_directory(workspace, "release-pair workspace")?;
+    let reviewed = reviewed_promotion_preflight_authority(&workspace)?;
+    crate::delegated::autonomy_supervisor::revalidate_release_pair_review_authority(
+        &workspace, &reviewed,
+    )?;
+    let observed = measure_divergent_release_pair(&workspace)?;
+    if observed.binary_sha256 != reviewed.prior_canonical_sha256 {
+        return Err("reviewed candidate prior binary binding drifted".into());
+    }
+    let script = canonical_workspace_script(
+        &workspace,
+        &workspace.join("scripts/reconcile-reviewed-catdesk-release-pair.ps1"),
+        "fixed release-pair reconciliation script",
+    )?;
+    let recovery_helper = canonical_workspace_script(
+        &workspace,
+        &workspace.join("scripts/catdesk-release-recovery.ps1"),
+        "fixed release-pair recovery helper",
+    )?;
+    let powershell = crate::operator_facade::trusted_windows_powershell(&workspace)?;
+    let authorization = ReleasePairReconcileAuthorizationV1 {
+        schema_version: 1,
+        authorization_id: Uuid::new_v4().simple().to_string(),
+        transaction_id: Uuid::new_v4().simple().to_string(),
+        expires_at_unix: reviewed
+            .expires_at_unix
+            .min(now_unix().saturating_add(PREFLIGHT_TTL_SECONDS)),
+        reviewed_preflight_sha256: sha256_file(&reviewed_promotion_preflight_path(&workspace))?,
+        reviewed_authorization_id: reviewed.authorization_id,
+        candidate_relative_path: reviewed.candidate_relative_path,
+        candidate_sha256: reviewed.candidate_sha256,
+        original_binary_sha256: observed.binary_sha256,
+        original_sidecar_file_sha256: observed.sidecar_file_sha256,
+        original_sidecar_value: observed.sidecar_value,
+        slot_a_binary_sha256: observed.slot_a_binary_sha256,
+        slot_a_sidecar_file_sha256: observed.slot_a_sidecar_file_sha256,
+        slot_a_manifest_sha256: observed.slot_a_manifest_sha256,
+        original_pointer_sha256: observed.pointer_sha256,
+        script_sha256: sha256_file(&script)?,
+        recovery_helper_sha256: sha256_file(&recovery_helper)?,
+        powershell_sha256: sha256_file(&powershell)?,
+    };
+    validate_release_pair_review(&workspace, &authorization)?;
+    let preflight = ReleasePairReconcilePreflightV1 {
+        schema_version: 1,
+        confirmation_token: Uuid::new_v4().simple().to_string(),
+        expires_at_unix: authorization.expires_at_unix,
+        authorization,
+    };
+    if release_pair_claim_path(&workspace).exists()
+        || release_pair_authorization_path(&workspace).exists()
+    {
+        return Err("release-pair reconciliation is already claimed".into());
+    }
+    if let Ok(existing) = read_bounded_json::<ReleasePairReconcilePreflightV1>(
+        &release_pair_preflight_path(&workspace),
+        "release-pair preflight",
+    ) {
+        if existing.schema_version == 1
+            && existing.expires_at_unix >= now_unix()
+            && existing.authorization.reviewed_preflight_sha256
+                == preflight.authorization.reviewed_preflight_sha256
+            && existing.authorization.reviewed_authorization_id
+                == preflight.authorization.reviewed_authorization_id
+            && existing.authorization.candidate_relative_path
+                == preflight.authorization.candidate_relative_path
+            && existing.authorization.candidate_sha256 == preflight.authorization.candidate_sha256
+            && existing.authorization.original_binary_sha256
+                == preflight.authorization.original_binary_sha256
+            && existing.authorization.original_sidecar_file_sha256
+                == preflight.authorization.original_sidecar_file_sha256
+            && existing.authorization.original_sidecar_value
+                == preflight.authorization.original_sidecar_value
+            && existing.authorization.slot_a_binary_sha256
+                == preflight.authorization.slot_a_binary_sha256
+            && existing.authorization.slot_a_sidecar_file_sha256
+                == preflight.authorization.slot_a_sidecar_file_sha256
+            && existing.authorization.slot_a_manifest_sha256
+                == preflight.authorization.slot_a_manifest_sha256
+            && existing.authorization.original_pointer_sha256
+                == preflight.authorization.original_pointer_sha256
+            && existing.authorization.script_sha256 == preflight.authorization.script_sha256
+            && existing.authorization.recovery_helper_sha256
+                == preflight.authorization.recovery_helper_sha256
+            && existing.authorization.powershell_sha256 == preflight.authorization.powershell_sha256
+        {
+            return Ok(existing);
+        }
+    }
+    atomic_json_write(&release_pair_preflight_path(&workspace), &preflight)?;
+    Ok(preflight)
+}
+
+fn release_pair_observed_matches(
+    observed: &ReleasePairObservedV1,
+    authorized: &ReleasePairReconcileAuthorizationV1,
+) -> bool {
+    observed.binary_sha256 == authorized.original_binary_sha256
+        && observed.sidecar_file_sha256 == authorized.original_sidecar_file_sha256
+        && observed.sidecar_value == authorized.original_sidecar_value
+        && observed.slot_a_binary_sha256 == authorized.slot_a_binary_sha256
+        && observed.slot_a_sidecar_file_sha256 == authorized.slot_a_sidecar_file_sha256
+        && observed.slot_a_manifest_sha256 == authorized.slot_a_manifest_sha256
+        && observed.pointer_sha256 == authorized.original_pointer_sha256
+}
+
+fn validate_release_pair_fixed_inputs(
+    workspace: &Path,
+    authorized: &ReleasePairReconcileAuthorizationV1,
+) -> Result<(), String> {
+    if authorized.schema_version != 1
+        || authorized.expires_at_unix < now_unix()
+        || authorized.authorization_id.len() != 32
+        || authorized.transaction_id.len() != 32
+        || !authorized
+            .authorization_id
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+        || !authorized
+            .transaction_id
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err("release-pair authorization is unavailable".into());
+    }
+    validate_release_pair_review(workspace, authorized)?;
+    let script = canonical_workspace_script(
+        workspace,
+        &workspace.join("scripts/reconcile-reviewed-catdesk-release-pair.ps1"),
+        "fixed release-pair reconciliation script",
+    )?;
+    let recovery_helper = canonical_workspace_script(
+        workspace,
+        &workspace.join("scripts/catdesk-release-recovery.ps1"),
+        "fixed release-pair recovery helper",
+    )?;
+    let powershell = crate::operator_facade::trusted_windows_powershell(workspace)?;
+    if sha256_file(&script)? != authorized.script_sha256
+        || sha256_file(&recovery_helper)? != authorized.recovery_helper_sha256
+        || sha256_file(&powershell)? != authorized.powershell_sha256
+    {
+        return Err("release-pair fixed worker evidence drifted".into());
+    }
+    Ok(())
+}
+
+fn create_new_release_pair_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or("release-pair control path is invalid")?;
+    fs::create_dir_all(parent).map_err(|_| "release-pair control is unavailable")?;
+    let bytes = serde_json::to_vec(value).map_err(|_| "release-pair control is malformed")?;
+    if bytes.is_empty() || bytes.len() > 8192 {
+        return Err("release-pair control is oversized".into());
+    }
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|_| "release-pair control is already claimed".to_string())?;
+    file.write_all(&bytes)
+        .and_then(|_| file.sync_all())
+        .map_err(|_| "release-pair control write failed".to_string())
+}
+
+pub fn confirm_release_pair_reconcile(
+    workspace: &Path,
+    confirmation_token: &str,
+) -> Result<ReleasePairReconcileConfirmationOutcomeV1, String> {
+    let workspace = canonical_directory(workspace, "release-pair workspace")?;
+    let preflight: ReleasePairReconcilePreflightV1 = read_bounded_json(
+        &release_pair_preflight_path(&workspace),
+        "release-pair preflight",
+    )?;
+    if preflight.schema_version != 1 || preflight.confirmation_token != confirmation_token {
+        return Err("release-pair confirmation is unavailable".into());
+    }
+    let authorized = &preflight.authorization;
+    let claim = ReleasePairReconcileClaimV1 {
+        schema_version: 1,
+        authorization_id: authorized.authorization_id.clone(),
+        transaction_id: authorized.transaction_id.clone(),
+        state: "CLAIMED_PENDING".into(),
+    };
+    let claim_path = release_pair_claim_path(&workspace);
+    if claim_path.exists() {
+        let prior: ReleasePairReconcileClaimV1 =
+            read_bounded_json(&claim_path, "release-pair claim")?;
+        if prior != claim {
+            return Err("release-pair claim belongs to another attempt".into());
+        }
+        let result = release_pair_reconcile_result(&workspace)?;
+        if result.as_ref().is_some_and(|result| {
+            result.transaction_id != authorized.transaction_id
+                || result.candidate_sha256 != authorized.candidate_sha256
+        }) {
+            return Err("release-pair result belongs to another transaction".into());
+        }
+        return Ok(ReleasePairReconcileConfirmationOutcomeV1 {
+            state: match result.as_ref().map(|result| result.state.as_str()) {
+                Some("RECONCILED_CANONICAL_READY") => "RECONCILED_CANONICAL_READY",
+                Some("RESTORED_ORIGINAL_OPERATOR_ATTENTION") => {
+                    "RESTORED_ORIGINAL_OPERATOR_ATTENTION"
+                }
+                Some(_) => "RECONCILE_UNPROVEN_OPERATOR_ATTENTION",
+                None => "CLAIMED_OUTCOME_UNPROVEN_OPERATOR_ATTENTION",
+            },
+            candidate_sha256: authorized.candidate_sha256.clone(),
+        });
+    }
+    if preflight.expires_at_unix < now_unix() {
+        return Err("release-pair confirmation expired".into());
+    }
+    validate_release_pair_fixed_inputs(&workspace, authorized)?;
+    if !release_pair_observed_matches(&measure_divergent_release_pair(&workspace)?, authorized) {
+        return Err("divergent release-pair evidence drifted".into());
+    }
+    #[cfg(target_os = "windows")]
+    crate::reviewed_candidate_owner::OwnedCandidateChild::require_uncontained_owner()?;
+    let current = std::env::current_exe()
+        .and_then(|path| path.canonicalize())
+        .map_err(|_| "release-pair worker image is unavailable".to_string())?;
+    let canonical = canonical_workspace_file(
+        &workspace,
+        &workspace.join("target/release/catdesk.exe"),
+        "canonical release",
+    )?;
+    if current == canonical {
+        return Err("release-pair worker cannot replace its own mapped image".into());
+    }
+    let authorization_path = release_pair_authorization_path(&workspace);
+    if authorization_path.exists() {
+        let prior: ReleasePairReconcileAuthorizationV1 =
+            read_bounded_json(&authorization_path, "release-pair authorization")?;
+        if prior != *authorized {
+            return Err("release-pair authorization belongs to another attempt".into());
+        }
+    } else {
+        create_new_release_pair_json(&authorization_path, authorized)?;
+    }
+    create_new_release_pair_json(&claim_path, &claim)?;
+    let mut command = Command::new(current);
+    command
+        .arg(RELEASE_PAIR_RECONCILE_WORKER_FLAG)
+        .arg("--workspace")
+        .arg(&workspace)
+        .arg("--authorization")
+        .arg(&authorized.authorization_id)
+        .arg("--transaction")
+        .arg(&authorized.transaction_id)
+        .current_dir(&workspace)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    apply_detached_process_flags(&mut command);
+    if command.spawn().is_err() {
+        let _ = atomic_json_write(
+            &release_pair_result_path(&workspace),
+            &ReleasePairReconcileResultV1 {
+                schema_version: 1,
+                state: "RECONCILE_UNPROVEN_OPERATOR_ATTENTION".into(),
+                transaction_id: authorized.transaction_id.clone(),
+                candidate_sha256: authorized.candidate_sha256.clone(),
+                owner_pid: None,
+            },
+        );
+        return Err("release-pair worker could not be scheduled".into());
+    }
+    Ok(ReleasePairReconcileConfirmationOutcomeV1 {
+        state: "NEWLY_SCHEDULED",
+        candidate_sha256: authorized.candidate_sha256.clone(),
+    })
+}
+
+pub fn release_pair_reconcile_result(
+    workspace: &Path,
+) -> Result<Option<ReleasePairReconcileResultV1>, String> {
+    let workspace = canonical_directory(workspace, "release-pair workspace")?;
+    let path = release_pair_result_path(&workspace);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let result: ReleasePairReconcileResultV1 = read_bounded_json(&path, "release-pair result")?;
+    if result.schema_version != 1
+        || !matches!(
+            result.state.as_str(),
+            "RECONCILED_CANONICAL_READY"
+                | "RESTORED_ORIGINAL_OPERATOR_ATTENTION"
+                | "RECONCILE_UNPROVEN_OPERATOR_ATTENTION"
+        )
+        || result.transaction_id.len() != 32
+        || normalize_sha256(&result.candidate_sha256).is_err()
+    {
+        return Err("release-pair result is malformed".into());
+    }
+    let authorization: ReleasePairReconcileAuthorizationV1 = read_bounded_json(
+        &release_pair_authorization_path(&workspace),
+        "release-pair authorization",
+    )?;
+    let claim: ReleasePairReconcileClaimV1 =
+        read_bounded_json(&release_pair_claim_path(&workspace), "release-pair claim")?;
+    if authorization.schema_version != 1
+        || claim.schema_version != 1
+        || claim.state != "CLAIMED_PENDING"
+        || claim.authorization_id != authorization.authorization_id
+        || claim.transaction_id != authorization.transaction_id
+        || result.transaction_id != authorization.transaction_id
+        || result.candidate_sha256 != authorization.candidate_sha256
+    {
+        return Err("release-pair result authority drifted".into());
+    }
+    Ok(Some(result))
+}
+
+pub fn release_pair_reconcile_claimed(workspace: &Path) -> Result<bool, String> {
+    let workspace = canonical_directory(workspace, "release-pair workspace")?;
+    let claim_path = release_pair_claim_path(&workspace);
+    if !claim_path.exists() {
+        return Ok(false);
+    }
+    let authorization: ReleasePairReconcileAuthorizationV1 = read_bounded_json(
+        &release_pair_authorization_path(&workspace),
+        "release-pair authorization",
+    )?;
+    let claim: ReleasePairReconcileClaimV1 = read_bounded_json(&claim_path, "release-pair claim")?;
+    if authorization.schema_version != 1
+        || claim.schema_version != 1
+        || claim.state != "CLAIMED_PENDING"
+        || claim.authorization_id != authorization.authorization_id
+        || claim.transaction_id != authorization.transaction_id
+    {
+        return Err("release-pair claim authority drifted".into());
+    }
+    Ok(true)
+}
+
+#[cfg(target_os = "windows")]
+fn run_release_pair_phase(
+    workspace: &Path,
+    authorized: &ReleasePairReconcileAuthorizationV1,
+    phase: crate::operator_facade::ReleasePairPhase,
+    owner_pid: Option<u32>,
+    owner_started_at_utc: Option<&str>,
+    expected_state: &str,
+) -> Result<ReleasePairScriptResultV1, String> {
+    // The same exact script, transitive helper and interpreter bytes are
+    // rechecked before *every* fixed invocation, including rollback.
+    let script = canonical_workspace_script(
+        workspace,
+        &workspace.join("scripts/reconcile-reviewed-catdesk-release-pair.ps1"),
+        "fixed release-pair reconciliation script",
+    )?;
+    let helper = canonical_workspace_script(
+        workspace,
+        &workspace.join("scripts/catdesk-release-recovery.ps1"),
+        "fixed release-pair recovery helper",
+    )?;
+    let powershell = crate::operator_facade::trusted_windows_powershell(workspace)?;
+    if sha256_file(&script)? != authorized.script_sha256
+        || sha256_file(&helper)? != authorized.recovery_helper_sha256
+        || sha256_file(&powershell)? != authorized.powershell_sha256
+    {
+        return Err("release-pair fixed source changed".into());
+    }
+    let invocation = crate::operator_facade::release_pair_invocation(
+        workspace,
+        phase,
+        &authorized.authorization_id,
+        &authorized.transaction_id,
+        owner_pid,
+        owner_started_at_utc,
+    )?;
+    let result = crate::operator_facade::run_fixed_powershell_invocation_blocking(invocation)?;
+    if !result.success || !result.stderr.trim().is_empty() || result.stdout.len() > 4096 {
+        return Err("release-pair fixed phase requires operator attention".into());
+    }
+    let parsed: ReleasePairScriptResultV1 = serde_json::from_str(result.stdout.trim())
+        .map_err(|_| "release-pair fixed phase result is malformed".to_string())?;
+    if parsed.state != expected_state
+        || parsed.transaction_id != authorized.transaction_id
+        || owner_pid.is_some_and(|pid| parsed.owner_pid != Some(pid))
+        || parsed
+            .candidate_sha256
+            .as_ref()
+            .is_some_and(|hash| hash != &authorized.candidate_sha256)
+    {
+        return Err("release-pair fixed phase result drifted".into());
+    }
+    Ok(parsed)
+}
+
+#[cfg(target_os = "windows")]
+fn prove_release_pair_empty_listener() -> Result<(), String> {
+    if !windows_listener_owner_pids(3200)?.is_empty() {
+        return Err("canonical MCP listener is occupied".into());
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn rollback_release_pair_after_quiescence(
+    workspace: &Path,
+    authorized: &ReleasePairReconcileAuthorizationV1,
+) -> Result<(), String> {
+    prove_release_pair_empty_listener()?;
+    run_release_pair_phase(
+        workspace,
+        authorized,
+        crate::operator_facade::ReleasePairPhase::Empty,
+        None,
+        None,
+        "CANONICAL_OWNER_EMPTY",
+    )?;
+    create_new_release_pair_json(
+        &release_pair_quiescence_path(workspace),
+        &ReleasePairQuiescenceV1 {
+            schema_version: 1,
+            state: "OWNED_TREE_EXITED",
+            authorization_id: &authorized.authorization_id,
+            transaction_id: &authorized.transaction_id,
+        },
+    )?;
+    run_release_pair_phase(
+        workspace,
+        authorized,
+        crate::operator_facade::ReleasePairPhase::Rollback,
+        None,
+        None,
+        "RESTORED_ORIGINAL_OPERATOR_ATTENTION",
+    )?;
+    Ok(())
+}
+
+/// This worker is scheduled only after an operator confirms a one-shot,
+/// independently reviewed candidate bound to the two divergent canonical
+/// files and the operational escrow. It owns every stage to final readback.
+#[cfg(target_os = "windows")]
+pub fn run_release_pair_reconcile_worker(
+    args: ReleasePairReconcileWorkerArgsV1,
+) -> Result<(), String> {
+    use crate::operator_facade::ReleasePairPhase;
+    use crate::reviewed_candidate_owner::OwnedCandidateChild;
+
+    let workspace = canonical_directory(&args.workspace, "release-pair workspace")?;
+    let authorized: ReleasePairReconcileAuthorizationV1 = read_bounded_json(
+        &release_pair_authorization_path(&workspace),
+        "release-pair authorization",
+    )?;
+    let claim: ReleasePairReconcileClaimV1 =
+        read_bounded_json(&release_pair_claim_path(&workspace), "release-pair claim")?;
+    if authorized.authorization_id != args.authorization_id
+        || authorized.transaction_id != args.transaction_id
+        || claim.schema_version != 1
+        || claim.authorization_id != authorized.authorization_id
+        || claim.transaction_id != authorized.transaction_id
+        || claim.state != "CLAIMED_PENDING"
+    {
+        return Err("release-pair worker authority is unavailable".into());
+    }
+    let mut owner_file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(release_pair_worker_owner_path(&workspace))
+        .map_err(|_| "release-pair worker is already owned".to_string())?;
+    if owner_file
+        .write_all(authorized.transaction_id.as_bytes())
+        .and_then(|_| owner_file.sync_all())
+        .is_err()
+    {
+        let _ = atomic_json_write(
+            &release_pair_result_path(&workspace),
+            &ReleasePairReconcileResultV1 {
+                schema_version: 1,
+                state: "RECONCILE_UNPROVEN_OPERATOR_ATTENTION".into(),
+                transaction_id: authorized.transaction_id,
+                candidate_sha256: authorized.candidate_sha256,
+                owner_pid: None,
+            },
+        );
+        return Err("release-pair worker ownership is unavailable".into());
+    }
+
+    // The script's fixed runner owns a kill-on-close PowerShell Job. It must
+    // finish before the daemon is spawned into this Rust worker's separate Job.
+    let mut staged = false;
+    let mut released = false;
+    let mut owned: Option<OwnedCandidateChild> = None;
+    let mut owner_pid = None;
+    let outcome = (|| -> Result<&'static str, String> {
+        validate_release_pair_fixed_inputs(&workspace, &authorized)?;
+        if !release_pair_observed_matches(&measure_divergent_release_pair(&workspace)?, &authorized)
+        {
+            return Err("divergent release-pair evidence drifted".into());
+        }
+        OwnedCandidateChild::require_uncontained_owner()?;
+        prove_release_pair_empty_listener()?;
+        run_release_pair_phase(
+            &workspace,
+            &authorized,
+            ReleasePairPhase::Empty,
+            None,
+            None,
+            "CANONICAL_OWNER_EMPTY",
+        )?;
+        // A failed Stage may have journaled and swapped only one of the two
+        // files. Keep rollback eligible even when it never returned STAGED.
+        staged = true;
+        run_release_pair_phase(
+            &workspace,
+            &authorized,
+            ReleasePairPhase::Stage,
+            None,
+            None,
+            "STAGED",
+        )?;
+        let canonical = canonical_workspace_file(
+            &workspace,
+            &workspace.join("target/release/catdesk.exe"),
+            "reconciled canonical image",
+        )?;
+        if sha256_file(&canonical)? != authorized.candidate_sha256 {
+            return Err("reconciled candidate pair drifted".into());
+        }
+        let mut command = Command::new(&canonical);
+        command
+            .arg(DAEMON_MODE_FLAG)
+            .current_dir(&workspace)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        let candidate = OwnedCandidateChild::spawn(&mut command)?;
+        owner_pid = Some(candidate.pid());
+        owned = Some(candidate);
+        let child = owned.as_mut().ok_or("candidate owner is unavailable")?;
+        if !wait_child_ready(child.child_mut(), 3200, READY_TIMEOUT) {
+            return Err("reconciled candidate did not become ready".into());
+        }
+        let proof = run_release_pair_phase(
+            &workspace,
+            &authorized,
+            ReleasePairPhase::Probe,
+            owner_pid,
+            None,
+            "SERVING_VERIFIED",
+        )?;
+        let started = proof
+            .owner_started_at_utc
+            .ok_or("reconciled candidate process instance is unproven")?;
+        if started.is_empty()
+            || started.len() > 64
+            || proof.candidate_sha256.as_deref() != Some(authorized.candidate_sha256.as_str())
+        {
+            return Err("reconciled candidate process instance is unproven".into());
+        }
+        create_new_release_pair_json(
+            &release_pair_pending_path(&workspace),
+            &ReleasePairOwnerMarkerV1 {
+                schema_version: 1,
+                state: "SERVING_VERIFIED_PENDING_JOB_RELEASE",
+                authorization_id: &authorized.authorization_id,
+                transaction_id: &authorized.transaction_id,
+                owner_pid: owner_pid.ok_or("candidate owner is unavailable")?,
+                owner_started_at_utc: &started,
+            },
+        )?;
+        child.disarm_live_retaining_job()?;
+        let retained = run_release_pair_phase(
+            &workspace,
+            &authorized,
+            ReleasePairPhase::Probe,
+            owner_pid,
+            Some(&started),
+            "SERVING_VERIFIED",
+        )?;
+        if retained.owner_started_at_utc.as_deref() != Some(started.as_str()) {
+            return Err("reconciled candidate instance drifted before Job release".into());
+        }
+        child.release_live()?;
+        released = true;
+        // A closing private Job is the persistence boundary. After it, any
+        // ambiguous exit must stay in attention; old bytes may still be mapped.
+        let post_close = run_release_pair_phase(
+            &workspace,
+            &authorized,
+            ReleasePairPhase::Probe,
+            owner_pid,
+            Some(&started),
+            "SERVING_VERIFIED",
+        )?;
+        if post_close.owner_started_at_utc.as_deref() != Some(started.as_str()) {
+            return Err("reconciled candidate instance drifted after Job release".into());
+        }
+        create_new_release_pair_json(
+            &release_pair_released_path(&workspace),
+            &ReleasePairOwnerMarkerV1 {
+                schema_version: 1,
+                state: "JOB_RELEASED_PENDING_POSTPROOF",
+                authorization_id: &authorized.authorization_id,
+                transaction_id: &authorized.transaction_id,
+                owner_pid: owner_pid.ok_or("candidate owner is unavailable")?,
+                owner_started_at_utc: &started,
+            },
+        )?;
+        run_release_pair_phase(
+            &workspace,
+            &authorized,
+            ReleasePairPhase::Commit,
+            owner_pid,
+            Some(&started),
+            "RECONCILED_CANONICAL_READY",
+        )?;
+        Ok("RECONCILED_CANONICAL_READY")
+    })();
+
+    let state = match outcome {
+        Ok(state) => state,
+        Err(_) if !released => {
+            let quiescent = match owned.as_mut() {
+                Some(child) => child.terminate_tree_and_confirm_quiescent().is_ok(),
+                None => {
+                    prove_release_pair_empty_listener().is_ok()
+                        && run_release_pair_phase(
+                            &workspace,
+                            &authorized,
+                            ReleasePairPhase::Empty,
+                            None,
+                            None,
+                            "CANONICAL_OWNER_EMPTY",
+                        )
+                        .is_ok()
+                }
+            };
+            if quiescent
+                && staged
+                && rollback_release_pair_after_quiescence(&workspace, &authorized).is_ok()
+            {
+                "RESTORED_ORIGINAL_OPERATOR_ATTENTION"
+            } else {
+                "RECONCILE_UNPROVEN_OPERATOR_ATTENTION"
+            }
+        }
+        Err(_) => "RECONCILE_UNPROVEN_OPERATOR_ATTENTION",
+    };
+    atomic_json_write(
+        &release_pair_result_path(&workspace),
+        &ReleasePairReconcileResultV1 {
+            schema_version: 1,
+            state: state.into(),
+            transaction_id: authorized.transaction_id,
+            candidate_sha256: authorized.candidate_sha256,
+            owner_pid,
+        },
+    )?;
+    if state != "RECONCILED_CANONICAL_READY" {
+        return Err("release-pair reconciliation requires operator attention".into());
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn run_release_pair_reconcile_worker(
+    _args: ReleasePairReconcileWorkerArgsV1,
+) -> Result<(), String> {
+    Err("release-pair reconciliation requires Windows".into())
 }
 
 /// Legacy daemon recovery cannot schedule a version-coupled script or runtime
@@ -2087,6 +3109,147 @@ mod tests {
         let root = std::env::temp_dir().join(format!("catdesk-reload-{label}-{}", Uuid::new_v4()));
         fs::create_dir_all(&root).expect("workspace");
         root
+    }
+
+    fn sample_release_pair_authorization() -> ReleasePairReconcileAuthorizationV1 {
+        ReleasePairReconcileAuthorizationV1 {
+            schema_version: 1,
+            authorization_id: "a".repeat(32),
+            transaction_id: "b".repeat(32),
+            expires_at_unix: now_unix().saturating_add(120),
+            reviewed_preflight_sha256: "c".repeat(64),
+            reviewed_authorization_id: "d".repeat(32),
+            candidate_relative_path: "build/candidate.exe".into(),
+            candidate_sha256: "e".repeat(64),
+            original_binary_sha256: "f".repeat(64),
+            original_sidecar_file_sha256: "1".repeat(64),
+            original_sidecar_value: "2".repeat(64),
+            slot_a_binary_sha256: "2".repeat(64),
+            slot_a_sidecar_file_sha256: "3".repeat(64),
+            slot_a_manifest_sha256: "4".repeat(64),
+            original_pointer_sha256: "5".repeat(64),
+            script_sha256: "6".repeat(64),
+            recovery_helper_sha256: "7".repeat(64),
+            powershell_sha256: "8".repeat(64),
+        }
+    }
+
+    #[test]
+    fn release_pair_worker_arguments_are_closed() {
+        let valid = vec![
+            RELEASE_PAIR_RECONCILE_WORKER_FLAG.into(),
+            "--workspace".into(),
+            "C:/work/catdesk".into(),
+            "--authorization".into(),
+            "a".repeat(32),
+            "--transaction".into(),
+            "b".repeat(32),
+        ];
+        assert_eq!(
+            parse_release_pair_reconcile_worker_args(&valid).unwrap(),
+            Some(ReleasePairReconcileWorkerArgsV1 {
+                workspace: PathBuf::from("C:/work/catdesk"),
+                authorization_id: "a".repeat(32),
+                transaction_id: "b".repeat(32),
+            })
+        );
+        let mut extra = valid.clone();
+        extra.push("--owner-pid".into());
+        assert!(parse_release_pair_reconcile_worker_args(&extra).is_err());
+    }
+
+    #[test]
+    fn release_pair_repeat_confirm_reads_exact_result_without_replaying_mutation() {
+        let root = temp_workspace("release-pair-confirm-retry");
+        let authorization = sample_release_pair_authorization();
+        let preflight = ReleasePairReconcilePreflightV1 {
+            schema_version: 1,
+            confirmation_token: "token-for-exact-retry".into(),
+            expires_at_unix: authorization.expires_at_unix,
+            authorization: authorization.clone(),
+        };
+        let claim = ReleasePairReconcileClaimV1 {
+            schema_version: 1,
+            authorization_id: authorization.authorization_id.clone(),
+            transaction_id: authorization.transaction_id.clone(),
+            state: "CLAIMED_PENDING".into(),
+        };
+        atomic_json_write(&release_pair_preflight_path(&root), &preflight).unwrap();
+        atomic_json_write(&release_pair_authorization_path(&root), &authorization).unwrap();
+        atomic_json_write(&release_pair_claim_path(&root), &claim).unwrap();
+        atomic_json_write(
+            &release_pair_result_path(&root),
+            &ReleasePairReconcileResultV1 {
+                schema_version: 1,
+                state: "RECONCILED_CANONICAL_READY".into(),
+                transaction_id: authorization.transaction_id.clone(),
+                candidate_sha256: authorization.candidate_sha256.clone(),
+                owner_pid: Some(42),
+            },
+        )
+        .unwrap();
+        let result = confirm_release_pair_reconcile(&root, &preflight.confirmation_token).unwrap();
+        assert_eq!(result.state, "RECONCILED_CANONICAL_READY");
+        assert!(!release_pair_worker_owner_path(&root).exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn release_pair_result_rejects_wrong_claimed_transaction() {
+        let root = temp_workspace("release-pair-result-drift");
+        let authorization = sample_release_pair_authorization();
+        let claim = ReleasePairReconcileClaimV1 {
+            schema_version: 1,
+            authorization_id: authorization.authorization_id.clone(),
+            transaction_id: authorization.transaction_id.clone(),
+            state: "CLAIMED_PENDING".into(),
+        };
+        atomic_json_write(&release_pair_authorization_path(&root), &authorization).unwrap();
+        atomic_json_write(&release_pair_claim_path(&root), &claim).unwrap();
+        atomic_json_write(
+            &release_pair_result_path(&root),
+            &ReleasePairReconcileResultV1 {
+                schema_version: 1,
+                state: "RECONCILED_CANONICAL_READY".into(),
+                transaction_id: "9".repeat(32),
+                candidate_sha256: authorization.candidate_sha256.clone(),
+                owner_pid: Some(42),
+            },
+        )
+        .unwrap();
+        assert!(release_pair_reconcile_result(&root).is_err());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn release_pair_claim_without_result_is_explicitly_unproven() {
+        let root = temp_workspace("release-pair-claimed-unknown");
+        let authorization = sample_release_pair_authorization();
+        let preflight = ReleasePairReconcilePreflightV1 {
+            schema_version: 1,
+            confirmation_token: "known-confirmation-token".into(),
+            expires_at_unix: authorization.expires_at_unix,
+            authorization: authorization.clone(),
+        };
+        let claim = ReleasePairReconcileClaimV1 {
+            schema_version: 1,
+            authorization_id: authorization.authorization_id.clone(),
+            transaction_id: authorization.transaction_id.clone(),
+            state: "CLAIMED_PENDING".into(),
+        };
+        atomic_json_write(&release_pair_preflight_path(&root), &preflight).unwrap();
+        atomic_json_write(&release_pair_authorization_path(&root), &authorization).unwrap();
+        atomic_json_write(&release_pair_claim_path(&root), &claim).unwrap();
+        assert!(release_pair_reconcile_claimed(&root).unwrap());
+        assert!(release_pair_reconcile_result(&root).unwrap().is_none());
+        assert_eq!(
+            confirm_release_pair_reconcile(&root, &preflight.confirmation_token)
+                .unwrap()
+                .state,
+            "CLAIMED_OUTCOME_UNPROVEN_OPERATOR_ATTENTION"
+        );
+        assert!(!release_pair_worker_owner_path(&root).exists());
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

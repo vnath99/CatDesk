@@ -2653,6 +2653,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::process::exit(2);
         }
     }
+    match daemon_reload::parse_release_pair_reconcile_worker_args(&args) {
+        Ok(Some(worker)) => {
+            if let Err(error) = daemon_reload::run_release_pair_reconcile_worker(worker) {
+                eprintln!("CatDesk release-pair reconciliation helper: {error}");
+                std::process::exit(1);
+            }
+            return Ok(());
+        }
+        Ok(None) => {}
+        Err(error) => {
+            eprintln!("CatDesk release-pair reconciliation helper: {error}");
+            std::process::exit(2);
+        }
+    }
     match reviewed_build::parse_reviewed_build_worker_args(&args) {
         Ok(Some((workspace, attempt, owner))) => {
             if let Err(error) =

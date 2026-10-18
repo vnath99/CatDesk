@@ -42,6 +42,7 @@ pub(crate) enum OperatorAction {
         expected_current_target_sha256: String,
     },
     ReviewedBuild(ReviewedBuildOperatorAction),
+    ReleasePair(ReleasePairOperatorAction),
     RepairWakeBridgeEnvironment,
     CoreHostAcceptancePreflight,
     Supervisor(crate::supervisor_lifecycle::SupervisorOperatorActionV1),
@@ -55,6 +56,19 @@ pub(crate) enum OperatorAction {
 pub(crate) enum ReviewedBuildOperatorAction {
     Prepare { review_record_id: String },
     Confirm { confirmation_token: String },
+    Result,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ReleasePairOperatorAction {
+    Prepare {
+        review_record_id: String,
+        build_path: PathBuf,
+        expected_sha256: String,
+    },
+    Confirm {
+        confirmation_token: String,
+    },
     Result,
 }
 
@@ -91,6 +105,7 @@ pub(crate) fn parse_operator_action(
         Some("wake-target") => parse_wake_target_action(&args),
         Some("designated-chat-target") => parse_designated_chat_target_action(&args),
         Some("reviewed-build") => parse_reviewed_build_action(&args),
+        Some("release-pair") => parse_release_pair_action(&args),
         Some("repair-wake-bridge-environment") if args.len() == 2 => {
             Ok(Some(OperatorAction::RepairWakeBridgeEnvironment))
         }
@@ -100,6 +115,39 @@ pub(crate) fn parse_operator_action(
         Some("project") => parse_project_control_action(&args),
         _ => Err("unknown operator action".into()),
     }
+}
+
+fn parse_release_pair_action(args: &[String]) -> Result<Option<OperatorAction>, String> {
+    let action = match args.get(2).map(String::as_str) {
+        Some("prepare")
+            if args.len() == 9
+                && args[3] == "--review-record-id"
+                && args[5] == "--build-path"
+                && args[7] == "--expected-sha256"
+                && valid_reviewed_build_operator_value(&args[4])
+                && args[6].len() <= 4096
+                && args[8].len() == 64
+                && args[8].bytes().all(|byte| byte.is_ascii_hexdigit()) =>
+        {
+            ReleasePairOperatorAction::Prepare {
+                review_record_id: args[4].clone(),
+                build_path: PathBuf::from(&args[6]),
+                expected_sha256: args[8].to_ascii_lowercase(),
+            }
+        }
+        Some("confirm")
+            if args.len() == 5
+                && args[3] == "--confirmation-token"
+                && valid_reviewed_build_operator_value(&args[4]) =>
+        {
+            ReleasePairOperatorAction::Confirm {
+                confirmation_token: args[4].clone(),
+            }
+        }
+        Some("result") if args.len() == 3 => ReleasePairOperatorAction::Result,
+        _ => return Err("operator release-pair accepts only fixed actions".into()),
+    };
+    Ok(Some(OperatorAction::ReleasePair(action)))
 }
 
 fn parse_reviewed_build_action(args: &[String]) -> Result<Option<OperatorAction>, String> {
@@ -418,6 +466,56 @@ pub(crate) async fn execute_operator_action(
                 })),
             }
         }
+        OperatorAction::ReleasePair(action) => {
+            let workspace = workspace
+                .canonicalize()
+                .map_err(|_| "operator workspace is unavailable".to_string())?;
+            match action {
+                ReleasePairOperatorAction::Prepare {
+                    review_record_id,
+                    build_path,
+                    expected_sha256,
+                } => {
+                    let request = json!({"action":"PREFLIGHT","recordId":review_record_id,"buildPath":build_path,"expectedSha256":expected_sha256});
+                    crate::delegated::autonomy_supervisor::handle_tool(
+                        "catdesk_reviewed_build_promotion",
+                        request,
+                        &workspace,
+                    )
+                    .map_err(|_| "independent reviewed build preflight was rejected".to_string())?;
+                    let preflight =
+                        crate::daemon_reload::prepare_release_pair_reconcile(&workspace)?;
+                    Ok(
+                        json!({"action":"release_pair_prepare","state":"PREFLIGHT_READY","confirmationToken":preflight.confirmation_token,"expiresAtUnix":preflight.expires_at_unix,"candidateSha256":preflight.authorization.candidate_sha256,"tunnelAction":"none"}),
+                    )
+                }
+                ReleasePairOperatorAction::Confirm { confirmation_token } => {
+                    let result = crate::daemon_reload::confirm_release_pair_reconcile(
+                        &workspace,
+                        &confirmation_token,
+                    )?;
+                    Ok(
+                        json!({"action":"release_pair_confirm","state":result.state,"candidateSha256":result.candidate_sha256,"tunnelAction":"none"}),
+                    )
+                }
+                ReleasePairOperatorAction::Result => {
+                    let result = crate::daemon_reload::release_pair_reconcile_result(&workspace)?;
+                    let state = match result.as_ref() {
+                        Some(result) => result.state.as_str(),
+                        None if crate::daemon_reload::release_pair_reconcile_claimed(
+                            &workspace,
+                        )? =>
+                        {
+                            "CLAIMED_OUTCOME_UNPROVEN_OPERATOR_ATTENTION"
+                        }
+                        None => "RESULT_UNAVAILABLE",
+                    };
+                    Ok(
+                        json!({"action":"release_pair_result","state":state,"candidateSha256":result.as_ref().map(|result| result.candidate_sha256.as_str()),"tunnelAction":"none"}),
+                    )
+                }
+            }
+        }
         OperatorAction::RepairWakeBridgeEnvironment => {
             let workspace = workspace
                 .canonicalize()
@@ -631,6 +729,104 @@ pub(crate) fn reviewed_promotion_invocation(
             "-TransactionId".into(),
             transaction_id.into(),
         ],
+        workspace,
+    })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReleasePairPhase {
+    Empty,
+    Stage,
+    Probe,
+    Commit,
+    Rollback,
+}
+
+/// The detached native worker supplies only fixed phase/identity values. Each
+/// invocation finishes before a daemon is launched or released from its Job.
+pub(crate) fn release_pair_invocation(
+    workspace: &Path,
+    phase: ReleasePairPhase,
+    authorization_id: &str,
+    transaction_id: &str,
+    owner_pid: Option<u32>,
+    owner_started_at_utc: Option<&str>,
+) -> Result<RepairInvocation, String> {
+    if authorization_id.len() != 32
+        || transaction_id.len() != 32
+        || !authorization_id
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+        || !transaction_id.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err("release-pair worker identity is invalid".into());
+    }
+    if matches!(phase, ReleasePairPhase::Probe | ReleasePairPhase::Commit) != owner_pid.is_some()
+        || owner_started_at_utc
+            .is_some_and(|value| value.len() > 64 || value.bytes().any(|b| !b.is_ascii_graphic()))
+        || (phase == ReleasePairPhase::Commit && owner_started_at_utc.is_none())
+        || (matches!(
+            phase,
+            ReleasePairPhase::Empty | ReleasePairPhase::Stage | ReleasePairPhase::Rollback
+        ) && (owner_pid.is_some() || owner_started_at_utc.is_some()))
+    {
+        return Err("release-pair phase arguments are invalid".into());
+    }
+    let workspace = workspace
+        .canonicalize()
+        .map(command::normalize_windows_verbatim_path)
+        .map_err(|_| "release-pair workspace is unavailable".to_string())?;
+    checked_regular_directory(&workspace)?;
+    let script = workspace.join("scripts/reconcile-reviewed-catdesk-release-pair.ps1");
+    let metadata = fs::symlink_metadata(&script)
+        .map_err(|_| "fixed release-pair script is unavailable".to_string())?;
+    if !metadata.is_file()
+        || path_is_reparse_or_symlink(&metadata)
+        || metadata.len() == 0
+        || metadata.len() > MAX_REPAIR_SCRIPT_BYTES
+    {
+        return Err("fixed release-pair script is unsafe".into());
+    }
+    let script = script
+        .canonicalize()
+        .map(command::normalize_windows_verbatim_path)
+        .map_err(|_| "fixed release-pair script is unavailable".to_string())?;
+    if !script.starts_with(&workspace) {
+        return Err("fixed release-pair script is unsafe".into());
+    }
+    let mut args = vec![
+        "-NoLogo".into(),
+        "-NoProfile".into(),
+        "-NonInteractive".into(),
+        "-ExecutionPolicy".into(),
+        "Bypass".into(),
+        "-File".into(),
+        script.to_string_lossy().into_owned(),
+        "-Workspace".into(),
+        workspace.to_string_lossy().into_owned(),
+        "-Phase".into(),
+        match phase {
+            ReleasePairPhase::Empty => "Empty",
+            ReleasePairPhase::Stage => "Stage",
+            ReleasePairPhase::Probe => "Probe",
+            ReleasePairPhase::Commit => "Commit",
+            ReleasePairPhase::Rollback => "Rollback",
+        }
+        .into(),
+        "-AuthorizationId".into(),
+        authorization_id.into(),
+        "-TransactionId".into(),
+        transaction_id.into(),
+    ];
+    if let Some(pid) = owner_pid {
+        args.extend(["-OwnerPid".into(), pid.to_string()]);
+    }
+    if let Some(start) = owner_started_at_utc {
+        args.extend(["-OwnerStartedAtUtc".into(), start.into()]);
+    }
+    Ok(RepairInvocation {
+        program: trusted_windows_powershell(&workspace)?,
+        args,
         workspace,
     })
 }

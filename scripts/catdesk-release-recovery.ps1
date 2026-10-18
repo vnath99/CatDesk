@@ -157,11 +157,56 @@ function Read-CatDeskLkgSlot([string]$Root, [string]$Slot) {
     # Only independently reviewed promotion evidence is rollback authority.
     # Older builds could persist `operational_verified` here from runtime health;
     # those legacy snapshots must now fail closed rather than remain trusted LKG.
-    if ([string]$manifest.source -notin @('reviewed_promotion', 'operational_verified')) { throw 'release recovery source is invalid' }
-    if ([string]$manifest.source -ne 'reviewed_promotion') { throw 'release recovery source is not authoritative' }
+    if ([string]$manifest.source -notin @('reviewed_promotion', 'reviewed_reconciliation', 'operational_verified')) { throw 'release recovery source is invalid' }
+    if ([string]$manifest.source -eq 'reviewed_reconciliation') {
+        if ($Slot -ne 'slot-b' -or $generation -ne 2) { throw 'reconciliation recovery slot identity is invalid' }
+        [void](Get-CatDeskReviewedReconciliationAuthority -Root $Root -ExpectedHash $expected)
+    } elseif ([string]$manifest.source -ne 'reviewed_promotion') {
+        throw 'release recovery source is not authoritative'
+    }
     if ([string]$manifest.sha256 -ne $expected) { throw 'release recovery manifest fingerprint did not match' }
     try { [void]([DateTime]::Parse([string]$manifest.capturedAtUtc).ToUniversalTime()) } catch { throw 'release recovery timestamp is invalid' }
     [pscustomobject]@{ Slot = $Slot; Generation = $generation; Hash = $actual; Binary = $binary; Manifest = $shaPath; Metadata = $manifestPath }
+}
+
+# This is a second, first-generation reviewed authority. It is accepted only
+# after the native owner has released its private Job, a fresh exact listener
+# and process-instance probe has completed, and the fixed transaction has
+# journaled slot-b as complete. Runtime health alone cannot mint this record.
+function Get-CatDeskReviewedReconciliationAuthority([string]$Root, [string]$ExpectedHash) {
+    $control = Join-Path (Resolve-CatDeskRecoveryRoot $Root) '.catdesk\release-pair-control'
+    $records = @(
+        @{ Name = 'authorization.json'; Limit = 8192 },
+        @{ Name = 'claim.json'; Limit = 1024 },
+        @{ Name = 'transaction.json'; Limit = 4096 },
+        @{ Name = 'job-release.json'; Limit = 1024 },
+        @{ Name = 'reconciled-release.json'; Limit = 2048 }
+    )
+    $read = @{}
+    foreach ($entry in $records) {
+        $path = Assert-CatDeskRecoveryContainedPath -Root $Root -Path (Join-Path $control $entry.Name) -Label 'reconciliation recovery authority'
+        $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
+        if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -lt 1 -or $item.Length -gt $entry.Limit) { throw 'reconciliation recovery authority is unsafe' }
+        $read[$entry.Name] = [IO.File]::ReadAllText($path) | ConvertFrom-Json -ErrorAction Stop
+    }
+    $a = $read['authorization.json']; $c = $read['claim.json']; $j = $read['transaction.json']; $r = $read['job-release.json']; $proof = $read['reconciled-release.json']
+    $shapes = @(
+        @{ Value = $a; Fields = @('schemaVersion','authorizationId','transactionId','expiresAtUnix','reviewedPreflightSha256','reviewedAuthorizationId','candidateRelativePath','candidateSha256','originalBinarySha256','originalSidecarFileSha256','originalSidecarValue','slotABinarySha256','slotASidecarFileSha256','slotAManifestSha256','originalPointerSha256','scriptSha256','recoveryHelperSha256','powershellSha256') },
+        @{ Value = $c; Fields = @('schemaVersion','authorizationId','transactionId','state') },
+        @{ Value = $j; Fields = @('schemaVersion','authorizationId','transactionId','phase','candidateSha256','originalBinarySha256','originalSidecarFileSha256') },
+        @{ Value = $r; Fields = @('schemaVersion','state','authorizationId','transactionId','ownerPid','ownerStartedAtUtc') },
+        @{ Value = $proof; Fields = @('schemaVersion','state','authorizationId','transactionId','candidateSha256','originalBinarySha256','originalSidecarFileSha256','ownerPid','ownerStartedAtUtc','postReleaseVerifiedAtUtc') }
+    )
+    foreach ($shape in $shapes) {
+        $names = @($shape.Value.PSObject.Properties.Name)
+        if ($names.Count -ne $shape.Fields.Count -or @($names | Where-Object { $_ -notin $shape.Fields }).Count -ne 0 -or $shape.Value.schemaVersion -ne 1) { throw 'reconciliation recovery authority fields are invalid' }
+    }
+    if ($ExpectedHash -cnotmatch '^[a-f0-9]{64}$' -or [string]$a.candidateSha256 -cne $ExpectedHash -or [string]$j.candidateSha256 -cne $ExpectedHash -or [string]$proof.candidateSha256 -cne $ExpectedHash -or [string]$c.state -cne 'CLAIMED_PENDING' -or [string]$j.phase -cne 'COMPLETED' -or [string]$r.state -cne 'JOB_RELEASED_PENDING_POSTPROOF' -or [string]$proof.state -cne 'RECONCILED_CANONICAL_READY') { throw 'reconciliation recovery authority is incomplete' }
+    if ([string]$a.authorizationId -cnotmatch '^[0-9a-f]{32}$' -or [string]$a.transactionId -cnotmatch '^[0-9a-f]{32}$' -or [string]$a.originalBinarySha256 -cnotmatch '^[a-f0-9]{64}$' -or [string]$a.originalSidecarFileSha256 -cnotmatch '^[a-f0-9]{64}$') { throw 'reconciliation recovery authority is malformed' }
+    if ([string]$a.authorizationId -cne [string]$c.authorizationId -or [string]$a.authorizationId -cne [string]$j.authorizationId -or [string]$a.authorizationId -cne [string]$r.authorizationId -or [string]$a.authorizationId -cne [string]$proof.authorizationId -or [string]$a.transactionId -cne [string]$c.transactionId -or [string]$a.transactionId -cne [string]$j.transactionId -or [string]$a.transactionId -cne [string]$r.transactionId -or [string]$a.transactionId -cne [string]$proof.transactionId) { throw 'reconciliation recovery authority identity drifted' }
+    if ([string]$a.originalBinarySha256 -cne [string]$j.originalBinarySha256 -or [string]$a.originalBinarySha256 -cne [string]$proof.originalBinarySha256 -or [string]$a.originalSidecarFileSha256 -cne [string]$j.originalSidecarFileSha256 -or [string]$a.originalSidecarFileSha256 -cne [string]$proof.originalSidecarFileSha256 -or [int]$r.ownerPid -lt 1 -or [int]$r.ownerPid -ne [int]$proof.ownerPid -or [string]$r.ownerStartedAtUtc -cne [string]$proof.ownerStartedAtUtc) { throw 'reconciliation recovery authority owner drifted' }
+    try { [void]([DateTime]::Parse([string]$proof.postReleaseVerifiedAtUtc).ToUniversalTime()); [void]([DateTime]::Parse([string]$proof.ownerStartedAtUtc).ToUniversalTime()) } catch { throw 'reconciliation recovery authority timestamp is invalid' }
+    return $proof
 }
 
 function Read-CatDeskLkgPointer([string]$Root) {

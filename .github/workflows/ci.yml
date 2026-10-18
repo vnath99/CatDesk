@@ -49,6 +49,9 @@ jobs:
         run: cargo test --locked command::tests::run_command_uses_platform_shell_and_cwd -- --exact
       - name: Test remaining Rust suite
         run: cargo test --locked -- --skip command::tests::run_command_uses_platform_shell_and_cwd
+      - name: Test reviewed release-pair reconciliation
+        shell: powershell
+        run: .\scripts\test-reconcile-reviewed-catdesk-release-pair.ps1
 
   python:
     name: Python Wake and advisor tests

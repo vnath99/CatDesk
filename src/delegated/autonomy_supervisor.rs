@@ -6,6 +6,7 @@
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fmt;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -586,6 +587,34 @@ pub fn handle_tool(name: &str, args: Value, workspace: &Path) -> Result<Value, S
         })),
         _ => Err("unknown autonomous supervisor tool".into()),
     }
+}
+
+/// Re-run the same acknowledged independent-review resolution used by normal
+/// promotion. The offline release-pair worker may inspect it without invoking
+/// normal promotion CONFIRM (which requires a valid prior canonical pair).
+pub(crate) fn revalidate_release_pair_review_authority(
+    workspace: &Path,
+    authorization: &crate::daemon_reload::ReviewedPromotionAuthorizationV1,
+) -> Result<(), String> {
+    let workspace = workspace
+        .canonicalize()
+        .map_err(|_| "independent review authority is unavailable".to_string())?;
+    let store_root = workspace.join(".catdesk").join("autonomy");
+    if !store_root.is_dir() || fs::symlink_metadata(&store_root).is_err() {
+        return Err("independent review authority is unavailable".into());
+    }
+    let supervisor = AutonomousSupervisorV1::open(&workspace)
+        .map_err(|_| "independent review authority is unavailable".to_string())?;
+    let reviewed =
+        supervisor.resolve_reviewed_promotion_review_authority(&authorization.review_record_id)?;
+    if reviewed.session_id != authorization.review_session_id
+        || reviewed.record_id != authorization.review_record_id
+        || reviewed.digest != authorization.review_record_sha256
+        || reviewed.snapshot_expected != authorization.snapshot_expected
+    {
+        return Err("independent review authority is unavailable".into());
+    }
+    Ok(())
 }
 
 /// Backwards-compatible capability discovery uses only the pre-existing
