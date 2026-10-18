@@ -397,12 +397,12 @@ impl WebContextStore {
             return Err("WEB_CONTEXT_OLD_GENERATION".into());
         }
         let mut ledger = self.read_ledger(key)?;
-        if let Some(existing) = &ledger.rollover_intent {
-            return Ok(Some(existing.clone()));
-        }
         let status = pressure_status(&project, &ledger);
         if !project.policy.automatic_rollover_enabled || !status.near_capacity || !quiescent {
             return Ok(None);
+        }
+        if let Some(existing) = &ledger.rollover_intent {
+            return Ok(Some(existing.clone()));
         }
         let intent = RolloverIntent {
             intent_id: sha256(
@@ -1042,7 +1042,10 @@ mod tests {
                 .is_none()
         );
         policy.automatic_rollover_enabled = true;
-        fixture.store.configure_policy("alpha", policy).unwrap();
+        fixture
+            .store
+            .configure_policy("alpha", policy.clone())
+            .unwrap();
         assert!(
             fixture
                 .store
@@ -1067,6 +1070,20 @@ mod tests {
         assert_eq!(
             reopened.pressure(&key).unwrap().rollover_intent,
             Some(intent)
+        );
+        assert!(
+            reopened
+                .request_rollover_if_due(&key, &key.target_sha256(), "task-2", false, 202)
+                .unwrap()
+                .is_none()
+        );
+        policy.automatic_rollover_enabled = false;
+        reopened.configure_policy("alpha", policy).unwrap();
+        assert!(
+            reopened
+                .request_rollover_if_due(&key, &key.target_sha256(), "task-2", true, 203)
+                .unwrap()
+                .is_none()
         );
     }
 
