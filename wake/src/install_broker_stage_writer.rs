@@ -1038,7 +1038,7 @@ thread_local! {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::{
         install_broker_approval::{self, ArtifactV1, verify_approval},
@@ -1048,7 +1048,7 @@ mod tests {
     };
     use std::{
         os::windows::ffi::OsStrExt,
-        path::PathBuf,
+        path::{Path, PathBuf},
         sync::atomic::{AtomicU64, Ordering},
     };
 
@@ -1179,7 +1179,7 @@ mod tests {
         }
     }
 
-    struct TransactionFixture {
+    pub(crate) struct TransactionFixture {
         base: PathBuf,
         root: OwnedHandle,
         approval: VerifiedApprovalV1,
@@ -1188,6 +1188,14 @@ mod tests {
 
     impl TransactionFixture {
         fn new() -> Self {
+            Self::new_inner(false)
+        }
+
+        pub(crate) fn new_pointer() -> Self {
+            Self::new_inner(true)
+        }
+
+        fn new_inner(with_predecessor: bool) -> Self {
             let base = std::env::temp_dir().join(format!(
                 "catdesk-stage-transaction-{}-{}",
                 std::process::id(),
@@ -1226,6 +1234,14 @@ mod tests {
             let (mut payload, mut observed, key) = install_broker_approval::tests::fixture();
             payload.target_protected_root = root_id.clone();
             observed.target_protected_root = root_id.clone();
+            if with_predecessor {
+                let (package_id, pointer_id) =
+                    crate::install_broker_reader::seed_predecessor_fixture(&base, &root, &root_id);
+                payload.predecessor_package_id = package_id.clone();
+                observed.predecessor_package_id = package_id;
+                payload.predecessor_pointer = pointer_id.clone();
+                observed.predecessor_pointer = pointer_id;
+            }
             payload.manifest.artifacts = std::array::from_fn(|index| ArtifactV1 {
                 name: ARTIFACTS[index].into(),
                 byte_length: blobs[index].len() as u64,
@@ -1266,11 +1282,45 @@ mod tests {
             open_fixture_candidate_source(&self.base, &self.approval).expect("pinned source")
         }
 
+        pub(crate) fn root(&self) -> &OwnedHandle {
+            &self.root
+        }
+
+        pub(crate) fn root_path(&self) -> &Path {
+            &self.base
+        }
+
+        pub(crate) fn approval(&self) -> &VerifiedApprovalV1 {
+            &self.approval
+        }
+
+        pub(crate) fn expectation(&self) -> &LedgerExpectationV1 {
+            &self.expectation
+        }
+
+        pub(crate) fn publish_for_pointer(
+            &self,
+            lease: &mut BrokerLedgerLease<'_>,
+        ) -> BrokerPublishedReceiptV1<'static> {
+            let mut receipt = materialize_pinned_candidate_stage(
+                lease,
+                &self.approval,
+                self.source(),
+                StageSecurityMode::Fixture,
+                None,
+            )
+            .expect("fixture stage");
+            lease
+                .record_staged(&mut receipt)
+                .expect("fixture durable STAGED");
+            publish_pinned_candidate(lease, receipt).expect("fixture publication")
+        }
+
         fn staged_path(&self) -> PathBuf {
             self.base.join(STAGING).join(CANDIDATE)
         }
 
-        fn cleanup(self) {
+        pub(crate) fn cleanup(self) {
             let base = self.base.clone();
             drop(self);
             let resolved = base.canonicalize().expect("resolved transaction fixture");

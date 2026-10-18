@@ -1377,6 +1377,71 @@ pub(crate) fn pin_protected_install_fixture(
     pin_pinned(root, expected_root, policy)
 }
 
+/// Seed an isolated, canonical predecessor solely for a native pointer-switch
+/// fixture. Production never creates an installed predecessor from source.
+#[cfg(test)]
+pub(crate) fn seed_predecessor_fixture(
+    root_path: &std::path::Path,
+    root: &OwnedHandle,
+    root_id: &ObjectIdentityV1,
+) -> (String, ObjectIdentityV1) {
+    use crate::install_broker_approval::ArtifactV1;
+    let blobs: [&[u8]; 4] = [b"old-host", b"old-gui", b"old-adapter", b"old-bridge"];
+    let artifacts = std::array::from_fn(|index| ArtifactV1 {
+        name: ARTIFACT_NAMES[index].into(),
+        byte_length: blobs[index].len() as u64,
+        sha256: format!("{:x}", Sha256::digest(blobs[index])),
+    });
+    let version = "1.0.0-dev.84".to_string();
+    let package_id = format!(
+        "{}-{}-{}",
+        version,
+        &artifacts[0].sha256[..12],
+        &artifacts[1].sha256[..12]
+    );
+    let manifest = PackageManifestV1 {
+        schema_version: 1,
+        package_id: package_id.clone(),
+        version,
+        artifacts,
+    };
+    let package_path = root_path.join("packages").join(&package_id);
+    std::fs::create_dir(&package_path).expect("old package directory");
+    for (name, blob) in ARTIFACT_NAMES.into_iter().zip(blobs) {
+        std::fs::write(package_path.join(name), blob).expect("old artifact");
+    }
+    let manifest_bytes = serde_json::to_vec(&manifest).expect("old canonical manifest");
+    std::fs::write(package_path.join("manifest.json"), &manifest_bytes)
+        .expect("old package manifest");
+    let packages = open_relative(root, "packages", true).expect("packages pin");
+    let package = open_relative(&packages, &package_id, true).expect("old package pin");
+    let manifest_file = open_relative(&package, "manifest.json", false).expect("old manifest pin");
+    let pointer = ProtectedPointerV1 {
+        schema_version: 1,
+        purpose: "catdesk-wake-protected-current".into(),
+        install_generation: 1,
+        approval_id: "b".repeat(32),
+        predecessor_package_id: "1.0.0-dev.83-example".into(),
+        predecessor_pointer: root_id.clone(),
+        protected_root: root_id.clone(),
+        package_id: package_id.clone(),
+        package_directory: identity(&file_info(package.as_raw_handle(), true).unwrap()),
+        manifest_file: identity(&file_info(manifest_file.as_raw_handle(), false).unwrap()),
+        manifest_sha256: format!("{:x}", Sha256::digest(&manifest_bytes)),
+    };
+    drop(manifest_file);
+    drop(package);
+    drop(packages);
+    std::fs::write(
+        root_path.join("current.json"),
+        serde_json::to_vec(&pointer).expect("old canonical pointer"),
+    )
+    .expect("old pointer");
+    let current = open_relative(root, "current.json", false).expect("old pointer pin");
+    let id = identity(&file_info(current.as_raw_handle(), false).expect("old pointer identity"));
+    (package_id, id)
+}
+
 /// Inspect only the compiled protected ProgramData namespace. This function
 /// exposes no request-selected path and performs no install or launch action.
 pub fn inspect_fixed_protected_install_read_only() -> Result<ProtectedInstallReadOnlySnapshotV1> {

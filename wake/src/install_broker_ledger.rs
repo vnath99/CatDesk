@@ -15,9 +15,9 @@
 //! This code cannot prove the trustworthiness of a supplied root or clock.
 //! An empty history cannot attest its own first generation: bootstrap must
 //! bind that first generation to an independently protected predecessor pointer.
-//! Production has no generic phase advancement past STAGED. A typed retained
-//! physical publication receipt permits PUBLISHED; every later phase remains
-//! fixture-only until its side effects and recovery invariants are proven.
+//! Production has no generic phase advancement past STAGED. Typed retained
+//! physical receipts permit PUBLISHED and, only after an independently proven
+//! OLD_OWNER_STOPPED phase, a one-attempt protected pointer switch.
 
 use crate::{
     Result,
@@ -36,6 +36,7 @@ use crate::{
         ProtectedInstallPinV1, ProtectedInstallReadOnlySnapshotV1, ProtectedPublishedPackagePinV1,
         PublicationLocationV1, inspect_publication_location_under_guard,
         pin_protected_install_under_guard, pin_published_package_under_guard,
+        plan_protected_pointer_from_stage,
     },
     install_broker_stage_writer::{BrokerPublishedReceiptV1, BrokerStageReceiptV1},
 };
@@ -56,7 +57,8 @@ const MAX_DIRECTORY_ENTRIES: usize = 4096;
 const DOMAIN: &[u8] = b"CatDeskWakeInstallLedgerV1\0";
 const GLOBAL_LOCK_NAME: &str = "install-ledger.lock";
 const PUBLICATION_ATTEMPT_SLOT: usize = InstallPhaseV1::ORDER.len();
-const LEDGER_SLOT_COUNT: usize = PUBLICATION_ATTEMPT_SLOT + 1;
+const POINTER_ATTEMPT_SLOT: usize = PUBLICATION_ATTEMPT_SLOT + 1;
+const LEDGER_SLOT_COUNT: usize = POINTER_ATTEMPT_SLOT + 1;
 const FILE_OPEN: u32 = 1;
 const FILE_CREATE: u32 = 2;
 const FILE_READ_DATA: u32 = 1;
@@ -170,6 +172,7 @@ pub enum InstallPhaseV1 {
 enum LedgerRecordKindV1 {
     Phase(InstallPhaseV1),
     PublicationAttempt,
+    PointerAttempt,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -255,6 +258,25 @@ struct PublicationAttemptRecordV1 {
     protected_root: ObjectIdentityV1,
     stage_binding: StageBindingV1,
     staged_record_sha256: String,
+}
+
+/// Create-once no-replay boundary before a protected current.json mutation.
+/// The old-owner-stopped phase must already exist. The marker alone is never
+/// evidence that the pointer changed or that a new owner launched.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PointerAttemptRecordV1 {
+    schema_version: u32,
+    purpose: String,
+    install_generation: u64,
+    approval_id: String,
+    signed_approval_sha256: String,
+    protected_root: ObjectIdentityV1,
+    stage_binding: StageBindingV1,
+    old_owner_stopped_record_sha256: String,
+    predecessor_pointer: ObjectIdentityV1,
+    predecessor_pointer_sha256: String,
+    planned_pointer_sha256: String,
 }
 
 /// Exact canonical bytes and physical file selected as the new current.json.
@@ -583,6 +605,38 @@ fn expected_publication_attempt(
     })
 }
 
+fn expected_pointer_attempt(
+    binding: &Binding,
+    stopped_digest: &str,
+    predecessor_sha256: &str,
+    planned_sha256: &str,
+) -> Result<PointerAttemptRecordV1> {
+    let stage = binding
+        .stage_binding
+        .as_ref()
+        .ok_or("WAKE_LEDGER_POINTER_ATTEMPT_INVALID")?;
+    if stage.packages_directory.is_none()
+        || !lowercase_hex(stopped_digest, 64)
+        || !lowercase_hex(predecessor_sha256, 64)
+        || !lowercase_hex(planned_sha256, 64)
+    {
+        return Err("WAKE_LEDGER_POINTER_ATTEMPT_INVALID".into());
+    }
+    Ok(PointerAttemptRecordV1 {
+        schema_version: 1,
+        purpose: "catdesk-wake-protected-pointer-attempt".into(),
+        install_generation: binding.install_generation,
+        approval_id: binding.approval_id.clone(),
+        signed_approval_sha256: binding.signed_approval_sha256.clone(),
+        protected_root: binding.protected_root.clone(),
+        stage_binding: stage.clone(),
+        old_owner_stopped_record_sha256: stopped_digest.into(),
+        predecessor_pointer: binding.predecessor_pointer.clone(),
+        predecessor_pointer_sha256: predecessor_sha256.into(),
+        planned_pointer_sha256: planned_sha256.into(),
+    })
+}
+
 /// Holds the intent record with share mode zero for the complete transaction
 /// observation. Dropping it releases the process lease but never erases a
 /// record. A different approval at the same generation remains a conflict.
@@ -594,6 +648,7 @@ pub struct BrokerLedgerLease<'a> {
     current: InstallPhaseV1,
     current_digest: String,
     publication_attempt_started: bool,
+    pointer_attempt_started: bool,
 }
 
 /// Owns the fixed global lock before the broker samples predecessor, old
@@ -1128,6 +1183,10 @@ fn publication_attempt_name(generation: u64) -> String {
     format!("install-transaction-{generation:020}-publication-attempt.json")
 }
 
+fn pointer_attempt_name(generation: u64) -> String {
+    format!("install-transaction-{generation:020}-pointer-attempt.json")
+}
+
 fn open_relative(
     root: &OwnedHandle,
     name: &str,
@@ -1282,6 +1341,8 @@ fn parse_record_name(name: &str) -> Result<(u64, LedgerRecordKindV1)> {
         .ok_or("WAKE_LEDGER_RECORD_CORRUPT")?;
     let kind = if suffix == "publication-attempt" {
         LedgerRecordKindV1::PublicationAttempt
+    } else if suffix == "pointer-attempt" {
+        LedgerRecordKindV1::PointerAttempt
     } else {
         LedgerRecordKindV1::Phase(
             InstallPhaseV1::ORDER
@@ -1294,6 +1355,7 @@ fn parse_record_name(name: &str) -> Result<(u64, LedgerRecordKindV1)> {
     let canonical_name = match kind {
         LedgerRecordKindV1::Phase(phase) => record_name(generation, phase),
         LedgerRecordKindV1::PublicationAttempt => publication_attempt_name(generation),
+        LedgerRecordKindV1::PointerAttempt => pointer_attempt_name(generation),
     };
     if generation == 0 || canonical_name != name {
         return Err("WAKE_LEDGER_RECORD_CORRUPT".into());
@@ -1368,6 +1430,7 @@ fn ledger_inventory(root: &OwnedHandle) -> Result<BTreeMap<u64, [bool; LEDGER_SL
         let index = match kind {
             LedgerRecordKindV1::Phase(phase) => phase.index(),
             LedgerRecordKindV1::PublicationAttempt => PUBLICATION_ATTEMPT_SLOT,
+            LedgerRecordKindV1::PointerAttempt => POINTER_ATTEMPT_SLOT,
         };
         let slots = found
             .entry(generation)
@@ -1436,6 +1499,26 @@ fn read_publication_attempt(file: &mut File) -> Result<PublicationAttemptRecordV
     Ok(actual)
 }
 
+fn read_pointer_attempt(file: &mut File) -> Result<PointerAttemptRecordV1> {
+    file_info(file, None)?;
+    file.seek(SeekFrom::Start(0))
+        .map_err(|_| "WAKE_LEDGER_RECORD_UNAVAILABLE")?;
+    let mut bytes = Vec::new();
+    file.take(MAX_RECORD_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "WAKE_LEDGER_RECORD_UNAVAILABLE")?;
+    if bytes.is_empty() || bytes.len() > MAX_RECORD_BYTES {
+        return Err("WAKE_LEDGER_POINTER_ATTEMPT_INVALID".into());
+    }
+    file_info(file, Some(bytes.len()))?;
+    let actual: PointerAttemptRecordV1 =
+        serde_json::from_slice(&bytes).map_err(|_| "WAKE_LEDGER_POINTER_ATTEMPT_INVALID")?;
+    if serde_json::to_vec(&actual).map_err(|_| "WAKE_LEDGER_POINTER_ATTEMPT_INVALID")? != bytes {
+        return Err("WAKE_LEDGER_POINTER_ATTEMPT_INVALID".into());
+    }
+    Ok(actual)
+}
+
 fn validate_publication_attempt(
     root: &OwnedHandle,
     binding: &Binding,
@@ -1455,6 +1538,30 @@ fn validate_publication_attempt(
         return Err("WAKE_LEDGER_PUBLICATION_ATTEMPT_INVALID".into());
     }
     Ok(())
+}
+
+fn validate_pointer_attempt(
+    root: &OwnedHandle,
+    binding: &Binding,
+    stopped_digest: Option<&str>,
+    present: bool,
+) -> Result<Option<PointerAttemptRecordV1>> {
+    if !present {
+        return Ok(None);
+    }
+    let mut file = open_optional(root, &pointer_attempt_name(binding.install_generation))?
+        .ok_or("WAKE_LEDGER_POINTER_ATTEMPT_INVALID")?;
+    let actual = read_pointer_attempt(&mut file)?;
+    let expected = expected_pointer_attempt(
+        binding,
+        stopped_digest.ok_or("WAKE_LEDGER_POINTER_ATTEMPT_INVALID")?,
+        &actual.predecessor_pointer_sha256,
+        &actual.planned_pointer_sha256,
+    )?;
+    if actual != expected {
+        return Err("WAKE_LEDGER_POINTER_ATTEMPT_INVALID".into());
+    }
+    Ok(Some(actual))
 }
 
 fn read_exact(file: &mut File, expected: &LedgerRecordV1) -> Result<String> {
@@ -1523,6 +1630,7 @@ fn historical_intent(
     let mut current = InstallPhaseV1::Intent;
     let mut gap = false;
     let mut staged_digest = None;
+    let mut stopped_digest = None;
     for phase in InstallPhaseV1::ORDER.iter().copied().skip(1) {
         if !present[phase.index()] {
             gap = true;
@@ -1567,6 +1675,9 @@ fn historical_intent(
         if phase == InstallPhaseV1::Staged {
             staged_digest = Some(next_digest.clone());
         }
+        if phase == InstallPhaseV1::OldOwnerStopped {
+            stopped_digest = Some(next_digest.clone());
+        }
         digest = next_digest;
         current = phase;
     }
@@ -1576,6 +1687,26 @@ fn historical_intent(
         staged_digest.as_deref(),
         present[PUBLICATION_ATTEMPT_SLOT],
     )?;
+    let pointer_attempt = validate_pointer_attempt(
+        root,
+        &binding,
+        stopped_digest.as_deref(),
+        present[POINTER_ATTEMPT_SLOT],
+    )?;
+    if current.index() >= InstallPhaseV1::PointerSwitched.index()
+        && binding
+            .stage_binding
+            .as_ref()
+            .is_some_and(|stage| stage.packages_directory.is_some())
+        && (pointer_attempt.is_none() || binding.pointer_switch_binding.is_none())
+    {
+        return Err("WAKE_LEDGER_POINTER_ATTEMPT_MISSING".into());
+    }
+    if let (Some(attempt), Some(pointer)) = (&pointer_attempt, &binding.pointer_switch_binding)
+        && attempt.planned_pointer_sha256 != pointer.pointer_sha256
+    {
+        return Err("WAKE_LEDGER_POINTER_BINDING_INVALID".into());
+    }
     if current.index() >= InstallPhaseV1::Published.index()
         && binding
             .stage_binding
@@ -1894,6 +2025,21 @@ fn write_new_publication_attempt(
     Ok(())
 }
 
+fn write_new_pointer_attempt(file: &mut File, expected: &PointerAttemptRecordV1) -> Result<()> {
+    file_info(file, Some(0))?;
+    let bytes = serde_json::to_vec(expected).map_err(|_| "WAKE_LEDGER_ENCODING_INVALID")?;
+    if bytes.is_empty() || bytes.len() > MAX_RECORD_BYTES {
+        return Err("WAKE_LEDGER_ENCODING_INVALID".into());
+    }
+    file.write_all(&bytes)
+        .and_then(|_| file.sync_all())
+        .map_err(|_| "WAKE_LEDGER_WRITE_FAILED")?;
+    if read_pointer_attempt(file)? != *expected {
+        return Err("WAKE_LEDGER_POINTER_ATTEMPT_INVALID".into());
+    }
+    Ok(())
+}
+
 impl<'a> BrokerLedgerGuard<'a> {
     /// Invoke the observation provider only while this global lock is held,
     /// then verify the envelope against the pinned protected policy. A fresh
@@ -2111,6 +2257,7 @@ impl<'a> BrokerLedgerGuard<'a> {
         let mut binding = binding;
         let mut gap = false;
         let mut staged_digest = None;
+        let mut stopped_digest = None;
         for phase in InstallPhaseV1::ORDER.iter().copied().skip(1) {
             let name = record_name(binding.install_generation, phase);
             match open_optional(root, &name)? {
@@ -2152,6 +2299,9 @@ impl<'a> BrokerLedgerGuard<'a> {
                     if phase == InstallPhaseV1::Staged {
                         staged_digest = Some(next_digest.clone());
                     }
+                    if phase == InstallPhaseV1::OldOwnerStopped {
+                        stopped_digest = Some(next_digest.clone());
+                    }
                     digest = next_digest;
                     current = phase;
                 }
@@ -2163,14 +2313,38 @@ impl<'a> BrokerLedgerGuard<'a> {
             .get(&binding.install_generation)
             .ok_or("WAKE_LEDGER_RECORD_CORRUPT")?;
         let publication_attempt_started = present[PUBLICATION_ATTEMPT_SLOT];
+        let pointer_attempt_started = present[POINTER_ATTEMPT_SLOT];
         validate_publication_attempt(
             root,
             &binding,
             staged_digest.as_deref(),
             publication_attempt_started,
         )?;
+        let pointer_attempt = validate_pointer_attempt(
+            root,
+            &binding,
+            stopped_digest.as_deref(),
+            pointer_attempt_started,
+        )?;
+        if current.index() >= InstallPhaseV1::PointerSwitched.index()
+            && binding
+                .stage_binding
+                .as_ref()
+                .is_some_and(|stage| stage.packages_directory.is_some())
+            && (pointer_attempt.is_none() || binding.pointer_switch_binding.is_none())
+        {
+            return Err("WAKE_LEDGER_POINTER_ATTEMPT_MISSING".into());
+        }
+        if let (Some(attempt), Some(pointer)) = (&pointer_attempt, &binding.pointer_switch_binding)
+            && attempt.planned_pointer_sha256 != pointer.pointer_sha256
+        {
+            return Err("WAKE_LEDGER_POINTER_BINDING_INVALID".into());
+        }
         if publication_attempt_started && current == InstallPhaseV1::Staged {
             return Err("WAKE_BROKER_PUBLICATION_ATTEMPT_ATTENTION".into());
+        }
+        if pointer_attempt_started && current == InstallPhaseV1::OldOwnerStopped {
+            return Err("WAKE_BROKER_POINTER_ATTEMPT_ATTENTION".into());
         }
         if root_info(root)? != observed_root {
             return Err("WAKE_LEDGER_ROOT_CHANGED".into());
@@ -2183,6 +2357,7 @@ impl<'a> BrokerLedgerGuard<'a> {
             current,
             current_digest: digest,
             publication_attempt_started,
+            pointer_attempt_started,
         })
     }
 }
@@ -2406,6 +2581,187 @@ impl<'a> BrokerLedgerLease<'a> {
         )?;
         let written = self.advance_internal(InstallPhaseV1::Published)?;
         receipt.revalidate_for_ledger(
+            self.root,
+            &self.binding.protected_root,
+            self.binding.install_generation,
+            &self.binding.approval_id,
+            &self.binding.signed_approval_sha256,
+            &self.binding.approval_continuity,
+        )?;
+        Ok(written)
+    }
+
+    /// Write the one-attempt boundary before a protected pointer temp file or
+    /// replacement is created. The old owner must already be durably stopped;
+    /// this method neither stops it nor infers that state from the package.
+    pub(crate) fn record_pointer_switch_attempt(
+        &mut self,
+        approval: &VerifiedApprovalV1,
+        published: &BrokerPublishedReceiptV1<'_>,
+        predecessor: &ProtectedInstallPinV1,
+        planned_sha256: &str,
+    ) -> Result<()> {
+        if self.pointer_attempt_started {
+            return Err("WAKE_BROKER_POINTER_ATTEMPT_ATTENTION".into());
+        }
+        if self.current != InstallPhaseV1::OldOwnerStopped
+            || self.binding.pointer_switch_binding.is_some()
+            || self.binding.stage_binding.as_ref() != Some(published.stage_binding())
+            || !self.matches_approval(approval)
+        {
+            return Err("WAKE_LEDGER_POINTER_ATTEMPT_INVALID".into());
+        }
+        let stage = self
+            .binding
+            .stage_binding
+            .as_ref()
+            .ok_or("WAKE_LEDGER_POINTER_ATTEMPT_INVALID")?;
+        let planned = plan_protected_pointer_from_stage(approval, stage)?;
+        if planned.sha256() != planned_sha256 {
+            return Err("WAKE_LEDGER_POINTER_ATTEMPT_INVALID".into());
+        }
+        published.revalidate_for_ledger(
+            self.root,
+            &self.binding.protected_root,
+            self.binding.install_generation,
+            &self.binding.approval_id,
+            &self.binding.signed_approval_sha256,
+            &self.binding.approval_continuity,
+        )?;
+        predecessor.revalidate(self.root, &self.binding.protected_root)?;
+        let old = predecessor.snapshot();
+        if old.pointer != self.binding.predecessor_pointer
+            || old.package_id != self.binding.predecessor_package_id
+            || old.protected_root != self.binding.protected_root
+        {
+            return Err("WAKE_BROKER_POINTER_PREDECESSOR_CHANGED".into());
+        }
+        let inventory = ledger_inventory(self.root)?;
+        let present = inventory
+            .get(&self.binding.install_generation)
+            .ok_or("WAKE_LEDGER_RECORD_CORRUPT")?;
+        if present[POINTER_ATTEMPT_SLOT] {
+            return Err("WAKE_BROKER_POINTER_ATTEMPT_ATTENTION".into());
+        }
+        if !present[InstallPhaseV1::OldOwnerStopped.index()]
+            || present[InstallPhaseV1::PointerSwitched.index()]
+            || !present[PUBLICATION_ATTEMPT_SLOT]
+        {
+            return Err("WAKE_LEDGER_POINTER_ATTEMPT_INVALID".into());
+        }
+        let expected = expected_pointer_attempt(
+            &self.binding,
+            &self.current_digest,
+            predecessor.pointer_sha256(),
+            planned_sha256,
+        )?;
+        let mut marker = match open_relative(
+            self.root,
+            &pointer_attempt_name(self.binding.install_generation),
+            FILE_CREATE,
+        ) {
+            Ok(file) => file,
+            Err(STATUS_OBJECT_NAME_COLLISION | STATUS_SHARING_VIOLATION) => {
+                return Err("WAKE_BROKER_POINTER_ATTEMPT_ATTENTION".into());
+            }
+            Err(_) => return Err("WAKE_LEDGER_CREATE_FAILED".into()),
+        };
+        // Every failure from here onward is sticky, including an empty or
+        // partially written marker. A later broker can diagnose but not retry.
+        self.pointer_attempt_started = true;
+        write_new_pointer_attempt(&mut marker, &expected)?;
+        flush_pinned_directory(
+            self.root,
+            &self.binding.protected_root,
+            ParentFlushPoint::PointerAttempt,
+        )?;
+        drop(marker);
+        validate_pointer_attempt(self.root, &self.binding, Some(&self.current_digest), true)?;
+        predecessor.revalidate(self.root, &self.binding.protected_root)?;
+        published.revalidate_for_ledger(
+            self.root,
+            &self.binding.protected_root,
+            self.binding.install_generation,
+            &self.binding.approval_id,
+            &self.binding.signed_approval_sha256,
+            &self.binding.approval_continuity,
+        )?;
+        Ok(())
+    }
+
+    /// Bind the exact protected-reader pointer ID and canonical bytes after
+    /// the single marked replacement. The new pointer pin remains live across
+    /// the ledger write and final readback.
+    pub(crate) fn record_pointer_switched(
+        &mut self,
+        approval: &VerifiedApprovalV1,
+        published: &BrokerPublishedReceiptV1<'_>,
+        switched: &ProtectedInstallPinV1,
+        planned_sha256: &str,
+    ) -> Result<bool> {
+        if self.current != InstallPhaseV1::OldOwnerStopped
+            || !self.pointer_attempt_started
+            || self.binding.pointer_switch_binding.is_some()
+            || self.binding.stage_binding.as_ref() != Some(published.stage_binding())
+            || !self.matches_approval(approval)
+        {
+            return Err("WAKE_LEDGER_POINTER_BINDING_INVALID".into());
+        }
+        let attempt =
+            validate_pointer_attempt(self.root, &self.binding, Some(&self.current_digest), true)?
+                .ok_or("WAKE_LEDGER_POINTER_ATTEMPT_INVALID")?;
+        published.revalidate_for_ledger(
+            self.root,
+            &self.binding.protected_root,
+            self.binding.install_generation,
+            &self.binding.approval_id,
+            &self.binding.signed_approval_sha256,
+            &self.binding.approval_continuity,
+        )?;
+        switched.revalidate(self.root, &self.binding.protected_root)?;
+        let snapshot = switched.snapshot();
+        let stage = self
+            .binding
+            .stage_binding
+            .as_ref()
+            .ok_or("WAKE_LEDGER_POINTER_BINDING_INVALID")?;
+        let planned = plan_protected_pointer_from_stage(approval, stage)?;
+        if attempt.planned_pointer_sha256 != planned_sha256
+            || planned.sha256() != planned_sha256
+            || switched.pointer_sha256() != planned_sha256
+            || snapshot.install_generation != self.binding.install_generation
+            || snapshot.approval_id != self.binding.approval_id
+            || snapshot.predecessor_package_id != self.binding.predecessor_package_id
+            || snapshot.predecessor_pointer != self.binding.predecessor_pointer
+            || snapshot.protected_root != self.binding.protected_root
+            || snapshot.package_id != self.binding.package_id
+            || snapshot.package_directory != stage.candidate_directory
+            || snapshot.manifest_file != stage.manifest_file
+            || snapshot.manifest_sha256 != self.binding.manifest_sha256
+            || snapshot
+                .artifacts
+                .iter()
+                .enumerate()
+                .any(|(index, artifact)| artifact.object != stage.artifacts[index])
+        {
+            return Err("WAKE_LEDGER_POINTER_BINDING_INVALID".into());
+        }
+        let pointer = PointerSwitchBindingV1 {
+            pointer_file: snapshot.pointer.clone(),
+            pointer_sha256: switched.pointer_sha256().into(),
+        };
+        if !valid_pointer_switch_binding(
+            &pointer,
+            &self.binding.protected_root,
+            &self.binding.predecessor_pointer,
+            stage,
+        ) {
+            return Err("WAKE_LEDGER_POINTER_BINDING_INVALID".into());
+        }
+        self.binding.pointer_switch_binding = Some(pointer);
+        let written = self.advance_internal(InstallPhaseV1::PointerSwitched)?;
+        switched.revalidate(self.root, &self.binding.protected_root)?;
+        published.revalidate_for_ledger(
             self.root,
             &self.binding.protected_root,
             self.binding.install_generation,

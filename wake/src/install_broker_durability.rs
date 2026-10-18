@@ -34,6 +34,9 @@ pub(crate) enum ParentFlushPoint {
     PublicationAttempt,
     PublicationSourceParent,
     PublicationDestinationParent,
+    PointerAttempt,
+    PointerTempEntry,
+    PointerReplacement,
     LaterLedgerPhase,
 }
 

@@ -25,6 +25,8 @@ pub mod install_broker_operator;
 #[cfg(windows)]
 pub(crate) mod install_broker_pipe_io;
 #[cfg(windows)]
+pub mod install_broker_pointer_writer;
+#[cfg(windows)]
 pub mod install_broker_policy;
 pub mod install_broker_preflight;
 #[cfg(windows)]
