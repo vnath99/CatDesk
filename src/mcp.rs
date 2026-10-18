@@ -6003,7 +6003,7 @@ fn wake_project_progress(
         );
     }
     let mut recent: Vec<_> = recent.into_values().collect();
-    recent.sort_by(|left, right| right.0.cmp(&left.0));
+    recent.sort_by_key(|entry| std::cmp::Reverse(entry.0));
     json!({
         "status":"DURABLE_SNAPSHOT",
         "queuedCount":queued,
@@ -9880,6 +9880,63 @@ mod tests {
     use super::*;
     use std::ffi::OsString;
     use uuid::Uuid;
+
+    #[test]
+    fn web_project_status_keeps_queue_progress_and_messages_project_scoped() {
+        use catdesk_wake::protocol::{Event, digest};
+        use catdesk_wake::store::{Delivery, Phase};
+
+        let event = |project: &str, id: &str, message: &str, created_utc| Event {
+            schema_version: catdesk_wake::PROTOCOL_VERSION,
+            event_id: id.into(),
+            project_id: project.into(),
+            event_type: "test".into(),
+            created_utc,
+            message: message.into(),
+            target_generation: 1,
+            audit_references: vec![],
+        };
+        let alpha = event("alpha", "alpha-event", "private alpha task", 10);
+        let beta = event("beta", "beta-event", "private beta task", 20);
+        let gamma = event("gamma", "gamma-event", "private gamma task", 30);
+        let delivery = Delivery {
+            schema_version: catdesk_wake::PROTOCOL_VERSION,
+            event: alpha.clone(),
+            target: catdesk_wake::protocol::Target::new(
+                1,
+                "https://chatgpt.com/c/alpha-conversation".into(),
+            )
+            .expect("target"),
+            phase: Phase::Claimed,
+            owner: "fixture-owner".into(),
+            updated_utc: 40,
+            message_digest: digest(&alpha.message),
+            receipt: None,
+            reason: None,
+        };
+        let events = [alpha, beta, gamma];
+        let deliveries = [delivery];
+        for (project, expected_event, claimed) in [
+            ("alpha", "alpha-event", true),
+            ("beta", "beta-event", false),
+            ("gamma", "gamma-event", false),
+        ] {
+            let status = wake_project_progress(project, &events, &deliveries);
+            assert_eq!(status["status"], "DURABLE_SNAPSHOT");
+            assert_eq!(status["queuedCount"], 1);
+            assert_eq!(status["recentEvents"][0]["eventId"], expected_event);
+            assert_eq!(status["recentEvents"].as_array().unwrap().len(), 1);
+            if claimed {
+                assert_eq!(status["deliveryPhaseCounts"]["CLAIMED"], 1);
+            } else {
+                assert!(status["deliveryPhaseCounts"]["CLAIMED"].is_null());
+            }
+            let serialized = status.to_string();
+            assert!(!serialized.contains("private alpha task"));
+            assert!(!serialized.contains("private beta task"));
+            assert!(!serialized.contains("private gamma task"));
+        }
+    }
 
     #[cfg(windows)]
     #[tokio::test]
