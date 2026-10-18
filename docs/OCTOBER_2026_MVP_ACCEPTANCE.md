@@ -1,5 +1,48 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 17 protected Wake pointer switch (TESTED_LOCAL_SOURCE; LIVE PARTIAL)
+
+Source `fcabbe3cbb4aa4b0d59a878bcb47fb239517eb82` implements one protected `current.json` switch
+after a durable `OldOwnerStopped` phase and retained package-publication receipt.
+It records a single-attempt marker before creating the new pointer, replaces the
+fixed relative name under the existing global ledger lock, and verifies both
+the canonical bytes and exact renamed file identity before recording
+`PointerSwitched`. Reopen requires the original marker and its matching pointer
+binding. An uncertain marked attempt refuses replay; previous packages remain
+preserved. Independent review findings about missing replay evidence and exact
+renamed-object identity were fixed and rereviewed.
+
+Nine native pointer tests exercise successful replacement, wrong predecessor,
+missing owner-stop prerequisite, an independent reader preventing replacement,
+failures before and after rename, missing/corrupt markers and an interrupted
+phase-record flush. Full Wake regression passed **297 tests / 3 ignored** on the
+final unchanged source. Four enabled `python_bridge_validation` tests passed;
+its manual bridge regression harness remained ignored.
+Strict root/Wake lint, formatting and builds passed on that same unchanged source.
+Commands, source/binary/log hashes and test groups are recorded in
+`docs/acceptance/wake_pointer_switch_tests_20261017.json`. Unchanged root Rust
+tests and standalone Python suites were not rerun in this checkpoint.
+
+The tests use isolated temporary files, unprivileged fixture ACLs and a test-only
+owner-stop prerequisite. Their protected-schema predecessor does not demonstrate
+migration of the actual installed dev84 pointer. The production policy/ACL path
+is compiled but has not run as the installed service. No installed image,
+service, Wake target or browser authority changed.
+
+Remaining release work is concrete: first-generation migration and old-owner
+proof, the typed owner-stopped transition, post-switch launch proof, and service
+transaction wiring. Exact resume inspection for `OldOwnerStopped` and
+`PointerSwitched` remains unsupported and refuses rather than inventing recovery
+authority. The main canonical binary/manifest mismatch still requires the
+separately reviewed recovery path described in R38. GitHub fork-workflow
+re-enable authorization remains pending. Three-project live delivery and actual
+autonomous rollover remain unaccepted.
+
+CatDesk's goal is active. Native project chats need no reservation or pause for
+this work; the repeated BYOVD checkpoint permission request was corrected using
+the user's existing approval. PortfolioDesk's dated observation dependency is a
+blocked goal, distinct from pausing a project for CatDesk.
+
 ## October 17 central rollover status and native regression checkpoint (TESTED_LOCAL_SOURCE; LIVE PARTIAL)
 
 Source `ec1ec272f303be4847b397c3c0950ca3f031cca1` adds per-project durable

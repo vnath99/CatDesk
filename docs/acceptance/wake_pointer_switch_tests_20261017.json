@@ -1,0 +1,267 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "fcabbe3cbb4aa4b0d59a878bcb47fb239517eb82",
+  "sourceTree": "52c2ad44a777582225191a6cf3a2d047a2cbf8aa",
+  "localDate": "2026-10-17",
+  "recordedUtc": "2026-10-18T03:33:29.9023733Z",
+  "classification": "TESTED_LOCAL_SOURCE_LIVE_PARTIAL",
+  "sourceBase": "4b5754bbd63025ba75b4d1b722d6df29c86f715b",
+  "sourceFiles": [
+    {
+      "path": "wake/src/install_broker_durability.rs",
+      "sha256": "8332AAE13085719FA5C10FF4709E98036CB83F0ED845795407F7111D6DB79764"
+    },
+    {
+      "path": "wake/src/install_broker_ledger.rs",
+      "sha256": "11179705B305514C4311B964393002159A4C9D517583F018B88F996749CF658A"
+    },
+    {
+      "path": "wake/src/install_broker_pointer_writer.rs",
+      "sha256": "5BBD8E03000361CC974FA0EE68F59C23DDC51B8C03979A35E604B027BC123CFD"
+    },
+    {
+      "path": "wake/src/install_broker_reader.rs",
+      "sha256": "6BEB47B6333E1EFC4EA15CD08BAC1408680F643CF383BF0583BAA6B5BEBEA11C"
+    },
+    {
+      "path": "wake/src/install_broker_stage_writer.rs",
+      "sha256": "66D013BC992057673C88A30B82A1563C9658D6D03008E97AE5F25EAA157E5017"
+    },
+    {
+      "path": "wake/src/lib.rs",
+      "sha256": "114CB6EBB4134CBA4FBC2C04E9DF6FD73FEA84A8F5CBC1DA3960FD381F5E163F"
+    }
+  ],
+  "checks": [
+    {
+      "name": "wake-tests",
+      "arguments": [
+        "test",
+        "--manifest-path",
+        "wake/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--all-features",
+        "--",
+        "--test-threads=1"
+      ],
+      "exitCode": 0,
+      "log": "20261018T033010Z-wake-tests.log",
+      "sha256": "5ACE77A4D9D527F1D275EF29D5B6B1D1B3FF7508F5B8855EF99D912D75CC2DBE"
+    },
+    {
+      "name": "wake-clippy",
+      "arguments": [
+        "clippy",
+        "--manifest-path",
+        "wake/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exitCode": 0,
+      "log": "20261018T033010Z-wake-clippy.log",
+      "sha256": "8F12AF11DF58062F6DF52ED5E372FF04616FE004D8FD10451ECA6A633EF93B10"
+    },
+    {
+      "name": "root-clippy",
+      "arguments": [
+        "clippy",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exitCode": 0,
+      "log": "20261018T033010Z-root-clippy.log",
+      "sha256": "72051AEF6E682936DE4EB7A9E0748FDE4F681AF7C7661C12A367A174F4F2D3AA"
+    },
+    {
+      "name": "wake-format",
+      "arguments": [
+        "fmt",
+        "--manifest-path",
+        "wake/Cargo.toml",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exitCode": 0,
+      "log": "20261018T033010Z-wake-format.log",
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "name": "root-format",
+      "arguments": [
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exitCode": 0,
+      "log": "20261018T033010Z-root-format.log",
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "name": "wake-build",
+      "arguments": [
+        "build",
+        "--manifest-path",
+        "wake/Cargo.toml",
+        "--locked",
+        "--offline",
+        "--all-features",
+        "--bins"
+      ],
+      "exitCode": 0,
+      "log": "20261018T033010Z-wake-build.log",
+      "sha256": "8568DEB3BA4AE6BDCF04869D3D2619DB39C69A248AA46C30EF138E3D2E9A7B83"
+    },
+    {
+      "name": "root-build",
+      "arguments": [
+        "build",
+        "--locked",
+        "--offline",
+        "--all-features",
+        "--bin",
+        "catdesk"
+      ],
+      "exitCode": 0,
+      "log": "20261018T033010Z-root-build.log",
+      "sha256": "F0F2F7B54FC12F39E0640442E077E150B6A13DD6720D2A1D163CBA7E1BAED212"
+    }
+  ],
+  "debugImages": [
+    {
+      "path": "target/debug/catdesk.exe",
+      "sha256": "8B6B47858039132CDA1AE366244F05A8D439F6ADC6AF8000F919C73348FEC2B5"
+    },
+    {
+      "path": "wake/target/debug/CatDeskWakeHost.exe",
+      "sha256": "80889EE0B99A78B2E843B303EC88697E54CD2EB6D649E370C86235E6470251B3"
+    },
+    {
+      "path": "wake/target/debug/CatDeskWakeInstallBroker.exe",
+      "sha256": "9753F898CBDEAB2BF4A358963B3369C8253056321AA0F2B91C6FBEF6F00FE578"
+    }
+  ],
+  "verificationScope": "FULL_WAKE_SUITE_AND_ROOT_WAKE_STRICT_LINT_FORMAT_BUILD_ON_UNCHANGED_FINAL_SOURCE",
+  "wakeTestGroups": [
+    {
+      "passed": 258,
+      "failed": 0,
+      "ignored": 1
+    },
+    {
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 0,
+      "failed": 0,
+      "ignored": 1
+    },
+    {
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 26,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 4,
+      "failed": 0,
+      "ignored": 1
+    },
+    {
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    }
+  ],
+  "wakePassed": 297.0,
+  "wakeIgnored": 3.0,
+  "focusedNativePointerTestsPassed": 9,
+  "independentReview": "MARKER_REPLAY_REQUIRED_BINDING_AND_EXACT_MOVED_OBJECT_FINDINGS_FIXED_FINAL_REVIEW_CLEAN",
+  "fixtureBoundary": "ISOLATED_NATIVE_TEMP_FILES_UNPRIVILEGED_ACLS_TEST_ONLY_OLD_OWNER_STOPPED_PREREQUISITE",
+  "productionPolicyAclPath": "COMPILED_NOT_LIVE_EXERCISED",
+  "preservedPhaseGate": "PUBLISHED_IS_NOT_OWNER_STOP_PROOF_OLD_OWNER_STOPPED_REQUIRED",
+  "recovery": "POST_MARKER_UNCERTAINTY_REFUSES_REPLAY_NO_AUTOMATIC_ROLLBACK",
+  "laterPhaseResumeDiagnosis": "OLD_OWNER_STOPPED_AND_POINTER_SWITCHED_EXACT_RESUME_INSPECTION_REMAINS_UNSUPPORTED",
+  "rootAndStandalonePythonTests": "UNCHANGED_SOURCE_NO_ROOT_FULL_OR_STANDALONE_PYTHON_RERUN_FOUR_ENABLED_PYTHON_BRIDGE_VALIDATION_TESTS_PASSED_MANUAL_BRIDGE_HARNESS_IGNORED",
+  "remoteCi": "NOT_ACCEPTED_DISABLED_FORK_WORKFLOW_REENABLE_AUTHORIZATION_PENDING",
+  "installedActivationPerformed": false,
+  "productionWakeBindingChanged": false,
+  "liveRolloverAccepted": false,
+  "otherNativeChatsRequirePause": false,
+  "liveBlockers": [
+    "MAIN_CANONICAL_PAIR_MISMATCH_NO_REVIEWED_RECOVERY_AUTHORITY",
+    "WAKE_FIRST_GENERATION_MIGRATION_AND_OLD_OWNER_STOP_PROOF_MISSING",
+    "WAKE_POST_SWITCH_LAUNCH_AND_SERVICE_TRANSACTION_UNWIRED",
+    "THREE_PROJECT_WAKE_TARGETS_NOT_ALIGNED",
+    "CHATGPT_CANARY_ASSISTANT_BODY_FAILED_RELOAD"
+  ],
+  "nextSourceSlice": "CLOSE_EXISTING_OLD_OWNER_MIGRATION_PROOF_AND_TYPED_TRANSITION_BEFORE_SERVICE_SWITCH_ACTIVATION"
+}

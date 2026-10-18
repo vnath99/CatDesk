@@ -1,3 +1,18 @@
+## 2026-10-17 — protected Wake pointer switch (TESTED_LOCAL_SOURCE; MVP PARTIAL)
+
+Source `fcabbe3` performs one marked protected pointer replacement after
+durable `OldOwnerStopped`, validates the exact renamed file and records its
+binding. Reopen requires the matching attempt marker; uncertain attempts cannot
+replay. Nine focused native tests and the full Wake suite (297 passed / 3 ignored)
+passed. Strict root/Wake lint, formatting and builds passed on the same source.
+Exact evidence: `docs/acceptance/wake_pointer_switch_tests_20261017.json`.
+
+Fixture evidence does not prove installed dev84 migration or service policy/ACL
+execution. Production owner/migration proof, typed owner-stop transition,
+post-switch launch and service wiring remain required. No installed change or
+live Web acceptance occurred. Native project development remains independent;
+CatDesk does not require other chats to pause.
+
 ## 2026-10-17 — central rollover progress and native regression (TESTED_LOCAL_SOURCE; MVP PARTIAL)
 
 Source `ec1ec27` adds independent rollover/automation status to the central Web
