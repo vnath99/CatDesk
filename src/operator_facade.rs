@@ -66,6 +66,9 @@ pub(crate) enum WebDevelopmentAction {
         package: PathBuf,
         python_runtime: PathBuf,
     },
+    UpdatePackage {
+        package: PathBuf,
+    },
     Enqueue {
         project_id: String,
         event_id: String,
@@ -186,11 +189,17 @@ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction,
                     package: PathBuf::from(&args[4]),
                     python_runtime: PathBuf::from(&args[6]),
                 }),
+        Some("update-package") if args.len() == 5
+            && args[3] == "--package"
+            && !args[4].is_empty() && args[4].len() <= 4096
+            && !args[4].chars().any(char::is_control) => Ok(WebDevelopmentAction::UpdatePackage {
+                package: PathBuf::from(&args[4]),
+            }),
         Some("status") if args.len() == 3 => Ok(WebDevelopmentAction::Status),
         Some("start") if args.len() == 3 => Ok(WebDevelopmentAction::Start),
         Some("stop") if args.len() == 3 => Ok(WebDevelopmentAction::Stop),
         Some("run") if args.len() == 3 => Ok(WebDevelopmentAction::Run),
-        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, login --project-id <id>, enqueue --project-id <id> --event-id <id> --message-file <file>, retry --project-id <id> --event-id dev-<id>, status, start, stop, or run".into()),
+        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, update-package --package <directory>, login --project-id <id>, enqueue --project-id <id> --event-id <id> --message-file <file>, retry --project-id <id> --event-id dev-<id>, status, start, stop, or run".into()),
     }
 }
 
@@ -653,6 +662,9 @@ pub(crate) async fn execute_operator_action(
                     package,
                     python_runtime,
                 } => development_runtime::prepare(workspace, &package, &python_runtime),
+                WebDevelopmentAction::UpdatePackage { package } => {
+                    development_runtime::update_package(workspace, &package)
+                }
                 WebDevelopmentAction::Enqueue {
                     project_id,
                     event_id,
@@ -1472,6 +1484,43 @@ mod tests {
                 WebDevelopmentAction::Prepare { .. }
             ))
         ));
+        assert!(matches!(
+            parse_operator_action(
+                ["operator", "web-dev-runtime", "update-package", "--package", "C:/dev/new-package"]
+                    .map(str::to_string)
+            ),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::UpdatePackage { package }
+            ))) if package == PathBuf::from("C:/dev/new-package")
+        ));
+        for invalid in [
+            vec!["operator", "web-dev-runtime", "update-package"],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "update-package",
+                "--package",
+                "",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "update-package",
+                "--package",
+                "C:/dev/package",
+                "--root",
+                "C:/production",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "update-package",
+                "--python-runtime",
+                "C:/dev/python",
+            ],
+        ] {
+            assert!(parse_operator_action(invalid.into_iter().map(str::to_string)).is_err());
+        }
         for action in ["status", "start", "stop", "run"] {
             assert!(
                 parse_operator_action(["operator", "web-dev-runtime", action].map(str::to_string))

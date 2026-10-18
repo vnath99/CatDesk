@@ -93,6 +93,7 @@ def attempt(bridge, sb, event, target, *, cooperative=False):
     if event["targetGeneration"] != target["generation"]:
         raise bridge.Attention("TARGET_GENERATION_STALE")
     record_id, message = event["eventId"], event["message"]
+    typed_message = bridge.keyboard_safe_message(message)
     sink = bridge.CdpSink(url, ROOT / "browser-profile", 30, 20)
     cdp = prepare_cdp_target(bridge, sb, url)
     emit({"stage": "TARGET_OPEN"})
@@ -110,14 +111,18 @@ def attempt(bridge, sb, event, target, *, cooperative=False):
     sink.best_effort_present_browser(cdp)
     sink.pre_typing_ready(cdp)
     emit({"stage": "PREWRITE_CONFIRMED"})
-    # ``pre_typing_ready`` has just proved one empty visible composer.  Carry
-    # that resolved fixed selector through both typing and the native-Enter
-    # fallback rather than reverting to the legacy first selector.  Current
-    # ChatGPT surfaces can expose only the fixed ProseMirror or lexical
-    # alternatives; using ``bridge.EDITOR`` here would then raise from CDP
-    # before the explicit submit authorization boundary.
+    # CDP text entry itself can synthesize Enter. The parent must persist its
+    # uncertain-submission boundary before the first possible browser write.
+    emit({"stage": "BEFORE_SUBMIT"})
+    if read_request() != {"submit": True}:
+        raise bridge.Attention("SUBMISSION_NOT_AUTHORIZED")
+    if not sink.exact(cdp.get_current_url()):
+        raise bridge.Attention("TARGET_IDENTITY_MISMATCH")
+    sink.pre_typing_ready(cdp)
+    # Carry the exact validated selector through typing and the native-Enter
+    # fallback; alternate ChatGPT composers need not expose bridge.EDITOR.
     editor_selector = sink.editor_selector(cdp, prevalidated=True)
-    cdp.press_keys(editor_selector, message, timeout=sink.ui_timeout)
+    cdp.press_keys(editor_selector, typed_message, timeout=sink.ui_timeout)
     if bridge.normalize_message(sink.text(cdp)) != bridge.normalize_message(message):
         raise bridge.Attention("TYPING_NOT_CONFIRMED")
     send_selector = sink.wait_for_send_control(cdp, 20)
@@ -125,9 +130,6 @@ def attempt(bridge, sb, event, target, *, cooperative=False):
         raise bridge.Attention("TARGET_IDENTITY_MISMATCH")
     if bridge.normalize_message(sink.text(cdp)) != bridge.normalize_message(message):
         raise bridge.Attention("TYPING_NOT_CONFIRMED")
-    emit({"stage": "BEFORE_SUBMIT"})
-    if read_request() != {"submit": True}:
-        raise bridge.Attention("SUBMISSION_NOT_AUTHORIZED")
     if not sink.exact(cdp.get_current_url()):
         raise bridge.Attention("TARGET_IDENTITY_MISMATCH")
     if bridge.normalize_message(sink.text(cdp)) != bridge.normalize_message(message):
@@ -183,6 +185,7 @@ def bootstrap_attempt(bridge, sb, request):
         raise bridge.Attention("BOOTSTRAP_SOURCE_INVALID")
     project_id, intent_id = request["projectId"], request["intentId"]
     message = bridge.compose_bootstrap_message(project_id, intent_id, source_url, request["handoff"])
+    typed_message = bridge.keyboard_safe_message(message)
     message_digest = bridge.digest(bridge.normalize_message(message))
     sink = bridge.NewConversationSink(source_url, ROOT / "browser-profile", 30, 20)
     cdp = prepare_cdp_target(bridge, sb, source_url)
@@ -195,13 +198,8 @@ def bootstrap_attempt(bridge, sb, request):
     sink.open_empty_home(cdp)
     emit({"stage": "BOOTSTRAP_HOME_READY"})
     sink.check_empty_home(cdp)
-    editor_selector = sink.editor_selector(cdp, prevalidated=True)
-    cdp.press_keys(editor_selector, message, timeout=sink.ui_timeout)
-    sink.check_typed_home(cdp, message)
-    send_selector = sink.wait_for_send_control(cdp, 20)
-    if send_selector is None:
-        raise bridge.Attention("BOOTSTRAP_SEND_CONTROL_MISSING")
-    sink.check_typed_home(cdp, message)
+    # This checkpoint must precede *all* CDP text entry. A physical newline
+    # from press_keys can submit even without a click on the send control.
     emit({
         "stage": "BEFORE_BOOTSTRAP_SUBMIT",
         "projectId": project_id,
@@ -211,13 +209,20 @@ def bootstrap_attempt(bridge, sb, request):
     })
     if read_request() != {"submit": True}:
         raise bridge.Attention("SUBMISSION_NOT_AUTHORIZED")
-    sink.check_typed_home(cdp, message)
-    send_selector = sink.wait_for_send_control(cdp, 5)
-    if send_selector is None:
-        raise bridge.Attention("BOOTSTRAP_SEND_CONTROL_MISSING")
-    # From this point even a click exception may have submitted the USER turn.
-    # Preserve unknown intent state; never send or create another chat here.
+    # After the checkpoint, even a typing exception may have submitted a USER
+    # turn. Preserve unknown intent state and reconcile without another send.
     try:
+        sink.check_empty_home(cdp)
+        editor_selector = sink.editor_selector(cdp, prevalidated=True)
+        cdp.press_keys(editor_selector, typed_message, timeout=sink.ui_timeout)
+        sink.check_typed_home(cdp, message)
+        send_selector = sink.wait_for_send_control(cdp, 20)
+        if send_selector is None:
+            raise bridge.Attention("BOOTSTRAP_SEND_CONTROL_MISSING")
+        sink.check_typed_home(cdp, message)
+        send_selector = sink.wait_for_send_control(cdp, 5)
+        if send_selector is None:
+            raise bridge.Attention("BOOTSTRAP_SEND_CONTROL_MISSING")
         sink.smoke_path_submit(cdp, send_selector, sink.ui_timeout, editor_selector)
         sink.latch_issued_url(cdp)
         accepted_at = sink.wait_for_submission_accepted(cdp, 0, message_digest, message)

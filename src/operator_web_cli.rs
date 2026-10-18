@@ -75,6 +75,11 @@ pub(crate) enum WebAction {
     RolloverExecute {
         project_id: String,
     },
+    RolloverQuarantine {
+        project_id: String,
+        expected_intent_id: String,
+        observed_conversation_url: String,
+    },
     AutoTick {
         project_id: String,
     },
@@ -229,6 +234,25 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("rollover", "execute") if options.is_empty() => Ok(WebAction::RolloverExecute {
             project_id: project_id.into(),
         }),
+        ("rollover", "quarantine") => {
+            let expected_intent_id = options
+                .remove("--expected-intent-id")
+                .ok_or("WEB_USAGE: --expected-intent-id is required")?;
+            let observed_conversation_url = options
+                .remove("--observed-conversation-url")
+                .ok_or("WEB_USAGE: --observed-conversation-url is required")?;
+            if !catdesk_wake::protocol::valid_id(expected_intent_id)
+                || catdesk_wake::protocol::Target::new(1, observed_conversation_url.into()).is_err()
+                || !options.is_empty()
+            {
+                return Err("WEB_USAGE: invalid quarantine witness or unexpected option".into());
+            }
+            Ok(WebAction::RolloverQuarantine {
+                project_id: project_id.into(),
+                expected_intent_id: expected_intent_id.into(),
+                observed_conversation_url: observed_conversation_url.into(),
+            })
+        }
         ("auto", "tick") if options.is_empty() => Ok(WebAction::AutoTick {
             project_id: project_id.into(),
         }),
@@ -415,6 +439,7 @@ fn registry_rollover_projection(raw: &Value) -> Value {
             | "CREATED"
             | "BOUND"
             | "CONTINUATION_QUEUED"
+            | "QUARANTINED"
     ) {
         return json!({"status":"UNAVAILABLE_OR_BUSY","reason":"STATE_INVALID"});
     }
@@ -438,6 +463,7 @@ fn registry_rollover_projection(raw: &Value) -> Value {
                     | "HANDOFF_REQUESTED"
                     | "SOURCE_WITNESS_REQUIRED"
                     | "SUBMISSION_UNKNOWN"
+                    | "QUARANTINED"
                     | "ROLLOVER_ADVANCED"
                     | "ATTENTION"
             ) {
@@ -665,6 +691,16 @@ pub(crate) fn execute(action: WebAction, workspace: &Path) -> Result<Value, Stri
             rollover::read_handoff(&handoff_file)?,
         ),
         WebAction::RolloverExecute { project_id } => rollover::execute(&workspace, &project_id),
+        WebAction::RolloverQuarantine {
+            project_id,
+            expected_intent_id,
+            observed_conversation_url,
+        } => rollover::quarantine(
+            &workspace,
+            &project_id,
+            &expected_intent_id,
+            &observed_conversation_url,
+        ),
         WebAction::AutoTick { project_id } => auto::tick_project(&workspace, &project_id),
     }
 }
@@ -750,6 +786,32 @@ mod tests {
             command.extend(args(&tail));
             assert!(parse(&command).is_err());
         }
+    }
+
+    #[test]
+    fn quarantine_requires_exact_intent_and_observed_conversation() {
+        let complete = args(&[
+            "operator",
+            "web",
+            "rollover",
+            "quarantine",
+            "--project-id",
+            "alpha",
+            "--expected-intent-id",
+            "intent-a",
+            "--observed-conversation-url",
+            "https://chatgpt.com/c/fragmented-orphan",
+        ]);
+        assert!(
+            matches!(parse(&complete), Ok(WebAction::RolloverQuarantine { project_id, expected_intent_id, .. }) if project_id == "alpha" && expected_intent_id == "intent-a")
+        );
+        assert!(parse(&complete[..8]).is_err());
+        let mut invalid = complete.clone();
+        *invalid.last_mut().unwrap() = "https://example.com/c/untrusted".into();
+        assert!(parse(&invalid).is_err());
+        let mut extra = complete;
+        extra.extend(args(&["--force", "true"]));
+        assert!(parse(&extra).is_err());
     }
 
     #[test]
@@ -874,6 +936,14 @@ mod tests {
         assert_eq!(requested["phase"], "NONE");
         assert_eq!(requested["targetGeneration"], 4);
         assert_eq!(requested["handoffRequested"], true);
+        let quarantined = registry_rollover_projection(&json!({
+            "phase":"QUARANTINED",
+            "quarantine":{"observedConversationUrl":"https://chatgpt.com/c/private-orphan"},
+            "automation":{"stage":"QUARANTINED","reason":"WEB_ROLLOVER_QUARANTINED_NO_REPLAY"}
+        }));
+        assert_eq!(quarantined["phase"], "QUARANTINED");
+        assert_eq!(quarantined["automation"]["stage"], "QUARANTINED");
+        assert!(!quarantined.to_string().contains("private-orphan"));
     }
 
     #[test]

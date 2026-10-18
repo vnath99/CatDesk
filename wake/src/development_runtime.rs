@@ -8,7 +8,7 @@ use crate::{
     install_broker_offline_pins::full_identity_of_handle,
     install_broker_offline_v2::FullFileIdentityV2,
     protocol, runtime,
-    store::{Config, Store, now},
+    store::{Config, Store, now, read},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -33,6 +33,8 @@ use std::{
 const PURPOSE: &str = "CATDESK_WAKE_DEVELOPMENT_UNPROTECTED_V1";
 const DEV_DIR: &str = "web-development";
 const ROOT_DIR: &str = "runtime";
+const PACKAGE_UPDATE_PURPOSE: &str = "CATDESK_WAKE_DEV_PACKAGE_UPDATE_V1";
+const PACKAGE_UPDATE_ATTEMPT: &str = "package-update-attempt.json";
 const PACKAGE_FILES: [&str; 4] = [
     "CatDeskWakeHost.exe",
     "CatDeskBinagotchy.exe",
@@ -65,14 +67,14 @@ unsafe extern "system" {
     fn IsProcessInJob(process: *mut c_void, job: *mut c_void, result: *mut i32) -> i32;
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ProductionRoot {
     path: String,
     identity: Option<FullFileIdentityV2>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Authority {
     schema_version: u32,
@@ -90,6 +92,22 @@ struct Authority {
     python_sha256: String,
     production_roots: Vec<ProductionRoot>,
     prepared_utc: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PackageUpdateAttempt {
+    schema_version: u32,
+    purpose: String,
+    workspace: String,
+    runtime_identity: FullFileIdentityV2,
+    old_authority: Authority,
+    old_authority_sha256: String,
+    new_authority: Authority,
+    new_authority_sha256: String,
+    pointer_stage_name: String,
+    authority_stage_name: String,
+    started_utc: u64,
 }
 
 fn wide(value: &OsStr) -> Vec<u16> {
@@ -397,6 +415,25 @@ fn package_id(hashes: &BTreeMap<String, String>) -> Result<String> {
     Ok(format!("{}-{}-{}", VERSION, &host[..12], &gui[..12]))
 }
 
+// The original development package ID used only the two executable hashes.
+// Keep accepting it for already prepared roots, while upgrades use every
+// immutable artifact so a bridge-only repair cannot collide with that root.
+fn updated_package_id(hashes: &BTreeMap<String, String>) -> Result<String> {
+    package_id(hashes)?;
+    let mut digest = Sha256::new();
+    for name in PACKAGE_FILES {
+        digest.update(name.as_bytes());
+        digest.update([0]);
+        digest.update(hashes[name].as_bytes());
+        digest.update([0]);
+    }
+    Ok(format!("{}-{:x}", VERSION, digest.finalize()))
+}
+
+fn package_id_matches(hashes: &BTreeMap<String, String>, id: &str) -> Result<bool> {
+    Ok(package_id(hashes)? == id || updated_package_id(hashes)? == id)
+}
+
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path, limit: u64) -> Result<T> {
     plain(path, false)?;
     let bytes = fs::read(path).map_err(|_| "DEV_RUNTIME_READ_FAILED")?;
@@ -409,6 +446,136 @@ fn read_json<T: for<'de> Deserialize<'de>>(path: &Path, limit: u64) -> Result<T>
 fn write_json_new(path: &Path, value: &impl Serialize) -> Result<()> {
     let bytes = serde_json::to_vec(value).map_err(|_| "DEV_RUNTIME_ENCODING_INVALID")?;
     write_new(path, &bytes)
+}
+
+fn package_manifest(hashes: &BTreeMap<String, String>) -> Value {
+    json!({
+        "schemaVersion":1,"version":VERSION,"protocolVersion":1,
+        "installedUtc":now().to_string(),"artifacts":hashes,
+        "acceptance":"DEVELOPMENT_NOT_ACTIVATED"
+    })
+}
+
+fn package_pointer(id: &str, hashes: &BTreeMap<String, String>) -> Value {
+    json!({
+        "schemaVersion":1,"directory":id,
+        "hostSha256":hashes["CatDeskWakeHost.exe"],
+        "binagotchySha256":hashes["CatDeskBinagotchy.exe"],
+        "adapterSha256":hashes["adapter.py"],
+        "wakeBridgeSha256":hashes["wake_bridge.py"]
+    })
+}
+
+fn verify_update_package(
+    root: &Path,
+    id: &str,
+    hashes: &BTreeMap<String, String>,
+) -> Result<(FullFileIdentityV2, String)> {
+    if updated_package_id(hashes)? != id {
+        return Err("DEV_PACKAGE_UPDATE_IDENTITY_MISMATCH".into());
+    }
+    let package = root.join("versions").join(id);
+    plain(&package, true)?;
+    for name in PACKAGE_FILES {
+        if hash_file(&package.join(name), MAX_PACKAGE_FILE)? != hashes[name] {
+            return Err("DEV_PACKAGE_UPDATE_CONTENT_MISMATCH".into());
+        }
+    }
+    let manifest_path = package.join("manifest.json");
+    let manifest: Value = read_json(&manifest_path, 16 * 1024)?;
+    if manifest.get("schemaVersion").and_then(Value::as_u64) != Some(1)
+        || manifest.get("version").and_then(Value::as_str) != Some(VERSION)
+        || manifest.get("protocolVersion").and_then(Value::as_u64) != Some(1)
+        || manifest.get("acceptance").and_then(Value::as_str) != Some("DEVELOPMENT_NOT_ACTIVATED")
+        || manifest.get("artifacts")
+            != Some(&serde_json::to_value(hashes).map_err(|_| "DEV_RUNTIME_ENCODING_INVALID")?)
+    {
+        return Err("DEV_PACKAGE_UPDATE_MANIFEST_INVALID".into());
+    }
+    Ok((
+        identity(&manifest_path, false)?,
+        hash_file(&manifest_path, 16 * 1024)?,
+    ))
+}
+
+fn stage_update_package(
+    root: &Path,
+    source: &Path,
+    id: &str,
+    hashes: &BTreeMap<String, String>,
+) -> Result<(FullFileIdentityV2, String)> {
+    let final_dir = root.join("versions").join(id);
+    if present(&final_dir)? {
+        return verify_update_package(root, id, hashes);
+    }
+    let stage_name = format!(
+        ".update-{}-{}-{}",
+        std::process::id(),
+        now(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| "DEV_RUNTIME_CLOCK_UNAVAILABLE")?
+            .subsec_nanos()
+    );
+    let stage = root.join("versions").join(stage_name);
+    fs::create_dir(&stage).map_err(|_| "DEV_RUNTIME_CREATE_CONFLICT")?;
+    for name in PACKAGE_FILES {
+        if copy_new(&source.join(name), &stage.join(name), MAX_PACKAGE_FILE)? != hashes[name] {
+            return Err("DEV_RUNTIME_COPY_MISMATCH".into());
+        }
+    }
+    write_json_new(&stage.join("manifest.json"), &package_manifest(hashes))?;
+    for name in PACKAGE_FILES {
+        if hash_file(&stage.join(name), MAX_PACKAGE_FILE)? != hashes[name] {
+            return Err("DEV_RUNTIME_COPY_MISMATCH".into());
+        }
+    }
+    fs::rename(&stage, &final_dir).map_err(|_| "DEV_PACKAGE_UPDATE_PUBLISH_FAILED")?;
+    verify_update_package(root, id, hashes)
+}
+
+fn update_stage_name(prefix: &str, id: &str) -> Result<String> {
+    let suffix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| "DEV_RUNTIME_CLOCK_UNAVAILABLE")?
+        .as_nanos();
+    Ok(format!(
+        "{prefix}-{id}-{}-{suffix}.json",
+        std::process::id()
+    ))
+}
+
+fn valid_update_stage_name(name: &str, prefix: &str, id: &str) -> bool {
+    name.starts_with(&format!("{prefix}-{id}-"))
+        && name.ends_with(".json")
+        && name.len() <= 192
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-'))
+}
+
+fn replace_update_file(from: &Path, to: &Path) -> Result<()> {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn MoveFileExW(from: *const u16, to: *const u16, flags: u32) -> i32;
+        fn GetLastError() -> u32;
+    }
+    if from.parent() != to.parent() {
+        return Err("DEV_PACKAGE_UPDATE_PATH_INVALID".into());
+    }
+    let from_wide = wide(from.as_os_str());
+    let to_wide = wide(to.as_os_str());
+    for retry in 0..20 {
+        if unsafe { MoveFileExW(from_wide.as_ptr(), to_wide.as_ptr(), 1 | 8) } != 0 {
+            return Ok(());
+        }
+        let code = unsafe { GetLastError() };
+        if !matches!(code, 5 | 32 | 33) || retry == 19 {
+            return Err("DEV_PACKAGE_UPDATE_REPLACE_FAILED".into());
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    Err("DEV_PACKAGE_UPDATE_REPLACE_FAILED".into())
 }
 
 /// Create one fresh, user-writable development runtime. Partial preparation is
@@ -525,12 +692,255 @@ pub fn prepare(
     )
 }
 
+fn validate_update_attempt(
+    workspace: &Path,
+    root: &Path,
+    attempt: &PackageUpdateAttempt,
+    source_hashes: &BTreeMap<String, String>,
+) -> Result<()> {
+    let old = &attempt.old_authority;
+    let new = &attempt.new_authority;
+    if attempt.schema_version != 1
+        || attempt.purpose != PACKAGE_UPDATE_PURPOSE
+        || attempt.started_utc == 0
+        || attempt.workspace != workspace.to_string_lossy()
+        || attempt.runtime_identity != identity(root, true)?
+        || old.workspace != attempt.workspace
+        || old.runtime_identity != attempt.runtime_identity
+        || old.workspace_identity != identity(workspace, true)?
+        || !package_id_matches(&old.artifacts, &old.package_id)?
+        || new.package_id != updated_package_id(source_hashes)?
+        || new.artifacts != *source_hashes
+        || new.workspace != old.workspace
+        || new.workspace_identity != old.workspace_identity
+        || new.runtime_identity != old.runtime_identity
+        || new.production_roots != old.production_roots
+        || new.python_identity != old.python_identity
+        || new.python_sha256 != old.python_sha256
+        || new.prepared_utc != old.prepared_utc
+        || new.purpose != old.purpose
+        || new.schema_version != old.schema_version
+        || !valid_update_stage_name(
+            &attempt.pointer_stage_name,
+            "current-update",
+            &new.package_id,
+        )
+        || !valid_update_stage_name(
+            &attempt.authority_stage_name,
+            "authority-update",
+            &new.package_id,
+        )
+        || [
+            &attempt.old_authority_sha256,
+            &attempt.new_authority_sha256,
+            &new.pointer_sha256,
+            &new.manifest_sha256,
+        ]
+        .into_iter()
+        .any(|hash| {
+            hash.len() != 64
+                || !hash
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        })
+    {
+        return Err("DEV_PACKAGE_UPDATE_ATTEMPT_INVALID".into());
+    }
+    let (manifest_identity, manifest_sha256) =
+        verify_update_package(root, &new.package_id, source_hashes)?;
+    if new.manifest_identity != manifest_identity || new.manifest_sha256 != manifest_sha256 {
+        return Err("DEV_PACKAGE_UPDATE_MANIFEST_MISMATCH".into());
+    }
+    Ok(())
+}
+
+fn package_update_result(old: &Authority, new: &Authority, status: &str) -> Value {
+    json!({"mode":"DEVELOPMENT_UNPROTECTED","status":status,
+        "oldPackageId":old.package_id,"packageId":new.package_id,
+        "browserProfilePreserved":true,"runtimeStatePreserved":true,
+        "hostStarted":false,"browserAction":"NONE"})
+}
+
+fn complete_package_update(
+    workspace: &Path,
+    root: &Path,
+    attempt: &PackageUpdateAttempt,
+    source_hashes: &BTreeMap<String, String>,
+) -> Result<Value> {
+    validate_update_attempt(workspace, root, attempt, source_hashes)?;
+    let dev = dev_dir(workspace);
+    let pointer_path = root.join("current.json");
+    let authority_path = dev.join("authority.json");
+    let pointer_stage = root.join(&attempt.pointer_stage_name);
+    let authority_stage = dev.join(&attempt.authority_stage_name);
+
+    let authority: Authority = read_json(&authority_path, 32 * 1024)?;
+    let authority_hash = hash_file(&authority_path, 32 * 1024)?;
+    let old_authority =
+        authority == attempt.old_authority && authority_hash == attempt.old_authority_sha256;
+    let new_authority =
+        authority == attempt.new_authority && authority_hash == attempt.new_authority_sha256;
+    if !old_authority && !new_authority {
+        return Err("DEV_PACKAGE_UPDATE_AUTHORITY_DIVERGED".into());
+    }
+    let pointer_hash = hash_file(&pointer_path, 4096)?;
+    let pointer_identity = identity(&pointer_path, false)?;
+    let old_pointer = pointer_hash == attempt.old_authority.pointer_sha256
+        && pointer_identity == attempt.old_authority.pointer_identity;
+    let new_pointer = pointer_hash == attempt.new_authority.pointer_sha256
+        && pointer_identity == attempt.new_authority.pointer_identity;
+    if !old_pointer && !new_pointer || new_authority && !new_pointer {
+        return Err("DEV_PACKAGE_UPDATE_POINTER_DIVERGED".into());
+    }
+
+    if old_authority && old_pointer {
+        if hash_file(&pointer_stage, 4096)? != attempt.new_authority.pointer_sha256
+            || identity(&pointer_stage, false)? != attempt.new_authority.pointer_identity
+            || read_json::<Value>(&pointer_stage, 4096)?
+                != package_pointer(&attempt.new_authority.package_id, source_hashes)
+        {
+            return Err("DEV_PACKAGE_UPDATE_POINTER_STAGE_INVALID".into());
+        }
+        if validated_authority_mode(workspace, true)?
+            .as_ref()
+            .map(|(_, value)| value)
+            != Some(&attempt.old_authority)
+        {
+            return Err("DEV_PACKAGE_UPDATE_OLD_AUTHORITY_INVALID".into());
+        }
+        replace_update_file(&pointer_stage, &pointer_path)?;
+    }
+    // The pointer-first window is intentional. A durable attempt keeps normal
+    // root selection closed until this exact authority catches up on retry.
+    if old_authority {
+        if hash_file(&authority_stage, 32 * 1024)? != attempt.new_authority_sha256
+            || read_json::<Authority>(&authority_stage, 32 * 1024)? != attempt.new_authority
+        {
+            return Err("DEV_PACKAGE_UPDATE_AUTHORITY_STAGE_INVALID".into());
+        }
+        if hash_file(&pointer_path, 4096)? != attempt.new_authority.pointer_sha256
+            || identity(&pointer_path, false)? != attempt.new_authority.pointer_identity
+        {
+            return Err("DEV_PACKAGE_UPDATE_POINTER_DIVERGED".into());
+        }
+        replace_update_file(&authority_stage, &authority_path)?;
+    }
+    if validated_authority_mode(workspace, true)?
+        .as_ref()
+        .map(|(_, value)| value)
+        != Some(&attempt.new_authority)
+    {
+        return Err("DEV_PACKAGE_UPDATE_READBACK_FAILED".into());
+    }
+    fs::remove_file(dev.join(PACKAGE_UPDATE_ATTEMPT))
+        .map_err(|_| "DEV_PACKAGE_UPDATE_MARKER_REMAINS")?;
+    if validated_authority(workspace)?
+        .as_ref()
+        .map(|(_, value)| value)
+        != Some(&attempt.new_authority)
+    {
+        return Err("DEV_PACKAGE_UPDATE_READBACK_FAILED".into());
+    }
+    Ok(package_update_result(
+        &attempt.old_authority,
+        &attempt.new_authority,
+        "PACKAGE_UPDATED_STOPPED",
+    ))
+}
+
+/// Replace only this isolated development runtime's immutable package. The
+/// browser profile, Python runtime, Wake queues and project registry are never
+/// copied, reset or selected from a different workspace.
+pub fn update_package(workspace: &Path, source_package: &Path) -> Result<Value> {
+    let workspace = canonical_workspace(workspace)?;
+    let dev = dev_dir(&workspace);
+    let root = runtime_root(&workspace);
+    plain(&dev, true)?;
+    plain(&root, true)?;
+    plain(source_package, true)?;
+    let source = fs::canonicalize(source_package).map_err(|_| "DEV_PACKAGE_UNAVAILABLE")?;
+    if source.starts_with(&workspace) || workspace.starts_with(&source) {
+        return Err("DEV_SOURCE_OVERLAP".into());
+    }
+    let attempt_path = dev.join(PACKAGE_UPDATE_ATTEMPT);
+    if !present(&attempt_path)? {
+        validated_authority(&workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    }
+    let store = Store::open(&root)?;
+    let _host = store.host_lock()?;
+    let _browser = runtime::browser_session_lock(&root, Duration::ZERO)?;
+    let control: runtime::Control = read(&root.join("control.json"))?;
+    if control.schema_version != 1 || control.desired != "STOPPED" {
+        return Err("DEV_PACKAGE_UPDATE_HOST_NOT_STOPPED".into());
+    }
+    let hashes = source_artifacts(&source)?;
+    if present(&attempt_path)? {
+        let attempt: PackageUpdateAttempt = read_json(&attempt_path, 32 * 1024)?;
+        return complete_package_update(&workspace, &root, &attempt, &hashes);
+    }
+    let (_, old) = validated_authority(&workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    if old.artifacts == hashes {
+        return Ok(package_update_result(&old, &old, "PACKAGE_ALREADY_CURRENT"));
+    }
+    let attempt = stage_package_update_attempt(&workspace, &root, &source, &old, &hashes)?;
+    complete_package_update(&workspace, &root, &attempt, &hashes)
+}
+
+fn stage_package_update_attempt(
+    workspace: &Path,
+    root: &Path,
+    source: &Path,
+    old: &Authority,
+    hashes: &BTreeMap<String, String>,
+) -> Result<PackageUpdateAttempt> {
+    let dev = dev_dir(workspace);
+    let attempt_path = dev.join(PACKAGE_UPDATE_ATTEMPT);
+    let id = updated_package_id(hashes)?;
+    let (manifest_identity, manifest_sha256) = stage_update_package(root, source, &id, hashes)?;
+    let pointer_stage_name = update_stage_name("current-update", &id)?;
+    let pointer_stage = root.join(&pointer_stage_name);
+    write_json_new(&pointer_stage, &package_pointer(&id, hashes))?;
+    let mut new = old.clone();
+    new.package_id = id.clone();
+    new.artifacts = hashes.clone();
+    new.manifest_identity = manifest_identity;
+    new.manifest_sha256 = manifest_sha256;
+    new.pointer_identity = identity(&pointer_stage, false)?;
+    new.pointer_sha256 = hash_file(&pointer_stage, 4096)?;
+    let authority_stage_name = update_stage_name("authority-update", &id)?;
+    let authority_stage = dev.join(&authority_stage_name);
+    write_json_new(&authority_stage, &new)?;
+    let attempt = PackageUpdateAttempt {
+        schema_version: 1,
+        purpose: PACKAGE_UPDATE_PURPOSE.into(),
+        workspace: workspace.to_string_lossy().into_owned(),
+        runtime_identity: identity(root, true)?,
+        old_authority: old.clone(),
+        old_authority_sha256: hash_file(&dev.join("authority.json"), 32 * 1024)?,
+        new_authority: new,
+        new_authority_sha256: hash_file(&authority_stage, 32 * 1024)?,
+        pointer_stage_name,
+        authority_stage_name,
+        started_utc: now(),
+    };
+    validate_update_attempt(workspace, root, &attempt, hashes)?;
+    write_json_new(&attempt_path, &attempt)?;
+    Ok(attempt)
+}
+
 fn present(path: &Path) -> Result<bool> {
     path.try_exists()
         .map_err(|_| "DEV_RUNTIME_AUTHORITY_UNAVAILABLE".into())
 }
 
 fn validated_authority(workspace: &Path) -> Result<Option<(PathBuf, Authority)>> {
+    validated_authority_mode(workspace, false)
+}
+
+fn validated_authority_mode(
+    workspace: &Path,
+    allow_package_update: bool,
+) -> Result<Option<(PathBuf, Authority)>> {
     let workspace = canonical_workspace(workspace)?;
     let dev = dev_dir(&workspace);
     if !present(&dev)? {
@@ -548,6 +958,9 @@ fn validated_authority(workspace: &Path) -> Result<Option<(PathBuf, Authority)>>
     plain(&dev, true)?;
     if present(&dev.join("login-active.json"))? {
         return Err("DEV_LOGIN_CLEANUP_UNVERIFIED".into());
+    }
+    if !allow_package_update && present(&dev.join(PACKAGE_UPDATE_ATTEMPT))? {
+        return Err("DEV_PACKAGE_UPDATE_INCOMPLETE".into());
     }
     let attempt = dev.join("prepare-attempt.json");
     let authority_path = dev.join("authority.json");
@@ -583,7 +996,7 @@ fn validated_authority(workspace: &Path) -> Result<Option<(PathBuf, Authority)>>
         return Err("DEV_RUNTIME_ROOT_MISMATCH".into());
     }
     let package = root.join("versions").join(&authority.package_id);
-    if package_id(&authority.artifacts)? != authority.package_id {
+    if !package_id_matches(&authority.artifacts, &authority.package_id)? {
         return Err("DEV_RUNTIME_PACKAGE_MISMATCH".into());
     }
     plain(&package, true)?;
@@ -1239,6 +1652,171 @@ mod tests {
 
     fn prepare_fixture(workspace: &Path, package: &Path, python: &Path) -> Value {
         prepare(workspace, package, python).unwrap()
+    }
+
+    #[test]
+    fn package_update_preserves_profile_queue_targets_and_old_version() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let store = Store::open(&root).unwrap();
+        let target = "https://chatgpt.com/c/dev-update-preserved-project";
+        let bound = store.set_target("project-a", 0, target).unwrap();
+        store
+            .produce_expected(
+                "dev-update-preserved",
+                "project-a",
+                "test",
+                "Preserved queued test event",
+                &bound,
+            )
+            .unwrap();
+        let profile = root.join("browser-profile/preserved.txt");
+        fs::write(&profile, b"authenticated profile fixture sentinel").unwrap();
+        let old = validated_authority(&workspace).unwrap().unwrap().1;
+        let old_package = root.join("versions").join(&old.package_id);
+        let old_pointer = fs::read(root.join("current.json")).unwrap();
+        let old_config = fs::read(root.join("config.json")).unwrap();
+        let old_queue = store.events().unwrap();
+        let old_profile = fs::read(&profile).unwrap();
+        let updated_source = parent.join("updated-package");
+        fs::create_dir(&updated_source).unwrap();
+        for name in PACKAGE_FILES {
+            fs::copy(package.join(name), updated_source.join(name)).unwrap();
+        }
+        fs::write(
+            updated_source.join("CatDeskWakeHost.exe"),
+            b"updated fixture host",
+        )
+        .unwrap();
+        let result = update_package(&workspace, &updated_source).unwrap();
+        assert_eq!(result["status"], "PACKAGE_UPDATED_STOPPED");
+        let updated = validated_authority(&workspace).unwrap().unwrap().1;
+        assert_ne!(old.package_id, updated.package_id);
+        assert!(old_package.is_dir());
+        assert_eq!(
+            fs::read(old_package.join("CatDeskWakeHost.exe")).unwrap(),
+            b"isolated fixture host"
+        );
+        assert_ne!(fs::read(root.join("current.json")).unwrap(), old_pointer);
+        assert_eq!(fs::read(root.join("config.json")).unwrap(), old_config);
+        assert_eq!(store.events().unwrap(), old_queue);
+        assert_eq!(fs::read(&profile).unwrap(), old_profile);
+        assert_eq!(store.config().unwrap().targets["project-a"].url, target);
+        assert!(
+            !dev_dir(&fs::canonicalize(&workspace).unwrap())
+                .join(PACKAGE_UPDATE_ATTEMPT)
+                .exists()
+        );
+        assert_eq!(
+            update_package(&workspace, &updated_source).unwrap()["status"],
+            "PACKAGE_ALREADY_CURRENT"
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn package_update_busy_or_running_refuses_without_switch() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let updated_source = parent.join("updated-package");
+        fs::create_dir(&updated_source).unwrap();
+        for name in PACKAGE_FILES {
+            fs::copy(package.join(name), updated_source.join(name)).unwrap();
+        }
+        fs::write(
+            updated_source.join("CatDeskWakeHost.exe"),
+            b"updated fixture host",
+        )
+        .unwrap();
+        let original = fs::read(root.join("current.json")).unwrap();
+        let store = Store::open(&root).unwrap();
+        let host = store.host_lock().unwrap();
+        assert!(update_package(&workspace, &updated_source).is_err());
+        drop(host);
+        let browser = runtime::browser_session_lock(&root, Duration::ZERO).unwrap();
+        assert_eq!(
+            update_package(&workspace, &updated_source).unwrap_err(),
+            "BROWSER_SESSION_BUSY"
+        );
+        drop(browser);
+        runtime::control(&store, "RUNNING").unwrap();
+        assert_eq!(
+            update_package(&workspace, &updated_source).unwrap_err(),
+            "DEV_PACKAGE_UPDATE_HOST_NOT_STOPPED"
+        );
+        runtime::control(&store, "STOPPED").unwrap();
+        assert_eq!(fs::read(root.join("current.json")).unwrap(), original);
+        assert!(
+            !dev_dir(&fs::canonicalize(&workspace).unwrap())
+                .join(PACKAGE_UPDATE_ATTEMPT)
+                .exists()
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn package_update_marker_closes_normal_selection_and_resumes_pointer_first() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let workspace = fs::canonicalize(&workspace).unwrap();
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let updated_source = parent.join("updated-package");
+        fs::create_dir(&updated_source).unwrap();
+        for name in PACKAGE_FILES {
+            fs::copy(package.join(name), updated_source.join(name)).unwrap();
+        }
+        fs::write(
+            updated_source.join("CatDeskWakeHost.exe"),
+            b"updated fixture host",
+        )
+        .unwrap();
+        let source_hashes = source_artifacts(&updated_source).unwrap();
+        let old = validated_authority(&workspace).unwrap().unwrap().1;
+        let attempt =
+            stage_package_update_attempt(&workspace, &root, &updated_source, &old, &source_hashes)
+                .unwrap();
+        assert_eq!(
+            root_for_workspace(&workspace).unwrap_err(),
+            "DEV_PACKAGE_UPDATE_INCOMPLETE"
+        );
+        replace_update_file(
+            &root.join(&attempt.pointer_stage_name),
+            &root.join("current.json"),
+        )
+        .unwrap();
+        assert_eq!(
+            root_for_workspace(&workspace).unwrap_err(),
+            "DEV_PACKAGE_UPDATE_INCOMPLETE"
+        );
+        assert_eq!(
+            update_package(&workspace, &updated_source).unwrap()["status"],
+            "PACKAGE_UPDATED_STOPPED"
+        );
+        assert_eq!(
+            validated_authority(&workspace)
+                .unwrap()
+                .unwrap()
+                .1
+                .package_id,
+            attempt.new_authority.package_id
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn package_id_upgrade_distinguishes_bridge_only_changes() {
+        let (_, _, package, _) = fixture();
+        let old = source_artifacts(&package).unwrap();
+        let mut changed = old.clone();
+        changed.insert("wake_bridge.py".into(), "a".repeat(64));
+        assert_eq!(package_id(&old).unwrap(), package_id(&changed).unwrap());
+        assert_ne!(
+            updated_package_id(&old).unwrap(),
+            updated_package_id(&changed).unwrap()
+        );
+        cleanup(package.parent().unwrap());
     }
 
     #[test]

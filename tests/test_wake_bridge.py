@@ -155,6 +155,18 @@ class WakeBridgeTests(unittest.TestCase):
         ), patch.object(sys, "argv", argv):
             return wake_bridge.main()
 
+    def test_keyboard_safe_message_preserves_receipt_and_json_spaces_without_submit_keys(self):
+        message = 'JSON {"note":"two  spaces"}\r\nNext\tstep\u2028done'
+        safe = wake_bridge.keyboard_safe_message(message)
+        self.assertEqual(safe, 'JSON {"note":"two  spaces"}  Next step done')
+        self.assertEqual(wake_bridge.normalize_message(safe), wake_bridge.normalize_message(message))
+        self.assertFalse(any(char in safe for char in "\r\n\t\u2028"))
+        with self.assertRaisesRegex(wake_bridge.Attention, "MESSAGE_CONTROL_UNSUPPORTED"):
+            wake_bridge.keyboard_safe_message("unsafe\x00input")
+        with self.assertRaisesRegex(wake_bridge.Attention, "MESSAGE_CONTROL_UNSUPPORTED"):
+            wake_bridge.keyboard_safe_message("unsafe\ue007input")
+        self.assertEqual(wake_bridge.keyboard_safe_message("project\ue100glyph"), "project\ue100glyph")
+
     @unittest.skipUnless(sys.platform == "win32", "Windows path normalization regression")
     def test_windows_extended_workspace_accepts_equivalent_normal_absolute_profile(self):
         normal_root = self.root.resolve()
@@ -1204,11 +1216,13 @@ class WakeBridgeTests(unittest.TestCase):
 
         self.assertEqual(["open", "close"], contexts)
 
-    def test_outer_retry_never_relaunches_after_browser_write_starts(self):
+    def test_outer_retry_never_relaunches_after_submission_boundary_starts(self):
         contexts, writes = [], []
         message = wake_bridge.MESSAGE.format(record_id=self.record_id)
 
         class Cdp:
+            def get_current_url(self):
+                return "https://chatgpt.com/c/review-one"
             def press_keys(self, _selector, text, timeout):
                 writes.append((text, timeout))
 
@@ -1235,7 +1249,7 @@ class WakeBridgeTests(unittest.TestCase):
             sink, "text", side_effect=wake_bridge.Attention("BROWSER_NETWORK_ERROR")
         ):
             with self.assertRaisesRegex(wake_bridge.Attention, "BROWSER_NETWORK_ERROR"):
-                sink.wake(self.record_id, message, lambda: True, lambda: self.fail("submission boundary"))
+                sink.wake(self.record_id, message, lambda: True, lambda: None)
 
         self.assertEqual([(message, 1)], writes)
         self.assertEqual(["open", "close"], contexts)
@@ -2363,8 +2377,9 @@ class WakeBridgeTests(unittest.TestCase):
             wake_bridge.POST_SUBMIT_DIAGNOSTICS,
         )
 
-    def test_browser_presentation_is_one_shot_and_precedes_typing_and_submit_boundary(self):
-        message, timeline = wake_bridge.MESSAGE.format(record_id=self.record_id), []
+    def test_browser_presentation_is_one_shot_and_precedes_submit_boundary_and_typing(self):
+        message = wake_bridge.MESSAGE.format(record_id=self.record_id) + '\r\nJSON {"note":"two  spaces"}'
+        timeline = []
 
         class Browser: _process_pid = 4242
         class Driver: cdp_base = Browser()
@@ -2378,9 +2393,15 @@ class WakeBridgeTests(unittest.TestCase):
             def maximize(self): timeline.append("maximize")
             def bring_active_window_to_front(self): timeline.append("foreground")
             def press_keys(self, _selector, text, timeout):
+                if text != "\n":
+                    self.assert_keyboard_safe(text)
                 timeline.append("type" if text != "\n" else "submit")
                 if text == "\n": self.composer = ""; self.messages.append(message)
                 else: self.composer = text
+            @staticmethod
+            def assert_keyboard_safe(text):
+                if any(char in text for char in "\r\n\t"):
+                    raise AssertionError("message typing would submit a USER turn")
             def evaluate(self, script):
                 if "#prompt-textarea" in script: return ["ready", True]
                 if "const selectorTiers" in script:
@@ -2410,7 +2431,7 @@ class WakeBridgeTests(unittest.TestCase):
             return_value=wake_bridge.receipt_for(self.record_id, message, sink.url, 99.0)
         ):
             sink.wake(self.record_id, message, lambda: True, lambda: timeline.append("boundary"))
-        self.assertEqual(["maximize", "foreground", "native", "type", "boundary", "submit", "reload"], timeline)
+        self.assertEqual(["maximize", "foreground", "native", "boundary", "type", "submit", "reload"], timeline)
 
     def test_windows_foreground_requires_exact_current_cdp_pid_and_one_suitable_window(self):
         class Browser: _process_pid = 4242
@@ -2511,7 +2532,7 @@ class WakeBridgeTests(unittest.TestCase):
                 if text == "\n": self.composer = ""; self.messages.append(message)
                 else: self.composer = text
         run(DeliveredCdp())
-        self.assertEqual(["maximize", "foreground", "type", "boundary", "submit", "reload"], timeline)
+        self.assertEqual(["maximize", "foreground", "boundary", "type", "submit", "reload"], timeline)
 
     def test_presentation_is_skipped_for_non_actionable_draft_or_existing_digest(self):
         sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)

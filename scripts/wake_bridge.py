@@ -130,6 +130,22 @@ class DeliveryReceipt:
 
 def normalize_message(value: str) -> str:
     return " ".join(value.split())
+
+def keyboard_safe_message(value: str) -> str:
+    """Keep message text semantically identical without CDP Enter/Tab key events.
+
+    CDP ``press_keys`` treats physical newlines as Enter on ChatGPT's composer.
+    Preserve ordinary spaces (including JSON string content) while replacing
+    only control whitespace with spaces. Receipt normalization must agree.
+    """
+    if not isinstance(value, str) or not value:
+        raise Attention("MESSAGE_CONTROL_UNSUPPORTED")
+    safe = "".join(" " if char in "\t\n\v\f\r\x85\u2028\u2029" else char for char in value)
+    if (any(ord(char) < 32 or ord(char) == 127 or 0xE000 <= ord(char) <= 0xE05D
+            for char in safe) or
+            normalize_message(safe) != normalize_message(value)):
+        raise Attention("MESSAGE_CONTROL_UNSUPPORTED")
+    return safe
 def digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -2107,10 +2123,11 @@ class CdpSink:
 
     def wake(self, record_id: str, message: str, still_actionable: Callable[[], bool], before_submit: Callable[[], None]) -> DeliveryReceipt:
         from seleniumbase import SB
+        typed_message = keyboard_safe_message(message)
         # Match the proven smoke-test resilience boundary: an intermittent
         # Chrome/network failure may discard and recreate the browser session
         # with the SAME durable profile and exact protected target. This outer
-        # retry exists only before the first browser write. Every other safety
+        # retry exists only before the durable submission boundary. Every other safety
         # classification (login, CAPTCHA, target drift, draft, ambiguity) and
         # every failure after typing remains single-attempt/fail-closed.
         for session_attempt in range(READINESS_ATTEMPTS):
@@ -2134,16 +2151,18 @@ class CdpSink:
                         # Presentation is allowed to fail, but may never weaken the exact
                         # target/editor contract before the first browser write.
                         self.pre_typing_ready(cdp)
-                        # From this instruction onward the browser may already contain
-                        # user-visible draft state even if the driver raises. Never
-                        # create a fresh browser session after crossing this boundary.
+                        # CDP text entry can synthesize submit keys. Persist the
+                        # caller's uncertain-submission boundary before any write.
                         editor_selector = self.editor_selector(cdp, prevalidated=True)
                         browser_write_started = True
-                        cdp.press_keys(editor_selector, message, timeout=self.ui_timeout)
+                        before_submit()
+                        if not self.exact(cdp.get_current_url()): raise Attention("TARGET_IDENTITY_MISMATCH")
+                        self.pre_typing_ready(cdp)
+                        editor_selector = self.editor_selector(cdp, prevalidated=True)
+                        cdp.press_keys(editor_selector, typed_message, timeout=self.ui_timeout)
                         if normalize_message(self.text(cdp)) != normalize_message(message): raise Attention("TYPING_NOT_CONFIRMED")
                         send_selector = self.wait_for_send_control(cdp, min(self.ui_timeout, 20))
                         if normalize_message(self.text(cdp)) != normalize_message(message): raise Attention("TYPING_NOT_CONFIRMED")
-                        before_submit()
                         self.smoke_path_submit(cdp, send_selector, self.ui_timeout, editor_selector)
                         accepted_at = self.wait_for_submission_accepted(
                             cdp, prior_message_digests, expected_digest, message
@@ -2445,7 +2464,7 @@ class NewConversationSink(CdpSink):
         raise Attention("BOOTSTRAP_HOME_NOT_READY")
 
     def check_typed_home(self, cdp: Any, message: str) -> None:
-        """Repeat home and exact-draft guards on both sides of parent ack."""
+        """Repeat home and exact-draft guards before the intentional send."""
         try:
             current = str(cdp.get_current_url())
         except Exception as error:

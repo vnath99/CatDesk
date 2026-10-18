@@ -1,5 +1,11 @@
 # CatDesk — Important Command Reference
 
+## October 18 live development Web checkpoint (MVP PARTIAL)
+
+The earlier source-built all-features `5cedbb7` image has SHA-256 `DB0F5600C19D42721BBB147C7A0052861B25C463644661132074F5D646821C7D`. Original login session 94778 closed normally with exit 0 and `LOGIN_WINDOW_CLOSED_UNVERIFIED`; later browser work reused that isolated profile and observed authenticated access. The protected production profile was untouched. Six project conversations now have matching guarded registry/Wake pairs: the original three remain unchanged, BYOVD and Bug Bounty were added at generation 1, and the controlled `catdesk-rollover-canary` is paired at initial generation 1. Native session ownership remains unchanged. All five original events have `SENT`/`EXACT_USER_MESSAGE_APPENDED` receipts and `COMPLETE` timers; do not retry or resend them. The first three and Bug Bounty had browser-visible response evidence; BYOVD's response was not separately verified in the UI. The canary's ordinary initial event reached exact verified `SENT`, with multiline input normalized by enqueue; this does not verify raw multiline browser entry. Read-only context captures include CatDesk 247 initially and 1,007 after handoff, plus Bug Bounty 709 visible tokens across four messages; history coverage remains incomplete. The development Wake host and scheduler stopped normally for `PACKAGE_UPDATED_STOPPED`, preserving the authenticated profile, configuration, queue and old version; the updated host and loopback scheduler are now running. Scheduler 82583 was a session ID, not a PID. No native project goal was paused. The commands below remain scoped to the unprotected development runtime, not an installed release.
+
+CatDesk's collected autonomous handoff reached durable `PREPARED` for rollover. Its visible-token estimate had incomplete history, and the near-capacity signal used an explicit low test threshold. The first live bootstrap ended `ATTENTION` / `BOOTSTRAP_HOME_DRIFT` before the parent's `SUBMITTING` checkpoint, with a null receipt. Read-only browser inspection found an unpaired orphan chat with multiple USER turns containing fragments of the multiline handoff: `cdp.press_keys` treated newlines as Enter during text entry. A null receipt did not rule out browser effects. The supported exact-witness quarantine has now been applied; the old CatDesk intent is `QUARANTINED`, not currently `PREPARED`. Its orphan, source target and handoff remain preserved, replay is prevented and the original paired target is unchanged. No complete bootstrap, guarded pair update or continuation is verified. CatDesk's controlled automatic rollover trigger remains disabled; the low 200-token policy is enabled only for the separate canary, and the project goal was not paused. Source verification passed 42 focused root Web tests, four quarantine tests, five development CLI tests, strict root Clippy/build, 45 focused Python text-entry tests and four Wake package update tests with strict Clippy; earlier sandbox fixture failures passed when rerun outside the sandbox. Inspect `operator web rollover status --project-id catdesk` and exact paired registry/Wake readback during diagnosis. Do not clear the intent, duplicate the bootstrap or reenable CatDesk's low test trigger. Genuine rollover, central provider routing, installed Wake/release and exact-source CI remain open.
+
 ## October 18 isolated Web development runtime (source; live acceptance open)
 
 Run these from a **new, empty, separate control workspace**, using a
@@ -14,6 +20,38 @@ current working directory as the control workspace; prepare creates its own
 <source-built-catdesk.exe> operator web-dev-runtime stop
 <source-built-catdesk.exe> operator web-dev-runtime run
 ```
+
+For an **existing** isolated development control workspace whose host and
+browser session have stopped, source now supports a package update:
+
+```text
+<source-built-catdesk.exe> operator web-dev-runtime update-package --package <source-package-directory>
+```
+
+The source package must have the exact four files `CatDeskWakeHost.exe`,
+`CatDeskBinagotchy.exe`, `adapter.py` and `wake_bridge.py`. If an update is
+interrupted, retry with those same unchanged source files. The operation
+retains the existing isolated browser profile, Python runtime, queues and
+project registry; it does not select a different workspace or touch the
+protected installed runtime. The supported live update succeeded with
+`PACKAGE_UPDATED_STOPPED`, preserving the authenticated profile, configuration,
+queue and old version; the updated development Wake host and loopback scheduler
+are now running. Focused Wake tests pass 4/4 with strict Clippy.
+
+For the observed uncertain rollover, source now supports a bounded quarantine
+after independently identifying the exact active intent and orphan conversation:
+
+```text
+<source-built-catdesk.exe> operator web rollover quarantine --project-id catdesk --expected-intent-id <exact-active-intent-id> --observed-conversation-url <exact-observed-orphan-URL>
+```
+
+Use the private observed URL only in the local command input, not in a public
+log or document. Quarantine preserves the source target, collected handoff and
+old guarded pair and prevents replay; it does not complete the bootstrap or
+bind the orphan. It has been applied to the old CatDesk intent, which now reads
+`QUARANTINED`. Do not use the command with a guessed intent or URL, and do not
+replay the old bootstrap. The separate canary's genuine rollover remains
+pending.
 
 `start` requests a managed development host; `run` is foreground. Neither was
 used in the local three-project fixture. Prepare requires an empty workspace;
@@ -50,8 +88,9 @@ Ordinary `operator web` failures now include a bounded `errorCode` alongside
 guard is still present. If the original login process is live, finish that
 same sign-in flow and let it close normally; do not clear the guard or start a
 duplicate login. If it is terminal, inspect the existing cleanup evidence.
-Registration and browser work remain unavailable until the guard is resolved.
-This diagnostic is source-only until a matching application is built.
+While that guard exists, registration and browser work remain unavailable.
+Session 94778 later closed normally; the bounded diagnostic is in the
+source-built `5cedbb7` image, without installed-release proof.
 
 Registration is create-only and checks the exact Git root/origin under the
 existing registry lock. It sets `nativeThreadId:null`, takes no Codex writer,
@@ -95,9 +134,10 @@ submitted work still needs those proofs. Both outcomes are caller-reported,
 not independent proof of task completion. The durable ledger retains prior
 requests; other projects and existing Codex conversations continue separately.
 Focused source tests, strict lint and formatting passed for these controls;
-the acceptance ledger records their exact scope. Live login is still
-`MANUAL_SIGN_IN_PENDING` in session 94778, with no Web delivery or rollover
-acceptance and no installed release claimed.
+the acceptance ledger records their exact scope. The earlier
+`MANUAL_SIGN_IN_PENDING` state in session 94778 was superseded by its normal
+exit and the live delivery checkpoint above. Rollover remains `PREPARED`, not
+completed; no installed release is claimed.
 
 For a controlled event after an exact paired target exists:
 
@@ -125,11 +165,12 @@ to `CLAIMED` through Wake's durable retry transition. It creates no new event
 and does not prove a browser send. `SUBMITTING`, `SENT`, missing queue events,
 and stale targets remain refused.
 
-This is an unprotected development lane, not an installed release. The local
-fixture prepared no running host, performed no browser send, and established
-no live three-project delivery or rollover. The protected Wake migration and
-service gates and exact remote CI remain open. Existing native project chats
-need not pause. See `docs/OCTOBER_2026_MVP_ACCEPTANCE.md` for acceptance state.
+This is an unprotected development lane, not an installed release. The earlier
+local fixture prepared no running host and performed no browser send; the
+later live five-project deliveries are recorded above. They do not establish
+completed rollover, protected Wake migration or exact remote CI acceptance.
+Existing native project chats need not pause. See
+`docs/OCTOBER_2026_MVP_ACCEPTANCE.md` for acceptance state.
 
 ## October 18 divergent canonical release-pair recovery (source; not installed acceptance)
 

@@ -237,8 +237,8 @@ class NewConversationTests(unittest.TestCase):
             "handoff": "Continue the bounded task with the preserved evidence.",
         }
 
-    def run_attempt(self, scenario="success", *, ack=None, request=None):
-        cdp = AttemptCdp(scenario)
+    def run_attempt(self, scenario="success", *, ack=None, request=None, cdp_type=AttemptCdp):
+        cdp = cdp_type(scenario)
         sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
         emitted = []
         acknowledgements = []
@@ -246,6 +246,8 @@ class NewConversationTests(unittest.TestCase):
         def read_ack():
             acknowledgements.append(1)
             self.assertEqual(cdp.sent, 0)
+            self.assertEqual(cdp.draft, "")
+            self.assertNotIn("type", cdp.timeline)
             self.assertEqual(emitted[-1]["stage"], "BEFORE_BOOTSTRAP_SUBMIT")
             return {"submit": True} if ack is None else ack
 
@@ -503,7 +505,47 @@ class NewConversationTests(unittest.TestCase):
         cdp, emitted, acknowledgements, error = self.run_attempt(ack={"submit": False})
         self.assertEqual(error, "SUBMISSION_NOT_AUTHORIZED")
         self.assertEqual((cdp.sent, len(acknowledgements)), (0, 1))
+        self.assertEqual(cdp.timeline, [])
         self.assertEqual([x["stage"] for x in emitted].count("BEFORE_BOOTSTRAP_SUBMIT"), 1)
+
+    def test_multiline_handoff_is_one_keyboard_safe_user_turn_after_ack(self):
+        class EnterSensitiveCdp(AttemptCdp):
+            def press_keys(self, selector, text, timeout):
+                if any(char in text for char in "\r\n\t"):
+                    self.sent += 1
+                    self.url = ISSUED
+                    raise AssertionError("CDP text entry submitted before guarded click")
+                super().press_keys(selector, text, timeout)
+
+        request = self.request()
+        request["handoff"] = 'Keep JSON {"note":"two  spaces"}\r\nThen\tcontinue.'
+        cdp, emitted, acknowledgements, error = self.run_attempt(
+            request=request, cdp_type=EnterSensitiveCdp
+        )
+        self.assertIsNone(error)
+        self.assertEqual((cdp.sent, len(acknowledgements)), (1, 1))
+        self.assertEqual(cdp.timeline.count("type"), 1)
+        self.assertEqual(cdp.timeline.count("submit"), 1)
+        self.assertNotIn("\n", cdp.typed_message)
+        self.assertNotIn("\r", cdp.typed_message)
+        self.assertNotIn("\t", cdp.typed_message)
+        self.assertIn('"note":"two  spaces"', cdp.typed_message)
+        expected = bridge.compose_bootstrap_message("project-one", "rollover-1", SOURCE, request["handoff"])
+        self.assertEqual(bridge.normalize_message(cdp.typed_message), bridge.normalize_message(expected))
+        self.assertEqual(emitted[-1]["stage"], "BOOTSTRAP_COMPLETE")
+
+    def test_uncertain_typing_after_ack_is_not_pre_submit_attention(self):
+        class AmbiguousCdp(AttemptCdp):
+            def press_keys(self, selector, text, timeout):
+                self.sent += 1
+                self.url = ISSUED
+                raise RuntimeError("ambiguous CDP keyboard outcome")
+
+        cdp, emitted, acknowledgements, error = self.run_attempt(cdp_type=AmbiguousCdp)
+        self.assertIsNone(error)
+        self.assertEqual((cdp.sent, len(acknowledgements)), (1, 1))
+        self.assertEqual(emitted[-1]["stage"], "BOOTSTRAP_UNKNOWN")
+        self.assertNotIn("BOOTSTRAP_COMPLETE", [item["stage"] for item in emitted])
 
     def test_url_drift_and_ambiguous_click_are_single_send_unknown(self):
         for scenario in ("source_revisited", "foreign_url", "click_unknown", "load_error_after_reload"):

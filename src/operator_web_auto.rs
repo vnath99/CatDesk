@@ -235,6 +235,10 @@ fn run_step(
             "SUBMISSION_UNKNOWN",
             json!({"reason":"WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND"}),
         )),
+        rollover::AutoStage::Quarantined => Ok((
+            "QUARANTINED",
+            json!({"reason":"WEB_ROLLOVER_QUARANTINED_NO_REPLAY"}),
+        )),
         rollover::AutoStage::Execute => {
             let result = rollover::execute(workspace, project)?;
             let stage = if result["phase"] == "RESPONSE_PENDING" {

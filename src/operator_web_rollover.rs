@@ -68,6 +68,7 @@ impl Handoff {
 enum Phase {
     Prepared,
     Submitting,
+    Quarantined,
     ResponsePending,
     Created,
     Bound,
@@ -109,6 +110,16 @@ struct Record {
     source_fingerprint: Option<String>,
     #[serde(default)]
     source_snapshot_verified: bool,
+    #[serde(default)]
+    quarantine: Option<Quarantine>,
+}
+
+/// Operator-observed incident evidence, never a bootstrap or binding receipt.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Quarantine {
+    observed_conversation_url: String,
+    recorded_utc: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -132,6 +143,7 @@ pub(super) enum AutoStage {
     Execute,
     SourceWitnessRequired,
     SubmissionUnknown,
+    Quarantined,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -527,6 +539,7 @@ fn summary(record: &Record) -> Value {
         "handoffEventId":record.handoff_event_id,
         "sourceProgressFingerprint":record.source_fingerprint,
         "sourceSnapshotVerified":record.source_snapshot_verified,
+        "quarantine":record.quarantine,
         "continuationProved":false,"oldConversationPreserved":true})
 }
 
@@ -553,6 +566,7 @@ pub(super) fn auto_stage(
         }
         match record.phase {
             Phase::Submitting => return Ok(AutoStage::SubmissionUnknown),
+            Phase::Quarantined => return Ok(AutoStage::Quarantined),
             Phase::Prepared | Phase::ResponsePending | Phase::Created | Phase::Bound => {
                 return Ok(AutoStage::Execute);
             }
@@ -1207,6 +1221,7 @@ fn prepare_with_request(
         handoff_event_id: request.map(|request| request.event_id.clone()),
         source_fingerprint,
         source_snapshot_verified: false,
+        quarantine: None,
     };
     store.save(&record)?;
     atomic(&store.root.join("active.json"), &record.intent_id)?;
@@ -1623,9 +1638,66 @@ fn verify_source_handoff_still_latest(
     Ok(())
 }
 
+fn quarantine_record(
+    store: &ProjectStore,
+    expected_intent: &str,
+    observed_url: &str,
+    current: &Target,
+) -> Result<Value, String> {
+    let mut record = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
+    let observed = Target::new(1, observed_url.into())?;
+    if record.intent_id != expected_intent || record.source != *current {
+        return Err("WEB_ROLLOVER_QUARANTINE_WITNESS_CHANGED".into());
+    }
+    if observed.url == record.source.url {
+        return Err("WEB_ROLLOVER_QUARANTINE_DESTINATION_INVALID".into());
+    }
+    if record.phase == Phase::Quarantined {
+        if record
+            .quarantine
+            .as_ref()
+            .map(|value| value.observed_conversation_url.as_str())
+            != Some(observed.url.as_str())
+        {
+            return Err("WEB_ROLLOVER_QUARANTINE_OBSERVATION_CHANGED".into());
+        }
+        return Ok(summary(&record));
+    }
+    if !matches!(record.phase, Phase::Prepared | Phase::Submitting)
+        || record.receipt.is_some()
+        || record.bound_target.is_some()
+    {
+        return Err("WEB_ROLLOVER_QUARANTINE_PHASE_INVALID".into());
+    }
+    record.phase = Phase::Quarantined;
+    record.quarantine = Some(Quarantine {
+        observed_conversation_url: observed.url,
+        recorded_utc: now(),
+    });
+    record.reconciliation_reason = Some("WEB_BOOTSTRAP_UNEXPECTED_SUBMISSION_OBSERVED".into());
+    store.save(&record)?;
+    Ok(summary(&record))
+}
+
+/// Stop replay after an operator observes an unexpected browser write. This
+/// preserves every existing record and target; it never fabricates a receipt.
+pub(super) fn quarantine(
+    workspace: &Path,
+    project: &str,
+    expected_intent: &str,
+    observed_url: &str,
+) -> Result<Value, String> {
+    let store = ProjectStore::open_existing(workspace, project)?;
+    let current = paired(workspace, project)?;
+    quarantine_record(&store, expected_intent, observed_url, &current)
+}
+
 pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> {
     let store = ProjectStore::open(workspace, project)?;
     let mut record = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
+    if record.phase == Phase::Quarantined {
+        return Err("WEB_ROLLOVER_QUARANTINED_NO_REPLAY".into());
+    }
     if record.phase == Phase::Submitting {
         return Err("WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND".into());
     }
@@ -1830,6 +1902,7 @@ mod tests {
             handoff_event_id: None,
             source_fingerprint: None,
             source_snapshot_verified: false,
+            quarantine: None,
         }
     }
     fn receipt_for(record: &Record) -> runtime::BootstrapReceipt {
@@ -1847,6 +1920,89 @@ mod tests {
             evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
             completion: "RESPONSE_COMPLETED".into(),
         }
+    }
+
+    #[test]
+    fn quarantine_preserves_uncertain_attempt_and_prevents_replay_after_reopen() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let original = record();
+        store.save(&original).unwrap();
+        atomic(&store.root.join("active.json"), &original.intent_id).unwrap();
+        let observed_url = "https://chatgpt.com/c/fragmented-orphan";
+        let result =
+            quarantine_record(&store, &original.intent_id, observed_url, &original.source).unwrap();
+        assert_eq!(result["phase"], "QUARANTINED");
+        assert_eq!(result["receipt"], Value::Null);
+        assert_eq!(result["boundTarget"], Value::Null);
+        let saved_bytes = fs::read(store.root.join("intent-a.json")).unwrap();
+        quarantine_record(&store, &original.intent_id, observed_url, &original.source).unwrap();
+        assert_eq!(
+            saved_bytes,
+            fs::read(store.root.join("intent-a.json")).unwrap()
+        );
+        let saved = store.active().unwrap().unwrap();
+        assert_eq!(saved.source, original.source);
+        assert_eq!(saved.handoff, original.handoff);
+        assert_eq!(saved.message_digest, original.message_digest);
+        assert_eq!(saved.source_task_id, original.source_task_id);
+        drop(store);
+        assert_eq!(
+            auto_stage(&root, "alpha", &original.source).unwrap(),
+            AutoStage::Quarantined
+        );
+        assert_eq!(
+            execute(&root, "alpha").unwrap_err(),
+            "WEB_ROLLOVER_QUARANTINED_NO_REPLAY"
+        );
+        assert_eq!(
+            acquire_web_work_lease(&root, "alpha").err().unwrap(),
+            "WEB_WORK_ROLLOVER_PENDING"
+        );
+        // The quarantine is scoped; another project can still obtain its lease.
+        drop(acquire_web_work_lease(&root, "beta").unwrap());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn quarantine_refuses_stale_witness_and_does_not_reclassify_proved_submission() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut original = record();
+        store.save(&original).unwrap();
+        atomic(&store.root.join("active.json"), &original.intent_id).unwrap();
+        let observed_url = "https://chatgpt.com/c/fragmented-orphan";
+        let before = fs::read(store.root.join("intent-a.json")).unwrap();
+        for (intent, target, url) in [
+            ("another-intent", original.source.clone(), observed_url),
+            (
+                original.intent_id.as_str(),
+                Target::new(2, original.source.url.clone()).unwrap(),
+                observed_url,
+            ),
+            (
+                original.intent_id.as_str(),
+                original.source.clone(),
+                original.source.url.as_str(),
+            ),
+        ] {
+            assert!(quarantine_record(&store, intent, url, &target).is_err());
+            assert_eq!(before, fs::read(store.root.join("intent-a.json")).unwrap());
+        }
+        original.phase = Phase::ResponsePending;
+        original.receipt = Some(receipt_for(&original));
+        store.save(&original).unwrap();
+        assert_eq!(
+            quarantine_record(&store, &original.intent_id, observed_url, &original.source)
+                .unwrap_err(),
+            "WEB_ROLLOVER_QUARANTINE_PHASE_INVALID"
+        );
+        assert_eq!(
+            store.active().unwrap().unwrap().phase,
+            Phase::ResponsePending
+        );
+        drop(store);
+        fs::remove_dir_all(root).unwrap();
     }
     fn handoff_request(root: &Path) -> HandoffRequest {
         let project_id = "alpha";

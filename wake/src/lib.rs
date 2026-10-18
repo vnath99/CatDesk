@@ -53,6 +53,9 @@ pub mod development_runtime {
     pub fn prepare(_: &Path, _: &Path, _: &Path) -> Result<Value> {
         Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
     }
+    pub fn update_package(_: &Path, _: &Path) -> Result<Value> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
     pub fn root_for_workspace(_: &Path) -> Result<Option<PathBuf>> {
         Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
     }

@@ -124,11 +124,11 @@ class AdapterTests(unittest.TestCase):
             calls,
         )
 
-    def run_attempt(self, acknowledgement, *, cdp_type=FakeCdp, sink_type=FakeSink, cooperative=False):
+    def run_attempt(self, acknowledgement, *, cdp_type=FakeCdp, sink_type=FakeSink, cooperative=False, message="bounded wake"):
         cdp = cdp_type()
         sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
         target = {"url": cdp.url, "digest": bridge.digest(cdp.url), "generation": 1}
-        event = {"eventId": "review-1", "message": "bounded wake", "targetGeneration": 1}
+        event = {"eventId": "review-1", "message": message, "targetGeneration": 1}
         emitted = []
         def ack():
             self.assertEqual(
@@ -147,6 +147,8 @@ class AdapterTests(unittest.TestCase):
                 ],
             )
             self.assertFalse(cdp.sent)
+            self.assertEqual(cdp.draft, "")
+            self.assertEqual(cdp.keys, [])
             return acknowledgement(cdp)
         with patch.object(bridge, "CdpSink", sink_type), patch.object(adapter, "read_request", ack), patch.object(adapter, "emit", emitted.append):
             try: adapter.attempt(bridge, sb, event, target, cooperative=cooperative)
@@ -212,9 +214,9 @@ class AdapterTests(unittest.TestCase):
         def edit(cdp): cdp.draft = "operator draft"; return {"submit": True}
         cdp, _, error = self.run_attempt(edit)
         self.assertFalse(cdp.sent)
-        self.assertEqual(error, "TYPING_NOT_CONFIRMED")
+        self.assertEqual(error, "EXISTING_DRAFT")
 
-    def test_alternate_editor_is_used_before_submission_authorization(self):
+    def test_alternate_editor_is_used_after_submission_authorization(self):
         alternate = bridge.EDITOR_SELECTORS[1]
         case = self
 
@@ -231,13 +233,33 @@ class AdapterTests(unittest.TestCase):
                 return alternate
 
         cdp, _emitted, error = self.run_attempt(
-            lambda _cdp: {"submit": False},
+            lambda _cdp: {"submit": True},
             cdp_type=AlternateEditorCdp,
             sink_type=AlternateEditorSink,
         )
-        self.assertEqual("SUBMISSION_NOT_AUTHORIZED", error)
-        self.assertFalse(cdp.sent)
+        self.assertIsNone(error)
+        self.assertTrue(cdp.sent)
         self.assertEqual([(alternate, "bounded wake", 30)], cdp.keys)
+
+    def test_multiline_message_never_sends_enter_during_typing(self):
+        class EnterSensitiveCdp(FakeCdp):
+            def press_keys(self, selector, text, timeout):
+                if any(char in text for char in "\r\n\t"):
+                    self.sent = True
+                    raise AssertionError("CDP text entry submitted before guarded click")
+                super().press_keys(selector, text, timeout)
+
+        message = 'Review JSON: {"note":"two  spaces"}\r\nNext\tstep'
+        cdp, emitted, error = self.run_attempt(
+            lambda _cdp: {"submit": True}, cdp_type=EnterSensitiveCdp, message=message
+        )
+        self.assertIsNone(error)
+        self.assertTrue(cdp.sent)
+        self.assertEqual(cdp.keys[0][1], 'Review JSON: {"note":"two  spaces"}  Next step')
+        self.assertEqual(
+            emitted[-1]["receipt"]["messageDigest"],
+            bridge.digest(bridge.normalize_message(message)),
+        )
 
     def test_reconciliation_observes_only_and_never_submits(self):
         cdp = FakeCdp()
