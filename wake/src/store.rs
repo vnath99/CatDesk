@@ -192,6 +192,22 @@ impl Delivery {
     }
 }
 
+fn require_expected_retirement_event(
+    event: &Event,
+    project: &str,
+    target: &Target,
+    message_sha256: &str,
+) -> Result<()> {
+    if event.project_id != project
+        || event.event_type != "engineering_attention"
+        || event.target_generation != target.generation
+        || digest(&event.message) != message_sha256
+    {
+        return Err("STALE_RETIREMENT_EXPECTATION_MISMATCH".into());
+    }
+    Ok(())
+}
+
 /// All producers and controls serialize through the same OS file lock. Kernel
 /// releases it on process death; atomic JSON replacement preserves prior bytes.
 pub struct Store {
@@ -1416,24 +1432,87 @@ impl Store {
             return Err("QUEUE_EVENT_INVALID".into());
         }
         let _lock = self.lock()?;
+        self.retire_stale_locked(id, None)
+    }
+
+    /// Retire an exact, receiptless engineering-attention request during a
+    /// durable caller-side closure. A never-published request has no Wake
+    /// artifacts and is a safe no-op; any partial evidence refuses closure.
+    pub fn retire_stale_expected(
+        &self,
+        id: &str,
+        project: &str,
+        expected_target: &Target,
+        message_sha256: &str,
+    ) -> Result<()> {
+        if !valid_id(id)
+            || !valid_id(project)
+            || message_sha256.len() != 64
+            || !message_sha256
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        {
+            return Err("STALE_RETIREMENT_EXPECTATION_INVALID".into());
+        }
+        expected_target.validate()?;
+        let _lock = self.lock()?;
+        self.retire_stale_locked(id, Some((project, expected_target, message_sha256)))
+    }
+
+    fn retire_stale_locked(&self, id: &str, expected: Option<(&str, &Target, &str)>) -> Result<()> {
         let event_path = self.event_path(id);
         let archive_path = self.archive_path(id);
-        if !event_path.try_exists().map_err(|_| "QUEUE_UNAVAILABLE")? {
-            if archive_path.try_exists().map_err(|_| "QUEUE_UNAVAILABLE")? {
+        let queued = event_path.try_exists().map_err(|_| "QUEUE_UNAVAILABLE")?;
+        let archived = if expected.is_some() || !queued {
+            archive_path.try_exists().map_err(|_| "QUEUE_UNAVAILABLE")?
+        } else {
+            false
+        };
+        let timer = if expected.is_some() {
+            self.read_timer(id)?
+        } else {
+            None
+        };
+        if expected.is_some() && timer.is_some() {
+            return Err("STALE_RETIREMENT_REFUSED".into());
+        }
+        if expected.is_some()
+            && self
+                .submission_start_path(id)
+                .try_exists()
+                .map_err(|_| "SUBMISSION_START_UNAVAILABLE")?
+        {
+            return Err("STALE_RETIREMENT_REFUSED".into());
+        }
+        if !queued {
+            if archived {
                 let archived: Event = read(&archive_path)?;
                 archived.validate()?;
                 if archived.event_id != id {
                     return Err("QUEUE_ID_MISMATCH".into());
+                }
+                if let Some((project, target, message_digest)) = expected {
+                    require_expected_retirement_event(&archived, project, target, message_digest)?;
                 }
                 let prior = self.read_delivery(id)?.ok_or("STALE_RETIREMENT_REFUSED")?;
                 if prior.event == archived
                     && prior.phase == Phase::Stale
                     && prior.receipt.is_none()
                     && prior.reason.as_deref() == Some("OPERATOR_RETIRED")
+                    && expected.is_none_or(|(_, target, message_digest)| {
+                        prior.target == *target && prior.message_digest == message_digest
+                    })
                 {
                     return Ok(());
                 }
                 return Err("STALE_RETIREMENT_REFUSED".into());
+            }
+            if expected.is_some() {
+                return if self.read_delivery(id)?.is_none() {
+                    Ok(())
+                } else {
+                    Err("STALE_RETIREMENT_PARTIAL".into())
+                };
             }
             return Err("STATE_UNAVAILABLE".into());
         }
@@ -1442,8 +1521,35 @@ impl Store {
         if event.event_id != id {
             return Err("QUEUE_ID_MISMATCH".into());
         }
+        if let Some((project, target, message_digest)) = expected {
+            require_expected_retirement_event(&event, project, target, message_digest)?;
+        }
         let config = self.read_config()?;
         let prior = self.read_delivery(id)?;
+        if expected.is_some()
+            && prior.as_ref().is_some_and(|delivery| {
+                delivery.phase == Phase::Stale
+                    && delivery.reason.as_deref() != Some("OPERATOR_RETIRED")
+            })
+        {
+            return Err("STALE_RETIREMENT_PARTIAL".into());
+        }
+        if expected.is_some() && archived {
+            // Only an exact final archive/journal pair may finish an earlier
+            // interrupted retirement by removing its still-queued original.
+            let archived_event: Event = read(&archive_path)?;
+            archived_event.validate()?;
+            if archived_event != event
+                || prior.as_ref().is_none_or(|delivery| {
+                    delivery.event != event
+                        || delivery.phase != Phase::Stale
+                        || delivery.receipt.is_some()
+                        || delivery.reason.as_deref() != Some("OPERATOR_RETIRED")
+                })
+            {
+                return Err("STALE_RETIREMENT_PARTIAL".into());
+            }
+        }
         let historical_target = prior
             .as_ref()
             .map(|delivery| delivery.target.clone())
@@ -1466,6 +1572,9 @@ impl Store {
                     })
             })
             .ok_or("TARGET_GENERATION_STALE")?;
+        if expected.is_some_and(|(_, target, _)| historical_target != *target) {
+            return Err("STALE_RETIREMENT_EXPECTATION_MISMATCH".into());
+        }
         if prior
             .as_ref()
             .is_some_and(|delivery| matches!(delivery.phase, Phase::Submitting | Phase::Sent))

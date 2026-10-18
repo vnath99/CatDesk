@@ -55,10 +55,46 @@ store. Known production current and historical conversation IDs are rejected
 for development use. An invalid or partial development authority requires
 attention and does not redirect commands to the installed store.
 
+Source defines two central ChatGPT controls in **SupervisorOnly Computer/Both**
+MCP mode. Read `autonomy_project_registry_read` first and use
+the chosen project's **current paired** Wake generation and URL SHA-256 for
+`catdesk_web_work_request`:
+
+```json
+{"projectId":"PROJECT","requestId":"STABLE_REQUEST_ID","expectedTargetGeneration":1,"expectedTargetSha256":"<current-paired-64-hex-sha>","taskText":"Continue the assigned project work."}
+```
+
+The tool records one durable Wake work request for that project; same-ID,
+same-target retries are idempotent, and another request waits while its work
+intent is active.
+`queue.workRequests` reports transport state without task text;
+`workIntent.active` reports the single active intent. A queued receipt does not
+prove browser delivery, assistant acknowledgement, or completed project work.
+The tool does not take over a native Codex writer.
+
+To close the exact request, call `catdesk_web_work_resolve` with that
+request's **original** generation and URL SHA-256 from `workIntent`, including
+when the current chat has rolled over:
+
+```json
+{"projectId":"PROJECT","requestId":"STABLE_REQUEST_ID","expectedTargetGeneration":1,"expectedTargetSha256":"<original-request-64-hex-sha>","outcome":"completed","summary":"Verified artifacts and remaining work."}
+```
+
+`completed` requires the exact Wake `SENT` receipt and completed response
+timer. `retired` can close a known pre-submit request without a browser send;
+submitted work still needs those proofs. Both outcomes are caller-reported,
+not independent proof of task completion. The durable ledger retains prior
+requests; other projects and existing Codex conversations continue separately.
+Focused source tests, strict lint and formatting passed for these controls;
+the acceptance ledger records their exact scope. Live login is still
+`MANUAL_SIGN_IN_PENDING` in session 94778, with no Web delivery or rollover
+acceptance and no installed release claimed.
+
 For a controlled event after an exact paired target exists:
 
 ```text
 <source-built-catdesk.exe> operator web-dev-runtime enqueue --project-id PROJECT --event-id dev-UNIQUE_ID --message-file <workspace-contained-plain-text-file>
+<source-built-catdesk.exe> operator web-dev-runtime retry --project-id PROJECT --event-id dev-EXISTING_ID
 <source-built-catdesk.exe> operator web status
 <source-built-catdesk.exe> operator web context configure --project-id PROJECT --input-file <policy-json>
 <source-built-catdesk.exe> operator web auto tick --project-id PROJECT
@@ -72,6 +108,13 @@ idempotent; changed content conflicts. A queued response reports
 delivery and the exact ChatGPT conversation before claiming either. Context
 capture and rollover policies are configured per project. Automatic
 observation is opt-in, and background browser work requires a running host.
+
+Use `retry` only for an existing controlled development event whose exact
+project and current paired target still match and whose Wake delivery is
+`ATTENTION` before submission with no receipt. It moves that same event back
+to `CLAIMED` through Wake's durable retry transition. It creates no new event
+and does not prove a browser send. `SUBMITTING`, `SENT`, missing queue events,
+and stale targets remain refused.
 
 This is an unprotected development lane, not an installed release. The local
 fixture prepared no running host, performed no browser send, and established

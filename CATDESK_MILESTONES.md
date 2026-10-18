@@ -1,3 +1,26 @@
+## 2026-10-18 — central multi-project Web work controls (TESTED_LOCAL_SOURCE; MVP PARTIAL)
+
+Source now exposes SupervisorOnly MCP `catdesk_web_work_request` and
+`catdesk_web_work_resolve`. A request names one registered project, a stable
+request ID, a bounded task and the exact **current** paired Wake generation and
+URL hash. Each project retains one active work intent; same-ID, same-target
+retries reuse it, and distinct work waits for explicit resolution. The Wake event and
+status `queue.workRequests` show transport progress only. Resolution uses the
+**original** request target witness, even after a verified rollover, and records
+a caller-reported completed or retired outcome. The ledger retains history,
+while `workIntent` reports the active intent; neither tool takes a native Codex
+writer.
+
+Focused checks passed: Web work 13/13, development 5/5, continuation 7/7 and
+Wake retirement 6/6, plus strict root/Wake lint and formatting. These filters
+overlap; no full-suite rerun is claimed. Final source hashes stayed unchanged
+during verification. The standalone application was not rebuilt while its
+previous executable holds the live login session. The live development login
+remains `MANUAL_SIGN_IN_PENDING` in session 94778. No actual Web delivery,
+three-project autonomous continuation, rollover acceptance, installed release
+or remote CI acceptance is claimed. A controlled pre-submit development event
+can use the existing exact-ID retry path. Other project chats can keep working.
+
 ## 2026-10-18 — development browser login (MANUAL_SIGN_IN_PENDING; MVP PARTIAL)
 
 The project-ID-only development login command now uses the existing paired

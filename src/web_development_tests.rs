@@ -351,3 +351,296 @@ async fn web_action_result(control: &Path, args: &[&str]) -> Result<serde_json::
         .ok_or("FIXTURE_ACTION_MISSING")?;
     operator_facade::execute_operator_action(action, control).await
 }
+
+#[tokio::test(flavor = "current_thread")]
+async fn central_web_work_requests_are_independent_durable_and_generation_bound() {
+    use serde_json::json;
+    let production_before = production_snapshot();
+    let parent = fixture_parent();
+    let control = parent.join("control");
+    fs::create_dir(&control).unwrap();
+    let (package, python) = package_and_python(&parent);
+    development_runtime::prepare(&control, &package, &python).unwrap();
+    let root = development_runtime::root_for_workspace(&control)
+        .unwrap()
+        .unwrap();
+    let wake = Store::open(&root).unwrap();
+    let projects = [
+        ("catdesk", control.clone()),
+        ("alpha", parent.join("alpha")),
+        ("beta", parent.join("beta")),
+    ];
+    for (project, workspace) in &projects {
+        let origin = format!("https://example.test/{project}.git");
+        git_root(workspace, &origin);
+        web_action(
+            &control,
+            &[
+                "operator",
+                "web",
+                "project",
+                "register",
+                "--project-id",
+                project,
+                "--workspace",
+                workspace.to_str().unwrap(),
+                "--git-identity",
+                &origin,
+            ],
+        )
+        .await;
+        let url = format!("https://chatgpt.com/c/{}", uuid::Uuid::new_v4());
+        web_action(
+            &control,
+            &[
+                "operator",
+                "web",
+                "target",
+                "bind",
+                "--project-id",
+                project,
+                "--conversation-url",
+                &url,
+                "--expected-current-target-sha256",
+                "none",
+                "--expected-wake-generation",
+                "0",
+            ],
+        )
+        .await;
+    }
+    // Ordinary publication deliberately refuses the target-change second.
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    let bindings = wake.config().unwrap().targets;
+    let arguments = |project: &str, request: &str| {
+        json!({
+            "projectId":project, "requestId":request, "expectedTargetGeneration":1,
+            "expectedTargetSha256":bindings[project].digest,
+            "taskText":"Review this project's current work; preserve the existing Codex task owner."
+        })
+    };
+    let mut event_ids = std::collections::BTreeSet::new();
+    for (project, _) in &projects {
+        let input = arguments(project, "same-request-id");
+        let recorded = crate::web_work::request(&control, input.clone()).unwrap();
+        assert_eq!(recorded["status"], "REQUEST_RECORDED");
+        assert_eq!(recorded["nativeSessionAction"], "NONE");
+        assert_eq!(recorded["deliveryProved"], false);
+        assert_eq!(recorded["taskCompletionVerified"], false);
+        assert_eq!(
+            crate::web_work::request(&control, input.clone()).unwrap(),
+            recorded
+        );
+        event_ids.insert(recorded["eventId"].as_str().unwrap().to_owned());
+        let mut conflict = input;
+        conflict["taskText"] = json!("A different task under the same request ID.");
+        assert_eq!(
+            crate::web_work::request(&control, conflict).unwrap_err(),
+            "WEB_WORK_REQUEST_CONFLICT"
+        );
+        assert_eq!(
+            crate::web_work::request(&control, arguments(project, "another-task")).unwrap_err(),
+            "WEB_WORK_ACTIVE_REQUEST"
+        );
+    }
+    assert_eq!(event_ids.len(), 3);
+    let events = wake.events().unwrap();
+    assert_eq!(events.len(), 3);
+    assert!(
+        events
+            .iter()
+            .all(|event| event.event_type == "engineering_attention")
+    );
+    for project in ["catdesk", "alpha", "beta"] {
+        assert_eq!(
+            events
+                .iter()
+                .filter(|event| event.project_id == project)
+                .count(),
+            1
+        );
+    }
+    let resolution = |project: &str, outcome: &str| {
+        json!({"projectId":project,"requestId":"same-request-id",
+            "expectedTargetGeneration":1,"expectedTargetSha256":bindings[project].digest,
+            "outcome":outcome,"summary":"Coordinator reports the controlled review is closed."})
+    };
+    assert_eq!(
+        crate::web_work::resolve(&control, resolution("catdesk", "completed")).unwrap_err(),
+        "WEB_WORK_DELIVERY_REQUIRED"
+    );
+    // A queued request can be retired without claiming it was delivered. Its
+    // archived transport and closed intent make an exact retry harmless.
+    let closed = crate::web_work::resolve(&control, resolution("beta", "retired")).unwrap();
+    assert_eq!(closed["taskCompletionVerified"], false);
+    assert_eq!(
+        crate::web_work::resolve(&control, resolution("beta", "retired")).unwrap(),
+        closed
+    );
+    assert_eq!(
+        crate::web_work::request(&control, arguments("beta", "same-request-id")).unwrap()["status"],
+        "REQUEST_ALREADY_CLOSED"
+    );
+    assert_eq!(wake.events().unwrap().len(), 2);
+
+    // Synthetic receipt/timer evidence is confined to this disposable Store.
+    // The coordinator cannot close delivered work while its response is active.
+    use catdesk_wake::{
+        protocol::digest,
+        store::{Phase, Receipt},
+    };
+    let event = events
+        .iter()
+        .find(|event| event.project_id == "catdesk")
+        .unwrap();
+    let lease = wake.host_lock().unwrap();
+    let delivery = wake.claim(event, &lease).unwrap();
+    wake.transition(
+        &event.event_id,
+        lease.owner(),
+        Phase::Submitting,
+        None,
+        None,
+    )
+    .unwrap();
+    let receipt = Receipt {
+        schema_version: 1,
+        event_id: event.event_id.clone(),
+        target_generation: 1,
+        target_digest: bindings["catdesk"].digest.clone(),
+        message_digest: digest(&event.message),
+        sent_utc: catdesk_wake::store::now(),
+        evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+    };
+    wake.record_exact_receipt_timer(&event.event_id, &receipt)
+        .unwrap();
+    wake.transition(
+        &event.event_id,
+        &delivery.owner,
+        Phase::Sent,
+        Some(receipt),
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        crate::web_work::resolve(&control, resolution("catdesk", "completed")).unwrap_err(),
+        "WEB_WORK_COMPLETED_RESPONSE_REQUIRED"
+    );
+    assert_eq!(
+        crate::web_work::resolve(&control, resolution("catdesk", "retired")).unwrap_err(),
+        "WEB_WORK_COMPLETED_RESPONSE_REQUIRED"
+    );
+    wake.complete_timer(&event.event_id).unwrap();
+    drop(lease);
+    let replacement_url = format!("https://chatgpt.com/c/{}", uuid::Uuid::new_v4());
+    web_action(
+        &control,
+        &[
+            "operator",
+            "web",
+            "target",
+            "bind",
+            "--project-id",
+            "catdesk",
+            "--conversation-url",
+            &replacement_url,
+            "--expected-current-target-sha256",
+            &bindings["catdesk"].digest,
+            "--expected-wake-generation",
+            "1",
+        ],
+    )
+    .await;
+    // Closing an existing intent uses its original witness after a target
+    // changes. The preserved receipt cannot be relabelled as the new target.
+    let mut new_witness = resolution("catdesk", "completed");
+    new_witness["expectedTargetGeneration"] = json!(2);
+    new_witness["expectedTargetSha256"] = json!(digest(&replacement_url));
+    assert_eq!(
+        crate::web_work::resolve(&control, new_witness).unwrap_err(),
+        "WEB_WORK_TARGET_CHANGED"
+    );
+    let closed = crate::web_work::resolve(&control, resolution("catdesk", "completed")).unwrap();
+    assert_eq!(closed["taskCompletionVerified"], false);
+    assert_eq!(
+        crate::web_work::resolve(&control, resolution("catdesk", "completed")).unwrap(),
+        closed
+    );
+    let mut wrong_resolution = resolution("alpha", "retired");
+    wrong_resolution["expectedTargetSha256"] = json!(bindings["beta"].digest);
+    assert_eq!(
+        crate::web_work::resolve(&control, wrong_resolution).unwrap_err(),
+        "WEB_WORK_TARGET_CHANGED"
+    );
+    // Crash boundary: the intent was persisted, but publication never happened.
+    // The exact intent can be retired so the project is not permanently blocked.
+    let ledger = crate::web_work_state::WorkLedger::open(&control, "beta").unwrap();
+    let unpublished_id = format!("web-work-{}", digest("beta\0unpublished"));
+    ledger
+        .prepare(
+            "unpublished",
+            &unpublished_id,
+            &digest("unpublished fixture"),
+            &bindings["beta"],
+        )
+        .unwrap();
+    let mut unpublished = resolution("beta", "retired");
+    unpublished["requestId"] = json!("unpublished");
+    assert_eq!(
+        crate::web_work::resolve(&control, unpublished).unwrap()["phase"],
+        "CLOSED"
+    );
+    let mut stale = arguments("alpha", "wrong-generation");
+    stale["expectedTargetGeneration"] = json!(2);
+    assert_eq!(
+        crate::web_work::request(&control, stale).unwrap_err(),
+        "WEB_WORK_TARGET_CHANGED"
+    );
+    let mut stale = arguments("alpha", "wrong-digest");
+    stale["expectedTargetSha256"] = json!("b".repeat(64));
+    assert_eq!(
+        crate::web_work::request(&control, stale).unwrap_err(),
+        "WEB_WORK_TARGET_CHANGED"
+    );
+    // One project's origin drift refuses its request and leaves the other
+    // project's independently registered request usable.
+    assert!(
+        Command::new("git")
+            .arg("-C")
+            .arg(&projects[1].1)
+            .args([
+                "remote",
+                "set-url",
+                "origin",
+                "https://example.test/changed.git"
+            ])
+            .status()
+            .unwrap()
+            .success()
+    );
+    assert!(crate::web_work::request(&control, arguments("alpha", "after-drift")).is_err());
+    assert_eq!(
+        crate::web_work::request(&control, arguments("beta", "after-drift")).unwrap()["status"],
+        "REQUEST_RECORDED"
+    );
+    assert_eq!(wake.events().unwrap().len(), 2);
+    let registry =
+        AutonomousProjectRegistryStoreV1::open_read_only(control.join(".catdesk/projects"))
+            .unwrap();
+    assert!(
+        registry
+            .load_registry()
+            .unwrap()
+            .projects
+            .iter()
+            .all(|project| project.codex_thread_id.is_none())
+    );
+    for (_, workspace) in &projects[1..] {
+        assert!(
+            !workspace.join(".catdesk").exists(),
+            "publication must not write the project checkout"
+        );
+    }
+    assert_eq!(production_snapshot(), production_before);
+    cleanup(&parent);
+}

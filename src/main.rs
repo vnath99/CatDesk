@@ -88,6 +88,8 @@ mod wake_protocol_client;
 mod web_conversation_context;
 #[cfg(all(test, windows))]
 mod web_development_tests;
+mod web_work;
+mod web_work_state;
 mod windows_gui;
 mod windows_protected_fs;
 #[allow(dead_code)]

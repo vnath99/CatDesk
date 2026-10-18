@@ -24,6 +24,13 @@ pub(crate) fn registry_rollover_status(workspace: &Path, project: &str) -> serde
     web::registry_rollover_status(workspace, project)
 }
 
+pub(crate) fn acquire_web_work_lease(
+    workspace: &Path,
+    project: &str,
+) -> Result<web::WebWorkLease, String> {
+    web::acquire_web_work_lease(workspace, project)
+}
+
 const REPAIR_TIMEOUT_MS: u64 = 10 * 60 * 1000;
 const MAX_REPAIR_SCRIPT_BYTES: u64 = 128 * 1024;
 const REPAIR_SUCCESS_MARKER: &str = "WAKE_BRIDGE_ENV_REPAIRED";
@@ -63,6 +70,10 @@ pub(crate) enum WebDevelopmentAction {
         project_id: String,
         event_id: String,
         message_file: PathBuf,
+    },
+    Retry {
+        project_id: String,
+        event_id: String,
     },
     Login {
         project_id: String,
@@ -148,6 +159,13 @@ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction,
             && catdesk_wake::protocol::valid_id(&args[4]) => Ok(WebDevelopmentAction::Login {
                 project_id: args[4].clone(),
             }),
+        Some("retry") if args.len() == 7
+            && args[3] == "--project-id" && args[5] == "--event-id"
+            && catdesk_wake::protocol::valid_id(&args[4])
+            && catdesk_wake::protocol::valid_id(&args[6])
+            && args[6].starts_with("dev-") => Ok(WebDevelopmentAction::Retry {
+                project_id: args[4].clone(), event_id: args[6].clone(),
+            }),
         Some("enqueue") if args.len() == 9
             && args[3] == "--project-id" && args[5] == "--event-id" && args[7] == "--message-file"
             && catdesk_wake::protocol::valid_id(&args[4])
@@ -172,7 +190,7 @@ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction,
         Some("start") if args.len() == 3 => Ok(WebDevelopmentAction::Start),
         Some("stop") if args.len() == 3 => Ok(WebDevelopmentAction::Stop),
         Some("run") if args.len() == 3 => Ok(WebDevelopmentAction::Run),
-        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, login --project-id <id>, enqueue --project-id <id> --event-id <id> --message-file <file>, status, start, stop, or run".into()),
+        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, login --project-id <id>, enqueue --project-id <id> --event-id <id> --message-file <file>, retry --project-id <id> --event-id dev-<id>, status, start, stop, or run".into()),
     }
 }
 
@@ -265,6 +283,84 @@ fn enqueue_web_development(
         json!({"mode":"DEVELOPMENT_UNPROTECTED","status":"QUEUED","eventId":produced.event_id,
         "projectId":project,"targetGeneration":expected.generation,"targetDigest":expected.digest,
         "deliveryProved":false,"naturalReviewProved":false}),
+    )
+}
+
+fn retry_pre_submit_checked(
+    store: &catdesk_wake::store::Store,
+    project: &str,
+    event: &str,
+    expected: &catdesk_wake::protocol::Target,
+) -> Result<(), String> {
+    use catdesk_wake::store::Phase;
+    if !catdesk_wake::protocol::valid_id(project)
+        || !catdesk_wake::protocol::valid_id(event)
+        || !event.starts_with("dev-")
+    {
+        return Err("DEV_RETRY_EVENT_INVALID".into());
+    }
+    if store.config()?.targets.get(project) != Some(expected) {
+        return Err("DEV_RETRY_TARGET_MISMATCH".into());
+    }
+    let delivery = store.delivery(event)?.ok_or("DEV_RETRY_DELIVERY_MISSING")?;
+    if delivery.event.event_id != event || delivery.event.project_id != project {
+        return Err("DEV_RETRY_EVENT_PROJECT_MISMATCH".into());
+    }
+    let prefix = format!("DEVELOPMENT CONTROLLED WORK — project {project} — event {event}. ");
+    if delivery.event.event_type != "test" || !delivery.event.message.starts_with(&prefix) {
+        return Err("DEV_RETRY_NOT_CONTROLLED_EVENT".into());
+    }
+    if delivery.target != *expected || delivery.event.target_generation != expected.generation {
+        return Err("DEV_RETRY_TARGET_MISMATCH".into());
+    }
+    if delivery.phase != Phase::Attention || delivery.receipt.is_some() {
+        return Err("SUBMISSION_RETRY_REFUSED".into());
+    }
+    if !store
+        .events()?
+        .iter()
+        .any(|queued| queued == &delivery.event)
+    {
+        return Err("DEV_RETRY_QUEUE_EVENT_MISSING".into());
+    }
+    // Wake repeats the phase, receipt and exact current-target checks under
+    // its transaction lock. No event is cloned, retargeted or resubmitted here.
+    store.retry_pre_submit(event)
+}
+
+fn retry_web_development(
+    workspace: &Path,
+    project: &str,
+    event: &str,
+) -> Result<serde_json::Value, String> {
+    let workspace = workspace
+        .canonicalize()
+        .map_err(|_| "DEV_WORKSPACE_UNAVAILABLE")?;
+    let root = catdesk_wake::development_runtime::root_for_workspace(&workspace)?
+        .ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    let target = mcp::operator_read_project_web_target(&workspace, project)
+        .map_err(|_| "DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?
+        .ok_or("DEV_RUNTIME_PAIRED_TARGET_REQUIRED")?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        &workspace,
+        &root,
+        &target.url,
+    )?;
+    let store = catdesk_wake::store::Store::open(&root)?;
+    let expected = catdesk_wake::protocol::Target::new(target.generation, target.url)?;
+    if expected.digest != target.sha256 {
+        return Err("DEV_RETRY_TARGET_MISMATCH".into());
+    }
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        &workspace,
+        store.root(),
+        &expected.url,
+    )?;
+    retry_pre_submit_checked(&store, project, event, &expected)?;
+    Ok(
+        json!({"mode":"DEVELOPMENT_UNPROTECTED","status":"RETRY_COMMITTED",
+        "projectId":project,"eventId":event,"targetGeneration":expected.generation,
+        "targetDigest":expected.digest,"deliveryProved":false}),
     )
 }
 
@@ -562,6 +658,10 @@ pub(crate) async fn execute_operator_action(
                     event_id,
                     message_file,
                 } => enqueue_web_development(workspace, &project_id, &event_id, &message_file),
+                WebDevelopmentAction::Retry {
+                    project_id,
+                    event_id,
+                } => retry_web_development(workspace, &project_id, &event_id),
                 WebDevelopmentAction::Login { project_id } => {
                     login_web_development(workspace, &project_id)
                 }
@@ -1422,6 +1522,64 @@ mod tests {
                 WebDevelopmentAction::Login { project_id }
             ))) if project_id == "alpha"
         ));
+        assert!(matches!(
+            parse_operator_action(
+                ["operator", "web-dev-runtime", "retry", "--project-id", "alpha", "--event-id", "dev-alpha-1"]
+                    .map(str::to_string)
+            ),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::Retry { project_id, event_id }
+            ))) if project_id == "alpha" && event_id == "dev-alpha-1"
+        ));
+        for invalid in [
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "retry",
+                "--project-id",
+                "alpha",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "retry",
+                "--project-id",
+                "alpha",
+                "--event-id",
+                "ordinary-1",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "retry",
+                "--project-id",
+                "../alpha",
+                "--event-id",
+                "dev-alpha",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "retry",
+                "--project-id",
+                "alpha",
+                "--event-id",
+                "dev-one",
+                "--event-id",
+                "dev-two",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "retry",
+                "--project-id",
+                "alpha",
+                "--conversation-url",
+                "https://chatgpt.com/c/other",
+            ],
+        ] {
+            assert!(parse_operator_action(invalid.into_iter().map(str::to_string)).is_err());
+        }
         for invalid in [
             vec!["operator", "web-dev-runtime", "login"],
             vec![
@@ -1471,6 +1629,96 @@ mod tests {
             "DEV_RUNTIME_NOT_PREPARED"
         );
         fs::remove_dir(workspace).unwrap();
+    }
+
+    #[test]
+    fn web_development_retry_only_reclaims_exact_pre_submit_project_event() {
+        use catdesk_wake::{
+            protocol::Target,
+            store::{Phase, Store},
+        };
+        let root = std::env::temp_dir().join(format!("catdesk-dev-retry-{}", Uuid::new_v4()));
+        let store = Store::open(&root).unwrap();
+        store.initialize().unwrap();
+        let alpha = store
+            .set_target("alpha", 0, "https://chatgpt.com/c/dev-alpha")
+            .unwrap();
+        let beta = store
+            .set_target("beta", 0, "https://chatgpt.com/c/dev-beta")
+            .unwrap();
+        let lease = store.host_lock().unwrap();
+        for (project, id) in [("alpha", "dev-alpha-1"), ("beta", "dev-beta-1")] {
+            let target = if project == "alpha" { &alpha } else { &beta };
+            let message = format!(
+                "DEVELOPMENT CONTROLLED WORK — project {project} — event {id}. Isolated fixture."
+            );
+            let event = store
+                .produce_expected(id, project, "test", &message, target)
+                .unwrap();
+            store.claim(&event, &lease).unwrap();
+            store
+                .transition(
+                    id,
+                    lease.owner(),
+                    Phase::Attention,
+                    None,
+                    Some("READINESS_ATTENTION".into()),
+                )
+                .unwrap();
+        }
+        drop(lease);
+        assert_eq!(
+            retry_pre_submit_checked(&store, "alpha", "dev-beta-1", &alpha).unwrap_err(),
+            "DEV_RETRY_EVENT_PROJECT_MISMATCH"
+        );
+        assert_eq!(
+            retry_pre_submit_checked(
+                &store,
+                "alpha",
+                "dev-alpha-1",
+                &Target::new(1, "https://chatgpt.com/c/wrong".into()).unwrap()
+            )
+            .unwrap_err(),
+            "DEV_RETRY_TARGET_MISMATCH"
+        );
+        assert_eq!(
+            store.delivery("dev-alpha-1").unwrap().unwrap().phase,
+            Phase::Attention
+        );
+        assert_eq!(
+            store.delivery("dev-beta-1").unwrap().unwrap().phase,
+            Phase::Attention
+        );
+        retry_pre_submit_checked(&store, "alpha", "dev-alpha-1", &alpha).unwrap();
+        assert_eq!(
+            store.delivery("dev-alpha-1").unwrap().unwrap().phase,
+            Phase::Claimed
+        );
+        assert_eq!(
+            store.delivery("dev-beta-1").unwrap().unwrap().phase,
+            Phase::Attention
+        );
+        assert_eq!(
+            retry_pre_submit_checked(&store, "alpha", "dev-alpha-1", &alpha).unwrap_err(),
+            "SUBMISSION_RETRY_REFUSED"
+        );
+        assert_eq!(
+            retry_pre_submit_checked(&store, "beta", "ordinary-1", &beta).unwrap_err(),
+            "DEV_RETRY_EVENT_INVALID"
+        );
+        let canonical = root.canonicalize().unwrap();
+        assert_eq!(
+            canonical.parent(),
+            Some(std::env::temp_dir().canonicalize().unwrap().as_path())
+        );
+        assert!(
+            canonical
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("catdesk-dev-retry-")
+        );
+        fs::remove_dir_all(canonical).unwrap();
     }
 
     fn repair_fixture(label: &str) -> PathBuf {

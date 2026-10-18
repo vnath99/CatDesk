@@ -517,6 +517,108 @@ fn stale_retirement_archives_exact_event_and_is_idempotent() {
 }
 
 #[test]
+fn stale_retirement_expected_is_exact_and_survives_old_target_rollover() {
+    let f = Fixture::new();
+    let s = f.store();
+    let source = s.config().unwrap().targets["catdesk"].clone();
+    let id = "web-work-expected-1";
+    let message = "Review this exact source task.";
+    let body_sha = format!("{:x}", Sha256::digest(message.as_bytes()));
+    // A saved intent that failed before publication has no Wake artifacts.
+    s.retire_stale_expected(id, "catdesk", &source, &body_sha)
+        .unwrap();
+    assert!(s.events().unwrap().is_empty());
+    let event = s
+        .produce_expected(id, "catdesk", "engineering_attention", message, &source)
+        .unwrap();
+    assert_eq!(
+        s.retire_stale_expected(id, "wrong-project", &source, &body_sha)
+            .unwrap_err(),
+        "STALE_RETIREMENT_EXPECTATION_MISMATCH"
+    );
+    assert_eq!(
+        s.retire_stale_expected(id, "catdesk", &source, &"f".repeat(64))
+            .unwrap_err(),
+        "STALE_RETIREMENT_EXPECTATION_MISMATCH"
+    );
+    assert_eq!(s.events().unwrap(), vec![event.clone()]);
+    // The original target remains in history after a project-only rollover.
+    s.set_target("catdesk", source.generation, CHAT_B).unwrap();
+    s.retire_stale_expected(id, "catdesk", &source, &body_sha)
+        .unwrap();
+    assert!(s.events().unwrap().is_empty());
+    let retired = s.delivery(id).unwrap().unwrap();
+    assert_eq!(retired.phase, Phase::Stale);
+    assert_eq!(retired.target, source);
+    let before = fs::read(f.root.join(format!("archive/{id}.json"))).unwrap();
+    s.retire_stale_expected(id, "catdesk", &source, &body_sha)
+        .unwrap();
+    assert_eq!(
+        before,
+        fs::read(f.root.join(format!("archive/{id}.json"))).unwrap()
+    );
+}
+
+#[test]
+fn stale_retirement_expected_refuses_partial_timer_or_submitting_evidence() {
+    use catdesk_wake::store::{ResponseState, TurnTimer};
+    let f = Fixture::new();
+    let s = f.store();
+    let target = s.config().unwrap().targets["catdesk"].clone();
+    let id = "web-work-partial-1";
+    let message = "One exact task.";
+    let body_sha = format!("{:x}", Sha256::digest(message.as_bytes()));
+    let timer_path = f.root.join(format!("turns/{id}.json"));
+    let timer = TurnTimer {
+        schema_version: 1,
+        event_id: id.into(),
+        project_id: "catdesk".into(),
+        target_generation: target.generation,
+        target_digest: target.digest.clone(),
+        started_utc: now(),
+        completed_utc: None,
+        response_state: ResponseState::Observing,
+    };
+    fs::write(&timer_path, serde_json::to_vec(&timer).unwrap()).unwrap();
+    assert_eq!(
+        s.retire_stale_expected(id, "catdesk", &target, &body_sha)
+            .unwrap_err(),
+        "STALE_RETIREMENT_REFUSED"
+    );
+    fs::remove_file(timer_path).unwrap();
+    let submission_start = f.root.join(format!("logs/submission-start-{id}.json"));
+    fs::write(&submission_start, b"{}").unwrap();
+    assert_eq!(
+        s.retire_stale_expected(id, "catdesk", &target, &body_sha)
+            .unwrap_err(),
+        "STALE_RETIREMENT_REFUSED"
+    );
+    fs::remove_file(submission_start).unwrap();
+    let event = s
+        .produce_expected(id, "catdesk", "engineering_attention", message, &target)
+        .unwrap();
+    let lease = s.host_lock().unwrap();
+    s.claim(&event, &lease).unwrap();
+    s.transition(id, lease.owner(), Phase::Submitting, None, None)
+        .unwrap();
+    assert_eq!(
+        s.retire_stale_expected(id, "catdesk", &target, &body_sha)
+            .unwrap_err(),
+        "STALE_RETIREMENT_REFUSED"
+    );
+    assert_eq!(s.delivery(id).unwrap().unwrap().phase, Phase::Submitting);
+    assert_eq!(s.events().unwrap(), vec![event]);
+    let other_id = "web-work-wrong-type";
+    s.produce_expected(other_id, "catdesk", "test", message, &target)
+        .unwrap();
+    assert_eq!(
+        s.retire_stale_expected(other_id, "catdesk", &target, &body_sha)
+            .unwrap_err(),
+        "STALE_RETIREMENT_EXPECTATION_MISMATCH"
+    );
+}
+
+#[test]
 fn stale_retirement_refuses_submitting_and_sent_boundaries() {
     let f = Fixture::new();
     let s = f.store();

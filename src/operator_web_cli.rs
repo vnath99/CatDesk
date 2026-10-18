@@ -375,6 +375,15 @@ pub(crate) fn registry_rollover_status(workspace: &Path, project: &str) -> Value
     }
 }
 
+pub(crate) use rollover::WorkLease as WebWorkLease;
+
+pub(crate) fn acquire_web_work_lease(
+    workspace: &Path,
+    project: &str,
+) -> Result<WebWorkLease, String> {
+    rollover::acquire_web_work_lease(workspace, project)
+}
+
 fn rollover_status_read_only(workspace: &Path, project: &str) -> Result<Option<Value>, String> {
     if !catdesk_wake::protocol::valid_id(project) {
         return Err("WEB_PROJECT_INVALID".into());

@@ -5,6 +5,7 @@ use crate::{
     delegated::autonomy_projects::{AutonomousProjectRegistryStoreV1, AutonomousProjectV1},
     mcp,
     web_conversation_context::{ConversationKey, Observation, VisibleSourceKind, WebContextStore},
+    web_work_state::WorkLedger,
 };
 use catdesk_wake::{
     protocol::{Target, digest, valid_id},
@@ -175,6 +176,111 @@ impl HandoffRequest {
 struct ProjectStore {
     root: PathBuf,
     _lock: File,
+}
+
+/// Hold this project's existing rollover lock across a central work request
+/// or resolution. Rollover takes this lock before its target and registry
+/// reads, so callers must acquire this lease before those same reads.
+pub(crate) struct WorkLease {
+    _store: ProjectStore,
+    approved_target: Option<Target>,
+}
+
+impl WorkLease {
+    /// A completed continuation authorizes only its proved generation.
+    /// Manual target binding does not take ProjectStore's lock, so the caller
+    /// rechecks its selected target against this witness before changing work.
+    pub(crate) fn check_target(&self, current: &Target) -> Result<(), String> {
+        current.validate()?;
+        if self
+            .approved_target
+            .as_ref()
+            .is_some_and(|approved| approved != current)
+        {
+            return Err("WEB_WORK_ROLLOVER_PENDING".into());
+        }
+        Ok(())
+    }
+}
+
+fn continuation_ready_for_work(
+    store: &ProjectStore,
+    wake: &Store,
+    workspace: &Path,
+    project: &str,
+    current: &Target,
+    record: &Record,
+) -> Result<(), String> {
+    if record.phase != Phase::ContinuationQueued
+        || record.context_meter_status != ContextMeterStatus::Recorded
+        || record.bound_target.as_ref() != Some(current)
+        || record.handoff_event_id.is_none()
+    {
+        return Err("WEB_WORK_ROLLOVER_PENDING".into());
+    }
+    let request = store
+        .handoff_request()
+        .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
+        .ok_or("WEB_WORK_ROLLOVER_PENDING")?;
+    let registered =
+        registered_project(workspace, project).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
+    let delivery = wake
+        .delivery(&record.continuation_event_id)
+        .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
+        .ok_or("WEB_WORK_ROLLOVER_PENDING")?;
+    let timer = wake
+        .timer(&record.continuation_event_id)
+        .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
+        .ok_or("WEB_WORK_ROLLOVER_PENDING")?;
+    if continuation_task_from_proof(record, &request, &registered, current, &delivery, &timer)
+        .ok()
+        .flatten()
+        .is_none()
+    {
+        return Err("WEB_WORK_ROLLOVER_PENDING".into());
+    }
+    Ok(())
+}
+
+pub(crate) fn acquire_web_work_lease(workspace: &Path, project: &str) -> Result<WorkLease, String> {
+    let store = ProjectStore::open(workspace, project)?;
+    // A new context intent can precede its handoff file, including after a
+    // previous rollover completed. Reserve either crash window for recovery.
+    let context_root = workspace.join(".catdesk/web-context");
+    if context_root
+        .try_exists()
+        .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
+    {
+        let meter =
+            WebContextStore::open(&context_root).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
+        if let Some(key) = meter
+            .active_key(project)
+            .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
+            && meter
+                .pressure(&key)
+                .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
+                .rollover_intent
+                .is_some()
+        {
+            return Err("WEB_WORK_ROLLOVER_PENDING".into());
+        }
+    }
+    let approved_target = match store.active()? {
+        None if store.handoff_request()?.is_none() => None,
+        Some(record) if record.phase == Phase::ContinuationQueued => {
+            let current = paired(workspace, project).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
+            let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)
+                .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
+            let wake = Store::open(&root).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
+            continuation_ready_for_work(&store, &wake, workspace, project, &current, &record)?;
+            Some(current)
+        }
+        _ => return Err("WEB_WORK_ROLLOVER_PENDING".into()),
+    };
+    Ok(WorkLease {
+        _store: store,
+        approved_target,
+    })
 }
 
 fn plain(path: &Path, directory: bool) -> Result<(), String> {
@@ -694,6 +800,14 @@ pub(super) fn request_handoff(
         return Err("WEB_HANDOFF_TASK_INVALID".into());
     }
     let store = ProjectStore::open(workspace, project)?;
+    let work = WorkLedger::status(workspace, project);
+    match work["status"].as_str() {
+        Some("UNOBSERVED" | "DURABLE_SNAPSHOT") => {}
+        _ => return Err("WEB_HANDOFF_WORK_INTENT_UNAVAILABLE".into()),
+    }
+    if !work["active"].is_null() && work["active"]["eventId"].as_str() != Some(source_task_id) {
+        return Err("WEB_HANDOFF_WORK_INTENT_CHANGED".into());
+    }
     let source = paired(workspace, project)?;
     let active = store.active()?;
     if let Some(active) = &active
@@ -1825,6 +1939,95 @@ mod tests {
             blockers: Vec::new(),
         }
     }
+
+    #[test]
+    fn web_work_lease_excludes_rollover_and_refuses_pending_handoff() {
+        let root = fixture();
+        let lease = acquire_web_work_lease(&root, "alpha").unwrap();
+        assert_eq!(
+            ProjectStore::open(&root, "alpha").err().unwrap(),
+            "WEB_ROLLOVER_PROJECT_BUSY"
+        );
+        drop(lease);
+        let request = handoff_request(&root);
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        store.save_handoff_request(&request).unwrap();
+        drop(store);
+        assert_eq!(
+            acquire_web_work_lease(&root, "alpha").err().unwrap(),
+            "WEB_WORK_ROLLOVER_PENDING"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn web_work_lease_refuses_context_intent_before_handoff_file_exists() {
+        use crate::web_conversation_context::{BrowserCoverageObservation, ContextPressurePolicy};
+
+        let root = fixture();
+        fs::create_dir(root.join(".catdesk")).unwrap();
+        let meter = WebContextStore::open(root.join(".catdesk/web-context")).unwrap();
+        let key = ConversationKey {
+            project_id: "alpha".into(),
+            conversation_url: "https://chatgpt.com/c/old".into(),
+            target_generation: 1,
+        };
+        meter.bind_observed_target(key.clone(), None).unwrap();
+        meter
+            .configure_policy(
+                "alpha",
+                ContextPressurePolicy {
+                    automatic_rollover_enabled: true,
+                    incomplete_history_rollover: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        meter
+            .record_browser_coverage(
+                &key,
+                BrowserCoverageObservation {
+                    initial_history_gap: true,
+                    identity_gap: false,
+                    text_gap: false,
+                    overflow_gap: false,
+                },
+            )
+            .unwrap();
+        assert!(
+            meter
+                .request_rollover_if_due(&key, &key.target_sha256(), "task-a", true, 100)
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(
+            acquire_web_work_lease(&root, "alpha").err().unwrap(),
+            "WEB_WORK_ROLLOVER_PENDING"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn web_work_handoff_rechecks_active_event_under_project_lock() {
+        let root = fixture();
+        fs::create_dir(root.join(".catdesk")).unwrap();
+        let source = Target::new(1, "https://chatgpt.com/c/old".into()).unwrap();
+        let event_id = format!("web-work-{}", digest("alpha\0central-task"));
+        WorkLedger::open(&root, "alpha")
+            .unwrap()
+            .prepare(
+                "central-task",
+                &event_id,
+                &digest("bounded request"),
+                &source,
+            )
+            .unwrap();
+        assert_eq!(
+            request_handoff(&root, "alpha", "older-task").err().unwrap(),
+            "WEB_HANDOFF_WORK_INTENT_CHANGED"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn handoff_request_is_durable_and_wake_publication_is_idempotent_after_restart() {
         let root = fixture();
@@ -2316,6 +2519,7 @@ mod tests {
         record.bound_target = Some(current.clone());
         record.handoff_event_id = Some(request.event_id.clone());
         record.continuation_event_id = format!("web-continue-{}", record.intent_id);
+        record.context_meter_status = ContextMeterStatus::Recorded;
         let project_store = ProjectStore::open(&root, "alpha").unwrap();
         project_store.save_handoff_request(&request).unwrap();
         project_store.save(&record).unwrap();
@@ -2345,6 +2549,13 @@ mod tests {
             request.source
         );
         assert_eq!(wake.set_target("alpha", 1, &current.url).unwrap(), current);
+        let pending_store = ProjectStore::open(&root, "alpha").unwrap();
+        assert_eq!(
+            continuation_ready_for_work(&pending_store, &wake, &root, "alpha", &current, &record,)
+                .unwrap_err(),
+            "WEB_WORK_ROLLOVER_PENDING"
+        );
+        drop(pending_store);
         let message = continuation_message(&record, &current);
         let event = wake
             .produce_expected(
@@ -2385,6 +2596,20 @@ mod tests {
         )
         .unwrap();
         wake.complete_timer(&event.event_id).unwrap();
+        let completed_store = ProjectStore::open(&root, "alpha").unwrap();
+        continuation_ready_for_work(&completed_store, &wake, &root, "alpha", &current, &record)
+            .unwrap();
+        let approved = WorkLease {
+            _store: completed_store,
+            approved_target: Some(current.clone()),
+        };
+        approved.check_target(&current).unwrap();
+        let changed = Target::new(3, "https://chatgpt.com/c/later".into()).unwrap();
+        assert_eq!(
+            approved.check_target(&changed).unwrap_err(),
+            "WEB_WORK_ROLLOVER_PENDING"
+        );
+        drop(approved);
         assert_eq!(
             completed_continuation_task_anchor(&root, &wake, "alpha", &current).unwrap(),
             Some("task-a".into())

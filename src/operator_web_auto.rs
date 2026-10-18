@@ -6,6 +6,7 @@ use crate::{
     delegated::autonomy_projects::AutonomousProjectRegistryStoreV1,
     state::SharedState,
     web_conversation_context::{ConversationKey, PressureStatus, WebContextStore},
+    web_work_state::WorkLedger,
 };
 use catdesk_wake::{
     protocol::{Target, valid_id},
@@ -80,6 +81,59 @@ pub(super) fn source_task_anchor(
     key: &ConversationKey,
     pressure: &PressureStatus,
 ) -> Result<Option<String>, String> {
+    let work = WorkLedger::status(workspace, project);
+    match work["status"].as_str() {
+        Some("UNOBSERVED" | "DURABLE_SNAPSHOT") => {}
+        _ => return Err("WEB_AUTO_WORK_INTENT_UNAVAILABLE".into()),
+    }
+    if !work["active"].is_null() {
+        let event_id = work["active"]["eventId"]
+            .as_str()
+            .filter(|id| valid_id(id))
+            .ok_or("WEB_AUTO_WORK_INTENT_INVALID")?;
+        let generation = work["active"]["targetGeneration"]
+            .as_u64()
+            .ok_or("WEB_AUTO_WORK_INTENT_INVALID")?;
+        let target_digest = work["active"]["targetSha256"]
+            .as_str()
+            .ok_or("WEB_AUTO_WORK_INTENT_INVALID")?;
+        let message_digest = work["active"]["messageSha256"]
+            .as_str()
+            .ok_or("WEB_AUTO_WORK_INTENT_INVALID")?;
+        if generation != source.generation || target_digest != source.digest {
+            return match rollover::completed_continuation_task_anchor(
+                workspace, wake, project, source,
+            )? {
+                Some(task_id) if task_id == event_id => Ok(Some(task_id)),
+                Some(_) => Err("WEB_AUTO_WORK_INTENT_LINEAGE_CHANGED".into()),
+                None => Ok(None),
+            };
+        }
+        let Some(delivery) = wake.delivery(event_id)? else {
+            return Ok(None);
+        };
+        let Some(timer) = wake.timer(event_id)? else {
+            return Ok(None);
+        };
+        if delivery.phase != Phase::Sent
+            || delivery.receipt.is_none()
+            || delivery.event.event_id != event_id
+            || delivery.event.project_id != project
+            || delivery.event.event_type != "engineering_attention"
+            || delivery.event.target_generation != source.generation
+            || delivery.target != *source
+            || delivery.message_digest != message_digest
+            || timer.event_id != event_id
+            || timer.project_id != project
+            || timer.target_generation != source.generation
+            || timer.target_digest != source.digest
+            || timer.response_state != ResponseState::Complete
+            || timer.completed_utc.is_none()
+        {
+            return Ok(None);
+        }
+        return Ok(Some(event_id.into()));
+    }
     if let Some(intent) = &pressure.rollover_intent
         && intent.key == *key
         && valid_id(&intent.source_task_id)
@@ -488,7 +542,7 @@ mod tests {
     }
 
     #[test]
-    fn task_anchor_uses_completed_exact_wake_event_and_skips_rollover_lineage() {
+    fn web_work_pending_overrides_older_completed_anchor_and_completed_work_wins() {
         let root = std::env::temp_dir().join(format!("web-auto-anchor-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir(&root).unwrap();
         let wake = Store::open_scoped_for_test(&root.join("wake"), &root).unwrap();
@@ -529,5 +583,68 @@ mod tests {
             Some("task-review".into())
         );
         assert_eq!(completed_task_anchor(&wake, "beta", &source).unwrap(), None);
+        std::fs::create_dir(root.join(".catdesk")).unwrap();
+        let key = ConversationKey {
+            project_id: "alpha".into(),
+            conversation_url: source.url.clone(),
+            target_generation: source.generation,
+        };
+        let meter = WebContextStore::open(root.join(".catdesk/web-context")).unwrap();
+        meter.bind_observed_target(key.clone(), None).unwrap();
+        let pressure = meter.pressure(&key).unwrap();
+        assert_eq!(
+            source_task_anchor(&root, &wake, "alpha", &source, &key, &pressure).unwrap(),
+            Some("task-review".into())
+        );
+
+        let request_id = "central-task";
+        let event_id = format!("web-work-{}", digest("alpha\0central-task"));
+        let message = "Continue the registered project task";
+        let ledger = WorkLedger::open(&root, "alpha").unwrap();
+        ledger
+            .prepare(request_id, &event_id, &digest(message), &source)
+            .unwrap();
+        let event = wake
+            .produce_expected(
+                &event_id,
+                "alpha",
+                "engineering_attention",
+                message,
+                &source,
+            )
+            .unwrap();
+        assert_eq!(
+            source_task_anchor(&root, &wake, "alpha", &source, &key, &pressure).unwrap(),
+            None,
+            "pending Web work must not inherit an older completed task anchor"
+        );
+        let delivery = wake.claim(&event, &lease).unwrap();
+        wake.transition(&event_id, lease.owner(), Phase::Submitting, None, None)
+            .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: event_id.clone(),
+            target_generation: source.generation,
+            target_digest: source.digest.clone(),
+            message_digest: digest(message),
+            sent_utc: catdesk_wake::store::now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        wake.record_exact_receipt_timer(&event_id, &receipt)
+            .unwrap();
+        wake.transition(
+            &event_id,
+            delivery.owner.as_str(),
+            Phase::Sent,
+            Some(receipt),
+            None,
+        )
+        .unwrap();
+        wake.complete_timer(&event_id).unwrap();
+        assert_eq!(
+            source_task_anchor(&root, &wake, "alpha", &source, &key, &pressure).unwrap(),
+            Some(event_id),
+            "the active completed work request must replace older anchors"
+        );
     }
 }

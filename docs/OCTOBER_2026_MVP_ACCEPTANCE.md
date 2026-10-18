@@ -1,5 +1,37 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 18 central Web work requests (TESTED_LOCAL_SOURCE; LIVE UNVERIFIED)
+
+SupervisorOnly MCP now exposes `catdesk_web_work_request` and
+`catdesk_web_work_resolve`. A request uses the registered project and exact
+paired target witness, publishes through the existing Wake queue, and retains
+one active work intent per project. Same-ID retries are idempotent; a different
+request waits for explicit resolution. Status separates the active intent from
+transport records. Existing native sessions keep their writers and checkouts.
+
+Resolution uses the original request target, including after rollover. A
+completed disposition requires its exact SENT receipt and COMPLETE response
+timer, but remains a coordinator report, with `taskCompletionVerified:false`.
+Retirement handles exact unsent events and intents saved before publication;
+submission ambiguity and mismatched evidence refuse closure. History remains
+preserved. A project rollover lease prevents overlapping handoff/continuation
+and new work; automatic rollover selects the current work intent as its task
+anchor rather than an older completed request.
+
+Focused verification passed: Web work 13/13, development 5/5, continuation
+7/7 and Wake retirement 6/6. The filters overlap; no full regression is claimed.
+Strict root/Wake Clippy and formatting passed. The final unchanged-source
+witness and logs are in private `central-work-verification.json`, verified
+at `2026-10-18T05:54:20Z`. An earlier verification detected a source change
+during the run and was not accepted; the final run retained matching hashes.
+The standalone application was not rebuilt while its prior executable held
+the login session. The live login remains at
+`LOGIN_BROWSER_OPEN`, awaiting the operator's existing sign-in confirmation.
+No new browser delivery, context capture, rollover, installation or remote CI
+acceptance is claimed by this source change. The running login executable is
+preserved while test executables are compiled separately. Other project chats
+can continue; no pause is required for this development work.
+
 ## October 18 guarded development login (TESTED_LOCAL_SOURCE; MANUAL_SIGN_IN_PENDING)
 
 `operator web-dev-runtime login --project-id PROJECT` now opens the selected
