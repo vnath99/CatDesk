@@ -1911,10 +1911,120 @@ pub fn bootstrap_conversation(
     }
 }
 
+fn source_snapshot_payload(
+    value: serde_json::Value,
+    project_id: &str,
+    source: &Target,
+) -> Result<serde_json::Value> {
+    if value.get("stage").and_then(|v| v.as_str()) != Some("SOURCE_SNAPSHOT")
+        || value.get("projectId").and_then(|v| v.as_str()) != Some(project_id)
+        || value.get("sourceGeneration").and_then(|v| v.as_u64()) != Some(source.generation)
+        || value.get("sourceDigest").and_then(|v| v.as_str()) != Some(source.digest.as_str())
+        || !value.as_object().is_some_and(|map| map.len() == 5)
+    {
+        return Err("SOURCE_SNAPSHOT_SCOPE_INVALID".into());
+    }
+    let snapshot = value.get("snapshot").ok_or("SOURCE_SNAPSHOT_INVALID")?;
+    if !snapshot
+        .get("messages")
+        .and_then(|v| v.as_array())
+        .is_some_and(|v| v.len() <= 16)
+        || snapshot
+            .get("truncated")
+            .and_then(|v| v.as_bool())
+            .is_none()
+        || !snapshot.get("coverage").is_some_and(|v| v.is_object())
+    {
+        return Err("SOURCE_SNAPSHOT_INVALID".into());
+    }
+    Ok(snapshot.clone())
+}
+
+/// Private, bounded source text for the context meter. This never sends a USER
+/// message and must not be returned by a public status endpoint. The installed
+/// browser owner and exact project generation remain mandatory.
+pub fn snapshot_conversation(
+    store: &Store,
+    project_id: &str,
+    source: &Target,
+) -> Result<serde_json::Value> {
+    source.validate()?;
+    if !crate::protocol::valid_id(project_id) {
+        return Err("SOURCE_SNAPSHOT_REQUEST_INVALID".into());
+    }
+    let _lease = store.host_lock()?;
+    ensure_bootstrap_source_available(store, project_id, source)?;
+    let installed = installed_bootstrap_directory(store)?;
+    let adapter_bytes =
+        std::fs::read(installed.join("adapter.py")).map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?;
+    let bridge_bytes = std::fs::read(installed.join("wake_bridge.py"))
+        .map_err(|_| "BROWSER_PRIMITIVES_UNAVAILABLE")?;
+    if !adapter_bytes
+        .windows(b"def source_snapshot(".len())
+        .any(|v| v == b"def source_snapshot(")
+        || !bridge_bytes
+            .windows(b"roleTurnHash".len())
+            .any(|v| v == b"roleTurnHash")
+    {
+        return Err("SOURCE_SNAPSHOT_INSTALLED_PACKAGE_UNSUPPORTED".into());
+    }
+    let mut adapter = Adapter::spawn_from_installed(store.root(), &installed)?;
+    adapter.send(serde_json::json!({"snapshot":true,"projectId":project_id,"source":source}))?;
+    let deadline = Instant::now() + Duration::from_secs(180);
+    loop {
+        if Instant::now() >= deadline {
+            return Err("SOURCE_SNAPSHOT_TIMEOUT".into());
+        }
+        match adapter.output.recv_timeout(Duration::from_millis(250)) {
+            Ok(Ok(value)) => match value.get("stage").and_then(|v| v.as_str()) {
+                Some("SOURCE_SNAPSHOT") => {
+                    ensure_bootstrap_source_available(store, project_id, source)?;
+                    let snapshot = source_snapshot_payload(value, project_id, source)?;
+                    let _ = adapter.allow_graceful_exit(Duration::from_secs(5));
+                    return Ok(snapshot);
+                }
+                Some(
+                    "CDP_REUSE_BEGIN" | "CDP_REUSE_DONE" | "CDP_ACTIVATE_BEGIN"
+                    | "CDP_ACTIVATE_DONE",
+                ) => {}
+                Some("ATTENTION") => {
+                    return Err(value
+                        .get("reason")
+                        .and_then(|v| v.as_str())
+                        .filter(|v| crate::protocol::valid_id(v))
+                        .unwrap_or("SOURCE_SNAPSHOT_ATTENTION")
+                        .into());
+                }
+                _ => return Err("SOURCE_SNAPSHOT_PROTOCOL_INVALID".into()),
+            },
+            Ok(Err(error)) => return Err(error),
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err("BROWSER_ADAPTER_EXITED".into());
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+    }
+}
+
 #[cfg(test)]
 mod bootstrap_runtime_tests {
     use super::*;
     use crate::protocol::Event;
+
+    #[test]
+    fn private_source_snapshot_is_bound_to_exact_project_and_generation() {
+        let target = source();
+        let value = serde_json::json!({"stage":"SOURCE_SNAPSHOT","projectId":"alpha",
+            "sourceGeneration":target.generation,"sourceDigest":target.digest,
+            "snapshot":{"messages":[],"truncated":true,"coverage":{"anchorStability":"UNVERIFIED"}}});
+        assert!(source_snapshot_payload(value.clone(), "alpha", &target).is_ok());
+        assert!(source_snapshot_payload(value.clone(), "beta", &target).is_err());
+        let changed = Target::new(target.generation + 1, target.url.clone()).unwrap();
+        assert!(source_snapshot_payload(value.clone(), "alpha", &changed).is_err());
+        let mut malformed = value;
+        malformed["snapshot"]["messages"] = serde_json::json!(vec![serde_json::Value::Null; 17]);
+        assert!(source_snapshot_payload(malformed, "alpha", &target).is_err());
+    }
 
     fn source() -> Target {
         Target::new(7, "https://chatgpt.com/c/source-123".into()).expect("source")

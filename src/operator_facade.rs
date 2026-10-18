@@ -13,6 +13,9 @@ use serde_json::json;
 use crate::command::{self, CommandResult};
 use crate::mcp;
 
+#[path = "operator_web_cli.rs"]
+mod web;
+
 const REPAIR_TIMEOUT_MS: u64 = 10 * 60 * 1000;
 const MAX_REPAIR_SCRIPT_BYTES: u64 = 128 * 1024;
 const REPAIR_SUCCESS_MARKER: &str = "WAKE_BRIDGE_ENV_REPAIRED";
@@ -21,6 +24,7 @@ const MAX_REPAIR_OUTPUT_BYTES: usize = 64 * 1024;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum OperatorAction {
     Codex(crate::operator_codex_cli::OperatorCodexAction),
+    Web(web::WebAction),
     SetWakeTarget {
         conversation_url: String,
         expected_current_target_sha256: Option<String>,
@@ -68,6 +72,7 @@ pub(crate) fn parse_operator_action(
         return Ok(None);
     }
     match args.get(1).map(String::as_str) {
+        Some("web") => web::parse(&args).map(OperatorAction::Web).map(Some),
         Some("codex") => crate::operator_codex_cli::parse_action(&args)
             .map(OperatorAction::Codex)
             .map(Some),
@@ -325,6 +330,7 @@ pub(crate) async fn execute_operator_action(
     workspace: &Path,
 ) -> Result<serde_json::Value, String> {
     match action {
+        OperatorAction::Web(action) => web::execute(action, workspace),
         OperatorAction::Codex(action) => {
             crate::operator_codex_cli::execute_action(action, workspace).await
         }
