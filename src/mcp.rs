@@ -89,6 +89,7 @@ const MAX_WAKE_BRIDGE_SCRIPT_BYTES: u64 = 256 * 1024;
 const MAX_WAKE_CONFIG_BYTES: u64 = 16 * 1024;
 const MAX_WAKE_TARGET_BYTES: usize = 512;
 const QUEUE_REVIEW_PACKAGE_READ_TOOL: &str = "catdesk_codex_queue_review_package_read";
+const QUEUE_REVIEW_INVITATION_PUBLISH_TOOL: &str = "catdesk_codex_queue_review_invitation_publish";
 static QUEUE_REVIEW_PACKAGE_READ_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 struct QueueReviewReadLease<'a>(&'a AtomicBool);
@@ -765,6 +766,22 @@ async fn handle_tools_list(
                 },
                 "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false }
             }));
+            tools.push(json!({
+                "name": QUEUE_REVIEW_INVITATION_PUBLISH_TOOL,
+                "title": "Publish one prepared project review invitation",
+                "description": "Queue the exact prepared Codex review invitation to its registered project's independent Wake target. Rechecks package, active local disclosure, project binding and target generation. A returned Wake event is not browser delivery, independent review, ChatGPT acknowledgement or next-task authorization.",
+                "inputSchema": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "projectId": { "type": "string", "description": "Exact registered project ID" },
+                        "receiptId": { "type": "string", "description": "Canonical queue receipt UUID" },
+                        "expectedPackageSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Exact verified review package SHA-256" }
+                    },
+                    "required": ["projectId", "receiptId", "expectedPackageSha256"]
+                },
+                "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": false }
+            }));
         }
         tools.push(json!({
             "name": "search",
@@ -1361,6 +1378,11 @@ where
                             queue_reader,
                         )
                         .await
+                    }
+                    QUEUE_REVIEW_INVITATION_PUBLISH_TOOL
+                        if matches!(tool_mode, ToolMode::SupervisorOnly) =>
+                    {
+                        handle_queue_review_invitation_publish(req, workspace_root).await
                     }
                     "search" => handle_search_text(req, workspace_root),
                     "project_memory_read" => handle_project_memory_read(req, workspace_root),
@@ -8992,6 +9014,92 @@ where
     }
 }
 
+async fn handle_queue_review_invitation_publish(
+    req: &JsonRpcRequest,
+    workspace_root: &str,
+) -> JsonRpcResponse {
+    let arguments = tool_arguments(req);
+    let Some(object) = arguments.as_object() else {
+        return tool_error_response(req, "Review invitation arguments must be an object".into());
+    };
+    if object.keys().any(|key| {
+        !matches!(
+            key.as_str(),
+            "projectId" | "receiptId" | "expectedPackageSha256"
+        )
+    }) {
+        return tool_error_response(req, "Unknown review invitation argument".into());
+    }
+    let Some(project_id) = object.get("projectId").and_then(Value::as_str) else {
+        return tool_error_response(req, "Missing projectId".into());
+    };
+    let Some(receipt_id) = object.get("receiptId").and_then(Value::as_str) else {
+        return tool_error_response(req, "Missing receiptId".into());
+    };
+    let Some(expected_sha256) = object.get("expectedPackageSha256").and_then(Value::as_str) else {
+        return tool_error_response(req, "Missing expectedPackageSha256".into());
+    };
+    let workspace = workspace_root.to_owned();
+    let project_id = project_id.to_owned();
+    let receipt_id = receipt_id.to_owned();
+    let expected_sha256 = expected_sha256.to_owned();
+    let outcome = tokio::task::spawn_blocking(move || {
+        crate::operator_codex_cli::publish_review_invitation_for_mcp(
+            Path::new(&workspace),
+            &project_id,
+            &receipt_id,
+            &expected_sha256,
+        )
+    })
+    .await;
+    match outcome {
+        Ok(Ok(result)) => {
+            let accepted = result.get("eventAccepted").and_then(Value::as_bool) == Some(true);
+            let message = if accepted {
+                "Exact project review event accepted by Wake; delivery and review remain unproved"
+            } else {
+                "Review event outcome requires reconciliation; no delivery or review is claimed"
+            };
+            tool_success_response_with_structured(req, message.into(), result)
+        }
+        Ok(Err(reason)) => tool_error_response(req, review_invitation_refusal(&reason).into()),
+        Err(_) => tool_error_response(req, review_invitation_refusal("").into()),
+    }
+}
+
+/// Central callers need an actionable gate, but queue errors can contain local
+/// paths. Only these known fixed phrases cross the MCP boundary.
+fn review_invitation_refusal(reason: &str) -> &'static str {
+    if reason.contains("prepared invitation is required") {
+        "REVIEW_INVITATION_NOT_PREPARED: Prepare the exact verified package invitation locally."
+    } else if reason.contains("active local disclosure grant is required")
+        || reason.contains("disclosure grant is outside its lifetime")
+        || reason.contains("disclosure was revoked")
+    {
+        "REVIEW_DISCLOSURE_REQUIRED: Refresh the exact local disclosure grant."
+    } else if reason == "WAKE_OWNER_NOT_SELECTED"
+        || reason == "TARGET_NOT_CONFIGURED"
+        || reason == "WAKE_PROJECT_NOT_REGISTERED"
+        || reason == "WAKE_ACTIVATION_INVALID"
+        || reason == "WAKE_PROJECT_TARGET_MISMATCH"
+        || reason.contains("registered ChatGPT target is absent")
+        || reason.contains("registered target digest is absent")
+        || reason.contains("registered target is outside exact Wake scope")
+    {
+        "REVIEW_WAKE_TARGET_REQUIRED: Pair this project to its current independent Wake target."
+    } else if reason == "WAKE_HISTORICAL_EVENT_RETAINED" {
+        "REVIEW_WAKE_GENERATION_NOT_READY: Wait past the target change before first preparation; an older persisted invitation needs a new receipt."
+    } else if reason.contains("bound package is unavailable")
+        || reason.contains("receipt target changed")
+        || reason.contains("bound package")
+        || reason.contains("expected package")
+    {
+        "REVIEW_PACKAGE_CHANGED: Verify the exact package, receipt, and target binding again."
+    } else {
+        "REVIEW_PUBLICATION_REFUSED: Inspect local queue and Wake status; no delivery is claimed."
+    }
+}
+
 fn project_memory_structured(
     tool_name: &str,
     output: project_memory::ProjectMemoryOutput,
@@ -16581,6 +16689,84 @@ hello world"
                 .contains("Invalid offset")
         );
         assert!(!root.exists());
+    }
+
+    #[tokio::test]
+    async fn review_invitation_publisher_is_supervisor_only_and_accepts_no_target_override() {
+        let list = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!("review-publish-list")),
+            method: "tools/list".into(),
+            params: json!({}),
+        };
+        let root = std::env::temp_dir().join(format!("catdesk-review-publish-{}", Uuid::new_v4()));
+        let root_str = root.to_string_lossy();
+        for mode in [Mode::Computer, Mode::Browser] {
+            for tool_mode in [ToolMode::MultiTools, ToolMode::SupervisorOnly] {
+                let exposed =
+                    mode.computer_enabled() && matches!(tool_mode, ToolMode::SupervisorOnly);
+                let listed = handle_tools_list(&list, mode, tool_mode, &None).await;
+                let tools = listed.result.as_ref().unwrap()["tools"].as_array().unwrap();
+                assert_eq!(
+                    tools.iter().any(|tool| {
+                        tool["name"].as_str() == Some(QUEUE_REVIEW_INVITATION_PUBLISH_TOOL)
+                    }),
+                    exposed
+                );
+            }
+        }
+        let invalid = handle_tools_call(
+            &tool_call_request(
+                QUEUE_REVIEW_INVITATION_PUBLISH_TOOL,
+                json!({
+                    "projectId":"alpha",
+                    "receiptId":Uuid::new_v4().to_string(),
+                    "expectedPackageSha256":"a".repeat(64),
+                    "conversationUrl":"https://chatgpt.com/c/override"
+                }),
+            ),
+            &root_str,
+            0,
+            Mode::Computer,
+            ToolMode::SupervisorOnly,
+            false,
+            &None,
+        )
+        .await;
+        assert_tool_error("publisher forbids target override", &invalid);
+        assert!(
+            serde_json::to_string(&invalid.result)
+                .unwrap()
+                .contains("Unknown review invitation argument")
+        );
+        assert!(!root.exists());
+    }
+
+    #[test]
+    fn review_invitation_refusals_expose_only_bounded_prerequisites() {
+        assert!(
+            review_invitation_refusal(
+                "CODEX_QUEUE_REVIEW_PUBLISH: prepared invitation is required"
+            )
+            .starts_with("REVIEW_INVITATION_NOT_PREPARED:")
+        );
+        assert!(
+            review_invitation_refusal(
+                "CODEX_QUEUE_REVIEW_INVITE: an active local disclosure grant is required"
+            )
+            .starts_with("REVIEW_DISCLOSURE_REQUIRED:")
+        );
+        assert!(
+            review_invitation_refusal("TARGET_NOT_CONFIGURED")
+                .starts_with("REVIEW_WAKE_TARGET_REQUIRED:")
+        );
+        assert!(
+            review_invitation_refusal("WAKE_HISTORICAL_EVENT_RETAINED")
+                .starts_with("REVIEW_WAKE_GENERATION_NOT_READY:")
+        );
+        let unknown = review_invitation_refusal("I/O error: C:\\private\\queue\\secret.txt");
+        assert!(unknown.starts_with("REVIEW_PUBLICATION_REFUSED:"));
+        assert!(!unknown.contains("secret.txt"));
     }
 
     #[test]

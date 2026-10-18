@@ -665,7 +665,8 @@ pub(super) fn request_handoff(
     }
     let store = ProjectStore::open(workspace, project)?;
     let source = paired(workspace, project)?;
-    if let Some(active) = store.active()?
+    let active = store.active()?;
+    if let Some(active) = &active
         && (active.phase != Phase::ContinuationQueued || active.source == source)
     {
         return Err("WEB_ROLLOVER_EXISTING_INTENT_REQUIRES_RESUME".into());
@@ -673,15 +674,9 @@ pub(super) fn request_handoff(
     let registered = registered_project(workspace, project)?;
     let wake = Store::open(&runtime::default_root()?)?;
     let meter = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
-    if let Some(previous) = store.handoff_request()?
-        && previous.source == source
+    if let Some(previous) =
+        saved_current_handoff_request(&store, &source, source_task_id, &registered)?
     {
-        if previous.source_task_id != source_task_id {
-            return Err("WEB_HANDOFF_TASK_CHANGED".into());
-        }
-        if !native_owner_matches(&previous, &registered) {
-            return Err("WEB_HANDOFF_NATIVE_OWNER_CHANGED".into());
-        }
         request_policy_still_due(&meter, &previous)?;
         if paired(workspace, project)? != source {
             return Err("WEB_HANDOFF_SOURCE_CHANGED".into());
@@ -695,6 +690,13 @@ pub(super) fn request_handoff(
         )?;
         return Ok(handoff_request_summary(&previous));
     }
+    require_prior_continuation_owner(
+        &store,
+        active.as_ref(),
+        &source,
+        source_task_id,
+        &registered,
+    )?;
 
     // The installed browser owner observes the exact idle source before the
     // advisory context ledger claims a quiescent point. This is a private read.
@@ -749,6 +751,43 @@ pub(super) fn request_handoff(
         &request.source,
     )?;
     Ok(handoff_request_summary(&request))
+}
+
+fn saved_current_handoff_request(
+    store: &ProjectStore,
+    source: &Target,
+    source_task_id: &str,
+    registered: &AutonomousProjectV1,
+) -> Result<Option<HandoffRequest>, String> {
+    let Some(previous) = store.handoff_request()? else {
+        return Ok(None);
+    };
+    if previous.source != *source {
+        return Ok(None);
+    }
+    if previous.source_task_id != source_task_id {
+        return Err("WEB_HANDOFF_TASK_CHANGED".into());
+    }
+    if !native_owner_matches(&previous, registered) {
+        return Err("WEB_HANDOFF_NATIVE_OWNER_CHANGED".into());
+    }
+    Ok(Some(previous))
+}
+
+pub(super) fn resume_saved_handoff_request(
+    workspace: &Path,
+    project: &str,
+) -> Result<Value, String> {
+    let store = ProjectStore::open(workspace, project)?;
+    let request = store
+        .handoff_request()?
+        .ok_or("WEB_HANDOFF_REQUEST_REQUIRED")?;
+    if paired(workspace, project)? != request.source {
+        return Err("WEB_HANDOFF_SOURCE_CHANGED".into());
+    }
+    let task = request.source_task_id;
+    drop(store);
+    request_handoff(workspace, project, &task)
 }
 
 fn completed_request_delivery(
@@ -1202,10 +1241,7 @@ where
     M: FnMut(&Record, &Target) -> Result<(), String>,
     S: FnMut(&Record) -> Result<(), String>,
 {
-    let message = format!(
-        "CatDesk continuation for project {}: rollover {} has verified the new conversation URL and paired Wake binding at generation {}. Resume task {} from the handoff in this conversation after checking current ownership and artifacts. Existing native sessions keep their tasks; do not duplicate their execution. Preserve predecessor history.",
-        record.project_id, record.intent_id, bound.generation, record.source_task_id
-    );
+    let message = continuation_message(record, bound);
     // Wake publication is durable and event-ID idempotent. Metering is
     // advisory; it cannot prevent the continuation from being queued.
     wake.produce_expected(
@@ -1219,6 +1255,99 @@ where
     retry_context_meter_with(record, bound, meter, save)
 }
 
+fn continuation_message(record: &Record, bound: &Target) -> String {
+    format!(
+        "CatDesk continuation for project {}: rollover {} has verified the new conversation URL and paired Wake binding at generation {}. Resume task {} from the handoff in this conversation after checking current ownership and artifacts. Existing native sessions keep their tasks; do not duplicate their execution. Preserve predecessor history.",
+        record.project_id, record.intent_id, bound.generation, record.source_task_id
+    )
+}
+
+fn continuation_task_from_proof(
+    record: &Record,
+    request: &HandoffRequest,
+    registered: &AutonomousProjectV1,
+    current: &Target,
+    delivery: &Delivery,
+    timer: &TurnTimer,
+) -> Result<Option<String>, String> {
+    if record.phase != Phase::ContinuationQueued || record.bound_target.as_ref() != Some(current) {
+        return Ok(None);
+    }
+    if !handoff_owner_matches_record(request, record, registered)
+        || registered.chatgpt_target_url.as_deref() != Some(current.url.as_str())
+        || registered.chatgpt_target_sha256.as_deref() != Some(current.digest.as_str())
+        || !valid_id(&record.source_task_id)
+        || record.continuation_event_id != format!("web-continue-{}", record.intent_id)
+        || validate_receipt(
+            record,
+            record
+                .receipt
+                .as_ref()
+                .ok_or("WEB_CONTINUATION_RECEIPT_REQUIRED")?,
+        )? != *current
+    {
+        return Err("WEB_CONTINUATION_OWNER_OR_TARGET_CHANGED".into());
+    }
+    let expected_message = continuation_message(record, current);
+    let expected_digest = digest(&expected_message);
+    let receipt = delivery
+        .receipt
+        .as_ref()
+        .ok_or("WEB_CONTINUATION_EXACT_RECEIPT_REQUIRED")?;
+    if delivery.phase != DeliveryPhase::Sent
+        || delivery.target != *current
+        || delivery.event.event_id != record.continuation_event_id
+        || delivery.event.project_id != record.project_id
+        || delivery.event.event_type != "engineering_attention"
+        || delivery.event.target_generation != current.generation
+        || delivery.event.message != expected_message
+        || delivery.message_digest != expected_digest
+        || receipt.event_id != record.continuation_event_id
+        || receipt.target_generation != current.generation
+        || receipt.target_digest != current.digest
+        || receipt.message_digest != expected_digest
+        || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
+        || timer.event_id != record.continuation_event_id
+        || timer.project_id != record.project_id
+        || timer.target_generation != current.generation
+        || timer.target_digest != current.digest
+        || timer.response_state != ResponseState::Complete
+        || timer.completed_utc.is_none()
+    {
+        return Err("WEB_CONTINUATION_PROOF_INVALID".into());
+    }
+    Ok(Some(record.source_task_id.clone()))
+}
+
+pub(super) fn completed_continuation_task_anchor(
+    workspace: &Path,
+    wake: &Store,
+    project: &str,
+    current: &Target,
+) -> Result<Option<String>, String> {
+    let store = ProjectStore::open(workspace, project)?;
+    let Some(record) = store.active()? else {
+        return Ok(None);
+    };
+    if record.phase != Phase::ContinuationQueued
+        || record.bound_target.as_ref() != Some(current)
+        || record.handoff_event_id.is_none()
+    {
+        return Ok(None);
+    }
+    let Some(request) = store.handoff_request()? else {
+        return Err("WEB_CONTINUATION_HANDOFF_WITNESS_REQUIRED".into());
+    };
+    let registered = registered_project(workspace, project)?;
+    let Some(delivery) = wake.delivery(&record.continuation_event_id)? else {
+        return Ok(None);
+    };
+    let Some(timer) = wake.timer(&record.continuation_event_id)? else {
+        return Ok(None);
+    };
+    continuation_task_from_proof(&record, &request, &registered, current, &delivery, &timer)
+}
+
 fn handoff_owner_matches_record(
     request: &HandoffRequest,
     record: &Record,
@@ -1230,6 +1359,28 @@ fn handoff_owner_matches_record(
         && record.source_task_id == request.source_task_id
         && record.source == request.source
         && native_owner_matches(request, registered)
+}
+
+fn require_prior_continuation_owner(
+    store: &ProjectStore,
+    active: Option<&Record>,
+    source: &Target,
+    source_task_id: &str,
+    registered: &AutonomousProjectV1,
+) -> Result<(), String> {
+    if let Some(active) = active
+        && active.phase == Phase::ContinuationQueued
+        && active.source != *source
+        && active.source_task_id == source_task_id
+    {
+        let previous = store
+            .handoff_request()?
+            .ok_or("WEB_HANDOFF_NATIVE_OWNER_CHANGED")?;
+        if !handoff_owner_matches_record(&previous, active, registered) {
+            return Err("WEB_HANDOFF_NATIVE_OWNER_CHANGED".into());
+        }
+    }
+    Ok(())
 }
 
 fn source_snapshot_matches_record(
@@ -1914,6 +2065,264 @@ mod tests {
         assert!(request.message.contains("native-thread-a"));
         registered.codex_thread_id = Some("native-thread-b".into());
         assert!(!native_owner_matches(&request, &registered));
+    }
+
+    #[test]
+    fn completed_continuation_reuses_original_task_only_with_exact_owner_and_turn_proof() {
+        let root = fixture();
+        let request = handoff_request(&root);
+        let current = Target::new(2, "https://chatgpt.com/c/new".into()).unwrap();
+        let mut record = record();
+        record.phase = Phase::ContinuationQueued;
+        record.receipt = Some(receipt_for(&record));
+        record.bound_target = Some(current.clone());
+        record.handoff_event_id = Some(request.event_id.clone());
+        record.continuation_event_id = format!("web-continue-{}", record.intent_id);
+        let mut registered = AutonomousProjectV1 {
+            project_id: "alpha".into(),
+            workspace: root,
+            git_identity: "fixture".into(),
+            verification_profile: "fixture".into(),
+            codex_thread_id: Some("native-thread-a".into()),
+            chatgpt_target_url: Some(current.url.clone()),
+            chatgpt_target_sha256: Some(current.digest.clone()),
+            chatgpt_target_history: vec![request.source.url.clone(), current.url.clone()],
+        };
+        let (mut delivery, mut timer) = completed_delivery(&request);
+        let message = continuation_message(&record, &current);
+        let message_digest = digest(&message);
+        delivery.event.event_id = record.continuation_event_id.clone();
+        delivery.event.target_generation = current.generation;
+        delivery.event.message = message;
+        delivery.target = current.clone();
+        delivery.message_digest = message_digest.clone();
+        let receipt = delivery.receipt.as_mut().unwrap();
+        receipt.event_id = record.continuation_event_id.clone();
+        receipt.target_generation = current.generation;
+        receipt.target_digest = current.digest.clone();
+        receipt.message_digest = message_digest;
+        timer.event_id = record.continuation_event_id.clone();
+        timer.target_generation = current.generation;
+        timer.target_digest = current.digest.clone();
+
+        assert_eq!(
+            continuation_task_from_proof(
+                &record,
+                &request,
+                &registered,
+                &current,
+                &delivery,
+                &timer,
+            )
+            .unwrap(),
+            Some("task-a".into())
+        );
+        timer.response_state = ResponseState::Observing;
+        assert_eq!(
+            continuation_task_from_proof(
+                &record,
+                &request,
+                &registered,
+                &current,
+                &delivery,
+                &timer,
+            )
+            .unwrap_err(),
+            "WEB_CONTINUATION_PROOF_INVALID"
+        );
+        timer.response_state = ResponseState::Complete;
+        registered.codex_thread_id = Some("different-thread".into());
+        assert_eq!(
+            continuation_task_from_proof(
+                &record,
+                &request,
+                &registered,
+                &current,
+                &delivery,
+                &timer,
+            )
+            .unwrap_err(),
+            "WEB_CONTINUATION_OWNER_OR_TARGET_CHANGED"
+        );
+    }
+
+    #[test]
+    fn next_handoff_rechecks_owner_and_reuses_saved_current_request() {
+        let root = fixture();
+        let request = handoff_request(&root);
+        let current = Target::new(2, "https://chatgpt.com/c/new".into()).unwrap();
+        let mut previous = record();
+        previous.phase = Phase::ContinuationQueued;
+        previous.bound_target = Some(current.clone());
+        previous.handoff_event_id = Some(request.event_id.clone());
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        store.save_handoff_request(&request).unwrap();
+        let mut registered = AutonomousProjectV1 {
+            project_id: "alpha".into(),
+            workspace: root,
+            git_identity: "fixture".into(),
+            verification_profile: "fixture".into(),
+            codex_thread_id: Some("native-thread-a".into()),
+            chatgpt_target_url: Some(current.url.clone()),
+            chatgpt_target_sha256: Some(current.digest.clone()),
+            chatgpt_target_history: vec![request.source.url.clone(), current.url.clone()],
+        };
+        require_prior_continuation_owner(&store, Some(&previous), &current, "task-a", &registered)
+            .unwrap();
+        assert!(
+            saved_current_handoff_request(&store, &current, "task-a", &registered)
+                .unwrap()
+                .is_none()
+        );
+        registered.codex_thread_id = Some("native-thread-b".into());
+        assert_eq!(
+            require_prior_continuation_owner(
+                &store,
+                Some(&previous),
+                &current,
+                "task-a",
+                &registered,
+            )
+            .unwrap_err(),
+            "WEB_HANDOFF_NATIVE_OWNER_CHANGED"
+        );
+
+        registered.codex_thread_id = Some("native-thread-a".into());
+        let second = HandoffRequest {
+            schema_version: 1,
+            project_id: "alpha".into(),
+            intent_id: "intent-b".into(),
+            source_task_id: "task-a".into(),
+            source: current.clone(),
+            native_workspace: registered.workspace.clone(),
+            native_thread_id: registered.codex_thread_id.clone(),
+            event_id: "web-handoff-intent-b".into(),
+            message: handoff_request_message(
+                "alpha",
+                "intent-b",
+                "task-a",
+                &registered.codex_thread_id,
+            ),
+        };
+        store.save_handoff_request(&second).unwrap();
+        assert_eq!(
+            saved_current_handoff_request(&store, &current, "task-a", &registered).unwrap(),
+            Some(second)
+        );
+        registered.codex_thread_id = Some("native-thread-b".into());
+        assert_eq!(
+            saved_current_handoff_request(&store, &current, "task-a", &registered).unwrap_err(),
+            "WEB_HANDOFF_NATIVE_OWNER_CHANGED"
+        );
+    }
+
+    #[test]
+    fn persisted_completed_continuation_anchors_next_generation() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("web-continuation-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let root = root.canonicalize().unwrap();
+        let request = handoff_request(&root);
+        let current = Target::new(2, "https://chatgpt.com/c/new".into()).unwrap();
+        let mut record = record();
+        record.phase = Phase::ContinuationQueued;
+        record.receipt = Some(receipt_for(&record));
+        record.bound_target = Some(current.clone());
+        record.handoff_event_id = Some(request.event_id.clone());
+        record.continuation_event_id = format!("web-continue-{}", record.intent_id);
+        let project_store = ProjectStore::open(&root, "alpha").unwrap();
+        project_store.save_handoff_request(&request).unwrap();
+        project_store.save(&record).unwrap();
+        atomic(&project_store.root.join("active.json"), &record.intent_id).unwrap();
+        drop(project_store);
+
+        let registry =
+            AutonomousProjectRegistryStoreV1::open(root.join(".catdesk/projects")).unwrap();
+        registry.initialize(1, 1).unwrap();
+        registry
+            .register_project(AutonomousProjectV1 {
+                project_id: "alpha".into(),
+                workspace: root.clone(),
+                git_identity: "fixture".into(),
+                verification_profile: "fixture".into(),
+                codex_thread_id: Some("native-thread-a".into()),
+                chatgpt_target_url: Some(current.url.clone()),
+                chatgpt_target_sha256: Some(current.digest.clone()),
+                chatgpt_target_history: vec![request.source.url.clone(), current.url.clone()],
+            })
+            .unwrap();
+
+        let wake = Store::open_scoped_for_test(&root.join("wake"), &root).unwrap();
+        wake.initialize().unwrap();
+        assert_eq!(
+            wake.set_target("alpha", 0, &request.source.url).unwrap(),
+            request.source
+        );
+        assert_eq!(wake.set_target("alpha", 1, &current.url).unwrap(), current);
+        let message = continuation_message(&record, &current);
+        let event = wake
+            .produce_expected(
+                &record.continuation_event_id,
+                "alpha",
+                "engineering_attention",
+                &message,
+                &current,
+            )
+            .unwrap();
+        let lease = wake.host_lock().unwrap();
+        let claimed = wake.claim(&event, &lease).unwrap();
+        wake.transition(
+            &event.event_id,
+            lease.owner(),
+            DeliveryPhase::Submitting,
+            None,
+            None,
+        )
+        .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: event.event_id.clone(),
+            target_generation: current.generation,
+            target_digest: current.digest.clone(),
+            message_digest: digest(&message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        wake.record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        wake.transition(
+            &event.event_id,
+            &claimed.owner,
+            DeliveryPhase::Sent,
+            Some(receipt),
+            None,
+        )
+        .unwrap();
+        wake.complete_timer(&event.event_id).unwrap();
+        assert_eq!(
+            completed_continuation_task_anchor(&root, &wake, "alpha", &current).unwrap(),
+            Some("task-a".into())
+        );
+        let meter = WebContextStore::open(root.join(".catdesk/web-context")).unwrap();
+        let current_key = key("alpha", &current);
+        meter
+            .bind_observed_target(current_key.clone(), None)
+            .unwrap();
+        let pressure = meter.pressure(&current_key).unwrap();
+        assert!(pressure.rollover_intent.is_none());
+        assert_eq!(
+            super::super::auto::source_task_anchor(
+                &root,
+                &wake,
+                "alpha",
+                &current,
+                &current_key,
+                &pressure,
+            )
+            .unwrap(),
+            Some("task-a".into())
+        );
     }
     #[test]
     fn uncertain_submission_is_durable_and_other_project_lock_is_independent() {

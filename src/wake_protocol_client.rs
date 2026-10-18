@@ -1,5 +1,6 @@
 //! CatDesk publishes bounded events; independent Wake owns delivery and target.
 use catdesk_wake::{
+    protocol::{Event, Target},
     runtime::{Activation, default_root},
     store::{Config, Store, read},
 };
@@ -122,6 +123,144 @@ pub(crate) fn publish_registered(
         id,
         review_created,
         review_ready,
+    )
+}
+
+/// The queue publisher saves this exact target before its first Wake write.
+/// It may then retry only against the same generation after an uncertain exit.
+pub(crate) fn registered_invitation_target(
+    control_workspace: &Path,
+    project: &str,
+    prepared_at: u64,
+) -> Result<Target, String> {
+    let (store, activation, registered_url, registered_sha256) =
+        registered_publication_context(control_workspace, project)?;
+    publication_target(
+        &store,
+        &activation,
+        project,
+        &registered_url,
+        &registered_sha256,
+        prepared_at,
+    )
+}
+
+/// Publish only the fixed, previously persisted queue invitation text. The
+/// caller holds its queue and registration locks and supplies its saved target.
+pub(crate) fn publish_registered_invitation(
+    control_workspace: &Path,
+    project: &str,
+    event_id: &str,
+    prepared_at: u64,
+    message: &str,
+    expected: &Target,
+) -> Result<Event, String> {
+    let (store, activation, registered_url, registered_sha256) =
+        registered_publication_context(control_workspace, project)?;
+    publish_registered_invitation_with_store(
+        &store,
+        &activation,
+        project,
+        &registered_url,
+        &registered_sha256,
+        event_id,
+        prepared_at,
+        message,
+        expected,
+    )
+}
+
+fn registered_publication_context(
+    control_workspace: &Path,
+    project: &str,
+) -> Result<(Store, Activation, String, String), String> {
+    if !selected(control_workspace) {
+        return Err("WAKE_OWNER_NOT_SELECTED".into());
+    }
+    let scope = crate::delegated::autonomy_projects::resolve_registered_project_from_control_root(
+        control_workspace,
+        project,
+    )
+    .map_err(|_| "WAKE_PROJECT_NOT_REGISTERED".to_string())?;
+    let root = default_root()?;
+    let activation: Activation = read(&root.join("activation.json"))?;
+    let store = Store::open(&root)?;
+    Ok((
+        store,
+        activation,
+        scope
+            .project
+            .chatgpt_target_url
+            .ok_or("TARGET_NOT_CONFIGURED")?,
+        scope
+            .project
+            .chatgpt_target_sha256
+            .ok_or("TARGET_NOT_CONFIGURED")?,
+    ))
+}
+
+fn publication_target(
+    store: &Store,
+    activation: &Activation,
+    project: &str,
+    registered_url: &str,
+    registered_sha256: &str,
+    prepared_at: u64,
+) -> Result<Target, String> {
+    if activation.schema_version != 1
+        || activation.owner != "CatDeskWake"
+        || activation.accept_after_utc == 0
+    {
+        return Err("WAKE_ACTIVATION_INVALID".into());
+    }
+    let config = store.config()?;
+    let target = config.targets.get(project).ok_or("TARGET_NOT_CONFIGURED")?;
+    if registered_url != target.url
+        || registered_sha256 != target.digest
+        || crate::delegated::autonomy_projects::canonical_project_chat_target(&target.url)
+            .ok()
+            .as_deref()
+            != Some(target.url.as_str())
+    {
+        return Err("WAKE_PROJECT_TARGET_MISMATCH".into());
+    }
+    // A queue invitation prepared in the exact second as a target change has
+    // ambiguous order. Hold it rather than delivering it in a later lineage.
+    if prepared_at <= generation_accept_after(activation, &config, project)? {
+        return Err("WAKE_HISTORICAL_EVENT_RETAINED".into());
+    }
+    Ok(target.clone())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn publish_registered_invitation_with_store(
+    store: &Store,
+    activation: &Activation,
+    project: &str,
+    registered_url: &str,
+    registered_sha256: &str,
+    event_id: &str,
+    prepared_at: u64,
+    message: &str,
+    expected: &Target,
+) -> Result<Event, String> {
+    let current = publication_target(
+        store,
+        activation,
+        project,
+        registered_url,
+        registered_sha256,
+        prepared_at,
+    )?;
+    if &current != expected {
+        return Err("WAKE_PROJECT_TARGET_CHANGED".into());
+    }
+    store.produce_expected(
+        event_id,
+        project,
+        "engineering_attention",
+        message,
+        expected,
     )
 }
 
@@ -261,6 +400,104 @@ mod tests {
         )
         .expect("beta progresses independently");
         assert_eq!(store.events().expect("events").len(), 2);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn invitation_publication_reuses_exact_event_and_refuses_retargeting() {
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-invitation-publish-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let store = Store::open_scoped_for_test(&root.join("wake"), &root).unwrap();
+        store.initialize().unwrap();
+        let alpha = store
+            .set_target("alpha", 0, "https://chatgpt.com/c/alpha-review")
+            .unwrap();
+        let beta = store
+            .set_target("beta", 0, "https://chatgpt.com/c/beta-review")
+            .unwrap();
+        let activation = Activation {
+            schema_version: 1,
+            owner: "CatDeskWake".into(),
+            migration_audit: "migration-v1.json".into(),
+            accept_after_utc: 1,
+        };
+        let message = "Review the exact prepared project package; no approval is implied.";
+        let prepared = u64::MAX - 1;
+        let first = publish_registered_invitation_with_store(
+            &store,
+            &activation,
+            "alpha",
+            &alpha.url,
+            &alpha.digest,
+            "queue-review-exact",
+            prepared,
+            message,
+            &alpha,
+        )
+        .unwrap();
+        let replay = publish_registered_invitation_with_store(
+            &store,
+            &activation,
+            "alpha",
+            &alpha.url,
+            &alpha.digest,
+            "queue-review-exact",
+            prepared,
+            message,
+            &alpha,
+        )
+        .unwrap();
+        assert_eq!(first, replay);
+        assert_eq!(store.events().unwrap().len(), 1);
+        assert_eq!(
+            publish_registered_invitation_with_store(
+                &store,
+                &activation,
+                "beta",
+                &beta.url,
+                &beta.digest,
+                "queue-review-exact",
+                prepared,
+                message,
+                &beta,
+            ),
+            Err("QUEUE_EVENT_ID_CONFLICT".into())
+        );
+        assert_eq!(
+            publish_registered_invitation_with_store(
+                &store,
+                &activation,
+                "alpha",
+                &beta.url,
+                &beta.digest,
+                "queue-review-other",
+                prepared,
+                message,
+                &alpha,
+            ),
+            Err("WAKE_PROJECT_TARGET_MISMATCH".into())
+        );
+        let next = store
+            .set_target("alpha", alpha.generation, "https://chatgpt.com/c/alpha-new")
+            .unwrap();
+        assert_eq!(
+            publish_registered_invitation_with_store(
+                &store,
+                &activation,
+                "alpha",
+                &next.url,
+                &next.digest,
+                "queue-review-exact",
+                prepared,
+                message,
+                &alpha,
+            ),
+            Err("WAKE_PROJECT_TARGET_CHANGED".into())
+        );
+        assert_eq!(store.events().unwrap().len(), 1);
         let _ = std::fs::remove_dir_all(root);
     }
 

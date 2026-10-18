@@ -49,6 +49,7 @@ mod operator_review;
 mod review_invite;
 mod review_reader;
 
+pub(crate) use review_invite::publish_for_mcp as publish_review_invitation_for_mcp;
 pub(crate) use review_reader::read_for_mcp as read_review_package_for_mcp;
 
 const QUEUE_SCHEMA_VERSION: u32 = 1;
@@ -6529,6 +6530,30 @@ mod tests {
             );
             assert!(!invitation_path.exists());
         }
+        for wake_gate in ["TARGET_NOT_CONFIGURED", "WAKE_HISTORICAL_EVENT_RETAINED"] {
+            assert_eq!(
+                review_invite::prepare_in_store_with_preflight_for_test(
+                    &queue,
+                    &projects[1],
+                    &receipt_id,
+                    sha,
+                    |observed, target_digest| {
+                        assert!(observed >= grant_created_at_unix);
+                        assert_eq!(
+                            target_digest,
+                            projects[1].chatgpt_target_sha256.as_deref().unwrap()
+                        );
+                        Err(wake_gate.into())
+                    },
+                )
+                .unwrap_err(),
+                wake_gate
+            );
+            assert!(
+                !invitation_path.exists(),
+                "Wake gate must precede first write"
+            );
+        }
         let first =
             review_invite::prepare_in_store_for_test(&queue, &projects[1], &receipt_id, sha)
                 .unwrap();
@@ -6607,7 +6632,8 @@ mod tests {
             .is_err()
         );
         let mut unsupported_target = projects[1].clone();
-        unsupported_target.chatgpt_target_url = Some("https://chatgpt.com/g/alpha/c/exact".into());
+        unsupported_target.chatgpt_target_url =
+            Some("https://chatgpt.com/g/alpha/c/exact?unsupported=1".into());
         unsupported_target.chatgpt_target_sha256 = Some(project_chat_target_digest(
             unsupported_target.chatgpt_target_url.as_deref().unwrap(),
         ));
@@ -6699,6 +6725,113 @@ mod tests {
                 .unwrap_err()
                 .contains("revoked")
         );
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    async fn prepared_review_invitation_publishes_once_and_freezes_its_target() {
+        let (fixture, projects, queue, receipt_id, cargo) = completed_verified_fixture(false).await;
+        verify_receipt_in_store_with_executable(&projects[0], &queue, &receipt_id, Some(&cargo))
+            .await
+            .unwrap();
+        let packaged = package_verified_receipt_in_store(&queue, &receipt_id).unwrap();
+        let sha = packaged["package"]["artifactSha256"].as_str().unwrap();
+        let package_before = fs::read(queue.review_package_path(&receipt_id)).unwrap();
+        review_reader::grant_in_store(&queue, &projects[1], &receipt_id, sha).unwrap();
+        review_invite::prepare_in_store_for_test(&queue, &projects[1], &receipt_id, sha).unwrap();
+        let invitation_path = queue
+            .root
+            .join("receipts")
+            .join(format!("{receipt_id}.review-invitation.json"));
+        let wake =
+            catdesk_wake::store::Store::open_scoped_for_test(&fixture.join("wake"), &fixture)
+                .unwrap();
+        wake.initialize().unwrap();
+        let target = wake
+            .set_target(
+                "alpha",
+                0,
+                projects[1].chatgpt_target_url.as_deref().unwrap(),
+            )
+            .unwrap();
+        let call = |current: catdesk_wake::protocol::Target| {
+            review_invite::publish_locked_with(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                sha,
+                |_| Ok(current),
+                |event_id, _, message, target| {
+                    wake.produce_expected(
+                        event_id,
+                        "alpha",
+                        "engineering_attention",
+                        message,
+                        target,
+                    )
+                },
+            )
+        };
+        let first = call(target.clone()).unwrap();
+        assert_eq!(first["publication"], "WAKE_EVENT_ACCEPTED");
+        assert_eq!(first["eventAccepted"], true);
+        assert_eq!(first["deliveryProved"], false);
+        assert_eq!(first["independentReviewProved"], false);
+        assert_eq!(first["targetDigest"], target.digest);
+        let second = call(target.clone()).unwrap();
+        assert_eq!(second["eventId"], first["eventId"]);
+        assert_eq!(second["eventCreatedUtc"], first["eventCreatedUtc"]);
+        assert_eq!(wake.events().unwrap().len(), 1);
+        assert!(
+            review_invite::publish_locked_with(
+                &queue,
+                &projects[2],
+                &receipt_id,
+                sha,
+                |_| Ok(target.clone()),
+                |_, _, _, _| panic!("wrong project must not publish"),
+            )
+            .is_err()
+        );
+        assert!(
+            review_invite::publish_locked_with(
+                &queue,
+                &projects[1],
+                &receipt_id,
+                &"0".repeat(64),
+                |_| Ok(target.clone()),
+                |_, _, _, _| panic!("wrong package must not publish"),
+            )
+            .is_err()
+        );
+        let changed = wake
+            .set_target(
+                "alpha",
+                target.generation,
+                "https://chatgpt.com/c/next-alpha",
+            )
+            .unwrap();
+        let drift = call(changed).unwrap();
+        assert_eq!(drift["publication"], "OUTCOME_UNKNOWN");
+        assert_eq!(drift["reason"], "WAKE_TARGET_CHANGED");
+        assert!(drift["eventAccepted"].is_null());
+        assert_eq!(wake.events().unwrap().len(), 1);
+        fs::write(queue.review_package_path(&receipt_id), b"changed package\n").unwrap();
+        let altered_package = call(target.clone()).unwrap();
+        assert_eq!(altered_package["reason"], "BOUND_EVIDENCE_CHANGED");
+        assert_eq!(wake.events().unwrap().len(), 1);
+        fs::write(queue.review_package_path(&receipt_id), package_before).unwrap();
+        let mut altered_invitation: Value =
+            serde_json::from_slice(&fs::read(&invitation_path).unwrap()).unwrap();
+        altered_invitation["message"] = json!("changed source text");
+        fs::write(
+            &invitation_path,
+            serde_json::to_vec(&altered_invitation).unwrap(),
+        )
+        .unwrap();
+        let altered_text = call(target).unwrap();
+        assert_eq!(altered_text["reason"], "BOUND_EVIDENCE_CHANGED");
+        assert_eq!(wake.events().unwrap().len(), 1);
         cleanup(fixture);
     }
 

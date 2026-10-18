@@ -72,7 +72,8 @@ fn completed_task_anchor(
     Ok(latest.map(|(_, event_id)| event_id))
 }
 
-fn source_task_anchor(
+pub(super) fn source_task_anchor(
+    workspace: &Path,
     wake: &Store,
     project: &str,
     source: &Target,
@@ -85,7 +86,10 @@ fn source_task_anchor(
     {
         return Ok(Some(intent.source_task_id.clone()));
     }
-    completed_task_anchor(wake, project, source)
+    if let Some(task_id) = completed_task_anchor(wake, project, source)? {
+        return Ok(Some(task_id));
+    }
+    rollover::completed_continuation_task_anchor(workspace, wake, project, source)
 }
 
 fn is_pending_handoff(reason: &str) -> bool {
@@ -187,6 +191,10 @@ fn run_step(
             Ok((stage, result))
         }
         rollover::AutoStage::CollectHandoff => {
+            // Crash recovery may find the request saved before queue
+            // publication. Republishing the same event ID is idempotent and
+            // cannot resend a submitted browser turn.
+            rollover::resume_saved_handoff_request(workspace, project)?;
             match rollover::collect_handoff(workspace, project) {
                 Ok(_) => {
                     let result = rollover::execute(workspace, project)?;
@@ -214,7 +222,9 @@ fn run_step(
             if running_wake_state(&wake, project, source)? != "RUNNING" {
                 return Ok(("WAKE_STOPPED", json!({"reason":"WAKE_CONTROL_CHANGED"})));
             }
-            let Some(task_id) = source_task_anchor(&wake, project, source, key, &pressure)? else {
+            let Some(task_id) =
+                source_task_anchor(workspace, &wake, project, source, key, &pressure)?
+            else {
                 return Ok((
                     "TASK_ANCHOR_REQUIRED",
                     json!({"reason":"WEB_AUTO_COMPLETED_WAKE_TASK_REQUIRED"}),
