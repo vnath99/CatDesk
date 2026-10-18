@@ -16,6 +16,12 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[path = "runtime_response.rs"]
+mod response;
+#[path = "runtime_scheduler.rs"]
+mod scheduler;
+use response::observe_sent_response;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Control {
@@ -1455,6 +1461,21 @@ impl Drop for Adapter {
     }
 }
 impl Adapter {
+    fn spawn_cooperative(root: &Path) -> Result<Self> {
+        let executable = std::env::current_exe().map_err(|_| "HOST_EXECUTABLE_UNAVAILABLE")?;
+        let installed = executable.parent().ok_or("HOST_INSTALL_UNAVAILABLE")?;
+        let (path, _) = verify_installed_browser_artifacts(root, installed)?;
+        let bytes = std::fs::read(path).map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?;
+        for marker in [
+            b"SENT_PENDING_RESPONSE".as_slice(),
+            b"def observe_response(".as_slice(),
+        ] {
+            if !bytes.windows(marker.len()).any(|part| part == marker) {
+                return Err("COOPERATIVE_BROWSER_PACKAGE_REQUIRED".into());
+            }
+        }
+        Self::spawn(root)
+    }
     fn allow_graceful_exit(&mut self, grace: Duration) -> bool {
         let deadline = Instant::now() + grace;
         loop {
@@ -3090,8 +3111,25 @@ mod review_discovery_tests {
             )
             .expect("submitting");
 
+        let started = store.submission_started_utc(&submitting).unwrap();
+        let mut long_queued = submitting.clone();
+        long_queued.event.created_utc = started.saturating_sub(3600);
+        assert!(submitting_reconciliation_due(
+            &long_queued,
+            started,
+            0,
+            started + 10
+        ));
+        assert!(!submitting_reconciliation_due(
+            &long_queued,
+            started,
+            0,
+            started + SUBMITTING_RECONCILIATION_RETRY_WINDOW_SECONDS + 1
+        ));
+
         assert!(submitting_reconciliation_due(
             &submitting,
+            store.submission_started_utc(&submitting).unwrap(),
             0,
             submitting.updated_utc
         ));
@@ -3101,33 +3139,41 @@ mod review_discovery_tests {
             .expect("transient attention");
         assert!(!submitting_reconciliation_due(
             &transient,
+            store.submission_started_utc(&transient).unwrap(),
             1,
             transient.updated_utc + 29
         ));
         assert!(submitting_reconciliation_due(
             &transient,
+            store.submission_started_utc(&transient).unwrap(),
             1,
             transient.updated_utc + 30
         ));
         assert!(submitting_reconciliation_due(
             &transient,
+            store.submission_started_utc(&transient).unwrap(),
             2,
             transient.updated_utc + 120
         ));
         assert!(submitting_reconciliation_due(
             &transient,
+            store.submission_started_utc(&transient).unwrap(),
             3,
             transient.updated_utc + 300
         ));
         assert!(!submitting_reconciliation_due(
             &transient,
+            store.submission_started_utc(&transient).unwrap(),
             SUBMITTING_RECONCILIATION_ATTEMPTS,
             transient.updated_utc + 3600
         ));
         assert!(!submitting_reconciliation_due(
             &transient,
+            store.submission_started_utc(&transient).unwrap(),
             0,
-            transient.event.created_utc + SUBMITTING_RECONCILIATION_RETRY_WINDOW_SECONDS + 1
+            store.submission_started_utc(&transient).unwrap()
+                + SUBMITTING_RECONCILIATION_RETRY_WINDOW_SECONDS
+                + 1
         ));
 
         // Chrome's own error document is transient and may safely trigger
@@ -3138,16 +3184,19 @@ mod review_discovery_tests {
             .expect("chrome error");
         assert!(!submitting_reconciliation_due(
             &chrome_error,
+            store.submission_started_utc(&chrome_error).unwrap(),
             1,
             chrome_error.updated_utc + 29
         ));
         assert!(submitting_reconciliation_due(
             &chrome_error,
+            store.submission_started_utc(&chrome_error).unwrap(),
             1,
             chrome_error.updated_utc + 30
         ));
         assert!(!submitting_reconciliation_due(
             &chrome_error,
+            store.submission_started_utc(&chrome_error).unwrap(),
             SUBMITTING_RECONCILIATION_ATTEMPTS,
             chrome_error.updated_utc + 3600
         ));
@@ -3156,6 +3205,7 @@ mod review_discovery_tests {
             .expect("contradictory attention");
         assert!(!submitting_reconciliation_due(
             &contradictory,
+            store.submission_started_utc(&contradictory).unwrap(),
             1,
             contradictory.updated_utc + 3600
         ));
@@ -3578,14 +3628,14 @@ fn retryable_submitting_reconciliation_reason(reason: Option<&str>) -> bool {
 
 fn submitting_reconciliation_due(
     delivery: &crate::store::Delivery,
+    started_utc: u64,
     attempts: usize,
     now_utc: u64,
 ) -> bool {
     if delivery.phase != Phase::Submitting
         || delivery.receipt.is_some()
         || attempts >= SUBMITTING_RECONCILIATION_ATTEMPTS
-        || now_utc.saturating_sub(delivery.event.created_utc)
-            > SUBMITTING_RECONCILIATION_RETRY_WINDOW_SECONDS
+        || now_utc.saturating_sub(started_utc) > SUBMITTING_RECONCILIATION_RETRY_WINDOW_SECONDS
     {
         return false;
     }
@@ -4126,6 +4176,7 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
     live.attention = None;
     let mut adapter = None;
     let mut reconciliation_attempts = BTreeMap::<String, usize>::new();
+    let mut next_response_probe = BTreeMap::<String, u64>::new();
     loop {
         let mode = desired(store)?;
         live.host = mode.clone();
@@ -4153,7 +4204,20 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                 // Assistant-turn completion is browser-observed. The passive
                 // turn timer below is status only; it never emits a wake or
                 // consumes an assistant-authored control flag.
-                for event in store.events()? {
+                let cursor_project = live
+                    .last_event_id
+                    .as_deref()
+                    .map(|id| store.delivery(id))
+                    .transpose()?
+                    .flatten()
+                    .map(|delivery| delivery.event.project_id);
+                for event in scheduler::fair_round(
+                    store,
+                    &live.targets,
+                    cursor_project.as_deref(),
+                    &next_response_probe,
+                    now(),
+                )? {
                     let mut existing = store.delivery(&event.event_id)?;
                     if live
                         .targets
@@ -4164,6 +4228,66 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                     }
                     if desired(store)? != "RUNNING" {
                         break;
+                    }
+
+                    if let Some(delivery) =
+                        existing.as_ref().filter(|value| value.phase == Phase::Sent)
+                    {
+                        // A durable USER receipt is final delivery evidence, while
+                        // assistant completion is a separate, read-only slice.
+                        // No later event for this project is selected until its
+                        // timer completes; other projects remain schedulable.
+                        live.last_event_id = Some(event.event_id.clone());
+                        live.last_attempt_utc = Some(now());
+                        if store
+                            .timer(&event.event_id)?
+                            .is_some_and(|timer| now().saturating_sub(timer.started_utc) > 90 * 60)
+                        {
+                            store.set_timer_response_state(
+                                &event.event_id,
+                                ResponseState::Attention,
+                            )?;
+                            live.attention = Some("RESPONSE_OBSERVATION_BUDGET_EXHAUSTED".into());
+                            next_response_probe.insert(event.event_id.clone(), u64::MAX);
+                            continue;
+                        }
+                        next_response_probe
+                            .insert(event.event_id.clone(), now().saturating_add(30));
+                        let response_deadline = Instant::now() + Duration::from_secs(90);
+                        if adapter.is_none() {
+                            match Adapter::spawn_cooperative(store.root()) {
+                                Ok(value) => adapter = Some(value),
+                                Err(reason) => {
+                                    live.attention = Some(reason);
+                                    live.browser = "ATTENTION".into();
+                                    break;
+                                }
+                            }
+                        }
+                        match observe_sent_response(
+                            store,
+                            adapter.as_mut().expect("adapter created"),
+                            delivery,
+                            &mut live,
+                            response_deadline,
+                        ) {
+                            Ok(true) => {
+                                next_response_probe.remove(&event.event_id);
+                            }
+                            Ok(false) => {}
+                            Err(reason) => {
+                                let _ = store.set_timer_response_state(
+                                    &event.event_id,
+                                    ResponseState::Attention,
+                                );
+                                live.attention = Some(reason);
+                                live.browser = "ATTENTION".into();
+                                next_response_probe
+                                    .insert(event.event_id.clone(), now().saturating_add(60));
+                            }
+                        }
+                        let _ = retire_adapter(&mut adapter);
+                        continue;
                     }
 
                     if maybe_retry_chatgpt_not_idle(store, &event, now())? {
@@ -4179,7 +4303,12 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                                     .get(&event.event_id)
                                     .copied()
                                     .unwrap_or(0);
-                                if !submitting_reconciliation_due(delivery, prior_attempts, now()) {
+                                if !submitting_reconciliation_due(
+                                    delivery,
+                                    store.submission_started_utc(delivery)?,
+                                    prior_attempts,
+                                    now(),
+                                ) {
                                     // This exact ambiguous delivery is never replayed. Transient
                                     // receipt-proof failures may become eligible for another bounded
                                     // read-only reconciliation after their delay; later distinct
@@ -4189,7 +4318,7 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                                 reconciliation_attempts
                                     .insert(event.event_id.clone(), prior_attempts + 1);
                                 if adapter.is_none() {
-                                    match Adapter::spawn(store.root()) {
+                                    match Adapter::spawn_cooperative(store.root()) {
                                         Ok(value) => {
                                             live.browser = "READY".into();
                                             live.attention = None;
@@ -4221,6 +4350,18 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                                         continue;
                                     }
                                     Err(reason) => {
+                                        if store
+                                            .delivery(&event.event_id)?
+                                            .is_some_and(|value| value.phase == Phase::Sent)
+                                        {
+                                            let _ = store.set_timer_response_state(
+                                                &event.event_id,
+                                                ResponseState::Attention,
+                                            );
+                                            live.attention = Some(reason);
+                                            let _ = retire_adapter(&mut adapter);
+                                            continue;
+                                        }
                                         store
                                             .note_submitting_attention(&event.event_id, &reason)?;
                                         live.browser = "ATTENTION".into();
@@ -4239,7 +4380,7 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                     }
 
                     if adapter.is_none() {
-                        match Adapter::spawn(store.root()) {
+                        match Adapter::spawn_cooperative(store.root()) {
                             Ok(value) => {
                                 live.browser = "READY".into();
                                 live.attention = None;
@@ -4287,7 +4428,7 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                                     live.attention = None;
                                     persist_live_status(store, &mut live)?;
                                     thread::sleep(Duration::from_secs(2));
-                                    match Adapter::spawn(store.root()) {
+                                    match Adapter::spawn_cooperative(store.root()) {
                                         Ok(value) => {
                                             live.browser = "READY".into();
                                             adapter = Some(value);
@@ -4317,7 +4458,16 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                                 live.attention = Some(reason);
                                 live.submission = "ATTENTION".into();
                                 let _ = retire_adapter(&mut adapter);
-                                break;
+                                continue;
+                            }
+                            if phase == Phase::Sent {
+                                let _ = store.set_timer_response_state(
+                                    &event.event_id,
+                                    ResponseState::Attention,
+                                );
+                                live.attention = Some(reason);
+                                let _ = retire_adapter(&mut adapter);
+                                continue;
                             }
                             // A Submitting journal is deliberately retained on
                             // any uncertainty. Persist the specific reason, never
@@ -4365,7 +4515,8 @@ fn reconcile_submitting(
     adapter.send(serde_json::json!({
         "reconcile": true,
         "event": d.event,
-        "target": d.target
+        "target": d.target,
+        "cooperative": true
     }))?;
     let mut deadline = Instant::now() + Duration::from_secs(180);
     loop {
@@ -4431,22 +4582,25 @@ fn reconcile_submitting(
                     status.browser = "GENERATION_WAIT".into();
                     status.login = "READY".into();
                 }
-                Some("SENT") => {
+                Some(stage @ ("SENT" | "SENT_PENDING_RESPONSE")) => {
                     let receipt: Receipt = serde_json::from_value(
                         value.get("receipt").ok_or("RECEIPT_MISSING")?.clone(),
                     )
                     .map_err(|_| "RECEIPT_MALFORMED")?;
+                    store.record_exact_receipt_timer(&d.event.event_id, &receipt)?;
                     let delivery =
                         store.reconcile_submitting_sent(&d.event.event_id, receipt.clone())?;
                     if delivery.phase != Phase::Sent {
                         return Err("SUBMISSION_RECONCILIATION_REFUSED".into());
                     }
-                    store.complete_timer(&d.event.event_id)?;
+                    if stage == "SENT" {
+                        store.complete_timer(&d.event.event_id)?;
+                    }
                     status.last_success_utc = Some(now());
                     status.last_receipt = Some(receipt);
                     status.browser = "READY".into();
                     status.login = "READY".into();
-                    status.submission = "SENT".into();
+                    status.submission = stage.into();
                     status.attention = None;
                     return Ok(());
                 }
@@ -4500,7 +4654,7 @@ fn attempt(
     d: &crate::store::Delivery,
     status: &mut Status,
 ) -> Result<()> {
-    adapter.send(serde_json::json!({"event": d.event, "target": d.target}))?;
+    adapter.send(serde_json::json!({"event": d.event, "target": d.target, "cooperative":true}))?;
     let mut deadline = Instant::now() + Duration::from_secs(180);
     let mut submit_dispatched = false;
     let mut receipt_recorded = false;
@@ -4609,11 +4763,12 @@ fn attempt(
                     status.browser = "GENERATION_WAIT".into();
                     status.login = "READY".into();
                 }
-                Some("SENT") => {
+                Some(stage @ ("SENT" | "SENT_PENDING_RESPONSE")) => {
                     let receipt: Receipt = serde_json::from_value(
                         value.get("receipt").ok_or("RECEIPT_MISSING")?.clone(),
                     )
                     .map_err(|_| "RECEIPT_MALFORMED")?;
+                    store.record_exact_receipt_timer(&d.event.event_id, &receipt)?;
                     let delivery = store.transition(
                         &d.event.event_id,
                         lease.owner(),
@@ -4624,12 +4779,14 @@ fn attempt(
                     if delivery.phase != Phase::Sent {
                         return Err("SUBMISSION_TRANSITION_INVALID".into());
                     }
-                    store.complete_timer(&d.event.event_id)?;
+                    if stage == "SENT" {
+                        store.complete_timer(&d.event.event_id)?;
+                    }
                     status.last_success_utc = Some(now());
                     status.last_receipt = Some(receipt);
                     status.browser = "READY".into();
                     status.login = "READY".into();
-                    status.submission = "SENT".into();
+                    status.submission = stage.into();
                     status.attention = None;
                     return Ok(());
                 }

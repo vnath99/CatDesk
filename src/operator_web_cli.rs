@@ -54,6 +54,13 @@ pub(crate) enum WebAction {
         project_id: String,
         handoff_file: PathBuf,
     },
+    RolloverHandoffRequest {
+        project_id: String,
+        source_task_id: String,
+    },
+    RolloverHandoffCollect {
+        project_id: String,
+    },
     RolloverExecute {
         project_id: String,
     },
@@ -165,6 +172,23 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("rollover", "status") if options.is_empty() => Ok(WebAction::RolloverStatus {
             project_id: project_id.into(),
         }),
+        ("rollover", "handoff-collect") if options.is_empty() => {
+            Ok(WebAction::RolloverHandoffCollect {
+                project_id: project_id.into(),
+            })
+        }
+        ("rollover", "handoff-request") => {
+            let source_task_id = options
+                .remove("--source-task-id")
+                .ok_or("WEB_USAGE: --source-task-id is required")?;
+            if !catdesk_wake::protocol::valid_id(source_task_id) || !options.is_empty() {
+                return Err("WEB_USAGE: invalid source task or unexpected option".into());
+            }
+            Ok(WebAction::RolloverHandoffRequest {
+                project_id: project_id.into(),
+                source_task_id: source_task_id.into(),
+            })
+        }
         ("rollover", "execute") if options.is_empty() => Ok(WebAction::RolloverExecute {
             project_id: project_id.into(),
         }),
@@ -397,6 +421,13 @@ pub(crate) fn execute(action: WebAction, workspace: &Path) -> Result<Value, Stri
             )
         }
         WebAction::RolloverStatus { project_id } => rollover::status(&workspace, &project_id),
+        WebAction::RolloverHandoffRequest {
+            project_id,
+            source_task_id,
+        } => rollover::request_handoff(&workspace, &project_id, &source_task_id),
+        WebAction::RolloverHandoffCollect { project_id } => {
+            rollover::collect_handoff(&workspace, &project_id)
+        }
         WebAction::RolloverPrepare {
             project_id,
             handoff_file,
@@ -456,6 +487,71 @@ mod tests {
             let mut command = args(&["operator", "web", "target", "read"]);
             command.extend(args(&tail));
             assert!(parse(&command).is_err());
+        }
+    }
+
+    #[test]
+    fn automatic_handoff_commands_require_exact_project_and_task_scope() {
+        let request = args(&[
+            "operator",
+            "web",
+            "rollover",
+            "handoff-request",
+            "--project-id",
+            "alpha",
+            "--source-task-id",
+            "task-a",
+        ]);
+        assert!(matches!(
+            parse(&request),
+            Ok(WebAction::RolloverHandoffRequest {
+                project_id,
+                source_task_id
+            }) if project_id == "alpha" && source_task_id == "task-a"
+        ));
+        let collect = args(&[
+            "operator",
+            "web",
+            "rollover",
+            "handoff-collect",
+            "--project-id",
+            "alpha",
+        ]);
+        assert!(matches!(
+            parse(&collect),
+            Ok(WebAction::RolloverHandoffCollect { project_id }) if project_id == "alpha"
+        ));
+        for invalid in [
+            args(&[
+                "operator",
+                "web",
+                "rollover",
+                "handoff-request",
+                "--project-id",
+                "alpha",
+            ]),
+            args(&[
+                "operator",
+                "web",
+                "rollover",
+                "handoff-request",
+                "--project-id",
+                "alpha",
+                "--source-task-id",
+                "../other",
+            ]),
+            args(&[
+                "operator",
+                "web",
+                "rollover",
+                "handoff-collect",
+                "--project-id",
+                "alpha",
+                "--source-task-id",
+                "task-a",
+            ]),
+        ] {
+            assert!(parse(&invalid).is_err());
         }
     }
 }

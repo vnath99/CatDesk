@@ -9,6 +9,7 @@ import importlib.util
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 CHANNEL = sys.stdout
@@ -85,7 +86,7 @@ def prepare_cdp_target(bridge, sb, url):
     return cdp
 
 
-def attempt(bridge, sb, event, target):
+def attempt(bridge, sb, event, target, *, cooperative=False):
     url = bridge.canonical_conversation_url(target["url"])
     if url != target["url"] or bridge.digest(url) != target["digest"]:
         raise bridge.Attention("TARGET_IDENTITY_MISMATCH")
@@ -137,12 +138,13 @@ def attempt(bridge, sb, event, target):
     # Accepted submission starts the passive response timer but is not a
     # durable receipt and cannot transition delivery to SENT.
     emit({"stage": "SUBMISSION_ACCEPTED"})
-    sink.wait_for_response_completion(
-        cdp, message, observer=lambda stage: emit({"stage": stage})
-    )
-    # Response observation keeps this browser/profile/conversation owned and
-    # may periodically refresh the exact target while Stop/Pause remains active.
-    # After deterministic completion, perform the separate persistence round-trip.
+    if not cooperative:
+        sink.wait_for_response_completion(
+            cdp, message, observer=lambda stage: emit({"stage": stage})
+        )
+    # A fresh-document round-trip is mandatory in both modes. Cooperative
+    # delivery may close this owner while the assistant is still generating,
+    # but never before independent USER persistence has been proven.
     sink.durable_receipt_round_trip(cdp)
     receipt = sink.confirm_exact_receipt(
         cdp,
@@ -159,7 +161,7 @@ def attempt(bridge, sb, event, target):
         "evidence": "EXACT_USER_MESSAGE_APPENDED",
     }
     emit({"stage": "USER_MESSAGE_APPENDED", "receipt": receipt_payload})
-    emit({"stage": "SENT", "receipt": receipt_payload})
+    emit({"stage": "SENT_PENDING_RESPONSE" if cooperative else "SENT", "receipt": receipt_payload})
 
 
 def bootstrap_attempt(bridge, sb, request):
@@ -306,7 +308,7 @@ def source_snapshot(bridge, sb, request):
     emit(payload)
 
 
-def reconcile_submission(bridge, sb, event, target):
+def reconcile_submission(bridge, sb, event, target, *, cooperative=False):
     """Reconcile a delivery already durably SUBMITTING without another USER submit.
 
     This path never types, presses Enter, or clicks the USER send control.
@@ -340,14 +342,61 @@ def reconcile_submission(bridge, sb, event, target):
         "messageDigest": receipt.message_sha256, "sentUtc": int(receipt.browser_sent_at_unix),
         "evidence": "EXACT_USER_MESSAGE_APPENDED",
     }
-    # Reconciliation never re-submits the USER wake. It only proves the
-    # existing receipt, restarts the passive timer idempotently, then observes
-    # or retries the failed assistant response in the same conversation.
+    # Reconciliation never re-submits the USER wake. Cooperative mode leaves
+    # the independently scheduled response probe to observe the assistant.
     emit({"stage": "USER_MESSAGE_APPENDED", "receipt": receipt_payload})
-    sink.wait_for_response_completion(
-        cdp, message, observer=lambda stage: emit({"stage": stage})
-    )
-    emit({"stage": "SENT", "receipt": receipt_payload})
+    if not cooperative:
+        sink.wait_for_response_completion(
+            cdp, message, observer=lambda stage: emit({"stage": stage})
+        )
+    emit({"stage": "SENT_PENDING_RESPONSE" if cooperative else "SENT", "receipt": receipt_payload})
+
+
+def observe_response(bridge, sb, request):
+    """Read one exact sent turn on a newly opened target; never interact with it."""
+    if set(request) != {"observeResponse", "event", "target", "receipt"} or request["observeResponse"] is not True:
+        raise bridge.Attention("RESPONSE_PROBE_REQUEST_INVALID")
+    event, target, receipt = request["event"], request["target"], request["receipt"]
+    if not all(isinstance(value, dict) for value in (event, target, receipt)):
+        raise bridge.Attention("RESPONSE_PROBE_REQUEST_INVALID")
+    if set(target) != {"url", "digest", "generation"} or set(receipt) != {
+        "schemaVersion", "eventId", "targetGeneration", "targetDigest",
+        "messageDigest", "sentUtc", "evidence",
+    }:
+        raise bridge.Attention("RESPONSE_PROBE_REQUEST_INVALID")
+    url = bridge.canonical_conversation_url(target["url"])
+    if url != target["url"] or bridge.digest(url) != target["digest"]:
+        raise bridge.Attention("RESPONSE_PROBE_TARGET_INVALID")
+    generation = target["generation"]
+    if not isinstance(generation, int) or isinstance(generation, bool) or not 0 < generation < 2**63:
+        raise bridge.Attention("RESPONSE_PROBE_TARGET_INVALID")
+    message = event.get("message")
+    event_id = event.get("eventId")
+    expected = bridge.digest(bridge.normalize_message(message)) if isinstance(message, str) else None
+    if (not isinstance(event_id, str) or not bridge.SAFE_ID.fullmatch(event_id) or
+            not isinstance(message, str) or not message or len(message) > 2048 or
+            type(event.get("targetGeneration")) is not int or
+            event["targetGeneration"] != generation or
+            type(receipt["schemaVersion"]) is not int or receipt["schemaVersion"] != 1 or
+            receipt["eventId"] != event_id or
+            type(receipt["targetGeneration"]) is not int or
+            receipt["targetGeneration"] != generation or receipt["targetDigest"] != target["digest"] or
+            receipt["messageDigest"] != expected or
+            not isinstance(receipt["sentUtc"], int) or isinstance(receipt["sentUtc"], bool) or
+            receipt["sentUtc"] <= 0 or receipt["evidence"] != "EXACT_USER_MESSAGE_APPENDED"):
+        raise bridge.Attention("RESPONSE_PROBE_RECEIPT_INVALID")
+    sink = bridge.CdpSink(url, ROOT / "browser-profile", 30, 20)
+    cdp = prepare_cdp_target(bridge, sb, url)
+    stage = sink.observe_cooperative_response(cdp, message, expected)
+    if stage == "RESPONSE_COMPLETE":
+        # One completed-looking frame can be a transient DOM remount. A
+        # separated second read must still prove the same exact final turn.
+        time.sleep(.25)
+        stage = sink.observe_cooperative_response(cdp, message, expected)
+    if stage not in {"RESPONSE_PENDING", "RESPONSE_COMPLETE"}:
+        raise bridge.Attention("RESPONSE_PROBE_STATE_INVALID")
+    emit({"stage": stage, "eventId": event_id, "targetGeneration": generation,
+          "targetDigest": target["digest"], "messageDigest": expected})
 
 
 def startup_reason(error):
@@ -386,16 +435,20 @@ def main():
                     emit({"stage": "READY"})
                     try:
                         request = read_job_request()
-                        if request.get("snapshot") is True:
+                        if request.get("observeResponse") is True:
+                            observe_response(bridge, sb, request)
+                        elif request.get("snapshot") is True:
                             source_snapshot(bridge, sb, request)
                         elif request.get("bootstrap") is True:
                             bootstrap_attempt(bridge, sb, request)
                         elif request.get("reconcile") is True:
                             reconcile_submission(
-                                bridge, sb, request["event"], request["target"]
+                                bridge, sb, request["event"], request["target"],
+                                cooperative=request.get("cooperative") is True,
                             )
                         else:
-                            attempt(bridge, sb, request["event"], request["target"])
+                            attempt(bridge, sb, request["event"], request["target"],
+                                    cooperative=request.get("cooperative") is True)
                         # One adapter process owns exactly one browser attempt.
                         # Returning exits SeleniumBase's context immediately after
                         # SENT or successful observe-only reconciliation, so the

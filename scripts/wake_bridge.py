@@ -954,7 +954,7 @@ class CdpSink:
                 sleeper(.25)
         raise PostSubmitUnknown(last_stage)
 
-    def response_snapshot(self, cdp: Any, message: str) -> tuple[int, int, bool, bool]:
+    def response_snapshot(self, cdp: Any, message: str, *, require_usable_body: bool = False) -> tuple[int, int, bool, bool]:
         """Return only bounded structural signals for the latest user turn.
 
         The timeout detector is intentionally exact-text and scoped strictly
@@ -966,6 +966,7 @@ class CdpSink:
             const timeoutText = {json.dumps("Message delivery timed out. Please try again.")};
             const retryLabel = {json.dumps("Retry")};
             const expectedWake = {json.dumps(normalize_message(message))};
+            const requireUsableBody = {str(require_usable_body).lower()};
             const normalize = value => String(value || '').replace(/\\s+/g, ' ').trim();
             const visible = element => {{
                 if (!element) return false;
@@ -1044,14 +1045,31 @@ class CdpSink:
             const fallbackAssistants = pairedTurn ? pairedAssistantUnits : turnsAfterWake;
             const assistants = roleAssistants.length ? roleAssistants : fallbackAssistants;
             const latestAssistant = assistants.length ? assistants[assistants.length - 1] : null;
-            const assistantText = latestAssistant
+            const assistantRawText = latestAssistant
                 ? normalize(latestAssistant.innerText || latestAssistant.textContent)
                     .replace(/[‘’]/g, "'")
                 : '';
+            // A mounted assistant shell may contain only Copy/Regenerate
+            // controls. Read a dedicated answer body and remove controls from
+            // that body before treating it as a usable response. If the current
+            // UI offers no known body node, cooperative observation stays
+            // pending instead of inferring an answer from button labels.
+            const contentSelector = '[data-message-content], .markdown, [class~="prose"]';
+            const bodyNode = latestAssistant
+                ? (latestAssistant.matches(contentSelector) ? latestAssistant :
+                   latestAssistant.querySelector(contentSelector))
+                : null;
+            let assistantBodyText = '';
+            if (bodyNode && visible(bodyNode)) {{
+                const bodyCopy = bodyNode.cloneNode(true);
+                bodyCopy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"]')
+                    .forEach(control => control.remove());
+                assistantBodyText = normalize(bodyCopy.textContent);
+            }}
             // ChatGPT can render an old assistant as a load-error placeholder
             // while retaining Copy/Regenerate controls. Those controls alone
             // are not evidence of a usable completed response.
-            if (assistantText.toLowerCase().includes("this response couldn't load"))
+            if (assistantRawText.toLowerCase().includes("this response couldn't load"))
                 return ['load-error', 0, 0, true, false];
             const latestAssistantTurn = latestAssistant
                 ? (latestAssistant.closest("[data-content-search-turn-key]") ||
@@ -1066,11 +1084,31 @@ class CdpSink:
             const completionAction = pairedCompletionAction || (latestAssistantTurn
                 ? latestAssistantTurn.querySelector("button[data-testid='copy-turn-action-button']")
                 : null);
+            // The paired turn can also hold a USER Copy button. For passive
+            // cooperative completion, climb only inside an assistant-only
+            // subtree; never treat a whole-turn control or a mounted message
+            // selection id as proof that the assistant finished.
+            const userNodeSelector = "[data-message-author-role='user'], article[data-turn='user'], " +
+                "[data-user-message-bubble], [class~='group/user-message']";
+            let assistantCompletionAction = null;
+            for (let scope = latestAssistant; scope && scope !== latestUser; scope = scope.parentElement) {{
+                if (scope.querySelector(userNodeSelector)) break;
+                const actions = Array.from(scope.querySelectorAll(
+                    "button[data-testid='copy-turn-action-button']"
+                ));
+                if (actions.length > 1) break;
+                if (actions.length === 1) {{
+                    assistantCompletionAction = actions[0];
+                    break;
+                }}
+            }}
             // ChatGPT may keep completed-turn actions in the DOM but visually hide
             // them until hover. Presence on the latest assistant turn/exchange is the
             // durable completion signal; requiring visibility caused clean turns
             // to age into RESPONSE_COMPLETION_UNPROVEN.
-            const completionActionReady = Boolean(completionAction) || pairedAssistantComplete;
+            const completionActionReady = requireUsableBody
+                ? Boolean(assistantCompletionAction) && assistantBodyText.length > 0
+                : (Boolean(completionAction) || pairedAssistantComplete);
             if (timeouts.length > 8 || retryButtons.length > 8 || assistants.length > 64)
                 return ['invalid', 0, 0, false, false];
             return [
@@ -1097,6 +1135,52 @@ class CdpSink:
         if value[0] != "ready":
             raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
         return value[1], value[2], value[3], value[4]
+
+    def observe_cooperative_response(self, cdp: Any, message: str, expected_digest: str) -> str:
+        """One read-only check of a durably sent USER turn on a new document.
+
+        The caller opens the exact target before this check. In particular,
+        this helper never retries the assistant or re-submits a USER message.
+        """
+        try:
+            current = str(cdp.get_current_url())
+        except Exception as error:
+            raise Attention("RESPONSE_TARGET_QUERY_FAILED") from error
+        if not self.exact(current):
+            raise Attention("RESPONSE_TARGET_DRIFT")
+        if self.post_submit_visible_any(cdp, NETWORK):
+            raise Attention("RESPONSE_NETWORK_ERROR")
+        if (self.post_submit_visible_any(cdp, LOGIN) or
+                self.post_submit_visible_any(cdp, CAPTCHA)):
+            raise Attention("LOGIN_OR_PROFILE_REQUIRED")
+        if self.document_ready_state(cdp) != "complete":
+            return "RESPONSE_PENDING"
+        try:
+            users = self.user_message_digests(cdp)
+            count, turns_after = self.trusted_turn_anchor_state(cdp, message)
+        except Attention as error:
+            raise Attention("RESPONSE_SEQUENCE_QUERY_FAILED") from error
+        if users.count(expected_digest) != 1 or not users:
+            raise Attention("RESPONSE_EXACT_USER_MISSING_OR_AMBIGUOUS")
+        if users[-1] != expected_digest or count != 1 or turns_after > 1:
+            raise Attention("RESPONSE_SEQUENCE_DRIFT")
+        if self.post_submit_visible_any(cdp, STOP):
+            return "RESPONSE_PENDING"
+        try:
+            editor_status, _editor_empty = self.editor_state(cdp)
+        except Attention as error:
+            raise Attention("RESPONSE_STATE_QUERY_FAILED") from error
+        if editor_status != "ready":
+            return "RESPONSE_PENDING"
+        try:
+            timeout_count, _retry_count, assistant_after_user, completed = self.response_snapshot(
+                cdp, message, require_usable_body=True
+            )
+        except PostSubmitUnknown as error:
+            raise Attention("RESPONSE_STATE_UNPROVEN") from error
+        if timeout_count:
+            raise Attention("RESPONSE_TIMEOUT_RETRY_REQUIRED")
+        return "RESPONSE_COMPLETE" if assistant_after_user and completed else "RESPONSE_PENDING"
 
     def click_response_timeout_retry(self, cdp: Any, message: str) -> None:
         """Click exactly one Retry control tied to the exact Wake turn."""
@@ -2160,9 +2244,22 @@ class NewConversationSink(CdpSink):
                 const messageId = anchor(node, 'data-chatgpt-selection-message-id');
                 const key = unitKey ? 'unit:' + role(node) + ':' + unitKey :
                     messageId ? 'message:' + role(node) + ':' + messageId : null;
-                const content = node.querySelector('[data-message-content]') || node;
-                const text = String(content.innerText || content.textContent || '');
-                const row = [role(node), text.slice(-4096), text.length <= 4096,
+                const contentSelector = '[data-message-content], .markdown, [class~="prose"]';
+                const content = node.matches(contentSelector) ? node : node.querySelector(contentSelector);
+                const completeBody = Boolean(content && visible(content));
+                let text = '';
+                if (completeBody) {
+                    const bodyCopy = content.cloneNode(true);
+                    bodyCopy.querySelectorAll('button, [role="button"], [role="toolbar"], [aria-hidden="true"]')
+                        .forEach(control => control.remove());
+                    text = String(bodyCopy.textContent || '');
+                } else {
+                    // Retain only a bounded diagnostic excerpt for a missing
+                    // body. It must never be counted as complete answer text.
+                    text = String(node.innerText || node.textContent || '');
+                }
+                const bodyProven = role(node) !== 'assistant' || completeBody;
+                const row = [role(node), text.slice(-4096), bodyProven && text.length <= 4096,
                     Math.min(text.length, 1000000), anchor(node, 'data-content-search-turn-key'),
                     unitKey, messageId];
                 if (key && keyed.has(key)) {
@@ -2272,7 +2369,7 @@ class NewConversationSink(CdpSink):
         body = normalize_message(messages[-1]["text"]).replace("’", "'").replace("‘", "'")
         if "this response couldn't load" in body.lower():
             raise error_type(load_error)
-        if not body:
+        if not body or not messages[-1]["textComplete"] or not messages[-1]["revisionComplete"]:
             raise error_type(unavailable)
 
     def check_empty_home(self, cdp: Any) -> None:

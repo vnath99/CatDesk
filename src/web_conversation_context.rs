@@ -36,6 +36,10 @@ pub struct ContextPressurePolicy {
     pub safety_headroom_tokens: u64,
     pub unknown_source_reserve_tokens: u64,
     pub automatic_rollover_enabled: bool,
+    /// Allow an advisory rollover request after an incomplete browser capture.
+    /// This remains opt-in even when automatic rollover is enabled.
+    #[serde(default)]
+    pub incomplete_history_rollover: bool,
 }
 
 impl Default for ContextPressurePolicy {
@@ -45,6 +49,7 @@ impl Default for ContextPressurePolicy {
             safety_headroom_tokens: 24_000,
             unknown_source_reserve_tokens: 8_000,
             automatic_rollover_enabled: false,
+            incomplete_history_rollover: false,
         }
     }
 }
@@ -153,6 +158,33 @@ pub struct RolloverIntent {
     /// independently recheck idle/ownership before any USER write.
     pub quiescence_evidence: String,
     pub status: String,
+    #[serde(default = "observed_pressure_reason")]
+    pub trigger_reason: String,
+}
+
+fn observed_pressure_reason() -> String {
+    "OBSERVED_PRESSURE".into()
+}
+
+/// Persistent uncertainty from bounded browser snapshots. A rendered DOM
+/// excerpt cannot prove absence of virtualized or older conversation turns.
+/// No current browser adapter supplies evidence capable of clearing a gap.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BrowserCoverageState {
+    pub observed: bool,
+    pub initial_history_gap: bool,
+    pub identity_gap: bool,
+    pub text_gap: bool,
+    pub overflow_gap: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct BrowserCoverageObservation {
+    pub initial_history_gap: bool,
+    pub identity_gap: bool,
+    pub text_gap: bool,
+    pub overflow_gap: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -162,6 +194,8 @@ struct ConversationLedger {
     key: ConversationKey,
     events: Vec<EventMetadata>,
     rollover_intent: Option<RolloverIntent>,
+    #[serde(default)]
+    browser_coverage: BrowserCoverageState,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -182,6 +216,9 @@ pub struct PressureStatus {
     pub is_current: bool,
     pub recorded_events: usize,
     pub visible_unique_tokens: u64,
+    /// Measured visible text only. Older unseen history has no finite bound.
+    #[serde(default)]
+    pub observed_estimate_tokens: u64,
     pub unknown_source_count: usize,
     pub estimated_upper_tokens: u64,
     pub observed_tool_argument_tokens: u64,
@@ -190,7 +227,15 @@ pub struct PressureStatus {
     pub safety_headroom_tokens: u64,
     pub trigger_tokens: u64,
     pub near_capacity: bool,
+    #[serde(default)]
+    pub coverage_known: bool,
+    #[serde(default)]
+    pub browser_coverage: BrowserCoverageState,
+    #[serde(default)]
+    pub pressure_assessment: String,
     pub automatic_rollover_enabled: bool,
+    #[serde(default)]
+    pub incomplete_history_rollover: bool,
     pub rollover_intent: Option<RolloverIntent>,
     pub estimate_method: String,
     pub advisory: bool,
@@ -256,10 +301,14 @@ impl WebContextStore {
             key: key.clone(),
             events: Vec::new(),
             rollover_intent: None,
+            browser_coverage: BrowserCoverageState::default(),
         };
         if self.ledger_path(&key).exists() {
             let existing = self.read_ledger(&key)?;
-            if !existing.events.is_empty() || existing.rollover_intent.is_some() {
+            if !existing.events.is_empty()
+                || existing.rollover_intent.is_some()
+                || existing.browser_coverage.observed
+            {
                 return Err("WEB_CONTEXT_TARGET_ALREADY_RECORDED".into());
             }
         } else {
@@ -336,6 +385,37 @@ impl WebContextStore {
             };
         }
         self.record_event_locked(&project, &mut ledger, event)
+    }
+
+    /// Merge uncertainty from a bounded browser excerpt. Until the browser
+    /// supplies an independently verified full-history scan, gaps are sticky:
+    /// a later virtualized DOM window is not evidence that old history ended.
+    pub fn record_browser_coverage(
+        &self,
+        key: &ConversationKey,
+        observation: BrowserCoverageObservation,
+    ) -> Result<PressureStatus, String> {
+        key.validate()?;
+        if !observation.initial_history_gap {
+            return Err("WEB_CONTEXT_COVERAGE_UNPROVEN".into());
+        }
+        let _lock = self.lock()?;
+        let project = self.read_project(&key.project_id)?;
+        if project.active.as_ref() != Some(key) {
+            return Err("WEB_CONTEXT_OLD_GENERATION".into());
+        }
+        let mut ledger = self.read_ledger(key)?;
+        let coverage = &mut ledger.browser_coverage;
+        let previous = coverage.clone();
+        coverage.observed = true;
+        coverage.initial_history_gap = true;
+        coverage.identity_gap |= observation.identity_gap;
+        coverage.text_gap |= observation.text_gap;
+        coverage.overflow_gap |= observation.overflow_gap;
+        if *coverage != previous {
+            self.write_ledger(&ledger)?;
+        }
+        Ok(pressure_status(&project, &ledger))
     }
 
     /// The caller holds the ledger lock across reading the previous event,
@@ -432,7 +512,18 @@ impl WebContextStore {
         }
         let mut ledger = self.read_ledger(key)?;
         let status = pressure_status(&project, &ledger);
-        if !project.policy.automatic_rollover_enabled || !status.near_capacity || !quiescent {
+        let incomplete_history_guard_candidate = project.policy.incomplete_history_rollover
+            && status.browser_coverage.observed
+            && status.pressure_assessment == "UNKNOWN_OR_INCOMPLETE";
+        // One uncertainty-only rollover is enough to put the project on a
+        // fresh conversation. Repeating it on that fresh chat's first bounded
+        // excerpt would otherwise create an automatic rollover loop.
+        let incomplete_history_guard = incomplete_history_guard_candidate
+            && !self.predecessor_used_incomplete_history_guard(&project, key)?;
+        if !project.policy.automatic_rollover_enabled
+            || !(status.near_capacity || incomplete_history_guard)
+            || !quiescent
+        {
             return Ok(None);
         }
         if let Some(existing) = &ledger.rollover_intent {
@@ -454,10 +545,33 @@ impl WebContextStore {
             requested_at_unix: now_unix,
             quiescence_evidence: "CALLER_OBSERVED_ADVISORY".into(),
             status: "REQUESTED".into(),
+            trigger_reason: if status.near_capacity {
+                "OBSERVED_PRESSURE".into()
+            } else {
+                "INCOMPLETE_HISTORY_GUARD".into()
+            },
         };
         ledger.rollover_intent = Some(intent.clone());
         self.write_ledger(&ledger)?;
         Ok(Some(intent))
+    }
+
+    fn predecessor_used_incomplete_history_guard(
+        &self,
+        project: &ProjectState,
+        current: &ConversationKey,
+    ) -> Result<bool, String> {
+        for predecessor in project.history.iter().filter(|key| *key != current) {
+            if self
+                .read_ledger(predecessor)?
+                .rollover_intent
+                .as_ref()
+                .is_some_and(|intent| intent.trigger_reason == "INCOMPLETE_HISTORY_GUARD")
+            {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     fn lock(&self) -> Result<File, String> {
@@ -561,10 +675,20 @@ impl WebContextStore {
                 .events
                 .iter()
                 .any(|event| !valid_event_metadata(event))
+            || (ledger.browser_coverage.observed && !ledger.browser_coverage.initial_history_gap)
+            || (!ledger.browser_coverage.observed
+                && (ledger.browser_coverage.initial_history_gap
+                    || ledger.browser_coverage.identity_gap
+                    || ledger.browser_coverage.text_gap
+                    || ledger.browser_coverage.overflow_gap))
             || ledger.rollover_intent.as_ref().is_some_and(|intent| {
                 intent.key != *key
                     || intent.target_sha256 != key.target_sha256()
                     || intent.status != "REQUESTED"
+                    || !matches!(
+                        intent.trigger_reason.as_str(),
+                        "OBSERVED_PRESSURE" | "INCOMPLETE_HISTORY_GUARD"
+                    )
             })
         {
             return Err("WEB_CONTEXT_LEDGER_INVALID".into());
@@ -662,12 +786,25 @@ fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> Press
     let estimated_upper_tokens = visible_unique_tokens.saturating_add(
         (unknown.len() as u64).saturating_mul(project.policy.unknown_source_reserve_tokens),
     );
+    let coverage_known = ledger.browser_coverage.observed
+        && !ledger.browser_coverage.initial_history_gap
+        && !ledger.browser_coverage.identity_gap
+        && !ledger.browser_coverage.text_gap
+        && !ledger.browser_coverage.overflow_gap;
+    let pressure_assessment = if !coverage_known || !unknown.is_empty() {
+        "UNKNOWN_OR_INCOMPLETE"
+    } else if visible_unique_tokens >= project.policy.trigger_tokens() {
+        "OBSERVED_AT_OR_ABOVE_TRIGGER"
+    } else {
+        "OBSERVED_BELOW_TRIGGER"
+    };
     PressureStatus {
         key: ledger.key.clone(),
         target_sha256: ledger.key.target_sha256(),
         is_current: project.active.as_ref() == Some(&ledger.key),
         recorded_events: ledger.events.len(),
         visible_unique_tokens,
+        observed_estimate_tokens: visible_unique_tokens,
         unknown_source_count: unknown.len(),
         estimated_upper_tokens,
         observed_tool_argument_tokens: arguments
@@ -679,10 +816,15 @@ fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> Press
         configured_budget_tokens: project.policy.configured_budget_tokens,
         safety_headroom_tokens: project.policy.safety_headroom_tokens,
         trigger_tokens: project.policy.trigger_tokens(),
-        near_capacity: estimated_upper_tokens >= project.policy.trigger_tokens(),
+        // A configured reserve is a proxy, not a bound on unseen history.
+        near_capacity: visible_unique_tokens >= project.policy.trigger_tokens(),
+        coverage_known,
+        browser_coverage: ledger.browser_coverage.clone(),
+        pressure_assessment: pressure_assessment.into(),
         automatic_rollover_enabled: project.policy.automatic_rollover_enabled,
+        incomplete_history_rollover: project.policy.incomplete_history_rollover,
         rollover_intent: ledger.rollover_intent.clone(),
-        estimate_method: "O200K_VISIBLE_TEXT_PROXY_WITH_UNKNOWN_RESERVE".into(),
+        estimate_method: "O200K_VISIBLE_TEXT_PROXY_WITH_CONFIGURED_UNKNOWN_RESERVE".into(),
         advisory: true,
         origin_authenticated: false,
     }
@@ -1201,6 +1343,219 @@ mod tests {
     }
 
     #[test]
+    fn incomplete_browser_coverage_is_durable_idempotent_and_project_scoped() {
+        let fixture = Fixture::new("browser-coverage");
+        let alpha = Fixture::key("alpha", "coverage-alpha", 1);
+        let beta = Fixture::key("beta", "coverage-beta", 1);
+        fixture
+            .store
+            .bind_observed_target(alpha.clone(), None)
+            .unwrap();
+        fixture
+            .store
+            .bind_observed_target(beta.clone(), None)
+            .unwrap();
+        let first = fixture
+            .store
+            .record_browser_coverage(
+                &alpha,
+                BrowserCoverageObservation {
+                    initial_history_gap: true,
+                    identity_gap: true,
+                    text_gap: false,
+                    overflow_gap: true,
+                },
+            )
+            .unwrap();
+        assert!(!first.coverage_known);
+        assert_eq!(first.pressure_assessment, "UNKNOWN_OR_INCOMPLETE");
+        assert!(first.browser_coverage.identity_gap);
+        assert!(first.browser_coverage.overflow_gap);
+        assert_eq!(first.unknown_source_count, 0);
+        let replay = fixture
+            .store
+            .record_browser_coverage(
+                &alpha,
+                BrowserCoverageObservation {
+                    initial_history_gap: true,
+                    identity_gap: false,
+                    text_gap: false,
+                    overflow_gap: false,
+                },
+            )
+            .unwrap();
+        assert_eq!(first, replay);
+        assert_eq!(
+            fixture.store.pressure(&beta).unwrap().browser_coverage,
+            BrowserCoverageState::default()
+        );
+        let reopened = WebContextStore::open(&fixture.root).unwrap();
+        assert_eq!(reopened.pressure(&alpha).unwrap(), first);
+        assert_eq!(
+            reopened
+                .record_browser_coverage(
+                    &alpha,
+                    BrowserCoverageObservation {
+                        initial_history_gap: false,
+                        identity_gap: false,
+                        text_gap: false,
+                        overflow_gap: false,
+                    }
+                )
+                .unwrap_err(),
+            "WEB_CONTEXT_COVERAGE_UNPROVEN"
+        );
+        let successor = Fixture::key("alpha", "coverage-alpha-next", 2);
+        reopened
+            .bind_observed_target(successor.clone(), Some(&alpha))
+            .unwrap();
+        assert_eq!(
+            reopened
+                .record_browser_coverage(
+                    &alpha,
+                    BrowserCoverageObservation {
+                        initial_history_gap: true,
+                        identity_gap: false,
+                        text_gap: false,
+                        overflow_gap: false,
+                    }
+                )
+                .unwrap_err(),
+            "WEB_CONTEXT_OLD_GENERATION"
+        );
+        assert_eq!(
+            reopened.pressure(&alpha).unwrap().browser_coverage,
+            first.browser_coverage
+        );
+        assert_eq!(
+            reopened.pressure(&successor).unwrap().browser_coverage,
+            BrowserCoverageState::default()
+        );
+    }
+
+    #[test]
+    fn incomplete_history_rollover_needs_capture_explicit_guard_and_quiescence() {
+        let fixture = Fixture::new("coverage-guard");
+        let key = Fixture::key("alpha", "coverage-guard", 1);
+        fixture
+            .store
+            .bind_observed_target(key.clone(), None)
+            .unwrap();
+        let mut policy = ContextPressurePolicy {
+            configured_budget_tokens: 100,
+            safety_headroom_tokens: 40,
+            unknown_source_reserve_tokens: 8,
+            automatic_rollover_enabled: true,
+            incomplete_history_rollover: false,
+        };
+        fixture
+            .store
+            .configure_policy("alpha", policy.clone())
+            .unwrap();
+        assert!(
+            fixture
+                .store
+                .request_rollover_if_due(&key, &key.target_sha256(), "task-1", true, 100)
+                .unwrap()
+                .is_none()
+        );
+        fixture
+            .store
+            .record_browser_coverage(
+                &key,
+                BrowserCoverageObservation {
+                    initial_history_gap: true,
+                    identity_gap: false,
+                    text_gap: false,
+                    overflow_gap: false,
+                },
+            )
+            .unwrap();
+        let status = fixture.store.pressure(&key).unwrap();
+        assert_eq!(status.observed_estimate_tokens, 0);
+        assert!(!status.near_capacity);
+        assert_eq!(status.pressure_assessment, "UNKNOWN_OR_INCOMPLETE");
+        assert!(
+            fixture
+                .store
+                .request_rollover_if_due(&key, &key.target_sha256(), "task-1", true, 101)
+                .unwrap()
+                .is_none()
+        );
+        policy.incomplete_history_rollover = true;
+        fixture
+            .store
+            .configure_policy("alpha", policy.clone())
+            .unwrap();
+        assert!(
+            fixture
+                .store
+                .request_rollover_if_due(&key, &key.target_sha256(), "task-1", false, 102)
+                .unwrap()
+                .is_none()
+        );
+        let intent = fixture
+            .store
+            .request_rollover_if_due(&key, &key.target_sha256(), "task-1", true, 103)
+            .unwrap()
+            .unwrap();
+        assert_eq!(intent.trigger_reason, "INCOMPLETE_HISTORY_GUARD");
+        assert_eq!(intent.estimated_upper_tokens, 0);
+        assert!(!fixture.store.pressure(&key).unwrap().near_capacity);
+        let replacement = Fixture::key("alpha", "coverage-guard-next", 2);
+        fixture
+            .store
+            .bind_observed_target(replacement.clone(), Some(&key))
+            .unwrap();
+        fixture
+            .store
+            .record_browser_coverage(
+                &replacement,
+                BrowserCoverageObservation {
+                    initial_history_gap: true,
+                    identity_gap: false,
+                    text_gap: false,
+                    overflow_gap: false,
+                },
+            )
+            .unwrap();
+        assert!(
+            fixture
+                .store
+                .request_rollover_if_due(
+                    &replacement,
+                    &replacement.target_sha256(),
+                    "task-2",
+                    true,
+                    104,
+                )
+                .unwrap()
+                .is_none()
+        );
+        let observed_text = "visible context ".repeat(80);
+        fixture.observe(
+            &replacement,
+            "new-chat-growth",
+            1,
+            "new-chat-growth",
+            VisibleSourceKind::UserMessage,
+            Some(&observed_text),
+        );
+        let later = fixture
+            .store
+            .request_rollover_if_due(
+                &replacement,
+                &replacement.target_sha256(),
+                "task-2",
+                true,
+                105,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(later.trigger_reason, "OBSERVED_PRESSURE");
+    }
+
+    #[test]
     fn three_projects_and_old_generation_remain_independent() {
         let fixture = Fixture::new("projects");
         let alpha = Fixture::key("alpha", "alpha-3", 1);
@@ -1289,6 +1644,7 @@ mod tests {
             safety_headroom_tokens: 40,
             unknown_source_reserve_tokens: 70,
             automatic_rollover_enabled: false,
+            incomplete_history_rollover: false,
         };
         fixture
             .store
@@ -1304,7 +1660,8 @@ mod tests {
         );
         assert_eq!(status.unknown_source_count, 1);
         assert_eq!(status.estimated_upper_tokens, 70);
-        assert!(status.near_capacity);
+        assert!(!status.near_capacity);
+        assert_eq!(status.pressure_assessment, "UNKNOWN_OR_INCOMPLETE");
         assert!(
             fixture
                 .store
@@ -1324,12 +1681,30 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+        assert!(
+            fixture
+                .store
+                .request_rollover_if_due(&key, &key.target_sha256(), "task-1", true, 200)
+                .unwrap()
+                .is_none()
+        );
+        let observed_text = "visible context ".repeat(80);
+        let observed = fixture.observe(
+            &key,
+            "message-pressure",
+            1,
+            "message-pressure",
+            VisibleSourceKind::UserMessage,
+            Some(&observed_text),
+        );
+        assert!(observed.near_capacity);
         let intent = fixture
             .store
             .request_rollover_if_due(&key, &key.target_sha256(), "task-1", true, 200)
             .unwrap()
             .unwrap();
         assert_eq!(intent.status, "REQUESTED");
+        assert_eq!(intent.trigger_reason, "OBSERVED_PRESSURE");
         assert_eq!(intent.quiescence_evidence, "CALLER_OBSERVED_ADVISORY");
         let replay = fixture
             .store
@@ -1408,6 +1783,7 @@ mod tests {
             key: key.clone(),
             events: Vec::new(),
             rollover_intent: None,
+            browser_coverage: BrowserCoverageState::default(),
         };
         fixture.store.write_ledger(&staged).unwrap();
         fixture

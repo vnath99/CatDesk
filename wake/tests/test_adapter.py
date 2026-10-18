@@ -2,7 +2,10 @@ import hashlib
 import importlib.util
 import io
 import json
+import shutil
+import subprocess
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -74,7 +77,32 @@ class FakeSink:
         return types.SimpleNamespace(record_id=record, target_sha256=target_sha256, message_sha256=digest, browser_sent_at_unix=101)
 
 
+class FakeProbeSink:
+    def __init__(self, url, profile, ready, submit): self.url = url
+    def observe_cooperative_response(self, cdp, message, expected_digest):
+        cdp.timeline.append("observe")
+        if cdp.get_current_url() != self.url:
+            raise bridge.Attention("RESPONSE_TARGET_DRIFT")
+        if bridge.digest(bridge.normalize_message(message)) != expected_digest:
+            raise bridge.Attention("RESPONSE_SEQUENCE_DRIFT")
+        if hasattr(cdp, "probe_stages"):
+            return cdp.probe_stages.pop(0)
+        return cdp.probe_stage
+
+
 class AdapterTests(unittest.TestCase):
+    @staticmethod
+    def probe_request(url="https://chatgpt.com/c/exact", event_id="review-1"):
+        target = {"url": url, "digest": bridge.digest(url), "generation": 1}
+        event = {"eventId": event_id, "message": "bounded wake", "targetGeneration": 1}
+        receipt = {
+            "schemaVersion": 1, "eventId": event_id, "targetGeneration": 1,
+            "targetDigest": target["digest"],
+            "messageDigest": bridge.digest(bridge.normalize_message(event["message"])),
+            "sentUtc": 99, "evidence": "EXACT_USER_MESSAGE_APPENDED",
+        }
+        return {"observeResponse": True, "event": event, "target": target, "receipt": receipt}
+
     def test_initial_navigation_enters_cdp_directly_on_same_exact_url(self):
         cdp = FakeCdp()
         calls = []
@@ -96,7 +124,7 @@ class AdapterTests(unittest.TestCase):
             calls,
         )
 
-    def run_attempt(self, acknowledgement, *, cdp_type=FakeCdp, sink_type=FakeSink):
+    def run_attempt(self, acknowledgement, *, cdp_type=FakeCdp, sink_type=FakeSink, cooperative=False):
         cdp = cdp_type()
         sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
         target = {"url": cdp.url, "digest": bridge.digest(cdp.url), "generation": 1}
@@ -121,7 +149,7 @@ class AdapterTests(unittest.TestCase):
             self.assertFalse(cdp.sent)
             return acknowledgement(cdp)
         with patch.object(bridge, "CdpSink", sink_type), patch.object(adapter, "read_request", ack), patch.object(adapter, "emit", emitted.append):
-            try: adapter.attempt(bridge, sb, event, target)
+            try: adapter.attempt(bridge, sb, event, target, cooperative=cooperative)
             except bridge.Attention as error: return cdp, emitted, str(error)
         return cdp, emitted, None
 
@@ -149,6 +177,25 @@ class AdapterTests(unittest.TestCase):
         )
         self.assertEqual(emitted[-2]["receipt"]["sentUtc"], 99)
         self.assertEqual(emitted[-1]["receipt"], emitted[-2]["receipt"])
+
+    def test_cooperative_delivery_releases_browser_after_durable_user_receipt(self):
+        cdp, emitted, error = self.run_attempt(lambda _cdp: {"submit": True}, cooperative=True)
+        self.assertIsNone(error)
+        self.assertEqual(cdp.timeline, ["submit", "accepted", "round-trip", "confirm"])
+        self.assertEqual([item["stage"] for item in emitted[-3:]],
+                         ["SUBMISSION_ACCEPTED", "USER_MESSAGE_APPENDED", "SENT_PENDING_RESPONSE"])
+        self.assertNotIn("RESPONSE_COMPLETED", [item["stage"] for item in emitted])
+        self.assertEqual(emitted[-1]["receipt"], emitted[-2]["receipt"])
+
+    def test_cooperative_delivery_keeps_uncertainty_when_fresh_receipt_fails(self):
+        class UnprovenSink(FakeSink):
+            def durable_receipt_round_trip(self, cdp):
+                raise bridge.PostSubmitUnknown("SUBMIT_RECEIPT_ROUND_TRIP_FAILED")
+        cdp, emitted, error = self.run_attempt(lambda _cdp: {"submit": True},
+                                               sink_type=UnprovenSink, cooperative=True)
+        self.assertEqual(error, "SUBMIT_RECEIPT_ROUND_TRIP_FAILED")
+        self.assertEqual(cdp.timeline, ["submit", "accepted"])
+        self.assertNotIn("SENT_PENDING_RESPONSE", [item["stage"] for item in emitted])
 
     def test_no_permission_never_submits(self):
         cdp, _, error = self.run_attempt(lambda cdp: {"submit": False})
@@ -224,6 +271,229 @@ class AdapterTests(unittest.TestCase):
             "EXACT_USER_MESSAGE_APPENDED",
         )
         self.assertEqual(emitted[-1]["receipt"], emitted[-4]["receipt"])
+
+    def test_cooperative_reconciliation_proves_existing_receipt_without_response_wait(self):
+        cdp = FakeCdp()
+        sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
+        target = {"url": cdp.url, "digest": bridge.digest(cdp.url), "generation": 1}
+        event = {"eventId": "review-1", "message": "bounded wake", "targetGeneration": 1}
+        emitted = []
+        with patch.object(bridge, "CdpSink", FakeSink), patch.object(adapter, "emit", emitted.append):
+            adapter.reconcile_submission(bridge, sb, event, target, cooperative=True)
+        self.assertEqual(cdp.timeline, ["reconcile"])
+        self.assertFalse(cdp.sent)
+        self.assertEqual([item["stage"] for item in emitted[-2:]],
+                         ["USER_MESSAGE_APPENDED", "SENT_PENDING_RESPONSE"])
+
+    def test_read_only_probes_for_a_then_b_do_not_submit_or_block_one_another(self):
+        emitted = []
+        with patch.object(bridge, "CdpSink", FakeProbeSink), patch.object(
+            adapter, "emit", emitted.append
+        ), patch.object(adapter.time, "sleep"):
+            for event_id, stage in (("project-a", "RESPONSE_PENDING"),
+                                    ("project-b", "RESPONSE_COMPLETE")):
+                cdp = FakeCdp()
+                cdp.probe_stage = stage
+                sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
+                adapter.observe_response(bridge, sb, self.probe_request(event_id=event_id))
+                self.assertFalse(cdp.sent)
+                self.assertEqual(cdp.keys, [])
+                self.assertEqual(cdp.timeline, ["observe"] if stage == "RESPONSE_PENDING" else
+                                 ["observe", "observe"])
+        terminal = [item for item in emitted if item.get("stage", "").startswith("RESPONSE_")]
+        self.assertEqual([(item["eventId"], item["stage"]) for item in terminal],
+                         [("project-a", "RESPONSE_PENDING"), ("project-b", "RESPONSE_COMPLETE")])
+        self.assertTrue(all(set(item) == {"stage", "eventId", "targetGeneration",
+                                              "targetDigest", "messageDigest"} for item in terminal))
+
+    def test_probe_rejects_wrong_chat_and_mismatched_receipt_before_any_write(self):
+        class StuckCdp(FakeCdp):
+            def __init__(self):
+                super().__init__()
+                self.url = "https://chatgpt.com/c/other"
+                self.probe_stage = "RESPONSE_COMPLETE"
+            def get(self, url): pass
+        cdp = StuckCdp()
+        sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
+        emitted = []
+        with patch.object(bridge, "CdpSink", FakeProbeSink), patch.object(adapter, "emit", emitted.append):
+            with self.assertRaisesRegex(bridge.Attention, "RESPONSE_TARGET_DRIFT"):
+                adapter.observe_response(bridge, sb, self.probe_request())
+            wrong = self.probe_request()
+            wrong["receipt"]["messageDigest"] = "0" * 64
+            with self.assertRaisesRegex(bridge.Attention, "RESPONSE_PROBE_RECEIPT_INVALID"):
+                adapter.observe_response(bridge, sb, wrong)
+        self.assertEqual(cdp.keys, [])
+        self.assertFalse(cdp.sent)
+        self.assertFalse(any(item.get("stage") == "RESPONSE_COMPLETE" for item in emitted))
+
+    def test_probe_rejects_boolean_generation_and_schema_before_browser_open(self):
+        class NoBrowser:
+            @property
+            def cdp(self):
+                raise AssertionError("invalid receipt must not open browser")
+        for field_path in (("event", "targetGeneration"),
+                           ("receipt", "targetGeneration"),
+                           ("receipt", "schemaVersion")):
+            with self.subTest(field_path=field_path):
+                request = self.probe_request()
+                request[field_path[0]][field_path[1]] = True
+                with self.assertRaisesRegex(bridge.Attention, "RESPONSE_PROBE_RECEIPT_INVALID"):
+                    adapter.observe_response(bridge, NoBrowser(), request)
+
+    def test_transient_completed_frame_becomes_pending_on_second_read(self):
+        cdp = FakeCdp()
+        cdp.probe_stages = ["RESPONSE_COMPLETE", "RESPONSE_PENDING"]
+        sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
+        emitted = []
+        with patch.object(bridge, "CdpSink", FakeProbeSink), patch.object(
+            adapter, "emit", emitted.append
+        ), patch.object(adapter.time, "sleep") as pause:
+            adapter.observe_response(bridge, sb, self.probe_request())
+        pause.assert_called_once_with(.25)
+        self.assertEqual(cdp.timeline, ["observe", "observe"])
+        self.assertEqual(emitted[-1]["stage"], "RESPONSE_PENDING")
+        self.assertFalse(cdp.sent)
+
+    def test_probe_requires_latest_exact_user_and_usable_completed_assistant(self):
+        with tempfile.TemporaryDirectory() as profile:
+            sink = bridge.CdpSink("https://chatgpt.com/c/exact", Path(profile), 1, 1)
+            cdp = FakeCdp()
+            expected = bridge.digest("bounded wake")
+            with patch.object(bridge.CdpSink, "post_submit_visible_any", return_value=False), patch.object(
+                bridge.CdpSink, "document_ready_state", return_value="complete"
+            ), patch.object(bridge.CdpSink, "trusted_turn_anchor_state", return_value=(1, 0)), patch.object(
+                bridge.CdpSink, "user_message_digests", return_value=[expected, bridge.digest("newer user")]
+            ), patch.object(bridge.CdpSink, "editor_state", return_value=("ready", True)), patch.object(
+                bridge.CdpSink, "response_snapshot", return_value=(0, 0, True, True)
+            ):
+                with self.assertRaisesRegex(bridge.Attention, "RESPONSE_SEQUENCE_DRIFT"):
+                    sink.observe_cooperative_response(cdp, "bounded wake", expected)
+            with patch.object(bridge.CdpSink, "post_submit_visible_any", return_value=False), patch.object(
+                bridge.CdpSink, "document_ready_state", return_value="complete"
+            ), patch.object(bridge.CdpSink, "trusted_turn_anchor_state", return_value=(1, 0)), patch.object(
+                bridge.CdpSink, "user_message_digests", return_value=[expected]
+            ), patch.object(bridge.CdpSink, "editor_state", return_value=("ready", True)), patch.object(
+                bridge.CdpSink, "response_snapshot", return_value=(0, 0, True, False)
+            ) as response:
+                self.assertEqual(sink.observe_cooperative_response(cdp, "bounded wake", expected), "RESPONSE_PENDING")
+                response.assert_called_once_with(cdp, "bounded wake", require_usable_body=True)
+            with patch.object(bridge.CdpSink, "post_submit_visible_any", return_value=False), patch.object(
+                bridge.CdpSink, "document_ready_state", return_value="complete"
+            ), patch.object(bridge.CdpSink, "trusted_turn_anchor_state", return_value=(1, 0)), patch.object(
+                bridge.CdpSink, "user_message_digests", return_value=[expected]
+            ), patch.object(bridge.CdpSink, "editor_state", return_value=("ready", True)), patch.object(
+                bridge.CdpSink, "response_snapshot", return_value=(0, 0, True, True)
+            ):
+                self.assertEqual(sink.observe_cooperative_response(cdp, "bounded wake", expected), "RESPONSE_COMPLETE")
+            with patch.object(bridge.CdpSink, "post_submit_visible_any", return_value=False), patch.object(
+                bridge.CdpSink, "document_ready_state", return_value="complete"
+            ), patch.object(bridge.CdpSink, "trusted_turn_anchor_state", return_value=(1, 0)), patch.object(
+                bridge.CdpSink, "user_message_digests", return_value=[expected]
+            ), patch.object(bridge.CdpSink, "editor_state", return_value=("ready", True)), patch.object(
+                bridge.CdpSink, "response_snapshot",
+                side_effect=bridge.PostSubmitUnknown("RESPONSE_COMPLETION_UNPROVEN")
+            ):
+                with self.assertRaisesRegex(bridge.Attention, "RESPONSE_STATE_UNPROVEN"):
+                    sink.observe_cooperative_response(cdp, "bounded wake", expected)
+
+    def test_controls_only_assistant_is_not_usable_or_complete(self):
+        node_exe = shutil.which("node")
+        if node_exe is None:
+            self.skipTest("Node.js is unavailable for the isolated DOM fixture")
+        harness = r"""
+            const fs = require('fs');
+            const withBody = __WITH_BODY__;
+            const withAssistantAction = __WITH_ASSISTANT_ACTION__;
+            const body = {
+                textContent: 'A useful answer',
+                getClientRects: () => [1],
+                cloneNode: () => ({textContent: 'A useful answer', querySelectorAll: () => []})
+            };
+            let turn;
+            const assistant = {
+                innerText: withBody ? 'A useful answer Copy Regenerate' : 'Copy Regenerate',
+                textContent: withBody ? 'A useful answer Copy Regenerate' : 'Copy Regenerate',
+                parentElement: null,
+                getClientRects: () => [1],
+                getAttribute: name => name === 'data-message-author-role' ? 'assistant' : null,
+                matches: () => false,
+                closest: selector => selector === '[data-content-search-turn-key]' ? turn : null,
+                querySelectorAll: selector => selector === "button[data-testid='copy-turn-action-button']" &&
+                    withAssistantAction ? [{}] : [],
+                querySelector: selector => selector.includes('data-message-content') && withBody ? body :
+                    selector === '[data-chatgpt-selection-message-id]' && withBody ?
+                        {getAttribute: () => null} : null
+            };
+            turn = {
+                innerText: 'exact wake message ' + assistant.innerText,
+                textContent: 'exact wake message ' + assistant.textContent,
+                parentElement: null,
+                getClientRects: () => [1],
+                getAttribute: name => name === 'data-content-search-turn-key' ? 'turn-1' : null,
+                matches: selector => selector === '[data-content-search-turn-key]',
+                closest: selector => selector === '[data-content-search-turn-key]' ? turn : null,
+                contains: element => element === assistant,
+                compareDocumentPosition: element => element === assistant ? 4 : 0,
+                querySelectorAll: selector => selector === '[data-content-search-unit-key]' ? [assistant] : [],
+                querySelector: selector => selector === "button[data-testid='copy-turn-action-button']" ? {} : null
+            };
+            assistant.parentElement = turn;
+            global.Node = {DOCUMENT_POSITION_FOLLOWING: 4};
+            global.window = {getComputedStyle: () => ({visibility: 'visible', display: 'block'})};
+            global.document = {querySelectorAll: selector => {
+                if (selector === 'div, span, p') return [];
+                if (selector.includes('[data-content-search-turn-key]') &&
+                    selector.includes('[data-user-message-bubble]')) return [turn, assistant];
+                if (selector === "[data-message-author-role='assistant'], article[data-turn='assistant']")
+                    return [assistant];
+                if (selector === "[data-message-author-role='user'], [data-message-author-role='assistant']")
+                    return [assistant];
+                return [];
+            }};
+            process.stdout.write(JSON.stringify(eval(fs.readFileSync(0, 'utf8'))));
+        """
+        class NodeCdp:
+            def __init__(self, with_body, with_assistant_action=False):
+                self.with_body = with_body
+                self.with_assistant_action = with_assistant_action
+            def evaluate(self, script):
+                result = subprocess.run(
+                    [node_exe, "-e", harness.replace("__WITH_BODY__", str(self.with_body).lower())
+                     .replace("__WITH_ASSISTANT_ACTION__", str(self.with_assistant_action).lower())],
+                    input=script, text=True, capture_output=True, timeout=10,
+                )
+                if result.returncode:
+                    raise AssertionError(result.stderr)
+                return json.loads(result.stdout)
+
+        with tempfile.TemporaryDirectory() as profile:
+            sink = bridge.NewConversationSink("https://chatgpt.com/c/exact", Path(profile), 1, 1)
+            controls_only = NodeCdp(False)
+            self.assertEqual(
+                sink.response_snapshot(controls_only, "exact wake message", require_usable_body=True),
+                (0, 0, True, False),
+            )
+            snapshot = sink.visible_message_snapshot(controls_only)
+            self.assertEqual(snapshot["messages"][-1]["text"], "Copy Regenerate")
+            self.assertFalse(snapshot["messages"][-1]["textComplete"])
+            with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_SOURCE_ASSISTANT_UNAVAILABLE"):
+                sink.require_usable_latest_assistant(controls_only, source=True)
+            usable = NodeCdp(True)
+            self.assertEqual(
+                sink.response_snapshot(usable, "exact wake message", require_usable_body=True),
+                (0, 0, True, False),
+            )
+            self.assertEqual(
+                sink.response_snapshot(usable, "exact wake message", require_usable_body=False),
+                (0, 0, True, True),
+            )
+            self.assertTrue(sink.visible_message_snapshot(usable)["messages"][-1]["textComplete"])
+            completed = NodeCdp(True, with_assistant_action=True)
+            self.assertEqual(
+                sink.response_snapshot(completed, "exact wake message", require_usable_body=True),
+                (0, 0, True, True),
+            )
 
     def test_startup_reason_is_fixed_and_non_sensitive(self):
         session_not_created = type("SessionNotCreatedException", (Exception,), {})

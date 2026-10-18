@@ -106,6 +106,16 @@ pub struct Receipt {
     pub evidence: String,
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SubmissionStart {
+    schema_version: u32,
+    event_id: String,
+    target_generation: u64,
+    target_digest: String,
+    started_utc: u64,
+}
+
 /// Passive assistant-response timing, anchored only to an exact USER receipt.
 /// It has no control input and cannot publish or replay a wake event.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -763,11 +773,24 @@ impl Store {
         ) {
             return Err("SUBMISSION_TRANSITION_INVALID".into());
         }
-        if next == Phase::Submitting {
+        if matches!(next, Phase::Submitting | Phase::Sent) {
             let config = self.read_config()?;
             if config.targets.get(&delivery.event.project_id) != Some(&delivery.target) {
                 return Err("TARGET_GENERATION_STALE".into());
             }
+        }
+        if next == Phase::Submitting {
+            // Keep the immutable recovery-window start separate from the
+            // queue's age and the mutable attention timestamp. A sidecar keeps
+            // the existing Delivery JSON readable by earlier installed hosts.
+            let start = SubmissionStart {
+                schema_version: PROTOCOL_VERSION,
+                event_id: id.into(),
+                target_generation: delivery.target.generation,
+                target_digest: delivery.target.digest.clone(),
+                started_utc: now(),
+            };
+            atomic(&self.submission_start_path(id), &start)?;
         }
         delivery.phase = next;
         delivery.receipt = receipt;
@@ -782,6 +805,34 @@ impl Store {
             fs::remove_file(self.event_path(id)).map_err(|_| "QUEUE_ARCHIVE_FAILED")?;
         }
         Ok(delivery)
+    }
+
+    fn submission_start_path(&self, id: &str) -> PathBuf {
+        self.root
+            .join("logs")
+            .join(format!("submission-start-{id}.json"))
+    }
+
+    pub(crate) fn submission_started_utc(&self, delivery: &Delivery) -> Result<u64> {
+        delivery.validate()?;
+        let path = self.submission_start_path(&delivery.event.event_id);
+        if !path
+            .try_exists()
+            .map_err(|_| "SUBMISSION_START_UNAVAILABLE")?
+        {
+            // Older journals lack this witness. Do not invent a fresh window.
+            return Ok(delivery.event.created_utc);
+        }
+        let start: SubmissionStart = read(&path)?;
+        if start.schema_version != PROTOCOL_VERSION
+            || start.event_id != delivery.event.event_id
+            || start.target_generation != delivery.target.generation
+            || start.target_digest != delivery.target.digest
+            || start.started_utc == 0
+        {
+            return Err("SUBMISSION_START_BINDING_INVALID".into());
+        }
+        Ok(start.started_utc)
     }
 
     /// Reconcile one already-crossed submission boundary after a later
@@ -944,6 +995,57 @@ impl Store {
         }
         timer.response_state = state;
         timer.completed_utc = None;
+        timer.validate()?;
+        atomic(&self.timer_path(event_id), &timer)
+    }
+
+    /// Apply one read-only browser observation under the same lock as target
+    /// changes. A fresh target check and the immutable SENT receipt are both
+    /// required; this cannot create a timer or authorize a USER submission.
+    pub(crate) fn record_response_probe(
+        &self,
+        event_id: &str,
+        expected: &Target,
+        complete: bool,
+    ) -> Result<()> {
+        expected.validate()?;
+        let _lock = self.lock()?;
+        let delivery = self.read_delivery(event_id)?.ok_or("TIMER_EVENT_MISSING")?;
+        if delivery.phase != Phase::Sent
+            || delivery.target != *expected
+            || self.read_config()?.targets.get(&delivery.event.project_id) != Some(expected)
+        {
+            return Err("RESPONSE_PROBE_TARGET_CHANGED".into());
+        }
+        let receipt = delivery
+            .receipt
+            .as_ref()
+            .ok_or("RESPONSE_PROBE_RECEIPT_REQUIRED")?;
+        let mut timer = self.read_timer(event_id)?.ok_or("TIMER_EVENT_MISSING")?;
+        if timer.project_id != delivery.event.project_id
+            || timer.target_generation != expected.generation
+            || timer.target_digest != expected.digest
+            || receipt.event_id != event_id
+            || receipt.target_generation != timer.target_generation
+            || receipt.target_digest != timer.target_digest
+            || receipt.message_digest != delivery.message_digest
+            || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
+        {
+            return Err("RESPONSE_PROBE_BINDING_INVALID".into());
+        }
+        if timer.response_state == ResponseState::Complete {
+            return if complete {
+                Ok(())
+            } else {
+                Err("TIMER_TERMINAL".into())
+            };
+        }
+        timer.response_state = if complete {
+            ResponseState::Complete
+        } else {
+            ResponseState::Observing
+        };
+        timer.completed_utc = complete.then(|| now().max(timer.started_utc));
         timer.validate()?;
         atomic(&self.timer_path(event_id), &timer)
     }
@@ -1356,6 +1458,66 @@ mod submission_reconciliation_tests {
             "SUBMISSION_RECONCILIATION_REFUSED"
         );
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn submission_window_start_survives_attention_and_restart_without_changing_journal_schema() {
+        let (_base, store, event, _lease) = fixture("window-start");
+        let submitting = store.delivery(&event.event_id).unwrap().unwrap();
+        let started = store.submission_started_utc(&submitting).unwrap();
+        assert!(started <= submitting.updated_utc && started >= event.created_utc);
+        let mut attention = store
+            .note_submitting_attention(&event.event_id, "BROWSER_ADAPTER_EXITED")
+            .unwrap();
+        attention.updated_utc += 600;
+        atomic(&store.delivery_path(&event.event_id), &attention).unwrap();
+        let reopened =
+            Store::open_scoped_for_test(store.root(), store.root().parent().unwrap()).unwrap();
+        let reread = reopened.delivery(&event.event_id).unwrap().unwrap();
+        assert_eq!(reopened.submission_started_utc(&reread).unwrap(), started);
+        let journal: serde_json::Value = read(&store.delivery_path(&event.event_id)).unwrap();
+        assert!(journal.get("submissionStartedUtc").is_none());
+        let legacy_path = store.submission_start_path(&event.event_id);
+        fs::remove_file(legacy_path).unwrap();
+        assert_eq!(
+            reopened.submission_started_utc(&reread).unwrap(),
+            event.created_utc
+        );
+    }
+
+    #[test]
+    fn rollover_between_exact_receipt_and_commit_preserves_uncertain_old_delivery() {
+        let (_base, store, event, lease) = fixture("receipt-rollover-race");
+        let source = store.config().unwrap().targets["catdesk"].clone();
+        let receipt = receipt(&event, &source);
+        store
+            .record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        store
+            .set_target_quarantining_submitting(
+                "catdesk",
+                source.generation,
+                "https://chatgpt.com/c/6ab06a56-56c0-83e9-9697-9bc7c380c159",
+            )
+            .unwrap();
+        assert_eq!(
+            store
+                .transition(
+                    &event.event_id,
+                    lease.owner(),
+                    Phase::Sent,
+                    Some(receipt),
+                    None
+                )
+                .unwrap_err(),
+            "TARGET_GENERATION_STALE"
+        );
+        assert_eq!(
+            store.delivery(&event.event_id).unwrap().unwrap().phase,
+            Phase::Submitting
+        );
+        assert!(store.event_path(&event.event_id).exists());
+        assert!(!store.archive_path(&event.event_id).exists());
     }
 
     #[test]
