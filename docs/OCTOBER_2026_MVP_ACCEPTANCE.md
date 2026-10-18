@@ -1,8 +1,9 @@
 # CatDesk October 2026 MVP acceptance
 
-## October 18 isolated Web development runtime (FOCUSED_LOCAL_SOURCE; LIVE OPEN)
+## October 18 isolated Web development runtime (TESTED_LOCAL_SOURCE; DEVELOPMENT_LIVE_PARTIAL)
 
-The current source adds an explicit `DEVELOPMENT_UNPROTECTED` Wake runtime for
+Source `7bfaab0c5d9980a48399998326f313fc03ad8269` adds an explicit
+`DEVELOPMENT_UNPROTECTED` Wake runtime for
 a **new, empty, separate control workspace**. `operator web-dev-runtime prepare`
 copies the source-matched Wake package and Python runtime into that workspace's
 `.catdesk/web-development/runtime`, records a fixed authority, and leaves the
@@ -28,7 +29,8 @@ duplicate IDs/workspaces; `catdesk` must first identify the control Git root.
 The local fixture uses this actual operator route for three projects.
 
 The unchanged pre-registration source passed the broad local Cargo regression
-(main binary 1,487 passed / 28 ignored, including nested Wake verification).
+(main binary 1,487 passed / 28 ignored; the full command also ran the nested
+Wake verification fixture).
 After the Web-only registration delta, focused local checks passed: Web
 operator 36/36, real-Git registration 1/1, and the three-project native
 integration fixture 1/1. Strict root Clippy, formatting and final CatDesk build
@@ -42,13 +44,35 @@ ChatGPT deliveries. The full root suite was not repeated after the narrow
 registration delta. The operator sequence is in
 `docs/orchestrator/CATDESK_IMPORTANT_COMMANDS.md`.
 
-**Live acceptance remains open:** no development host/browser conversation was
-launched for this fixture, no new ChatGPT URL or genuine rollover was verified,
-and no installed Wake release was activated. The installed old-owner/migration
-and service gates remain separate, as does exact remote CI acceptance. The
-October three-project Web milestone remains **PARTIAL**. Bug Bounty, BYOVD,
-Wake2 and PortfolioDesk may continue in their existing native conversations;
-this development lane does not require them to pause.
+**Development live results:** three fresh ChatGPT URLs were issued and observed
+through the authenticated browser UI for controlled CatDesk, Wake2 and
+PortfolioDesk review tasks. CatDesk and Wake2 returned their requested markers;
+PortfolioDesk displayed `This response couldn't load`, including after reload.
+This manual setup is separate from CatDesk delivery. The actual development
+runtime was prepared, then the three projects were registered through the
+Web-only command and paired with distinct generation-1 targets. Three bounded
+review events were queued. All native thread IDs remained null.
+
+The retained foreground host ran against the fresh development browser profile.
+Its first event remained on ChatGPT HOME and ended in pre-submit
+`TARGET_DRIFT` attention without a receipt. The scheduler then claimed the
+PortfolioDesk event, showing that the first attention state did not prevent
+another project from being selected. The test was stopped before any submit;
+the retained host exited successfully, PortfolioDesk recorded
+`HOST_PAUSED_BEFORE_SUBMIT`, and Wake2's event remained queued. Selected installed
+Wake control-file hashes matched before preparation and after the live run.
+
+**Still open:** exact-conversation readiness in the fresh development browser
+profile, three actual Wake deliveries, browser-derived context estimates,
+genuine rollover and continuation, and central ChatGPT access to the local MCP
+endpoint. HOME drift alone does not establish an authentication failure. A
+guarded manual login flow for this development profile is not yet exposed by
+the operator CLI; the legacy login helper must not be used to bypass the shared
+browser lock. No installed Wake release was activated, and exact remote CI
+acceptance remains separate. Local evidence is retained in the private
+`checkpoints/web-development-oct18` directory outside the source checkout.
+The October milestone remains **PARTIAL**. Existing project conversations do
+not need to pause for this development lane; only this test host was stopped.
 
 ## October 18 canonical release-pair reconciliation (TESTED_LOCAL_SOURCE; LIVE PARTIAL)
 

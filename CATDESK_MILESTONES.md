@@ -1,4 +1,4 @@
-## 2026-10-18 — isolated Web development runtime (FOCUSED_LOCAL_SOURCE; MVP PARTIAL)
+## 2026-10-18 — isolated Web development runtime (DEVELOPMENT_LIVE_PARTIAL; MVP PARTIAL)
 
 Current source adds an opt-in `DEVELOPMENT_UNPROTECTED` Wake runtime in a new
 empty control workspace. Web target, queue, context and rollover paths select
@@ -14,9 +14,15 @@ verification passed (main 1,487 / 28 ignored); final delta checks passed Web
 The full root suite was not repeated after the registration delta. See
 `docs/OCTOBER_2026_MVP_ACCEPTANCE.md` and the operator runbook.
 
-Live three-project ChatGPT delivery and rollover, protected Wake release, and
-exact remote CI remain open. Existing Bug Bounty, BYOVD, Wake2 and PortfolioDesk
-conversations can continue independently without pausing for this lane.
+Source checkpoint `7bfaab0` was exercised in a private development runtime.
+Three real newly issued ChatGPT URLs are registered and paired, with three
+review events queued and no native session takeover. The first attempt reached
+HOME instead of its target, ended in pre-submit `TARGET_DRIFT`, and the next
+project was selected. The test host was then stopped and exited successfully;
+no delivery receipt was recorded. Installed control-file hashes were unchanged.
+Fresh-profile exact-target readiness, actual deliveries/context capture and
+rollover, protected Wake release, and exact remote CI remain open. Existing
+project conversations can continue independently without pausing for this lane.
 
 ## 2026-10-18 — reviewed canonical pair reconciliation (TESTED_LOCAL_SOURCE; MVP PARTIAL)
 
