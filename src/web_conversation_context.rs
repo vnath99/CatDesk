@@ -278,40 +278,74 @@ impl WebContextStore {
         observation: Observation<'_>,
     ) -> Result<PressureStatus, String> {
         key.validate()?;
-        valid_identifier(observation.event_id)?;
-        valid_identifier(observation.dedup_key)?;
-        if observation.revision == 0 || observation.observed_at_unix == 0 {
-            return Err("WEB_CONTEXT_EVENT_INVALID".into());
-        }
-        let (content_sha256, visible_bytes, estimated_tokens) =
-            match (observation.source_kind, observation.visible_text) {
-                (VisibleSourceKind::UnknownAttachment, None) => (None, None, None),
-                (VisibleSourceKind::UnknownAttachment, Some(_)) | (_, None) => {
-                    return Err("WEB_CONTEXT_EVENT_CONTENT_INVALID".into());
-                }
-                (_, Some(text)) if text.len() <= MAX_VISIBLE_TEXT_BYTES => (
-                    Some(sha256(text.as_bytes())),
-                    Some(text.len() as u64),
-                    Some(estimate_tokens(text)),
-                ),
-                _ => return Err("WEB_CONTEXT_EVENT_CONTENT_OVERSIZED".into()),
-            };
-        let event = EventMetadata {
-            event_id: observation.event_id.into(),
-            revision: observation.revision,
-            dedup_key: observation.dedup_key.into(),
-            source_kind: observation.source_kind,
-            content_sha256,
-            visible_bytes,
-            estimated_tokens,
-            observed_at_unix: observation.observed_at_unix,
-        };
+        let event = observation_metadata(observation)?;
         let _lock = self.lock()?;
         let project = self.read_project(&key.project_id)?;
         if project.active.as_ref() != Some(key) {
             return Err("WEB_CONTEXT_OLD_GENERATION".into());
         }
         let mut ledger = self.read_ledger(key)?;
+        self.record_event_locked(&project, &mut ledger, event)
+    }
+
+    /// Ingests a browser-visible snapshot with a stable event identity. The
+    /// content hash determines whether the existing revision is replayed or
+    /// advanced. This remains an advisory estimate; the caller must separately
+    /// prove which browser conversation supplied the observation.
+    pub fn record_browser_observation(
+        &self,
+        key: &ConversationKey,
+        event_id: &str,
+        source_kind: VisibleSourceKind,
+        visible_text: Option<&str>,
+        observed_at_unix: u64,
+    ) -> Result<PressureStatus, String> {
+        key.validate()?;
+        let mut event = observation_metadata(Observation {
+            event_id,
+            revision: 1,
+            dedup_key: event_id,
+            source_kind,
+            visible_text,
+            observed_at_unix,
+        })?;
+        let _lock = self.lock()?;
+        let project = self.read_project(&key.project_id)?;
+        if project.active.as_ref() != Some(key) {
+            return Err("WEB_CONTEXT_OLD_GENERATION".into());
+        }
+        let mut ledger = self.read_ledger(key)?;
+        if let Some(previous) = ledger
+            .events
+            .iter()
+            .find(|previous| previous.event_id == event_id)
+        {
+            if previous.source_kind != source_kind || previous.dedup_key != event_id {
+                return Err("WEB_CONTEXT_EVENT_REVISION_CONFLICT".into());
+            }
+            event.revision = if previous.content_sha256 == event.content_sha256
+                && previous.visible_bytes == event.visible_bytes
+                && previous.estimated_tokens == event.estimated_tokens
+            {
+                previous.revision
+            } else {
+                previous
+                    .revision
+                    .checked_add(1)
+                    .ok_or("WEB_CONTEXT_EVENT_REVISION_CONFLICT")?
+            };
+        }
+        self.record_event_locked(&project, &mut ledger, event)
+    }
+
+    /// The caller holds the ledger lock across reading the previous event,
+    /// deriving its revision, and writing the replacement.
+    fn record_event_locked(
+        &self,
+        project: &ProjectState,
+        ledger: &mut ConversationLedger,
+        event: EventMetadata,
+    ) -> Result<PressureStatus, String> {
         if let Some(previous) = ledger
             .events
             .iter_mut()
@@ -332,16 +366,16 @@ impl WebContextStore {
                 }
             } else {
                 *previous = event;
-                self.write_ledger(&ledger)?;
+                self.write_ledger(ledger)?;
             }
         } else {
             if ledger.events.len() >= MAX_EVENTS {
                 return Err("WEB_CONTEXT_EVENT_LIMIT".into());
             }
             ledger.events.push(event);
-            self.write_ledger(&ledger)?;
+            self.write_ledger(ledger)?;
         }
-        Ok(pressure_status(&project, &ledger))
+        Ok(pressure_status(project, ledger))
     }
 
     pub fn pressure(&self, key: &ConversationKey) -> Result<PressureStatus, String> {
@@ -564,6 +598,37 @@ impl WebContextStore {
         }
         Ok(())
     }
+}
+
+fn observation_metadata(observation: Observation<'_>) -> Result<EventMetadata, String> {
+    valid_identifier(observation.event_id)?;
+    valid_identifier(observation.dedup_key)?;
+    if observation.revision == 0 || observation.observed_at_unix == 0 {
+        return Err("WEB_CONTEXT_EVENT_INVALID".into());
+    }
+    let (content_sha256, visible_bytes, estimated_tokens) =
+        match (observation.source_kind, observation.visible_text) {
+            (VisibleSourceKind::UnknownAttachment, None) => (None, None, None),
+            (VisibleSourceKind::UnknownAttachment, Some(_)) | (_, None) => {
+                return Err("WEB_CONTEXT_EVENT_CONTENT_INVALID".into());
+            }
+            (_, Some(text)) if text.len() <= MAX_VISIBLE_TEXT_BYTES => (
+                Some(sha256(text.as_bytes())),
+                Some(text.len() as u64),
+                Some(estimate_tokens(text)),
+            ),
+            _ => return Err("WEB_CONTEXT_EVENT_CONTENT_OVERSIZED".into()),
+        };
+    Ok(EventMetadata {
+        event_id: observation.event_id.into(),
+        revision: observation.revision,
+        dedup_key: observation.dedup_key.into(),
+        source_kind: observation.source_kind,
+        content_sha256,
+        visible_bytes,
+        estimated_tokens,
+        observed_at_unix: observation.observed_at_unix,
+    })
 }
 
 fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> PressureStatus {
@@ -926,6 +991,212 @@ mod tests {
                     }
                 )
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn browser_observation_replays_stable_hash_and_advances_changed_content() {
+        let fixture = Fixture::new("browser-revisions");
+        let key = Fixture::key("alpha", "browser-revisions", 1);
+        fixture
+            .store
+            .bind_observed_target(key.clone(), None)
+            .unwrap();
+        let first = fixture
+            .store
+            .record_browser_observation(
+                &key,
+                "visible-user-1",
+                VisibleSourceKind::UserMessage,
+                Some("hello"),
+                100,
+            )
+            .unwrap();
+        let replay = fixture
+            .store
+            .record_browser_observation(
+                &key,
+                "visible-user-1",
+                VisibleSourceKind::UserMessage,
+                Some("hello"),
+                101,
+            )
+            .unwrap();
+        assert_eq!(first, replay);
+        assert_eq!(
+            fixture.store.read_ledger(&key).unwrap().events[0].revision,
+            1
+        );
+        let revised = fixture
+            .store
+            .record_browser_observation(
+                &key,
+                "visible-user-1",
+                VisibleSourceKind::UserMessage,
+                Some("hello world with more words"),
+                102,
+            )
+            .unwrap();
+        assert_eq!(revised.recorded_events, 1);
+        assert_eq!(
+            revised.visible_unique_tokens,
+            estimate_tokens("hello world with more words")
+        );
+        assert_eq!(
+            fixture.store.read_ledger(&key).unwrap().events[0].revision,
+            2
+        );
+        let unknown = fixture
+            .store
+            .record_browser_observation(
+                &key,
+                "unknown-history",
+                VisibleSourceKind::UnknownAttachment,
+                None,
+                103,
+            )
+            .unwrap();
+        assert_eq!(unknown.unknown_source_count, 1);
+        let unknown_replay = fixture
+            .store
+            .record_browser_observation(
+                &key,
+                "unknown-history",
+                VisibleSourceKind::UnknownAttachment,
+                None,
+                104,
+            )
+            .unwrap();
+        assert_eq!(unknown, unknown_replay);
+        assert_eq!(
+            fixture.store.read_ledger(&key).unwrap().events[1].revision,
+            1
+        );
+        assert_eq!(
+            fixture
+                .store
+                .record_browser_observation(
+                    &key,
+                    "visible-user-1",
+                    VisibleSourceKind::AssistantMessage,
+                    Some("role changed"),
+                    105,
+                )
+                .unwrap_err(),
+            "WEB_CONTEXT_EVENT_REVISION_CONFLICT"
+        );
+        assert_eq!(
+            fixture
+                .store
+                .record_browser_observation(
+                    &key,
+                    "unknown-history",
+                    VisibleSourceKind::UnknownAttachment,
+                    Some("unexpected bytes"),
+                    105,
+                )
+                .unwrap_err(),
+            "WEB_CONTEXT_EVENT_CONTENT_INVALID"
+        );
+    }
+
+    #[test]
+    fn browser_observation_serializes_concurrent_revisions_without_lost_updates() {
+        let fixture = Fixture::new("browser-concurrent");
+        let key = Fixture::key("alpha", "browser-concurrent", 1);
+        fixture
+            .store
+            .bind_observed_target(key.clone(), None)
+            .unwrap();
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+        let handles: Vec<_> = (0..8)
+            .map(|index| {
+                let store = fixture.store.clone();
+                let key = key.clone();
+                let barrier = barrier.clone();
+                std::thread::spawn(move || {
+                    let text = format!("independent browser revision {index}");
+                    barrier.wait();
+                    store.record_browser_observation(
+                        &key,
+                        "streaming-assistant-1",
+                        VisibleSourceKind::AssistantMessage,
+                        Some(&text),
+                        200 + index,
+                    )
+                })
+            })
+            .collect();
+        for handle in handles {
+            handle.join().expect("thread").expect("observation");
+        }
+        let ledger = fixture.store.read_ledger(&key).unwrap();
+        assert_eq!(ledger.events.len(), 1);
+        assert_eq!(ledger.events[0].revision, 8);
+        assert_eq!(ledger.events[0].dedup_key, "streaming-assistant-1");
+    }
+
+    #[test]
+    fn browser_observation_rejects_old_generation_without_cross_project_effects() {
+        let fixture = Fixture::new("browser-projects");
+        let alpha = Fixture::key("alpha", "browser-alpha", 1);
+        let beta = Fixture::key("beta", "browser-beta", 1);
+        let gamma = Fixture::key("gamma", "browser-gamma", 1);
+        for key in [&alpha, &beta, &gamma] {
+            fixture
+                .store
+                .bind_observed_target(key.clone(), None)
+                .unwrap();
+            fixture
+                .store
+                .record_browser_observation(
+                    key,
+                    "visible-turn-1",
+                    VisibleSourceKind::UserMessage,
+                    Some(&format!("{} source message", key.project_id)),
+                    100,
+                )
+                .unwrap();
+        }
+        let beta_before = fixture.store.pressure(&beta).unwrap();
+        let gamma_before = fixture.store.pressure(&gamma).unwrap();
+        let successor = Fixture::key("alpha", "browser-alpha-next", 2);
+        fixture
+            .store
+            .bind_observed_target(successor.clone(), Some(&alpha))
+            .unwrap();
+        assert_eq!(
+            fixture
+                .store
+                .record_browser_observation(
+                    &alpha,
+                    "visible-turn-1",
+                    VisibleSourceKind::UserMessage,
+                    Some("late source update"),
+                    200,
+                )
+                .unwrap_err(),
+            "WEB_CONTEXT_OLD_GENERATION"
+        );
+        fixture
+            .store
+            .record_browser_observation(
+                &successor,
+                "visible-turn-1",
+                VisibleSourceKind::UserMessage,
+                Some("successor only"),
+                201,
+            )
+            .unwrap();
+        assert_eq!(fixture.store.pressure(&beta).unwrap(), beta_before);
+        assert_eq!(fixture.store.pressure(&gamma).unwrap(), gamma_before);
+        assert_eq!(
+            fixture.store.read_ledger(&alpha).unwrap().events[0].revision,
+            1
+        );
+        assert_eq!(
+            fixture.store.read_ledger(&successor).unwrap().events[0].revision,
+            1
         );
     }
 
