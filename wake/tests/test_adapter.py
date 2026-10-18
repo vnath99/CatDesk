@@ -407,6 +407,7 @@ class AdapterTests(unittest.TestCase):
             const withAssistantAction = __WITH_ASSISTANT_ACTION__;
             const body = {
                 textContent: 'A useful answer',
+                contains: () => false,
                 getClientRects: () => [1],
                 cloneNode: () => ({textContent: 'A useful answer', querySelectorAll: () => []})
             };

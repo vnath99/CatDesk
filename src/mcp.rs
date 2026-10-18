@@ -3398,6 +3398,7 @@ pub(crate) struct DesignatedChatTargetV1 {
 pub(crate) enum DesignatedChatTargetErrorV1 {
     InvalidUrl,
     Stale,
+    SourceProgress,
     ProtectedStateMismatch,
     SynchronizationFailure,
     Unavailable,
@@ -3744,13 +3745,14 @@ pub(crate) fn operator_read_project_web_target(
     paired_project_target_readback_locked(&control_workspace, &wake_store, project_id)
 }
 
-fn bind_project_web_target_locked(
+fn bind_project_web_target_locked_with_witness(
     control_workspace: &Path,
     wake_store: &catdesk_wake::store::Store,
     project_id: &str,
     target_url: &str,
     expected_current_target_sha256: Option<&str>,
     expected_wake_generation: u64,
+    source_witness: Option<(&catdesk_wake::protocol::Target, &str, &str)>,
 ) -> Result<ProjectWebTargetV1, DesignatedChatTargetErrorV1> {
     use crate::delegated::autonomy_projects::AutonomousProjectRegistryStoreV1;
     use crate::delegated::runtime::RuntimeError;
@@ -3852,19 +3854,32 @@ fn bind_project_web_target_locked(
         _ => return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch),
     };
     let mut staged = None;
+    let mut source_progress = false;
     let result = store.bind_project_chat_target_after(
         project_id,
         &target_url,
         expected_current_target_sha256,
         || {
             if stage_wake {
-                let updated = wake_store
-                    .set_target_quarantining_submitting(
+                let updated = match source_witness {
+                    Some((source, witness, fingerprint)) => wake_store
+                        .set_target_quarantining_submitting_if_no_source_progress(
+                            project_id,
+                            source,
+                            &target_url,
+                            witness,
+                            fingerprint,
+                        ),
+                    None => wake_store.set_target_quarantining_submitting(
                         project_id,
                         expected_wake_generation,
                         &target_url,
-                    )
-                    .map_err(RuntimeError::Validation)?;
+                    ),
+                }
+                .map_err(|reason| {
+                    source_progress = reason == "BOOTSTRAP_SOURCE_PROGRESS_AFTER_HANDOFF";
+                    RuntimeError::Validation(reason)
+                })?;
                 staged = Some(updated);
             } else if wake_store
                 .config()
@@ -3884,19 +3899,77 @@ fn bind_project_web_target_locked(
             let Some(old) = previous else {
                 return Err(DesignatedChatTargetErrorV1::SynchronizationFailure);
             };
-            if wake_store
-                .set_target_quarantining_submitting(project_id, updated.generation, &old.url)
-                .is_err()
+            let rollback = if source_witness.is_some() {
+                wake_store.set_target_quarantining_submitting_if_no_new_progress(
+                    project_id, &updated, &old.url,
+                )
+            } else {
+                wake_store.set_target_quarantining_submitting(
+                    project_id,
+                    updated.generation,
+                    &old.url,
+                )
+            };
+            if rollback.is_err()
                 || paired_project_target_readback_locked(control_workspace, wake_store, project_id)
                     .is_err()
             {
                 return Err(DesignatedChatTargetErrorV1::SynchronizationFailure);
             }
         }
-        return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
+        return Err(if source_progress {
+            DesignatedChatTargetErrorV1::SourceProgress
+        } else {
+            DesignatedChatTargetErrorV1::ProtectedStateMismatch
+        });
     }
     paired_project_target_readback_locked(control_workspace, wake_store, project_id)?
         .ok_or(DesignatedChatTargetErrorV1::SynchronizationFailure)
+}
+
+fn bind_project_web_target_locked(
+    control_workspace: &Path,
+    wake_store: &catdesk_wake::store::Store,
+    project_id: &str,
+    target_url: &str,
+    expected_current_target_sha256: Option<&str>,
+    expected_wake_generation: u64,
+) -> Result<ProjectWebTargetV1, DesignatedChatTargetErrorV1> {
+    bind_project_web_target_locked_with_witness(
+        control_workspace,
+        wake_store,
+        project_id,
+        target_url,
+        expected_current_target_sha256,
+        expected_wake_generation,
+        None,
+    )
+}
+
+pub(crate) fn operator_bind_project_web_target_with_witness(
+    control_workspace: &Path,
+    project_id: &str,
+    target_url: &str,
+    expected_current_target_sha256: Option<&str>,
+    expected_wake_generation: u64,
+    source: &catdesk_wake::protocol::Target,
+    handoff_event_id: &str,
+    source_fingerprint: &str,
+) -> Result<ProjectWebTargetV1, DesignatedChatTargetErrorV1> {
+    let _guard = WAKE_TARGET_SET_LOCK
+        .get_or_init(|| StdMutex::new(()))
+        .lock()
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let (control_workspace, wake_store) = project_web_store(control_workspace, project_id)?;
+    bind_project_web_target_locked_with_witness(
+        &control_workspace,
+        &wake_store,
+        project_id,
+        target_url,
+        expected_current_target_sha256,
+        expected_wake_generation,
+        Some((source, handoff_event_id, source_fingerprint)),
+    )
 }
 
 pub(crate) fn operator_bind_project_web_target(
@@ -5846,6 +5919,7 @@ fn web_target_status_reason(error: DesignatedChatTargetErrorV1) -> &'static str 
     match error {
         DesignatedChatTargetErrorV1::InvalidUrl => "INVALID_CONVERSATION_URL",
         DesignatedChatTargetErrorV1::Stale => "STALE_TARGET_WITNESS",
+        DesignatedChatTargetErrorV1::SourceProgress => "SOURCE_PROGRESS_AFTER_HANDOFF",
         DesignatedChatTargetErrorV1::ProtectedStateMismatch => "REGISTRY_WAKE_MISMATCH",
         DesignatedChatTargetErrorV1::SynchronizationFailure => "TARGET_SYNCHRONIZATION_REQUIRED",
         DesignatedChatTargetErrorV1::Unavailable => "TARGET_AUTHORITY_UNAVAILABLE",

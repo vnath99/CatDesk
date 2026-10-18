@@ -842,6 +842,19 @@ mod windows {
     }
 
     impl InstallStoreGuard {
+        /// Read-only proof of the process currently holding this exact store.
+        /// The fingerprint is derived from freshly pinned objects rather than
+        /// supplied by the caller; this grants no install mutation authority.
+        pub fn acquire_current_for_probe(root: &Path, pid: u32) -> Result<Self> {
+            let root_file = open_pinned(root, true)?;
+            let lock_file = open_pinned(&root.join("host.lock"), false)?;
+            let expected = fingerprint(
+                validate_info(info(&root_file)?, true)?,
+                validate_info(info(&lock_file)?, false)?,
+            );
+            Self::acquire_inner(root, pid, &expected, false)
+        }
+
         pub fn acquire(root: &Path, pid: u32, expected: &str) -> Result<Self> {
             Self::acquire_inner(root, pid, expected, true)
         }
@@ -1070,6 +1083,9 @@ impl<'a> HostOwnerProofServer<'a> {
 pub struct InstallStoreGuard;
 #[cfg(not(windows))]
 impl InstallStoreGuard {
+    pub fn acquire_current_for_probe(_root: &Path, _pid: u32) -> Result<Self> {
+        Err("WAKE_STORE_AUTHORITY_PLATFORM_INVALID".into())
+    }
     pub fn acquire(_root: &Path, _pid: u32, _expected: &str) -> Result<Self> {
         Err("WAKE_STORE_AUTHORITY_PLATFORM_INVALID".into())
     }

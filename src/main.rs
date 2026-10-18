@@ -1507,6 +1507,10 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
         })
     );
 
+    if !options.isolated_dev_fixture {
+        operator_facade::start_web_auto_scheduler(state.clone());
+    }
+
     tokio::select! {
         signal = tokio::signal::ctrl_c() => {
             signal?;
@@ -5528,6 +5532,8 @@ async fn start_services(
             "Persisted ChatGPT wake handoff rehydration failed closed".into(),
         ),
     }
+
+    operator_facade::start_web_auto_scheduler(state.clone());
 
     devtools_bridge
 }

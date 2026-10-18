@@ -166,7 +166,11 @@ def attempt(bridge, sb, event, target, *, cooperative=False):
 
 def bootstrap_attempt(bridge, sb, request):
     """Submit exactly one handoff from an empty native New Chat page."""
-    if set(request) != {"bootstrap", "projectId", "intentId", "source", "handoff"} or request["bootstrap"] is not True:
+    cooperative = request.get("cooperative") is True
+    expected_fields = {"bootstrap", "projectId", "intentId", "source", "handoff"}
+    if cooperative:
+        expected_fields.add("cooperative")
+    if set(request) != expected_fields or request["bootstrap"] is not True:
         raise bridge.Attention("BOOTSTRAP_REQUEST_INVALID")
     source = request["source"]
     if not isinstance(source, dict) or set(source) != {"url", "digest", "generation"}:
@@ -218,17 +222,24 @@ def bootstrap_attempt(bridge, sb, request):
         sink.latch_issued_url(cdp)
         accepted_at = sink.wait_for_submission_accepted(cdp, 0, message_digest, message)
         emit({"stage": "BOOTSTRAP_SUBMISSION_ACCEPTED"})
-        sink.wait_for_response_completion(
-            cdp, message, allow_retry=False,
-            observer=lambda stage: emit({"stage": stage}),
-        )
+        if not cooperative:
+            sink.wait_for_response_completion(
+                cdp, message, allow_retry=False,
+                observer=lambda stage: emit({"stage": stage}),
+            )
         sink.durable_receipt_round_trip(cdp)
         sink.latch_issued_url(cdp)
         receipt = sink.confirm_exact_receipt(
             cdp, 0, message_digest, intent_id, message,
             wall_time=lambda: accepted_at,
         )
-        sink.prove_single_bootstrap_user(cdp, message)
+        if cooperative:
+            # The fresh document must contain exactly the submitted USER
+            # turn before the adapter releases the shared browser profile.
+            if sink.user_message_digests(cdp) != [message_digest]:
+                raise bridge.PostSubmitUnknown("BOOTSTRAP_RECEIPT_SEQUENCE_DRIFT")
+        else:
+            sink.prove_single_bootstrap_user(cdp, message)
         if receipt.message_sha256 != message_digest or receipt.target_sha256 != bridge.digest(sink.url):
             raise bridge.PostSubmitUnknown("BOOTSTRAP_RECEIPT_MISMATCH")
     except Exception as error:
@@ -240,7 +251,7 @@ def bootstrap_attempt(bridge, sb, request):
         emit({"stage": "BOOTSTRAP_UNKNOWN", "reason": reason})
         return
     emit({
-        "stage": "BOOTSTRAP_COMPLETE",
+        "stage": "BOOTSTRAP_SUBMITTED" if cooperative else "BOOTSTRAP_COMPLETE",
         "receipt": {
             "schemaVersion": 1,
             "projectId": project_id,
@@ -252,9 +263,53 @@ def bootstrap_attempt(bridge, sb, request):
             "messageDigest": message_digest,
             "sentUtc": int(receipt.browser_sent_at_unix),
             "evidence": "EXACT_USER_MESSAGE_APPENDED",
-            "completion": "RESPONSE_COMPLETED",
+            "completion": "RESPONSE_PENDING" if cooperative else "RESPONSE_COMPLETED",
         },
     })
+
+
+def bootstrap_probe(bridge, sb, request):
+    """Observe a persisted bootstrap receipt without sending another USER turn."""
+    if set(request) != {"bootstrapProbe", "projectId", "intentId", "source", "handoff", "receipt"} or request["bootstrapProbe"] is not True:
+        raise bridge.Attention("BOOTSTRAP_PROBE_REQUEST_INVALID")
+    source, receipt = request["source"], request["receipt"]
+    if not isinstance(source, dict) or set(source) != {"url", "digest", "generation"} or not isinstance(receipt, dict):
+        raise bridge.Attention("BOOTSTRAP_PROBE_REQUEST_INVALID")
+    project_id, intent_id = request["projectId"], request["intentId"]
+    source_url = bridge.canonical_conversation_url(source["url"])
+    if (source_url != source["url"] or bridge.digest(source_url) != source["digest"] or
+            not isinstance(source["generation"], int) or isinstance(source["generation"], bool) or
+            not 0 <= source["generation"] < 2**63):
+        raise bridge.Attention("BOOTSTRAP_PROBE_SOURCE_INVALID")
+    message = bridge.compose_bootstrap_message(project_id, intent_id, source_url, request["handoff"])
+    message_digest = bridge.digest(bridge.normalize_message(message))
+    destination = bridge.canonical_conversation_url(receipt.get("destinationUrl"))
+    if (destination != receipt.get("destinationUrl") or destination == source_url or
+            receipt.get("schemaVersion") != 1 or receipt.get("projectId") != project_id or
+            receipt.get("intentId") != intent_id or receipt.get("sourceGeneration") != source["generation"] or
+            receipt.get("sourceDigest") != source["digest"] or
+            receipt.get("destinationDigest") != bridge.digest(destination) or
+            receipt.get("messageDigest") != message_digest or
+            receipt.get("evidence") != "EXACT_USER_MESSAGE_APPENDED" or
+            receipt.get("completion") != "RESPONSE_PENDING" or
+            not isinstance(receipt.get("sentUtc"), int) or isinstance(receipt.get("sentUtc"), bool) or
+            receipt["sentUtc"] <= 0):
+        raise bridge.Attention("BOOTSTRAP_PROBE_RECEIPT_INVALID")
+    sink = bridge.CdpSink(destination, ROOT / "browser-profile", 30, 20)
+    cdp = prepare_cdp_target(bridge, sb, destination)
+    stage = sink.observe_cooperative_response(cdp, message, message_digest)
+    if stage == "RESPONSE_COMPLETE":
+        time.sleep(.25)
+        stage = sink.observe_cooperative_response(cdp, message, message_digest)
+    if stage == "RESPONSE_PENDING":
+        emit({"stage": "BOOTSTRAP_RESPONSE_PENDING", "projectId": project_id,
+              "intentId": intent_id, "destinationDigest": receipt["destinationDigest"]})
+    elif stage == "RESPONSE_COMPLETE":
+        completed = dict(receipt)
+        completed["completion"] = "RESPONSE_COMPLETED"
+        emit({"stage": "BOOTSTRAP_COMPLETE", "receipt": completed})
+    else:
+        raise bridge.Attention("BOOTSTRAP_PROBE_STATE_INVALID")
 
 
 def source_snapshot(bridge, sb, request):
@@ -435,7 +490,9 @@ def main():
                     emit({"stage": "READY"})
                     try:
                         request = read_job_request()
-                        if request.get("observeResponse") is True:
+                        if request.get("bootstrapProbe") is True:
+                            bootstrap_probe(bridge, sb, request)
+                        elif request.get("observeResponse") is True:
                             observe_response(bridge, sb, request)
                         elif request.get("snapshot") is True:
                             source_snapshot(bridge, sb, request)

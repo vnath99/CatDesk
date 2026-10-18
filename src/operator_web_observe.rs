@@ -66,7 +66,7 @@ pub(super) fn ingest(
     if snapshot.messages.len() > 16
         || !matches!(
             coverage.selector_tier.as_str(),
-            "AUTHOR_ROLE" | "ARTICLE_ROLE" | "NONE"
+            "AUTHOR_ROLE" | "ARTICLE_ROLE" | "SEMANTIC_UNIT" | "NONE"
         )
         || (coverage.selector_tier == "NONE" && !snapshot.messages.is_empty())
         || coverage.anchor_stability != "UNVERIFIED"
@@ -256,6 +256,11 @@ mod tests {
         )
         .unwrap();
         assert_eq!(first["pressure"], replay["pressure"]);
+        let mut current_dom = input(&key, "private short response", true);
+        current_dom["coverage"]["selectorTier"] = json!("SEMANTIC_UNIT");
+        let current_dom = ingest(&store, &key, current_dom, 2, || Ok(())).unwrap();
+        assert_eq!(first["pressure"], current_dom["pressure"]);
+        assert_eq!(current_dom["recordedMessages"], 1);
         assert!(!first.to_string().contains("private short response"));
         assert_eq!(first["recordedMessages"], 1);
         let changed = ingest(

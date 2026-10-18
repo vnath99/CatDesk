@@ -36,6 +36,8 @@ pub struct Status {
     pub protocol_version: u32,
     pub host: String,
     pub pid: u32,
+    #[serde(default)]
+    pub browser_session_protocol: Option<String>,
     pub updated_utc: u64,
     pub targets: BTreeMap<String, Target>,
     pub queue_depth: usize,
@@ -534,6 +536,7 @@ pub fn status(store: &Store) -> Result<Status> {
             protocol_version: 1,
             host: "STOPPED".into(),
             pid: 0,
+            browser_session_protocol: None,
             updated_utc: now(),
             targets: config.targets.clone(),
             queue_depth: 0,
@@ -1448,11 +1451,64 @@ fn activate_reviewed_install_checked(
     Ok(handoff)
 }
 
+const BROWSER_SESSION_LOCK_PROTOCOL: &str = "CATDESK_WAKE_BROWSER_SESSION_LOCK_V1";
+
+fn browser_session_lock(root: &Path, wait: Duration) -> Result<File> {
+    let path = root.join("browser-session.lock");
+    if let Ok(metadata) = std::fs::symlink_metadata(&path) {
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            if metadata.file_attributes() & 0x400 != 0 {
+                return Err("BROWSER_SESSION_LOCK_UNSAFE".into());
+            }
+        }
+        if !metadata.is_file() || metadata.file_type().is_symlink() {
+            return Err("BROWSER_SESSION_LOCK_UNSAFE".into());
+        }
+    }
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)
+        .map_err(|_| "BROWSER_SESSION_LOCK_UNAVAILABLE")?;
+    let metadata =
+        std::fs::symlink_metadata(&path).map_err(|_| "BROWSER_SESSION_LOCK_UNAVAILABLE")?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if metadata.file_attributes() & 0x400 != 0 {
+            return Err("BROWSER_SESSION_LOCK_UNSAFE".into());
+        }
+    }
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Err("BROWSER_SESSION_LOCK_UNSAFE".into());
+    }
+    let deadline = Instant::now() + wait;
+    loop {
+        match file.try_lock() {
+            Ok(()) => return Ok(file),
+            Err(std::fs::TryLockError::WouldBlock) if Instant::now() < deadline => {
+                thread::sleep(Duration::from_millis(100));
+            }
+            Err(std::fs::TryLockError::WouldBlock) => {
+                return Err("BROWSER_SESSION_BUSY".into());
+            }
+            Err(std::fs::TryLockError::Error(_)) => {
+                return Err("BROWSER_SESSION_LOCK_UNAVAILABLE".into());
+            }
+        }
+    }
+}
+
 struct Adapter {
     _job: crate::process_job::Job,
     child: Child,
     input: ChildStdin,
     output: Receiver<Result<serde_json::Value>>,
+    _browser_session_lock: File,
 }
 impl Drop for Adapter {
     fn drop(&mut self) {
@@ -1495,12 +1551,21 @@ impl Adapter {
     fn spawn(root: &Path) -> Result<Self> {
         let executable = std::env::current_exe().map_err(|_| "HOST_EXECUTABLE_UNAVAILABLE")?;
         let installed = executable.parent().ok_or("HOST_INSTALL_UNAVAILABLE")?;
-        Self::spawn_from_installed(root, installed)
+        Self::spawn_from_installed_with_wait(root, installed, Duration::ZERO)
     }
 
     fn spawn_from_installed(root: &Path, installed: &Path) -> Result<Self> {
+        Self::spawn_from_installed_with_wait(root, installed, Duration::from_secs(30))
+    }
+
+    fn spawn_from_installed_with_wait(
+        root: &Path,
+        installed: &Path,
+        wait: Duration,
+    ) -> Result<Self> {
         let (adapter_path, _wake_bridge_path) =
             verify_installed_browser_artifacts(root, installed)?;
+        let browser_session_lock = browser_session_lock(root, wait)?;
         let interpreter = root.join("runtime/python.exe");
         if !interpreter.is_file() {
             return Err("BROWSER_RUNTIME_NOT_INSTALLED".into());
@@ -1559,6 +1624,7 @@ impl Adapter {
             child,
             input,
             output: rx,
+            _browser_session_lock: browser_session_lock,
         };
         adapter.send(serde_json::json!({"initialize":true}))?;
         let deadline = Instant::now() + Duration::from_secs(90);
@@ -1752,12 +1818,61 @@ fn ensure_bootstrap_source_available(
     Ok(())
 }
 
+enum BrowserOwnerGuard {
+    Standalone {
+        _lease: HostLease,
+    },
+    Running {
+        _owner: crate::install_authority::InstallStoreGuard,
+    },
+}
+
+fn browser_owner_guard(store: &Store) -> Result<BrowserOwnerGuard> {
+    match store.host_lock() {
+        Ok(lease) => Ok(BrowserOwnerGuard::Standalone { _lease: lease }),
+        Err(reason) if reason == "HOST_ALREADY_RUNNING" => {
+            let live = status(store)?;
+            if live.host != "RUNNING"
+                || live.pid == 0
+                || live.browser_session_protocol.as_deref() != Some(BROWSER_SESSION_LOCK_PROTOCOL)
+            {
+                return Err("COOPERATIVE_HOST_PROTOCOL_REQUIRED".into());
+            }
+            let owner = crate::install_authority::InstallStoreGuard::acquire_current_for_probe(
+                store.root(),
+                live.pid,
+            )?;
+            owner.require_lock_owner_proof()?;
+            Ok(BrowserOwnerGuard::Running { _owner: owner })
+        }
+        Err(reason) => Err(reason),
+    }
+}
+
 fn validate_bootstrap_receipt(
     receipt: &BootstrapReceipt,
     project_id: &str,
     intent_id: &str,
     source: &Target,
     message_digest: &str,
+) -> Result<()> {
+    validate_bootstrap_receipt_stage(
+        receipt,
+        project_id,
+        intent_id,
+        source,
+        message_digest,
+        "RESPONSE_COMPLETED",
+    )
+}
+
+fn validate_bootstrap_receipt_stage(
+    receipt: &BootstrapReceipt,
+    project_id: &str,
+    intent_id: &str,
+    source: &Target,
+    message_digest: &str,
+    completion: &str,
 ) -> Result<()> {
     if receipt.schema_version != 1
         || receipt.project_id != project_id
@@ -1767,7 +1882,7 @@ fn validate_bootstrap_receipt(
         || receipt.message_digest != message_digest
         || receipt.sent_utc == 0
         || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
-        || receipt.completion != "RESPONSE_COMPLETED"
+        || receipt.completion != completion
         || receipt.destination_url == source.url
     {
         return Err("BOOTSTRAP_RECEIPT_INVALID".into());
@@ -1932,6 +2047,228 @@ pub fn bootstrap_conversation(
     }
 }
 
+/// Submit one new-chat bootstrap and return only after the issued URL and
+/// exact USER turn persist in a fresh browser document. The caller must save
+/// this pending receipt before probing; no retry may submit another USER turn.
+pub fn bootstrap_submit_conversation(
+    store: &Store,
+    project_id: &str,
+    intent_id: &str,
+    source: &Target,
+    handoff: &str,
+    mut before_submit: impl FnMut() -> Result<()>,
+) -> Result<BootstrapReceipt> {
+    let message_digest = bootstrap_message_digest(project_id, intent_id, source, handoff)?;
+    let request = serde_json::json!({
+        "bootstrap":true,"cooperative":true,"projectId":project_id,
+        "intentId":intent_id,"source":source,"handoff":handoff,
+    });
+    if serde_json::to_vec(&request)
+        .map_err(|_| "BOOTSTRAP_REQUEST_INVALID")?
+        .len()
+        + 1
+        > 32 * 1024
+    {
+        return Err("BOOTSTRAP_REQUEST_TOO_LARGE".into());
+    }
+    let _owner = browser_owner_guard(store)?;
+    ensure_bootstrap_source_available(store, project_id, source)?;
+    let installed = installed_bootstrap_directory(store)?;
+    let adapter_bytes =
+        std::fs::read(installed.join("adapter.py")).map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?;
+    if !adapter_bytes
+        .windows(b"def bootstrap_probe(".len())
+        .any(|part| part == b"def bootstrap_probe(")
+    {
+        return Err("COOPERATIVE_BOOTSTRAP_PACKAGE_REQUIRED".into());
+    }
+    let mut adapter = Adapter::spawn_from_installed(store.root(), &installed)?;
+    adapter.send(request)?;
+    let absolute_deadline = Instant::now() + BOOTSTRAP_SETUP_RECEIPT_ALLOWANCE;
+    let mut progress_deadline = Instant::now() + BOOTSTRAP_PROGRESS_WINDOW;
+    let mut submit_dispatched = false;
+    loop {
+        if let Some(reason) = bootstrap_timeout_reason(
+            Instant::now(),
+            progress_deadline,
+            absolute_deadline,
+            submit_dispatched,
+        ) {
+            return Err(reason.into());
+        }
+        let value = match adapter.output.recv_timeout(Duration::from_millis(250)) {
+            Ok(Ok(value)) => value,
+            Ok(Err(reason)) if !submit_dispatched => return Err(reason),
+            Err(mpsc::RecvTimeoutError::Disconnected) if !submit_dispatched => {
+                return Err("BROWSER_ADAPTER_EXITED".into());
+            }
+            Ok(Err(_)) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err("BOOTSTRAP_OUTCOME_UNKNOWN".into());
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+        };
+        match value.get("stage").and_then(|stage| stage.as_str()) {
+            Some("BEFORE_BOOTSTRAP_SUBMIT") if !submit_dispatched => {
+                let valid = value.get("projectId").and_then(|v| v.as_str()) == Some(project_id)
+                    && value.get("intentId").and_then(|v| v.as_str()) == Some(intent_id)
+                    && value.get("sourceGeneration").and_then(|v| v.as_u64())
+                        == Some(source.generation)
+                    && value.get("messageDigest").and_then(|v| v.as_str())
+                        == Some(message_digest.as_str())
+                    && value.as_object().is_some_and(|map| map.len() == 5);
+                if !valid {
+                    return Err("BOOTSTRAP_BEFORE_SUBMIT_INVALID".into());
+                }
+                ensure_bootstrap_source_available(store, project_id, source)?;
+                before_submit()?;
+                submit_dispatched = true;
+                adapter
+                    .send(serde_json::json!({"submit":true}))
+                    .map_err(|_| "BOOTSTRAP_OUTCOME_UNKNOWN")?;
+                progress_deadline = Instant::now() + BOOTSTRAP_PROGRESS_WINDOW;
+            }
+            Some("BOOTSTRAP_SUBMITTED") if submit_dispatched => {
+                let receipt: BootstrapReceipt = serde_json::from_value(
+                    value
+                        .get("receipt")
+                        .ok_or("BOOTSTRAP_OUTCOME_UNKNOWN")?
+                        .clone(),
+                )
+                .map_err(|_| "BOOTSTRAP_OUTCOME_UNKNOWN")?;
+                validate_bootstrap_receipt_stage(
+                    &receipt,
+                    project_id,
+                    intent_id,
+                    source,
+                    &message_digest,
+                    "RESPONSE_PENDING",
+                )
+                .map_err(|_| "BOOTSTRAP_OUTCOME_UNKNOWN")?;
+                let _ = adapter.allow_graceful_exit(Duration::from_secs(5));
+                return Ok(receipt);
+            }
+            Some("BOOTSTRAP_UNKNOWN") if submit_dispatched => {
+                return Err("BOOTSTRAP_OUTCOME_UNKNOWN".into());
+            }
+            Some("ATTENTION") if !submit_dispatched => {
+                return Err(value
+                    .get("reason")
+                    .and_then(|v| v.as_str())
+                    .filter(|reason| crate::protocol::valid_id(reason))
+                    .unwrap_or("BOOTSTRAP_PRE_SUBMIT_ATTENTION")
+                    .into());
+            }
+            Some(
+                "CDP_REUSE_BEGIN"
+                | "CDP_REUSE_DONE"
+                | "CDP_ACTIVATE_BEGIN"
+                | "CDP_ACTIVATE_DONE"
+                | "BOOTSTRAP_SOURCE_READY"
+                | "BOOTSTRAP_HOME_READY"
+                | "BOOTSTRAP_SUBMISSION_ACCEPTED"
+                | "GENERATION_WAIT"
+                | "GENERATION_ACTIVE",
+            ) => progress_deadline = Instant::now() + BOOTSTRAP_PROGRESS_WINDOW,
+            _ if submit_dispatched => return Err("BOOTSTRAP_OUTCOME_UNKNOWN".into()),
+            _ => return Err("BROWSER_ADAPTER_RESPONSE_INVALID".into()),
+        }
+    }
+}
+
+/// One bounded, read-only probe of a durably submitted replacement chat. It
+/// never opens New Chat or sends a USER message. `None` means try a later slice.
+pub fn bootstrap_probe_completion(
+    store: &Store,
+    source: &Target,
+    pending: &BootstrapReceipt,
+    handoff: &str,
+) -> Result<Option<BootstrapReceipt>> {
+    source.validate()?;
+    let message_digest =
+        bootstrap_message_digest(&pending.project_id, &pending.intent_id, source, handoff)?;
+    validate_bootstrap_receipt_stage(
+        pending,
+        &pending.project_id,
+        &pending.intent_id,
+        source,
+        &message_digest,
+        "RESPONSE_PENDING",
+    )?;
+    if now().saturating_sub(pending.sent_utc) > 90 * 60 {
+        return Err("BOOTSTRAP_RESPONSE_BUDGET_EXHAUSTED".into());
+    }
+    let _owner = browser_owner_guard(store)?;
+    ensure_bootstrap_source_available(store, &pending.project_id, source)?;
+    let installed = installed_bootstrap_directory(store)?;
+    let mut adapter = Adapter::spawn_from_installed(store.root(), &installed)?;
+    adapter.send(serde_json::json!({
+        "bootstrapProbe":true,"projectId":pending.project_id,
+        "intentId":pending.intent_id,"source":source,"handoff":handoff,
+        "receipt":pending,
+    }))?;
+    let deadline = Instant::now() + Duration::from_secs(90);
+    loop {
+        if Instant::now() >= deadline {
+            return Err("BOOTSTRAP_RESPONSE_PROBE_TIMEOUT".into());
+        }
+        match adapter.output.recv_timeout(Duration::from_millis(250)) {
+            Ok(Ok(value)) => match value.get("stage").and_then(|v| v.as_str()) {
+                Some("BOOTSTRAP_RESPONSE_PENDING")
+                    if value.get("projectId").and_then(|v| v.as_str())
+                        == Some(pending.project_id.as_str())
+                        && value.get("intentId").and_then(|v| v.as_str())
+                            == Some(pending.intent_id.as_str())
+                        && value.get("destinationDigest").and_then(|v| v.as_str())
+                            == Some(pending.destination_digest.as_str()) =>
+                {
+                    return Ok(None);
+                }
+                Some("BOOTSTRAP_COMPLETE") => {
+                    let complete: BootstrapReceipt = serde_json::from_value(
+                        value
+                            .get("receipt")
+                            .ok_or("BOOTSTRAP_PROBE_RESPONSE_INVALID")?
+                            .clone(),
+                    )
+                    .map_err(|_| "BOOTSTRAP_PROBE_RESPONSE_INVALID")?;
+                    validate_bootstrap_receipt(
+                        &complete,
+                        &pending.project_id,
+                        &pending.intent_id,
+                        source,
+                        &message_digest,
+                    )?;
+                    if complete.destination_url != pending.destination_url
+                        || complete.destination_digest != pending.destination_digest
+                        || complete.sent_utc != pending.sent_utc
+                    {
+                        return Err("BOOTSTRAP_PROBE_RECEIPT_CHANGED".into());
+                    }
+                    return Ok(Some(complete));
+                }
+                Some(
+                    "CDP_REUSE_BEGIN" | "CDP_REUSE_DONE" | "CDP_ACTIVATE_BEGIN"
+                    | "CDP_ACTIVATE_DONE",
+                ) => {}
+                Some("ATTENTION") => {
+                    return Err(value
+                        .get("reason")
+                        .and_then(|v| v.as_str())
+                        .filter(|v| crate::protocol::valid_id(v))
+                        .unwrap_or("BOOTSTRAP_PROBE_ATTENTION")
+                        .into());
+                }
+                _ => return Err("BOOTSTRAP_PROBE_RESPONSE_INVALID".into()),
+            },
+            Ok(Err(reason)) => return Err(reason),
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err("BROWSER_ADAPTER_EXITED".into());
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+    }
+}
+
 fn source_snapshot_payload(
     value: serde_json::Value,
     project_id: &str,
@@ -1973,7 +2310,7 @@ pub fn snapshot_conversation(
     if !crate::protocol::valid_id(project_id) {
         return Err("SOURCE_SNAPSHOT_REQUEST_INVALID".into());
     }
-    let _lease = store.host_lock()?;
+    let _owner = browser_owner_guard(store)?;
     ensure_bootstrap_source_available(store, project_id, source)?;
     let installed = installed_bootstrap_directory(store)?;
     let adapter_bytes =
@@ -2160,6 +2497,51 @@ mod bootstrap_runtime_tests {
             )
             .is_err()
         );
+        receipt.source_generation = source().generation;
+        receipt.completion = "RESPONSE_PENDING".into();
+        validate_bootstrap_receipt_stage(
+            &receipt,
+            "project-one",
+            "rollover-1",
+            &source(),
+            &message_digest,
+            "RESPONSE_PENDING",
+        )
+        .expect("persistable pending receipt");
+        assert_eq!(
+            validate_bootstrap_receipt(
+                &receipt,
+                "project-one",
+                "rollover-1",
+                &source(),
+                &message_digest,
+            )
+            .unwrap_err(),
+            "BOOTSTRAP_RECEIPT_INVALID"
+        );
+    }
+
+    #[test]
+    fn shared_browser_lock_is_bounded_and_released() {
+        let parent = std::env::temp_dir();
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = parent.join(format!(
+            "catdesk-browser-lock-{}-{nonce}",
+            std::process::id()
+        ));
+        let store = Store::open_scoped_for_test(&root, &parent).expect("store");
+        let first = browser_session_lock(store.root(), Duration::ZERO).expect("first owner");
+        assert_eq!(
+            browser_session_lock(store.root(), Duration::ZERO).unwrap_err(),
+            "BROWSER_SESSION_BUSY"
+        );
+        drop(first);
+        browser_session_lock(store.root(), Duration::ZERO).expect("released lock");
+        drop(store);
+        std::fs::remove_dir_all(root).expect("remove fixture");
     }
 
     #[test]
@@ -3896,6 +4278,7 @@ fn persist_host_runtime_failure(
     let mut live = status(store)?;
     live.version = VERSION.into();
     live.pid = std::process::id();
+    live.browser_session_protocol = Some(BROWSER_SESSION_LOCK_PROTOCOL.into());
     live.host = if recovering { "RUNNING" } else { "ERROR" }.into();
     live.attention = Some(
         if recovering {
@@ -4173,6 +4556,7 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
     let mut live = status(store)?;
     live.version = VERSION.into();
     live.pid = std::process::id();
+    live.browser_session_protocol = Some(BROWSER_SESSION_LOCK_PROTOCOL.into());
     live.attention = None;
     let mut adapter = None;
     let mut reconciliation_attempts = BTreeMap::<String, usize>::new();
@@ -4257,6 +4641,11 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                         if adapter.is_none() {
                             match Adapter::spawn_cooperative(store.root()) {
                                 Ok(value) => adapter = Some(value),
+                                Err(reason) if reason == "BROWSER_SESSION_BUSY" => {
+                                    next_response_probe.remove(&event.event_id);
+                                    live.browser = "SHARED_SESSION_BUSY".into();
+                                    continue;
+                                }
                                 Err(reason) => {
                                     live.attention = Some(reason);
                                     live.browser = "ATTENTION".into();
@@ -4315,14 +4704,16 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                                     // events remain free to progress in the meantime.
                                     continue;
                                 }
-                                reconciliation_attempts
-                                    .insert(event.event_id.clone(), prior_attempts + 1);
                                 if adapter.is_none() {
                                     match Adapter::spawn_cooperative(store.root()) {
                                         Ok(value) => {
                                             live.browser = "READY".into();
                                             live.attention = None;
                                             adapter = Some(value);
+                                        }
+                                        Err(e) if e == "BROWSER_SESSION_BUSY" => {
+                                            live.browser = "SHARED_SESSION_BUSY".into();
+                                            continue;
                                         }
                                         Err(e) => {
                                             live.browser = "ATTENTION".into();
@@ -4331,6 +4722,8 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                                         }
                                     }
                                 }
+                                reconciliation_attempts
+                                    .insert(event.event_id.clone(), prior_attempts + 1);
                                 live.last_event_id = Some(event.event_id.clone());
                                 live.last_attempt_utc = Some(now());
                                 live.submission = "SUBMITTING".into();
@@ -4385,6 +4778,10 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                                 live.browser = "READY".into();
                                 live.attention = None;
                                 adapter = Some(value);
+                            }
+                            Err(e) if e == "BROWSER_SESSION_BUSY" => {
+                                live.browser = "SHARED_SESSION_BUSY".into();
+                                continue;
                             }
                             Err(e) => {
                                 live.browser = "ATTENTION".into();
@@ -4442,6 +4839,11 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                         }
                     };
                     match result {
+                        Err(reason) if reason == "BROWSER_SESSION_BUSY" => {
+                            live.browser = "SHARED_SESSION_BUSY".into();
+                            live.attention = None;
+                            continue;
+                        }
                         Err(reason) => {
                             let phase = store
                                 .delivery(&event.event_id)?
@@ -5216,6 +5618,7 @@ mod reviewed_install_transaction_tests {
                 protocol_version: 1,
                 host: "RUNNING".into(),
                 pid: 42,
+                browser_session_protocol: None,
                 updated_utc: now(),
                 targets: BTreeMap::new(),
                 queue_depth: 99,

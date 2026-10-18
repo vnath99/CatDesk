@@ -234,6 +234,7 @@ impl DesignatedChatUrlStatusV1 {
         match error {
             DesignatedChatTargetErrorV1::InvalidUrl => Self::InvalidUrl,
             DesignatedChatTargetErrorV1::Stale => Self::StaleTarget,
+            DesignatedChatTargetErrorV1::SourceProgress => Self::ProtectedStateMismatch,
             DesignatedChatTargetErrorV1::ProtectedStateMismatch => Self::ProtectedStateMismatch,
             DesignatedChatTargetErrorV1::SynchronizationFailure => Self::SynchronizationFailure,
             DesignatedChatTargetErrorV1::Unavailable => Self::AuthorityUnavailable,

@@ -2,7 +2,7 @@ use crate::protocol::{Event, Target, digest, valid_id};
 use crate::{PROTOCOL_VERSION, Result};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -13,6 +13,7 @@ use std::{
 static TEMP: AtomicU64 = AtomicU64::new(0);
 const MAX_FILE: u64 = 1024 * 1024;
 pub const MANUAL_TURN_PREFIX: &str = "manual-turn-";
+const MAX_SOURCE_PROGRESS_ITEMS: usize = 100_000;
 pub fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -286,7 +287,7 @@ impl Store {
         self.read_config()
     }
     pub fn set_target(&self, project: &str, expected: u64, url: &str) -> Result<Target> {
-        self.set_target_with_submission_policy(project, expected, url, false)
+        self.set_target_with_submission_policy(project, expected, url, false, None, None)
     }
 
     /// Explicit operator target rollover may quarantine an already-crossed
@@ -303,7 +304,80 @@ impl Store {
         expected: u64,
         url: &str,
     ) -> Result<Target> {
-        self.set_target_with_submission_policy(project, expected, url, true)
+        self.set_target_with_submission_policy(project, expected, url, true, None, None)
+    }
+
+    /// Automatic Web rollover may advance a target only while its exact
+    /// completed handoff turn is still the latest source activity. This check
+    /// and the target write share the Store transaction lock with producers.
+    pub fn set_target_quarantining_submitting_if_no_source_progress(
+        &self,
+        project: &str,
+        expected_source: &Target,
+        url: &str,
+        witness_event_id: &str,
+        expected_fingerprint: &str,
+    ) -> Result<Target> {
+        expected_source.validate()?;
+        if !valid_id(witness_event_id) {
+            return Err("CONFIG_SOURCE_WITNESS_INVALID".into());
+        }
+        if expected_fingerprint.len() != 64
+            || !expected_fingerprint
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        {
+            return Err("CONFIG_SOURCE_FINGERPRINT_INVALID".into());
+        }
+        self.set_target_with_submission_policy(
+            project,
+            expected_source.generation,
+            url,
+            true,
+            Some((expected_source, witness_event_id, expected_fingerprint)),
+            None,
+        )
+    }
+
+    /// Capture the exact source-generation state at handoff collection. The
+    /// digest is advisory until a later guarded target bind compares it under
+    /// the Store transaction lock. No clock ordering is assumed.
+    pub fn source_progress_fingerprint(
+        &self,
+        project: &str,
+        source: &Target,
+        witness_event_id: &str,
+    ) -> Result<String> {
+        if !valid_id(project) || !valid_id(witness_event_id) {
+            return Err("CONFIG_SOURCE_WITNESS_INVALID".into());
+        }
+        source.validate()?;
+        let _lock = self.lock()?;
+        if self.read_config()?.targets.get(project) != Some(source) {
+            return Err("CONFIG_SOURCE_WITNESS_TARGET_MISMATCH".into());
+        }
+        self.ensure_no_source_progress_locked(project, source, witness_event_id)?;
+        self.source_progress_fingerprint_locked(project, source, witness_event_id)
+    }
+
+    /// Compensate a staged automatic rollover only if no work has entered its
+    /// new Wake generation. The read and target change share the Store lock
+    /// with event producers, so a new event cannot be orphaned by rollback.
+    pub fn set_target_quarantining_submitting_if_no_new_progress(
+        &self,
+        project: &str,
+        expected_new: &Target,
+        old_url: &str,
+    ) -> Result<Target> {
+        expected_new.validate()?;
+        self.set_target_with_submission_policy(
+            project,
+            expected_new.generation,
+            old_url,
+            true,
+            None,
+            Some(expected_new),
+        )
     }
 
     fn set_target_with_submission_policy(
@@ -312,6 +386,8 @@ impl Store {
         expected: u64,
         url: &str,
         quarantine_submitting: bool,
+        source_guard: Option<(&Target, &str, &str)>,
+        rollback_guard: Option<&Target>,
     ) -> Result<Target> {
         if !valid_id(project) {
             return Err("CONFIG_PROJECT_INVALID".into());
@@ -321,6 +397,23 @@ impl Store {
         let previous = config.targets.get(project);
         if previous.map_or(0, |t| t.generation) != expected {
             return Err("CONFIG_CAS_CONFLICT".into());
+        }
+        if let Some((source, witness_event_id, expected_fingerprint)) = source_guard {
+            if previous != Some(source) || source.url == url {
+                return Err("CONFIG_SOURCE_WITNESS_TARGET_MISMATCH".into());
+            }
+            self.ensure_no_source_progress_locked(project, source, witness_event_id)?;
+            if self.source_progress_fingerprint_locked(project, source, witness_event_id)?
+                != expected_fingerprint
+            {
+                return Err("BOOTSTRAP_SOURCE_PROGRESS_AFTER_HANDOFF".into());
+            }
+        }
+        if let Some(staged) = rollback_guard {
+            if previous != Some(staged) || staged.url == url {
+                return Err("CONFIG_STAGED_TARGET_MISMATCH".into());
+            }
+            self.ensure_staged_target_unused_locked(project, staged)?;
         }
         if let Some(target) = previous
             && target.url == url
@@ -372,6 +465,206 @@ impl Store {
             return Err("CONFIG_READBACK_MISMATCH".into());
         }
         Ok(target)
+    }
+
+    fn ensure_no_source_progress_locked(
+        &self,
+        project: &str,
+        source: &Target,
+        witness_event_id: &str,
+    ) -> Result<()> {
+        let witness = self
+            .read_delivery(witness_event_id)?
+            .ok_or("CONFIG_SOURCE_WITNESS_MISSING")?;
+        let receipt = witness
+            .receipt
+            .as_ref()
+            .ok_or("CONFIG_SOURCE_WITNESS_INCOMPLETE")?;
+        let timer = self
+            .read_timer(witness_event_id)?
+            .ok_or("CONFIG_SOURCE_WITNESS_INCOMPLETE")?;
+        if witness.event.project_id != project
+            || witness.target != *source
+            || witness.phase != Phase::Sent
+            || receipt.event_id != witness_event_id
+            || receipt.target_generation != source.generation
+            || receipt.target_digest != source.digest
+            || receipt.message_digest != witness.message_digest
+            || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
+            || timer.event_id != witness_event_id
+            || timer.project_id != project
+            || timer.target_generation != source.generation
+            || timer.target_digest != source.digest
+            || timer.response_state != ResponseState::Complete
+        {
+            return Err("CONFIG_SOURCE_WITNESS_INCOMPLETE".into());
+        }
+        let completed = timer
+            .completed_utc
+            .ok_or("CONFIG_SOURCE_WITNESS_INCOMPLETE")?;
+        for entry in fs::read_dir(self.root.join("queue")).map_err(|_| "QUEUE_UNAVAILABLE")? {
+            let path = entry.map_err(|_| "QUEUE_UNAVAILABLE")?.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let event: Event = read(&path)?;
+            event.validate()?;
+            if event.project_id == project && event.target_generation == source.generation {
+                let delivery = self.read_delivery(&event.event_id)?;
+                if !delivery
+                    .as_ref()
+                    .is_some_and(|delivery| matches!(delivery.phase, Phase::Sent | Phase::Stale))
+                {
+                    return Err("BOOTSTRAP_SOURCE_PROGRESS_AFTER_HANDOFF".into());
+                }
+            }
+        }
+        for entry in
+            fs::read_dir(self.root.join("deliveries")).map_err(|_| "RECEIPT_UNAVAILABLE")?
+        {
+            let path = entry.map_err(|_| "RECEIPT_UNAVAILABLE")?.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let delivery: Delivery = read(&path)?;
+            delivery.validate()?;
+            if delivery.event.event_id == witness_event_id
+                || delivery.event.project_id != project
+                || delivery.target != *source
+            {
+                continue;
+            }
+            if delivery.phase == Phase::Sent
+                && delivery
+                    .receipt
+                    .as_ref()
+                    .is_some_and(|receipt| receipt.sent_utc >= completed)
+            {
+                return Err("BOOTSTRAP_SOURCE_PROGRESS_AFTER_HANDOFF".into());
+            }
+        }
+        for entry in fs::read_dir(self.root.join("turns")).map_err(|_| "TURN_TIMER_UNAVAILABLE")? {
+            let path = entry.map_err(|_| "TURN_TIMER_UNAVAILABLE")?.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let timer: TurnTimer = read(&path)?;
+            timer.validate()?;
+            if timer.event_id != witness_event_id
+                && timer.project_id == project
+                && timer.target_generation == source.generation
+                && timer.target_digest == source.digest
+                && (timer.response_state != ResponseState::Complete
+                    || timer.started_utc >= completed
+                    || timer.completed_utc.is_some_and(|value| value >= completed))
+            {
+                return Err("BOOTSTRAP_SOURCE_PROGRESS_AFTER_HANDOFF".into());
+            }
+        }
+        Ok(())
+    }
+
+    fn source_progress_fingerprint_locked(
+        &self,
+        project: &str,
+        source: &Target,
+        witness_event_id: &str,
+    ) -> Result<String> {
+        let mut event_ids = BTreeSet::new();
+        for child in ["queue", "archive"] {
+            for entry in fs::read_dir(self.root.join(child)).map_err(|_| "QUEUE_UNAVAILABLE")? {
+                let path = entry.map_err(|_| "QUEUE_UNAVAILABLE")?.path();
+                if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                    continue;
+                }
+                let event: Event = read(&path)?;
+                event.validate()?;
+                if event.project_id == project && event.target_generation == source.generation {
+                    event_ids.insert(event.event_id);
+                }
+            }
+        }
+        for entry in
+            fs::read_dir(self.root.join("deliveries")).map_err(|_| "RECEIPT_UNAVAILABLE")?
+        {
+            let path = entry.map_err(|_| "RECEIPT_UNAVAILABLE")?.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let delivery: Delivery = read(&path)?;
+            delivery.validate()?;
+            if delivery.event.project_id == project
+                && delivery.target.generation == source.generation
+            {
+                event_ids.insert(delivery.event.event_id);
+            }
+        }
+        for entry in fs::read_dir(self.root.join("turns")).map_err(|_| "TURN_TIMER_UNAVAILABLE")? {
+            let path = entry.map_err(|_| "TURN_TIMER_UNAVAILABLE")?.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let timer: TurnTimer = read(&path)?;
+            timer.validate()?;
+            if timer.project_id == project && timer.target_generation == source.generation {
+                event_ids.insert(timer.event_id);
+            }
+        }
+        if event_ids.len() > MAX_SOURCE_PROGRESS_ITEMS {
+            return Err("CONFIG_SOURCE_FINGERPRINT_CAPACITY".into());
+        }
+        let canonical = serde_json::to_string(&(
+            project,
+            source.generation,
+            &source.digest,
+            witness_event_id,
+            &event_ids,
+        ))
+        .map_err(|_| "CONFIG_SOURCE_FINGERPRINT_UNAVAILABLE")?;
+        Ok(digest(&canonical))
+    }
+
+    fn ensure_staged_target_unused_locked(&self, project: &str, staged: &Target) -> Result<()> {
+        for child in ["queue", "archive"] {
+            for entry in fs::read_dir(self.root.join(child)).map_err(|_| "QUEUE_UNAVAILABLE")? {
+                let path = entry.map_err(|_| "QUEUE_UNAVAILABLE")?.path();
+                if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                    continue;
+                }
+                let event: Event = read(&path)?;
+                event.validate()?;
+                if event.project_id == project && event.target_generation == staged.generation {
+                    return Err("BOOTSTRAP_STAGED_TARGET_IN_USE".into());
+                }
+            }
+        }
+        for entry in
+            fs::read_dir(self.root.join("deliveries")).map_err(|_| "RECEIPT_UNAVAILABLE")?
+        {
+            let path = entry.map_err(|_| "RECEIPT_UNAVAILABLE")?.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let delivery: Delivery = read(&path)?;
+            delivery.validate()?;
+            if delivery.event.project_id == project
+                && delivery.target.generation == staged.generation
+            {
+                return Err("BOOTSTRAP_STAGED_TARGET_IN_USE".into());
+            }
+        }
+        for entry in fs::read_dir(self.root.join("turns")).map_err(|_| "TURN_TIMER_UNAVAILABLE")? {
+            let path = entry.map_err(|_| "TURN_TIMER_UNAVAILABLE")?.path();
+            if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                continue;
+            }
+            let timer: TurnTimer = read(&path)?;
+            timer.validate()?;
+            if timer.project_id == project && timer.target_generation == staged.generation {
+                return Err("BOOTSTRAP_STAGED_TARGET_IN_USE".into());
+            }
+        }
+        Ok(())
     }
     /// Caller captures generation when creating the event, never during replay.
     /// Identical publication is idempotent; changed bytes under one ID conflict.
@@ -1518,6 +1811,225 @@ mod submission_reconciliation_tests {
         );
         assert!(store.event_path(&event.event_id).exists());
         assert!(!store.archive_path(&event.event_id).exists());
+    }
+
+    fn completed_witness(store: &Store, event: &Event, lease: &HostLease) -> Target {
+        let source = store.config().unwrap().targets["catdesk"].clone();
+        let proof = receipt(event, &source);
+        store
+            .record_exact_receipt_timer(&event.event_id, &proof)
+            .unwrap();
+        store
+            .transition(
+                &event.event_id,
+                lease.owner(),
+                Phase::Sent,
+                Some(proof),
+                None,
+            )
+            .unwrap();
+        store.complete_timer(&event.event_id).unwrap();
+        source
+    }
+
+    #[test]
+    fn source_guard_accepts_completed_witness_and_refuses_queued_source_work() {
+        let (_base, store, witness, lease) = fixture("source-queue");
+        let source = completed_witness(&store, &witness, &lease);
+        let fingerprint = store
+            .source_progress_fingerprint("catdesk", &source, &witness.event_id)
+            .unwrap();
+        // A crash between receipt commit and queue archival can leave the
+        // same terminal ID in both places; housekeeping must not look new.
+        atomic(&store.event_path(&witness.event_id), &witness).unwrap();
+        assert_eq!(
+            store
+                .source_progress_fingerprint("catdesk", &source, &witness.event_id)
+                .unwrap(),
+            fingerprint
+        );
+        fs::remove_file(store.event_path(&witness.event_id)).unwrap();
+        store
+            .produce(
+                "queued-after-witness",
+                "catdesk",
+                "review_ready",
+                "new source work",
+            )
+            .unwrap();
+        assert_eq!(
+            store
+                .set_target_quarantining_submitting_if_no_source_progress(
+                    "catdesk",
+                    &source,
+                    "https://chatgpt.com/c/6ab06a56-56c0-83e9-9697-9bc7c380c155",
+                    &witness.event_id,
+                    &fingerprint,
+                )
+                .unwrap_err(),
+            "BOOTSTRAP_SOURCE_PROGRESS_AFTER_HANDOFF"
+        );
+        assert_eq!(store.config().unwrap().targets["catdesk"], source);
+    }
+
+    #[test]
+    fn source_guard_allows_other_project_activity() {
+        let (_base, store, witness, lease) = fixture("source-other-project");
+        let source = completed_witness(&store, &witness, &lease);
+        let fingerprint = store
+            .source_progress_fingerprint("catdesk", &source, &witness.event_id)
+            .unwrap();
+        store
+            .set_target(
+                "byovd",
+                0,
+                "https://chatgpt.com/c/6ab06a56-56c0-83e9-9697-9bc7c380c157",
+            )
+            .unwrap();
+        store
+            .produce(
+                "other-source-project",
+                "byovd",
+                "review_ready",
+                "independent",
+            )
+            .unwrap();
+        let destination = store
+            .set_target_quarantining_submitting_if_no_source_progress(
+                "catdesk",
+                &source,
+                "https://chatgpt.com/c/6ab06a56-56c0-83e9-9697-9bc7c380c155",
+                &witness.event_id,
+                &fingerprint,
+            )
+            .unwrap();
+        assert_eq!(destination.generation, source.generation + 1);
+    }
+
+    #[test]
+    fn source_guard_refuses_later_completed_delivery_even_after_queue_archive() {
+        let (_base, store, witness, lease) = fixture("source-later-sent");
+        let source = completed_witness(&store, &witness, &lease);
+        let fingerprint = store
+            .source_progress_fingerprint("catdesk", &source, &witness.event_id)
+            .unwrap();
+        let later = store
+            .produce(
+                "sent-after-witness",
+                "catdesk",
+                "review_ready",
+                "later source work",
+            )
+            .unwrap();
+        store.claim(&later, &lease).unwrap();
+        store
+            .transition(
+                &later.event_id,
+                lease.owner(),
+                Phase::Submitting,
+                None,
+                None,
+            )
+            .unwrap();
+        let later_receipt = receipt(&later, &source);
+        store
+            .record_exact_receipt_timer(&later.event_id, &later_receipt)
+            .unwrap();
+        store
+            .transition(
+                &later.event_id,
+                lease.owner(),
+                Phase::Sent,
+                Some(later_receipt),
+                None,
+            )
+            .unwrap();
+        store.complete_timer(&later.event_id).unwrap();
+        assert!(!store.event_path(&later.event_id).exists());
+        // Simulate the wall clock moving backward after the handoff. The
+        // immutable ID fingerprint must still catch the later completed turn.
+        let mut later_delivery = store.delivery(&later.event_id).unwrap().unwrap();
+        later_delivery.receipt.as_mut().unwrap().sent_utc = 1;
+        atomic(&store.delivery_path(&later.event_id), &later_delivery).unwrap();
+        let mut later_timer = store.timer(&later.event_id).unwrap().unwrap();
+        later_timer.started_utc = 1;
+        later_timer.completed_utc = Some(1);
+        atomic(&store.timer_path(&later.event_id), &later_timer).unwrap();
+        assert_eq!(
+            store
+                .set_target_quarantining_submitting_if_no_source_progress(
+                    "catdesk",
+                    &source,
+                    "https://chatgpt.com/c/6ab06a56-56c0-83e9-9697-9bc7c380c155",
+                    &witness.event_id,
+                    &fingerprint,
+                )
+                .unwrap_err(),
+            "BOOTSTRAP_SOURCE_PROGRESS_AFTER_HANDOFF"
+        );
+        assert_eq!(store.config().unwrap().targets["catdesk"], source);
+    }
+
+    #[test]
+    fn staged_target_rollback_isolated_by_project_and_refuses_new_queue_or_timer() {
+        let (_base, store, _event, _lease) = fixture("staged-rollback");
+        let old = store.config().unwrap().targets["catdesk"].clone();
+        let staged = store
+            .set_target_quarantining_submitting(
+                "catdesk",
+                old.generation,
+                "https://chatgpt.com/c/6ab06a56-56c0-83e9-9697-9bc7c380c156",
+            )
+            .unwrap();
+        let other = store
+            .set_target(
+                "byovd",
+                0,
+                "https://chatgpt.com/c/6ab06a56-56c0-83e9-9697-9bc7c380c157",
+            )
+            .unwrap();
+        store
+            .produce("other-project-work", "byovd", "review_ready", "independent")
+            .unwrap();
+        let reverted = store
+            .set_target_quarantining_submitting_if_no_new_progress("catdesk", &staged, &old.url)
+            .unwrap();
+        assert_eq!(reverted.url, old.url);
+        assert_eq!(store.config().unwrap().targets["byovd"], other);
+
+        let restaged = store
+            .set_target_quarantining_submitting("catdesk", reverted.generation, &staged.url)
+            .unwrap();
+        store
+            .produce(
+                "new-gen-queued",
+                "catdesk",
+                "review_ready",
+                "new generation",
+            )
+            .unwrap();
+        assert_eq!(
+            store
+                .set_target_quarantining_submitting_if_no_new_progress(
+                    "catdesk", &restaged, &old.url,
+                )
+                .unwrap_err(),
+            "BOOTSTRAP_STAGED_TARGET_IN_USE"
+        );
+        assert_eq!(store.config().unwrap().targets["catdesk"], restaged);
+
+        let timer_id = "manual-turn-new-generation";
+        store
+            .start_manual_turn_timer(timer_id, "catdesk", &restaged)
+            .unwrap();
+        assert_eq!(
+            store
+                .set_target_quarantining_submitting_if_no_new_progress(
+                    "catdesk", &restaged, &old.url,
+                )
+                .unwrap_err(),
+            "BOOTSTRAP_STAGED_TARGET_IN_USE"
+        );
     }
 
     #[test]

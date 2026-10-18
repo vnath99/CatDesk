@@ -16,10 +16,16 @@ use crate::web_conversation_context::{
     ContextPressurePolicy, ConversationKey, Observation, VisibleSourceKind, WebContextStore,
 };
 
+#[path = "operator_web_auto.rs"]
+mod auto;
 #[path = "operator_web_observe.rs"]
 mod observe;
 #[path = "operator_web_rollover.rs"]
 mod rollover;
+
+pub(crate) fn start_auto_scheduler(state: crate::state::SharedState) {
+    auto::start_scheduler(state);
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WebAction {
@@ -62,6 +68,9 @@ pub(crate) enum WebAction {
         project_id: String,
     },
     RolloverExecute {
+        project_id: String,
+    },
+    AutoTick {
         project_id: String,
     },
 }
@@ -192,6 +201,9 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("rollover", "execute") if options.is_empty() => Ok(WebAction::RolloverExecute {
             project_id: project_id.into(),
         }),
+        ("auto", "tick") if options.is_empty() => Ok(WebAction::AutoTick {
+            project_id: project_id.into(),
+        }),
         ("rollover", "prepare") => {
             let handoff_file = PathBuf::from(
                 options
@@ -214,6 +226,7 @@ fn reason(error: DesignatedChatTargetErrorV1) -> &'static str {
     match error {
         DesignatedChatTargetErrorV1::InvalidUrl => "INVALID_CONVERSATION_URL",
         DesignatedChatTargetErrorV1::Stale => "STALE_TARGET_WITNESS",
+        DesignatedChatTargetErrorV1::SourceProgress => "SOURCE_PROGRESS_AFTER_HANDOFF",
         DesignatedChatTargetErrorV1::ProtectedStateMismatch => "REGISTRY_WAKE_MISMATCH",
         DesignatedChatTargetErrorV1::SynchronizationFailure => "TARGET_SYNCHRONIZATION_REQUIRED",
         DesignatedChatTargetErrorV1::Unavailable => "TARGET_AUTHORITY_UNAVAILABLE",
@@ -284,6 +297,27 @@ fn context_status(workspace: &Path, project: &str) -> Value {
     }
 }
 
+fn capture_context(workspace: &Path, project: &str) -> Result<Value, String> {
+    let key = paired_key(workspace, project)?;
+    let wake = catdesk_wake::store::Store::open(&catdesk_wake::runtime::default_root()?)?;
+    let source =
+        catdesk_wake::protocol::Target::new(key.target_generation, key.conversation_url.clone())?;
+    let snapshot = catdesk_wake::runtime::snapshot_conversation(&wake, project, &source)?;
+    if paired_key(workspace, project)? != key {
+        return Err("WEB_CONTEXT_TARGET_CHANGED".into());
+    }
+    let store = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
+    let previous = store.active_key(project)?;
+    store.bind_observed_target(key.clone(), previous.as_ref())?;
+    observe::ingest(&store, &key, snapshot, catdesk_wake::store::now(), || {
+        if paired_key(workspace, project)? == key {
+            Ok(())
+        } else {
+            Err("WEB_CONTEXT_TARGET_CHANGED".into())
+        }
+    })
+}
+
 fn target_status(workspace: &Path, project_id: &str) -> Value {
     match mcp::operator_read_project_web_target(workspace, project_id) {
         Ok(Some(target)) => json!({"status":"PAIRED", "target":target, "deliveryProved":false}),
@@ -316,6 +350,8 @@ pub(crate) fn execute(action: WebAction, workspace: &Path) -> Result<Value, Stri
                         "conversationHistory":stored.get("chatgptTargetHistory"),
                         "wake":target_status(&workspace, &project.project_id),
                         "context":context_status(&workspace,&project.project_id),
+                        "rollover":rollover::status(&workspace,&project.project_id)
+                            .unwrap_or_else(|_| json!({"status":"UNAVAILABLE_OR_BUSY"})),
                     })
                 })
                 .collect();
@@ -348,29 +384,7 @@ pub(crate) fn execute(action: WebAction, workspace: &Path) -> Result<Value, Stri
             )
         }
         WebAction::ContextStatus { project_id } => Ok(context_status(&workspace, &project_id)),
-        WebAction::ContextCapture { project_id } => {
-            let key = paired_key(&workspace, &project_id)?;
-            let wake = catdesk_wake::store::Store::open(&catdesk_wake::runtime::default_root()?)?;
-            let source = catdesk_wake::protocol::Target::new(
-                key.target_generation,
-                key.conversation_url.clone(),
-            )?;
-            let snapshot =
-                catdesk_wake::runtime::snapshot_conversation(&wake, &project_id, &source)?;
-            if paired_key(&workspace, &project_id)? != key {
-                return Err("WEB_CONTEXT_TARGET_CHANGED".into());
-            }
-            let store = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
-            let previous = store.active_key(&project_id)?;
-            store.bind_observed_target(key.clone(), previous.as_ref())?;
-            observe::ingest(&store, &key, snapshot, catdesk_wake::store::now(), || {
-                if paired_key(&workspace, &project_id)? == key {
-                    Ok(())
-                } else {
-                    Err("WEB_CONTEXT_TARGET_CHANGED".into())
-                }
-            })
-        }
+        WebAction::ContextCapture { project_id } => capture_context(&workspace, &project_id),
         WebAction::ContextConfigure {
             project_id,
             input_file,
@@ -437,6 +451,7 @@ pub(crate) fn execute(action: WebAction, workspace: &Path) -> Result<Value, Stri
             rollover::read_handoff(&handoff_file)?,
         ),
         WebAction::RolloverExecute { project_id } => rollover::execute(&workspace, &project_id),
+        WebAction::AutoTick { project_id } => auto::tick_project(&workspace, &project_id),
     }
 }
 
@@ -553,5 +568,25 @@ mod tests {
         ] {
             assert!(parse(&invalid).is_err());
         }
+    }
+
+    #[test]
+    fn auto_tick_requires_one_exact_project_scope() {
+        let command = args(&["operator", "web", "auto", "tick", "--project-id", "alpha"]);
+        assert!(matches!(
+            parse(&command),
+            Ok(WebAction::AutoTick { project_id }) if project_id == "alpha"
+        ));
+        let extra = args(&[
+            "operator",
+            "web",
+            "auto",
+            "tick",
+            "--project-id",
+            "alpha",
+            "--force",
+            "true",
+        ]);
+        assert!(parse(&extra).is_err());
     }
 }

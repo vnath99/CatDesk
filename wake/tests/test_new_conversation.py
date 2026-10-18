@@ -79,6 +79,7 @@ class AttemptCdp:
     def press_keys(self, selector, text, timeout):
         self.timeline.append("type")
         self.draft = text
+        self.typed_message = text
 
     def click(self, selector, timeout):
         self.sent += 1
@@ -182,6 +183,10 @@ class AttemptSink:
             raise bridge.PostSubmitUnknown("BOOTSTRAP_ASSISTANT_LOAD_ERROR_PLACEHOLDER")
         if cdp.sent != 1:
             raise bridge.PostSubmitUnknown("BOOTSTRAP_RECEIPT_SEQUENCE_DRIFT")
+
+    def user_message_digests(self, cdp):
+        self._check_issued(cdp)
+        return [bridge.digest(bridge.normalize_message(cdp.typed_message))]
 
     def _check_issued(self, cdp):
         if cdp.url != ISSUED:
@@ -529,6 +534,85 @@ class NewConversationTests(unittest.TestCase):
         self.assertEqual(receipt["evidence"], "EXACT_USER_MESSAGE_APPENDED")
         self.assertEqual(receipt["completion"], "RESPONSE_COMPLETED")
         self.assertNotIn("handoff", json.dumps(emitted))
+
+    def test_cooperative_bootstrap_saves_pending_receipt_without_response_wait(self):
+        request = self.request()
+        request["cooperative"] = True
+        cdp, emitted, acknowledgements, error = self.run_attempt(request=request)
+        self.assertIsNone(error)
+        self.assertEqual((cdp.sent, len(acknowledgements)), (1, 1))
+        self.assertNotIn("completion", cdp.timeline)
+        self.assertEqual(cdp.timeline[-2:], ["fresh-document", "exact-receipt"])
+        self.assertEqual(emitted[-1]["stage"], "BOOTSTRAP_SUBMITTED")
+        receipt = emitted[-1]["receipt"]
+        self.assertEqual(receipt["destinationUrl"], ISSUED)
+        self.assertEqual(receipt["destinationDigest"], bridge.digest(ISSUED))
+        self.assertEqual(receipt["completion"], "RESPONSE_PENDING")
+
+    def test_pending_bootstrap_probe_is_read_only_and_rejects_wrong_receipt(self):
+        request = self.request()
+        request["cooperative"] = True
+        _original, emitted, _ack, error = self.run_attempt(request=request)
+        self.assertIsNone(error)
+        receipt = emitted[-1]["receipt"]
+
+        class ProbeSink:
+            stages = ["RESPONSE_PENDING", "RESPONSE_COMPLETE", "RESPONSE_COMPLETE"]
+
+            def __init__(self, url, profile, ui_timeout, submit_timeout):
+                self.url = url
+
+            def observe_cooperative_response(self, cdp, message, message_digest):
+                self.assert_probe(cdp, message, message_digest)
+                return self.stages.pop(0)
+
+            @staticmethod
+            def assert_probe(cdp, message, message_digest):
+                assert cdp.url == ISSUED and cdp.sent == 0
+                assert message_digest == bridge.digest(bridge.normalize_message(message))
+
+        def run_probe(probe_receipt):
+            cdp = AttemptCdp()
+            sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
+            output = []
+            probe_request = {
+                "bootstrapProbe": True,
+                "projectId": "project-one",
+                "intentId": "rollover-1",
+                "source": self.request()["source"],
+                "handoff": self.request()["handoff"],
+                "receipt": probe_receipt,
+            }
+            with patch.object(bridge, "CdpSink", ProbeSink), patch.object(
+                adapter, "emit", output.append
+            ), patch.object(adapter.time, "sleep", return_value=None):
+                adapter.bootstrap_probe(bridge, sb, probe_request)
+            return cdp, output
+
+        first_cdp, first_output = run_probe(receipt)
+        self.assertEqual(first_cdp.sent, 0)
+        self.assertEqual(first_output[-1]["stage"], "BOOTSTRAP_RESPONSE_PENDING")
+        second_cdp, second_output = run_probe(receipt)
+        self.assertEqual(second_cdp.sent, 0)
+        self.assertEqual(second_output[-1]["stage"], "BOOTSTRAP_COMPLETE")
+        self.assertEqual(second_output[-1]["receipt"]["completion"], "RESPONSE_COMPLETED")
+        self.assertEqual(second_output[-1]["receipt"]["destinationUrl"], ISSUED)
+
+        wrong = dict(receipt, destinationDigest="0" * 64)
+        with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_PROBE_RECEIPT_INVALID"):
+            run_probe(wrong)
+        wrong_source = self.request()["source"].copy()
+        wrong_source["generation"] = True
+        cdp = AttemptCdp()
+        sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
+        with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_PROBE_SOURCE_INVALID"):
+            with patch.object(bridge, "CdpSink", ProbeSink):
+                adapter.bootstrap_probe(bridge, sb, {
+                    "bootstrapProbe": True, "projectId": "project-one",
+                    "intentId": "rollover-1", "source": wrong_source,
+                    "handoff": self.request()["handoff"], "receipt": receipt,
+                })
+        self.assertEqual(cdp.navigation, [])
 
 
 if __name__ == "__main__":

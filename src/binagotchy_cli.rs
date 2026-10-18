@@ -171,6 +171,7 @@ const fn target_error(error: DesignatedChatTargetErrorV1) -> &'static str {
     match error {
         DesignatedChatTargetErrorV1::InvalidUrl => "TARGET_INVALID_URL",
         DesignatedChatTargetErrorV1::Stale => "TARGET_STALE",
+        DesignatedChatTargetErrorV1::SourceProgress => "TARGET_SOURCE_PROGRESS",
         DesignatedChatTargetErrorV1::ProtectedStateMismatch => "TARGET_PROTECTED_STATE_MISMATCH",
         DesignatedChatTargetErrorV1::SynchronizationFailure => "TARGET_SYNCHRONIZATION_FAILED",
         DesignatedChatTargetErrorV1::Unavailable => "TARGET_AUTHORITY_UNAVAILABLE",

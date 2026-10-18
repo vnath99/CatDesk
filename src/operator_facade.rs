@@ -16,6 +16,10 @@ use crate::mcp;
 #[path = "operator_web_cli.rs"]
 mod web;
 
+pub(crate) fn start_web_auto_scheduler(state: crate::state::SharedState) {
+    web::start_auto_scheduler(state);
+}
+
 const REPAIR_TIMEOUT_MS: u64 = 10 * 60 * 1000;
 const MAX_REPAIR_SCRIPT_BYTES: u64 = 128 * 1024;
 const REPAIR_SUCCESS_MARKER: &str = "WAKE_BRIDGE_ENV_REPAIRED";

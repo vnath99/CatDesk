@@ -36,6 +36,9 @@ pub struct ContextPressurePolicy {
     pub safety_headroom_tokens: u64,
     pub unknown_source_reserve_tokens: u64,
     pub automatic_rollover_enabled: bool,
+    /// Explicit consent for periodic browser reads when rollover is disabled.
+    #[serde(default)]
+    pub automatic_observation_enabled: bool,
     /// Allow an advisory rollover request after an incomplete browser capture.
     /// This remains opt-in even when automatic rollover is enabled.
     #[serde(default)]
@@ -49,6 +52,7 @@ impl Default for ContextPressurePolicy {
             safety_headroom_tokens: 24_000,
             unknown_source_reserve_tokens: 8_000,
             automatic_rollover_enabled: false,
+            automatic_observation_enabled: false,
             incomplete_history_rollover: false,
         }
     }
@@ -234,6 +238,8 @@ pub struct PressureStatus {
     #[serde(default)]
     pub pressure_assessment: String,
     pub automatic_rollover_enabled: bool,
+    #[serde(default)]
+    pub automatic_observation_enabled: bool,
     #[serde(default)]
     pub incomplete_history_rollover: bool,
     pub rollover_intent: Option<RolloverIntent>,
@@ -822,6 +828,7 @@ fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> Press
         browser_coverage: ledger.browser_coverage.clone(),
         pressure_assessment: pressure_assessment.into(),
         automatic_rollover_enabled: project.policy.automatic_rollover_enabled,
+        automatic_observation_enabled: project.policy.automatic_observation_enabled,
         incomplete_history_rollover: project.policy.incomplete_history_rollover,
         rollover_intent: ledger.rollover_intent.clone(),
         estimate_method: "O200K_VISIBLE_TEXT_PROXY_WITH_CONFIGURED_UNKNOWN_RESERVE".into(),
@@ -1446,6 +1453,7 @@ mod tests {
             safety_headroom_tokens: 40,
             unknown_source_reserve_tokens: 8,
             automatic_rollover_enabled: true,
+            automatic_observation_enabled: false,
             incomplete_history_rollover: false,
         };
         fixture
@@ -1644,6 +1652,7 @@ mod tests {
             safety_headroom_tokens: 40,
             unknown_source_reserve_tokens: 70,
             automatic_rollover_enabled: false,
+            automatic_observation_enabled: false,
             incomplete_history_rollover: false,
         };
         fixture

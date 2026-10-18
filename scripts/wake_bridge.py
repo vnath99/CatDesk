@@ -589,13 +589,13 @@ class CdpSink:
         raise Attention("EDITOR_SELECTOR")
     @staticmethod
     def user_message_digests(cdp: Any) -> list[str]:
-        # The fixed author-role selector is intentionally the only post-submit
-        # conversation query. It is not a generic page search or interaction.
+        # Query only dedicated USER message containers, never the whole page.
         # ChatGPT puts message controls beside/inside the author container on
         # some current surfaces; hash the dedicated message-content node when
         # present so those controls cannot change the receipt digest.
         script = """(() => {
             const roleUsers = Array.from(document.querySelectorAll(\"[data-message-author-role='user'], article[data-turn='user']:not(:has([data-message-author-role='user']))\"));
+            const bubbles = Array.from(document.querySelectorAll('[data-user-message-bubble]'));
             const turnContainers = Array.from(new Set([
                 ...document.querySelectorAll(\"[data-testid^='conversation-turn-']\"),
                 ...document.querySelectorAll(\"article[id^='conversation-turn-']\"),
@@ -607,9 +607,9 @@ class CdpSink:
                     turn.querySelector(\"[data-message-author-role=\'user\'], [data-message-content], .whitespace-pre-wrap\")
                 )
             );
-            const containers = roleUsers.length ? roleUsers : fallbackUsers;
+            const containers = roleUsers.length ? roleUsers : bubbles.length ? bubbles : fallbackUsers;
             return containers.map(container => {
-            const content = container.querySelector(\"[data-message-content], .whitespace-pre-wrap\") || container;
+            const content = container.querySelector(\"[data-message-content], [data-markdown-text-tone='user-message'], .whitespace-pre-wrap\") || container;
             return content.innerText || content.textContent || '';
             });
         })()"""
@@ -638,7 +638,7 @@ class CdpSink:
                 );
                 const isAssistantTurn = Boolean(
                     turn.matches("[data-turn='assistant'], [data-message-author-role='assistant']") ||
-                    turn.querySelector("[data-turn='assistant'], [data-message-author-role='assistant']")
+                    turn.querySelector("[data-turn='assistant'], [data-message-author-role='assistant'], h4[data-conversation-role='assistant']")
                 );
                 return [isUserTurn, isAssistantTurn];
             }};
@@ -1054,7 +1054,7 @@ class CdpSink:
             // that body before treating it as a usable response. If the current
             // UI offers no known body node, cooperative observation stays
             // pending instead of inferring an answer from button labels.
-            const contentSelector = '[data-message-content], .markdown, [class~="prose"]';
+            const contentSelector = '[data-message-content], .markdown, [class~="prose"], [data-markdown-text-style="assistant-message"]';
             const bodyNode = latestAssistant
                 ? (latestAssistant.matches(contentSelector) ? latestAssistant :
                    latestAssistant.querySelector(contentSelector))
@@ -1093,14 +1093,32 @@ class CdpSink:
             let assistantCompletionAction = null;
             for (let scope = latestAssistant; scope && scope !== latestUser; scope = scope.parentElement) {{
                 if (scope.querySelector(userNodeSelector)) break;
-                const actions = Array.from(scope.querySelectorAll(
-                    "button[data-testid='copy-turn-action-button']"
-                ));
+                const actions = Array.from(new Set([
+                    ...scope.querySelectorAll("button[data-testid='copy-turn-action-button']"),
+                    ...scope.querySelectorAll(".turn-action-controls button[aria-label='Copy']"),
+                ])).filter(button => !bodyNode || !bodyNode.contains(button));
                 if (actions.length > 1) break;
                 if (actions.length === 1) {{
                     assistantCompletionAction = actions[0];
                     break;
                 }}
+            }}
+            // The current paired-turn UI puts its ASSISTANT toolbar beside
+            // both message units. Qualify that toolbar by its distinct Copy
+            // label, position after the sole ASSISTANT unit and exclusion from
+            // every USER subtree. A USER Copy message or code-block Copy is
+            // not a completed-answer control.
+            if (!assistantCompletionAction && pairedTurn && latestAssistant &&
+                    pairedAssistantUnits.length === 1 &&
+                    (pairedAssistantUnits[0] === latestAssistant ||
+                     pairedAssistantUnits[0].contains(latestAssistant)) &&
+                    pairedAssistantUnits[0].querySelector('h4[data-conversation-role="assistant"]')) {{
+                const actions = Array.from(latestUser.querySelectorAll(
+                    ".turn-action-controls button[aria-label='Copy']"
+                )).filter(button => !button.closest(userNodeSelector) &&
+                    !pairedAssistantUnits[0].contains(button) &&
+                    Boolean(pairedAssistantUnits[0].compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING));
+                if (actions.length === 1) assistantCompletionAction = actions[0];
             }}
             // ChatGPT may keep completed-turn actions in the DOM but visually hide
             // them until hover. Presence on the latest assistant turn/exchange is the
@@ -2184,9 +2202,9 @@ class NewConversationSink(CdpSink):
                 document.querySelectorAll(selector)
             )).filter(visible).length;
             return [
-                count("[data-message-author-role='user'], article[data-turn='user']"),
-                count("[data-message-author-role='assistant'], article[data-turn='assistant']"),
-                count("[data-content-search-turn-key], [data-testid^='conversation-turn-'], article[id^='conversation-turn-']"),
+                count("[data-message-author-role='user'], article[data-turn='user'], [data-user-message-bubble]"),
+                count("[data-message-author-role='assistant'], article[data-turn='assistant'], [data-content-search-unit-key]:has(h4[data-conversation-role='assistant'])"),
+                count("[data-content-search-turn-key], [data-testid^='conversation-turn-'], article[id^='conversation-turn-'], [data-content-search-unit-key]"),
             ];
         })()"""
         try:
@@ -2211,7 +2229,16 @@ class NewConversationSink(CdpSink):
                 return element.getClientRects().length > 0 &&
                     style.visibility !== 'hidden' && style.display !== 'none';
             };
-            const role = node => node.getAttribute('data-message-author-role') || node.getAttribute('data-turn');
+            const role = node => {
+                const explicit = node.getAttribute('data-message-author-role') || node.getAttribute('data-turn');
+                if (explicit) return explicit;
+                // The current Web UI identifies each message by a search unit,
+                // with the USER bubble or ASSISTANT heading inside it. A paired
+                // wrapper containing both roles must never become one message.
+                const user = Boolean(node.querySelector('[data-user-message-bubble]'));
+                const assistant = Boolean(node.querySelector('h4[data-conversation-role="assistant"]'));
+                return user !== assistant ? (user ? 'user' : 'assistant') : null;
+            };
             const anchor = (node, name) => {
                 const selector = '[' + name + ']';
                 const holder = node.closest(selector) || node.querySelector(selector);
@@ -2224,8 +2251,11 @@ class NewConversationSink(CdpSink):
             const articles = Array.from(document.querySelectorAll(
                 "article[data-turn='user'], article[data-turn='assistant']"
             )).filter(visible);
-            const tier = roles.length ? 'AUTHOR_ROLE' : articles.length ? 'ARTICLE_ROLE' : 'NONE';
-            const candidates = roles.length ? roles : articles;
+            const units = Array.from(document.querySelectorAll('[data-content-search-unit-key]'))
+                .filter(node => visible(node) && role(node));
+            const tier = roles.length ? 'AUTHOR_ROLE' : articles.length ? 'ARTICLE_ROLE' :
+                units.length ? 'SEMANTIC_UNIT' : 'NONE';
+            const candidates = roles.length ? roles : articles.length ? articles : units;
             const candidateSet = new Set(candidates);
             const nested = new Set();
             for (const node of candidates) {
@@ -2244,7 +2274,8 @@ class NewConversationSink(CdpSink):
                 const messageId = anchor(node, 'data-chatgpt-selection-message-id');
                 const key = unitKey ? 'unit:' + role(node) + ':' + unitKey :
                     messageId ? 'message:' + role(node) + ':' + messageId : null;
-                const contentSelector = '[data-message-content], .markdown, [class~="prose"]';
+                const contentSelector = '[data-message-content], .markdown, [class~="prose"], ' +
+                    '[data-markdown-text-style="assistant-message"], [data-markdown-text-tone="user-message"]';
                 const content = node.matches(contentSelector) ? node : node.querySelector(contentSelector);
                 const completeBody = Boolean(content && visible(content));
                 let text = '';
@@ -2278,7 +2309,7 @@ class NewConversationSink(CdpSink):
         except Exception as error:
             raise Attention("SOURCE_SNAPSHOT_QUERY_FAILED") from error
         if (not isinstance(value, list) or len(value) != 6 or
-                value[0] not in {"AUTHOR_ROLE", "ARTICLE_ROLE", "NONE"} or
+                value[0] not in {"AUTHOR_ROLE", "ARTICLE_ROLE", "SEMANTIC_UNIT", "NONE"} or
                 any(not isinstance(count, int) or isinstance(count, bool) or count < 0 or count > 1024
                     for count in (value[1], value[3], value[4])) or
                 not isinstance(value[2], bool) or not isinstance(value[5], list) or
