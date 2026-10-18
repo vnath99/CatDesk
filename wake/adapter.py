@@ -37,7 +37,8 @@ def read_job_request():
     if not line or len(line) > MAX_BOOTSTRAP_REQUEST_BYTES or not line.endswith(b"\n"):
         raise ValueError("invalid job request")
     request = json.loads(line)
-    if not isinstance(request, dict) or (request.get("bootstrap") is not True and len(line) > 8192):
+    if not isinstance(request, dict) or (not any(request.get(kind) is True for kind in
+            ("bootstrap", "bootstrapDraftInspect", "bootstrapDraftArchive")) and len(line) > 8192):
         raise ValueError("invalid job request")
     return request
 
@@ -169,8 +170,20 @@ def attempt(bridge, sb, event, target, *, cooperative=False):
 def bootstrap_attempt(bridge, sb, request):
     """Submit exactly one handoff from an empty native New Chat page."""
     cooperative = request.get("cooperative") is True
+    protocol_v2 = type(request.get("bootstrapProtocol")) is int and request["bootstrapProtocol"] == 2
+    resume_draft = request.get("resumeDraft") if protocol_v2 else False
+    resume_progress = request.get("resumeProgress") if protocol_v2 else None
     expected_fields = {"bootstrap", "projectId", "intentId", "source", "handoff"}
-    if cooperative:
+    if protocol_v2:
+        expected_fields.update({"cooperative", "bootstrapProtocol", "resumeDraft"})
+        if "resumeProgress" in request:
+            expected_fields.add("resumeProgress")
+        if (not cooperative or type(resume_draft) is not bool or
+                (resume_draft and (not isinstance(resume_progress, str) or
+                                   resume_progress not in {"TEXT_ENTRY_AUTHORIZED", "DRAFT_READY"})) or
+                (not resume_draft and resume_progress is not None)):
+            raise bridge.Attention("BOOTSTRAP_REQUEST_INVALID")
+    elif cooperative:
         expected_fields.add("cooperative")
     if set(request) != expected_fields or request["bootstrap"] is not True:
         raise bridge.Attention("BOOTSTRAP_REQUEST_INVALID")
@@ -188,34 +201,63 @@ def bootstrap_attempt(bridge, sb, request):
     typed_message = bridge.keyboard_safe_message(message)
     message_digest = bridge.digest(bridge.normalize_message(message))
     sink = bridge.NewConversationSink(source_url, ROOT / "browser-profile", 30, 20)
-    cdp = prepare_cdp_target(bridge, sb, source_url)
-    cdp = sink.wait_for_page_readiness(sb, cdp)
-    sink.wait_for_idle(cdp, sink.ui_timeout)
-    sink.pre_typing_ready(cdp)
-    if not sink.exact(cdp.get_current_url()):
-        raise bridge.Attention("BOOTSTRAP_SOURCE_DRIFT")
-    emit({"stage": "BOOTSTRAP_SOURCE_READY"})
-    sink.open_empty_home(cdp)
-    emit({"stage": "BOOTSTRAP_HOME_READY"})
-    sink.check_empty_home(cdp)
-    # This checkpoint must precede *all* CDP text entry. A physical newline
-    # from CDP text entry can submit even without a click on the send control.
-    emit({
-        "stage": "BEFORE_BOOTSTRAP_SUBMIT",
-        "projectId": project_id,
-        "intentId": intent_id,
-        "sourceGeneration": source["generation"],
-        "messageDigest": message_digest,
-    })
-    if read_request() != {"submit": True}:
-        raise bridge.Attention("SUBMISSION_NOT_AUTHORIZED")
+    existing_draft = False
+    if protocol_v2 and resume_draft:
+        # A new adapter process opens the fixed home once to load this profile's
+        # saved composer. Never navigate to the source first or clear the draft.
+        cdp = prepare_cdp_target(bridge, sb, bridge.NEW_CONVERSATION_HOME)
+        observed = sink.wait_home_draft(cdp, message)
+        if observed["classification"] == "EMPTY_HOME":
+            raise bridge.Attention("BOOTSTRAP_DRAFT_MISSING")
+        if observed["classification"] != "EXACT_OWNED":
+            raise bridge.Attention("BOOTSTRAP_DRAFT_MISMATCH")
+        existing_draft = observed["classification"] == "EXACT_OWNED"
+        emit({"stage": "BOOTSTRAP_HOME_READY"})
+    else:
+        cdp = prepare_cdp_target(bridge, sb, source_url)
+        cdp = sink.wait_for_page_readiness(sb, cdp)
+        sink.wait_for_idle(cdp, sink.ui_timeout)
+        sink.pre_typing_ready(cdp)
+        if not sink.exact(cdp.get_current_url()):
+            raise bridge.Attention("BOOTSTRAP_SOURCE_DRIFT")
+        emit({"stage": "BOOTSTRAP_SOURCE_READY"})
+        sink.open_empty_home(cdp)
+        emit({"stage": "BOOTSTRAP_HOME_READY"})
+        sink.check_empty_home(cdp)
+    if protocol_v2:
+        emit({"stage": "TEXT_ENTRY_AUTHORIZED", "projectId": project_id,
+              "intentId": intent_id, "sourceGeneration": source["generation"],
+              "messageDigest": message_digest})
+        if read_request() != {"textEntry": True}:
+            raise bridge.Attention("TEXT_ENTRY_NOT_AUTHORIZED")
+    else:
+        # Legacy requests retain their old unknown-outcome behavior. They may
+        # never use the v2 draft-resume path after a prior submit checkpoint.
+        emit({
+            "stage": "BEFORE_BOOTSTRAP_SUBMIT",
+            "projectId": project_id,
+            "intentId": intent_id,
+            "sourceGeneration": source["generation"],
+            "messageDigest": message_digest,
+        })
+        if read_request() != {"submit": True}:
+            raise bridge.Attention("SUBMISSION_NOT_AUTHORIZED")
     # After the checkpoint, even a typing exception may have submitted a USER
     # turn. Preserve unknown intent state and reconcile without another send.
     try:
-        sink.check_empty_home(cdp)
+        if not existing_draft:
+            sink.check_empty_home(cdp)
         editor_selector = sink.editor_selector(cdp, prevalidated=True)
-        cdp.send_keys(editor_selector, typed_message, timeout=sink.ui_timeout)
+        if not existing_draft:
+            cdp.send_keys(editor_selector, typed_message, timeout=sink.ui_timeout)
         sink.check_typed_home(cdp, message)
+        if protocol_v2:
+            emit({"stage": "DRAFT_READY", "projectId": project_id,
+                  "intentId": intent_id, "sourceGeneration": source["generation"],
+                  "messageDigest": message_digest})
+            if read_request() != {"draftReady": True}:
+                raise bridge.Attention("DRAFT_NOT_AUTHORIZED")
+            sink.check_typed_home(cdp, message)
         send_selector = sink.wait_for_send_control(cdp, 20)
         if send_selector is None:
             raise bridge.Attention("BOOTSTRAP_SEND_CONTROL_MISSING")
@@ -223,6 +265,13 @@ def bootstrap_attempt(bridge, sb, request):
         send_selector = sink.wait_for_send_control(cdp, 5)
         if send_selector is None:
             raise bridge.Attention("BOOTSTRAP_SEND_CONTROL_MISSING")
+        if protocol_v2:
+            emit({"stage": "SEND_ATTEMPTED", "projectId": project_id,
+                  "intentId": intent_id, "sourceGeneration": source["generation"],
+                  "messageDigest": message_digest})
+            if read_request() != {"submit": True}:
+                raise bridge.Attention("SUBMISSION_NOT_AUTHORIZED")
+            sink.check_typed_home(cdp, message)
         sink.smoke_path_submit(cdp, send_selector, sink.ui_timeout, editor_selector)
         sink.latch_issued_url(cdp)
         accepted_at = sink.wait_for_submission_accepted(cdp, 0, message_digest, message)
@@ -271,6 +320,94 @@ def bootstrap_attempt(bridge, sb, request):
             "completion": "RESPONSE_PENDING" if cooperative else "RESPONSE_COMPLETED",
         },
     })
+
+
+def bootstrap_draft_inspect(bridge, sb, request):
+    """Classify one saved home draft without typing, clicking, or clearing it."""
+    if (set(request) != {"bootstrapDraftInspect", "bootstrapProtocol", "projectId", "intentId",
+                         "source", "handoff"} or
+            request["bootstrapDraftInspect"] is not True or
+            type(request["bootstrapProtocol"]) is not int or request["bootstrapProtocol"] != 2):
+        raise bridge.Attention("BOOTSTRAP_DRAFT_INSPECT_REQUEST_INVALID")
+    source = request["source"]
+    if not isinstance(source, dict) or set(source) != {"url", "digest", "generation"}:
+        raise bridge.Attention("BOOTSTRAP_DRAFT_INSPECT_REQUEST_INVALID")
+    source_url = bridge.canonical_conversation_url(source["url"])
+    if (source_url != source["url"] or bridge.digest(source_url) != source["digest"] or
+            type(source["generation"]) is not int or not 0 <= source["generation"] < 2**63):
+        raise bridge.Attention("BOOTSTRAP_DRAFT_INSPECT_SOURCE_INVALID")
+    project_id, intent_id = request["projectId"], request["intentId"]
+    message = bridge.compose_bootstrap_message(project_id, intent_id, source_url, request["handoff"])
+    expected_digest = bridge.digest(bridge.normalize_message(message))
+    sink = bridge.NewConversationSink(source_url, ROOT / "browser-profile", 30, 20)
+    try:
+        # A fresh SeleniumBase process must activate the fixed home once to
+        # load this profile's saved draft. Never open the source or clear text.
+        cdp = prepare_cdp_target(bridge, sb, bridge.NEW_CONVERSATION_HOME)
+        observed = sink.wait_home_draft(cdp, message)
+    except Exception:
+        observed = {"classification": "UNAVAILABLE", "actualDigest": None, "actualBytes": 0}
+    emit({
+        "stage": "BOOTSTRAP_DRAFT_INSPECTED",
+        "projectId": project_id, "intentId": intent_id,
+        "sourceGeneration": source["generation"], "sourceDigest": source["digest"],
+        "expectedDigest": expected_digest,
+        "actualDigest": observed["actualDigest"], "actualBytes": observed["actualBytes"],
+        "classification": observed["classification"],
+    })
+
+
+def bootstrap_draft_archive(bridge, sb, request):
+    """Archive then clear only a fully owned legacy bootstrap draft."""
+    expected_fields = {"bootstrapDraftArchive", "bootstrapProtocol", "archiveRecorded",
+                       "projectId", "intentId", "source", "handoff"}
+    if (set(request) != expected_fields or request["bootstrapDraftArchive"] is not True or
+            type(request["bootstrapProtocol"]) is not int or request["bootstrapProtocol"] != 2 or
+            type(request["archiveRecorded"]) is not bool):
+        raise bridge.Attention("BOOTSTRAP_DRAFT_ARCHIVE_REQUEST_INVALID")
+    source = request["source"]
+    if not isinstance(source, dict) or set(source) != {"url", "digest", "generation"}:
+        raise bridge.Attention("BOOTSTRAP_DRAFT_ARCHIVE_REQUEST_INVALID")
+    source_url = bridge.canonical_conversation_url(source["url"])
+    if (source_url != source["url"] or bridge.digest(source_url) != source["digest"] or
+            type(source["generation"]) is not int or not 0 <= source["generation"] < 2**63):
+        raise bridge.Attention("BOOTSTRAP_DRAFT_ARCHIVE_SOURCE_INVALID")
+    project_id, intent_id = request["projectId"], request["intentId"]
+    message = bridge.compose_bootstrap_message(project_id, intent_id, source_url, request["handoff"])
+    message_digest = bridge.digest(bridge.normalize_message(message))
+    scope = {"projectId": project_id, "intentId": intent_id,
+             "sourceGeneration": source["generation"], "sourceDigest": source["digest"],
+             "messageDigest": message_digest}
+    sink = bridge.NewConversationSink(source_url, ROOT / "browser-profile", 30, 20)
+    cdp = prepare_cdp_target(bridge, sb, bridge.NEW_CONVERSATION_HOME)
+    observed = sink.wait_home_draft(cdp, message)
+    if observed["classification"] == "EMPTY_HOME":
+        if not request["archiveRecorded"]:
+            raise bridge.Attention("BOOTSTRAP_DRAFT_MISSING")
+        emit({"stage": "BOOTSTRAP_DRAFT_ARCHIVED", **scope, "actualBytes": 0})
+        return
+    if observed["classification"] != "EXACT_OWNED":
+        raise bridge.Attention("BOOTSTRAP_DRAFT_MISMATCH")
+    actual_text = sink.raw_editor_text(cdp)
+    actual_bytes = len(actual_text.encode("utf-8"))
+    if (actual_bytes > bridge.MAX_USER_MESSAGE_CHARS or
+            bridge.normalize_message(actual_text) != bridge.normalize_message(message)):
+        raise bridge.Attention("BOOTSTRAP_DRAFT_MISMATCH")
+    sink.check_typed_home(cdp, message)
+    ready = {"stage": "BOOTSTRAP_DRAFT_ARCHIVE_READY", **scope,
+             "actualBytes": actual_bytes, "actualText": actual_text}
+    # The standard adapter protocol reader accepts at most 8 KiB per frame.
+    # Refuse a larger private witness before the parent could ACK or clear it.
+    if len((json.dumps(ready, separators=(",", ":")) + "\n").encode("utf-8")) > 8192:
+        raise bridge.Attention("BOOTSTRAP_ARCHIVE_FRAME_TOO_LARGE")
+    emit(ready)
+    if read_request() != {"archiveDraft": True}:
+        raise bridge.Attention("BOOTSTRAP_DRAFT_ARCHIVE_NOT_AUTHORIZED")
+    sink.check_typed_home(cdp, message)
+    if sink.raw_editor_text(cdp) != actual_text:
+        raise bridge.Attention("BOOTSTRAP_DRAFT_CHANGED")
+    sink.clear_archived_home_draft(cdp, message, actual_text)
+    emit({"stage": "BOOTSTRAP_DRAFT_ARCHIVED", **scope, "actualBytes": 0})
 
 
 def bootstrap_probe(bridge, sb, request):
@@ -495,7 +632,11 @@ def main():
                     emit({"stage": "READY"})
                     try:
                         request = read_job_request()
-                        if request.get("bootstrapProbe") is True:
+                        if request.get("bootstrapDraftArchive") is True:
+                            bootstrap_draft_archive(bridge, sb, request)
+                        elif request.get("bootstrapDraftInspect") is True:
+                            bootstrap_draft_inspect(bridge, sb, request)
+                        elif request.get("bootstrapProbe") is True:
                             bootstrap_probe(bridge, sb, request)
                         elif request.get("observeResponse") is True:
                             observe_response(bridge, sb, request)

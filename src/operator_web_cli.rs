@@ -75,6 +75,14 @@ pub(crate) enum WebAction {
     RolloverExecute {
         project_id: String,
     },
+    RolloverInspectDraft {
+        project_id: String,
+        expected_intent_id: String,
+    },
+    RolloverArchiveDraft {
+        project_id: String,
+        expected_intent_id: String,
+    },
     RolloverQuarantine {
         project_id: String,
         expected_intent_id: String,
@@ -234,6 +242,25 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("rollover", "execute") if options.is_empty() => Ok(WebAction::RolloverExecute {
             project_id: project_id.into(),
         }),
+        ("rollover", "inspect-draft" | "archive-draft") => {
+            let expected_intent_id = options
+                .remove("--expected-intent-id")
+                .ok_or("WEB_USAGE: --expected-intent-id is required")?;
+            if !catdesk_wake::protocol::valid_id(expected_intent_id) || !options.is_empty() {
+                return Err("WEB_USAGE: invalid draft intent or unexpected option".into());
+            }
+            if verb == "inspect-draft" {
+                Ok(WebAction::RolloverInspectDraft {
+                    project_id: project_id.into(),
+                    expected_intent_id: expected_intent_id.into(),
+                })
+            } else {
+                Ok(WebAction::RolloverArchiveDraft {
+                    project_id: project_id.into(),
+                    expected_intent_id: expected_intent_id.into(),
+                })
+            }
+        }
         ("rollover", "quarantine") => {
             let expected_intent_id = options
                 .remove("--expected-intent-id")
@@ -511,6 +538,15 @@ fn registry_rollover_projection(raw: &Value) -> Value {
         .get("contextMeterStatus")
         .and_then(Value::as_str)
         .filter(|value| matches!(*value, "PENDING" | "RECORDED" | "RETRY_REQUIRED"));
+    let bootstrap_progress = raw
+        .get("bootstrapProgress")
+        .and_then(Value::as_str)
+        .filter(|value| {
+            matches!(
+                *value,
+                "TEXT_ENTRY_AUTHORIZED" | "DRAFT_READY" | "SEND_ATTEMPTED"
+            )
+        });
     let source_target = raw.get("source");
     let bound_target = raw.get("boundTarget").filter(|target| target.is_object());
     let request_target = raw
@@ -540,6 +576,7 @@ fn registry_rollover_projection(raw: &Value) -> Value {
         "targetDigest":target_digest,
         "reconciliationRequired":raw.get("reconciliationRequired").and_then(Value::as_bool).unwrap_or(false),
         "contextMeterStatus":meter,
+        "bootstrapProgress":bootstrap_progress,
         "handoffRequested":raw.get("handoffRequest").is_some_and(Value::is_object),
         "handoffCollected":raw.get("handoffRequest").and_then(|request| request.get("handoffCollected")).and_then(Value::as_bool),
         "automation":automation,
@@ -711,6 +748,14 @@ pub(crate) fn execute(action: WebAction, workspace: &Path) -> Result<Value, Stri
             rollover::read_handoff(&handoff_file)?,
         ),
         WebAction::RolloverExecute { project_id } => rollover::execute(&workspace, &project_id),
+        WebAction::RolloverInspectDraft {
+            project_id,
+            expected_intent_id,
+        } => rollover::inspect_draft(&workspace, &project_id, &expected_intent_id),
+        WebAction::RolloverArchiveDraft {
+            project_id,
+            expected_intent_id,
+        } => rollover::archive_draft(&workspace, &project_id, &expected_intent_id),
         WebAction::RolloverQuarantine {
             project_id,
             expected_intent_id,
@@ -806,6 +851,62 @@ mod tests {
             command.extend(args(&tail));
             assert!(parse(&command).is_err());
         }
+    }
+
+    #[test]
+    fn draft_inspection_requires_one_exact_intent_without_mutation_options() {
+        let base = args(&[
+            "operator",
+            "web",
+            "rollover",
+            "inspect-draft",
+            "--project-id",
+            "alpha",
+        ]);
+        assert!(parse(&base).is_err());
+        let mut complete = base.clone();
+        complete.extend(args(&["--expected-intent-id", "intent-a"]));
+        assert!(
+            matches!(parse(&complete), Ok(WebAction::RolloverInspectDraft {
+            project_id, expected_intent_id
+        }) if project_id == "alpha" && expected_intent_id == "intent-a")
+        );
+        for tail in [
+            vec!["--expected-intent-id", "../other"],
+            vec!["--expected-intent-id", "intent-a", "--clear", "true"],
+            vec!["--expected-intent-id", "intent-a", "--submit", "true"],
+        ] {
+            let mut invalid = base.clone();
+            invalid.extend(args(&tail));
+            assert!(parse(&invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn draft_archival_requires_exact_scope_and_has_no_force_or_send_option() {
+        let mut complete = args(&[
+            "operator",
+            "web",
+            "rollover",
+            "archive-draft",
+            "--project-id",
+            "alpha",
+            "--expected-intent-id",
+            "intent-a",
+        ]);
+        assert!(
+            matches!(parse(&complete), Ok(WebAction::RolloverArchiveDraft {
+            project_id, expected_intent_id
+        }) if project_id == "alpha" && expected_intent_id == "intent-a")
+        );
+        assert!(parse(&complete[..6]).is_err());
+        for flag in ["--force", "--submit", "--clear", "--draft-file"] {
+            let mut invalid = complete.clone();
+            invalid.extend(args(&[flag, "true"]));
+            assert!(parse(&invalid).is_err());
+        }
+        complete[7] = "../other".into();
+        assert!(parse(&complete).is_err());
     }
 
     #[test]
@@ -928,6 +1029,7 @@ mod tests {
             "handoffRequest":{"handoffCollected":true,"message":"private handoff"},
             "reconciliationRequired":false,
             "contextMeterStatus":"PENDING",
+            "bootstrapProgress":"SEND_ATTEMPTED",
             "automation":{"stage":"WAKE_STOPPED","reason":"WAKE_CONTROL_CHANGED",
                 "tickUtc":123,"targetGeneration":7}
         });
@@ -938,6 +1040,7 @@ mod tests {
         assert_eq!(summary["automation"]["targetGeneration"], 7);
         assert!(summary["automation"]["lastFailure"].is_null());
         assert_eq!(summary["handoffCollected"], true);
+        assert_eq!(summary["bootstrapProgress"], "SEND_ATTEMPTED");
         let encoded = summary.to_string();
         for private in ["private-source", "private answer", "private handoff"] {
             assert!(!encoded.contains(private));
@@ -949,6 +1052,25 @@ mod tests {
         assert_eq!(bad["automation"]["stage"], "UNKNOWN_STAGE");
         assert!(bad["automation"]["reason"].is_null());
         assert!(!bad.to_string().contains("secret.txt"));
+        for progress in ["TEXT_ENTRY_AUTHORIZED", "DRAFT_READY", "SEND_ATTEMPTED"] {
+            let projected = registry_rollover_projection(&json!({
+                "phase":"SUBMITTING", "bootstrapProgress":progress
+            }));
+            assert_eq!(projected["bootstrapProgress"], progress);
+        }
+        let invalid_progress = registry_rollover_projection(&json!({
+            "phase":"SUBMITTING", "bootstrapProgress":"private draft content"
+        }));
+        assert!(invalid_progress["bootstrapProgress"].is_null());
+        assert!(
+            !invalid_progress
+                .to_string()
+                .contains("private draft content")
+        );
+        assert!(
+            registry_rollover_projection(&json!({"phase":"SUBMITTING"}))["bootstrapProgress"]
+                .is_null()
+        );
         let failed = registry_rollover_projection(&json!({
             "phase":"PREPARED", "source":{"generation":7,"digest":"a".repeat(64)},
             "automation":{"stage":"ATTENTION","reason":"WEB_ROLLOVER_NOT_DUE_OR_DISABLED",

@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
     fs::{self, File, OpenOptions},
-    io::Read,
+    io::{Read, Write},
     path::{Path, PathBuf},
 };
 
@@ -95,6 +95,8 @@ struct Record {
     source_task_id: String,
     source: Target,
     phase: Phase,
+    #[serde(default)]
+    bootstrap_progress: Option<runtime::BootstrapProgress>,
     handoff: String,
     message_digest: String,
     created_utc: u64,
@@ -122,6 +124,32 @@ struct Record {
 struct Quarantine {
     observed_conversation_url: String,
     recorded_utc: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DraftArchive {
+    schema_version: u32,
+    project_id: String,
+    intent_id: String,
+    source: Target,
+    message_digest: String,
+    expected_text: String,
+    actual_text: String,
+    observed_bytes: usize,
+    recorded_utc: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DraftArchiveReceipt {
+    schema_version: u32,
+    project_id: String,
+    intent_id: String,
+    source_digest: String,
+    message_digest: String,
+    archived_utc: u64,
+    evidence: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -457,6 +485,9 @@ impl ProjectStore {
             return Err("WEB_ROLLOVER_STATE_INVALID".into());
         }
         record.source.validate()?;
+        if record.bootstrap_progress.is_some() && record.phase == Phase::Prepared {
+            return Err("WEB_ROLLOVER_STATE_INVALID".into());
+        }
         if record.message_digest
             != message_digest(
                 &record.project_id,
@@ -504,6 +535,155 @@ impl ProjectStore {
         )?;
         atomic(&self.root.join("handoff-active.json"), &request.intent_id)
     }
+}
+
+fn draft_archive_path(store: &ProjectStore, record: &Record) -> PathBuf {
+    store
+        .root
+        .join(format!("draft-archive-{}.json", record.intent_id))
+}
+
+fn draft_archive_receipt_path(store: &ProjectStore, record: &Record) -> PathBuf {
+    store
+        .root
+        .join(format!("draft-archive-complete-{}.json", record.intent_id))
+}
+
+fn read_draft_archive(
+    store: &ProjectStore,
+    record: &Record,
+) -> Result<Option<DraftArchive>, String> {
+    let path = draft_archive_path(store, record);
+    if !path
+        .try_exists()
+        .map_err(|_| "WEB_DRAFT_ARCHIVE_UNAVAILABLE")?
+    {
+        return Ok(None);
+    }
+    plain(&path, false)?;
+    let archive: DraftArchive = read(&path).map_err(|_| "WEB_DRAFT_ARCHIVE_INVALID")?;
+    let expected = runtime::compose_bootstrap_message(
+        &record.project_id,
+        &record.intent_id,
+        &record.source,
+        &record.handoff,
+    )?;
+    if archive.schema_version != 1
+        || archive.project_id != record.project_id
+        || archive.intent_id != record.intent_id
+        || archive.source != record.source
+        || archive.message_digest != record.message_digest
+        || archive.expected_text != expected
+        || archive.actual_text.len() > 16 * 1024
+        || archive.observed_bytes != archive.actual_text.len()
+        || digest(
+            &archive
+                .actual_text
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" "),
+        ) != record.message_digest
+    {
+        return Err("WEB_DRAFT_ARCHIVE_INVALID".into());
+    }
+    Ok(Some(archive))
+}
+
+fn create_private_once<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
+    let bytes = serde_json::to_vec(value).map_err(|_| "WEB_DRAFT_ARCHIVE_INVALID")?;
+    if bytes.len() > 40 * 1024 {
+        return Err("WEB_DRAFT_ARCHIVE_TOO_LARGE".into());
+    }
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.custom_flags(0x0020_0000);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    let mut file = options
+        .open(path)
+        .map_err(|_| "WEB_DRAFT_ARCHIVE_UNAVAILABLE")?;
+    file.write_all(&bytes)
+        .and_then(|_| file.sync_all())
+        .map_err(|_| "WEB_DRAFT_ARCHIVE_UNAVAILABLE")?;
+    plain(path, false)?;
+    Ok(())
+}
+
+fn save_draft_archive(
+    store: &ProjectStore,
+    record: &Record,
+    actual_text: &str,
+    observed_bytes: usize,
+) -> Result<(), String> {
+    if actual_text.len() > 16 * 1024
+        || actual_text.len() != observed_bytes
+        || digest(&actual_text.split_whitespace().collect::<Vec<_>>().join(" "))
+            != record.message_digest
+    {
+        return Err("WEB_DRAFT_ARCHIVE_WITNESS_INVALID".into());
+    }
+    if let Some(existing) = read_draft_archive(store, record)? {
+        return if existing.actual_text == actual_text {
+            Ok(())
+        } else {
+            Err("WEB_DRAFT_ARCHIVE_WITNESS_CHANGED".into())
+        };
+    }
+    let archive = DraftArchive {
+        schema_version: 1,
+        project_id: record.project_id.clone(),
+        intent_id: record.intent_id.clone(),
+        source: record.source.clone(),
+        message_digest: record.message_digest.clone(),
+        expected_text: runtime::compose_bootstrap_message(
+            &record.project_id,
+            &record.intent_id,
+            &record.source,
+            &record.handoff,
+        )?,
+        actual_text: actual_text.into(),
+        observed_bytes,
+        recorded_utc: now(),
+    };
+    create_private_once(&draft_archive_path(store, record), &archive)?;
+    if read_draft_archive(store, record)?.as_ref() != Some(&archive) {
+        return Err("WEB_DRAFT_ARCHIVE_READBACK_FAILED".into());
+    }
+    Ok(())
+}
+
+fn read_draft_archive_receipt(
+    store: &ProjectStore,
+    record: &Record,
+) -> Result<Option<DraftArchiveReceipt>, String> {
+    let path = draft_archive_receipt_path(store, record);
+    if !path
+        .try_exists()
+        .map_err(|_| "WEB_DRAFT_ARCHIVE_UNAVAILABLE")?
+    {
+        return Ok(None);
+    }
+    plain(&path, false)?;
+    let receipt: DraftArchiveReceipt =
+        read(&path).map_err(|_| "WEB_DRAFT_ARCHIVE_RECEIPT_INVALID")?;
+    if receipt.schema_version != 1
+        || receipt.project_id != record.project_id
+        || receipt.intent_id != record.intent_id
+        || receipt.source_digest != record.source.digest
+        || receipt.message_digest != record.message_digest
+        || receipt.evidence != "ARCHIVE_RECORDED_HOME_EMPTY"
+        || read_draft_archive(store, record)?.is_none()
+    {
+        return Err("WEB_DRAFT_ARCHIVE_RECEIPT_INVALID".into());
+    }
+    Ok(Some(receipt))
 }
 
 fn registered_project(workspace: &Path, project: &str) -> Result<AutonomousProjectV1, String> {
@@ -582,6 +762,7 @@ fn summary(record: &Record) -> Value {
     json!({"schemaVersion":1,"projectId":record.project_id,"intentId":record.intent_id,
         "sourceTaskId":record.source_task_id,"source":record.source,"phase":record.phase,
         "messageDigest":record.message_digest,"receipt":record.receipt,
+        "bootstrapProgress":record.bootstrap_progress,
         "continuationEventId":record.continuation_event_id,
         "boundTarget":record.bound_target,
         "reconciliationRequired":record.reconciliation_reason.is_some(),
@@ -592,6 +773,44 @@ fn summary(record: &Record) -> Value {
         "sourceSnapshotVerified":record.source_snapshot_verified,
         "quarantine":record.quarantine,
         "continuationProved":false,"oldConversationPreserved":true})
+}
+
+fn resumable_bootstrap(record: &Record) -> bool {
+    record.phase == Phase::Submitting
+        && record.reconciliation_reason.is_none()
+        && matches!(
+            record.bootstrap_progress,
+            Some(
+                runtime::BootstrapProgress::TextEntryAuthorized
+                    | runtime::BootstrapProgress::DraftReady
+            )
+        )
+}
+
+fn checkpoint_bootstrap_progress(
+    record: &mut Record,
+    stage: runtime::BootstrapProgress,
+) -> Result<(), String> {
+    use runtime::BootstrapProgress as Progress;
+    if !matches!(record.phase, Phase::Prepared | Phase::Submitting) {
+        return Err("WEB_BOOTSTRAP_PROGRESS_PHASE_INVALID".into());
+    }
+    let next = match record.bootstrap_progress {
+        None => Progress::TextEntryAuthorized,
+        Some(Progress::TextEntryAuthorized) => Progress::DraftReady,
+        Some(Progress::DraftReady) => Progress::SendAttempted,
+        Some(Progress::SendAttempted) => {
+            return Err("WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND".into());
+        }
+    };
+    if stage > next {
+        return Err("WEB_BOOTSTRAP_PROGRESS_ORDER_INVALID".into());
+    }
+    record.phase = Phase::Submitting;
+    if record.bootstrap_progress.is_none_or(|saved| stage > saved) {
+        record.bootstrap_progress = Some(stage);
+    }
+    Ok(())
 }
 
 fn handoff_request_summary(request: &HandoffRequest) -> Value {
@@ -608,15 +827,22 @@ pub(super) fn auto_stage(
 ) -> Result<AutoStage, String> {
     let store = ProjectStore::open(workspace, project)?;
     if let Some(record) = store.active()? {
-        if matches!(
+        if (matches!(
             record.phase,
             Phase::Prepared | Phase::ResponsePending | Phase::Created | Phase::Bound
-        ) && (record.handoff_event_id.is_none() || record.source_fingerprint.is_none())
+        ) || resumable_bootstrap(&record))
+            && (record.handoff_event_id.is_none() || record.source_fingerprint.is_none())
         {
             return Ok(AutoStage::SourceWitnessRequired);
         }
         match record.phase {
-            Phase::Submitting => return Ok(AutoStage::SubmissionUnknown),
+            Phase::Submitting => {
+                return Ok(if resumable_bootstrap(&record) {
+                    AutoStage::Execute
+                } else {
+                    AutoStage::SubmissionUnknown
+                });
+            }
             Phase::Quarantined => return Ok(AutoStage::Quarantined),
             Phase::Prepared | Phase::ResponsePending | Phase::Created | Phase::Bound => {
                 return Ok(AutoStage::Execute);
@@ -1314,6 +1540,7 @@ fn prepare_with_request(
         message_digest: message_digest(project, &intent.intent_id, &source.url, &content)?,
         source,
         phase: Phase::Prepared,
+        bootstrap_progress: None,
         handoff: content,
         created_utc: now(),
         receipt: None,
@@ -1795,6 +2022,140 @@ pub(super) fn quarantine(
     quarantine_record(&store, expected_intent, observed_url, &current)
 }
 
+/// Read only the saved intent's home draft. The exact intent and source are
+/// checked before a browser is launched; this never authorizes a replay.
+pub(super) fn inspect_draft(
+    workspace: &Path,
+    project: &str,
+    expected_intent_id: &str,
+) -> Result<Value, String> {
+    if !valid_id(expected_intent_id) {
+        return Err("WEB_ROLLOVER_INTENT_INVALID".into());
+    }
+    let store = ProjectStore::open_existing(workspace, project)?;
+    let record = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
+    if record.intent_id != expected_intent_id {
+        return Err("WEB_ROLLOVER_INTENT_CHANGED".into());
+    }
+    if !matches!(record.phase, Phase::Prepared | Phase::Submitting)
+        || record.receipt.is_some()
+        || record.bound_target.is_some()
+    {
+        return Err("WEB_ROLLOVER_DRAFT_INSPECTION_PHASE_INVALID".into());
+    }
+    if paired(workspace, project)? != record.source {
+        return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
+    }
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+    let wake = Store::open(&root)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &record.source.url,
+    )?;
+    let result = runtime::inspect_bootstrap_draft(
+        &wake,
+        project,
+        &record.intent_id,
+        &record.source,
+        &record.handoff,
+    )?;
+    Ok(json!({"projectId":project,"intentId":record.intent_id,
+        "sourceGeneration":record.source.generation,"sourceDigest":record.source.digest,
+        "bootstrapProgress":record.bootstrap_progress,"inspection":result,
+        "sendBoundaryKnown":record.bootstrap_progress.is_some(),
+        "sendAttemptRecorded":record.bootstrap_progress.map(|stage| stage == runtime::BootstrapProgress::SendAttempted),
+        "submissionVerified":false}))
+}
+
+/// Release one legacy unknown-submit home draft only after preserving its
+/// actual text under the project lock and proving an empty home afterward.
+/// The original SUBMITTING intent remains permanently non-replayable.
+pub(super) fn archive_draft(
+    workspace: &Path,
+    project: &str,
+    expected_intent_id: &str,
+) -> Result<Value, String> {
+    if !valid_id(expected_intent_id) {
+        return Err("WEB_ROLLOVER_INTENT_INVALID".into());
+    }
+    let store = ProjectStore::open_existing(workspace, project)?;
+    let mut record = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
+    if record.intent_id != expected_intent_id {
+        return Err("WEB_ROLLOVER_INTENT_CHANGED".into());
+    }
+    if record.phase != Phase::Submitting
+        || record.bootstrap_progress.is_some()
+        || record.receipt.is_some()
+        || record.bound_target.is_some()
+    {
+        return Err("WEB_DRAFT_ARCHIVE_LEGACY_UNKNOWN_REQUIRED".into());
+    }
+    if paired(workspace, project)? != record.source {
+        return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
+    }
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+    let wake = Store::open(&root)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &record.source.url,
+    )?;
+    if let Some(previous) = read_draft_archive_receipt(&store, &record)? {
+        if record.reconciliation_reason.as_deref() != Some("WEB_BOOTSTRAP_DRAFT_ARCHIVED_NO_RESEND")
+        {
+            record.reconciliation_reason = Some("WEB_BOOTSTRAP_DRAFT_ARCHIVED_NO_RESEND".into());
+            store.save(&record)?;
+        }
+        return Ok(json!({"projectId":project,"intentId":record.intent_id,
+            "status":"ARCHIVED","composerEmptyProved":true,
+            "composerEmptyObservedUtc":previous.archived_utc,"currentComposerObserved":false,
+            "submissionVerified":false,"resendAuthorized":false}));
+    }
+    let archive_recorded = read_draft_archive(&store, &record)?.is_some();
+    let result = runtime::archive_bootstrap_draft(
+        &wake,
+        project,
+        &record.intent_id,
+        &record.source,
+        &record.handoff,
+        archive_recorded,
+        |actual, count| {
+            if paired(workspace, project)? != record.source {
+                return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
+            }
+            catdesk_wake::development_runtime::validate_selected_target_isolation(
+                workspace,
+                wake.root(),
+                &record.source.url,
+            )?;
+            save_draft_archive(&store, &record, actual, count)
+        },
+    )?;
+    if read_draft_archive(&store, &record)?.is_none() {
+        return Err("WEB_DRAFT_ARCHIVE_REQUIRED".into());
+    }
+    let receipt = DraftArchiveReceipt {
+        schema_version: 1,
+        project_id: project.into(),
+        intent_id: record.intent_id.clone(),
+        source_digest: record.source.digest.clone(),
+        message_digest: record.message_digest.clone(),
+        archived_utc: now(),
+        evidence: "ARCHIVE_RECORDED_HOME_EMPTY".into(),
+    };
+    create_private_once(&draft_archive_receipt_path(&store, &record), &receipt)?;
+    if read_draft_archive_receipt(&store, &record)?.as_ref() != Some(&receipt) {
+        return Err("WEB_DRAFT_ARCHIVE_RECEIPT_INVALID".into());
+    }
+    record.reconciliation_reason = Some("WEB_BOOTSTRAP_DRAFT_ARCHIVED_NO_RESEND".into());
+    store.save(&record)?;
+    Ok(json!({"projectId":project,"intentId":record.intent_id,
+        "status":"ARCHIVED","composerEmptyProved":result["composerEmptyProved"],
+        "composerEmptyObservedUtc":receipt.archived_utc,"currentComposerObserved":true,
+        "submissionVerified":false,"resendAuthorized":false}))
+}
+
 fn automatic_wake_running(
     automatic: bool,
     wake: &Store,
@@ -1835,8 +2196,15 @@ fn execute_with_mode(workspace: &Path, project: &str, automatic: bool) -> Result
     if record.phase == Phase::Quarantined {
         return Err("WEB_ROLLOVER_QUARANTINED_NO_REPLAY".into());
     }
-    if record.phase == Phase::Submitting {
-        return Err("WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND".into());
+    if record.phase == Phase::Submitting && !resumable_bootstrap(&record) {
+        return Err(if record.reconciliation_reason.as_deref()
+            == Some("WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND")
+        {
+            "WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND"
+        } else {
+            "WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND"
+        }
+        .into());
     }
     if record.phase == Phase::ContinuationQueued {
         if record.context_meter_status != ContextMeterStatus::Recorded {
@@ -1861,7 +2229,7 @@ fn execute_with_mode(workspace: &Path, project: &str, automatic: bool) -> Result
         wake.root(),
         &record.source.url,
     )?;
-    if record.phase == Phase::Prepared {
+    if matches!(record.phase, Phase::Prepared | Phase::Submitting) {
         confirm_request_enabled(workspace, &record)?;
         if paired(workspace, project)? != record.source {
             return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
@@ -1873,13 +2241,27 @@ fn execute_with_mode(workspace: &Path, project: &str, automatic: bool) -> Result
         let source = record.source.clone();
         let intent_id = record.intent_id.clone();
         let handoff = record.handoff.clone();
+        let resume = record.bootstrap_progress;
         let receipt = runtime::bootstrap_submit_conversation(
             &wake,
             project,
             &intent_id,
             &source,
             &handoff,
-            || {
+            resume,
+            |checkpoint| {
+                let stage = match checkpoint {
+                    runtime::BootstrapCheckpoint::PreSendUnknown => {
+                        if record.phase == Phase::Submitting && record.bootstrap_progress.is_some()
+                        {
+                            record.reconciliation_reason =
+                                Some("WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND".into());
+                            return store.save(&record);
+                        }
+                        return Ok(());
+                    }
+                    runtime::BootstrapCheckpoint::Progress(stage) => stage,
+                };
                 if paired(workspace, project)? != source {
                     return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
                 }
@@ -1890,7 +2272,7 @@ fn execute_with_mode(workspace: &Path, project: &str, automatic: bool) -> Result
                 )?;
                 confirm_request_enabled(workspace, &record)?;
                 authorize_automatic_submit(automatic, &wake, project, &source, || {
-                    record.phase = Phase::Submitting;
+                    checkpoint_bootstrap_progress(&mut record, stage)?;
                     store.save(&record)
                 })
             },
@@ -2088,6 +2470,7 @@ mod tests {
                 .unwrap(),
             source,
             phase: Phase::Prepared,
+            bootstrap_progress: None,
             handoff: "private handoff".into(),
             created_utc: 10,
             receipt: None,
@@ -2116,6 +2499,117 @@ mod tests {
             evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
             completion: "RESPONSE_COMPLETED".into(),
         }
+    }
+
+    #[test]
+    fn bootstrap_progress_restart_only_resumes_before_send_attempt() {
+        use runtime::BootstrapProgress as Progress;
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut record = record();
+        record.handoff_event_id = Some("web-handoff-intent-a".into());
+        record.source_fingerprint = Some("saved-source-fingerprint".into());
+        store.save(&record).unwrap();
+        atomic(&store.root.join("active.json"), &record.intent_id).unwrap();
+        checkpoint_bootstrap_progress(&mut record, Progress::TextEntryAuthorized).unwrap();
+        store.save(&record).unwrap();
+        drop(store);
+        assert_eq!(
+            auto_stage(&root, "alpha", &record.source).unwrap(),
+            AutoStage::Execute
+        );
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut record = store.active().unwrap().unwrap();
+        checkpoint_bootstrap_progress(&mut record, Progress::TextEntryAuthorized).unwrap();
+        checkpoint_bootstrap_progress(&mut record, Progress::DraftReady).unwrap();
+        store.save(&record).unwrap();
+        drop(store);
+        assert_eq!(
+            auto_stage(&root, "alpha", &record.source).unwrap(),
+            AutoStage::Execute
+        );
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut record = store.active().unwrap().unwrap();
+        checkpoint_bootstrap_progress(&mut record, Progress::TextEntryAuthorized).unwrap();
+        assert_eq!(record.bootstrap_progress, Some(Progress::DraftReady));
+        checkpoint_bootstrap_progress(&mut record, Progress::SendAttempted).unwrap();
+        store.save(&record).unwrap();
+        drop(store);
+        assert_eq!(
+            auto_stage(&root, "alpha", &record.source).unwrap(),
+            AutoStage::SubmissionUnknown
+        );
+        let mut legacy = record.clone();
+        legacy.bootstrap_progress = None;
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        store.save(&legacy).unwrap();
+        drop(store);
+        assert_eq!(
+            auto_stage(&root, "alpha", &legacy.source).unwrap(),
+            AutoStage::SubmissionUnknown
+        );
+        let mut ambiguous = legacy.clone();
+        ambiguous.bootstrap_progress = Some(Progress::TextEntryAuthorized);
+        ambiguous.reconciliation_reason = Some("WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND".into());
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        store.save(&ambiguous).unwrap();
+        drop(store);
+        assert!(!resumable_bootstrap(&ambiguous));
+        assert_eq!(
+            auto_stage(&root, "alpha", &ambiguous.source).unwrap(),
+            AutoStage::SubmissionUnknown
+        );
+        assert_eq!(
+            auto_stage(&root, "beta", &ambiguous.source).unwrap(),
+            AutoStage::Observe
+        );
+        assert_eq!(
+            inspect_draft(&root, "alpha", "wrong-intent").unwrap_err(),
+            "WEB_ROLLOVER_INTENT_CHANGED"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn legacy_draft_archive_preserves_actual_and_expected_before_clear_authority() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut record = record();
+        record.phase = Phase::Submitting;
+        store.save(&record).unwrap();
+        atomic(&store.root.join("active.json"), &record.intent_id).unwrap();
+        let expected = runtime::compose_bootstrap_message(
+            &record.project_id,
+            &record.intent_id,
+            &record.source,
+            &record.handoff,
+        )
+        .unwrap();
+        let actual = expected.split_whitespace().collect::<Vec<_>>().join(" ");
+        save_draft_archive(&store, &record, &actual, actual.len()).unwrap();
+        let archived = read_draft_archive(&store, &record).unwrap().unwrap();
+        assert_eq!(archived.expected_text, expected);
+        assert_eq!(archived.actual_text, actual);
+        assert_ne!(archived.expected_text, archived.actual_text);
+        save_draft_archive(&store, &record, &actual, actual.len()).unwrap();
+        assert_eq!(
+            save_draft_archive(&store, &record, &format!("{actual} "), actual.len() + 1)
+                .unwrap_err(),
+            "WEB_DRAFT_ARCHIVE_WITNESS_CHANGED"
+        );
+        drop(store);
+        assert_eq!(
+            archive_draft(&root, "alpha", "wrong-intent").unwrap_err(),
+            "WEB_ROLLOVER_INTENT_CHANGED"
+        );
+        record.source = Target::new(2, record.source.url.clone()).unwrap();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        assert_eq!(
+            read_draft_archive(&store, &record).unwrap_err(),
+            "WEB_DRAFT_ARCHIVE_INVALID"
+        );
+        drop(store);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

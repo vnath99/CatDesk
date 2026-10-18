@@ -1,5 +1,47 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 18 owned-draft recovery (TESTED_LOCAL_SOURCE; LIVE PENDING)
+
+The user identified the preserved composer as a CatDesk rollover bootstrap.
+The old journal records `SUBMITTING` without a send boundary or receipt. Its
+predecessor, intent and full expected-message digest are retained. The former
+slow typing path could exceed the 180-second progress watchdog after that
+combined checkpoint, leaving a saved draft. An exact draft match establishes
+ownership, but does not establish that an earlier send never happened.
+
+Protocol 2 now journals text-entry authorization, full-draft readiness and
+send-attempt authorization separately before each browser ACK. A pre-send
+restart resumes only its exact complete saved draft and skips typing. Empty,
+partial or foreign drafts refuse. Explicitly observed pre-send ambiguity is
+durably fenced; legacy unknown and send-attempted records never replay.
+
+The supported `inspect-draft` command reads a bounded full-draft comparison.
+The separate `archive-draft` command applies only to a legacy unknown intent:
+it saves actual DOM text and expected journal text privately before authorizing
+an atomic exact-draft clear, then reloads HOME and verifies empty. Its old
+intent, source pair and history remain preserved and non-replayable. Completed
+archive receipts identify historical observations rather than claiming a new
+browser read. Oversized archive protocol witnesses refuse before clear.
+
+Verification: 34 Python new-conversation tests, 18 adapter tests, 6 current-DOM
+tests, and 10 Rust Web CLI tests pass. The Web rollover suite passed 31 cases
+in the sandbox; its sole existing Windows metadata fixture failed with
+`CONFIG_ROOT_UNAVAILABLE` and passed on the normal-user rerun. The final
+restart case and Wake protocol case each passed. Strict all-target/all-feature
+Clippy passed for root and Wake. Independent static review found no remaining
+blocking issue after corrections to ambiguity handling, frame limits, raw-text
+preservation and the clear boundary. These checks are not live acceptance.
+
+The manual login browser closed normally; no new sign-in was requested. A fresh
+read-only comparison found the five original registry/Wake pairs exactly
+unchanged. The next live steps are: compare the old canary draft; archive it
+only on exact ownership; verify the separate PREPARED canary has a clean HOME;
+then run normal scheduling and verify the actual replacement URL, paired
+generation, history and continuation while another project receives a review
+event. Production Wake targets and native project sessions are outside this
+canary. Installed release, central connector acceptance and exact-source CI
+remain separate gates. **Overall: `PARTIAL`.**
+
 ## October 18 completed continuation with advisory meter retry (TESTED_LOCAL_SOURCE; LIVE PARTIAL)
 
 Source `9102b9e` allows new work after a proved completed continuation when

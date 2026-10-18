@@ -2447,6 +2447,157 @@ class NewConversationSink(CdpSink):
         if any(self.visible_role_counts(cdp)):
             raise Attention("BOOTSTRAP_HOME_HAS_TURNS")
 
+    def observe_home_draft(self, cdp: Any, expected_message: str) -> dict[str, Any]:
+        """Classify one owned home composer without writing or returning its text."""
+        try:
+            current = str(cdp.get_current_url())
+        except Exception as error:
+            raise Attention("BOOTSTRAP_HOME_DRIFT") from error
+        if current != NEW_CONVERSATION_HOME:
+            raise Attention("BOOTSTRAP_HOME_DRIFT")
+        if self.error(cdp, current):
+            raise Attention("BROWSER_NETWORK_ERROR")
+        if any(self.visible(cdp, selector) for selector in LOGIN):
+            raise Attention("LOGIN_OR_PROFILE_REQUIRED")
+        if any(self.visible(cdp, selector) for selector in CAPTCHA):
+            raise Attention("CAPTCHA_OR_SECURITY_CHECK")
+        if any(self.visible(cdp, selector) for selector in STOP):
+            raise Attention("CHATGPT_NOT_IDLE")
+        if self.document_ready_state(cdp) == "loading":
+            raise Attention("BOOTSTRAP_HOME_NOT_READY")
+        if any(self.visible_role_counts(cdp)):
+            raise Attention("BOOTSTRAP_HOME_HAS_TURNS")
+        status, empty = self.editor_state(cdp)
+        if status != "ready":
+            raise Attention("BOOTSTRAP_HOME_NOT_READY")
+        if empty:
+            return {"classification": "EMPTY_HOME", "actualDigest": None, "actualBytes": 0}
+        actual = self.text(cdp)
+        if not actual:
+            raise Attention("BOOTSTRAP_DRAFT_UNREADABLE")
+        actual_bytes = actual.encode("utf-8")
+        if len(actual_bytes) > MAX_USER_MESSAGE_CHARS:
+            return {"classification": "MISMATCH", "actualDigest": None,
+                    "actualBytes": MAX_USER_MESSAGE_CHARS}
+        normalized = normalize_message(actual)
+        return {
+            "classification": "EXACT_OWNED" if normalized == normalize_message(expected_message) else "MISMATCH",
+            "actualDigest": digest(normalized), "actualBytes": len(actual_bytes),
+        }
+
+    def wait_home_draft(self, cdp: Any, expected_message: str, *,
+                        monotonic=time.monotonic, sleeper=time.sleep) -> dict[str, Any]:
+        """Wait only for readiness; never wait through a foreign draft or turn."""
+        deadline = monotonic() + self.ui_timeout
+        empty_since = None
+        while True:
+            try:
+                observed = self.observe_home_draft(cdp, expected_message)
+            except Attention as error:
+                if str(error) != "BOOTSTRAP_HOME_NOT_READY" or monotonic() >= deadline:
+                    raise
+                sleeper(READINESS_POLL_SECONDS)
+                continue
+            if observed["classification"] != "EMPTY_HOME":
+                return observed
+            now = monotonic()
+            if empty_since is None:
+                empty_since = now
+            # A fresh browser may show an empty editor before a saved draft
+            # hydrates. Require a short stable empty observation before any
+            # caller treats it as absent; the caller still cannot type on a
+            # resumed intent merely because the home is empty.
+            if now - empty_since >= 0.5:
+                return observed
+            if now >= deadline:
+                raise Attention("BOOTSTRAP_HOME_NOT_READY")
+            sleeper(min(READINESS_POLL_SECONDS, deadline - now))
+
+    def raw_editor_text(self, cdp: Any) -> str:
+        """Read the actual DOM text, preserving spaces and line breaks."""
+        script = """(() => {
+            const visible = Array.from(document.querySelectorAll(
+                '#prompt-textarea, div.ProseMirror[contenteditable="true"], [contenteditable="true"][data-lexical-editor="true"]'
+            )).filter(element => {
+                const style = window.getComputedStyle(element);
+                return element.getClientRects().length > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+            });
+            if (visible.length !== 1) return ['count'];
+            const element = visible[0];
+            const text = element.value ?? element.innerText ?? element.textContent ?? '';
+            if (new TextEncoder().encode(text).length > 16384) return ['oversize'];
+            return ['ready', text];
+        })()"""
+        try:
+            value = CdpSink.cdp_value(cdp.evaluate(script))
+        except Exception as error:
+            raise Attention("BOOTSTRAP_DRAFT_UNREADABLE") from error
+        if value == ["oversize"]:
+            raise Attention("BOOTSTRAP_ARCHIVE_TEXT_TOO_LARGE")
+        if (not isinstance(value, list) or len(value) != 2 or value[0] != "ready" or
+                not isinstance(value[1], str) or not value[1].strip() or
+                len(value[1].encode("utf-8")) > MAX_USER_MESSAGE_CHARS):
+            raise Attention("BOOTSTRAP_DRAFT_UNREADABLE")
+        return value[1]
+
+    def clear_archived_home_draft(self, cdp: Any, expected_message: str, actual_text: str) -> None:
+        """Clear only the exact owned composer after the durable archive ACK."""
+        self.check_typed_home(cdp, expected_message)
+        if (not isinstance(actual_text, str) or
+                normalize_message(actual_text) != normalize_message(expected_message)):
+            raise Attention("BOOTSTRAP_ARCHIVE_CLEAR_UNVERIFIED")
+        # The pinned CDP clear_input() only sets `.value`, which does not clear
+        # ChatGPT's contenteditable composer. Select its contents, then issue
+        # the browser's native edit command. The identity, URL, turn and text
+        # recheck is in the same DOM evaluation as the edit.
+        script = f"""(() => {{
+            if (location.href !== {json.dumps(NEW_CONVERSATION_HOME)}) return 'UNAVAILABLE';
+            if (document.querySelector(
+                '[data-message-author-role="user"], [data-message-author-role="assistant"], '
+                + 'article[data-turn="user"], article[data-turn="assistant"], '
+                + '[data-user-message-bubble], h4[data-conversation-role="assistant"]'
+            )) return 'UNAVAILABLE';
+            const visible = Array.from(document.querySelectorAll(
+                '#prompt-textarea, div.ProseMirror[contenteditable="true"], [contenteditable="true"][data-lexical-editor="true"]'
+            )).filter(element => {{
+                const style = window.getComputedStyle(element);
+                return element.getClientRects().length > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+            }});
+            if (visible.length !== 1) return 'UNAVAILABLE';
+            const editor = visible[0];
+            const current = editor.value ?? editor.innerText ?? editor.textContent ?? '';
+            if (current !== {json.dumps(actual_text)}) return 'UNAVAILABLE';
+            editor.focus();
+            if (editor.isContentEditable) {{
+                const range = document.createRange();
+                range.selectNodeContents(editor);
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(range);
+                return document.execCommand('delete', false, null) ? 'CLEARED' : 'UNAVAILABLE';
+            }}
+            if (editor instanceof HTMLTextAreaElement) {{
+                editor.setRangeText('', 0, editor.value.length, 'start');
+                editor.dispatchEvent(new InputEvent('input', {{bubbles: true, inputType: 'deleteContent'}}));
+                return 'CLEARED';
+            }}
+            return 'UNAVAILABLE';
+        }})()"""
+        try:
+            result = CdpSink.cdp_value(cdp.evaluate(script))
+        except Exception as error:
+            raise Attention("BOOTSTRAP_ARCHIVE_CLEAR_UNVERIFIED") from error
+        if result != "CLEARED":
+            raise Attention("BOOTSTRAP_ARCHIVE_CLEAR_UNVERIFIED")
+        self.check_empty_home(cdp)
+        try:
+            cdp.get(NEW_CONVERSATION_HOME)
+            reloaded = self.wait_home_draft(cdp, expected_message)
+        except Exception as error:
+            raise Attention("BOOTSTRAP_ARCHIVE_CLEAR_UNVERIFIED") from error
+        if reloaded["classification"] != "EMPTY_HOME":
+            raise Attention("BOOTSTRAP_ARCHIVE_CLEAR_UNVERIFIED")
+
     def open_empty_home(self, cdp: Any, *, monotonic=time.monotonic, sleeper=time.sleep) -> None:
         try:
             cdp.get(NEW_CONVERSATION_HOME)

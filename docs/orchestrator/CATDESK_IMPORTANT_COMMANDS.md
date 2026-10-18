@@ -1,5 +1,38 @@
 # CatDesk — Important Command Reference
 
+## October 18 draft recovery commands (source; live verification pending)
+
+Run these against the existing isolated development control workspace and its
+authenticated profile. Supply the saved project's exact active intent ID.
+
+```powershell
+<source-built-catdesk.exe> operator web rollover inspect-draft --project-id PROJECT --expected-intent-id INTENT
+<source-built-catdesk.exe> operator web rollover archive-draft --project-id PROJECT --expected-intent-id INTENT
+```
+
+`inspect-draft` compares the complete normalized composer with the journal's
+project, intent, predecessor and handoff. It returns bounded digests and status,
+without typing, clearing or sending. An exact match proves draft ownership;
+it does not prove an earlier submission never occurred.
+
+`archive-draft` is restricted to a legacy `SUBMITTING` intent with no recorded
+send boundary, receipt or replacement binding. It preserves the actual composer
+text and expected journal text privately before permitting an exact-match
+composer clear. A changed or unrelated draft is preserved. The old intent stays
+non-replayable; the command never sends, rebinds a target or starts another task.
+
+New protocol-2 rollovers persist `TEXT_ENTRY_AUTHORIZED`, `DRAFT_READY` and
+`SEND_ATTEMPTED` before each browser acknowledgement. Automatic recovery of a
+pre-send record requires its exact full saved draft. Missing, partial, changed
+or ambiguous drafts require attention. `SEND_ATTEMPTED` and legacy unknown
+records are never automatically replayed. Existing STOP, project ownership and
+paired Wake binding checks still apply at every authorization boundary.
+
+The manual setup browser closed normally. The original five registry/Wake
+pairs passed a fresh exact comparison. Source testing and development package
+qualification are in progress; no new replacement URL is accepted yet. The
+following sections retain earlier checkpoint evidence.
+
 ## October 18 live development Web checkpoint (MVP PARTIAL)
 
 **Current hold.** Registry/Wake contain seven guarded pairs: five original plus two test canaries. Pushed source `bce01e974054646006520a598ed83d449d30afaa` passed main/Wake builds, 49 focused Python tests, three focused Rust STOP/recovery regressions (two STOP, one recovery) and strict Clippy; exact-commit CI lookup found no runs. The v3 isolated development package was applied by supported update without replacing authenticated profile/state. Independent direct raw-file comparison (private `current-binding-comparison.json`, SHA-256 `83EF59A1DDC68F37C0E5E145DA20ED879545826B7D95086CA4248C99EAE6546F`) found all five original registry/Wake bindings exactly unchanged. Normal scheduling advanced the fresh canary handoff request through exact `SENT`/`COMPLETE` and collected a marked handoff, then left its new intent `PREPARED` with `ATTENTION` / `EXISTING_DRAFT`: no bootstrap ACK, receipt or pair update. The home-composer guard proves nonempty text only; its owner is unknown. Automatic rollover is disabled only for this canary. Supported STOP released the host with exit 0; scheduler session 20297 terminated exit 1 after Ctrl+C drain. Guarded login opened the preserved test profile (`LOGIN_BROWSER_OPEN`) without new sign-in. The user was asked to inspect the New chat draft and clear only recognizable old canary text; otherwise leave it. No inspection outcome or clearing is yet verified. Preserve both uncertain attempts. No accepted automated safe inspect/clear route exists; do not replay, clear blindly or guess the composer owner. An independent BYOVD checkpoint review completed during this cycle; Wake2 native work remained active. Bug Bounty public-pilot gates, production profile, installed release, exact-source CI and central connector catalog acceptance remain open. Earlier paragraphs below are historical.

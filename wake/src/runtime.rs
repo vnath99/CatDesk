@@ -1718,6 +1718,64 @@ pub struct BootstrapReceipt {
     pub completion: String,
 }
 
+/// Durable authorization boundary for the protocol-v2 browser bootstrap.
+/// Only the first two stages may be resumed; SEND_ATTEMPTED may have clicked.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum BootstrapProgress {
+    TextEntryAuthorized,
+    DraftReady,
+    SendAttempted,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BootstrapCheckpoint {
+    Progress(BootstrapProgress),
+    PreSendUnknown,
+}
+
+impl BootstrapProgress {
+    fn frame(self) -> &'static str {
+        match self {
+            Self::TextEntryAuthorized => "TEXT_ENTRY_AUTHORIZED",
+            Self::DraftReady => "DRAFT_READY",
+            Self::SendAttempted => "SEND_ATTEMPTED",
+        }
+    }
+
+    fn acknowledgement(self) -> serde_json::Value {
+        match self {
+            Self::TextEntryAuthorized => serde_json::json!({"textEntry":true}),
+            Self::DraftReady => serde_json::json!({"draftReady":true}),
+            Self::SendAttempted => serde_json::json!({"submit":true}),
+        }
+    }
+}
+
+fn bootstrap_progress_frame(
+    value: &serde_json::Value,
+    project_id: &str,
+    intent_id: &str,
+    source: &Target,
+    message_digest: &str,
+) -> Result<Option<BootstrapProgress>> {
+    let stage = match value.get("stage").and_then(|v| v.as_str()) {
+        Some("TEXT_ENTRY_AUTHORIZED") => BootstrapProgress::TextEntryAuthorized,
+        Some("DRAFT_READY") => BootstrapProgress::DraftReady,
+        Some("SEND_ATTEMPTED") => BootstrapProgress::SendAttempted,
+        _ => return Ok(None),
+    };
+    if value.get("projectId").and_then(|v| v.as_str()) != Some(project_id)
+        || value.get("intentId").and_then(|v| v.as_str()) != Some(intent_id)
+        || value.get("sourceGeneration").and_then(|v| v.as_u64()) != Some(source.generation)
+        || value.get("messageDigest").and_then(|v| v.as_str()) != Some(message_digest)
+        || !value.as_object().is_some_and(|map| map.len() == 5)
+    {
+        return Err("BOOTSTRAP_PROGRESS_SCOPE_INVALID".into());
+    }
+    Ok(Some(stage))
+}
+
 pub fn compose_bootstrap_message(
     project_id: &str,
     intent_id: &str,
@@ -2056,11 +2114,17 @@ pub fn bootstrap_submit_conversation(
     intent_id: &str,
     source: &Target,
     handoff: &str,
-    mut before_submit: impl FnMut() -> Result<()>,
+    resume: Option<BootstrapProgress>,
+    mut checkpoint: impl FnMut(BootstrapCheckpoint) -> Result<()>,
 ) -> Result<BootstrapReceipt> {
+    if resume == Some(BootstrapProgress::SendAttempted) {
+        return Err("BOOTSTRAP_OUTCOME_UNKNOWN".into());
+    }
     let message_digest = bootstrap_message_digest(project_id, intent_id, source, handoff)?;
     let request = serde_json::json!({
-        "bootstrap":true,"cooperative":true,"projectId":project_id,
+        "bootstrap":true,"cooperative":true,"bootstrapProtocol":2,
+        "resumeDraft":resume.is_some(),"resumeProgress":resume.map(BootstrapProgress::frame),
+        "projectId":project_id,
         "intentId":intent_id,"source":source,"handoff":handoff,
     });
     if serde_json::to_vec(&request)
@@ -2087,6 +2151,7 @@ pub fn bootstrap_submit_conversation(
     let absolute_deadline = Instant::now() + BOOTSTRAP_SETUP_RECEIPT_ALLOWANCE;
     let mut progress_deadline = Instant::now() + BOOTSTRAP_PROGRESS_WINDOW;
     let mut submit_dispatched = false;
+    let mut acknowledged = None;
     loop {
         if let Some(reason) = bootstrap_timeout_reason(
             Instant::now(),
@@ -2107,25 +2172,40 @@ pub fn bootstrap_submit_conversation(
             }
             Err(mpsc::RecvTimeoutError::Timeout) => continue,
         };
-        match value.get("stage").and_then(|stage| stage.as_str()) {
-            Some("BEFORE_BOOTSTRAP_SUBMIT") if !submit_dispatched => {
-                let valid = value.get("projectId").and_then(|v| v.as_str()) == Some(project_id)
-                    && value.get("intentId").and_then(|v| v.as_str()) == Some(intent_id)
-                    && value.get("sourceGeneration").and_then(|v| v.as_u64())
-                        == Some(source.generation)
-                    && value.get("messageDigest").and_then(|v| v.as_str())
-                        == Some(message_digest.as_str())
-                    && value.as_object().is_some_and(|map| map.len() == 5);
-                if !valid {
-                    return Err("BOOTSTRAP_BEFORE_SUBMIT_INVALID".into());
+        if let Some(stage) =
+            bootstrap_progress_frame(&value, project_id, intent_id, source, &message_digest)?
+        {
+            let expected = match acknowledged {
+                None => BootstrapProgress::TextEntryAuthorized,
+                Some(BootstrapProgress::TextEntryAuthorized) => BootstrapProgress::DraftReady,
+                Some(BootstrapProgress::DraftReady) => BootstrapProgress::SendAttempted,
+                Some(BootstrapProgress::SendAttempted) => {
+                    return Err("BOOTSTRAP_OUTCOME_UNKNOWN".into());
                 }
-                ensure_bootstrap_source_available(store, project_id, source)?;
-                before_submit()?;
+            };
+            if stage != expected {
+                return Err("BOOTSTRAP_PROGRESS_ORDER_INVALID".into());
+            }
+            ensure_bootstrap_source_available(store, project_id, source)?;
+            checkpoint(BootstrapCheckpoint::Progress(stage))?;
+            acknowledged = Some(stage);
+            if stage == BootstrapProgress::SendAttempted {
                 submit_dispatched = true;
-                adapter
-                    .send(serde_json::json!({"submit":true}))
-                    .map_err(|_| "BOOTSTRAP_OUTCOME_UNKNOWN")?;
-                progress_deadline = Instant::now() + BOOTSTRAP_PROGRESS_WINDOW;
+            }
+            adapter.send(stage.acknowledgement()).map_err(|_| {
+                if submit_dispatched {
+                    "BOOTSTRAP_OUTCOME_UNKNOWN"
+                } else {
+                    "BROWSER_ADAPTER_PIPE_FAILED"
+                }
+            })?;
+            progress_deadline = Instant::now() + BOOTSTRAP_PROGRESS_WINDOW;
+            continue;
+        }
+        match value.get("stage").and_then(|stage| stage.as_str()) {
+            Some("BEFORE_BOOTSTRAP_SUBMIT") => {
+                // A v1 helper must never receive authorization to type or send.
+                return Err("BOOTSTRAP_PROTOCOL_V2_REQUIRED".into());
             }
             Some("BOOTSTRAP_SUBMITTED") if submit_dispatched => {
                 let receipt: BootstrapReceipt = serde_json::from_value(
@@ -2150,6 +2230,10 @@ pub fn bootstrap_submit_conversation(
             Some("BOOTSTRAP_UNKNOWN") if submit_dispatched => {
                 return Err("BOOTSTRAP_OUTCOME_UNKNOWN".into());
             }
+            Some("BOOTSTRAP_UNKNOWN") => {
+                checkpoint(BootstrapCheckpoint::PreSendUnknown)?;
+                return Err("BOOTSTRAP_PRE_SEND_UNKNOWN".into());
+            }
             Some("ATTENTION") if !submit_dispatched => {
                 return Err(value
                     .get("reason")
@@ -2171,6 +2255,252 @@ pub fn bootstrap_submit_conversation(
             ) => progress_deadline = Instant::now() + BOOTSTRAP_PROGRESS_WINDOW,
             _ if submit_dispatched => return Err("BOOTSTRAP_OUTCOME_UNKNOWN".into()),
             _ => return Err("BROWSER_ADAPTER_RESPONSE_INVALID".into()),
+        }
+    }
+}
+
+fn bootstrap_draft_inspection_payload(
+    value: serde_json::Value,
+    project_id: &str,
+    intent_id: &str,
+    source: &Target,
+    expected_digest: &str,
+) -> Result<serde_json::Value> {
+    let classification = value.get("classification").and_then(|v| v.as_str());
+    let actual_digest = value.get("actualDigest").and_then(|v| v.as_str());
+    let actual_bytes = value.get("actualBytes").and_then(|v| v.as_u64());
+    if value.get("stage").and_then(|v| v.as_str()) != Some("BOOTSTRAP_DRAFT_INSPECTED")
+        || value.get("projectId").and_then(|v| v.as_str()) != Some(project_id)
+        || value.get("intentId").and_then(|v| v.as_str()) != Some(intent_id)
+        || value.get("sourceGeneration").and_then(|v| v.as_u64()) != Some(source.generation)
+        || value.get("sourceDigest").and_then(|v| v.as_str()) != Some(source.digest.as_str())
+        || value.get("expectedDigest").and_then(|v| v.as_str()) != Some(expected_digest)
+        || !value.as_object().is_some_and(|map| map.len() == 9)
+        || !actual_bytes.is_some_and(|n| {
+            n <= 16 * 1024 || (classification == Some("MISMATCH") && n == 16 * 1024 + 1)
+        })
+        || !matches!(
+            classification,
+            Some("EXACT_OWNED" | "EMPTY_HOME" | "MISMATCH" | "UNAVAILABLE")
+        )
+        || actual_digest
+            .is_some_and(|v| v.len() != 64 || !v.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        || (classification == Some("EXACT_OWNED") && actual_digest != Some(expected_digest))
+        || (matches!(classification, Some("EMPTY_HOME" | "UNAVAILABLE"))
+            && (actual_digest.is_some() || actual_bytes != Some(0)))
+    {
+        return Err("BOOTSTRAP_DRAFT_INSPECTION_INVALID".into());
+    }
+    Ok(value)
+}
+
+/// Inspect only the visible home composer under the existing browser owner.
+/// The result contains digests/counts, never raw draft text or authority to send.
+pub fn inspect_bootstrap_draft(
+    store: &Store,
+    project_id: &str,
+    intent_id: &str,
+    source: &Target,
+    handoff: &str,
+) -> Result<serde_json::Value> {
+    let expected_digest = bootstrap_message_digest(project_id, intent_id, source, handoff)?;
+    let _owner = browser_owner_guard(store)?;
+    if store.config()?.targets.get(project_id) != Some(source) {
+        return Err("BOOTSTRAP_SOURCE_BINDING_CHANGED".into());
+    }
+    let installed = installed_bootstrap_directory(store)?;
+    let adapter_bytes =
+        std::fs::read(installed.join("adapter.py")).map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?;
+    if !adapter_bytes
+        .windows(b"def bootstrap_draft_inspect(".len())
+        .any(|part| part == b"def bootstrap_draft_inspect(")
+    {
+        return Err("BOOTSTRAP_DRAFT_INSPECT_PACKAGE_REQUIRED".into());
+    }
+    let mut adapter = Adapter::spawn_from_installed(store.root(), &installed)?;
+    adapter.send(serde_json::json!({
+        "bootstrapDraftInspect":true,"bootstrapProtocol":2,
+        "projectId":project_id,"intentId":intent_id,"source":source,"handoff":handoff,
+    }))?;
+    let deadline = Instant::now() + Duration::from_secs(90);
+    loop {
+        if Instant::now() >= deadline {
+            return Err("BOOTSTRAP_DRAFT_INSPECTION_TIMEOUT".into());
+        }
+        match adapter.output.recv_timeout(Duration::from_millis(250)) {
+            Ok(Ok(value)) => match value.get("stage").and_then(|v| v.as_str()) {
+                Some("BOOTSTRAP_DRAFT_INSPECTED") => {
+                    if store.config()?.targets.get(project_id) != Some(source) {
+                        return Err("BOOTSTRAP_SOURCE_BINDING_CHANGED".into());
+                    }
+                    let result = bootstrap_draft_inspection_payload(
+                        value,
+                        project_id,
+                        intent_id,
+                        source,
+                        &expected_digest,
+                    )?;
+                    let _ = adapter.allow_graceful_exit(Duration::from_secs(5));
+                    return Ok(result);
+                }
+                Some(
+                    "CDP_REUSE_BEGIN" | "CDP_REUSE_DONE" | "CDP_ACTIVATE_BEGIN"
+                    | "CDP_ACTIVATE_DONE",
+                ) => {}
+                Some("ATTENTION") => {
+                    return Err(value
+                        .get("reason")
+                        .and_then(|v| v.as_str())
+                        .filter(|reason| crate::protocol::valid_id(reason))
+                        .unwrap_or("BOOTSTRAP_DRAFT_INSPECTION_ATTENTION")
+                        .into());
+                }
+                _ => return Err("BOOTSTRAP_DRAFT_INSPECTION_INVALID".into()),
+            },
+            Ok(Err(reason)) => return Err(reason),
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err("BROWSER_ADAPTER_EXITED".into());
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+    }
+}
+
+fn draft_archive_frame_scope(
+    value: &serde_json::Value,
+    stage: &str,
+    project_id: &str,
+    intent_id: &str,
+    source: &Target,
+    message_digest: &str,
+    fields: usize,
+) -> Result<()> {
+    if value.get("stage").and_then(|v| v.as_str()) != Some(stage)
+        || value.get("projectId").and_then(|v| v.as_str()) != Some(project_id)
+        || value.get("intentId").and_then(|v| v.as_str()) != Some(intent_id)
+        || value.get("sourceGeneration").and_then(|v| v.as_u64()) != Some(source.generation)
+        || value.get("sourceDigest").and_then(|v| v.as_str()) != Some(source.digest.as_str())
+        || value.get("messageDigest").and_then(|v| v.as_str()) != Some(message_digest)
+        || !value.as_object().is_some_and(|map| map.len() == fields)
+    {
+        return Err("BOOTSTRAP_DRAFT_ARCHIVE_SCOPE_INVALID".into());
+    }
+    Ok(())
+}
+
+/// Archive only an exact full saved bootstrap draft. The callback must durably
+/// preserve actual composer bytes before this function authorizes deletion.
+pub fn archive_bootstrap_draft(
+    store: &Store,
+    project_id: &str,
+    intent_id: &str,
+    source: &Target,
+    handoff: &str,
+    archive_recorded: bool,
+    mut persist_archive: impl FnMut(&str, usize) -> Result<()>,
+) -> Result<serde_json::Value> {
+    let message_digest = bootstrap_message_digest(project_id, intent_id, source, handoff)?;
+    let _owner = browser_owner_guard(store)?;
+    if store.config()?.targets.get(project_id) != Some(source) {
+        return Err("BOOTSTRAP_SOURCE_BINDING_CHANGED".into());
+    }
+    let installed = installed_bootstrap_directory(store)?;
+    let adapter_bytes =
+        std::fs::read(installed.join("adapter.py")).map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?;
+    if !adapter_bytes
+        .windows(b"def bootstrap_draft_archive(".len())
+        .any(|part| part == b"def bootstrap_draft_archive(")
+    {
+        return Err("BOOTSTRAP_DRAFT_ARCHIVE_PACKAGE_REQUIRED".into());
+    }
+    let mut adapter = Adapter::spawn_from_installed(store.root(), &installed)?;
+    adapter.send(serde_json::json!({
+        "bootstrapDraftArchive":true,"bootstrapProtocol":2,"archiveRecorded":archive_recorded,
+        "projectId":project_id,"intentId":intent_id,"source":source,"handoff":handoff,
+    }))?;
+    let deadline = Instant::now() + Duration::from_secs(90);
+    let mut ready = false;
+    loop {
+        if Instant::now() >= deadline {
+            return Err("BOOTSTRAP_DRAFT_ARCHIVE_TIMEOUT".into());
+        }
+        match adapter.output.recv_timeout(Duration::from_millis(250)) {
+            Ok(Ok(value)) => match value.get("stage").and_then(|v| v.as_str()) {
+                Some("BOOTSTRAP_DRAFT_ARCHIVE_READY") if !ready => {
+                    draft_archive_frame_scope(
+                        &value,
+                        "BOOTSTRAP_DRAFT_ARCHIVE_READY",
+                        project_id,
+                        intent_id,
+                        source,
+                        &message_digest,
+                        8,
+                    )?;
+                    let actual = value
+                        .get("actualText")
+                        .and_then(|v| v.as_str())
+                        .ok_or("BOOTSTRAP_DRAFT_ARCHIVE_WITNESS_INVALID")?;
+                    let count = value
+                        .get("actualBytes")
+                        .and_then(|v| v.as_u64())
+                        .ok_or("BOOTSTRAP_DRAFT_ARCHIVE_WITNESS_INVALID")?;
+                    if actual.len() > 16 * 1024
+                        || count != actual.len() as u64
+                        || crate::protocol::digest(
+                            &actual.split_whitespace().collect::<Vec<_>>().join(" "),
+                        ) != message_digest
+                    {
+                        return Err("BOOTSTRAP_DRAFT_ARCHIVE_WITNESS_INVALID".into());
+                    }
+                    if store.config()?.targets.get(project_id) != Some(source) {
+                        return Err("BOOTSTRAP_SOURCE_BINDING_CHANGED".into());
+                    }
+                    persist_archive(actual, actual.len())?;
+                    ready = true;
+                    adapter.send(serde_json::json!({"archiveDraft":true}))?;
+                }
+                Some("BOOTSTRAP_DRAFT_ARCHIVED") if ready || archive_recorded => {
+                    draft_archive_frame_scope(
+                        &value,
+                        "BOOTSTRAP_DRAFT_ARCHIVED",
+                        project_id,
+                        intent_id,
+                        source,
+                        &message_digest,
+                        7,
+                    )?;
+                    if value.get("actualBytes").and_then(|v| v.as_u64()) != Some(0)
+                        || store.config()?.targets.get(project_id) != Some(source)
+                    {
+                        return Err("BOOTSTRAP_DRAFT_ARCHIVE_READBACK_INVALID".into());
+                    }
+                    let _ = adapter.allow_graceful_exit(Duration::from_secs(5));
+                    return Ok(
+                        serde_json::json!({"projectId":project_id,"intentId":intent_id,
+                        "sourceGeneration":source.generation,"sourceDigest":source.digest,
+                        "messageDigest":message_digest,"composerEmptyProved":true,
+                        "submissionVerified":false}),
+                    );
+                }
+                Some(
+                    "CDP_REUSE_BEGIN" | "CDP_REUSE_DONE" | "CDP_ACTIVATE_BEGIN"
+                    | "CDP_ACTIVATE_DONE",
+                ) => {}
+                Some("ATTENTION") => {
+                    return Err(value
+                        .get("reason")
+                        .and_then(|v| v.as_str())
+                        .filter(|reason| crate::protocol::valid_id(reason))
+                        .unwrap_or("BOOTSTRAP_DRAFT_ARCHIVE_ATTENTION")
+                        .into());
+                }
+                _ => return Err("BOOTSTRAP_DRAFT_ARCHIVE_PROTOCOL_INVALID".into()),
+            },
+            Ok(Err(reason)) => return Err(reason),
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err("BROWSER_ADAPTER_EXITED".into());
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
         }
     }
 }
@@ -2368,6 +2698,93 @@ pub fn snapshot_conversation(
 mod bootstrap_runtime_tests {
     use super::*;
     use crate::protocol::Event;
+
+    #[test]
+    fn bootstrap_v2_progress_and_draft_inspection_are_exactly_scoped() {
+        let source = source();
+        let expected = bootstrap_message_digest("alpha", "intent-a", &source, "handoff").unwrap();
+        for stage in ["TEXT_ENTRY_AUTHORIZED", "DRAFT_READY", "SEND_ATTEMPTED"] {
+            let frame = serde_json::json!({"stage":stage,"projectId":"alpha",
+                "intentId":"intent-a","sourceGeneration":source.generation,
+                "messageDigest":expected});
+            assert!(
+                bootstrap_progress_frame(&frame, "alpha", "intent-a", &source, &expected)
+                    .unwrap()
+                    .is_some()
+            );
+            assert!(
+                bootstrap_progress_frame(&frame, "beta", "intent-a", &source, &expected).is_err()
+            );
+            let mut extra = frame;
+            extra["rawText"] = serde_json::json!("private");
+            assert!(
+                bootstrap_progress_frame(&extra, "alpha", "intent-a", &source, &expected).is_err()
+            );
+        }
+        let inspected = serde_json::json!({"stage":"BOOTSTRAP_DRAFT_INSPECTED",
+            "projectId":"alpha","intentId":"intent-a",
+            "sourceGeneration":source.generation,"sourceDigest":source.digest,
+            "expectedDigest":expected,"actualDigest":expected,"actualBytes":100,
+            "classification":"EXACT_OWNED"});
+        assert!(
+            bootstrap_draft_inspection_payload(
+                inspected.clone(),
+                "alpha",
+                "intent-a",
+                &source,
+                &expected
+            )
+            .is_ok()
+        );
+        let mut forged = inspected;
+        forged["actualDigest"] = serde_json::json!("0".repeat(64));
+        assert!(
+            bootstrap_draft_inspection_payload(forged, "alpha", "intent-a", &source, &expected)
+                .is_err()
+        );
+        let ready = serde_json::json!({"stage":"BOOTSTRAP_DRAFT_ARCHIVE_READY",
+            "projectId":"alpha","intentId":"intent-a",
+            "sourceGeneration":source.generation,"sourceDigest":source.digest,
+            "messageDigest":expected,"actualBytes":7,"actualText":"private"});
+        assert!(
+            draft_archive_frame_scope(
+                &ready,
+                "BOOTSTRAP_DRAFT_ARCHIVE_READY",
+                "alpha",
+                "intent-a",
+                &source,
+                &expected,
+                8
+            )
+            .is_ok()
+        );
+        assert!(
+            draft_archive_frame_scope(
+                &ready,
+                "BOOTSTRAP_DRAFT_ARCHIVE_READY",
+                "beta",
+                "intent-a",
+                &source,
+                &expected,
+                8
+            )
+            .is_err()
+        );
+        let mut extra = ready;
+        extra["rawOther"] = serde_json::json!("untrusted");
+        assert!(
+            draft_archive_frame_scope(
+                &extra,
+                "BOOTSTRAP_DRAFT_ARCHIVE_READY",
+                "alpha",
+                "intent-a",
+                &source,
+                &expected,
+                8
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn private_source_snapshot_is_bound_to_exact_project_and_generation() {
