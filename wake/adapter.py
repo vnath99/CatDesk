@@ -293,8 +293,16 @@ def source_snapshot(bridge, sb, request):
         elif messages and messages[0]["text"]:
             text = messages[0]["text"]
             messages[0]["text"] = text[:len(text) // 2]
+            messages[0]["textComplete"] = False
         else:
             raise bridge.Attention("SOURCE_SNAPSHOT_TOO_LARGE")
+        coverage = snapshot["coverage"]
+        coverage["returned"] = len(messages)
+        coverage["omittedBeforeWindow"] = max(0, coverage["visibleRoleCount"] - len(messages))
+        coverage["identityMissing"] = sum(item["identityBasis"] == "MISSING" for item in messages)
+        coverage["identityUncertain"] = sum(item["identityBasis"] == "ROLE_TURN_ONLY" for item in messages)
+        coverage["revisionIncomplete"] = sum(not item["revisionComplete"] for item in messages)
+        coverage["textIncomplete"] = sum(not item["textComplete"] for item in messages)
     emit(payload)
 
 

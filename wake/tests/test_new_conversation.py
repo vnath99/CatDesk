@@ -24,6 +24,14 @@ SOURCE = "https://chatgpt.com/c/source-123"
 ISSUED = "https://chatgpt.com/c/issued-456"
 
 
+def observed_rows(*rows, nested=0, keyed=0, count=None):
+    """Synthetic CDP output; raw DOM keys must never escape the sink."""
+    units = [[role, text, len(text.encode("utf-16-le")) // 2 <= 4096,
+              min(len(text.encode("utf-16-le")) // 2, 1000000), turn, unit, message]
+             for role, text, turn, unit, message in rows]
+    return ["AUTHOR_ROLE", len(units) if count is None else count, False, nested, keyed, units]
+
+
 class StructuralCdp:
     def __init__(self, url=bridge.NEW_CONVERSATION_HOME):
         self.url = url
@@ -32,7 +40,7 @@ class StructuralCdp:
         self.assistants = 0
         self.turns = 0
         self.visible_selectors = set()
-        self.snapshot = [False, []]
+        self.snapshot = observed_rows()
 
     def get_current_url(self):
         return self.url
@@ -45,7 +53,7 @@ class StructuralCdp:
             return "complete"
         if "const count = selector" in script:
             return [self.users, self.assistants, self.turns]
-        if "nodes.slice(-16)" in script:
+        if "unique.slice(-16)" in script:
             return self.snapshot
         if "if (visible.length !== 1) return ['count'" in script:
             return ["ready", not self.draft]
@@ -184,9 +192,34 @@ class AttemptSink:
 
     def visible_message_snapshot(self, cdp):
         cdp.timeline.append("snapshot")
+        coverage = {
+            "selectorTier": "AUTHOR_ROLE", "visibleRoleCount": 1, "countOverflow": False,
+            "nestedCollapsed": 0, "keyedCollapsed": 0, "omittedBeforeWindow": 0,
+            "returned": 1, "identityMissing": 1, "identityUncertain": 0,
+            "revisionIncomplete": 0, "textIncomplete": 0,
+            "anchorStability": "UNVERIFIED",
+        }
+        message = {
+            "role": "ASSISTANT", "text": "bounded private status", "visibleUnits": 22,
+            "textComplete": True, "turnHash": None, "roleTurnHash": None,
+            "messageHash": None, "identityBasis": "MISSING",
+            "revisionHash": bridge.digest("bounded private status"), "revisionComplete": True,
+        }
         if cdp.scenario == "large_snapshot":
-            return {"messages": [{"role": "ASSISTANT", "text": "😀" * 4096}], "truncated": False}
-        return {"messages": [{"role": "ASSISTANT", "text": "bounded private status"}], "truncated": False}
+            message["text"] = "😀" * 4096
+            message["visibleUnits"] = 4096
+        if cdp.scenario == "many_snapshot":
+            messages = []
+            for index in range(12):
+                item = dict(message)
+                item["text"] = "x" * 800
+                item["visibleUnits"] = 800
+                item["identityBasis"] = "UNIT_KEY"
+                item["messageHash"] = bridge.digest(f"message-{index}")
+                messages.append(item)
+            coverage.update(visibleRoleCount=12, returned=12, identityMissing=0)
+            return {"messages": messages, "truncated": False, "coverage": coverage}
+        return {"messages": [message], "truncated": False, "coverage": coverage}
 
 
 class NewConversationTests(unittest.TestCase):
@@ -270,15 +303,17 @@ class NewConversationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as profile:
             sink = bridge.NewConversationSink(SOURCE, Path(profile), 1, 1)
             cdp = StructuralCdp(SOURCE)
-            cdp.snapshot = [False, [["user", "handoff"], ["assistant", "This response couldn’t load"]]]
+            cdp.snapshot = observed_rows(("user", "handoff", None, None, None),
+                                         ("assistant", "This response couldn’t load", None, None, None))
             with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_SOURCE_LOAD_ERROR_PLACEHOLDER"):
                 sink.require_usable_latest_assistant(cdp, source=True)
             with self.assertRaisesRegex(bridge.PostSubmitUnknown, "BOOTSTRAP_ASSISTANT_LOAD_ERROR_PLACEHOLDER"):
                 sink.require_usable_latest_assistant(cdp, source=False)
-            cdp.snapshot = [False, [["user", "handoff"], ["assistant", "Usable code and next step."]]]
+            cdp.snapshot = observed_rows(("user", "handoff", None, None, None),
+                                         ("assistant", "Usable code and next step.", None, None, None))
             sink.require_usable_latest_assistant(cdp, source=True)
             sink.require_usable_latest_assistant(cdp, source=False)
-            cdp.snapshot = [False, [["user", "handoff"]]]
+            cdp.snapshot = observed_rows(("user", "handoff", None, None, None))
             with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_SOURCE_ASSISTANT_UNAVAILABLE"):
                 sink.require_usable_latest_assistant(cdp, source=True)
 
@@ -287,7 +322,8 @@ class NewConversationTests(unittest.TestCase):
             sink = bridge.NewConversationSink(SOURCE, Path(profile), 1, 1)
             cdp = StructuralCdp(SOURCE)
             message = "Exact bootstrap handoff"
-            cdp.snapshot = [False, [["user", message], ["assistant", "This response couldn’t load"]]]
+            cdp.snapshot = observed_rows(("user", message, None, None, None),
+                                         ("assistant", "This response couldn’t load", None, None, None))
             with patch.object(bridge.CdpSink, "pre_typing_ready", return_value=None):
                 with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_SOURCE_LOAD_ERROR_PLACEHOLDER"):
                     sink.pre_typing_ready(cdp)
@@ -308,15 +344,79 @@ class NewConversationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as profile:
             sink = bridge.NewConversationSink(SOURCE, Path(profile), 1, 1)
             cdp = StructuralCdp(SOURCE)
-            cdp.snapshot = [False, [["user", "old"], ["assistant", "😀" * 4096]]]
+            cdp.snapshot = observed_rows(("user", "old", None, None, None),
+                                         ("assistant", "😀" * 4096, None, None, None))
             snapshot = sink.visible_message_snapshot(cdp)
             self.assertTrue(snapshot["truncated"])
-            self.assertEqual(snapshot["messages"][0], {"role": "USER", "text": "old"})
+            self.assertEqual((snapshot["messages"][0]["role"], snapshot["messages"][0]["text"]),
+                             ("USER", "old"))
             self.assertEqual(len(snapshot["messages"][1]["text"].encode("utf-8")), 4096)
             self.assertLessEqual(
                 sum(len(item["text"].encode("utf-8")) for item in snapshot["messages"]),
                 8192,
             )
+
+    def test_snapshot_identity_stays_stable_while_complete_body_revision_changes(self):
+        with tempfile.TemporaryDirectory() as profile:
+            sink = bridge.NewConversationSink(SOURCE, Path(profile), 1, 1)
+            cdp = StructuralCdp(SOURCE)
+            raw_turn = "private-turn-key"
+            raw_unit = "private-unit-key"
+            cdp.snapshot = observed_rows(("assistant", "Working", raw_turn, raw_unit, None))
+            first = sink.visible_message_snapshot(cdp)
+            cdp.snapshot = observed_rows(("assistant", "Working step two", raw_turn, raw_unit, None))
+            second = sink.visible_message_snapshot(cdp)
+            prior, current = first["messages"][0], second["messages"][0]
+            for field in ("turnHash", "roleTurnHash", "messageHash"):
+                self.assertEqual(prior[field], current[field])
+                self.assertEqual(len(prior[field]), 64)
+            self.assertNotEqual(prior["revisionHash"], current["revisionHash"])
+            self.assertEqual(current["identityBasis"], "UNIT_KEY")
+            self.assertEqual(second["coverage"]["anchorStability"], "UNVERIFIED")
+            self.assertNotIn(raw_turn, json.dumps(second))
+            self.assertNotIn(raw_unit, json.dumps(second))
+            other_source = bridge.NewConversationSink(ISSUED, Path(profile), 1, 1)
+            self.assertNotEqual(other_source.visible_message_snapshot(cdp)["messages"][0]["messageHash"],
+                                current["messageHash"])
+
+    def test_snapshot_reports_uncertain_or_missing_identity_and_incomplete_revision(self):
+        with tempfile.TemporaryDirectory() as profile:
+            sink = bridge.NewConversationSink(SOURCE, Path(profile), 1, 1)
+            cdp = StructuralCdp(SOURCE)
+            cdp.snapshot = observed_rows(
+                ("user", "one", "turn-only-key", None, None),
+                ("assistant", "tail" * 1024, None, None, None),
+                nested=2, keyed=1, count=20,
+            )
+            cdp.snapshot[5][1][2] = False
+            cdp.snapshot[5][1][3] = 9000
+            result = sink.visible_message_snapshot(cdp)
+            uncertain, missing = result["messages"]
+            self.assertEqual(uncertain["identityBasis"], "ROLE_TURN_ONLY")
+            self.assertIsNotNone(uncertain["roleTurnHash"])
+            self.assertIsNone(uncertain["messageHash"])
+            self.assertEqual(missing["identityBasis"], "MISSING")
+            self.assertIsNone(missing["turnHash"])
+            self.assertIsNone(missing["revisionHash"])
+            self.assertFalse(missing["revisionComplete"])
+            self.assertEqual(missing["visibleUnits"], 9000)
+            self.assertTrue(result["truncated"])
+            self.assertEqual(result["coverage"]["omittedBeforeWindow"], 18)
+            self.assertEqual(result["coverage"]["nestedCollapsed"], 2)
+            self.assertEqual(result["coverage"]["keyedCollapsed"], 1)
+            self.assertEqual(result["coverage"]["identityMissing"], 1)
+            self.assertEqual(result["coverage"]["identityUncertain"], 1)
+            self.assertEqual(result["coverage"]["revisionIncomplete"], 1)
+
+    def test_snapshot_message_id_can_identify_unit_without_turn_key(self):
+        with tempfile.TemporaryDirectory() as profile:
+            sink = bridge.NewConversationSink(SOURCE, Path(profile), 1, 1)
+            cdp = StructuralCdp(SOURCE)
+            cdp.snapshot = observed_rows(("assistant", "answer", None, None, "private-message-id"))
+            item = sink.visible_message_snapshot(cdp)["messages"][0]
+            self.assertEqual(item["identityBasis"], "MESSAGE_ID")
+            self.assertIsNotNone(item["messageHash"])
+            self.assertIsNone(item["turnHash"])
 
     def test_explicit_snapshot_mode_never_types_or_submits(self):
         cdp = AttemptCdp()
@@ -344,10 +444,29 @@ class NewConversationTests(unittest.TestCase):
         self.assertEqual(cdp.sent, 0)
         self.assertTrue(emitted[-1]["snapshot"]["truncated"])
         self.assertTrue(emitted[-1]["snapshot"]["messages"][0]["text"])
+        self.assertFalse(emitted[-1]["snapshot"]["messages"][0]["textComplete"])
+        self.assertEqual(emitted[-1]["snapshot"]["coverage"]["textIncomplete"], 1)
         self.assertLessEqual(
             len(json.dumps(emitted[-1], separators=(",", ":")).encode("utf-8")) + 1,
             8192,
         )
+
+    def test_snapshot_frame_trim_reports_omitted_older_units(self):
+        cdp = AttemptCdp("many_snapshot")
+        sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
+        emitted = []
+        request = {"snapshot": True, "projectId": "project-one", "source": self.request()["source"]}
+        with patch.object(bridge, "NewConversationSink", AttemptSink), patch.object(
+            adapter, "emit", emitted.append
+        ):
+            adapter.source_snapshot(bridge, sb, request)
+        snapshot = emitted[-1]["snapshot"]
+        self.assertTrue(snapshot["truncated"])
+        self.assertLess(len(snapshot["messages"]), 12)
+        self.assertEqual(snapshot["coverage"]["returned"], len(snapshot["messages"]))
+        self.assertEqual(snapshot["coverage"]["omittedBeforeWindow"], 12 - len(snapshot["messages"]))
+        self.assertEqual(snapshot["coverage"]["identityMissing"], 0)
+        self.assertLessEqual(len(json.dumps(emitted[-1], separators=(",", ":")).encode("utf-8")) + 1, 8192)
 
     def test_wrong_source_fails_before_browser_navigation(self):
         request = self.request()

@@ -2115,14 +2115,24 @@ class NewConversationSink(CdpSink):
             raise Attention("BOOTSTRAP_TURN_QUERY_FAILED")
         return value[0], value[1], value[2]
 
-    @staticmethod
-    def visible_message_snapshot(cdp: Any) -> dict[str, Any]:
-        """Return only a bounded visible role transcript for an explicit private request."""
+    def visible_message_snapshot(self, cdp: Any) -> dict[str, Any]:
+        """Return bounded private text and qualified identities for visible role units.
+
+        DOM keys stay inside this process. A hash is an observation aid, not a
+        claim that ChatGPT will preserve that key across a future document.
+        """
         script = """(() => {
             const visible = element => {
                 const style = window.getComputedStyle(element);
                 return element.getClientRects().length > 0 &&
                     style.visibility !== 'hidden' && style.display !== 'none';
+            };
+            const role = node => node.getAttribute('data-message-author-role') || node.getAttribute('data-turn');
+            const anchor = (node, name) => {
+                const selector = '[' + name + ']';
+                const holder = node.closest(selector) || node.querySelector(selector);
+                const value = holder && holder.getAttribute(name);
+                return value && value.length <= 256 ? value : null;
             };
             const roles = Array.from(document.querySelectorAll(
                 "[data-message-author-role='user'], [data-message-author-role='assistant']"
@@ -2130,44 +2140,123 @@ class NewConversationSink(CdpSink):
             const articles = Array.from(document.querySelectorAll(
                 "article[data-turn='user'], article[data-turn='assistant']"
             )).filter(visible);
-            const nodes = roles.length ? roles : articles;
-            if (nodes.length > 1024) return ['invalid', []];
-            return [nodes.length > 16, nodes.slice(-16).map(node => {
-                const role = node.getAttribute('data-message-author-role') || node.getAttribute('data-turn');
-                const content = node.querySelector('[data-message-content], .whitespace-pre-wrap') || node;
-                const text = content.innerText || content.textContent || '';
-                return [role, String(text).slice(-4096)];
-            })];
+            const tier = roles.length ? 'AUTHOR_ROLE' : articles.length ? 'ARTICLE_ROLE' : 'NONE';
+            const candidates = roles.length ? roles : articles;
+            const candidateSet = new Set(candidates);
+            const nested = new Set();
+            for (const node of candidates) {
+                let parent = node.parentElement;
+                while (parent) {
+                    if (candidateSet.has(parent) && role(parent) === role(node)) nested.add(parent);
+                    parent = parent.parentElement;
+                }
+            }
+            const innermost = candidates.filter(node => !nested.has(node));
+            const keyed = new Map();
+            const rows = [];
+            let keyedCollapsed = 0;
+            for (const node of innermost) {
+                const unitKey = anchor(node, 'data-content-search-unit-key');
+                const messageId = anchor(node, 'data-chatgpt-selection-message-id');
+                const key = unitKey ? 'unit:' + role(node) + ':' + unitKey :
+                    messageId ? 'message:' + role(node) + ':' + messageId : null;
+                const content = node.querySelector('[data-message-content]') || node;
+                const text = String(content.innerText || content.textContent || '');
+                const row = [role(node), text.slice(-4096), text.length <= 4096,
+                    Math.min(text.length, 1000000), anchor(node, 'data-content-search-turn-key'),
+                    unitKey, messageId];
+                if (key && keyed.has(key)) {
+                    rows[keyed.get(key)] = null;
+                    keyedCollapsed++;
+                }
+                if (key) keyed.set(key, rows.length);
+                rows.push(row);
+            }
+            const unique = rows.filter(row => row !== null);
+            return [tier, Math.min(unique.length, 1024), unique.length > 1024,
+                Math.min(nested.size, 1024), Math.min(keyedCollapsed, 1024), unique.slice(-16)];
         })()"""
         try:
             value = CdpSink.cdp_value(cdp.evaluate(script))
         except Exception as error:
             raise Attention("SOURCE_SNAPSHOT_QUERY_FAILED") from error
-        if (not isinstance(value, list) or len(value) != 2 or
-                not isinstance(value[0], bool) or not isinstance(value[1], list) or
-                len(value[1]) > 16):
+        if (not isinstance(value, list) or len(value) != 6 or
+                value[0] not in {"AUTHOR_ROLE", "ARTICLE_ROLE", "NONE"} or
+                any(not isinstance(count, int) or isinstance(count, bool) or count < 0 or count > 1024
+                    for count in (value[1], value[3], value[4])) or
+                not isinstance(value[2], bool) or not isinstance(value[5], list) or
+                len(value[5]) > 16 or value[1] < len(value[5])):
             raise Attention("SOURCE_SNAPSHOT_QUERY_FAILED")
-        truncated = value[0]
+        truncated = value[2] or value[1] > len(value[5])
         remaining = 8192
         messages = []
-        for item in reversed(value[1]):
-            if (not isinstance(item, list) or len(item) != 2 or
+        source_salt = digest(self.url)
+        for item in reversed(value[5]):
+            if (not isinstance(item, list) or len(item) != 7 or
                     item[0] not in {"user", "assistant"} or
-                    not isinstance(item[1], str) or len(item[1]) > 4096):
+                    not isinstance(item[1], str) or len(item[1]) > 4096 or
+                    not isinstance(item[2], bool) or
+                    not isinstance(item[3], int) or isinstance(item[3], bool) or not 0 <= item[3] <= 1000000 or
+                    any(key is not None and (not isinstance(key, str) or not 0 < len(key) <= 256)
+                        for key in item[4:])):
                 raise Attention("SOURCE_SNAPSHOT_QUERY_FAILED")
             text_bytes = item[1].encode("utf-8")
             clipped = text_bytes[:min(4096, remaining)].decode("utf-8", errors="ignore")
-            if len(text_bytes) > len(clipped.encode("utf-8")):
+            text_complete = item[2] and len(text_bytes) == len(clipped.encode("utf-8"))
+            if not text_complete:
                 truncated = True
             if not clipped and text_bytes:
                 break
             remaining -= len(clipped.encode("utf-8"))
-            messages.append({"role": item[0].upper(), "text": clipped})
+            role_name = item[0].upper()
+            turn_key, unit_key, message_id = item[4:]
+            if unit_key:
+                identity_basis = "UNIT_KEY"
+                message_key = ("unit", unit_key)
+            elif message_id:
+                identity_basis = "MESSAGE_ID"
+                message_key = ("message", message_id)
+            elif turn_key:
+                identity_basis = "ROLE_TURN_ONLY"
+                message_key = None
+            else:
+                identity_basis = "MISSING"
+                message_key = None
+            messages.append({
+                "role": role_name,
+                "text": clipped,
+                "visibleUnits": item[3],
+                "textComplete": text_complete,
+                "turnHash": digest(f"catdesk-snapshot-turn-v1\0{source_salt}\0{turn_key}") if turn_key else None,
+                "roleTurnHash": digest(f"catdesk-snapshot-role-turn-v1\0{source_salt}\0{role_name}\0{turn_key}")
+                    if turn_key else None,
+                "messageHash": digest(f"catdesk-snapshot-message-v1\0{source_salt}\0{role_name}\0{message_key[0]}\0{message_key[1]}")
+                    if message_key else None,
+                "identityBasis": identity_basis,
+                "revisionHash": digest(f"catdesk-snapshot-revision-v1\0{source_salt}\0{item[1]}")
+                    if item[2] else None,
+                "revisionComplete": item[2],
+            })
             if remaining == 0:
                 truncated = True
                 break
         messages.reverse()
-        return {"messages": messages, "truncated": truncated}
+        omitted = max(0, value[1] - len(messages))
+        coverage = {
+            "selectorTier": value[0],
+            "visibleRoleCount": value[1],
+            "countOverflow": value[2],
+            "nestedCollapsed": value[3],
+            "keyedCollapsed": value[4],
+            "omittedBeforeWindow": omitted,
+            "returned": len(messages),
+            "identityMissing": sum(item["identityBasis"] == "MISSING" for item in messages),
+            "identityUncertain": sum(item["identityBasis"] == "ROLE_TURN_ONLY" for item in messages),
+            "revisionIncomplete": sum(not item["revisionComplete"] for item in messages),
+            "textIncomplete": sum(not item["textComplete"] for item in messages),
+            "anchorStability": "UNVERIFIED",
+        }
+        return {"messages": messages, "truncated": truncated or omitted > 0, "coverage": coverage}
 
     def require_usable_latest_assistant(self, cdp: Any, *, source: bool) -> None:
         """Fail closed if a source or freshly reloaded destination lost its answer."""
