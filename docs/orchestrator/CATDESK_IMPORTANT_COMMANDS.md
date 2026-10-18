@@ -1,5 +1,42 @@
 # CatDesk — Important Command Reference
 
+## October 17 Web observation and rollover driver (source; installed acceptance pending)
+
+Use the central control workspace and a verified paired project/Wake target:
+
+```text
+catdesk operator web status
+catdesk operator web context configure --project-id PROJECT --input-file POLICY_JSON
+catdesk operator web auto tick --project-id PROJECT
+catdesk operator web rollover status --project-id PROJECT
+```
+
+The policy adds `automaticObservationEnabled` (default false) for periodic
+read-only context capture. `automaticRolloverEnabled` also enables observation.
+The existing budget, headroom, unknown-source reserve and optional
+`incompleteHistoryRollover` settings retain their meanings. Configure each
+project independently; recent excerpts still cannot prove whole-chat coverage.
+
+The production service and non-isolated headless MCP host drive eligible
+projects every 120 seconds, with independent project workers and a shared
+browser-session lease. A stopped or paused Wake host does not start browser
+work. The driver captures context, requests and collects an exact completed
+task handoff, submits a replacement, saves its observed URL and USER receipt,
+then observes its answer before binding and queuing continuation. Central Web
+status includes each project's durable scheduler and rollover state.
+
+`RESPONSE_PENDING` means the replacement receipt is saved; a later tick only
+observes that conversation. `SUBMITTING` without a receipt is an uncertain
+outcome and never permits automatic resubmission. Intervening source work or
+target divergence requires reconciliation with the saved receipt and queue
+preserved. An exact saved Wake-first transition can finish its registry update
+only while the handoff, native owner and destination still match. Legacy/manual
+handoff files without a collected source witness report
+`SOURCE_WITNESS_REQUIRED` to the driver; they remain explicit operator workflows.
+These commands do not release or pause an existing native Codex
+conversation. Installed package approval, target alignment and live acceptance
+remain separate requirements; see `docs/OCTOBER_2026_MVP_ACCEPTANCE.md`.
+
 ## October 16 read-only workspace candidate and Python v2 verification
 
 The source-built CLI accepts `catdesk.exe codex queue workspace-bind-preflight --project-id <registered-id> --workspace <exact-old-root> --new-workspace <absolute-candidate-root> --expected-old-head <lowercase-Git-SHA> --expected-new-head <lowercase-Git-SHA> --expected-binding-sha256 <lowercase-hash> --expected-thread-id <bound-UUID>`. It checks a point-in-time replacement candidate and always reports `BLOCKED_NATIVE_WRITER_RELEASE_UNPROVED`, `registrationMutation:false`, and `launchAuthorized:false` when its prerequisites pass. Ignored entries are counted, not content checked. This command cannot rebind a project or release its native thread writer. The currently registered Bug Bounty root still has `rust_full`, so its Python worktree cannot pass this profile check until an independently safe profile transition; no live transition was made.

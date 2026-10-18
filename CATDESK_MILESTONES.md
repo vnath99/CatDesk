@@ -1,3 +1,24 @@
+## 2026-10-17 — automatic Web observation and staged rollover (TESTED_LOCAL_SOURCE; MVP PARTIAL)
+
+The periodic per-project driver now connects context capture, exact handoff
+request/collection, cooperative replacement submission and continuation.
+`RESPONSE_PENDING` saves the actual new URL and USER receipt before read-only
+response polling. Source event fingerprints and a fresh handoff read protect
+automatic binding; guarded compensation preserves work entering a staged
+generation. Current ChatGPT semantic message layout is supported. Existing
+native project conversations retain their work and can continue. Source
+`270bba6` passed 46 focused Web tests, the full Wake suite (288 passed/three
+ignored), 56 focused Python tests, strict root/Wake Clippy, formatting and build.
+Hashes and commands: `docs/acceptance/web_auto_tests_20261017.json`.
+
+The live durability diagnostic received its ACK, then lost the assistant body
+after reload. Exact live USER/anchor probes succeeded; full snapshot/completion
+probes have offline fixture evidence only. Installed dev84 remains stopped,
+project/Wake targets are not aligned, and reviewed installed/live three-project
+rollover acceptance remains open. See the current checkpoint in
+`docs/OCTOBER_2026_MVP_ACCEPTANCE.md` and its test manifest. This supersedes the
+older source work list below; it does not claim the October 31 MVP is complete.
+
 ## 2026-10-17 — cooperative Web scheduling and generated handoffs (TESTED_LOCAL_SOURCE; MVP PARTIAL)
 
 Checkpoint `e97d5f0` implements fair per-project delivery slices, durable pending

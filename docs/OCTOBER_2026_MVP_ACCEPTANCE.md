@@ -1,5 +1,96 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 17 automatic Web driver checkpoint (TESTED_LOCAL_SOURCE; LIVE PARTIAL)
+
+Source `270bba669270f94c65b6305892769d0dafdd4508`, tree
+`a8e79fa327db33e06710f0c6a1a722f5d4b28145`. Verification: 46 focused CatDesk Web
+tests (30 operator, 16 context/MCP), full Wake suite 288 passed/three ignored,
+and 56 focused Python checks (38 adapter/bootstrap, six current-DOM, 12 response)
+passed. The Wake installer-authority fixture initially failed in the sandbox;
+the full Wake rerun with normal Windows process-handle access passed. Strict
+all-target/all-feature root and Wake Clippy, formatting, diff checks and the
+all-feature CatDesk build passed. Root lint findings were corrected before the
+final rerun. Full CatDesk and full legacy Python suites were not rerun; their
+earlier incomplete runs remain incomplete.
+
+Exact commands, source/log/evidence hashes and limitations are recorded in
+`docs/acceptance/web_auto_tests_20261017.json`. Debug image SHA-256:
+`D4C2157843D6D72AA310DE93B9C97F2A379DC88CBF3CA1EE4179F3D0EF5A939A`.
+Private logs and before/after screenshots are under
+`CatDesk_v2/checkpoints/web-auto-oct17`. No remote CI pass is claimed by this
+source manifest. Authenticated pre-push GitHub reads showed Actions enabled
+and the workflow active; the latest visible run was still the October 14
+success `38646210548` at `4e9a2e2`. This is distinct from the historical HTTP 422
+report and the absent `workflow_dispatch` trigger. No dispatch or settings
+change was attempted.
+
+The current source connects per-project context capture, handoff collection and
+rollover to a periodic production-service driver. Existing project Codex chats
+retain their work and do not need to be paused. BYOVD received a coordination
+correction: stale Git preconditions in old queue job prompts do not freeze its
+native checkout under the user's later development instruction. Those old
+queue jobs remain inactive, avoiding duplicate execution. Its existing native
+chat then verified the advanced checkout and passed 29 public static-report
+regressions, preserving its untracked helper; no other project's checkout was
+changed by this CatDesk source task.
+
+Implemented behavior:
+
+- A 120-second driver schedules up to eight independent project workers and
+  reports durable per-project status. `automaticObservationEnabled` and
+  `automaticRolloverEnabled` are configured per project; both default false.
+  Stopped/paused Wake prevents browser actions. Busy browser sessions are
+  retryable and do not change another project's target or task state.
+- WakeHost and operator browser tasks share one bounded browser-session lease.
+  The running host must prove current store ownership and the new cooperative
+  protocol. The replacement's issued URL and fresh exact USER receipt are saved
+  as `RESPONSE_PENDING`; response probes only read that conversation. A crash
+  with an unknown `SUBMITTING` outcome never permits a second submission.
+- Automatic handoffs retain a stable source event-ID fingerprint, checked
+  around collection and atomically with target mutation. A fresh source read
+  before binding must still show the exact handoff request and saved answer.
+  Pending or intervening work leaves the receipt and queue intact for
+  reconciliation. Rollback refuses to abandon a staged generation that has
+  acquired work. Other projects remain schedulable.
+- A saved, proved Wake-first update can finish the interrupted registry write
+  automatically. It must retain the exact completed receipt, adjacent target,
+  old registry binding, handoff request and native owner/workspace. These are
+  rechecked before binding; unrelated divergence requires reconciliation.
+- Current ChatGPT semantic message units are supported without depending on
+  the old author-role attributes. USER Copy controls and code-block Copy
+  controls cannot prove assistant completion. Load errors and empty bodies
+  remain incomplete.
+
+### Controlled browser result and actual live gates
+
+The existing replacement canary received one distinct durability diagnostic
+and returned `CATDESK-DURABILITY-20261017-1 ACK.`. After one reload, the USER turn
+and URL persisted, but the assistant showed `This response couldn’t load`.
+No resend or regeneration followed. Exact production USER, turn-anchor and
+role-count probes ran through CUA: two USER messages, anchor `ready/1/1`, and
+role counts `2/2/6`. The count includes structural containers and is used only
+to detect a populated home page. The full snapshot/completion expressions
+could not execute through the available CUA DOM surface (`cloneNode` is not
+exposed; raw CDP evaluation was unavailable). Those expressions passed offline
+DOM fixtures, and their source bytes match the preserved probe hashes. This
+does not establish live completion or installed Wake acceptance.
+
+Normal-host readback still selects `1.0.0-dev.84-02431feba5ed-1c6bcdfcedf0`,
+desired `STOPPED`, with no observed WakeHost process. Its sole CatDesk target
+differs from the central registry. BYOVD and Bug Bounty have registered Web
+URLs but no independent Wake targets; Wake2 has no Web URL. Normal installation
+still requires the existing package/broker approval and exact Windows CI;
+there is no supported full live bypass in the source-only developer lane.
+
+Manual-file handoffs remain an explicit operator workflow; automatic execution
+requires the collected source witness. A human can still type in the old chat
+after the final snapshot because ChatGPT UI activity cannot be locked atomically
+with the Wake store. The controlled rollover procedure must keep that source
+conversation quiescent. Automatic refresh of a changed handoff remains a
+reconciliation step. Three independently progressing live Web projects, actual
+paired authority, durable rollover/continuation and continued native sessions
+are still required for the October 31 milestone. Overall acceptance is PARTIAL.
+
 ## October 17 cooperative Web progress and handoff checkpoint (TESTED_LOCAL_SOURCE; MVP PARTIAL)
 
 Source `e97d5f0847104ea4a6fe7db9d0526bab84257782`, tree

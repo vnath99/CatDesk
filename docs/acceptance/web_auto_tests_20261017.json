@@ -1,0 +1,235 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "270bba669270f94c65b6305892769d0dafdd4508",
+  "sourceTree": "a8e79fa327db33e06710f0c6a1a722f5d4b28145",
+  "localDate": "2026-10-17",
+  "recordedUtc": "2026-10-18T02:39:47.0836160Z",
+  "classification": "TESTED_LOCAL_SOURCE_LIVE_PARTIAL",
+  "debugImageSha256": "D4C2157843D6D72AA310DE93B9C97F2A379DC88CBF3CA1EE4179F3D0EF5A939A",
+  "wakeAllTests": {
+    "passed": 288,
+    "failed": 0,
+    "ignored": 3
+  },
+  "wakeInitialSandboxFailure": "INSTALLER_AUTHORITY_OBJECT_UNAVAILABLE_NORMAL_ACCESS_RERUN_PASSED",
+  "focusedOperatorTests": {
+    "passed": 30,
+    "failed": 0,
+    "ignored": 0
+  },
+  "focusedContextAndMcpTests": {
+    "passed": 16,
+    "failed": 0,
+    "ignored": 0
+  },
+  "pythonTests": {
+    "wakeAdapterAndBootstrap": 38,
+    "currentDom": 6,
+    "bridgeResponse": 12
+  },
+  "clippy": "PASS_ROOT_AND_WAKE_ALL_TARGET_ALL_FEATURE_WARNINGS_DENIED",
+  "format": "PASS_ROOT_AND_WAKE",
+  "build": "PASS_CATDESK_ALL_FEATURES",
+  "fullCatDeskSuite": "NOT_RERUN_PRIOR_INCOMPLETE_LIFECYCLE_RUN_REMAINS_INCOMPLETE",
+  "fullLegacyPythonSuite": "NOT_RERUN_PRIOR_INCOMPLETE_RUN_REMAINS_INCOMPLETE",
+  "remoteCi": "NOT_YET_ACCEPTED",
+  "installedActivationPerformed": false,
+  "productionWakeBindingChanged": false,
+  "liveRolloverAccepted": false,
+  "installedPointer": "1.0.0-dev.84-02431feba5ed-1c6bcdfcedf0",
+  "installedDesired": "STOPPED",
+  "liveBrowser": {
+    "diagnosticAckObserved": true,
+    "reloadResult": "ASSISTANT_RESPONSE_LOAD_ERROR",
+    "userMessages": 2,
+    "anchor": [
+      "ready",
+      1,
+      1
+    ],
+    "roleCounts": [
+      2,
+      2,
+      6
+    ],
+    "snapshotProbe": "OFFLINE_FIXTURE_ONLY_CUA_CLONENODE_UNAVAILABLE",
+    "completionProbe": "OFFLINE_FIXTURE_ONLY_RAW_CDP_UNAVAILABLE",
+    "fiveProbeByteHashes": "MATCH_FINAL_SOURCE",
+    "evidence": [
+      {
+        "name": "users.js",
+        "sha256": "B742E4915D9EEC4E2E49E0DA4E3CC98F8EC8A9D62CE6E99C98FE6D1436014145"
+      },
+      {
+        "name": "anchor.js",
+        "sha256": "5838B2E622F08824A6F4EF68355CCBDEAFE0BBC1CF037A847D9C9591890EB025"
+      },
+      {
+        "name": "counts.js",
+        "sha256": "F4D726FBCB1EF9E29DA9DE04EC5F7BE76FC2E5E0219C10181E8CF728E89061AE"
+      },
+      {
+        "name": "snapshot.js",
+        "sha256": "D9D5505798F2BCE71F259AF03EE3873203D7A74B08212A7C15708AB43CFB11FF"
+      },
+      {
+        "name": "response.js",
+        "sha256": "B7800BAC598E7BE6F2BC8D4771169DB0CBD1F37E8A227C9D1EEC0F627BA65737"
+      },
+      {
+        "name": "live-source-probe-results.json",
+        "sha256": "02024A13018D195DC780517F48C76E2730155E8F02FFEC474F79E664128EE92D"
+      },
+      {
+        "name": "diagnostic-before-reload.jpg",
+        "sha256": "C500A00AEE0EC678DFEFE8B8A385B2B9887971F1E6717B76BFF18467EC8E9BD6"
+      },
+      {
+        "name": "diagnostic-after-reload.jpg",
+        "sha256": "67485F89F2E9CEE34B650605384F47845F0E126FD84AECE3111202A60CF6DAA2"
+      }
+    ]
+  },
+  "limitations": [
+    "INSTALLED_PACKAGE_AND_TARGET_ALIGNMENT_OPEN",
+    "THREE_LIVE_PROJECTS_NOT_ACCEPTED",
+    "HUMAN_SOURCE_TURNS_CANNOT_BE_ATOMICALLY_LOCKED_WITH_WAKE_CAS",
+    "MANUAL_HANDOFF_FILES_ARE_NOT_AUTOMATIC_SOURCE_WITNESSES",
+    "CHANGED_HANDOFF_REQUIRES_RECONCILIATION"
+  ],
+  "sourceFiles": [
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256": "32CEC9C031B3E52412503BA661004947732732BDD7F37FAD0E7D6AC8479B9F3B"
+    },
+    {
+      "path": "src/binagotchy_cli.rs",
+      "sha256": "3BD2BB8C6B39996B71B69793076A715E37451172E3E4E51F355B796213F96C49"
+    },
+    {
+      "path": "src/main.rs",
+      "sha256": "D18A2886B0BF1BCC78E113C8BFDF9220E656F4A30ADB0D4476B0DDD247228BA0"
+    },
+    {
+      "path": "src/mcp.rs",
+      "sha256": "8163028BCBC927044B12797D5C1D020E971D469F3F993EA7648664800E60928E"
+    },
+    {
+      "path": "src/operator_facade.rs",
+      "sha256": "A2CCE5034365BD007D9176164A06F2377685F61273225AB9728BEECF87C4C308"
+    },
+    {
+      "path": "src/operator_web_auto.rs",
+      "sha256": "40A642A744BBE0DDAB1E7E31A4F01072586AADB7F3E6F3927C7DA9109767DB6B"
+    },
+    {
+      "path": "src/operator_web_cli.rs",
+      "sha256": "EA0F4933D91FF4EDAE0792E24FA1420D249FC5762CCCC8E39E2F34A4A16D2B24"
+    },
+    {
+      "path": "src/operator_web_observe.rs",
+      "sha256": "A23B1A1217EAD3A0380CBD6E98912D841BDC3E7A4A92077111E8FEF2D02D4212"
+    },
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "B15EB3F39B48BDCF530B312C4A62E6BBC75D6D073089593DB871645FDC4BD7C5"
+    },
+    {
+      "path": "src/web_conversation_context.rs",
+      "sha256": "CAA0B10B6E974A43B8DA239B7316EAF6756B33D0D600129D7898A425824D3D52"
+    },
+    {
+      "path": "src/windows_gui.rs",
+      "sha256": "D1A64D70298B8B2139C9D9086664BE55C90D14495E369F31DC38555C6C536DE3"
+    },
+    {
+      "path": "tests/test_wake_bridge_current_dom.py",
+      "sha256": "A75F0B375DDDD864566B8CB65EE06FA9AB61C8BCE4BBE4F95CC33F4597543260"
+    },
+    {
+      "path": "wake/adapter.py",
+      "sha256": "8DF4693C08E9FC5D99DC04EC35D7EC08284B247186344073FA3FFB82B4E8D023"
+    },
+    {
+      "path": "wake/src/install_authority.rs",
+      "sha256": "D57050CBCA31B0E4E0A38FDD6F170AD46FCDAEA0BF7ED2C20EDB9C78449B5102"
+    },
+    {
+      "path": "wake/src/runtime.rs",
+      "sha256": "AB20D346A4949BA99C2E3BD7C6069EDE67A9FECDEFEBBADD8F356A6821D01862"
+    },
+    {
+      "path": "wake/src/store.rs",
+      "sha256": "48DB8B2F45BB149D244CCC06EA0A869A7CCC81446DC099AAEE592FB7AF8B4A5D"
+    },
+    {
+      "path": "wake/tests/test_adapter.py",
+      "sha256": "479850932ADFBDA5F5321543E67B5E59ED954C60E356A7386D3A583E68AA9CEF"
+    },
+    {
+      "path": "wake/tests/test_new_conversation.py",
+      "sha256": "B7177900987F89029A76AEC5B09F21CD95424AD1712C1B7F02F0D751AA9B9D01"
+    }
+  ],
+  "logs": [
+    {
+      "name": "wake-all-tests.log",
+      "sha256": "FC48F33282C1E0405A1FA3F3490BAFF910FC32C6686750E1955E210BADAB0D44"
+    },
+    {
+      "name": "wake-all-tests-normal.log",
+      "sha256": "FACDE7239E320C7F93C440C476537EAD829749B0329E594C8371FD373743543F"
+    },
+    {
+      "name": "wake-clippy.log",
+      "sha256": "743B9A6160BB8F0FE46F772B009203C1FA868D9FB7CA43EE372282D57DF936DD"
+    },
+    {
+      "name": "wake-python-tests.log",
+      "sha256": "C0C42EF220655FD006F37ADC78777C1F3FBCF5953D6098300259C2B2FD168C23"
+    },
+    {
+      "name": "dom-tests.log",
+      "sha256": "61F1FC728AF00432E293694B99EDFFC21D82F0BBBF1AB5E6FDF18471BE769BF3"
+    },
+    {
+      "name": "bridge-response-tests.log",
+      "sha256": "9E69BA2EB3ABB6811D0E4DECFC335078DE2C52474E23DE35B4FFA01197A026AA"
+    },
+    {
+      "name": "root-web-tests.log",
+      "sha256": "41D514C53FF8DADC3F28230EE823585B307E3EB09EBEB3A5C910C8CB33AA9B3C"
+    },
+    {
+      "name": "root-operator-tests.log",
+      "sha256": "3B256485E1F93AEA3BD430100D0D1CBAA2A4BD5B824EFCED74211723304CD10B"
+    },
+    {
+      "name": "root-clippy.log",
+      "sha256": "A5C7A82313AC974201A68051769D710BC4E181108A7EE199D6C906591F8D855B"
+    },
+    {
+      "name": "root-build.log",
+      "sha256": "19D4834DBD8AFB4CEA9642AB8F740131A2451C2F6EB7DF15E524F53D8CCA4FE0"
+    },
+    {
+      "name": "format.log",
+      "sha256": "0194F214FD692AD962DF2009EC1D9B5D407553D88D25DE740C064E9A6AE30BB7"
+    },
+    {
+      "name": "probe-byte-verification.log",
+      "sha256": "C0F288C3C92BFEF5BB89A38F4683DDA95DCF30FCA8387C9BC14FCE6111993267"
+    }
+  ],
+  "reproductionCommands": {
+    "wake": "cargo test --manifest-path wake/Cargo.toml --locked --offline --all-features",
+    "operator": "cargo test --locked --offline --all-features --bin catdesk operator_facade::web -- --test-threads=1",
+    "contextAndMcp": "cargo test --locked --offline --all-features --bin catdesk web_ -- --test-threads=1",
+    "pythonWake": "python -B -m unittest discover -s wake/tests -p test_*.py -q",
+    "pythonDom": "python -B -m unittest discover -s tests -p test_wake_bridge_current_dom.py -q",
+    "pythonResponse": "python -B -m unittest discover -s tests -p test_wake_bridge.py -k response -q",
+    "rootClippy": "cargo clippy --locked --offline --all-targets --all-features -- -D warnings",
+    "wakeClippy": "cargo clippy --manifest-path wake/Cargo.toml --locked --offline --all-targets --all-features -- -D warnings",
+    "build": "cargo build --locked --offline --all-features --bin catdesk"
+  }
+}

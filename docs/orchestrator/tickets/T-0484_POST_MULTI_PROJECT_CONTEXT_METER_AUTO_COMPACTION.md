@@ -7,6 +7,40 @@
 
 ## Operator requirements
 
+### October 17 running-host implementation update
+
+The new source driver connects periodic per-project context capture, handoff
+request/collection and rollover progression to the production service and
+non-isolated headless MCP host. Observation is explicitly enabled per project;
+rollover remains separately configurable. A 120-second cadence and up to eight
+independent project workers share short browser sessions. Stopped/paused Wake
+does not start a browser action. The installed host must support the shared
+browser-session protocol and prove current store ownership.
+
+Replacement submission now saves `RESPONSE_PENDING` with the actual issued URL
+and fresh-document exact USER receipt. Subsequent probes are read-only and
+never submit the handoff again. `SUBMITTING` without a receipt remains an
+unknown outcome. New source activity must be reconciled before changing a
+target; pending evidence and events are preserved. `operator web auto tick`
+exercises one driver step and central Web status includes durable per-project
+progress. This supersedes the earlier source descriptions below that leave
+periodic integration and cooperative bootstrap outstanding.
+
+Current ChatGPT UI support recognizes semantic USER/ASSISTANT units and isolates
+message text from Copy controls. Completed assistant content remains mandatory.
+The controlled replacement diagnostic produced its requested ACK, but its
+assistant body showed `This response couldn’t load` after reload. Exact live
+USER and turn-anchor probes succeeded; the full snapshot/completion probes
+could not run through the available read-only CUA DOM surface. Offline DOM
+fixtures cover those probes. This is partial browser evidence, not installed
+Wake delivery or completed user-facing rollover acceptance.
+
+Installed dev84 remains stopped, with only a CatDesk Wake target that differs
+from the central registry. BYOVD and Bug Bounty have registered Web URLs but no
+independent Wake targets; Wake2 has no Web URL. Reviewed package installation,
+authority alignment, three live projects and a durable real rollover remain
+required. See the current acceptance ledger for exact checks and limitations.
+
 ### October 17 priority and execution correction
 
 The primary user capability is autonomous work across independent ChatGPT Web
