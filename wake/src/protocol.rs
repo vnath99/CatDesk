@@ -14,17 +14,52 @@ pub fn valid_id(value: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
 }
 
-/// Accept only an exact conversation URL, including the reviewed uppercase WEB:
-/// compatibility spelling. No redirects, query strings, ports or URL credentials.
+/// Accept only an exact conversation URL, including a ChatGPT Project route
+/// and the reviewed uppercase WEB: conversation compatibility spelling. No
+/// redirects, query strings, ports or URL credentials.
 pub fn validate_target(url: &str) -> Result<()> {
-    let id = url
-        .strip_prefix("https://chatgpt.com/c/")
+    let path = url
+        .strip_prefix("https://chatgpt.com/")
+        .or_else(|| url.strip_prefix("https://chat.openai.com/"))
         .ok_or("TARGET_INVALID_URL")?;
-    let suffix = id.strip_prefix("WEB:").unwrap_or(id);
-    if url.len() > 512 || id.len() > 200 || !valid_id(suffix) {
+    let parts = path.split('/').collect::<Vec<_>>();
+    let conversation = match parts.as_slice() {
+        ["c", conversation] => *conversation,
+        ["g", project, "c", conversation] if valid_id(project) => *conversation,
+        _ => return Err("TARGET_INVALID_URL".into()),
+    };
+    let suffix = conversation.strip_prefix("WEB:").unwrap_or(conversation);
+    if url.len() > 512 || conversation.len() > 200 || !valid_id(suffix) {
         return Err("TARGET_INVALID_URL".into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod target_tests {
+    use super::validate_target;
+
+    #[test]
+    fn project_conversation_routes_are_exact_and_credential_free() {
+        for url in [
+            "https://chatgpt.com/c/turn-1",
+            "https://chatgpt.com/g/g-p-123/c/turn-1",
+            "https://chat.openai.com/g/g-p-123/c/WEB:turn-1",
+        ] {
+            assert!(validate_target(url).is_ok(), "{url}");
+        }
+        for url in [
+            "https://chatgpt.com/g/project/c/",
+            "https://chatgpt.com/g/project/c/turn-1/",
+            "https://chatgpt.com/g/project/c/turn-1?query=1",
+            "https://chatgpt.com/g/WEB:project/c/turn-1",
+            "https://user@chatgpt.com/g/project/c/turn-1",
+            "https://chatgpt.com:443/g/project/c/turn-1",
+            "https://other.example/g/project/c/turn-1",
+        ] {
+            assert!(validate_target(url).is_err(), "{url}");
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

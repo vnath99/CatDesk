@@ -731,6 +731,7 @@ impl AutonomousSupervisorV1 {
                     codex_thread_id: None,
                     chatgpt_target_url: None,
                     chatgpt_target_sha256: None,
+                    chatgpt_target_history: Vec::new(),
                 })
                 .map_err(|_| "project registration was rejected".to_string())?;
         }
@@ -761,6 +762,9 @@ impl AutonomousSupervisorV1 {
     /// intentionally not a general project patch: only the reviewed target
     /// CAS fields are accepted and all thread/workspace/profile fields fail.
     fn project_registry_bind_chat_target(&self, args: &Value) -> Result<Value, String> {
+        if crate::wake_protocol_client::selected(&self.workspace) {
+            return Err("paired project Wake target binding is required".into());
+        }
         let object = args
             .as_object()
             .ok_or_else(|| "project registry binding arguments are invalid".to_string())?;
@@ -1017,6 +1021,9 @@ impl AutonomousSupervisorV1 {
         conversation_url: &str,
         expected: &str,
     ) -> Result<Value, String> {
+        if crate::wake_protocol_client::selected(&self.workspace) {
+            return Err("paired project Wake target binding is required".into());
+        }
         validate_cached_conversation_url(conversation_url)?;
         let project = self
             .project_registry()?
@@ -1030,6 +1037,9 @@ impl AutonomousSupervisorV1 {
         project_id: &str,
         conversation_url: &str,
     ) -> Result<Value, String> {
+        if crate::wake_protocol_client::selected(&self.workspace) {
+            return Err("paired project Wake target binding is required".into());
+        }
         validate_cached_conversation_url(conversation_url)?;
         let project = self
             .project_registry()?
@@ -4152,6 +4162,7 @@ mod tests {
                 codex_thread_id: None,
                 chatgpt_target_url: None,
                 chatgpt_target_sha256: None,
+                chatgpt_target_history: Vec::new(),
             })
             .expect("external project");
         let preflight = store
@@ -5188,6 +5199,22 @@ mod tests {
             paired_target["required"],
             json!(["projectId", "decision", "expectedSha256"])
         );
+        std::fs::create_dir_all(root.join(".catdesk/wake-bridge"))
+            .expect("independent owner directory");
+        std::fs::write(
+            root.join(".catdesk/wake-bridge/owner.json"),
+            br#"{"schemaVersion":1,"owner":"independent_v1"}"#,
+        )
+        .expect("independent owner selector");
+        assert!(
+            handle_tool(
+                "autonomy_project_registry_bind",
+                json!({"projectId":"catdesk","conversationUrl":"https://chatgpt.com/c/other","expectedCurrentTargetSha256":digest}),
+                &root,
+            )
+            .is_err(),
+            "registry-only target changes must stop once independent Wake owns delivery"
+        );
     }
 
     #[test]
@@ -5222,6 +5249,7 @@ mod tests {
                 codex_thread_id: Some("thread-sibling-1".into()),
                 chatgpt_target_url: None,
                 chatgpt_target_sha256: None,
+                chatgpt_target_history: Vec::new(),
             })
             .expect("sibling registration");
 

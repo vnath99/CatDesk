@@ -1500,6 +1500,7 @@ mod tests {
             codex_thread_id: Some(Uuid::new_v4().to_string()),
             chatgpt_target_url: None,
             chatgpt_target_sha256: None,
+            chatgpt_target_history: Vec::new(),
         };
         let workspace = project.workspace.to_str().expect("Unicode fixture");
         assert_eq!(
@@ -1552,6 +1553,7 @@ mod tests {
             codex_thread_id: None,
             chatgpt_target_url: None,
             chatgpt_target_sha256: None,
+            chatgpt_target_history: Vec::new(),
         };
         let blockers = (0..20)
             .map(|index| {
@@ -1661,6 +1663,7 @@ mod tests {
             codex_thread_id: Some(Uuid::new_v4().to_string()),
             chatgpt_target_url: Some(target.into()),
             chatgpt_target_sha256: Some(project_chat_target_digest(target)),
+            chatgpt_target_history: Vec::new(),
         };
         let registry = AutonomousProjectRegistryV1 {
             schema_version: PROJECT_REGISTRY_SCHEMA_VERSION,
@@ -1675,6 +1678,7 @@ mod tests {
                     codex_thread_id: Some(Uuid::new_v4().to_string()),
                     chatgpt_target_url: None,
                     chatgpt_target_sha256: None,
+                    chatgpt_target_history: Vec::new(),
                 },
                 project.clone(),
             ],
@@ -1777,6 +1781,7 @@ mod tests {
             codex_thread_id: Some(Uuid::new_v4().to_string()),
             chatgpt_target_url: None,
             chatgpt_target_sha256: None,
+            chatgpt_target_history: Vec::new(),
         };
         let registry = AutonomousProjectRegistryV1 {
             schema_version: PROJECT_REGISTRY_SCHEMA_VERSION,
@@ -1814,6 +1819,7 @@ mod tests {
                 codex_thread_id: Some("secret-thread-id".into()),
                 chatgpt_target_url: Some(target.into()),
                 chatgpt_target_sha256: Some(project_chat_target_digest(target)),
+                chatgpt_target_history: Vec::new(),
             }],
         };
         fs::write(
@@ -1846,6 +1852,7 @@ mod tests {
             codex_thread_id: None,
             chatgpt_target_url: None,
             chatgpt_target_sha256: None,
+            chatgpt_target_history: Vec::new(),
         };
         fs::write(session.join("state.json"), br#"{"schemaVersion":1,"sessionId":"session-one","state":"QUEUED","currentTaskId":"task-one","active":true}"#)
             .expect("state fixture");
@@ -1905,6 +1912,7 @@ mod tests {
             codex_thread_id: None,
             chatgpt_target_url: None,
             chatgpt_target_sha256: None,
+            chatgpt_target_history: Vec::new(),
         };
         fs::write(root.join(".catdesk"), b"not a directory").expect("nondirectory parent");
         assert_eq!(
@@ -1959,6 +1967,7 @@ mod tests {
                 codex_thread_id: None,
                 chatgpt_target_url: None,
                 chatgpt_target_sha256: None,
+                chatgpt_target_history: Vec::new(),
             }],
         };
         assert_eq!(

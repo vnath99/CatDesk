@@ -5459,6 +5459,7 @@ mod tests {
             verification_profile: "rust_full".into(),
             codex_thread_id: Some(Uuid::new_v4().to_string()),
             chatgpt_target_sha256: Some(project_chat_target_digest(&target)),
+            chatgpt_target_history: Vec::new(),
             chatgpt_target_url: Some(target),
         }
     }

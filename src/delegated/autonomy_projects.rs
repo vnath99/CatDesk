@@ -25,6 +25,7 @@ const MAX_PROJECT_REGISTRY_BYTES: u64 = 1024 * 1024;
 const MAX_SCHEDULER_LEASE_BYTES: u64 = 128 * 1024;
 const MAX_SCHEDULER_CURSOR_BYTES: u64 = 4 * 1024;
 const MAX_SCHEDULER_LEASES: usize = 128;
+const MAX_PROJECT_CHAT_TARGET_HISTORY: usize = 64;
 
 fn redirected_entry(metadata: &fs::Metadata) -> bool {
     if metadata.file_type().is_symlink() {
@@ -128,6 +129,8 @@ pub struct AutonomousProjectV1 {
     pub chatgpt_target_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub chatgpt_target_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chatgpt_target_history: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -769,6 +772,7 @@ impl AutonomousProjectRegistryStoreV1 {
             codex_thread_id: Some(preflight.evidence.codex_thread_id.clone()),
             chatgpt_target_url: None,
             chatgpt_target_sha256: None,
+            chatgpt_target_history: Vec::new(),
         };
         registry.projects.push(project.clone());
         registry
@@ -1092,6 +1096,14 @@ impl AutonomousProjectRegistryStoreV1 {
             ));
         }
         before_commit()?;
+        if project.chatgpt_target_url.as_deref() != Some(target_url.as_str()) {
+            if let Some(previous) = project.chatgpt_target_url.take() {
+                project.chatgpt_target_history.push(previous);
+                if project.chatgpt_target_history.len() > MAX_PROJECT_CHAT_TARGET_HISTORY {
+                    project.chatgpt_target_history.remove(0);
+                }
+            }
+        }
         project.chatgpt_target_url = Some(target_url);
         project.chatgpt_target_sha256 = Some(target_sha256);
         let bound = project.clone();
@@ -1754,6 +1766,24 @@ fn validate_registry(registry: &AutonomousProjectRegistryV1) -> Result<(), Runti
                 "project registry workspace or Codex thread binding is not unique".into(),
             ));
         }
+        let conversation_ids = project
+            .chatgpt_target_url
+            .iter()
+            .chain(project.chatgpt_target_history.iter())
+            .filter_map(|url| url.rsplit('/').next())
+            .collect::<Vec<_>>();
+        if registry.projects.iter().skip(index + 1).any(|other| {
+            other
+                .chatgpt_target_url
+                .iter()
+                .chain(other.chatgpt_target_history.iter())
+                .filter_map(|url| url.rsplit('/').next())
+                .any(|id| conversation_ids.contains(&id))
+        }) {
+            return Err(RuntimeError::Validation(
+                "project ChatGPT conversations must be exclusive".into(),
+            ));
+        }
     }
     Ok(())
 }
@@ -1782,6 +1812,16 @@ fn validate_project(project: &AutonomousProjectV1) -> Result<(), RuntimeError> {
                 "project ChatGPT target binding is invalid".into(),
             ));
         }
+    }
+    if project.chatgpt_target_history.len() > MAX_PROJECT_CHAT_TARGET_HISTORY
+        || project
+            .chatgpt_target_history
+            .iter()
+            .any(|url| canonical_project_chat_target(url).ok().as_deref() != Some(url.as_str()))
+    {
+        return Err(RuntimeError::Validation(
+            "project ChatGPT target history is invalid".into(),
+        ));
     }
     Ok(())
 }
@@ -2114,7 +2154,24 @@ mod tests {
             codex_thread_id: None,
             chatgpt_target_url: None,
             chatgpt_target_sha256: None,
+            chatgpt_target_history: Vec::new(),
         }
+    }
+
+    #[test]
+    fn historical_chat_urls_are_backward_compatible_and_bounded() {
+        let mut old =
+            serde_json::to_value(project("alpha", PathBuf::from("alpha"))).expect("project JSON");
+        old.as_object_mut()
+            .expect("project object")
+            .remove("chatgptTargetHistory");
+        let mut restored: AutonomousProjectV1 =
+            serde_json::from_value(old).expect("legacy project decode");
+        assert!(restored.chatgpt_target_history.is_empty());
+        restored.chatgpt_target_history = (0..=MAX_PROJECT_CHAT_TARGET_HISTORY)
+            .map(|index| format!("https://chatgpt.com/c/history-{index}"))
+            .collect();
+        assert!(validate_project(&restored).is_err());
     }
 
     fn scheduler_preflight_fixture(

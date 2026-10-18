@@ -909,6 +909,7 @@ pub fn host_prepare_codex_app_server_thread(
             codex_thread_id: None,
             chatgpt_target_url: None,
             chatgpt_target_sha256: None,
+            chatgpt_target_history: Vec::new(),
         })?;
     }
     project_store.bind_codex_thread(&contract.project_id, &bound_thread)?;
@@ -3052,6 +3053,7 @@ fn dispatch_actionable_wake_with_policy(
         // Queue acknowledgement is deliberately not reported as browser delivery.
         // WakeHost owns retries and exact receipts after this durable handoff.
         return match crate::wake_protocol_client::publish(
+            workspace,
             &record.project_id,
             &record.record_id,
             record.created_at_unix,
@@ -4862,6 +4864,7 @@ mod tests {
             codex_thread_id: None,
             chatgpt_target_url: None,
             chatgpt_target_sha256: None,
+            chatgpt_target_history: Vec::new(),
         };
         if let Some(target) = target {
             let target = super::super::autonomy_projects::canonical_project_chat_target(target)
@@ -4900,6 +4903,7 @@ mod tests {
                     super::super::autonomy_projects::project_chat_target_digest(&canonical_target),
                 ),
                 chatgpt_target_url: Some(canonical_target),
+                chatgpt_target_history: Vec::new(),
             })
             .expect("register sibling");
 

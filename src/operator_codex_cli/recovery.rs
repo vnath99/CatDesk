@@ -835,6 +835,7 @@ mod tests {
             codex_thread_id: None,
             chatgpt_target_url: None,
             chatgpt_target_sha256: None,
+            chatgpt_target_history: Vec::new(),
         }
     }
 

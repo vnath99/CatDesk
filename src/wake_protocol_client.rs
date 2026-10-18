@@ -77,14 +77,33 @@ pub(crate) fn current_generation_accept_after_at_for_test(
 }
 
 pub(crate) fn publish(
+    control_workspace: &Path,
     project: &str,
     id: &str,
     review_created: u64,
     review_ready: bool,
 ) -> Result<(), String> {
-    if project != "catdesk" {
-        return Err("WAKE_PROJECT_NOT_MIGRATED".into());
+    publish_registered(control_workspace, project, id, review_created, review_ready)
+}
+
+/// Publish only after a fresh central registration and independent Wake target
+/// agree. The exact observed target is carried into Store publication, so a
+/// concurrent rollover cannot silently retarget this review event.
+pub(crate) fn publish_registered(
+    control_workspace: &Path,
+    project: &str,
+    id: &str,
+    review_created: u64,
+    review_ready: bool,
+) -> Result<(), String> {
+    if !selected(control_workspace) {
+        return Err("WAKE_OWNER_NOT_SELECTED".into());
     }
+    let scope = crate::delegated::autonomy_projects::resolve_registered_project_from_control_root(
+        control_workspace,
+        project,
+    )
+    .map_err(|_| "WAKE_PROJECT_NOT_REGISTERED".to_string())?;
     let root = default_root()?;
     let activation: Activation = read(&root.join("activation.json"))?;
     if activation.schema_version != 1
@@ -94,8 +113,46 @@ pub(crate) fn publish(
         return Err("WAKE_ACTIVATION_INVALID".into());
     }
     let store = Store::open(&root)?;
+    publish_registered_with_store(
+        &store,
+        &activation,
+        project,
+        scope.project.chatgpt_target_url.as_deref(),
+        scope.project.chatgpt_target_sha256.as_deref(),
+        id,
+        review_created,
+        review_ready,
+    )
+}
+
+fn publish_registered_with_store(
+    store: &Store,
+    activation: &Activation,
+    project: &str,
+    registered_url: Option<&str>,
+    registered_sha256: Option<&str>,
+    id: &str,
+    review_created: u64,
+    review_ready: bool,
+) -> Result<(), String> {
+    if activation.schema_version != 1
+        || activation.owner != "CatDeskWake"
+        || activation.accept_after_utc == 0
+    {
+        return Err("WAKE_ACTIVATION_INVALID".into());
+    }
     let config = store.config()?;
-    if review_created < generation_accept_after(&activation, &config, project)? {
+    let target = config.targets.get(project).ok_or("TARGET_NOT_CONFIGURED")?;
+    if registered_url != Some(target.url.as_str())
+        || registered_sha256 != Some(target.digest.as_str())
+        || crate::delegated::autonomy_projects::canonical_project_chat_target(&target.url)
+            .ok()
+            .as_deref()
+            != Some(target.url.as_str())
+    {
+        return Err("WAKE_PROJECT_TARGET_MISMATCH".into());
+    }
+    if review_created < generation_accept_after(activation, &config, project)? {
         return Err("WAKE_HISTORICAL_EVENT_RETAINED".into());
     }
     let purpose = if review_ready {
@@ -103,10 +160,16 @@ pub(crate) fn publish(
     } else {
         "engineering_attention"
     };
-    let message = format!(
-        "CatDesk Wake: {purpose} for CatDesk review record {id}. Review the exact record and current wake/GUI repair plan through CatDesk. Ordinary autonomy remains frozen until wake acceptance completes."
-    );
-    store.produce(id, project, purpose, &message)?;
+    let message = if project == "catdesk" {
+        format!(
+            "CatDesk Wake: {purpose} for CatDesk review record {id}. Review the exact record and current wake/GUI repair plan through CatDesk. Ordinary autonomy remains frozen until wake acceptance completes."
+        )
+    } else {
+        format!(
+            "CatDesk Wake: {purpose} for project {project} review record {id}. Continue only this registered project's pending review in this conversation."
+        )
+    };
+    store.produce_expected(id, project, purpose, &message, target)?;
     Ok(())
 }
 
@@ -115,6 +178,91 @@ mod tests {
     use super::*;
     use catdesk_wake::{protocol::Target, store::TargetChange};
     use std::collections::BTreeMap;
+
+    #[test]
+    fn project_publication_rechecks_target_and_deduplicates_exact_event() {
+        let root =
+            std::env::temp_dir().join(format!("catdesk-project-publish-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("fixture root");
+        let wake_root = root.join("wake");
+        let store = Store::open_scoped_for_test(&wake_root, &root).expect("wake store");
+        store.initialize().expect("wake initialize");
+        let first = store
+            .set_target("alpha", 0, "https://chatgpt.com/g/project-a/c/chat-a")
+            .expect("alpha target");
+        let second = store
+            .set_target("beta", 0, "https://chatgpt.com/g/project-b/c/chat-b")
+            .expect("beta target");
+        let activation = Activation {
+            schema_version: 1,
+            owner: "CatDeskWake".into(),
+            migration_audit: "migration-v1.json".into(),
+            accept_after_utc: 1,
+        };
+        let created = u64::MAX - 1;
+        publish_registered_with_store(
+            &store,
+            &activation,
+            "alpha",
+            Some(&first.url),
+            Some(&first.digest),
+            "same-record",
+            created,
+            true,
+        )
+        .expect("alpha publish");
+        publish_registered_with_store(
+            &store,
+            &activation,
+            "alpha",
+            Some(&first.url),
+            Some(&first.digest),
+            "same-record",
+            created,
+            true,
+        )
+        .expect("alpha retry is idempotent");
+        assert_eq!(store.events().expect("events").len(), 1);
+        assert_eq!(
+            publish_registered_with_store(
+                &store,
+                &activation,
+                "beta",
+                Some(&second.url),
+                Some(&second.digest),
+                "same-record",
+                created,
+                true,
+            ),
+            Err("QUEUE_EVENT_ID_CONFLICT".into())
+        );
+        assert_eq!(
+            publish_registered_with_store(
+                &store,
+                &activation,
+                "beta",
+                Some(&first.url),
+                Some(&first.digest),
+                "beta-record",
+                created,
+                true,
+            ),
+            Err("WAKE_PROJECT_TARGET_MISMATCH".into())
+        );
+        publish_registered_with_store(
+            &store,
+            &activation,
+            "beta",
+            Some(&second.url),
+            Some(&second.digest),
+            "beta-record",
+            created,
+            false,
+        )
+        .expect("beta progresses independently");
+        assert_eq!(store.events().expect("events").len(), 2);
+        let _ = std::fs::remove_dir_all(root);
+    }
 
     fn config_with_current_target(changed_utc: u64) -> Config {
         let target =

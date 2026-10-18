@@ -3650,6 +3650,277 @@ fn project_chat_target_digest_for_wake(target: &str) -> String {
     wake_target_sha256(target)
 }
 
+/// A control-root project binding is ready only when the central registry and
+/// the independent Wake store name the same exact current conversation. The
+/// generation is Wake's durable authority; registry history retains URLs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProjectWebTargetV1 {
+    pub(crate) project_id: String,
+    pub(crate) url: String,
+    pub(crate) sha256: String,
+    pub(crate) generation: u64,
+    pub(crate) historical_urls: Vec<String>,
+}
+
+fn paired_project_target_readback_locked(
+    control_workspace: &Path,
+    wake_store: &catdesk_wake::store::Store,
+    project_id: &str,
+) -> Result<Option<ProjectWebTargetV1>, DesignatedChatTargetErrorV1> {
+    use crate::delegated::autonomy_projects::{
+        AutonomousProjectRegistryStoreV1, project_chat_target_digest,
+    };
+    let registry = AutonomousProjectRegistryStoreV1::open_read_only(
+        control_workspace.join(".catdesk/projects"),
+    )
+    .and_then(|store| store.load_registry())
+    .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+    let project = registry
+        .projects
+        .iter()
+        .find(|project| project.project_id == project_id)
+        .ok_or(DesignatedChatTargetErrorV1::Unavailable)?;
+    let config = wake_store
+        .config()
+        .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+    match (
+        project.chatgpt_target_url.as_deref(),
+        project.chatgpt_target_sha256.as_deref(),
+        config.targets.get(project_id),
+    ) {
+        (None, None, None) => Ok(None),
+        (Some(url), Some(sha256), Some(target))
+            if url == target.url
+                && sha256 == target.digest
+                && sha256 == project_chat_target_digest(url)
+                && config
+                    .history
+                    .iter()
+                    .rev()
+                    .any(|change| change.project_id == project_id && change.target == *target) =>
+        {
+            Ok(Some(ProjectWebTargetV1 {
+                project_id: project_id.into(),
+                url: url.into(),
+                sha256: sha256.into(),
+                generation: target.generation,
+                historical_urls: project.chatgpt_target_history.clone(),
+            }))
+        }
+        _ => Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch),
+    }
+}
+
+fn project_web_store(
+    control_workspace: &Path,
+    project_id: &str,
+) -> Result<(PathBuf, catdesk_wake::store::Store), DesignatedChatTargetErrorV1> {
+    use crate::delegated::autonomy_projects::resolve_registered_project_from_control_root;
+    let control_workspace = control_workspace
+        .canonicalize()
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    if !crate::wake_protocol_client::selected(&control_workspace)
+        || resolve_registered_project_from_control_root(&control_workspace, project_id).is_err()
+    {
+        return Err(DesignatedChatTargetErrorV1::Unavailable);
+    }
+    let root = catdesk_wake::runtime::default_root()
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let store = catdesk_wake::store::Store::open(&root)
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    Ok((control_workspace, store))
+}
+
+pub(crate) fn operator_read_project_web_target(
+    control_workspace: &Path,
+    project_id: &str,
+) -> Result<Option<ProjectWebTargetV1>, DesignatedChatTargetErrorV1> {
+    let _guard = WAKE_TARGET_SET_LOCK
+        .get_or_init(|| StdMutex::new(()))
+        .lock()
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let (control_workspace, wake_store) = project_web_store(control_workspace, project_id)?;
+    paired_project_target_readback_locked(&control_workspace, &wake_store, project_id)
+}
+
+fn bind_project_web_target_locked(
+    control_workspace: &Path,
+    wake_store: &catdesk_wake::store::Store,
+    project_id: &str,
+    target_url: &str,
+    expected_current_target_sha256: Option<&str>,
+    expected_wake_generation: u64,
+) -> Result<ProjectWebTargetV1, DesignatedChatTargetErrorV1> {
+    use crate::delegated::autonomy_projects::AutonomousProjectRegistryStoreV1;
+    use crate::delegated::runtime::RuntimeError;
+
+    let target_url = crate::delegated::autonomy_projects::canonical_project_chat_target(target_url)
+        .map_err(|_| DesignatedChatTargetErrorV1::InvalidUrl)?;
+    catdesk_wake::protocol::validate_target(&target_url)
+        .map_err(|_| DesignatedChatTargetErrorV1::InvalidUrl)?;
+    if expected_current_target_sha256.is_some_and(|digest| !is_sha256_hex(digest)) {
+        return Err(DesignatedChatTargetErrorV1::Stale);
+    }
+    let store = AutonomousProjectRegistryStoreV1::open_read_only(
+        control_workspace.join(".catdesk/projects"),
+    )
+    .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let registry = store
+        .load_registry()
+        .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+    let project = registry
+        .projects
+        .iter()
+        .find(|project| project.project_id == project_id)
+        .ok_or(DesignatedChatTargetErrorV1::Unavailable)?;
+    if project.chatgpt_target_sha256.as_deref() != expected_current_target_sha256 {
+        return Err(DesignatedChatTargetErrorV1::Stale);
+    }
+    let conversation_id = target_url
+        .rsplit('/')
+        .next()
+        .ok_or(DesignatedChatTargetErrorV1::InvalidUrl)?;
+    if registry.projects.iter().any(|other| {
+        other.project_id != project_id
+            && other
+                .chatgpt_target_url
+                .iter()
+                .chain(other.chatgpt_target_history.iter())
+                .any(|url| url.rsplit('/').next() == Some(conversation_id))
+    }) {
+        return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
+    }
+    let config = wake_store
+        .config()
+        .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+    let previous = config.targets.get(project_id).cloned();
+    let registered_url = project.chatgpt_target_url.as_deref();
+    let stage_wake = match (registered_url, previous.as_ref()) {
+        (None, None) if expected_wake_generation == 0 => true,
+        (Some(url), None) if expected_wake_generation == 0 && url == target_url => true,
+        (Some(url), Some(wake))
+            if url == wake.url && wake.generation == expected_wake_generation =>
+        {
+            if wake.digest != crate::delegated::autonomy_projects::project_chat_target_digest(url) {
+                return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
+            }
+            if url == target_url {
+                return paired_project_target_readback_locked(
+                    control_workspace,
+                    wake_store,
+                    project_id,
+                )?
+                .ok_or(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
+            }
+            true
+        }
+        // A Wake-first interrupted write is recoverable only when the exact
+        // predecessor and successor are adjacent in this project's history.
+        (Some(url), Some(wake))
+            if wake.url == target_url
+                && wake.generation == expected_wake_generation.saturating_add(1)
+                && config
+                    .history
+                    .iter()
+                    .rev()
+                    .filter(|change| change.project_id == project_id)
+                    .take(2)
+                    .map(|change| &change.target)
+                    .collect::<Vec<_>>()
+                    == vec![
+                        wake,
+                        &catdesk_wake::protocol::Target::new(expected_wake_generation, url.into())
+                            .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?,
+                    ] =>
+        {
+            false
+        }
+        (None, Some(wake))
+            if expected_wake_generation == 0
+                && wake.generation == 1
+                && wake.url == target_url
+                && config
+                    .history
+                    .iter()
+                    .filter(|change| change.project_id == project_id)
+                    .count()
+                    == 1 =>
+        {
+            false
+        }
+        _ => return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch),
+    };
+    let mut staged = None;
+    let result = store.bind_project_chat_target_after(
+        project_id,
+        &target_url,
+        expected_current_target_sha256,
+        || {
+            if stage_wake {
+                let updated = wake_store
+                    .set_target_quarantining_submitting(
+                        project_id,
+                        expected_wake_generation,
+                        &target_url,
+                    )
+                    .map_err(RuntimeError::Validation)?;
+                staged = Some(updated);
+            } else if wake_store
+                .config()
+                .ok()
+                .and_then(|config| config.targets.get(project_id).cloned())
+                .is_none_or(|wake| wake.url != target_url)
+            {
+                return Err(RuntimeError::Validation(
+                    "independent Wake target changed before registry commit".into(),
+                ));
+            }
+            Ok(())
+        },
+    );
+    if result.is_err() {
+        if let Some(updated) = staged {
+            let Some(old) = previous else {
+                return Err(DesignatedChatTargetErrorV1::SynchronizationFailure);
+            };
+            if wake_store
+                .set_target_quarantining_submitting(project_id, updated.generation, &old.url)
+                .is_err()
+                || paired_project_target_readback_locked(control_workspace, wake_store, project_id)
+                    .is_err()
+            {
+                return Err(DesignatedChatTargetErrorV1::SynchronizationFailure);
+            }
+        }
+        return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
+    }
+    paired_project_target_readback_locked(control_workspace, wake_store, project_id)?
+        .ok_or(DesignatedChatTargetErrorV1::SynchronizationFailure)
+}
+
+pub(crate) fn operator_bind_project_web_target(
+    control_workspace: &Path,
+    project_id: &str,
+    target_url: &str,
+    expected_current_target_sha256: Option<&str>,
+    expected_wake_generation: u64,
+) -> Result<ProjectWebTargetV1, DesignatedChatTargetErrorV1> {
+    let _guard = WAKE_TARGET_SET_LOCK
+        .get_or_init(|| StdMutex::new(()))
+        .lock()
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let (control_workspace, wake_store) = project_web_store(control_workspace, project_id)?;
+    bind_project_web_target_locked(
+        &control_workspace,
+        &wake_store,
+        project_id,
+        target_url,
+        expected_current_target_sha256,
+        expected_wake_generation,
+    )
+}
+
 fn handle_wake_target_set(req: &JsonRpcRequest, workspace_root: &str) -> JsonRpcResponse {
     let request = match parse_wake_target_set_request(&tool_arguments(req)) {
         Ok(request) => request,
@@ -10278,9 +10549,191 @@ mod tests {
                 codex_thread_id: Some("fixture-thread".into()),
                 chatgpt_target_url: Some(initial.into()),
                 chatgpt_target_sha256: Some(project_chat_target_digest(initial)),
+                chatgpt_target_history: Vec::new(),
             })
             .expect("project register");
         (root, config)
+    }
+
+    fn project_web_target_fixture(label: &str) -> (PathBuf, catdesk_wake::store::Store) {
+        use crate::delegated::autonomy_projects::{
+            AutonomousProjectRegistryStoreV1, AutonomousProjectV1,
+        };
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-project-web-target-{label}-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).expect("fixture root");
+        let registry = AutonomousProjectRegistryStoreV1::open(root.join(".catdesk/projects"))
+            .expect("registry");
+        registry.initialize(1, 1).expect("initialize");
+        for project_id in ["alpha", "beta", "gamma"] {
+            let workspace = root.join(project_id);
+            fs::create_dir(&workspace).expect("project workspace");
+            registry
+                .register_project(AutonomousProjectV1 {
+                    project_id: project_id.into(),
+                    workspace,
+                    git_identity: format!("https://example.test/{project_id}.git"),
+                    verification_profile: "rust_full".into(),
+                    codex_thread_id: None,
+                    chatgpt_target_url: None,
+                    chatgpt_target_sha256: None,
+                    chatgpt_target_history: Vec::new(),
+                })
+                .expect("register project");
+        }
+        let wake_root = root.join("wake");
+        let wake = catdesk_wake::store::Store::open_scoped_for_test(&wake_root, &root)
+            .expect("wake store");
+        wake.initialize().expect("wake initialize");
+        (root, wake)
+    }
+
+    #[test]
+    fn project_web_pairing_keeps_three_targets_independent_and_historical() {
+        let (root, wake) = project_web_target_fixture("three-projects");
+        assert_eq!(
+            paired_project_target_readback_locked(&root, &wake, "alpha").expect("unbound"),
+            None
+        );
+        for project_id in ["alpha", "beta", "gamma"] {
+            let url = format!("https://chatgpt.com/g/project-{project_id}/c/chat-{project_id}");
+            let bound = bind_project_web_target_locked(&root, &wake, project_id, &url, None, 0)
+                .expect("initial pair");
+            assert_eq!(bound.project_id, project_id);
+            assert_eq!(bound.url, url);
+            assert_eq!(bound.generation, 1);
+            assert!(bound.historical_urls.is_empty());
+        }
+        let beta = paired_project_target_readback_locked(&root, &wake, "beta")
+            .expect("beta read")
+            .expect("beta bound");
+        let alpha = paired_project_target_readback_locked(&root, &wake, "alpha")
+            .expect("alpha read")
+            .expect("alpha bound");
+        assert_eq!(
+            bind_project_web_target_locked(
+                &root,
+                &wake,
+                "beta",
+                &alpha.url,
+                Some(&beta.sha256),
+                beta.generation,
+            ),
+            Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch)
+        );
+        let next = bind_project_web_target_locked(
+            &root,
+            &wake,
+            "alpha",
+            "https://chatgpt.com/c/alpha-next",
+            Some(&alpha.sha256),
+            alpha.generation,
+        )
+        .expect("alpha rollover");
+        assert_eq!(next.generation, 2);
+        assert_eq!(next.historical_urls, vec![alpha.url]);
+        assert_eq!(
+            paired_project_target_readback_locked(&root, &wake, "beta")
+                .expect("beta read after alpha")
+                .expect("beta bound after alpha"),
+            beta
+        );
+        assert_eq!(
+            bind_project_web_target_locked(
+                &root,
+                &wake,
+                "alpha",
+                "https://chatgpt.com/c/stale",
+                Some(&alpha.sha256),
+                alpha.generation,
+            ),
+            Err(DesignatedChatTargetErrorV1::Stale)
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn project_web_pairing_recovers_wake_first_only_for_exact_successor() {
+        let (root, wake) = project_web_target_fixture("wake-first");
+        let first = bind_project_web_target_locked(
+            &root,
+            &wake,
+            "alpha",
+            "https://chatgpt.com/c/alpha-first",
+            None,
+            0,
+        )
+        .expect("first pair");
+        wake.set_target(
+            "alpha",
+            first.generation,
+            "https://chatgpt.com/c/alpha-next",
+        )
+        .expect("simulate interrupted Wake-first update");
+        assert_eq!(
+            paired_project_target_readback_locked(&root, &wake, "alpha"),
+            Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch)
+        );
+        assert_eq!(
+            bind_project_web_target_locked(
+                &root,
+                &wake,
+                "alpha",
+                "https://chatgpt.com/c/wrong-successor",
+                Some(&first.sha256),
+                first.generation,
+            ),
+            Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch)
+        );
+        let repaired = bind_project_web_target_locked(
+            &root,
+            &wake,
+            "alpha",
+            "https://chatgpt.com/c/alpha-next",
+            Some(&first.sha256),
+            first.generation,
+        )
+        .expect("exact successor recovery");
+        assert_eq!(repaired.generation, first.generation + 1);
+        assert_eq!(repaired.historical_urls, vec![first.url]);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn project_web_pairing_initializes_exact_prebound_registry_url() {
+        use crate::delegated::autonomy_projects::AutonomousProjectRegistryStoreV1;
+        let (root, wake) = project_web_target_fixture("prebound-registry");
+        let registry =
+            AutonomousProjectRegistryStoreV1::open_read_only(root.join(".catdesk/projects"))
+                .expect("registry");
+        let url = "https://chatgpt.com/g/project-alpha/c/alpha-existing";
+        let prior = registry
+            .bind_project_chat_target("alpha", url, None)
+            .expect("historical registry-only binding");
+        let digest = prior.chatgpt_target_sha256.expect("prior digest");
+        assert_eq!(
+            paired_project_target_readback_locked(&root, &wake, "alpha"),
+            Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch)
+        );
+        assert_eq!(
+            bind_project_web_target_locked(
+                &root,
+                &wake,
+                "alpha",
+                "https://chatgpt.com/c/alternate",
+                Some(&digest),
+                0,
+            ),
+            Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch)
+        );
+        let paired = bind_project_web_target_locked(&root, &wake, "alpha", url, Some(&digest), 0)
+            .expect("pair exact prebound URL");
+        assert_eq!(paired.url, url);
+        assert_eq!(paired.generation, 1);
+        assert!(paired.historical_urls.is_empty());
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

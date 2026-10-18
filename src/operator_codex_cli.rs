@@ -794,6 +794,7 @@ mod tests {
             codex_thread_id: None,
             chatgpt_target_url: None,
             chatgpt_target_sha256: None,
+            chatgpt_target_history: Vec::new(),
         }
     }
 
@@ -1068,6 +1069,7 @@ mod tests {
             codex_thread_id: None,
             chatgpt_target_url: None,
             chatgpt_target_sha256: None,
+            chatgpt_target_history: Vec::new(),
         };
         (root, project, store)
     }
@@ -1176,6 +1178,7 @@ mod tests {
             codex_thread_id: None,
             chatgpt_target_url: None,
             chatgpt_target_sha256: None,
+            chatgpt_target_history: Vec::new(),
         };
         assert!(ensure_no_interrupted_managed_writer(&project).is_err());
         if linked {
@@ -1218,6 +1221,7 @@ mod tests {
             codex_thread_id: None,
             chatgpt_target_url: None,
             chatgpt_target_sha256: None,
+            chatgpt_target_history: Vec::new(),
         };
         let error = ensure_no_interrupted_managed_writer(&project)
             .expect_err("nonterminal provider task must block direct Codex");
@@ -1325,6 +1329,7 @@ mod tests {
             codex_thread_id: Some(thread.into()),
             chatgpt_target_url: None,
             chatgpt_target_sha256: None,
+            chatgpt_target_history: Vec::new(),
         };
         let action = parse(&[
             "operator",
@@ -1374,6 +1379,7 @@ mod tests {
             codex_thread_id: Some("019fe33e-5c82-7540-a41c-9ae497527e57".into()),
             chatgpt_target_url: None,
             chatgpt_target_sha256: None,
+            chatgpt_target_history: Vec::new(),
         };
         let exact = parse(&[
             "operator",
@@ -1453,6 +1459,7 @@ mod tests {
                     codex_thread_id: None,
                     chatgpt_target_url: None,
                     chatgpt_target_sha256: None,
+                    chatgpt_target_history: Vec::new(),
                 })
                 .expect("register");
         }
