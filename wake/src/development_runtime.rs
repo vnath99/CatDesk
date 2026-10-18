@@ -430,6 +430,23 @@ fn updated_package_id(hashes: &BTreeMap<String, String>) -> Result<String> {
     Ok(format!("{}-{:x}", VERSION, digest.finalize()))
 }
 
+pub(crate) fn updated_package_id_from_pointer(pointer: &Value) -> Result<String> {
+    let mut hashes = BTreeMap::new();
+    for (field, name) in [
+        ("hostSha256", "CatDeskWakeHost.exe"),
+        ("binagotchySha256", "CatDeskBinagotchy.exe"),
+        ("adapterSha256", "adapter.py"),
+        ("wakeBridgeSha256", "wake_bridge.py"),
+    ] {
+        let hash = pointer
+            .get(field)
+            .and_then(Value::as_str)
+            .ok_or("DEV_RUNTIME_POINTER_INVALID")?;
+        hashes.insert(name.to_owned(), hash.to_owned());
+    }
+    updated_package_id(&hashes)
+}
+
 fn package_id_matches(hashes: &BTreeMap<String, String>, id: &str) -> Result<bool> {
     Ok(package_id(hashes)? == id || updated_package_id(hashes)? == id)
 }
