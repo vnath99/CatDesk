@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "6e4ed8c9cf49ee1f4cdc3e5261142da6e0101e57",
+  "sourceTree": "35a882376bde0d5a66adae948af41e34078b02b5",
+  "localDate": "2026-10-17",
+  "debugImageSha256": "CFED6A064AFE575A8C4FD9216ACABE9D8FF9D098E223CD28F2CD30BF188DC92D",
+  "focusedWebTests": {
+    "failed": 0,
+    "passed": 26
+  },
+  "wakeLibraryTests": {
+    "failed": 0,
+    "ignored": 1,
+    "passed": 234
+  },
+  "wakeProfileProbeUnitTests": {
+    "passed": 3
+  },
+  "wakeProcessTreeTests": {
+    "passed": 3
+  },
+  "wakeInstallerAuthorityTest": {
+    "initialSandboxResult": "WAKE_STORE_AUTHORITY_OBJECT_UNAVAILABLE",
+    "permittedAccessRerun": "PASS"
+  },
+  "clippy": "PASS_ALL_TARGET_ALL_FEATURE",
+  "format": "PASS",
+  "build": "PASS_ALL_FEATURE",
+  "mainFullSuite": "INCOMPLETE_STALLED_OWNED_TEST_STOPPED",
+  "legacyPythonBridgeFullSuite": "INCOMPLETE_SLOW_PRESENTATION_FIXTURES",
+  "remoteCI": "UNACCEPTED",
+  "installedActivationPerformed": false,
+  "logs": [
+    {
+      "name": "web-oct17-focused-final.log",
+      "sha256": "9A6EC3042B7D478B8AE3E1F2EA233B67A98C074761C7559B76F0F9A7EC0B73D3"
+    },
+    {
+      "name": "web-oct17-capture-tests.log",
+      "sha256": "EAC82F3B13166B239A6B65C45042C55A9A22F0BF89E975CDDBDAA3427F9C90B5"
+    },
+    {
+      "name": "web-oct17-wake-tests.log",
+      "sha256": "F0343306B07A0E68FD20F107A14A5E96A7D9DD871CF875B64A904D97E8F780DC"
+    },
+    {
+      "name": "web-oct17-wake-native-probe.log",
+      "sha256": "3BE728963E5730B9F43503F6C43A32BE6898945573DAE1E235CF70BD18CA5EAE"
+    },
+    {
+      "name": "web-oct17-wake-integrations.log",
+      "sha256": "8C3DCE74CCF8DD47AC84D81A4AAACD1822CE2525E62E140F4C8F24FC177A088E"
+    },
+    {
+      "name": "web-oct17-full-tests.log",
+      "sha256": "9B126B88AFB57FDAD671553210A8B398E625FFB67619313B5223F25C87EFAE41"
+    },
+    {
+      "name": "web-oct17-clippy-final.log",
+      "sha256": "E34D7AE9707072440495E8E28B47C1EDBDD5ACA5EFEE92978C04D11A133BCD94"
+    },
+    {
+      "name": "web-oct17-build-final.log",
+      "sha256": "150077047DE773A6D6D73C2FD6A8E3E41CBACC3D753F5025BBDB7618BA80B99C"
+    }
+  ]
+}

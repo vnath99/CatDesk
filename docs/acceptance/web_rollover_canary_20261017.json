@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "observedAtUtc": "2026-10-18T00:13:54Z",
+  "localDate": "2026-10-17",
+  "taskId": "CANARY-WEB-ROLLOVER-1",
+  "status": "BROWSER_HANDOFF_PARTIAL",
+  "driver": "Codex computer-use Chrome extension",
+  "sourceConversationUrl": "https://chatgpt.com/c/6ad40c82-6d80-8332-aa8c-2eeac9c4ea4a",
+  "replacementConversationUrl": "https://chatgpt.com/c/6ad40de5-5370-8327-91d1-5f355963a214",
+  "sourceTitle": "Write durable handoff",
+  "replacementTitle": "Implement Project Rollover",
+  "observations": [
+    "Created an isolated synthetic source conversation from an authenticated empty ChatGPT home page.",
+    "Observed a completed assistant handoff containing task ID, requirements, completed work, remaining work and next action.",
+    "Opened another empty ChatGPT home tab and submitted the handoff once with the observed predecessor URL.",
+    "Observed a distinct server-issued replacement URL and a completed response preserving the task ID and predecessor link.",
+    "Replacement implemented next_project and supplied behavior checks, without claiming execution.",
+    "Both conversation URLs remain accessible; no production conversation was edited.",
+    "After source reload the original USER message remained, but the assistant body displayed This response could not load. Complete predecessor-history readback is not proven.",
+    "Replacement reload also retained its exact USER handoff and distinct URL but showed the same assistant response-load failure. No retry, regeneration, or duplicate USER submit was performed."
+  ],
+  "catdeskRuntimeExecuted": false,
+  "installedWakeUpdated": false,
+  "wakeAuthorityVerified": false,
+  "automaticContextTriggerProved": false,
+  "independentWebProjectProgressProved": false,
+  "productionTaskAuthority": "NONE",
+  "predecessorUserMessageSurvivedReload": true,
+  "predecessorAssistantSurvivedReload": "UNPROVEN_UI_RESPONSE_LOAD_FAILURE",
+  "replacementAssistantSurvivedReload": "UNPROVEN_UI_RESPONSE_LOAD_FAILURE",
+  "localBehaviorChecks": {"passed": 5, "failed": 0, "scope": "synthetic returned next_project function"},
+  "remaining": [
+    "Reviewed installed Wake package with bootstrap capability",
+    "Coherent central registry and independent Wake project bindings",
+    "Per-project rollover scheduling alongside the running Wake host",
+    "Periodic host observations with explicit initial-history coverage; source one-shot capture exists but recent excerpts can underestimate old chats",
+    "Automatic durable handoff generation and source task ownership readback",
+    "Actual Wake continuation delivery and resumed-work proof for at least three independent projects"
+  ]
+}

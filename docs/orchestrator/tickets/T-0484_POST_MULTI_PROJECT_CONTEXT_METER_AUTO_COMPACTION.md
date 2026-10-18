@@ -1,25 +1,116 @@
 # T-0484 — Per-conversation context pressure, token accounting and safe automatic rollover
-**Priority:** CORE MILESTONE, explicitly **AFTER the multi-project queue/fairness/ownership milestone** and its independent acceptance. This placement overrides ticket-number ordering.  
-**Date:** 2026-10-14 | **Status:** Design and acceptance contract only, **NOT IMPLEMENTED**.  
-**Owner:** Codex Desktop implementation after current Wake dev85, T-0483 review cycle, T-0478/79 worker release/recovery, Binagotchy UX and multi-project fairness completion.  
+**Priority:** October 31 combined P3/P4 user milestone. The operator's October 17 revision supersedes the earlier deferral below. Independent ChatGPT Web project continuation and a demonstrated project rollover are required for overall acceptance.
+**Date:** 2026-10-14; priority revised 2026-10-17 | **Status:** Implementation in progress; no live rollover accepted.
+**Owner:** Codex Desktop, alongside continued development in each project's existing Codex conversation.
 **Dependencies:** accepted project-bound sessions and fair Wake dispatch, versioned WakeHost/owned SeleniumBase, durable event/receipt identity, one authoritative target generation per project, source/trust boundary acceptance.  
 **Read with:** `docs/orchestrator/CATDESK_CODEX_DESKTOP_HANDOFF_2026-10-14.md`; `docs/orchestrator/CATDESK_COMPETITOR_BROWSER_CONTINUITY_2026-10-14.md`; `CATDESK_MILESTONES.md`.
 
 ## Operator requirements
+
+### October 17 priority and execution correction
+
+The primary user capability is autonomous work across independent ChatGPT Web
+conversations. Native Codex thread coordination supports that capability. Keep
+Bug Bounty, BYOVD, Wake2 and PortfolioDesk progressing toward their own MVPs;
+do not hold their existing conversations idle for a queue demonstration.
+
+Implement the smallest connected sequence using the existing registry, Wake
+store, receipts and SeleniumBase owner: per-project paired target binding and
+history; project event delivery; an advisory per-conversation visible-content
+ledger with configurable pressure thresholds; durable handoff/rollover intent;
+one controlled New Chat bootstrap with an observed issued URL and exact USER
+receipt; atomic one-project binding update; continuation with predecessor links.
+Exercise a controlled conversation early. Keep source implementation, local
+tests, installed authority and actual browser receipts as separate evidence.
+
+Overall P3/P4 remains incomplete until at least three registered project Web
+conversations can make independent progress and one project has demonstrated
+handoff, replacement creation, URL/Wake verification and continuation while
+the old history and other project sessions remain usable. If authentication,
+UI behavior or installed Wake authority blocks automatic execution, demonstrate
+the supported partial workflow and record the precise remaining limitation.
+The older ordering language below is historical and does not defer this work.
 
 1. Use CatDesk's **existing Rust MCP gateway and SeleniumBase Python/WakeHost browser**; do not introduce a Chrome extension as a prerequisite.
 2. Automatically monitor estimated **current ChatGPT conversation** context pressure (not lifetime MCP byte counts).
 3. At a configurable, conservative threshold, arrange a safe summary/handoff in Chat A, create a new native ChatGPT conversation in the existing authenticated Selenium browser, verify its first USER receipt, then atomically rebind that **one project's** project/Wake/session/worker routing to Chat B. Never move another project's target or queue.
 4. Display estimated tool/model-inbound traffic and full context estimates separately; mark inferred/unobservable areas clearly. The tool token meters are not provider-authoritative context or dollar charges.
 5. Preserve current one-writer, no duplicate USER send, immutable event ID, reviewed install, old forensic records and original-chat fallback rules.
-6. Implement this **after multi-project wake queue/fairness acceptance**, not merely after a source-only registry prototype.
+6. October 17 revision: implement context-aware continuation alongside multi-project scheduling. Both are required for October 31 user-facing acceptance.
 
 ## Existing CatDesk assets — verified at design time
 
 - `src/mcp.rs::estimate_turn_token_usage` computes `inputTokens` using the `o200k_base` tokenizer over JSON-serialized tool name/arguments, `outputTokens` over sanitized JSON result (excluding internal `_meta`), and `totalTokens` as their sum.
 - `src/state.rs::UsageTotals` and `src/server.rs::extract_turn_token_usage / attach_history_usage` maintain displayed tool/session/history totals; `src/widget/catdesk_dashboard.html::renderTurnToken` renders ↓, ↑, Σ, $, ƒ. These counts **are neither authoritative ChatGPT usage nor per-conversation context**. Tool ↓ represents model→tool commands; tool ↑ represents tool→model content. The GUI illustrative dollar rate must not be interpreted as actual billing.
 - Today CatDesk's project registry includes `catdesk`, `BUG_BOUNTY_RECON_PLATFORM`, `BYOVD_DRIVER_PIPELINE`; registration alone does **not** prove a fair multi-project Wake scheduler.
-- `wake/src/runtime.rs`, `wake/adapter.py`, `scripts/wake_bridge.py` and review records already implement guarded existing-chat target, timer, read-only SUBMITTING reconciliation, exact USER receipt and assistant completion. Current installed dev84 is behind source dev85; **no live new-chat rollover is authorized by this ticket**.
+- `wake/src/runtime.rs`, `wake/adapter.py`, `scripts/wake_bridge.py` and review records already implement guarded existing-chat target, timer, read-only SUBMITTING reconciliation, exact USER receipt and assistant completion. Current installed dev84 is behind source dev85. The operator has authorized a controlled rollover test; production installation and Wake authority still require their existing evidence.
+
+### October 17 implemented source and controlled live evidence
+
+Source now contains per-project current/predecessor URLs, paired registry/Wake
+readback and compare-and-set binding, exact-generation event publication,
+independent advisory context ledgers, a guarded new-chat adapter and installed
+runtime bridge. Local `operator web` commands connect these to durable
+PREPARED → SUBMITTING → CREATED → BOUND → CONTINUATION_QUEUED records. A SUBMITTING
+record never authorizes resend; a CREATED record resumes binding and continuation
+without opening another conversation. Current policy is rechecked before submit.
+
+The local command surface is:
+
+```text
+catdesk operator web status
+catdesk operator web target read --project-id PROJECT
+catdesk operator web target bind --project-id PROJECT --conversation-url URL --expected-current-target-sha256 DIGEST_OR_none --expected-wake-generation N
+catdesk operator web context configure --project-id PROJECT --input-file POLICY_JSON
+catdesk operator web context observe --project-id PROJECT --input-file OBSERVATION_JSON
+catdesk operator web context capture --project-id PROJECT
+catdesk operator web context status --project-id PROJECT
+catdesk operator web rollover prepare --project-id PROJECT --handoff-file HANDOFF_JSON
+catdesk operator web rollover execute --project-id PROJECT
+catdesk operator web rollover status --project-id PROJECT
+```
+
+Run these from the central control workspace. Policy uses
+`configuredBudgetTokens`, `safetyHeadroomTokens`, `unknownSourceReserveTokens`,
+and `automaticRolloverEnabled` (default false). Observations supply schemaVersion
+1, an exact `key` (`projectId`, `conversationUrl`, `targetGeneration`) and `events`
+with `eventId`, `revision`, `dedupKey`, `sourceKind`, `visibleText` and
+`observedAtUnix`. The independently read paired target must match that key.
+Raw observations are never returned in diagnostics or stored by the meter.
+`capture` obtains a private bounded excerpt through the reviewed installed
+adapter, checks the paired target again, and ingests complete explicitly keyed
+messages with locked revision updates. Empty, clipped, unkeyed and response-load
+error bodies cannot replace a previously counted complete answer. It sends no
+USER message. Cross-document anchor stability remains unverified; a fixed
+unknown reserve does not establish coverage of a preexisting long conversation.
+Periodic host capture and initial-history accounting remain required work.
+
+Handoff input requires schemaVersion 1, projectId, sourceTaskId, objective,
+completed/remaining/ownedPaths/verification/blockers arrays and nextAction. It is
+private local state, capped at 10 KiB. The generated bootstrap includes the
+workspace, native owner, predecessor URL and instructions to await the bound
+continuation event. Preparing a handoff is not permission to duplicate native
+work. The initial MVP command consumes an explicit handoff; automatic extraction
+from project state and browser observations is still outstanding.
+
+The source defaults are a local 96k token budget with 24k safety headroom and an
+8k reserve per unknown source. These are configurable operating assumptions,
+not a provider context-window claim. The optional browser snapshot is only a
+bounded recent excerpt and cannot stand for whole-chat measurement; automatic
+observation must preserve unknown/truncation reserves and stable message IDs.
+
+On October 17 an authenticated Chrome computer-use canary created a predecessor
+and a distinct replacement conversation, carried the assistant-generated
+handoff and source link forward, and resumed the synthetic coding task. The
+returned code passed five local behavior checks. See
+`docs/acceptance/web_rollover_canary_20261017.json` for the observed URLs and scope.
+This canary did not run the installed CatDesk rollover path or rebind Wake.
+
+Remaining live blockers are specific: installed dev84 lacks the new adapter;
+the central/independent Wake targets are not coherent; and the one-shot bootstrap
+requires Wake's free singleton host lease. Production integration must schedule
+rollover alongside the running host so one response cannot block other projects.
+Do not stop other projects to turn this partial result into a demonstration.
 
 ## Semantics: tool traffic versus model context
 

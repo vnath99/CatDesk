@@ -1,3 +1,42 @@
+## 2026-10-17 — combined ChatGPT Web P3/P4 priority (IN PROGRESS; MVP PARTIAL)
+
+The operator requires independent ChatGPT Web project agents and a demonstrated
+context rollover by October 31. This supersedes all earlier instructions to
+defer P4 until native queue acceptance. Existing Codex sessions continue project
+development; they are supporting workers and integration inputs for this goal.
+
+1. Connect the existing central project registry to per-project Wake targets,
+   history and guarded paired updates, then route exact project events.
+2. Add an advisory visible-conversation ledger, configurable conservative
+   thresholds and durable handoff intent. Keep tool traffic and context estimates
+   separate, including uncertainty and old-conversation history.
+3. Use the existing SeleniumBase owner to create a controlled replacement chat,
+   verify the actual issued URL and first USER receipt, update only that project's
+   binding, and continue its task with predecessor links.
+4. Demonstrate three project Web conversations, failure isolation, preserved old
+   history and continued native development. Record source, installed and live
+   evidence independently; an authenticated-browser or Wake-authority blocker
+   leaves a specifically described partial workflow, not overall acceptance.
+
+Source checkpoint `6e4ed8c` now connects paired target updates, project routing,
+context policy/observations/private browser capture, durable rollover and
+continuation controls. Focused Web tests pass 26/26; Wake library tests pass
+234 with one ignored; strict Clippy, format and build pass. The controlled
+browser handoff created two real URLs and resumed a synthetic coding task, but
+both assistant bodies failed to load after refresh. Installed dev84, target
+alignment, initial-history context coverage, automatic handoff collection and
+cooperative response scheduling still prevent overall live acceptance. Full
+CatDesk and legacy bridge test runs remain incomplete. Exact evidence and the
+remaining October 31 sequence are in `docs/OCTOBER_2026_MVP_ACCEPTANCE.md`.
+
+At baseline source `da937b4`, Wake storage already has per-project generations/history and
+idempotent events, but its CatDesk publisher and paired target update are still
+CatDesk-specific. The central registry has current URLs for CatDesk, Bug Bounty
+and BYOVD; Wake2 has no Web URL and PortfolioDesk is not registered. The independent
+Wake store has only a different CatDesk target and is stopped. No multi-project
+Web delivery or rollover is accepted. Routing, context and browser changes are
+being implemented in separate worktrees from this checkpoint.
+
 ## 2026-10-16 — scoped Python verification and native owner gate (TESTED_LOCAL; MVP PARTIAL)
 
 - Tested source `3bba1967133bc07b1771ff31eff996d7f31f000c` (tree `e133290a1b53a3416f1ae5665cb79f4d04e25d87`) adds reviewed touched-Python v2 verification profiles and a read-only workspace-bind diagnostic. The exact locked serial full Rust suite exited 0 (main 1,402 passed/0 failed/28 ignored; enabled integrations passed); strict Clippy, formatting, build and diff checks passed. The debug binary SHA-256 is `AF858CA475B7FCD6A9A35264D351544BAB791C2FAB354D063BAEE963522658A5`. See `docs/OCTOBER_2026_MVP_ACCEPTANCE.md` for the log hash, commands and limits.

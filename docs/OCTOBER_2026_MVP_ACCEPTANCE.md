@@ -1,5 +1,106 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 17 combined ChatGPT Web P3/P4 checkpoint (SOURCE CHECKPOINT; LIVE PARTIAL)
+
+The user's revised October 31 milestone requires per-project ChatGPT Web work,
+context pressure, compaction, actual new-chat creation and task continuation.
+Native Codex scheduling is supporting functionality. Earlier P4 deferrals below
+are historical and superseded.
+
+- Existing primitives reused: native threads/workdirs, central project registry,
+  Wake target generations/history, durable event IDs and exact USER receipts,
+  owned SeleniumBase browser, token estimator and existing install guards.
+- New source: paired project target binding/history and exact-generation routing;
+  advisory per-conversation context ledgers with configurable thresholds;
+  bootstrap into a verified empty new conversation; actual issued-URL receipt;
+  durable local rollover intent/handoff, per-project lock, no resend after an
+  uncertain submit, paired CAS, and idempotent continuation publication.
+  Source `6e4ed8c9cf49ee1f4cdc3e5261142da6e0101e57` (tree
+  `35a882376bde0d5a66adae948af41e34078b02b5`) also connects the local operator
+  commands, installed-package private source capture, qualified DOM identity
+  hashes, streaming revisions and explicit excerpt uncertainty. Raw observed
+  text is not stored in the context ledger or returned in public diagnostics.
+  Wake-first binding recovery retains the exact source witness. A compensated
+  higher generation remains explicitly reconciliation-required, with no second
+  bootstrap. Advisory meter failure cannot withhold the continuation event.
+- Verification at that source: 26 focused all-feature Web tests passed; Wake
+  library 234 passed/one ignored, profile-probe unit tests three passed, and
+  process-tree integration three passed. The native installer authority test
+  passed after rerunning with its required process-handle access. Python
+  adapter/bootstrap 27 passed and focused bridge response tests 12 passed.
+  Strict all-target/all-feature Clippy, format, diff check and all-feature
+  CatDesk build passed. Debug image SHA-256:
+  `CFED6A064AFE575A8C4FD9216ACABE9D8FF9D098E223CD28F2CD30BF188DC92D`.
+  The full CatDesk suite was stopped at the unchanged Windows lifecycle test
+  `failed_creation_time_spawn_proves_empty_job_before_clean_failure` after it
+  stopped progressing; only that exact owned test process was terminated.
+  The full legacy Python bridge suite was also stopped in slow presentation
+  fixtures. Neither broad run is accepted as passing. See the source-test
+  manifest beside the controlled browser evidence for exact log hashes.
+- Controlled browser evidence: predecessor
+  `https://chatgpt.com/c/6ad40c82-6d80-8332-aa8c-2eeac9c4ea4a` generated a usable
+  handoff; replacement
+  `https://chatgpt.com/c/6ad40de5-5370-8327-91d1-5f355963a214` preserved its link and
+  task ID and implemented the remaining synthetic task. Five local behavior
+  checks passed. The computer-use driver performed this safe partial workflow;
+  it is not an installed CatDesk/Wake receipt. Both chat URLs remain accessible.
+  Source reload retained the original USER message but showed "This response
+  couldn't load" for the assistant handoff. Full predecessor-history readback
+  therefore remains unproven. Replacement reload showed the same assistant-body
+  failure while retaining the exact USER handoff and distinct URL. No regeneration
+  or resend was attempted; initial-response output and local behavior checks
+  remain evidence of a partial handoff, not durable live rollover acceptance.
+- Existing project development continued: BYOVD completed its offline HTML
+  triage report (full regression 5,180 tests, 24 skips, zero failures/errors at
+  `b5708e4`, clean documentation HEAD `e52625bf`); Bug Bounty completed its
+  pinned owned-qualification runner (24 focused checks, real qualifier/checker
+  exit 0 at `ce40137`, clean documentation HEAD `9d1efa1`). These are their own
+  thread-reported gates, not new CatDesk verifier receipts. The isolated Wake2
+  audit passed 11 tests with two symlink skips; its original active checkout
+  remains untouched. PortfolioDesk's next admissible observation window remains
+  October 19, 09:30–13:30 UTC; existing timers were preserved.
+  After another authorized development turn, BYOVD additionally completed a
+  public four-case comparison with 98 affected tests and repeatable CLI formats,
+  clean HEAD `833839fb149c07e27fe03dc3b828657b4c3f8915`. Its qualified benign-control
+  gate remains open. Bug Bounty's existing chat is running its next integrated
+  regression/review; that in-progress run is not yet accepted. No duplicate
+  CatDesk task was dispatched. Wake2's three isolated audit files also have a
+  hashed copy under `CatDesk_v2/checkpoints/wake2-corpus-oct17`; its scoped Git
+  checkpoint remains pending after two automatic approval-review timeouts.
+- Installed/live gates remain open: dev84 lacks bootstrap capability; current
+  registry and independent Wake CatDesk targets differ, other registered Web
+  targets are not paired; no three-project Web delivery/rollover acceptance is
+  claimed. One-shot bootstrap currently requires the free global Wake host
+  lease, so running-host scheduling is still needed for independent progress.
+  The one-shot source capture now feeds the advisory meter, but a late first
+  capture of a long conversation can miss older content beyond its last-16
+  excerpt and fixed unknown reserve. Whole-history coverage and periodic host
+  capture are not accepted; this estimate must not be treated as proof that
+  such a conversation is safely below its context limit. Automatic handoff
+  extraction still requires integration. Shared MCP bearer
+  does not authenticate which ChatGPT conversation originated a request.
+- No claim-reconciliation bypass, protected install, production Wake rebind,
+  workflow-dispatch retry, or remote CI acceptance was performed. The historical
+  35 claims/85 accounting rows remain preserved. Exact current remote CI is
+  unproven; earlier HTTP 422 and missing workflow_dispatch are separate facts.
+
+Detailed source command/data contracts are in T-0484; controlled evidence is in
+`docs/acceptance/web_rollover_canary_20261017.json`. Overall acceptance is PARTIAL.
+
+### Remaining October 31 sequence
+
+1. Extend the existing Wake scheduler to yield between response probes so a
+   long ChatGPT response or rollover cannot block other project deliveries.
+2. Connect periodic observations with explicit initial-history coverage and
+   an automatic, task-bound handoff request/collection path.
+3. Use the existing reviewed installation flow, reconcile project/Wake targets
+   from current authority, and exercise the controlled replacement through that
+   installed path. Preserve the observed ChatGPT response-load failure as an
+   open live gate until fresh readback succeeds.
+4. Demonstrate three actual project Web targets routing and continuing while
+   one rolls over. Keep source, installed, delivery and native-session evidence
+   separate; existing native project work continues during all stages.
+
 ## October 16 native queue and recovery checkpoint (TESTED_LOCAL; PARTIAL)
 
 - Source-built CatDesk `9199ee9b51df927e853dbc5bb24e2a8949780647` (tree `77d7c65eada7eb3c591adc621741d15460565edb`) passed locked serial all-feature workspace tests: main 1,405 passed, zero failed, 28 ignored, and all enabled integration targets passed. Strict all-target/all-feature Clippy, format and all-feature build exited zero. Debug executable SHA-256: `7998251BC5C6405F3DA22CE1D17262968E0D280B3542AE3139FEDB3AE9D8F62B`; test log SHA-256: `FB8748A70BFA4E947D9365FCD0B81A5A4A09711A54ED4C3DB78F7655EF195CAB`.
