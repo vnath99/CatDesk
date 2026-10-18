@@ -1,0 +1,649 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "2cf2751c72f491513760d21cd183a891f01d699d",
+  "sourceTree": "0e53e0f2192d18a92d59fa46ad2dec03f5c2bf68",
+  "localDate": "2026-10-18",
+  "recordedUtc": "2026-10-18T04:25:19.2025290Z",
+  "classification": "TESTED_LOCAL_SOURCE_LIVE_PARTIAL",
+  "sourceBase": "c57ec195f6d41f7664770468140dfd689038d3e9",
+  "sourceFiles": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "841BDDDACD680D9786474973CD6072CCA56AF7C0895EAE68B7120D9D8E54B2D6"
+    },
+    {
+      "path": "scripts/catdesk-release-recovery.ps1",
+      "sha256": "58642E8547F50588A4FA7B48ABB07D00FD58D285BC76D181C92A528ECC518F0B"
+    },
+    {
+      "path": "scripts/reconcile-reviewed-catdesk-release-pair.ps1",
+      "sha256": "8AA5E7072E8CFCEE13EBEE8043121AFC7829F9752819E966F2A3FE934AFE4B21"
+    },
+    {
+      "path": "scripts/test-reconcile-reviewed-catdesk-release-pair.ps1",
+      "sha256": "AD9E5E7F9B8BD25F27D64CCD3986705CC3E43A977B9FAF8729EA3DC37B2DC2DE"
+    },
+    {
+      "path": "src/daemon_reload.rs",
+      "sha256": "EC0F4F409F1A9DC4F70174FEC5244073A1EE730243A18FEB7A67C352CAD31750"
+    },
+    {
+      "path": "src/delegated/autonomy_supervisor.rs",
+      "sha256": "8FB7C883F2C9A835021486743E225117EF316063FB20F1F375A5E6F1C938274C"
+    },
+    {
+      "path": "src/main.rs",
+      "sha256": "5B59C2052330106CB4A371B8B580847A683D83C5D4E8CD27D43E00E76E3C041C"
+    },
+    {
+      "path": "src/operator_facade.rs",
+      "sha256": "CC4AB19250BEAC69BDD6EB5B109B71387EBD7BF06A0BE8AFAAD9525180D33506"
+    },
+    {
+      "path": "src/reviewed_candidate_owner.rs",
+      "sha256": "6510E3CFEE1888560B7D383D67D29D510920C4CFF4426837832D0E11DAC259FF"
+    }
+  ],
+  "checks": [
+    {
+      "name": "root-tests",
+      "program": "cargo",
+      "arguments": [
+        "test",
+        "--locked",
+        "--offline",
+        "--all-features",
+        "--",
+        "--test-threads=1"
+      ],
+      "exitCode": 0,
+      "log": "20261018T041407Z-root-tests.log",
+      "sha256": "B65381248A9457A4BA33CDC9DD46E5EEDED9F447EF6384ABF18932D3B2725CC8"
+    },
+    {
+      "name": "reconcile-fixtures",
+      "program": "powershell.exe",
+      "arguments": [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "scripts/test-reconcile-reviewed-catdesk-release-pair.ps1"
+      ],
+      "exitCode": 0,
+      "log": "20261018T042434Z-reconcile-fixtures.log",
+      "sha256": "C68347ACFC360C1B365E88C54D12A1CE44FF44CC465B1EB853943EFFC12D39A9"
+    },
+    {
+      "name": "promotion-fixtures",
+      "program": "powershell.exe",
+      "arguments": [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "scripts/test-promote-reviewed-catdesk-build.ps1"
+      ],
+      "exitCode": 0,
+      "log": "20261018T042434Z-promotion-fixtures.log",
+      "sha256": "554737E9489B54469A8EE8A7FBEE0B0BF32099A1B772D77159E8C9F624F293DD"
+    },
+    {
+      "name": "bootstrap-fixtures",
+      "program": "powershell.exe",
+      "arguments": [
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "scripts/test-start-catdesk-stack.ps1"
+      ],
+      "exitCode": 0,
+      "log": "20261018T042434Z-bootstrap-fixtures.log",
+      "sha256": "B3776BACA320ADCBAA3DCB289C24F34F5934779B219DE9949BA56F80EFCBC622"
+    },
+    {
+      "name": "root-clippy",
+      "program": "cargo",
+      "arguments": [
+        "clippy",
+        "--locked",
+        "--offline",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exitCode": 0,
+      "log": "20261018T042434Z-root-clippy.log",
+      "sha256": "3022FC4CEA736D2546F115A670C2652DB979DC4DCC55BB4F718199DC2DDE5515"
+    },
+    {
+      "name": "root-format",
+      "program": "cargo",
+      "arguments": [
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exitCode": 0,
+      "log": "20261018T042434Z-root-format.log",
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "name": "root-build",
+      "program": "cargo",
+      "arguments": [
+        "build",
+        "--locked",
+        "--offline",
+        "--all-features",
+        "--bin",
+        "catdesk"
+      ],
+      "exitCode": 0,
+      "log": "20261018T042434Z-root-build.log",
+      "sha256": "ECFA4248EEF4EBA08D6A014289EC0D206EB8BF86BB2C37C29D9BD3FAA45956CB"
+    },
+    {
+      "name": "operator-result-smoke",
+      "program": "C:\\Users\\Volap\\OneDrive\\Documents\\ChatGPT\\CatDesk_v2\\CatDesk-web-rollover-oct17\\target\\debug\\catdesk.exe",
+      "arguments": [
+        "operator",
+        "release-pair",
+        "result"
+      ],
+      "exitCode": 0,
+      "log": "20261018T042434Z-operator-result-smoke.log",
+      "sha256": "AA35F6A90BB192EBF31A04AB7C280728B393E8DEB63624BA21EBAA5C95F958CD"
+    }
+  ],
+  "debugImages": [
+    {
+      "path": "target/debug/catdesk.exe",
+      "sha256": "101CB01E7567B3841DB637E7144DD5C1D33313EA34F9E1B00783E40CCC68F665"
+    }
+  ],
+  "verificationScope": "FULL_ROOT_SUITE_BOUND_TO_UNCHANGED_RUST_INPUTS_FINAL_FIXED_SCRIPT_FIXTURES_STRICT_LINT_FORMAT_BUILD",
+  "rootTestGroups": [
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 1483,
+      "failed": 0,
+      "ignored": 28
+    },
+    {
+      "passed": 46,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 49,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 8,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 20,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 57,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 62,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 49,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 0,
+      "failed": 0,
+      "ignored": 1
+    },
+    {
+      "passed": 5,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 3,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    }
+  ],
+  "rootPassed": 1801.0,
+  "rootIgnored": 29.0,
+  "independentReview": "INDEPENDENT_SOURCE_AND_NATIVE_OWNERSHIP_REVIEWS_CLEAR_FINAL_ABSENT_CANDIDATE_AND_STATUS_DELTAS_REREVIEWED_NO_INSTALLED_ACCEPTANCE",
+  "rootTestReuse": {
+    "evidence": "20261018T041407Z-verification.json",
+    "sha256": "9BE5FD8D28E95E07479160EE1733BCD5414F2796EDEC9BA020FB940D102D3FA5",
+    "unchangedRustAndCompileInputs": true,
+    "changedRuntimeScripts": [
+      "scripts/reconcile-reviewed-catdesk-release-pair.ps1",
+      "scripts/test-reconcile-reviewed-catdesk-release-pair.ps1"
+    ],
+    "reason": "RUST_SOURCE_UNCHANGED_RUNTIME_SCRIPT_FIXTURES_RERUN_ON_FINAL_BYTES"
+  },
+  "priorVerificationRuns": [
+    {
+      "evidence": "20261018T041407Z-verification.json",
+      "sha256": "9BE5FD8D28E95E07479160EE1733BCD5414F2796EDEC9BA020FB940D102D3FA5",
+      "verification": "FAILED_OR_SOURCE_CHANGED",
+      "checks": [
+        {
+          "name": "root-tests",
+          "program": "cargo",
+          "arguments": [
+            "test",
+            "--locked",
+            "--offline",
+            "--all-features",
+            "--",
+            "--test-threads=1"
+          ],
+          "exitCode": 0,
+          "log": "20261018T041407Z-root-tests.log",
+          "sha256": "B65381248A9457A4BA33CDC9DD46E5EEDED9F447EF6384ABF18932D3B2725CC8"
+        },
+        {
+          "name": "reconcile-fixtures",
+          "program": "powershell.exe",
+          "arguments": [
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "scripts/test-reconcile-reviewed-catdesk-release-pair.ps1"
+          ],
+          "exitCode": 0,
+          "log": "20261018T041407Z-reconcile-fixtures.log",
+          "sha256": "C68347ACFC360C1B365E88C54D12A1CE44FF44CC465B1EB853943EFFC12D39A9"
+        },
+        {
+          "name": "promotion-fixtures",
+          "program": "powershell.exe",
+          "arguments": [
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "scripts/test-promote-reviewed-catdesk-build.ps1"
+          ],
+          "exitCode": 0,
+          "log": "20261018T041407Z-promotion-fixtures.log",
+          "sha256": "554737E9489B54469A8EE8A7FBEE0B0BF32099A1B772D77159E8C9F624F293DD"
+        },
+        {
+          "name": "bootstrap-fixtures",
+          "program": "powershell.exe",
+          "arguments": [
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "scripts/test-start-catdesk-stack.ps1"
+          ],
+          "exitCode": 0,
+          "log": "20261018T041407Z-bootstrap-fixtures.log",
+          "sha256": "B3776BACA320ADCBAA3DCB289C24F34F5934779B219DE9949BA56F80EFCBC622"
+        },
+        {
+          "name": "root-clippy",
+          "program": "cargo",
+          "arguments": [
+            "clippy",
+            "--locked",
+            "--offline",
+            "--all-targets",
+            "--all-features",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exitCode": 0,
+          "log": "20261018T041407Z-root-clippy.log",
+          "sha256": "9D79679B277A49E2766631C093CDD2885A873774E924BA40D8FB2A6A8EFDF377"
+        },
+        {
+          "name": "root-format",
+          "program": "cargo",
+          "arguments": [
+            "fmt",
+            "--all",
+            "--",
+            "--check"
+          ],
+          "exitCode": 0,
+          "log": "20261018T041407Z-root-format.log",
+          "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+        },
+        {
+          "name": "root-build",
+          "program": "cargo",
+          "arguments": [
+            "build",
+            "--locked",
+            "--offline",
+            "--all-features",
+            "--bin",
+            "catdesk"
+          ],
+          "exitCode": 0,
+          "log": "20261018T041407Z-root-build.log",
+          "sha256": "DBD4D6062F1B067626F6FB8F25D0B7E17FFEB45D2A3C6D239B1D6A59457E2531"
+        }
+      ]
+    },
+    {
+      "evidence": "20261018T042347Z-verification.json",
+      "sha256": "35EE4EF3BFCE1A83E939232950E6C4285E0555BEE5A41F037F89B33056263A56",
+      "verification": "FAILED_OR_SOURCE_CHANGED",
+      "checks": [
+        {
+          "name": "root-tests",
+          "program": "cargo",
+          "arguments": [
+            "test",
+            "--locked",
+            "--offline",
+            "--all-features",
+            "--",
+            "--test-threads=1"
+          ],
+          "exitCode": 0,
+          "log": "20261018T041407Z-root-tests.log",
+          "sha256": "B65381248A9457A4BA33CDC9DD46E5EEDED9F447EF6384ABF18932D3B2725CC8"
+        },
+        {
+          "name": "reconcile-fixtures",
+          "program": "powershell.exe",
+          "arguments": [
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "scripts/test-reconcile-reviewed-catdesk-release-pair.ps1"
+          ],
+          "exitCode": 0,
+          "log": "20261018T042347Z-reconcile-fixtures.log",
+          "sha256": "C68347ACFC360C1B365E88C54D12A1CE44FF44CC465B1EB853943EFFC12D39A9"
+        },
+        {
+          "name": "promotion-fixtures",
+          "program": "powershell.exe",
+          "arguments": [
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "scripts/test-promote-reviewed-catdesk-build.ps1"
+          ],
+          "exitCode": 0,
+          "log": "20261018T042347Z-promotion-fixtures.log",
+          "sha256": "554737E9489B54469A8EE8A7FBEE0B0BF32099A1B772D77159E8C9F624F293DD"
+        },
+        {
+          "name": "bootstrap-fixtures",
+          "program": "powershell.exe",
+          "arguments": [
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "scripts/test-start-catdesk-stack.ps1"
+          ],
+          "exitCode": 0,
+          "log": "20261018T042347Z-bootstrap-fixtures.log",
+          "sha256": "B3776BACA320ADCBAA3DCB289C24F34F5934779B219DE9949BA56F80EFCBC622"
+        },
+        {
+          "name": "root-clippy",
+          "program": "cargo",
+          "arguments": [
+            "clippy",
+            "--locked",
+            "--offline",
+            "--all-targets",
+            "--all-features",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "exitCode": 0,
+          "log": "20261018T042347Z-root-clippy.log",
+          "sha256": "460758BB44D0EC24236A780B7C9713A6D0D221EE97408D2CE4255694B29190E1"
+        },
+        {
+          "name": "root-format",
+          "program": "cargo",
+          "arguments": [
+            "fmt",
+            "--all",
+            "--",
+            "--check"
+          ],
+          "exitCode": 0,
+          "log": "20261018T042347Z-root-format.log",
+          "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+        },
+        {
+          "name": "root-build",
+          "program": "cargo",
+          "arguments": [
+            "build",
+            "--locked",
+            "--offline",
+            "--all-features",
+            "--bin",
+            "catdesk"
+          ],
+          "exitCode": 0,
+          "log": "20261018T042347Z-root-build.log",
+          "sha256": "ABCA85C948CDA4CF17621222967E7674E56657838E235616EA3C788D5C080281"
+        },
+        {
+          "name": "operator-result-smoke",
+          "program": "C:\\Users\\Volap\\OneDrive\\Documents\\ChatGPT\\CatDesk_v2\\CatDesk-web-rollover-oct17\\target\\debug\\catdesk.exe",
+          "arguments": [
+            "operator",
+            "release-pair",
+            "result"
+          ],
+          "exitCode": 0,
+          "log": "20261018T042347Z-operator-result-smoke.log",
+          "sha256": "AA35F6A90BB192EBF31A04AB7C280728B393E8DEB63624BA21EBAA5C95F958CD"
+        }
+      ]
+    }
+  ],
+  "priorRunInterpretation": [
+    "041407_ALL_CHECKS_PASSED_BUT_GLOBAL_WITNESS_REJECTED_TWO_RUNTIME_SCRIPT_CHANGES_RUST_INPUTS_UNCHANGED",
+    "042347_ALL_COMMANDS_EXIT_ZERO_PRIVATE_SMOKE_ASSERTION_EXPECTED_OLD_STATUS_LABEL_CORRECTED_TO_SOURCE_RESULT_UNAVAILABLE_NO_PRODUCT_CHANGE"
+  ],
+  "authority": "EXISTING_INDEPENDENT_REVIEW_SNAPSHOT_PRODUCER_ATTESTATION_PLUS_EXACT_DIVERGENT_PAIR_AND_FIXED_SCRIPT_BINDINGS",
+  "handoff": "PRIVATE_NATIVE_JOB_DISARM_CLOSE_THEN_FRESH_EXACT_SERVING_OWNER_PROOF_BEFORE_REVIEWED_RECONCILIATION_LKG",
+  "rollback": "OWNED_TREE_EXIT_AND_LISTENER_QUIESCENCE_BEFORE_EXACT_ORIGINAL_BINARY_AND_SIDECAR_RESTORATION",
+  "afterJobReleaseUncertainty": "ATTENTION_NO_ROLLBACK_NO_UNPROVEN_RECOVERY_ACCEPTANCE",
+  "fixtureBoundary": "TEMPORARY_FILES_SCRIPT_OWNER_PROOF_SEAMS_SEPARATE_REAL_NATIVE_JOB_TESTS_NO_INSTALLED_RECONCILIATION",
+  "rootWakeIntegration": "ROOT_WAKE_LOCAL_RUNTIME_FIXTURE_RUNS_NESTED_WAKE_TEST_SUPPORT_SUITE_COUNTS_NOT_EXPOSED_ON_SUCCESS",
+  "unchangedSuites": "NO_SEPARATE_WAKE_INVOCATION_OR_STANDALONE_PYTHON_SUITE_RERUN",
+  "installedSnapshot": {
+    "evidence": "20261018T040207Z-installed-readonly.json",
+    "sha256": "7012A4572E18A1E6E502EF9B9DA81563B771EB1C16B0A930A81C994DB0D043C1",
+    "files": [
+      {
+        "path": "target/release/catdesk.exe",
+        "size": 26838016,
+        "sha256": "9A8F4EBF6EA57CBB61EFAA12E8AFA54D18B8DB7374B9884067325BC84565568C",
+        "projection": null
+      },
+      {
+        "path": "target/release/catdesk.exe.sha256",
+        "size": 64,
+        "sha256": "C030E9F10275432743E5FD07987EBF9425CA44B1FA3D516CA2FF4F417AFDB58C",
+        "projection": "A264C8DC85FA55311E74114158F4F4CD598F6E9E9D0A6CA535E14D18AA649939"
+      },
+      {
+        "path": ".catdesk/release-recovery/slot-a/catdesk.exe",
+        "size": 23779328,
+        "sha256": "A264C8DC85FA55311E74114158F4F4CD598F6E9E9D0A6CA535E14D18AA649939",
+        "projection": null
+      },
+      {
+        "path": ".catdesk/release-recovery/slot-a/catdesk.exe.sha256",
+        "size": 65,
+        "sha256": "9ADCA962DFE07D708B025DDC806D40CA99D903BE1CB3E160246B31AE564F7263",
+        "projection": "a264c8dc85fa55311e74114158f4f4cd598f6e9e9d0a6ca535e14d18aa649939"
+      },
+      {
+        "path": ".catdesk/release-recovery/slot-a/manifest.json",
+        "size": 189,
+        "sha256": "A63F36CEBDBDD3B04D03BD96FA516D8D06F6788C2239BDCB16695CC135054408",
+        "projection": {
+          "schemaVersion": 1,
+          "generation": 1,
+          "sha256": "a264c8dc85fa55311e74114158f4f4cd598f6e9e9d0a6ca535e14d18aa649939",
+          "source": "operational_verified",
+          "capturedAtUtc": "2026-09-07T01:38:28.7290022Z"
+        }
+      },
+      {
+        "path": ".catdesk/release-recovery/current.json",
+        "size": 126,
+        "sha256": "C56ECDFC001666EBCA5C1E153F1FB9AA64BDB116E03E4E2B5AF0E7E02CBE19E5",
+        "projection": {
+          "schemaVersion": 1,
+          "slot": "slot-a",
+          "generation": 1,
+          "sha256": "a264c8dc85fa55311e74114158f4f4cd598f6e9e9d0a6ca535e14d18aa649939"
+        }
+      }
+    ],
+    "processObservation": "UNAVAILABLE_SANDBOX_CIM_ACCESS_DENIED",
+    "listenerObservation": [],
+    "limits": "PER_FILE_DOUBLE_HASH_NOT_ATOMIC_STATE_NO_RELEASE_OR_OWNER_AUTHORITY",
+    "caveat": "HISTORICAL_SNAPSHOT_GUESSED_PROTECTED_CONTROL_PATH_IS_NOT_THE_NEW_RELEASE_PAIR_CONTROL_PATH"
+  },
+  "remoteCi": "NOT_ACCEPTED_DISABLED_FORK_WORKFLOW_REENABLE_AUTHORIZATION_PENDING",
+  "installedActivationPerformed": false,
+  "productionWakeBindingChanged": false,
+  "liveRolloverAccepted": false,
+  "otherNativeChatsRequirePause": false,
+  "remainingLiveWork": [
+    "INDEPENDENT_REVIEWED_CURRENT_CANDIDATE_AND_RELEASE_ACCEPTANCE",
+    "WAKE_FIRST_GENERATION_MIGRATION_AND_OWNER_SERVICE_WIRING",
+    "THREE_PROJECT_WEB_TARGET_DELIVERY_AND_AUTONOMOUS_ROLLOVER"
+  ]
+}

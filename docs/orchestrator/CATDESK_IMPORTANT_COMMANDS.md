@@ -1,5 +1,42 @@
 # CatDesk — Important Command Reference
 
+## October 18 divergent canonical release-pair recovery (source; not installed acceptance)
+
+From the control workspace, use a new independently reviewed executable that
+contains this command and is **not** `target/release/catdesk.exe`:
+
+```text
+<reviewed-candidate.exe> operator release-pair prepare --review-record-id <id> --build-path <workspace-contained-reviewed-exe> --expected-sha256 <64-hex-sha>
+<reviewed-candidate.exe> operator release-pair confirm --confirmation-token <returned-token>
+<reviewed-candidate.exe> operator release-pair result
+```
+
+Prepare uses the existing independent review/snapshot/producer preflight,
+then binds the actually divergent canonical binary and raw sidecar, preserved
+operational slot-a, fixed scripts and interpreter. It does not invoke ordinary
+promotion confirmation. The confirmation expires after 120 seconds. Confirm
+requires a noncanonical worker image outside an enclosing Windows Job; a
+canonical mapped process or occupied listener prevents staging. These checks
+must pass before a release can be attempted.
+
+The native worker owns the candidate and descendants until persistent handoff.
+Only exact serving-owner proof after Job disarm and close can authorize
+`reviewed_reconciliation` slot-b. Pre-handoff rollback requires whole-tree exit
+and restores both original files byte-for-byte. The scripts do not launch the
+daemon themselves. The external tunnel is not restarted.
+
+`RESULT_UNAVAILABLE` means no result/claim is available. A valid claim without
+a terminal result reports `CLAIMED_OUTCOME_UNPROVEN_OPERATOR_ATTENTION`; it
+does not establish a live worker or permit replay. `RECONCILED_CANONICAL_READY`
+is a historical transaction result, not a fresh current-health assertion.
+Attention outcomes preserve evidence for inspection. Do not clear claims or
+edit sidecar/slot metadata to retry.
+
+The implementation and temporary fixtures are verified at source `2cf2751`.
+No installed transaction has run; obtain actual independent candidate/release
+acceptance before use. Source tests do not establish three-project Wake/Web
+delivery or automatic rollover. See `docs/OCTOBER_2026_MVP_ACCEPTANCE.md`.
+
 ## October 17 Web observation and rollover driver (source; installed acceptance pending)
 
 Use the central control workspace and a verified paired project/Wake target:

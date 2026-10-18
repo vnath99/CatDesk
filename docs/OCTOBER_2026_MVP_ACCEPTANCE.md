@@ -1,5 +1,53 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 18 canonical release-pair reconciliation (TESTED_LOCAL_SOURCE; LIVE PARTIAL)
+
+Source `2cf2751c72f491513760d21cd183a891f01d699d` adds the missing recovery path
+for the observed canonical binary/sidecar mismatch. The operator's
+`release-pair prepare/confirm/result` commands reuse existing independent
+review, committed snapshot and producer evidence. A separate one-shot record
+binds both original file hashes, preserved slot-a and fixed script/interpreter
+bytes. The worker rejects a mapped canonical process, occupied listener,
+canonical worker image or enclosing Windows Job before unsafe replacement.
+
+The daemon starts in the existing private native Job. Durable pending evidence,
+exact serving-owner checks, Job disarm/close and a fresh owner check precede
+`reviewed_reconciliation` authority for slot-b. An abort before handoff proves
+the whole owned tree exited before restoring the original binary and raw
+sidecar bytes. An uncertain outcome after release requires attention; it does
+not restore potentially mapped files or replay a claimed attempt. Slot-a and
+the original escrow remain preserved.
+
+Full root regression passed **1,801 tests / 29 ignored**. This includes the
+root fixture that invokes Wake's test-support suite; nested test counts are
+not printed on success. New reconciliation, existing promotion and bootstrap
+PowerShell fixtures passed, as did strict Clippy, formatting and build. A
+compiled CLI status check created no files in an empty temporary workspace.
+Four focused reconciliation tests and nine native ownership tests also passed.
+Independent source and ownership reviews found no remaining concrete blocker.
+
+The first overall witness rejected a late change to two runtime scripts.
+The passing full Rust result was retained only after unchanged Rust/compile
+inputs were verified, and the final script fixtures were rerun. A later private
+smoke assertion expected an obsolete status label; it was corrected to the
+source's `RESULT_UNAVAILABLE` without changing production code. All witnesses,
+log hashes and exact source bindings are recorded in
+`docs/acceptance/canonical_reconciliation_tests_20261018.json`.
+
+**Installed acceptance remains open.** The script fixtures simulate owner
+proof; the separate native tests exercise real child/descendant ownership.
+No composed installed reconciliation was run. The read-only snapshot still
+shows canonical SHA `9A8F4E...65568C` versus sidecar/slot-a SHA
+`A264C8...649939`; process inspection was unavailable in that snapshot.
+No Wake binding, installed image, service or external tunnel changed.
+
+Next: obtain the actual current reviewed candidate and release acceptance,
+then use this guarded path. GitHub fork-workflow re-enable authorization,
+Wake first-generation migration/owner/service wiring, aligned project targets,
+three-project Web delivery and genuine autonomous rollover remain open. The
+combined October milestone is **PARTIAL**. CatDesk's goal remains active;
+other native project conversations need no pause or reservation.
+
 ## October 17 retained offline Wake locks and historical-store evidence (TESTED_LOCAL_SOURCE; LIVE PARTIAL)
 
 Source `d5e64f6a0c05a9d555b547d0af919c1ad7e53822` extends the existing offline

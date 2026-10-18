@@ -1,3 +1,24 @@
+## 2026-10-18 — reviewed canonical pair reconciliation (TESTED_LOCAL_SOURCE; MVP PARTIAL)
+
+Source `2cf2751` implements operator release-pair prepare/confirm/result using
+existing independent build review, exact divergent-file evidence and preserved
+slot-a. A persistent native daemon handoff must pass post-Job-close owner proof
+before the new slot-b is eligible for reviewed reconciliation recovery. Failed
+handoff restores original bytes only after owned-tree exit; uncertain claimed
+attempts report attention without replay.
+
+Root regression: 1,801 passed / 29 ignored, including nested Wake verification.
+Final PowerShell recovery fixtures, strict lint/format/build and a noncreating
+compiled CLI status smoke passed. The retained full Rust result is bound to
+unchanged Rust inputs after the final runtime-script correction; prior witness
+failures are preserved. See
+`docs/acceptance/canonical_reconciliation_tests_20261018.json`.
+
+No installed reconciliation or live Web rollover was performed. Actual reviewed
+candidate/release acceptance, Wake migration/activation and three-project Web
+delivery remain open. Native project chats can continue independently; the
+CatDesk goal is active.
+
 ## 2026-10-17 — retained offline Wake locks and exact-root evidence (TESTED_LOCAL_SOURCE; MVP PARTIAL)
 
 Source `d5e64f6` retains exact selected old-store locks across path and root-handle
