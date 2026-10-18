@@ -56,7 +56,7 @@ are historical and superseded.
   pinned owned-qualification runner (24 focused checks, real qualifier/checker
   exit 0 at `ce40137`, clean documentation HEAD `9d1efa1`). These are their own
   thread-reported gates, not new CatDesk verifier receipts. The isolated Wake2
-  audit passed 11 tests with two symlink skips; its original active checkout
+  audit ran 11 tests: nine passed and two symlink tests skipped; its original active checkout
   remains untouched. PortfolioDesk's next admissible observation window remains
   October 19, 09:30–13:30 UTC; existing timers were preserved.
   After another authorized development turn, BYOVD additionally completed a
