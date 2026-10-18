@@ -1692,7 +1692,41 @@ pub(super) fn quarantine(
     quarantine_record(&store, expected_intent, observed_url, &current)
 }
 
+fn automatic_wake_running(
+    automatic: bool,
+    wake: &Store,
+    project: &str,
+    source: &Target,
+) -> Result<(), String> {
+    if !automatic {
+        return Ok(());
+    }
+    match super::auto::running_wake_state(wake, project, source)? {
+        "RUNNING" => Ok(()),
+        state => Err(state.into()),
+    }
+}
+
+fn authorize_automatic_submit(
+    automatic: bool,
+    wake: &Store,
+    project: &str,
+    source: &Target,
+    save_submitting: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    automatic_wake_running(automatic, wake, project, source)?;
+    save_submitting()
+}
+
 pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> {
+    execute_with_mode(workspace, project, false)
+}
+
+pub(super) fn execute_automatic(workspace: &Path, project: &str) -> Result<Value, String> {
+    execute_with_mode(workspace, project, true)
+}
+
+fn execute_with_mode(workspace: &Path, project: &str, automatic: bool) -> Result<Value, String> {
     let store = ProjectStore::open(workspace, project)?;
     let mut record = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
     if record.phase == Phase::Quarantined {
@@ -1729,6 +1763,10 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
         if paired(workspace, project)? != record.source {
             return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
         }
+        // Automatic work must retain its live Wake owner. If STOP released
+        // that owner while a handoff was being collected, do not acquire a
+        // standalone browser lease and start a replacement conversation.
+        automatic_wake_running(automatic, &wake, project, &record.source)?;
         let source = record.source.clone();
         let intent_id = record.intent_id.clone();
         let handoff = record.handoff.clone();
@@ -1748,8 +1786,10 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
                     &source.url,
                 )?;
                 confirm_request_enabled(workspace, &record)?;
-                record.phase = Phase::Submitting;
-                store.save(&record)
+                authorize_automatic_submit(automatic, &wake, project, &source, || {
+                    record.phase = Phase::Submitting;
+                    store.save(&record)
+                })
             },
         )?;
         validate_receipt_stage(&record, &receipt, "RESPONSE_PENDING")?;
@@ -1768,6 +1808,7 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
             wake.root(),
             &record.source.url,
         )?;
+        automatic_wake_running(automatic, &wake, project, &record.source)?;
         let Some(completed) =
             runtime::bootstrap_probe_completion(&wake, &record.source, pending, &record.handoff)?
         else {
@@ -1920,6 +1961,38 @@ mod tests {
             evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
             completion: "RESPONSE_COMPLETED".into(),
         }
+    }
+
+    #[test]
+    fn stopped_wake_refuses_automatic_pre_submit_ack_without_submitting_checkpoint() {
+        let root = fixture();
+        let wake = Store::open_scoped_for_test(&root.join("wake"), &root).unwrap();
+        wake.initialize().unwrap();
+        let source = wake
+            .set_target("alpha", 0, "https://chatgpt.com/c/old")
+            .unwrap();
+        runtime::control(&wake, "STOPPED").unwrap();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut pending = record();
+        store.save(&pending).unwrap();
+        atomic(&store.root.join("active.json"), &pending.intent_id).unwrap();
+        assert_eq!(
+            authorize_automatic_submit(true, &wake, "alpha", &source, || {
+                pending.phase = Phase::Submitting;
+                store.save(&pending)
+            })
+            .unwrap_err(),
+            "WAKE_STOPPED"
+        );
+        assert_eq!(pending.phase, Phase::Prepared);
+        assert_eq!(store.active().unwrap().unwrap().phase, Phase::Prepared);
+        // The explicit operator route retains its existing standalone mode.
+        authorize_automatic_submit(false, &wake, "alpha", &source, || {
+            pending.phase = Phase::Submitting;
+            store.save(&pending)
+        })
+        .unwrap();
+        assert_eq!(store.active().unwrap().unwrap().phase, Phase::Submitting);
     }
 
     #[test]

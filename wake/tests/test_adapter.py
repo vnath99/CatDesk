@@ -31,9 +31,11 @@ class FakeCdp:
         self.keys = []
     def get_current_url(self): return self.url
     def get(self, url): self.url = url
-    def press_keys(self, selector, text, timeout):
+    def send_keys(self, selector, text, timeout):
         self.keys.append((selector, text, timeout))
         self.draft = text
+    def press_keys(self, selector, text, timeout):
+        raise AssertionError("human-speed press_keys must not type a message")
 
 
 class FakeSink:
@@ -221,11 +223,11 @@ class AdapterTests(unittest.TestCase):
         case = self
 
         class AlternateEditorCdp(FakeCdp):
-            def press_keys(self, selector, text, timeout):
+            def send_keys(self, selector, text, timeout):
                 if selector == bridge.EDITOR:
                     raise RuntimeError("legacy selector is unavailable")
                 case.assertEqual(alternate, selector)
-                super().press_keys(selector, text, timeout)
+                super().send_keys(selector, text, timeout)
 
         class AlternateEditorSink(FakeSink):
             def editor_selector(self, cdp, *, prevalidated=False):
@@ -243,11 +245,11 @@ class AdapterTests(unittest.TestCase):
 
     def test_multiline_message_never_sends_enter_during_typing(self):
         class EnterSensitiveCdp(FakeCdp):
-            def press_keys(self, selector, text, timeout):
+            def send_keys(self, selector, text, timeout):
                 if any(char in text for char in "\r\n\t"):
                     self.sent = True
                     raise AssertionError("CDP text entry submitted before guarded click")
-                super().press_keys(selector, text, timeout)
+                super().send_keys(selector, text, timeout)
 
         message = 'Review JSON: {"note":"two  spaces"}\r\nNext\tstep'
         cdp, emitted, error = self.run_attempt(

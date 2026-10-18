@@ -134,7 +134,7 @@ def normalize_message(value: str) -> str:
 def keyboard_safe_message(value: str) -> str:
     """Keep message text semantically identical without CDP Enter/Tab key events.
 
-    CDP ``press_keys`` treats physical newlines as Enter on ChatGPT's composer.
+    CDP text entry treats physical newlines as Enter on ChatGPT's composer.
     Preserve ordinary spaces (including JSON string content) while replacing
     only control whitespace with spaces. Receipt normalization must agree.
     """
@@ -2159,7 +2159,7 @@ class CdpSink:
                         if not self.exact(cdp.get_current_url()): raise Attention("TARGET_IDENTITY_MISMATCH")
                         self.pre_typing_ready(cdp)
                         editor_selector = self.editor_selector(cdp, prevalidated=True)
-                        cdp.press_keys(editor_selector, typed_message, timeout=self.ui_timeout)
+                        cdp.send_keys(editor_selector, typed_message, timeout=self.ui_timeout)
                         if normalize_message(self.text(cdp)) != normalize_message(message): raise Attention("TYPING_NOT_CONFIRMED")
                         send_selector = self.wait_for_send_control(cdp, min(self.ui_timeout, 20))
                         if normalize_message(self.text(cdp)) != normalize_message(message): raise Attention("TYPING_NOT_CONFIRMED")

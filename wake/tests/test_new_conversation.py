@@ -76,10 +76,12 @@ class AttemptCdp:
         self.navigation.append(url)
         self.url = url
 
-    def press_keys(self, selector, text, timeout):
+    def send_keys(self, selector, text, timeout):
         self.timeline.append("type")
         self.draft = text
         self.typed_message = text
+    def press_keys(self, selector, text, timeout):
+        raise AssertionError("human-speed press_keys must not type a handoff")
 
     def click(self, selector, timeout):
         self.sent += 1
@@ -510,12 +512,12 @@ class NewConversationTests(unittest.TestCase):
 
     def test_multiline_handoff_is_one_keyboard_safe_user_turn_after_ack(self):
         class EnterSensitiveCdp(AttemptCdp):
-            def press_keys(self, selector, text, timeout):
+            def send_keys(self, selector, text, timeout):
                 if any(char in text for char in "\r\n\t"):
                     self.sent += 1
                     self.url = ISSUED
                     raise AssertionError("CDP text entry submitted before guarded click")
-                super().press_keys(selector, text, timeout)
+                super().send_keys(selector, text, timeout)
 
         request = self.request()
         request["handoff"] = 'Keep JSON {"note":"two  spaces"}\r\nThen\tcontinue.'
@@ -536,7 +538,7 @@ class NewConversationTests(unittest.TestCase):
 
     def test_uncertain_typing_after_ack_is_not_pre_submit_attention(self):
         class AmbiguousCdp(AttemptCdp):
-            def press_keys(self, selector, text, timeout):
+            def send_keys(self, selector, text, timeout):
                 self.sent += 1
                 self.url = ISSUED
                 raise RuntimeError("ambiguous CDP keyboard outcome")

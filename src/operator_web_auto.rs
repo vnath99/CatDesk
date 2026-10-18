@@ -153,7 +153,7 @@ fn is_pending_handoff(reason: &str) -> bool {
     )
 }
 
-fn running_wake_state(
+pub(super) fn running_wake_state(
     wake: &Store,
     project: &str,
     source: &Target,
@@ -204,8 +204,50 @@ where
     action()
 }
 
+fn execute_after_live_recheck_with(
+    wake: &Store,
+    project: &str,
+    source: &Target,
+    execute: impl FnOnce() -> Result<Value, String>,
+) -> Result<(&'static str, Value), String> {
+    let state = running_wake_state(wake, project, source)?;
+    if state != "RUNNING" {
+        return Ok((
+            state,
+            json!({"reason":"WAKE_CONTROL_CHANGED","browserAction":"NONE"}),
+        ));
+    }
+    let result = execute()?;
+    let stage = if result["phase"] == "RESPONSE_PENDING" {
+        "AWAITING_RESPONSE"
+    } else {
+        "ROLLOVER_ADVANCED"
+    };
+    Ok((stage, result))
+}
+
+fn execute_after_live_recheck(
+    workspace: &Path,
+    project: &str,
+    source: &Target,
+) -> Result<(&'static str, Value), String> {
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+    let wake = Store::open(&root)?;
+    execute_after_live_recheck_with(&wake, project, source, || {
+        rollover::execute_automatic(workspace, project)
+    })
+}
+
 fn error_stage(reason: &str) -> &'static str {
-    if reason == "BROWSER_SESSION_BUSY" {
+    if reason == "WAKE_STOPPED" {
+        "WAKE_STOPPED"
+    } else if reason == "WAKE_PAUSED" {
+        "WAKE_PAUSED"
+    } else if reason == "WAKE_HOST_NOT_RUNNING" {
+        "WAKE_HOST_NOT_RUNNING"
+    } else if reason == "WAKE_TARGET_CHANGED" {
+        "WAKE_TARGET_CHANGED"
+    } else if reason == "BROWSER_SESSION_BUSY" {
         "AWAITING_BROWSER"
     } else if matches!(
         reason,
@@ -239,30 +281,14 @@ fn run_step(
             "QUARANTINED",
             json!({"reason":"WEB_ROLLOVER_QUARANTINED_NO_REPLAY"}),
         )),
-        rollover::AutoStage::Execute => {
-            let result = rollover::execute(workspace, project)?;
-            let stage = if result["phase"] == "RESPONSE_PENDING" {
-                "AWAITING_RESPONSE"
-            } else {
-                "ROLLOVER_ADVANCED"
-            };
-            Ok((stage, result))
-        }
+        rollover::AutoStage::Execute => execute_after_live_recheck(workspace, project, source),
         rollover::AutoStage::CollectHandoff => {
             // Crash recovery may find the request saved before queue
             // publication. Republishing the same event ID is idempotent and
             // cannot resend a submitted browser turn.
             rollover::resume_saved_handoff_request(workspace, project)?;
             match rollover::collect_handoff(workspace, project) {
-                Ok(_) => {
-                    let result = rollover::execute(workspace, project)?;
-                    let stage = if result["phase"] == "RESPONSE_PENDING" {
-                        "AWAITING_RESPONSE"
-                    } else {
-                        "ROLLOVER_ADVANCED"
-                    };
-                    Ok((stage, result))
-                }
+                Ok(_) => execute_after_live_recheck(workspace, project, source),
                 Err(reason) if is_pending_handoff(&reason) => {
                     Ok(("AWAITING_HANDOFF", json!({"reason":reason})))
                 }
@@ -512,7 +538,28 @@ mod tests {
     }
 
     #[test]
+    fn stop_after_handoff_collection_refuses_automatic_execute() {
+        let root =
+            std::env::temp_dir().join(format!("web-auto-collected-stop-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        let wake = Store::open_scoped_for_test(&root.join("wake"), &root).unwrap();
+        wake.initialize().unwrap();
+        let source = wake
+            .set_target("alpha", 0, "https://chatgpt.com/c/old")
+            .unwrap();
+        runtime::control(&wake, "STOPPED").unwrap();
+        let (stage, result) = execute_after_live_recheck_with(&wake, "alpha", &source, || {
+            panic!("STOPPED after collection must not invoke rollover execution")
+        })
+        .unwrap();
+        assert_eq!(stage, "WAKE_STOPPED");
+        assert_eq!(result["browserAction"], "NONE");
+    }
+
+    #[test]
     fn busy_shared_browser_is_retryable_per_project() {
+        assert_eq!(error_stage("WAKE_STOPPED"), "WAKE_STOPPED");
+        assert_eq!(error_stage("WAKE_TARGET_CHANGED"), "WAKE_TARGET_CHANGED");
         assert_eq!(error_stage("BROWSER_SESSION_BUSY"), "AWAITING_BROWSER");
         assert_eq!(
             error_stage("BOOTSTRAP_SOURCE_QUEUE_PENDING"),

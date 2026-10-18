@@ -122,7 +122,7 @@ def attempt(bridge, sb, event, target, *, cooperative=False):
     # Carry the exact validated selector through typing and the native-Enter
     # fallback; alternate ChatGPT composers need not expose bridge.EDITOR.
     editor_selector = sink.editor_selector(cdp, prevalidated=True)
-    cdp.press_keys(editor_selector, typed_message, timeout=sink.ui_timeout)
+    cdp.send_keys(editor_selector, typed_message, timeout=sink.ui_timeout)
     if bridge.normalize_message(sink.text(cdp)) != bridge.normalize_message(message):
         raise bridge.Attention("TYPING_NOT_CONFIRMED")
     send_selector = sink.wait_for_send_control(cdp, 20)
@@ -199,7 +199,7 @@ def bootstrap_attempt(bridge, sb, request):
     emit({"stage": "BOOTSTRAP_HOME_READY"})
     sink.check_empty_home(cdp)
     # This checkpoint must precede *all* CDP text entry. A physical newline
-    # from press_keys can submit even without a click on the send control.
+    # from CDP text entry can submit even without a click on the send control.
     emit({
         "stage": "BEFORE_BOOTSTRAP_SUBMIT",
         "projectId": project_id,
@@ -214,7 +214,7 @@ def bootstrap_attempt(bridge, sb, request):
     try:
         sink.check_empty_home(cdp)
         editor_selector = sink.editor_selector(cdp, prevalidated=True)
-        cdp.press_keys(editor_selector, typed_message, timeout=sink.ui_timeout)
+        cdp.send_keys(editor_selector, typed_message, timeout=sink.ui_timeout)
         sink.check_typed_home(cdp, message)
         send_selector = sink.wait_for_send_control(cdp, 20)
         if send_selector is None:

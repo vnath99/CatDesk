@@ -1116,8 +1116,10 @@ class WakeBridgeTests(unittest.TestCase):
                 self.index, self.writes = index, []
             def get_current_url(self):
                 return "https://chatgpt.com/c/review-one"
-            def press_keys(self, _selector, text, timeout):
+            def send_keys(self, _selector, text, timeout):
                 self.writes.append((text, timeout))
+            def press_keys(self, *_args, **_kwargs):
+                raise AssertionError("human-speed message typing is forbidden")
 
         class SB:
             def __init__(self, **_kwargs):
@@ -1223,8 +1225,10 @@ class WakeBridgeTests(unittest.TestCase):
         class Cdp:
             def get_current_url(self):
                 return "https://chatgpt.com/c/review-one"
-            def press_keys(self, _selector, text, timeout):
+            def send_keys(self, _selector, text, timeout):
                 writes.append((text, timeout))
+            def press_keys(self, *_args, **_kwargs):
+                raise AssertionError("human-speed message typing is forbidden")
 
         class SB:
             def __init__(self, **_kwargs):
@@ -1685,7 +1689,9 @@ class WakeBridgeTests(unittest.TestCase):
                     self.composer = ""
                     self.messages.append(message)
                 else:
-                    self.composer = text
+                    raise AssertionError("human-speed message typing is forbidden")
+            def send_keys(self, _selector, text, timeout):
+                self.composer = text
             def evaluate(self, script):
                 if script == "document.readyState": return "complete"
                 if "#prompt-textarea" in script: return ["ready", self.composer == ""]
@@ -2393,11 +2399,13 @@ class WakeBridgeTests(unittest.TestCase):
             def maximize(self): timeline.append("maximize")
             def bring_active_window_to_front(self): timeline.append("foreground")
             def press_keys(self, _selector, text, timeout):
-                if text != "\n":
-                    self.assert_keyboard_safe(text)
-                timeline.append("type" if text != "\n" else "submit")
-                if text == "\n": self.composer = ""; self.messages.append(message)
-                else: self.composer = text
+                if text != "\n": raise AssertionError("human-speed message typing is forbidden")
+                timeline.append("submit")
+                self.composer = ""; self.messages.append(message)
+            def send_keys(self, _selector, text, timeout):
+                self.assert_keyboard_safe(text)
+                timeline.append("type")
+                self.composer = text
             @staticmethod
             def assert_keyboard_safe(text):
                 if any(char in text for char in "\r\n\t"):
@@ -2493,7 +2501,8 @@ class WakeBridgeTests(unittest.TestCase):
                 if self.drift: self.url = "https://chatgpt.com/c/other"
                 raise RuntimeError("foreground policy")
             def bring_active_window_to_front(self): timeline.append("foreground"); return False
-            def press_keys(self, _selector, text, timeout): timeline.append("type"); self.composer = text
+            def send_keys(self, _selector, text, timeout): timeline.append("type"); self.composer = text
+            def press_keys(self, *_args, **_kwargs): raise AssertionError("human-speed message typing is forbidden")
             def evaluate(self, script):
                 if "#prompt-textarea" in script: return ["ready", True]
                 if "const selectorTiers" in script:
@@ -2528,9 +2537,9 @@ class WakeBridgeTests(unittest.TestCase):
 
         class DeliveredCdp(Cdp):
             def press_keys(self, _selector, text, timeout):
-                timeline.append("type" if text != "\n" else "submit")
-                if text == "\n": self.composer = ""; self.messages.append(message)
-                else: self.composer = text
+                if text != "\n": raise AssertionError("human-speed message typing is forbidden")
+                timeline.append("submit")
+                self.composer = ""; self.messages.append(message)
         run(DeliveredCdp())
         self.assertEqual(["maximize", "foreground", "boundary", "type", "submit", "reload"], timeline)
 
@@ -2609,7 +2618,8 @@ class WakeBridgeTests(unittest.TestCase):
             class ReloadingCdp:
                 def reload(self, ignore_cache): pass
                 def get_current_url(self): return "https://chatgpt.com/c/review-one"
-                def press_keys(self, *_args, **_kwargs): pass
+                def send_keys(self, *_args, **_kwargs): pass
+                def press_keys(self, *_args, **_kwargs): raise AssertionError("human-speed message typing is forbidden")
             real_cdp = ReloadingCdp()
             class SB:
                 def __init__(self, **_kwargs): self.cdp = real_cdp
@@ -2640,8 +2650,10 @@ class WakeBridgeTests(unittest.TestCase):
                 return self.composer
             def get_text(self, _selector, timeout):
                 return self.composer
-            def press_keys(self, _selector, text, timeout):
+            def send_keys(self, _selector, text, timeout):
                 self.composer = text
+            def press_keys(self, *_args, **_kwargs):
+                raise AssertionError("human-speed message typing is forbidden")
             def evaluate(self, script):
                 if "#prompt-textarea" in script:
                     return ["ready", True]
@@ -2726,18 +2738,20 @@ class WakeBridgeTests(unittest.TestCase):
             def __init__(self):
                 self.composer = ""
                 self.messages = ["prior message"]
-                self.keys = []
+                self.fast_keys = []
+                self.enter_keys = []
             def is_element_visible(self, selector): return selector == wake_bridge.EDITOR
             def get_current_url(self): return "https://chatgpt.com/c/review-one"
             def get_attribute(self, _selector, _name, timeout): return self.composer
             def get_text(self, _selector, timeout): return self.composer
+            def send_keys(self, selector, text, timeout):
+                self.fast_keys.append((selector, text, timeout))
+                self.composer = text
             def press_keys(self, selector, text, timeout):
-                self.keys.append((selector, text, timeout))
-                if text == "\n":
-                    self.composer = ""
-                    self.messages.append(message)
-                else:
-                    self.composer = text
+                if text != "\n": raise AssertionError("human-speed message typing is forbidden")
+                self.enter_keys.append((selector, text, timeout))
+                self.composer = ""
+                self.messages.append(message)
             def evaluate(self, script):
                 if "#prompt-textarea" in script: return ["ready", True]
                 if "const selectorTiers" in script:
@@ -2766,7 +2780,8 @@ class WakeBridgeTests(unittest.TestCase):
         ):
             receipt = sink.wake(self.record_id, message, lambda: True, lambda: events.append("boundary"))
         self.assertEqual(["boundary"], events)
-        self.assertEqual([(wake_bridge.EDITOR, message, 1), (wake_bridge.EDITOR, "\n", 1)], cdp.keys)
+        self.assertEqual([(wake_bridge.EDITOR, message, 1)], cdp.fast_keys)
+        self.assertEqual([(wake_bridge.EDITOR, "\n", 1)], cdp.enter_keys)
         self.assertEqual(wake_bridge.digest(wake_bridge.normalize_message(message)), receipt.message_sha256)
 
     def test_bridge_send_selector_parity_with_proven_smoke_paths(self):
