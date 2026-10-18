@@ -1474,6 +1474,10 @@ impl Adapter {
     fn spawn(root: &Path) -> Result<Self> {
         let executable = std::env::current_exe().map_err(|_| "HOST_EXECUTABLE_UNAVAILABLE")?;
         let installed = executable.parent().ok_or("HOST_INSTALL_UNAVAILABLE")?;
+        Self::spawn_from_installed(root, installed)
+    }
+
+    fn spawn_from_installed(root: &Path, installed: &Path) -> Result<Self> {
         let (adapter_path, _wake_bridge_path) =
             verify_installed_browser_artifacts(root, installed)?;
         let interpreter = root.join("runtime/python.exe");
@@ -1607,6 +1611,411 @@ fn read_line_bounded(reader: &mut impl BufRead, bytes: &mut Vec<u8>) -> Result<(
         }
     }
     Ok(())
+}
+
+/// A browser-issued destination is only evidence for a rollover. The caller
+/// must durably pair its project binding and enqueue continuation separately.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BootstrapReceipt {
+    pub schema_version: u32,
+    pub project_id: String,
+    pub intent_id: String,
+    pub source_generation: u64,
+    pub source_digest: String,
+    pub destination_url: String,
+    pub destination_digest: String,
+    pub message_digest: String,
+    pub sent_utc: u64,
+    pub evidence: String,
+    pub completion: String,
+}
+
+pub fn compose_bootstrap_message(
+    project_id: &str,
+    intent_id: &str,
+    source: &Target,
+    handoff: &str,
+) -> Result<String> {
+    source.validate()?;
+    if !crate::protocol::valid_id(project_id)
+        || !crate::protocol::valid_id(intent_id)
+        || handoff.trim().is_empty()
+        || handoff
+            .chars()
+            .any(|ch| ch.is_control() && !matches!(ch, '\n' | '\r' | '\t'))
+    {
+        return Err("BOOTSTRAP_REQUEST_INVALID".into());
+    }
+    let message = format!(
+        "CatDesk project rollover bootstrap.\nProject: {project_id}\nIntent: {intent_id}\nPredecessor: {}\n\n{handoff}",
+        source.url
+    );
+    if message.len() > 16 * 1024 {
+        return Err("BOOTSTRAP_MESSAGE_TOO_LONG".into());
+    }
+    Ok(message)
+}
+
+pub fn bootstrap_message_digest(
+    project_id: &str,
+    intent_id: &str,
+    source: &Target,
+    handoff: &str,
+) -> Result<String> {
+    let message = compose_bootstrap_message(project_id, intent_id, source, handoff)?;
+    Ok(crate::protocol::digest(
+        &message.split_whitespace().collect::<Vec<_>>().join(" "),
+    ))
+}
+
+fn installed_bootstrap_directory(store: &Store) -> Result<PathBuf> {
+    let pointer: serde_json::Value = read(&store.root().join("current.json"))?;
+    require_plain_install_directory(&store.root().join("versions"))?;
+    let directory = store.root().join("versions").join(install_id(&pointer)?);
+    require_plain_install_directory(&directory)?;
+    let host = directory.join("CatDeskWakeHost.exe");
+    require_plain_install_file(&host)?;
+    let host_hash = sha256_file(&host, "HOST_EXECUTABLE_UNAVAILABLE")?;
+    if !host_hash.eq_ignore_ascii_case(pointer_hash(&pointer, "hostSha256")?) {
+        return Err("HOST_EXECUTABLE_HASH_MISMATCH".into());
+    }
+    let (adapter, bridge) = verify_installed_browser_artifacts(store.root(), &directory)?;
+    require_plain_install_file(&adapter)?;
+    require_plain_install_file(&bridge)?;
+    // The pointer and manifest hashes above authorize these installed bytes.
+    // Old reviewed packages have no bootstrap protocol and must be rejected
+    // before a browser launches or a handoff draft is typed.
+    let adapter_bytes = std::fs::read(adapter).map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?;
+    let bridge_bytes = std::fs::read(bridge).map_err(|_| "BROWSER_PRIMITIVES_UNAVAILABLE")?;
+    if !adapter_bytes
+        .windows(b"def bootstrap_attempt(".len())
+        .any(|part| part == b"def bootstrap_attempt(")
+        || !bridge_bytes
+            .windows(b"class NewConversationSink(".len())
+            .any(|part| part == b"class NewConversationSink(")
+    {
+        return Err("BOOTSTRAP_INSTALLED_PACKAGE_UNSUPPORTED".into());
+    }
+    Ok(directory)
+}
+
+fn ensure_bootstrap_source_available(
+    store: &Store,
+    project_id: &str,
+    source: &Target,
+) -> Result<()> {
+    if store.config()?.targets.get(project_id) != Some(source) {
+        return Err("BOOTSTRAP_SOURCE_BINDING_CHANGED".into());
+    }
+    for event in store.events()? {
+        if event.project_id != project_id || event.target_generation != source.generation {
+            continue;
+        }
+        let delivery = store.delivery(&event.event_id)?;
+        if !delivery
+            .as_ref()
+            .is_some_and(|value| matches!(value.phase, Phase::Sent | Phase::Stale))
+        {
+            return Err("BOOTSTRAP_SOURCE_QUEUE_PENDING".into());
+        }
+    }
+    if store.timers()?.iter().any(|timer| {
+        timer.project_id == project_id
+            && timer.target_generation == source.generation
+            && timer.target_digest == source.digest
+            && timer.response_state != ResponseState::Complete
+    }) {
+        return Err("BOOTSTRAP_SOURCE_TURN_PENDING".into());
+    }
+    Ok(())
+}
+
+fn validate_bootstrap_receipt(
+    receipt: &BootstrapReceipt,
+    project_id: &str,
+    intent_id: &str,
+    source: &Target,
+    message_digest: &str,
+) -> Result<()> {
+    if receipt.schema_version != 1
+        || receipt.project_id != project_id
+        || receipt.intent_id != intent_id
+        || receipt.source_generation != source.generation
+        || receipt.source_digest != source.digest
+        || receipt.message_digest != message_digest
+        || receipt.sent_utc == 0
+        || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
+        || receipt.completion != "RESPONSE_COMPLETED"
+        || receipt.destination_url == source.url
+    {
+        return Err("BOOTSTRAP_RECEIPT_INVALID".into());
+    }
+    let next_generation = source
+        .generation
+        .checked_add(1)
+        .ok_or("BOOTSTRAP_RECEIPT_INVALID")?;
+    let destination = Target::new(next_generation, receipt.destination_url.clone())
+        .map_err(|_| "BOOTSTRAP_RECEIPT_INVALID")?;
+    if destination.digest != receipt.destination_digest {
+        return Err("BOOTSTRAP_RECEIPT_INVALID".into());
+    }
+    Ok(())
+}
+
+/// Run one preauthorized browser bootstrap in the reviewed installed Wake
+/// package. The callback must durably mark the root intent SUBMITTING while
+/// rechecking its paired source binding; it runs once before one submit ack.
+/// Any ambiguity after that ack is terminal for this attempt and is not retried.
+pub fn bootstrap_conversation(
+    store: &Store,
+    project_id: &str,
+    intent_id: &str,
+    source: &Target,
+    handoff: &str,
+    mut before_submit: impl FnMut() -> Result<()>,
+) -> Result<BootstrapReceipt> {
+    let message_digest = bootstrap_message_digest(project_id, intent_id, source, handoff)?;
+    let request = serde_json::json!({
+        "bootstrap": true,
+        "projectId": project_id,
+        "intentId": intent_id,
+        "source": source,
+        "handoff": handoff,
+    });
+    let request_bytes = serde_json::to_vec(&request).map_err(|_| "BOOTSTRAP_REQUEST_INVALID")?;
+    if request_bytes.len() + 1 > 32 * 1024 {
+        return Err("BOOTSTRAP_REQUEST_TOO_LARGE".into());
+    }
+    let _lease = store.host_lock()?;
+    ensure_bootstrap_source_available(store, project_id, source)?;
+    let installed = installed_bootstrap_directory(store)?;
+    let mut adapter = Adapter::spawn_from_installed(store.root(), &installed)?;
+    adapter.send(request)?;
+    let absolute_deadline = Instant::now() + Duration::from_secs(15 * 60);
+    let mut deadline = Instant::now() + Duration::from_secs(180);
+    let mut submit_dispatched = false;
+    loop {
+        if Instant::now() >= deadline || Instant::now() >= absolute_deadline {
+            return Err(if submit_dispatched {
+                "BOOTSTRAP_OUTCOME_UNKNOWN"
+            } else {
+                "BOOTSTRAP_PRE_SUBMIT_TIMEOUT"
+            }
+            .into());
+        }
+        let observed = adapter.output.recv_timeout(Duration::from_millis(250));
+        let value = match observed {
+            Ok(Ok(value)) => value,
+            Ok(Err(error)) if !submit_dispatched => return Err(error),
+            Err(mpsc::RecvTimeoutError::Disconnected) if !submit_dispatched => {
+                return Err("BROWSER_ADAPTER_EXITED".into());
+            }
+            Ok(Err(_)) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err("BOOTSTRAP_OUTCOME_UNKNOWN".into());
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+        };
+        match value.get("stage").and_then(|stage| stage.as_str()) {
+            Some("BEFORE_BOOTSTRAP_SUBMIT") if !submit_dispatched => {
+                let valid = value.get("projectId").and_then(|v| v.as_str()) == Some(project_id)
+                    && value.get("intentId").and_then(|v| v.as_str()) == Some(intent_id)
+                    && value.get("sourceGeneration").and_then(|v| v.as_u64())
+                        == Some(source.generation)
+                    && value.get("messageDigest").and_then(|v| v.as_str())
+                        == Some(message_digest.as_str())
+                    && value.as_object().is_some_and(|map| map.len() == 5);
+                if !valid {
+                    return Err("BOOTSTRAP_BEFORE_SUBMIT_INVALID".into());
+                }
+                ensure_bootstrap_source_available(store, project_id, source)?;
+                before_submit()?;
+                submit_dispatched = true;
+                adapter
+                    .send(serde_json::json!({"submit": true}))
+                    .map_err(|_| "BOOTSTRAP_OUTCOME_UNKNOWN")?;
+                deadline = Instant::now() + Duration::from_secs(180);
+            }
+            Some("BOOTSTRAP_COMPLETE") if submit_dispatched => {
+                let receipt: BootstrapReceipt = serde_json::from_value(
+                    value
+                        .get("receipt")
+                        .ok_or("BOOTSTRAP_OUTCOME_UNKNOWN")?
+                        .clone(),
+                )
+                .map_err(|_| "BOOTSTRAP_OUTCOME_UNKNOWN")?;
+                validate_bootstrap_receipt(
+                    &receipt,
+                    project_id,
+                    intent_id,
+                    source,
+                    &message_digest,
+                )
+                .map_err(|_| "BOOTSTRAP_OUTCOME_UNKNOWN")?;
+                let _ = adapter.allow_graceful_exit(Duration::from_secs(5));
+                return Ok(receipt);
+            }
+            Some("BOOTSTRAP_UNKNOWN") if submit_dispatched => {
+                return Err("BOOTSTRAP_OUTCOME_UNKNOWN".into());
+            }
+            Some("ATTENTION") if !submit_dispatched => {
+                let reason = value
+                    .get("reason")
+                    .and_then(|v| v.as_str())
+                    .filter(|reason| crate::protocol::valid_id(reason))
+                    .unwrap_or("BOOTSTRAP_PRE_SUBMIT_ATTENTION");
+                return Err(reason.into());
+            }
+            Some(
+                "CDP_REUSE_BEGIN"
+                | "CDP_REUSE_DONE"
+                | "CDP_ACTIVATE_BEGIN"
+                | "CDP_ACTIVATE_DONE"
+                | "BOOTSTRAP_SOURCE_READY"
+                | "BOOTSTRAP_HOME_READY"
+                | "BOOTSTRAP_SUBMISSION_ACCEPTED"
+                | "GENERATION_WAIT"
+                | "GENERATION_ACTIVE"
+                | "RESPONSE_TIMEOUT_DETECTED"
+                | "RESPONSE_COMPLETED"
+                | "RESPONSE_COMPLETED_AFTER_REOPEN",
+            ) => {
+                deadline = Instant::now() + Duration::from_secs(180);
+            }
+            _ if submit_dispatched => return Err("BOOTSTRAP_OUTCOME_UNKNOWN".into()),
+            _ => return Err("BROWSER_ADAPTER_RESPONSE_INVALID".into()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod bootstrap_runtime_tests {
+    use super::*;
+    use crate::protocol::Event;
+
+    fn source() -> Target {
+        Target::new(7, "https://chatgpt.com/c/source-123".into()).expect("source")
+    }
+
+    #[test]
+    fn message_composition_matches_adapter_and_is_bounded() {
+        let message =
+            compose_bootstrap_message("project-one", "rollover-1", &source(), "body\nline")
+                .expect("message");
+        assert_eq!(
+            message,
+            "CatDesk project rollover bootstrap.\nProject: project-one\nIntent: rollover-1\nPredecessor: https://chatgpt.com/c/source-123\n\nbody\nline"
+        );
+        let expected = crate::protocol::digest(
+            "CatDesk project rollover bootstrap. Project: project-one Intent: rollover-1 Predecessor: https://chatgpt.com/c/source-123 body line",
+        );
+        assert_eq!(
+            bootstrap_message_digest("project-one", "rollover-1", &source(), "body\nline")
+                .expect("digest"),
+            expected
+        );
+        assert_eq!(
+            compose_bootstrap_message("project-one", "rollover-1", &source(), &"é".repeat(9000))
+                .unwrap_err(),
+            "BOOTSTRAP_MESSAGE_TOO_LONG"
+        );
+    }
+
+    #[test]
+    fn receipt_requires_new_issued_url_and_exact_identity() {
+        let message_digest =
+            bootstrap_message_digest("project-one", "rollover-1", &source(), "body")
+                .expect("digest");
+        let issued = "https://chatgpt.com/c/issued-456";
+        let mut receipt = BootstrapReceipt {
+            schema_version: 1,
+            project_id: "project-one".into(),
+            intent_id: "rollover-1".into(),
+            source_generation: 7,
+            source_digest: source().digest,
+            destination_url: issued.into(),
+            destination_digest: crate::protocol::digest(issued),
+            message_digest: message_digest.clone(),
+            sent_utc: 42,
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+            completion: "RESPONSE_COMPLETED".into(),
+        };
+        validate_bootstrap_receipt(
+            &receipt,
+            "project-one",
+            "rollover-1",
+            &source(),
+            &message_digest,
+        )
+        .expect("valid receipt");
+        receipt.destination_url = source().url;
+        assert_eq!(
+            validate_bootstrap_receipt(
+                &receipt,
+                "project-one",
+                "rollover-1",
+                &source(),
+                &message_digest,
+            )
+            .unwrap_err(),
+            "BOOTSTRAP_RECEIPT_INVALID"
+        );
+        receipt.destination_url = issued.into();
+        receipt.source_generation = 8;
+        assert!(
+            validate_bootstrap_receipt(
+                &receipt,
+                "project-one",
+                "rollover-1",
+                &source(),
+                &message_digest,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn source_guard_refuses_pending_timer_and_queued_event() {
+        let parent = std::env::temp_dir();
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = parent.join(format!("catdesk-bootstrap-{}-{nonce}", std::process::id()));
+        let store = Store::open_scoped_for_test(&root, &parent).expect("store");
+        store.initialize().expect("initialize");
+        let target = store
+            .set_target("project-one", 0, &source().url)
+            .expect("target");
+        ensure_bootstrap_source_available(&store, "project-one", &target).expect("empty source");
+        store
+            .start_manual_turn_timer("manual-turn-bootstrap", "project-one", &target)
+            .expect("timer");
+        assert_eq!(
+            ensure_bootstrap_source_available(&store, "project-one", &target).unwrap_err(),
+            "BOOTSTRAP_SOURCE_TURN_PENDING"
+        );
+        store
+            .complete_manual_turn_timer("manual-turn-bootstrap", "project-one", &target)
+            .expect("complete timer");
+        let event = Event {
+            schema_version: 1,
+            event_id: "queued-bootstrap".into(),
+            project_id: "project-one".into(),
+            event_type: "test".into(),
+            created_utc: now(),
+            message: "queued work".into(),
+            target_generation: target.generation,
+            audit_references: vec![],
+        };
+        store.publish(&event).expect("queue event");
+        assert_eq!(
+            ensure_bootstrap_source_available(&store, "project-one", &target).unwrap_err(),
+            "BOOTSTRAP_SOURCE_QUEUE_PENDING"
+        );
+        drop(store);
+        std::fs::remove_dir_all(root).expect("remove fixture");
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
