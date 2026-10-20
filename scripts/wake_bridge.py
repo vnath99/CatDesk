@@ -2236,6 +2236,78 @@ class NewConversationSink(CdpSink):
             raise Attention("BOOTSTRAP_TURN_QUERY_FAILED")
         return value[0], value[1], value[2]
 
+    def message_body_diagnostics(self, cdp: Any) -> dict[str, Any]:
+        """Bounded private DOM shape only; never promotes incomplete text."""
+        if not self.exact(str(cdp.get_current_url())):
+            raise Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
+        script = """(() => {
+            const visible = node => {
+                const style = window.getComputedStyle(node);
+                return node.getClientRects().length > 0 &&
+                    style.visibility !== 'hidden' && style.display !== 'none';
+            };
+            const shape = node => {
+                const style = window.getComputedStyle(node);
+                return [String(node.tagName || '').slice(0, 16),
+                    String(node.getAttribute('class') || '').slice(0, 96),
+                    String(node.getAttribute('data-markdown-text-style') || '').slice(0, 64),
+                    String(style.display || '').slice(0, 32),
+                    String(style.visibility || '').slice(0, 16),
+                    Math.min(node.getClientRects().length, 32)];
+            };
+            let tier = 'AUTHOR_ROLE';
+            let nodes = Array.from(document.querySelectorAll(
+                '[data-message-author-role="assistant"]')).filter(visible);
+            if (!nodes.length) {
+                tier = 'ARTICLE_ROLE';
+                nodes = Array.from(document.querySelectorAll('article[data-turn="assistant"]')).filter(visible);
+            }
+            if (!nodes.length) {
+                tier = 'SEMANTIC_UNIT';
+                nodes = Array.from(document.querySelectorAll('[data-content-search-unit-key]'))
+                    .filter(node => visible(node) && node.querySelector('h4[data-conversation-role="assistant"]') &&
+                        !node.querySelector('[data-user-message-bubble]'));
+            }
+            const node = nodes[nodes.length - 1];
+            if (!node) return null;
+            const selector = '[data-message-content], .markdown, [class~="prose"], [data-markdown-text-style="assistant-message"]';
+            const bodies = (node.matches(selector) ? [node] : [])
+                .concat(Array.from(node.querySelectorAll(selector)));
+            const ancestors = [];
+            for (let parent = node.parentElement; parent && ancestors.length < 2; parent = parent.parentElement)
+                ancestors.push(shape(parent));
+            return {selectorTier:tier, roleNodeCount:Math.min(nodes.length, 1024),
+                selected:shape(node), bodyCount:Math.min(bodies.length, 1024),
+                visibleBodyCount:Math.min(bodies.filter(visible).length, 1024),
+                bodies:bodies.slice(0, 2).map(shape), ancestors,
+                descendants:Array.from(node.querySelectorAll('*')).slice(0, 4).map(shape)};
+        })()"""
+        try:
+            value = self.cdp_value(cdp.evaluate(script))
+            if (not isinstance(value, dict) or set(value) != {
+                    "selectorTier", "roleNodeCount", "selected", "bodyCount",
+                    "visibleBodyCount", "bodies", "ancestors", "descendants"} or
+                    value["selectorTier"] not in {"AUTHOR_ROLE", "ARTICLE_ROLE", "SEMANTIC_UNIT"} or
+                    any(type(value[key]) is not int or not 0 <= value[key] <= 1024
+                        for key in ("roleNodeCount", "bodyCount", "visibleBodyCount"))):
+                return {"status": "UNAVAILABLE"}
+            for key, maximum in (("bodies", 2), ("ancestors", 2), ("descendants", 4)):
+                if not isinstance(value[key], list) or len(value[key]) > maximum:
+                    return {"status": "UNAVAILABLE"}
+            for shape in [value["selected"], *value["bodies"], *value["ancestors"], *value["descendants"]]:
+                if (not isinstance(shape, list) or len(shape) != 6 or
+                        any(not isinstance(part, str) or len(part) > limit
+                            for part, limit in zip(shape[:5], (16, 96, 64, 32, 16))) or
+                        type(shape[5]) is not int or not 0 <= shape[5] <= 32):
+                    return {"status": "UNAVAILABLE"}
+            if len(json.dumps(value).encode("utf-8")) > 3072:
+                return {"status": "UNAVAILABLE"}
+        except Exception:
+            return {"status": "UNAVAILABLE"}
+        if not self.exact(str(cdp.get_current_url())):
+            raise Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
+        return {"status": "OBSERVED", **value}
+
     def visible_message_snapshot(self, cdp: Any) -> dict[str, Any]:
         """Return bounded private text and qualified identities for visible role units.
 

@@ -250,6 +250,9 @@ class AttemptSink:
             "messageHash": None, "identityBasis": "MISSING",
             "revisionHash": bridge.digest("bounded private status"), "revisionComplete": True,
         }
+        if cdp.scenario == "incomplete_body":
+            message["textComplete"] = False
+            coverage["textIncomplete"] = 1
         if cdp.scenario == "large_snapshot":
             message["text"] = "😀" * 4096
             message["visibleUnits"] = 4096
@@ -265,6 +268,10 @@ class AttemptSink:
             coverage.update(visibleRoleCount=12, returned=12, identityMissing=0)
             return {"messages": messages, "truncated": False, "coverage": coverage}
         return {"messages": [message], "truncated": False, "coverage": coverage}
+
+    def message_body_diagnostics(self, cdp):
+        cdp.timeline.append("body-diagnostics")
+        return {"status": "UNAVAILABLE"}
 
 
 class NewConversationTests(unittest.TestCase):
@@ -608,6 +615,19 @@ class NewConversationTests(unittest.TestCase):
             len(json.dumps(emitted[-1], separators=(",", ":")).encode("utf-8")) + 1,
             8192,
         )
+
+    def test_incomplete_snapshot_adds_private_shape_without_promoting_text(self):
+        cdp = AttemptCdp("incomplete_body")
+        sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
+        emitted = []
+        request = {"snapshot": True, "projectId": "project-one", "source": self.request()["source"]}
+        with patch.object(bridge, "NewConversationSink", AttemptSink), patch.object(adapter, "emit", emitted.append):
+            adapter.source_snapshot(bridge, sb, request)
+        snapshot = emitted[-1]["snapshot"]
+        self.assertEqual(snapshot["bodyDiagnostics"], {"status":"UNAVAILABLE"})
+        self.assertFalse(snapshot["messages"][-1]["textComplete"])
+        self.assertEqual(cdp.timeline, ["snapshot", "body-diagnostics"])
+        self.assertEqual(cdp.sent, 0)
 
     def test_snapshot_frame_trim_reports_omitted_older_units(self):
         cdp = AttemptCdp("many_snapshot")

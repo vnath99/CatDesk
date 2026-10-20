@@ -526,6 +526,11 @@ def source_snapshot(bridge, sb, request):
     if not sink.exact(cdp.get_current_url()) or sink.readiness_reason(cdp) is not None:
         raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
     snapshot = sink.visible_message_snapshot(cdp)
+    if (snapshot["messages"] and snapshot["messages"][-1]["role"] == "ASSISTANT" and
+            not snapshot["messages"][-1]["textComplete"]):
+        snapshot["bodyDiagnostics"] = sink.message_body_diagnostics(cdp)
+    if not sink.exact(cdp.get_current_url()):
+        raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
     payload = {
         "stage": "SOURCE_SNAPSHOT",
         "projectId": request["projectId"],

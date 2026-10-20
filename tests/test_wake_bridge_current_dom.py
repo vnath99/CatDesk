@@ -106,6 +106,9 @@ class CurrentDom:
     def __init__(self, **options):
         self.options = options
 
+    def get_current_url(self):
+        return "https://chatgpt.com/c/current-dom"
+
     def evaluate(self, script):
         result = subprocess.run(
             [shutil.which("node"), "-e", DOM, json.dumps(self.options)],
@@ -136,6 +139,28 @@ class CurrentDomTests(unittest.TestCase):
     def test_current_user_receipt_and_following_assistant_anchor(self):
         self.assertEqual(self.sink.user_message_digests(CurrentDom()), [bridge.digest("exact wake message")])
         self.assertEqual(self.sink.trusted_turn_anchor_state(CurrentDom(), "exact wake message"), (1, 1))
+
+    def test_private_body_shape_diagnostics_contain_no_message_text(self):
+        for options, count in (({}, 1), ({"controlsOnly": True}, 0)):
+            with self.subTest(options=options):
+                shape = self.sink.message_body_diagnostics(CurrentDom(**options))
+                self.assertEqual(shape["status"], "OBSERVED")
+                self.assertEqual(shape["selectorTier"], "SEMANTIC_UNIT")
+                self.assertEqual(shape["bodyCount"], count)
+                self.assertLessEqual(len(json.dumps(shape).encode("utf-8")), 3072)
+                self.assertNotIn("A useful answer", json.dumps(shape))
+                self.assertNotIn("assistant-id", json.dumps(shape))
+        self.assertFalse(self.sink.visible_message_snapshot(CurrentDom(controlsOnly=True))["messages"][-1]["textComplete"])
+
+    def test_body_shape_refuses_wrong_target_and_sanitizes_failures(self):
+        class Wrong:
+            def get_current_url(self): return "https://chatgpt.com/c/foreign"
+            def evaluate(self, script): raise AssertionError("must not evaluate")
+        with self.assertRaisesRegex(bridge.Attention, "SOURCE_SNAPSHOT_SOURCE_DRIFT"):
+            self.sink.message_body_diagnostics(Wrong())
+        class Failure(CurrentDom):
+            def evaluate(self, script): raise RuntimeError("private page details")
+        self.assertEqual(self.sink.message_body_diagnostics(Failure()), {"status":"UNAVAILABLE"})
 
     def test_collapsible_user_controls_do_not_change_message_digest(self):
         cdp = CurrentDom(userBodyClass=True, userShowMore=True)
