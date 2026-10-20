@@ -491,6 +491,24 @@ impl WebContextStore {
         Ok(pressure_status(&project, &self.read_ledger(key)?))
     }
 
+    /// Read pressure and the durable one-time history guard together. This
+    /// advisory decision neither creates an intent nor proves quiescence;
+    /// request_rollover_if_due rechecks it before recording a request.
+    pub fn rollover_readiness(
+        &self,
+        key: &ConversationKey,
+    ) -> Result<(PressureStatus, bool), String> {
+        key.validate()?;
+        let _lock = self.read_lock()?;
+        let project = self.read_project(&key.project_id)?;
+        if !project.history.contains(key) {
+            return Err("WEB_CONTEXT_TARGET_NOT_RECORDED".into());
+        }
+        let status = pressure_status(&project, &self.read_ledger(key)?);
+        let due = self.rollover_due_locked(&project, &status)?;
+        Ok((status, due))
+    }
+
     pub fn project_history(&self, project_id: &str) -> Result<Vec<PressureStatus>, String> {
         valid_identifier(project_id)?;
         let _lock = self.read_lock()?;
@@ -548,18 +566,7 @@ impl WebContextStore {
         }
         let mut ledger = self.read_ledger(key)?;
         let status = pressure_status(&project, &ledger);
-        let incomplete_history_guard_candidate = project.policy.incomplete_history_rollover
-            && status.browser_coverage.observed
-            && status.pressure_assessment == "UNKNOWN_OR_INCOMPLETE";
-        // One uncertainty-only rollover is enough to put the project on a
-        // fresh conversation. Repeating it on that fresh chat's first bounded
-        // excerpt would otherwise create an automatic rollover loop.
-        let incomplete_history_guard = incomplete_history_guard_candidate
-            && !self.predecessor_used_incomplete_history_guard(&project, key)?;
-        if !project.policy.automatic_rollover_enabled
-            || !(status.near_capacity || incomplete_history_guard)
-            || !quiescent
-        {
+        if !self.rollover_due_locked(&project, &status)? || !quiescent {
             return Ok(None);
         }
         if let Some(existing) = &ledger.rollover_intent {
@@ -590,6 +597,26 @@ impl WebContextStore {
         ledger.rollover_intent = Some(intent.clone());
         self.write_ledger(&ledger)?;
         Ok(Some(intent))
+    }
+
+    fn rollover_due_locked(
+        &self,
+        project: &ProjectState,
+        status: &PressureStatus,
+    ) -> Result<bool, String> {
+        if !status.is_current {
+            return Ok(false);
+        }
+        let incomplete_history_guard_candidate = project.policy.incomplete_history_rollover
+            && status.browser_coverage.observed
+            && status.pressure_assessment == "UNKNOWN_OR_INCOMPLETE";
+        // One uncertainty-only rollover is enough to put the project on a
+        // fresh conversation. Repeating it on that fresh chat's first bounded
+        // excerpt would otherwise create an automatic rollover loop.
+        let incomplete_history_guard = incomplete_history_guard_candidate
+            && !self.predecessor_used_incomplete_history_guard(project, &status.key)?;
+        Ok(project.policy.automatic_rollover_enabled
+            && (status.near_capacity || incomplete_history_guard))
     }
 
     fn predecessor_used_incomplete_history_guard(
@@ -1109,6 +1136,14 @@ mod tests {
         assert!(reader.pressure(&key).is_ok());
         assert_eq!(reader.project_history("alpha").unwrap().len(), 1);
         assert!(reader.active_pressure("alpha").unwrap().is_some());
+        let ledger_before = fs::read(fixture.store.ledger_path(&key)).unwrap();
+        let (pressure, due) = reader.rollover_readiness(&key).unwrap();
+        assert_eq!(pressure.key, key);
+        assert!(!due);
+        assert_eq!(
+            fs::read(fixture.store.ledger_path(&key)).unwrap(),
+            ledger_before
+        );
         assert_eq!(
             reader
                 .configure_policy("alpha", ContextPressurePolicy::default())
@@ -1134,6 +1169,10 @@ mod tests {
         assert_eq!(reader.active_key("alpha").unwrap_err(), "WEB_CONTEXT_BUSY");
         assert_eq!(
             reader.project_history("alpha").unwrap_err(),
+            "WEB_CONTEXT_BUSY"
+        );
+        assert_eq!(
+            reader.rollover_readiness(&key).unwrap_err(),
             "WEB_CONTEXT_BUSY"
         );
         drop(held);
@@ -1610,6 +1649,7 @@ mod tests {
         assert_eq!(intent.trigger_reason, "INCOMPLETE_HISTORY_GUARD");
         assert_eq!(intent.estimated_upper_tokens, 0);
         assert!(!fixture.store.pressure(&key).unwrap().near_capacity);
+        assert!(fixture.store.rollover_readiness(&key).unwrap().1);
         let replacement = Fixture::key("alpha", "coverage-guard-next", 2);
         fixture
             .store
@@ -1627,6 +1667,8 @@ mod tests {
                 },
             )
             .unwrap();
+        assert!(!fixture.store.rollover_readiness(&replacement).unwrap().1);
+        assert!(!fixture.store.rollover_readiness(&key).unwrap().1);
         assert!(
             fixture
                 .store

@@ -42,13 +42,17 @@ fn require_scheduler_running(cancel: &AtomicBool) -> Result<(), String> {
     }
 }
 
-fn pressure_due(pressure: &PressureStatus) -> bool {
-    pressure.is_current
-        && pressure.automatic_rollover_enabled
-        && (pressure.near_capacity
-            || (pressure.incomplete_history_rollover
-                && pressure.browser_coverage.observed
-                && pressure.pressure_assessment == "UNKNOWN_OR_INCOMPLETE"))
+fn after_observation_with(
+    meter: &WebContextStore,
+    key: &ConversationKey,
+    observed: Value,
+    request: impl FnOnce(&PressureStatus) -> Result<(&'static str, Value), String>,
+) -> Result<(&'static str, Value), String> {
+    let (pressure, due) = meter.rollover_readiness(key)?;
+    if !due {
+        return Ok(("OBSERVED", observed));
+    }
+    request(&pressure)
 }
 
 fn completed_task_anchor(
@@ -324,27 +328,25 @@ fn run_step(
             let observed = super::capture_context_guarded(workspace, project, keep_running)?;
             keep_running()?;
             let meter = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
-            let pressure = meter.pressure(key)?;
-            if !pressure_due(&pressure) {
-                return Ok(("OBSERVED", observed));
-            }
-            let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
-                workspace,
-            )?)?;
-            if running_wake_state(&wake, project, source)? != "RUNNING" {
-                return Ok(("WAKE_STOPPED", json!({"reason":"WAKE_CONTROL_CHANGED"})));
-            }
-            let Some(task_id) =
-                source_task_anchor(workspace, &wake, project, source, key, &pressure)?
-            else {
-                return Ok((
-                    "TASK_ANCHOR_REQUIRED",
-                    json!({"reason":"WEB_AUTO_COMPLETED_WAKE_TASK_REQUIRED"}),
-                ));
-            };
-            let request =
-                rollover::request_handoff_guarded(workspace, project, &task_id, keep_running)?;
-            Ok(("HANDOFF_REQUESTED", request))
+            after_observation_with(&meter, key, observed, |pressure| {
+                let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
+                    workspace,
+                )?)?;
+                if running_wake_state(&wake, project, source)? != "RUNNING" {
+                    return Ok(("WAKE_STOPPED", json!({"reason":"WAKE_CONTROL_CHANGED"})));
+                }
+                let Some(task_id) =
+                    source_task_anchor(workspace, &wake, project, source, key, pressure)?
+                else {
+                    return Ok((
+                        "TASK_ANCHOR_REQUIRED",
+                        json!({"reason":"WEB_AUTO_COMPLETED_WAKE_TASK_REQUIRED"}),
+                    ));
+                };
+                let request =
+                    rollover::request_handoff_guarded(workspace, project, &task_id, keep_running)?;
+                Ok(("HANDOFF_REQUESTED", request))
+            })
         }
     }
 }
@@ -736,21 +738,176 @@ mod tests {
 
     #[test]
     fn opted_out_policy_still_allows_observation_but_not_request() {
-        let mut pressure = serde_json::from_value::<PressureStatus>(json!({
-            "key":{"projectId":"alpha","conversationUrl":"https://chatgpt.com/c/old","targetGeneration":1},
-            "targetSha256":"x","isCurrent":true,"recordedEvents":1,
-            "visibleUniqueTokens":90000,"observedEstimateTokens":90000,
-            "unknownSourceCount":0,"estimatedUpperTokens":90000,
-            "observedToolArgumentTokens":0,"observedToolResultTokens":0,
-            "configuredBudgetTokens":96000,"safetyHeadroomTokens":24000,"triggerTokens":72000,
-            "nearCapacity":true,"coverageKnown":true,"browserCoverage":{"observed":true,"initialHistoryGap":false,"identityGap":false,"textGap":false,"overflowGap":false},
-            "pressureAssessment":"OBSERVED_AT_OR_ABOVE_TRIGGER",
-            "automaticRolloverEnabled":false,"incompleteHistoryRollover":false,
-            "rolloverIntent":null,"estimateMethod":"test","advisory":true,"originAuthenticated":false
-        })).unwrap();
-        assert!(!pressure_due(&pressure));
-        pressure.automatic_rollover_enabled = true;
-        assert!(pressure_due(&pressure));
+        use crate::web_conversation_context::{
+            ContextPressurePolicy, Observation, VisibleSourceKind,
+        };
+        let root = std::env::temp_dir().join(format!("web-auto-opt-out-{}", uuid::Uuid::new_v4()));
+        let meter = WebContextStore::open(&root).unwrap();
+        let key = ConversationKey {
+            project_id: "alpha".into(),
+            conversation_url: "https://chatgpt.com/c/alpha-old".into(),
+            target_generation: 1,
+        };
+        meter.bind_observed_target(key.clone(), None).unwrap();
+        let mut policy = ContextPressurePolicy {
+            configured_budget_tokens: 100,
+            safety_headroom_tokens: 40,
+            unknown_source_reserve_tokens: 8,
+            ..Default::default()
+        };
+        meter.configure_policy("alpha", policy.clone()).unwrap();
+        let text = "observed context ".repeat(100);
+        meter
+            .record_observation(
+                &key,
+                Observation {
+                    event_id: "growth",
+                    revision: 1,
+                    dedup_key: "growth",
+                    source_kind: VisibleSourceKind::UserMessage,
+                    visible_text: Some(&text),
+                    observed_at_unix: 100,
+                },
+            )
+            .unwrap();
+        let observed = json!({"recordedMessages":1});
+        let result = after_observation_with(&meter, &key, observed.clone(), |_| {
+            panic!("opted-out request")
+        })
+        .unwrap();
+        assert_eq!(result, ("OBSERVED", observed));
+        assert!(meter.pressure(&key).unwrap().near_capacity);
+        policy.automatic_rollover_enabled = true;
+        meter.configure_policy("alpha", policy).unwrap();
+        let mut requests = 0;
+        assert_eq!(
+            after_observation_with(&meter, &key, json!({}), |_| {
+                requests += 1;
+                Ok(("HANDOFF_REQUESTED", json!({})))
+            })
+            .unwrap()
+            .0,
+            "HANDOFF_REQUESTED"
+        );
+        assert_eq!(requests, 1);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn spent_history_guard_skips_handoff_while_other_projects_and_pressure_progress() {
+        use crate::web_conversation_context::{
+            BrowserCoverageObservation, ContextPressurePolicy, Observation, VisibleSourceKind,
+        };
+        let root =
+            std::env::temp_dir().join(format!("web-auto-spent-guard-{}", uuid::Uuid::new_v4()));
+        let meter = WebContextStore::open(&root).unwrap();
+        let mut keys = Vec::new();
+        for project in ["alpha", "beta", "gamma"] {
+            let key = ConversationKey {
+                project_id: project.into(),
+                conversation_url: format!("https://chatgpt.com/c/{project}-old"),
+                target_generation: 1,
+            };
+            meter.bind_observed_target(key.clone(), None).unwrap();
+            meter
+                .configure_policy(
+                    project,
+                    ContextPressurePolicy {
+                        configured_budget_tokens: 100,
+                        safety_headroom_tokens: 40,
+                        unknown_source_reserve_tokens: 8,
+                        automatic_rollover_enabled: true,
+                        incomplete_history_rollover: true,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            meter
+                .record_browser_coverage(
+                    &key,
+                    BrowserCoverageObservation {
+                        initial_history_gap: true,
+                        identity_gap: false,
+                        text_gap: false,
+                        overflow_gap: false,
+                    },
+                )
+                .unwrap();
+            keys.push(key);
+        }
+        let first = meter
+            .request_rollover_if_due(&keys[0], &keys[0].target_sha256(), "alpha-task", true, 100)
+            .unwrap()
+            .unwrap();
+        assert_eq!(first.trigger_reason, "INCOMPLETE_HISTORY_GUARD");
+        let replacement = ConversationKey {
+            project_id: "alpha".into(),
+            conversation_url: "https://chatgpt.com/c/alpha-new".into(),
+            target_generation: 2,
+        };
+        meter
+            .bind_observed_target(replacement.clone(), Some(&keys[0]))
+            .unwrap();
+        meter
+            .record_browser_coverage(
+                &replacement,
+                BrowserCoverageObservation {
+                    initial_history_gap: true,
+                    identity_gap: false,
+                    text_gap: false,
+                    overflow_gap: false,
+                },
+            )
+            .unwrap();
+        let observed = json!({"projectId":"alpha","recordedMessages":0});
+        for key in [&keys[0], &replacement] {
+            assert_eq!(
+                after_observation_with(&meter, key, observed.clone(), |_| panic!(
+                    "stale or spent guard must not prepare a handoff"
+                ))
+                .unwrap(),
+                ("OBSERVED", observed.clone())
+            );
+        }
+        let mut requested = Vec::new();
+        for key in &keys[1..] {
+            after_observation_with(&meter, key, json!({}), |pressure| {
+                requested.push(pressure.key.project_id.clone());
+                Ok(("HANDOFF_REQUESTED", json!({})))
+            })
+            .unwrap();
+        }
+        assert_eq!(requested, ["beta", "gamma"]);
+        let text = "observed growth ".repeat(100);
+        meter
+            .record_observation(
+                &replacement,
+                Observation {
+                    event_id: "growth",
+                    revision: 1,
+                    dedup_key: "growth",
+                    source_kind: VisibleSourceKind::UserMessage,
+                    visible_text: Some(&text),
+                    observed_at_unix: 101,
+                },
+            )
+            .unwrap();
+        after_observation_with(&meter, &replacement, json!({}), |pressure| {
+            assert!(pressure.near_capacity);
+            requested.push(pressure.key.project_id.clone());
+            Ok(("HANDOFF_REQUESTED", json!({})))
+        })
+        .unwrap();
+        assert_eq!(requested, ["beta", "gamma", "alpha"]);
+        assert!(
+            meter
+                .pressure(&replacement)
+                .unwrap()
+                .rollover_intent
+                .is_none(),
+            "readiness did not create an intent"
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

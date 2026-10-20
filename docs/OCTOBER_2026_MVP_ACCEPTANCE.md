@@ -1,5 +1,33 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 scheduler rollover eligibility (SOURCE VERIFIED)
+
+The context ledger already limited uncertainty-only rollover to one use in a
+project's history. The scheduler's separate coarse pressure check did not use
+that durable decision: after observing a replacement it could prepare another
+handoff, take another source snapshot, and then receive
+`WEB_ROLLOVER_NOT_DUE_OR_DISABLED` from the ledger. This produced unnecessary
+browser work and an attention state despite the guard behaving correctly.
+
+`rollover_readiness` now reads pressure and eligibility under the same meter
+lock. The scheduler uses that decision before entering handoff preparation;
+intent creation rechecks the same eligibility logic and retains its existing
+target, task, timestamp and quiescence checks. An ineligible observation remains
+`OBSERVED`. The ordinary opted-in observation cadence is unchanged.
+
+Local fixture tests verify no handoff callback for a spent guard, opted-out
+policy or stale generation; beta/gamma can still progress independently, and
+new observed pressure makes alpha's replacement eligible again. Readiness on a
+read-only meter preserves ledger bytes and returns busy without waiting for a
+writer. These are source tests with fake handoff callbacks, not live dispatch.
+
+Final verification: **1,530 root tests passed / 28 ignored**, strict root Clippy,
+main build, formatting and diff checks pass. Wake/Python sources are unchanged
+from the preceding full regression checkpoint. Evidence lives in parent
+`checkpoints/web-eligibility-oct20`. No browser, WakeHost, recurring scheduler,
+production pointer, project binding or native session was changed by the tests.
+Installed and remote CI acceptance remain open. **October MVP: `PARTIAL`.**
+
 ## October 20 complete local regression gates (SOURCE VERIFIED)
 
 The full root suite passed **1,529 tests / 28 ignored** on `f9a4e83`.
