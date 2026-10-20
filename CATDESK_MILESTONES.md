@@ -1,5 +1,13 @@
 ## 2026-10-20 — Web context capture and current acceptance (SOURCE; MVP PARTIAL)
 
+The ten-requirement acceptance audit confirms preserved controlled rollover
+proof and independent advisory estimates, while installed/central/natural-cycle
+acceptance remains open. It exposed a central projection omission: durable
+`AWAITING_CONTEXT` appeared as `UNKNOWN_STAGE`. The existing real held-ledger
+worker regression now traverses central readback, reproduces the old result
+and passes after correction. This is source-only; stopped v22 and the pending
+three-review test remain unchanged, with no browser/host start or message.
+
 The already delivered draft-recovery implementation review was retrieved by one
 read-only browser command with exact event verification. Six existing offline
 archive/resume regressions pass, including the requested late-composer-edit

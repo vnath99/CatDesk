@@ -894,6 +894,12 @@ mod tests {
         assert!(cancel.load(Ordering::Acquire));
         assert_eq!(requested.load(Ordering::Acquire), 0);
         assert_eq!(meter.project_history("alpha").unwrap(), before);
+        // The central status reader must preserve the durable worker wait,
+        // not turn a normal metadata contention into an unknown stage.
+        let central = super::super::registry_rollover_status(&root, "alpha");
+        assert_eq!(central["automation"]["stage"], "AWAITING_CONTEXT");
+        assert_eq!(central["automation"]["reason"], "WEB_CONTEXT_BUSY");
+        assert!(central["automation"]["lastFailure"].is_null());
         assert!(background_observation_enabled(&root, &key).unwrap());
         assert_eq!(
             after_observation(&root, &key, json!({}), |_| Ok((

@@ -9,6 +9,14 @@
 
 ### October 20 current acceptance and contention correction
 
+Central registry status now preserves `AWAITING_CONTEXT` and its
+`WEB_CONTEXT_BUSY` reason instead of projecting `UNKNOWN_STAGE`. The existing
+held-writer stop/drain regression exercises this production readback, fails
+before the fix and passes afterward without a sticky failure. This correction
+is source-only; stopped v22, live targets and the approval-pending three-review
+controller are unchanged. The ten user acceptance requirements remain audited
+as controlled development evidence with installed/central live gates open.
+
 One read-only fetch now verifies the actual already delivered implementation
 review against its exact sent event and complete assistant body. Six existing
 archive/resume regressions pass, including late composer change before deletion.

@@ -651,6 +651,7 @@ fn registry_rollover_projection(raw: &Value) -> Value {
                     | "WAKE_HOST_NOT_RUNNING"
                     | "WAKE_TARGET_CHANGED"
                     | "AWAITING_BROWSER"
+                    | "AWAITING_CONTEXT"
                     | "AWAITING_QUIESCENCE"
                     | "AWAITING_RESPONSE"
                     | "AWAITING_HANDOFF"

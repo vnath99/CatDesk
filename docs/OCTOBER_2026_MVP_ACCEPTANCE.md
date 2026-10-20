@@ -1,5 +1,33 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 acceptance audit and central context-wait reporting (SOURCE)
+
+Read-only central status confirms seven paired registrations (five original
+projects and two canaries), separate advisory context estimates, and the
+completed fast canary at generation 2 with `continuationProved:true`. No
+completed step was repeated. The ten requested live requirements and original
+P0–P4 scope are evaluated in parent
+`checkpoints/web-acceptance-audit-oct20/requirements-audit.json`. Controlled
+development proof remains separate from protected installed, fresh current
+source delivery, central connector and natural review-cycle acceptance.
+Native inventory reports Bug Bounty, Wake2 and PortfolioDesk active, BYOVD idle;
+no native messages, ownership changes or interruptions were issued.
+
+The audit found a real source reporting gap: the durable worker records
+`AWAITING_CONTEXT` / `WEB_CONTEXT_BUSY`, but the central registry projection
+omitted that stage and returned `UNKNOWN_STAGE`. The existing held-ledger
+worker regression was extended through the actual central reader; it reproduced
+the wrong stage, then passed after the projection correction, preserving the
+reason and null permanent failure. No duplicate stage-only test was added.
+Full CatDesk passes **1,537 tests / 28 ignored**, with strict all-target/
+all-feature Clippy, formatting and diff checks passing. Wake/Python product
+sources are unchanged; their preceding gates were not repeated.
+
+This source-only correction is not selected into another development package.
+The stopped v22 candidate, its prepared controller/payload hashes and all live
+project state remain unchanged. Fresh live execution still requires the
+existing exact three-review approval. Overall October MVP remains `PARTIAL`.
+
 ## October 20 verified implementation-review read and installation audit
 
 One explicit `operator web review read` for
