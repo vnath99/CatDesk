@@ -29,6 +29,7 @@ class Element {
   }
   get textContent() { return this.text + this.children.map(c => c.textContent).join(''); }
   get innerText() { return this.textContent; }
+  get disabled() { return this.attrs.disabled === true; }
   getAttribute(name) { return this.attrs[name] ?? null; }
   getClientRects() { return [1]; }
   matches(selector) { return selector.split(',').some(raw => {
@@ -41,6 +42,8 @@ class Element {
     }
     const tag = s.match(/^[a-z][a-z0-9-]*/i);
     if (tag && tag[0].toLowerCase() !== this.tagName.toLowerCase()) return false;
+    const id = s.match(/#([a-zA-Z0-9_-]+)/);
+    if (id && this.getAttribute('id') !== id[1]) return false;
     const classes = [...s.matchAll(/\.([a-zA-Z0-9_-]+)/g)].map(m => m[1]);
     if (classes.some(c => !(this.attrs.class || '').split(' ').includes(c))) return false;
     for (const m of s.matchAll(/\[([^\s~^=\]]+)(?:(~=|\^=|=)["']?([^\]"']*)["']?)?\]/g)) {
@@ -68,10 +71,11 @@ const el = (tag, attrs = {}, text = '', children = []) => new Element(tag, attrs
 const button = label => el('button', {'aria-label':label}, label);
 const user = el('div', {'data-content-search-unit-key':'fallback-turn-0:0:user'}, '', [
   el('div', {'data-user-message-bubble':'true'}, '', [
-    el('div', {'data-markdown-text-tone':'user-message'}, 'exact wake message'),
+    el('div', options.userBodyClass ? {class:'whitespace-pre-wrap'} : {'data-markdown-text-tone':'user-message'}, 'exact wake message'),
     el('div', {class:'turn-action-controls'}, '', [button(options.userCopy || 'Copy message')]),
   ]),
 ]);
+if (options.userShowMore) user.children[0].children.push(el('span', {}, '…'), button('Show more'));
 const answer = options.loadError ? "This response couldn’t load" : 'A useful answer';
 const assistant = el('div', {'data-content-search-unit-key':'fallback-turn-0:2:assistant'}, '', [
   el('h4', {'data-conversation-role':'assistant'}, 'ChatGPT said:'),
@@ -82,6 +86,9 @@ const assistant = el('div', {'data-content-search-unit-key':'fallback-turn-0:2:a
   ]),
 ]);
 const children = [user, assistant];
+for (const control of options.submitControls || []) children.push(el('button', {
+  'aria-label':control.label, type:control.type, disabled:control.disabled || false
+}));
 if (options.extraAssistant) children.push(el('div', {'data-content-search-unit-key':'assistant-2'}, '', [
   el('h4', {'data-conversation-role':'assistant'}, 'ChatGPT said:'),
 ]));
@@ -129,6 +136,26 @@ class CurrentDomTests(unittest.TestCase):
     def test_current_user_receipt_and_following_assistant_anchor(self):
         self.assertEqual(self.sink.user_message_digests(CurrentDom()), [bridge.digest("exact wake message")])
         self.assertEqual(self.sink.trusted_turn_anchor_state(CurrentDom(), "exact wake message"), (1, 1))
+
+    def test_collapsible_user_controls_do_not_change_message_digest(self):
+        cdp = CurrentDom(userBodyClass=True, userShowMore=True)
+        observed = self.sink.visible_message_snapshot(cdp)["messages"][0]
+        self.assertEqual(observed["text"], "exact wake message")
+        self.assertTrue(observed["textComplete"])
+        self.assertEqual(bridge.digest(bridge.normalize_message(observed["text"])),
+                         self.sink.user_message_digests(cdp)[0])
+
+    def test_new_chat_plain_send_requires_submit_type_and_unique_enabled_control(self):
+        send = {"label":"Send", "type":"submit"}
+        selector = "button[type='submit'][aria-label='Send']"
+        self.assertEqual(self.sink.select_send_control(CurrentDom(submitControls=[send])),
+                         ("ready", selector))
+        for controls, status in (([send, send], "ambiguous"),
+                                 ([{**send, "disabled":True}], "disabled"),
+                                 ([{"label":"Send", "type":"button"}], "missing"),
+                                 ([{"label":"Dictate", "type":"submit"}], "missing")):
+            with self.subTest(controls=controls):
+                self.assertEqual(self.sink.select_send_control(CurrentDom(submitControls=controls))[0], status)
 
     def test_adjacent_assistant_toolbar_proves_usable_response(self):
         self.assertEqual(self.sink.response_snapshot(CurrentDom(), "exact wake message", require_usable_body=True),

@@ -2575,6 +2575,10 @@ class WakeBridgeTests(unittest.TestCase):
 
     def test_login_captcha_or_unrecoverable_network_never_presents_browser(self):
         presented = []
+        class Clock:
+            def __init__(self): self.now = 0.0
+            def monotonic(self): return self.now
+            def sleep(self, seconds): self.now += seconds
         class Cdp:
             def __init__(self, mode): self.mode = mode
             def get_current_url(self):
@@ -2596,7 +2600,12 @@ class WakeBridgeTests(unittest.TestCase):
                 def __exit__(self, *_args): return False
                 def activate_cdp_mode(self, _url): return None
             sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
-            with patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=SB)}), patch.object(wake_bridge.time, "sleep"):
+            clock = Clock()
+            readiness = sink.wait_for_page_readiness
+            with patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=SB)}), patch.object(
+                wake_bridge.time, "sleep", side_effect=clock.sleep
+            ), patch.object(sink, "wait_for_page_readiness", side_effect=lambda sb, cdp:
+                            readiness(sb, cdp, monotonic=clock.monotonic, sleeper=clock.sleep)):
                 with self.assertRaises(wake_bridge.Attention):
                     sink.wake(self.record_id, wake_bridge.MESSAGE.format(record_id=self.record_id), lambda: True, lambda: self.fail("submission boundary"))
         self.assertEqual([], presented)

@@ -2,6 +2,20 @@
 
 ## October 20 ready-draft retry and exact blocker (LIVE PARTIAL)
 
+The read-only composer probe subsequently confirmed the same exact owned draft
+and found an enabled `BUTTON` with `type=submit`, `aria-label=Send`, and no ID or
+test ID. The existing selectors did not cover it. Source adds only
+`button[type='submit'][aria-label='Send']`, retaining uniqueness, disabled-control
+and exact-draft checks. Executable offline DOM tests cover this observed shape,
+reject duplicate or disabled Send controls and unrelated buttons, and reproduce
+the Show more extraction regression. Eight current-DOM tests pass. A further
+bounded retry under the updated test package remains pending.
+Four focused bridge control/smoke tests and 35 bootstrap tests also pass.
+The optional broad bridge suite is not a passing gate: its initial run was
+stopped at a 174-second budget after 28 completed cases. The identified
+network-error fixture now uses an injected clock and passes in 0.023 seconds;
+broader real-time fixtures remain subject to the bounded test budget.
+
 Checkpoint `b3d2a43` is pushed. The corrected USER-body extraction passed a
 fresh one-shot read of the previously delivered review with
 `eventVerified:true`; the expected review marker and all three acceptance

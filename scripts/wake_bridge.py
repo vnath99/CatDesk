@@ -29,7 +29,7 @@ EDITOR_SELECTORS = (
     "[contenteditable='true'][data-lexical-editor='true']",
 )
 EDITOR = EDITOR_SELECTORS[0]
-SEND = ("button[data-testid='send-button']", "button[aria-label='Send prompt']", "button[aria-label='Send message']", "button#composer-submit-button")
+SEND = ("button[data-testid='send-button']", "button[aria-label='Send prompt']", "button[aria-label='Send message']", "button#composer-submit-button", "button[type='submit'][aria-label='Send']")
 USER_MESSAGE = "[data-message-author-role='user'], article[data-turn='user']"
 USER_MESSAGE_CONTENT = "[data-message-content], .whitespace-pre-wrap"
 STOP = ("button[data-testid='stop-button']", "button[aria-label='Stop answering']", "button[aria-label='Stop generating']", "button[aria-label='Stop streaming']", "button[aria-label='Stop']")
