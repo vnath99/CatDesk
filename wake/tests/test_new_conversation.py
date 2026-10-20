@@ -713,6 +713,21 @@ class NewConversationTests(unittest.TestCase):
         self.assertEqual(error, "BOOTSTRAP_DRAFT_MISMATCH")
         self.assertEqual((cdp.sent, acks), (0, []))
 
+    def test_ready_draft_survives_send_control_failure_and_resumes_without_retyping(self):
+        with patch.object(AttemptSink, "wait_for_send_control", return_value=None):
+            cdp, emitted, acks, error = self.run_v2_attempt()
+        self.assertIsNone(error)
+        self.assertEqual(acks, ["TEXT_ENTRY_AUTHORIZED", "DRAFT_READY"])
+        self.assertEqual(cdp.sent, 0)
+        self.assertEqual(emitted[-1], {"stage":"BOOTSTRAP_UNKNOWN",
+                                      "reason":"BOOTSTRAP_SEND_CONTROL_MISSING"})
+        saved_draft = cdp.draft
+        request = self.v2_request(resume_progress="DRAFT_READY")
+        resumed, emitted, acks, error = self.run_v2_attempt(request=request, draft=saved_draft)
+        self.assertIsNone(error)
+        self.assertEqual((resumed.timeline.count("type"), resumed.sent), (0, 1))
+        self.assertEqual(emitted[-1]["stage"], "BOOTSTRAP_SUBMITTED")
+
     def test_large_inspector_request_uses_bootstrap_bound_without_exposing_text(self):
         request = {"bootstrapDraftInspect": True, "bootstrapProtocol": 2,
                    "projectId": "project-one", "intentId": "rollover-1",
@@ -759,6 +774,7 @@ class NewConversationTests(unittest.TestCase):
             adapter.bootstrap_attempt(bridge, sb, request)
         self.assertEqual(acks, ["TEXT_ENTRY_AUTHORIZED"])
         self.assertEqual(emitted[-1]["stage"], "BOOTSTRAP_UNKNOWN")
+        self.assertEqual(emitted[-1]["reason"], "BOOTSTRAP_PRE_SEND_RUNTIMEERROR")
         self.assertNotIn("SEND_ATTEMPTED", [item["stage"] for item in emitted])
 
     def test_v2_draft_inspector_is_observe_only_and_bounded(self):

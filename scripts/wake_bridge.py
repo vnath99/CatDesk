@@ -2293,8 +2293,11 @@ class NewConversationSink(CdpSink):
                 const messageId = anchor(node, 'data-chatgpt-selection-message-id');
                 const key = unitKey ? 'unit:' + role(node) + ':' + unitKey :
                     messageId ? 'message:' + role(node) + ':' + messageId : null;
-                const contentSelector = '[data-message-content], .markdown, [class~="prose"], ' +
-                    '[data-markdown-text-style="assistant-message"], [data-markdown-text-tone="user-message"]';
+                // Match the dedicated USER body used by exact delivery receipts.
+                // Its surrounding bubble can append an ellipsis/Show more UI.
+                const contentSelector = role(node) === 'user' ?
+                    '[data-message-content], [data-markdown-text-tone="user-message"], .whitespace-pre-wrap' :
+                    '[data-message-content], .markdown, [class~="prose"], [data-markdown-text-style="assistant-message"]';
                 const content = node.matches(contentSelector) ? node : node.querySelector(contentSelector);
                 const completeBody = Boolean(content && visible(content));
                 let text = '';
@@ -2308,7 +2311,7 @@ class NewConversationSink(CdpSink):
                     // body. It must never be counted as complete answer text.
                     text = String(node.innerText || node.textContent || '');
                 }
-                const bodyProven = role(node) !== 'assistant' || completeBody;
+                const bodyProven = completeBody;
                 const row = [role(node), text.slice(-4096), bodyProven && text.length <= 4096,
                     Math.min(text.length, 1000000), anchor(node, 'data-content-search-turn-key'),
                     unitKey, messageId];

@@ -1,5 +1,47 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 bounded recovery resumed (SOURCE VERIFIED; LIVE PARTIAL)
+
+The approved implementation-review request reached exact `SENT` on October 20.
+Its temporary worker stopped normally with `HOST_LEASE_RELEASED`; subsequent
+inspection found no owned automation process or development scheduler. The
+review response requests exact-draft/idempotency checks, archive-before-clear
+and composer-race checks, and canary continuation with project isolation. It
+explicitly reviews the supplied contract only, without independent live proof.
+
+The preserved canary remains `SUBMITTING` / `DRAFT_READY`, with no send-attempt
+checkpoint, receipt or replacement binding. The v2 code had classified every
+pre-send exception as ambiguous, including read-only checks after full draft
+readiness. Source now permits that specific ready-draft case to recover only
+through the full existing exact-draft checks. It clears the old broad fence only
+after a new verified DRAFT_READY checkpoint. Ambiguous typing, unrelated
+reconciliation reasons, legacy unknown sends and SEND_ATTEMPTED remain blocked.
+Bounded helper reasons and exception classes are retained for diagnosis.
+
+An explicit local `operator web review read --project-id P --event-id E` reads
+one already delivered review using the existing browser owner and private Job.
+It does not run WakeHost, send a message or complete a timer. Only that exact
+delivery's passive response timer may be pending; another pending turn or
+queued task still refuses. A digest-matching complete latest pair sets
+`eventVerified:true`; otherwise a bounded private diagnostic snapshot is
+labelled `UNVERIFIED_EVENT_SNAPSHOT`. Such snapshots are not public status.
+
+The first live read exposed a DOM extraction defect: the complete USER body
+had an appended ellipsis and Show more control. Source now selects the same
+dedicated USER body as exact delivery receipts and treats missing bodies as
+incomplete. The captured assistant response contains the expected review marker,
+but that earlier snapshot did not establish an exact event pair. Qualification
+of this extraction fix and the canary retry remains pending.
+
+Focused checks pass: 35 Python bootstrap tests, 18 adapter tests, 6 current-DOM
+tests, 11 Rust Web operator tests, 9 Wake bootstrap tests, the persisted rollover
+restart regression, and the Windows private-Job termination/accounting test.
+These filters overlap. Strict root and Wake Clippy and both builds passed.
+All five original bindings passed another exact comparison. No native Codex
+project was paused or edited. Recurring schedulers and WakeHost remain stopped;
+further live checks must be one-shot and observed through cleanup. **Overall:
+`PARTIAL`.**
+
 ## October 18 owned-draft recovery (TESTED_LOCAL_SOURCE; LIVE PENDING)
 
 The user identified the preserved composer as a CatDesk rollover bootstrap.

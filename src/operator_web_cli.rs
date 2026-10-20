@@ -50,6 +50,10 @@ pub(crate) enum WebAction {
     ContextCapture {
         project_id: String,
     },
+    ReviewRead {
+        project_id: String,
+        event_id: String,
+    },
     ContextConfigure {
         project_id: String,
         input_file: PathBuf,
@@ -198,6 +202,18 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("context", "capture") if options.is_empty() => Ok(WebAction::ContextCapture {
             project_id: project_id.into(),
         }),
+        ("review", "read") => {
+            let event_id = options
+                .remove("--event-id")
+                .ok_or("WEB_USAGE: --event-id is required")?;
+            if !catdesk_wake::protocol::valid_id(event_id) || !options.is_empty() {
+                return Err("WEB_USAGE: invalid review event or unexpected option".into());
+            }
+            Ok(WebAction::ReviewRead {
+                project_id: project_id.into(),
+                event_id: event_id.into(),
+            })
+        }
         ("context", "configure" | "observe") => {
             let input_file = PathBuf::from(
                 options
@@ -401,6 +417,91 @@ fn capture_context(workspace: &Path, project: &str) -> Result<Value, String> {
             Err("WEB_CONTEXT_TARGET_CHANGED".into())
         }
     })
+}
+
+fn review_text(snapshot: &Value, expected_message_digest: &str) -> Result<String, String> {
+    let messages = snapshot["messages"]
+        .as_array()
+        .ok_or("WEB_REVIEW_SNAPSHOT_INVALID")?;
+    let user_index = messages
+        .iter()
+        .rposition(|message| message["role"] == "USER")
+        .ok_or("WEB_REVIEW_USER_WITNESS_REQUIRED")?;
+    let user = &messages[user_index];
+    let user_text = user["text"]
+        .as_str()
+        .ok_or("WEB_REVIEW_USER_WITNESS_REQUIRED")?;
+    let normalized = user_text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if user["textComplete"] != true
+        || catdesk_wake::protocol::digest(&normalized) != expected_message_digest
+    {
+        return Err("WEB_REVIEW_EVENT_NOT_LATEST_OR_INCOMPLETE".into());
+    }
+    if user_index + 2 != messages.len() {
+        return Err("WEB_REVIEW_RESPONSE_NOT_COMPLETE".into());
+    }
+    let assistant = &messages[user_index + 1];
+    let text = assistant["text"]
+        .as_str()
+        .ok_or("WEB_REVIEW_RESPONSE_NOT_COMPLETE")?;
+    if assistant["role"] != "ASSISTANT"
+        || assistant["textComplete"] != true
+        || text.trim().is_empty()
+        || text.len() > 8192
+        || text.to_ascii_lowercase().contains("response couldn’t load")
+        || text.to_ascii_lowercase().contains("response couldn't load")
+    {
+        return Err("WEB_REVIEW_RESPONSE_NOT_COMPLETE".into());
+    }
+    Ok(text.to_owned())
+}
+
+/// Explicit local read only; private response text is never a status field.
+fn read_review(workspace: &Path, project: &str, event_id: &str) -> Result<Value, String> {
+    let key = paired_key(workspace, project)?;
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+    let wake = catdesk_wake::store::Store::open(&root)?;
+    let target =
+        catdesk_wake::protocol::Target::new(key.target_generation, key.conversation_url.clone())?;
+    let delivery = wake
+        .delivery(event_id)?
+        .ok_or("WEB_REVIEW_DELIVERY_REQUIRED")?;
+    let receipt = delivery
+        .receipt
+        .as_ref()
+        .ok_or("WEB_REVIEW_DELIVERY_REQUIRED")?;
+    if delivery.phase != catdesk_wake::store::Phase::Sent
+        || delivery.event.project_id != project
+        || delivery.target != target
+        || receipt.event_id != event_id
+        || receipt.target_digest != target.digest
+        || receipt.target_generation != target.generation
+    {
+        return Err("WEB_REVIEW_DELIVERY_SCOPE_CHANGED".into());
+    }
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &target.url,
+    )?;
+    let snapshot =
+        catdesk_wake::runtime::snapshot_sent_conversation(&wake, project, &target, event_id)?;
+    if paired_key(workspace, project)? != key {
+        return Err("WEB_REVIEW_TARGET_CHANGED".into());
+    }
+    match review_text(&snapshot, &receipt.message_digest) {
+        Ok(text) => Ok(
+            json!({"action":"web_review_read", "projectId":project,"eventId":event_id,
+            "target":target,"readOnly":true,"response":text,"eventVerified":true,
+            "sendAttempted":false}),
+        ),
+        // Explicit local reads may expose this bounded private excerpt for
+        // diagnosis. It is never a status endpoint or verified event response.
+        Err(reason) => Ok(json!({"action":"web_review_read", "projectId":project,
+            "eventId":event_id,"target":target,"readOnly":true,"eventVerified":false,
+            "status":"UNVERIFIED_EVENT_SNAPSHOT","reason":reason,
+            "snapshot":snapshot,"sendAttempted":false})),
+    }
 }
 
 fn target_status(workspace: &Path, project_id: &str, runtime_mode: &str) -> Value {
@@ -680,6 +781,10 @@ pub(crate) fn execute(action: WebAction, workspace: &Path) -> Result<Value, Stri
         }
         WebAction::ContextStatus { project_id } => Ok(context_status(&workspace, &project_id)),
         WebAction::ContextCapture { project_id } => capture_context(&workspace, &project_id),
+        WebAction::ReviewRead {
+            project_id,
+            event_id,
+        } => read_review(&workspace, &project_id, &event_id),
         WebAction::ContextConfigure {
             project_id,
             input_file,
@@ -775,6 +880,44 @@ mod tests {
     use super::*;
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|v| (*v).into()).collect()
+    }
+
+    #[test]
+    fn review_read_requires_exact_latest_complete_delivered_pair() {
+        let message_digest = catdesk_wake::protocol::digest("approved review request");
+        let mut snapshot = json!({"messages":[
+            {"role":"USER","text":"approved review\nrequest","textComplete":true},
+            {"role":"ASSISTANT","text":"Review findings.","textComplete":true}
+        ]});
+        assert_eq!(
+            review_text(&snapshot, &message_digest).unwrap(),
+            "Review findings."
+        );
+        assert!(review_text(&snapshot, &"0".repeat(64)).is_err());
+        snapshot["messages"][1]["textComplete"] = json!(false);
+        assert!(review_text(&snapshot, &message_digest).is_err());
+        snapshot["messages"][1]["textComplete"] = json!(true);
+        snapshot["messages"][1]["text"] = json!("This response couldn’t load");
+        assert!(review_text(&snapshot, &message_digest).is_err());
+        snapshot["messages"].as_array_mut().unwrap().push(json!({
+            "role":"USER","text":"different task","textComplete":true
+        }));
+        assert!(review_text(&snapshot, &message_digest).is_err());
+        let valid = args(&[
+            "operator",
+            "web",
+            "review",
+            "read",
+            "--project-id",
+            "catdesk",
+            "--event-id",
+            "review-one",
+        ]);
+        assert!(matches!(parse(&valid), Ok(WebAction::ReviewRead { .. })));
+        assert!(parse(&valid[..6]).is_err());
+        let mut invalid = valid;
+        invalid.extend(args(&["--submit", "true"]));
+        assert!(parse(&invalid).is_err());
     }
 
     #[test]

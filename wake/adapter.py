@@ -244,6 +244,7 @@ def bootstrap_attempt(bridge, sb, request):
             raise bridge.Attention("SUBMISSION_NOT_AUTHORIZED")
     # After the checkpoint, even a typing exception may have submitted a USER
     # turn. Preserve unknown intent state and reconcile without another send.
+    send_authorized = not protocol_v2
     try:
         if not existing_draft:
             sink.check_empty_home(cdp)
@@ -271,6 +272,7 @@ def bootstrap_attempt(bridge, sb, request):
                   "messageDigest": message_digest})
             if read_request() != {"submit": True}:
                 raise bridge.Attention("SUBMISSION_NOT_AUTHORIZED")
+            send_authorized = True
             sink.check_typed_home(cdp, message)
         sink.smoke_path_submit(cdp, send_selector, sink.ui_timeout, editor_selector)
         sink.latch_issued_url(cdp)
@@ -297,7 +299,8 @@ def bootstrap_attempt(bridge, sb, request):
         if receipt.message_sha256 != message_digest or receipt.target_sha256 != bridge.digest(sink.url):
             raise bridge.PostSubmitUnknown("BOOTSTRAP_RECEIPT_MISMATCH")
     except Exception as error:
-        reason = "BOOTSTRAP_POST_SUBMIT_UNKNOWN"
+        error_class = "".join(c for c in type(error).__name__.upper() if c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789")[:40]
+        reason = ("BOOTSTRAP_POST_SUBMIT_" if send_authorized else "BOOTSTRAP_PRE_SEND_") + (error_class or "UNKNOWN")
         if isinstance(error, bridge.Attention):
             candidate = str(error)
             if candidate and len(candidate) <= 100 and all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789" for c in candidate):

@@ -777,7 +777,12 @@ fn summary(record: &Record) -> Value {
 
 fn resumable_bootstrap(record: &Record) -> bool {
     record.phase == Phase::Submitting
-        && record.reconciliation_reason.is_none()
+        && record.receipt.is_none()
+        && record.bound_target.is_none()
+        && (record.reconciliation_reason.is_none()
+            || (record.bootstrap_progress == Some(runtime::BootstrapProgress::DraftReady)
+                && record.reconciliation_reason.as_deref()
+                    == Some("WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND")))
         && matches!(
             record.bootstrap_progress,
             Some(
@@ -806,9 +811,20 @@ fn checkpoint_bootstrap_progress(
     if stage > next {
         return Err("WEB_BOOTSTRAP_PROGRESS_ORDER_INVALID".into());
     }
+    let already_verified_ready = record.bootstrap_progress == Some(Progress::DraftReady);
     record.phase = Phase::Submitting;
     if record.bootstrap_progress.is_none_or(|saved| stage > saved) {
         record.bootstrap_progress = Some(stage);
+    }
+    // A resumed helper emits DRAFT_READY only after rechecking the full owned
+    // home draft. Before SEND_ATTEMPTED its remaining operations are reads.
+    // Repair only the overly broad v2 pre-send fence, never another incident.
+    if already_verified_ready
+        && stage == Progress::DraftReady
+        && record.reconciliation_reason.as_deref()
+            == Some("WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND")
+    {
+        record.reconciliation_reason = None;
     }
     Ok(())
 }
@@ -2252,7 +2268,9 @@ fn execute_with_mode(workspace: &Path, project: &str, automatic: bool) -> Result
             |checkpoint| {
                 let stage = match checkpoint {
                     runtime::BootstrapCheckpoint::PreSendUnknown => {
-                        if record.phase == Phase::Submitting && record.bootstrap_progress.is_some()
+                        if record.phase == Phase::Submitting
+                            && record.bootstrap_progress
+                                == Some(runtime::BootstrapProgress::TextEntryAuthorized)
                         {
                             record.reconciliation_reason =
                                 Some("WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND".into());
@@ -2563,6 +2581,34 @@ mod tests {
             auto_stage(&root, "beta", &ambiguous.source).unwrap(),
             AutoStage::Observe
         );
+        // The live v2 canary hit this broad fence after full draft readiness.
+        // Its only remaining action before a send ACK was a read/check.
+        ambiguous.bootstrap_progress = Some(Progress::DraftReady);
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        store.save(&ambiguous).unwrap();
+        drop(store);
+        assert!(resumable_bootstrap(&ambiguous));
+        assert_eq!(
+            auto_stage(&root, "alpha", &ambiguous.source).unwrap(),
+            AutoStage::Execute
+        );
+        checkpoint_bootstrap_progress(&mut ambiguous, Progress::TextEntryAuthorized).unwrap();
+        assert!(
+            ambiguous.reconciliation_reason.is_some(),
+            "first ACK is not full revalidation"
+        );
+        checkpoint_bootstrap_progress(&mut ambiguous, Progress::DraftReady).unwrap();
+        assert!(ambiguous.reconciliation_reason.is_none());
+        ambiguous.reconciliation_reason = Some("UNRELATED_SOURCE_DRIFT".into());
+        assert!(!resumable_bootstrap(&ambiguous));
+        checkpoint_bootstrap_progress(&mut ambiguous, Progress::DraftReady).unwrap();
+        assert_eq!(
+            ambiguous.reconciliation_reason.as_deref(),
+            Some("UNRELATED_SOURCE_DRIFT")
+        );
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        store.save(&legacy).unwrap();
+        drop(store);
         assert_eq!(
             inspect_draft(&root, "alpha", "wrong-intent").unwrap_err(),
             "WEB_ROLLOVER_INTENT_CHANGED"

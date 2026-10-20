@@ -1776,6 +1776,21 @@ fn bootstrap_progress_frame(
     Ok(Some(stage))
 }
 
+fn bootstrap_pre_send_reason(value: &serde_json::Value) -> String {
+    value
+        .get("reason")
+        .and_then(|reason| reason.as_str())
+        .filter(|reason| {
+            !reason.is_empty()
+                && reason.len() <= 128
+                && reason
+                    .bytes()
+                    .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
+        })
+        .unwrap_or("BOOTSTRAP_PRE_SEND_UNKNOWN")
+        .to_owned()
+}
+
 pub fn compose_bootstrap_message(
     project_id: &str,
     intent_id: &str,
@@ -1850,8 +1865,29 @@ fn ensure_bootstrap_source_available(
     project_id: &str,
     source: &Target,
 ) -> Result<()> {
+    ensure_source_snapshot_available(store, project_id, source, None)
+}
+
+fn ensure_source_snapshot_available(
+    store: &Store,
+    project_id: &str,
+    source: &Target,
+    delivered_review: Option<&str>,
+) -> Result<()> {
     if store.config()?.targets.get(project_id) != Some(source) {
         return Err("BOOTSTRAP_SOURCE_BINDING_CHANGED".into());
+    }
+    if let Some(event_id) = delivered_review {
+        let delivery = store
+            .delivery(event_id)?
+            .ok_or("SOURCE_REVIEW_RECEIPT_REQUIRED")?;
+        if delivery.phase != Phase::Sent
+            || delivery.target != *source
+            || delivery.event.project_id != project_id
+            || delivery.receipt.is_none()
+        {
+            return Err("SOURCE_REVIEW_RECEIPT_REQUIRED".into());
+        }
     }
     for event in store.events()? {
         if event.project_id != project_id || event.target_generation != source.generation {
@@ -1870,6 +1906,7 @@ fn ensure_bootstrap_source_available(
             && timer.target_generation == source.generation
             && timer.target_digest == source.digest
             && timer.response_state != ResponseState::Complete
+            && delivered_review != Some(timer.event_id.as_str())
     }) {
         return Err("BOOTSTRAP_SOURCE_TURN_PENDING".into());
     }
@@ -2232,7 +2269,7 @@ pub fn bootstrap_submit_conversation(
             }
             Some("BOOTSTRAP_UNKNOWN") => {
                 checkpoint(BootstrapCheckpoint::PreSendUnknown)?;
-                return Err("BOOTSTRAP_PRE_SEND_UNKNOWN".into());
+                return Err(bootstrap_pre_send_reason(&value));
             }
             Some("ATTENTION") if !submit_dispatched => {
                 return Err(value
@@ -2636,12 +2673,32 @@ pub fn snapshot_conversation(
     project_id: &str,
     source: &Target,
 ) -> Result<serde_json::Value> {
+    snapshot_conversation_inner(store, project_id, source, None)
+}
+
+/// Read an already delivered review while its passive local timer is pending.
+/// The browser must still prove idle; this never sends or completes a timer.
+pub fn snapshot_sent_conversation(
+    store: &Store,
+    project_id: &str,
+    source: &Target,
+    event_id: &str,
+) -> Result<serde_json::Value> {
+    snapshot_conversation_inner(store, project_id, source, Some(event_id))
+}
+
+fn snapshot_conversation_inner(
+    store: &Store,
+    project_id: &str,
+    source: &Target,
+    delivered_review: Option<&str>,
+) -> Result<serde_json::Value> {
     source.validate()?;
     if !crate::protocol::valid_id(project_id) {
         return Err("SOURCE_SNAPSHOT_REQUEST_INVALID".into());
     }
     let _owner = browser_owner_guard(store)?;
-    ensure_bootstrap_source_available(store, project_id, source)?;
+    ensure_source_snapshot_available(store, project_id, source, delivered_review)?;
     let installed = installed_bootstrap_directory(store)?;
     let adapter_bytes =
         std::fs::read(installed.join("adapter.py")).map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?;
@@ -2666,7 +2723,7 @@ pub fn snapshot_conversation(
         match adapter.output.recv_timeout(Duration::from_millis(250)) {
             Ok(Ok(value)) => match value.get("stage").and_then(|v| v.as_str()) {
                 Some("SOURCE_SNAPSHOT") => {
-                    ensure_bootstrap_source_available(store, project_id, source)?;
+                    ensure_source_snapshot_available(store, project_id, source, delivered_review)?;
                     let snapshot = source_snapshot_payload(value, project_id, source)?;
                     let _ = adapter.allow_graceful_exit(Duration::from_secs(5));
                     return Ok(snapshot);
@@ -2698,6 +2755,102 @@ pub fn snapshot_conversation(
 mod bootstrap_runtime_tests {
     use super::*;
     use crate::protocol::Event;
+
+    #[test]
+    fn pre_send_failure_keeps_bounded_diagnostic_without_private_text() {
+        assert_eq!(
+            bootstrap_pre_send_reason(&serde_json::json!({
+                "reason":"BOOTSTRAP_SEND_CONTROL_MISSING"
+            })),
+            "BOOTSTRAP_SEND_CONTROL_MISSING"
+        );
+        for reason in [
+            "private composer contents",
+            "C:\\private\\profile",
+            "",
+            &"A".repeat(129),
+        ] {
+            assert_eq!(
+                bootstrap_pre_send_reason(&serde_json::json!({"reason":reason})),
+                "BOOTSTRAP_PRE_SEND_UNKNOWN"
+            );
+        }
+    }
+
+    #[test]
+    fn delivered_review_read_exempts_only_its_own_pending_timer() {
+        let base = std::env::temp_dir().join(format!(
+            "catdesk-review-read-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&base).unwrap();
+        let store = Store::open_scoped_for_test(&base.join("wake"), &base).unwrap();
+        store.initialize().unwrap();
+        let target = store
+            .set_target("alpha", 0, "https://chatgpt.com/c/review-read")
+            .unwrap();
+        let lease = store.host_lock().unwrap();
+        for id in ["review-one", "review-two"] {
+            let event = store
+                .produce_expected(id, "alpha", "test", "review request", &target)
+                .unwrap();
+            let delivery = store.claim(&event, &lease).unwrap();
+            store
+                .transition(id, &delivery.owner, Phase::Submitting, None, None)
+                .unwrap();
+            let receipt = crate::store::Receipt {
+                schema_version: 1,
+                event_id: id.into(),
+                target_generation: target.generation,
+                target_digest: target.digest.clone(),
+                message_digest: delivery.message_digest.clone(),
+                sent_utc: now(),
+                evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+            };
+            store
+                .transition(
+                    id,
+                    &delivery.owner,
+                    Phase::Sent,
+                    Some(receipt.clone()),
+                    None,
+                )
+                .unwrap();
+            store.record_exact_receipt_timer(id, &receipt).unwrap();
+            if id == "review-one" {
+                assert_eq!(
+                    ensure_bootstrap_source_available(&store, "alpha", &target).unwrap_err(),
+                    "BOOTSTRAP_SOURCE_TURN_PENDING"
+                );
+                ensure_source_snapshot_available(&store, "alpha", &target, Some(id)).unwrap();
+                assert!(
+                    ensure_source_snapshot_available(&store, "alpha", &target, Some("missing"))
+                        .is_err()
+                );
+            }
+        }
+        assert_eq!(
+            ensure_source_snapshot_available(&store, "alpha", &target, Some("review-one"))
+                .unwrap_err(),
+            "BOOTSTRAP_SOURCE_TURN_PENDING"
+        );
+        store.complete_timer("review-two").unwrap();
+        ensure_source_snapshot_available(&store, "alpha", &target, Some("review-one")).unwrap();
+        store
+            .produce_expected("new-work", "alpha", "test", "other work", &target)
+            .unwrap();
+        assert_eq!(
+            ensure_source_snapshot_available(&store, "alpha", &target, Some("review-one"))
+                .unwrap_err(),
+            "BOOTSTRAP_SOURCE_QUEUE_PENDING"
+        );
+        drop(lease);
+        std::fs::remove_dir_all(&base).unwrap();
+    }
 
     #[test]
     fn bootstrap_v2_progress_and_draft_inspection_are_exactly_scoped() {

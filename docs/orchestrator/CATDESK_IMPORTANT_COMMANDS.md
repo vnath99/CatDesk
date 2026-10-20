@@ -1,5 +1,25 @@
 # CatDesk — Important Command Reference
 
+## October 20 bounded review read and recovery
+
+```powershell
+<source-built-catdesk.exe> operator web review read --project-id PROJECT --event-id EXACT_SENT_EVENT
+```
+
+This explicit local read uses the existing authenticated profile and bounded
+browser owner; it starts neither WakeHost nor the recurring scheduler. It must
+match the currently paired delivery receipt and the latest complete USER and
+ASSISTANT pair before returning `eventVerified:true`. A UI or excerpt mismatch
+returns `UNVERIFIED_EVENT_SNAPSHOT`, with a private bounded diagnostic excerpt;
+never treat it as verified delivery or publish it through central status.
+
+The stopped canary's v2 `DRAFT_READY` broad pre-send fence can now resume through
+the exact full-draft guard. It remains fenced until a new verified ready
+checkpoint. Missing/changed drafts, ambiguous typing, unrelated reconciliation
+reasons, legacy unknown sends and send-attempted records refuse replay. Retain
+the same intent and handoff. Do not start recurring test processes to exercise
+this repair; use a bounded one-shot command and verify child cleanup afterward.
+
 ## October 18 draft recovery commands (source; live verification pending)
 
 Run these against the existing isolated development control workspace and its
