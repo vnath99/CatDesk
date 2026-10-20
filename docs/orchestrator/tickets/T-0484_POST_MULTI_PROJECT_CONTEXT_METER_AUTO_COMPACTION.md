@@ -9,6 +9,15 @@
 
 ### October 20 current acceptance and contention correction
 
+One read-only fetch now verifies the actual already delivered implementation
+review against its exact sent event and complete assistant body. Six existing
+archive/resume regressions pass, including late composer change before deletion.
+Actual legacy clearing remains unproven; no old draft or completed canary was
+changed. All original state/bindings are preserved with no owned reader process
+left. Connector verification remains separate from this successful local read.
+Protected installation also has unfinished admission/service/reader source
+wiring, in addition to independent approval and provisioning; see T-0485.
+
 The external three-review controller has 14 passing checks and a read-only
 default preflight. Optional `run --max-runtime-seconds 1..900` now enforces the
 deadline inside the existing foreground owner, requests STOP once and retains

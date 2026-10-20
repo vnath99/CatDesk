@@ -1,5 +1,21 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-20 source wiring audit (no installation)
+
+At `87c8ebd`, `run_one_service_submission` still unconditionally returns
+`WAKE_BROKER_TRANSACTION_GATES_UNAVAILABLE` after its admitted frame. Ordinary
+`wake/install.ps1` refuses before work unless BuildOnly. Offline V2 remains a
+diagnostic with no first-generation ledger/install consumer; production ledger
+admission requires unproved migration-anchor and old-owner evidence before CI
+and INTENT. Thus provisioning alone cannot finish the release. Typed staging,
+publication and pointer writers already exist and should be reused after
+admission, not recreated. Remaining work includes the independently accepted
+closed store/launcher inventory/anchor, V2 admission and transaction integration,
+protected reader/bootstrap cutover, approved provisioning and exact remote CI.
+No guard, trust key, approval flag, service, pointer or production package was
+changed. Bounded development Web acceptance can proceed independently once its
+current explicit host-start hold is lifted.
+
 ## 2026-10-20 retained paired-target readback (source only)
 
 The publisher and pointer writer already exist; earlier test-only/no-publisher

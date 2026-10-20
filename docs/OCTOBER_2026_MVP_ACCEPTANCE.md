@@ -1,5 +1,41 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 verified implementation-review read and installation audit
+
+One explicit `operator web review read` for
+`dev-oct18-catdesk-draft-recovery-review-1` succeeded with `eventVerified:true`,
+`readOnly:true` and `sendAttempted:false`, using the preserved authenticated
+profile and stopped v22 development package. The exact delivered USER digest
+and complete latest ASSISTANT pair matched the current CatDesk target. The
+1,363-character response is preserved privately in parent
+`checkpoints/web-install-audit-oct20`; it reviews the supplied contract only
+and is not independent release approval. This resolves retrieval of that
+implementation-review body without relying on the throttled connector.
+
+The review requests exact-draft recovery, guarded legacy clearing, and canary
+isolation evidence, specifically calling out a composer edit before deletion.
+The existing six archive/resume regressions pass at source `87c8ebd`, including
+that late-edit refusal and the adapter's post-archive-ACK drift refusal. No
+duplicate test or replay was added. The completed rollover/continuation remains
+preserved. Actual legacy-composer clearing is not established by this review
+read or offline fixtures. All 91 state files, five original bindings and the
+production pointer are unchanged, both controls stopped, owned process count
+zero. No recurring scheduler or WakeHost was started.
+
+The installation audit also corrects a material distinction:
+
+| Gate | Current authoritative result |
+| --- | --- |
+| Installed prerequisite | Last fixed preflight: `WAKE_BROKER_SERVICE_UNPROVISIONED`; no provisioning/start attempted. |
+| Service source wiring | `install_broker_service_runtime::run_one_service_submission` unconditionally returns `WAKE_BROKER_TRANSACTION_GATES_UNAVAILABLE` after an admitted frame. Provisioning alone cannot complete installation. |
+| First-generation admission | Offline V2 verification returns diagnostic readback, with no ledger/install consumer. Production ledger admission still requires unproved migration-anchor and old-owner evidence before exact CI and INTENT. |
+| Reusable components | Typed candidate staging/publication and protected pointer writer already exist. They require accepted typed leases; no replacement publisher is needed. |
+| Required next release work | Independently accepted closed store/launcher inventory and anchor, V2 admission/ledger/service integration, protected reader/bootstrap cutover, approved provisioning, exact remote CI and installed verification remain open. Matching paths, no-process snapshots or diagnostic signatures cannot supply these proofs. |
+
+The existing install guards remain intact. A large new security framework was
+not started during the audit. The prepared bounded three-project development
+test is separate from this installation work and still awaits explicit approval.
+
 ## October 20 bounded review controller and internal deadline (SOURCE; LIVE HELD)
 
 The prepared external controller has 14 passing synthetic/native-helper checks

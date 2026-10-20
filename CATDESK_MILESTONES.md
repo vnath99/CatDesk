@@ -1,5 +1,14 @@
 ## 2026-10-20 — Web context capture and current acceptance (SOURCE; MVP PARTIAL)
 
+The already delivered draft-recovery implementation review was retrieved by one
+read-only browser command with exact event verification. Six existing offline
+archive/resume regressions pass, including the requested late-composer-edit
+refusal; no replay or duplicate test was added. All 91 state files and five
+bindings remain unchanged, both controls stopped and owned process count zero.
+Installation still requires source admission/service/reader integration as
+well as independent inventory, approval and provisioning: the current service
+unconditionally refuses transactions. Provisioning alone is insufficient.
+
 The prepared bounded review controller passes 14 synthetic/native-helper
 checks and uses existing guarded enqueue/run/stop commands. Foreground run
 now accepts an optional 1–900-second internal deadline, so loss of the external
