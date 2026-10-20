@@ -1,5 +1,32 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 ready-draft retry and exact blocker (LIVE PARTIAL)
+
+Checkpoint `b3d2a43` is pushed. The corrected USER-body extraction passed a
+fresh one-shot read of the previously delivered review with
+`eventVerified:true`; the expected review marker and all three acceptance
+checks were read. No second review message was sent. The rebuilt v5b isolated
+package applied through `PACKAGE_UPDATED_STOPPED`, preserving the existing
+authenticated profile and runtime state. The first v5 candidate had correctly
+refused with `DEV_PACKAGE_SCRIPT_SOURCE_MISMATCH` because the main image
+predated the final script edit; no authority guard was bypassed.
+
+One bounded canary retry revalidated the complete saved draft, retained the
+same intent, skipped typing and cleared the overly broad ready-draft fence.
+It then refused with the concrete reason `BOOTSTRAP_SEND_CONTROL_MISSING`.
+The record remains `SUBMITTING` / `DRAFT_READY`, with null reconciliation
+reason, receipt and bound target. No `SEND_ATTEMPTED` checkpoint was reached.
+The owner exited 2 before its four-minute cap; neither WakeHost nor a recurring
+scheduler was started. This is recovery progress, not completed rollover.
+
+The next executable task is a read-only inspection of visible composer control
+attributes on that exact owned home draft. Source inspection now includes a
+bounded optional `controls` array, accepts legacy inspection frames, and
+validates field types, lengths, scope and wire budget. It reads only rendered
+control attributes, with no typing, clicking, clearing or send authorization.
+The draft and all project histories remain preserved. No operator action is
+currently required for the diagnostic. **Overall: `PARTIAL`.**
+
 ## October 20 bounded recovery resumed (SOURCE VERIFIED; LIVE PARTIAL)
 
 The approved implementation-review request reached exact `SENT` on October 20.

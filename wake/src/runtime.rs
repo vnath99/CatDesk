@@ -2306,13 +2306,35 @@ fn bootstrap_draft_inspection_payload(
     let classification = value.get("classification").and_then(|v| v.as_str());
     let actual_digest = value.get("actualDigest").and_then(|v| v.as_str());
     let actual_bytes = value.get("actualBytes").and_then(|v| v.as_u64());
+    let controls_valid = value.get("controls").is_none_or(|controls| {
+        controls.as_array().is_some_and(|rows| {
+            rows.len() <= 12
+                && rows.iter().all(|row| {
+                    row.as_array().is_some_and(|fields| {
+                        fields.len() == 6
+                            && fields[..5]
+                                .iter()
+                                .all(|field| field.as_str().is_some_and(|text| text.len() <= 192))
+                            && fields[5].is_boolean()
+                    })
+                })
+        })
+    });
     if value.get("stage").and_then(|v| v.as_str()) != Some("BOOTSTRAP_DRAFT_INSPECTED")
         || value.get("projectId").and_then(|v| v.as_str()) != Some(project_id)
         || value.get("intentId").and_then(|v| v.as_str()) != Some(intent_id)
         || value.get("sourceGeneration").and_then(|v| v.as_u64()) != Some(source.generation)
         || value.get("sourceDigest").and_then(|v| v.as_str()) != Some(source.digest.as_str())
         || value.get("expectedDigest").and_then(|v| v.as_str()) != Some(expected_digest)
-        || !value.as_object().is_some_and(|map| map.len() == 9)
+        || !controls_valid
+        || !value.as_object().is_some_and(|map| {
+            map.len()
+                == if value.get("controls").is_some() {
+                    10
+                } else {
+                    9
+                }
+        })
         || !actual_bytes.is_some_and(|n| {
             n <= 16 * 1024 || (classification == Some("MISMATCH") && n == 16 * 1024 + 1)
         })
@@ -2888,6 +2910,30 @@ mod bootstrap_runtime_tests {
                 &expected
             )
             .is_ok()
+        );
+        let mut with_controls = inspected.clone();
+        with_controls["controls"] =
+            serde_json::json!([["BUTTON", "", "send-button", "Send", "submit", false]]);
+        assert!(
+            bootstrap_draft_inspection_payload(
+                with_controls.clone(),
+                "alpha",
+                "intent-a",
+                &source,
+                &expected
+            )
+            .is_ok()
+        );
+        with_controls["controls"][0][5] = serde_json::json!("untrusted");
+        assert!(
+            bootstrap_draft_inspection_payload(
+                with_controls,
+                "alpha",
+                "intent-a",
+                &source,
+                &expected
+            )
+            .is_err()
         );
         let mut forged = inspected;
         forged["actualDigest"] = serde_json::json!("0".repeat(64));

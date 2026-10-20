@@ -343,21 +343,46 @@ def bootstrap_draft_inspect(bridge, sb, request):
     message = bridge.compose_bootstrap_message(project_id, intent_id, source_url, request["handoff"])
     expected_digest = bridge.digest(bridge.normalize_message(message))
     sink = bridge.NewConversationSink(source_url, ROOT / "browser-profile", 30, 20)
+    controls = []
     try:
         # A fresh SeleniumBase process must activate the fixed home once to
         # load this profile's saved draft. Never open the source or clear text.
         cdp = prepare_cdp_target(bridge, sb, bridge.NEW_CONVERSATION_HOME)
         observed = sink.wait_home_draft(cdp, message)
+        if observed["classification"] == "EXACT_OWNED":
+            try:
+                controls = bridge.CdpSink.cdp_value(cdp.evaluate("""(() => {
+                    const editor = document.querySelector('#prompt-textarea, div.ProseMirror[contenteditable="true"]');
+                    if (!editor) return [];
+                    const scope = editor.closest('form') || editor.parentElement?.parentElement?.parentElement || editor;
+                    return Array.from(scope.querySelectorAll('button, [role="button"], input[type="submit"]'))
+                        .filter(node => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none')
+                        .slice(-12).map(node => [node.tagName, node.id, node.getAttribute('data-testid') || '',
+                            node.getAttribute('aria-label') || '', node.getAttribute('type') || '',
+                            Boolean(node.disabled || node.getAttribute('aria-disabled') === 'true')])
+                        .map(row => row.map(value => typeof value === 'string' ? Array.from(value).slice(0,48).join('') : value));
+                })()"""))
+                if not isinstance(controls, list):
+                    controls = []
+                controls = [row for row in controls[:12] if isinstance(row, list) and len(row) == 6
+                            and all(isinstance(item, str) and len(item.encode('utf-8')) <= 192 for item in row[:5])
+                            and type(row[5]) is bool]
+            except Exception:
+                controls = []
     except Exception:
         observed = {"classification": "UNAVAILABLE", "actualDigest": None, "actualBytes": 0}
-    emit({
+    payload = {
         "stage": "BOOTSTRAP_DRAFT_INSPECTED",
         "projectId": project_id, "intentId": intent_id,
         "sourceGeneration": source["generation"], "sourceDigest": source["digest"],
         "expectedDigest": expected_digest,
         "actualDigest": observed["actualDigest"], "actualBytes": observed["actualBytes"],
         "classification": observed["classification"],
-    })
+        "controls": controls,
+    }
+    while controls and len((json.dumps(payload, separators=(",", ":")) + "\n").encode("utf-8")) > 8192:
+        controls.pop()
+    emit(payload)
 
 
 def bootstrap_draft_archive(bridge, sb, request):
