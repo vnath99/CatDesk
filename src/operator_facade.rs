@@ -20,6 +20,14 @@ pub(crate) fn start_web_auto_scheduler(state: crate::state::SharedState) {
     web::start_auto_scheduler(state);
 }
 
+pub(crate) async fn stop_web_auto_scheduler(state: crate::state::SharedState) {
+    web::stop_auto_scheduler(state).await;
+}
+
+pub(crate) async fn join_web_auto_schedulers(tasks: Vec<tokio::task::JoinHandle<()>>) {
+    web::join_auto_schedulers(tasks).await;
+}
+
 pub(crate) fn registry_rollover_status(workspace: &Path, project: &str) -> serde_json::Value {
     web::registry_rollover_status(workspace, project)
 }

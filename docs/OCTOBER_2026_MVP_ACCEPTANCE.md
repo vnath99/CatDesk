@@ -1,5 +1,39 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 scheduler ownership and shutdown (SOURCE VERIFIED)
+
+Inspection found that stopping the MCP server dropped blocking project task
+handles, and a quick stop/restart could escape a boolean-only lifecycle check.
+The scheduler now registers each run with an independent cancellation flag and
+retains its driver handle in application state. Normal server stop cancels and
+joins the drivers; each driver retains and drains its blocking project tasks.
+Finished listener handles are checked every 250 ms without browser requests.
+A retired run stays cancelled across restart and cannot overwrite new status.
+
+Cancellation reaches the existing browser lock wait, private adapter startup,
+snapshot/probe receive loops, handoff reads, bootstrap acknowledgements, paired
+binding and continuation publication. Adapter unwinding retains the existing
+private Windows Job cleanup. Already-authorized in-flight actions retain their
+durable checkpoints; SEND_ATTEMPTED is never replayed. Cancellation before
+binding preserves the receipt without falsely recording source corruption or
+requiring a new reconciliation. Independent WakeHost and native sessions are
+not stopped by the scheduler's cancellation flag.
+
+Offline verification passed 59 Web and 12 Wake runtime tests, including quick
+restart, listener exit, draining two blocking workers, pending channel/lock
+cancellation, no adapter/lock creation after cancellation, and durable receipt
+preservation. No browser, WakeHost or recurring automation ran in those tests.
+Strict root/Wake Clippy, both builds, formatting and diff checks also pass.
+These tests do not establish live browser shutdown or installed parity. The
+source-matched package must be promoted and a bounded live test authorised
+before recurring automation is restored; the user's current stop remains.
+
+The first-generation install gate remains separate: inventory hashes alone do
+not prove closed store/launcher coverage. No independent inventory or provisioned
+broker exists, so admission was not enabled from caller-supplied claims. Safe
+source work continues independently of that gate and the connector's last 429.
+**Overall October MVP: `PARTIAL`.**
+
 ## October 20 first-generation migration target readback (SOURCE ONLY)
 
 Current source already has typed package publication and a protected pointer

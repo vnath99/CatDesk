@@ -4,7 +4,6 @@ use std::collections::{HashMap, VecDeque};
 use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-#[cfg(not(test))]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 use tokio::sync::Mutex;
@@ -767,6 +766,8 @@ pub struct AppState {
     pub transport_identity: TransportIdentityConfig,
     pub transport_health: TransportHealthSnapshot,
     pub server_running: bool,
+    pub web_auto_cancel: Option<Arc<AtomicBool>>,
+    pub web_auto_tasks: Vec<tokio::task::JoinHandle<()>>,
     pub ngrok_running: bool,
     pub ngrok_url: Option<String>,
     pub remote_connected: bool,
@@ -1117,6 +1118,13 @@ fn advance_bootstrap_progress(
 }
 
 impl AppState {
+    pub(crate) fn cancel_web_auto_scheduler(&mut self) -> Vec<tokio::task::JoinHandle<()>> {
+        if let Some(cancel) = self.web_auto_cancel.take() {
+            cancel.store(true, Ordering::Release);
+        }
+        std::mem::take(&mut self.web_auto_tasks)
+    }
+
     pub fn new(port: u16, workspace_root: String) -> std::io::Result<Self> {
         let config_path = app_config_path()?;
         Self::from_config_path_with_archive(port, workspace_root, config_path, true)
@@ -1239,6 +1247,8 @@ impl AppState {
                 config.tunnel.remote_self_check,
             ),
             server_running: false,
+            web_auto_cancel: None,
+            web_auto_tasks: Vec::new(),
             ngrok_running: false,
             ngrok_url: None,
             remote_connected: false,

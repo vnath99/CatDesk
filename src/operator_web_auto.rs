@@ -1,7 +1,7 @@
 //! Small periodic driver for the existing exact-target Web operator steps.
 //! One project can wait on its browser without holding up another project.
 
-use super::{capture_context, paired_key, rollover};
+use super::{paired_key, rollover};
 use crate::{
     delegated::autonomy_projects::AutonomousProjectRegistryStoreV1,
     state::SharedState,
@@ -17,11 +17,30 @@ use serde_json::{Value, json};
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Duration,
 };
 
 const AUTO_INTERVAL: Duration = Duration::from_secs(120);
 const MAX_ACTIVE_PROJECTS: usize = 8;
+
+struct CancelOnExit(Arc<AtomicBool>);
+impl Drop for CancelOnExit {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Release);
+    }
+}
+
+fn require_scheduler_running(cancel: &AtomicBool) -> Result<(), String> {
+    if cancel.load(Ordering::Acquire) {
+        Err("WEB_AUTO_OWNER_STOPPED".into())
+    } else {
+        Ok(())
+    }
+}
 
 fn pressure_due(pressure: &PressureStatus) -> bool {
     pressure.is_current
@@ -230,11 +249,13 @@ fn execute_after_live_recheck(
     workspace: &Path,
     project: &str,
     source: &Target,
+    keep_running: &dyn Fn() -> Result<(), String>,
 ) -> Result<(&'static str, Value), String> {
+    keep_running()?;
     let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
     let wake = Store::open(&root)?;
     execute_after_live_recheck_with(&wake, project, source, || {
-        rollover::execute_automatic(workspace, project)
+        rollover::execute_automatic(workspace, project, keep_running)
     })
 }
 
@@ -267,7 +288,9 @@ fn run_step(
     project: &str,
     key: &ConversationKey,
     source: &Target,
+    keep_running: &dyn Fn() -> Result<(), String>,
 ) -> Result<(&'static str, Value), String> {
+    keep_running()?;
     match rollover::auto_stage(workspace, project, source)? {
         rollover::AutoStage::SourceWitnessRequired => Ok((
             "SOURCE_WITNESS_REQUIRED",
@@ -281,14 +304,16 @@ fn run_step(
             "QUARANTINED",
             json!({"reason":"WEB_ROLLOVER_QUARANTINED_NO_REPLAY"}),
         )),
-        rollover::AutoStage::Execute => execute_after_live_recheck(workspace, project, source),
+        rollover::AutoStage::Execute => {
+            execute_after_live_recheck(workspace, project, source, keep_running)
+        }
         rollover::AutoStage::CollectHandoff => {
             // Crash recovery may find the request saved before queue
             // publication. Republishing the same event ID is idempotent and
             // cannot resend a submitted browser turn.
-            rollover::resume_saved_handoff_request(workspace, project)?;
-            match rollover::collect_handoff(workspace, project) {
-                Ok(_) => execute_after_live_recheck(workspace, project, source),
+            rollover::resume_saved_handoff_request_guarded(workspace, project, keep_running)?;
+            match rollover::collect_handoff_guarded(workspace, project, keep_running) {
+                Ok(_) => execute_after_live_recheck(workspace, project, source, keep_running),
                 Err(reason) if is_pending_handoff(&reason) => {
                     Ok(("AWAITING_HANDOFF", json!({"reason":reason})))
                 }
@@ -296,7 +321,8 @@ fn run_step(
             }
         }
         rollover::AutoStage::Observe => {
-            let observed = capture_context(workspace, project)?;
+            let observed = super::capture_context_guarded(workspace, project, keep_running)?;
+            keep_running()?;
             let meter = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
             let pressure = meter.pressure(key)?;
             if !pressure_due(&pressure) {
@@ -316,13 +342,20 @@ fn run_step(
                     json!({"reason":"WEB_AUTO_COMPLETED_WAKE_TASK_REQUIRED"}),
                 ));
             };
-            let request = rollover::request_handoff(workspace, project, &task_id)?;
+            let request =
+                rollover::request_handoff_guarded(workspace, project, &task_id, keep_running)?;
             Ok(("HANDOFF_REQUESTED", request))
         }
     }
 }
 
-fn tick_project_mode(workspace: &Path, project: &str, background: bool) -> Result<Value, String> {
+fn tick_project_mode(
+    workspace: &Path,
+    project: &str,
+    background: bool,
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<Value, String> {
+    keep_running()?;
     let (key, source) = match paired_key(workspace, project) {
         Ok(key) => {
             let source = Target::new(key.target_generation, key.conversation_url.clone())?;
@@ -331,6 +364,7 @@ fn tick_project_mode(workspace: &Path, project: &str, background: bool) -> Resul
         Err(reason) => match rollover::automatic_recovery_authority(workspace, project) {
             Ok(Some(authority)) => authority,
             Ok(None) | Err(_) => {
+                keep_running()?;
                 let _ = rollover::record_auto_status(
                     workspace,
                     project,
@@ -344,14 +378,17 @@ fn tick_project_mode(workspace: &Path, project: &str, background: bool) -> Resul
     };
     let selected_stage =
         rollover::auto_stage(workspace, project, &source).inspect_err(|reason| {
-            let _ = rollover::record_auto_status(
-                workspace,
-                project,
-                "ATTENTION",
-                Some(source.generation),
-                Some(reason),
-            );
+            if keep_running().is_ok() {
+                let _ = rollover::record_auto_status(
+                    workspace,
+                    project,
+                    "ATTENTION",
+                    Some(source.generation),
+                    Some(reason),
+                );
+            }
         })?;
+    keep_running()?;
     if background
         && selected_stage == rollover::AutoStage::Observe
         && !background_observation_enabled(workspace, &key)?
@@ -386,8 +423,12 @@ fn tick_project_mode(workspace: &Path, project: &str, background: bool) -> Resul
                 &source.url,
             )?;
         }
-        gated_browser_step(wake_state, || run_step(workspace, project, &key, &source))
+        gated_browser_step(wake_state, || {
+            run_step(workspace, project, &key, &source, keep_running)
+        })
     })();
+    // A replaced/stopped owner must not overwrite the next run's status.
+    keep_running()?;
     match result {
         Ok((stage, value)) => {
             rollover::record_auto_status(workspace, project, stage, Some(source.generation), None)?;
@@ -408,11 +449,17 @@ fn tick_project_mode(workspace: &Path, project: &str, background: bool) -> Resul
 }
 
 pub(super) fn tick_project(workspace: &Path, project: &str) -> Result<Value, String> {
-    tick_project_mode(workspace, project, false)
+    tick_project_mode(workspace, project, false, &|| Ok(()))
 }
 
-fn tick_background_project(workspace: &Path, project: &str) -> Result<Value, String> {
-    tick_project_mode(workspace, project, true)
+fn tick_background_project(
+    workspace: &Path,
+    project: &str,
+    cancel: &AtomicBool,
+) -> Result<Value, String> {
+    tick_project_mode(workspace, project, true, &|| {
+        require_scheduler_running(cancel)
+    })
 }
 
 fn registered_projects(workspace: &Path) -> Result<Vec<String>, String> {
@@ -445,40 +492,91 @@ fn startable_projects(
         .collect()
 }
 
+async fn drain_project_tasks(
+    cancel: &AtomicBool,
+    active: BTreeMap<String, tokio::task::JoinHandle<()>>,
+) {
+    cancel.store(true, Ordering::Release);
+    for (_, task) in active {
+        let _ = task.await;
+    }
+}
+
 pub(crate) fn start_scheduler(state: SharedState) {
     tokio::spawn(async move {
-        let workspace = {
-            let app = state.lock().await;
-            PathBuf::from(&app.workspace_root)
-        };
-        let mut watch = tokio::time::interval(AUTO_INTERVAL);
-        watch.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        watch.tick().await; // Allow service startup to settle before browser reads.
-        let mut active = BTreeMap::<String, tokio::task::JoinHandle<()>>::new();
-        let mut cursor = 0usize;
-        loop {
-            watch.tick().await;
-            if !state.lock().await.server_running {
-                break;
-            }
-            active.retain(|_, handle| !handle.is_finished());
-            let Ok(projects) = registered_projects(&workspace) else {
-                continue;
-            };
-            let running: BTreeSet<_> = active.keys().cloned().collect();
-            let capacity = MAX_ACTIVE_PROJECTS.saturating_sub(active.len());
-            for project in startable_projects(&projects, &running, capacity, cursor) {
-                let workspace = workspace.clone();
-                let project_for_task = project.clone();
-                let handle = tokio::task::spawn_blocking(move || {
-                    let _ = tick_background_project(&workspace, &project_for_task);
-                });
-                active.insert(project, handle);
-            }
-            if !projects.is_empty() {
-                cursor = (cursor + 1) % projects.len();
-            }
+        let mut app = state.lock().await;
+        if !app.server_running || app.server_handle.as_ref().is_some_and(|h| h.is_finished()) {
+            app.server_running = false;
+            let tasks = app.cancel_web_auto_scheduler();
+            drop(app);
+            super::join_auto_schedulers(tasks).await;
+            return;
         }
+        if let Some(previous) = app.web_auto_cancel.take() {
+            previous.store(true, Ordering::Release);
+        }
+        app.web_auto_tasks.retain(|task| !task.is_finished());
+        let cancel = Arc::new(AtomicBool::new(false));
+        app.web_auto_cancel = Some(cancel.clone());
+        let workspace = PathBuf::from(&app.workspace_root);
+        let driver_state = state.clone();
+        let driver = tokio::spawn(async move {
+            let _lifetime = CancelOnExit(cancel.clone());
+            let mut watch = tokio::time::interval(AUTO_INTERVAL);
+            watch.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            watch.tick().await; // Allow service startup to settle before browser reads.
+            let mut lifecycle = tokio::time::interval(Duration::from_millis(250));
+            let mut active = BTreeMap::<String, tokio::task::JoinHandle<()>>::new();
+            let mut cursor = 0usize;
+            loop {
+                let tick_due =
+                    tokio::select! { _ = watch.tick() => true, _ = lifecycle.tick() => false };
+                let listener_live = {
+                    let mut app = driver_state.lock().await;
+                    let live = app.server_running
+                        && app.server_handle.as_ref().is_none_or(|h| !h.is_finished());
+                    if !live
+                        && app
+                            .web_auto_cancel
+                            .as_ref()
+                            .is_some_and(|current| Arc::ptr_eq(current, &cancel))
+                    {
+                        app.server_running = false;
+                    }
+                    live
+                };
+                if require_scheduler_running(&cancel).is_err() || !listener_live {
+                    cancel.store(true, Ordering::Release);
+                    break;
+                }
+                active.retain(|_, handle| !handle.is_finished());
+                if !tick_due {
+                    continue;
+                }
+                let Ok(projects) = registered_projects(&workspace) else {
+                    continue;
+                };
+                let running: BTreeSet<_> = active.keys().cloned().collect();
+                let capacity = MAX_ACTIVE_PROJECTS.saturating_sub(active.len());
+                for project in startable_projects(&projects, &running, capacity, cursor) {
+                    let workspace = workspace.clone();
+                    let project_for_task = project.clone();
+                    let task_cancel = cancel.clone();
+                    let handle = tokio::task::spawn_blocking(move || {
+                        let _ =
+                            tick_background_project(&workspace, &project_for_task, &task_cancel);
+                    });
+                    active.insert(project, handle);
+                }
+                if !projects.is_empty() {
+                    cursor = (cursor + 1) % projects.len();
+                }
+            }
+            // Dropping a blocking JoinHandle does not cancel its work. Retain each
+            // handle until guarded browser I/O unwinds and its private Job closes.
+            drain_project_tasks(&cancel, active).await;
+        });
+        app.web_auto_tasks.push(driver);
     });
 }
 
@@ -486,6 +584,144 @@ pub(crate) fn start_scheduler(state: SharedState) {
 mod tests {
     use super::*;
     use catdesk_wake::{protocol::digest, store::Receipt};
+
+    fn lifecycle_fixture() -> SharedState {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("web-owner-{}", uuid::Uuid::new_v4()));
+        let mut app = crate::state::AppState::new_isolated_fixture(
+            0,
+            root.display().to_string(),
+            root.join("config.toml"),
+        )
+        .unwrap();
+        app.server_running = true;
+        Arc::new(tokio::sync::Mutex::new(app))
+    }
+
+    async fn owner_after_start(
+        state: &SharedState,
+        previous: Option<&Arc<AtomicBool>>,
+    ) -> Arc<AtomicBool> {
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if let Some(owner) = state.lock().await.web_auto_cancel.clone()
+                    && previous.is_none_or(|old| !Arc::ptr_eq(old, &owner))
+                {
+                    return owner;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("scheduler owner registration")
+    }
+
+    #[tokio::test]
+    async fn stopped_or_replaced_scheduler_never_revives_after_restart() {
+        let state = lifecycle_fixture();
+        start_scheduler(state.clone());
+        let first = owner_after_start(&state, None).await;
+        start_scheduler(state.clone());
+        let second = owner_after_start(&state, Some(&first)).await;
+        assert!(require_scheduler_running(&first).is_err());
+        assert!(require_scheduler_running(&second).is_ok());
+        tokio::time::timeout(
+            Duration::from_secs(2),
+            super::super::stop_auto_scheduler(state.clone()),
+        )
+        .await
+        .unwrap();
+        assert!(require_scheduler_running(&second).is_err());
+        assert!(state.lock().await.web_auto_tasks.is_empty());
+        state.lock().await.server_running = true;
+        start_scheduler(state.clone());
+        let third = owner_after_start(&state, None).await;
+        assert!(!Arc::ptr_eq(&second, &third));
+        assert!(require_scheduler_running(&second).is_err());
+        super::super::stop_auto_scheduler(state).await;
+        assert!(require_scheduler_running(&third).is_err());
+    }
+
+    #[tokio::test]
+    async fn finished_listener_retires_owner_without_waiting_for_next_browser_tick() {
+        let state = lifecycle_fixture();
+        let (finish, wait) = tokio::sync::oneshot::channel::<()>();
+        state.lock().await.server_handle = Some(tokio::spawn(async move {
+            let _ = wait.await;
+        }));
+        start_scheduler(state.clone());
+        let owner = owner_after_start(&state, None).await;
+        finish.send(()).unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while require_scheduler_running(&owner).is_ok() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(
+            !state.lock().await.server_running,
+            "finished listener must also correct the stale UI flag"
+        );
+        super::super::stop_auto_scheduler(state).await;
+    }
+
+    #[tokio::test]
+    async fn listener_that_exits_during_startup_never_registers_a_scheduler() {
+        let state = lifecycle_fixture();
+        let listener = tokio::spawn(async {});
+        while !listener.is_finished() {
+            tokio::task::yield_now().await;
+        }
+        state.lock().await.server_handle = Some(listener);
+        start_scheduler(state.clone());
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while state.lock().await.server_running {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        let app = state.lock().await;
+        assert!(app.web_auto_cancel.is_none());
+        assert!(app.web_auto_tasks.is_empty());
+    }
+
+    #[tokio::test]
+    async fn shutdown_drains_every_owned_blocking_task() {
+        let cancel = Arc::new(AtomicBool::new(false));
+        let completed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut active = BTreeMap::new();
+        for project in ["alpha", "beta"] {
+            let cancelled = cancel.clone();
+            let finished = completed.clone();
+            active.insert(
+                project.into(),
+                tokio::task::spawn_blocking(move || {
+                    while require_scheduler_running(&cancelled).is_ok() {
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
+                    finished.fetch_add(1, Ordering::Release);
+                }),
+            );
+        }
+        tokio::time::timeout(Duration::from_secs(2), drain_project_tasks(&cancel, active))
+            .await
+            .unwrap();
+        assert_eq!(completed.load(Ordering::Acquire), 2);
+    }
+
+    #[test]
+    fn cancelled_background_owner_refuses_before_filesystem_or_browser_work() {
+        let root =
+            std::env::temp_dir().join(format!("web-cancel-no-create-{}", uuid::Uuid::new_v4()));
+        assert_eq!(
+            tick_background_project(&root, "alpha", &AtomicBool::new(true)).unwrap_err(),
+            "WEB_AUTO_OWNER_STOPPED"
+        );
+        assert!(!root.exists());
+    }
 
     #[test]
     fn scheduler_keeps_other_projects_startable_when_one_is_busy() {

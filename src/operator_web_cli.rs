@@ -27,6 +27,21 @@ pub(crate) fn start_auto_scheduler(state: crate::state::SharedState) {
     auto::start_scheduler(state);
 }
 
+pub(crate) async fn stop_auto_scheduler(state: crate::state::SharedState) {
+    let tasks = {
+        let mut app = state.lock().await;
+        app.server_running = false;
+        app.cancel_web_auto_scheduler()
+    };
+    join_auto_schedulers(tasks).await;
+}
+
+pub(crate) async fn join_auto_schedulers(tasks: Vec<tokio::task::JoinHandle<()>>) {
+    for task in tasks {
+        let _ = task.await;
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WebAction {
     Status,
@@ -393,6 +408,15 @@ fn context_status(workspace: &Path, project: &str) -> Value {
 }
 
 fn capture_context(workspace: &Path, project: &str) -> Result<Value, String> {
+    capture_context_guarded(workspace, project, &|| Ok(()))
+}
+
+fn capture_context_guarded(
+    workspace: &Path,
+    project: &str,
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<Value, String> {
+    keep_running()?;
     let key = paired_key(workspace, project)?;
     let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
     let wake = catdesk_wake::store::Store::open(&root)?;
@@ -403,7 +427,13 @@ fn capture_context(workspace: &Path, project: &str) -> Result<Value, String> {
     )?;
     let source =
         catdesk_wake::protocol::Target::new(key.target_generation, key.conversation_url.clone())?;
-    let snapshot = catdesk_wake::runtime::snapshot_conversation(&wake, project, &source)?;
+    let snapshot = catdesk_wake::runtime::snapshot_conversation_guarded(
+        &wake,
+        project,
+        &source,
+        keep_running,
+    )?;
+    keep_running()?;
     if paired_key(workspace, project)? != key {
         return Err("WEB_CONTEXT_TARGET_CHANGED".into());
     }
@@ -411,6 +441,7 @@ fn capture_context(workspace: &Path, project: &str) -> Result<Value, String> {
     let previous = store.active_key(project)?;
     store.bind_observed_target(key.clone(), previous.as_ref())?;
     observe::ingest(&store, &key, snapshot, catdesk_wake::store::now(), || {
+        keep_running()?;
         if paired_key(workspace, project)? == key {
             Ok(())
         } else {

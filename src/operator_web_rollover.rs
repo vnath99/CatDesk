@@ -1180,6 +1180,16 @@ pub(super) fn request_handoff(
     project: &str,
     source_task_id: &str,
 ) -> Result<Value, String> {
+    request_handoff_guarded(workspace, project, source_task_id, &|| Ok(()))
+}
+
+pub(super) fn request_handoff_guarded(
+    workspace: &Path,
+    project: &str,
+    source_task_id: &str,
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<Value, String> {
+    keep_running()?;
     if !valid_id(source_task_id) {
         return Err("WEB_HANDOFF_TASK_INVALID".into());
     }
@@ -1220,6 +1230,7 @@ pub(super) fn request_handoff(
             wake.root(),
             &source.url,
         )?;
+        keep_running()?;
         wake.produce_expected(
             &previous.event_id,
             project,
@@ -1239,12 +1250,14 @@ pub(super) fn request_handoff(
 
     // The selected Wake browser owner observes the exact idle source before the
     // advisory context ledger claims a quiescent point. This is a private read.
-    let snapshot = runtime::snapshot_conversation(&wake, project, &source)?;
+    let snapshot = runtime::snapshot_conversation_guarded(&wake, project, &source, keep_running)?;
+    keep_running()?;
     source_ready_for_handoff(&snapshot)?;
     let source_key = key(project, &source);
     let previous = meter.active_key(project)?;
     meter.bind_observed_target(source_key.clone(), previous.as_ref())?;
     super::observe::ingest(&meter, &source_key, snapshot, now(), || {
+        keep_running()?;
         if paired(workspace, project)? == source {
             Ok(())
         } else {
@@ -1276,6 +1289,7 @@ pub(super) fn request_handoff(
     request.validate(project)?;
     // Save before queue publication. A retry after a crash republishes only
     // these exact bytes under the same Wake event ID.
+    keep_running()?;
     store.save_handoff_request(&request)?;
     if paired(workspace, project)? != request.source
         || !native_owner_matches(&request, &registered_project(workspace, project)?)
@@ -1287,6 +1301,7 @@ pub(super) fn request_handoff(
         wake.root(),
         &request.source.url,
     )?;
+    keep_running()?;
     wake.produce_expected(
         &request.event_id,
         project,
@@ -1318,10 +1333,12 @@ fn saved_current_handoff_request(
     Ok(Some(previous))
 }
 
-pub(super) fn resume_saved_handoff_request(
+pub(super) fn resume_saved_handoff_request_guarded(
     workspace: &Path,
     project: &str,
+    keep_running: &dyn Fn() -> Result<(), String>,
 ) -> Result<Value, String> {
+    keep_running()?;
     let store = ProjectStore::open(workspace, project)?;
     let request = store
         .handoff_request()?
@@ -1331,7 +1348,7 @@ pub(super) fn resume_saved_handoff_request(
     }
     let task = request.source_task_id;
     drop(store);
-    request_handoff(workspace, project, &task)
+    request_handoff_guarded(workspace, project, &task, keep_running)
 }
 
 fn completed_request_delivery(
@@ -1434,6 +1451,15 @@ fn handoff_from_source_snapshot(
 }
 
 pub(super) fn collect_handoff(workspace: &Path, project: &str) -> Result<Value, String> {
+    collect_handoff_guarded(workspace, project, &|| Ok(()))
+}
+
+pub(super) fn collect_handoff_guarded(
+    workspace: &Path,
+    project: &str,
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<Value, String> {
+    keep_running()?;
     let store = ProjectStore::open(workspace, project)?;
     let request = store
         .handoff_request()?
@@ -1477,7 +1503,9 @@ pub(super) fn collect_handoff(workspace: &Path, project: &str) -> Result<Value, 
         wake.root(),
         &request.source.url,
     )?;
-    let snapshot = runtime::snapshot_conversation(&wake, project, &request.source)?;
+    let snapshot =
+        runtime::snapshot_conversation_guarded(&wake, project, &request.source, keep_running)?;
+    keep_running()?;
     let handoff = handoff_from_source_snapshot(&request, &snapshot)?;
     if wake.source_progress_fingerprint(project, &request.source, &request.event_id)?
         != source_fingerprint
@@ -1490,6 +1518,7 @@ pub(super) fn collect_handoff(workspace: &Path, project: &str) -> Result<Value, 
         snapshot,
         now(),
         || {
+            keep_running()?;
             if paired(workspace, project)? == request.source {
                 Ok(())
             } else {
@@ -1503,6 +1532,7 @@ pub(super) fn collect_handoff(workspace: &Path, project: &str) -> Result<Value, 
         return Err("WEB_HANDOFF_SOURCE_OR_OWNER_CHANGED".into());
     }
     drop(store);
+    keep_running()?;
     prepare_with_request(
         workspace,
         project,
@@ -1659,7 +1689,9 @@ where
             record.source.generation,
         )
         .map_err(|reason| {
-            if reason == "WEB_ROLLOVER_SOURCE_PROGRESS_RECONCILIATION_REQUIRED" {
+            if reason == "WEB_ROLLOVER_SOURCE_PROGRESS_RECONCILIATION_REQUIRED"
+                || reason == "WEB_AUTO_OWNER_STOPPED"
+            {
                 reason
             } else {
                 "WEB_ROLLOVER_BINDING_REQUIRES_RECONCILIATION".into()
@@ -1707,6 +1739,9 @@ where
     {
         Ok(bound) => bound,
         Err(reason) => {
+            if reason == "WEB_AUTO_OWNER_STOPPED" {
+                return Err(reason);
+            }
             record.reconciliation_reason = Some(reason.clone());
             store.save(record)?;
             return Err(reason);
@@ -1963,7 +1998,9 @@ fn verify_source_handoff_still_latest(
     wake: &Store,
     record: &mut Record,
     destination: &Target,
+    keep_running: &dyn Fn() -> Result<(), String>,
 ) -> Result<(), String> {
+    keep_running()?;
     // A prior guarded Wake-first commit can leave the registry one write
     // behind. Its source snapshot proof was saved before that commit, and the
     // old Wake target is no longer available for another source read.
@@ -1985,14 +2022,19 @@ fn verify_source_handoff_still_latest(
             wake.root(),
             &record.source.url,
         )?;
-        let snapshot = runtime::snapshot_conversation(wake, &record.project_id, &record.source)
-            .map_err(|reason| {
-                if reason == "BROWSER_SESSION_BUSY" {
-                    reason
-                } else {
-                    "WEB_ROLLOVER_SOURCE_SNAPSHOT_UNAVAILABLE_RECONCILIATION_REQUIRED".into()
-                }
-            })?;
+        let snapshot = runtime::snapshot_conversation_guarded(
+            wake,
+            &record.project_id,
+            &record.source,
+            keep_running,
+        )
+        .map_err(|reason| {
+            if reason == "BROWSER_SESSION_BUSY" || reason == "WEB_AUTO_OWNER_STOPPED" {
+                reason
+            } else {
+                "WEB_ROLLOVER_SOURCE_SNAPSHOT_UNAVAILABLE_RECONCILIATION_REQUIRED".into()
+            }
+        })?;
         source_snapshot_matches_record(&request, record, &registered, &snapshot)?;
         if paired(workspace, &record.project_id)? != record.source {
             return Err("WEB_ROLLOVER_SOURCE_CHANGED_RECONCILIATION_REQUIRED".into());
@@ -2000,10 +2042,14 @@ fn verify_source_handoff_still_latest(
         Ok(())
     })();
     if let Err(reason) = check {
+        if reason == "WEB_AUTO_OWNER_STOPPED" {
+            return Err(reason);
+        }
         record.reconciliation_reason = Some(reason.clone());
         store.save(record)?;
         return Err(reason);
     }
+    keep_running()?;
     record.source_snapshot_verified = true;
     store.save(record)?;
     Ok(())
@@ -2224,14 +2270,24 @@ fn authorize_automatic_submit(
 }
 
 pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> {
-    execute_with_mode(workspace, project, false)
+    execute_with_mode(workspace, project, false, &|| Ok(()))
 }
 
-pub(super) fn execute_automatic(workspace: &Path, project: &str) -> Result<Value, String> {
-    execute_with_mode(workspace, project, true)
+pub(super) fn execute_automatic(
+    workspace: &Path,
+    project: &str,
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<Value, String> {
+    execute_with_mode(workspace, project, true, keep_running)
 }
 
-fn execute_with_mode(workspace: &Path, project: &str, automatic: bool) -> Result<Value, String> {
+fn execute_with_mode(
+    workspace: &Path,
+    project: &str,
+    automatic: bool,
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<Value, String> {
+    keep_running()?;
     let store = ProjectStore::open(workspace, project)?;
     let mut record = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
     if record.phase == Phase::Quarantined {
@@ -2283,41 +2339,45 @@ fn execute_with_mode(workspace: &Path, project: &str, automatic: bool) -> Result
         let intent_id = record.intent_id.clone();
         let handoff = record.handoff.clone();
         let resume = record.bootstrap_progress;
-        let receipt = runtime::bootstrap_submit_conversation(
+        let receipt = runtime::bootstrap_submit_conversation_guarded(
             &wake,
             project,
             &intent_id,
             &source,
             &handoff,
             resume,
-            |checkpoint| {
-                let stage = match checkpoint {
-                    runtime::BootstrapCheckpoint::PreSendUnknown => {
-                        if record.phase == Phase::Submitting
-                            && record.bootstrap_progress
-                                == Some(runtime::BootstrapProgress::TextEntryAuthorized)
-                        {
-                            record.reconciliation_reason =
-                                Some("WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND".into());
-                            return store.save(&record);
+            runtime::BootstrapCallbacks {
+                keep_running,
+                checkpoint: &mut |checkpoint| {
+                    keep_running()?;
+                    let stage = match checkpoint {
+                        runtime::BootstrapCheckpoint::PreSendUnknown => {
+                            if record.phase == Phase::Submitting
+                                && record.bootstrap_progress
+                                    == Some(runtime::BootstrapProgress::TextEntryAuthorized)
+                            {
+                                record.reconciliation_reason =
+                                    Some("WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND".into());
+                                return store.save(&record);
+                            }
+                            return Ok(());
                         }
-                        return Ok(());
+                        runtime::BootstrapCheckpoint::Progress(stage) => stage,
+                    };
+                    if paired(workspace, project)? != source {
+                        return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
                     }
-                    runtime::BootstrapCheckpoint::Progress(stage) => stage,
-                };
-                if paired(workspace, project)? != source {
-                    return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
-                }
-                catdesk_wake::development_runtime::validate_selected_target_isolation(
-                    workspace,
-                    wake.root(),
-                    &source.url,
-                )?;
-                confirm_request_enabled(workspace, &record)?;
-                authorize_automatic_submit(automatic, &wake, project, &source, || {
-                    checkpoint_bootstrap_progress(&mut record, stage)?;
-                    store.save(&record)
-                })
+                    catdesk_wake::development_runtime::validate_selected_target_isolation(
+                        workspace,
+                        wake.root(),
+                        &source.url,
+                    )?;
+                    confirm_request_enabled(workspace, &record)?;
+                    authorize_automatic_submit(automatic, &wake, project, &source, || {
+                        checkpoint_bootstrap_progress(&mut record, stage)?;
+                        store.save(&record)
+                    })
+                },
             },
         )?;
         validate_receipt_stage(&record, &receipt, "RESPONSE_PENDING")?;
@@ -2337,8 +2397,13 @@ fn execute_with_mode(workspace: &Path, project: &str, automatic: bool) -> Result
             &record.source.url,
         )?;
         automatic_wake_running(automatic, &wake, project, &record.source)?;
-        let Some(completed) =
-            runtime::bootstrap_probe_completion(&wake, &record.source, pending, &record.handoff)?
+        let Some(completed) = runtime::bootstrap_probe_completion_guarded(
+            &wake,
+            &record.source,
+            pending,
+            &record.handoff,
+            keep_running,
+        )?
         else {
             return Ok(summary(&record));
         };
@@ -2352,8 +2417,16 @@ fn execute_with_mode(workspace: &Path, project: &str, automatic: bool) -> Result
         .as_ref()
         .ok_or("WEB_BOOTSTRAP_RECEIPT_REQUIRED")?;
     let destination = validate_receipt(&record, receipt)?;
+    keep_running()?;
     if record.phase == Phase::Created && record.handoff_event_id.is_some() {
-        verify_source_handoff_still_latest(workspace, &store, &wake, &mut record, &destination)?;
+        verify_source_handoff_still_latest(
+            workspace,
+            &store,
+            &wake,
+            &mut record,
+            &destination,
+            keep_running,
+        )?;
     }
     let handoff_witness = record.handoff_event_id.clone();
     let source_fingerprint = record.source_fingerprint.clone();
@@ -2379,12 +2452,14 @@ fn execute_with_mode(workspace: &Path, project: &str, automatic: bool) -> Result
             return Err(reason.into());
         }
     }
+    keep_running()?;
     let bound = checkpoint_bound_with(
         &store,
         &mut record,
         &destination,
         || paired(workspace, project),
         |url, digest, generation| {
+            keep_running()?;
             let result = match handoff_witness.as_deref() {
                 Some(witness) => {
                     let fingerprint = source_fingerprint.as_deref().ok_or(
@@ -2431,6 +2506,7 @@ fn execute_with_mode(workspace: &Path, project: &str, automatic: bool) -> Result
         wake.root(),
         &bound.url,
     )?;
+    keep_running()?;
     queue_continuation_with(
         &wake,
         &mut record,
@@ -2444,6 +2520,25 @@ fn execute_with_mode(workspace: &Path, project: &str, automatic: bool) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cancelled_scheduler_cannot_prepare_collect_or_execute_a_project() {
+        let root =
+            std::env::temp_dir().join(format!("web-cancelled-rollover-{}", uuid::Uuid::new_v4()));
+        let stopped = || Err("WEB_AUTO_OWNER_STOPPED".to_string());
+        for result in [
+            request_handoff_guarded(&root, "alpha", "task-a", &stopped),
+            resume_saved_handoff_request_guarded(&root, "alpha", &stopped),
+            collect_handoff_guarded(&root, "alpha", &stopped),
+            execute_automatic(&root, "alpha", &stopped),
+        ] {
+            assert_eq!(result.unwrap_err(), "WEB_AUTO_OWNER_STOPPED");
+        }
+        assert!(
+            !root.exists(),
+            "retired owner must not initialize project state"
+        );
+    }
     #[cfg(windows)]
     use catdesk_wake::development_runtime;
     use catdesk_wake::{protocol::Event, store::Receipt};
@@ -4015,6 +4110,36 @@ mod tests {
         assert_eq!(saved.phase, Phase::Bound);
         assert_eq!(saved.bound_target, Some(destination));
         assert!(saved.receipt.is_some());
+    }
+
+    #[test]
+    fn cancelled_owner_before_binding_preserves_receipt_without_reconciliation_fence() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut record = record();
+        record.phase = Phase::Created;
+        record.receipt = Some(receipt_for(&record));
+        store.save(&record).unwrap();
+        atomic(&store.root.join("active.json"), &record.intent_id).unwrap();
+        let before = serde_json::to_value(store.active().unwrap().unwrap()).unwrap();
+        let destination = validate_receipt(&record, record.receipt.as_ref().unwrap()).unwrap();
+        let source = record.source.clone();
+        assert_eq!(
+            checkpoint_bound_with(
+                &store,
+                &mut record,
+                &destination,
+                || Ok(source.clone()),
+                |_, _, _| Err("WEB_AUTO_OWNER_STOPPED".into())
+            )
+            .unwrap_err(),
+            "WEB_AUTO_OWNER_STOPPED"
+        );
+        assert!(record.reconciliation_reason.is_none());
+        assert_eq!(
+            serde_json::to_value(store.active().unwrap().unwrap()).unwrap(),
+            before
+        );
     }
 
     #[test]

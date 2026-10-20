@@ -1454,6 +1454,15 @@ fn activate_reviewed_install_checked(
 const BROWSER_SESSION_LOCK_PROTOCOL: &str = "CATDESK_WAKE_BROWSER_SESSION_LOCK_V1";
 
 pub(crate) fn browser_session_lock(root: &Path, wait: Duration) -> Result<File> {
+    browser_session_lock_guarded(root, wait, &|| Ok(()))
+}
+
+fn browser_session_lock_guarded(
+    root: &Path,
+    wait: Duration,
+    keep_running: &dyn Fn() -> Result<()>,
+) -> Result<File> {
+    keep_running()?;
     let path = root.join("browser-session.lock");
     if let Ok(metadata) = std::fs::symlink_metadata(&path) {
         #[cfg(windows)]
@@ -1488,8 +1497,12 @@ pub(crate) fn browser_session_lock(root: &Path, wait: Duration) -> Result<File> 
     }
     let deadline = Instant::now() + wait;
     loop {
+        keep_running()?;
         match file.try_lock() {
-            Ok(()) => return Ok(file),
+            Ok(()) => {
+                keep_running()?;
+                return Ok(file);
+            }
             Err(std::fs::TryLockError::WouldBlock) if Instant::now() < deadline => {
                 thread::sleep(Duration::from_millis(100));
             }
@@ -1509,6 +1522,16 @@ struct Adapter {
     input: ChildStdin,
     output: Receiver<Result<serde_json::Value>>,
     _browser_session_lock: File,
+}
+
+fn guarded_browser_receive(
+    output: &Receiver<Result<serde_json::Value>>,
+    keep_running: &dyn Fn() -> Result<()>,
+) -> Result<std::result::Result<Result<serde_json::Value>, mpsc::RecvTimeoutError>> {
+    keep_running()?;
+    let result = output.recv_timeout(Duration::from_millis(250));
+    keep_running()?;
+    Ok(result)
 }
 impl Drop for Adapter {
     fn drop(&mut self) {
@@ -1563,9 +1586,19 @@ impl Adapter {
         installed: &Path,
         wait: Duration,
     ) -> Result<Self> {
+        Self::spawn_from_installed_guarded(root, installed, wait, &|| Ok(()))
+    }
+
+    fn spawn_from_installed_guarded(
+        root: &Path,
+        installed: &Path,
+        wait: Duration,
+        keep_running: &dyn Fn() -> Result<()>,
+    ) -> Result<Self> {
+        keep_running()?;
         let (adapter_path, _wake_bridge_path) =
             verify_installed_browser_artifacts(root, installed)?;
-        let browser_session_lock = browser_session_lock(root, wait)?;
+        let browser_session_lock = browser_session_lock_guarded(root, wait, keep_running)?;
         let interpreter = root.join("runtime/python.exe");
         if !interpreter.is_file() {
             return Err("BROWSER_RUNTIME_NOT_INSTALLED".into());
@@ -1586,6 +1619,7 @@ impl Adapter {
                     .map_err(|_| "BROWSER_LOG_UNAVAILABLE")?,
             ));
         hidden(&mut command);
+        keep_running()?;
         let mut child = command
             .spawn()
             .map_err(|_| "BROWSER_ADAPTER_START_FAILED")?;
@@ -1632,7 +1666,7 @@ impl Adapter {
             if Instant::now() >= deadline {
                 return Err("BROWSER_SESSION_START_TIMEOUT".into());
             }
-            match adapter.output.recv_timeout(Duration::from_millis(250)) {
+            match guarded_browser_receive(&adapter.output, keep_running)? {
                 Ok(Ok(value)) => match value.get("stage").and_then(|v| v.as_str()) {
                     Some("READY") => return Ok(adapter),
                     Some("ATTENTION") => {
@@ -1732,6 +1766,11 @@ pub enum BootstrapProgress {
 pub enum BootstrapCheckpoint {
     Progress(BootstrapProgress),
     PreSendUnknown,
+}
+
+pub struct BootstrapCallbacks<'a> {
+    pub checkpoint: &'a mut dyn FnMut(BootstrapCheckpoint) -> Result<()>,
+    pub keep_running: &'a dyn Fn() -> Result<()>,
 }
 
 impl BootstrapProgress {
@@ -2154,6 +2193,34 @@ pub fn bootstrap_submit_conversation(
     resume: Option<BootstrapProgress>,
     mut checkpoint: impl FnMut(BootstrapCheckpoint) -> Result<()>,
 ) -> Result<BootstrapReceipt> {
+    bootstrap_submit_conversation_guarded(
+        store,
+        project_id,
+        intent_id,
+        source,
+        handoff,
+        resume,
+        BootstrapCallbacks {
+            checkpoint: &mut checkpoint,
+            keep_running: &|| Ok(()),
+        },
+    )
+}
+
+pub fn bootstrap_submit_conversation_guarded(
+    store: &Store,
+    project_id: &str,
+    intent_id: &str,
+    source: &Target,
+    handoff: &str,
+    resume: Option<BootstrapProgress>,
+    callbacks: BootstrapCallbacks<'_>,
+) -> Result<BootstrapReceipt> {
+    let BootstrapCallbacks {
+        checkpoint,
+        keep_running,
+    } = callbacks;
+    keep_running()?;
     if resume == Some(BootstrapProgress::SendAttempted) {
         return Err("BOOTSTRAP_OUTCOME_UNKNOWN".into());
     }
@@ -2183,7 +2250,13 @@ pub fn bootstrap_submit_conversation(
     {
         return Err("COOPERATIVE_BOOTSTRAP_PACKAGE_REQUIRED".into());
     }
-    let mut adapter = Adapter::spawn_from_installed(store.root(), &installed)?;
+    let mut adapter = Adapter::spawn_from_installed_guarded(
+        store.root(),
+        &installed,
+        Duration::from_secs(30),
+        keep_running,
+    )?;
+    keep_running()?;
     adapter.send(request)?;
     let absolute_deadline = Instant::now() + BOOTSTRAP_SETUP_RECEIPT_ALLOWANCE;
     let mut progress_deadline = Instant::now() + BOOTSTRAP_PROGRESS_WINDOW;
@@ -2198,7 +2271,7 @@ pub fn bootstrap_submit_conversation(
         ) {
             return Err(reason.into());
         }
-        let value = match adapter.output.recv_timeout(Duration::from_millis(250)) {
+        let value = match guarded_browser_receive(&adapter.output, keep_running)? {
             Ok(Ok(value)) => value,
             Ok(Err(reason)) if !submit_dispatched => return Err(reason),
             Err(mpsc::RecvTimeoutError::Disconnected) if !submit_dispatched => {
@@ -2225,6 +2298,7 @@ pub fn bootstrap_submit_conversation(
             }
             ensure_bootstrap_source_available(store, project_id, source)?;
             checkpoint(BootstrapCheckpoint::Progress(stage))?;
+            keep_running()?;
             acknowledged = Some(stage);
             if stage == BootstrapProgress::SendAttempted {
                 submit_dispatched = true;
@@ -2572,6 +2646,17 @@ pub fn bootstrap_probe_completion(
     pending: &BootstrapReceipt,
     handoff: &str,
 ) -> Result<Option<BootstrapReceipt>> {
+    bootstrap_probe_completion_guarded(store, source, pending, handoff, &|| Ok(()))
+}
+
+pub fn bootstrap_probe_completion_guarded(
+    store: &Store,
+    source: &Target,
+    pending: &BootstrapReceipt,
+    handoff: &str,
+    keep_running: &dyn Fn() -> Result<()>,
+) -> Result<Option<BootstrapReceipt>> {
+    keep_running()?;
     source.validate()?;
     let message_digest =
         bootstrap_message_digest(&pending.project_id, &pending.intent_id, source, handoff)?;
@@ -2589,7 +2674,13 @@ pub fn bootstrap_probe_completion(
     let _owner = browser_owner_guard(store)?;
     ensure_bootstrap_source_available(store, &pending.project_id, source)?;
     let installed = installed_bootstrap_directory(store)?;
-    let mut adapter = Adapter::spawn_from_installed(store.root(), &installed)?;
+    let mut adapter = Adapter::spawn_from_installed_guarded(
+        store.root(),
+        &installed,
+        Duration::from_secs(30),
+        keep_running,
+    )?;
+    keep_running()?;
     adapter.send(serde_json::json!({
         "bootstrapProbe":true,"projectId":pending.project_id,
         "intentId":pending.intent_id,"source":source,"handoff":handoff,
@@ -2600,7 +2691,7 @@ pub fn bootstrap_probe_completion(
         if Instant::now() >= deadline {
             return Err("BOOTSTRAP_RESPONSE_PROBE_TIMEOUT".into());
         }
-        match adapter.output.recv_timeout(Duration::from_millis(250)) {
+        match guarded_browser_receive(&adapter.output, keep_running)? {
             Ok(Ok(value)) => match value.get("stage").and_then(|v| v.as_str()) {
                 Some("BOOTSTRAP_RESPONSE_PENDING")
                     if value.get("projectId").and_then(|v| v.as_str())
@@ -2695,7 +2786,16 @@ pub fn snapshot_conversation(
     project_id: &str,
     source: &Target,
 ) -> Result<serde_json::Value> {
-    snapshot_conversation_inner(store, project_id, source, None)
+    snapshot_conversation_guarded(store, project_id, source, &|| Ok(()))
+}
+
+pub fn snapshot_conversation_guarded(
+    store: &Store,
+    project_id: &str,
+    source: &Target,
+    keep_running: &dyn Fn() -> Result<()>,
+) -> Result<serde_json::Value> {
+    snapshot_conversation_inner(store, project_id, source, None, keep_running)
 }
 
 /// Read an already delivered review while its passive local timer is pending.
@@ -2706,7 +2806,7 @@ pub fn snapshot_sent_conversation(
     source: &Target,
     event_id: &str,
 ) -> Result<serde_json::Value> {
-    snapshot_conversation_inner(store, project_id, source, Some(event_id))
+    snapshot_conversation_inner(store, project_id, source, Some(event_id), &|| Ok(()))
 }
 
 fn snapshot_conversation_inner(
@@ -2714,7 +2814,9 @@ fn snapshot_conversation_inner(
     project_id: &str,
     source: &Target,
     delivered_review: Option<&str>,
+    keep_running: &dyn Fn() -> Result<()>,
 ) -> Result<serde_json::Value> {
+    keep_running()?;
     source.validate()?;
     if !crate::protocol::valid_id(project_id) {
         return Err("SOURCE_SNAPSHOT_REQUEST_INVALID".into());
@@ -2735,14 +2837,20 @@ fn snapshot_conversation_inner(
     {
         return Err("SOURCE_SNAPSHOT_INSTALLED_PACKAGE_UNSUPPORTED".into());
     }
-    let mut adapter = Adapter::spawn_from_installed(store.root(), &installed)?;
+    let mut adapter = Adapter::spawn_from_installed_guarded(
+        store.root(),
+        &installed,
+        Duration::from_secs(30),
+        keep_running,
+    )?;
+    keep_running()?;
     adapter.send(serde_json::json!({"snapshot":true,"projectId":project_id,"source":source}))?;
     let deadline = Instant::now() + Duration::from_secs(180);
     loop {
         if Instant::now() >= deadline {
             return Err("SOURCE_SNAPSHOT_TIMEOUT".into());
         }
-        match adapter.output.recv_timeout(Duration::from_millis(250)) {
+        match guarded_browser_receive(&adapter.output, keep_running)? {
             Ok(Ok(value)) => match value.get("stage").and_then(|v| v.as_str()) {
                 Some("SOURCE_SNAPSHOT") => {
                     ensure_source_snapshot_available(store, project_id, source, delivered_review)?;
@@ -2776,6 +2884,144 @@ fn snapshot_conversation_inner(
 #[cfg(test)]
 mod bootstrap_runtime_tests {
     use super::*;
+
+    #[test]
+    fn guarded_browser_wait_cancels_pending_read_and_preserves_unread_frames() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        };
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (_send, receive) = mpsc::channel();
+        let (ready, started) = mpsc::sync_channel(0);
+        let task_cancel = cancel.clone();
+        let worker = thread::spawn(move || {
+            let announced = std::cell::Cell::new(false);
+            let guard = || {
+                if !announced.replace(true) {
+                    ready.send(()).unwrap();
+                }
+                if task_cancel.load(Ordering::Acquire) {
+                    Err("WEB_AUTO_OWNER_STOPPED".into())
+                } else {
+                    Ok(())
+                }
+            };
+            guarded_browser_receive(&receive, &guard).map(|_| ())
+        });
+        started.recv_timeout(Duration::from_secs(2)).unwrap();
+        cancel.store(true, Ordering::Release);
+        assert_eq!(
+            worker.join().unwrap().unwrap_err(),
+            "WEB_AUTO_OWNER_STOPPED"
+        );
+        let (send, receive) = mpsc::channel();
+        send.send(Ok(serde_json::json!({"stage":"READY"}))).unwrap();
+        assert_eq!(
+            guarded_browser_receive(&receive, &|| Err("WEB_AUTO_OWNER_STOPPED".into()))
+                .unwrap_err(),
+            "WEB_AUTO_OWNER_STOPPED"
+        );
+        assert_eq!(receive.try_recv().unwrap().unwrap()["stage"], "READY");
+    }
+
+    #[test]
+    fn cancelled_browser_operations_cannot_initialize_an_adapter_or_lock() {
+        let root =
+            std::env::temp_dir().join(format!("wake-cancelled-{}-{}", std::process::id(), now()));
+        std::fs::create_dir(&root).unwrap();
+        let store = Store::open_scoped_for_test(&root.join("wake"), &root).unwrap();
+        let source = Target::new(1, "https://chatgpt.com/c/old".into()).unwrap();
+        let guard = || Err("WEB_AUTO_OWNER_STOPPED".into());
+        assert_eq!(
+            snapshot_conversation_guarded(&store, "alpha", &source, &guard).unwrap_err(),
+            "WEB_AUTO_OWNER_STOPPED"
+        );
+        assert_eq!(
+            bootstrap_submit_conversation_guarded(
+                &store,
+                "alpha",
+                "intent-a",
+                &source,
+                "handoff",
+                None,
+                BootstrapCallbacks {
+                    checkpoint: &mut |_| panic!("cancelled owner cannot authorize progress"),
+                    keep_running: &guard
+                }
+            )
+            .unwrap_err(),
+            "WEB_AUTO_OWNER_STOPPED"
+        );
+        let pending = BootstrapReceipt {
+            schema_version: 1,
+            project_id: "alpha".into(),
+            intent_id: "intent-a".into(),
+            source_generation: 1,
+            source_digest: source.digest.clone(),
+            destination_url: "https://chatgpt.com/c/new".into(),
+            destination_digest: crate::protocol::digest("https://chatgpt.com/c/new"),
+            message_digest: "0".repeat(64),
+            sent_utc: 1,
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+            completion: "RESPONSE_PENDING".into(),
+        };
+        assert_eq!(
+            bootstrap_probe_completion_guarded(&store, &source, &pending, "handoff", &guard)
+                .unwrap_err(),
+            "WEB_AUTO_OWNER_STOPPED"
+        );
+        assert!(browser_session_lock_guarded(store.root(), Duration::ZERO, &guard).is_err());
+        assert!(!store.root().join("browser-session.lock").exists());
+        assert!(!store.root().join("host.lock").exists());
+        assert!(!store.root().join("logs/adapter.log").exists());
+        for child in ["queue", "archive", "deliveries", "turns", "logs"] {
+            std::fs::remove_dir(store.root().join(child)).unwrap();
+        }
+        std::fs::remove_dir(store.root()).unwrap();
+        std::fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    fn cancelled_shared_browser_wait_keeps_the_original_owner_lock() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        };
+        let root =
+            std::env::temp_dir().join(format!("wake-cancel-lock-{}-{}", std::process::id(), now()));
+        std::fs::create_dir(&root).unwrap();
+        let held = browser_session_lock(&root, Duration::ZERO).unwrap();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (ready, started) = mpsc::sync_channel(0);
+        let selected = root.clone();
+        let task_cancel = cancel.clone();
+        let worker = thread::spawn(move || {
+            let checks = std::cell::Cell::new(0);
+            browser_session_lock_guarded(&selected, Duration::from_secs(1), &|| {
+                checks.set(checks.get() + 1);
+                if checks.get() == 2 {
+                    ready.send(()).unwrap();
+                }
+                if task_cancel.load(Ordering::Acquire) {
+                    Err("WEB_AUTO_OWNER_STOPPED".into())
+                } else {
+                    Ok(())
+                }
+            })
+        });
+        started.recv_timeout(Duration::from_secs(2)).unwrap();
+        cancel.store(true, Ordering::Release);
+        assert_eq!(
+            worker.join().unwrap().unwrap_err(),
+            "WEB_AUTO_OWNER_STOPPED"
+        );
+        assert!(browser_session_lock(&root, Duration::ZERO).is_err());
+        drop(held);
+        drop(browser_session_lock(&root, Duration::ZERO).unwrap());
+        std::fs::remove_file(root.join("browser-session.lock")).unwrap();
+        std::fs::remove_dir(root).unwrap();
+    }
     use crate::protocol::Event;
 
     #[test]

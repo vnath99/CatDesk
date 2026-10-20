@@ -1560,10 +1560,7 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
         }
         result = &mut serve_handle => {
             drain_handle.abort();
-            {
-                let mut app = state.lock().await;
-                app.server_running = false;
-            }
+            operator_facade::stop_web_auto_scheduler(state.clone()).await;
             match result {
                 Ok(Ok(())) => return Err(std::io::Error::other("headless MCP server exited unexpectedly").into()),
                 Ok(Err(error)) => return Err(std::io::Error::other(format!("headless MCP server failed: {error}")).into()),
@@ -1573,10 +1570,7 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
     }
     serve_handle.abort();
     drain_handle.abort();
-    {
-        let mut app = state.lock().await;
-        app.server_running = false;
-    }
+    operator_facade::stop_web_auto_scheduler(state.clone()).await;
     Ok(())
 }
 
@@ -2435,7 +2429,7 @@ async fn run_reviewed_candidate_mcp(
             .into());
         }
     }
-    state.lock().await.server_running = false;
+    operator_facade::stop_web_auto_scheduler(state.clone()).await;
     let staged = match Arc::try_unwrap(snapshot) {
         Ok(staged) => staged,
         Err(snapshot) => {
@@ -2947,11 +2941,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let openai_tunnel_child = app.openai_tunnel_child.take();
         app.server_running = false;
+        let web_auto_tasks = app.cancel_web_auto_scheduler();
         app.ngrok_running = false;
         app.ngrok_url = None;
         app.remote_connected = false;
         app.last_remote_activity_ms = None;
         drop(app);
+        operator_facade::join_web_auto_schedulers(web_auto_tasks).await;
         if let Some(mut child) = openai_tunnel_child {
             let _ = child.start_kill();
             let _ = child.wait_with_timeout(Duration::from_secs(3)).await;
