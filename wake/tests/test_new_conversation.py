@@ -593,7 +593,7 @@ class NewConversationTests(unittest.TestCase):
         ):
             adapter.source_snapshot(bridge, sb, request)
         self.assertEqual((cdp.sent, cdp.draft, cdp.navigation), (0, "", [SOURCE]))
-        self.assertEqual(cdp.timeline, ["snapshot"])
+        self.assertEqual(cdp.timeline, ["snapshot", "snapshot"])
         self.assertEqual(emitted[-1]["stage"], "SOURCE_SNAPSHOT")
         self.assertEqual(emitted[-1]["sourceGeneration"], 7)
 
@@ -621,12 +621,15 @@ class NewConversationTests(unittest.TestCase):
         sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
         emitted = []
         request = {"snapshot": True, "projectId": "project-one", "source": self.request()["source"]}
-        with patch.object(bridge, "NewConversationSink", AttemptSink), patch.object(adapter, "emit", emitted.append):
+        with patch.object(bridge, "NewConversationSink", AttemptSink), patch.object(adapter, "emit", emitted.append), patch.object(
+            adapter.time, "monotonic", side_effect=range(100)
+        ), patch.object(adapter.time, "sleep"):
             adapter.source_snapshot(bridge, sb, request)
         snapshot = emitted[-1]["snapshot"]
         self.assertEqual(snapshot["bodyDiagnostics"], {"status":"UNAVAILABLE"})
         self.assertFalse(snapshot["messages"][-1]["textComplete"])
-        self.assertEqual(cdp.timeline, ["snapshot", "body-diagnostics"])
+        self.assertGreater(cdp.timeline.count("snapshot"), 1)
+        self.assertEqual(cdp.timeline[-1], "body-diagnostics")
         self.assertEqual(cdp.sent, 0)
 
     def test_snapshot_frame_trim_reports_omitted_older_units(self):

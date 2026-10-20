@@ -93,6 +93,54 @@ class FakeProbeSink:
 
 
 class AdapterTests(unittest.TestCase):
+    def test_source_snapshot_waits_for_complete_matching_frames_without_writes(self):
+        now = [0.0]
+        pauses = []
+        cdp = FakeCdp()
+        def frame(text, complete=True):
+            return {"messages": [
+                {"role":"USER", "text":"bounded wake", "textComplete":True, "revisionComplete":True},
+                {"role":"ASSISTANT", "text":text, "textComplete":complete, "revisionComplete":complete},
+            ]}
+        frames = [frame("mounting", False), frame("first render"), frame("final answer"), frame("final answer")]
+        class Sink:
+            def exact(self, url): return url == "https://chatgpt.com/c/exact"
+            def visible_message_snapshot(self, cdp):
+                cdp.timeline.append("snapshot")
+                return frames.pop(0)
+        def pause(seconds):
+            pauses.append(seconds)
+            now[0] += seconds
+        snapshot = adapter.bounded_source_snapshot(bridge, Sink(), cdp, clock=lambda:now[0], sleep=pause)
+        self.assertEqual(snapshot["messages"][-1]["text"], "final answer")
+        self.assertEqual(pauses, [.5, .25, .25])
+        self.assertEqual(len(cdp.timeline), 4)
+        self.assertFalse(cdp.sent)
+        self.assertEqual(cdp.keys, [])
+
+    def test_source_snapshot_deadline_preserves_incomplete_and_drift_never_retries(self):
+        now = [0.0]
+        cdp = FakeCdp()
+        partial = {"messages":[{"role":"ASSISTANT", "text":"partial", "textComplete":False, "revisionComplete":False}]}
+        class Sink:
+            def exact(self, url): return url == "https://chatgpt.com/c/exact"
+            def visible_message_snapshot(self, cdp):
+                cdp.timeline.append("snapshot")
+                return partial
+        def pause(seconds): now[0] += seconds
+        self.assertIs(adapter.bounded_source_snapshot(
+            bridge, Sink(), cdp, timeout=1, clock=lambda:now[0], sleep=pause), partial)
+        self.assertEqual(now[0], 1)
+        self.assertFalse(partial["messages"][-1]["textComplete"])
+        class Drift(Sink):
+            def visible_message_snapshot(self, cdp):
+                cdp.url = "https://chatgpt.com/c/foreign"
+                return partial
+        with self.assertRaisesRegex(bridge.Attention, "SOURCE_SNAPSHOT_SOURCE_DRIFT"):
+            adapter.bounded_source_snapshot(bridge, Drift(), cdp, clock=lambda:now[0], sleep=pause)
+        self.assertEqual(now[0], 1)
+        self.assertFalse(cdp.sent)
+
     def test_fresh_document_probe_waits_within_one_browser_and_requires_stability(self):
         now = [0.0]
         sleeps = []

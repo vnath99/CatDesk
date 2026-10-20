@@ -505,6 +505,35 @@ def bootstrap_probe(bridge, sb, request):
         raise bridge.Attention("BOOTSTRAP_PROBE_STATE_INVALID")
 
 
+def bounded_source_snapshot(bridge, sink, cdp, *, timeout=10, clock=None, sleep=None):
+    """Wait in one document for matching complete final message frames.
+
+    A still-incomplete snapshot remains explicitly incomplete at the deadline;
+    no reload, retry control, editor operation or submission is permitted.
+    """
+    clock = clock or time.monotonic
+    sleep = sleep or time.sleep
+    deadline = clock() + timeout
+    previous = None
+    while True:
+        if not sink.exact(cdp.get_current_url()):
+            raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
+        snapshot = sink.visible_message_snapshot(cdp)
+        if not sink.exact(cdp.get_current_url()):
+            raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
+        messages = snapshot["messages"]
+        ready = (messages and messages[-1]["role"] == "ASSISTANT" and
+                 all(item["textComplete"] and item["revisionComplete"] for item in messages[-2:]))
+        final = [(item["role"], item["text"]) for item in messages[-2:]] if ready else None
+        if final is not None and final == previous:
+            return snapshot
+        previous = final
+        remaining = deadline - clock()
+        if remaining <= 0:
+            return snapshot
+        sleep(min(.25 if ready else .5, remaining))
+
+
 def source_snapshot(bridge, sb, request):
     """Read an exact idle source chat only on an explicit private request."""
     if set(request) != {"snapshot", "projectId", "source"} or request["snapshot"] is not True:
@@ -525,7 +554,7 @@ def source_snapshot(bridge, sb, request):
     sink.wait_for_idle(cdp, sink.ui_timeout)
     if not sink.exact(cdp.get_current_url()) or sink.readiness_reason(cdp) is not None:
         raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
-    snapshot = sink.visible_message_snapshot(cdp)
+    snapshot = bounded_source_snapshot(bridge, sink, cdp)
     if (snapshot["messages"] and snapshot["messages"][-1]["role"] == "ASSISTANT" and
             not snapshot["messages"][-1]["textComplete"]):
         snapshot["bodyDiagnostics"] = sink.message_body_diagnostics(cdp)
