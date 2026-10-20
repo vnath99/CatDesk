@@ -1,3 +1,24 @@
+## 2026-10-20 — Web context capture and current acceptance (SOURCE; MVP PARTIAL)
+
+The completed fast controlled rollover has a verified replacement, paired
+generation-2 binding, preserved predecessor and delivered continuation with
+assistant response proof. It has not been replayed. Earlier prepared/draft
+failures below are historical and do not negate that later completion.
+
+The central MCP context family now includes bounded browser-backed capture,
+alongside policy configuration and caller-reported observations. It reuses the
+existing snapshot reader/ledger with exact target witnesses, cancellation,
+per-project duplicate exclusion and off-reactor work. Source/mock regression
+tests preserve independent projects and native sessions; detailed test results
+and live gates are in `docs/OCTOBER_2026_MVP_ACCEPTANCE.md`.
+
+One connector read again returned HTTP 429; source work continued. Five original
+bindings and 91 project-state files remain preserved. Production and development
+WakeHost/recurring automation stay stopped. Installed migration admission,
+exact-source remote CI, connector catalog parity and fresh multi-project live
+delivery remain open. No new browser authentication or operator action is
+required for safe source/package checks.
+
 ## 2026-10-18 — seven paired companions and live Web recovery (DEVELOPMENT_LIVE_PARTIAL; MVP PARTIAL)
 
 **Final live checkpoint, partial.** Registry and Wake contain seven guarded pairs: five original projects and two controlled canaries. Pushed source `bce01e974054646006520a598ed83d449d30afaa` passed main/Wake builds, 49 focused Python tests, three focused Rust STOP/recovery regressions (two STOP, one recovery) and strict Clippy. Exact-commit CI lookup returned no runs. The v3 isolated development package was applied by supported update with authenticated profile and state preserved. Independent raw-file comparison against the original five-project snapshot found all five registry records and Wake targets exactly unchanged, with stable read hashes (private `current-binding-comparison.json`, SHA-256 `83EF59A1DDC68F37C0E5E145DA20ED879545826B7D95086CA4248C99EAE6546F`).

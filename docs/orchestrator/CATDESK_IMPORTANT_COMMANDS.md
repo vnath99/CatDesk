@@ -202,7 +202,7 @@ ledger. Preserve that completed event. Installed release acceptance is open.
 
 ### Per-project context policy and observations (source)
 
-Use the **current paired** target from registry Web status for both context
+Use the **current paired** target from registry Web status for all context
 tools, including after rollover. Policy is project-scoped and retained across
 conversation generations. All three automatic flags must be explicit:
 
@@ -235,6 +235,31 @@ Target and registration changes serialize with these mutations. A stale paired
 witness refuses; a current replacement records a separate ledger and preserves
 its predecessor. These controls publish no Wake event or native work request.
 Installed/connector availability requires its own acceptance and catalog read.
+
+`catdesk_web_context_capture` uses the existing browser snapshot owner to read
+one visible excerpt and update the same count/hash ledger:
+
+```json
+{"projectId":"PROJECT","expectedTargetGeneration":1,"expectedTargetSha256":"<current-paired-64-hex-sha>"}
+```
+
+This explicit operation can open one temporary browser reader. It sends no
+message, changes no binding and starts no recurring worker or WakeHost. It has
+a 60-second cooperative deadline with existing bounded adapter cleanup. A
+cancelled request keeps its project slot until its worker exits; duplicate
+capture returns `WEB_CONTEXT_CAPTURE_BUSY`. Up to four captures may be active
+in one server process, subject to the existing shared browser owner lock.
+Sibling metadata/status operations do not wait for a browser snapshot.
+
+The reader checks the expected generation/digest before reading and again
+before ingestion; an intervening rebind refuses. Results contain counts with
+`BOUND_BROWSER_SNAPSHOT` provenance and `browserBindingVerified:true`, while
+`originAuthenticated:false` still applies to the caller. Visible excerpts retain
+unknown-history coverage and are not exact provider context usage. Existing
+owner/package checks can return `WEB_CONTEXT_CAPTURE_OWNER_BUSY` or
+`WEB_CONTEXT_CAPTURE_PACKAGE_UNSUPPORTED`. Other backend details remain private.
+Only disposable source/mock tests have exercised the new MCP capture path.
+Do not invoke it against real chats while the current browser-start hold applies.
 
 For a controlled event after an exact paired target exists:
 

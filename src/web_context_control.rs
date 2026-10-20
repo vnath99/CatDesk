@@ -11,7 +11,162 @@ use crate::{
 use catdesk_wake::{protocol::valid_id, store::now};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::path::Path;
+use std::{
+    collections::BTreeSet,
+    path::{Path, PathBuf},
+    sync::{
+        Arc, Mutex, OnceLock,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::{Duration, Instant},
+};
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct CaptureRequest {
+    pub(crate) project_id: String,
+    pub(crate) expected_target_generation: u64,
+    pub(crate) expected_target_sha256: String,
+}
+
+const CAPTURE_TIMEOUT: Duration = Duration::from_secs(60);
+const MAX_CAPTURES: usize = 4;
+type CaptureScope = (PathBuf, String);
+static CAPTURES: OnceLock<Mutex<BTreeSet<CaptureScope>>> = OnceLock::new();
+
+struct CaptureLease(CaptureScope);
+
+impl CaptureLease {
+    fn acquire(control: &Path, project: &str) -> Result<Self, String> {
+        let scope = (control.to_path_buf(), project.to_owned());
+        let mut captures = CAPTURES
+            .get_or_init(Default::default)
+            .lock()
+            .map_err(|_| "WEB_CONTEXT_CAPTURE_UNAVAILABLE")?;
+        if captures.contains(&scope) {
+            return Err("WEB_CONTEXT_CAPTURE_BUSY".into());
+        }
+        if captures.len() >= MAX_CAPTURES {
+            return Err("WEB_CONTEXT_CAPTURE_LIMIT".into());
+        }
+        captures.insert(scope.clone());
+        Ok(Self(scope))
+    }
+}
+
+impl Drop for CaptureLease {
+    fn drop(&mut self) {
+        if let Some(captures) = CAPTURES.get()
+            && let Ok(mut captures) = captures.lock()
+        {
+            captures.remove(&self.0);
+        }
+    }
+}
+
+struct CancelCapture(Arc<AtomicBool>);
+
+impl Drop for CancelCapture {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Release);
+    }
+}
+
+pub(crate) async fn capture(workspace: &Path, args: Value) -> Result<Value, String> {
+    let result = capture_with(workspace, args, |control, request, keep_running| {
+        crate::operator_facade::capture_web_context_expected_guarded(
+            control,
+            &request.project_id,
+            (
+                request.expected_target_generation,
+                &request.expected_target_sha256,
+            ),
+            keep_running,
+        )
+    })
+    .await;
+    result.map_err(|error| match error.as_str() {
+        "BROWSER_SESSION_BUSY" | "COOPERATIVE_HOST_PROTOCOL_REQUIRED" => {
+            "WEB_CONTEXT_CAPTURE_OWNER_BUSY".into()
+        }
+        "SOURCE_SNAPSHOT_INSTALLED_PACKAGE_UNSUPPORTED" => {
+            "WEB_CONTEXT_CAPTURE_PACKAGE_UNSUPPORTED".into()
+        }
+        "SOURCE_SNAPSHOT_TIMEOUT" => "WEB_CONTEXT_CAPTURE_TIMEOUT".into(),
+        _ => error,
+    })
+}
+
+pub(crate) async fn capture_with<F>(
+    workspace: &Path,
+    args: Value,
+    snapshot: F,
+) -> Result<Value, String>
+where
+    F: FnOnce(&Path, &CaptureRequest, &dyn Fn() -> Result<(), String>) -> Result<Value, String>
+        + Send
+        + 'static,
+{
+    capture_with_timeout(workspace, args, CAPTURE_TIMEOUT, snapshot).await
+}
+
+async fn capture_with_timeout<F>(
+    workspace: &Path,
+    args: Value,
+    timeout: Duration,
+    snapshot: F,
+) -> Result<Value, String>
+where
+    F: FnOnce(&Path, &CaptureRequest, &dyn Fn() -> Result<(), String>) -> Result<Value, String>
+        + Send
+        + 'static,
+{
+    let request: CaptureRequest =
+        serde_json::from_value(args).map_err(|_| "WEB_CONTEXT_ARGUMENTS_INVALID")?;
+    validate_scope(
+        &request.project_id,
+        request.expected_target_generation,
+        &request.expected_target_sha256,
+    )?;
+    let workspace = workspace.to_path_buf();
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let _cancel_on_drop = CancelCapture(cancelled.clone());
+    let started = Instant::now();
+    // The worker, not the awaiting request, owns the lease. Dropping the MCP
+    // future cancels cooperatively without admitting a second browser reader.
+    tokio::task::spawn_blocking(move || {
+        let keep_running = || {
+            if cancelled.load(Ordering::Acquire) {
+                Err("WEB_CONTEXT_CAPTURE_CANCELLED".into())
+            } else if started.elapsed() >= timeout {
+                Err("WEB_CONTEXT_CAPTURE_TIMEOUT".into())
+            } else {
+                Ok(())
+            }
+        };
+        keep_running()?;
+        let control =
+            std::fs::canonicalize(&workspace).map_err(|_| "WEB_CONTEXT_CAPTURE_UNAVAILABLE")?;
+        // This short preflight releases all target/registration locks before
+        // browser work. The reader repeats the witness before and after read.
+        mcp::with_current_project_web_target(
+            &control,
+            &request.project_id,
+            request.expected_target_generation,
+            &request.expected_target_sha256,
+            |_, _| Ok(()),
+        )?;
+        keep_running()?;
+        let _lease = CaptureLease::acquire(&control, &request.project_id)?;
+        let mut result = snapshot(&control, &request, &keep_running)?;
+        keep_running()?;
+        result["observationSource"] = json!("BOUND_BROWSER_SNAPSHOT");
+        result["hostStarted"] = json!(false);
+        Ok(result)
+    })
+    .await
+    .map_err(|_| "WEB_CONTEXT_CAPTURE_WORKER_FAILED".to_owned())?
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -171,8 +326,18 @@ pub(crate) fn observe(workspace: &Path, args: Value) -> Result<Value, String> {
     )
 }
 
-pub(crate) fn tool_schemas() -> [(&'static str, &'static str, &'static str, Value); 2] {
+pub(crate) fn tool_schemas() -> [(&'static str, &'static str, &'static str, Value); 3] {
     [
+        (
+            "catdesk_web_context_capture",
+            "Capture one project's visible context",
+            "Perform one bounded read through the existing private browser snapshot owner for the exact paired project generation and URL digest. Store hashes and estimated token counts only. No message is sent, no target changes, and no recurring worker or WakeHost starts. Browser reads can refuse when another owner is active. Caller identity is not authenticated by the explicit project scope.",
+            json!({"type":"object","additionalProperties":false,"properties":{
+                "projectId":{"type":"string","pattern":"^[A-Za-z0-9_-]{1,128}$"},
+                "expectedTargetGeneration":{"type":"integer","minimum":1},
+                "expectedTargetSha256":{"type":"string","pattern":"^[0-9a-f]{64}$"}},
+                "required":["projectId","expectedTargetGeneration","expectedTargetSha256"]}),
+        ),
         (
             "catdesk_web_context_configure",
             "Configure one project's context policy",
@@ -253,5 +418,40 @@ mod tests {
             assert!(observe(&root, args).is_err());
             assert!(!root.exists());
         }
+    }
+
+    #[tokio::test]
+    async fn capture_validates_before_state_and_deadline_before_reader() {
+        let root =
+            std::env::temp_dir().join(format!("web-capture-invalid-{}", uuid::Uuid::new_v4()));
+        let valid = json!({"projectId":"alpha","expectedTargetGeneration":1,
+            "expectedTargetSha256":"a".repeat(64)});
+        for (field, value) in [
+            ("workspace", json!("C:/private")),
+            ("conversationUrl", json!("https://chatgpt.com/c/other")),
+            ("timeout", json!(1800)),
+            ("projectId", json!("../other")),
+            ("expectedTargetGeneration", json!(0)),
+            ("expectedTargetSha256", json!("A".repeat(64))),
+        ] {
+            let mut args = valid.clone();
+            args[field] = value;
+            assert_eq!(
+                capture_with(&root, args, |_, _, _| panic!("reader called"))
+                    .await
+                    .unwrap_err(),
+                "WEB_CONTEXT_ARGUMENTS_INVALID"
+            );
+            assert!(!root.exists());
+        }
+        assert_eq!(
+            capture_with_timeout(&root, valid, Duration::ZERO, |_, _, _| panic!(
+                "reader called"
+            ))
+            .await
+            .unwrap_err(),
+            "WEB_CONTEXT_CAPTURE_TIMEOUT"
+        );
+        assert!(!root.exists());
     }
 }

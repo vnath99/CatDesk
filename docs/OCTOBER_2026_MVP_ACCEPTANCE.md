@@ -1,5 +1,79 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 explicit bounded browser context capture (SOURCE; LIVE HELD)
+
+`catdesk_web_context_capture` now reuses the existing private snapshot owner and
+excerpt ingestion through Computer/Both + SupervisorOnly MCP. Its closed scope
+requires the current paired project generation and URL digest. The reader
+rechecks that witness before browser access and before ingesting each message.
+Results expose hashes/counts with `BOUND_BROWSER_SNAPSHOT` provenance, verified
+browser binding and unauthenticated caller identity. Unknown history remains
+explicit. No message, binding update or recurring worker start is performed.
+
+Blocking capture runs outside the server reactor with a 60-second cooperative
+deadline and existing adapter cleanup. A cancelled request retains its project
+slot until the blocking worker exits. Four process-local slots cap active reads;
+the existing shared browser owner still controls actual profile access. Target
+and registration locks are released before browser work so sibling status and
+metadata do not wait on the snapshot. Existing CLI/scheduler behavior is reused.
+
+Disposable mock tests exercise cancellation with the worker deliberately held,
+sibling capture, same-project refusal, release/unwind, deduplication and target
+changes both after preflight and during the read. The authenticated local HTTP
+fixture also refuses capture with a stale witness before reaching a reader.
+No new real browser read or canary delivery was needed. The first full-suite
+run exposed a two-second test deadline that included registration/Git and ledger
+I/O under parallel load; the bounded fixture deadline was corrected without
+changing production timing. The sandbox application build encountered LNK1318
+writing its PDB; the same build passed as the Windows user.
+
+A subsequent full run caught unrelated development controls contending on the
+global target mutex: one control's target read returned attention while another
+registered/bound projects. Target locks now follow the canonical Wake authority
+(or workspace for legacy local target files). Separate development stores no
+longer block one another; two controls selecting the same installed authority
+still share one mutex. The 250 ms status deadline and paired CAS/compensation
+checks are unchanged. Dead weak entries are discarded, and no lock is held
+while waiting for a browser. Regression tests cover aliases, separate roots and
+shared installed authority without opening the production store.
+
+Final root gate: **1,535 passed / 28 ignored**, including all three development
+control fixtures running together. Strict all-target/all-feature root Clippy,
+the all-feature application build, formatting and diff checks pass. Wake/Python
+product sources and the built WakeHost are unchanged from the preceding
+288-passed Wake library plus integration / 229-passed Python checkpoint.
+Evidence: parent `checkpoints/web-context-capture-oct20`, including both original
+failure logs and the final corrected gate. These are source/mock results.
+
+One read-only connector probe again returned exactly
+`McpServerError: MCP SSE probe returned 429 from openai.org`. This remains a
+connector verification dependency. The completed fast canary stays preserved
+at generation 2 with continuation and assistant response already verified.
+All five original bindings and independent native sessions remain untouched.
+Recurring browser automation and WakeHost remain stopped.
+
+The supported v16 development-package update returned
+`PACKAGE_UPDATED_STOPPED`, `browserAction:NONE`, `hostStarted:false`, with profile
+and runtime state preserved. One source-built local status read then reported
+all seven registered projects and the fast canary's paired generation-2
+`CONTINUATION_QUEUED` / verified continuation. Post-read comparison found all 91
+tracked project-state files and all five original bindings unchanged; production
+pointer bytes were unchanged, both runtimes were `STOPPED`, and no owned browser
+or Wake processes were observed. An overlapping hash attempt refused the status
+reader's held journal lock; the verification was completed after that reader
+exited. This confirms stopped candidate/readback behavior, not installed serving
+parity or a new live Web delivery.
+
+Protected first-generation install admission/provisioning, exact-head remote CI,
+connector catalog parity and fresh independent multi-project live delivery are
+still separate acceptance gates. No installation authority follows from these
+source tests or a stopped development package. Next executable local work is to
+inspect the existing protected-install admission evidence and remaining reader
+cutover gates, then verify the actual connector catalog and fresh independent
+project routing when their dependencies permit. Safe source/evidence work needs
+no operator action; existing independent release approval/bootstrap requirements
+remain prerequisites for protected installation. **October MVP: `PARTIAL`.**
+
 ## October 20 central context controls (SOURCE + LOCAL HTTP VERIFIED)
 
 Source now exposes `catdesk_web_context_configure` and

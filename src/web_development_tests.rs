@@ -974,6 +974,11 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
     for (tool, input) in [
         ("catdesk_web_context_configure", context_config("catdesk")),
         ("catdesk_web_context_observe", context_event("catdesk")),
+        (
+            "catdesk_web_context_capture",
+            json!({"projectId":"catdesk","expectedTargetGeneration":1,
+            "expectedTargetSha256":bindings["catdesk"].digest}),
+        ),
     ] {
         let stale = web_mcp_tool(&client, &url, token, tool, input).await;
         assert!(stale.to_string().contains("WEB_CONTEXT_TARGET_CHANGED"));
@@ -1093,5 +1098,279 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
     assert_eq!(production_snapshot(), production_before);
     server.abort();
     let _ = server.await;
+    cleanup(&parent);
+}
+
+// Exercise the real scope checks, capture lifecycle and ingestion with a fake
+// snapshot provider. No runtime reader, browser, native session or Wake starts.
+#[tokio::test(flavor = "current_thread")]
+async fn bounded_context_capture_is_independent_cancelled_and_generation_bound() {
+    use crate::web_context_control::capture_with;
+    use catdesk_wake::protocol::digest;
+    use serde_json::{Value, json};
+    use std::time::Duration;
+
+    fn snapshot(target: &catdesk_wake::protocol::Target) -> Value {
+        let text = "private captured assistant response";
+        json!({"messages":[{"role":"ASSISTANT","text":text,"visibleUnits":text.len(),
+            "textComplete":true,"turnHash":null,"roleTurnHash":null,
+            "messageHash":digest("capture-fixture-message"),"identityBasis":"MESSAGE_ID",
+            "revisionHash":digest(&format!("catdesk-snapshot-revision-v1\0{}\0{}",target.digest,text)),
+            "revisionComplete":true}],"truncated":false,
+            "coverage":{"selectorTier":"AUTHOR_ROLE","visibleRoleCount":1,"countOverflow":false,
+                "nestedCollapsed":0,"keyedCollapsed":0,"omittedBeforeWindow":0,"returned":1,
+                "identityMissing":0,"identityUncertain":0,"revisionIncomplete":0,"textIncomplete":0,
+                "anchorStability":"UNVERIFIED"}})
+    }
+    fn read(
+        control: &Path,
+        request: &crate::web_context_control::CaptureRequest,
+        keep_running: &dyn Fn() -> Result<(), String>,
+    ) -> Result<Value, String> {
+        operator_facade::capture_web_context_with_snapshot(
+            control,
+            &request.project_id,
+            (
+                request.expected_target_generation,
+                &request.expected_target_sha256,
+            ),
+            keep_running,
+            |_, project, target, guard| {
+                guard()?;
+                assert_eq!(project, request.project_id);
+                assert_eq!(target.generation, request.expected_target_generation);
+                assert_eq!(target.digest, request.expected_target_sha256);
+                Ok(snapshot(target))
+            },
+        )
+    }
+
+    let production_before = production_snapshot();
+    let parent = fixture_parent();
+    let control = parent.join("control");
+    fs::create_dir(&control).unwrap();
+    let (package, python) = package_and_python(&parent);
+    development_runtime::prepare(&control, &package, &python).unwrap();
+    let wake = Store::open(
+        &development_runtime::root_for_workspace(&control)
+            .unwrap()
+            .unwrap(),
+    )
+    .unwrap();
+    let projects = [
+        ("catdesk", control.clone()),
+        ("alpha", parent.join("alpha")),
+        ("beta", parent.join("beta")),
+    ];
+    for (project, workspace) in &projects {
+        let origin = format!("https://example.test/{project}.git");
+        git_root(workspace, &origin);
+        web_action(
+            &control,
+            &[
+                "operator",
+                "web",
+                "project",
+                "register",
+                "--project-id",
+                project,
+                "--workspace",
+                workspace.to_str().unwrap(),
+                "--git-identity",
+                &origin,
+            ],
+        )
+        .await;
+        let url = format!("https://chatgpt.com/c/{}", uuid::Uuid::new_v4());
+        crate::mcp::operator_bind_project_web_target(&control, project, &url, None, 0).unwrap();
+    }
+    let bindings = wake.config().unwrap().targets;
+    let args = |project: &str| {
+        json!({"projectId":project,"expectedTargetGeneration":1,
+        "expectedTargetSha256":bindings[project].digest})
+    };
+
+    // Cancel an awaiting MCP operation while its blocking reader still owns the
+    // slot. Other projects remain runnable; the cancelled project cannot overlap.
+    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+    let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let owned_control = control.clone();
+    let input = args("alpha");
+    let pending = tokio::spawn(async move {
+        capture_with(&owned_control, input, move |control, _, guard| {
+            assert!(
+                crate::mcp::operator_read_project_web_target(control, "beta")
+                    .unwrap()
+                    .is_some()
+            );
+            let _ = started_tx.send(());
+            let deadline = std::time::Instant::now() + Duration::from_secs(2);
+            let reason = loop {
+                if let Err(reason) = guard() {
+                    break reason;
+                }
+                if std::time::Instant::now() >= deadline {
+                    panic!("cancellation not observed");
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            };
+            let _ = cancel_tx.send(reason.clone());
+            let _ = release_rx.recv_timeout(Duration::from_secs(30));
+            Err(reason)
+        })
+        .await
+    });
+    tokio::time::timeout(Duration::from_secs(15), started_rx)
+        .await
+        .unwrap()
+        .unwrap();
+    pending.abort();
+    assert!(pending.await.unwrap_err().is_cancelled());
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(5), cancel_rx)
+            .await
+            .unwrap()
+            .unwrap(),
+        "WEB_CONTEXT_CAPTURE_CANCELLED"
+    );
+    assert_eq!(
+        capture_with(&control, args("alpha"), |_, _, _| panic!(
+            "duplicate reader"
+        ))
+        .await
+        .unwrap_err(),
+        "WEB_CONTEXT_CAPTURE_BUSY"
+    );
+    for project in ["catdesk", "beta"] {
+        let captured = capture_with(&control, args(project), read).await.unwrap();
+        assert_eq!(captured["recordedMessages"], 1);
+        assert_eq!(captured["observationSource"], "BOUND_BROWSER_SNAPSHOT");
+        assert_eq!(captured["browserBindingVerified"], true);
+        assert_eq!(captured["originAuthenticated"], false);
+        assert_eq!(captured["userMessageSent"], false);
+        assert_eq!(captured["hostStarted"], false);
+        assert!(!captured.to_string().contains("private captured"));
+    }
+    release_tx.send(()).unwrap();
+    // This includes the full registration/Git witness and first alpha ledger
+    // write, which may take seconds while the full suite runs in parallel.
+    tokio::time::timeout(Duration::from_secs(15), async {
+        loop {
+            match capture_with(&control, args("alpha"), read).await {
+                Ok(_) => break,
+                Err(reason) if reason == "WEB_CONTEXT_CAPTURE_BUSY" => {
+                    tokio::time::sleep(Duration::from_millis(5)).await
+                }
+                Err(reason) => panic!("{reason}"),
+            }
+        }
+    })
+    .await
+    .unwrap();
+
+    let meter = WebContextStore::open(control.join(".catdesk/web-context")).unwrap();
+    let before = meter.project_history("alpha").unwrap();
+    let replay = capture_with(&control, args("alpha"), read).await.unwrap();
+    assert_eq!(replay["recordedMessages"], 1);
+    assert_eq!(meter.project_history("alpha").unwrap(), before);
+    let mut stale = args("alpha");
+    stale["expectedTargetGeneration"] = json!(2);
+    assert_eq!(
+        capture_with(&control, stale, |_, _, _| panic!("stale reader called"))
+            .await
+            .unwrap_err(),
+        "WEB_CONTEXT_TARGET_CHANGED"
+    );
+
+    // Rebind during a read must discard the old snapshot before ingestion.
+    let beta_before = meter.project_history("beta").unwrap();
+    assert_eq!(
+        capture_with(&control, args("beta"), |control, request, guard| {
+            operator_facade::capture_web_context_with_snapshot(
+                control,
+                &request.project_id,
+                (
+                    request.expected_target_generation,
+                    &request.expected_target_sha256,
+                ),
+                guard,
+                |_, project, target, _| {
+                    crate::mcp::operator_bind_project_web_target(
+                        control,
+                        project,
+                        &format!("https://chatgpt.com/c/{}", uuid::Uuid::new_v4()),
+                        Some(&target.digest),
+                        1,
+                    )
+                    .map_err(|_| "fixture rebind failed")?;
+                    Ok(snapshot(target))
+                },
+            )
+        })
+        .await
+        .unwrap_err(),
+        "WEB_CONTEXT_TARGET_CHANGED"
+    );
+    assert_eq!(meter.project_history("beta").unwrap(), beta_before);
+    assert_eq!(meter.project_history("alpha").unwrap(), before);
+
+    // A rebind after MCP preflight but before the reader's own check must not
+    // silently capture the new target under the caller's old witness.
+    let catdesk_before = meter.project_history("catdesk").unwrap();
+    assert_eq!(
+        capture_with(&control, args("catdesk"), |control, request, guard| {
+            crate::mcp::operator_bind_project_web_target(
+                control,
+                "catdesk",
+                &format!("https://chatgpt.com/c/{}", uuid::Uuid::new_v4()),
+                Some(&request.expected_target_sha256),
+                1,
+            )
+            .map_err(|_| "fixture rebind failed")?;
+            operator_facade::capture_web_context_with_snapshot(
+                control,
+                &request.project_id,
+                (
+                    request.expected_target_generation,
+                    &request.expected_target_sha256,
+                ),
+                guard,
+                |_, _, _, _| panic!("reader crossed target change"),
+            )
+        })
+        .await
+        .unwrap_err(),
+        "WEB_CONTEXT_TARGET_CHANGED"
+    );
+    assert_eq!(meter.project_history("catdesk").unwrap(), catdesk_before);
+
+    // Failure/unwind also releases the worker's ownership without poisoning it.
+    assert_eq!(
+        capture_with(&control, args("alpha"), |_, _, _| panic!(
+            "fixture worker unwind"
+        ))
+        .await
+        .unwrap_err(),
+        "WEB_CONTEXT_CAPTURE_WORKER_FAILED"
+    );
+    capture_with(&control, args("alpha"), read).await.unwrap();
+    assert!(wake.events().unwrap().is_empty());
+    let control_state: Value =
+        serde_json::from_slice(&fs::read(wake.root().join("control.json")).unwrap()).unwrap();
+    assert_eq!(control_state["desired"], "STOPPED");
+    for (_, workspace) in &projects[1..] {
+        assert!(!workspace.join(".catdesk").exists());
+    }
+    assert!(
+        AutonomousProjectRegistryStoreV1::open_read_only(control.join(".catdesk/projects"))
+            .unwrap()
+            .load_registry()
+            .unwrap()
+            .projects
+            .iter()
+            .all(|p| p.codex_thread_id.is_none())
+    );
+    assert_eq!(production_snapshot(), production_before);
     cleanup(&parent);
 }

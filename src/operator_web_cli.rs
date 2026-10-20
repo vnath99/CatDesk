@@ -416,8 +416,52 @@ fn capture_context_guarded(
     project: &str,
     keep_running: &dyn Fn() -> Result<(), String>,
 ) -> Result<Value, String> {
+    capture_context_with_snapshot(
+        workspace,
+        project,
+        None,
+        keep_running,
+        catdesk_wake::runtime::snapshot_conversation_guarded,
+    )
+}
+
+pub(super) fn capture_context_expected_guarded(
+    workspace: &Path,
+    project: &str,
+    expected: (u64, &str),
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<Value, String> {
+    capture_context_with_snapshot(
+        workspace,
+        project,
+        Some(expected),
+        keep_running,
+        catdesk_wake::runtime::snapshot_conversation_guarded,
+    )
+}
+
+pub(super) fn capture_context_with_snapshot<F>(
+    workspace: &Path,
+    project: &str,
+    expected: Option<(u64, &str)>,
+    keep_running: &dyn Fn() -> Result<(), String>,
+    snapshot: F,
+) -> Result<Value, String>
+where
+    F: FnOnce(
+        &catdesk_wake::store::Store,
+        &str,
+        &catdesk_wake::protocol::Target,
+        &dyn Fn() -> Result<(), String>,
+    ) -> Result<Value, String>,
+{
     keep_running()?;
     let key = paired_key(workspace, project)?;
+    if expected.is_some_and(|(generation, digest)| {
+        key.target_generation != generation || key.target_sha256() != digest
+    }) {
+        return Err("WEB_CONTEXT_TARGET_CHANGED".into());
+    }
     let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
     let wake = catdesk_wake::store::Store::open(&root)?;
     catdesk_wake::development_runtime::validate_selected_target_isolation(
@@ -427,12 +471,8 @@ fn capture_context_guarded(
     )?;
     let source =
         catdesk_wake::protocol::Target::new(key.target_generation, key.conversation_url.clone())?;
-    let snapshot = catdesk_wake::runtime::snapshot_conversation_guarded(
-        &wake,
-        project,
-        &source,
-        keep_running,
-    )?;
+    keep_running()?;
+    let snapshot = snapshot(&wake, project, &source, keep_running)?;
     keep_running()?;
     if paired_key(workspace, project)? != key {
         return Err("WEB_CONTEXT_TARGET_CHANGED".into());

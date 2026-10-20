@@ -32,6 +32,34 @@ pub(crate) fn registry_rollover_status(workspace: &Path, project: &str) -> serde
     web::registry_rollover_status(workspace, project)
 }
 
+pub(crate) fn capture_web_context_expected_guarded(
+    workspace: &Path,
+    project: &str,
+    expected: (u64, &str),
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<serde_json::Value, String> {
+    web::capture_context_expected_guarded(workspace, project, expected, keep_running)
+}
+
+#[cfg(test)]
+pub(crate) fn capture_web_context_with_snapshot<F>(
+    workspace: &Path,
+    project: &str,
+    expected: (u64, &str),
+    keep_running: &dyn Fn() -> Result<(), String>,
+    snapshot: F,
+) -> Result<serde_json::Value, String>
+where
+    F: FnOnce(
+        &catdesk_wake::store::Store,
+        &str,
+        &catdesk_wake::protocol::Target,
+        &dyn Fn() -> Result<(), String>,
+    ) -> Result<serde_json::Value, String>,
+{
+    web::capture_context_with_snapshot(workspace, project, Some(expected), keep_running, snapshot)
+}
+
 pub(crate) fn acquire_web_work_lease(
     workspace: &Path,
     project: &str,

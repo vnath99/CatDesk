@@ -14,7 +14,7 @@ use std::net::ToSocketAddrs;
 use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex as StdMutex, OnceLock};
+use std::sync::{Arc, Mutex as StdMutex, OnceLock, Weak};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tiktoken_rs::o200k_base_singleton;
 use tokio::sync::Mutex;
@@ -94,6 +94,7 @@ const WEB_WORK_REQUEST_TOOL: &str = "catdesk_web_work_request";
 const WEB_WORK_RESOLVE_TOOL: &str = "catdesk_web_work_resolve";
 const WEB_CONTEXT_CONFIGURE_TOOL: &str = "catdesk_web_context_configure";
 const WEB_CONTEXT_OBSERVE_TOOL: &str = "catdesk_web_context_observe";
+const WEB_CONTEXT_CAPTURE_TOOL: &str = "catdesk_web_context_capture";
 static QUEUE_REVIEW_PACKAGE_READ_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 struct QueueReviewReadLease<'a>(&'a AtomicBool);
@@ -113,7 +114,40 @@ fn try_queue_review_read_lease(active: &AtomicBool) -> Option<QueueReviewReadLea
 const STABLE_SUPERVISOR_LIFECYCLE_STATUS_TOOL: &str = "catdesk_stable_supervisor_status";
 const STABLE_SUPERVISOR_LIFECYCLE_PREFLIGHT_TOOL: &str = "catdesk_stable_supervisor_preflight";
 const STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL: &str = "catdesk_stable_supervisor_activate";
-static WAKE_TARGET_SET_LOCK: OnceLock<StdMutex<()>> = OnceLock::new();
+type WakeTargetLocks = BTreeMap<PathBuf, Weak<StdMutex<()>>>;
+static WAKE_TARGET_LOCKS: OnceLock<StdMutex<WakeTargetLocks>> = OnceLock::new();
+
+/// Serialize paired mutations sharing one authority without blocking separate
+/// development controls. Legacy target files belong to their workspace;
+/// selected independent targets belong to their resolved Wake store.
+fn wake_target_lock(workspace: &Path) -> Result<Arc<StdMutex<()>>, String> {
+    let root = if crate::wake_protocol_client::selected(workspace) {
+        crate::wake_protocol_client::wake_root_for_workspace(workspace)?
+    } else {
+        workspace.to_path_buf()
+    };
+    let key = match root.canonicalize() {
+        Ok(key) => key,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => root
+            .parent()
+            .and_then(|parent| parent.canonicalize().ok())
+            .zip(root.file_name())
+            .map(|(parent, name)| parent.join(name))
+            .ok_or("WAKE_TARGET_LOCK_UNAVAILABLE")?,
+        Err(_) => return Err("WAKE_TARGET_LOCK_UNAVAILABLE".into()),
+    };
+    let mut locks = WAKE_TARGET_LOCKS
+        .get_or_init(Default::default)
+        .lock()
+        .map_err(|_| "WAKE_TARGET_LOCK_UNAVAILABLE")?;
+    locks.retain(|_, lock| lock.strong_count() > 0);
+    if let Some(lock) = locks.get(&key).and_then(Weak::upgrade) {
+        return Ok(lock);
+    }
+    let lock = Arc::new(StdMutex::new(()));
+    locks.insert(key, Arc::downgrade(&lock));
+    Ok(lock)
+}
 static TURN_TIMER_NONCE: AtomicU64 = AtomicU64::new(0);
 const MAX_PRODUCTION_ACCEPTANCE_OUTPUT_BYTES: usize = 16 * 1024;
 const PRODUCTION_ACCEPTANCE_EVIDENCE_DIRECTORY: &str = ".catdesk/production-acceptance";
@@ -756,7 +790,8 @@ async fn handle_tools_list(
             {
                 tools.push(json!({"name":name,"title":title,"description":description,
                     "inputSchema":input_schema,"annotations":{"readOnlyHint":false,
-                        "openWorldHint":false,"destructiveHint":true}}));
+                        "openWorldHint":name == WEB_CONTEXT_CAPTURE_TOOL,
+                        "destructiveHint":name != WEB_CONTEXT_CAPTURE_TOOL}}));
             }
             tools.push(json!({
                 "name": WEB_WORK_REQUEST_TOOL,
@@ -1427,6 +1462,14 @@ where
                         if matches!(tool_mode, ToolMode::SupervisorOnly) =>
                     {
                         handle_web_context_control(req, workspace_root, &tool_name)
+                    }
+                    WEB_CONTEXT_CAPTURE_TOOL if matches!(tool_mode, ToolMode::SupervisorOnly) => {
+                        let result = crate::web_context_control::capture(
+                            Path::new(workspace_root),
+                            tool_arguments(req),
+                        )
+                        .await;
+                        web_context_response(req, result)
                     }
                     QUEUE_REVIEW_PACKAGE_READ_TOOL
                         if matches!(tool_mode, ToolMode::SupervisorOnly) =>
@@ -3313,8 +3356,8 @@ fn set_wake_target(
     workspace: &Path,
     request: &WakeTargetSetRequest,
 ) -> Result<WakeTargetSetResult, String> {
-    let _guard = WAKE_TARGET_SET_LOCK
-        .get_or_init(|| StdMutex::new(()))
+    let lock = wake_target_lock(workspace)?;
+    let _guard = lock
         .lock()
         .map_err(|_| "wake target update is unavailable".to_string())?;
     set_wake_target_locked(workspace, request)
@@ -3359,7 +3402,7 @@ fn effective_wake_target_locked(workspace: &Path) -> Result<String, String> {
     .map_err(|_| "wake configuration is invalid".to_string())
 }
 
-/// The caller holds `WAKE_TARGET_SET_LOCK`. Keeping the write mechanics in a
+/// The caller holds the authority target lock. Keeping the write mechanics in a
 /// separate helper lets the designated-chat transaction serialize both the
 /// effective wake target and the project binding without exposing a file
 /// writer to its caller. Once the independent owner is selected, its durable
@@ -3563,8 +3606,8 @@ fn designated_chat_target_readback_locked(
 pub(crate) fn operator_read_designated_chat_target(
     workspace: &Path,
 ) -> Result<DesignatedChatTargetV1, DesignatedChatTargetErrorV1> {
-    let _guard = WAKE_TARGET_SET_LOCK
-        .get_or_init(|| StdMutex::new(()))
+    let lock = wake_target_lock(workspace).map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let _guard = lock
         .lock()
         .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
     designated_chat_target_readback_locked(workspace)
@@ -3591,8 +3634,8 @@ pub(crate) fn operator_update_designated_chat_target(
     if !is_sha256_hex(expected_current_target_sha256) {
         return Err(DesignatedChatTargetErrorV1::Stale);
     }
-    let _guard = WAKE_TARGET_SET_LOCK
-        .get_or_init(|| StdMutex::new(()))
+    let lock = wake_target_lock(workspace).map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let _guard = lock
         .lock()
         .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
     let workspace = workspace
@@ -3876,8 +3919,9 @@ pub(crate) fn operator_read_project_web_target(
     control_workspace: &Path,
     project_id: &str,
 ) -> Result<Option<ProjectWebTargetV1>, DesignatedChatTargetErrorV1> {
-    let _guard = WAKE_TARGET_SET_LOCK
-        .get_or_init(|| StdMutex::new(()))
+    let lock = wake_target_lock(control_workspace)
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let _guard = lock
         .lock()
         .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
     let (control_workspace, wake_store) = project_web_store(control_workspace, project_id)?;
@@ -3888,7 +3932,8 @@ pub(crate) fn operator_read_project_web_target_status(
     control_workspace: &Path,
     project_id: &str,
 ) -> Result<Option<ProjectWebTargetV1>, DesignatedChatTargetErrorV1> {
-    let lock = WAKE_TARGET_SET_LOCK.get_or_init(|| StdMutex::new(()));
+    let lock = wake_target_lock(control_workspace)
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
     let deadline = std::time::Instant::now() + std::time::Duration::from_millis(250);
     let _guard = loop {
         match lock.try_lock() {
@@ -3915,10 +3960,8 @@ pub(crate) fn with_current_project_web_target<T>(
 ) -> Result<T, String> {
     let (workspace, wake) = project_web_store(control_workspace, project_id)
         .map_err(|_| "WEB_CONTEXT_PROJECT_UNAVAILABLE")?;
-    let _guard = WAKE_TARGET_SET_LOCK
-        .get_or_init(|| StdMutex::new(()))
-        .lock()
-        .map_err(|_| "WEB_CONTEXT_TARGET_UNAVAILABLE")?;
+    let lock = wake_target_lock(control_workspace).map_err(|_| "WEB_CONTEXT_TARGET_UNAVAILABLE")?;
+    let _guard = lock.lock().map_err(|_| "WEB_CONTEXT_TARGET_UNAVAILABLE")?;
     let check_target = |target: Option<ProjectWebTargetV1>| -> Result<ProjectWebTargetV1, String> {
         let target = target.ok_or("WEB_CONTEXT_PAIRED_TARGET_REQUIRED")?;
         if target.generation != expected_generation || target.sha256 != expected_digest {
@@ -3951,7 +3994,7 @@ pub(crate) fn with_current_project_web_target<T>(
                         .map_err(|_| "WEB_CONTEXT_PAIRED_TARGET_REQUIRED")?,
                 )?;
                 // Registration and the shared Wake transaction lock retain the
-                // target. Release the process-wide mutex before context I/O so
+                // target. Release the authority mutex before context I/O so
                 // sibling projects and independent controls can read status.
                 drop(_guard);
                 operation(&workspace, &target)
@@ -4184,8 +4227,9 @@ pub(crate) fn operator_bind_project_web_target_with_witness(
     handoff_event_id: &str,
     source_fingerprint: &str,
 ) -> Result<ProjectWebTargetV1, DesignatedChatTargetErrorV1> {
-    let _guard = WAKE_TARGET_SET_LOCK
-        .get_or_init(|| StdMutex::new(()))
+    let lock = wake_target_lock(control_workspace)
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let _guard = lock
         .lock()
         .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
     let (control_workspace, wake_store) = project_web_store_expected(
@@ -4230,8 +4274,9 @@ pub(crate) fn operator_bind_project_web_target_at_root(
     expected_current_target_sha256: Option<&str>,
     expected_wake_generation: u64,
 ) -> Result<ProjectWebTargetV1, DesignatedChatTargetErrorV1> {
-    let _guard = WAKE_TARGET_SET_LOCK
-        .get_or_init(|| StdMutex::new(()))
+    let lock = wake_target_lock(control_workspace)
+        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let _guard = lock
         .lock()
         .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
     let (control_workspace, wake_store) =
@@ -6503,10 +6548,15 @@ fn handle_web_context_control(
     } else {
         crate::web_context_control::observe(Path::new(workspace_root), tool_arguments(req))
     };
+    web_context_response(req, result)
+}
+
+fn web_context_response(req: &JsonRpcRequest, result: Result<Value, String>) -> JsonRpcResponse {
     match result {
         Ok(value) => tool_success_response_with_structured(
             req,
-            "Advisory Web context metadata returned; provenance remains caller-reported".into(),
+            "Advisory Web context metadata returned; see observation provenance and coverage"
+                .into(),
             value,
         ),
         Err(error) => {
@@ -17310,6 +17360,46 @@ hello world"
         assert!(!names.contains(&STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL));
     }
 
+    #[test]
+    fn target_locks_share_canonical_authority_without_global_contention() {
+        let root = std::env::temp_dir().join(format!("web-target-locks-{}", Uuid::new_v4()));
+        let first = root.join("first");
+        let second = root.join("second");
+        fs::create_dir_all(&first).unwrap();
+        fs::create_dir_all(&second).unwrap();
+        let first_lock = wake_target_lock(&first).unwrap();
+        let alias_lock = wake_target_lock(&first.join(".")).unwrap();
+        let second_lock = wake_target_lock(&second).unwrap();
+        assert!(Arc::ptr_eq(&first_lock, &alias_lock));
+        assert!(!Arc::ptr_eq(&first_lock, &second_lock));
+        let held = first_lock.lock().unwrap();
+        assert!(alias_lock.try_lock().is_err());
+        assert!(second_lock.try_lock().is_ok());
+        drop(held);
+        assert!(alias_lock.try_lock().is_ok());
+
+        // Two selected controls resolving the installed authority must retain
+        // one lock. This only resolves its path; it never opens/writes the store.
+        #[cfg(windows)]
+        {
+            for workspace in [&first, &second] {
+                fs::create_dir_all(workspace.join(".catdesk/wake-bridge")).unwrap();
+                fs::write(
+                    workspace.join(".catdesk/wake-bridge/owner.json"),
+                    br#"{"schemaVersion":1,"owner":"independent_v1"}"#,
+                )
+                .unwrap();
+            }
+            let shared_first = wake_target_lock(&first).unwrap();
+            let shared_second = wake_target_lock(&second).unwrap();
+            assert!(Arc::ptr_eq(&shared_first, &shared_second));
+            let held = shared_first.lock().unwrap();
+            assert!(shared_second.try_lock().is_err());
+            drop(held);
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[tokio::test]
     async fn web_context_controls_are_supervisor_only_with_closed_scopes() {
         let root = std::env::temp_dir().join(format!("web-context-mcp-{}", Uuid::new_v4()));
@@ -17326,7 +17416,11 @@ hello world"
                 ToolMode::SupervisorOnly,
             ] {
                 let listed = handle_tools_list(&list, mode, tool_mode, &None).await;
-                for name in [WEB_CONTEXT_CONFIGURE_TOOL, WEB_CONTEXT_OBSERVE_TOOL] {
+                for name in [
+                    WEB_CONTEXT_CONFIGURE_TOOL,
+                    WEB_CONTEXT_OBSERVE_TOOL,
+                    WEB_CONTEXT_CAPTURE_TOOL,
+                ] {
                     let exposed =
                         mode.computer_enabled() && matches!(tool_mode, ToolMode::SupervisorOnly);
                     let tool = listed.result.as_ref().unwrap()["tools"]
@@ -17344,12 +17438,18 @@ hello world"
                         );
                         assert!(schema["properties"].get("workspace").is_none());
                         assert!(schema["properties"].get("conversationUrl").is_none());
-                        let nested = if name == WEB_CONTEXT_CONFIGURE_TOOL {
-                            "policy"
+                        if name != WEB_CONTEXT_CAPTURE_TOOL {
+                            let nested = if name == WEB_CONTEXT_CONFIGURE_TOOL {
+                                "policy"
+                            } else {
+                                "event"
+                            };
+                            assert_eq!(schema["properties"][nested]["additionalProperties"], false);
                         } else {
-                            "event"
-                        };
-                        assert_eq!(schema["properties"][nested]["additionalProperties"], false);
+                            assert_eq!(schema["properties"].as_object().unwrap().len(), 3);
+                            assert_eq!(tool["annotations"]["openWorldHint"], true);
+                            assert_eq!(tool["annotations"]["destructiveHint"], false);
+                        }
                         assert_eq!(tool["annotations"]["readOnlyHint"], false);
                     }
                     let request = tool_call_request(
