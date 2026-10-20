@@ -93,6 +93,46 @@ class FakeProbeSink:
 
 
 class AdapterTests(unittest.TestCase):
+    def test_fresh_document_probe_waits_within_one_browser_and_requires_stability(self):
+        now = [0.0]
+        sleeps = []
+        def pause(seconds):
+            sleeps.append(seconds)
+            now[0] += seconds
+        cdp = FakeCdp()
+        cdp.probe_stages = ["RESPONSE_PENDING", "RESPONSE_PENDING",
+                            "RESPONSE_COMPLETE", "RESPONSE_COMPLETE"]
+        result = adapter.bounded_response_observation(
+            bridge, FakeProbeSink(cdp.url, None, 0, 0), cdp, "bounded wake",
+            bridge.digest("bounded wake"), clock=lambda: now[0], sleep=pause,
+        )
+        self.assertEqual(result, "RESPONSE_COMPLETE")
+        self.assertEqual(sleeps, [.5, .5, .25])
+        self.assertEqual(len(cdp.timeline), 4)
+        self.assertFalse(cdp.sent)
+        self.assertEqual(cdp.keys, [])
+
+    def test_pending_probe_has_fixed_budget_and_errors_are_not_retried(self):
+        now = [0.0]
+        cdp = FakeCdp()
+        cdp.probe_stage = "RESPONSE_PENDING"
+        sink = FakeProbeSink(cdp.url, None, 0, 0)
+        def pause(seconds): now[0] += seconds
+        self.assertEqual(adapter.bounded_response_observation(
+            bridge, sink, cdp, "bounded wake", bridge.digest("bounded wake"),
+            timeout=1, clock=lambda: now[0], sleep=pause,
+        ), "RESPONSE_PENDING")
+        self.assertEqual(now[0], 1)
+        self.assertEqual(len(cdp.timeline), 3)
+        cdp.url = "https://chatgpt.com/c/foreign"
+        with self.assertRaisesRegex(bridge.Attention, "RESPONSE_TARGET_DRIFT"):
+            adapter.bounded_response_observation(
+                bridge, sink, cdp, "bounded wake", bridge.digest("bounded wake"),
+                clock=lambda: now[0], sleep=pause,
+            )
+        self.assertEqual(len(cdp.timeline), 4)
+        self.assertEqual(now[0], 1)
+
     @staticmethod
     def probe_request(url="https://chatgpt.com/c/exact", event_id="review-1"):
         target = {"url": url, "digest": bridge.digest(url), "generation": 1}
@@ -313,7 +353,9 @@ class AdapterTests(unittest.TestCase):
         emitted = []
         with patch.object(bridge, "CdpSink", FakeProbeSink), patch.object(
             adapter, "emit", emitted.append
-        ), patch.object(adapter.time, "sleep"):
+        ), patch.object(adapter.time, "sleep"), patch.object(
+            adapter.time, "monotonic", side_effect=range(100)
+        ):
             for event_id, stage in (("project-a", "RESPONSE_PENDING"),
                                     ("project-b", "RESPONSE_COMPLETE")):
                 cdp = FakeCdp()
@@ -322,8 +364,8 @@ class AdapterTests(unittest.TestCase):
                 adapter.observe_response(bridge, sb, self.probe_request(event_id=event_id))
                 self.assertFalse(cdp.sent)
                 self.assertEqual(cdp.keys, [])
-                self.assertEqual(cdp.timeline, ["observe"] if stage == "RESPONSE_PENDING" else
-                                 ["observe", "observe"])
+                self.assertTrue(all(item == "observe" for item in cdp.timeline))
+                self.assertGreaterEqual(len(cdp.timeline), 2)
         terminal = [item for item in emitted if item.get("stage", "").startswith("RESPONSE_")]
         self.assertEqual([(item["eventId"], item["stage"]) for item in terminal],
                          [("project-a", "RESPONSE_PENDING"), ("project-b", "RESPONSE_COMPLETE")])

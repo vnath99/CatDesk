@@ -438,6 +438,32 @@ def bootstrap_draft_archive(bridge, sb, request):
     emit({"stage": "BOOTSTRAP_DRAFT_ARCHIVED", **scope, "actualBytes": 0})
 
 
+def bounded_response_observation(bridge, sink, cdp, message, message_digest,
+                                 *, timeout=10, clock=None, sleep=None):
+    """Allow fresh-document hydration without opening another browser or sending.
+
+    Every sample retains the exact receipt/target/body checks. A completed
+    frame still needs a separated second proof; a remount returns pending.
+    """
+    clock = clock or time.monotonic
+    sleep = sleep or time.sleep
+    deadline = clock() + timeout
+    while True:
+        stage = sink.observe_cooperative_response(cdp, message, message_digest)
+        if stage not in {"RESPONSE_PENDING", "RESPONSE_COMPLETE"}:
+            raise bridge.Attention("RESPONSE_PROBE_STATE_INVALID")
+        if stage == "RESPONSE_COMPLETE":
+            sleep(.25)
+            stage = sink.observe_cooperative_response(cdp, message, message_digest)
+            if stage not in {"RESPONSE_PENDING", "RESPONSE_COMPLETE"}:
+                raise bridge.Attention("RESPONSE_PROBE_STATE_INVALID")
+            return stage
+        remaining = deadline - clock()
+        if remaining <= 0:
+            return stage
+        sleep(min(.5, remaining))
+
+
 def bootstrap_probe(bridge, sb, request):
     """Observe a persisted bootstrap receipt without sending another USER turn."""
     if set(request) != {"bootstrapProbe", "projectId", "intentId", "source", "handoff", "receipt"} or request["bootstrapProbe"] is not True:
@@ -467,10 +493,7 @@ def bootstrap_probe(bridge, sb, request):
         raise bridge.Attention("BOOTSTRAP_PROBE_RECEIPT_INVALID")
     sink = bridge.CdpSink(destination, ROOT / "browser-profile", 30, 20)
     cdp = prepare_cdp_target(bridge, sb, destination)
-    stage = sink.observe_cooperative_response(cdp, message, message_digest)
-    if stage == "RESPONSE_COMPLETE":
-        time.sleep(.25)
-        stage = sink.observe_cooperative_response(cdp, message, message_digest)
+    stage = bounded_response_observation(bridge, sink, cdp, message, message_digest)
     if stage == "RESPONSE_PENDING":
         emit({"stage": "BOOTSTRAP_RESPONSE_PENDING", "projectId": project_id,
               "intentId": intent_id, "destinationDigest": receipt["destinationDigest"]})
@@ -612,12 +635,7 @@ def observe_response(bridge, sb, request):
         raise bridge.Attention("RESPONSE_PROBE_RECEIPT_INVALID")
     sink = bridge.CdpSink(url, ROOT / "browser-profile", 30, 20)
     cdp = prepare_cdp_target(bridge, sb, url)
-    stage = sink.observe_cooperative_response(cdp, message, expected)
-    if stage == "RESPONSE_COMPLETE":
-        # One completed-looking frame can be a transient DOM remount. A
-        # separated second read must still prove the same exact final turn.
-        time.sleep(.25)
-        stage = sink.observe_cooperative_response(cdp, message, expected)
+    stage = bounded_response_observation(bridge, sink, cdp, message, expected)
     if stage not in {"RESPONSE_PENDING", "RESPONSE_COMPLETE"}:
         raise bridge.Attention("RESPONSE_PROBE_STATE_INVALID")
     emit({"stage": stage, "eventId": event_id, "targetGeneration": generation,

@@ -1,5 +1,27 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 replacement issued; completion observation (LIVE PARTIAL)
+
+Checkpoint `65480c5` supports the observed New Chat Send control. Under the
+updated isolated development package, the same saved canary draft was submitted
+once, and the actual newly issued conversation URL passed fresh exact-USER
+receipt verification. The journal is `RESPONSE_PENDING` / `SEND_ATTEMPTED`,
+with a saved destination receipt and no bound target. It must never replay.
+The server conversation record shows a completed assistant response, while two
+separated browser probes still reported pending. No production target changed.
+
+The next source change gives a fresh browser document a ten-second read-only
+observation window in the same visit. Every sample retains exact target,
+USER receipt, sequence and usable assistant-body checks; completion still needs
+two separated proofs. Errors terminate immediately. Fake-clock tests cover
+delayed hydration, a fixed pending budget, drift and transient completion;
+20 adapter and 35 bootstrap tests pass. Both binaries rebuild successfully.
+The next live action is one bounded probe of the saved receipt, followed by
+guarded paired binding and continuation only if completion is proven. No
+recurring scheduler or WakeHost is running. No operator action is required.
+This supersedes the earlier missing-Send and ready-draft checkpoints below.
+**Overall: `PARTIAL`.**
+
 ## October 20 ready-draft retry and exact blocker (LIVE PARTIAL)
 
 The read-only composer probe subsequently confirmed the same exact owned draft

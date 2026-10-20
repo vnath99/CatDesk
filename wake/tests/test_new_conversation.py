@@ -974,14 +974,14 @@ class NewConversationTests(unittest.TestCase):
         receipt = emitted[-1]["receipt"]
 
         class ProbeSink:
-            stages = ["RESPONSE_PENDING", "RESPONSE_COMPLETE", "RESPONSE_COMPLETE"]
+            stages = ["RESPONSE_PENDING"]
 
             def __init__(self, url, profile, ui_timeout, submit_timeout):
                 self.url = url
 
             def observe_cooperative_response(self, cdp, message, message_digest):
                 self.assert_probe(cdp, message, message_digest)
-                return self.stages.pop(0)
+                return self.stages.pop(0) if len(self.stages) > 1 else self.stages[0]
 
             @staticmethod
             def assert_probe(cdp, message, message_digest):
@@ -1002,13 +1002,16 @@ class NewConversationTests(unittest.TestCase):
             }
             with patch.object(bridge, "CdpSink", ProbeSink), patch.object(
                 adapter, "emit", output.append
-            ), patch.object(adapter.time, "sleep", return_value=None):
+            ), patch.object(adapter.time, "sleep", return_value=None), patch.object(
+                adapter.time, "monotonic", side_effect=range(100)
+            ):
                 adapter.bootstrap_probe(bridge, sb, probe_request)
             return cdp, output
 
         first_cdp, first_output = run_probe(receipt)
         self.assertEqual(first_cdp.sent, 0)
         self.assertEqual(first_output[-1]["stage"], "BOOTSTRAP_RESPONSE_PENDING")
+        ProbeSink.stages = ["RESPONSE_PENDING", "RESPONSE_COMPLETE", "RESPONSE_COMPLETE"]
         second_cdp, second_output = run_probe(receipt)
         self.assertEqual(second_cdp.sent, 0)
         self.assertEqual(second_output[-1]["stage"], "BOOTSTRAP_COMPLETE")
