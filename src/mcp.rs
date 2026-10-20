@@ -92,6 +92,8 @@ const QUEUE_REVIEW_PACKAGE_READ_TOOL: &str = "catdesk_codex_queue_review_package
 const QUEUE_REVIEW_INVITATION_PUBLISH_TOOL: &str = "catdesk_codex_queue_review_invitation_publish";
 const WEB_WORK_REQUEST_TOOL: &str = "catdesk_web_work_request";
 const WEB_WORK_RESOLVE_TOOL: &str = "catdesk_web_work_resolve";
+const WEB_CONTEXT_CONFIGURE_TOOL: &str = "catdesk_web_context_configure";
+const WEB_CONTEXT_OBSERVE_TOOL: &str = "catdesk_web_context_observe";
 static QUEUE_REVIEW_PACKAGE_READ_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 struct QueueReviewReadLease<'a>(&'a AtomicBool);
@@ -749,6 +751,13 @@ async fn handle_tools_list(
             "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false }
         }));
         if matches!(tool_mode, ToolMode::SupervisorOnly) {
+            for (name, title, description, input_schema) in
+                crate::web_context_control::tool_schemas()
+            {
+                tools.push(json!({"name":name,"title":title,"description":description,
+                    "inputSchema":input_schema,"annotations":{"readOnlyHint":false,
+                        "openWorldHint":false,"destructiveHint":true}}));
+            }
             tools.push(json!({
                 "name": WEB_WORK_REQUEST_TOOL,
                 "title": "Request work in one Web project",
@@ -1413,6 +1422,11 @@ where
                     }
                     WEB_WORK_RESOLVE_TOOL if matches!(tool_mode, ToolMode::SupervisorOnly) => {
                         handle_web_work_resolve(req, workspace_root)
+                    }
+                    WEB_CONTEXT_CONFIGURE_TOOL | WEB_CONTEXT_OBSERVE_TOOL
+                        if matches!(tool_mode, ToolMode::SupervisorOnly) =>
+                    {
+                        handle_web_context_control(req, workspace_root, &tool_name)
                     }
                     QUEUE_REVIEW_PACKAGE_READ_TOOL
                         if matches!(tool_mode, ToolMode::SupervisorOnly) =>
@@ -3762,6 +3776,17 @@ fn paired_project_target_readback_locked(
     wake_store: &catdesk_wake::store::Store,
     project_id: &str,
 ) -> Result<Option<ProjectWebTargetV1>, DesignatedChatTargetErrorV1> {
+    let config = wake_store
+        .config()
+        .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+    paired_project_target_readback_with_config(control_workspace, project_id, &config)
+}
+
+fn paired_project_target_readback_with_config(
+    control_workspace: &Path,
+    project_id: &str,
+    config: &catdesk_wake::store::Config,
+) -> Result<Option<ProjectWebTargetV1>, DesignatedChatTargetErrorV1> {
     use crate::delegated::autonomy_projects::{
         AutonomousProjectRegistryStoreV1, project_chat_target_digest,
     };
@@ -3775,9 +3800,6 @@ fn paired_project_target_readback_locked(
         .iter()
         .find(|project| project.project_id == project_id)
         .ok_or(DesignatedChatTargetErrorV1::Unavailable)?;
-    let config = wake_store
-        .config()
-        .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
     match (
         project.chatgpt_target_url.as_deref(),
         project.chatgpt_target_sha256.as_deref(),
@@ -3879,6 +3901,69 @@ pub(crate) fn operator_read_project_web_target_status(
     };
     let (control_workspace, wake_store) = project_web_store(control_workspace, project_id)?;
     paired_project_target_readback_locked(&control_workspace, &wake_store, project_id)
+}
+
+/// Keep the current paired target and registration fixed during one bounded
+/// context mutation. The operation performs metadata I/O only, never browser,
+/// Wake, native worker or network actions. Binding uses the same lock order.
+pub(crate) fn with_current_project_web_target<T>(
+    control_workspace: &Path,
+    project_id: &str,
+    expected_generation: u64,
+    expected_digest: &str,
+    operation: impl FnOnce(&Path, &ProjectWebTargetV1) -> Result<T, String>,
+) -> Result<T, String> {
+    let (workspace, wake) = project_web_store(control_workspace, project_id)
+        .map_err(|_| "WEB_CONTEXT_PROJECT_UNAVAILABLE")?;
+    let _guard = WAKE_TARGET_SET_LOCK
+        .get_or_init(|| StdMutex::new(()))
+        .lock()
+        .map_err(|_| "WEB_CONTEXT_TARGET_UNAVAILABLE")?;
+    let check_target = |target: Option<ProjectWebTargetV1>| -> Result<ProjectWebTargetV1, String> {
+        let target = target.ok_or("WEB_CONTEXT_PAIRED_TARGET_REQUIRED")?;
+        if target.generation != expected_generation || target.sha256 != expected_digest {
+            return Err("WEB_CONTEXT_TARGET_CHANGED".into());
+        }
+        Ok(target)
+    };
+    check_target(
+        paired_project_target_readback_locked(&workspace, &wake, project_id)
+            .map_err(|_| "WEB_CONTEXT_PAIRED_TARGET_REQUIRED")?,
+    )?;
+    let registry =
+        crate::delegated::autonomy_projects::AutonomousProjectRegistryStoreV1::open_read_only(
+            workspace.join(".catdesk/projects"),
+        )
+        .map_err(|_| "WEB_CONTEXT_PROJECT_UNAVAILABLE")?;
+    registry
+        .with_registration_lock(|| {
+            wake.with_config_read_only(|config| {
+                let selected = crate::wake_protocol_client::wake_root_for_workspace(&workspace)
+                    .and_then(|root| {
+                        root.canonicalize()
+                            .map_err(|_| "WEB_CONTEXT_PROJECT_UNAVAILABLE".into())
+                    })?;
+                if selected != wake.root() {
+                    return Err("WEB_CONTEXT_TARGET_CHANGED".into());
+                }
+                let target = check_target(
+                    paired_project_target_readback_with_config(&workspace, project_id, config)
+                        .map_err(|_| "WEB_CONTEXT_PAIRED_TARGET_REQUIRED")?,
+                )?;
+                // Registration and the shared Wake transaction lock retain the
+                // target. Release the process-wide mutex before context I/O so
+                // sibling projects and independent controls can read status.
+                drop(_guard);
+                operation(&workspace, &target)
+            })
+        })
+        .map_err(|error| {
+            if error == "project registration is already in progress" {
+                "WEB_CONTEXT_REGISTRATION_BUSY".into()
+            } else {
+                error
+            }
+        })
 }
 
 fn bind_project_web_target_locked_with_witness(
@@ -6405,6 +6490,43 @@ fn handle_web_work_resolve(req: &JsonRpcRequest, workspace_root: &str) -> JsonRp
             disposition,
         ),
         Err(error) => web_work_refusal(req, &error, "Web work disposition was not recorded"),
+    }
+}
+
+fn handle_web_context_control(
+    req: &JsonRpcRequest,
+    workspace_root: &str,
+    tool: &str,
+) -> JsonRpcResponse {
+    let result = if tool == WEB_CONTEXT_CONFIGURE_TOOL {
+        crate::web_context_control::configure(Path::new(workspace_root), tool_arguments(req))
+    } else {
+        crate::web_context_control::observe(Path::new(workspace_root), tool_arguments(req))
+    };
+    match result {
+        Ok(value) => tool_success_response_with_structured(
+            req,
+            "Advisory Web context metadata returned; provenance remains caller-reported".into(),
+            value,
+        ),
+        Err(error) => {
+            let code = if error.starts_with("WEB_CONTEXT_")
+                && error.len() <= 96
+                && error
+                    .bytes()
+                    .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
+            {
+                error.as_str()
+            } else {
+                "WEB_CONTEXT_UNAVAILABLE"
+            };
+            tool_error_response(
+                req,
+                format!(
+                    "code: {code}\nmessage: Context operation could not advance; refresh the paired target and context status"
+                ),
+            )
+        }
     }
 }
 
@@ -17186,6 +17308,75 @@ hello world"
         assert!(!names.contains(&STABLE_SUPERVISOR_LIFECYCLE_STATUS_TOOL));
         assert!(!names.contains(&STABLE_SUPERVISOR_LIFECYCLE_PREFLIGHT_TOOL));
         assert!(!names.contains(&STABLE_SUPERVISOR_LIFECYCLE_ACTIVATE_TOOL));
+    }
+
+    #[tokio::test]
+    async fn web_context_controls_are_supervisor_only_with_closed_scopes() {
+        let root = std::env::temp_dir().join(format!("web-context-mcp-{}", Uuid::new_v4()));
+        let list = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!("list")),
+            method: "tools/list".into(),
+            params: json!({}),
+        };
+        for mode in [Mode::Computer, Mode::Both, Mode::Browser] {
+            for tool_mode in [
+                ToolMode::ReadOnly,
+                ToolMode::MultiTools,
+                ToolMode::SupervisorOnly,
+            ] {
+                let listed = handle_tools_list(&list, mode, tool_mode, &None).await;
+                for name in [WEB_CONTEXT_CONFIGURE_TOOL, WEB_CONTEXT_OBSERVE_TOOL] {
+                    let exposed =
+                        mode.computer_enabled() && matches!(tool_mode, ToolMode::SupervisorOnly);
+                    let tool = listed.result.as_ref().unwrap()["tools"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .find(|tool| tool["name"] == name);
+                    assert_eq!(tool.is_some(), exposed);
+                    if let Some(tool) = tool {
+                        let schema = &tool["inputSchema"];
+                        assert_eq!(schema["additionalProperties"], false);
+                        assert_eq!(
+                            schema["properties"]["expectedTargetGeneration"]["minimum"],
+                            1
+                        );
+                        assert!(schema["properties"].get("workspace").is_none());
+                        assert!(schema["properties"].get("conversationUrl").is_none());
+                        let nested = if name == WEB_CONTEXT_CONFIGURE_TOOL {
+                            "policy"
+                        } else {
+                            "event"
+                        };
+                        assert_eq!(schema["properties"][nested]["additionalProperties"], false);
+                        assert_eq!(tool["annotations"]["readOnlyHint"], false);
+                    }
+                    let request = tool_call_request(
+                        name,
+                        json!({"projectId":"alpha","expectedTargetGeneration":1,
+                        "expectedTargetSha256":"a".repeat(64),"conversationUrl":"C:/private-secret"}),
+                    );
+                    let response = handle_tools_call(
+                        &request,
+                        root.to_str().unwrap(),
+                        0,
+                        mode,
+                        tool_mode,
+                        false,
+                        &None,
+                    )
+                    .await;
+                    assert_eq!(response.result.as_ref().unwrap()["isError"], true);
+                    let encoded = serde_json::to_string(&response).unwrap();
+                    assert!(!encoded.contains("private-secret"));
+                    if exposed {
+                        assert!(encoded.contains("WEB_CONTEXT_ARGUMENTS_INVALID"));
+                    }
+                    assert!(!root.exists());
+                }
+            }
+        }
     }
 
     #[tokio::test]

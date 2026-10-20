@@ -367,7 +367,7 @@ async fn three_projects_route_only_to_prepared_development_wake() {
     assert_eq!(central["installedAcceptance"], "UNVERIFIED");
     assert_eq!(central["projects"].as_array().unwrap().len(), 3);
     for project in central["projects"].as_array().unwrap() {
-        assert_eq!(project["wake"]["status"], "PAIRED");
+        assert_eq!(project["wake"]["status"], "PAIRED", "{project}");
         assert_eq!(project["context"]["status"], "CURRENT_ADVISORY");
         assert_eq!(project["rollover"]["status"], "UNOBSERVED");
     }
@@ -528,7 +528,183 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
         .collect::<Vec<_>>();
     assert!(names.contains(&"catdesk_web_work_request"));
     assert!(names.contains(&"catdesk_web_work_resolve"));
+    assert!(names.contains(&"catdesk_web_context_configure"));
+    assert!(names.contains(&"catdesk_web_context_observe"));
     assert!(!names.contains(&"run_command"));
+
+    let context_config = |project: &str| {
+        json!({"projectId":project,"expectedTargetGeneration":1,
+        "expectedTargetSha256":bindings[project].digest,"policy":{
+            "configuredBudgetTokens":match project {"catdesk"=>4000,"alpha"=>6000,_=>8000},
+            "safetyHeadroomTokens":1000,"unknownSourceReserveTokens":500,
+            "automaticRolloverEnabled":false,"automaticObservationEnabled":false,"incompleteHistoryRollover":false}})
+    };
+    let context_event = |project: &str| {
+        json!({"projectId":project,"expectedTargetGeneration":1,
+        "expectedTargetSha256":bindings[project].digest,"event":{"eventId":"same-event",
+            "revision":1,"dedupKey":"same-output","sourceKind":"TOOL_RESULT",
+            "visibleText":format!("PRIVATE_CONTEXT_{project} {}", "context ".repeat(10))}})
+    };
+    let (denied, _) = web_mcp_request(&client, &url, None, json!({"jsonrpc":"2.0","id":"denied-context",
+        "method":"tools/call","params":{"name":"catdesk_web_context_configure","arguments":context_config("catdesk")}})).await;
+    assert_eq!(denied, reqwest::StatusCode::UNAUTHORIZED);
+    assert!(!control.join(".catdesk/web-context").exists());
+    for (project, _) in &projects {
+        let configured = web_mcp_tool(
+            &client,
+            &url,
+            token,
+            "catdesk_web_context_configure",
+            context_config(project),
+        )
+        .await;
+        let result = &configured["result"]["structuredContent"];
+        assert_eq!(
+            result["pressure"]["configuredBudgetTokens"],
+            context_config(project)["policy"]["configuredBudgetTokens"]
+        );
+        assert_eq!(result["originAuthenticated"], false);
+        assert_eq!(result["hostStarted"], false);
+        let observed = web_mcp_tool(
+            &client,
+            &url,
+            token,
+            "catdesk_web_context_observe",
+            context_event(project),
+        )
+        .await;
+        let result = &observed["result"]["structuredContent"];
+        assert_eq!(result["pressure"]["key"]["projectId"], *project);
+        assert_eq!(result["pressure"]["recordedEvents"], 1);
+        assert!(
+            result["pressure"]["observedToolResultTokens"]
+                .as_u64()
+                .unwrap()
+                > 0
+        );
+        assert_eq!(result["observationSource"], "CALLER_REPORTED");
+        assert_eq!(result["rawTextPersisted"], false);
+        assert_eq!(result["browserAction"], "NONE");
+        assert!(!observed.to_string().contains("PRIVATE_CONTEXT_"));
+        let replay = web_mcp_tool(
+            &client,
+            &url,
+            token,
+            "catdesk_web_context_observe",
+            context_event(project),
+        )
+        .await;
+        assert_eq!(
+            replay["result"]["structuredContent"]["pressure"],
+            result["pressure"]
+        );
+    }
+    let independent = crate::mcp::with_current_project_web_target(
+        &control,
+        "alpha",
+        1,
+        &bindings["alpha"].digest,
+        |workspace, _| {
+            let sibling = crate::mcp::operator_read_project_web_target_status(workspace, "beta")
+                .map_err(|_| "WEB_CONTEXT_PARALLEL_READ_UNAVAILABLE")?
+                .ok_or("WEB_CONTEXT_PARALLEL_READ_UNAVAILABLE")?;
+            assert_eq!(sibling.sha256, bindings["beta"].digest);
+            Ok(())
+        },
+    );
+    assert!(
+        independent.is_ok(),
+        "sibling status blocked during context operation: {independent:?}"
+    );
+    let meter = WebContextStore::open_read_only(control.join(".catdesk/web-context")).unwrap();
+    let before = meter.project_history("alpha").unwrap();
+    let mut wrong_scope = context_config("alpha");
+    wrong_scope["expectedTargetSha256"] = json!(bindings["beta"].digest);
+    wrong_scope["policy"]["configuredBudgetTokens"] = json!(9000);
+    let refused = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_context_configure",
+        wrong_scope,
+    )
+    .await;
+    assert!(refused.to_string().contains("WEB_CONTEXT_TARGET_CHANGED"));
+    let mut conflict = context_event("alpha");
+    conflict["event"]["visibleText"] = json!("different private content");
+    let refused = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_context_observe",
+        conflict,
+    )
+    .await;
+    assert!(
+        refused
+            .to_string()
+            .contains("WEB_CONTEXT_EVENT_REVISION_CONFLICT")
+    );
+    assert_eq!(meter.project_history("alpha").unwrap(), before);
+    let mut revision = context_event("beta");
+    revision["event"]["revision"] = json!(2);
+    revision["event"]["visibleText"] = json!("revised visible context ".repeat(30));
+    let revised = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_context_observe",
+        revision,
+    )
+    .await;
+    assert_eq!(
+        revised["result"]["structuredContent"]["pressure"]["recordedEvents"],
+        1
+    );
+    let mut arguments_event = context_event("alpha");
+    arguments_event["event"]["eventId"] = json!("tool-arguments");
+    arguments_event["event"]["dedupKey"] = json!("tool-arguments");
+    arguments_event["event"]["sourceKind"] = json!("TOOL_ARGUMENTS");
+    let traffic = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_context_observe",
+        arguments_event,
+    )
+    .await;
+    assert!(
+        traffic["result"]["structuredContent"]["pressure"]["observedToolArgumentTokens"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    assert_eq!(
+        traffic["result"]["structuredContent"]["pressure"]["visibleUniqueTokens"],
+        json!(before[0].visible_unique_tokens)
+    );
+    let mut unknown = context_event("beta");
+    unknown["event"]["eventId"] = json!("unknown-attachment");
+    unknown["event"]["dedupKey"] = json!("unknown-attachment");
+    unknown["event"]["sourceKind"] = json!("UNKNOWN_ATTACHMENT");
+    unknown["event"]["visibleText"] = json!(null);
+    let reserved = web_mcp_tool(&client, &url, token, "catdesk_web_context_observe", unknown).await;
+    assert_eq!(
+        reserved["result"]["structuredContent"]["pressure"]["unknownSourceCount"],
+        1
+    );
+    assert!(
+        wake.events().unwrap().is_empty(),
+        "context controls publish no Wake events"
+    );
+    for entry in fs::read_dir(control.join(".catdesk/web-context/conversations")).unwrap() {
+        let bytes = fs::read(entry.unwrap().path()).unwrap();
+        assert!(
+            !String::from_utf8(bytes)
+                .unwrap()
+                .contains("PRIVATE_CONTEXT_")
+        );
+    }
 
     let mut event_ids = std::collections::BTreeSet::new();
     for (project, _) in &projects {
@@ -794,6 +970,38 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
     .await;
     // Closing an existing intent uses its original witness after a target
     // changes. The preserved receipt cannot be relabelled as the new target.
+    let old_context = meter.project_history("catdesk").unwrap();
+    for (tool, input) in [
+        ("catdesk_web_context_configure", context_config("catdesk")),
+        ("catdesk_web_context_observe", context_event("catdesk")),
+    ] {
+        let stale = web_mcp_tool(&client, &url, token, tool, input).await;
+        assert!(stale.to_string().contains("WEB_CONTEXT_TARGET_CHANGED"));
+    }
+    assert_eq!(meter.project_history("catdesk").unwrap(), old_context);
+    let mut replacement_event = context_event("catdesk");
+    replacement_event["expectedTargetGeneration"] = json!(2);
+    replacement_event["expectedTargetSha256"] = json!(digest(&replacement_url));
+    let recorded = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_context_observe",
+        replacement_event,
+    )
+    .await;
+    assert_eq!(
+        recorded["result"]["structuredContent"]["pressure"]["key"]["targetGeneration"],
+        2
+    );
+    let context_history = meter.project_history("catdesk").unwrap();
+    assert_eq!(context_history.len(), 2);
+    assert_eq!(
+        context_history[0].recorded_events,
+        old_context[0].recorded_events
+    );
+    assert_eq!(meter.project_history("alpha").unwrap().len(), 1);
+    assert_eq!(meter.project_history("beta").unwrap().len(), 1);
     let mut new_witness = resolution("catdesk", "completed");
     new_witness["expectedTargetGeneration"] = json!(2);
     new_witness["expectedTargetSha256"] = json!(digest(&replacement_url));

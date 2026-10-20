@@ -340,6 +340,16 @@ impl Store {
         let _lock = self.read_lock()?;
         self.read_config()
     }
+    /// Retain the existing transaction read lock during a bounded metadata
+    /// operation. A read-only store permits sibling reads while preventing
+    /// target writers. The callback must not write through this Wake store.
+    pub fn with_config_read_only<T>(
+        &self,
+        operation: impl FnOnce(&Config) -> Result<T>,
+    ) -> Result<T> {
+        let _lock = self.read_lock()?;
+        operation(&self.read_config()?)
+    }
     pub fn set_target(&self, project: &str, expected: u64, url: &str) -> Result<Target> {
         self.set_target_with_submission_policy(project, expected, url, false, None, None)
     }
@@ -1891,6 +1901,53 @@ mod read_only_store_tests {
         assert!(reader.host_lock().is_err());
         assert!(!root.join("host.lock").exists());
         assert_eq!(fs::read(root.join("config.json")).unwrap(), before);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn scoped_snapshot_allows_readers_holds_writers_and_releases_on_error() {
+        let root = root();
+        let writer = Store::open(&root).unwrap();
+        writer.initialize().unwrap();
+        let first = writer
+            .set_target("alpha", 0, "https://chatgpt.com/c/first")
+            .unwrap();
+        let reader = Store::open_read_only(&root).unwrap();
+        let sibling = Store::open_read_only(&root).unwrap();
+        reader
+            .with_config_read_only(|config| {
+                assert_eq!(config.targets.get("alpha"), Some(&first));
+                assert_eq!(sibling.config()?.targets.get("alpha"), Some(&first));
+                let contender = OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open(root.join("transaction.lock"))
+                    .unwrap();
+                assert!(
+                    contender.try_lock().is_err(),
+                    "writer must wait until the scoped read ends"
+                );
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(
+            writer
+                .set_target("alpha", 1, "https://chatgpt.com/c/second")
+                .unwrap()
+                .generation,
+            2
+        );
+        let failed = reader.with_config_read_only(|_| Err::<(), String>("FIXTURE_FAILURE".into()));
+        assert_eq!(failed.unwrap_err(), "FIXTURE_FAILURE");
+        let contender = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(root.join("transaction.lock"))
+            .unwrap();
+        contender
+            .try_lock()
+            .expect("error released only the read guard");
+        drop(contender);
         fs::remove_dir_all(&root).unwrap();
     }
 

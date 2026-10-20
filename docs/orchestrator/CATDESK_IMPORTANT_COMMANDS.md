@@ -162,7 +162,7 @@ store. Known production current and historical conversation IDs are rejected
 for development use. An invalid or partial development authority requires
 attention and does not redirect commands to the installed store.
 
-Source defines two central ChatGPT controls in **SupervisorOnly Computer/Both**
+Source defines central work and context controls in **SupervisorOnly Computer/Both**
 MCP mode. Read `autonomy_project_registry_read` first and use
 the chosen project's **current paired** Wake generation and URL SHA-256 for
 `catdesk_web_work_request`:
@@ -195,8 +195,46 @@ requests; other projects and existing Codex conversations continue separately.
 Focused source tests, strict lint and formatting passed for these controls;
 the acceptance ledger records their exact scope. The earlier
 `MANUAL_SIGN_IN_PENDING` state in session 94778 was superseded by its normal
-exit and the live delivery checkpoint above. Rollover remains `PREPARED`, not
-completed; no installed release is claimed.
+exit and the live delivery checkpoint above. The fast controlled canary later
+completed replacement creation, paired binding, history preservation and
+continuation with a verified assistant response; see the October acceptance
+ledger. Preserve that completed event. Installed release acceptance is open.
+
+### Per-project context policy and observations (source)
+
+Use the **current paired** target from registry Web status for both context
+tools, including after rollover. Policy is project-scoped and retained across
+conversation generations. All three automatic flags must be explicit:
+
+```json
+{"projectId":"PROJECT","expectedTargetGeneration":1,"expectedTargetSha256":"<current-paired-64-hex-sha>","policy":{"configuredBudgetTokens":96000,"safetyHeadroomTokens":24000,"unknownSourceReserveTokens":8000,"automaticRolloverEnabled":false,"automaticObservationEnabled":false,"incompleteHistoryRollover":false}}
+```
+
+Pass this to `catdesk_web_context_configure`. The budget is a conservative local
+setting, not a claim about the provider's context window. Automatic flags affect
+later work by an already authorized running worker; this metadata operation
+starts no browser or host.
+
+To supplement the existing browser meter with one caller-reported observation,
+use `catdesk_web_context_observe`:
+
+```json
+{"projectId":"PROJECT","expectedTargetGeneration":1,"expectedTargetSha256":"<current-paired-64-hex-sha>","event":{"eventId":"tool-result-ONE","revision":1,"dedupKey":"tool-result-ONE","sourceKind":"TOOL_RESULT","visibleText":"Bounded text actually visible in this project's conversation."}}
+```
+
+Text is limited to 65,536 UTF-8 bytes. Reuse event/dedup IDs for retries; increase
+the revision when that same content changes. Same-revision conflicting content
+is refused. Use distinct IDs for distinct messages. `UNKNOWN_ATTACHMENT` needs
+`visibleText:null`; the configured reserve is advisory. Tool arguments are
+tracked as traffic separately from visible message/tool-result occupancy.
+
+The server supplies observation time and stores hashes/counts, never raw text.
+Responses retain `originAuthenticated:false` and `CALLER_REPORTED` provenance;
+explicit project scope does not authenticate the calling ChatGPT conversation.
+Target and registration changes serialize with these mutations. A stale paired
+witness refuses; a current replacement records a separate ledger and preserves
+its predecessor. These controls publish no Wake event or native work request.
+Installed/connector availability requires its own acceptance and catalog read.
 
 For a controlled event after an exact paired target exists:
 

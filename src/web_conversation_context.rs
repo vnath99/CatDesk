@@ -59,7 +59,7 @@ impl Default for ContextPressurePolicy {
 }
 
 impl ContextPressurePolicy {
-    fn validate(&self) -> Result<(), String> {
+    pub(crate) fn validate(&self) -> Result<(), String> {
         if self.configured_budget_tokens == 0
             || self.configured_budget_tokens > 2_000_000
             || self.safety_headroom_tokens >= self.configured_budget_tokens
@@ -806,6 +806,10 @@ impl WebContextStore {
         }
         Ok(())
     }
+}
+
+pub(crate) fn validate_observation(observation: Observation<'_>) -> Result<(), String> {
+    observation_metadata(observation).map(|_| ())
 }
 
 fn observation_metadata(observation: Observation<'_>) -> Result<EventMetadata, String> {

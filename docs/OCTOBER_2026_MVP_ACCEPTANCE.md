@@ -1,5 +1,45 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 central context controls (SOURCE + LOCAL HTTP VERIFIED)
+
+Source now exposes `catdesk_web_context_configure` and
+`catdesk_web_context_observe` in Computer/Both + SupervisorOnly mode. They reuse
+the existing per-project meter, policies, event IDs, revisions, deduplication
+and token estimator. Configuration requires all automatic flags explicitly;
+observation accepts one event up to 65,536 UTF-8 bytes and assigns server time.
+Only hashes/counts persist. Caller-reported text remains advisory with
+`originAuthenticated:false`; project scope does not identify the ChatGPT caller
+or automatically attribute shared HTTP traffic to a conversation.
+
+Both operations require the exact current paired generation/digest and retain
+the existing registration and Wake configuration guards during mutation. The
+full root regression initially exposed excessive process-wide mutex retention:
+a sibling status could return attention during context I/O. A deterministic
+same-control sibling-read regression reproduced it. Context I/O now runs after
+that mutex is released while registration and a shared Wake transaction read
+keep target writers out. Sibling readers remain available, including on errors.
+
+Authenticated ephemeral-loopback HTTP tests cover three independent budgets,
+same-ID replay, revision conflicts and replacement, tool-argument/result counts,
+unknown-attachment reserve, raw-text privacy, stale/cross-project witnesses and
+separate old/new ledgers after a rebind. Unauthorized calls and unsupported
+modes refuse. No context operation queues a Wake event or native work request.
+The current command reference includes the new schemas and corrects an older
+statement that the already-completed fast canary was still prepared.
+
+Final source gates: **1,532 root tests passed / 28 ignored**, **288 Wake library
+tests passed / one ignored**, all Wake integration targets, strict root/Wake
+Clippy and formatting. The main/Wake build logs and before/after contention
+evidence are in parent `checkpoints/web-context-mcp-oct20`. Python product sources
+are unchanged from their full 229-passed/one-skipped checkpoint; the bounded
+Python integration harness also passed in the full Wake run.
+
+These results establish source and disposable local HTTP behavior. The actual
+connector catalog, protected installed runtime, fresh independent project
+delivery and scheduler lifecycle still require live acceptance. No real project
+policy, target, browser profile, native session or completed canary was changed
+to run the fixtures. **Overall October MVP: `PARTIAL`.**
+
 ## October 20 scheduler rollover eligibility (SOURCE VERIFIED)
 
 The context ledger already limited uncertainty-only rollover to one use in a
