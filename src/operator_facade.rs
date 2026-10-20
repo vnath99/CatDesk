@@ -121,6 +121,9 @@ pub(crate) enum WebDevelopmentAction {
     Start,
     Stop,
     Run,
+    RunBounded {
+        maximum_seconds: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -235,6 +238,12 @@ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction,
         Some("start") if args.len() == 3 => Ok(WebDevelopmentAction::Start),
         Some("stop") if args.len() == 3 => Ok(WebDevelopmentAction::Stop),
         Some("run") if args.len() == 3 => Ok(WebDevelopmentAction::Run),
+        Some("run") if args.len() == 5 && args[3] == "--max-runtime-seconds" => {
+            let maximum_seconds = args[4].parse::<u64>().ok()
+                .filter(|seconds| (1..=900).contains(seconds))
+                .ok_or("WEB_DEVELOPMENT_FOREGROUND_BUDGET_INVALID")?;
+            Ok(WebDevelopmentAction::RunBounded { maximum_seconds })
+        }
         _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, update-package --package <directory>, login --project-id <id>, enqueue --project-id <id> --event-id <id> --message-file <file>, retry --project-id <id> --event-id dev-<id>, status, start, stop, or run".into()),
     }
 }
@@ -717,6 +726,9 @@ pub(crate) async fn execute_operator_action(
                 WebDevelopmentAction::Start => development_runtime::start(workspace),
                 WebDevelopmentAction::Stop => development_runtime::stop(workspace),
                 WebDevelopmentAction::Run => development_runtime::run_foreground(workspace),
+                WebDevelopmentAction::RunBounded { maximum_seconds } => {
+                    development_runtime::run_foreground_bounded(workspace, maximum_seconds)
+                }
             }
         }
         OperatorAction::Web(action) => web::execute(action, workspace).await,
@@ -1571,6 +1583,39 @@ mod tests {
                         action,
                         "--root",
                         "C:/production"
+                    ]
+                    .map(str::to_string)
+                )
+                .is_err()
+            );
+        }
+        for value in ["1", "900"] {
+            assert!(matches!(
+                parse_operator_action(
+                    [
+                        "operator",
+                        "web-dev-runtime",
+                        "run",
+                        "--max-runtime-seconds",
+                        value
+                    ]
+                    .map(str::to_string)
+                )
+                .unwrap(),
+                Some(OperatorAction::WebDevelopment(
+                    WebDevelopmentAction::RunBounded { .. }
+                ))
+            ));
+        }
+        for value in ["0", "901", "-1", "abc", "18446744073709551616"] {
+            assert!(
+                parse_operator_action(
+                    [
+                        "operator",
+                        "web-dev-runtime",
+                        "run",
+                        "--max-runtime-seconds",
+                        value
                     ]
                     .map(str::to_string)
                 )

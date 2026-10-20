@@ -1314,6 +1314,17 @@ pub fn start(workspace: &Path) -> Result<Value> {
 /// another session may issue stop, then this call returns the child exit.
 /// A private kill-on-close Job owns all descendants before runtime startup.
 pub fn run_foreground(workspace: &Path) -> Result<Value> {
+    run_foreground_inner(workspace, None)
+}
+
+pub fn run_foreground_bounded(workspace: &Path, maximum_seconds: u64) -> Result<Value> {
+    if !(1..=900).contains(&maximum_seconds) {
+        return Err("DEV_RUNTIME_FOREGROUND_BUDGET_INVALID".into());
+    }
+    run_foreground_inner(workspace, Some(maximum_seconds))
+}
+
+fn run_foreground_inner(workspace: &Path, maximum_seconds: Option<u64>) -> Result<Value> {
     let (store, executable) = validated_launch(workspace)?;
     let host = fs::read(&executable).map_err(|_| "DEV_RUNTIME_EXECUTABLE_UNAVAILABLE")?;
     if !host
@@ -1337,19 +1348,29 @@ pub fn run_foreground(workspace: &Path) -> Result<Value> {
         .arg(workspace)
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    let (pid, exit) = match foreground::run(&mut command) {
+    let (pid, exit, deadline_reached) = match foreground::run_with_deadline(
+        &mut command,
+        maximum_seconds.map(Duration::from_secs),
+        || runtime::control(&store, "STOPPED"),
+    ) {
         Ok(result) => result,
         Err(error) => {
             if let Ok(lease) = store.host_lock() {
                 drop(lease);
-                runtime::control(&store, &previous_desired)?;
+                let restore = if maximum_seconds.is_some() {
+                    "STOPPED"
+                } else {
+                    &previous_desired
+                };
+                runtime::control(&store, restore)?;
             }
             return Err(error);
         }
     };
     Ok(
         json!({"mode":"DEVELOPMENT_UNPROTECTED","status":"FOREGROUND_HOST_EXITED",
-        "pid":pid,"success":exit.success(),"exitCode":exit.code(),"ownedTreeExited":true}),
+        "pid":pid,"success":exit.success(),"exitCode":exit.code(),"ownedTreeExited":true,
+        "maximumRuntimeSeconds":maximum_seconds,"deadlineReached":deadline_reached}),
     )
 }
 
@@ -1703,6 +1724,13 @@ mod tests {
             run_foreground(&workspace).unwrap_err(),
             "DEV_RUNTIME_FOREGROUND_PACKAGE_REQUIRED"
         );
+        assert_eq!(fs::read(root.join("control.json")).unwrap(), before);
+        for budget in [0, 901, u64::MAX] {
+            assert_eq!(
+                run_foreground_bounded(&workspace, budget).unwrap_err(),
+                "DEV_RUNTIME_FOREGROUND_BUDGET_INVALID"
+            );
+        }
         assert_eq!(fs::read(root.join("control.json")).unwrap(), before);
         cleanup(&parent);
     }

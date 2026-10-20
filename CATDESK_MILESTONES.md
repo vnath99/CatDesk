@@ -1,5 +1,17 @@
 ## 2026-10-20 — Web context capture and current acceptance (SOURCE; MVP PARTIAL)
 
+The prepared bounded review controller passes 14 synthetic/native-helper
+checks and uses existing guarded enqueue/run/stop commands. Foreground run
+now accepts an optional 1–900-second internal deadline, so loss of the external
+controller cannot leave that approved run unbounded. Its disposable helper
+test requests STOP once without controller assistance; invalid budgets refuse
+before state changes. No real events or host/browser starts occurred. The
+operator start hold remains effective pending the exact three-project test.
+Final gates: CatDesk 1,537 / 28 ignored, Wake 294 library / 1 ignored and
+enabled integrations, strict Clippy and both builds pass. Stopped v22 and the
+controller's read-only preflight preserve all 91 state files, five bindings
+and production pointer, with zero owned browser/Wake processes afterward.
+
 The foreground development launcher now assigns the existing kill-on-close Job
 before an exact child startup gate, closing a concrete orphan path on launcher
 loss. Disposable native tests prove actual live helper/descendant exit after

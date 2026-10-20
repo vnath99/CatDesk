@@ -6,7 +6,7 @@ use std::{
     io::{Read, Write},
     os::windows::process::CommandExt,
     process::{Command, ExitStatus, Stdio},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 pub(super) const OWNER_GATE: &[u8] = b"CATDESK_DEV_FOREGROUND_OWNER_V1\n";
@@ -23,7 +23,16 @@ pub(super) fn require_owner(reader: impl Read) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn run(command: &mut Command) -> Result<(u32, ExitStatus)> {
+#[cfg(test)]
+fn run(command: &mut Command) -> Result<(u32, ExitStatus)> {
+    run_with_deadline(command, None, || Ok(())).map(|(pid, exit, _)| (pid, exit))
+}
+
+pub(super) fn run_with_deadline(
+    command: &mut Command,
+    budget: Option<Duration>,
+    stop: impl FnOnce() -> Result<()>,
+) -> Result<(u32, ExitStatus, bool)> {
     let mut child = command
         .stdin(Stdio::piped())
         .creation_flags(0x0800_0000)
@@ -51,10 +60,31 @@ pub(super) fn run(command: &mut Command) -> Result<(u32, ExitStatus)> {
                 .map_err(|_| "DEV_RUNTIME_FOREGROUND_OWNER_UNAVAILABLE".to_owned())
         });
     let result = gate.and_then(|()| {
-        child
-            .wait()
-            .map(|exit| (child.id(), exit))
-            .map_err(|_| "DEV_RUNTIME_CHILD_WAIT_UNAVAILABLE".to_owned())
+        let Some(budget) = budget else {
+            return child
+                .wait()
+                .map(|exit| (child.id(), exit, false))
+                .map_err(|_| "DEV_RUNTIME_CHILD_WAIT_UNAVAILABLE".to_owned());
+        };
+        let started = Instant::now();
+        let mut stop = Some(stop);
+        let mut stopping = None;
+        loop {
+            if let Some(exit) = child
+                .try_wait()
+                .map_err(|_| "DEV_RUNTIME_CHILD_WAIT_UNAVAILABLE")?
+            {
+                return Ok((child.id(), exit, stopping.is_some()));
+            }
+            if stopping.is_none() && started.elapsed() >= budget {
+                stop.take().expect("deadline stop called once")()?;
+                stopping = Some(Instant::now());
+            }
+            if stopping.is_some_and(|at| at.elapsed() >= Duration::from_secs(30)) {
+                return Err("DEV_RUNTIME_FOREGROUND_STOP_DEADLINE".into());
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
     });
     // Normal host exit must not leave descendants behind either. Retain the
     // Job until accounting proves the exact owned tree empty.
@@ -122,6 +152,31 @@ mod tests {
             .stdout(Stdio::null())
             .stderr(Stdio::null());
         command
+    }
+
+    #[test]
+    fn internal_deadline_requests_stop_once_without_external_controller() {
+        let root = fixture_root();
+        fs::write(root.join("helper.ps1"), concat!(
+            "if ([Console]::In.ReadToEnd() -cne \"CATDESK_DEV_FOREGROUND_OWNER_V1`n\") { exit 42 }\n",
+            "while (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'stop.txt'))) { Start-Sleep -Milliseconds 20 }\n",
+            "exit 0\n"
+        )).unwrap();
+        let stopped = std::cell::Cell::new(0);
+        let result = run_with_deadline(
+            &mut helper_command(&root),
+            Some(Duration::from_millis(100)),
+            || {
+                stopped.set(stopped.get() + 1);
+                fs::write(root.join("stop.txt"), b"stop")
+                    .map_err(|_| "FIXTURE_STOP_WRITE_FAILED".to_owned())
+            },
+        );
+        cleanup(&root);
+        let (_, exit, deadline_reached) = result.unwrap();
+        assert!(exit.success());
+        assert!(deadline_reached);
+        assert_eq!(stopped.get(), 1);
     }
 
     #[test]

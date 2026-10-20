@@ -1,5 +1,40 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 bounded review controller and internal deadline (SOURCE; LIVE HELD)
+
+The prepared external controller has 14 passing synthetic/native-helper checks
+for exact project, target, receipt, timer, message digest, sibling completion,
+literal argument handling and retained-process timeout cleanup. Default mode
+only performs read-only preflight; it does not copy inputs, enqueue or start a
+host. An approved run copies the exact payload bytes into the public control
+workspace as required by the existing enqueue command, verifies the actual
+wrapped queue message, then uses existing run/stop controls. The empty isolated
+discovery inbox is pinned read-only during that test to exclude extra work.
+Real project native sessions do not write this isolated inbox.
+
+Review found that controller death could otherwise discard its external
+deadline. The existing run command now accepts optional
+`--max-runtime-seconds 1..900`; the foreground owner enforces this independently,
+requests STOP once, permits 30 seconds of graceful exit and then drains its
+private Job. Bounded failure retains STOPPED intent. The default unbounded
+command is preserved. A disposable gated helper proves the internal stop
+without an external controller; invalid CLI/runtime budgets refuse before
+control changes. No actual WakeHost/browser was used for these checks.
+
+Final gates pass **1,537 CatDesk tests / 28 ignored**, **294 Wake library
+tests / 1 ignored** and enabled integrations, strict root/Wake Clippy, both
+builds, formatting and diff checks. The source-matched v22 development package
+was selected stopped. The controller's default read-only preflight passes;
+all 91 tracked state files, original five pairs and production pointer remain
+unchanged. Both controls are stopped and owned browser/Wake process count is
+zero. Exact prepared events remain absent from queue and delivery history.
+Evidence: parent `checkpoints/web-three-project-review-oct20`.
+
+This remains preparation for the exact three review payloads, not delivery,
+protected installation, connector or natural review acceptance. The explicit
+operator start hold remains in force and the bounded-test approval request is
+pending. Earlier completed canaries and all project histories remain preserved.
+
 ## October 20 foreground development ownership (SOURCE; LIVE HELD)
 
 Inspection for the next independent-project test found that the foreground

@@ -9,10 +9,20 @@ startup before Job assignment. Old packages refuse with
 supported stopped package update. Successful foreground exit adds
 `ownedTreeExited:true` only after private Job accounting reaches zero.
 
-This command still runs the shared host scheduler until STOP; it is not a
-single-event or inherently time-limited dispatch command. A bounded acceptance
-run needs an external deadline and supported STOP, plus retained launcher
-identity for failure cleanup. The current operator prohibition on WakeHost
+This command still runs the shared host scheduler; it is not a single-event
+dispatch command. A bounded development run can use:
+
+```powershell
+<source-built-catdesk.exe> operator web-dev-runtime run --max-runtime-seconds 900
+```
+
+The optional budget accepts 1–900 seconds. The foreground command requests
+STOP once at its internal deadline, allows 30 seconds for graceful host exit,
+then drains the exact private Job. Successful output includes
+`maximumRuntimeSeconds`, `deadlineReached` and `ownedTreeExited`. A failed
+bounded run retains STOPPED intent. The unqualified `run` remains unbounded.
+Use an external controller for early completion/error stop and retained
+launcher identity for fallback cleanup. The current operator prohibition on WakeHost
 restart remains effective; preparation alone is not permission to run it.
 
 ## October 20 context metadata contention

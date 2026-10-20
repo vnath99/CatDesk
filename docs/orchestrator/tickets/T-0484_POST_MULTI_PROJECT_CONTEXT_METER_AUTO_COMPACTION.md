@@ -9,6 +9,17 @@
 
 ### October 20 current acceptance and contention correction
 
+The external three-review controller has 14 passing checks and a read-only
+default preflight. Optional `run --max-runtime-seconds 1..900` now enforces the
+deadline inside the existing foreground owner, requests STOP once and retains
+the private Job for bounded cleanup. A disposable helper verifies stop without
+the external controller; invalid budgets change no control state. Prepared
+payloads remain unpublished and the explicit live-start approval is pending.
+Final source gates: CatDesk 1,537 / 28 ignored, Wake 294 library / 1 ignored
+plus integrations, strict Clippy and both builds pass. Stopped v22 and its
+read-only controller preflight preserve all original state/pairs, with no owned
+browser/Wake process afterward.
+
 Preparing the next three-project test exposed a foreground launcher-loss orphan
 gap. The existing run command now assigns the private kill-on-close Job before
 an exact child startup gate; missing protocol refuses before control changes.
@@ -55,7 +66,7 @@ release and unchanged state after refusal. Final root gate: 1,536 passed / 28
 ignored, strict Clippy/build/format pass. No browser, WakeHost, recurring worker
 or native conversation was started or changed to run these fixtures.
 
-The stopped development candidate is now v21, with the foreground owner
+The stopped development candidate is now v22, with the bounded foreground owner
 protocol and all original state/bindings preserved; this is not protected installed
 acceptance. Fixed broker preflight reports `WAKE_BROKER_SERVICE_UNPROVISIONED`.
 Independent release approval, closed old-store/launcher evidence, protected
