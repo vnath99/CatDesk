@@ -55,6 +55,16 @@ fn after_observation_with(
     request(&pressure)
 }
 
+fn after_observation(
+    workspace: &Path,
+    key: &ConversationKey,
+    observed: Value,
+    request: impl FnOnce(&PressureStatus) -> Result<(&'static str, Value), String>,
+) -> Result<(&'static str, Value), String> {
+    let meter = WebContextStore::open_read_only(workspace.join(".catdesk/web-context"))?;
+    after_observation_with(&meter, key, observed, request)
+}
+
 fn completed_task_anchor(
     wake: &Store,
     project: &str,
@@ -206,7 +216,7 @@ fn background_observation_enabled(workspace: &Path, key: &ConversationKey) -> Re
     if !root.exists() {
         return Ok(false);
     }
-    let meter = WebContextStore::open(root)?;
+    let meter = WebContextStore::open_read_only(root)?;
     if meter.active_key(&key.project_id)?.as_ref() != Some(key) {
         return Ok(false);
     }
@@ -274,6 +284,8 @@ fn error_stage(reason: &str) -> &'static str {
         "WAKE_TARGET_CHANGED"
     } else if reason == "BROWSER_SESSION_BUSY" {
         "AWAITING_BROWSER"
+    } else if reason == "WEB_CONTEXT_BUSY" {
+        "AWAITING_CONTEXT"
     } else if matches!(
         reason,
         "SOURCE_SNAPSHOT_SCOPE_INVALID"
@@ -327,8 +339,7 @@ fn run_step(
         rollover::AutoStage::Observe => {
             let observed = super::capture_context_guarded(workspace, project, keep_running)?;
             keep_running()?;
-            let meter = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
-            after_observation_with(&meter, key, observed, |pressure| {
+            after_observation(workspace, key, observed, |pressure| {
                 let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
                     workspace,
                 )?)?;
@@ -391,20 +402,30 @@ fn tick_project_mode(
             }
         })?;
     keep_running()?;
-    if background
-        && selected_stage == rollover::AutoStage::Observe
-        && !background_observation_enabled(workspace, &key)?
-    {
-        rollover::record_auto_status(
-            workspace,
-            project,
-            "OBSERVATION_DISABLED",
-            Some(source.generation),
-            None,
-        )?;
-        return Ok(
-            json!({"action":"web_auto_tick","projectId":project,"stage":"OBSERVATION_DISABLED"}),
-        );
+    if background && selected_stage == rollover::AutoStage::Observe {
+        let enabled = background_observation_enabled(workspace, &key).inspect_err(|reason| {
+            if keep_running().is_ok() {
+                let _ = rollover::record_auto_status(
+                    workspace,
+                    project,
+                    error_stage(reason),
+                    Some(source.generation),
+                    Some(reason),
+                );
+            }
+        })?;
+        if !enabled {
+            rollover::record_auto_status(
+                workspace,
+                project,
+                "OBSERVATION_DISABLED",
+                Some(source.generation),
+                None,
+            )?;
+            return Ok(
+                json!({"action":"web_auto_tick","projectId":project,"stage":"OBSERVATION_DISABLED"}),
+            );
+        }
     }
     rollover::record_auto_status(
         workspace,
@@ -736,6 +757,168 @@ mod tests {
         assert_eq!(startable_projects(&projects, &active, 1, 2), vec!["gamma"]);
     }
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn online_meter_contention_does_not_strand_workers_or_request_handoff() {
+        use crate::web_conversation_context::{
+            ContextPressurePolicy, Observation, VisibleSourceKind,
+        };
+        let root =
+            std::env::temp_dir().join(format!("web-auto-meter-drain-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        let meter_root = root.join(".catdesk/web-context");
+        let meter = WebContextStore::open(&meter_root).unwrap();
+        let key = ConversationKey {
+            project_id: "alpha".into(),
+            conversation_url: "https://chatgpt.com/c/alpha".into(),
+            target_generation: 1,
+        };
+        meter.bind_observed_target(key.clone(), None).unwrap();
+        meter
+            .configure_policy(
+                "alpha",
+                ContextPressurePolicy {
+                    configured_budget_tokens: 10,
+                    safety_headroom_tokens: 8,
+                    unknown_source_reserve_tokens: 0,
+                    automatic_observation_enabled: true,
+                    automatic_rollover_enabled: true,
+                    incomplete_history_rollover: false,
+                },
+            )
+            .unwrap();
+        meter
+            .record_observation(
+                &key,
+                Observation {
+                    event_id: "growth",
+                    revision: 1,
+                    dedup_key: "growth",
+                    source_kind: VisibleSourceKind::UserMessage,
+                    visible_text: Some("visible context ".repeat(20).as_str()),
+                    observed_at_unix: 1,
+                },
+            )
+            .unwrap();
+        let before = meter.project_history("alpha").unwrap();
+        let held = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(meter_root.join("ledger.lock"))
+            .unwrap();
+        held.lock().unwrap();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let release = std::thread::spawn(move || {
+            let _ = release_rx.recv_timeout(Duration::from_secs(10));
+            drop(held);
+        });
+        let cancel = Arc::new(AtomicBool::new(false));
+        let requested = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let (outcome_tx, mut outcome_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut active = BTreeMap::new();
+        let mut started = Vec::new();
+        for policy_check in [true, false] {
+            let workspace = root.clone();
+            let key = key.clone();
+            let requested = requested.clone();
+            let outcome_tx = outcome_tx.clone();
+            let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+            started.push(started_rx);
+            active.insert(
+                if policy_check { "alpha" } else { "beta" }.into(),
+                tokio::task::spawn_blocking(move || {
+                    let _ = started_tx.send(());
+                    let result = if policy_check {
+                        background_observation_enabled(&workspace, &key).map(|_| ())
+                    } else {
+                        after_observation(&workspace, &key, json!({}), |_| {
+                            requested.fetch_add(1, Ordering::Release);
+                            Ok(("HANDOFF_REQUESTED", json!({})))
+                        })
+                        .map(|_| ())
+                    };
+                    let _ = outcome_tx.send(result);
+                }),
+            );
+        }
+        for ready in started {
+            tokio::time::timeout(Duration::from_secs(2), ready)
+                .await
+                .unwrap()
+                .unwrap();
+        }
+        assert_eq!(
+            startable_projects(
+                &["alpha".into(), "beta".into(), "gamma".into()],
+                &active.keys().cloned().collect(),
+                1,
+                0
+            ),
+            vec!["gamma"]
+        );
+        rollover::record_auto_status(
+            &root,
+            "alpha",
+            error_stage("WEB_CONTEXT_BUSY"),
+            Some(1),
+            Some("WEB_CONTEXT_BUSY"),
+        )
+        .unwrap();
+        let waiting: Value = serde_json::from_slice(
+            &std::fs::read(root.join(".catdesk/web-rollovers/alpha/auto-status.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(waiting["stage"], "AWAITING_CONTEXT");
+        assert_eq!(waiting["reason"], "WEB_CONTEXT_BUSY");
+        assert!(waiting["lastFailure"].is_null());
+        let drain_cancel = cancel.clone();
+        let mut drain = tokio::spawn(async move {
+            drain_project_tasks(&drain_cancel, active).await;
+        });
+        let completed_while_locked = tokio::time::timeout(Duration::from_secs(2), &mut drain).await;
+        let released_before_timeout = release_tx.send(()).is_ok();
+        release.join().unwrap();
+        if completed_while_locked.is_err() {
+            drain.await.unwrap();
+        }
+        assert!(
+            completed_while_locked.is_ok(),
+            "stop/drain waited on the metadata writer"
+        );
+        assert!(released_before_timeout);
+        for _ in 0..2 {
+            assert_eq!(
+                outcome_rx.recv().await.unwrap().unwrap_err(),
+                "WEB_CONTEXT_BUSY"
+            );
+        }
+        assert!(cancel.load(Ordering::Acquire));
+        assert_eq!(requested.load(Ordering::Acquire), 0);
+        assert_eq!(meter.project_history("alpha").unwrap(), before);
+        assert!(background_observation_enabled(&root, &key).unwrap());
+        assert_eq!(
+            after_observation(&root, &key, json!({}), |_| Ok((
+                "HANDOFF_REQUESTED",
+                json!({})
+            )))
+            .unwrap()
+            .0,
+            "HANDOFF_REQUESTED"
+        );
+        let cleanup = root.canonicalize().unwrap();
+        assert_eq!(
+            cleanup.parent(),
+            Some(std::env::temp_dir().canonicalize().unwrap().as_path())
+        );
+        assert!(
+            cleanup
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("web-auto-meter-drain-")
+        );
+        std::fs::remove_dir_all(cleanup).unwrap();
+    }
+
     #[test]
     fn opted_out_policy_still_allows_observation_but_not_request() {
         use crate::web_conversation_context::{
@@ -954,6 +1137,7 @@ mod tests {
         assert_eq!(error_stage("WAKE_STOPPED"), "WAKE_STOPPED");
         assert_eq!(error_stage("WAKE_TARGET_CHANGED"), "WAKE_TARGET_CHANGED");
         assert_eq!(error_stage("BROWSER_SESSION_BUSY"), "AWAITING_BROWSER");
+        assert_eq!(error_stage("WEB_CONTEXT_BUSY"), "AWAITING_CONTEXT");
         assert_eq!(
             error_stage("BOOTSTRAP_SOURCE_QUEUE_PENDING"),
             "AWAITING_QUIESCENCE"

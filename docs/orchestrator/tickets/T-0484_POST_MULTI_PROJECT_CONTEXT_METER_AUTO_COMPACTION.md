@@ -9,6 +9,21 @@
 
 ### October 20 current acceptance and contention correction
 
+Automatic policy/readiness checks now use nonblocking read-only context access;
+shared rollover mutations also refuse a busy ledger. The status is transient
+`AWAITING_CONTEXT` / `WEB_CONTEXT_BUSY`. The held-lock worker regression checks
+prompt stop/drain, sibling startability, no handoff request and recovery after
+release. Rollover confirmation retains phase/history and policy opt-out guards.
+Latest full root gate: **1,537 passed / 28 ignored**, strict Clippy/build/format
+pass. These are source fixtures; no live capture, resend or recurring start.
+The v20 development package was selected stopped, preserving all 91 state
+files, five original paired bindings and the production pointer, with no owned
+browser/Wake process afterward. Current native-session inventory is distinct
+from task progress: Wake2 and
+PortfolioDesk were active at the preceding checkpoint; BYOVD and Bug Bounty
+were idle at their own operator authorization gates. CatDesk did not pause,
+resume, message or alter them.
+
 Current standalone capture uses the same witnessed bounded worker as MCP.
 Three real non-canary reads verified existing BYOVD, Wake2 and PortfolioDesk
 targets, independent visible estimates and normal reader cleanup. An earlier
@@ -30,12 +45,13 @@ release and unchanged state after refusal. Final root gate: 1,536 passed / 28
 ignored, strict Clippy/build/format pass. No browser, WakeHost, recurring worker
 or native conversation was started or changed to run these fixtures.
 
-The stopped development candidate is v19; this is not protected installed
+The stopped development candidate is now v20; this is not protected installed
 acceptance. Fixed broker preflight reports `WAKE_BROKER_SERVICE_UNPROVISIONED`.
 Independent release approval, closed old-store/launcher evidence, protected
 bootstrap/reader cutover, remote CI, connector serving parity (last 429) and
-fresh independent project delivery remain separate gates. The four other native
-project chats remain active. See `docs/OCTOBER_2026_MVP_ACCEPTANCE.md` for evidence.
+fresh independent project delivery remain separate gates. All four native
+project chats remain preserved and independently usable, subject to their own
+operator gates. See `docs/OCTOBER_2026_MVP_ACCEPTANCE.md` for evidence.
 
 ### October 17 running-host implementation update
 

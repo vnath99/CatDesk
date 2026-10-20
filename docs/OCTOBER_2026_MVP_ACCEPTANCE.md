@@ -1,5 +1,40 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 automatic worker context contention (SOURCE; LIVE HELD)
+
+A disposable held-ledger test reproduced another stop/drain stall: automatic
+policy and post-observation readiness checks opened the context store with a
+blocking lock. They now use its existing nonblocking read-only mode. Shared
+rollover mutation steps use the existing nonblocking writable mode, retaining
+policy rechecks, paired-target guards, submission fences and durable event
+deduplication. Metadata contention reports `AWAITING_CONTEXT` /
+`WEB_CONTEXT_BUSY`; it does not create a permanent failure or request a handoff.
+
+The regression holds the OS ledger lock while both workers exit and drain,
+verifies a sibling remains startable, checks unchanged context history and zero
+handoff callbacks, then verifies eligibility after release. A prepared-rollover
+test also checks confirmation refuses promptly without advancing its phase or
+changing history, then succeeds after release and still honors later opt-out.
+These are source fixtures, not browser or installed acceptance. The full root
+suite passed **1,537 tests / 28 ignored**, with strict all-target/all-feature
+Clippy, application build, formatting and diff checks passing. Evidence is in
+parent `checkpoints/web-auto-context-oct20`.
+
+The four-file v20 development package was selected through the supported
+`PACKAGE_UPDATED_STOPPED` path. Its unchanged Wake/Python inputs match v19.
+All 91 project-state files, the five original paired bindings and production
+pointer are unchanged. Both controls remain `STOPPED`; no owned browser or
+Wake process was present after verification. This is a stopped development
+candidate, not protected installed acceptance.
+
+No live capture, message, canary replay, binding change, WakeHost or recurring
+start was needed. The completed canary and three prior independent live context
+reads remain accepted within their documented development scope. Fresh
+multi-project delivery, connector verification and protected installation remain
+open. Inspection of `development_runtime::run_foreground` confirms it starts the
+shared host scheduler; it is not a scoped one-event alternative to the current
+operator start hold. No automatic restart is authorized by this checkpoint.
+
 ## October 20 bounded standalone capture (SOURCE + DEVELOPMENT LIVE READS)
 
 The existing `operator web context capture` now selects the current paired

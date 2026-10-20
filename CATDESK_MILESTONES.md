@@ -1,5 +1,18 @@
 ## 2026-10-20 — Web context capture and current acceptance (SOURCE; MVP PARTIAL)
 
+Automatic policy/readiness checks and shared rollover steps now refuse context
+ledger contention without stranding worker stop/drain. `AWAITING_CONTEXT` is a
+transient status; no handoff is requested while metadata is busy. A held-writer
+regression reproduced the old stall and passes after correction, including
+sibling startability and recovery after release. Prepared rollover confirmation
+also refuses without advancing or changing history. Full root suite: **1,537
+passed / 28 ignored**, strict Clippy/build/format pass. These fixtures do not
+start browser automation or WakeHost. The completed canary is not replayed;
+fresh independent delivery and installed/connector acceptance remain open.
+The supported v20 development update stayed stopped; all 91 state files, five
+original paired bindings and production pointer match their preflight values,
+with zero owned browser/Wake processes afterward.
+
 The explicit standalone context-capture command now shares the bounded MCP
 reader and current-target witness checks. Live reads completed for BYOVD,
 Wake2 and PortfolioDesk in 64–70 seconds with separate 1,446 / 895 / 916 visible

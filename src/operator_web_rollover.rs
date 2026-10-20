@@ -346,7 +346,7 @@ pub(crate) fn acquire_web_work_lease(workspace: &Path, project: &str) -> Result<
         .try_exists()
         .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
     {
-        WebContextStore::open(&context_root)
+        WebContextStore::open_nonblocking(&context_root)
             .and_then(|meter| meter.active_pressure(project))
             .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
     } else {
@@ -742,7 +742,7 @@ fn paired(workspace: &Path, project: &str) -> Result<Target, String> {
 }
 
 fn confirm_request_enabled(workspace: &Path, record: &Record) -> Result<(), String> {
-    let meter = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
+    let meter = WebContextStore::open_nonblocking(workspace.join(".catdesk/web-context"))?;
     let intent = meter
         .request_rollover_if_due(
             &key(&record.project_id, &record.source),
@@ -1214,7 +1214,7 @@ pub(super) fn request_handoff_guarded(
         wake.root(),
         &source.url,
     )?;
-    let meter = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
+    let meter = WebContextStore::open_nonblocking(workspace.join(".catdesk/web-context"))?;
     if let Some(previous) =
         saved_current_handoff_request(&store, &source, source_task_id, &registered)?
     {
@@ -1474,7 +1474,7 @@ pub(super) fn collect_handoff_guarded(
     if !native_owner_matches(&request, &registered_project(workspace, project)?) {
         return Err("WEB_HANDOFF_NATIVE_OWNER_CHANGED".into());
     }
-    let meter = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
+    let meter = WebContextStore::open_nonblocking(workspace.join(".catdesk/web-context"))?;
     request_policy_still_due(&meter, &request)?;
     let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
     let wake = Store::open(&root)?;
@@ -1580,7 +1580,7 @@ fn prepare_with_request(
             return Err("WEB_ROLLOVER_EXISTING_INTENT_REQUIRES_RESUME".into());
         }
     }
-    let meter = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
+    let meter = WebContextStore::open_nonblocking(workspace.join(".catdesk/web-context"))?;
     // This is advisory scheduling only. The browser independently proves idle
     // before its submission callback, which rereads the paired authority.
     let intent = meter
@@ -1755,7 +1755,7 @@ fn record_context_meter(workspace: &Path, record: &Record, bound: &Target) -> Re
     if !matches!(paired(workspace, &record.project_id), Ok(current) if current == *bound) {
         return Err("WEB_ROLLOVER_BOUND_TARGET_CHANGED_RECONCILIATION_REQUIRED".into());
     }
-    let meter = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
+    let meter = WebContextStore::open_nonblocking(workspace.join(".catdesk/web-context"))?;
     let next_key = key(&record.project_id, bound);
     meter.bind_observed_target(
         next_key.clone(),
@@ -4374,6 +4374,29 @@ mod tests {
             .unwrap()
             .unwrap()
             .intent_id;
+        confirm_request_enabled(&root, &record).unwrap();
+        let before = meter.project_history("alpha").unwrap();
+        let held = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(root.join(".catdesk/web-context/ledger.lock"))
+            .unwrap();
+        held.lock().unwrap();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let release = std::thread::spawn(move || {
+            let _ = release_rx.recv_timeout(std::time::Duration::from_secs(10));
+            drop(held);
+        });
+        let refused = confirm_request_enabled(&root, &record);
+        let released_before_timeout = release_tx.send(()).is_ok();
+        release.join().unwrap();
+        assert!(
+            released_before_timeout,
+            "rollover confirmation waited on metadata"
+        );
+        assert_eq!(refused.unwrap_err(), "WEB_CONTEXT_BUSY");
+        assert_eq!(record.phase, Phase::Prepared);
+        assert_eq!(meter.project_history("alpha").unwrap(), before);
         confirm_request_enabled(&root, &record).unwrap();
         policy.automatic_rollover_enabled = false;
         meter.configure_policy("alpha", policy).unwrap();

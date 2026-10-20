@@ -1,5 +1,14 @@
 # CatDesk — Important Command Reference
 
+## October 20 context metadata contention
+
+Online context operations refuse a held ledger with `WEB_CONTEXT_BUSY`.
+Automatic policy/readiness and rollover checks now use the existing
+nonblocking store modes; automatic status records `AWAITING_CONTEXT`. Retry
+through the normal bounded cadence after the writer releases the lock. Do not
+clear locks, replay a submitted handoff or restart the host to resolve this
+transient state. Stop/drain can finish while the context writer remains busy.
+
 ## October 20 bounded review read and recovery
 
 ```powershell
