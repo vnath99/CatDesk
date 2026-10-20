@@ -1,5 +1,52 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 controlled rollover and continuation (DEVELOPMENT LIVE PARTIAL)
+
+Source checkpoint `673e853` adds bounded fresh-document response observation.
+Its v8b isolated package advanced the saved canary receipt without replay:
+`RESPONSE_PENDING` -> `CREATED` -> `CONTINUATION_QUEUED`. The source handoff
+was revalidated, registry and independent Wake agreed on generation 2 and its
+exact destination digest, both histories retained the generation-1 predecessor,
+and the new conversation's context meter was recorded. All five original
+project bindings still exactly matched their saved baseline after the change.
+The deliberately low canary threshold was restored to conservative settings.
+
+One foreground development WakeHost delivered the sole queued continuation
+event with an exact appended-USER receipt and a completed response timer.
+Its owner ran for 77 seconds, issued supported STOP in cleanup, exited normally
+and confirmed `HOST_LEASE_RELEASED`. No recurring scheduler started. The later
+bounded response read also exited normally; a final process check found no
+owned Chrome, driver, WakeHost or scheduler. Native project sessions were not
+modified, paused or replaced.
+
+The private DOM excerpt visibly contains `FAST_CANARY_CONTINUED` and the exact
+inherited marker/task. Its latest USER body matches the continuation event.
+However the assistant-body snapshot selector did not establish `textComplete`,
+so the local review reader correctly returned `UNVERIFIED_EVENT_SNAPSHOT`.
+Do not label that excerpt a fully verified review response. Durable delivery
+and response-completion proofs are separate and passed. The replacement chat
+reported its independent ownership/artifact lookup blocked by connector HTTP
+429. One transport-status call here independently returned the same 429; it
+was not retried. No further task execution was requested from that chat.
+
+Source status now computes `continuationProved` from the existing exact
+receipt, completed turn, current owner and paired target checks instead of
+returning a constant false. The source-local canary status reads `VERIFIED`.
+Missing Wake directories are not initialized by this status read. The central
+projection exposes only bounded proof codes. Regression gates: 32 rollover and
+11 Web CLI tests, 20 adapter and 35 bootstrap tests, strict root Clippy and
+both main/Wake builds passed. The earlier broad bridge suite remains partial.
+The new status-reader change is source-local, not yet in the v8b live package
+or protected installation. Historical automatic-driver failure fields remain
+preserved; use current generation and durable proof when interpreting them.
+
+Next executable work: diagnose the incomplete assistant-body snapshot against
+the observed DOM, then qualify the installed/central tool catalog and a bounded
+three-project Web work cycle when connector transport is available. No new
+login, target edit or native-session pause is needed. Do not keep retrying 429,
+restart hourly workers, or claim remote CI/installed/natural-Wake acceptance.
+Those gates and full cross-project Web execution remain open. **Overall: `PARTIAL`.**
+
 ## October 20 replacement issued; completion observation (LIVE PARTIAL)
 
 Checkpoint `65480c5` supports the observed New Chat Send control. Under the

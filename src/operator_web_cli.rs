@@ -670,6 +670,16 @@ fn registry_rollover_projection(raw: &Value) -> Value {
                     .bytes()
                     .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
         });
+    let continuation_proof = raw
+        .get("continuationProofStatus")
+        .and_then(Value::as_str)
+        .filter(|status| {
+            matches!(
+                *status,
+                "NOT_CHECKED" | "VERIFIED" | "PENDING_OR_UNVERIFIED" | "UNAVAILABLE_OR_CHANGED"
+            )
+        })
+        .unwrap_or("NOT_CHECKED");
     json!({
         "status":if phase == "NONE" && raw.get("handoffRequest").is_none() {"NO_ROLLOVER"} else {"DURABLE_SNAPSHOT"},
         "phase":phase,
@@ -680,6 +690,8 @@ fn registry_rollover_projection(raw: &Value) -> Value {
         "bootstrapProgress":bootstrap_progress,
         "handoffRequested":raw.get("handoffRequest").is_some_and(Value::is_object),
         "handoffCollected":raw.get("handoffRequest").and_then(|request| request.get("handoffCollected")).and_then(Value::as_bool),
+        "continuationProved":phase == "CONTINUATION_QUEUED" && continuation_proof == "VERIFIED" && raw.get("continuationProved") == Some(&Value::Bool(true)),
+        "continuationProofStatus":continuation_proof,
         "automation":automation,
     })
 }
@@ -1184,6 +1196,19 @@ mod tests {
         assert!(summary["automation"]["lastFailure"].is_null());
         assert_eq!(summary["handoffCollected"], true);
         assert_eq!(summary["bootstrapProgress"], "SEND_ATTEMPTED");
+        assert_eq!(summary["continuationProved"], false);
+        assert_eq!(summary["continuationProofStatus"], "NOT_CHECKED");
+        for (phase, proof, value, expected) in [
+            ("CONTINUATION_QUEUED", "VERIFIED", true, true),
+            ("CONTINUATION_QUEUED", "VERIFIED", false, false),
+            ("RESPONSE_PENDING", "VERIFIED", true, false),
+            ("CONTINUATION_QUEUED", "private-path", true, false),
+        ] {
+            let projected = registry_rollover_projection(&json!({"phase":phase,
+                "continuationProofStatus":proof,"continuationProved":value}));
+            assert_eq!(projected["continuationProved"], expected);
+            assert!(!projected.to_string().contains("private-path"));
+        }
         let encoded = summary.to_string();
         for private in ["private-source", "private answer", "private handoff"] {
             assert!(!encoded.contains(private));

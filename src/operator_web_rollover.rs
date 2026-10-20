@@ -772,7 +772,8 @@ fn summary(record: &Record) -> Value {
         "sourceProgressFingerprint":record.source_fingerprint,
         "sourceSnapshotVerified":record.source_snapshot_verified,
         "quarantine":record.quarantine,
-        "continuationProved":false,"oldConversationPreserved":true})
+        "continuationProved":false,"continuationProofStatus":"NOT_CHECKED",
+        "oldConversationPreserved":true})
 }
 
 fn resumable_bootstrap(record: &Record) -> bool {
@@ -1060,7 +1061,31 @@ fn read_auto_status(store: &ProjectStore) -> Result<Option<AutoStatus>, String> 
 
 pub(super) fn status_read_only(workspace: &Path, project: &str) -> Result<Value, String> {
     let store = ProjectStore::open_existing(workspace, project)?;
-    status_from_store(&store, project)
+    let mut result = status_from_store(&store, project)?;
+    if let Some(record) = store
+        .active()?
+        .filter(|record| record.phase == Phase::ContinuationQueued)
+    {
+        let proof = (|| -> Result<(), String> {
+            let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+            // Status must never initialize missing Wake state. Validate every
+            // directory Store::open would otherwise create before opening it.
+            existing_directory(&root)?;
+            for child in ["queue", "archive", "deliveries", "turns", "logs"] {
+                existing_directory(&root.join(child))?;
+            }
+            let wake = Store::open(&root)?;
+            let current = paired(workspace, project)?;
+            continuation_ready_for_work(&store, &wake, workspace, project, &current, &record)
+        })();
+        result["continuationProved"] = json!(proof.is_ok());
+        result["continuationProofStatus"] = json!(match proof {
+            Ok(()) => "VERIFIED",
+            Err(ref reason) if reason == "WEB_WORK_ROLLOVER_PENDING" => "PENDING_OR_UNVERIFIED",
+            Err(_) => "UNAVAILABLE_OR_CHANGED",
+        });
+    }
+    Ok(result)
 }
 
 fn status_from_store(store: &ProjectStore, project: &str) -> Result<Value, String> {
@@ -3630,6 +3655,12 @@ mod tests {
             request.source
         );
         assert_eq!(wake.set_target("alpha", 1, &current.url).unwrap(), current);
+        let pending_status = status_read_only(&root, "alpha").unwrap();
+        assert_eq!(pending_status["continuationProved"], false);
+        assert_eq!(
+            pending_status["continuationProofStatus"],
+            "PENDING_OR_UNVERIFIED"
+        );
         let pending_store = ProjectStore::open(&root, "alpha").unwrap();
         assert_eq!(
             continuation_ready_for_work(&pending_store, &wake, &root, "alpha", &current, &record,)
@@ -3682,6 +3713,23 @@ mod tests {
         )
         .unwrap();
         wake.complete_timer(&event.event_id).unwrap();
+        let verified_status = status_read_only(&root, "alpha").unwrap();
+        assert_eq!(verified_status["continuationProved"], true);
+        assert_eq!(verified_status["continuationProofStatus"], "VERIFIED");
+        let missing_logs = wake.root().join("logs");
+        let saved_logs = wake.root().join("logs-saved-fixture");
+        fs::rename(&missing_logs, &saved_logs).unwrap();
+        let unavailable_status = status_read_only(&root, "alpha").unwrap();
+        assert_eq!(unavailable_status["continuationProved"], false);
+        assert_eq!(
+            unavailable_status["continuationProofStatus"],
+            "UNAVAILABLE_OR_CHANGED"
+        );
+        assert!(
+            !missing_logs.exists(),
+            "status must not recreate missing Wake state"
+        );
+        fs::rename(&saved_logs, &missing_logs).unwrap();
         let completed_store = ProjectStore::open(&root, "alpha").unwrap();
         continuation_ready_for_work(&completed_store, &wake, &root, "alpha", &current, &record)
             .unwrap();
