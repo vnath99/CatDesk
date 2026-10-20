@@ -1,5 +1,15 @@
 ## 2026-10-20 — Web context capture and current acceptance (SOURCE; MVP PARTIAL)
 
+Latest source checkpoint fixes a reproduced blocking context-ledger wait in
+online MCP mutations and snapshot ingestion. Contention now refuses with
+`WEB_CONTEXT_BUSY`; three-project status stays readable and a snapshot retry
+releases its capture slot without double counting. **1,536 root tests / 28
+ignored**, strict root Clippy, application build and formatting pass. The
+supported v17 development update remains stopped. Existing fixed broker
+preflight reports `WAKE_BROKER_SERVICE_UNPROVISIONED`; protected installation
+still needs independent approval/provisioning evidence. All four independent
+native project chats were observed active without messages or session changes.
+
 The completed fast controlled rollover has a verified replacement, paired
 generation-2 binding, preserved predecessor and delivered continuation with
 assistant response proof. It has not been replayed. Earlier prepared/draft

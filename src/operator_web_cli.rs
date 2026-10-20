@@ -477,7 +477,7 @@ where
     if paired_key(workspace, project)? != key {
         return Err("WEB_CONTEXT_TARGET_CHANGED".into());
     }
-    let store = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
+    let store = WebContextStore::open_nonblocking(workspace.join(".catdesk/web-context"))?;
     let previous = store.active_key(project)?;
     store.bind_observed_target(key.clone(), previous.as_ref())?;
     observe::ingest(&store, &key, snapshot, catdesk_wake::store::now(), || {

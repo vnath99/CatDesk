@@ -1,11 +1,31 @@
 # T-0484 — Per-conversation context pressure, token accounting and safe automatic rollover
 **Priority:** October 31 combined P3/P4 user milestone. The operator's October 17 revision supersedes the earlier deferral below. Independent ChatGPT Web project continuation and a demonstrated project rollover are required for overall acceptance.
-**Date:** 2026-10-14; priority revised 2026-10-17 | **Status:** Implementation in progress; no live rollover accepted.
+**Date:** 2026-10-14; priority revised 2026-10-17; acceptance updated 2026-10-20 | **Status:** Controlled development rollover and continuation verified; installed and fresh multi-project live acceptance pending.
 **Owner:** Codex Desktop, alongside continued development in each project's existing Codex conversation.
 **Dependencies:** accepted project-bound sessions and fair Wake dispatch, versioned WakeHost/owned SeleniumBase, durable event/receipt identity, one authoritative target generation per project, source/trust boundary acceptance.  
 **Read with:** `docs/orchestrator/CATDESK_CODEX_DESKTOP_HANDOFF_2026-10-14.md`; `docs/orchestrator/CATDESK_COMPETITOR_BROWSER_CONTINUITY_2026-10-14.md`; `CATDESK_MILESTONES.md`.
 
 ## Operator requirements
+
+### October 20 current acceptance and contention correction
+
+The controlled fast canary completed replacement creation, paired binding,
+history preservation and continuation with assistant response proof. Preserve
+that completed operation. Earlier failure descriptions below are historical.
+The central MCP context family exposes policy, observations and bounded capture.
+Online mutations and snapshot ingestion now refuse a held ledger lock with
+`WEB_CONTEXT_BUSY`, retaining exact target guards and idempotent event/revision
+accounting. HTTP and fake-reader tests verify sibling status, capture-slot
+release and unchanged state after refusal. Final root gate: 1,536 passed / 28
+ignored, strict Clippy/build/format pass. No browser, WakeHost, recurring worker
+or native conversation was started or changed to run these fixtures.
+
+The stopped development candidate is v17; this is not protected installed
+acceptance. Fixed broker preflight reports `WAKE_BROKER_SERVICE_UNPROVISIONED`.
+Independent release approval, closed old-store/launcher evidence, protected
+bootstrap/reader cutover, remote CI, connector serving parity (last 429) and
+fresh independent project delivery remain separate gates. The four other native
+project chats remain active. See `docs/OCTOBER_2026_MVP_ACCEPTANCE.md` for evidence.
 
 ### October 17 running-host implementation update
 

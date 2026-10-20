@@ -252,6 +252,7 @@ pub struct PressureStatus {
 pub struct WebContextStore {
     root: PathBuf,
     read_only: bool,
+    nonblocking: bool,
 }
 
 impl WebContextStore {
@@ -266,7 +267,17 @@ impl WebContextStore {
         Ok(Self {
             root,
             read_only: false,
+            nonblocking: false,
         })
+    }
+
+    /// Online requests and cancellable workers must not wait for a separate
+    /// ledger writer. Refuse contention so the caller can retry its stable
+    /// event later and the worker can unwind without abandoning its lease.
+    pub fn open_nonblocking(root: impl AsRef<Path>) -> Result<Self, String> {
+        let mut store = Self::open(root)?;
+        store.nonblocking = true;
+        Ok(store)
     }
 
     pub fn open_read_only(root: impl AsRef<Path>) -> Result<Self, String> {
@@ -279,6 +290,7 @@ impl WebContextStore {
         Ok(Self {
             root,
             read_only: true,
+            nonblocking: true,
         })
     }
 
@@ -658,7 +670,14 @@ impl WebContextStore {
         if !metadata.is_file() || redirected(&metadata) {
             return Err("WEB_CONTEXT_LOCK_UNSAFE".into());
         }
-        file.lock().map_err(io_error)?;
+        if self.nonblocking {
+            file.try_lock().map_err(|error| match error {
+                std::fs::TryLockError::WouldBlock => "WEB_CONTEXT_BUSY".to_string(),
+                std::fs::TryLockError::Error(error) => io_error(error),
+            })?;
+        } else {
+            file.lock().map_err(io_error)?;
+        }
         Ok(file)
     }
 
@@ -1181,6 +1200,47 @@ mod tests {
         );
         drop(held);
         assert!(reader.pressure(&key).is_ok());
+    }
+
+    #[test]
+    fn online_context_refuses_contended_reads_and_writes_without_changing_state() {
+        let fixture = Fixture::new("online-busy");
+        let key = Fixture::key("alpha", "online-busy-chat", 1);
+        fixture
+            .store
+            .bind_observed_target(key.clone(), None)
+            .unwrap();
+        let online = WebContextStore::open_nonblocking(&fixture.root).unwrap();
+        let project_before = fs::read(fixture.store.project_path("alpha")).unwrap();
+        let ledger_before = fs::read(fixture.store.ledger_path(&key)).unwrap();
+        let held = fixture.store.lock().unwrap();
+        assert_eq!(online.active_key("alpha").unwrap_err(), "WEB_CONTEXT_BUSY");
+        assert_eq!(online.pressure(&key).unwrap_err(), "WEB_CONTEXT_BUSY");
+        assert_eq!(
+            online
+                .configure_policy("alpha", ContextPressurePolicy::default())
+                .unwrap_err(),
+            "WEB_CONTEXT_BUSY"
+        );
+        assert_eq!(
+            online
+                .bind_observed_target(key.clone(), Some(&key))
+                .unwrap_err(),
+            "WEB_CONTEXT_BUSY"
+        );
+        drop(held);
+        assert_eq!(
+            fs::read(fixture.store.project_path("alpha")).unwrap(),
+            project_before
+        );
+        assert_eq!(
+            fs::read(fixture.store.ledger_path(&key)).unwrap(),
+            ledger_before
+        );
+        online
+            .configure_policy("alpha", ContextPressurePolicy::default())
+            .unwrap();
+        assert_eq!(online.pressure(&key).unwrap().key, key);
     }
 
     #[test]

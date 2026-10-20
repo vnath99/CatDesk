@@ -261,6 +261,15 @@ owner/package checks can return `WEB_CONTEXT_CAPTURE_OWNER_BUSY` or
 Only disposable source/mock tests have exercised the new MCP capture path.
 Do not invoke it against real chats while the current browser-start hold applies.
 
+Online context configuration/observation and snapshot ingestion use nonblocking
+ledger access. `WEB_CONTEXT_BUSY` means no waiting lock owner was displaced;
+refresh status and retry the same stable event ID/revision after the writer
+releases it. A snapshot ingestion refusal also releases that capture's worker
+slot. Reusing IDs retains normal deduplication if an earlier metadata write
+completed before a later read refused. Other explicit maintenance operations
+retain their existing store mode. No busy response authorizes clearing locks,
+resending Wake work or changing a conversation binding.
+
 For a controlled event after an exact paired target exists:
 
 ```text

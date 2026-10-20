@@ -1,5 +1,54 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 context ledger contention and install preflight (SOURCE; LIVE HELD)
+
+The existing zero-argument broker preflight returned exactly
+`WAKE_BROKER_SERVICE_UNPROVISIONED` (exit 1). Source inspection confirms the
+fixed service still refuses transaction admission, while the V2 offline path
+has no independently reviewed closed-store/launcher inventory or provisioned
+broker evidence. These remain protected-install gates; diagnostic signatures,
+the completed Web canary and a stopped development package do not replace them.
+No service, policy, trust key or protected installation was changed.
+
+The inspection also found a concrete cancellation/independence gap in context
+operations: the online meter used a blocking OS ledger lock. An authenticated
+disposable HTTP regression held that lock and released it from a separate
+thread after 1.5 seconds. The old request waited and then succeeded, reproducing
+a stalled reactor rather than a bounded refusal. Its failure log is retained.
+
+Online context policy/observation and browser excerpt ingestion now open the
+existing meter in nonblocking mode. Contention returns `WEB_CONTEXT_BUSY`; other
+I/O failures retain their existing error classification. Store layout, object
+checks, file locks, atomic writes, target guards and stable event/revision
+deduplication remain unchanged. A completed snapshot cannot wait indefinitely
+behind a metadata writer and strand its capture lease. Other maintenance uses
+retain their existing locking mode.
+
+The expanded HTTP fixture holds the lock through configuration, observation and
+registry status reads: both mutations refuse, while all three Wake pairs remain
+readable. A separate fake-snapshot fixture verifies busy ingestion, lease release
+and an exact deduplicated retry. The store regression verifies unchanged ledger
+and policy bytes plus successful use after release. Fixtures start no browser,
+WakeHost or recurring scheduler and do not modify real project state.
+
+A separate Codex app inventory reported all four existing native project chats
+active. This proves observed session availability, not project task completion.
+No messages, goal changes, native ownership changes or interruptions were issued.
+The app's CatDesk Web review read returned an opaque content reference for the
+assistant body, so that alternate transport did not establish new review text.
+The completed rollover and prior assistant-body proof remain preserved.
+
+Final verification: **1,536 root tests passed / 28 ignored**, strict root
+all-target/all-feature Clippy, all-feature application build, formatting and diff
+checks passed. The held-lock failure and corrected HTTP tests are retained.
+Wake/Python product sources are unchanged from the preceding full checkpoint.
+The supported v17 development update returned `PACKAGE_UPDATED_STOPPED` with
+profile/state preserved, `browserAction:NONE` and `hostStarted:false`.
+
+Evidence is in parent `checkpoints/web-context-locks-oct20`. Installed serving,
+connector catalog parity, exact-head remote CI and fresh multi-project live
+delivery remain separate open gates. **October MVP: `PARTIAL`.**
+
 ## October 20 explicit bounded browser context capture (SOURCE; LIVE HELD)
 
 `catdesk_web_context_capture` now reuses the existing private snapshot owner and

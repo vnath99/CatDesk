@@ -271,7 +271,7 @@ pub(crate) fn configure(workspace: &Path, args: Value) -> Result<Value, String> 
         request.expected_target_generation,
         &request.expected_target_sha256,
         |control, target| {
-            let store = WebContextStore::open(control.join(".catdesk/web-context"))?;
+            let store = WebContextStore::open_nonblocking(control.join(".catdesk/web-context"))?;
             let key = key(target);
             let previous = store.active_key(&request.project_id)?;
             store.bind_observed_target(key.clone(), previous.as_ref())?;
@@ -310,7 +310,7 @@ pub(crate) fn observe(workspace: &Path, args: Value) -> Result<Value, String> {
         request.expected_target_generation,
         &request.expected_target_sha256,
         |control, target| {
-            let store = WebContextStore::open(control.join(".catdesk/web-context"))?;
+            let store = WebContextStore::open_nonblocking(control.join(".catdesk/web-context"))?;
             let key = key(target);
             let previous = store.active_key(&request.project_id)?;
             store.bind_observed_target(key.clone(), previous.as_ref())?;

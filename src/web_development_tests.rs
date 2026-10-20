@@ -599,6 +599,66 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
             result["pressure"]
         );
     }
+    // A contended metadata lock must refuse immediately instead of freezing
+    // the HTTP reactor. The separate thread bounds the old blocking behavior
+    // so this regression cannot hang the suite before the fix.
+    let held = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(control.join(".catdesk/web-context/ledger.lock"))
+        .unwrap();
+    held.lock().unwrap();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let release = std::thread::spawn(move || {
+        let _ = release_rx.recv_timeout(std::time::Duration::from_secs(30));
+        drop(held);
+    });
+    let busy = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_context_configure",
+        context_config("alpha"),
+    )
+    .await;
+    let busy_observe = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_context_observe",
+        context_event("beta"),
+    )
+    .await;
+    let sibling_status = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "autonomy_project_registry_read",
+        json!({}),
+    )
+    .await;
+    let released_before_timeout = release_tx.send(()).is_ok();
+    release.join().unwrap();
+    assert!(
+        released_before_timeout,
+        "context operations waited for fixture release timeout"
+    );
+    assert!(
+        busy.to_string().contains("WEB_CONTEXT_BUSY"),
+        "context mutation waited for held lock: {busy}"
+    );
+    assert!(busy_observe.to_string().contains("WEB_CONTEXT_BUSY"));
+    assert_ne!(sibling_status["result"]["isError"], true);
+    let busy_projects = sibling_status["result"]["structuredContent"]["webProjects"]["projects"]
+        .as_array()
+        .unwrap();
+    assert_eq!(busy_projects.len(), 3);
+    assert!(
+        busy_projects
+            .iter()
+            .all(|project| project["wake"]["status"] == "PAIRED")
+    );
+
     let independent = crate::mcp::with_current_project_web_target(
         &control,
         "alpha",
@@ -1273,6 +1333,30 @@ async fn bounded_context_capture_is_independent_cancelled_and_generation_bound()
     let before = meter.project_history("alpha").unwrap();
     let replay = capture_with(&control, args("alpha"), read).await.unwrap();
     assert_eq!(replay["recordedMessages"], 1);
+    assert_eq!(meter.project_history("alpha").unwrap(), before);
+    // A completed fake browser read must not strand its capture lease while
+    // waiting for a metadata writer. Its exact retry remains deduplicated.
+    let held = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(control.join(".catdesk/web-context/ledger.lock"))
+        .unwrap();
+    held.lock().unwrap();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let release = std::thread::spawn(move || {
+        let _ = release_rx.recv_timeout(Duration::from_secs(30));
+        drop(held);
+    });
+    let busy_capture = capture_with(&control, args("alpha"), read).await;
+    let released_before_timeout = release_tx.send(()).is_ok();
+    release.join().unwrap();
+    assert!(
+        released_before_timeout,
+        "capture waited for metadata release timeout"
+    );
+    assert_eq!(busy_capture.unwrap_err(), "WEB_CONTEXT_BUSY");
+    assert_eq!(meter.project_history("alpha").unwrap(), before);
+    capture_with(&control, args("alpha"), read).await.unwrap();
     assert_eq!(meter.project_history("alpha").unwrap(), before);
     let mut stale = args("alpha");
     stale["expectedTargetGeneration"] = json!(2);
