@@ -530,6 +530,18 @@ def bounded_source_snapshot(bridge, sink, cdp, *, timeout=10, clock=None, sleep=
         previous = final
         remaining = deadline - clock()
         if remaining <= 0:
+            if ready:
+                # One complete-looking final frame at the deadline has not
+                # earned the separated stability proof. Retain its text only
+                # as an explicitly incomplete private observation.
+                snapshot = dict(snapshot, messages=[dict(item) for item in messages],
+                                truncated=True, readinessReason="FINAL_FRAMES_NOT_STABLE")
+                for item in snapshot["messages"][-2:]:
+                    item.update(textComplete=False, revisionComplete=False, revisionHash=None)
+                if "coverage" in snapshot:
+                    snapshot["coverage"] = dict(snapshot["coverage"],
+                        textIncomplete=sum(not item["textComplete"] for item in snapshot["messages"]),
+                        revisionIncomplete=sum(not item["revisionComplete"] for item in snapshot["messages"]))
             return snapshot
         sleep(min(.25 if ready else .5, remaining))
 

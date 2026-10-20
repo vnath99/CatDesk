@@ -141,6 +141,25 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(now[0], 1)
         self.assertFalse(cdp.sent)
 
+    def test_single_complete_source_frame_at_deadline_is_not_verified(self):
+        cdp = FakeCdp()
+        original = {"messages":[{"role":"ASSISTANT", "text":"new frame", "textComplete":True,
+                                 "revisionComplete":True, "revisionHash":"prior-hash"}],
+                    "coverage":{"textIncomplete":0, "revisionIncomplete":0}}
+        class Sink:
+            def exact(self, url): return url == cdp.url
+            def visible_message_snapshot(self, cdp): return original
+        result = adapter.bounded_source_snapshot(bridge, Sink(), cdp, timeout=0, clock=lambda:0,
+                                                 sleep=lambda _:self.fail("expired probe must not sleep"))
+        self.assertEqual(result["readinessReason"], "FINAL_FRAMES_NOT_STABLE")
+        self.assertFalse(result["messages"][-1]["textComplete"])
+        self.assertFalse(result["messages"][-1]["revisionComplete"])
+        self.assertIsNone(result["messages"][-1]["revisionHash"])
+        self.assertEqual(result["coverage"]["textIncomplete"], 1)
+        self.assertTrue(original["messages"][-1]["textComplete"])
+        self.assertEqual(original["coverage"]["textIncomplete"], 0)
+        self.assertFalse(cdp.sent)
+
     def test_fresh_document_probe_waits_within_one_browser_and_requires_stability(self):
         now = [0.0]
         sleeps = []

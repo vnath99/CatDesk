@@ -1,5 +1,46 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 assistant snapshot verified and three-project readback (DEVELOPMENT LIVE)
+
+One bounded read of the already-completed canary continuation returned
+`eventVerified:true`, with the exact inherited marker and task in the verified
+assistant response. No bootstrap, binding update or continuation was repeated.
+The earlier missing-body state was not reproduced, so a permanent selector
+mismatch is not established. The existing private snapshot path now includes
+bounded DOM-shape diagnostics when its final assistant body is incomplete;
+diagnostics never promote incomplete text or appear in public status.
+
+Checkpoint `43dd541` adds a ten-second, same-document readiness window requiring
+two matching complete final message frames, with target checks on each sample.
+A follow-up regression closes the deadline edge: a single complete-looking
+frame at expiry remains explicitly unverified. There is no reload, Retry click,
+typing or send. Source gates pass 23 adapter, 36 bootstrap and 10 executable DOM
+tests; main/Wake builds and strict root Clippy pass. The deadline edge is source
+verified; the live three-project reads used the preceding v10 package.
+
+Under the stopped v10 isolated development package, separate bounded reads of
+the latest saved completed events for Bug Bounty, BYOVD and Wake2 all returned
+`eventVerified:true`, exact generation 1, `sendAttempted:false` and owner exit 0.
+These are independent readback tests of existing delivery receipts and current
+responses, not new dispatch, parallel worker or natural-Wake acceptance. No
+WakeHost or recurring scheduler started. Native sessions and project targets
+were untouched. The same existing authenticated profile was reused.
+
+Installed parity is a separate open gate: the production pointer still selects
+`1.0.0-dev.84-02431feba5ed-1c6bcdfcedf0`. Its adapter/bridge hashes match the
+pointer, but it lacks source-snapshot and new-conversation helpers and remains
+`STOPPED`. No production package or authority was edited. The existing supported
+promotion/migration path must be completed and qualified before these source
+and isolated-development results can count as installed acceptance.
+
+The connector's last observed HTTP 429 still affects connector-based ownership
+and catalog verification; no connector retry was made in this cycle. One exact
+`43dd541` GitHub run lookup returned no runs, so remote CI is not accepted.
+Source/package preparation, offline regressions and bounded local readback can
+continue independently. Installed promotion, fresh multi-project dispatch and
+central request/resolve tool acceptance remain open. No new sign-in or native
+session change is needed. **Overall October MVP: `PARTIAL`.**
+
 ## October 20 controlled rollover and continuation (DEVELOPMENT LIVE PARTIAL)
 
 Source checkpoint `673e853` adds bounded fresh-document response observation.
