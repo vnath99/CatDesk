@@ -401,7 +401,7 @@ fn context_status(workspace: &Path, project: &str) -> Value {
     if !root.exists() {
         return json!({"status":"UNOBSERVED","advisory":true});
     }
-    match WebContextStore::open(root).and_then(|store| store.project_history(project)) {
+    match WebContextStore::open_read_only(root).and_then(|store| store.project_history(project)) {
         Ok(history) => json!({"status":"OBSERVED","conversations":history,"advisory":true}),
         Err(_) => json!({"status":"UNOBSERVED_OR_UNAVAILABLE","advisory":true}),
     }
@@ -536,7 +536,7 @@ fn read_review(workspace: &Path, project: &str, event_id: &str) -> Result<Value,
 }
 
 fn target_status(workspace: &Path, project_id: &str, runtime_mode: &str) -> Value {
-    match mcp::operator_read_project_web_target(workspace, project_id) {
+    match mcp::operator_read_project_web_target_status(workspace, project_id) {
         Ok(Some(target)) => json!({"status":"PAIRED", "target":target, "deliveryProved":false,
             "runtimeMode":runtime_mode}),
         Ok(None) => json!({"status":"UNBOUND", "deliveryProved":false,
@@ -768,6 +768,10 @@ pub(crate) fn execute(action: WebAction, workspace: &Path) -> Result<Value, Stri
             )
             .and_then(|store| store.load_registry())
             .map_err(|_| "WEB_SCOPE: control registry is unavailable")?;
+            let web_projects = mcp::web_project_registry_status(
+                &workspace,
+                &json!({"projects":&registry.projects}),
+            );
             let projects: Vec<_> = registry
                 .projects
                 .iter()
@@ -788,7 +792,7 @@ pub(crate) fn execute(action: WebAction, workspace: &Path) -> Result<Value, Stri
                 .collect();
             Ok(
                 json!({"action":"web_status", "readOnly":true, "projects":projects,
-                "runtimeMode":runtime_mode,
+                "runtimeMode":runtime_mode, "webProjects":web_projects,
                 "meaning":"Per-project registration and paired Wake readback. Browser authentication, delivery and continuation require their own receipts."}),
             )
         }

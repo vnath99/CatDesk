@@ -251,6 +251,7 @@ pub struct PressureStatus {
 #[derive(Clone, Debug)]
 pub struct WebContextStore {
     root: PathBuf,
+    read_only: bool,
 }
 
 impl WebContextStore {
@@ -262,7 +263,23 @@ impl WebContextStore {
             let path = root.join(child);
             checked_directory(&path, true)?;
         }
-        Ok(Self { root })
+        Ok(Self {
+            root,
+            read_only: false,
+        })
+    }
+
+    pub fn open_read_only(root: impl AsRef<Path>) -> Result<Self, String> {
+        let root = root.as_ref();
+        checked_directory(root, false)?;
+        let root = root.canonicalize().map_err(io_error)?;
+        for child in ["projects", "conversations"] {
+            checked_directory(&root.join(child), false)?;
+        }
+        Ok(Self {
+            root,
+            read_only: true,
+        })
     }
 
     pub fn configure_policy(
@@ -466,7 +483,7 @@ impl WebContextStore {
 
     pub fn pressure(&self, key: &ConversationKey) -> Result<PressureStatus, String> {
         key.validate()?;
-        let _lock = self.lock()?;
+        let _lock = self.read_lock()?;
         let project = self.read_project(&key.project_id)?;
         if !project.history.contains(key) {
             return Err("WEB_CONTEXT_TARGET_NOT_RECORDED".into());
@@ -476,7 +493,7 @@ impl WebContextStore {
 
     pub fn project_history(&self, project_id: &str) -> Result<Vec<PressureStatus>, String> {
         valid_identifier(project_id)?;
-        let _lock = self.lock()?;
+        let _lock = self.read_lock()?;
         let project = self.read_project(project_id)?;
         project
             .history
@@ -492,7 +509,7 @@ impl WebContextStore {
     /// readback. `None` means the meter has no target, not that Wake is absent.
     pub fn active_key(&self, project_id: &str) -> Result<Option<ConversationKey>, String> {
         valid_identifier(project_id)?;
-        let _lock = self.lock()?;
+        let _lock = self.read_lock()?;
         Ok(self.read_project_or_default(project_id)?.active)
     }
 
@@ -501,7 +518,7 @@ impl WebContextStore {
     /// must not combine two independently sampled generations.
     pub fn active_pressure(&self, project_id: &str) -> Result<Option<PressureStatus>, String> {
         valid_identifier(project_id)?;
-        let _lock = self.lock()?;
+        let _lock = self.read_lock()?;
         let project = self.read_project_or_default(project_id)?;
         let Some(key) = project.active.as_ref() else {
             return Ok(None);
@@ -594,6 +611,9 @@ impl WebContextStore {
     }
 
     fn lock(&self) -> Result<File, String> {
+        if self.read_only {
+            return Err("WEB_CONTEXT_READ_ONLY".into());
+        }
         let path = self.root.join("ledger.lock");
         if let Ok(metadata) = fs::symlink_metadata(&path) {
             if !metadata.is_file() || redirected(&metadata) {
@@ -612,6 +632,24 @@ impl WebContextStore {
             return Err("WEB_CONTEXT_LOCK_UNSAFE".into());
         }
         file.lock().map_err(io_error)?;
+        Ok(file)
+    }
+
+    fn read_lock(&self) -> Result<File, String> {
+        if !self.read_only {
+            return self.lock();
+        }
+        let path = self.root.join("ledger.lock");
+        let metadata = fs::symlink_metadata(&path).map_err(io_error)?;
+        if !metadata.is_file() || redirected(&metadata) {
+            return Err("WEB_CONTEXT_LOCK_UNSAFE".into());
+        }
+        let file = File::open(&path).map_err(io_error)?;
+        let metadata = fs::symlink_metadata(&path).map_err(io_error)?;
+        if !metadata.is_file() || redirected(&metadata) {
+            return Err("WEB_CONTEXT_LOCK_UNSAFE".into());
+        }
+        file.try_lock_shared().map_err(|_| "WEB_CONTEXT_BUSY")?;
         Ok(file)
     }
 
@@ -1051,6 +1089,55 @@ mod tests {
                 let _ = fs::remove_dir_all(&self.root);
             }
         }
+    }
+
+    #[test]
+    fn read_only_context_never_creates_state_and_refuses_mutation() {
+        let fixture = Fixture::new("read-only");
+        assert!(WebContextStore::open_read_only(fixture.root.join("absent")).is_err());
+        assert!(!fixture.root.join("absent").exists());
+        let reader = WebContextStore::open_read_only(&fixture.root).unwrap();
+        assert!(reader.active_key("alpha").is_err());
+        assert!(!fixture.root.join("ledger.lock").exists());
+        let key = Fixture::key("alpha", "read-only-chat", 1);
+        fixture
+            .store
+            .bind_observed_target(key.clone(), None)
+            .unwrap();
+        let before = fs::read(fixture.store.project_path("alpha")).unwrap();
+        assert_eq!(reader.active_key("alpha").unwrap(), Some(key.clone()));
+        assert!(reader.pressure(&key).is_ok());
+        assert_eq!(reader.project_history("alpha").unwrap().len(), 1);
+        assert!(reader.active_pressure("alpha").unwrap().is_some());
+        assert_eq!(
+            reader
+                .configure_policy("alpha", ContextPressurePolicy::default())
+                .unwrap_err(),
+            "WEB_CONTEXT_READ_ONLY"
+        );
+        assert_eq!(
+            fs::read(fixture.store.project_path("alpha")).unwrap(),
+            before
+        );
+    }
+
+    #[test]
+    fn read_only_context_returns_busy_without_disturbing_the_writer() {
+        let fixture = Fixture::new("read-only-busy");
+        let key = Fixture::key("alpha", "read-only-busy-chat", 1);
+        fixture
+            .store
+            .bind_observed_target(key.clone(), None)
+            .unwrap();
+        let reader = WebContextStore::open_read_only(&fixture.root).unwrap();
+        let held = fixture.store.lock().unwrap();
+        assert_eq!(reader.active_key("alpha").unwrap_err(), "WEB_CONTEXT_BUSY");
+        assert_eq!(
+            reader.project_history("alpha").unwrap_err(),
+            "WEB_CONTEXT_BUSY"
+        );
+        drop(held);
+        assert!(reader.pressure(&key).is_ok());
     }
 
     #[test]

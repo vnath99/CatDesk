@@ -3810,13 +3810,14 @@ fn project_web_store(
     control_workspace: &Path,
     project_id: &str,
 ) -> Result<(PathBuf, catdesk_wake::store::Store), DesignatedChatTargetErrorV1> {
-    project_web_store_expected(control_workspace, project_id, None)
+    project_web_store_expected(control_workspace, project_id, None, true)
 }
 
 fn project_web_store_expected(
     control_workspace: &Path,
     project_id: &str,
     expected_root: Option<&Path>,
+    read_only: bool,
 ) -> Result<(PathBuf, catdesk_wake::store::Store), DesignatedChatTargetErrorV1> {
     use crate::delegated::autonomy_projects::resolve_registered_project_from_control_root;
     let control_workspace = control_workspace
@@ -3840,8 +3841,12 @@ fn project_web_store_expected(
             return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
         }
     }
-    let store = catdesk_wake::store::Store::open(&root)
-        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let store = if read_only {
+        catdesk_wake::store::Store::open_read_only(&root)
+    } else {
+        catdesk_wake::store::Store::open(&root)
+    }
+    .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
     Ok((control_workspace, store))
 }
 
@@ -3853,6 +3858,25 @@ pub(crate) fn operator_read_project_web_target(
         .get_or_init(|| StdMutex::new(()))
         .lock()
         .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    let (control_workspace, wake_store) = project_web_store(control_workspace, project_id)?;
+    paired_project_target_readback_locked(&control_workspace, &wake_store, project_id)
+}
+
+pub(crate) fn operator_read_project_web_target_status(
+    control_workspace: &Path,
+    project_id: &str,
+) -> Result<Option<ProjectWebTargetV1>, DesignatedChatTargetErrorV1> {
+    let lock = WAKE_TARGET_SET_LOCK.get_or_init(|| StdMutex::new(()));
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(250);
+    let _guard = loop {
+        match lock.try_lock() {
+            Ok(guard) => break guard,
+            Err(std::sync::TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            Err(_) => return Err(DesignatedChatTargetErrorV1::Unavailable),
+        }
+    };
     let (control_workspace, wake_store) = project_web_store(control_workspace, project_id)?;
     paired_project_target_readback_locked(&control_workspace, &wake_store, project_id)
 }
@@ -4079,8 +4103,12 @@ pub(crate) fn operator_bind_project_web_target_with_witness(
         .get_or_init(|| StdMutex::new(()))
         .lock()
         .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
-    let (control_workspace, wake_store) =
-        project_web_store_expected(control_workspace, project_id, Some(expected_wake_root))?;
+    let (control_workspace, wake_store) = project_web_store_expected(
+        control_workspace,
+        project_id,
+        Some(expected_wake_root),
+        false,
+    )?;
     bind_project_web_target_locked_with_witness(
         &control_workspace,
         &wake_store,
@@ -4122,7 +4150,7 @@ pub(crate) fn operator_bind_project_web_target_at_root(
         .lock()
         .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
     let (control_workspace, wake_store) =
-        project_web_store_expected(control_workspace, project_id, expected_wake_root)?;
+        project_web_store_expected(control_workspace, project_id, expected_wake_root, false)?;
     bind_project_web_target_locked(
         &control_workspace,
         &wake_store,
@@ -6006,7 +6034,7 @@ fn bounded_autonomy_continuation_error(value: &str) -> String {
 /// Registry fields are the control-plane snapshot. Wake and the context ledger
 /// are read independently and can change during this report; only an exact
 /// paired readback may be shown as paired. This never grants delivery authority.
-fn web_project_registry_status(workspace: &Path, registry: &Value) -> Value {
+pub(crate) fn web_project_registry_status(workspace: &Path, registry: &Value) -> Value {
     web_project_registry_status_with(
         workspace,
         registry,
@@ -6033,7 +6061,7 @@ fn web_project_registry_status_with(
                 .get("chatgptTargetHistory")
                 .cloned()
                 .unwrap_or_else(|| json!([]));
-            let paired = operator_read_project_web_target(workspace, project_id);
+            let paired = operator_read_project_web_target_status(workspace, project_id);
             let wake = match &paired {
                 Ok(Some(target))
                     if registered_url == Some(target.url.as_str())
@@ -6105,14 +6133,12 @@ fn annotate_rollover_current_target(
     let paired_current = current == Some(true);
     object.insert("matchesPairedTarget".into(), json!(current));
     if let Some(automation) = object.get_mut("automation").and_then(Value::as_object_mut) {
-        let observed = automation.get("targetGeneration").and_then(Value::as_u64);
-        let current = paired_target
-            .and_then(|target| observed.map(|generation| generation == target.generation));
-        automation.insert("sameGenerationAsPairedTarget".into(), json!(current));
+        annotate_generation_observation(automation, paired_target);
         if let Some(failure) = automation
             .get_mut("lastFailure")
             .and_then(Value::as_object_mut)
         {
+            annotate_generation_observation(failure, paired_target);
             let relevant = prepared
                 && paired_current
                 && failure.get("reason").and_then(Value::as_str) == Some("EXISTING_DRAFT")
@@ -6126,6 +6152,34 @@ fn annotate_rollover_current_target(
             );
         }
     }
+}
+
+/// Persisted ticks and failures are observations, never proof of a live worker.
+/// Keep their original stage/reason for recovery while explicitly qualifying
+/// older generations against the independently paired target in this read.
+fn annotate_generation_observation(
+    observation: &mut serde_json::Map<String, Value>,
+    paired_target: Option<&ProjectWebTargetV1>,
+) {
+    let observed = observation
+        .get("targetGeneration")
+        .and_then(Value::as_u64)
+        .filter(|generation| *generation > 0);
+    let relation = paired_target
+        .filter(|target| target.generation > 0)
+        .and_then(|target| observed.map(|generation| generation.cmp(&target.generation)));
+    let scope = match relation {
+        Some(std::cmp::Ordering::Less) => "HISTORICAL_GENERATION_SNAPSHOT",
+        Some(std::cmp::Ordering::Equal) => "SAME_GENERATION_SNAPSHOT",
+        Some(std::cmp::Ordering::Greater) => "UNEXPECTED_FUTURE_GENERATION",
+        None => "UNVERIFIED_GENERATION",
+    };
+    observation.insert("observationOnly".into(), json!(true));
+    observation.insert("generationScope".into(), json!(scope));
+    observation.insert(
+        "sameGenerationAsPairedTarget".into(),
+        json!(relation.map(|ordering| ordering == std::cmp::Ordering::Equal)),
+    );
 }
 
 fn web_target_status_reason(error: DesignatedChatTargetErrorV1) -> &'static str {
@@ -6155,11 +6209,12 @@ fn web_project_context_status(
     {
         return json!({"status":"UNOBSERVED","advisory":true});
     }
-    let result = crate::web_conversation_context::WebContextStore::open(&root).and_then(|store| {
-        let active = store.active_key(project_id)?;
-        let history = store.project_history(project_id)?;
-        Ok((active, history))
-    });
+    let result =
+        crate::web_conversation_context::WebContextStore::open_read_only(&root).and_then(|store| {
+            let active = store.active_key(project_id)?;
+            let history = store.project_history(project_id)?;
+            Ok((active, history))
+        });
     let Ok((active, history)) = result else {
         return json!({"status":"UNOBSERVED_OR_UNAVAILABLE","advisory":true});
     };
@@ -6171,14 +6226,17 @@ fn web_project_context_status(
         })
     });
     let current = if matches_paired {
-        history.iter().find(|pressure| pressure.is_current).cloned()
+        history
+            .iter()
+            .find(|pressure| pressure.is_current && active.as_ref() == Some(&pressure.key))
+            .cloned()
     } else {
         None
     };
     let count = history.len();
     let recent: Vec<_> = history.into_iter().rev().take(8).collect();
     json!({
-        "status":if matches_paired {"CURRENT_ADVISORY"} else {"STALE_OR_UNPAIRED_ADVISORY"},
+        "status":if current.is_some() {"CURRENT_ADVISORY"} else {"STALE_OR_UNPAIRED_ADVISORY"},
         "advisory":true,
         "conversationCount":count,
         "historyTruncated":count > recent.len(),
@@ -6214,7 +6272,8 @@ fn load_wake_progress_snapshot(
     {
         return Err("WAKE_STATE_UNAVAILABLE");
     }
-    let store = catdesk_wake::store::Store::open(&root).map_err(|_| "WAKE_STATE_UNAVAILABLE")?;
+    let store =
+        catdesk_wake::store::Store::open_read_only(&root).map_err(|_| "WAKE_STATE_UNAVAILABLE")?;
     store.config().map_err(|_| "WAKE_STATE_UNAVAILABLE")?;
     let events = store.events().map_err(|_| "WAKE_QUEUE_UNAVAILABLE")?;
     let mut deliveries = Vec::new();
@@ -10457,6 +10516,14 @@ mod tests {
             "WAKE_STOPPED"
         );
         assert!(result["projects"][0]["rollover"]["matchesPairedTarget"].is_null());
+        assert_eq!(
+            result["projects"][0]["rollover"]["automation"]["generationScope"],
+            "UNVERIFIED_GENERATION"
+        );
+        assert_eq!(
+            result["projects"][2]["rollover"]["automation"]["observationOnly"],
+            true
+        );
         for project in result["projects"].as_array().unwrap() {
             assert!(project["workIntent"]["status"].as_str().is_some());
         }
@@ -10475,21 +10542,96 @@ mod tests {
             generation: 8,
             historical_urls: Vec::new(),
         };
-        let mut rollover = json!({"status":"DURABLE_SNAPSHOT","phase":"RESPONSE_PENDING",
+        let mut rollover = json!({"status":"DURABLE_SNAPSHOT","phase":"CONTINUATION_QUEUED",
             "targetGeneration":8,"targetDigest":"a".repeat(64),
-            "automation":{"status":"RECORDED","stage":"AWAITING_RESPONSE",
-                "targetGeneration":7}});
+            "continuationProved":true,"continuationProofStatus":"VERIFIED",
+            "automation":{"status":"RECORDED","stage":"SUBMISSION_UNKNOWN",
+                "targetGeneration":7,"lastFailure":{"reason":"BOOTSTRAP_PRE_SEND_UNKNOWN",
+                    "tickUtc":42,"targetGeneration":7}}});
         annotate_rollover_current_target(&mut rollover, Some(&target));
         assert_eq!(rollover["matchesPairedTarget"], true);
         assert_eq!(
             rollover["automation"]["sameGenerationAsPairedTarget"],
             false
         );
+        assert_eq!(
+            rollover["automation"]["generationScope"],
+            "HISTORICAL_GENERATION_SNAPSHOT"
+        );
+        assert_eq!(rollover["automation"]["stage"], "SUBMISSION_UNKNOWN");
+        assert_eq!(
+            rollover["automation"]["lastFailure"]["generationScope"],
+            "HISTORICAL_GENERATION_SNAPSHOT"
+        );
+        assert_eq!(
+            rollover["automation"]["lastFailure"]["reason"],
+            "BOOTSTRAP_PRE_SEND_UNKNOWN"
+        );
+        assert!(rollover["automation"]["lastFailure"]["requiredAction"].is_null());
+        assert_eq!(rollover["continuationProved"], true);
+        assert_eq!(rollover["continuationProofStatus"], "VERIFIED");
         assert!(rollover.get("targetDigest").is_none());
         let mut same_generation_wrong_digest = json!({"status":"DURABLE_SNAPSHOT",
             "targetGeneration":8,"targetDigest":"b".repeat(64)});
         annotate_rollover_current_target(&mut same_generation_wrong_digest, Some(&target));
         assert_eq!(same_generation_wrong_digest["matchesPairedTarget"], false);
+    }
+
+    #[test]
+    fn web_rollover_observation_scope_requires_a_valid_paired_generation() {
+        let target = ProjectWebTargetV1 {
+            project_id: "alpha".into(),
+            url: "https://chatgpt.com/c/current".into(),
+            sha256: "a".repeat(64),
+            generation: 8,
+            historical_urls: Vec::new(),
+        };
+        for (observed, scope, same) in [
+            (json!(7), "HISTORICAL_GENERATION_SNAPSHOT", json!(false)),
+            (json!(8), "SAME_GENERATION_SNAPSHOT", json!(true)),
+            (json!(9), "UNEXPECTED_FUTURE_GENERATION", json!(false)),
+            (json!(0), "UNVERIFIED_GENERATION", Value::Null),
+            (Value::Null, "UNVERIFIED_GENERATION", Value::Null),
+            (json!("8"), "UNVERIFIED_GENERATION", Value::Null),
+        ] {
+            for paired in [Some(&target), None] {
+                let mut rollover = json!({"phase":"CONTINUATION_QUEUED",
+                    "automation":{"stage":"OBSERVED","targetGeneration":8,
+                        "lastFailure":{"reason":"EXISTING_DRAFT","tickUtc":42,
+                            "targetGeneration":observed}}});
+                annotate_rollover_current_target(&mut rollover, paired);
+                let failure = &rollover["automation"]["lastFailure"];
+                assert_eq!(failure["observationOnly"], true);
+                assert_eq!(
+                    failure["generationScope"],
+                    if paired.is_some() {
+                        scope
+                    } else {
+                        "UNVERIFIED_GENERATION"
+                    }
+                );
+                assert_eq!(
+                    failure["sameGenerationAsPairedTarget"],
+                    if paired.is_some() {
+                        same.clone()
+                    } else {
+                        Value::Null
+                    }
+                );
+                assert_eq!(failure["targetGeneration"], observed);
+                assert_eq!(failure["reason"], "EXISTING_DRAFT");
+                assert!(failure["requiredAction"].is_null());
+                // The automation's newer tick cannot relabel its older failure.
+                assert_eq!(
+                    rollover["automation"]["generationScope"],
+                    if paired.is_some() {
+                        "SAME_GENERATION_SNAPSHOT"
+                    } else {
+                        "UNVERIFIED_GENERATION"
+                    }
+                );
+            }
+        }
     }
 
     #[test]

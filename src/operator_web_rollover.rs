@@ -1068,14 +1068,11 @@ pub(super) fn status_read_only(workspace: &Path, project: &str) -> Result<Value,
     {
         let proof = (|| -> Result<(), String> {
             let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
-            // Status must never initialize missing Wake state. Validate every
-            // directory Store::open would otherwise create before opening it.
-            existing_directory(&root)?;
-            for child in ["queue", "archive", "deliveries", "turns", "logs"] {
-                existing_directory(&root.join(child))?;
-            }
-            let wake = Store::open(&root)?;
-            let current = paired(workspace, project)?;
+            let wake = Store::open_read_only(&root)?;
+            let current = mcp::operator_read_project_web_target_status(workspace, project)
+                .map_err(|_| "WEB_ROLLOVER_PAIRED_TARGET_REQUIRED")?
+                .ok_or("WEB_ROLLOVER_TARGET_UNBOUND")?;
+            let current = Target::new(current.generation, current.url)?;
             continuation_ready_for_work(&store, &wake, workspace, project, &current, &record)
         })();
         result["continuationProved"] = json!(proof.is_ok());

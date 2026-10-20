@@ -361,6 +361,16 @@ async fn three_projects_route_only_to_prepared_development_wake() {
     let status = web_action(&control, &["operator", "web", "status"]).await;
     assert_eq!(status["runtimeMode"], "DEVELOPMENT_UNPROTECTED");
     assert_eq!(status["projects"].as_array().unwrap().len(), 3);
+    let central = &status["webProjects"];
+    assert_eq!(central["readOnly"], true);
+    assert_eq!(central["status"], "SOURCE_STATUS_ONLY");
+    assert_eq!(central["installedAcceptance"], "UNVERIFIED");
+    assert_eq!(central["projects"].as_array().unwrap().len(), 3);
+    for project in central["projects"].as_array().unwrap() {
+        assert_eq!(project["wake"]["status"], "PAIRED");
+        assert_eq!(project["context"]["status"], "CURRENT_ADVISORY");
+        assert_eq!(project["rollover"]["status"], "UNOBSERVED");
+    }
     for project in status["projects"].as_array().unwrap() {
         assert_eq!(project["wake"]["status"], "PAIRED");
         assert_eq!(project["wake"]["runtimeMode"], "DEVELOPMENT_UNPROTECTED");

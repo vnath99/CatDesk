@@ -212,6 +212,7 @@ fn require_expected_retirement_event(
 /// releases it on process death; atomic JSON replacement preserves prior bytes.
 pub struct Store {
     root: PathBuf,
+    read_only: bool,
 }
 pub struct HostLease {
     _lock: File,
@@ -235,6 +236,20 @@ impl Store {
         }
         Ok(Self {
             root: fs::canonicalize(root).map_err(|_| "CONFIG_ROOT_UNAVAILABLE")?,
+            read_only: false,
+        })
+    }
+
+    /// Diagnostic access never initializes directories/locks or waits for a
+    /// writer. Mutating methods refuse this handle before changing state.
+    pub fn open_read_only(root: &Path) -> Result<Self> {
+        safe_directories_mode(root, false)?;
+        for child in ["queue", "archive", "deliveries", "turns", "logs"] {
+            safe_directories_mode(&root.join(child), false)?;
+        }
+        Ok(Self {
+            root: fs::canonicalize(root).map_err(|_| "CONFIG_ROOT_UNAVAILABLE")?,
+            read_only: true,
         })
     }
 
@@ -262,13 +277,19 @@ impl Store {
         if !canonical.starts_with(&trusted) {
             return Err("CONFIG_ROOT_OUTSIDE_TEST_PARENT".into());
         }
-        Ok(Self { root: canonical })
+        Ok(Self {
+            root: canonical,
+            read_only: false,
+        })
     }
     pub fn root(&self) -> &Path {
         &self.root
     }
 
     fn lock(&self) -> Result<File> {
+        if self.read_only {
+            return Err("STATE_READ_ONLY".into());
+        }
         let path = self.root.join("transaction.lock");
         reject_link(&path)?;
         let file = OpenOptions::new()
@@ -279,6 +300,23 @@ impl Store {
             .open(path)
             .map_err(|_| "CONFIG_LOCK_UNAVAILABLE")?;
         file.lock().map_err(|_| "CONFIG_LOCK_UNAVAILABLE")?;
+        Ok(file)
+    }
+    fn read_lock(&self) -> Result<File> {
+        if !self.read_only {
+            return self.lock();
+        }
+        let path = self.root.join("transaction.lock");
+        reject_link(&path)?;
+        let file = File::open(path).map_err(|_| "CONFIG_LOCK_UNAVAILABLE")?;
+        if !file
+            .metadata()
+            .map_err(|_| "CONFIG_LOCK_UNAVAILABLE")?
+            .is_file()
+        {
+            return Err("CONFIG_LOCK_UNAVAILABLE".into());
+        }
+        file.try_lock_shared().map_err(|_| "CONFIG_LOCK_BUSY")?;
         Ok(file)
     }
     fn read_config(&self) -> Result<Config> {
@@ -299,7 +337,7 @@ impl Store {
         self.read_config().map(|_| ())
     }
     pub fn config(&self) -> Result<Config> {
-        let _lock = self.lock()?;
+        let _lock = self.read_lock()?;
         self.read_config()
     }
     pub fn set_target(&self, project: &str, expected: u64, url: &str) -> Result<Target> {
@@ -368,7 +406,7 @@ impl Store {
             return Err("CONFIG_SOURCE_WITNESS_INVALID".into());
         }
         source.validate()?;
-        let _lock = self.lock()?;
+        let _lock = self.read_lock()?;
         if self.read_config()?.targets.get(project) != Some(source) {
             return Err("CONFIG_SOURCE_WITNESS_TARGET_MISMATCH".into());
         }
@@ -856,11 +894,11 @@ impl Store {
         Ok(Some(timer))
     }
     pub fn timer(&self, id: &str) -> Result<Option<TurnTimer>> {
-        let _lock = self.lock()?;
+        let _lock = self.read_lock()?;
         self.read_timer(id)
     }
     pub fn timers(&self) -> Result<Vec<TurnTimer>> {
-        let _lock = self.lock()?;
+        let _lock = self.read_lock()?;
         let mut timers = Vec::new();
         for entry in fs::read_dir(self.root.join("turns")).map_err(|_| "TURN_TIMER_UNAVAILABLE")? {
             let path = entry.map_err(|_| "TURN_TIMER_UNAVAILABLE")?.path();
@@ -977,7 +1015,7 @@ impl Store {
     }
 
     pub fn events(&self) -> Result<Vec<Event>> {
-        let _lock = self.lock()?;
+        let _lock = self.read_lock()?;
         let mut events = Vec::new();
         for entry in fs::read_dir(self.root.join("queue")).map_err(|_| "QUEUE_UNAVAILABLE")? {
             let path = entry.map_err(|_| "QUEUE_UNAVAILABLE")?.path();
@@ -1013,7 +1051,7 @@ impl Store {
         Ok(Some(delivery))
     }
     pub fn delivery(&self, id: &str) -> Result<Option<Delivery>> {
-        let _lock = self.lock()?;
+        let _lock = self.read_lock()?;
         self.read_delivery(id)
     }
     /// A host holds a separate lifetime lock. Only after that lock is acquired
@@ -1606,6 +1644,9 @@ impl Store {
         fs::remove_file(self.event_path(id)).map_err(|_| "QUEUE_ARCHIVE_FAILED".into())
     }
     pub fn host_lock(&self) -> Result<HostLease> {
+        if self.read_only {
+            return Err("STATE_READ_ONLY".into());
+        }
         let path = self.root.join("host.lock");
         reject_link(&path)?;
         let file = OpenOptions::new()
@@ -1732,6 +1773,10 @@ fn reject_link(path: &Path) -> Result<()> {
     }
 }
 fn safe_directories(path: &Path) -> Result<()> {
+    safe_directories_mode(path, true)
+}
+
+fn safe_directories_mode(path: &Path, create: bool) -> Result<()> {
     if !path.is_absolute() {
         return Err("CONFIG_ROOT_NOT_ABSOLUTE".into());
     }
@@ -1752,6 +1797,9 @@ fn safe_directories(path: &Path) -> Result<()> {
             .try_exists()
             .map_err(|_| "CONFIG_ROOT_UNAVAILABLE")?
         {
+            if !create {
+                return Err("CONFIG_ROOT_UNAVAILABLE".into());
+            }
             fs::create_dir(&current).map_err(|_| "CONFIG_ROOT_UNAVAILABLE")?;
         }
         if !current.is_dir() {
@@ -1780,6 +1828,87 @@ mod canonical_store_root_tests {
         let reopened = Store::open(&canonical).unwrap();
         assert_eq!(normal.root(), reopened.root());
         assert_eq!(reopened.config().unwrap().schema_version, PROTOCOL_VERSION);
+        fs::remove_dir_all(&root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod read_only_store_tests {
+    use super::*;
+
+    fn root() -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "catdesk-wake-read-only-{}-{}-{}",
+            std::process::id(),
+            now(),
+            TEMP.fetch_add(1, Ordering::Relaxed)
+        ))
+    }
+
+    #[test]
+    fn missing_root_and_children_are_never_initialized() {
+        let root = root();
+        assert!(Store::open_read_only(&root).is_err());
+        assert!(!root.exists());
+        fs::create_dir(&root).unwrap();
+        assert!(Store::open_read_only(&root).is_err());
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 0);
+        fs::remove_dir(&root).unwrap();
+    }
+
+    #[test]
+    fn missing_transaction_lock_is_not_created() {
+        let root = root();
+        let writer = Store::open(&root).unwrap();
+        writer.initialize().unwrap();
+        fs::remove_file(root.join("transaction.lock")).unwrap();
+        let reader = Store::open_read_only(&root).unwrap();
+        assert!(reader.config().is_err());
+        assert!(reader.events().is_err());
+        assert!(!root.join("transaction.lock").exists());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn existing_reads_preserve_bytes_and_refuse_writes_or_host_ownership() {
+        let root = root();
+        let writer = Store::open(&root).unwrap();
+        writer.initialize().unwrap();
+        let before = fs::read(root.join("config.json")).unwrap();
+        let reader = Store::open_read_only(&root).unwrap();
+        assert_eq!(reader.config().unwrap().schema_version, PROTOCOL_VERSION);
+        assert!(reader.events().unwrap().is_empty());
+        assert!(reader.timers().unwrap().is_empty());
+        assert!(reader.timer("missing-event").unwrap().is_none());
+        assert!(reader.delivery("missing-event").unwrap().is_none());
+        assert_eq!(reader.initialize().unwrap_err(), "STATE_READ_ONLY");
+        assert_eq!(
+            reader
+                .set_target("alpha", 0, "https://chatgpt.com/c/chat-alpha")
+                .unwrap_err(),
+            "STATE_READ_ONLY"
+        );
+        assert!(reader.host_lock().is_err());
+        assert!(!root.join("host.lock").exists());
+        assert_eq!(fs::read(root.join("config.json")).unwrap(), before);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn busy_writer_returns_without_waiting_or_releasing_its_lock() {
+        let root = root();
+        let writer = Store::open(&root).unwrap();
+        writer.initialize().unwrap();
+        let reader = Store::open_read_only(&root).unwrap();
+        let held = writer.lock().unwrap();
+        assert_eq!(reader.config().unwrap_err(), "CONFIG_LOCK_BUSY");
+        assert_eq!(reader.events().unwrap_err(), "CONFIG_LOCK_BUSY");
+        assert_eq!(
+            reader.delivery("missing-event").unwrap_err(),
+            "CONFIG_LOCK_BUSY"
+        );
+        drop(held);
+        assert!(reader.config().is_ok());
         fs::remove_dir_all(&root).unwrap();
     }
 }

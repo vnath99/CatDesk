@@ -1,5 +1,43 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 central status and read-only access (SOURCE + STOPPED DEVELOPMENT READBACK)
+
+The central rollover report now qualifies saved automation ticks and failures
+independently against its paired target generation. Earlier generations are
+explicitly `HISTORICAL_GENERATION_SNAPSHOT`; matching generations remain
+observations, never proof of a live worker. Missing/invalid generations and
+unexpected future generations remain unverified or anomalous. Original stages,
+failure reasons and completed continuation proof remain preserved.
+
+The existing local `operator web status` now includes the same `webProjects`
+projection as `autonomy_project_registry_read`, allowing central status checks
+without the connector. Existing local fields remain available. Registry reads
+bypass unrelated autonomy-store initialization. Wake/context diagnostic handles
+open existing directories and lock files, refuse mutations, and use nonblocking
+shared file locks. Status target-lock acquisition is bounded to 250 ms; execution
+retains its existing control-lock behavior. Context status also requires its
+reported current pressure to match the sampled active conversation key.
+
+Final focused regression groups passed 42 Web/MCP/context tests, 59 Web runtime
+tests (overlapping groups), one missing-registry read test and 23 Wake store
+tests. Coverage includes absent roots/locks, busy writers, preserved file bytes,
+refused mutations/host ownership, historical failures, and three-project central
+status. Strict root/Wake Clippy, both builds, formatting and diff checks pass.
+
+One source-built local status invocation against the stopped development control
+completed in 26 seconds. All seven registered projects were reported; the fast
+canary remained generation 2, `CONTINUATION_QUEUED`, paired and continuation
+verified. Its saved generation-1 failure was explicitly historical. All 98
+compared state files and 12 directory entries were unchanged after that read,
+and all five original registrations/targets still matched their baseline.
+No browser, connector request, send, WakeHost or recurring automation was used.
+
+Evidence: `checkpoints/web-status-oct20` in the parent workspace. Production
+still selects stopped dev.84; installed parity, migration admission/provisioning,
+exact-source remote CI and fresh multi-project delivery remain open gates.
+The connector's last HTTP 429 is separate from these local source/readback
+results. **Overall October MVP: `PARTIAL`.**
+
 ## October 20 scheduler ownership and shutdown (SOURCE VERIFIED)
 
 Inspection found that stopping the MCP server dropped blocking project task

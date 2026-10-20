@@ -402,6 +402,9 @@ pub fn handle_tool(name: &str, args: Value, workspace: &Path) -> Result<Value, S
     if name == "autonomy_contract_validate" && is_capability_query(&args)? {
         return Ok(runtime_capability_manifest());
     }
+    if name == "autonomy_project_registry_read" {
+        return AutonomousSupervisorV1::project_registry_read(&workspace);
+    }
     let supervisor = AutonomousSupervisorV1::open(&workspace)?;
     match name {
         "autonomy_contract_create" => {
@@ -518,7 +521,6 @@ pub fn handle_tool(name: &str, args: Value, workspace: &Path) -> Result<Value, S
         "autonomy_review_inbox_ack" => {
             supervisor.ack_review_inbox(required_str(&args, "recordId")?)
         }
-        "autonomy_project_registry_read" => supervisor.project_registry_read(),
         "autonomy_project_registry_bind" => supervisor.project_registry_bind(&args),
         "autonomy_project_registry_preflight" => supervisor.project_registry_preflight(
             required_str(&args, "projectId")?,
@@ -670,11 +672,12 @@ impl AutonomousSupervisorV1 {
         GithubBootstrapStore::open(self.workspace.join(".catdesk").join("github-bootstrap"))
     }
 
-    fn project_registry_read(&self) -> Result<Value, String> {
-        let registry = self
-            .project_registry()?
-            .load_registry()
-            .map_err(|_| "project registry is unavailable".to_string())?;
+    fn project_registry_read(workspace: &Path) -> Result<Value, String> {
+        let registry =
+            AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
+                .map_err(|_| "project registry is unavailable".to_string())?
+                .load_registry()
+                .map_err(|_| "project registry is unavailable".to_string())?;
         Ok(json!({
             "schemaVersion": registry.schema_version,
             "maximumCodexWorkers": registry.maximum_codex_workers,
@@ -5115,6 +5118,15 @@ mod tests {
             "the exact typed artifact must remain a current reviewed completion output"
         );
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn project_registry_read_does_not_initialize_missing_state() {
+        let root = std::env::temp_dir().join(format!("catdesk-project-read-{}", Uuid::new_v4()));
+        std::fs::create_dir(&root).expect("workspace");
+        assert!(handle_tool("autonomy_project_registry_read", json!({}), &root).is_err());
+        assert!(!root.join(".catdesk").exists());
+        std::fs::remove_dir_all(&root).expect("fixture cleanup");
     }
 
     #[test]
