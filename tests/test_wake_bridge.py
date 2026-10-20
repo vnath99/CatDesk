@@ -1219,7 +1219,6 @@ class WakeBridgeTests(unittest.TestCase):
         self.assertEqual(["open", "close"], contexts)
 
     def test_outer_retry_never_relaunches_after_submission_boundary_starts(self):
-        contexts, writes = [], []
         message = wake_bridge.MESSAGE.format(record_id=self.record_id)
 
         class Cdp:
@@ -1242,21 +1241,31 @@ class WakeBridgeTests(unittest.TestCase):
             def activate_cdp_mode(self, _url):
                 return None
 
-        sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
-        with patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=SB)}), patch.object(
-            wake_bridge.time, "sleep"
-        ), patch.object(sink, "wait_for_page_readiness", side_effect=lambda _sb, cdp: cdp), patch.object(
-            sink, "wait_for_idle"
-        ), patch.object(sink, "pre_typing_ready"), patch.object(
-            sink, "pre_submit_receipt_snapshot", return_value=0
-        ), patch.object(sink, "best_effort_present_browser"), patch.object(
-            sink, "text", side_effect=wake_bridge.Attention("BROWSER_NETWORK_ERROR")
-        ):
-            with self.assertRaisesRegex(wake_bridge.Attention, "BROWSER_NETWORK_ERROR"):
-                sink.wake(self.record_id, message, lambda: True, lambda: None)
+        for fail_at_checkpoint in (True, False):
+            with self.subTest(fail_at_checkpoint=fail_at_checkpoint):
+                contexts, writes, checkpoints = [], [], []
 
-        self.assertEqual([(message, 1)], writes)
-        self.assertEqual(["open", "close"], contexts)
+                def before_submit():
+                    checkpoints.append("submission-boundary")
+                    if fail_at_checkpoint:
+                        raise wake_bridge.Attention("BROWSER_NETWORK_ERROR")
+
+                sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
+                with patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=SB)}), patch.object(
+                    wake_bridge.time, "sleep"
+                ), patch.object(sink, "wait_for_page_readiness", side_effect=lambda _sb, cdp: cdp), patch.object(
+                    sink, "wait_for_idle"
+                ), patch.object(sink, "pre_typing_ready"), patch.object(
+                    sink, "pre_submit_receipt_snapshot", return_value=0
+                ), patch.object(sink, "best_effort_present_browser"), patch.object(
+                    sink, "text", side_effect=wake_bridge.Attention("BROWSER_NETWORK_ERROR")
+                ):
+                    with self.assertRaisesRegex(wake_bridge.Attention, "BROWSER_NETWORK_ERROR"):
+                        sink.wake(self.record_id, message, lambda: True, before_submit)
+
+                self.assertEqual(["submission-boundary"], checkpoints)
+                self.assertEqual([] if fail_at_checkpoint else [(message, 1)], writes)
+                self.assertEqual(["open", "close"], contexts)
 
     def test_production_waits_for_safe_send_and_never_converts_disabled_to_enter(self):
         class Clock:
@@ -2546,6 +2555,10 @@ class WakeBridgeTests(unittest.TestCase):
     def test_presentation_is_skipped_for_non_actionable_draft_or_existing_digest(self):
         sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
         message, presented = wake_bridge.MESSAGE.format(record_id=self.record_id), []
+        class Clock:
+            def __init__(self): self.now = 0.0
+            def monotonic(self): return self.now
+            def sleep(self, seconds): self.now += seconds
         class Cdp:
             def __init__(self, composer="", messages=None):
                 self.composer, self.messages = composer, messages or ["prior"]
@@ -2566,8 +2579,13 @@ class WakeBridgeTests(unittest.TestCase):
             def __exit__(self, *_args): return False
             def activate_cdp_mode(self, _url): return None
         for cdp, actionable in ((Cdp("draft"), lambda: True), (Cdp(), lambda: False), (Cdp(messages=[message]), lambda: True)):
+            clock = Clock()
             with patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=lambda **kwargs: SB(cdp, **kwargs))}), patch.object(
                 wake_bridge.CdpSink, "best_effort_windows_foreground", side_effect=lambda _pid: presented.append("native")
+            ), patch.object(
+                sink, "wait_for_page_readiness", side_effect=lambda sb, current: wake_bridge.CdpSink.wait_for_page_readiness(
+                    sink, sb, current, monotonic=clock.monotonic, sleeper=clock.sleep
+                )
             ):
                 with self.assertRaises(wake_bridge.Attention):
                     sink.wake(self.record_id, message, actionable, lambda: self.fail("submission boundary"))

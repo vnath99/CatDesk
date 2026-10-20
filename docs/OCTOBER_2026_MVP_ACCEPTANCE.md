@@ -1,5 +1,38 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 complete local regression gates (SOURCE VERIFIED)
+
+The full root suite passed **1,529 tests / 28 ignored** on `f9a4e83`.
+The full Wake run exposed a stale Rust-to-Python test selector referring to
+the old browser-write-boundary test name. The selector now invokes the existing
+submission-boundary test, extended to check both a network error at the durable
+checkpoint before typing and a network error after typing. Neither may relaunch
+the browser context or repeat the checkpoint.
+
+The required full Python CI command then exposed two stale cleanup fakes missing
+the exact-URL and text-entry operations used by the current bridge. Updated
+fixtures assert owned-tab closure before context exit after success and unknown
+receipt failure, plus no typing or receipt after target drift at the checkpoint.
+The shared browser's quit method remains forbidden. The draft/presentation
+fixture now runs the production readiness logic with its virtual clock.
+
+Final Wake verification passed **287 library tests / one ignored**, all binary
+and integration targets, and its Python bridge regression harness. Full offline
+pytest passed **229 tests / one skipped / 35 subtests**, using existing pytest
+9.1.1 with third-party plugin autoload disabled. Strict Wake Clippy, formatting
+and diff checks pass. These changes affect tests only; main runtime code and
+the stopped v13 development package remain the preceding verified build.
+Evidence: parent workspace `checkpoints/web-regression-oct20`.
+
+Migration remains held on independently reviewed closed-store/launcher evidence
+and protected bootstrap/admission. Task closure already preserves the original
+target witness after a rebind; no replacement implementation was needed.
+Next source task: make the scheduler consult the ledger's existing one-time
+incomplete-history eligibility before attempting another handoff, preserving
+ordinary observed-pressure rollover and independent projects. No recurring
+browser/Wake process or completed canary was started or replayed for these tests.
+Remote exact-commit CI and installed/live acceptance remain separate open gates.
+
 ## October 20 central status and read-only access (SOURCE + STOPPED DEVELOPMENT READBACK)
 
 The central rollover report now qualifies saved automation ticks and failures
