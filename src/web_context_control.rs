@@ -29,7 +29,10 @@ pub(crate) struct CaptureRequest {
     pub(crate) expected_target_sha256: String,
 }
 
-const CAPTURE_TIMEOUT: Duration = Duration::from_secs(60);
+// Cover the existing 30s profile-lock wait and 90s adapter initialization,
+// with remaining time for the bounded page/snapshot read. An outer 60s cap
+// cancelled valid startup before its own diagnostic deadline could report.
+const CAPTURE_TIMEOUT: Duration = Duration::from_secs(180);
 const MAX_CAPTURES: usize = 4;
 type CaptureScope = (PathBuf, String);
 static CAPTURES: OnceLock<Mutex<BTreeSet<CaptureScope>>> = OnceLock::new();
@@ -73,19 +76,29 @@ impl Drop for CancelCapture {
 }
 
 pub(crate) async fn capture(workspace: &Path, args: Value) -> Result<Value, String> {
-    let result = capture_with(workspace, args, |control, request, keep_running| {
-        crate::operator_facade::capture_web_context_expected_guarded(
-            control,
-            &request.project_id,
-            (
-                request.expected_target_generation,
-                &request.expected_target_sha256,
-            ),
-            keep_running,
-        )
-    })
-    .await;
-    result.map_err(|error| match error.as_str() {
+    capture_with(workspace, args, read_snapshot)
+        .await
+        .map_err(capture_error)
+}
+
+fn read_snapshot(
+    control: &Path,
+    request: &CaptureRequest,
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<Value, String> {
+    crate::operator_facade::capture_web_context_expected_guarded(
+        control,
+        &request.project_id,
+        (
+            request.expected_target_generation,
+            &request.expected_target_sha256,
+        ),
+        keep_running,
+    )
+}
+
+fn capture_error(error: String) -> String {
+    match error.as_str() {
         "BROWSER_SESSION_BUSY" | "COOPERATIVE_HOST_PROTOCOL_REQUIRED" => {
             "WEB_CONTEXT_CAPTURE_OWNER_BUSY".into()
         }
@@ -94,7 +107,42 @@ pub(crate) async fn capture(workspace: &Path, args: Value) -> Result<Value, Stri
         }
         "SOURCE_SNAPSHOT_TIMEOUT" => "WEB_CONTEXT_CAPTURE_TIMEOUT".into(),
         _ => error,
-    })
+    }
+}
+
+/// The local operator selects the currently paired target without accepting a
+/// URL override. Resolve it once, then use the same witnessed bounded reader.
+pub(crate) async fn capture_current(workspace: &Path, project: &str) -> Result<Value, String> {
+    capture_current_with(workspace, project, read_snapshot)
+        .await
+        .map_err(capture_error)
+}
+
+pub(crate) async fn capture_current_with<F>(
+    workspace: &Path,
+    project: &str,
+    snapshot: F,
+) -> Result<Value, String>
+where
+    F: FnOnce(&Path, &CaptureRequest, &dyn Fn() -> Result<(), String>) -> Result<Value, String>
+        + Send
+        + 'static,
+{
+    if project.len() > 128 || !valid_id(project) {
+        return Err("WEB_CONTEXT_ARGUMENTS_INVALID".into());
+    }
+    let target = mcp::operator_read_project_web_target(workspace, project)
+        .map_err(|_| "WEB_CONTEXT_PROJECT_UNAVAILABLE")?
+        .ok_or("WEB_CONTEXT_PAIRED_TARGET_REQUIRED")?;
+    let mut result = capture_with(
+        workspace,
+        json!({"projectId":project,
+        "expectedTargetGeneration":target.generation,"expectedTargetSha256":target.sha256}),
+        snapshot,
+    )
+    .await?;
+    result["invocationSource"] = json!("STANDALONE_OPERATOR");
+    Ok(result)
 }
 
 pub(crate) async fn capture_with<F>(

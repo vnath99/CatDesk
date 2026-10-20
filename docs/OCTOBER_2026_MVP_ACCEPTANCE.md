@@ -1,5 +1,55 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 bounded standalone capture (SOURCE + DEVELOPMENT LIVE READS)
+
+The existing `operator web context capture` now selects the current paired
+target and uses the same bounded, cancellable worker as MCP capture. It retains
+the current-generation/digest checks, per-project capture slot, private adapter
+owner and nonblocking count/hash ingestion. It returns before TUI/MCP startup,
+and identifies its result as `STANDALONE_OPERATOR`; this is not proof that the
+central connector exposes the new tool.
+
+Initial explicit PortfolioDesk and BYOVD reads hit the 60-second outer deadline
+and exited after cleanup at roughly 65 seconds. The observed first reader tree
+contained 14 reader descendants; all had exited at post-check. Source inspection
+showed that the outer limit preempted the adapter's existing 90-second startup
+allowance. The fixed overall budget is now 180 seconds, covering the existing
+30-second profile-lock wait, startup and a bounded snapshot read. Internal limits,
+owner checks and cleanup are unchanged; callers cannot override the budget.
+
+BYOVD then succeeded in 70.1 seconds: five complete visible messages were
+recorded, producing a 1,446-token visible estimate. Wake2 succeeded in 64.3
+seconds: six complete visible messages and an independent 895-token estimate.
+Both matched their existing generation-1 paired targets and returned no raw text,
+no send and no host start. Unknown history/coverage gaps remain explicit; these
+are advisory visible estimates, not exact provider context usage. The preserved
+authenticated profile was reused without sign-in or cloning. No owned browser
+process remained after either successful read.
+
+PortfolioDesk then succeeded in 69.4 seconds, recording six visible messages and
+its separate 916-token estimate. All three outputs matched the exact preflight
+project/generation/URL digest. Only two expected context-ledger files changed;
+PortfolioDesk's observation deduplicated without a ledger rewrite. The other 89
+tracked state files, all five original bindings, every rollover journal and the
+production pointer remained unchanged. Both controls stayed `STOPPED`, and the
+final owned browser/Wake process count was zero. No recurring browser activity
+was started. These source-matched live reads used the stopped v19 development
+package; they do not constitute protected installed or connector acceptance.
+
+Final source gates pass 1,536 root tests / 28 ignored, strict all-target/all-feature
+Clippy, application build, formatting and diff checks. Tests cover current-target
+selection after rebind, preserved predecessor history, invalid/unregistered scope,
+cancellation, contention and duplicate exclusion. Low disk space caused an early
+test link failure; only inactive worktree incremental caches and the failed test
+PDB were removed. Source, executables, immutable packages, profiles and state were
+preserved, and the full gate passed after rebuilding. Failure evidence is retained
+in parent `checkpoints/web-operator-capture-oct20`.
+
+The completed canary is excluded from these reads. No message was sent, no
+binding changed, and no recurring scheduler or WakeHost was started. Source/live
+read verification does not establish fresh work/review delivery, central connector
+parity, protected installation or remote CI acceptance. **October MVP: `PARTIAL`.**
+
 ## October 20 context ledger contention and install preflight (SOURCE; LIVE HELD)
 
 The existing zero-argument broker preflight returned exactly

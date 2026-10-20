@@ -1429,6 +1429,37 @@ async fn bounded_context_capture_is_independent_cancelled_and_generation_bound()
     );
     assert_eq!(meter.project_history("catdesk").unwrap(), catdesk_before);
 
+    // Standalone selection resolves the actual replacement and passes its
+    // exact witness to the shared bounded reader, preserving history.
+    let current = crate::web_context_control::capture_current_with(&control, "catdesk", read)
+        .await
+        .unwrap();
+    assert_eq!(current["invocationSource"], "STANDALONE_OPERATOR");
+    assert_eq!(current["observationSource"], "BOUND_BROWSER_SNAPSHOT");
+    assert_eq!(current["pressure"]["key"]["targetGeneration"], 2);
+    assert_eq!(meter.project_history("catdesk").unwrap().len(), 2);
+    let mut predecessor = catdesk_before[0].clone();
+    predecessor.is_current = false;
+    assert_eq!(meter.project_history("catdesk").unwrap()[0], predecessor);
+    assert_eq!(
+        crate::web_context_control::capture_current_with(&control, "../alpha", |_, _, _| panic!(
+            "invalid current reader"
+        ))
+        .await
+        .unwrap_err(),
+        "WEB_CONTEXT_ARGUMENTS_INVALID"
+    );
+    assert_eq!(
+        crate::web_context_control::capture_current_with(
+            &control,
+            "unregistered",
+            |_, _, _| panic!("unregistered current reader")
+        )
+        .await
+        .unwrap_err(),
+        "WEB_CONTEXT_PROJECT_UNAVAILABLE"
+    );
+
     // Failure/unwind also releases the worker's ownership without poisoning it.
     assert_eq!(
         capture_with(&control, args("alpha"), |_, _, _| panic!(

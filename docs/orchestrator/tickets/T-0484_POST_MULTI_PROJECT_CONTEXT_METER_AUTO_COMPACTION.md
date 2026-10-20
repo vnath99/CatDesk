@@ -9,6 +9,16 @@
 
 ### October 20 current acceptance and contention correction
 
+Current standalone capture uses the same witnessed bounded worker as MCP.
+Three real non-canary reads verified existing BYOVD, Wake2 and PortfolioDesk
+targets, independent visible estimates and normal reader cleanup. An earlier
+60-second outer limit cancelled startup prematurely; the fixed total budget is
+180 seconds, retaining the existing internal timeouts and cancellation. Timeout
+cleanup was also observed with all 14 recorded reader descendants gone.
+The v19 development package remains stopped; only two expected context ledgers
+changed. No message, target change, repeated canary or recurring start occurred.
+These reads do not establish fresh delivery or central connector parity.
+
 The controlled fast canary completed replacement creation, paired binding,
 history preservation and continuation with assistant response proof. Preserve
 that completed operation. Earlier failure descriptions below are historical.
@@ -20,7 +30,7 @@ release and unchanged state after refusal. Final root gate: 1,536 passed / 28
 ignored, strict Clippy/build/format pass. No browser, WakeHost, recurring worker
 or native conversation was started or changed to run these fixtures.
 
-The stopped development candidate is v17; this is not protected installed
+The stopped development candidate is v19; this is not protected installed
 acceptance. Fixed broker preflight reports `WAKE_BROKER_SERVICE_UNPROVISIONED`.
 Independent release approval, closed old-store/launcher evidence, protected
 bootstrap/reader cutover, remote CI, connector serving parity (last 429) and

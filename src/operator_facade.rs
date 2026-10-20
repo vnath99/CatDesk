@@ -719,7 +719,7 @@ pub(crate) async fn execute_operator_action(
                 WebDevelopmentAction::Run => development_runtime::run_foreground(workspace),
             }
         }
-        OperatorAction::Web(action) => web::execute(action, workspace),
+        OperatorAction::Web(action) => web::execute(action, workspace).await,
         OperatorAction::Codex(action) => {
             crate::operator_codex_cli::execute_action(action, workspace).await
         }

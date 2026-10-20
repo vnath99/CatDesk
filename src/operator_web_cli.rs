@@ -407,10 +407,6 @@ fn context_status(workspace: &Path, project: &str) -> Value {
     }
 }
 
-fn capture_context(workspace: &Path, project: &str) -> Result<Value, String> {
-    capture_context_guarded(workspace, project, &|| Ok(()))
-}
-
 fn capture_context_guarded(
     workspace: &Path,
     project: &str,
@@ -767,7 +763,7 @@ fn registry_rollover_projection(raw: &Value) -> Value {
     })
 }
 
-pub(crate) fn execute(action: WebAction, workspace: &Path) -> Result<Value, String> {
+pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value, String> {
     let workspace = workspace
         .canonicalize()
         .map_err(|_| "WEB_SCOPE: control workspace is unavailable")?;
@@ -867,7 +863,9 @@ pub(crate) fn execute(action: WebAction, workspace: &Path) -> Result<Value, Stri
             )
         }
         WebAction::ContextStatus { project_id } => Ok(context_status(&workspace, &project_id)),
-        WebAction::ContextCapture { project_id } => capture_context(&workspace, &project_id),
+        WebAction::ContextCapture { project_id } => {
+            crate::web_context_control::capture_current(&workspace, &project_id).await
+        }
         WebAction::ReviewRead {
             project_id,
             event_id,

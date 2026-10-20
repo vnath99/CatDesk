@@ -1,5 +1,17 @@
 ## 2026-10-20 — Web context capture and current acceptance (SOURCE; MVP PARTIAL)
 
+The explicit standalone context-capture command now shares the bounded MCP
+reader and current-target witness checks. Live reads completed for BYOVD,
+Wake2 and PortfolioDesk in 64–70 seconds with separate 1,446 / 895 / 916 visible
+token estimates and unknown coverage retained. The initial 60-second cap
+preempted the existing 90-second startup allowance; its fixed overall budget is
+now 180 seconds, with the existing internal limits and cleanup. Only two
+expected context ledgers changed, with no binding/rollover/production-pointer
+changes or orphan processes. The v19 development candidate stays stopped; no
+message, recurring automation or WakeHost start occurred. Full root gate remains
+1,536 passed / 28 ignored, with strict Clippy/build/format passing. Central
+connector, fresh delivery and protected installation acceptance remain open.
+
 Latest source checkpoint fixes a reproduced blocking context-ledger wait in
 online MCP mutations and snapshot ingestion. Contention now refuses with
 `WEB_CONTEXT_BUSY`; three-project status stays readable and a snapshot retry

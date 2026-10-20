@@ -245,7 +245,7 @@ one visible excerpt and update the same count/hash ledger:
 
 This explicit operation can open one temporary browser reader. It sends no
 message, changes no binding and starts no recurring worker or WakeHost. It has
-a 60-second cooperative deadline with existing bounded adapter cleanup. A
+a fixed 180-second cooperative budget with existing bounded adapter cleanup. A
 cancelled request keeps its project slot until its worker exits; duplicate
 capture returns `WEB_CONTEXT_CAPTURE_BUSY`. Up to four captures may be active
 in one server process, subject to the existing shared browser owner lock.
@@ -258,8 +258,21 @@ before ingestion; an intervening rebind refuses. Results contain counts with
 unknown-history coverage and are not exact provider context usage. Existing
 owner/package checks can return `WEB_CONTEXT_CAPTURE_OWNER_BUSY` or
 `WEB_CONTEXT_CAPTURE_PACKAGE_UNSUPPORTED`. Other backend details remain private.
-Only disposable source/mock tests have exercised the new MCP capture path.
-Do not invoke it against real chats while the current browser-start hold applies.
+The guarded reader has also been exercised through the existing explicit
+standalone command:
+
+```text
+<source-built-catdesk.exe> operator web context capture --project-id PROJECT
+```
+
+It resolves the current paired target, then uses the same witnessed worker and
+reports `invocationSource:STANDALONE_OPERATOR`. The earlier 60-second overall
+limit preempted the adapter's existing 90-second startup allowance; the fixed
+180-second budget includes its existing profile-lock/startup phases and the
+bounded snapshot read. Internal limits and cleanup remain in place. This command
+returns before TUI/MCP initialization and starts no recurring worker or WakeHost.
+Keep those recurring starts stopped under the current operator instruction.
+The actual central connector catalog remains unverified separately.
 
 Online context configuration/observation and snapshot ingestion use nonblocking
 ledger access. `WEB_CONTEXT_BUSY` means no waiting lock owner was displaced;
