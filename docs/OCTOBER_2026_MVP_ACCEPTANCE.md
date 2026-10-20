@@ -1,5 +1,35 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 first-generation migration target readback (SOURCE ONLY)
+
+Current source already has typed package publication and a protected pointer
+writer. The fixed service still refuses transaction admission; neither those
+writers nor the completed Web canary establish an installed dev.85 migration.
+The next source increment strengthens the existing V2 migration diagnostic:
+it pins the selected old root's fixed `config.json`, reads the retained registry
+file, verifies both exact raw-byte snapshot hashes, and proves the selected
+project's URL/digest/conversation ID and Wake generation match the signed
+observation. The registry has no separate stored generation; the matching
+Wake target supplies that paired readback's generation. Existing pointer and
+host-lock roles must also resolve as exact children of the pinned old root.
+
+Snapshots are bounded to 1 MiB, duplicate project targets/registrations refuse,
+and incomplete, split, changed or absent target evidence fails before signature
+inspection can succeed. Retained Windows handles block new writers and object
+replacement. Fifteen focused offline migration tests pass, including actual
+Windows pin/lock fixtures, wrong hashes/generations/conversations, duplicate
+fields/projects, missing targets, oversize files and replacement denial.
+Strict root/Wake Clippy, both builds, formatting and diff checks also pass.
+This is read-only source evidence, with no new ledger or installation authority.
+
+Remaining installed work: independently established closed old-store/launcher
+inventory and its reviewed offline approval, first-generation ledger admission,
+protected service provisioning and reader cutover, exact-source CI, then live
+installed acceptance. Source development can continue on those existing seams;
+connector HTTP 429 affects connector checks separately. No browser, WakeHost,
+recurring scheduler, production pointer or project binding was changed.
+**Overall October MVP: `PARTIAL`.**
+
 ## October 20 assistant snapshot verified and three-project readback (DEVELOPMENT LIVE)
 
 One bounded read of the already-completed canary continuation returned

@@ -1,5 +1,21 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-20 retained paired-target readback (source only)
+
+The publisher and pointer writer already exist; earlier test-only/no-publisher
+statements below are historical. First-generation admission is still closed.
+V2 role revalidation now reads the selected old root's pinned fixed config.json
+and the retained CatDesk registry file, checks their signed exact raw-byte
+snapshot hashes, and requires matching project URL/digest/conversation and Wake
+generation. The registry does not store an independent generation counter.
+Pointer/lock roles must resolve under that same pinned old root. Bounded reads,
+duplicate-target/project rejection and write/replacement denial are verified by
+15 focused offline migration tests. No new install authority, service mutation,
+production package change or Wake/browser execution follows from this change.
+Closed store/launcher inventory, independently reviewed first-generation anchor,
+ledger admission, provisioning/reader cutover, exact remote CI and installed
+acceptance remain open. See the current October MVP acceptance record.
+
 ## 2026-10-15 native no-replace publication fixture proof (source only)
 
 Four Windows fixtures prove a single handle-relative no-replace rename after the durable attempt marker, flush both pinned parents, and require exact post-move bytes, ACLs and physical IDs. Collision, injected parent-flush failure, actual DACL drift and same-byte object replacement stay fail closed. Full Wake 213 library tests passed/one ignored plus enabled targets; strict checks and independent review passed. See `T-0485_R30_NATIVE_RENAME_FIXTURE_PROOF.md`. Pushed source `ab67d390dee529e604904daac604ca1e161e34a5` had zero exact GitHub workflow/check runs. The rename is test-only: the stage receipt's delete-denying pins still need a safe production handoff to a typed writer receipt. No production PUBLISHED writer or install authority exists; service/install holds stay closed.

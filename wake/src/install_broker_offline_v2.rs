@@ -85,11 +85,13 @@ pub struct OfflineMigrationAnchorV2 {
     pub old_host_image_sha256: String,
     pub target_conversation_id: String,
     pub target_generation: u64,
+    /// SHA-256 of the exact old root's config.json bytes, read through its pin.
     pub target_snapshot_sha256: String,
     pub project_id: String,
     pub project_registration_object: OfflineObjectIdentityV2,
     pub project_target_conversation_id: String,
     pub project_target_generation: u64,
+    /// SHA-256 of the exact pinned project-registration file bytes.
     pub project_target_snapshot_sha256: String,
     pub unresolved_events_sha256: String,
     pub ambiguous_event_disposition: AmbiguousEventDispositionV2,
