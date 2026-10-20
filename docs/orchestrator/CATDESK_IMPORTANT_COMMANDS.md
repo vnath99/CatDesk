@@ -1,5 +1,20 @@
 # CatDesk — Important Command Reference
 
+## October 20 foreground development ownership
+
+The existing `operator web-dev-runtime run` now owns its host tree through a
+private kill-on-close Windows Job. An internal stdin gate prevents runtime
+startup before Job assignment. Old packages refuse with
+`DEV_RUNTIME_FOREGROUND_PACKAGE_REQUIRED` before control changes; use the
+supported stopped package update. Successful foreground exit adds
+`ownedTreeExited:true` only after private Job accounting reaches zero.
+
+This command still runs the shared host scheduler until STOP; it is not a
+single-event or inherently time-limited dispatch command. A bounded acceptance
+run needs an external deadline and supported STOP, plus retained launcher
+identity for failure cleanup. The current operator prohibition on WakeHost
+restart remains effective; preparation alone is not permission to run it.
+
 ## October 20 context metadata contention
 
 Online context operations refuse a held ledger with `WEB_CONTEXT_BUSY`.

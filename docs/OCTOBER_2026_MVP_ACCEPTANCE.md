@@ -1,5 +1,46 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 foreground development ownership (SOURCE; LIVE HELD)
+
+Inspection for the next independent-project test found that the foreground
+development launcher waited on an ordinary child without owning its process
+tree. It now assigns the existing private Windows kill-on-close Job before
+releasing an exact stdin startup gate. EOF or a wrong gate exits the internal
+child entry before runtime activity. The foreground launch refuses a package
+without that protocol before changing control state. Existing detached start,
+protected installation and ordinary host dispatch remain separate paths.
+
+Two native regressions use disposable PowerShell helpers, never WakeHost or a
+browser. Retained OS handles prove both helper and descendant were live before
+the launcher was abruptly killed, then prove their exit. Normal parent exit
+also drains a live descendant while preserving exit code 7. Exact gate and
+old-package refusal checks pass. Five finalized focused tests pass; the full
+Wake suite passed **293 library tests / 1 ignored** and all enabled integration
+targets, including the unchanged Python regression target. Full CatDesk passed
+**1,537 / 28 ignored**. Strict root/Wake Clippy, both builds, format and diff
+checks pass. The final fixture-only cleanup/live-handle refinements were
+rechecked with all five focused tests and strict Wake Clippy.
+
+The source-matched v21 development package was selected through the supported
+stopped update. Both Python inputs are unchanged; the new built host contains
+the owner protocol. All 91 project-state files, the five original paired
+bindings and production pointer remain unchanged. Both controls are stopped
+and the final owned browser/Wake process count is zero.
+
+Three exact review-only requests are prepared privately in parent
+`checkpoints/web-three-project-review-oct20`, with fresh event IDs, payload
+hashes and the current paired targets for CatDesk, Wake2 and PortfolioDesk.
+They preserve existing native ownership and distinguish focused/collected
+evidence from completed full qualification. Nothing is enqueued or sent.
+The execution plan limits a future approved development run to three events
+and 900 seconds, then supported stop and exact owned-tree exit checks. It
+excludes both canaries and never enables the MCP automatic scheduler.
+
+These source tests close a concrete launcher-loss orphan gap. They do not
+authorize or establish live WakeHost, recurring automation, protected installed,
+connector or natural review acceptance. The operator's start hold remains in
+force. The completed rollover remains preserved without repetition.
+
 ## October 20 automatic worker context contention (SOURCE; LIVE HELD)
 
 A disposable held-ledger test reproduced another stop/drain stall: automatic

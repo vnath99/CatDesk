@@ -9,6 +9,16 @@
 
 ### October 20 current acceptance and contention correction
 
+Preparing the next three-project test exposed a foreground launcher-loss orphan
+gap. The existing run command now assigns the private kill-on-close Job before
+an exact child startup gate; missing protocol refuses before control changes.
+Five native/gate tests verify live helpers and descendants exit on caller death
+and normal parent exit, without real host/browser work. Root 1,537 / 28 ignored,
+Wake 293 library / 1 ignored plus integrations, strict Clippy and both builds
+pass. Three exact review requests are prepared with independent paired targets;
+none is enqueued/sent. The shared runner still requires explicit authorization
+lifting the current host-start hold and an external test deadline.
+
 Automatic policy/readiness checks now use nonblocking read-only context access;
 shared rollover mutations also refuse a busy ledger. The status is transient
 `AWAITING_CONTEXT` / `WEB_CONTEXT_BUSY`. The held-lock worker regression checks
@@ -45,7 +55,8 @@ release and unchanged state after refusal. Final root gate: 1,536 passed / 28
 ignored, strict Clippy/build/format pass. No browser, WakeHost, recurring worker
 or native conversation was started or changed to run these fixtures.
 
-The stopped development candidate is now v20; this is not protected installed
+The stopped development candidate is now v21, with the foreground owner
+protocol and all original state/bindings preserved; this is not protected installed
 acceptance. Fixed broker preflight reports `WAKE_BROKER_SERVICE_UNPROVISIONED`.
 Independent release approval, closed old-store/launcher evidence, protected
 bootstrap/reader cutover, remote CI, connector serving parity (last 429) and

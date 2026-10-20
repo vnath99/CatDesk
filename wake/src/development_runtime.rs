@@ -52,6 +52,9 @@ const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
 const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
 const INVALID_HANDLE: *mut c_void = -1isize as *mut c_void;
 
+#[path = "development_foreground.rs"]
+mod foreground;
+
 #[link(name = "kernel32")]
 unsafe extern "system" {
     fn CreateFileW(
@@ -1309,8 +1312,16 @@ pub fn start(workspace: &Path) -> Result<Value> {
 /// Keep the exact WakeHost child attached to this operator invocation. This
 /// mode is usable from an outer Job without trying to break away from it;
 /// another session may issue stop, then this call returns the child exit.
+/// A private kill-on-close Job owns all descendants before runtime startup.
 pub fn run_foreground(workspace: &Path) -> Result<Value> {
     let (store, executable) = validated_launch(workspace)?;
+    let host = fs::read(&executable).map_err(|_| "DEV_RUNTIME_EXECUTABLE_UNAVAILABLE")?;
+    if !host
+        .windows(foreground::OWNER_GATE.len())
+        .any(|part| part == foreground::OWNER_GATE)
+    {
+        return Err("DEV_RUNTIME_FOREGROUND_PACKAGE_REQUIRED".into());
+    }
     drop(store.host_lock()?);
     let previous: Value = read_json(&store.root().join("control.json"), 4096)?;
     let previous_desired = previous
@@ -1322,28 +1333,31 @@ pub fn run_foreground(workspace: &Path) -> Result<Value> {
     runtime::control(&store, "RUNNING")?;
     let mut command = Command::new(&executable);
     command
-        .arg("--dev-host")
+        .arg("--dev-foreground-host")
         .arg(workspace)
-        .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    let mut child = match command.spawn() {
-        Ok(child) => child,
-        Err(_) => {
+    let (pid, exit) = match foreground::run(&mut command) {
+        Ok(result) => result,
+        Err(error) => {
             if let Ok(lease) = store.host_lock() {
                 drop(lease);
                 runtime::control(&store, &previous_desired)?;
             }
-            return Err("DEV_RUNTIME_START_FAILED".into());
+            return Err(error);
         }
     };
-    let exit = child
-        .wait()
-        .map_err(|_| "DEV_RUNTIME_CHILD_WAIT_UNAVAILABLE")?;
     Ok(
         json!({"mode":"DEVELOPMENT_UNPROTECTED","status":"FOREGROUND_HOST_EXITED",
-        "pid":child.id(),"success":exit.success(),"exitCode":exit.code()}),
+        "pid":pid,"success":exit.success(),"exitCode":exit.code(),"ownedTreeExited":true}),
     )
+}
+
+/// Internal foreground entry: EOF or a mismatched owner gate exits before any
+/// runtime/control/browser action. Detached development start remains separate.
+pub fn run_foreground_host(workspace: &Path) -> Result<()> {
+    foreground::require_owner(std::io::stdin().lock())?;
+    run_host(workspace)
 }
 
 struct LoginPreflight {
@@ -1669,6 +1683,28 @@ mod tests {
 
     fn prepare_fixture(workspace: &Path, package: &Path, python: &Path) -> Value {
         prepare(workspace, package, python).unwrap()
+    }
+
+    #[test]
+    fn foreground_requires_owned_startup_protocol_before_control_change() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let store = Store::open(&root).unwrap();
+        store
+            .set_target(
+                "canary-project",
+                0,
+                "https://chatgpt.com/c/foreground-fixture-only",
+            )
+            .unwrap();
+        let before = fs::read(root.join("control.json")).unwrap();
+        assert_eq!(
+            run_foreground(&workspace).unwrap_err(),
+            "DEV_RUNTIME_FOREGROUND_PACKAGE_REQUIRED"
+        );
+        assert_eq!(fs::read(root.join("control.json")).unwrap(), before);
+        cleanup(&parent);
     }
 
     #[test]

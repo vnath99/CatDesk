@@ -1,5 +1,14 @@
 ## 2026-10-20 — Web context capture and current acceptance (SOURCE; MVP PARTIAL)
 
+The foreground development launcher now assigns the existing kill-on-close Job
+before an exact child startup gate, closing a concrete orphan path on launcher
+loss. Disposable native tests prove actual live helper/descendant exit after
+caller death and normal parent exit; no real host/browser starts. Five focused
+checks, Wake 293 library tests / 1 ignored and integrations, CatDesk 1,537 / 28
+ignored, strict Clippy and both builds pass. Three independent review-only
+payloads and a bounded execution plan are prepared, without enqueue/send.
+The operator's WakeHost/recurring start hold remains in force.
+
 Automatic policy/readiness checks and shared rollover steps now refuse context
 ledger contention without stranding worker stop/drain. `AWAITING_CONTEXT` is a
 transient status; no handoff is requested while metadata is busy. A held-writer
