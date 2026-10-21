@@ -1,5 +1,56 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 long-message context estimates (SOURCE; LIVE PENDING)
+
+The existing browser snapshot clips each body and bounds its total payload.
+Ingestion previously discarded every message whose body was clipped, including
+long real assistant replies. The adapter now separately reports whether the
+excerpt comes from the dedicated visible body, retaining the existing complete
+text/revision flags. Only a real body with an identified message can contribute
+an excerpt proxy. UI-only fallback, missing/uncertain identity, empty text and
+load-error placeholders remain excluded. No additional page text is collected.
+
+The ledger persists only hashes, byte/token counts and an excerpt-only flag.
+Each stable message retains the largest clipped proxy; replay and moving tail
+windows never sum together. A subsequently observed complete body replaces it,
+even when the answer was edited shorter. Existing complete records and old
+adapters remain readable; an old adapter cannot authorize counting a diagnostic
+fallback. Older binaries that deny unknown ledger fields may refuse new
+excerpt-only records, so an older package is not context-format rollback proof.
+No record is deleted or rewritten just to accommodate an older reader.
+
+The new Unicode probe also reproduces an existing snapshot failure: a UTF-16
+tail beginning halfway through an emoji raises Python UnicodeEncodeError.
+The DOM clip now omits that isolated low surrogate before UTF-8 encoding;
+the emoji-plus-ASCII boundary passes without changing payload bounds.
+
+Pressure exposes excerptOnlyMessages separately. Estimates stay advisory,
+coverage gaps stay sticky, and unobserved history has no finite bound. No token
+count is extrapolated from a clipped body's character length. Configured pressure
+can become due using actual observed excerpts, without changing the existing
+quiescence, handoff, binding, submission or continuation checks.
+
+Focused Rust ingestion tests pass five cases (three new). Main Rust passes
+1,548 tests / 29 ignored; all root integration targets, including nested Wake,
+pass. Strict root/Wake all-target/all-feature Clippy, formats and diff pass.
+Full offline Python unittest runs 231 tests with one skip (230 passed); the
+subsequent final DOM run passes eleven, including the corrected emoji boundary.
+The full Python run preceded that final clipping fix; the targeted run verifies
+the final DOM code. No pytest installation or parity claim is made. An initial
+test-only argument-type compile error and Unicode command
+line limit are corrected with their failed evidence retained. The initial Rust
+filter selected zero tests; the corrected filter executes all five. Full
+regression and package/live outcomes are recorded in the parent dated audit:
+checkpoints/web-context-excerpts-oct21. This source result is not installed
+acceptance. The five original project pairs/history and completed canary are
+preserved; no recurring scheduler or WakeHost is restarted.
+
+One read-only connector probe at 19:39:28–19:39:29 UTC still returns HTTP 429 at
+OpenAI's unified tunnel SSE probe, before local CatDesk access is proven. It is
+not retried. Exact remote CI, actual native full-profile qualification, the
+natural deliverable/review/next-task cycle and installed independent operation
+remain separate open gates. The preceding completed rollover is not repeated.
+
 ## October 21 complete-pointer V2 recovery (SOURCE/FIXTURE ONLY)
 
 `resume_offline_v2` now reconstructs complete POINTER_SWITCHED state as a retained

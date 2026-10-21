@@ -39,6 +39,10 @@ struct Message {
     text: String,
     visible_units: u64,
     text_complete: bool,
+    /// New adapters distinguish real clipped body text from a controls-only
+    /// diagnostic fallback. Older incomplete snapshots remain uncounted.
+    #[serde(default)]
+    body_text_observed: bool,
     turn_hash: Option<String>,
     role_turn_hash: Option<String>,
     message_hash: Option<String>,
@@ -151,6 +155,7 @@ pub(super) fn ingest(
         return Err("WEB_SNAPSHOT_INVALID".into());
     }
     let mut recorded = 0;
+    let mut excerpts = 0;
     let mut uncertain = 0;
     confirm_target()?;
     for message in &snapshot.messages {
@@ -184,9 +189,27 @@ pub(super) fn ingest(
             recorded += 1;
         } else {
             uncertain += 1;
-            // Keep the previous complete revision, if any. Incomplete units
-            // set durable coverage uncertainty. Transient clipping must not
-            // add an invented token reserve on every newly streamed message.
+            if message.body_text_observed
+                && !normalized.is_empty()
+                && !load_error
+                && let Some(id) = &message.message_hash
+            {
+                let role = if message.role == "USER" {
+                    VisibleSourceKind::UserMessage
+                } else {
+                    VisibleSourceKind::AssistantMessage
+                };
+                store.record_browser_excerpt_observation(
+                    key,
+                    &format!("browser-{id}"),
+                    role,
+                    &message.text,
+                    observed_at,
+                )?;
+                excerpts += 1;
+            }
+            // Coverage stays uncertain. Missing/ambiguous identity, UI-only
+            // fallback and load errors never count as message body content.
         }
     }
     confirm_target()?;
@@ -207,7 +230,7 @@ pub(super) fn ingest(
     )?;
     Ok(
         json!({"action":"web_context_capture","projectId":key.project_id,
-        "recordedMessages":recorded,"uncertainMessages":uncertain,
+        "recordedMessages":recorded,"excerptMessages":excerpts,"uncertainMessages":uncertain,
         "excerptTruncated":snapshot.truncated,"anchorStability":"UNVERIFIED",
         "coverage":"RECENT_VISIBLE_EXCERPT_WITH_UNKNOWN_HISTORY",
         "pressure":pressure,"advisory":true,"originAuthenticated":false,
@@ -234,6 +257,202 @@ mod tests {
                 "omittedBeforeWindow":0,"returned":1,"identityMissing":0,
                 "identityUncertain":0,"revisionIncomplete":0,
                 "textIncomplete":u64::from(!complete),"anchorStability":"UNVERIFIED"}})
+    }
+
+    fn excerpt(key: &ConversationKey, text: &str) -> Value {
+        let mut value = input(key, text, false);
+        value["messages"][0]["bodyTextObserved"] = json!(true);
+        value["messages"][0]["visibleUnits"] = json!(20_000);
+        value["messages"][0]["revisionComplete"] = json!(false);
+        value["messages"][0]["revisionHash"] = Value::Null;
+        value["coverage"]["revisionIncomplete"] = json!(1);
+        value
+    }
+
+    #[test]
+    fn clipped_body_counts_once_without_becoming_complete_history() {
+        let root = std::env::temp_dir().join(format!("web-excerpt-{}", uuid::Uuid::new_v4()));
+        let store = WebContextStore::open(&root).unwrap();
+        let key = ConversationKey {
+            project_id: "alpha".into(),
+            conversation_url: "https://chatgpt.com/c/excerpt".into(),
+            target_generation: 1,
+        };
+        store.bind_observed_target(key.clone(), None).unwrap();
+        let small = "private clipped body ".repeat(12);
+        let first = ingest(&store, &key, excerpt(&key, &small), 1, || Ok(())).unwrap();
+        assert_eq!(first["recordedMessages"], 0);
+        assert_eq!(first["excerptMessages"], 1);
+        assert_eq!(first["uncertainMessages"], 1);
+        let first_count = first["pressure"]["visibleUniqueTokens"].as_u64().unwrap();
+        assert!(first_count > 0);
+        assert_eq!(first["pressure"]["recordedEvents"], 1);
+        assert_eq!(first["pressure"]["excerptOnlyMessages"], 1);
+        assert_eq!(
+            first["pressure"]["pressureAssessment"],
+            "UNKNOWN_OR_INCOMPLETE"
+        );
+        assert_eq!(first["pressure"]["browserCoverage"]["textGap"], true);
+        let replay = ingest(&store, &key, excerpt(&key, &small), 2, || Ok(())).unwrap();
+        assert_eq!(pressure_at(&first, 2), replay["pressure"]);
+        let changed_tail = "another clipped tail ".repeat(2);
+        let smaller = ingest(&store, &key, excerpt(&key, &changed_tail), 3, || Ok(())).unwrap();
+        assert_eq!(pressure_at(&first, 3), smaller["pressure"]);
+        let large = "private clipped body ".repeat(60);
+        let grown = ingest(&store, &key, excerpt(&key, &large), 4, || Ok(())).unwrap();
+        assert!(grown["pressure"]["visibleUniqueTokens"].as_u64().unwrap() > first_count);
+        assert_eq!(grown["pressure"]["recordedEvents"], 1);
+        let reopened = WebContextStore::open_read_only(&root).unwrap();
+        assert_eq!(
+            reopened.pressure(&key).unwrap(),
+            serde_json::from_value(grown["pressure"].clone()).unwrap()
+        );
+        let complete = ingest(
+            &store,
+            &key,
+            input(&key, "final edited answer", true),
+            5,
+            || Ok(()),
+        )
+        .unwrap();
+        assert_eq!(complete["pressure"]["excerptOnlyMessages"], 0);
+        assert_eq!(complete["pressure"]["recordedEvents"], 1);
+        assert!(
+            complete["pressure"]["visibleUniqueTokens"]
+                .as_u64()
+                .unwrap()
+                < first_count
+        );
+        assert_eq!(complete["pressure"]["browserCoverage"]["textGap"], true);
+        let clipped_again = ingest(&store, &key, excerpt(&key, "tail"), 6, || Ok(())).unwrap();
+        assert_eq!(pressure_at(&complete, 6), clipped_again["pressure"]);
+        // Neither the response nor the on-disk metadata retains body text.
+        for file in std::fs::read_dir(root.join("conversations")).unwrap() {
+            let text = std::fs::read_to_string(file.unwrap().path()).unwrap();
+            assert!(!text.contains("private clipped body"));
+            assert!(!text.contains("final edited answer"));
+        }
+        assert!(!grown.to_string().contains("private clipped body"));
+    }
+
+    #[test]
+    fn only_identified_body_excerpts_count_and_target_change_stops_ingestion() {
+        let root = std::env::temp_dir().join(format!("web-excerpt-veto-{}", uuid::Uuid::new_v4()));
+        let store = WebContextStore::open(&root).unwrap();
+        let key = ConversationKey {
+            project_id: "alpha".into(),
+            conversation_url: "https://chatgpt.com/c/excerpt-veto".into(),
+            target_generation: 1,
+        };
+        store.bind_observed_target(key.clone(), None).unwrap();
+        for mut value in [
+            excerpt(&key, "controls diagnostic"),
+            excerpt(&key, "unidentified body"),
+            excerpt(&key, "This response couldn’t load"),
+            excerpt(&key, " \n\t"),
+        ] {
+            if value["messages"][0]["text"] == "controls diagnostic" {
+                value["messages"][0]["bodyTextObserved"] = json!(false);
+            }
+            if value["messages"][0]["text"] == "unidentified body" {
+                value["messages"][0]["identityBasis"] = json!("ROLE_TURN_ONLY");
+                value["messages"][0]["messageHash"] = Value::Null;
+                value["coverage"]["identityUncertain"] = json!(1);
+            }
+            let result = ingest(&store, &key, value, 1, || Ok(())).unwrap();
+            assert_eq!(result["pressure"]["visibleUniqueTokens"], 0);
+            assert_eq!(result["excerptMessages"], 0);
+        }
+        // Old adapters do not attest a diagnostic fallback as body text.
+        let legacy = ingest(
+            &store,
+            &key,
+            input(&key, "legacy clipped text", false),
+            2,
+            || Ok(()),
+        )
+        .unwrap();
+        assert_eq!(legacy["pressure"]["recordedEvents"], 0);
+        assert_eq!(
+            ingest(&store, &key, excerpt(&key, "real body"), 3, || Err(
+                "TARGET_CHANGED".into()
+            ))
+            .unwrap_err(),
+            "TARGET_CHANGED"
+        );
+        assert_eq!(store.pressure(&key).unwrap().recorded_events, 0);
+    }
+
+    #[test]
+    fn excerpt_pressure_is_per_conversation_and_can_reach_the_configured_trigger() {
+        use crate::web_conversation_context::ContextPressurePolicy;
+        let root =
+            std::env::temp_dir().join(format!("web-excerpt-pressure-{}", uuid::Uuid::new_v4()));
+        let store = WebContextStore::open(&root).unwrap();
+        let alpha = ConversationKey {
+            project_id: "alpha".into(),
+            conversation_url: "https://chatgpt.com/c/excerpt-alpha".into(),
+            target_generation: 1,
+        };
+        let beta = ConversationKey {
+            project_id: "beta".into(),
+            conversation_url: "https://chatgpt.com/c/excerpt-beta".into(),
+            target_generation: 1,
+        };
+        for key in [&alpha, &beta] {
+            store.bind_observed_target(key.clone(), None).unwrap();
+        }
+        let beta_before = store.pressure(&beta).unwrap();
+        store
+            .configure_policy(
+                "alpha",
+                ContextPressurePolicy {
+                    configured_budget_tokens: 128,
+                    safety_headroom_tokens: 32,
+                    unknown_source_reserve_tokens: 0,
+                    automatic_rollover_enabled: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        ingest(
+            &store,
+            &alpha,
+            excerpt(&alpha, &"observed body excerpt ".repeat(90)),
+            1,
+            || Ok(()),
+        )
+        .unwrap();
+        let (pressure, due) = store.rollover_readiness(&alpha).unwrap();
+        assert!(pressure.near_capacity && due);
+        assert!(!pressure.coverage_known);
+        assert_eq!(pressure.unknown_source_count, 0);
+        assert_eq!(store.pressure(&beta).unwrap(), beta_before);
+        let next = ConversationKey {
+            conversation_url: "https://chatgpt.com/c/excerpt-alpha-next".into(),
+            target_generation: 2,
+            ..alpha.clone()
+        };
+        store
+            .bind_observed_target(next.clone(), Some(&alpha))
+            .unwrap();
+        assert_eq!(store.pressure(&next).unwrap().visible_unique_tokens, 0);
+        assert_eq!(store.pressure(&next).unwrap().excerpt_only_messages, 0);
+        assert_eq!(
+            store.pressure(&alpha).unwrap().visible_unique_tokens,
+            pressure.visible_unique_tokens
+        );
+        assert!(
+            store
+                .record_browser_excerpt_observation(
+                    &alpha,
+                    "old",
+                    VisibleSourceKind::AssistantMessage,
+                    "body",
+                    2
+                )
+                .is_err()
+        );
     }
     #[test]
     fn browser_excerpt_replay_and_revision_do_not_accumulate_snapshots() {

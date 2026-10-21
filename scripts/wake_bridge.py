@@ -2384,7 +2384,12 @@ class NewConversationSink(CdpSink):
                     text = String(node.innerText || node.textContent || '');
                 }
                 const bodyProven = completeBody;
-                const row = [role(node), text.slice(-4096), bodyProven && text.length <= 4096,
+                let excerpt = text.slice(-4096);
+                // JavaScript slices UTF-16 units. A tail can begin with half
+                // of an emoji; omit that half before Python's UTF-8 encoding.
+                const firstUnit = excerpt.charCodeAt(0);
+                if (firstUnit >= 0xDC00 && firstUnit <= 0xDFFF) excerpt = excerpt.slice(1);
+                const row = [role(node), excerpt, bodyProven,
                     Math.min(text.length, 1000000), anchor(node, 'data-content-search-turn-key'),
                     unitKey, messageId];
                 if (key && keyed.has(key)) {
@@ -2424,7 +2429,8 @@ class NewConversationSink(CdpSink):
                 raise Attention("SOURCE_SNAPSHOT_QUERY_FAILED")
             text_bytes = item[1].encode("utf-8")
             clipped = text_bytes[:min(4096, remaining)].decode("utf-8", errors="ignore")
-            text_complete = item[2] and len(text_bytes) == len(clipped.encode("utf-8"))
+            complete_body = item[2] and item[3] <= 4096
+            text_complete = complete_body and len(text_bytes) == len(clipped.encode("utf-8"))
             if not text_complete:
                 truncated = True
             if not clipped and text_bytes:
@@ -2449,6 +2455,7 @@ class NewConversationSink(CdpSink):
                 "text": clipped,
                 "visibleUnits": item[3],
                 "textComplete": text_complete,
+                "bodyTextObserved": item[2],
                 "turnHash": digest(f"catdesk-snapshot-turn-v1\0{source_salt}\0{turn_key}") if turn_key else None,
                 "roleTurnHash": digest(f"catdesk-snapshot-role-turn-v1\0{source_salt}\0{role_name}\0{turn_key}")
                     if turn_key else None,
@@ -2456,8 +2463,8 @@ class NewConversationSink(CdpSink):
                     if message_key else None,
                 "identityBasis": identity_basis,
                 "revisionHash": digest(f"catdesk-snapshot-revision-v1\0{source_salt}\0{item[1]}")
-                    if item[2] else None,
-                "revisionComplete": item[2],
+                    if complete_body else None,
+                "revisionComplete": complete_body,
             })
             if remaining == 0:
                 truncated = True

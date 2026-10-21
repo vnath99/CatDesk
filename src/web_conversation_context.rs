@@ -152,6 +152,14 @@ struct EventMetadata {
     visible_bytes: Option<u64>,
     estimated_tokens: Option<u64>,
     observed_at_unix: u64,
+    /// Only the counted excerpt was observed, not the full message body.
+    /// Missing on older complete-text records; false stays byte-compatible.
+    #[serde(default, skip_serializing_if = "is_false")]
+    excerpt_only: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -230,6 +238,8 @@ pub struct PressureStatus {
     pub target_sha256: String,
     pub is_current: bool,
     pub recorded_events: usize,
+    #[serde(default)]
+    pub excerpt_only_messages: usize,
     /// Deduplicated observed model-visible content, including structured tool
     /// arguments and worker messages. The field name remains wire-compatible.
     pub visible_unique_tokens: u64,
@@ -367,8 +377,8 @@ impl WebContextStore {
         self.write_project(&project)
     }
 
-    /// Records only model-visible text supplied by the caller. Tool arguments
-    /// are retained as traffic metadata but excluded from context occupancy.
+    /// Records only model-visible text supplied by the caller, including
+    /// observed tool arguments. Transport totals are not silently attributed.
     pub fn record_observation(
         &self,
         key: &ConversationKey,
@@ -397,6 +407,53 @@ impl WebContextStore {
         visible_text: Option<&str>,
         observed_at_unix: u64,
     ) -> Result<PressureStatus, String> {
+        self.record_browser_text(
+            key,
+            event_id,
+            source_kind,
+            visible_text,
+            observed_at_unix,
+            false,
+        )
+    }
+
+    /// Count actual text from a clipped, identified message body. The largest
+    /// excerpt proxy replaces smaller clipped samples of that same message;
+    /// samples are never added together. A later complete body supersedes it.
+    pub(crate) fn record_browser_excerpt_observation(
+        &self,
+        key: &ConversationKey,
+        event_id: &str,
+        source_kind: VisibleSourceKind,
+        visible_text: &str,
+        observed_at_unix: u64,
+    ) -> Result<PressureStatus, String> {
+        if !matches!(
+            source_kind,
+            VisibleSourceKind::UserMessage | VisibleSourceKind::AssistantMessage
+        ) || visible_text.trim().is_empty()
+        {
+            return Err("WEB_CONTEXT_EVENT_CONTENT_INVALID".into());
+        }
+        self.record_browser_text(
+            key,
+            event_id,
+            source_kind,
+            Some(visible_text),
+            observed_at_unix,
+            true,
+        )
+    }
+
+    fn record_browser_text(
+        &self,
+        key: &ConversationKey,
+        event_id: &str,
+        source_kind: VisibleSourceKind,
+        visible_text: Option<&str>,
+        observed_at_unix: u64,
+        excerpt_only: bool,
+    ) -> Result<PressureStatus, String> {
         key.validate()?;
         let mut event = observation_metadata(Observation {
             event_id,
@@ -406,6 +463,7 @@ impl WebContextStore {
             visible_text,
             observed_at_unix,
         })?;
+        event.excerpt_only = excerpt_only;
         let _lock = self.lock()?;
         let project = self.read_project(&key.project_id)?;
         if project.active.as_ref() != Some(key) {
@@ -420,9 +478,13 @@ impl WebContextStore {
             if previous.source_kind != source_kind || previous.dedup_key != event_id {
                 return Err("WEB_CONTEXT_EVENT_REVISION_CONFLICT".into());
             }
+            if excerpt_only && event.estimated_tokens <= previous.estimated_tokens {
+                return Ok(pressure_status(&project, &ledger));
+            }
             event.revision = if previous.content_sha256 == event.content_sha256
                 && previous.visible_bytes == event.visible_bytes
                 && previous.estimated_tokens == event.estimated_tokens
+                && previous.excerpt_only == event.excerpt_only
             {
                 previous.revision
             } else {
@@ -495,6 +557,7 @@ impl WebContextStore {
                 if event.content_sha256 != previous.content_sha256
                     || event.visible_bytes != previous.visible_bytes
                     || event.estimated_tokens != previous.estimated_tokens
+                    || event.excerpt_only != previous.excerpt_only
                 {
                     return Err("WEB_CONTEXT_EVENT_REVISION_CONFLICT".into());
                 }
@@ -880,6 +943,7 @@ fn observation_metadata(observation: Observation<'_>) -> Result<EventMetadata, S
         visible_bytes,
         estimated_tokens,
         observed_at_unix: observation.observed_at_unix,
+        excerpt_only: false,
     })
 }
 
@@ -931,6 +995,11 @@ fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> Press
         target_sha256: ledger.key.target_sha256(),
         is_current: project.active.as_ref() == Some(&ledger.key),
         recorded_events: ledger.events.len(),
+        excerpt_only_messages: ledger
+            .events
+            .iter()
+            .filter(|event| event.excerpt_only)
+            .count(),
         visible_unique_tokens,
         observed_estimate_tokens: visible_unique_tokens,
         unknown_source_count: unknown.len(),
@@ -976,6 +1045,11 @@ fn valid_event_metadata(event: &EventMetadata) -> bool {
         && valid_identifier(&event.dedup_key).is_ok()
         && event.revision > 0
         && event.observed_at_unix > 0
+        && (!event.excerpt_only
+            || matches!(
+                event.source_kind,
+                VisibleSourceKind::UserMessage | VisibleSourceKind::AssistantMessage
+            ))
         && match event.source_kind {
             VisibleSourceKind::UnknownAttachment => {
                 event.content_sha256.is_none()

@@ -76,7 +76,7 @@ const user = el('div', {'data-content-search-unit-key':'fallback-turn-0:0:user'}
   ]),
 ]);
 if (options.userShowMore) user.children[0].children.push(el('span', {}, '…'), button('Show more'));
-const answer = options.loadError ? "This response couldn’t load" : 'A useful answer';
+const answer = options.loadError ? "This response couldn’t load" : (options.answer ?? 'A useful answer');
 const assistant = el('div', {'data-content-search-unit-key':'fallback-turn-0:2:assistant'}, '', [
   el('h4', {'data-conversation-role':'assistant'}, 'ChatGPT said:'),
   el('div', {'data-chatgpt-selection-message-id':'assistant-id'}, '', options.controlsOnly ? [] : [
@@ -111,7 +111,7 @@ class CurrentDom:
 
     def evaluate(self, script):
         result = subprocess.run(
-            [shutil.which("node"), "-e", DOM, json.dumps(self.options)],
+            [shutil.which("node"), "-e", DOM, json.dumps(self.options, ensure_ascii=False)],
             input=script, text=True, encoding="utf-8", capture_output=True, timeout=10,
         )
         if result.returncode:
@@ -135,6 +135,25 @@ class CurrentDomTests(unittest.TestCase):
         self.assertEqual([m["text"] for m in observed["messages"]], ["exact wake message", "A useful answer"])
         self.assertTrue(all(m["textComplete"] and m["revisionComplete"] for m in observed["messages"]))
         self.assertEqual(observed["coverage"]["anchorStability"], "UNVERIFIED")
+        self.assertTrue(all(m["bodyTextObserved"] for m in observed["messages"]))
+
+    def test_long_body_excerpt_is_identified_without_claiming_full_revision(self):
+        for answer in ("Actual body text. " * 600, "😀" * 3000, "😀" * 3000 + "x"):
+            with self.subTest(unicode=answer.startswith("😀")):
+                snapshot = self.sink.visible_message_snapshot(CurrentDom(answer=answer))
+                message = snapshot["messages"][-1]
+                self.assertTrue(message["bodyTextObserved"])
+                self.assertFalse(message["textComplete"])
+                self.assertFalse(message["revisionComplete"])
+                self.assertIsNone(message["revisionHash"])
+                self.assertIsNotNone(message["messageHash"])
+                self.assertTrue(snapshot["truncated"])
+                self.assertGreater(message["visibleUnits"], 4096)
+                self.assertLessEqual(len(message["text"].encode("utf-8")), 4096)
+                self.assertTrue(message["text"])
+                self.assertNotIn("Copy", message["text"])
+        diagnostic = self.sink.visible_message_snapshot(CurrentDom(controlsOnly=True))["messages"][-1]
+        self.assertFalse(diagnostic["bodyTextObserved"])
 
     def test_current_user_receipt_and_following_assistant_anchor(self):
         self.assertEqual(self.sink.user_message_digests(CurrentDom()), [bridge.digest("exact wake message")])

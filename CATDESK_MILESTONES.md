@@ -1,3 +1,25 @@
+## 2026-10-21 — long-message context excerpts (SOURCE; LIVE PENDING)
+
+Context monitoring now counts identified, verified body excerpts when long
+messages exceed the bounded browser snapshot. Previously every clipped body
+was discarded. Repeated or changing clipped samples retain the largest proxy
+for that message instead of accumulating snapshots; a later complete body
+replaces that estimate. Missing identity, controls-only text and load errors
+remain excluded. Coverage stays UNKNOWN_OR_INCOMPLETE and never becomes an
+assertion about the provider's full context. Each project/generation stays separate.
+
+Three new Rust regressions and the actual offline DOM probes cover ASCII and
+Unicode clipping, replay/growth, later full-body replacement, privacy, wrong
+target refusal, per-project pressure and a fresh generation. Main Rust passes
+1,548 / 29 ignored; all root integrations/nested Wake, strict root/Wake Clippy,
+format and diff pass. Offline Python unittest passes 230 / one skip, followed
+by eleven final DOM cases after the Unicode clipping fix. Results and separate
+stopped-package/live qualification are recorded in the dated parent
+audit checkpoints/web-context-excerpts-oct21. No recurring browser automation,
+WakeHost restart, target change or completed-canary replay is part of this change.
+The independent native launcher failure, connector HTTP 429, exact remote CI
+and full installed multi-project acceptance remain open.
+
 ## 2026-10-21 — complete-pointer V2 recovery (SOURCE/FIXTURE ONLY)
 
 Recovery now accepts exact complete POINTER_SWITCHED history, retaining all
