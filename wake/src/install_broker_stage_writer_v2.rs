@@ -343,6 +343,52 @@ mod tests {
     }
 
     #[test]
+    fn retained_writer_supports_all_root_flushes_through_staged_and_lease_owns_it() {
+        use crate::{
+            install_broker_durability::RetainedDirectoryWriterV2,
+            install_broker_ledger::begin_offline_writer_fixture,
+        };
+        use std::{fs::OpenOptions, os::windows::fs::OpenOptionsExt, sync::Arc};
+        let fixture = TransactionFixture::new();
+        let (pair, observed) = pair(&fixture);
+        let write_open = || {
+            OpenOptions::new()
+                .write(true)
+                .share_mode(3)
+                .custom_flags(0x0200_0000 | FILE_OPEN_REPARSE_POINT)
+                .open(fixture.root_path())
+        };
+        drop(write_open().expect("positive write control"));
+        let writer = Arc::new(
+            RetainedDirectoryWriterV2::acquire(fixture.root(), &observed.target_protected_root)
+                .unwrap(),
+        );
+        let mut lease = begin_offline_writer_fixture(
+            BrokerLedgerGuard::acquire(fixture.root()).unwrap(),
+            &pair,
+            &observed,
+            Arc::clone(&writer),
+        )
+        .unwrap();
+        drop(writer);
+        assert!(write_open().is_err(), "lease retains exclusive writer");
+        let mut receipt = materialize_pinned_stage(
+            &mut lease,
+            source(&fixture, &pair),
+            StageSecurityMode::Fixture,
+            None,
+        )
+        .unwrap();
+        lease.record_staged(&mut receipt).unwrap();
+        assert_eq!(lease.phase(), "STAGED");
+        assert!(write_open().is_err());
+        drop(lease);
+        drop(write_open().expect("root writer releases with lease"));
+        drop(receipt);
+        fixture.cleanup();
+    }
+
+    #[test]
     fn offline_stage_copies_exact_bytes_retains_full_ids_and_records_staged_once() {
         let fixture = TransactionFixture::new();
         let (pair, observed) = pair(&fixture);

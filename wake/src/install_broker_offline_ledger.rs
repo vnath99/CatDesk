@@ -10,14 +10,17 @@ use super::*;
 use crate::{
     install_broker_approval::PackageManifestV1,
     install_broker_ci_fetch::require_broker_owned_offline_exact_ci,
+    install_broker_durability::RetainedDirectoryWriterV2,
     install_broker_offline_pins::{
-        OfflineMigrationPinsV2, OfflineOldStoreLockSetV2, full_identity_of_handle,
+        OfflineMigrationObjectPathsV2, OfflineMigrationPinsV2, OfflineOldStoreLockSetV2,
+        full_identity_of_handle,
     },
     install_broker_offline_v2::{
         CheckedOfflinePairV2, OfflineDesiredStateV2, OfflineMigrationObservationV2,
         OfflineObjectIdentityV2,
     },
 };
+use std::sync::Arc;
 
 const DOMAIN_V2: &[u8] = b"CatDeskWakeOfflineInstallLedgerV2\0";
 // V1 retains its 4-KiB limit. Full V2 object identities in STAGED need their
@@ -274,12 +277,47 @@ pub struct OfflineLedgerLeaseV2<'a, 'p> {
     intent: OfflineIntentRecordV2,
     intent_digest: String,
     revalidate: Box<dyn Fn() -> Result<()> + 'p>,
+    root_flush: OfflineRootFlush,
     manifest: PackageManifestV1,
     policy: Option<&'p BrokerProtectedPolicyV1>,
     stage_attempted: bool,
     stage_recorded: bool,
     stage_started_digest: Option<String>,
     staged_binding: Option<StageBindingV2>,
+}
+
+enum OfflineRootFlush {
+    Retained(Arc<RetainedDirectoryWriterV2>),
+    #[cfg(test)]
+    FixtureReopen,
+}
+
+impl OfflineRootFlush {
+    fn require_root(&self, root: &OwnedHandle, expected: &OfflineObjectIdentityV2) -> Result<()> {
+        match self {
+            Self::Retained(writer) => writer.require_root(root, expected),
+            #[cfg(test)]
+            Self::FixtureReopen => require_offline_root(root, expected),
+        }
+    }
+
+    fn flush(
+        &self,
+        root: &OwnedHandle,
+        expected: &OfflineObjectIdentityV2,
+        point: ParentFlushPoint,
+    ) -> Result<()> {
+        match self {
+            Self::Retained(writer) => writer.flush(root, expected, point),
+            #[cfg(test)]
+            Self::FixtureReopen => flush_pinned_directory(root, &expected.legacy, point),
+        }
+    }
+}
+
+struct OfflineMutationChecks<'p> {
+    revalidate: Box<dyn Fn() -> Result<()> + 'p>,
+    root_flush: OfflineRootFlush,
 }
 
 impl<'a> BrokerLedgerGuard<'a> {
@@ -293,9 +331,14 @@ impl<'a> BrokerLedgerGuard<'a> {
         anchor_wire: &'p [u8],
         approval_wire: &'p [u8],
         observed: &OfflineMigrationObservationV2,
-        pins: &'p OfflineMigrationPinsV2,
+        paths: &OfflineMigrationObjectPathsV2<'_>,
         stores: &'p OfflineOldStoreLockSetV2,
     ) -> Result<OfflineLedgerLeaseV2<'a, 'p>> {
+        // Writer acquisition occurs only after this guard owns the matching
+        // global ledger lock. Diagnostic callers keep open_read_only unchanged.
+        let pins = Arc::new(policy.open_offline_transaction_pins(&self, paths)?);
+        let writer = pins.transaction_root_writer()?;
+        writer.require_root(self.root, &observed.target_protected_root)?;
         let accepted_at = pending_offline_intent(self.root)?
             .map_or(observed.now_utc_seconds, |record| {
                 record.accepted_at_utc_seconds
@@ -309,16 +352,17 @@ impl<'a> BrokerLedgerGuard<'a> {
             anchor_wire,
             approval_wire,
             &original,
-            pins,
+            &pins,
             stores,
         )?;
         let expected_pair = approved.checked().readback().clone();
+        let retained_pins = Arc::clone(&pins);
         let revalidate = Box::new(move || {
             let current = policy.inspect_offline_pair_pinned(
                 anchor_wire,
                 approval_wire,
                 &original,
-                pins,
+                &retained_pins,
                 stores,
             )?;
             if current.readback() != &expected_pair {
@@ -326,10 +370,13 @@ impl<'a> BrokerLedgerGuard<'a> {
             }
             Ok(())
         });
-        let mut lease = self.accept_offline_checked(
+        let mut lease = self.accept_offline_checked_with_root(
             approved.checked(),
             observed,
-            revalidate,
+            OfflineMutationChecks {
+                revalidate,
+                root_flush: OfflineRootFlush::Retained(writer),
+            },
             require_offline_launch_quarantine,
             || require_broker_owned_offline_exact_ci(&approved),
         )?;
@@ -337,6 +384,7 @@ impl<'a> BrokerLedgerGuard<'a> {
         Ok(lease)
     }
 
+    #[cfg(test)]
     fn accept_offline_checked<'p>(
         self,
         pair: &CheckedOfflinePairV2,
@@ -345,8 +393,33 @@ impl<'a> BrokerLedgerGuard<'a> {
         admit: impl FnOnce() -> Result<()>,
         check_ci: impl FnOnce() -> Result<()>,
     ) -> Result<OfflineLedgerLeaseV2<'a, 'p>> {
+        self.accept_offline_checked_with_root(
+            pair,
+            observed,
+            OfflineMutationChecks {
+                revalidate,
+                root_flush: OfflineRootFlush::FixtureReopen,
+            },
+            admit,
+            check_ci,
+        )
+    }
+
+    fn accept_offline_checked_with_root<'p>(
+        self,
+        pair: &CheckedOfflinePairV2,
+        observed: &OfflineMigrationObservationV2,
+        checks: OfflineMutationChecks<'p>,
+        admit: impl FnOnce() -> Result<()>,
+        check_ci: impl FnOnce() -> Result<()>,
+    ) -> Result<OfflineLedgerLeaseV2<'a, 'p>> {
+        let OfflineMutationChecks {
+            revalidate,
+            root_flush,
+        } = checks;
         let accepted_at = pair.checked_at_utc_seconds();
         require_offline_root(self.root, &observed.target_protected_root)?;
+        root_flush.require_root(self.root, &observed.target_protected_root)?;
         if observed.now_utc_seconds < accepted_at {
             return Err("WAKE_OFFLINE_LEDGER_CLOCK_ROLLBACK".into());
         }
@@ -384,11 +457,7 @@ impl<'a> BrokerLedgerGuard<'a> {
         } else {
             write_offline_record(&mut file, &binding)?
         };
-        flush_pinned_directory(
-            self.root,
-            &binding.protected_root.legacy,
-            ParentFlushPoint::Intent,
-        )?;
+        root_flush.flush(self.root, &binding.protected_root, ParentFlushPoint::Intent)?;
         revalidate()?;
         require_offline_root(self.root, &binding.protected_root)?;
         require_offline_inventory(self.root, false)?;
@@ -402,6 +471,7 @@ impl<'a> BrokerLedgerGuard<'a> {
             intent: binding,
             intent_digest: digest,
             revalidate,
+            root_flush,
             manifest: pair.approval().manifest.clone(),
             policy: None,
             stage_attempted: false,
@@ -443,6 +513,8 @@ impl<'p> OfflineLedgerLeaseV2<'_, 'p> {
     }
     pub(crate) fn revalidate_inputs(&self) -> Result<()> {
         (self.revalidate)()?;
+        self.root_flush
+            .require_root(self.root, &self.intent.protected_root)?;
         require_offline_root(self.root, &self.intent.protected_root)
     }
 
@@ -477,9 +549,9 @@ impl<'p> OfflineLedgerLeaseV2<'_, 'p> {
         )
         .map_err(|_| "WAKE_OFFLINE_STAGE_ATTENTION")?;
         let digest = write_offline_record(&mut file, &marker)?;
-        flush_pinned_directory(
+        self.root_flush.flush(
             self.root,
-            &self.intent.protected_root.legacy,
+            &self.intent.protected_root,
             ParentFlushPoint::StageStarted,
         )?;
         (self.revalidate)()?;
@@ -554,9 +626,9 @@ impl<'p> OfflineLedgerLeaseV2<'_, 'p> {
             }
             digest
         };
-        flush_pinned_directory(
+        self.root_flush.flush(
             self.root,
-            &self.intent.protected_root.legacy,
+            &self.intent.protected_root,
             ParentFlushPoint::Staged,
         )?;
         self.revalidate_inputs()?;
@@ -596,6 +668,25 @@ pub(crate) fn begin_offline_fixture<'a>(
     observed: &OfflineMigrationObservationV2,
 ) -> Result<OfflineLedgerLeaseV2<'a, 'static>> {
     guard.accept_offline_checked(pair, observed, Box::new(|| Ok(())), || Ok(()), || Ok(()))
+}
+
+#[cfg(test)]
+pub(crate) fn begin_offline_writer_fixture<'a>(
+    guard: BrokerLedgerGuard<'a>,
+    pair: &CheckedOfflinePairV2,
+    observed: &OfflineMigrationObservationV2,
+    writer: Arc<RetainedDirectoryWriterV2>,
+) -> Result<OfflineLedgerLeaseV2<'a, 'static>> {
+    guard.accept_offline_checked_with_root(
+        pair,
+        observed,
+        OfflineMutationChecks {
+            revalidate: Box::new(|| Ok(())),
+            root_flush: OfflineRootFlush::Retained(writer),
+        },
+        || Ok(()),
+        || Ok(()),
+    )
 }
 
 impl BrokerLedgerGuard<'_> {
@@ -770,6 +861,69 @@ mod tests {
         stage.artifacts[0] = object(5);
         stage.artifacts[0].full.volume_serial += 1;
         assert!(!valid_stage_binding_v2(&stage, &root));
+    }
+
+    #[test]
+    fn mismatched_retained_writer_refuses_before_intent_and_exact_flush_failure_reopens() {
+        use crate::install_broker_durability::fail_next_flush;
+        let (first_path, first, _, _, first_observed, _) = fixture();
+        let (path, root, anchor, approval, observed, key) = fixture();
+        let pair = checked(
+            &anchor,
+            &approval,
+            &observed,
+            &key,
+            observed.now_utc_seconds,
+        )
+        .unwrap();
+        let wrong = Arc::new(
+            RetainedDirectoryWriterV2::acquire(&first, &first_observed.target_protected_root)
+                .unwrap(),
+        );
+        assert_eq!(
+            begin_offline_writer_fixture(
+                BrokerLedgerGuard::acquire(&root).unwrap(),
+                &pair,
+                &observed,
+                wrong
+            )
+            .err()
+            .unwrap(),
+            "WAKE_OFFLINE_TRANSACTION_ROOT_MISMATCH"
+        );
+        let intent = path.join(record_name(1, InstallPhaseV1::Intent));
+        assert!(!intent.exists());
+        let writer = Arc::new(
+            RetainedDirectoryWriterV2::acquire(&root, &observed.target_protected_root).unwrap(),
+        );
+        fail_next_flush(ParentFlushPoint::Intent);
+        assert_eq!(
+            begin_offline_writer_fixture(
+                BrokerLedgerGuard::acquire(&root).unwrap(),
+                &pair,
+                &observed,
+                Arc::clone(&writer)
+            )
+            .err()
+            .unwrap(),
+            "WAKE_BROKER_PARENT_FLUSH_FAILED"
+        );
+        let bytes = std::fs::read(&intent).unwrap();
+        let lease = begin_offline_writer_fixture(
+            BrokerLedgerGuard::acquire(&root).unwrap(),
+            &pair,
+            &observed,
+            Arc::clone(&writer),
+        )
+        .unwrap();
+        assert_eq!(lease.phase(), "INTENT");
+        drop(lease);
+        drop(writer);
+        assert_eq!(std::fs::read(&intent).unwrap(), bytes);
+        drop(first);
+        drop(root);
+        super::super::tests::remove_fixture(&first_path, 1);
+        super::super::tests::remove_fixture(&path, 1);
     }
 
     #[test]

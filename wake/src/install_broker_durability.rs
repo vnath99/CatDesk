@@ -4,15 +4,22 @@
 //! The service must still establish a protected local filesystem and validate
 //! sudden-power-loss behavior before this source can gate an installation.
 
-use crate::{Result, install_broker_approval::ObjectIdentityV1};
+use crate::{
+    Result, install_broker_approval::ObjectIdentityV1,
+    install_broker_offline_pins::full_identity_of_handle,
+    install_broker_offline_v2::OfflineObjectIdentityV2,
+};
 use std::{
     ffi::c_void,
+    fs::File,
     os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle},
     ptr,
 };
 
 const FILE_OPEN: u32 = 1;
 const FILE_ADD_FILE: u32 = 2;
+const FILE_READ_DATA: u32 = 1;
+const READ_CONTROL: u32 = 0x0002_0000;
 const FILE_READ_ATTRIBUTES: u32 = 0x80;
 const SYNCHRONIZE: u32 = 0x0010_0000;
 const FILE_SHARE_READ: u32 = 1;
@@ -128,6 +135,14 @@ fn identity(handle: &OwnedHandle) -> Result<ObjectIdentityV1> {
 }
 
 fn reopen_self_for_flush(pinned: &OwnedHandle) -> Result<OwnedHandle> {
+    open_relative_directory(
+        pinned,
+        FILE_ADD_FILE | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+    )
+}
+
+fn open_relative_directory(pinned: &OwnedHandle, access: u32, sharing: u32) -> Result<OwnedHandle> {
     // An empty relative name is the pinned directory itself, not a caller
     // pathname. Reopening obtains the write right needed for metadata flush
     // without widening the long-lived readback handle's rights.
@@ -152,12 +167,12 @@ fn reopen_self_for_flush(pinned: &OwnedHandle) -> Result<OwnedHandle> {
     let result = unsafe {
         NtCreateFile(
             &mut raw,
-            FILE_ADD_FILE | FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+            access,
             &mut attributes,
             &mut status,
             ptr::null_mut(),
             0,
-            FILE_SHARE_READ | FILE_SHARE_WRITE, // deny delete/rename
+            sharing,
             FILE_OPEN,
             FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_REPARSE_POINT,
             ptr::null_mut(),
@@ -185,6 +200,21 @@ pub(crate) fn flush_pinned_directory(
     }
     let write_handle = reopen_self_for_flush(pinned)?;
     if identity(&write_handle)? != *expected {
+        return Err("WAKE_BROKER_PARENT_DIRECTORY_CHANGED".into());
+    }
+    flush_directory_handle(&write_handle, expected, point)?;
+    if identity(pinned)? != *expected {
+        return Err("WAKE_BROKER_PARENT_DIRECTORY_CHANGED".into());
+    }
+    Ok(())
+}
+
+fn flush_directory_handle(
+    write_handle: &OwnedHandle,
+    expected: &ObjectIdentityV1,
+    point: ParentFlushPoint,
+) -> Result<()> {
+    if identity(write_handle)? != *expected {
         return Err("WAKE_BROKER_PARENT_DIRECTORY_CHANGED".into());
     }
     #[cfg(test)]
@@ -219,8 +249,82 @@ pub(crate) fn flush_pinned_directory(
     {
         return Err("WAKE_BROKER_PARENT_FLUSH_FAILED".into());
     }
-    if identity(pinned)? != *expected || identity(&write_handle)? != *expected {
+    if identity(write_handle)? != *expected {
         return Err("WAKE_BROKER_PARENT_DIRECTORY_CHANGED".into());
+    }
+    Ok(())
+}
+
+/// Exact directory writer retained by one broker transaction. It denies new
+/// write/delete opens and flushes its own already granted handle. Construction
+/// is crate-private; production obtains it from fixed policy under the ledger
+/// guard, never from a serialized capability or caller-selected trusted path.
+pub(crate) struct RetainedDirectoryWriterV2 {
+    handle: OwnedHandle,
+    expected: OfflineObjectIdentityV2,
+}
+
+impl RetainedDirectoryWriterV2 {
+    pub(crate) fn identity(&self) -> &OfflineObjectIdentityV2 {
+        &self.expected
+    }
+    pub(crate) fn acquire(
+        pinned: &OwnedHandle,
+        expected: &OfflineObjectIdentityV2,
+    ) -> Result<Self> {
+        require_full_directory(pinned, expected)?;
+        let handle = open_relative_directory(
+            pinned,
+            FILE_READ_DATA | FILE_ADD_FILE | FILE_READ_ATTRIBUTES | READ_CONTROL | SYNCHRONIZE,
+            FILE_SHARE_READ,
+        )?;
+        let writer = Self {
+            handle,
+            expected: expected.clone(),
+        };
+        writer.require_root(pinned, expected)?;
+        Ok(writer)
+    }
+
+    pub(crate) fn require_root(
+        &self,
+        root: &OwnedHandle,
+        expected: &OfflineObjectIdentityV2,
+    ) -> Result<()> {
+        if self.expected != *expected {
+            return Err("WAKE_OFFLINE_TRANSACTION_ROOT_MISMATCH".into());
+        }
+        require_full_directory(root, expected)?;
+        require_full_directory(&self.handle, expected)
+    }
+
+    pub(crate) fn duplicate_role_file(&self) -> Result<File> {
+        require_full_directory(&self.handle, &self.expected)?;
+        // DuplicateHandle preserves this open's access/share contract; no
+        // second path open or right upgrade occurs.
+        self.handle
+            .try_clone()
+            .map(File::from)
+            .map_err(|_| "WAKE_OFFLINE_TRANSACTION_ROOT_UNAVAILABLE".into())
+    }
+
+    pub(crate) fn flush(
+        &self,
+        root: &OwnedHandle,
+        expected: &OfflineObjectIdentityV2,
+        point: ParentFlushPoint,
+    ) -> Result<()> {
+        self.require_root(root, expected)?;
+        flush_directory_handle(&self.handle, &expected.legacy, point)?;
+        self.require_root(root, expected)
+    }
+}
+
+fn require_full_directory(handle: &OwnedHandle, expected: &OfflineObjectIdentityV2) -> Result<()> {
+    if identity(handle)? != expected.legacy
+        || full_identity_of_handle(handle.as_raw_handle())? != expected.full
+    {
+        return Err("WAKE_OFFLINE_TRANSACTION_ROOT_MISMATCH".into());
     }
     Ok(())
 }
@@ -239,4 +343,90 @@ pub(crate) fn fail_next_flush(point: ParentFlushPoint) {
         );
         failure.set(Some(point));
     });
+}
+
+#[cfg(test)]
+mod retained_writer_tests {
+    use super::*;
+    use crate::install_broker_stage_writer::tests::TransactionFixture;
+    use std::{fs::OpenOptions, os::windows::fs::OpenOptionsExt};
+
+    fn expected(root: &OwnedHandle) -> OfflineObjectIdentityV2 {
+        OfflineObjectIdentityV2 {
+            legacy: identity(root).unwrap(),
+            full: full_identity_of_handle(root.as_raw_handle()).unwrap(),
+        }
+    }
+
+    fn write_open(path: &std::path::Path) -> std::io::Result<File> {
+        OpenOptions::new()
+            .write(true)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .custom_flags(0x0200_0000 | FILE_OPEN_REPARSE_POINT)
+            .open(path)
+    }
+
+    #[test]
+    fn retained_writer_flushes_while_new_writers_are_denied_and_role_clone_keeps_pin() {
+        let fixture = TransactionFixture::new();
+        drop(write_open(fixture.root_path()).expect("positive control: writable fixture"));
+        let expected = expected(fixture.root());
+        let writer = RetainedDirectoryWriterV2::acquire(fixture.root(), &expected).unwrap();
+        let role = writer.duplicate_role_file().unwrap();
+        assert!(write_open(fixture.root_path()).is_err());
+        assert_eq!(
+            flush_pinned_directory(fixture.root(), &expected.legacy, ParentFlushPoint::Intent)
+                .unwrap_err(),
+            "WAKE_BROKER_PARENT_FLUSH_UNAVAILABLE"
+        );
+        writer
+            .flush(fixture.root(), &expected, ParentFlushPoint::Intent)
+            .unwrap();
+        fail_next_flush(ParentFlushPoint::StageStarted);
+        assert_eq!(
+            writer
+                .flush(fixture.root(), &expected, ParentFlushPoint::StageStarted)
+                .unwrap_err(),
+            "WAKE_BROKER_PARENT_FLUSH_FAILED"
+        );
+        writer
+            .flush(fixture.root(), &expected, ParentFlushPoint::StageStarted)
+            .unwrap();
+        drop(writer);
+        assert!(
+            write_open(fixture.root_path()).is_err(),
+            "duplicate retains the same exclusive open"
+        );
+        drop(role);
+        drop(
+            write_open(fixture.root_path())
+                .expect("write opens recover after all writer pins drop"),
+        );
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn wrong_full_identity_or_root_cannot_acquire_or_flush_writer() {
+        let first = TransactionFixture::new();
+        let second = TransactionFixture::new();
+        let first_id = expected(first.root());
+        let second_id = expected(second.root());
+        assert!(RetainedDirectoryWriterV2::acquire(first.root(), &second_id).is_err());
+        let writer = RetainedDirectoryWriterV2::acquire(first.root(), &first_id).unwrap();
+        assert_eq!(
+            writer
+                .flush(second.root(), &second_id, ParentFlushPoint::Intent)
+                .unwrap_err(),
+            "WAKE_OFFLINE_TRANSACTION_ROOT_MISMATCH"
+        );
+        let mut wrong = first_id.clone();
+        wrong.full.file_id_hex = "f".repeat(32);
+        assert_eq!(
+            writer.require_root(first.root(), &wrong).unwrap_err(),
+            "WAKE_OFFLINE_TRANSACTION_ROOT_MISMATCH"
+        );
+        drop(writer);
+        first.cleanup();
+        second.cleanup();
+    }
 }

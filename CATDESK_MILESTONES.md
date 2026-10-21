@@ -1,3 +1,28 @@
+## 2026-10-21 — V2 retained root writer (SOURCE/FIXTURE; ADMISSION HELD)
+
+Resolved the kernel-confirmed root-pin/metadata-flush conflict without changing
+diagnostic sharing. Fixed policy constructs transaction pins under its matching
+global ledger guard. The transaction owns a full-identity-checked writer handle
+that excludes new root write/delete opens and flushes its existing handle at
+INTENT, STAGE_STARTED and STAGED. The lease retains the writer and other role
+pins; mismatched roots refuse before INTENT. No serialized writer capability,
+V1 owner substitution or production admission bypass is added.
+
+Five new Windows tests pass, including the complete physical staging path with
+the writer retained and injected INTENT-flush recovery. Complete all-feature
+Wake tests pass (323 library / one ignored, all enabled binary/integration and
+adapter/response Python regressions). Strict root/Wake Clippy, formatting and
+diff checks pass. Root main tests remain prior-checkpoint evidence.
+
+Production quarantine/admission, broker-owned observations/clock, V2 later-phase
+recovery/publication and reader/owner cutover remain unfinished. This source is
+not selected or installed. Five original registry/Wake pairs, stopped v33 and
+production pointers remain unchanged; completed rollover is not replayed.
+One read-only connector probe at 17:48:44 UTC still returns HTTP 429 from the
+OpenAI tunnel SSE probe before local CatDesk access is proven. Source work can
+continue independently; no operational or recurring worker is started.
+Parent dated audit: checkpoints/offline-v2-root-writer-oct21.
+
 ## 2026-10-21 — V2 physical candidate staging (SOURCE/FIXTURE; ADMISSION HELD)
 
 V2 now copies the exact signed manifest/four artifacts through the existing

@@ -3,8 +3,9 @@
 //! Only the compiled `C:\ProgramData\CatDesk\WakeProtectedInstallV1` root and
 //! fixed `broker-policy.json` name are accepted in production. The policy file
 //! must be broker-only writable, canonical and bounded, and physically bound
-//! to its root and own file object. Root and file handles stay pinned without
-//! write/delete sharing for the value's lifetime; use sites recheck them.
+//! to its root and own file object. Root pins deny delete sharing; policy-file
+//! pins deny write/delete sharing. Use sites recheck them. A separate V2
+//! transaction writer excludes new protected-root write/delete opens.
 //! This proves a snapshot of installed bytes, not that an independent offline
 //! authority approved the bootstrap, nor that a service or worker token is
 //! correctly provisioned. It grants no install or launch authority.
@@ -15,11 +16,12 @@ use crate::{
         BrokerObservedStateV1, ObjectIdentityV1, VerifiedApprovalV1, verify_approval,
     },
     install_broker_offline_pins::{
-        OfflineMigrationPinsV2, OfflineOldStoreLockSetV2, full_identity_of_handle,
+        OfflineMigrationObjectPathsV2, OfflineMigrationPinsV2, OfflineOldStoreLockSetV2,
+        full_identity_of_handle,
     },
     install_broker_offline_v2::{
         CheckedOfflinePairV2, FullFileIdentityV2, OfflineMigrationObservationV2,
-        OfflinePairReadbackV2, check_offline_pair,
+        OfflineObjectIdentityV2, OfflinePairReadbackV2, check_offline_pair,
     },
     install_broker_operator::{OperatorTokenEvidenceV1, inspect_connected_pipe_operator},
     install_broker_preflight::{
@@ -559,6 +561,36 @@ fn load_pinned(
 }
 
 impl BrokerProtectedPolicyV1 {
+    /// Construct mutation-compatible pins under the matching retained global
+    /// ledger guard. This acquires handles only; signatures, closed inventory,
+    /// quarantine, exact CI and broker observations are still required before
+    /// INTENT. Production policy has only its fixed-root constructor.
+    pub(crate) fn open_offline_transaction_pins(
+        &self,
+        guard: &crate::install_broker_ledger::BrokerLedgerGuard<'_>,
+        paths: &OfflineMigrationObjectPathsV2<'_>,
+    ) -> Result<OfflineMigrationPinsV2> {
+        let before = self.readback()?;
+        let full_before = self.fixed_full_ids()?;
+        let expected = OfflineObjectIdentityV2 {
+            legacy: before.protected_root.clone(),
+            full: full_before.0.clone(),
+        };
+        if object_identity(&file_info(guard.root().as_raw_handle(), true)?) != expected.legacy
+            || full_identity_of_handle(guard.root().as_raw_handle())? != expected.full
+        {
+            return Err("WAKE_OFFLINE_TRANSACTION_ROOT_MISMATCH".into());
+        }
+        let pins =
+            OfflineMigrationPinsV2::open_for_transaction(paths, self.root.handle(), &expected)?;
+        pins.transaction_root_writer()?
+            .require_root(guard.root(), &expected)?;
+        if self.readback()? != before || self.fixed_full_ids()? != full_before {
+            return Err("WAKE_OFFLINE_PROTECTED_POLICY_CHANGED".into());
+        }
+        Ok(pins)
+    }
+
     fn fixed_full_ids(&self) -> Result<(FullFileIdentityV2, FullFileIdentityV2)> {
         let root = full_identity_of_handle(self.root.handle().as_raw_handle())?;
         let file = self
@@ -996,6 +1028,114 @@ pub(crate) mod tests {
                 .expect("remove fixture policy");
             std::fs::remove_dir(self.path).expect("remove fixture root");
         }
+    }
+
+    #[test]
+    fn transaction_pins_require_matching_global_guard_and_preserve_other_role_sharing() {
+        use crate::install_broker_ledger::BrokerLedgerGuard;
+        use std::{fs::OpenOptions, os::windows::fs::OpenOptionsExt};
+        let first = Fixture::new();
+        let second = Fixture::new();
+        let policy = first.load().unwrap();
+        for fixture in [&first, &second] {
+            std::fs::write(fixture.path.join("install-ledger.lock"), b"").unwrap();
+        }
+        let old = first.path.join("old");
+        std::fs::create_dir(&old).unwrap();
+        let pointer = old.join("current.json");
+        let config = old.join("config.json");
+        let lock = old.join("host.lock");
+        let image = old.join("old.exe");
+        let registry = first.path.join("projects.json");
+        let service = first.path.join("service.exe");
+        let policy_path = first.path.join(FIXED_BROKER_POLICY_FILE);
+        for path in [&pointer, &config, &lock, &image, &registry, &service] {
+            std::fs::write(path, b"untrusted fixture bytes, not approval").unwrap();
+        }
+        let paths = OfflineMigrationObjectPathsV2 {
+            predecessor_pointer: &pointer,
+            old_runtime_root: &old,
+            old_runtime_lock: &lock,
+            old_host_image: &image,
+            project_registration_object: &registry,
+            target_protected_root: &first.path,
+            broker_policy_file: &policy_path,
+            broker_service_image: &service,
+        };
+        let wrong_guard = BrokerLedgerGuard::acquire(&second.root).unwrap();
+        assert_eq!(
+            policy
+                .open_offline_transaction_pins(&wrong_guard, &paths)
+                .err()
+                .unwrap(),
+            "WAKE_OFFLINE_TRANSACTION_ROOT_MISMATCH"
+        );
+        drop(wrong_guard);
+        let guard = BrokerLedgerGuard::acquire(&first.root).unwrap();
+        let wrong_paths = OfflineMigrationObjectPathsV2 {
+            target_protected_root: &second.path,
+            ..paths
+        };
+        assert!(
+            policy
+                .open_offline_transaction_pins(&guard, &wrong_paths)
+                .is_err()
+        );
+        let diagnostic = OfflineMigrationPinsV2::open_read_only(&paths).unwrap();
+        assert_eq!(
+            diagnostic.transaction_root_writer().err().unwrap(),
+            "WAKE_OFFLINE_TRANSACTION_ROOT_REQUIRED"
+        );
+        drop(diagnostic);
+        let pins = policy
+            .open_offline_transaction_pins(&guard, &paths)
+            .unwrap();
+        let writer = pins.transaction_root_writer().unwrap();
+        policy
+            .revalidate()
+            .expect("fixed policy remains readable during exclusive write pin");
+        writer
+            .flush(
+                guard.root(),
+                writer.identity(),
+                crate::install_broker_durability::ParentFlushPoint::Intent,
+            )
+            .unwrap();
+        for path in [
+            &pointer,
+            &config,
+            &lock,
+            &image,
+            &registry,
+            &policy_path,
+            &service,
+            &old,
+            &first.path,
+        ] {
+            assert!(
+                OpenOptions::new()
+                    .write(true)
+                    .share_mode(3)
+                    .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+                    .open(path)
+                    .is_err(),
+                "role still excludes write opens: {}",
+                path.display()
+            );
+        }
+        drop(writer);
+        drop(pins);
+        drop(guard);
+        drop(policy);
+        for path in [&pointer, &config, &lock, &image, &registry, &service] {
+            std::fs::remove_file(path).unwrap();
+        }
+        std::fs::remove_dir(&old).unwrap();
+        for fixture in [&first, &second] {
+            std::fs::remove_file(fixture.path.join("install-ledger.lock")).unwrap();
+        }
+        first.cleanup();
+        second.cleanup();
     }
 
     /// Build only an isolated test policy in an already pinned temporary root.

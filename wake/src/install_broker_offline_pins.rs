@@ -10,6 +10,7 @@
 use crate::{
     Result,
     install_broker_approval::ObjectIdentityV1,
+    install_broker_durability::RetainedDirectoryWriterV2,
     install_broker_offline_v2::{
         FullFileIdentityV2, OfflineMigrationObservationV2, OfflineObjectIdentityV2,
     },
@@ -28,10 +29,11 @@ use std::{
     os::windows::{
         ffi::OsStrExt,
         fs::OpenOptionsExt,
-        io::{AsRawHandle, FromRawHandle},
+        io::{AsRawHandle, FromRawHandle, OwnedHandle},
     },
     path::{Component, Path, PathBuf},
     ptr,
+    sync::Arc,
 };
 
 const FILE_SHARE_READ: u32 = 1;
@@ -723,6 +725,7 @@ pub struct OfflineMigrationPinsV2 {
     target_protected_root: OfflineObjectPinV2,
     broker_policy_file: OfflineObjectPinV2,
     broker_service_image: OfflineObjectPinV2,
+    protected_root_writer: Option<Arc<RetainedDirectoryWriterV2>>,
 }
 
 impl OfflineMigrationPinsV2 {
@@ -742,7 +745,66 @@ impl OfflineMigrationPinsV2 {
             target_protected_root: OfflineObjectPinV2::open(paths.target_protected_root, true)?,
             broker_policy_file: OfflineObjectPinV2::open(paths.broker_policy_file, false)?,
             broker_service_image: OfflineObjectPinV2::open(paths.broker_service_image, false)?,
+            protected_root_writer: None,
         })
+    }
+
+    /// Called only by fixed policy while the matching ledger guard is held.
+    /// The fresh auxiliary target-path readback is replaced before admission;
+    /// the fixed policy's no-delete root pin remains live throughout. All
+    /// predecessor/config/policy/image pins keep their diagnostic share modes.
+    pub(crate) fn open_for_transaction(
+        paths: &OfflineMigrationObjectPathsV2<'_>,
+        fixed_root: &OwnedHandle,
+        expected_root: &OfflineObjectIdentityV2,
+    ) -> Result<Self> {
+        let Self {
+            predecessor_pointer,
+            old_runtime_root,
+            target_config,
+            old_runtime_lock,
+            old_host_image,
+            project_registration_object,
+            target_protected_root,
+            broker_policy_file,
+            broker_service_image,
+            ..
+        } = Self::open_read_only(paths)?;
+        target_protected_root.matches(expected_root)?;
+        drop(target_protected_root);
+        let writer = Arc::new(RetainedDirectoryWriterV2::acquire(
+            fixed_root,
+            expected_root,
+        )?);
+        let file = writer.duplicate_role_file()?;
+        let identity = inspect(&file, true)?;
+        let target_protected_root = OfflineObjectPinV2 {
+            file,
+            identity,
+            directory: true,
+        };
+        target_protected_root.matches(expected_root)?;
+        Ok(Self {
+            predecessor_pointer,
+            old_runtime_root,
+            target_config,
+            old_runtime_lock,
+            old_host_image,
+            project_registration_object,
+            target_protected_root,
+            broker_policy_file,
+            broker_service_image,
+            protected_root_writer: Some(writer),
+        })
+    }
+
+    pub(crate) fn transaction_root_writer(&self) -> Result<Arc<RetainedDirectoryWriterV2>> {
+        let writer = self
+            .protected_root_writer
+            .as_ref()
+            .ok_or("WAKE_OFFLINE_TRANSACTION_ROOT_REQUIRED")?;
+        self.target_protected_root.matches(writer.identity())?;
+        Ok(Arc::clone(writer))
     }
 
     pub fn revalidate_matching(&self, observed: &OfflineMigrationObservationV2) -> Result<()> {

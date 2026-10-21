@@ -1,5 +1,41 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 retained transaction root writer (SOURCE/FIXTURE ONLY)
+
+The diagnostic pin/metadata-flush conflict recorded below is resolved for the
+separate V2 transaction path. Fixed protected policy first verifies its matching
+global ledger guard, then constructs owned transaction role pins. Only the fresh
+auxiliary target-root readback is replaced; the fixed policy root stays pinned.
+The opaque writer checks legacy and full FileIdInfo identities, denies new
+root write/delete opens and flushes its own already granted handle. The lease
+owns the writer and other role pins through INTENT, STAGE_STARTED and STAGED.
+Read-only diagnostic construction and all other role sharing remain unchanged.
+
+Five new Windows tests cover direct flushing while competing writers are denied,
+duplicate-handle lifetime, full-ID/root mismatches, exact INTENT-flush recovery,
+matching policy/guard construction and complete physical staging with the writer
+retained. Complete all-feature Wake tests pass: 323 library / one ignored plus
+all enabled binary/integration and adapter/response Python regressions. Strict
+all-target/all-feature root and Wake Clippy, both formatting checks and diff
+checks pass. Source hashes remain identical to the full test run. Root main
+tests were not rerun for this Wake-only increment.
+
+This does not establish production admission or installed acceptance. The
+quarantine proof gate still refuses before independent CI or INTENT; broker-owned
+clock/observation integration, closed inventory/quarantine proof, later V2 phase
+recovery/publication, protected reader/owner cutover and independent provisioning
+evidence remain required. Existing installer and service holds stay in force.
+
+Five original project registry/Wake pairs and histories remain exact. Selected
+development v33 and production stay stopped and unchanged; no new package is
+selected, no operational browser/WakeHost/recurring worker starts, and no message
+or completed canary is resent. Source fixture helpers are distinct from those
+operational runtimes. One read-only connector probe at 17:48:44 UTC still returns
+HTTP 429 at the OpenAI tunnel SSE probe, before local CatDesk access is proven.
+This limits connector verification while safe source work continues. Installed
+multi-project operation and the natural development/review cycle remain open.
+Parent dated audit: checkpoints/offline-v2-root-writer-oct21.
+
 ## October 21 V2 physical candidate staging (SOURCE/FIXTURE ONLY)
 
 V2 now materializes the fixed manifest/four-file package and records STAGED
