@@ -1,5 +1,46 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 V2 INTENT writer and pre-stage boundary (SOURCE/FIXTURE ONLY)
+
+The existing offline ledger now includes create-once INTENT writing, exact
+reopening at the original signature-checked time, an opaque retained lease and
+the hash-linked STAGE_STARTED write-ahead boundary. It reuses V1's global lock,
+root-relative creates, record bounds and directory-flush helpers. Full root IDs,
+signed bindings, retained policy/role/store validation and ledger inventory are
+checked at mutation boundaries. Failed stage-marker attempts cannot retry on
+the same lease; an existing marker requires attention after reopening. No
+physical candidate is created by this increment, and no V1 PID is fabricated.
+
+A V2 protected-policy wrapper reuses the existing fixed-origin independent-CI
+fetcher and bounded network-worker permit. Production admission remains held
+by an explicit, unimplemented quarantine proof gate:
+`WAKE_OFFLINE_LAUNCH_QUARANTINE_UNVERIFIED`, before any CI request or INTENT.
+Supplied hashes, matching diagnostic snapshots and configuration flags cannot
+enable it. The private fixture seam is not exposed in a production command.
+Broker-owned clock/observation admission, real closed inventory/quarantine,
+physical V2 stage/publish and owner/reader cutover remain incomplete. Existing
+service/installer holds are preserved.
+
+Verification covers 14 V2 ledger tests (eight new), 309 Wake unit tests / one
+ignored, strict root/Wake Clippy and formatting. Main tests pass 1,545 / 29
+ignored using a short isolated serial temp directory. Enabled integration
+coverage passes across recorded runs: the existing nested Wake integration
+passes separately with normal temp settings. Earlier broad commands failed
+on shared Temp-handle contention, overlong fixture Git paths and a custom-temp
+legacy lock-owner probe. Those logs and command exits are retained; there is
+no claim that one combined full command passed. Code hashes remained unchanged
+between these attempts, and no guard, global environment or Git setting was
+weakened to obtain the results.
+
+Operational v33 and production stay stopped and unchanged; no new package is
+selected. Source fixture helpers are distinct from those operational runtimes.
+Five development bindings and prior five-context/three-route/completed-rollover
+evidence remain separate and unreplayed. The connector's one new read still
+fails with HTTP 429 at the OpenAI tunnel SSE probe, before local CatDesk access
+is proven. No retry, transport change or recurring/browser worker is started.
+Installed multi-project acceptance and the natural development/review cycle
+remain open. Parent dated audit: checkpoints/offline-v2-transaction-oct21.
+
 ## October 21 first-generation V2 intent readback (SOURCE ONLY)
 
 The offline signed-pair verifier now retains checked payloads for the existing

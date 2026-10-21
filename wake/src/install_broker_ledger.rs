@@ -82,7 +82,7 @@ const INVALID_HANDLE_VALUE: *mut c_void = -1isize as *mut c_void;
 
 #[path = "install_broker_offline_ledger.rs"]
 mod offline_v2;
-pub use offline_v2::OfflineIntentReadbackV2;
+pub use offline_v2::{OfflineIntentReadbackV2, OfflineLedgerLeaseV2};
 
 #[repr(C)]
 struct UnicodeString {

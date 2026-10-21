@@ -185,6 +185,7 @@ pub(crate) struct CheckedOfflinePairV2 {
     anchor: OfflineMigrationAnchorV2,
     approval: WakeOfflineInstallApprovalV2,
     readback: OfflinePairReadbackV2,
+    checked_at_utc_seconds: u64,
 }
 
 impl CheckedOfflinePairV2 {
@@ -198,6 +199,10 @@ impl CheckedOfflinePairV2 {
 
     pub(crate) fn readback(&self) -> &OfflinePairReadbackV2 {
         &self.readback
+    }
+
+    pub(crate) fn checked_at_utc_seconds(&self) -> u64 {
+        self.checked_at_utc_seconds
     }
 }
 
@@ -487,6 +492,7 @@ pub(crate) fn check_offline_pair(
         anchor,
         approval,
         readback,
+        checked_at_utc_seconds: observed.now_utc_seconds,
     })
 }
 

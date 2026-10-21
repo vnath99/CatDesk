@@ -1,3 +1,29 @@
+## 2026-10-21 — V2 create-once INTENT and pre-stage boundary (SOURCE/FIXTURE)
+
+The V2 ledger now has a create-once writer/lease and exact INTENT reopening,
+retaining the existing global lock, root-relative file operations and parent
+flushes. The lease retains protected-policy/offline-role/store borrows through
+its private validator. A hash-linked STAGE_STARTED marker precedes any future
+physical stage create; failed/uncertain markers are sticky attention and cannot
+be replayed. V1 bytes and owner fields remain unchanged. The V2 CI consumer
+reuses the existing protected-key, fixed-origin, bounded WinHTTP path.
+
+Actual production admission is still unimplemented: the fixed quarantine gate
+returns WAKE_OFFLINE_LAUNCH_QUARANTINE_UNVERIFIED before CI or INTENT, with no
+caller hash/flag bypass. Only disposable fixture admission exercises the new
+writer. Broker-owned observation/clock integration, real quarantine proof,
+physical V2 stage/publish receipts, reader cutover and service provisioning
+remain required. No source test authorizes installation or activation.
+
+Fourteen V2 ledger cases pass (eight new transaction/race/crash cases); 309
+Wake unit cases pass / one ignored. Main tests pass 1,545 / 29 ignored in a
+short isolated serial temp run; enabled integrations pass across recorded
+runs, with the nested Wake integration passing separately under normal temp.
+Earlier shared-Temp, long-path and custom-temp probe failures are retained,
+not reported as passing full commands. Strict root/Wake Clippy and formatting
+pass. Selected stopped v33/production and project bindings are unchanged.
+Parent dated audit: checkpoints/offline-v2-transaction-oct21.
+
 ## 2026-10-21 — Offline V2 intent reader (SOURCE; ADMISSION STILL HELD)
 
 The existing ledger now has an explicit schema-2 offline INTENT encoding and

@@ -213,6 +213,28 @@ pub struct PolicyVerifiedApprovalV1<'p> {
     readback: BrokerProtectedPolicyReadbackV1,
 }
 
+/// Protected-key provenance for the V2 ledger/CI consumers. This proves only
+/// the checks performed by inspect_offline_pair_pinned, not closed launcher
+/// inventory, quarantine, independent CI or permission to create INTENT.
+pub(crate) struct PolicyCheckedOfflinePairV2<'p> {
+    policy: &'p BrokerProtectedPolicyV1,
+    checked: CheckedOfflinePairV2,
+    readback: BrokerProtectedPolicyReadbackV1,
+}
+
+impl PolicyCheckedOfflinePairV2<'_> {
+    pub(crate) fn checked(&self) -> &CheckedOfflinePairV2 {
+        &self.checked
+    }
+
+    pub(crate) fn revalidate(&self) -> Result<()> {
+        if self.policy.readback()? != self.readback {
+            return Err("WAKE_OFFLINE_PROTECTED_POLICY_CHANGED".into());
+        }
+        Ok(())
+    }
+}
+
 impl<'p> PolicyVerifiedApprovalV1<'p> {
     pub(crate) fn verified(&self) -> &VerifiedApprovalV1 {
         &self.verified
@@ -701,6 +723,26 @@ impl BrokerProtectedPolicyV1 {
         }
         pins.revalidate_matching(observed)?;
         stores.require_reviewed_inventory(observed)?;
+        Ok(result)
+    }
+
+    pub(crate) fn check_offline_pair_for_ledger(
+        &self,
+        anchor_wire: &[u8],
+        approval_wire: &[u8],
+        observed: &OfflineMigrationObservationV2,
+        pins: &OfflineMigrationPinsV2,
+        stores: &OfflineOldStoreLockSetV2,
+    ) -> Result<PolicyCheckedOfflinePairV2<'_>> {
+        let readback = self.readback()?;
+        let checked =
+            self.inspect_offline_pair_pinned(anchor_wire, approval_wire, observed, pins, stores)?;
+        let result = PolicyCheckedOfflinePairV2 {
+            policy: self,
+            checked,
+            readback,
+        };
+        result.revalidate()?;
         Ok(result)
     }
 }
