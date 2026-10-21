@@ -1,5 +1,22 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 offline migration inventory comparison (SOURCE; MVP PARTIAL)
+
+The existing fixed-policy V2 diagnostic now compares its signed inventory
+digest with the canonical distinct physical store pairs actually retained
+and locked. Alias/order stability and extra/omitted-store, digest and role
+rejection use disposable fixtures. Matching this set still cannot establish
+historical completeness, launch quarantine or owner exit, and grants no
+installation authority. First-generation admission/service/reader integration,
+approved provisioning, exact remote CI and installed acceptance remain open.
+The selected development v29 and production remain unchanged and stopped;
+original project bindings, histories and native sessions are preserved.
+Private dated evidence: parent `checkpoints/offline-store-inventory-oct21`.
+Local gates pass: 15 focused offline tests, main 1,539 / 28 ignored, Wake
+295 library / 1 ignored and enabled integrations, both strict Clippy checks,
+formatting and diff checks. The main suite's nested Wake run also covers the
+final expanded inventory fixture. These results are source verification.
+
 ## October 21 standalone multi-project discovery (SOURCE + MATCHED DEVELOPMENT READBACK; MVP PARTIAL)
 
 Independent Wake discovery now routes records from its configured CatDesk

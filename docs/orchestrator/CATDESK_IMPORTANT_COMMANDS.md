@@ -1,5 +1,15 @@
 # CatDesk — Important Command Reference
 
+## October 21 offline inventory diagnostic (SOURCE)
+
+`BrokerProtectedPolicyV1::inspect_offline_pair_read_only` additionally requires
+the existing retained `OfflineOldStoreLockSetV2`. Its canonical
+`selected_inventory_bytes()` hash must equal the signed V2 anchor's inventory
+digest and include the exact predecessor pair. Historical completeness and
+launcher quarantine still need independent proof. This library diagnostic
+enables no installer/service mutation or runtime start. Focused disposable
+verification: `cargo test --locked --offline --manifest-path wake/Cargo.toml --all-features --lib install_broker_offline`.
+
 ## October 21 per-project standalone review discovery (SOURCE)
 
 The existing independent Wake source binding still names the CatDesk control

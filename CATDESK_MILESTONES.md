@@ -1,3 +1,15 @@
+## 2026-10-21 — Retained offline store inventory binding (SOURCE ONLY)
+
+The existing V2 fixed-policy diagnostic now checks the signed inventory digest
+against its retained physical root/lock set before and after signature
+verification. Canonical distinct pairs retain all alias checks. Disposable
+fixtures cover ordering, aliases, extra/omitted stores, changed digest/role,
+contention and release. Historical completeness/launcher evidence and
+first-generation admission/service/reader integration remain required before
+protected activation. Development v29 and production stay stopped/unchanged;
+no Web/canary event or native task runs. Dated evidence is in the parent
+`checkpoints/offline-store-inventory-oct21`.
+
 ## 2026-10-21 — Independent registered-project inbox discovery (SOURCE + DEVELOPMENT READBACK)
 
 Standalone Wake discovery now checks each record's registered project target

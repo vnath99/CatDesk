@@ -14,7 +14,9 @@ use crate::{
     install_broker_approval::{
         BrokerObservedStateV1, ObjectIdentityV1, VerifiedApprovalV1, verify_approval,
     },
-    install_broker_offline_pins::{OfflineMigrationPinsV2, full_identity_of_handle},
+    install_broker_offline_pins::{
+        OfflineMigrationPinsV2, OfflineOldStoreLockSetV2, full_identity_of_handle,
+    },
     install_broker_offline_v2::{
         FullFileIdentityV2, OfflineMigrationObservationV2, OfflinePairReadbackV2,
         verify_offline_pair_read_only,
@@ -642,8 +644,9 @@ impl BrokerProtectedPolicyV1 {
     }
 
     /// Compare two V2 signatures using the protected policy key, fixed service
-    /// preflight and retained full FileIdInfo role pins. The old-store path
-    /// selection and closed-inventory claims still need independent proof:
+    /// preflight, retained full FileIdInfo role pins and the exact signed
+    /// inventory of selected store locks. Historical completeness, old-store
+    /// selection and launcher quarantine still need independent proof:
     /// this returns no approval, ledger lease, owner proof or install capability.
     pub fn inspect_offline_pair_read_only(
         &self,
@@ -651,11 +654,13 @@ impl BrokerProtectedPolicyV1 {
         approval_wire: &[u8],
         observed: &OfflineMigrationObservationV2,
         pins: &OfflineMigrationPinsV2,
+        stores: &OfflineOldStoreLockSetV2,
     ) -> Result<OfflinePairReadbackV2> {
         let before = self.readback()?;
         let fixed_full_ids = self.fixed_full_ids()?;
         let service = inspect_fixed_broker_read_only()?;
         pins.revalidate_matching(observed)?;
+        stores.require_reviewed_inventory(observed)?;
         if observed.target_protected_root.legacy != before.protected_root
             || observed.target_protected_root.full != fixed_full_ids.0
             || observed.target_protected_root.full != service.protected_root_full
@@ -683,6 +688,7 @@ impl BrokerProtectedPolicyV1 {
             return Err("WAKE_OFFLINE_PROTECTED_POLICY_CHANGED".into());
         }
         pins.revalidate_matching(observed)?;
+        stores.require_reviewed_inventory(observed)?;
         Ok(result)
     }
 }

@@ -1,5 +1,26 @@
 # T-0485 — Protected Wake installation broker and dev.84 migration
 
+## 2026-10-21 retained store inventory binding (source only)
+
+The fixed-policy offline V2 diagnostic now requires the retained old-store
+lock set as well as the role pins. Before and after signature verification it
+checks the exact selected inventory digest and membership of the signed
+predecessor root/lock pair. Its canonical UTF-8 JSON uses schemaVersion 2,
+purpose `catdesk-wake-offline-selected-store-inventory`, and a `stores` array
+of `root`/`hostLock` full and legacy identities. Distinct pairs sort by full
+root volume/ID then lock volume/ID; physical aliases share one entry while
+every original alias remains retained and revalidated. These exact bytes are
+the anchor's `closedStoreInventorySha256` input.
+
+This closes the missing comparison between signed inventory bytes and the
+actual retained lock set. It does not independently establish the historical
+inventory's completeness, launcher quarantine or owner exit. Those still need
+reviewed evidence before first-generation ledger admission. No signature
+domain, service transaction, ledger authority, install guard or runtime start
+is enabled. Disposable fixtures cover aliases/order, extra/omitted stores,
+digest/role mismatches, contention and release. Evidence is in the parent
+`checkpoints/offline-store-inventory-oct21` dated audit.
+
 ## 2026-10-20 source wiring audit (no installation)
 
 At `87c8ebd`, `run_one_service_submission` still unconditionally returns

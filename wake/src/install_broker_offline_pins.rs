@@ -16,7 +16,7 @@ use crate::{
     protocol::{Target, valid_id},
 };
 use serde::{
-    Deserialize, Deserializer,
+    Deserialize, Deserializer, Serialize,
     de::{MapAccess, Visitor},
 };
 use sha2::{Digest, Sha256};
@@ -621,6 +621,67 @@ impl OfflineOldStoreLockSetV2 {
         Ok(())
     }
 
+    /// Canonical reviewer input for the anchor's closedStoreInventorySha256.
+    /// Sort distinct physical root/lock pairs so caller order and additional
+    /// aliases cannot change the digest. Every alias remains pinned and is
+    /// rechecked. Matching this set does not prove historical completeness,
+    /// launcher quarantine, owner exit, or permission to mutate an install.
+    pub fn selected_inventory_bytes(&self) -> Result<Vec<u8>> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct StorePair<'a> {
+            root: &'a OfflineObjectIdentityV2,
+            host_lock: &'a OfflineObjectIdentityV2,
+        }
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Inventory<'a> {
+            schema_version: u32,
+            purpose: &'static str,
+            stores: Vec<StorePair<'a>>,
+        }
+
+        self.revalidate()?;
+        let mut stores = BTreeMap::new();
+        for pin in &self.pinned {
+            stores.insert(
+                (
+                    pin.root.identity.full.volume_serial,
+                    pin.root.identity.full.file_id_hex.as_str(),
+                    pin.lock.identity.full.volume_serial,
+                    pin.lock.identity.full.file_id_hex.as_str(),
+                ),
+                StorePair {
+                    root: &pin.root.identity,
+                    host_lock: &pin.lock.identity,
+                },
+            );
+        }
+        let bytes = serde_json::to_vec(&Inventory {
+            schema_version: 2,
+            purpose: "catdesk-wake-offline-selected-store-inventory",
+            stores: stores.into_values().collect(),
+        })
+        .map_err(|_| "WAKE_OFFLINE_HOST_INVENTORY_ENCODING_INVALID")?;
+        self.revalidate()?;
+        Ok(bytes)
+    }
+
+    /// Bind all retained selected locks to the exact inventory digest carried
+    /// in the V2 observation. The policy caller must independently verify that
+    /// the signed anchor matches this observation. No caller-supplied digest
+    /// alone is an inventory/owner proof or installation capability.
+    pub fn require_reviewed_inventory(
+        &self,
+        observed: &OfflineMigrationObservationV2,
+    ) -> Result<()> {
+        let digest = format!("{:x}", Sha256::digest(self.selected_inventory_bytes()?));
+        if digest != observed.closed_store_inventory_sha256 {
+            return Err("WAKE_OFFLINE_HOST_INVENTORY_MISMATCH".into());
+        }
+        self.require_exact_selected(observed)
+    }
+
     /// Require the signed first-generation root/lock role to be among the
     /// retained selected locks. Other candidate completeness is not inferred.
     pub fn require_exact_selected(&self, observed: &OfflineMigrationObservationV2) -> Result<()> {
@@ -825,9 +886,34 @@ mod tests {
         let held = OfflineOldStoreLockSetV2::acquire(&[a, a_path, b]).expect("two distinct locks");
         assert_eq!(held.pinned.len(), 3);
         held.revalidate().expect("every candidate path and ID");
+        let inventory = held.selected_inventory_bytes().expect("retained inventory");
+        let readback: serde_json::Value = serde_json::from_slice(&inventory).unwrap();
+        assert_eq!(readback["schemaVersion"], 2);
+        assert_eq!(
+            readback["purpose"],
+            "catdesk-wake-offline-selected-store-inventory"
+        );
+        let selected = readback["stores"].as_array().unwrap();
+        assert_eq!(selected.len(), 2, "physical aliases are not extra stores");
+        for (root, lock) in [(&first_root, &first_lock), (&second_root, &second_lock)] {
+            assert!(selected.iter().any(|pair| {
+                pair["root"] == serde_json::to_value(root).unwrap()
+                    && pair["hostLock"] == serde_json::to_value(lock).unwrap()
+            }));
+        }
         assert!(first_store.host_lock().is_err());
         assert!(second_store.host_lock().is_err());
         drop(held);
+        let reordered = OfflineOldStoreLockSetV2::acquire(&[b, a_path]).unwrap();
+        assert_eq!(
+            reordered.selected_inventory_bytes().unwrap(),
+            inventory,
+            "ordering and alias count cannot change the reviewer-bound bytes"
+        );
+        drop(reordered);
+        let incomplete = OfflineOldStoreLockSetV2::acquire(&[a]).unwrap();
+        assert_ne!(incomplete.selected_inventory_bytes().unwrap(), inventory);
+        drop(incomplete);
         drop(first_store.host_lock().expect("first released"));
         drop(second_store.host_lock().expect("second released"));
         let wrong_handle_role = OfflineOldStoreLockCandidateV2 {
@@ -1172,13 +1258,68 @@ mod tests {
         let held = OfflineOldStoreLockSetV2::acquire(&[selected]).expect("selected old lock");
         held.require_exact_selected(&observed)
             .expect("signed old root and lock role selected");
+        assert_eq!(
+            held.require_reviewed_inventory(&observed).unwrap_err(),
+            "WAKE_OFFLINE_HOST_INVENTORY_MISMATCH"
+        );
+        observed.closed_store_inventory_sha256 = format!(
+            "{:x}",
+            Sha256::digest(held.selected_inventory_bytes().unwrap())
+        );
+        held.require_reviewed_inventory(&observed)
+            .expect("exact selected inventory and predecessor role");
+        let mut wrong_inventory = observed.clone();
+        wrong_inventory.closed_store_inventory_sha256 = "0".repeat(64);
+        assert_eq!(
+            held.require_reviewed_inventory(&wrong_inventory)
+                .unwrap_err(),
+            "WAKE_OFFLINE_HOST_INVENTORY_MISMATCH"
+        );
         let mut wrong_selected = observed.clone();
         wrong_selected.old_runtime_lock = observed.predecessor_pointer.clone();
         assert_eq!(
-            held.require_exact_selected(&wrong_selected).unwrap_err(),
+            held.require_reviewed_inventory(&wrong_selected)
+                .unwrap_err(),
             "WAKE_OFFLINE_HOST_LOCK_ROLE_MISMATCH"
         );
         drop(held);
+        let extra = root.join("extra-old-store");
+        fs::create_dir(&extra).unwrap();
+        fs::write(extra.join(HOST_LOCK_LEAF), b"").unwrap();
+        let (extra_root, extra_lock) = old_store_identities(&extra);
+        let extra_candidate = OfflineOldStoreLockCandidateV2 {
+            old_runtime_root: OfflineOldStoreRootSelectionV2::Path(&extra),
+            expected_root: &extra_root,
+            expected_lock: &extra_lock,
+        };
+        let all_stores = OfflineOldStoreLockSetV2::acquire(&[selected, extra_candidate]).unwrap();
+        assert_eq!(
+            all_stores
+                .require_reviewed_inventory(&observed)
+                .unwrap_err(),
+            "WAKE_OFFLINE_HOST_INVENTORY_MISMATCH",
+            "a digest of only the predecessor cannot bind a larger retained set"
+        );
+        let mut complete_inventory = observed.clone();
+        complete_inventory.closed_store_inventory_sha256 = format!(
+            "{:x}",
+            Sha256::digest(all_stores.selected_inventory_bytes().unwrap())
+        );
+        all_stores
+            .require_reviewed_inventory(&complete_inventory)
+            .expect("every retained distinct store is bound");
+        drop(all_stores);
+        let only_extra = OfflineOldStoreLockSetV2::acquire(&[extra_candidate]).unwrap();
+        assert_eq!(
+            only_extra
+                .require_reviewed_inventory(&complete_inventory)
+                .unwrap_err(),
+            "WAKE_OFFLINE_HOST_INVENTORY_MISMATCH",
+            "an omitted predecessor is not covered by the complete digest"
+        );
+        drop(only_extra);
+        fs::remove_file(extra.join(HOST_LOCK_LEAF)).unwrap();
+        fs::remove_dir(extra).unwrap();
         let mut wrong_pointer_hash = observed.clone();
         wrong_pointer_hash.predecessor_pointer_sha256 = "0".repeat(64);
         assert_eq!(

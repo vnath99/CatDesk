@@ -96,6 +96,9 @@ pub struct OfflineMigrationAnchorV2 {
     pub unresolved_events_sha256: String,
     pub ambiguous_event_disposition: AmbiguousEventDispositionV2,
     pub desired_state: OfflineDesiredStateV2,
+    /// SHA-256 of the retained lock set's canonical selected_inventory_bytes.
+    /// The independent reviewer must separately establish that this selection
+    /// exhausts the old stores; matching bytes do not prove completeness.
     pub closed_store_inventory_sha256: String,
     pub quarantined_launch_entrypoints_sha256: String,
     pub target_protected_root: OfflineObjectIdentityV2,
