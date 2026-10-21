@@ -1011,7 +1011,15 @@ impl VerificationRuntime {
             reject_overlap(&uv_cache, project)?;
         }
         checked_dir(&root)?;
-        for name in ["tmp", "cache", "ruff", "mypy", "pycache", "pytest"] {
+        for name in [
+            "tmp",
+            "cache",
+            "ruff",
+            "mypy",
+            "pycache",
+            "pytest",
+            "hypothesis",
+        ] {
             checked_dir(&root.join(name))?;
         }
         checked_dir(
@@ -1038,8 +1046,16 @@ impl VerificationRuntime {
     fn revalidate(&self) -> Result<(), String> {
         for path in std::iter::once(self.root.clone())
             .chain(
-                ["tmp", "cache", "ruff", "mypy", "pycache", "pytest"]
-                    .map(|name| self.root.join(name)),
+                [
+                    "tmp",
+                    "cache",
+                    "ruff",
+                    "mypy",
+                    "pycache",
+                    "pytest",
+                    "hypothesis",
+                ]
+                .map(|name| self.root.join(name)),
             )
             .chain([
                 self.uv_cache
@@ -1104,6 +1120,10 @@ impl VerificationRuntime {
             (
                 "PYTEST_ADDOPTS".into(),
                 format!("-o {quoted_option}").into(),
+            ),
+            (
+                "HYPOTHESIS_STORAGE_DIRECTORY".into(),
+                self.root.join("hypothesis").into_os_string(),
             ),
             (
                 "XDG_CACHE_HOME".into(),
@@ -4134,6 +4154,7 @@ fn verification_env_key_allowed(tool: VerificationTool, profile: &str, upper: &s
                 )
                 && !upper.starts_with("PYTHON")
                 && !upper.starts_with("PYTEST_")
+                && upper != "HYPOTHESIS_STORAGE_DIRECTORY"
                 && !upper.starts_with("PIP_")
                 && !upper.starts_with("RUFF_")
                 && !upper.starts_with("CONDA_")
@@ -6476,7 +6497,7 @@ mod tests {
                 let environment = std::path::PathBuf::from(std::env::var_os("UV_PROJECT_ENVIRONMENT").expect("fixed environment"));
                 let runtime = environment.parent().unwrap();
                 assert!(environment.is_absolute() && !environment.starts_with(&cwd) && !cwd.starts_with(&environment));
-                for name in ["UV_CACHE_DIR", "RUFF_CACHE_DIR", "MYPY_CACHE_DIR", "PYTHONPYCACHEPREFIX", "XDG_CACHE_HOME", "TEMP", "TMP", "TMPDIR"] {
+                for name in ["UV_CACHE_DIR", "RUFF_CACHE_DIR", "MYPY_CACHE_DIR", "PYTHONPYCACHEPREFIX", "HYPOTHESIS_STORAGE_DIRECTORY", "XDG_CACHE_HOME", "TEMP", "TMP", "TMPDIR"] {
                     let path = std::path::PathBuf::from(std::env::var_os(name).expect("fixed external state"));
                     assert!(path.is_absolute() && !path.starts_with(&cwd) && !cwd.starts_with(&path));
                     if name != "UV_CACHE_DIR" { assert!(path.starts_with(runtime)); }
@@ -8526,6 +8547,7 @@ mod tests {
             "TMP",
             "TMPDIR",
             "PYTEST_ADDOPTS",
+            "HYPOTHESIS_STORAGE_DIRECTORY",
         ] {
             assert!(!verification_env_key_allowed(
                 VerificationTool::Uv,
@@ -8550,11 +8572,67 @@ mod tests {
                 .is_err()
         );
         assert!(!forbidden.exists());
+        let hypothesis = environment
+            .get(std::ffi::OsStr::new("HYPOTHESIS_STORAGE_DIRECTORY"))
+            .unwrap();
+        assert_eq!(hypothesis, &first.root.join("hypothesis").into_os_string());
+        fs::remove_dir(first.root.join("hypothesis")).unwrap();
+        assert!(
+            verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, Some(&first))
+                .is_err()
+        );
+        fs::create_dir(first.root.join("hypothesis")).unwrap();
         fs::write(first.root.join("venv"), b"not a virtual environment").unwrap();
         assert!(
             verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, Some(&first))
                 .is_err()
         );
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    #[ignore = "opt-in bounded offline test requires approved existing Python with Hypothesis"]
+    async fn real_hypothesis_uses_external_verification_runtime() {
+        let python = PathBuf::from(
+            std::env::var_os("CATDESK_TEST_PYTHON").expect("approved existing Python path"),
+        );
+        assert!(python.is_absolute());
+        let fixture = std::env::temp_dir().join(format!("catdesk hypothesis {}", Uuid::new_v4()));
+        fs::create_dir(&fixture).unwrap();
+        let workspace = fixture.join("project");
+        fs::create_dir(&workspace).unwrap();
+        let queue = QueueStore::open_at(fixture.join("operator-state")).unwrap();
+        let runtime = queue
+            .verification_runtime(
+                &Uuid::new_v4().to_string(),
+                std::slice::from_ref(&workspace),
+            )
+            .unwrap();
+        let (variables, _) =
+            verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, Some(&runtime))
+                .unwrap();
+        let script = "import os,pathlib; from hypothesis.configuration import storage_directory; from hypothesis.database import DirectoryBasedExampleDatabase; expected=pathlib.Path(os.environ['HYPOTHESIS_STORAGE_DIRECTORY']); storage=storage_directory('examples'); assert storage.path==expected/'examples'; storage.create_if_missing(); db=DirectoryBasedExampleDatabase(storage.path); db.save(b'catdesk-placement',b'bounded-canary'); assert list(db.fetch(b'catdesk-placement'))==[b'bounded-canary']; assert not pathlib.Path('.hypothesis').exists(); print('EXTERNAL_HYPOTHESIS_STORAGE_OK')";
+        let output = tokio::time::timeout(
+            Duration::from_secs(60),
+            tokio::process::Command::new(&python)
+                .args(["-B", "-c", script])
+                .current_dir(&workspace)
+                .env_clear()
+                .envs(variables)
+                .kill_on_drop(true)
+                .output(),
+        )
+        .await
+        .expect("bounded Hypothesis probe")
+        .expect("Python starts");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("EXTERNAL_HYPOTHESIS_STORAGE_OK"));
+        assert!(!workspace.join(".hypothesis").exists());
+        assert!(runtime.root.join("hypothesis/examples").is_dir());
         cleanup(fixture);
     }
 

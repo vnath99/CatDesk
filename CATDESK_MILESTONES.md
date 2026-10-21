@@ -1,3 +1,18 @@
+## 2026-10-21 — external Hypothesis verification storage (SOURCE)
+
+The existing per-receipt verification runtime now generates and revalidates a
+Hypothesis storage directory, replaces inherited HYPOTHESIS_STORAGE_DIRECTORY
+and includes it in the environment digest. Otherwise Hypothesis defaults to a
+project-local .hypothesis directory. Fixed commands and historical verification
+records remain unchanged; project code is still trusted local code.
+
+The queue group passes 78 tests / two ignored. An explicit offline opt-in probe
+uses the existing installed Hypothesis library to write/read its real example
+database outside a disposable checkout, with a 60-second child cap; it passes
+in 4.54 seconds. The checkout cache is absent. This does not qualify a complete
+real-project profile, fix the prior native launcher failure, or establish an
+installed review/Wake cycle. Parent audit: checkpoints/verification-hypothesis-oct21.
+
 ## 2026-10-21 — long-message context excerpts (SOURCE; LIVE PENDING)
 
 Context monitoring now counts identified, verified body excerpts when long

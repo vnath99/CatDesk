@@ -1,5 +1,17 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-21 Hypothesis storage placement (source)
+
+Fresh fixed UV verification now supplies HYPOTHESIS_STORAGE_DIRECTORY from its
+existing external receipt runtime. The directory is revalidated before commands,
+its inherited selector is filtered, and its value enters the environment digest.
+An actual installed Hypothesis example database write/read passes in 4.54 seconds
+with a 60-second child cap and no checkout cache. Queue regressions pass 78 / two
+ignored; this actual-library probe is explicitly run despite its opt-in marker.
+Historical artifacts are not rewritten or given new placement claims. This is
+not native launcher repair, full project qualification, review or Wake proof.
+Parent UTC audit: checkpoints/verification-hypothesis-oct21.
+
 ## 2026-10-21 fixed UV verification runtime placement (source)
 
 Fresh verification uses a receipt-specific runtime under the existing external

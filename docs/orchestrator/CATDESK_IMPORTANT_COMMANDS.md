@@ -25,12 +25,17 @@ selectors and enter the existing environment digest. The shared UV download
 cache uses the OS-derived standard user location, outside registered roots;
 project environments remain distinct. No path selector is added to MCP/CLI.
 
-Standard Ruff/mypy/Python/pytest cache and temporary paths are directed outside
+Standard Ruff/mypy/Python/pytest/Hypothesis cache and temporary paths are directed outside
 source. Fixed argv, locked/offline/no-download options, writer checks and source
 rechecks remain. Project/test code is still trusted local code; this is not OS
 confinement. Existing checkout environments are preserved. `runtimeRoot` appears
 only on a fresh verification result; historical artifacts/readbacks are not
 rewritten or given new runtime claims. No automatic environment deletion occurs.
+
+The Hypothesis addition generates HYPOTHESIS_STORAGE_DIRECTORY under that same
+receipt runtime and filters its inherited override. It is not a new CLI/MCP path
+selector. An opt-in actual-library database probe passes in 4.54 seconds with
+no checkout .hypothesis directory; full real-project qualification is separate.
 
 The dependency-free offline UV/Python probe passes in disposable state, with
 60-second command bounds and source caches absent. It is explicitly not a real
