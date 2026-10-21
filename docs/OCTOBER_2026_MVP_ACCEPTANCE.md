@@ -26,6 +26,19 @@ integrations and nested Wake, strict all-target/all-feature Clippy, formatting
 and diff checks. The three new persisted/gated regressions are included. These
 results do not demonstrate a running installed scheduler or browser backoff.
 
+Normal app/default-feature host builds at `6bc057c` now form stopped
+development v32 (`1.0.0-dev.85-aeecc25cf53572bd14d4b0b0aa7c5c929ccfda6d3ac5c1733f9abba3d11f0408`).
+The 20-second loopback probe passes scope/authentication checks, seven paired
+records, three retained advisory context estimates and preserved continuation
+proof, with no fresh browser capture or event. V31/profile/state and production
+remain preserved. Listener exit and zero scoped processes pass; only four
+numeric usage counters change. Both controls remain STOPPED, and all five
+original bindings match exactly. This is package metadata acceptance; actual
+background backoff remains untested while browser/WakeHost remain stopped.
+Fresh compact reads show all four other native development chats active with
+no reported turn error; none was messaged or reconfigured. The single connector
+read still returns 429 and exact source has zero observed remote CI runs/checks.
+
 ## October 21 selected v31 / bounded native qualification (PARTIAL)
 
 Normal app and default-feature WakeHost builds at `49f421a` form development

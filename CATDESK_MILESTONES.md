@@ -10,6 +10,16 @@ retry is started. This addresses repeated attempts while existing protected
 installation evidence remains missing. Source and selected/live acceptance
 are separate. Parent checkpoint: checkpoints/web-auto-backoff-oct21.
 
+Source `6bc057c` passes full main 1,544 / 28 ignored, enabled integrations/nested
+Wake, strict Clippy and format/diff. Normal matched v32 is selected stopped;
+its 20-second metadata/cleanup readback passes seven paired records, three
+retained context estimates and preserved rollover proof. Old package/profile,
+original five bindings and production are preserved; zero scoped processes,
+both controls STOPPED. Actual background/browser pacing remains untested.
+All four other native chats are freshly observed active, unchanged by this
+work. Connector 429, absent exact-source CI, native qualification/target cycle
+and protected installation remain separate gates.
+
 ## 2026-10-21 — Selected package and fresh qualification outcome (PARTIAL)
 
 Normal matched development v31 at `49f421a` is selected stopped. Its bounded

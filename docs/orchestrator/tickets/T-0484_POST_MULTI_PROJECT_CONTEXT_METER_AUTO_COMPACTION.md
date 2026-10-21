@@ -1,6 +1,6 @@
 # T-0484 — Per-conversation context pressure, token accounting and safe automatic rollover
 **Priority:** October 31 combined P3/P4 user milestone. The operator's October 17 revision supersedes the earlier deferral below. Independent ChatGPT Web project continuation and a demonstrated project rollover are required for overall acceptance.
-**Date:** 2026-10-14; priority revised 2026-10-17; acceptance updated 2026-10-20 | **Status:** Controlled rollover, continuation and fresh three-project delivery/readback verified; installed, central connector and natural-cycle acceptance pending.
+**Date:** 2026-10-14; priority revised 2026-10-17; acceptance updated 2026-10-21 | **Status:** Controlled rollover, continuation and fresh three-project delivery/readback verified; retry pacing source and stopped package readback pass; live background, installed, central connector and natural-cycle acceptance pending.
 **Owner:** Codex Desktop, alongside continued development in each project's existing Codex conversation.
 **Dependencies:** accepted project-bound sessions and fair Wake dispatch, versioned WakeHost/owned SeleniumBase, durable event/receipt identity, one authoritative target generation per project, source/trust boundary acceptance.  
 **Read with:** `docs/orchestrator/CATDESK_CODEX_DESKTOP_HANDOFF_2026-10-14.md`; `docs/orchestrator/CATDESK_COMPETITOR_BROWSER_CONTINUITY_2026-10-14.md`; `CATDESK_MILESTONES.md`.
@@ -30,6 +30,13 @@ browser behavior remain separately verified. Parent dated checkpoint:
 The final source suite passes 1,544 / 28 ignored, enabled integrations/nested
 Wake, strict all-target/all-feature Clippy, formatting and diff checks. No
 installed background backoff claim follows from these fixture tests.
+
+Normal development v32 built at `6bc057c` passes stopped selection and its
+20-second loopback metadata/cleanup probe. Seven pairs, three retained context
+estimates, continuation proof, old package/profile and all five original
+bindings remain preserved, with both controls STOPPED and zero scoped
+processes. Only four numeric usage counters change. This is metadata
+compatibility; no live background retry/rollover or browser send is performed.
 
 ### October 21 retained tool and worker content accounting (source)
 

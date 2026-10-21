@@ -21,6 +21,11 @@ Source fixtures, selected-package readback and actual background browser
 behavior are separate acceptance stages. Dated parent checkpoint:
 `checkpoints/web-auto-backoff-oct21`.
 
+Normal stopped development v32 at `6bc057c` passes a 20-second metadata-only
+probe and cleanup while preserving v31/profile/project state and production.
+This confirms package compatibility, not live background retry pacing. Both
+controls remain STOPPED and no browser, WakeHost or recurring worker starts.
+
 ## October 21 optional per-task Windows implementation (SOURCE + DEVELOPMENT READBACK)
 
 The existing `operator codex queue add` accepts `--windows-sandbox mxc` for an
