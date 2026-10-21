@@ -18,8 +18,8 @@ use crate::{
         OfflineMigrationPinsV2, OfflineOldStoreLockSetV2, full_identity_of_handle,
     },
     install_broker_offline_v2::{
-        FullFileIdentityV2, OfflineMigrationObservationV2, OfflinePairReadbackV2,
-        verify_offline_pair_read_only,
+        CheckedOfflinePairV2, FullFileIdentityV2, OfflineMigrationObservationV2,
+        OfflinePairReadbackV2, check_offline_pair,
     },
     install_broker_operator::{OperatorTokenEvidenceV1, inspect_connected_pipe_operator},
     install_broker_preflight::{
@@ -656,6 +656,23 @@ impl BrokerProtectedPolicyV1 {
         pins: &OfflineMigrationPinsV2,
         stores: &OfflineOldStoreLockSetV2,
     ) -> Result<OfflinePairReadbackV2> {
+        Ok(self
+            .inspect_offline_pair_pinned(anchor_wire, approval_wire, observed, pins, stores)?
+            .readback()
+            .clone())
+    }
+
+    /// Retains checked payloads for the V2 ledger reader, with the same fixed
+    /// policy and physical-pin checks as the public diagnostic. No admission
+    /// capability is returned, and no ledger write is authorized.
+    pub(crate) fn inspect_offline_pair_pinned(
+        &self,
+        anchor_wire: &[u8],
+        approval_wire: &[u8],
+        observed: &OfflineMigrationObservationV2,
+        pins: &OfflineMigrationPinsV2,
+        stores: &OfflineOldStoreLockSetV2,
+    ) -> Result<CheckedOfflinePairV2> {
         let before = self.readback()?;
         let fixed_full_ids = self.fixed_full_ids()?;
         let service = inspect_fixed_broker_read_only()?;
@@ -674,16 +691,11 @@ impl BrokerProtectedPolicyV1 {
         {
             return Err("WAKE_OFFLINE_PROTECTED_POLICY_MISMATCH".into());
         }
-        let result = verify_offline_pair_read_only(
-            anchor_wire,
-            approval_wire,
-            &self.approval_key,
-            observed,
-        )?;
+        let result = check_offline_pair(anchor_wire, approval_wire, &self.approval_key, observed)?;
         if self.readback()? != before
             || self.fixed_full_ids()? != fixed_full_ids
             || inspect_fixed_broker_read_only()? != service
-            || result.verification_key_sha256 != before.approval_public_key_sha256
+            || result.readback().verification_key_sha256 != before.approval_public_key_sha256
         {
             return Err("WAKE_OFFLINE_PROTECTED_POLICY_CHANGED".into());
         }

@@ -80,6 +80,10 @@ const STATUS_NO_MORE_FILES: u32 = 0x8000_0006;
 const FILE_NAMES_INFORMATION: u32 = 12;
 const INVALID_HANDLE_VALUE: *mut c_void = -1isize as *mut c_void;
 
+#[path = "install_broker_offline_ledger.rs"]
+mod offline_v2;
+pub use offline_v2::OfflineIntentReadbackV2;
+
 #[repr(C)]
 struct UnicodeString {
     length: u16,
@@ -2951,7 +2955,7 @@ mod tests {
         ) -> *mut c_void;
     }
 
-    fn fixture() -> (
+    pub(super) fn fixture() -> (
         PathBuf,
         OwnedHandle,
         VerifiedApprovalV1,
@@ -3009,7 +3013,7 @@ mod tests {
         }
     }
 
-    fn remove_fixture(root: &Path, generation: u64) {
+    pub(super) fn remove_fixture(root: &Path, generation: u64) {
         remove_generation_records(root, generation);
         let marker = root.join(publication_attempt_name(generation));
         if marker.exists() {

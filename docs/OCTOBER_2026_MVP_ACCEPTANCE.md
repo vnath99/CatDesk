@@ -1,5 +1,41 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 first-generation V2 intent readback (SOURCE ONLY)
+
+The offline signed-pair verifier now retains checked payloads for the existing
+protected-policy and ledger readers. A distinct schema-2 INTENT persists signed
+envelope/key digests, full protected/predecessor identities, package/source,
+paired target, desired state and inventory/quarantine digests. It occupies the
+existing generation-one ledger slot under the existing global lock. No V1 PID
+is fabricated or reinterpreted, and canonical V1 bytes remain unchanged.
+
+The production reader checks fixed policy and retained physical roles/selected
+locks, compares the exact signed pair at the persisted acceptance time, checks
+current full root identity and rechecks the retained record/inventory afterward.
+Expired envelopes are inspectable only as historical evidence. The output says
+`EXACT_OFFLINE_INTENT_READ_ONLY_NO_INSTALL_AUTHORITY`; it does not attest that
+original admission was authorized. Missing INTENT creates nothing. Later/mixed
+history, malformed records, clock rollback and changed bindings refuse.
+
+Only disposable fixtures write these new records. No production admission,
+INTENT creation, later phase writer, owner disposition, protected-reader cutover
+or service activation is implemented by this increment. Independent closed
+inventory/launcher quarantine, broker-fetched exact CI and provisioned-machine
+evidence remain separate gates. The existing installer/service holds, stopped
+v33/production state, five project bindings, completed rollover and independent
+native development sessions are preserved. Source checks are not installed
+acceptance. Dated private audit: parent checkpoints/offline-v2-ledger-oct21.
+
+Six new reader tests pass, including expired historical signatures, canonical
+encoding/schema separation, exact signed disposition, full-root/clock checks,
+mixed history, exclusive file pinning and late inventory change. Full root
+normal-access tests pass (1,545 main / 29 ignored, enabled integrations and
+nested Wake), with strict root/Wake all-target/all-feature Clippy and format/diff
+checks. An initial restricted-shell run failed on fixture filesystem access;
+its log is preserved and source guards were not weakened. Selected normal v33
+remains unchanged at its previous source; no new package or live migration
+acceptance is claimed.
+
 ## October 21 five-project context readback (LIVE DEVELOPMENT; PARTIAL)
 
 The selected normal development v33 performs one standalone read-only browser

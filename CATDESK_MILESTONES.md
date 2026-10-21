@@ -1,3 +1,29 @@
+## 2026-10-21 — Offline V2 intent reader (SOURCE; ADMISSION STILL HELD)
+
+The existing ledger now has an explicit schema-2 offline INTENT encoding and
+locked reader using the same fixed generation-one slot and global lock as V1.
+It compares both signed envelopes, protected policy, retained offline roles
+and selected store locks, full file IDs, paired target and original disposition.
+Expired pairs may be inspected at the persisted acceptance time without
+creating a lease, changing bytes or authorizing a fresh install. Mixed/later
+history refuses pending its V2 implementation. V1 PID fields and replay remain
+unchanged; V1 cannot treat the new record as an anchored predecessor.
+
+This increment implements the first ledger reader, not admission or a migration
+transaction. There is no production V2 INTENT writer. Independent inventory and
+launcher-quarantine evidence, exact broker-fetched CI, later V2 phase receipts
+and protected-reader cutover remain required. All install/service holds remain.
+No browser, WakeHost, recurring worker, project binding or native chat changes
+are needed for these source/fixture checks. Dated audit:
+parent checkpoints/offline-v2-ledger-oct21.
+
+Six added intent-reader tests pass, including retained-file write/delete denial
+and late-history detection. Normal-access root tests pass (1,545 main / 29
+ignored, integrations and nested Wake), as do strict root/Wake Clippy and
+format/diff checks. The earlier restricted-shell fixture-access failure is
+retained separately. Selected stopped v33 remains at its prior source; this
+increment has not been installed or promoted.
+
 ## 2026-10-21 — Five independent context observations (LIVE DEVELOPMENT; PARTIAL)
 
 One bounded standalone read-only capture each for BYOVD and Bug Bounty passes,
