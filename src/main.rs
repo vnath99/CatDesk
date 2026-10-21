@@ -2562,6 +2562,10 @@ fn operator_web_error_code(error: &str) -> &str {
             "BOOTSTRAP_",
             "BROWSER_",
             "REGISTRY_",
+            "RESPONSE_",
+            "LOGIN_",
+            "COOPERATIVE_",
+            "HOST_",
         ]
         .iter()
         .any(|prefix| code.starts_with(prefix))
@@ -3558,6 +3562,18 @@ mod tests {
             operator_web_error_code("WEB_TARGET: C:\\private\\target.json"),
             "WEB_TARGET"
         );
+        for code in [
+            "RESPONSE_EXACT_USER_MISSING_OR_AMBIGUOUS",
+            "LOGIN_OR_PROFILE_REQUIRED",
+            "COOPERATIVE_HOST_PROTOCOL_REQUIRED",
+            "HOST_EXECUTABLE_HASH_MISMATCH",
+        ] {
+            assert_eq!(operator_web_error_code(code), code);
+            assert_eq!(
+                operator_web_error_code(&format!("{code}: C:\\private\\profile")),
+                code
+            );
+        }
         for untrusted in [
             "C:\\private\\token.txt",
             "raw task text with a secret",
@@ -3565,6 +3581,8 @@ mod tests {
             "WEB_USAGE raw task text",
             "web_scope: private path",
             "WEB_SCOPE\nprivate path",
+            "RESPONSE_PRIVATE\nsecret",
+            "LOGIN_OR_PROFILE_REQUIRED private profile text",
         ] {
             assert_eq!(operator_web_error_code(untrusted), "WEB_OPERATION_REFUSED");
         }

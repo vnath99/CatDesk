@@ -1,3 +1,26 @@
+## 2026-10-21 — real native profile qualification and inspection diagnostics
+
+The fresh isolated native candidate passes all four fixed commands, including
+the complete default pytest invocation, in the existing external receipt runtime.
+Its source witness matches afterward, no checkout caches are created, and the
+old Ruff cache remains exact. A private source-bound review package is captured
+before checkpointing. The verifier, twelve recorded descendant identities and
+receipt-runtime processes are absent afterward. This is real local project
+qualification; independent Web review, Wake/next-task and production acceptance
+remain open. The separate native registration has no paired review target.
+
+The read-only quarantine feature is built in stopped normal development v37.
+Its metadata/authentication/five-context readback and listener cleanup pass.
+One bounded orphan inspection exits with a generic refusal, leaves all 81
+protected state files exact and closes its owned root/profile processes. The
+underlying reason is unestablished; no quarantine, receipt or binding is changed.
+The existing CLI code filter is extended for compact RESPONSE, LOGIN,
+COOPERATIVE and HOST codes, retaining code-length/character/detail redaction.
+The extended boundary regression, strict root Clippy and format/diff checks pass.
+This diagnostic rendering fix requires its own matched package/live check.
+Parent UTC evidence: checkpoints/verification-hypothesis-oct21 and
+checkpoints/web-quarantine-inspection-oct21.
+
 ## 2026-10-21 — read-only quarantined conversation inspection (SOURCE)
 
 An older quarantined attempt still blocks new Web work for its own project;
