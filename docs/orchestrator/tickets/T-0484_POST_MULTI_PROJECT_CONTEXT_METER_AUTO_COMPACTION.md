@@ -33,6 +33,13 @@ This is source verification; selected development/installed and live acceptance
 must be recorded separately. Private dated evidence: parent
 `checkpoints/web-observed-context-oct21`.
 
+Matched normal v30 at `aa7c60f` is subsequently selected stopped. Its bounded
+20-second metadata readback verifies the schema and retained three-project
+estimates through the new method, with seven paired projects and the existing
+continuation proof preserved. Normal exit, original-five comparison, unchanged
+production, zero owned processes and both STOPPED controls pass. Valid worker
+payloads remain fixture-verified; this starts no browser, WakeHost or live event.
+
 ### October 20 guarded Web serving parity verified locally
 
 Source `784c729` exposes the five existing work/context tools in both Computer

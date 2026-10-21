@@ -20,6 +20,24 @@ Clippy, formatting and diff checks pass. Wake source is unchanged in this increm
 Development v29 and production remain unchanged at this source checkpoint;
 installed/live acceptance and the genuine natural cycle remain open.
 
+Normal optimized app/Wake images built at `aa7c60f` are subsequently selected
+through the supported stopped development **v30** update. The host has no
+test-support feature. Existing Python inputs, profile, v29 and all 79 checked
+non-selection files are preserved. A fresh internally bounded **20-second**
+loopback readback passes authentication, the five Web tool scope checks and
+the new worker schema. The seven registrations remain paired; current-generation
+retained estimates read back as CatDesk 2,123, Wake2 1,530 and PortfolioDesk 1,556,
+with the new observed-context proxy method. These are retained advisory estimates,
+not fresh browser captures. The completed canary continuation proof is preserved.
+
+The listener exits normally before the scheduler's first browser tick. Among
+81 checked files only numeric usage counters change; launch settings, original
+five pairs and production are unchanged. Zero owned browser/Wake processes remain
+and both controls are STOPPED. No browser, WakeHost or live event starts. Valid
+worker observation/deduplication remains source-fixture verified, separate from
+this selected-package metadata proof. Private evidence:
+`approved-context-package-readback-20261021T053318466Z` under the checkpoint above.
+
 ## October 21 offline migration inventory comparison (SOURCE; MVP PARTIAL)
 
 The existing fixed-policy V2 diagnostic now compares its signed inventory

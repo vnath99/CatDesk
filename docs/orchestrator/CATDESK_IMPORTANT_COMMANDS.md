@@ -2,7 +2,7 @@
 
 ## October 21 retained context observations (SOURCE)
 
-The existing `catdesk_web_context_observe` and `operator web context-observe`
+The existing `catdesk_web_context_observe` and `operator web context observe`
 accept `WORKER_MESSAGE` for worker content actually delivered to the scoped
 conversation. `TOOL_ARGUMENTS` now contributes to observed pressure. Use one
 dedup key for multiple representations of the same retained content and newer
@@ -11,6 +11,11 @@ again. Caller identity stays unauthenticated; paired target witnesses, token
 estimation and hash-only storage remain in force. Existing argument metadata
 is counted on read without resetting history. New worker records require this
 reader; verify the selected package separately before using them in live state.
+
+Normal matched development v30 at `aa7c60f` now advertises the new schema and
+reads existing per-project estimates through a bounded 20-second metadata
+probe. It publishes no live observation/event; valid worker-content acceptance
+remains the disposable fixture proof. Both controls remain STOPPED.
 
 ## October 21 offline inventory diagnostic (SOURCE)
 

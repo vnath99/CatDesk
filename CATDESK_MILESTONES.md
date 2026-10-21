@@ -1,12 +1,18 @@
-## 2026-10-21 — Retained tool/worker context accounting (SOURCE)
+## 2026-10-21 — Retained tool/worker context accounting (SOURCE + DEVELOPMENT READBACK)
 
 Per-conversation pressure now includes observed retained tool arguments and
 explicit `WORKER_MESSAGE` content once through the existing dedup/revision
 ledger. Traffic counters remain separate breakdowns. The streaming regression
 reproduces the old undercount; 17 context-store tests and the authenticated
 three-project MCP fixture pass. Reopen/history, rollover opt-in and sibling
-isolation are preserved. Selected development v29 and production are unchanged;
-this source checkpoint does not close installed/live acceptance. Dated audit:
+isolation are preserved. Full main 1,540 / 28 ignored, enabled integrations and
+nested Wake, strict Clippy, format/diff pass. Normal matched v30 at `aa7c60f`
+is selected stopped, preserving v29/profile/state. Its 20-second readback passes
+the worker schema, five tool scope checks, seven paired statuses and retained
+three-project estimates with the new method. Normal exit, zero owned processes,
+original five pairs and production preservation pass. Both controls are STOPPED.
+Valid worker observations remain fixture-verified; production/live acceptance
+and the genuine natural cycle remain open. Dated audit:
 parent `checkpoints/web-observed-context-oct21`.
 
 ## 2026-10-21 — Retained offline store inventory binding (SOURCE ONLY)
