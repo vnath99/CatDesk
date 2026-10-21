@@ -1,3 +1,19 @@
+## 2026-10-21 — context observation wait-state reporting (SOURCE)
+
+After a context capture reaches its pressure threshold, automatic monitoring
+now preserves the exact Wake recheck result: paused, stopped or host absent.
+Previously all three were reported as stopped. The refusal still creates no
+handoff and now explicitly reports browserAction NONE. No scheduling or
+rollover authority changes, host launch, binding update or canary replay occur.
+
+A synthetic Windows regression first reproduced PAUSED being mislabeled as
+WAKE_STOPPED, then passed for all three control/host states with context
+pressure retained and no handoff request. All 68 Web orchestration tests,
+strict all-target/all-feature Clippy, formatting and diff checks pass. This
+source is not selected or installed. The separate native Wake2 fixed-profile
+verification remains pending; no full qualification is inferred from its worker
+exit. Parent UTC evidence: checkpoints/verification-hypothesis-oct21.
+
 ## 2026-10-21 — native verification path compatibility (SOURCE)
 
 Real-project verification exposed a native pywin32 loader limit: it reports a

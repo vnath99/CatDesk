@@ -3149,6 +3149,80 @@ mod tests {
         assert_eq!(store.active().unwrap().unwrap().phase, Phase::Submitting);
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn automatic_observation_reports_wake_state_changed_during_capture() {
+        use crate::web_conversation_context::ContextPressurePolicy;
+        let parent = fixture();
+        let (control, wake_root) = prepared_dev_fixture(&parent);
+        let wake = Store::open(&wake_root).unwrap();
+        let source = wake
+            .set_target("alpha", 0, "https://chatgpt.com/c/old")
+            .unwrap();
+        let source_key = key("alpha", &source);
+        let meter = WebContextStore::open(control.join(".catdesk/web-context")).unwrap();
+        meter
+            .bind_observed_target(source_key.clone(), None)
+            .unwrap();
+        meter
+            .configure_policy(
+                "alpha",
+                ContextPressurePolicy {
+                    configured_budget_tokens: 10,
+                    safety_headroom_tokens: 8,
+                    unknown_source_reserve_tokens: 0,
+                    automatic_rollover_enabled: true,
+                    ..ContextPressurePolicy::default()
+                },
+            )
+            .unwrap();
+        for (desired, expected) in [
+            ("PAUSED", "WAKE_PAUSED"),
+            ("STOPPED", "WAKE_STOPPED"),
+            ("RUNNING", "WAKE_HOST_NOT_RUNNING"),
+        ] {
+            let (stage, result) = super::super::auto::run_step_with_capture(
+                &control,
+                "alpha",
+                &source_key,
+                &source,
+                &|| Ok(()),
+                || {
+                    meter.record_observation(
+                        &source_key,
+                        Observation {
+                            event_id: "pressure",
+                            revision: 1,
+                            dedup_key: "pressure",
+                            source_kind: VisibleSourceKind::AssistantMessage,
+                            visible_text: Some("context growth above the configured trigger"),
+                            observed_at_unix: 20,
+                        },
+                    )?;
+                    // A bounded capture can finish after the operator changes
+                    // Wake control. No host or browser is started by this test.
+                    runtime::control(&wake, desired)?;
+                    Ok(json!({"captured":true}))
+                },
+            )
+            .unwrap();
+            assert_eq!(stage, expected);
+            assert_eq!(result["browserAction"], "NONE");
+            assert!(meter.pressure(&source_key).unwrap().near_capacity);
+            assert!(
+                !control
+                    .join(".catdesk/web-rollovers/alpha/handoff-request.json")
+                    .exists()
+            );
+        }
+        let cleanup = parent.canonicalize().unwrap();
+        assert_eq!(
+            cleanup.parent(),
+            Some(std::env::temp_dir().canonicalize().unwrap().as_path())
+        );
+        fs::remove_dir_all(cleanup).unwrap();
+    }
+
     #[test]
     fn quarantine_preserves_uncertain_attempt_and_prevents_replay_after_reopen() {
         use crate::web_conversation_context::ContextPressurePolicy;

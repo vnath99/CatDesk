@@ -380,8 +380,12 @@ pub(super) fn run_step_with_capture(
                 let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
                     workspace,
                 )?)?;
-                if running_wake_state(&wake, project, source)? != "RUNNING" {
-                    return Ok(("WAKE_STOPPED", json!({"reason":"WAKE_CONTROL_CHANGED"})));
+                let wake_state = running_wake_state(&wake, project, source)?;
+                if wake_state != "RUNNING" {
+                    return Ok((
+                        wake_state,
+                        json!({"reason":"WAKE_CONTROL_CHANGED","browserAction":"NONE"}),
+                    ));
                 }
                 let Some(task_id) =
                     source_task_anchor(workspace, &wake, project, source, key, pressure)?
