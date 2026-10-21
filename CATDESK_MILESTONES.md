@@ -1,3 +1,20 @@
+## 2026-10-20 — Natural review notification scope and rollover CAS (SOURCE)
+
+Both authentic review producers now share project-scoped notifications instead
+of CatDesk's obsolete instruction to freeze ordinary autonomy. Standalone
+discovery publishes against its sampled target/cutoff through the existing CAS.
+Legacy queue/archive bytes and receipts stay immutable; changed content still
+conflicts and archived reviews are not requeued. Two existing regressions
+reproduce the old message and pass after correction. Main 1,539 / 28 ignored,
+Wake 294 library / 1 ignored plus enabled integrations and both strict Clippy
+checks pass. Private evidence: parent `checkpoints/web-review-routing-oct20`.
+
+This is source-only; selected development v28 and production are unchanged.
+Direct publication supports registered sibling projects, but standalone inbox
+discovery still filters CatDesk only. Extending that recovery path is the next
+source task. Exact CI, connector, protected installation and a real development/
+review/next-task cycle remain open. Overall MVP PARTIAL.
+
 ## 2026-10-20 — Web serving parity and headless setting preservation (VERIFIED DEVELOPMENT)
 
 The five guarded work/context tools now follow the existing supervisor-mode

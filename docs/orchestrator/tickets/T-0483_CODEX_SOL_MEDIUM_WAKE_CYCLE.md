@@ -1,5 +1,29 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-20 natural producer trace and scoped notifications (source only)
+
+Both direct and independent inbox producers emitted an obsolete global-freeze
+instruction for CatDesk. They now share the project-scoped review Store entry.
+Standalone discovery carries the exact target observed with the cutoff into
+the existing atomic publication check; rollover during validation cannot move
+the review to a later conversation. Legacy queued/archived message bytes remain
+unchanged, exact retries are idempotent, changed content conflicts and archives
+are not requeued. Independent completed-review validation remains intact.
+
+The two existing producer regressions fail before and pass after. Main CatDesk
+passes 1,539 / 28 ignored; independent Wake passes 294 library / 1 ignored and
+enabled integrations (including 28 protocol-store cases); strict Clippy for both
+crates and format/diff pass. Private dated evidence: parent
+`checkpoints/web-review-routing-oct20`. Selected development v28 is unchanged;
+no installed/source-current natural cycle is claimed.
+
+Standalone discovery's CatDesk-only record filter remains the next multi-project
+source gap. The ordinary native queue path already binds verified package,
+active local disclosure and exact registered target to its prepared invitation.
+Publication/receipt alone is not independent review or next-task authorization.
+This work uses existing routing and does not make the optional isolated managed
+Sol account a prerequisite for the approved ordinary native Codex route.
+
 ## 2026-10-15 private burn-to-stage journal (source only)
 
 The host-only staging path now records an exact stage intent before nonce burn, binds the selected task/turn, output and stage identities, writes a create-once burn marker, and verifies a staged completion record. Reopen is diagnostic ATTENTION and never reissues the burned output. Focused staging 21/21 and nonce 11/11 tests, full local Rust and strict gates passed. See `T-0483_R36_PRIVATE_SOL_BURN_STAGE_JOURNAL_SOURCE.md`. Pushed source `da58c72634322d638291989fbca6465cabecbb6a` had zero exact GitHub runs/checks. No fixed worker account, lost-write proof, repository-use authority or real Sol/medium→review_ready→Wake cycle exists. This optional isolated worker lane does not block the separately approved ordinary Codex CLI route in the October directive.

@@ -3554,7 +3554,11 @@ fn review_source(store: &Store) -> Result<Option<ReviewSource>> {
     Ok(Some(source))
 }
 
-fn review_cutoff(store: &Store, activation: &Activation, project_id: &str) -> Result<u64> {
+fn review_cutoff(
+    store: &Store,
+    activation: &Activation,
+    project_id: &str,
+) -> Result<(Target, u64)> {
     let config = store.config()?;
     let target = config
         .targets
@@ -3567,7 +3571,7 @@ fn review_cutoff(store: &Store, activation: &Activation, project_id: &str) -> Re
         .find(|change| change.project_id == project_id && change.target == *target)
         .map(|change| change.changed_utc)
         .ok_or("WAKE_TARGET_HISTORY_INVALID")?;
-    Ok(activation.accept_after_utc.max(changed_utc))
+    Ok((target.clone(), activation.accept_after_utc.max(changed_utc)))
 }
 
 fn discover_review_events(store: &Store, activation: &Activation) -> Result<usize> {
@@ -3588,7 +3592,7 @@ fn discover_review_events(store: &Store, activation: &Activation) -> Result<usiz
         &std::fs::read(&inbox).map_err(|_| "REVIEW_SOURCE_INBOX_UNAVAILABLE")?,
     )
     .map_err(|_| "REVIEW_SOURCE_INBOX_INVALID")?;
-    let cutoff = review_cutoff(store, activation, &source.project_id)?;
+    let (target, cutoff) = review_cutoff(store, activation, &source.project_id)?;
     let mut counts = BTreeMap::<String, usize>::new();
     let mut candidates = Vec::new();
     for record in records {
@@ -3641,11 +3645,12 @@ fn discover_review_events(store: &Store, activation: &Activation) -> Result<usiz
             hold_review_discovery_record(store, &record, &reason)?;
             continue;
         }
-        let message = format!(
-            "CatDesk Wake: {event_type} for CatDesk review record {}. Review the exact record and current wake/GUI repair plan through CatDesk. Ordinary autonomy remains frozen until wake acceptance completes.",
-            record.record_id
-        );
-        store.produce(&record.record_id, &record.project_id, event_type, &message)?;
+        store.produce_review_expected(
+            &record.record_id,
+            &record.project_id,
+            event_type,
+            &target,
+        )?;
         produced += 1;
     }
     Ok(produced)
@@ -3785,6 +3790,12 @@ mod review_discovery_tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].event_id, "review-current");
         assert_eq!(events[0].event_type, "review_ready");
+        assert!(
+            events[0]
+                .message
+                .contains("for project catdesk review record review-current")
+        );
+        assert!(!events[0].message.contains("autonomy remains frozen"));
 
         assert_eq!(
             discover_review_events(&store, &activation).expect("replay"),

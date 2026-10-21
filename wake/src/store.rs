@@ -774,7 +774,7 @@ impl Store {
         event_type: &str,
         message: &str,
     ) -> Result<Event> {
-        self.produce_bound(id, project, event_type, message, None)
+        self.produce_bound(id, project, event_type, message, None, None)
     }
 
     /// Manual diagnostics must bind the target observed by their caller. The
@@ -788,7 +788,38 @@ impl Store {
         message: &str,
         expected: &Target,
     ) -> Result<Event> {
-        self.produce_bound(id, project, event_type, message, Some(expected))
+        self.produce_bound(id, project, event_type, message, Some(expected), None)
+    }
+
+    /// Both authentic review producers use the same project-scoped message
+    /// and target CAS. An exact legacy CatDesk message may be returned only
+    /// from an existing event; new events always use the current message.
+    pub fn produce_review_expected(
+        &self,
+        id: &str,
+        project: &str,
+        event_type: &str,
+        expected: &Target,
+    ) -> Result<Event> {
+        if !matches!(event_type, "review_ready" | "engineering_attention") {
+            return Err("QUEUE_EVENT_INVALID".into());
+        }
+        let message = format!(
+            "CatDesk Wake: {event_type} for project {project} review record {id}. Continue only this registered project's pending review in this conversation."
+        );
+        // Compatibility readback preserves immutable queued/archived bytes.
+        // This old instruction is never used to construct a new event.
+        let legacy = (project == "catdesk").then(|| format!(
+            "CatDesk Wake: {event_type} for CatDesk review record {id}. Review the exact record and current wake/GUI repair plan through CatDesk. Ordinary autonomy remains frozen until wake acceptance completes."
+        ));
+        self.produce_bound(
+            id,
+            project,
+            event_type,
+            &message,
+            Some(expected),
+            legacy.as_deref(),
+        )
     }
 
     fn produce_bound(
@@ -798,6 +829,7 @@ impl Store {
         event_type: &str,
         message: &str,
         expected: Option<&Target>,
+        legacy_message: Option<&str>,
     ) -> Result<Event> {
         if !valid_id(id) || !valid_id(project) {
             return Err("QUEUE_EVENT_INVALID".into());
@@ -819,7 +851,7 @@ impl Store {
             if prior.event_id == id
                 && prior.project_id == project
                 && prior.event_type == event_type
-                && prior.message == message
+                && (prior.message == message || legacy_message == Some(prior.message.as_str()))
             {
                 return Ok(prior);
             }
@@ -834,7 +866,7 @@ impl Store {
             if prior.event_id != id
                 || prior.project_id != project
                 || prior.event_type != event_type
-                || prior.message != message
+                || (prior.message != message && legacy_message != Some(prior.message.as_str()))
             {
                 return Err("QUEUE_EVENT_ID_CONFLICT".into());
             }

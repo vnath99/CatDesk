@@ -332,16 +332,7 @@ fn publish_registered_with_store(
     } else {
         "engineering_attention"
     };
-    let message = if project == "catdesk" {
-        format!(
-            "CatDesk Wake: {purpose} for CatDesk review record {id}. Review the exact record and current wake/GUI repair plan through CatDesk. Ordinary autonomy remains frozen until wake acceptance completes."
-        )
-    } else {
-        format!(
-            "CatDesk Wake: {purpose} for project {project} review record {id}. Continue only this registered project's pending review in this conversation."
-        )
-    };
-    store.produce_expected(id, project, purpose, &message, target)?;
+    store.produce_review_expected(id, project, purpose, target)?;
     Ok(())
 }
 
@@ -452,6 +443,36 @@ mod tests {
         )
         .expect("beta progresses independently");
         assert_eq!(store.events().expect("events").len(), 2);
+        let catdesk = store
+            .set_target("catdesk", 0, "https://chatgpt.com/c/catdesk-review")
+            .unwrap();
+        publish_registered_with_store(
+            &store,
+            &activation,
+            "catdesk",
+            Some(&catdesk.url),
+            Some(&catdesk.digest),
+            "catdesk-review-record",
+            created,
+            true,
+        )
+        .unwrap();
+        let events = store.events().unwrap();
+        let review = events
+            .iter()
+            .find(|event| event.project_id == "catdesk")
+            .unwrap();
+        assert!(
+            review
+                .message
+                .contains("for project catdesk review record catdesk-review-record")
+        );
+        assert!(
+            review
+                .message
+                .contains("only this registered project's pending review")
+        );
+        assert!(!review.message.contains("autonomy remains frozen"));
         let _ = std::fs::remove_dir_all(root);
     }
 

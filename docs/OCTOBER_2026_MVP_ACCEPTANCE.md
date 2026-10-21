@@ -1,5 +1,38 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 natural review producer trace (SOURCE; MVP PARTIAL)
+
+Both authentic producers still generated an outdated CatDesk message telling
+ChatGPT to freeze ordinary autonomy until Wake acceptance. Existing direct and
+standalone discovery regressions reproduce that instruction. They now use one
+project-scoped Store producer: new notifications request only that registered
+project's review, with no global freeze or obsolete GUI-repair plan. Other
+projects retain their existing notification wording.
+
+The new review entry uses the existing target CAS. Standalone discovery now
+passes the exact target sampled with its generation cutoff rather than
+silently selecting a later target after review validation. Wrong generation
+or digest refuses before publication. Exact legacy CatDesk queued/archive
+bodies remain immutable and idempotent through this narrow review entry;
+changed legacy content still conflicts, and an archived event is never requeued.
+Generic publication's duplicate-content rules remain unchanged.
+
+Both pre-fix producer regressions fail, then pass. Final full CatDesk main
+suite passes **1,539 / 28 ignored**. Full independent Wake passes **294 library /
+1 ignored** plus enabled integrations, including 28 protocol-store cases;
+strict all-target/all-feature Clippy for both crates and format/diff checks pass.
+Private dated evidence: parent `checkpoints/web-review-routing-oct20`.
+This source is not selected or installed: the last verified development package
+remains v28. No browser, live Wake runtime or old review/canary is replayed.
+
+The trace distinguishes two remaining paths. Direct CatDesk publication already
+accepts registered sibling projects, while standalone inbox discovery still
+filters CatDesk only. That recovery-path limitation is the next source task.
+Ordinary native queue review additionally requires its verified package and
+active disclosure before invitation publication; a notification does not prove
+ChatGPT review or authorize another task. Exact CI, connector, protected install
+and the genuine development/review/next-task cycle remain open.
+
 ## October 20 Web tool serving parity (SOURCE + DEVELOPMENT LOOPBACK; MVP PARTIAL)
 
 The five existing `catdesk_web_work_request`, `catdesk_web_work_resolve` and
