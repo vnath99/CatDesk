@@ -1,3 +1,23 @@
+## 2026-10-20 — Optimized reporting in stopped development (VERIFIED; MVP PARTIAL)
+
+The normal release profile resolves the CPU-heavy debug status delay without
+source or authority changes. Its exact image passes an internal-deadline
+fixture and is selected through the supported stopped development v26 update.
+Selected status matches all seven prior project records in 3.00 seconds,
+versus about 50 seconds in debug; exact-target read and invalid-scope refusal
+pass. All 79 checked files remain unchanged during reads, zero owned browser/
+Wake processes remain, original five bindings/history pass independent
+comparison and both controls remain STOPPED. Auth profile, Wake/Python inputs
+and protected production are preserved. Private dated evidence:
+parent `checkpoints/web-status-performance-oct20`.
+
+The single connector registry probe still returns HTTP 429. Protected
+installation source wiring, exact-current CI, central connector acceptance
+and a natural development/review/next-task cycle remain open. No recurring
+automation or completed canary was restarted. Native Wake2, PortfolioDesk and
+BYOVD sessions remain active; Bug Bounty reports its own pending approval.
+This is controlled development selection/readback, not production acceptance.
+
 ## 2026-10-20 — Three-project automatic observation and bounded lifecycle (CONTROLLED LIVE)
 
 Source `148deba` in stopped development v25 passes the 480-second periodic test:

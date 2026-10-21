@@ -7,6 +7,21 @@
 
 ## Operator requirements
 
+### October 20 optimized reporting verified in stopped development
+
+The existing normal release profile resolves debug status latency without
+source/authority changes. Restored exact-image deadline proof passes, and
+guarded stopped development v26 preserves all project state, auth profile and
+production. Its selected aggregate read returns the same seven-project status
+in 3.00 seconds; target read and invalid-scope refusal pass, all 79 checked
+files are unchanged and no owned processes remain. Original five pairs pass
+independent readback. Wake/Python inputs remain unchanged and no recurring
+task starts. Parent `checkpoints/web-status-performance-oct20` retains dated
+evidence. One connector read still returns HTTP 429; authenticated GitHub shows
+no current-source CI evidence, and its billing read is unavailable (HTTP 404).
+Installed, central connector and natural development-cycle acceptance remain
+open; development measurements do not replace those gates.
+
 ### October 20 periodic three-project observation verified
 
 Corrected development v25 (`148deba`) passes the 480-second scoped periodic run:
@@ -22,8 +37,9 @@ reporting and two cancellable local contention retries. Final 61 Web regressions
 strict Clippy and build pass; main 1,539 / 28 ignored and two native headless
 fixtures passed before the last retry change. Aggregate status completed in
 about 50 CPU-heavy seconds after exceeding its initial 30-second diagnostic
-limit; latency optimization, connector, installation and natural-cycle gates
-remain open. This is controlled development acceptance only.
+limit; the optimized candidate above resolves that delay. Connector,
+installation and natural-cycle gates remain open. This is controlled
+development acceptance only.
 
 ### October 20 approved bounded live result and capture freshness
 

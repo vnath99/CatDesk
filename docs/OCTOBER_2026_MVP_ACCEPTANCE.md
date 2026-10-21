@@ -1,5 +1,38 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 optimized status verification (READ-ONLY; MVP PARTIAL)
+
+The existing release profile resolves the debug aggregate-reporting delay
+without changing source, authority checks or status contents. Built at source
+`e2cf222`, the first optimized image returns the same complete seven-project
+status in **3.49 seconds**, versus about 50 seconds for the debug candidate.
+After the fixture build, the restored normal image passes its own deadline
+fixture and reads the same status in 3.64 seconds. Its exact SHA-256 is
+`2db278a875cba1a924b442a3559241c195bfb5a18eb4c01d62385112b57b14e9`.
+The guarded update selects that image into stopped development **v26**;
+the other three package inputs are unchanged, and v25 remains preserved.
+Status through the selected path takes **3.00 seconds** (1.00 second CPU),
+the exact-target read takes 0.24 seconds, and invalid scope refuses with
+`WEB_USAGE`/exit 2 in 0.03 seconds. Each read preserves all 79
+checked state files and leaves zero owned browser/Wake processes. No runtime
+or browser starts. Both optimized native headless fixtures also pass; these
+use disposable local fixtures, not installed Wake or ChatGPT.
+
+The package selection itself preserves all 77 non-selection state files, the
+existing authenticated browser profile and the protected production pointer.
+An independent comparison of the five original paired registrations/Wake
+targets passes. Both controls remain STOPPED. This is verified development
+package selection/readback, not protected installed production acceptance.
+
+Private dated evidence: parent `checkpoints/web-status-performance-oct20`.
+The single subsequent connector registry read still returns HTTP 429 from the
+MCP SSE dependency. No retry, transport restart or account/settings change
+follows. The authenticated GitHub repository is active and not disabled;
+its latest visible run remains the historical October 14 push. A billing read
+returns HTTP 404, which does not establish an account restriction. No workflow
+was dispatched. Protected installation, exact-current CI, central connector
+acceptance and a genuine development/review/next-task cycle remain open.
+
 ## October 20 automatic monitoring while rollover is quarantined (CONTROLLED LIVE; MVP PARTIAL)
 
 The corrected **v25** candidate at source `148debabdbe68b92d0de4a120bb66cad6e23fbd3`
@@ -22,7 +55,8 @@ also occurred but did not prevent this acceptance. A separate aggregate
 completed successfully in about 50 seconds, with steadily increasing CPU time.
 It returned seven paired projects, the three fresh advisory estimates and the
 preserved fast-canary continuation proof. This is a CPU-heavy reporting path,
-not a deadlock or lost state. Optimizing that latency remains open. No browser
+not a deadlock or lost state. The optimized read-only result above resolves
+that reporting delay for the release image. No browser
 or runtime was started for the status profile.
 
 Inspection found that a preserved QUARANTINED attempt suppressed context reads

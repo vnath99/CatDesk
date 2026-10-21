@@ -1,5 +1,26 @@
 # CatDesk — Important Command Reference
 
+## October 20 optimized stopped development readback
+
+Use the existing release profile for a normally built operator image:
+
+```powershell
+cargo build --locked --offline --release --all-features --bin catdesk --jobs 2
+```
+
+Stopped development v26 selects the verified normal optimized app through the
+existing `operator web-dev-runtime update-package --package <four-artifact-directory>`
+command. WakeHost/Python inputs, authenticated profile, project state and
+protected production are preserved. Its aggregate `operator web status`
+matches the prior seven-project result in 3.00 seconds instead of about 50
+seconds in debug. Exact-target read and invalid-scope refusal also pass; no
+integrity check or authority gate was removed. Package selection does not
+start a runtime, browser or recurring task and is not production acceptance.
+The exact normal image passes the internal-deadline fixture after the Cargo
+test build, which can unify dev-dependency features and relink the app.
+Keep measurements tied to the final selected hash, not a prior linked file.
+Private dated audit: parent `checkpoints/web-status-performance-oct20`.
+
 ## October 20 bounded, scoped automatic observation (SOURCE)
 
 The existing headless MCP command now accepts optional
