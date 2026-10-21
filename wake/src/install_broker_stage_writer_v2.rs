@@ -11,6 +11,10 @@ use crate::{
     install_broker_source::{pin_fixed_candidate_manifest, pin_staged_candidate_manifest},
 };
 
+#[path = "install_broker_publish_v2.rs"]
+mod publication;
+pub use publication::{BrokerPublishedReceiptV2, publish_fixed_candidate_stage_v2};
+
 fn full_object(raw: *mut c_void, directory: bool) -> Result<OfflineObjectIdentityV2> {
     Ok(OfflineObjectIdentityV2 {
         legacy: identity(raw, directory)?,
@@ -302,7 +306,9 @@ mod tests {
         install_broker_stage_writer::tests::TransactionFixture,
     };
 
-    fn pair(fixture: &TransactionFixture) -> (CheckedOfflinePairV2, OfflineMigrationObservationV2) {
+    pub(super) fn pair(
+        fixture: &TransactionFixture,
+    ) -> (CheckedOfflinePairV2, OfflineMigrationObservationV2) {
         let (mut anchor, mut approval, mut observed, key) = signed_test::fixture();
         let root = full_object(fixture.root().as_raw_handle(), true).unwrap();
         let manifest = fixture.approval().payload().manifest.clone();

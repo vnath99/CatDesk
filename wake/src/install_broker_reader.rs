@@ -583,7 +583,10 @@ fn reopen_directory_for_inventory(directory: &OwnedHandle) -> Result<OwnedHandle
     Ok(reopened)
 }
 
-fn directory_inventory(directory: &OwnedHandle, limit: usize) -> Result<BTreeSet<String>> {
+pub(crate) fn directory_inventory(
+    directory: &OwnedHandle,
+    limit: usize,
+) -> Result<BTreeSet<String>> {
     let fresh = reopen_directory_for_inventory(directory)?;
     let mut seen = BTreeSet::new();
     for index in 0..=limit {

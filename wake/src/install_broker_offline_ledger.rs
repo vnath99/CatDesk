@@ -1,10 +1,11 @@
-//! Explicit offline V2 INTENT and pre-stage transaction boundary.
+//! Explicit offline V2 INTENT, staging and publication transaction boundary.
 //!
 //! Shares the V1 ledger namespace and global lock, but never interprets a V1
 //! PID or process snapshot as an offline migration. The production admission
 //! entry point still refuses before INTENT because independent launch-entry
 //! quarantine is not implemented. Disposable fixtures exercise the create-once
-//! engine; later physical stage/publish and reader cutover remain held.
+//! engine through physical publication. Restart recovery and reader/owner
+//! cutover remain incomplete; this source does not activate an installation.
 
 use super::*;
 use crate::{
@@ -176,9 +177,14 @@ fn read_offline_record(file: &mut File) -> Result<(OfflineIntentRecordV2, String
         || record.schema_version != 2
         || record.install_generation != 1
         || record.purpose != "catdesk-wake-offline-install-ledger"
-        || !matches!(record.phase.as_str(), "INTENT" | "STAGE_STARTED" | "STAGED")
+        || !matches!(
+            record.phase.as_str(),
+            "INTENT" | "STAGE_STARTED" | "STAGED" | "PUBLICATION_ATTEMPT" | "PUBLISHED"
+        )
         || match (&record.stage_binding, record.phase.as_str()) {
-            (Some(stage), "STAGED") => !valid_stage_binding_v2(stage, &record.protected_root),
+            (Some(stage), "STAGED" | "PUBLICATION_ATTEMPT" | "PUBLISHED") => {
+                !valid_stage_binding_v2(stage, &record.protected_root)
+            }
             (None, "INTENT" | "STAGE_STARTED") => false,
             _ => true,
         }
@@ -284,6 +290,11 @@ pub struct OfflineLedgerLeaseV2<'a, 'p> {
     stage_recorded: bool,
     stage_started_digest: Option<String>,
     staged_binding: Option<StageBindingV2>,
+    staged_digest: Option<String>,
+    publication_attempted: bool,
+    publication_attempt_digest: Option<String>,
+    publication_finish_attempted: bool,
+    published_digest: Option<String>,
 }
 
 enum OfflineRootFlush {
@@ -478,13 +489,20 @@ impl<'a> BrokerLedgerGuard<'a> {
             stage_recorded: false,
             stage_started_digest: None,
             staged_binding: None,
+            staged_digest: None,
+            publication_attempted: false,
+            publication_attempt_digest: None,
+            publication_finish_attempted: false,
+            published_digest: None,
         })
     }
 }
 
 impl<'p> OfflineLedgerLeaseV2<'_, 'p> {
     pub fn phase(&self) -> &'static str {
-        if self.staged_binding.is_some() {
+        if self.published_digest.is_some() {
+            "PUBLISHED"
+        } else if self.staged_binding.is_some() {
             "STAGED"
         } else if self.stage_recorded {
             "STAGE_STARTED"
@@ -570,7 +588,7 @@ impl<'p> OfflineLedgerLeaseV2<'_, 'p> {
         &mut self,
         receipt: &mut crate::install_broker_stage_writer::BrokerStageReceiptV2<'_>,
     ) -> Result<bool> {
-        if !self.stage_recorded {
+        if !self.stage_recorded || self.publication_attempted {
             return Err("WAKE_OFFLINE_STAGE_ATTENTION".into());
         }
         self.revalidate_inputs()?;
@@ -657,7 +675,193 @@ impl<'p> OfflineLedgerLeaseV2<'_, 'p> {
         }
         let advanced = self.staged_binding.is_none();
         self.staged_binding = Some(binding);
+        self.staged_digest = Some(digest);
         Ok(advanced)
+    }
+
+    fn publication_inventory(&self, attempt: bool, published: bool) -> Result<()> {
+        let mut expected = [false; LEDGER_SLOT_COUNT];
+        for phase in [
+            InstallPhaseV1::Intent,
+            InstallPhaseV1::StageStarted,
+            InstallPhaseV1::Staged,
+        ] {
+            expected[phase.index()] = true;
+        }
+        expected[PUBLICATION_ATTEMPT_SLOT] = attempt;
+        expected[InstallPhaseV1::Published.index()] = published;
+        let actual = ledger_inventory(self.root)?;
+        if actual.len() != 1 || actual.get(&1) != Some(&expected) {
+            return Err("WAKE_OFFLINE_PUBLICATION_ATTENTION".into());
+        }
+        Ok(())
+    }
+
+    fn exact_staged_record(&mut self) -> Result<(OfflineIntentRecordV2, String)> {
+        self.revalidate_inputs()?;
+        if read_offline_intent(&mut self.intent_file)?
+            != (self.intent.clone(), self.intent_digest.clone())
+        {
+            return Err("WAKE_OFFLINE_LEDGER_APPROVAL_CONFLICT".into());
+        }
+        let mut marker = self.intent.clone();
+        marker.phase = "STAGE_STARTED".into();
+        marker.prior_record_sha256 = self.intent_digest.clone();
+        let mut marker_file =
+            open_optional(self.root, &record_name(1, InstallPhaseV1::StageStarted))?
+                .ok_or("WAKE_LEDGER_RECORD_UNAVAILABLE")?;
+        let (actual, marker_digest) = read_offline_record(&mut marker_file)?;
+        if actual != marker || Some(&marker_digest) != self.stage_started_digest.as_ref() {
+            return Err("WAKE_OFFLINE_LEDGER_APPROVAL_CONFLICT".into());
+        }
+        marker.phase = "STAGED".into();
+        marker.prior_record_sha256 = marker_digest;
+        marker.stage_binding = Some(
+            self.staged_binding
+                .clone()
+                .ok_or("WAKE_OFFLINE_PUBLICATION_ATTENTION")?,
+        );
+        let mut file = open_optional(self.root, &record_name(1, InstallPhaseV1::Staged))?
+            .ok_or("WAKE_LEDGER_RECORD_UNAVAILABLE")?;
+        let (actual, digest) = read_offline_record(&mut file)?;
+        if actual != marker || Some(&digest) != self.staged_digest.as_ref() {
+            return Err("WAKE_OFFLINE_LEDGER_APPROVAL_CONFLICT".into());
+        }
+        Ok((actual, digest))
+    }
+
+    /// Durable no-retry boundary before releasing fresh stage pins. The
+    /// serialized marker alone cannot authorize rename or PUBLISHED.
+    pub(crate) fn record_publication_attempt(
+        &mut self,
+        receipt: &mut crate::install_broker_stage_writer::BrokerStageReceiptV2<'_>,
+    ) -> Result<()> {
+        if self.phase() != "STAGED" || self.publication_attempted {
+            return Err("WAKE_OFFLINE_PUBLICATION_ATTENTION".into());
+        }
+        let binding = receipt.binding_for_ledger(
+            self.root,
+            &self.intent.protected_root,
+            &self.intent_digest,
+            &self.manifest,
+            &self.intent.manifest_sha256,
+        )?;
+        if self.staged_binding.as_ref() != Some(&binding) {
+            return Err("WAKE_OFFLINE_LEDGER_APPROVAL_CONFLICT".into());
+        }
+        let (mut marker, staged_digest) = self.exact_staged_record()?;
+        self.publication_inventory(false, false)?;
+        marker.phase = "PUBLICATION_ATTEMPT".into();
+        marker.prior_record_sha256 = staged_digest;
+        // Even a failed create is not retried on this live lease.
+        self.publication_attempted = true;
+        let mut file = open_relative(self.root, &publication_attempt_name(1), FILE_CREATE)
+            .map_err(|_| "WAKE_OFFLINE_PUBLICATION_ATTENTION")?;
+        let digest = write_offline_record(&mut file, &marker)?;
+        self.root_flush.flush(
+            self.root,
+            &self.intent.protected_root,
+            ParentFlushPoint::PublicationAttempt,
+        )?;
+        self.revalidate_inputs()?;
+        self.exact_staged_record()?;
+        self.publication_inventory(true, false)?;
+        if read_offline_record(&mut file)? != (marker, digest.clone())
+            || receipt.binding_for_ledger(
+                self.root,
+                &self.intent.protected_root,
+                &self.intent_digest,
+                &self.manifest,
+                &self.intent.manifest_sha256,
+            )? != binding
+        {
+            return Err("WAKE_OFFLINE_LEDGER_APPROVAL_CONFLICT".into());
+        }
+        self.publication_attempt_digest = Some(digest);
+        Ok(())
+    }
+
+    fn exact_publication_attempt(&mut self) -> Result<(OfflineIntentRecordV2, String)> {
+        let (mut expected, staged_digest) = self.exact_staged_record()?;
+        expected.phase = "PUBLICATION_ATTEMPT".into();
+        expected.prior_record_sha256 = staged_digest;
+        let mut file = open_optional(self.root, &publication_attempt_name(1))?
+            .ok_or("WAKE_OFFLINE_PUBLICATION_ATTENTION")?;
+        let (actual, digest) = read_offline_record(&mut file)?;
+        if actual != expected || Some(&digest) != self.publication_attempt_digest.as_ref() {
+            return Err("WAKE_OFFLINE_LEDGER_APPROVAL_CONFLICT".into());
+        }
+        Ok((actual, digest))
+    }
+
+    pub(crate) fn revalidate_publication_attempt(&mut self) -> Result<()> {
+        if self.phase() != "STAGED"
+            || !self.publication_attempted
+            || self.publication_finish_attempted
+            || self.publication_attempt_digest.is_none()
+        {
+            return Err("WAKE_OFFLINE_PUBLICATION_ATTENTION".into());
+        }
+        self.exact_publication_attempt()?;
+        self.publication_inventory(true, false)
+    }
+
+    /// Only a retained moved-package receipt may finish this live attempt.
+    /// Errors leave the marker/record intact and never authorize another rename.
+    pub(crate) fn record_published(
+        &mut self,
+        receipt: &mut crate::install_broker_stage_writer::BrokerPublishedReceiptV2<'_>,
+    ) -> Result<()> {
+        if self.phase() != "STAGED"
+            || !self.publication_attempted
+            || self.publication_finish_attempted
+            || self.publication_attempt_digest.is_none()
+        {
+            return Err("WAKE_OFFLINE_PUBLICATION_ATTENTION".into());
+        }
+        let binding = receipt.binding_for_ledger(
+            self.root,
+            &self.intent.protected_root,
+            &self.intent_digest,
+            &self.manifest,
+            &self.intent.manifest_sha256,
+        )?;
+        if self.staged_binding.as_ref() != Some(&binding) {
+            return Err("WAKE_OFFLINE_LEDGER_APPROVAL_CONFLICT".into());
+        }
+        let (mut published, attempt_digest) = self.exact_publication_attempt()?;
+        self.publication_inventory(true, false)?;
+        published.phase = "PUBLISHED".into();
+        published.prior_record_sha256 = attempt_digest;
+        self.publication_finish_attempted = true;
+        let mut file = open_relative(
+            self.root,
+            &record_name(1, InstallPhaseV1::Published),
+            FILE_CREATE,
+        )
+        .map_err(|_| "WAKE_OFFLINE_PUBLICATION_ATTENTION")?;
+        let digest = write_offline_record(&mut file, &published)?;
+        self.root_flush.flush(
+            self.root,
+            &self.intent.protected_root,
+            ParentFlushPoint::LaterLedgerPhase,
+        )?;
+        self.revalidate_inputs()?;
+        self.exact_publication_attempt()?;
+        self.publication_inventory(true, true)?;
+        if read_offline_record(&mut file)? != (published, digest.clone())
+            || receipt.binding_for_ledger(
+                self.root,
+                &self.intent.protected_root,
+                &self.intent_digest,
+                &self.manifest,
+                &self.intent.manifest_sha256,
+            )? != binding
+        {
+            return Err("WAKE_OFFLINE_LEDGER_APPROVAL_CONFLICT".into());
+        }
+        self.published_digest = Some(digest);
+        Ok(())
     }
 }
 

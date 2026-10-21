@@ -452,7 +452,8 @@ fn hash_artifact(file: &mut File, expected_length: u64, expected_sha256: &str) -
 /// with the already verified detached approval. This type cannot install.
 pub(crate) struct PinnedCandidateSourceV1 {
     ancestors: Vec<OwnedHandle>,
-    chain: Vec<&'static str>,
+    chain: Vec<String>,
+    exclusive_parent: bool,
     directory_info: Vec<FileInfo>,
     manifest: File,
     manifest_info: FileInfo,
@@ -510,11 +511,11 @@ impl PinnedCandidateSourceV1 {
             if index > 0 {
                 inventory(
                     &self.ancestors[index - 1],
-                    Some(self.chain[index - 1]),
-                    &[self.chain[index - 1]],
+                    Some(&self.chain[index - 1]),
+                    &[&self.chain[index - 1]],
                 )?;
                 let reopened =
-                    open_relative(&self.ancestors[index - 1], self.chain[index - 1], true)?;
+                    open_relative(&self.ancestors[index - 1], &self.chain[index - 1], true)?;
                 if !same_object(&now, &info(reopened.as_raw_handle(), true)?) {
                     return Err("WAKE_BROKER_SOURCE_OBJECT_CHANGED".into());
                 }
@@ -522,7 +523,19 @@ impl PinnedCandidateSourceV1 {
         }
         let submission = &self.ancestors[self.ancestors.len() - 2];
         let candidate = &self.ancestors[self.ancestors.len() - 1];
-        inventory(submission, None, &["candidate"])?;
+        let package_name = self
+            .chain
+            .last()
+            .ok_or("WAKE_BROKER_SOURCE_COMPONENT_INVALID")?;
+        inventory(
+            submission,
+            if self.exclusive_parent {
+                None
+            } else {
+                Some(package_name)
+            },
+            &[package_name],
+        )?;
         inventory(
             candidate,
             None,
@@ -605,6 +618,19 @@ fn open_candidate_manifest_in(
     if chain.len() < 2 || chain.last() != Some(&"candidate") {
         return Err("WAKE_BROKER_SOURCE_COMPONENT_INVALID".into());
     }
+    open_manifest_package_in(root, chain, manifest, manifest_sha256, true)
+}
+
+fn open_manifest_package_in(
+    root: OwnedHandle,
+    chain: &[&str],
+    manifest: &PackageManifestV1,
+    manifest_sha256: &str,
+    exclusive_parent: bool,
+) -> Result<PinnedCandidateSourceV1> {
+    if chain.len() < 2 || chain.iter().any(|name| !valid_component(name)) {
+        return Err("WAKE_BROKER_SOURCE_COMPONENT_INVALID".into());
+    }
     validate_manifest(manifest)?;
     let mut ancestors = vec![root];
     let mut directory_info = vec![info(ancestors[0].as_raw_handle(), true)?];
@@ -621,7 +647,16 @@ fn open_candidate_manifest_in(
     }
     let submission = &ancestors[ancestors.len() - 2];
     let candidate = &ancestors[ancestors.len() - 1];
-    inventory(submission, None, &["candidate"])?;
+    let package_name = chain.last().ok_or("WAKE_BROKER_SOURCE_COMPONENT_INVALID")?;
+    inventory(
+        submission,
+        if exclusive_parent {
+            None
+        } else {
+            Some(package_name)
+        },
+        &[*package_name],
+    )?;
     inventory(
         candidate,
         None,
@@ -643,7 +678,8 @@ fn open_candidate_manifest_in(
         .map_err(|_| "WAKE_BROKER_SOURCE_INVENTORY_MISMATCH")?;
     let mut source = PinnedCandidateSourceV1 {
         ancestors,
-        chain: chain.to_vec(),
+        chain: chain.iter().map(|name| (*name).to_owned()).collect(),
+        exclusive_parent,
         directory_info,
         manifest: manifest_file,
         manifest_info: FileInfo::default(),
@@ -696,6 +732,26 @@ pub(crate) fn pin_staged_candidate_manifest(
         &["staging", "candidate"],
         manifest,
         manifest_sha256,
+    )
+}
+
+/// Read pins for the exact signed package name under the fixed packages role.
+/// This only validates bytes; the V2 publication receipt separately checks
+/// protected ACLs, full identities, location and durable transaction history.
+pub(crate) fn pin_published_candidate_manifest(
+    root: &OwnedHandle,
+    manifest: &PackageManifestV1,
+    manifest_sha256: &str,
+) -> Result<PinnedCandidateSourceV1> {
+    let retained = root
+        .try_clone()
+        .map_err(|_| "WAKE_BROKER_SOURCE_OBJECT_UNAVAILABLE")?;
+    open_manifest_package_in(
+        retained,
+        &["packages", &manifest.package_id],
+        manifest,
+        manifest_sha256,
+        false,
     )
 }
 

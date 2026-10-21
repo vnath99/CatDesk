@@ -1,5 +1,54 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 typed V2 physical publication (SOURCE/FIXTURE ONLY)
+
+V2 now publishes a freshly staged signed package through the existing native
+handle-relative no-replace rename and parent-flush primitives. A create-once
+PUBLICATION_ATTEMPT is hash-linked to exact STAGED history before any stage pin
+is released. The matching global lock, policy/role pins and retained root writer
+stay live. Reopened parent/candidate full FileIdInfo identities, exact ACLs,
+namespace location and attempt history are checked before rename. A moved-byte
+receipt retains the exact package, manifest and four artifacts through durable
+PUBLISHED recording, including rehashing and full-ID/security checks. Binding
+data alone cannot construct that receipt. Peer packages are preserved.
+
+The V2 record bound stays 8 KiB. V1 record bytes, owner fields and publication
+semantics stay unchanged. Shared manifest byte pins now also support the exact
+signed package name below the fixed packages role; original candidate intake
+still requires its exclusive fixed candidate slot. Shared component opens check
+the existing bounded single-component name grammar. No caller-selected trusted
+path, serialized receipt or install-admission bypass is introduced.
+
+Eight new Windows fixture tests pass. Coverage includes successful physical
+rename/full-ID history/receipt lifetime, four flush-failure points, cross-root
+receipt refusal, destination collisions before and after the attempt marker,
+candidate substitution, candidate ACL drift after pin release and torn marker
+refusal before rename. The complete all-feature Wake command passes: 331
+library tests / one ignored plus enabled binary/integration and adapter/response
+Python regressions. Strict all-target/all-feature root/Wake Clippy, formatting,
+diff checks and source-under-test hash comparison pass. Root main runtime tests
+remain prior-checkpoint evidence. Initial lifetime compile errors and the first
+fixture failure remain retained: that attack tried to create a root entry which
+the writer correctly denied; the corrected fixture substitutes within existing
+container roles and proves full-ID rejection. No sharing guard was weakened.
+
+Publication stops at PUBLISHED. Any uncertain attempt stays held; later-phase
+restart re-admission, protected reader/owner cutover and production admission
+remain incomplete. The quarantine gate still refuses before CI/INTENT, and
+broker-owned observation/clock, independent CI/quarantine/provisioning evidence
+and existing installer/service gates remain required. This source was not built
+into a selected release or installed. Installed multi-project monitoring,
+routing, rollover and the natural development/review cycle remain unaccepted.
+
+All five original registry/Wake pairs remain exact; stopped selected v33,
+production pointers and completed rollover stay preserved. Post-test cleanup
+at 18:05:08 UTC finds zero scoped processes. No operational browser, WakeHost,
+recurring job or event send is started; isolated fixture helpers are separate.
+No completed canary is replayed. No connector retry is made: the last recorded
+read at 17:48:44 UTC returned HTTP 429 at the OpenAI tunnel SSE probe, before
+local CatDesk access was proven. That dependency does not block source work.
+Parent dated audit: checkpoints/offline-v2-publication-oct21.
+
 ## October 21 retained transaction root writer (SOURCE/FIXTURE ONLY)
 
 The diagnostic pin/metadata-flush conflict recorded below is resolved for the

@@ -1,3 +1,32 @@
+## 2026-10-21 — V2 typed package publication (SOURCE/FIXTURE; ADMISSION HELD)
+
+V2 now consumes its fresh STAGED receipt, persists a create-once hash-linked
+publication-attempt record, releases stage pins, rechecks full parent/candidate
+identities and ACLs, and uses the existing handle-relative no-replace rename.
+Both namespace parents flush before a new retained moved-package receipt may
+record PUBLISHED through the transaction's retained root writer. Other package
+entries remain preserved. No V1 approval/owner fields are constructed.
+
+Eight new Windows fixtures pass: real publication and receipt lifetime, four
+flush-failure boundaries, cross-root receipts, destination collisions before
+and after the marker, candidate substitution, candidate ACL drift and torn
+marker refusal before rename. Full all-feature Wake passes 331 library tests /
+one ignored plus enabled binaries/integrations and adapter/response Python
+regressions. Strict root/Wake Clippy, formatting and diff checks pass; earlier
+compile/fixture failures remain in the dated audit. Root main runtime tests
+remain previous-checkpoint evidence.
+
+Failed/uncertain attempts remain sticky; restart re-admission of STAGED or
+PUBLISHED is not implemented. Next: exact V2 phase recovery using retained
+physical package proof, then protected reader/owner cutover. Quarantine,
+broker-owned observation/clock, independent CI/provisioning and operational
+admission remain required. This dormant source is not selected or installed.
+Five original registry/Wake pairs and stopped v33/production remain unchanged;
+cleanup finds zero scoped processes. No browser, operational WakeHost, recurring
+worker, message or canary replay is started. Connector evidence remains the
+prior 17:48:44 UTC HTTP 429; no additional probe is made for this increment.
+Parent dated audit: checkpoints/offline-v2-publication-oct21.
+
 ## 2026-10-21 — V2 retained root writer (SOURCE/FIXTURE; ADMISSION HELD)
 
 Resolved the kernel-confirmed root-pin/metadata-flush conflict without changing
