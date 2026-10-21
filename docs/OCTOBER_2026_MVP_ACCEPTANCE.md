@@ -1,5 +1,33 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 fresh native task / Python runtime diagnosis (PARTIAL)
+
+The already isolated Wake2 worktree's three preserved corpus artifacts are
+reviewed and checkpointed after three concrete mypy errors are fixed. Focused
+operator tests pass (11 / 2 skipped), Ruff/mypy pass, and a read-only recompute
+matches the historical JSON without changing its UNKNOWN/UNVERIFIED labels.
+The original active checkout is preserved. A fresh preflight is clean with no
+recorded ownership/accounting blockers; the historical 35-claim issue does not
+apply to this isolated project.
+
+Two real native queue turns resume the existing isolated thread, with observed
+Sol/medium and released leases. Their reports honestly distinguish native exit
+zero from failed qualification: the first runs no checks because Python cannot
+start, and the second establishes direct base Python Win32 error 5. A separate
+managed read-only MXC probe starts the same interpreter, with config/ACLs/state
+unchanged. Per-task `--windows-sandbox mxc` is implemented in source and binds
+requested mode through queue/receipt/candidate, preserving workspace policy
+and defaults. Queued MXC qualification remains pending. Native Wake2 has no
+bound Web target. MXC task/receipt/candidate schema 2 prevents older readers
+from silently executing the request without its implementation option; default
+records retain schema 1. Source gates pass: 77 focused queue tests, 1,541 main
+tests / 28 ignored, enabled integrations and nested Wake, strict all-target
+Clippy, formatting and diff checks. These are separate from selected-package
+and actual native qualification.
+Full profile verification, review package, independent Web
+review and the natural cycle remain open. Private dated evidence: parent
+`checkpoints/native-cycle-readiness-oct21` and `checkpoints/native-mxc-optin-oct21`.
+
 ## October 21 retained tool/worker context pressure (SOURCE; MVP PARTIAL)
 
 Tool arguments now contribute once to the retained conversation's observed

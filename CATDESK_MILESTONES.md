@@ -1,3 +1,18 @@
+## 2026-10-21 — Fresh native resumption and requested MXC option (PARTIAL)
+
+The preserved isolated Wake2 artifacts are checkpointed after three mypy fixes;
+11 focused tests (2 skipped), Ruff/mypy and exact JSON preservation pass.
+Two fresh queued turns resume the existing thread on observed Sol/medium and
+release their leases, preserving original active work. Qualification is still
+blocked by native Python process creation (Win32 5), despite operator checks
+passing. A managed read-only MXC compatibility probe starts the same Python
+without config/ACL/state changes. The queue adds a task-specific mxc-only
+request, bound through its receipt/candidate while keeping workspace-write and
+defaults. Source, package and queued/live proof remain separate. Full-profile
+verification, native target binding, independent review and natural cycle are
+pending. Private dated evidence: parent checkpoints/native-cycle-readiness-oct21
+and checkpoints/native-mxc-optin-oct21.
+
 ## 2026-10-21 — Retained tool/worker context accounting (SOURCE + DEVELOPMENT READBACK)
 
 Per-conversation pressure now includes observed retained tool arguments and

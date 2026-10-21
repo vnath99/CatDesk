@@ -1,5 +1,43 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-21 isolated native resumption and per-task MXC (source)
+
+The existing isolated Wake2 thread resumes through the actual operator queue
+on observed `gpt-6.1-sol` / `medium`, with standard access requested. Two fresh
+turns exit zero and release their leases. The first delivers an honest failed
+qualification report: its checks never start because the existing venv cannot
+launch base Python. A bounded follow-up proves direct base Python fails with
+Win32 error 5 in that native execution context too. Native exit zero is not a
+passing qualification. Old/current receipts and their historical source remain
+separate; the original active Wake2 checkout/chat is untouched.
+
+The independently reviewed isolated helper is checkpointed with three mypy
+errors corrected. Operator-context focused tests pass (11 / 2 skipped), Ruff
+and mypy pass, and the historical JSON's exact bytes are preserved. Its
+provenance/sanitization remain UNKNOWN/UNVERIFIED; full regression is pending.
+
+Following the [official Windows sandbox guidance](https://learn.chatgpt.com/docs/windows/windows-sandbox),
+a one-command managed read-only MXC probe on installed CLI 0.163 starts the
+same Python 3.12.10 successfully. Codex configuration, Python ACLs and all
+project artifacts remain unchanged. This is separate from a queued turn.
+
+The local queue now accepts explicit `add --windows-sandbox mxc`. It binds this
+request in job identity, receipt and review candidate and passes the native
+configuration override for that task only. Defaults/old serialized records are
+preserved; unsupported values and non-Windows execution refuse. Workspace-write,
+approval, model/effort, owner and managed-policy checks remain. Requested mode
+is not effective-policy attestation. MXC compatibility/network behavior is
+native-platform dependent; no fallback or permission/setup change is performed.
+Source tests and selected-package/live qualification are recorded separately.
+Opted-in task/receipt/candidate records use schema 2 and older readers refuse
+them; default records remain schema 1. The final source gates pass: 77 focused
+queue tests, full main 1,541 / 28 ignored, integrations/nested Wake, strict
+all-target Clippy, formatting and diff checks. A compile error caught during
+the versioning increment was corrected before this final rerun.
+Private dated evidence: parent `checkpoints/native-cycle-readiness-oct21` and
+`checkpoints/native-mxc-optin-oct21`. Native Wake2's target remains unbound, so
+this does not establish review delivery or the natural next-task cycle.
+
 ## 2026-10-21 sibling-project discovery implemented (source only)
 
 The independent inbox path no longer filters CatDesk records only. It observes

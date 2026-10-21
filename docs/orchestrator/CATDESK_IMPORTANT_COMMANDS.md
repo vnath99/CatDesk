@@ -1,5 +1,21 @@
 # CatDesk — Important Command Reference
 
+## October 21 optional per-task Windows implementation (SOURCE)
+
+The existing `operator codex queue add` accepts `--windows-sandbox mxc` for an
+explicit native Windows task. Omit it to retain the existing native settings.
+This is a requested implementation override, recorded with the task/receipt/
+review candidate; it does not attest the native policy. Workspace-write and
+approval/model/owner checks remain. Opted-in tasks, receipts and candidates
+use schema 2 so older readers refuse them; default records retain schema 1.
+Unsupported modes/platforms refuse and the
+CLI may reject unavailable or disallowed MXC. No automatic fallback, global
+config, account, ACL or service change is made. Use a qualified selected
+package and bound/quiescent task owner before live execution. The successful
+managed read-only compatibility probe is not proof of a queued task's tests,
+review or Wake delivery. Current evidence is in the parent native-mxc-optin-oct21
+and native-cycle-readiness-oct21 checkpoints.
+
 ## October 21 retained context observations (SOURCE)
 
 The existing `catdesk_web_context_observe` and `operator web context observe`
