@@ -1,11 +1,29 @@
 # T-0484 — Per-conversation context pressure, token accounting and safe automatic rollover
 **Priority:** October 31 combined P3/P4 user milestone. The operator's October 17 revision supersedes the earlier deferral below. Independent ChatGPT Web project continuation and a demonstrated project rollover are required for overall acceptance.
-**Date:** 2026-10-14; priority revised 2026-10-17; acceptance updated 2026-10-21 | **Status:** Controlled rollover, continuation and fresh three-project delivery/readback verified; retry pacing source and stopped package readback pass; live background, installed, central connector and natural-cycle acceptance pending.
+**Date:** 2026-10-14; priority revised 2026-10-17; acceptance updated 2026-10-21 | **Status:** Controlled rollover, continuation and three-project delivery verified; five independent context meters observed; retry pacing source and stopped package readback pass; live background, installed, central connector and natural-cycle acceptance pending.
 **Owner:** Codex Desktop, alongside continued development in each project's existing Codex conversation.
 **Dependencies:** accepted project-bound sessions and fair Wake dispatch, versioned WakeHost/owned SeleniumBase, durable event/receipt identity, one authoritative target generation per project, source/trust boundary acceptance.  
 **Read with:** `docs/orchestrator/CATDESK_CODEX_DESKTOP_HANDOFF_2026-10-14.md`; `docs/orchestrator/CATDESK_COMPETITOR_BROWSER_CONTINUITY_2026-10-14.md`; `CATDESK_MILESTONES.md`.
 
 ## Operator requirements
+
+### October 21 five-project context observations (live development)
+
+Existing standalone capture passes once for BYOVD and Bug Bounty with no
+WakeHost start, message, binding/policy change or new authentication. Actual
+reader durations are 38.3/36.5 seconds, with 240-second outer bounds and a
+30-second gap. The reused profile remains authenticated. Both readers exit
+with zero scoped processes; 75 protected files and all original five pairs
+remain unchanged. Fresh post-test snapshots show all four other native chats
+active without turn errors, with no messages or interruptions from this test.
+
+All five generation-1 meters read back with matching pair digests: retained
+CatDesk/Wake2/PortfolioDesk excerpt proxies 2,123/1,530/1,556; fresh BYOVD/Bug
+Bounty 1,446/709. Coverage remains unknown/incomplete, with BYOVD overflow;
+these are not complete context-window measurements. Automatic policies stay
+unchanged and both runtime controls remain STOPPED. This is not five-project
+send/natural-cycle or production acceptance. Existing rollover is not repeated.
+Parent dated evidence: checkpoints/web-five-project-context-oct21.
 
 ### October 21 durable retry pacing for automatic browser failures (source)
 

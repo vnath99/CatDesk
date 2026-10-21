@@ -1,5 +1,41 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 five-project context readback (LIVE DEVELOPMENT; PARTIAL)
+
+The selected normal development v33 performs one standalone read-only browser
+capture each for BYOVD and Bug Bounty, using the existing authenticated profile.
+The existing host lease/private adapter Job provides ownership while WakeHost
+stays stopped. Each reader has a 240-second outer bound; observed durations are
+38.3 and 36.5 seconds with a 30-second gap. No message, rollover, target update,
+new login or recurring worker is invoked. Exact project/generation/URL-digest
+bookends and browser binding pass. Only hashes/counts are persisted.
+
+All five current generation-1 meters then read back independently:
+
+| Project | Observed excerpt token proxy | Evidence |
+| --- | ---: | --- |
+| CatDesk | 2,123 | Prior live capture retained |
+| Wake2 | 1,530 | Prior live capture retained |
+| PortfolioDesk | 1,556 | Prior live capture retained |
+| BYOVD | 1,446 | Fresh standalone capture |
+| Bug Bounty | 709 | Fresh standalone capture |
+
+These are advisory observed-content proxies, not provider context sizes.
+Every meter retains `UNKNOWN_OR_INCOMPLETE` coverage; BYOVD also reports an
+excerpt overflow. No complete-history or capacity claim is inferred. Existing
+context policies are preserved. The 75 protected files, all five registry/Wake
+records, other context/rollover histories, deliveries/timers and production
+pointer remain unchanged. Scoped processes are zero after each reader and at
+completion; both controls remain STOPPED. All four original native development
+chats are freshly observed active afterward without reported turn errors.
+
+This extends context capture/readback to five projects; it does not extend the
+previous three-project delivery proof to five sends, or prove installed
+production, automatic browser retry pacing or the natural review cycle.
+The completed rollover is preserved and not repeated. Connector read still
+returns 429; no retry or transport change occurs. Private dated evidence:
+parent `checkpoints/web-five-project-context-oct21/bounded-read-20261021T145504759Z`.
+
 ## October 21 external Python verification runtime (SOURCE; LIVE PROFILE PENDING)
 
 Fixed UV verification previously stripped inherited UV overrides but supplied
@@ -26,6 +62,14 @@ Final source gates pass: 1,545 main tests / 29 ignored, enabled integrations
 and nested Wake, strict all-target/all-feature Clippy, formatting and diff.
 The ignored real-UV probe is explicitly run and passes separately. These
 results do not establish a real project's full fixed-profile qualification.
+
+Normal app/default-feature host builds at `3d060f9` form stopped development
+v33 (`1.0.0-dev.85-e74e956c0872cce4cb8e52604a538ed9b72dae4c22f5c48350cd833bb21d6b51`).
+Its 20-second loopback metadata/cleanup probe passes seven paired records,
+three retained estimates and completed continuation proof. V32, profile, all
+79 checked state files and production are preserved. Only four numeric usage
+counters change in the probe; its listener exits normally with zero scoped
+processes. This is package compatibility, separate from a real UV profile run.
 
 ## October 21 repeated automatic browser failures (SOURCE; LIVE PENDING)
 

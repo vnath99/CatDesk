@@ -1,3 +1,16 @@
+## 2026-10-21 — Five independent context observations (LIVE DEVELOPMENT; PARTIAL)
+
+One bounded standalone read-only capture each for BYOVD and Bug Bounty passes,
+reusing the authenticated profile with WakeHost stopped and a 30-second gap.
+Five current paired meters now read back: CatDesk 2,123, Wake2 1,530,
+PortfolioDesk 1,556 retained; BYOVD 1,446 and Bug Bounty 709 freshly captured.
+These are excerpt proxies with unknown history, not provider capacity. No
+message, rollover, binding or policy change occurs. All 75 protected state
+files and original five pairs are preserved, scoped processes zero, both
+controls STOPPED. Four other native chats remain active without reported
+turn errors. Three-project delivery and completed rollover proofs remain
+separate and unreplayed. Parent audit: checkpoints/web-five-project-context-oct21.
+
 ## 2026-10-21 — External fixed Python verification runtime (SOURCE; LIVE PENDING)
 
 Fresh fixed UV verification now derives receipt-specific environment and
@@ -9,6 +22,11 @@ The bounded dependency-free real UV/Python probe passes in 2.33 seconds with
 source cache directories absent; full project/native qualification remains
 pending. This starts no model, browser/WakeHost or recurring process and changes
 no binding. Dated evidence: checkpoints/native-verification-runtime-oct21.
+
+Source `3d060f9` passes 1,545 main tests / 29 ignored, enabled integrations/nested
+Wake, strict lint/format gates, and an explicitly run real-UV probe. Normal v33
+is selected stopped and passes 20-second metadata/cleanup readback, preserving
+v32/profile/state and production. Real project qualification remains pending.
 
 ## 2026-10-21 — Durable automatic Web retry pacing (SOURCE; LIVE PENDING)
 

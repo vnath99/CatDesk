@@ -23,6 +23,13 @@ Wake, strict Clippy and format/diff. The real-UV ignored probe passes in its
 explicit opt-in run. Current default UV cache path readback matches the OS-derived
 path used by production code. No cache contents or operator settings are changed.
 
+Normal development v33 at `3d060f9` is selected stopped and passes the bounded
+20-second metadata/cleanup probe with v32/profile/state preserved. Two subsequent
+standalone read-only Web captures extend retained context observations to five
+projects while keeping WakeHost stopped, but emit no native review event. The
+earlier native qualification and natural deliverable-review-next-task cycle
+remain open. Dated two-reader evidence: checkpoints/web-five-project-context-oct21.
+
 ## 2026-10-21 v31 fresh native qualification result (PARTIAL)
 
 Selected normal development v31 is built at `49f421a`; its bounded loopback

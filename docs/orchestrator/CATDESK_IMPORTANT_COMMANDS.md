@@ -1,5 +1,21 @@
 # CatDesk — Important Command Reference
 
+## October 21 standalone read-only context capture (DEVELOPMENT TESTED)
+
+With a matched selected package and its registered control workspace,
+`operator web context capture --project-id PROJECT` resolves the paired target
+without accepting a URL override. It can acquire the existing standalone host
+lease while WakeHost stays stopped, then retain private adapter ownership for
+one bounded snapshot. It sends no USER message and starts no recurring worker.
+Owner/target contention or unavailable authentication is a refusal, not a
+reason to replace a profile, clear a draft or replay work.
+
+One attempt each for BYOVD and Bug Bounty passes; together with retained prior
+CatDesk/Wake2/PortfolioDesk captures, all five current meters read back with
+paired generation/digest. Estimates are advisory excerpts with unknown history.
+Cleanup, five binding preservation and both STOPPED controls pass. Dated parent
+evidence: `checkpoints/web-five-project-context-oct21`.
+
 ## October 21 fixed Python verification runtime (SOURCE; LIVE PROFILE PENDING)
 
 Fresh `operator codex queue verify` executions for fixed UV profiles derive a
@@ -21,6 +37,10 @@ The dependency-free offline UV/Python probe passes in disposable state, with
 project's full profile qualification. See the parent dated checkpoint
 `checkpoints/native-verification-runtime-oct21` and the [UV environment-path
 reference](https://docs.astral.sh/uv/concepts/projects/config/#project-environment-path).
+
+Normal stopped development v33 at `3d060f9` passes matched-package selection
+and a 20-second metadata/cleanup readback while preserving v32/profile/state.
+This does not qualify a real project's fixed UV profile or repair native 101.
 
 ## October 21 automatic Web retry pacing (SOURCE; LIVE PENDING)
 
