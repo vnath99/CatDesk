@@ -25,8 +25,11 @@ contention), with full cleanup and policy restoration. Corrected source now
 preserves `BROWSER_` refusal codes and retries only local `BROWSER_SESSION_BUSY`
 twice per retained project worker, with cancellable 30-second waits. Other
 errors are not retried by that loop. This is separate from the normal scheduler
-interval. Select the matched candidate stopped before its bounded periodic
-retest; source checks do not establish live acceptance.
+interval. The matched v25 periodic retest now passes for all three projects,
+with exact policy restoration and complete cleanup. That controlled result
+does not establish installed production acceptance. The separate aggregate
+status read completes, but took about 50 CPU-heavy seconds in the debug
+candidate, exceeding the initial 30-second diagnostic budget.
 
 ## October 20 approved live test and context freshness
 

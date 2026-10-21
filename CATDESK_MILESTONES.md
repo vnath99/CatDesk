@@ -1,3 +1,30 @@
+## 2026-10-20 — Three-project automatic observation and bounded lifecycle (CONTROLLED LIVE)
+
+Source `148deba` in stopped development v25 passes the 480-second periodic test:
+CatDesk, Wake2 and PortfolioDesk each obtained a fresh exact-conversation capture,
+without manual capture calls, messages, rollover or canary replay. CatDesk's
+quarantine remains intact. Scheduler deadline exit is normal, host tree exit is
+proved, zero owned processes remain, policies restore exactly and both controls
+are STOPPED. Original five bindings, canary histories, existing delivery/timer
+records and protected production pointer are unchanged. The previous partial
+run and all diagnostic attempts are retained in the private monitor checkpoint.
+
+Source permits independently opted-in observation while quarantine blocks
+advancement, adds optional headless deadline/project scope, preserves browser
+error codes and retains workers for two cancellable local contention retries.
+Main suite passes 1,539 / 28 ignored before the final retry increment; its final
+61 Web regressions and strict Clippy/build/format/diff checks pass, with two
+native headless fixtures already passing. Exact-source CI remains unverified.
+
+The aggregate status read exceeded its first 30-second limit, then completed
+within the bounded profile in about 50 seconds with increasing CPU time. Seven
+paired projects, fresh context counters and preserved continuation proof read
+back correctly; reporting latency still needs optimization. Separately,
+central connector HTTP 429, protected installation and a genuine development/
+review/next-task cycle remain open. Native snapshots show Wake2, PortfolioDesk
+and BYOVD active, Bug Bounty idle with its own reported operator-input blocker;
+no native messages, replacement or interruptions were issued. Overall MVP PARTIAL.
+
 ## 2026-10-20 — Approved three-project delivery/readback (CONTROLLED LIVE; MVP PARTIAL)
 
 The approved 900-second-maximum v22 foreground test completed in 212 seconds.

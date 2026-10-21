@@ -7,6 +7,24 @@
 
 ## Operator requirements
 
+### October 20 periodic three-project observation verified
+
+Corrected development v25 (`148deba`) passes the 480-second scoped periodic run:
+three fresh exact-target captures without manual capture calls, no sends or
+rollover, CatDesk quarantine retained and canaries excluded. Scheduler exits
+normally on its internal deadline, host tree drains, owned process count is
+zero; all policies restore exactly, five bindings/history and old deliveries/
+timers are preserved, both controls stopped, production unchanged. Evidence:
+parent `checkpoints/web-quarantine-monitor-oct20/approved-monitor-run-20261021T021001323Z`.
+The earlier partial run remains retained. Source fixes include independent
+quarantine observation, bounded/project-scoped headless operation, browser code
+reporting and two cancellable local contention retries. Final 61 Web regressions,
+strict Clippy and build pass; main 1,539 / 28 ignored and two native headless
+fixtures passed before the last retry change. Aggregate status completed in
+about 50 CPU-heavy seconds after exceeding its initial 30-second diagnostic
+limit; latency optimization, connector, installation and natural-cycle gates
+remain open. This is controlled development acceptance only.
+
 ### October 20 approved bounded live result and capture freshness
 
 The explicit operator test approval supersedes earlier holds below. Source-built

@@ -1,6 +1,29 @@
 # CatDesk October 2026 MVP acceptance
 
-## October 20 automatic monitoring while rollover is quarantined (SOURCE)
+## October 20 automatic monitoring while rollover is quarantined (CONTROLLED LIVE; MVP PARTIAL)
+
+The corrected **v25** candidate at source `148debabdbe68b92d0de4a120bb66cad6e23fbd3`
+passes the fresh scoped periodic test: CatDesk, Wake2 and PortfolioDesk each
+recorded a new capture for their exact current URL/generation within the
+480-second scheduler window. There were no manual capture calls during that
+run. CatDesk remained quarantined, and no project advanced rollover or sent a
+message. Both canaries were excluded. The scheduler exited normally at its
+internal deadline; host tree exit is proved and owned process count is zero.
+All policies restored exactly, all five bindings and canary histories preserved,
+all existing deliveries/timers unchanged, both controls STOPPED, production
+pointer/configuration unchanged. Private evidence:
+`checkpoints/web-quarantine-monitor-oct20/approved-monitor-run-20261021T021001323Z`.
+
+This closes controlled periodic monitoring for the three projects, not protected
+installation or the central ChatGPT development loop. The earlier partial run
+and diagnostic probes below remain preserved. Intermittent target-read refusals
+also occurred but did not prevent this acceptance. A separate aggregate
+`operator web status` diagnostic hit its 30-second limit; its bounded follow-up
+completed successfully in about 50 seconds, with steadily increasing CPU time.
+It returned seven paired projects, the three fresh advisory estimates and the
+preserved fast-canary continuation proof. This is a CPU-heavy reporting path,
+not a deadlock or lost state. Optimizing that latency remains open. No browser
+or runtime was started for the status profile.
 
 Inspection found that a preserved QUARANTINED attempt suppressed context reads
 even when independent observation was enabled. Its scheduler step now permits
@@ -53,7 +76,7 @@ cancellation; the existing worker-drain regression exercises the actual retry
 wait. The main suite passed 1,539 / 28 ignored after the error-code correction;
 then all 61 Web tests, strict Clippy and build passed after the retry change.
 Wake/Python and headless entry behavior are unchanged by that retry correction.
-Periodic acceptance of the corrected candidate still requires a fresh bounded run.
+The subsequent v25 periodic acceptance above is separate from these source gates.
 
 ## October 20 approved three-project live test (CONTROLLED DEVELOPMENT)
 
