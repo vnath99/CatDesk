@@ -7,6 +7,27 @@
 
 ## Operator requirements
 
+### October 20 guarded Web serving parity verified locally
+
+Source `784c729` exposes the five existing work/context tools in both Computer
+supervisor modes, retaining read-only/browser-only refusal and the separate
+queue disclosure gates. Three existing Web matrices fail before and pass after
+the correction. The v27 loopback test exits cleanly but remains PARTIAL because
+usage accounting also saves temporary headless launch settings. The first
+evidence/configuration are retained rather than reconstructed.
+
+Source `742ede6` fixes that persistence and passes full main 1,539 / 28 ignored
+and strict Clippy. Matched normal optimized v28 passes a fresh internally
+bounded 20-second MCP test: authentication and five-tool catalog/closed-scope
+dispatch pass, seven paired statuses and existing continuation proof read back,
+no events/browser/WakeHost starts. Only four numeric usage counters can change
+among 81 checked files; launch settings and project/history state are preserved.
+Normal listener exit, zero owned processes, both controls STOPPED, original-five
+pair comparison and unchanged production pass. Private dated evidence:
+parent `checkpoints/web-serving-parity-oct20/approved-catalog-run-20261021T033800303Z`.
+External connector, protected installation, exact CI and natural-cycle gates
+remain separate; this local serving result does not close them.
+
 ### October 20 optimized reporting verified in stopped development
 
 The existing normal release profile resolves debug status latency without

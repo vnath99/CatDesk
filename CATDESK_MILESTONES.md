@@ -1,3 +1,22 @@
+## 2026-10-20 — Web serving parity and headless setting preservation (VERIFIED DEVELOPMENT)
+
+The five guarded work/context tools now follow the existing supervisor-mode
+rule in both catalog and dispatch, including Multi Tools. Read-only/browser-only
+and queue disclosure boundaries remain intact. Source `742ede6` also prevents
+headless usage persistence from saving temporary mode/port settings, an issue
+found by the first bounded v27 test. Its partial evidence remains preserved.
+The final main suite passes 1,539 / 28 ignored and strict Clippy.
+
+Normal optimized v28 passes the fresh 20-second loopback serving probe: 401
+without auth, five tools listed once and rejecting invalid scope, seven paired
+statuses and preserved continuation proof. Only usage counters advance; all
+launch settings/project history are preserved. Normal internal-deadline exit,
+zero owned browser/Wake processes, both controls STOPPED, five original pairs
+and unchanged production pass. No event, browser or WakeHost starts. Dated
+private evidence: parent `checkpoints/web-serving-parity-oct20`.
+Connector HTTP 429, protected installation, exact-current CI and a genuine
+development/review/next-task cycle remain open. Overall MVP PARTIAL.
+
 ## 2026-10-20 — Optimized reporting in stopped development (VERIFIED; MVP PARTIAL)
 
 The normal release profile resolves the CPU-heavy debug status delay without

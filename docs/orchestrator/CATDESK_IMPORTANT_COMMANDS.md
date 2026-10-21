@@ -20,6 +20,16 @@ listener cleanup. Its source correction needs matched package verification.
 Configuration usage counters can legitimately advance during MCP calls; verify
 the remaining settings instead of treating every config byte change as drift.
 
+The matched normal optimized v28 (`742ede6`) now passes the corrected 20-second
+loopback test: five tools exposed once with invalid scope rejected, HTTP 401
+without authentication, seven paired project statuses and preserved continuation
+proof. Usage counters persist; configured launch settings remain unchanged.
+Cleanup proves normal internal-deadline exit, zero owned browser/Wake processes,
+both controls STOPPED and original five pairs preserved. No events or browser/
+WakeHost starts. This is development serving acceptance, not external connector
+refresh or installed production acceptance. Dated private evidence:
+parent `checkpoints/web-serving-parity-oct20/approved-catalog-run-20261021T033800303Z`.
+
 ## October 20 optimized stopped development readback
 
 Use the existing release profile for a normally built operator image:

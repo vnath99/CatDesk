@@ -1,6 +1,6 @@
 # CatDesk October 2026 MVP acceptance
 
-## October 20 Web tool serving parity (SOURCE; MVP PARTIAL)
+## October 20 Web tool serving parity (SOURCE + DEVELOPMENT LOOPBACK; MVP PARTIAL)
 
 The five existing `catdesk_web_work_request`, `catdesk_web_work_resolve` and
 `catdesk_web_context_{capture,configure,observe}` tools now use the existing
@@ -34,6 +34,25 @@ process-local while still persisting usage counters and explicit ordinary
 configuration updates. This correction requires its own matched package
 readback. Legitimate accounting changes must be distinguished from launch
 setting drift rather than silently exempting the whole configuration file.
+
+Source `742ede6` passes the full main suite **1,539 / 28 ignored**, strict
+all-target/all-feature Clippy, format and diff checks. Its normal optimized
+image is selected through the existing stopped development **v28** update;
+Wake/Python inputs, browser profile and all 77 non-selection files are preserved.
+The corrected **20-second** loopback probe passes: unauthorized access returns
+401, all five Web tools appear exactly once and reject private scope overrides,
+the separately gated queue tools remain absent, and a successful MCP registry
+read returns seven paired projects and the preserved continuation proof.
+
+The listener exits normally at its internal deadline with zero owned browser/
+Wake processes, no events, browser delivery or WakeHost start. Of 81 checked
+files only four numeric usage counters in the isolated configuration can change;
+all other configuration bytes/settings and project/history files are preserved.
+Independent original-five paired readback passes, both controls remain STOPPED,
+and protected production pointer/configuration are unchanged. Evidence:
+`approved-catalog-run-20261021T033800303Z` under the private checkpoint above.
+This verifies the selected development serving path, not provider connector
+catalog refresh, valid work delivery, protected installation or a natural cycle.
 Private dated evidence: parent `checkpoints/web-serving-parity-oct20`.
 Connector HTTP 429 and protected installation remain independent live gates.
 
