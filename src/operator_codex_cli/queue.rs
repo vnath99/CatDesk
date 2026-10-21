@@ -996,7 +996,160 @@ struct QueueStore {
     root: PathBuf,
 }
 
+struct VerificationRuntime {
+    root: PathBuf,
+    uv_cache: PathBuf,
+}
+
+impl VerificationRuntime {
+    fn prepare(root: PathBuf, uv_cache: PathBuf, projects: &[PathBuf]) -> Result<Self, String> {
+        if !root.is_absolute() || !uv_cache.is_absolute() {
+            return Err("CODEX_QUEUE_VERIFY: runtime paths must be absolute".into());
+        }
+        for project in projects {
+            reject_overlap(&root, project)?;
+            reject_overlap(&uv_cache, project)?;
+        }
+        checked_dir(&root)?;
+        for name in ["tmp", "cache", "ruff", "mypy", "pycache", "pytest"] {
+            checked_dir(&root.join(name))?;
+        }
+        checked_dir(
+            uv_cache
+                .parent()
+                .ok_or("CODEX_QUEUE_VERIFY: cache parent is absent")?,
+        )?;
+        checked_dir(&uv_cache)?;
+        let root = root
+            .canonicalize()
+            .map_err(|_| "CODEX_QUEUE_VERIFY: runtime is unavailable")?;
+        let uv_cache = uv_cache
+            .canonicalize()
+            .map_err(|_| "CODEX_QUEUE_VERIFY: cache is unavailable")?;
+        for project in projects {
+            reject_overlap(&root, project)?;
+            reject_overlap(&uv_cache, project)?;
+        }
+        let runtime = Self { root, uv_cache };
+        runtime.revalidate()?;
+        Ok(runtime)
+    }
+
+    fn revalidate(&self) -> Result<(), String> {
+        for path in std::iter::once(self.root.clone())
+            .chain(
+                ["tmp", "cache", "ruff", "mypy", "pycache", "pytest"]
+                    .map(|name| self.root.join(name)),
+            )
+            .chain([
+                self.uv_cache
+                    .parent()
+                    .ok_or("CODEX_QUEUE_VERIFY: cache parent is absent")?
+                    .to_path_buf(),
+                self.uv_cache.clone(),
+            ])
+        {
+            let metadata = fs::symlink_metadata(&path)
+                .map_err(|_| "CODEX_QUEUE_VERIFY: runtime directory is unavailable")?;
+            if !metadata.is_dir() || redirected(&metadata) {
+                return Err("CODEX_QUEUE_VERIFY: runtime directory is redirected or unsafe".into());
+            }
+        }
+        match fs::symlink_metadata(self.root.join("venv")) {
+            Ok(metadata) if !metadata.is_dir() || redirected(&metadata) => {
+                return Err(
+                    "CODEX_QUEUE_VERIFY: virtual environment is redirected or unsafe".into(),
+                );
+            }
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                return Err("CODEX_QUEUE_VERIFY: virtual environment is unavailable".into());
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn environment(&self) -> Result<Vec<(OsString, OsString)>, String> {
+        let pytest_cache = self.root.join("pytest");
+        let cache_option = format!(
+            "cache_dir={}",
+            pytest_cache
+                .to_str()
+                .ok_or("CODEX_QUEUE_VERIFY: runtime path is not Unicode")?
+        );
+        // pytest parses PYTEST_ADDOPTS with shlex, not a Windows command line.
+        // Quote the entire internally derived option, including apostrophes.
+        let quoted_option = format!("'{}'", cache_option.replace('\'', "'\"'\"'"));
+        let mut variables = vec![
+            (
+                "UV_PROJECT_ENVIRONMENT".into(),
+                self.root.join("venv").into_os_string(),
+            ),
+            (
+                "UV_CACHE_DIR".into(),
+                self.uv_cache.clone().into_os_string(),
+            ),
+            (
+                "RUFF_CACHE_DIR".into(),
+                self.root.join("ruff").into_os_string(),
+            ),
+            (
+                "MYPY_CACHE_DIR".into(),
+                self.root.join("mypy").into_os_string(),
+            ),
+            (
+                "PYTHONPYCACHEPREFIX".into(),
+                self.root.join("pycache").into_os_string(),
+            ),
+            (
+                "PYTEST_ADDOPTS".into(),
+                format!("-o {quoted_option}").into(),
+            ),
+            (
+                "XDG_CACHE_HOME".into(),
+                self.root.join("cache").into_os_string(),
+            ),
+        ];
+        for name in ["TEMP", "TMP", "TMPDIR"] {
+            variables.push((name.into(), self.root.join("tmp").into_os_string()));
+        }
+        Ok(variables)
+    }
+}
+
 impl QueueStore {
+    fn verification_runtime(
+        &self,
+        receipt_id: &str,
+        projects: &[PathBuf],
+    ) -> Result<VerificationRuntime, String> {
+        if !Uuid::parse_str(receipt_id).is_ok_and(|id| id.to_string() == receipt_id) {
+            return Err("CODEX_QUEUE_VERIFY: runtime receipt identity is invalid".into());
+        }
+        let parent = self.root.join("verification-runtime");
+        for project in projects {
+            reject_overlap(&parent, project)?;
+        }
+        checked_dir(&parent)?;
+        // Production uses the OS-derived user location, never UV_/XDG_ caller
+        // settings. Unit fixtures must not create or populate the real cache.
+        let uv_cache = if cfg!(test) {
+            self.root.join("fixture-uv-cache")
+        } else {
+            let state = fixed_current_user_catdesk_state_root_path()
+                .map_err(|_| "CODEX_QUEUE_VERIFY: fixed user cache root is unavailable")?;
+            let user = state
+                .parent()
+                .ok_or("CODEX_QUEUE_VERIFY: fixed cache parent is absent")?;
+            #[cfg(windows)]
+            let cache = user.join("uv").join("cache");
+            #[cfg(not(windows))]
+            let cache = user.join(".cache").join("uv");
+            cache
+        };
+        VerificationRuntime::prepare(parent.join(receipt_id), uv_cache, projects)
+    }
+
     fn namespaced_path(
         control: &AutonomousProjectV1,
         project_workspace: &Path,
@@ -3088,6 +3241,18 @@ async fn verify_receipt_in_store_with_executable(
         &job.binding.verification_profile,
         &candidate.after.changed_paths,
     )?;
+    let runtime = if profile.tool == VerificationTool::Uv {
+        let roots = scheduler(control_workspace)?
+            .load_registry()
+            .map_err(|_| "CODEX_QUEUE_VERIFY: registered runtime scope is unavailable")?
+            .projects
+            .into_iter()
+            .map(|project| project.workspace)
+            .collect::<Vec<_>>();
+        Some(store.verification_runtime(receipt_id, &roots)?)
+    } else {
+        None
+    };
     writer
         .begin_writer_turn()
         .map_err(|_| "CODEX_QUEUE_VERIFY: writer marker could not be persisted".to_string())?;
@@ -3098,6 +3263,7 @@ async fn verify_receipt_in_store_with_executable(
             &executable,
             profile.tool,
             &job.binding.verification_profile,
+            runtime.as_ref(),
             argv,
             verification_command_timeout(&job.binding.verification_profile, argv),
         )
@@ -3173,6 +3339,7 @@ async fn verify_receipt_in_store_with_executable(
         "action":"codex_queue_verify", "idempotent":false,
         "verification":artifact.summary(&digest),
         "artifactPath":store.verification_path(receipt_id),
+        "runtimeRoot":runtime.as_ref().map(|runtime| &runtime.root),
         "historicalReadback":false,
         "meaning":"Fixed local command exits and source recheck at recording time only; descendants, independent review, and Wake are not proven.",
     }))
@@ -3961,6 +4128,10 @@ fn verification_env_key_allowed(tool: VerificationTool, profile: &str, upper: &s
         }
         VerificationTool::Uv => {
             !upper.starts_with("UV_")
+                && !matches!(
+                    upper,
+                    "TEMP" | "TMP" | "TMPDIR" | "XDG_CACHE_HOME" | "MYPY_CACHE_DIR"
+                )
                 && !upper.starts_with("PYTHON")
                 && !upper.starts_with("PYTEST_")
                 && !upper.starts_with("PIP_")
@@ -3979,6 +4150,7 @@ fn verification_env_key_allowed(tool: VerificationTool, profile: &str, upper: &s
 fn verification_command_environment(
     tool: VerificationTool,
     profile: &str,
+    runtime: Option<&VerificationRuntime>,
 ) -> Result<(Vec<(OsString, OsString)>, String), String> {
     const MAX_ENV_BYTES: usize = 256 * 1024;
     const MAX_ENV_ENTRIES: usize = 512;
@@ -3988,6 +4160,11 @@ fn verification_command_environment(
             verification_env_key_allowed(tool, profile, &upper)
         })
         .collect::<Vec<_>>();
+    if tool == VerificationTool::Uv {
+        let runtime = runtime.ok_or("CODEX_QUEUE_VERIFY: Python runtime scope is absent")?;
+        runtime.revalidate()?;
+        variables.extend(runtime.environment()?);
+    }
     if variables.len() > MAX_ENV_ENTRIES {
         return Err("CODEX_QUEUE_VERIFY: command environment has too many entries".into());
     }
@@ -4086,6 +4263,7 @@ async fn execute_fixed_verification_command(
     executable: &TrustedVerificationExecutable,
     tool: VerificationTool,
     profile: &str,
+    runtime: Option<&VerificationRuntime>,
     argv: &[String],
     timeout: Duration,
 ) -> Result<QueueVerificationCommand, VerifyCommandError> {
@@ -4099,7 +4277,8 @@ async fn execute_fixed_verification_command(
         ));
     }
     let (environment, environment_sha256) =
-        verification_command_environment(tool, profile).map_err(VerifyCommandError::Safe)?;
+        verification_command_environment(tool, profile, runtime)
+            .map_err(VerifyCommandError::Safe)?;
     let mut command = Command::new(&executable.executable);
     command
         .args(&argv[1..])
@@ -6293,6 +6472,17 @@ mod tests {
                 if args.first().map(String::as_str) != Some("run") {
                     std::process::exit(41);
                 }
+                let cwd = std::env::current_dir().unwrap();
+                let environment = std::path::PathBuf::from(std::env::var_os("UV_PROJECT_ENVIRONMENT").expect("fixed environment"));
+                let runtime = environment.parent().unwrap();
+                assert!(environment.is_absolute() && !environment.starts_with(&cwd) && !cwd.starts_with(&environment));
+                for name in ["UV_CACHE_DIR", "RUFF_CACHE_DIR", "MYPY_CACHE_DIR", "PYTHONPYCACHEPREFIX", "XDG_CACHE_HOME", "TEMP", "TMP", "TMPDIR"] {
+                    let path = std::path::PathBuf::from(std::env::var_os(name).expect("fixed external state"));
+                    assert!(path.is_absolute() && !path.starts_with(&cwd) && !cwd.starts_with(&path));
+                    if name != "UV_CACHE_DIR" { assert!(path.starts_with(runtime)); }
+                }
+                assert!(std::env::var("PYTEST_ADDOPTS").unwrap().starts_with("-o 'cache_dir="));
+                std::fs::write(runtime.join("fixture-child-observed-scope"), b"observed external runtime").unwrap();
                 for flag in ["--locked", "--offline", "--no-python-downloads", "--no-env-file", "--no-config"] {
                     if !args.iter().any(|arg| arg == flag) { std::process::exit(42); }
                 }
@@ -8294,6 +8484,187 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn uv_verification_runtime_is_scoped_and_environment_bound() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let roots = projects
+            .iter()
+            .map(|project| project.workspace.clone())
+            .collect::<Vec<_>>();
+        let first = queue
+            .verification_runtime(&Uuid::new_v4().to_string(), &roots)
+            .unwrap();
+        let second = queue
+            .verification_runtime(&Uuid::new_v4().to_string(), &roots)
+            .unwrap();
+        assert_ne!(first.root, second.root);
+        assert_eq!(first.uv_cache, second.uv_cache);
+        let (variables, first_hash) =
+            verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, Some(&first))
+                .unwrap();
+        let (_, second_hash) =
+            verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, Some(&second))
+                .unwrap();
+        assert_ne!(
+            first_hash, second_hash,
+            "receipt runtime must be bound into the command environment"
+        );
+        let environment = variables
+            .into_iter()
+            .collect::<std::collections::BTreeMap<_, _>>();
+        assert_eq!(
+            environment.get(std::ffi::OsStr::new("UV_PROJECT_ENVIRONMENT")),
+            Some(&first.root.join("venv").into_os_string())
+        );
+        for name in [
+            "UV_PROJECT_ENVIRONMENT",
+            "UV_CACHE_DIR",
+            "RUFF_CACHE_DIR",
+            "MYPY_CACHE_DIR",
+            "PYTHONPYCACHEPREFIX",
+            "XDG_CACHE_HOME",
+            "TEMP",
+            "TMP",
+            "TMPDIR",
+            "PYTEST_ADDOPTS",
+        ] {
+            assert!(!verification_env_key_allowed(
+                VerificationTool::Uv,
+                WAKE2_PROFILE,
+                name
+            ));
+        }
+        assert!(
+            verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, None).is_err()
+        );
+        assert!(
+            verification_command_environment(VerificationTool::Cargo, "rust_full", None).is_ok()
+        );
+        assert!(
+            queue
+                .verification_runtime("../not-a-receipt", &roots)
+                .is_err()
+        );
+        let forbidden = projects[1].workspace.join("runtime");
+        assert!(
+            VerificationRuntime::prepare(forbidden.clone(), first.uv_cache.clone(), &roots)
+                .is_err()
+        );
+        assert!(!forbidden.exists());
+        fs::write(first.root.join("venv"), b"not a virtual environment").unwrap();
+        assert!(
+            verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, Some(&first))
+                .is_err()
+        );
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    #[ignore = "opt-in bounded offline test requires approved existing UV and Python executables"]
+    async fn real_uv_uses_external_verification_runtime() {
+        let uv =
+            PathBuf::from(std::env::var_os("CATDESK_TEST_UV").expect("approved existing UV path"));
+        let python = PathBuf::from(
+            std::env::var_os("CATDESK_TEST_PYTHON").expect("approved existing Python path"),
+        );
+        assert!(uv.is_absolute() && python.is_absolute());
+        let fixture = std::env::temp_dir().join(format!("catdesk uv runtime's {}", Uuid::new_v4()));
+        fs::create_dir(&fixture).unwrap();
+        let workspace = fixture.join("project");
+        fs::create_dir(&workspace).unwrap();
+        fs::write(workspace.join("pyproject.toml"), "[project]\nname = \"catdesk-runtime-canary\"\nversion = \"0.0.0\"\nrequires-python = \">=3.12\"\ndependencies = []\n[tool.uv]\npackage = false\n").unwrap();
+        let queue = QueueStore::open_at(fixture.join("operator state")).unwrap();
+        let runtime = queue
+            .verification_runtime(
+                &Uuid::new_v4().to_string(),
+                std::slice::from_ref(&workspace),
+            )
+            .unwrap();
+        let executable = TrustedVerificationExecutable {
+            sha256: native_executable_sha256(&uv).unwrap(),
+            executable: uv,
+        };
+        let lock = [
+            "uv",
+            "lock",
+            "--offline",
+            "--no-python-downloads",
+            "--no-config",
+            "--python",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .chain([python.to_string_lossy().into_owned()])
+        .collect::<Vec<_>>();
+        let prepared = execute_fixed_verification_command(
+            &workspace,
+            &executable,
+            VerificationTool::Uv,
+            WAKE2_PROFILE,
+            Some(&runtime),
+            &lock,
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+        assert_eq!(prepared.exit_code, Some(0));
+        let script = "import os,sys,pathlib,shlex; root=pathlib.Path(os.environ['UV_PROJECT_ENVIRONMENT']).parent; assert os.path.samefile(sys.prefix,root/'venv'); assert shlex.split(os.environ['PYTEST_ADDOPTS'])==['-o','cache_dir='+str(root/'pytest')]; assert not pathlib.Path('.venv').exists(); (root/'real-uv-observed-scope').write_text(sys.prefix); print('EXTERNAL_UV_RUNTIME_OK')";
+        let mut argv = [
+            "uv",
+            "run",
+            "--locked",
+            "--offline",
+            "--no-python-downloads",
+            "--no-env-file",
+            "--no-config",
+            "--python",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+        argv.extend([
+            python.to_string_lossy().into_owned(),
+            "--".into(),
+            "python".into(),
+            "-I".into(),
+            "-B".into(),
+            "-c".into(),
+            script.into(),
+        ]);
+        let result = execute_fixed_verification_command(
+            &workspace,
+            &executable,
+            VerificationTool::Uv,
+            WAKE2_PROFILE,
+            Some(&runtime),
+            &argv,
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.exit_code, Some(0));
+        let observed_prefix =
+            fs::read_to_string(runtime.root.join("real-uv-observed-scope")).unwrap();
+        assert_eq!(
+            PathBuf::from(observed_prefix).canonicalize().unwrap(),
+            runtime.root.join("venv").canonicalize().unwrap()
+        );
+        for path in [
+            ".venv",
+            ".ruff_cache",
+            ".mypy_cache",
+            ".pytest_cache",
+            "__pycache__",
+        ] {
+            assert!(!workspace.join(path).exists());
+        }
+        println!(
+            "REAL_UV_EXTERNAL_RUNTIME_PASS executableSha256={} environmentSha256={} sourceCachesAbsent=true",
+            executable.sha256, result.environment_sha256
+        );
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
     async fn fixed_python_profiles_capture_source_command_exits_and_refuse_rebound_argv() {
         for profile in ["python_uv_group_dev_v1", "python_uv_extras_dev_lab_v1"] {
             let (fixture, projects, queue, receipt_id, uv) =
@@ -8316,6 +8687,9 @@ mod tests {
             );
             assert_eq!(result["verification"]["independentReview"], "PENDING");
             assert_eq!(result["verification"]["wakeReady"], false);
+            let runtime = PathBuf::from(result["runtimeRoot"].as_str().unwrap());
+            assert!(runtime.join("fixture-child-observed-scope").is_file());
+            assert!(!projects[1].workspace.join(".venv").exists());
             let receipt = queue.read_receipt(&receipt_id).unwrap();
             let candidate = queue.read_review_candidate(&receipt).unwrap();
             let (artifact, _) = queue

@@ -1,5 +1,28 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-21 fixed UV verification runtime placement (source)
+
+Fresh verification uses a receipt-specific runtime under the existing external
+queue namespace. UV environment, standard tool-cache/temp settings are generated
+internally and hash-bound; the OS-derived shared UV cache is outside registered
+workspaces. Existing source environments, fixed command args, no-download/offline
+flags, writer/source checks and historical artifact bytes remain preserved.
+The fresh result reports `runtimeRoot`; historical readback makes no new placement
+claim. Runtime directories are checked before each command and are not implicitly
+deleted after a failure. Local code/plugins remain outside an OS confinement claim.
+
+The real installed UV/Python dependency-free probe passes with two 60-second
+command bounds and no source cache directories, including quoted paths. Source
+fixtures also bind per-receipt environments and make the child observe external
+paths. This is not a real project's complete fixed-profile verification, a fix
+for the resumed native launcher's 101, independent review or Wake delivery. No
+failed task is replayed. Parent audit: checkpoints/native-verification-runtime-oct21.
+
+Full source verification passes 1,545 / 29 ignored, enabled integrations/nested
+Wake, strict Clippy and format/diff. The real-UV ignored probe passes in its
+explicit opt-in run. Current default UV cache path readback matches the OS-derived
+path used by production code. No cache contents or operator settings are changed.
+
 ## 2026-10-21 v31 fresh native qualification result (PARTIAL)
 
 Selected normal development v31 is built at `49f421a`; its bounded loopback

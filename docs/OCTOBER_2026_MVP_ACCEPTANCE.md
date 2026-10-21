@@ -1,5 +1,32 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 external Python verification runtime (SOURCE; LIVE PROFILE PENDING)
+
+Fixed UV verification previously stripped inherited UV overrides but supplied
+no internal environment path, leaving `.venv` creation in the checkout possible.
+Fresh verification now derives a receipt-specific runtime from the existing
+external queue namespace, keeps standard tool-cache/temp defaults there and
+reuses the fixed OS-derived UV download cache outside registered project roots.
+Caller selectors stay filtered; the generated settings join the existing
+environment digest. Fixed commands and historical artifact formats are unchanged.
+The fresh result exposes `runtimeRoot`; old artifacts remain historical without
+new placement claims. This is local coordination, not hostile-worker isolation.
+
+A bounded opt-in offline probe uses installed UV 0.12.23/Python 3.12 with a
+dependency-free disposable project. Lock preparation and execution each have a
+60-second cap; the test finishes in 2.33 seconds and proves the actual interpreter
+prefix is the external environment, quoting survives spaces/apostrophes, and
+source cache/environment directories are absent. No live project, model, browser,
+Wake, binding or authentication state is used. The earlier native launcher 101
+and full-project qualification remain unresolved; this probe does not repair or
+replace that evidence. Parent dated checkpoint:
+`checkpoints/native-verification-runtime-oct21`.
+
+Final source gates pass: 1,545 main tests / 29 ignored, enabled integrations
+and nested Wake, strict all-target/all-feature Clippy, formatting and diff.
+The ignored real-UV probe is explicitly run and passes separately. These
+results do not establish a real project's full fixed-profile qualification.
+
 ## October 21 repeated automatic browser failures (SOURCE; LIVE PENDING)
 
 Automatic Web context/rollover work previously became eligible every existing

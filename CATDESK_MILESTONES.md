@@ -1,3 +1,15 @@
+## 2026-10-21 — External fixed Python verification runtime (SOURCE; LIVE PENDING)
+
+Fresh fixed UV verification now derives receipt-specific environment and
+standard tool-cache/temp paths under existing external user state, while
+reusing the OS-derived UV download cache outside registered project roots.
+Caller selectors remain filtered and the complete environment is hash-bound.
+No fixed argv, writer/source check or historical artifact format is replaced.
+The bounded dependency-free real UV/Python probe passes in 2.33 seconds with
+source cache directories absent; full project/native qualification remains
+pending. This starts no model, browser/WakeHost or recurring process and changes
+no binding. Dated evidence: checkpoints/native-verification-runtime-oct21.
+
 ## 2026-10-21 — Durable automatic Web retry pacing (SOURCE; LIVE PENDING)
 
 The existing context/rollover driver now defers repeated project attention

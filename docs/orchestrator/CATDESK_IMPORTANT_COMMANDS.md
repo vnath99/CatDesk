@@ -1,5 +1,27 @@
 # CatDesk — Important Command Reference
 
+## October 21 fixed Python verification runtime (SOURCE; LIVE PROFILE PENDING)
+
+Fresh `operator codex queue verify` executions for fixed UV profiles derive a
+receipt-specific environment under the existing external user-state queue
+namespace. Internally generated UV/tool-cache/temp variables replace inherited
+selectors and enter the existing environment digest. The shared UV download
+cache uses the OS-derived standard user location, outside registered roots;
+project environments remain distinct. No path selector is added to MCP/CLI.
+
+Standard Ruff/mypy/Python/pytest cache and temporary paths are directed outside
+source. Fixed argv, locked/offline/no-download options, writer checks and source
+rechecks remain. Project/test code is still trusted local code; this is not OS
+confinement. Existing checkout environments are preserved. `runtimeRoot` appears
+only on a fresh verification result; historical artifacts/readbacks are not
+rewritten or given new runtime claims. No automatic environment deletion occurs.
+
+The dependency-free offline UV/Python probe passes in disposable state, with
+60-second command bounds and source caches absent. It is explicitly not a real
+project's full profile qualification. See the parent dated checkpoint
+`checkpoints/native-verification-runtime-oct21` and the [UV environment-path
+reference](https://docs.astral.sh/uv/concepts/projects/config/#project-environment-path).
+
 ## October 21 automatic Web retry pacing (SOURCE; LIVE PENDING)
 
 The existing automatic context/rollover driver defers repeated project
