@@ -1,3 +1,23 @@
+## 2026-10-20 — Approved three-project delivery/readback (CONTROLLED LIVE; MVP PARTIAL)
+
+The approved 900-second-maximum v22 foreground test completed in 212 seconds.
+CatDesk, Wake2 and PortfolioDesk each have one exact-target SENT receipt,
+COMPLETE response timer and independently read exact-event assistant body.
+All requested markers pass; recorded response windows overlap for 18 seconds.
+Cleanup proves the owned tree exited and zero owned processes remain. Both
+controls are stopped, five original bindings and historical state preserved,
+production pointer unchanged. No recurring scheduler, completed-canary replay
+or native session mutation occurred. Dated audit and proofs are in parent
+`checkpoints/web-three-project-review-oct20/approved-run-20261021T010650920Z`.
+
+A single connector read still returns HTTP 429. Protected installation, exact
+remote CI, central connector acceptance and a genuine next-task development
+cycle remain open. The source continues with per-conversation capture freshness
+that advances on deduplicated observations without inventing legacy timestamps
+or clearing coverage uncertainty; it has not been selected into v22. Full root
+regression passes 1,538 CatDesk tests / 28 ignored and all enabled integrations;
+strict all-target/all-feature Clippy, formatting and diff checks pass.
+
 ## 2026-10-20 — Web context capture and current acceptance (SOURCE; MVP PARTIAL)
 
 The ten-requirement acceptance audit confirms preserved controlled rollover

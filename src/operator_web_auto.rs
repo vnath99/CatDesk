@@ -1015,6 +1015,7 @@ mod tests {
                 .record_browser_coverage(
                     &key,
                     BrowserCoverageObservation {
+                        observed_at_unix: 1,
                         initial_history_gap: true,
                         identity_gap: false,
                         text_gap: false,
@@ -1041,6 +1042,7 @@ mod tests {
             .record_browser_coverage(
                 &replacement,
                 BrowserCoverageObservation {
+                    observed_at_unix: 1,
                     initial_history_gap: true,
                     identity_gap: false,
                     text_gap: false,

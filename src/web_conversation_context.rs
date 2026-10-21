@@ -177,6 +177,10 @@ fn observed_pressure_reason() -> String {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BrowserCoverageState {
     pub observed: bool,
+    /// Latest validated browser capture, even when deduplication adds no tokens.
+    /// This timestamp does not prove complete history or provider context size.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_observed_at_unix: Option<u64>,
     pub initial_history_gap: bool,
     pub identity_gap: bool,
     pub text_gap: bool,
@@ -185,6 +189,7 @@ pub struct BrowserCoverageState {
 
 #[derive(Clone, Copy, Debug)]
 pub struct BrowserCoverageObservation {
+    pub observed_at_unix: u64,
     pub initial_history_gap: bool,
     pub identity_gap: bool,
     pub text_gap: bool,
@@ -431,7 +436,7 @@ impl WebContextStore {
         observation: BrowserCoverageObservation,
     ) -> Result<PressureStatus, String> {
         key.validate()?;
-        if !observation.initial_history_gap {
+        if !observation.initial_history_gap || observation.observed_at_unix == 0 {
             return Err("WEB_CONTEXT_COVERAGE_UNPROVEN".into());
         }
         let _lock = self.lock()?;
@@ -443,6 +448,12 @@ impl WebContextStore {
         let coverage = &mut ledger.browser_coverage;
         let previous = coverage.clone();
         coverage.observed = true;
+        coverage.last_observed_at_unix = Some(
+            coverage
+                .last_observed_at_unix
+                .unwrap_or(0)
+                .max(observation.observed_at_unix),
+        );
         coverage.initial_history_gap = true;
         coverage.identity_gap |= observation.identity_gap;
         coverage.text_gap |= observation.text_gap;
@@ -779,8 +790,10 @@ impl WebContextStore {
                 .iter()
                 .any(|event| !valid_event_metadata(event))
             || (ledger.browser_coverage.observed && !ledger.browser_coverage.initial_history_gap)
+            || ledger.browser_coverage.last_observed_at_unix == Some(0)
             || (!ledger.browser_coverage.observed
                 && (ledger.browser_coverage.initial_history_gap
+                    || ledger.browser_coverage.last_observed_at_unix.is_some()
                     || ledger.browser_coverage.identity_gap
                     || ledger.browser_coverage.text_gap
                     || ledger.browser_coverage.overflow_gap))
@@ -1081,6 +1094,86 @@ fn write_atomic<T: Serialize>(path: &Path, value: &T, maximum: usize) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn browser_capture_freshness_is_durable_scoped_and_legacy_unknown() {
+        let root = std::env::temp_dir().join(format!("web-freshness-{}", Uuid::new_v4()));
+        let store = WebContextStore::open(&root).unwrap();
+        let key = |project: &str, generation| ConversationKey {
+            project_id: project.into(),
+            conversation_url: format!("https://chatgpt.com/c/{project}-{generation}"),
+            target_generation: generation,
+        };
+        let alpha = key("alpha", 1);
+        let beta = key("beta", 1);
+        store.bind_observed_target(alpha.clone(), None).unwrap();
+        store.bind_observed_target(beta.clone(), None).unwrap();
+        let capture = |observed_at_unix| BrowserCoverageObservation {
+            observed_at_unix,
+            initial_history_gap: true,
+            identity_gap: false,
+            text_gap: false,
+            overflow_gap: false,
+        };
+        store.record_browser_coverage(&alpha, capture(20)).unwrap();
+        store.record_browser_coverage(&alpha, capture(10)).unwrap();
+        let reader = WebContextStore::open_read_only(&root).unwrap();
+        assert_eq!(
+            reader
+                .pressure(&alpha)
+                .unwrap()
+                .browser_coverage
+                .last_observed_at_unix,
+            Some(20)
+        );
+        assert_eq!(
+            reader
+                .pressure(&beta)
+                .unwrap()
+                .browser_coverage
+                .last_observed_at_unix,
+            None
+        );
+        let next = key("alpha", 2);
+        store
+            .bind_observed_target(next.clone(), Some(&alpha))
+            .unwrap();
+        assert_eq!(
+            reader
+                .pressure(&next)
+                .unwrap()
+                .browser_coverage
+                .last_observed_at_unix,
+            None
+        );
+        assert_eq!(
+            store
+                .record_browser_coverage(&alpha, capture(99))
+                .unwrap_err(),
+            "WEB_CONTEXT_OLD_GENERATION"
+        );
+        assert_eq!(
+            reader
+                .pressure(&alpha)
+                .unwrap()
+                .browser_coverage
+                .last_observed_at_unix,
+            Some(20)
+        );
+        // A pre-upgrade ledger retains unknown freshness; no timestamp is invented.
+        let path = store.ledger_path(&alpha);
+        let mut legacy: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        legacy["browserCoverage"]
+            .as_object_mut()
+            .unwrap()
+            .remove("lastObservedAtUnix");
+        fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+        let historical = reader.pressure(&alpha).unwrap();
+        assert_eq!(historical.browser_coverage.last_observed_at_unix, None);
+        assert!(!historical.coverage_known);
+        assert!(historical.browser_coverage.observed);
+    }
 
     struct Fixture {
         root: PathBuf,
@@ -1570,6 +1663,7 @@ mod tests {
             .record_browser_coverage(
                 &alpha,
                 BrowserCoverageObservation {
+                    observed_at_unix: 1,
                     initial_history_gap: true,
                     identity_gap: true,
                     text_gap: false,
@@ -1587,6 +1681,7 @@ mod tests {
             .record_browser_coverage(
                 &alpha,
                 BrowserCoverageObservation {
+                    observed_at_unix: 1,
                     initial_history_gap: true,
                     identity_gap: false,
                     text_gap: false,
@@ -1606,6 +1701,7 @@ mod tests {
                 .record_browser_coverage(
                     &alpha,
                     BrowserCoverageObservation {
+                        observed_at_unix: 1,
                         initial_history_gap: false,
                         identity_gap: false,
                         text_gap: false,
@@ -1624,6 +1720,7 @@ mod tests {
                 .record_browser_coverage(
                     &alpha,
                     BrowserCoverageObservation {
+                        observed_at_unix: 1,
                         initial_history_gap: true,
                         identity_gap: false,
                         text_gap: false,
@@ -1675,6 +1772,7 @@ mod tests {
             .record_browser_coverage(
                 &key,
                 BrowserCoverageObservation {
+                    observed_at_unix: 1,
                     initial_history_gap: true,
                     identity_gap: false,
                     text_gap: false,
@@ -1724,6 +1822,7 @@ mod tests {
             .record_browser_coverage(
                 &replacement,
                 BrowserCoverageObservation {
+                    observed_at_unix: 1,
                     initial_history_gap: true,
                     identity_gap: false,
                     text_gap: false,

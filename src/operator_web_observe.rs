@@ -193,6 +193,7 @@ pub(super) fn ingest(
     let pressure = store.record_browser_coverage(
         key,
         BrowserCoverageObservation {
+            observed_at_unix: observed_at,
             initial_history_gap: true,
             identity_gap: identity_missing > 0
                 || identity_uncertain > 0
@@ -217,6 +218,11 @@ pub(super) fn ingest(
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn pressure_at(capture: &Value, observed_at: u64) -> Value {
+        let mut pressure = capture["pressure"].clone();
+        pressure["browserCoverage"]["lastObservedAtUnix"] = json!(observed_at);
+        pressure
+    }
     fn input(key: &ConversationKey, text: &str, complete: bool) -> Value {
         json!({"messages":[{"role":"ASSISTANT","text":text,"visibleUnits":text.len(),
             "textComplete":complete,"turnHash":null,"roleTurnHash":null,
@@ -255,11 +261,15 @@ mod tests {
             || Ok(()),
         )
         .unwrap();
-        assert_eq!(first["pressure"], replay["pressure"]);
+        assert_eq!(
+            first["pressure"]["browserCoverage"]["lastObservedAtUnix"],
+            1
+        );
+        assert_eq!(pressure_at(&first, 2), replay["pressure"]);
         let mut current_dom = input(&key, "private short response", true);
         current_dom["coverage"]["selectorTier"] = json!("SEMANTIC_UNIT");
         let current_dom = ingest(&store, &key, current_dom, 2, || Ok(())).unwrap();
-        assert_eq!(first["pressure"], current_dom["pressure"]);
+        assert_eq!(pressure_at(&first, 2), current_dom["pressure"]);
         assert_eq!(current_dom["recordedMessages"], 1);
         assert!(!first.to_string().contains("private short response"));
         assert_eq!(first["recordedMessages"], 1);
@@ -292,7 +302,7 @@ mod tests {
             let unreadable =
                 ingest(&store, &key, input(&key, placeholder, true), 5, || Ok(())).unwrap();
             assert_eq!(unreadable["recordedMessages"], 0);
-            assert_eq!(unreadable["pressure"], incomplete["pressure"]);
+            assert_eq!(unreadable["pressure"], pressure_at(&incomplete, 5));
         }
         assert!(
             ingest(&store, &key, input(&key, "new text", true), 5, || Err(
@@ -302,7 +312,7 @@ mod tests {
         );
         assert_eq!(
             store.pressure(&key).unwrap(),
-            serde_json::from_value(incomplete["pressure"].clone()).unwrap()
+            serde_json::from_value(pressure_at(&incomplete, 5)).unwrap()
         );
     }
 
@@ -334,7 +344,7 @@ mod tests {
         assert_eq!(first["pressure"]["browserCoverage"]["overflowGap"], true);
         assert_eq!(first["pressure"]["unknownSourceCount"], 0);
         let replay = ingest(&store, &key, late, 2, || Ok(())).unwrap();
-        assert_eq!(first["pressure"], replay["pressure"]);
+        assert_eq!(pressure_at(&first, 2), replay["pressure"]);
         let vanished = json!({"messages":[],"truncated":false,
             "coverage":{"selectorTier":"NONE","visibleRoleCount":0,
                 "countOverflow":false,"nestedCollapsed":0,"keyedCollapsed":0,
@@ -342,7 +352,7 @@ mod tests {
                 "identityUncertain":0,"revisionIncomplete":0,
                 "textIncomplete":0,"anchorStability":"UNVERIFIED"}});
         let later = ingest(&store, &key, vanished, 3, || Ok(())).unwrap();
-        assert_eq!(later["pressure"], first["pressure"]);
+        assert_eq!(later["pressure"], pressure_at(&first, 3));
         assert_eq!(later["recordedMessages"], 0);
         let mut impossible_full = input(&key, "only the newest rendered message", true);
         impossible_full["coverage"]["anchorStability"] = json!("FULL_HISTORY_VERIFIED");
@@ -352,7 +362,7 @@ mod tests {
         );
         assert_eq!(
             store.pressure(&key).unwrap(),
-            serde_json::from_value(first["pressure"].clone()).unwrap()
+            serde_json::from_value(pressure_at(&first, 3)).unwrap()
         );
     }
 }

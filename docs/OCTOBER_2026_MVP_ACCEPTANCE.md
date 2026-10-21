@@ -1,5 +1,62 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 approved three-project live test (CONTROLLED DEVELOPMENT)
+
+The operator explicitly approved bounded testing and dated audit records,
+superseding the preparation holds recorded below. The stopped v22 candidate
+ran with its internal 900-second ceiling from **01:07:08 to 01:10:40 UTC on
+October 21** (October 20 locally), completing early in 212 seconds. CatDesk,
+Wake2 and PortfolioDesk each received one exact prepared review request at
+their own generation-1 target. All three have `EXACT_USER_MESSAGE_APPENDED`
+receipts, COMPLETE timers and separately read, exact-event verified assistant
+bodies with the requested project markers. Recorded response windows overlap
+for 18 seconds. There were no unexpected deliveries or duplicate submissions.
+
+Foreground exit reports `ownedTreeExited:true`; process enumeration confirms
+zero owned browser/Wake processes after it and after each sequential read.
+Both controls remain STOPPED. All five original registry/Wake pairs, previous
+deliveries, completed canary journals and context histories are preserved. Of
+9,922 pre-existing non-profile files, only expected readiness-history and
+status files changed; three new event/receipt/timer records and exact review
+inputs are intentional additions. Production pointer SHA-256 remains
+`25b8430dc25fdb7cf2be3465d5f6c5431f6ff274d0dfcf3e09f9c2aa3cb50185`.
+No native task, hourly scheduler or recurring browser process was started.
+The completed rollover was not repeated.
+
+Private timestamped evidence is in parent
+`checkpoints/web-three-project-review-oct20/approved-run-20261021T010650920Z`:
+`audit.jsonl`, `acceptance-summary.json`, delivery/readback proofs and final
+preservation comparison. An earlier comparison encountered locks during an
+active one-shot read; the completed readable comparison supersedes it. The
+native app inventory read timed out without session mutations. Existing native
+sessions were not interrupted or replaced; this test does not independently
+qualify their current development tasks.
+
+One read-only connector request at 01:16:02 UTC still returned
+`MCP SSE probe returned 429 from openai.org`; no retry followed. This is a
+connector verification dependency. Local authenticated delivery/readback
+passed. Protected installation, an exact-source CI result, a genuine
+deliverable-to-review-to-next-task cycle and central connector operation remain
+OPEN. Review replies are advice on supplied checkpoints, not independent
+release approval. Overall October acceptance remains PARTIAL.
+
+### Continued source development: capture freshness
+
+Validated browser ingestion now records a monotonic, per-conversation
+`browserCoverage.lastObservedAtUnix`, including unchanged/deduplicated captures.
+New generations start without a timestamp; legacy ledgers retain unknown
+freshness. The timestamp commits after snapshot validation and the final
+target/cancellation check; rejected reads retain previous freshness.
+The timestamp reports observation time, not full-history coverage or provider
+context capacity. Regressions exercise replay, durable readback, project and
+generation isolation, legacy state, cancellation and context-lock contention.
+Full root regression passes **1,538 CatDesk tests / 28 ignored** and all other
+enabled targets, including the nested Wake suite. Strict all-target/all-feature
+Clippy, formatting and diff checks pass. The first run exposed a replay equality
+assertion that needed to permit advancing capture time; its failure and corrected
+rerun are retained in parent `checkpoints/web-context-freshness-oct20`.
+This increment remains source-only; v22 and production are unchanged.
+
 ## October 20 acceptance audit and central context-wait reporting (SOURCE)
 
 Read-only central status confirms seven paired registrations (five original

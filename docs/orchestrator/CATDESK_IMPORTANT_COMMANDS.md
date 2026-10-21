@@ -1,5 +1,22 @@
 # CatDesk — Important Command Reference
 
+## October 20 approved live test and context freshness
+
+The operator-approved three-project v22 foreground test completed and cleaned
+up; both controls remain STOPPED. Exact dated payload, receipt, response-body
+and preservation records are retained privately in parent
+`checkpoints/web-three-project-review-oct20/approved-run-20261021T010650920Z`.
+Do not rerun its controller or resend its event IDs: those events are complete.
+The earlier completed rollover remains preserved. These are controlled
+development results, separate from protected installed and natural-cycle proof.
+
+Current source capture/status additionally reports optional
+`browserCoverage.lastObservedAtUnix`: latest validated capture for that exact
+conversation, even when its token estimate is unchanged. Missing means unknown,
+including old ledgers and new generations. It does not imply full history or a
+provider context bound. This field is source-only until a matched package update;
+do not silently rewrite existing live state using an older selected app.
+
 ## October 20 foreground development ownership
 
 The existing `operator web-dev-runtime run` now owns its host tree through a

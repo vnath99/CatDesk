@@ -1,11 +1,31 @@
 # T-0484 — Per-conversation context pressure, token accounting and safe automatic rollover
 **Priority:** October 31 combined P3/P4 user milestone. The operator's October 17 revision supersedes the earlier deferral below. Independent ChatGPT Web project continuation and a demonstrated project rollover are required for overall acceptance.
-**Date:** 2026-10-14; priority revised 2026-10-17; acceptance updated 2026-10-20 | **Status:** Controlled development rollover and continuation verified; installed and fresh multi-project live acceptance pending.
+**Date:** 2026-10-14; priority revised 2026-10-17; acceptance updated 2026-10-20 | **Status:** Controlled rollover, continuation and fresh three-project delivery/readback verified; installed, central connector and natural-cycle acceptance pending.
 **Owner:** Codex Desktop, alongside continued development in each project's existing Codex conversation.
 **Dependencies:** accepted project-bound sessions and fair Wake dispatch, versioned WakeHost/owned SeleniumBase, durable event/receipt identity, one authoritative target generation per project, source/trust boundary acceptance.  
 **Read with:** `docs/orchestrator/CATDESK_CODEX_DESKTOP_HANDOFF_2026-10-14.md`; `docs/orchestrator/CATDESK_COMPETITOR_BROWSER_CONTINUITY_2026-10-14.md`; `CATDESK_MILESTONES.md`.
 
 ## Operator requirements
+
+### October 20 approved bounded live result and capture freshness
+
+The explicit operator test approval supersedes earlier holds below. Source-built
+v22 delivered one review each to CatDesk, Wake2 and PortfolioDesk, with exact
+receipts, completed timers and separately verified assistant bodies/markers.
+The internal maximum was 900 seconds; completion and owned-tree cleanup took
+212 seconds. All five bindings/history and the production pointer are preserved;
+owned process count is zero, both controls STOPPED, no recurring scheduler or
+completed canary replay. Dated audit: parent
+`checkpoints/web-three-project-review-oct20/approved-run-20261021T010650920Z`.
+One connector read remains HTTP 429; no retries. Installed and natural development
+cycle acceptance remain open. Native owners received no tasks or interruptions.
+
+Source browser ingestion now exposes monotonic per-conversation capture time as
+`browserCoverage.lastObservedAtUnix`. Deduplicated snapshots refresh observation
+time without increasing tokens; legacy/new-generation freshness remains unknown.
+Freshness commits after snapshot validation and the final target/cancellation
+check; rejected reads retain previous freshness.
+This source increment does not change the stopped v22 or production package.
 
 ### October 20 current acceptance and contention correction
 

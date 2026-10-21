@@ -1330,10 +1330,23 @@ async fn bounded_context_capture_is_independent_cancelled_and_generation_bound()
     .unwrap();
 
     let meter = WebContextStore::open(control.join(".catdesk/web-context")).unwrap();
-    let before = meter.project_history("alpha").unwrap();
+    let mut before = meter.project_history("alpha").unwrap();
     let replay = capture_with(&control, args("alpha"), read).await.unwrap();
     assert_eq!(replay["recordedMessages"], 1);
-    assert_eq!(meter.project_history("alpha").unwrap(), before);
+    let refreshed = meter.project_history("alpha").unwrap();
+    assert!(
+        refreshed[0]
+            .browser_coverage
+            .last_observed_at_unix
+            .is_some()
+    );
+    assert!(
+        refreshed[0].browser_coverage.last_observed_at_unix
+            >= before[0].browser_coverage.last_observed_at_unix
+    );
+    before[0].browser_coverage.last_observed_at_unix =
+        refreshed[0].browser_coverage.last_observed_at_unix;
+    assert_eq!(refreshed, before);
     // A completed fake browser read must not strand its capture lease while
     // waiting for a metadata writer. Its exact retry remains deduplicated.
     let held = fs::OpenOptions::new()
@@ -1357,7 +1370,14 @@ async fn bounded_context_capture_is_independent_cancelled_and_generation_bound()
     assert_eq!(busy_capture.unwrap_err(), "WEB_CONTEXT_BUSY");
     assert_eq!(meter.project_history("alpha").unwrap(), before);
     capture_with(&control, args("alpha"), read).await.unwrap();
-    assert_eq!(meter.project_history("alpha").unwrap(), before);
+    let refreshed = meter.project_history("alpha").unwrap();
+    assert!(
+        refreshed[0].browser_coverage.last_observed_at_unix
+            >= before[0].browser_coverage.last_observed_at_unix
+    );
+    before[0].browser_coverage.last_observed_at_unix =
+        refreshed[0].browser_coverage.last_observed_at_unix;
+    assert_eq!(refreshed, before);
     let mut stale = args("alpha");
     stale["expectedTargetGeneration"] = json!(2);
     assert_eq!(
