@@ -306,6 +306,19 @@ fn run_step(
     source: &Target,
     keep_running: &dyn Fn() -> Result<(), String>,
 ) -> Result<(&'static str, Value), String> {
+    run_step_with_capture(workspace, project, key, source, keep_running, || {
+        super::capture_context_guarded(workspace, project, keep_running)
+    })
+}
+
+pub(super) fn run_step_with_capture(
+    workspace: &Path,
+    project: &str,
+    key: &ConversationKey,
+    source: &Target,
+    keep_running: &dyn Fn() -> Result<(), String>,
+    capture: impl FnOnce() -> Result<Value, String>,
+) -> Result<(&'static str, Value), String> {
     keep_running()?;
     match rollover::auto_stage(workspace, project, source)? {
         rollover::AutoStage::SourceWitnessRequired => Ok((
@@ -316,10 +329,34 @@ fn run_step(
             "SUBMISSION_UNKNOWN",
             json!({"reason":"WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND"}),
         )),
-        rollover::AutoStage::Quarantined => Ok((
-            "QUARANTINED",
-            json!({"reason":"WEB_ROLLOVER_QUARANTINED_NO_REPLAY"}),
-        )),
+        rollover::AutoStage::Quarantined => {
+            // Quarantine blocks writes and rollover advancement, not a separately
+            // opted-in observation of the still-paired canonical conversation.
+            // Never run after_observation here, even if pressure exceeds its trigger.
+            let root = workspace.join(".catdesk/web-context");
+            let enabled = if root.exists() {
+                let meter = WebContextStore::open_read_only(root)?;
+                meter.active_key(project)?.as_ref() == Some(key)
+                    && meter.pressure(key)?.automatic_observation_enabled
+            } else {
+                false
+            };
+            let observation = if enabled {
+                keep_running()?;
+                let observed = capture()?;
+                keep_running()?;
+                Some(observed)
+            } else {
+                None
+            };
+            Ok((
+                "QUARANTINED",
+                json!({
+                    "reason":"WEB_ROLLOVER_QUARANTINED_NO_REPLAY",
+                    "contextObservation":observation,"rolloverAdvanced":false
+                }),
+            ))
+        }
         rollover::AutoStage::Execute => {
             execute_after_live_recheck(workspace, project, source, keep_running)
         }
@@ -337,7 +374,7 @@ fn run_step(
             }
         }
         rollover::AutoStage::Observe => {
-            let observed = super::capture_context_guarded(workspace, project, keep_running)?;
+            let observed = capture()?;
             keep_running()?;
             after_observation(workspace, key, observed, |pressure| {
                 let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
@@ -526,6 +563,10 @@ async fn drain_project_tasks(
 }
 
 pub(crate) fn start_scheduler(state: SharedState) {
+    start_scheduler_scoped(state, None);
+}
+
+pub(crate) fn start_scheduler_scoped(state: SharedState, projects: Option<BTreeSet<String>>) {
     tokio::spawn(async move {
         let mut app = state.lock().await;
         if !app.server_running || app.server_handle.as_ref().is_some_and(|h| h.is_finished()) {
@@ -576,9 +617,17 @@ pub(crate) fn start_scheduler(state: SharedState) {
                 if !tick_due {
                     continue;
                 }
-                let Ok(projects) = registered_projects(&workspace) else {
+                let Ok(registered) = registered_projects(&workspace) else {
                     continue;
                 };
+                let projects: Vec<_> = registered
+                    .into_iter()
+                    .filter(|project| {
+                        projects
+                            .as_ref()
+                            .is_none_or(|scope| scope.contains(project))
+                    })
+                    .collect();
                 let running: BTreeSet<_> = active.keys().cloned().collect();
                 let capacity = MAX_ACTIVE_PROJECTS.saturating_sub(active.len());
                 for project in startable_projects(&projects, &running, capacity, cursor) {

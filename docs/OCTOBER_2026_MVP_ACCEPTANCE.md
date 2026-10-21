@@ -1,5 +1,29 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 automatic monitoring while rollover is quarantined (SOURCE)
+
+Inspection found that a preserved QUARANTINED attempt suppressed context reads
+even when independent observation was enabled. Its scheduler step now permits
+only that separately opted-in capture of the current paired conversation,
+retaining QUARANTINED and `rolloverAdvanced:false`. It never evaluates the
+rollover trigger afterward. The existing quarantine regression now traverses
+this step: opt-out performs no read; opt-in observes above the configured
+threshold without changing the journal, creating a handoff or lifting the
+project work lease. Unknown submission and missing source-witness paths remain
+blocked. This is continued monitoring, not recovery authorization.
+
+The existing headless MCP command gains optional `--max-runtime-seconds 1..900`
+and repeatable `--web-auto-project ID` scope. The deadline uses the existing
+scheduler cancellation/drain path; explicit scope filters scheduled projects
+before task creation. Default behavior remains unchanged. A disposable native
+listener exits on its internal one-second deadline without an external stop.
+Main CatDesk passes **1,539 / 28 ignored**, both native headless fixtures pass,
+strict all-target/all-feature Clippy, build, format and diff checks pass. Wake
+and Python source are unchanged and their preceding accepted source gates were
+not repeated. Private evidence: parent `checkpoints/web-quarantine-monitor-oct20`.
+Actual scoped periodic observation is prepared separately and is not proved by
+these source/fixture checks.
+
 ## October 20 approved three-project live test (CONTROLLED DEVELOPMENT)
 
 The operator explicitly approved bounded testing and dated audit records,

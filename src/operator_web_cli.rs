@@ -27,6 +27,13 @@ pub(crate) fn start_auto_scheduler(state: crate::state::SharedState) {
     auto::start_scheduler(state);
 }
 
+pub(crate) fn start_scoped_auto_scheduler(
+    state: crate::state::SharedState,
+    projects: std::collections::BTreeSet<String>,
+) {
+    auto::start_scheduler_scoped(state, Some(projects));
+}
+
 pub(crate) async fn stop_auto_scheduler(state: crate::state::SharedState) {
     let tasks = {
         let mut app = state.lock().await;

@@ -20,6 +20,13 @@ pub(crate) fn start_web_auto_scheduler(state: crate::state::SharedState) {
     web::start_auto_scheduler(state);
 }
 
+pub(crate) fn start_scoped_web_auto_scheduler(
+    state: crate::state::SharedState,
+    projects: std::collections::BTreeSet<String>,
+) {
+    web::start_scoped_auto_scheduler(state, projects);
+}
+
 pub(crate) async fn stop_web_auto_scheduler(state: crate::state::SharedState) {
     web::stop_auto_scheduler(state).await;
 }

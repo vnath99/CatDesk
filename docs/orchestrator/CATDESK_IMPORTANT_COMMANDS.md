@@ -1,5 +1,25 @@
 # CatDesk — Important Command Reference
 
+## October 20 bounded, scoped automatic observation (SOURCE)
+
+The existing headless MCP command now accepts optional
+`--max-runtime-seconds 1..900` and repeatable `--web-auto-project ID` arguments.
+The scope limits automatic scheduler ticks, not registration or MCP tool
+authority. Omission preserves the existing all-project scheduler. The internal
+deadline invokes existing scheduler cancellation/drain before normal exit;
+it does not install an hourly task or detached worker. Use a process-local
+ephemeral `CATDESK_MCP_AUTH_TOKEN`, loopback port 0 and read-only tool mode for
+bounded verification; never print the token or borrow the production tunnel.
+Development workspaces retain their existing fixed configuration path
+`.catdesk/web-development/catdesk.toml` and existing authenticated profile.
+
+A quarantined rollover can now continue separately opted-in context captures
+of its current paired conversation. Its journal/lease remains quarantined and
+no threshold-triggered rollover occurs from that branch. This does not permit
+replay, composer clearing or authority replacement. Source/fixture checks pass;
+the periodic live demonstration is tracked separately in the private monitor
+checkpoint.
+
 ## October 20 approved live test and context freshness
 
 The operator-approved three-project v22 foreground test completed and cleaned

@@ -914,6 +914,8 @@ struct HeadlessMcpOptions {
     config_path: PathBuf,
     auth_token: String,
     isolated_dev_fixture: bool,
+    maximum_runtime_seconds: Option<u64>,
+    web_auto_projects: std::collections::BTreeSet<String>,
 }
 
 struct ReviewedCandidateMcpOptions {
@@ -1127,6 +1129,8 @@ fn parse_headless_mcp_options(
     let mut config_path: Option<PathBuf> = None;
     let mut auth_token = std::env::var("CATDESK_MCP_AUTH_TOKEN").ok();
     let mut isolated_dev_fixture = false;
+    let mut maximum_runtime_seconds = None;
+    let mut web_auto_projects = std::collections::BTreeSet::new();
 
     let mut index = 0;
     while index < args.len() {
@@ -1141,6 +1145,24 @@ fn parse_headless_mcp_options(
                 }
                 isolated_dev_fixture = true;
                 index += 1;
+            }
+            "--max-runtime-seconds" => {
+                let value = next_arg(&args, &mut index, "--max-runtime-seconds")?;
+                let seconds = value
+                    .parse::<u64>()
+                    .ok()
+                    .filter(|seconds| (1..=900).contains(seconds))
+                    .ok_or("--max-runtime-seconds requires 1..900")?;
+                if maximum_runtime_seconds.replace(seconds).is_some() {
+                    return Err("duplicate --max-runtime-seconds".into());
+                }
+            }
+            "--web-auto-project" => {
+                let project = next_arg(&args, &mut index, "--web-auto-project")?;
+                if !catdesk_wake::protocol::valid_id(&project) || !web_auto_projects.insert(project)
+                {
+                    return Err("invalid or duplicate --web-auto-project".into());
+                }
             }
             "--host" => {
                 host = next_arg(&args, &mut index, "--host")?;
@@ -1195,7 +1217,8 @@ fn parse_headless_mcp_options(
         })?;
 
     if isolated_dev_fixture
-        && (host != "127.0.0.1"
+        && (!web_auto_projects.is_empty()
+            || host != "127.0.0.1"
             || port != 0
             || !matches!(tool_mode, ToolMode::ReadOnly)
             || !matches!(mode, Mode::Computer)
@@ -1214,6 +1237,8 @@ fn parse_headless_mcp_options(
         return Err("isolated fixture requires explicit workspace, config, /dev/mcp, loopback port 0 and read-only computer mode".into());
     }
     Ok(Some(HeadlessMcpOptions {
+        maximum_runtime_seconds,
+        web_auto_projects,
         isolated_dev_fixture,
         host,
         port,
@@ -1542,6 +1567,8 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
             "tool_mode": options.tool_mode.label(),
             "workspace": workspace_root,
             "config_path": options.config_path,
+            "maximum_runtime_seconds": options.maximum_runtime_seconds,
+            "web_auto_projects": options.web_auto_projects,
             "mcp_url": format!("http://{local_addr}{mcp_path}"),
             "auth": {
                 "scheme": "bearer",
@@ -1552,10 +1579,25 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
     );
 
     if !options.isolated_dev_fixture {
-        operator_facade::start_web_auto_scheduler(state.clone());
+        if options.web_auto_projects.is_empty() {
+            operator_facade::start_web_auto_scheduler(state.clone());
+        } else {
+            operator_facade::start_scoped_web_auto_scheduler(
+                state.clone(),
+                options.web_auto_projects,
+            );
+        }
     }
 
+    let deadline = async {
+        if let Some(seconds) = options.maximum_runtime_seconds {
+            tokio::time::sleep(Duration::from_secs(seconds)).await;
+        } else {
+            std::future::pending::<()>().await;
+        }
+    };
     tokio::select! {
+        _ = deadline => {}
         signal = tokio::signal::ctrl_c() => {
             signal?;
         }
@@ -4305,6 +4347,12 @@ mod tests {
             "--auth-token".to_string(),
             "catdesk-test-token-1234567890".to_string(),
             "--no-ngrok".to_string(),
+            "--max-runtime-seconds".to_string(),
+            "300".to_string(),
+            "--web-auto-project".to_string(),
+            "catdesk".to_string(),
+            "--web-auto-project".to_string(),
+            "wake2".to_string(),
         ])
         .expect("parse headless options")
         .expect("headless options present");
@@ -4314,6 +4362,33 @@ mod tests {
         assert_eq!(options.mcp_path.as_deref(), Some("/t0012/mcp"));
         assert!(matches!(options.tool_mode, ToolMode::ReadOnly));
         assert_eq!(options.auth_token, "catdesk-test-token-1234567890");
+        assert_eq!(options.maximum_runtime_seconds, Some(300));
+        assert_eq!(
+            options.web_auto_projects.into_iter().collect::<Vec<_>>(),
+            ["catdesk", "wake2"]
+        );
+    }
+
+    #[test]
+    fn headless_budget_and_project_scope_refuse_invalid_or_duplicate_options() {
+        for tail in [
+            vec!["--max-runtime-seconds", "0"],
+            vec!["--max-runtime-seconds", "901"],
+            vec!["--max-runtime-seconds", "-1"],
+            vec!["--max-runtime-seconds", "1", "--max-runtime-seconds", "2"],
+            vec!["--web-auto-project", "../other"],
+            vec!["--web-auto-project", "alpha", "--web-auto-project", "alpha"],
+        ] {
+            let mut args = vec![
+                "--headless-mcp",
+                "--config-path",
+                "unused.toml",
+                "--auth-token",
+                "catdesk-test-token-1234567890",
+            ];
+            args.extend(tail);
+            assert!(parse_headless_mcp_options(args.into_iter().map(str::to_owned)).is_err());
+        }
     }
 
     #[test]
@@ -4329,6 +4404,8 @@ mod tests {
         .expect("headless options present");
 
         assert!(matches!(options.tool_mode, ToolMode::ReadOnly));
+        assert_eq!(options.maximum_runtime_seconds, None);
+        assert!(options.web_auto_projects.is_empty());
     }
 
     #[test]

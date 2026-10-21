@@ -2895,6 +2895,7 @@ mod tests {
 
     #[test]
     fn quarantine_preserves_uncertain_attempt_and_prevents_replay_after_reopen() {
+        use crate::web_conversation_context::ContextPressurePolicy;
         let root = fixture();
         let store = ProjectStore::open(&root, "alpha").unwrap();
         let original = record();
@@ -2921,6 +2922,65 @@ mod tests {
         assert_eq!(
             auto_stage(&root, "alpha", &original.source).unwrap(),
             AutoStage::Quarantined
+        );
+        let meter = WebContextStore::open(root.join(".catdesk/web-context")).unwrap();
+        let source_key = key("alpha", &original.source);
+        meter
+            .bind_observed_target(source_key.clone(), None)
+            .unwrap();
+        let run_observation = |capture: &dyn Fn() -> Result<Value, String>| {
+            super::super::auto::run_step_with_capture(
+                &root,
+                "alpha",
+                &source_key,
+                &original.source,
+                &|| Ok(()),
+                capture,
+            )
+        };
+        let disabled = run_observation(&|| panic!("observation requires separate opt-in")).unwrap();
+        assert_eq!(disabled.0, "QUARANTINED");
+        assert!(disabled.1["contextObservation"].is_null());
+        meter
+            .configure_policy(
+                "alpha",
+                ContextPressurePolicy {
+                    configured_budget_tokens: 10,
+                    safety_headroom_tokens: 8,
+                    unknown_source_reserve_tokens: 0,
+                    automatic_rollover_enabled: true,
+                    automatic_observation_enabled: true,
+                    ..ContextPressurePolicy::default()
+                },
+            )
+            .unwrap();
+        let observed = run_observation(&|| {
+            let pressure = meter.record_observation(
+                &source_key,
+                Observation {
+                    event_id: "large-observation",
+                    revision: 1,
+                    dedup_key: "large-observation",
+                    source_kind: VisibleSourceKind::AssistantMessage,
+                    visible_text: Some("context pressure above trigger with quarantine preserved"),
+                    observed_at_unix: 20,
+                },
+            )?;
+            assert!(pressure.near_capacity);
+            Ok(json!({"captured":true,"userMessageSent":false}))
+        })
+        .unwrap();
+        assert_eq!(observed.0, "QUARANTINED");
+        assert_eq!(observed.1["contextObservation"]["captured"], true);
+        assert_eq!(observed.1["rolloverAdvanced"], false);
+        assert_eq!(
+            saved_bytes,
+            fs::read(root.join(".catdesk/web-rollovers/alpha/intent-a.json")).unwrap()
+        );
+        assert!(
+            !root
+                .join(".catdesk/web-rollovers/alpha/handoff-request.json")
+                .exists()
         );
         assert_eq!(
             execute(&root, "alpha").unwrap_err(),
