@@ -1,3 +1,30 @@
+## 2026-10-21 — V2 physical candidate staging (SOURCE/FIXTURE; ADMISSION HELD)
+
+V2 now copies the exact signed manifest/four artifacts through the existing
+fixed-source intake, create/copy/ACL/flush primitives. An opaque retained
+receipt binds full staging/packages/candidate/manifest/artifact identities to
+the V2 intent before STAGED is persisted. V1 owner fields are not synthesized.
+V2 STAGED has a fixed 8-KiB record bound; V1 keeps 4 KiB and earlier V2
+INTENT/marker bytes omit the optional stage binding unchanged. Partial copies
+and uncertain stage markers remain attention-only. A retained exact receipt
+can finish a failed STAGED parent flush without recopying bytes. Later-phase
+re-admission/recovery, publication and reader cutover remain incomplete.
+
+Nine new cases pass: seven physical-stage cases, full-ID alias checks and a
+real diagnostic-pin/metadata-flush compatibility test. Complete all-feature
+Wake tests pass (318 library / one ignored, binaries/integrations and Python
+adapter/response regressions); strict root/Wake Clippy passes. Root main tests
+are prior-checkpoint evidence, not rerun for this Wake-only change.
+
+The kernel test confirms the current read-only diagnostic target-root pin
+blocks metadata writer reopening (WAKE_BROKER_PARENT_FLUSH_UNAVAILABLE), with
+no journal/data mutation. A transaction-specific retained broker writer root
+is required before production admission can work. Diagnostic sharing remains
+unchanged; quarantine/admission, broker clock/observation and service holds
+remain in force. Next: implement that writer-root/flush capability, then finish
+V2 phase recovery/publication. No operational runtime or binding is changed.
+Parent dated audit: checkpoints/offline-v2-stage-oct21.
+
 ## 2026-10-21 — V2 create-once INTENT and pre-stage boundary (SOURCE/FIXTURE)
 
 The V2 ledger now has a create-once writer/lease and exact INTENT reopening,

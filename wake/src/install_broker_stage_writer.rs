@@ -67,6 +67,10 @@ const ARTIFACTS: [&str; 4] = [
     "wake_bridge.py",
 ];
 
+#[path = "install_broker_stage_writer_v2.rs"]
+mod offline_v2;
+pub use offline_v2::{BrokerStageReceiptV2, materialize_fixed_candidate_stage_v2};
+
 #[derive(Clone)]
 enum StageSecurityMode {
     Protected(String),
@@ -1187,7 +1191,7 @@ pub(crate) mod tests {
     }
 
     impl TransactionFixture {
-        fn new() -> Self {
+        pub(crate) fn new() -> Self {
             Self::new_inner(false)
         }
 

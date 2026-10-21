@@ -8,7 +8,7 @@
 
 use crate::{
     Result,
-    install_broker_approval::{VerifiedApprovalV1, validate_manifest},
+    install_broker_approval::{PackageManifestV1, VerifiedApprovalV1, validate_manifest},
 };
 use sha2::{Digest, Sha256};
 use std::{
@@ -478,11 +478,24 @@ impl PinnedCandidateSourceV1 {
     /// Rehash the same pinned bytes and compare every fixed-name reopen before
     /// a protected stage records provenance. A source change only refuses use.
     pub(crate) fn revalidate(&mut self, approval: &VerifiedApprovalV1) -> Result<()> {
-        validate_manifest(&approval.payload().manifest)?;
-        let canonical = serde_json::to_vec(&approval.payload().manifest)
-            .map_err(|_| "WAKE_BROKER_SOURCE_MANIFEST_INVALID")?;
+        self.revalidate_manifest(
+            &approval.payload().manifest,
+            &approval.payload().manifest_sha256,
+        )
+    }
+
+    /// Manifest-layout byte checks shared with V2. This does not turn an
+    /// unsigned manifest or these read pins into installation authority.
+    pub(crate) fn revalidate_manifest(
+        &mut self,
+        manifest: &PackageManifestV1,
+        manifest_sha256: &str,
+    ) -> Result<()> {
+        validate_manifest(manifest)?;
+        let canonical =
+            serde_json::to_vec(manifest).map_err(|_| "WAKE_BROKER_SOURCE_MANIFEST_INVALID")?;
         if canonical.len() > MAX_MANIFEST_BYTES
-            || format!("{:x}", Sha256::digest(&canonical)) != approval.payload().manifest_sha256
+            || format!("{:x}", Sha256::digest(&canonical)) != manifest_sha256
             || self.manifest_bytes != canonical
         {
             return Err("WAKE_BROKER_SOURCE_MANIFEST_MISMATCH".into());
@@ -521,8 +534,8 @@ impl PinnedCandidateSourceV1 {
                 ARTIFACT_NAMES[3],
             ],
         )?;
-        let (manifest, now_manifest) = read_manifest(&mut self.manifest)?;
-        if manifest != canonical || !stable(&self.manifest_info, &now_manifest) {
+        let (manifest_bytes, now_manifest) = read_manifest(&mut self.manifest)?;
+        if manifest_bytes != canonical || !stable(&self.manifest_info, &now_manifest) {
             return Err("WAKE_BROKER_SOURCE_MANIFEST_MISMATCH".into());
         }
         let reopened = open_relative(candidate, MANIFEST_NAME, false)?;
@@ -530,7 +543,7 @@ impl PinnedCandidateSourceV1 {
             return Err("WAKE_BROKER_SOURCE_OBJECT_CHANGED".into());
         }
         for (index, name) in ARTIFACT_NAMES.iter().enumerate() {
-            let expected = &approval.payload().manifest.artifacts[index];
+            let expected = &manifest.artifacts[index];
             let now = hash_artifact(
                 &mut self.artifacts[index],
                 expected.byte_length,
@@ -557,6 +570,17 @@ impl PinnedCandidateSourceV1 {
         )?;
         Ok(())
     }
+
+    /// Retained objects only, in fixed manifest-layout order. The caller must
+    /// keep this value alive and separately check protected-stage security.
+    pub(crate) fn package_pins(&self) -> (&OwnedHandle, &OwnedHandle, &File, &[File; 4]) {
+        (
+            &self.ancestors[self.ancestors.len() - 2],
+            &self.ancestors[self.ancestors.len() - 1],
+            &self.manifest,
+            &self.artifacts,
+        )
+    }
 }
 
 fn open_candidate_in(
@@ -564,10 +588,24 @@ fn open_candidate_in(
     chain: &[&'static str],
     approval: &VerifiedApprovalV1,
 ) -> Result<PinnedCandidateSourceV1> {
+    open_candidate_manifest_in(
+        root,
+        chain,
+        &approval.payload().manifest,
+        &approval.payload().manifest_sha256,
+    )
+}
+
+fn open_candidate_manifest_in(
+    root: OwnedHandle,
+    chain: &[&'static str],
+    manifest: &PackageManifestV1,
+    manifest_sha256: &str,
+) -> Result<PinnedCandidateSourceV1> {
     if chain.len() < 2 || chain.last() != Some(&"candidate") {
         return Err("WAKE_BROKER_SOURCE_COMPONENT_INVALID".into());
     }
-    validate_manifest(&approval.payload().manifest)?;
+    validate_manifest(manifest)?;
     let mut ancestors = vec![root];
     let mut directory_info = vec![info(ancestors[0].as_raw_handle(), true)?];
     for component in chain {
@@ -595,7 +633,7 @@ fn open_candidate_in(
             ARTIFACT_NAMES[3],
         ],
     )?;
-    let manifest = File::from(open_relative(candidate, MANIFEST_NAME, false)?);
+    let manifest_file = File::from(open_relative(candidate, MANIFEST_NAME, false)?);
     let mut artifact_vec = Vec::with_capacity(4);
     for name in ARTIFACT_NAMES {
         artifact_vec.push(File::from(open_relative(candidate, name, false)?));
@@ -607,7 +645,7 @@ fn open_candidate_in(
         ancestors,
         chain: chain.to_vec(),
         directory_info,
-        manifest,
+        manifest: manifest_file,
         manifest_info: FileInfo::default(),
         manifest_bytes: Vec::new(),
         artifacts,
@@ -617,14 +655,14 @@ fn open_candidate_in(
     source.manifest_info = manifest_info;
     source.manifest_bytes = bytes;
     for index in 0..4 {
-        let signed = &approval.payload().manifest.artifacts[index];
+        let signed = &manifest.artifacts[index];
         source.artifact_info[index] = hash_artifact(
             &mut source.artifacts[index],
             signed.byte_length,
             &signed.sha256,
         )?;
     }
-    source.revalidate(approval)?;
+    source.revalidate_manifest(manifest, manifest_sha256)?;
     Ok(source)
 }
 
@@ -633,6 +671,47 @@ pub(crate) fn open_fixed_candidate_source(
 ) -> Result<PinnedCandidateSourceV1> {
     let volume = open_path_directory(OsStr::new(r"C:\"))?;
     open_candidate_in(volume, &SOURCE_CHAIN, approval)
+}
+
+/// Same fixed, untrusted source; V2 supplies only its already checked manifest
+/// layout. There is no caller-selected path and no owner-field conversion.
+pub(crate) fn pin_fixed_candidate_manifest(
+    manifest: &PackageManifestV1,
+    manifest_sha256: &str,
+) -> Result<PinnedCandidateSourceV1> {
+    let volume = open_path_directory(OsStr::new(r"C:\"))?;
+    open_candidate_manifest_in(volume, &SOURCE_CHAIN, manifest, manifest_sha256)
+}
+
+pub(crate) fn pin_staged_candidate_manifest(
+    root: &OwnedHandle,
+    manifest: &PackageManifestV1,
+    manifest_sha256: &str,
+) -> Result<PinnedCandidateSourceV1> {
+    let retained = root
+        .try_clone()
+        .map_err(|_| "WAKE_BROKER_SOURCE_OBJECT_UNAVAILABLE")?;
+    open_candidate_manifest_in(
+        retained,
+        &["staging", "candidate"],
+        manifest,
+        manifest_sha256,
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn pin_fixture_candidate_manifest(
+    root: &std::path::Path,
+    manifest: &PackageManifestV1,
+    manifest_sha256: &str,
+) -> Result<PinnedCandidateSourceV1> {
+    let volume = open_path_directory(root.as_os_str())?;
+    open_candidate_manifest_in(
+        volume,
+        &["WakeSubmissionV1", "candidate"],
+        manifest,
+        manifest_sha256,
+    )
 }
 
 #[cfg(test)]

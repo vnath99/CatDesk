@@ -1,5 +1,47 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 V2 physical candidate staging (SOURCE/FIXTURE ONLY)
+
+V2 now materializes the fixed manifest/four-file package and records STAGED
+through an opaque fresh-create receipt. It reuses existing source hashing,
+fixed names, copy/create, protected ACL and parent-flush primitives. Shared
+intake accepts the signed manifest layout without constructing a V1 approval
+or owner PID. The receipt retains source/stage pins, strict candidate and leaf
+handles, policy context and full FileIdInfo identities for every staged role.
+Ledger admission compares those physical objects with the exact intent and
+signed manifest; serialized binding data cannot construct a receipt.
+
+STAGED persists full identities within a fixed 8-KiB V2 bound. V1 remains at
+4 KiB; optional binding omission preserves earlier V2 INTENT/marker bytes.
+Partial copies, unexpected ledger entries, receipt splicing and failed stage
+markers refuse progress. An exact retained receipt may complete only the
+STAGED parent flush after failure. Automatic re-admission of later V2 phases,
+publication, protected reader/owner cutover and production admission are still
+unfinished. No live package is created or installed by these fixture results.
+
+Nine new tests pass: seven materialization/recovery-boundary cases, full-ID
+alias handling and a real kernel compatibility check. The complete all-feature
+Wake crate suite passes: 318 library tests / one ignored plus enabled binary,
+integration and adapter/response Python regressions. Strict all-target,
+all-feature root/Wake Clippy passes. Root main-test results remain historical
+to the preceding checkpoint; they were not rerun for this Wake-only increment.
+The initial compile errors and successful corrected runs remain in the audit.
+
+The kernel check establishes a concrete remaining source blocker: holding
+the existing diagnostic read-only target-root pin denies the writer reopen
+needed by metadata flushing, returning WAKE_BROKER_PARENT_FLUSH_UNAVAILABLE.
+It changes no journal or data. A transaction-specific retained broker writer
+root and compatible flush path must be implemented before admission is enabled.
+Read-only diagnostic sharing, the unimplemented quarantine gate and existing
+installer/service holds are unchanged. Independent inventory/quarantine/CI and
+provisioned-machine evidence remain required after source integration.
+
+Selected stopped v33, production, project histories and completed rollover are
+preserved. No operational WakeHost, browser, recurring worker or message send
+is invoked; isolated source fixtures are separate. Installed multi-project
+operation and the natural development/review cycle remain unaccepted.
+Parent dated audit: checkpoints/offline-v2-stage-oct21.
+
 ## October 21 V2 INTENT writer and pre-stage boundary (SOURCE/FIXTURE ONLY)
 
 The existing offline ledger now includes create-once INTENT writing, exact

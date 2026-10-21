@@ -228,7 +228,7 @@ fn identifier(value: &str, max: usize) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b'@'))
 }
 
-fn valid_object(value: &OfflineObjectIdentityV2) -> bool {
+pub(crate) fn valid_object(value: &OfflineObjectIdentityV2) -> bool {
     value.legacy.volume_serial != 0
         && (value.legacy.file_index_high != 0 || value.legacy.file_index_low != 0)
         && value.full.volume_serial != 0

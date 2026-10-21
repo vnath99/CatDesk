@@ -8,6 +8,7 @@
 
 use super::*;
 use crate::{
+    install_broker_approval::PackageManifestV1,
     install_broker_ci_fetch::require_broker_owned_offline_exact_ci,
     install_broker_offline_pins::{
         OfflineMigrationPinsV2, OfflineOldStoreLockSetV2, full_identity_of_handle,
@@ -19,6 +20,41 @@ use crate::{
 };
 
 const DOMAIN_V2: &[u8] = b"CatDeskWakeOfflineInstallLedgerV2\0";
+// V1 retains its 4-KiB limit. Full V2 object identities in STAGED need their
+// own fixed bound; earlier V2 INTENT/marker canonical bytes stay unchanged.
+const MAX_OFFLINE_RECORD_BYTES: usize = 8 * 1024;
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StageBindingV2 {
+    pub staging_directory: OfflineObjectIdentityV2,
+    pub packages_directory: OfflineObjectIdentityV2,
+    pub candidate_directory: OfflineObjectIdentityV2,
+    pub manifest_file: OfflineObjectIdentityV2,
+    pub artifacts: [OfflineObjectIdentityV2; 4],
+}
+
+fn valid_stage_binding_v2(stage: &StageBindingV2, root: &OfflineObjectIdentityV2) -> bool {
+    let objects = [
+        &stage.staging_directory,
+        &stage.packages_directory,
+        &stage.candidate_directory,
+        &stage.manifest_file,
+        &stage.artifacts[0],
+        &stage.artifacts[1],
+        &stage.artifacts[2],
+        &stage.artifacts[3],
+    ];
+    objects.iter().enumerate().all(|(index, object)| {
+        crate::install_broker_offline_v2::valid_object(object)
+            && object.full.volume_serial == root.full.volume_serial
+            && object.legacy.volume_serial == root.legacy.volume_serial
+            && object.full != root.full
+            && objects[..index]
+                .iter()
+                .all(|prior| prior.full != object.full)
+    })
+}
 
 /// The distinct schema has no old PID fields and persists the exact signed
 /// pair, full protected/predecessor IDs, paired target and offline disposition.
@@ -52,6 +88,8 @@ struct OfflineIntentRecordV2 {
     original_desired_state: OfflineDesiredStateV2,
     closed_store_inventory_sha256: String,
     quarantined_launch_entrypoints_sha256: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    stage_binding: Option<StageBindingV2>,
     prior_record_sha256: String,
 }
 
@@ -88,6 +126,7 @@ impl OfflineIntentRecordV2 {
             quarantined_launch_entrypoints_sha256: anchor
                 .quarantined_launch_entrypoints_sha256
                 .clone(),
+            stage_binding: None,
             prior_record_sha256: "0".repeat(64),
         }
     }
@@ -110,28 +149,36 @@ pub struct OfflineIntentReadbackV2 {
 
 fn read_offline_intent(file: &mut File) -> Result<(OfflineIntentRecordV2, String)> {
     let (record, digest) = read_offline_record(file)?;
-    if record.phase != "INTENT" || record.prior_record_sha256 != "0".repeat(64) {
+    if record.phase != "INTENT"
+        || record.prior_record_sha256 != "0".repeat(64)
+        || record.stage_binding.is_some()
+    {
         return Err("WAKE_OFFLINE_LEDGER_RECORD_INVALID".into());
     }
     Ok((record, digest))
 }
 
 fn read_offline_record(file: &mut File) -> Result<(OfflineIntentRecordV2, String)> {
-    file_info(file, None)?;
+    file_info_bounded(file, None, MAX_OFFLINE_RECORD_BYTES)?;
     file.seek(SeekFrom::Start(0))
         .map_err(|_| "WAKE_LEDGER_RECORD_UNAVAILABLE")?;
     let mut bytes = Vec::new();
-    file.take(MAX_RECORD_BYTES as u64 + 1)
+    file.take(MAX_OFFLINE_RECORD_BYTES as u64 + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "WAKE_LEDGER_RECORD_UNAVAILABLE")?;
-    file_info(file, Some(bytes.len()))?;
+    file_info_bounded(file, Some(bytes.len()), MAX_OFFLINE_RECORD_BYTES)?;
     let record: OfflineIntentRecordV2 =
         serde_json::from_slice(&bytes).map_err(|_| "WAKE_OFFLINE_LEDGER_RECORD_INVALID")?;
     if serde_json::to_vec(&record).map_err(|_| "WAKE_OFFLINE_LEDGER_RECORD_INVALID")? != bytes
         || record.schema_version != 2
         || record.install_generation != 1
         || record.purpose != "catdesk-wake-offline-install-ledger"
-        || !matches!(record.phase.as_str(), "INTENT" | "STAGE_STARTED")
+        || !matches!(record.phase.as_str(), "INTENT" | "STAGE_STARTED" | "STAGED")
+        || match (&record.stage_binding, record.phase.as_str()) {
+            (Some(stage), "STAGED") => !valid_stage_binding_v2(stage, &record.protected_root),
+            (None, "INTENT" | "STAGE_STARTED") => false,
+            _ => true,
+        }
         || !lowercase_hex(&record.prior_record_sha256, 64)
     {
         return Err("WAKE_OFFLINE_LEDGER_RECORD_INVALID".into());
@@ -202,9 +249,9 @@ fn pending_offline_intent(root: &OwnedHandle) -> Result<Option<OfflineIntentReco
 }
 
 fn write_offline_record(file: &mut File, record: &OfflineIntentRecordV2) -> Result<String> {
-    file_info(file, Some(0))?;
+    file_info_bounded(file, Some(0), MAX_OFFLINE_RECORD_BYTES)?;
     let bytes = serde_json::to_vec(record).map_err(|_| "WAKE_LEDGER_ENCODING_INVALID")?;
-    if bytes.is_empty() || bytes.len() > MAX_RECORD_BYTES {
+    if bytes.is_empty() || bytes.len() > MAX_OFFLINE_RECORD_BYTES {
         return Err("WAKE_LEDGER_ENCODING_INVALID".into());
     }
     file.write_all(&bytes)
@@ -227,8 +274,12 @@ pub struct OfflineLedgerLeaseV2<'a, 'p> {
     intent: OfflineIntentRecordV2,
     intent_digest: String,
     revalidate: Box<dyn Fn() -> Result<()> + 'p>,
+    manifest: PackageManifestV1,
+    policy: Option<&'p BrokerProtectedPolicyV1>,
     stage_attempted: bool,
     stage_recorded: bool,
+    stage_started_digest: Option<String>,
+    staged_binding: Option<StageBindingV2>,
 }
 
 impl<'a> BrokerLedgerGuard<'a> {
@@ -275,13 +326,15 @@ impl<'a> BrokerLedgerGuard<'a> {
             }
             Ok(())
         });
-        self.accept_offline_checked(
+        let mut lease = self.accept_offline_checked(
             approved.checked(),
             observed,
             revalidate,
             require_offline_launch_quarantine,
             || require_broker_owned_offline_exact_ci(&approved),
-        )
+        )?;
+        lease.policy = Some(policy);
+        Ok(lease)
     }
 
     fn accept_offline_checked<'p>(
@@ -349,19 +402,48 @@ impl<'a> BrokerLedgerGuard<'a> {
             intent: binding,
             intent_digest: digest,
             revalidate,
+            manifest: pair.approval().manifest.clone(),
+            policy: None,
             stage_attempted: false,
             stage_recorded: false,
+            stage_started_digest: None,
+            staged_binding: None,
         })
     }
 }
 
-impl OfflineLedgerLeaseV2<'_, '_> {
+impl<'p> OfflineLedgerLeaseV2<'_, 'p> {
     pub fn phase(&self) -> &'static str {
-        if self.stage_recorded {
+        if self.staged_binding.is_some() {
+            "STAGED"
+        } else if self.stage_recorded {
             "STAGE_STARTED"
         } else {
             "INTENT"
         }
+    }
+
+    pub(crate) fn protected_root(&self) -> &OwnedHandle {
+        self.root
+    }
+    pub(crate) fn protected_root_identity(&self) -> &OfflineObjectIdentityV2 {
+        &self.intent.protected_root
+    }
+    pub(crate) fn approved_manifest(&self) -> &PackageManifestV1 {
+        &self.manifest
+    }
+    pub(crate) fn approved_manifest_sha256(&self) -> &str {
+        &self.intent.manifest_sha256
+    }
+    pub(crate) fn intent_record_sha256(&self) -> &str {
+        &self.intent_digest
+    }
+    pub(crate) fn policy(&self) -> Option<&'p BrokerProtectedPolicyV1> {
+        self.policy
+    }
+    pub(crate) fn revalidate_inputs(&self) -> Result<()> {
+        (self.revalidate)()?;
+        require_offline_root(self.root, &self.intent.protected_root)
     }
 
     /// Write/flush the no-replay boundary before any future physical stage
@@ -403,12 +485,117 @@ impl OfflineLedgerLeaseV2<'_, '_> {
         (self.revalidate)()?;
         require_offline_root(self.root, &self.intent.protected_root)?;
         require_offline_inventory(self.root, true)?;
-        if read_offline_record(&mut file)? != (marker, digest) {
+        if read_offline_record(&mut file)? != (marker, digest.clone()) {
             return Err("WAKE_OFFLINE_LEDGER_APPROVAL_CONFLICT".into());
         }
         self.stage_recorded = true;
+        self.stage_started_digest = Some(digest);
         Ok(())
     }
+
+    /// Only the opaque fresh-create receipt may supply STAGED identities.
+    pub(crate) fn record_staged(
+        &mut self,
+        receipt: &mut crate::install_broker_stage_writer::BrokerStageReceiptV2<'_>,
+    ) -> Result<bool> {
+        if !self.stage_recorded {
+            return Err("WAKE_OFFLINE_STAGE_ATTENTION".into());
+        }
+        self.revalidate_inputs()?;
+        let binding = receipt.binding_for_ledger(
+            self.root,
+            &self.intent.protected_root,
+            &self.intent_digest,
+            &self.manifest,
+            &self.intent.manifest_sha256,
+        )?;
+        if !valid_stage_binding_v2(&binding, &self.intent.protected_root)
+            || self
+                .staged_binding
+                .as_ref()
+                .is_some_and(|prior| *prior != binding)
+        {
+            return Err("WAKE_OFFLINE_LEDGER_APPROVAL_CONFLICT".into());
+        }
+        let mut marker_file =
+            open_optional(self.root, &record_name(1, InstallPhaseV1::StageStarted))?
+                .ok_or("WAKE_LEDGER_RECORD_UNAVAILABLE")?;
+        let mut marker = self.intent.clone();
+        marker.phase = "STAGE_STARTED".into();
+        marker.prior_record_sha256 = self.intent_digest.clone();
+        let (actual_marker, marker_digest) = read_offline_record(&mut marker_file)?;
+        if actual_marker != marker || Some(&marker_digest) != self.stage_started_digest.as_ref() {
+            return Err("WAKE_OFFLINE_LEDGER_APPROVAL_CONFLICT".into());
+        }
+        let mut staged = marker;
+        staged.phase = "STAGED".into();
+        staged.prior_record_sha256 = marker_digest;
+        staged.stage_binding = Some(binding.clone());
+        let inventory_before = ledger_inventory(self.root)?;
+        let mut before_slots = [false; LEDGER_SLOT_COUNT];
+        before_slots[InstallPhaseV1::Intent.index()] = true;
+        before_slots[InstallPhaseV1::StageStarted.index()] = true;
+        let mut existing_slots = before_slots;
+        existing_slots[InstallPhaseV1::Staged.index()] = true;
+        if inventory_before.len() != 1
+            || !matches!(inventory_before.get(&1),
+            Some(slots) if *slots == before_slots || *slots == existing_slots)
+        {
+            return Err("WAKE_OFFLINE_LEDGER_RECORD_CHANGED".into());
+        }
+        let name = record_name(1, InstallPhaseV1::Staged);
+        let (mut file, created) = create_or_reopen(self.root, &name)?;
+        let digest = if created {
+            write_offline_record(&mut file, &staged)?
+        } else {
+            let (record, digest) = read_offline_record(&mut file)?;
+            if record != staged {
+                return Err("WAKE_OFFLINE_LEDGER_APPROVAL_CONFLICT".into());
+            }
+            digest
+        };
+        flush_pinned_directory(
+            self.root,
+            &self.intent.protected_root.legacy,
+            ParentFlushPoint::Staged,
+        )?;
+        self.revalidate_inputs()?;
+        if receipt.binding_for_ledger(
+            self.root,
+            &self.intent.protected_root,
+            &self.intent_digest,
+            &self.manifest,
+            &self.intent.manifest_sha256,
+        )? != binding
+            || read_offline_record(&mut file)? != (staged, digest.clone())
+        {
+            return Err("WAKE_OFFLINE_LEDGER_APPROVAL_CONFLICT".into());
+        }
+        let inventory = ledger_inventory(self.root)?;
+        let mut slots = [false; LEDGER_SLOT_COUNT];
+        for phase in [
+            InstallPhaseV1::Intent,
+            InstallPhaseV1::StageStarted,
+            InstallPhaseV1::Staged,
+        ] {
+            slots[phase.index()] = true;
+        }
+        if inventory.len() != 1 || inventory.get(&1) != Some(&slots) {
+            return Err("WAKE_OFFLINE_LEDGER_RECORD_CHANGED".into());
+        }
+        let advanced = self.staged_binding.is_none();
+        self.staged_binding = Some(binding);
+        Ok(advanced)
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn begin_offline_fixture<'a>(
+    guard: BrokerLedgerGuard<'a>,
+    pair: &CheckedOfflinePairV2,
+    observed: &OfflineMigrationObservationV2,
+) -> Result<OfflineLedgerLeaseV2<'a, 'static>> {
+    guard.accept_offline_checked(pair, observed, Box::new(|| Ok(())), || Ok(()), || Ok(()))
 }
 
 impl BrokerLedgerGuard<'_> {
@@ -553,6 +740,36 @@ mod tests {
         observed: &OfflineMigrationObservationV2,
     ) -> Result<OfflineLedgerLeaseV2<'a, 'static>> {
         guard.accept_offline_checked(pair, observed, Box::new(|| Ok(())), || Ok(()), || Ok(()))
+    }
+
+    #[test]
+    fn staged_full_ids_reject_aliases_without_assuming_legacy_ids_are_unique() {
+        use crate::install_broker_offline_v2::FullFileIdentityV2;
+        let (anchor, _, _, _) = signed_test::fixture();
+        let root = anchor.target_protected_root;
+        let object = |index: u32| OfflineObjectIdentityV2 {
+            legacy: root.legacy.clone(),
+            full: FullFileIdentityV2 {
+                volume_serial: root.full.volume_serial,
+                file_id_hex: format!("ffffffffffffffffffffffff{index:08x}"),
+            },
+        };
+        let mut stage = StageBindingV2 {
+            staging_directory: object(1),
+            packages_directory: object(2),
+            candidate_directory: object(3),
+            manifest_file: object(4),
+            artifacts: std::array::from_fn(|index| object(5 + index as u32)),
+        };
+        assert!(
+            valid_stage_binding_v2(&stage, &root),
+            "full identities are the distinctness premise"
+        );
+        stage.artifacts[0].full = stage.candidate_directory.full.clone();
+        assert!(!valid_stage_binding_v2(&stage, &root));
+        stage.artifacts[0] = object(5);
+        stage.artifacts[0].full.volume_serial += 1;
+        assert!(!valid_stage_binding_v2(&stage, &root));
     }
 
     #[test]

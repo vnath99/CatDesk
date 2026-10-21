@@ -806,6 +806,30 @@ mod tests {
         root
     }
 
+    #[test]
+    fn diagnostic_read_only_root_pin_does_not_grant_parent_flush_rights() {
+        use crate::install_broker_durability::{ParentFlushPoint, flush_pinned_directory};
+        use std::os::windows::io::OwnedHandle;
+        let root = fixture_root();
+        let pin = OfflineObjectPinV2::open(&root, true).expect("read-only diagnostic pin");
+        let retained = OwnedHandle::from(pin.file.try_clone().expect("same retained root"));
+        assert_eq!(
+            flush_pinned_directory(&retained, &pin.identity.legacy, ParentFlushPoint::Intent)
+                .unwrap_err(),
+            "WAKE_BROKER_PARENT_FLUSH_UNAVAILABLE"
+        );
+        pin.matches(&pin.identity)
+            .expect("diagnostic identity preserved");
+        assert_eq!(
+            fs::read_dir(&root).unwrap().count(),
+            0,
+            "no journal or data mutation"
+        );
+        drop(retained);
+        drop(pin);
+        fs::remove_dir(root).expect("empty fixture cleanup");
+    }
+
     fn old_store_identities(root: &Path) -> (OfflineObjectIdentityV2, OfflineObjectIdentityV2) {
         let pinned_root = OfflineObjectPinV2::open(root, true).expect("old root pin");
         let pinned_lock = open_host_lock_under(&pinned_root).expect("relative host lock pin");
