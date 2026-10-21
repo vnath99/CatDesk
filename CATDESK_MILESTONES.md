@@ -1,3 +1,22 @@
+## 2026-10-21 — native verification path compatibility (SOURCE)
+
+Real-project verification exposed a native pywin32 loader limit: it reports a
+259-character truncated DLL path when the actual file path has 293 characters.
+Importing pywintypes alone works, while importing win32api/security first fails;
+the shorter existing project environment passes both orders. This is concrete
+verification-path incompatibility, not evidence that the project tests pass.
+
+Fresh runtimes now live under the fixed external user-state v directory with
+a full SHA-256 name binding queue namespace and receipt. This removes repeated
+long path components while preserving per-receipt isolation, generated cache
+settings and environment hashing. Old long runtimes, failed artifacts and
+historical readbacks remain intact. No DLL copy, global search-path change,
+import-order workaround, sandbox change or new caller path option is used.
+Queue regressions pass 78 / two ignored; strict all-target/all-feature Clippy,
+format and diff pass. Real project qualification and installed acceptance remain
+separate gates; the failed first real profile has not been rewritten or replayed.
+Parent UTC audit: checkpoints/verification-hypothesis-oct21.
+
 ## 2026-10-21 — external Hypothesis verification storage (SOURCE)
 
 The existing per-receipt verification runtime now generates and revalidates a

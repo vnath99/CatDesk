@@ -1146,18 +1146,37 @@ impl QueueStore {
         if !Uuid::parse_str(receipt_id).is_ok_and(|id| id.to_string() == receipt_id) {
             return Err("CODEX_QUEUE_VERIFY: runtime receipt identity is invalid".into());
         }
-        let parent = self.root.join("verification-runtime");
+        // Keep DLL paths below legacy native loader limits even when Windows
+        // redirects LocalAppData into an MSIX package. The full hash still
+        // binds both this queue namespace and the exact receipt, without
+        // repeating those long components in every site-packages path.
+        let state = if cfg!(test) {
+            self.root.join("fixture-user-state")
+        } else {
+            fixed_current_user_catdesk_state_root_path()
+                .map_err(|_| "CODEX_QUEUE_VERIFY: fixed runtime state root is unavailable")?
+        };
+        let parent = state.join("v");
         for project in projects {
             reject_overlap(&parent, project)?;
         }
+        checked_dir(&state)?;
         checked_dir(&parent)?;
+        let runtime_id = format!(
+            "{:x}",
+            Sha256::digest(
+                format!(
+                    "catdesk-verification-runtime-v2\0{}\0{receipt_id}",
+                    self.root.display()
+                )
+                .as_bytes()
+            )
+        );
         // Production uses the OS-derived user location, never UV_/XDG_ caller
         // settings. Unit fixtures must not create or populate the real cache.
         let uv_cache = if cfg!(test) {
             self.root.join("fixture-uv-cache")
         } else {
-            let state = fixed_current_user_catdesk_state_root_path()
-                .map_err(|_| "CODEX_QUEUE_VERIFY: fixed user cache root is unavailable")?;
             let user = state
                 .parent()
                 .ok_or("CODEX_QUEUE_VERIFY: fixed cache parent is absent")?;
@@ -1167,7 +1186,7 @@ impl QueueStore {
             let cache = user.join(".cache").join("uv");
             cache
         };
-        VerificationRuntime::prepare(parent.join(receipt_id), uv_cache, projects)
+        VerificationRuntime::prepare(parent.join(runtime_id), uv_cache, projects)
     }
 
     fn namespaced_path(
@@ -8518,6 +8537,8 @@ mod tests {
             .verification_runtime(&Uuid::new_v4().to_string(), &roots)
             .unwrap();
         assert_ne!(first.root, second.root);
+        assert_eq!(first.root.file_name().unwrap().to_str().unwrap().len(), 64);
+        assert_eq!(first.root.parent().unwrap().file_name().unwrap(), "v");
         assert_eq!(first.uv_cache, second.uv_cache);
         let (variables, first_hash) =
             verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, Some(&first))

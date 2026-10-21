@@ -19,8 +19,10 @@ evidence: `checkpoints/web-five-project-context-oct21`.
 ## October 21 fixed Python verification runtime (SOURCE; LIVE PROFILE PENDING)
 
 Fresh `operator codex queue verify` executions for fixed UV profiles derive a
-receipt-specific environment under the existing external user-state queue
-namespace. Internally generated UV/tool-cache/temp variables replace inherited
+receipt-specific environment under the fixed external user-state root. Its
+short v/full-hash path binds the queue namespace and receipt without repeating
+their long components in every native DLL path. Internally generated
+UV/tool-cache/temp variables replace inherited
 selectors and enter the existing environment digest. The shared UV download
 cache uses the OS-derived standard user location, outside registered roots;
 project environments remain distinct. No path selector is added to MCP/CLI.
@@ -36,6 +38,11 @@ The Hypothesis addition generates HYPOTHESIS_STORAGE_DIRECTORY under that same
 receipt runtime and filters its inherited override. It is not a new CLI/MCP path
 selector. An opt-in actual-library database probe passes in 4.54 seconds with
 no checkout .hypothesis directory; full real-project qualification is separate.
+
+The shorter layout addresses a reproduced pywin32 import-order failure caused
+by truncating a 293-character DLL path to 259 characters. It applies only to fresh
+verification; old runtimes and failed artifacts are preserved, not adopted or
+rewritten. No global DLL, path, sandbox or package configuration is changed.
 
 The dependency-free offline UV/Python probe passes in disposable state, with
 60-second command bounds and source caches absent. It is explicitly not a real

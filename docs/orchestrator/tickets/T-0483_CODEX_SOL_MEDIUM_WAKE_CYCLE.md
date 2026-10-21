@@ -1,5 +1,21 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-21 actual-verifier DLL path incompatibility (source)
+
+The real isolated project verifier starts Python and passes Ruff lint and
+whole-src mypy. Its pytest collection fails loading pywintypes after another
+win32 module: the installed loader returns a nonexistent truncated path of
+259 characters for a DLL that exists at a 293-character path. Both import
+orders pass in the shorter existing environment. Formatter feedback on the
+new tests is a separate project-source correction; neither failure is accepted
+as qualification. The failed verification stays immutable.
+
+Fresh runtime paths are now fixed user-state v/SHA256(queue namespace, receipt),
+retaining all existing overlap/directory/environment checks and old artifacts.
+No global configuration, DLL search policy, import-order workaround or operator
+path selector is added. Full fresh-candidate qualification remains required.
+Parent UTC audit: checkpoints/verification-hypothesis-oct21.
+
 ## 2026-10-21 Hypothesis storage placement (source)
 
 Fresh fixed UV verification now supplies HYPOTHESIS_STORAGE_DIRECTORY from its
