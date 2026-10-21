@@ -1,5 +1,17 @@
 # CatDesk — Important Command Reference
 
+## October 20 Web orchestration tools in Multi Tools (SOURCE)
+
+Computer/Both with **Multi Tools** now exposes and dispatches the same five
+guarded Web tools as **Supervisor Only**: work request/resolve and context
+capture/configure/observe. Use the exact project ID, paired generation and
+digest from the registry; this is explicit scope, not caller authentication.
+Read Only and Browser Only keep these tools unavailable. Queue disclosure/
+review-package tools retain their separate Supervisor Only gate.
+This source serving correction does not refresh the external connector,
+restart the tunnel, enable rollover policy, or install a production package.
+The provider catalog and production serving path require separate acceptance.
+
 ## October 20 optimized stopped development readback
 
 Use the existing release profile for a normally built operator image:

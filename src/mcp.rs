@@ -784,7 +784,7 @@ async fn handle_tools_list(
             },
             "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false }
         }));
-        if matches!(tool_mode, ToolMode::SupervisorOnly) {
+        if tool_mode.supervisor_tools_enabled() {
             for (name, title, description, input_schema) in
                 crate::web_context_control::tool_schemas()
             {
@@ -830,6 +830,8 @@ async fn handle_tools_list(
                 },
                 "annotations": { "readOnlyHint": false, "openWorldHint": false, "destructiveHint": true }
             }));
+        }
+        if matches!(tool_mode, ToolMode::SupervisorOnly) {
             tools.push(json!({
                 "name": QUEUE_REVIEW_PACKAGE_READ_TOOL,
                 "title": "Read granted Codex queue review package",
@@ -1452,18 +1454,18 @@ where
                     ),
                     "ollama_model_probe" => handle_ollama_model_probe(req).await,
                     "read" => handle_read_file(req, workspace_root),
-                    WEB_WORK_REQUEST_TOOL if matches!(tool_mode, ToolMode::SupervisorOnly) => {
+                    WEB_WORK_REQUEST_TOOL if tool_mode.supervisor_tools_enabled() => {
                         handle_web_work_request(req, workspace_root)
                     }
-                    WEB_WORK_RESOLVE_TOOL if matches!(tool_mode, ToolMode::SupervisorOnly) => {
+                    WEB_WORK_RESOLVE_TOOL if tool_mode.supervisor_tools_enabled() => {
                         handle_web_work_resolve(req, workspace_root)
                     }
                     WEB_CONTEXT_CONFIGURE_TOOL | WEB_CONTEXT_OBSERVE_TOOL
-                        if matches!(tool_mode, ToolMode::SupervisorOnly) =>
+                        if tool_mode.supervisor_tools_enabled() =>
                     {
                         handle_web_context_control(req, workspace_root, &tool_name)
                     }
-                    WEB_CONTEXT_CAPTURE_TOOL if matches!(tool_mode, ToolMode::SupervisorOnly) => {
+                    WEB_CONTEXT_CAPTURE_TOOL if tool_mode.supervisor_tools_enabled() => {
                         let result = crate::web_context_control::capture(
                             Path::new(workspace_root),
                             tool_arguments(req),
@@ -12879,6 +12881,11 @@ mod tests {
                 "catdesk_transport_status",
                 "ollama_model_probe",
                 "read",
+                "catdesk_web_context_capture",
+                "catdesk_web_context_configure",
+                "catdesk_web_context_observe",
+                "catdesk_web_work_request",
+                "catdesk_web_work_resolve",
                 "search",
                 "project_memory_read",
                 "plan_read",
@@ -17401,7 +17408,7 @@ hello world"
     }
 
     #[tokio::test]
-    async fn web_context_controls_are_supervisor_only_with_closed_scopes() {
+    async fn web_context_controls_follow_supervisor_modes_with_closed_scopes() {
         let root = std::env::temp_dir().join(format!("web-context-mcp-{}", Uuid::new_v4()));
         let list = JsonRpcRequest {
             jsonrpc: "2.0".into(),
@@ -17421,8 +17428,7 @@ hello world"
                     WEB_CONTEXT_OBSERVE_TOOL,
                     WEB_CONTEXT_CAPTURE_TOOL,
                 ] {
-                    let exposed =
-                        mode.computer_enabled() && matches!(tool_mode, ToolMode::SupervisorOnly);
+                    let exposed = mode.computer_enabled() && tool_mode.supervisor_tools_enabled();
                     let tool = listed.result.as_ref().unwrap()["tools"]
                         .as_array()
                         .unwrap()
@@ -17480,7 +17486,9 @@ hello world"
     }
 
     #[tokio::test]
-    async fn web_work_request_is_supervisor_only_with_closed_target_witness_schema() {
+    async fn web_work_request_follows_supervisor_modes_with_closed_target_witness_schema() {
+        let root = std::env::temp_dir().join(format!("catdesk-web-work-mcp-{}", Uuid::new_v4()));
+        let root_str = root.to_string_lossy();
         let list = JsonRpcRequest {
             jsonrpc: "2.0".into(),
             id: Some(json!("web-work-list")),
@@ -17498,9 +17506,26 @@ hello world"
                 let tool = tools
                     .iter()
                     .find(|tool| tool["name"] == WEB_WORK_REQUEST_TOOL);
-                let exposed =
-                    mode.computer_enabled() && matches!(tool_mode, ToolMode::SupervisorOnly);
+                let exposed = mode.computer_enabled() && tool_mode.supervisor_tools_enabled();
                 assert_eq!(tool.is_some(), exposed);
+                let denied = handle_tools_call(
+                    &tool_call_request(
+                        WEB_WORK_REQUEST_TOOL,
+                        json!({"workspace":"C:/private-secret"}),
+                    ),
+                    &root_str,
+                    0,
+                    mode,
+                    tool_mode,
+                    false,
+                    &None,
+                )
+                .await;
+                assert_tool_error("web request closed scope/mode", &denied);
+                let encoded = serde_json::to_string(&denied).unwrap();
+                assert_eq!(encoded.contains("WEB_WORK_ARGUMENTS_INVALID"), exposed);
+                assert!(!encoded.contains("private-secret"));
+                assert!(!root.exists());
                 if let Some(tool) = tool {
                     let schema = &tool["inputSchema"];
                     assert_eq!(schema["additionalProperties"], false);
@@ -17527,8 +17552,6 @@ hello world"
                 }
             }
         }
-        let root = std::env::temp_dir().join(format!("catdesk-web-work-mcp-{}", Uuid::new_v4()));
-        let root_str = root.to_string_lossy();
         let request = tool_call_request(
             WEB_WORK_REQUEST_TOOL,
             json!({
@@ -17583,7 +17606,7 @@ hello world"
                 .contains("WEB_WORK_CONTROL_UNAVAILABLE")
         );
         assert!(!root.exists());
-        let unavailable = handle_tools_call(
+        let multi_tools = handle_tools_call(
             &request,
             &root_str,
             0,
@@ -17593,16 +17616,21 @@ hello world"
             &None,
         )
         .await;
-        assert_tool_error("web request mode gate", &unavailable);
+        assert_tool_error(
+            "web request multi-tools rejects target override",
+            &multi_tools,
+        );
         assert!(
-            serde_json::to_string(&unavailable.result)
+            serde_json::to_string(&multi_tools.result)
                 .unwrap()
-                .contains("Unknown tool")
+                .contains("WEB_WORK_ARGUMENTS_INVALID")
         );
     }
 
     #[tokio::test]
-    async fn web_work_resolve_is_supervisor_only_and_caller_reported() {
+    async fn web_work_resolve_follows_supervisor_modes_and_is_caller_reported() {
+        let root = std::env::temp_dir().join(format!("catdesk-web-resolve-mcp-{}", Uuid::new_v4()));
+        let root_str = root.to_string_lossy();
         let list = JsonRpcRequest {
             jsonrpc: "2.0".into(),
             id: Some(json!("web-work-resolve-list")),
@@ -17620,9 +17648,26 @@ hello world"
                 let tool = tools
                     .iter()
                     .find(|tool| tool["name"] == WEB_WORK_RESOLVE_TOOL);
-                let exposed =
-                    mode.computer_enabled() && matches!(tool_mode, ToolMode::SupervisorOnly);
+                let exposed = mode.computer_enabled() && tool_mode.supervisor_tools_enabled();
                 assert_eq!(tool.is_some(), exposed);
+                let denied = handle_tools_call(
+                    &tool_call_request(
+                        WEB_WORK_RESOLVE_TOOL,
+                        json!({"workspace":"C:/private-secret"}),
+                    ),
+                    &root_str,
+                    0,
+                    mode,
+                    tool_mode,
+                    false,
+                    &None,
+                )
+                .await;
+                assert_tool_error("web resolve closed scope/mode", &denied);
+                let encoded = serde_json::to_string(&denied).unwrap();
+                assert_eq!(encoded.contains("WEB_WORK_ARGUMENTS_INVALID"), exposed);
+                assert!(!encoded.contains("private-secret"));
+                assert!(!root.exists());
                 if let Some(tool) = tool {
                     let schema = &tool["inputSchema"];
                     assert_eq!(schema["additionalProperties"], false);
@@ -17649,8 +17694,6 @@ hello world"
                 }
             }
         }
-        let root = std::env::temp_dir().join(format!("catdesk-web-resolve-mcp-{}", Uuid::new_v4()));
-        let root_str = root.to_string_lossy();
         let response = handle_tools_call(
             &tool_call_request(
                 WEB_WORK_RESOLVE_TOOL,

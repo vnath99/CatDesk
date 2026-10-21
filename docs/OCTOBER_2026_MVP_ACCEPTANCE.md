@@ -1,5 +1,26 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 20 Web tool serving parity (SOURCE; MVP PARTIAL)
+
+The five existing `catdesk_web_work_request`, `catdesk_web_work_resolve` and
+`catdesk_web_context_{capture,configure,observe}` tools now use the existing
+supervisor-mode predicate for both catalog and dispatch. They are available
+in Computer/Both with Multi Tools or Supervisor Only. Read Only and Browser
+Only still refuse them. Exact project generation/digest witnesses, closed
+schemas, target CAS, per-project work ownership and disclosure/install guards
+are unchanged; queue package read/publication tools remain Supervisor Only.
+No caller identity or task completion is inferred from tool access.
+
+The three existing Web mode regressions fail before the fix and pass afterward,
+covering catalog/dispatch agreement, invalid scope refusal, no state creation
+and private-error redaction. The broader initial run passes 1,538 with one
+outdated exact-catalog expectation, which is updated for these five tools.
+The final full main suite passes **1,539 / 28 ignored**; strict all-target,
+all-feature Clippy, formatting and diff checks pass. The selected stopped
+development package remains v26 until a matched update is verified.
+Private dated evidence: parent `checkpoints/web-serving-parity-oct20`.
+Connector HTTP 429 and protected installation remain independent live gates.
+
 ## October 20 optimized status verification (READ-ONLY; MVP PARTIAL)
 
 The existing release profile resolves the debug aggregate-reporting delay
