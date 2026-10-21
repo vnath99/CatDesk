@@ -1,5 +1,23 @@
 # CatDesk — Important Command Reference
 
+## October 21 per-project standalone review discovery (SOURCE)
+
+The existing independent Wake source binding still names the CatDesk control
+workspace. Its inbox now accepts registered sibling-project records, each with
+its own matching registry/Wake target and generation cutoff. All fresh records,
+including CatDesk, require the fixed `.catdesk/projects/projects.json` pair.
+No new source selector, browser profile, recurring job or CLI dispatch layer is
+needed. Existing history and receipts are not rewritten.
+
+Per-record mapping, schema, proof and publication failures persist redacted
+attention with a project prefix and allow valid siblings to proceed. Malformed
+duplicates hold all recognizable copies of that event ID. A whole invalid JSON
+document or shared persistence failure still refuses discovery. Completed
+sibling reviews require their own bound contract/artifacts; the old CatDesk
+missing-contract exception grants no sibling authority. Use a matched app/Wake
+package before claiming this behavior from an installed runtime. Source
+regressions pass; current development v28 remains unchanged pending update.
+
 ## October 20 Web orchestration tools in Multi Tools (SOURCE)
 
 Computer/Both with **Multi Tools** now exposes and dispatches the same five

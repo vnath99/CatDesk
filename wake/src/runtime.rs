@@ -3454,6 +3454,7 @@ mod bootstrap_runtime_tests {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ReviewSource {
     pub schema_version: u32,
+    /// V1 names the CatDesk control source; records route by their registered project.
     pub project_id: String,
     pub workspace: String,
 }
@@ -3479,6 +3480,7 @@ struct ReviewDiscoveryAttention {
     inbox_record_sha256: String,
     record_id_prefix: String,
     session_id_prefix: String,
+    project_id_prefix: String,
     reason: String,
     updated_utc: u64,
 }
@@ -3488,12 +3490,56 @@ fn hold_review_discovery_record(store: &Store, record: &ReviewRecord, reason: &s
     // never supply a path component. Each rejected record keeps its own
     // durable attention even when a later, unrelated review is actionable.
     let bytes = serde_json::to_vec(record).map_err(|_| "REVIEW_RECORD_SERIALIZATION_FAILED")?;
-    let digest = format!("{:x}", Sha256::digest(&bytes));
+    hold_review_discovery_fields(
+        store,
+        &bytes,
+        &record.record_id,
+        &record.session_id,
+        &record.project_id,
+        reason,
+    )
+}
+
+fn hold_invalid_review_discovery_record(store: &Store, record: &serde_json::Value) -> Result<()> {
+    let bytes = serde_json::to_vec(record).map_err(|_| "REVIEW_RECORD_SERIALIZATION_FAILED")?;
+    let field = |key| {
+        record
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("")
+    };
+    hold_review_discovery_fields(
+        store,
+        &bytes,
+        field("recordId"),
+        field("sessionId"),
+        field("projectId"),
+        "WAKE_REVIEW_RECORD_INVALID",
+    )
+}
+
+fn hold_review_discovery_fields(
+    store: &Store,
+    bytes: &[u8],
+    record_id: &str,
+    session_id: &str,
+    project_id: &str,
+    reason: &str,
+) -> Result<()> {
+    let digest = format!("{:x}", Sha256::digest(bytes));
+    let prefix = |value: &str| {
+        if crate::protocol::valid_id(value) {
+            value.chars().take(128).collect::<String>()
+        } else {
+            "INVALID".into()
+        }
+    };
     let attention = ReviewDiscoveryAttention {
         schema_version: 1,
         inbox_record_sha256: digest.clone(),
-        record_id_prefix: record.record_id.chars().take(128).collect(),
-        session_id_prefix: record.session_id.chars().take(128).collect(),
+        record_id_prefix: prefix(record_id),
+        session_id_prefix: prefix(session_id),
+        project_id_prefix: prefix(project_id),
         reason: if reason.len() <= 128 {
             reason.to_owned()
         } else {
@@ -3588,19 +3634,49 @@ fn discover_review_events(store: &Store, activation: &Activation) -> Result<usiz
     if !metadata.is_file() || metadata.len() > 4 * 1024 * 1024 {
         return Err("REVIEW_SOURCE_INBOX_INVALID".into());
     }
-    let records: Vec<ReviewRecord> = serde_json::from_slice(
-        &std::fs::read(&inbox).map_err(|_| "REVIEW_SOURCE_INBOX_UNAVAILABLE")?,
-    )
-    .map_err(|_| "REVIEW_SOURCE_INBOX_INVALID")?;
-    let (target, cutoff) = review_cutoff(store, activation, &source.project_id)?;
+    let mut bytes = Vec::new();
+    File::open(&inbox)
+        .map_err(|_| "REVIEW_SOURCE_INBOX_UNAVAILABLE")?
+        .take(4 * 1024 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "REVIEW_SOURCE_INBOX_UNAVAILABLE")?;
+    if bytes.len() > 4 * 1024 * 1024 {
+        return Err("REVIEW_SOURCE_INBOX_INVALID".into());
+    }
+    let records: Vec<serde_json::Value> =
+        serde_json::from_slice(&bytes).map_err(|_| "REVIEW_SOURCE_INBOX_INVALID")?;
+    let mut project_cutoffs = BTreeMap::<String, Result<(Target, u64)>>::new();
     let mut counts = BTreeMap::<String, usize>::new();
-    let mut candidates = Vec::new();
-    for record in records {
-        if record.schema_version != 1
-            || !record.unread
-            || record.project_id != source.project_id
-            || record.created_at_unix < cutoff
+    // IDs are immutable across the inbox. Count recognizable active copies
+    // before decoding so a malformed duplicate cannot let a valid copy win.
+    for record in &records {
+        if record["schemaVersion"].as_u64() == Some(1)
+            && record["unread"].as_bool() == Some(true)
+            && matches!(
+                (record["state"].as_str(), record["nextAction"].as_str()),
+                (Some("COMPLETED_VERIFIED"), Some("independent_final_review"))
+                    | (
+                        Some("WAITING_FOR_CHATGPT"),
+                        Some("chatgpt_decision_required")
+                    )
+            )
+            && let Some(id) = record["recordId"]
+                .as_str()
+                .filter(|id| crate::protocol::valid_id(id))
         {
+            *counts.entry(id.into()).or_default() += 1;
+        }
+    }
+    let mut candidates = Vec::new();
+    for raw in records {
+        let record: ReviewRecord = match serde_json::from_value(raw.clone()) {
+            Ok(record) => record,
+            Err(_) => {
+                hold_invalid_review_discovery_record(store, &raw)?;
+                continue;
+            }
+        };
+        if record.schema_version != 1 || !record.unread {
             continue;
         }
         let event_type = match (record.state.as_str(), record.next_action.as_str()) {
@@ -3608,7 +3684,36 @@ fn discover_review_events(store: &Store, activation: &Activation) -> Result<usiz
             ("WAITING_FOR_CHATGPT", "chatgpt_decision_required") => "engineering_attention",
             _ => continue,
         };
-        *counts.entry(record.record_id.clone()).or_default() += 1;
+        if !crate::protocol::valid_id(&record.project_id)
+            || !crate::protocol::valid_id(&record.record_id)
+            || !crate::protocol::valid_id(&record.session_id)
+            || record.created_at_unix == 0
+        {
+            hold_review_discovery_record(store, &record, "WAKE_REVIEW_RECORD_INVALID")?;
+            continue;
+        }
+        let (target, cutoff) = match project_cutoffs
+            .entry(record.project_id.clone())
+            .or_insert_with(|| review_cutoff(store, activation, &record.project_id))
+            .clone()
+        {
+            Ok(binding) => binding,
+            Err(reason) => {
+                hold_review_discovery_record(store, &record, &reason)?;
+                continue;
+            }
+        };
+        if record.created_at_unix < cutoff {
+            continue;
+        }
+        if let Err(reason) = crate::review_binding::validate_registered_review_target(
+            &workspace,
+            &record.project_id,
+            &target,
+        ) {
+            hold_review_discovery_record(store, &record, &reason)?;
+            continue;
+        }
         if event_type == "review_ready"
             && let Err(reason) = crate::review_binding::validate_completed_review(
                 &workspace,
@@ -3622,10 +3727,10 @@ fn discover_review_events(store: &Store, activation: &Activation) -> Result<usiz
             hold_review_discovery_record(store, &record, &reason)?;
             continue;
         }
-        candidates.push((record, event_type));
+        candidates.push((record, event_type, target));
     }
     let mut produced = 0usize;
-    for (record, event_type) in candidates {
+    for (record, event_type, target) in candidates {
         if counts.get(&record.record_id).copied() != Some(1) {
             hold_review_discovery_record(store, &record, "WAKE_REVIEW_DUPLICATE_RECORD_ID")?;
             continue;
@@ -3645,12 +3750,16 @@ fn discover_review_events(store: &Store, activation: &Activation) -> Result<usiz
             hold_review_discovery_record(store, &record, &reason)?;
             continue;
         }
-        store.produce_review_expected(
+        if let Err(reason) = store.produce_discovered_review_expected(
+            &workspace,
             &record.record_id,
             &record.project_id,
             event_type,
             &target,
-        )?;
+        ) {
+            hold_review_discovery_record(store, &record, &reason)?;
+            continue;
+        }
         produced += 1;
     }
     Ok(produced)
@@ -3709,6 +3818,15 @@ mod review_discovery_tests {
             .expect("history")
             .changed_utc;
         set_review_source(&store, workspace.to_str().expect("workspace text")).expect("source");
+        std::fs::create_dir_all(workspace.join(".catdesk/projects")).unwrap();
+        atomic(
+            &workspace.join(".catdesk/projects/projects.json"),
+            &serde_json::json!({
+                "schemaVersion":1,"projects":[{"projectId":"catdesk",
+                "chatgptTargetUrl":target.url,"chatgptTargetSha256":target.digest}]
+            }),
+        )
+        .unwrap();
         let activation = Activation {
             schema_version: 1,
             owner: "CatDeskWake".into(),
@@ -3802,6 +3920,281 @@ mod review_discovery_tests {
             1
         );
         assert_eq!(store.events().expect("replayed events").len(), 1);
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    fn completed_project_record(
+        workspace: &Path,
+        project: &str,
+        session: &str,
+        created: u64,
+    ) -> ReviewRecord {
+        let record_id = crate::review_binding::test_support::completed_sol_for_project(
+            workspace, project, session, created,
+        );
+        ReviewRecord {
+            schema_version: 1,
+            record_id,
+            project_id: project.into(),
+            session_id: session.into(),
+            state: "COMPLETED_VERIFIED".into(),
+            next_action: "independent_final_review".into(),
+            reference: "artifacts/completion.json".into(),
+            created_at_unix: created,
+            unread: true,
+        }
+    }
+
+    #[test]
+    fn standalone_discovery_routes_registered_projects_and_isolates_blocked_records() {
+        let (base, workspace, store, activation, changed) = fixture();
+        for project in ["wake2", "portfoliodesk", "byovd", "bug-bounty"] {
+            store
+                .set_target(project, 0, &format!("https://chatgpt.com/c/{project}"))
+                .unwrap();
+        }
+        store
+            .set_target("wake2", 1, "https://chatgpt.com/c/wake2-current")
+            .unwrap();
+        let mut config = store.config().unwrap();
+        config
+            .history
+            .iter_mut()
+            .rev()
+            .find(|change| change.project_id == "wake2")
+            .unwrap()
+            .changed_utc = changed + 100;
+        atomic(&store.root().join("config.json"), &config).unwrap();
+        std::fs::create_dir_all(workspace.join(".catdesk/projects")).unwrap();
+        let mut registrations: Vec<_> = ["catdesk", "wake2", "portfoliodesk", "byovd"].iter().map(|project| {
+            let target = &config.targets[*project];
+            serde_json::json!({"projectId":project,"chatgptTargetUrl":target.url,"chatgptTargetSha256":target.digest})
+        }).collect();
+        registrations[3]["chatgptTargetUrl"] = serde_json::json!("https://chatgpt.com/c/wrong");
+        let registry_path = workspace.join(".catdesk/projects/projects.json");
+        atomic(
+            &registry_path,
+            &serde_json::json!({"schemaVersion":1,"projects":registrations}),
+        )
+        .unwrap();
+        let mut records = vec![
+            completed_project_record(&workspace, "catdesk", "sol-catdesk", changed + 1),
+            completed_project_record(&workspace, "wake2", "sol-wake2", changed + 101),
+            completed_project_record(&workspace, "portfoliodesk", "sol-portfolio", changed + 1),
+        ];
+        for (project, id, created) in [
+            ("wake2", "stale-wake2", changed + 50),
+            ("byovd", "drifted-byovd", changed + 1),
+            ("bug-bounty", "unregistered-bug", changed + 1),
+        ] {
+            records.push(ReviewRecord {
+                schema_version: 1,
+                record_id: id.into(),
+                project_id: project.into(),
+                session_id: id.into(),
+                state: "WAITING_FOR_CHATGPT".into(),
+                next_action: "chatgpt_decision_required".into(),
+                reference: "attention".into(),
+                created_at_unix: created,
+                unread: true,
+            });
+        }
+        let legacy = workspace.join(".catdesk/autonomy/legacy-wake2");
+        std::fs::create_dir_all(&legacy).unwrap();
+        atomic(
+            &legacy.join("state.json"),
+            &serde_json::json!({
+                "schemaVersion":1,"sessionId":"legacy-wake2","state":"COMPLETED_VERIFIED",
+                "currentTaskId":null,"providerThreadId":null,"approvedContractHash":null,
+                "lastEventSequence":0,"active":false
+            }),
+        )
+        .unwrap();
+        records.push(ReviewRecord {
+            schema_version: 1,
+            record_id: "unbound-wake2".into(),
+            project_id: "wake2".into(),
+            session_id: "legacy-wake2".into(),
+            state: "COMPLETED_VERIFIED".into(),
+            next_action: "independent_final_review".into(),
+            reference: "artifacts/completion.json".into(),
+            created_at_unix: changed + 101,
+            unread: true,
+        });
+        let inbox = workspace.join(".catdesk/autonomy/review-inbox.json");
+        let mut raw_records = serde_json::to_value(&records).unwrap();
+        raw_records.as_array_mut().unwrap().push(serde_json::json!({
+            "schemaVersion":1,"recordId":"malformed-row","projectId":"byovd","sessionId":"malformed-row",
+            "state":"WAITING_FOR_CHATGPT","nextAction":"chatgpt_decision_required","reference":"attention",
+            "createdAtUnix":changed+1,"unread":true,"workspace":"C:/private-scope-override"
+        }));
+        atomic(&inbox, &raw_records).unwrap();
+        assert_eq!(discover_review_events(&store, &activation).unwrap(), 3);
+        let initial_events = store.events().unwrap();
+        assert_eq!(initial_events.len(), 3);
+        for event in &initial_events {
+            assert_eq!(event.event_type, "review_ready");
+            assert_eq!(
+                event.target_generation,
+                config.targets[&event.project_id].generation
+            );
+            assert!(event.message.contains(&format!(
+                "for project {} review record {}",
+                event.project_id, event.event_id
+            )));
+        }
+        let reasons = discovery_attention(&store);
+        assert!(
+            !serde_json::to_string(&reasons)
+                .unwrap()
+                .contains("private-scope-override")
+        );
+        for reason in [
+            "REVIEW_PROJECT_TARGET_MISMATCH",
+            "REVIEW_PROJECT_NOT_REGISTERED",
+            "WAKE_SOL_REVIEW_PROJECT_BINDING_REQUIRED",
+            "WAKE_REVIEW_RECORD_INVALID",
+        ] {
+            assert!(
+                reasons.iter().any(|entry| entry["reason"] == reason),
+                "missing {reason}"
+            );
+        }
+        assert!(
+            !reasons
+                .iter()
+                .any(|entry| entry["recordIdPrefix"] == "stale-wake2")
+        );
+        assert_eq!(discover_review_events(&store, &activation).unwrap(), 3);
+        assert_eq!(store.events().unwrap(), initial_events);
+
+        // A publication conflict must leave that event unchanged and still
+        // permit fresh reviews from both sibling projects in this same scan.
+        let next = vec![
+            completed_project_record(&workspace, "catdesk", "conflict-catdesk", changed + 2),
+            completed_project_record(&workspace, "wake2", "next-wake2", changed + 102),
+            completed_project_record(&workspace, "portfoliodesk", "next-portfolio", changed + 2),
+        ];
+        let conflict = store
+            .produce(
+                &next[0].record_id,
+                "catdesk",
+                "test",
+                "Existing immutable event",
+            )
+            .unwrap();
+        atomic(&inbox, &next).unwrap();
+        assert_eq!(discover_review_events(&store, &activation).unwrap(), 2);
+        assert!(store.events().unwrap().contains(&conflict));
+        assert_eq!(store.events().unwrap().len(), 6);
+
+        // A duplicate registration blocks only that project's fresh review.
+        registrations.push(registrations[1].clone());
+        atomic(
+            &registry_path,
+            &serde_json::json!({"schemaVersion":1,"projects":registrations}),
+        )
+        .unwrap();
+        let fresh = vec![
+            completed_project_record(&workspace, "catdesk", "fresh-catdesk", changed + 3),
+            completed_project_record(&workspace, "wake2", "fresh-wake2", changed + 103),
+            completed_project_record(&workspace, "portfoliodesk", "fresh-portfolio", changed + 3),
+        ];
+        atomic(&inbox, &fresh).unwrap();
+        assert_eq!(discover_review_events(&store, &activation).unwrap(), 2);
+        assert_eq!(store.events().unwrap().len(), 8);
+        assert!(
+            discovery_attention(&store)
+                .iter()
+                .any(|entry| entry["reason"] == "REVIEW_PROJECT_REGISTRATION_AMBIGUOUS")
+        );
+        registrations.pop();
+        atomic(
+            &registry_path,
+            &serde_json::json!({"schemaVersion":1,"projects":registrations}),
+        )
+        .unwrap();
+        let expected = config.targets["wake2"].clone();
+        crate::review_binding::validate_registered_review_target(&workspace, "wake2", &expected)
+            .unwrap();
+        registrations[1]["chatgptTargetSha256"] = serde_json::json!("f".repeat(64));
+        atomic(
+            &registry_path,
+            &serde_json::json!({"schemaVersion":1,"projects":registrations}),
+        )
+        .unwrap();
+        assert_eq!(
+            store
+                .produce_discovered_review_expected(
+                    &workspace,
+                    "late-registry",
+                    "wake2",
+                    "engineering_attention",
+                    &expected
+                )
+                .unwrap_err(),
+            "REVIEW_PROJECT_TARGET_MISMATCH"
+        );
+        registrations[1]["chatgptTargetSha256"] = serde_json::json!(expected.digest);
+        atomic(
+            &registry_path,
+            &serde_json::json!({"schemaVersion":1,"projects":registrations}),
+        )
+        .unwrap();
+        store
+            .set_target(
+                "wake2",
+                expected.generation,
+                "https://chatgpt.com/c/wake2-replaced",
+            )
+            .unwrap();
+        assert_eq!(
+            store
+                .produce_discovered_review_expected(
+                    &workspace,
+                    "late-target",
+                    "wake2",
+                    "engineering_attention",
+                    &expected
+                )
+                .unwrap_err(),
+            "TARGET_EXPECTATION_MISMATCH"
+        );
+        assert_eq!(store.events().unwrap().len(), 8);
+
+        let valid = serde_json::to_value(completed_project_record(
+            &workspace,
+            "catdesk",
+            "schema-duplicate",
+            changed + 4,
+        ))
+        .unwrap();
+        let mut invalid = valid.clone();
+        invalid["workspace"] = serde_json::json!("C:/private-duplicate");
+        for order in [vec![valid.clone(), invalid.clone()], vec![invalid, valid]] {
+            atomic(&inbox, &order).unwrap();
+            assert_eq!(discover_review_events(&store, &activation).unwrap(), 0);
+            assert_eq!(store.events().unwrap().len(), 8);
+        }
+        assert!(
+            !serde_json::to_string(&discovery_attention(&store))
+                .unwrap()
+                .contains("private-duplicate")
+        );
+        std::fs::remove_file(&registry_path).unwrap();
+        assert_eq!(
+            store
+                .produce_discovered_review_expected(
+                    &workspace,
+                    "missing-registry",
+                    "catdesk",
+                    "engineering_attention",
+                    &config.targets["catdesk"]
+                )
+                .unwrap_err(),
+            "REVIEW_PROJECT_REGISTRY_INVALID"
+        );
+        assert_eq!(store.events().unwrap().len(), 8);
         let _ = std::fs::remove_dir_all(base);
     }
 

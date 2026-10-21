@@ -801,7 +801,34 @@ impl Store {
         event_type: &str,
         expected: &Target,
     ) -> Result<Event> {
-        if !matches!(event_type, "review_ready" | "engineering_attention") {
+        self.produce_review_expected_in(id, project, event_type, expected, None)
+    }
+
+    /// Independent discovery rechecks the fixed source registry while holding
+    /// the same queue lock as the final target CAS and event publication.
+    pub fn produce_discovered_review_expected(
+        &self,
+        workspace: &Path,
+        id: &str,
+        project: &str,
+        event_type: &str,
+        expected: &Target,
+    ) -> Result<Event> {
+        self.produce_review_expected_in(id, project, event_type, expected, Some(workspace))
+    }
+
+    fn produce_review_expected_in(
+        &self,
+        id: &str,
+        project: &str,
+        event_type: &str,
+        expected: &Target,
+        workspace: Option<&Path>,
+    ) -> Result<Event> {
+        if !valid_id(id)
+            || !valid_id(project)
+            || !matches!(event_type, "review_ready" | "engineering_attention")
+        {
             return Err("QUEUE_EVENT_INVALID".into());
         }
         let message = format!(
@@ -812,7 +839,11 @@ impl Store {
         let legacy = (project == "catdesk").then(|| format!(
             "CatDesk Wake: {event_type} for CatDesk review record {id}. Review the exact record and current wake/GUI repair plan through CatDesk. Ordinary autonomy remains frozen until wake acceptance completes."
         ));
-        self.produce_bound(
+        let _lock = self.lock()?;
+        if let Some(workspace) = workspace {
+            crate::review_binding::validate_registered_review_target(workspace, project, expected)?;
+        }
+        self.produce_bound_locked(
             id,
             project,
             event_type,
@@ -835,6 +866,18 @@ impl Store {
             return Err("QUEUE_EVENT_INVALID".into());
         }
         let _lock = self.lock()?;
+        self.produce_bound_locked(id, project, event_type, message, expected, legacy_message)
+    }
+
+    fn produce_bound_locked(
+        &self,
+        id: &str,
+        project: &str,
+        event_type: &str,
+        message: &str,
+        expected: Option<&Target>,
+        legacy_message: Option<&str>,
+    ) -> Result<Event> {
         if let Some(expected) = expected
             && self.read_config()?.targets.get(project) != Some(expected)
         {

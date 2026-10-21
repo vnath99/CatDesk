@@ -1,5 +1,45 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 standalone multi-project discovery (SOURCE; MVP PARTIAL)
+
+Independent Wake discovery now routes records from its configured CatDesk
+control inbox by each record's project. Each uses its own current Wake target,
+history/activation cutoff and matching fixed project-registry URL/digest.
+The registry pair is checked again under the existing Wake queue lock with
+the final target CAS and event write. No new scheduler or registration lock is
+introduced. Missing, ambiguous or drifted registrations hold that record.
+Fresh CatDesk discovery also requires its registry pair; existing queued and
+archived events remain preserved.
+
+Completed reviews still pass independent artifact/contract validation, twice
+around the scan. The historical missing-contract allowance stays CatDesk-only;
+it cannot authenticate a sibling project's completion. Malformed rows are
+isolated with bounded, redacted, per-project attention instead of rejecting the
+whole syntactically valid inbox. IDs are counted before row decoding so either
+ordering of a malformed duplicate holds the valid copy too. Unparseable shared
+JSON and shared persistence failures still refuse the scan. Inbox and registry
+reads are bounded; no raw malformed payload is persisted in attention.
+
+One disposable end-to-end fixture reproduces the old one-of-three routing
+failure and malformed-row global failure, then verifies three complete bound
+reviews, distinct generations/cutoffs, stale-record suppression, mapping drift,
+unregistered projects, unbound legacy siblings, queue conflicts, duplicate
+registrations, late registry/target changes and malformed duplicates in either
+order. Good siblings progress while rejected records remain held. Main CatDesk
+passes **1,539 / 28 ignored**; full Wake passes **295 library / 1 ignored** plus
+enabled integrations. Strict all-target/all-feature Clippy for both crates and
+format/diff checks pass. Private dated evidence:
+parent `checkpoints/web-review-discovery-oct21`.
+
+This is source verification. The last accepted development package is still
+v28 until the matched app/Wake update and readback finish. No live review event,
+browser, recurring automation or Wake runtime was started. A separate read-only
+native queue status preserves its registry and shows seven historical jobs:
+four native zero exits, two failed and one paused; only one has verification
+and a review package. This does not prove a current native development/review/
+next-task cycle. Existing native chats are untouched. Production, exact remote
+CI, connector and genuine natural-cycle acceptance remain open.
+
 ## October 20 natural review producer trace (SOURCE; MVP PARTIAL)
 
 Both authentic producers still generated an outdated CatDesk message telling

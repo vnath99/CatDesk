@@ -1,5 +1,29 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-21 sibling-project discovery implemented (source only)
+
+The independent inbox path no longer filters CatDesk records only. It observes
+each project's target/cutoff, verifies its registry URL/digest and repeats that
+check under the existing Wake queue lock before exact-target publication.
+Malformed, misbound, stale, duplicate and conflicting records cannot retarget a
+review or stop valid siblings. Completed-review artifact validation remains,
+and the missing-contract legacy exception is restricted to CatDesk. Whole
+invalid JSON/shared persistence failures remain a scan-wide refusal.
+
+The disposable fixture fails before both routing/row-isolation corrections and
+passes afterward, including three actual bound review fixtures, distinct target
+generations, independent cutoffs, registration ambiguity and late target drift.
+Main 1,539 / 28 ignored, Wake 295 library / 1 ignored plus integrations, both
+strict Clippy checks and format/diff pass. Dated private evidence: parent
+`checkpoints/web-review-discovery-oct21`. Current v28 is unchanged until matched
+package readback; no live native/Wake event or new native session was created.
+
+Read-only ordinary native queue status preserves all registrations: seven jobs,
+four native zero exits, two failed, one paused; one verified/package-bound job.
+Those historical receipts are not current natural-cycle acceptance, and no
+original native goal or paused queue job was resumed/replaced. The optional
+managed Sol isolation lane remains separate from the approved native CLI route.
+
 ## 2026-10-20 natural producer trace and scoped notifications (source only)
 
 Both direct and independent inbox producers emitted an obsolete global-freeze
