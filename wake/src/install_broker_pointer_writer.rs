@@ -45,6 +45,8 @@ const INVALID_HANDLE_VALUE: *mut c_void = -1isize as *mut c_void;
 #[path = "install_broker_pointer_writer_v2.rs"]
 mod offline_v2;
 pub use offline_v2::create_first_protected_pointer_v2;
+#[cfg(test)]
+pub(crate) use offline_v2::create_offline_pointer_fixture;
 
 #[repr(C)]
 struct UnicodeString {

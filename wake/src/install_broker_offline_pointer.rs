@@ -9,6 +9,186 @@ const MAX_POINTER_V2_BYTES: usize = 8 * 1024;
 const ATTEMPT_DOMAIN: &[u8] = b"CatDeskWakeOfflinePointerAttemptV2\0";
 const CREATED_DOMAIN: &[u8] = b"CatDeskWakeOfflinePointerCreatedV2\0";
 
+fn valid_pointer_binding(
+    binding: &OfflinePointerBindingV2,
+    intent: &OfflineIntentRecordV2,
+    stage: &StageBindingV2,
+    plan_sha256: &str,
+) -> bool {
+    let root = &intent.protected_root;
+    let objects = [
+        &root.full,
+        &intent.predecessor_pointer.full,
+        &stage.staging_directory.full,
+        &stage.packages_directory.full,
+        &stage.candidate_directory.full,
+        &stage.manifest_file.full,
+        &stage.artifacts[0].full,
+        &stage.artifacts[1].full,
+        &stage.artifacts[2].full,
+        &stage.artifacts[3].full,
+    ];
+    crate::install_broker_offline_v2::valid_object(&binding.pointer_file)
+        && binding.pointer_file.full.volume_serial == root.full.volume_serial
+        && binding.pointer_file.legacy.volume_serial == root.legacy.volume_serial
+        && !objects.contains(&&binding.pointer_file.full)
+        && binding.pointer_sha256 == plan_sha256
+}
+
+fn pointer_plan_for(
+    intent: &OfflineIntentRecordV2,
+    intent_digest: &str,
+    stage: &StageBindingV2,
+) -> Result<OfflinePointerPlanV2> {
+    let data = PointerDataV2 {
+        schema_version: 2,
+        purpose: "catdesk-wake-offline-protected-pointer",
+        install_generation: 1,
+        anchor_id: intent.anchor_id.clone(),
+        approval_id: intent.approval_id.clone(),
+        intent_record_sha256: intent_digest.into(),
+        protected_root: intent.protected_root.clone(),
+        predecessor_package_id: intent.predecessor_package_id.clone(),
+        predecessor_pointer: intent.predecessor_pointer.clone(),
+        predecessor_pointer_sha256: intent.predecessor_pointer_sha256.clone(),
+        package_id: intent.package_id.clone(),
+        manifest_sha256: intent.manifest_sha256.clone(),
+        stage_binding: stage.clone(),
+    };
+    let canonical_bytes =
+        serde_json::to_vec(&data).map_err(|_| "WAKE_OFFLINE_POINTER_PLAN_INVALID")?;
+    if canonical_bytes.is_empty() || canonical_bytes.len() > MAX_POINTER_V2_BYTES {
+        return Err("WAKE_OFFLINE_POINTER_PLAN_INVALID".into());
+    }
+    let sha256 = format!("{:x}", Sha256::digest(&canonical_bytes));
+    Ok(OfflinePointerPlanV2 {
+        canonical_bytes,
+        sha256,
+    })
+}
+
+fn expected_attempt_for(
+    intent: &OfflineIntentRecordV2,
+    intent_digest: &str,
+    published_digest: &str,
+    plan: &OfflinePointerPlanV2,
+) -> PointerNamespaceAttemptV2 {
+    PointerNamespaceAttemptV2 {
+        schema_version: 2,
+        purpose: "catdesk-wake-offline-pointer-attempt".into(),
+        install_generation: 1,
+        intent_record_sha256: intent_digest.into(),
+        published_record_sha256: published_digest.into(),
+        protected_root: intent.protected_root.clone(),
+        predecessor_pointer: intent.predecessor_pointer.clone(),
+        predecessor_pointer_sha256: intent.predecessor_pointer_sha256.clone(),
+        closed_store_inventory_sha256: intent.closed_store_inventory_sha256.clone(),
+        quarantined_launch_entrypoints_sha256: intent.quarantined_launch_entrypoints_sha256.clone(),
+        planned_pointer_sha256: plan.sha256.clone(),
+    }
+}
+
+fn expected_created_for(
+    intent: &OfflineIntentRecordV2,
+    intent_digest: &str,
+    published_digest: &str,
+    attempt_digest: &str,
+    binding: &OfflinePointerBindingV2,
+    stage: &StageBindingV2,
+) -> PointerCreatedRecordV2 {
+    PointerCreatedRecordV2 {
+        schema_version: 2,
+        purpose: "catdesk-wake-offline-pointer-created".into(),
+        install_generation: 1,
+        intent_record_sha256: intent_digest.into(),
+        published_record_sha256: published_digest.into(),
+        pointer_attempt_sha256: attempt_digest.into(),
+        protected_root: intent.protected_root.clone(),
+        pointer_binding: binding.clone(),
+        stage_binding: stage.clone(),
+    }
+}
+
+/// Both journal pins remain live through signature admission and physical
+/// pointer/package reconstruction. No file creation or rename occurs here.
+pub(super) struct PointerRecoveryRecordsV2 {
+    attempt_file: File,
+    created_file: File,
+    attempt: PointerNamespaceAttemptV2,
+    created: PointerCreatedRecordV2,
+    attempt_digest: String,
+    created_digest: String,
+}
+
+impl PointerRecoveryRecordsV2 {
+    pub(super) fn open(
+        root: &OwnedHandle,
+        intent: &OfflineIntentRecordV2,
+        intent_digest: &str,
+        published_digest: &str,
+        stage: &StageBindingV2,
+    ) -> Result<Self> {
+        let mut attempt_file = open_optional(root, &pointer_attempt_name(1))?
+            .ok_or("WAKE_OFFLINE_POINTER_ATTENTION")?;
+        let (attempt, attempt_digest) = read_attempt(&mut attempt_file)?;
+        let plan = pointer_plan_for(intent, intent_digest, stage)?;
+        if attempt != expected_attempt_for(intent, intent_digest, published_digest, &plan) {
+            return Err("WAKE_OFFLINE_POINTER_ATTEMPT_INVALID".into());
+        }
+        let mut created_file =
+            open_optional(root, &record_name(1, InstallPhaseV1::PointerSwitched))?
+                .ok_or("WAKE_OFFLINE_POINTER_ATTENTION")?;
+        let (created, created_digest) = read_created(&mut created_file)?;
+        if !valid_pointer_binding(&created.pointer_binding, intent, stage, plan.sha256())
+            || created
+                != expected_created_for(
+                    intent,
+                    intent_digest,
+                    published_digest,
+                    &attempt_digest,
+                    &created.pointer_binding,
+                    stage,
+                )
+        {
+            return Err("WAKE_OFFLINE_POINTER_RECORD_INVALID".into());
+        }
+        let mut result = Self {
+            attempt_file,
+            created_file,
+            attempt,
+            created,
+            attempt_digest,
+            created_digest,
+        };
+        result.revalidate(root)?;
+        Ok(result)
+    }
+
+    pub(super) fn revalidate(&mut self, root: &OwnedHandle) -> Result<()> {
+        if read_attempt(&mut self.attempt_file)?
+            != (self.attempt.clone(), self.attempt_digest.clone())
+            || read_created(&mut self.created_file)?
+                != (self.created.clone(), self.created_digest.clone())
+        {
+            return Err("WAKE_OFFLINE_POINTER_RECORD_INVALID".into());
+        }
+        if open_optional(root, "current-00000000000000000001.pending.json")?.is_some() {
+            return Err("WAKE_OFFLINE_POINTER_ATTENTION".into());
+        }
+        Ok(())
+    }
+
+    pub(super) fn binding(&self) -> &OfflinePointerBindingV2 {
+        &self.created.pointer_binding
+    }
+    pub(super) fn attempt_digest(&self) -> &str {
+        &self.attempt_digest
+    }
+    pub(super) fn created_digest(&self) -> &str {
+        &self.created_digest
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct OfflinePointerBindingV2 {
@@ -139,31 +319,11 @@ impl OfflineLedgerLeaseV2<'_, '_> {
         Ok(())
     }
     fn pointer_plan(&self) -> Result<OfflinePointerPlanV2> {
-        let data = PointerDataV2 {
-            schema_version: 2,
-            purpose: "catdesk-wake-offline-protected-pointer",
-            install_generation: 1,
-            anchor_id: self.intent.anchor_id.clone(),
-            approval_id: self.intent.approval_id.clone(),
-            intent_record_sha256: self.intent_digest.clone(),
-            protected_root: self.intent.protected_root.clone(),
-            predecessor_package_id: self.intent.predecessor_package_id.clone(),
-            predecessor_pointer: self.intent.predecessor_pointer.clone(),
-            predecessor_pointer_sha256: self.intent.predecessor_pointer_sha256.clone(),
-            package_id: self.intent.package_id.clone(),
-            manifest_sha256: self.intent.manifest_sha256.clone(),
-            stage_binding: self.stage_binding_for_recovery()?.clone(),
-        };
-        let canonical_bytes =
-            serde_json::to_vec(&data).map_err(|_| "WAKE_OFFLINE_POINTER_PLAN_INVALID")?;
-        if canonical_bytes.is_empty() || canonical_bytes.len() > MAX_POINTER_V2_BYTES {
-            return Err("WAKE_OFFLINE_POINTER_PLAN_INVALID".into());
-        }
-        let sha256 = format!("{:x}", Sha256::digest(&canonical_bytes));
-        Ok(OfflinePointerPlanV2 {
-            canonical_bytes,
-            sha256,
-        })
+        pointer_plan_for(
+            &self.intent,
+            &self.intent_digest,
+            self.stage_binding_for_recovery()?,
+        )
     }
 
     pub(crate) fn checked_initial_pointer_plan(&self) -> Result<OfflinePointerPlanV2> {
@@ -223,22 +383,7 @@ impl OfflineLedgerLeaseV2<'_, '_> {
         plan: &OfflinePointerPlanV2,
         published_digest: String,
     ) -> PointerNamespaceAttemptV2 {
-        PointerNamespaceAttemptV2 {
-            schema_version: 2,
-            purpose: "catdesk-wake-offline-pointer-attempt".into(),
-            install_generation: 1,
-            intent_record_sha256: self.intent_digest.clone(),
-            published_record_sha256: published_digest,
-            protected_root: self.intent.protected_root.clone(),
-            predecessor_pointer: self.intent.predecessor_pointer.clone(),
-            predecessor_pointer_sha256: self.intent.predecessor_pointer_sha256.clone(),
-            closed_store_inventory_sha256: self.intent.closed_store_inventory_sha256.clone(),
-            quarantined_launch_entrypoints_sha256: self
-                .intent
-                .quarantined_launch_entrypoints_sha256
-                .clone(),
-            planned_pointer_sha256: plan.sha256.clone(),
-        }
+        expected_attempt_for(&self.intent, &self.intent_digest, &published_digest, plan)
     }
 
     /// Prepare one first-pointer namespace mutation. Admission is inherited
@@ -348,42 +493,23 @@ impl OfflineLedgerLeaseV2<'_, '_> {
         let plan = self.checked_initial_pointer_plan()?;
         self.check_initial_pointer_namespace(&plan, switched.published_mut(), false)?;
         let binding = switched.pointer_binding().clone();
-        let root = &self.intent.protected_root;
         let stage = self.stage_binding_for_recovery()?.clone();
-        let objects = [
-            &root.full,
-            &self.intent.predecessor_pointer.full,
-            &stage.staging_directory.full,
-            &stage.packages_directory.full,
-            &stage.candidate_directory.full,
-            &stage.manifest_file.full,
-            &stage.artifacts[0].full,
-            &stage.artifacts[1].full,
-            &stage.artifacts[2].full,
-            &stage.artifacts[3].full,
-        ];
-        if !crate::install_broker_offline_v2::valid_object(&binding.pointer_file)
-            || binding.pointer_file.full.volume_serial != root.full.volume_serial
-            || binding.pointer_file.legacy.volume_serial != root.legacy.volume_serial
-            || objects.contains(&&binding.pointer_file.full)
-            || binding.pointer_sha256 != plan.sha256
-        {
+        if !valid_pointer_binding(&binding, &self.intent, &stage, plan.sha256()) {
             return Err("WAKE_OFFLINE_POINTER_RECORD_INVALID".into());
         }
-        let expected = PointerCreatedRecordV2 {
-            schema_version: 2,
-            purpose: "catdesk-wake-offline-pointer-created".into(),
-            install_generation: 1,
-            intent_record_sha256: self.intent_digest.clone(),
-            published_record_sha256: self.exact_published_record()?,
-            pointer_attempt_sha256: self
-                .pointer_namespace_digest
-                .clone()
-                .ok_or("WAKE_OFFLINE_POINTER_ATTENTION")?,
-            protected_root: self.intent.protected_root.clone(),
-            pointer_binding: binding.clone(),
-            stage_binding: stage,
-        };
+        let published_digest = self.exact_published_record()?;
+        let attempt_digest = self
+            .pointer_namespace_digest
+            .as_deref()
+            .ok_or("WAKE_OFFLINE_POINTER_ATTENTION")?;
+        let expected = expected_created_for(
+            &self.intent,
+            &self.intent_digest,
+            &published_digest,
+            attempt_digest,
+            &binding,
+            &stage,
+        );
         self.pointer_finish_attempted = true;
         let mut file = open_relative(
             self.root,

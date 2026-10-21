@@ -173,3 +173,38 @@ pub(crate) fn pin_created_offline_pointer<'p>(
     pin.revalidate(lease)?;
     Ok(pin)
 }
+
+/// Recover only the exact pointer ID/hash already bound in complete journal
+/// history. Production security is re-derived from fixed protected policy,
+/// not accepted from the current file or a serialized caller observation.
+pub(crate) fn reopen_recovered_offline_pointer<'p>(
+    lease: &OfflineLedgerLeaseV2<'_, 'p>,
+    published: BrokerPublishedReceiptV2<'p>,
+    expected: &OfflinePointerBindingV2,
+) -> Result<ProtectedInstallPinV2<'p>> {
+    let plan = lease.checked_initial_pointer_plan()?;
+    if plan.sha256() != expected.pointer_sha256 {
+        return Err("WAKE_OFFLINE_POINTER_BINDING_MISMATCH".into());
+    }
+    // Keep this no-write/delete pin live across security selection and the
+    // second complete pointer/package readback below.
+    let first = open_relative(lease.protected_root(), "current.json", false)?;
+    let security = if let Some(policy) = lease.policy() {
+        policy.revalidate()?;
+        (
+            "S-1-5-18".to_owned(),
+            canonical_protected_security(policy.checked_endpoint_sids()?.0, false)?,
+        )
+    } else {
+        #[cfg(not(test))]
+        return Err("WAKE_OFFLINE_POINTER_POLICY_REQUIRED".into());
+        #[cfg(test)]
+        {
+            protected_security_raw(first.as_raw_handle())?
+        }
+    };
+    let pin =
+        pin_created_offline_pointer(lease, published, &plan, &expected.pointer_file, security)?;
+    drop(first);
+    Ok(pin)
+}

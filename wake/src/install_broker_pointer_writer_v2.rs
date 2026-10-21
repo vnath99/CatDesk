@@ -82,6 +82,14 @@ fn create_pointer<'p>(
 }
 
 #[cfg(test)]
+pub(crate) fn create_offline_pointer_fixture<'p>(
+    lease: &mut OfflineLedgerLeaseV2<'_, 'p>,
+    published: BrokerPublishedReceiptV2<'p>,
+) -> Result<ProtectedInstallPinV2<'p>> {
+    create_pointer(lease, published)
+}
+
+#[cfg(test)]
 thread_local! {
     static BEFORE_RENAME: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = std::cell::RefCell::new(None);
     static BEFORE_READBACK: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = std::cell::RefCell::new(None);

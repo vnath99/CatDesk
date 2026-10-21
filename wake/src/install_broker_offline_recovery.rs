@@ -2,7 +2,9 @@
 //! rename. Reopened receipts require canonical signed history, current
 //! physical package proof and the same independent admission gates as entry.
 
+use super::pointer::PointerRecoveryRecordsV2;
 use super::*;
+use crate::install_broker_reader::{ProtectedInstallPinV2, reopen_recovered_offline_pointer};
 use crate::install_broker_stage_writer::{
     BrokerPublishedReceiptV2, BrokerStageReceiptV2, reopen_published_after_verified_history,
     reopen_stage_after_verified_history,
@@ -19,6 +21,10 @@ pub enum OfflineRecoveryV2<'a, 'p> {
         lease: OfflineLedgerLeaseV2<'a, 'p>,
         receipt: Box<BrokerPublishedReceiptV2<'p>>,
     },
+    PointerSwitched {
+        lease: OfflineLedgerLeaseV2<'a, 'p>,
+        reader: Box<ProtectedInstallPinV2<'p>>,
+    },
 }
 
 struct RecoveryRecord {
@@ -31,6 +37,7 @@ struct RecoveryHistory {
     records: Vec<RecoveryRecord>,
     inventory: BTreeMap<u64, [bool; LEDGER_SLOT_COUNT]>,
     published: bool,
+    pointer: Option<PointerRecoveryRecordsV2>,
 }
 
 impl RecoveryHistory {
@@ -48,14 +55,29 @@ impl RecoveryHistory {
         attempted[PUBLICATION_ATTEMPT_SLOT] = true;
         let mut published = attempted;
         published[InstallPhaseV1::Published.index()] = true;
+        let mut pointer_attempted = published;
+        pointer_attempted[POINTER_ATTEMPT_SLOT] = true;
+        let mut pointer_created = pointer_attempted;
+        pointer_created[InstallPhaseV1::PointerSwitched.index()] = true;
         let slots = inventory
             .get(&1)
             .ok_or("WAKE_OFFLINE_LEDGER_LATER_OR_MIXED_HISTORY")?;
-        if inventory.len() != 1 || ![staged, attempted, published].contains(slots) {
+        if inventory.len() != 1
+            || ![
+                staged,
+                attempted,
+                published,
+                pointer_attempted,
+                pointer_created,
+            ]
+            .contains(slots)
+        {
             return Err("WAKE_OFFLINE_LEDGER_LATER_OR_MIXED_HISTORY".into());
         }
         let has_attempt = slots[PUBLICATION_ATTEMPT_SLOT];
         let is_published = slots[InstallPhaseV1::Published.index()];
+        let has_pointer_attempt = slots[POINTER_ATTEMPT_SLOT];
+        let has_pointer = slots[InstallPhaseV1::PointerSwitched.index()];
         let mut names = vec![
             (record_name(1, InstallPhaseV1::Intent), "INTENT"),
             (
@@ -95,14 +117,33 @@ impl RecoveryHistory {
                 digest,
             });
         }
+        let pointer = if has_pointer {
+            Some(PointerRecoveryRecordsV2::open(
+                root,
+                &records[0].record,
+                &records[0].digest,
+                &records[4].digest,
+                records[2]
+                    .record
+                    .stage_binding
+                    .as_ref()
+                    .ok_or("WAKE_OFFLINE_POINTER_RECORD_INVALID")?,
+            )?)
+        } else {
+            None
+        };
         let mut history = Self {
             records,
             inventory,
             published: is_published,
+            pointer,
         };
         history.revalidate(root)?;
         if has_attempt && !is_published {
             return Err("WAKE_OFFLINE_PUBLICATION_ATTENTION".into());
+        }
+        if has_pointer_attempt && !has_pointer {
+            return Err("WAKE_OFFLINE_POINTER_ATTENTION".into());
         }
         Ok(history)
     }
@@ -114,6 +155,9 @@ impl RecoveryHistory {
                 return Err("WAKE_OFFLINE_LEDGER_RECORD_CHANGED".into());
             }
         }
+        if let Some(pointer) = self.pointer.as_mut() {
+            pointer.revalidate(root)?;
+        }
         if ledger_inventory(root)? != self.inventory {
             return Err("WAKE_OFFLINE_LEDGER_RECORD_CHANGED".into());
         }
@@ -122,7 +166,7 @@ impl RecoveryHistory {
 }
 
 impl<'a> BrokerLedgerGuard<'a> {
-    /// Re-admit only complete STAGED or PUBLISHED history. Original acceptance
+    /// Re-admit only complete STAGED, PUBLISHED or POINTER_SWITCHED history. Original acceptance
     /// time verifies that exact signed pair; current observed roles, locks,
     /// independent quarantine and exact CI are still required for resumption.
     pub fn resume_offline_v2<'p>(
@@ -230,13 +274,36 @@ impl<'a> BrokerLedgerGuard<'a> {
             publication_attempt_digest: history.records.get(3).map(|entry| entry.digest.clone()),
             publication_finish_attempted: history.published,
             published_digest: history.records.get(4).map(|entry| entry.digest.clone()),
-            pointer_namespace_attempted: false,
-            pointer_namespace_digest: None,
-            pointer_finish_attempted: false,
-            pointer_binding: None,
-            pointer_digest: None,
+            pointer_namespace_attempted: history.pointer.is_some(),
+            pointer_namespace_digest: history
+                .pointer
+                .as_ref()
+                .map(|record| record.attempt_digest().to_owned()),
+            pointer_finish_attempted: history.pointer.is_some(),
+            pointer_binding: history
+                .pointer
+                .as_ref()
+                .map(|record| record.binding().clone()),
+            pointer_digest: history
+                .pointer
+                .as_ref()
+                .map(|record| record.created_digest().to_owned()),
         };
-        let result = if history.published {
+        let result = if let Some(pointer) = history.pointer.as_ref() {
+            let receipt = reopen_published_after_verified_history(&lease, policy)?;
+            let mut reader = reopen_recovered_offline_pointer(&lease, receipt, pointer.binding())?;
+            lease.root_flush.flush(
+                lease.root,
+                &lease.intent.protected_root,
+                ParentFlushPoint::LaterLedgerPhase,
+            )?;
+            reader.revalidate(&lease)?;
+            history.revalidate(lease.root)?;
+            OfflineRecoveryV2::PointerSwitched {
+                lease,
+                reader: Box::new(reader),
+            }
+        } else if history.published {
             let mut receipt = reopen_published_after_verified_history(&lease, policy)?;
             lease.root_flush.flush(
                 lease.root,
@@ -611,6 +678,320 @@ mod tests {
         assert!(matches!(recovered, OfflineRecoveryV2::Staged { .. }));
         drop(recovered);
         assert_eq!(records(&fixture), before);
+        fixture.cleanup();
+    }
+
+    fn pointer_completed(
+        fixture: &TransactionFixture,
+    ) -> (
+        OfflineLedgerLeaseV2<'_, 'static>,
+        ProtectedInstallPinV2<'static>,
+        CheckedOfflinePairV2,
+        OfflineMigrationObservationV2,
+    ) {
+        let (mut lease, staged, pair, observed) = prepare_offline_recovery_fixture(fixture);
+        let published = publish_offline_recovery_fixture(&mut lease, staged).unwrap();
+        let reader = crate::install_broker_pointer_writer::create_offline_pointer_fixture(
+            &mut lease, published,
+        )
+        .unwrap();
+        (lease, reader, pair, observed)
+    }
+
+    fn pointer_fingerprint(fixture: &TransactionFixture) -> Vec<(String, Vec<u8>, String)> {
+        let mut names: Vec<String> = [
+            "intent",
+            "stage-started",
+            "staged",
+            "publication-attempt",
+            "published",
+            "pointer-attempt",
+            "pointer-switched",
+        ]
+        .into_iter()
+        .map(|phase| format!("install-transaction-00000000000000000001-{phase}.json"))
+        .collect();
+        names.extend([
+            "current.json".into(),
+            "current-00000000000000000001.pending.json".into(),
+        ]);
+        names
+            .into_iter()
+            .filter_map(|name| {
+                let file = File::open(fixture.root_path().join(&name)).ok()?;
+                let id = full_identity_of_handle(file.as_raw_handle()).unwrap();
+                Some((
+                    name.clone(),
+                    std::fs::read(fixture.root_path().join(name)).unwrap(),
+                    format!("{}:{}", id.volume_serial, id.file_id_hex),
+                ))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn offline_pointer_recovery_reopens_complete_phase_without_record_or_pointer_recreation() {
+        let fixture = TransactionFixture::new();
+        let (lease, reader, pair, mut observed) = pointer_completed(&fixture);
+        let binding = reader.pointer_binding().clone();
+        let digest = lease.pointer_record_sha256().unwrap().to_owned();
+        drop(reader);
+        drop(lease);
+        let before = pointer_fingerprint(&fixture);
+        assert_eq!(before.len(), 8);
+        observed.now_utc_seconds = 10_000;
+        for _ in 0..2 {
+            let OfflineRecoveryV2::PointerSwitched {
+                mut lease,
+                mut reader,
+            } = resume(&fixture, &pair, &observed).unwrap()
+            else {
+                panic!("complete pointer")
+            };
+            assert_eq!(lease.phase(), "POINTER_SWITCHED");
+            assert_eq!(lease.pointer_record_sha256(), Some(digest.as_str()));
+            assert_eq!(reader.pointer_binding(), &binding);
+            reader.revalidate(&lease).unwrap();
+            let again = reopen_published_after_verified_history(&lease, None).unwrap();
+            assert_eq!(
+                crate::install_broker_pointer_writer::create_offline_pointer_fixture(
+                    &mut lease, again
+                )
+                .err()
+                .unwrap(),
+                "WAKE_OFFLINE_POINTER_ATTENTION"
+            );
+            drop(lease);
+            assert!(std::fs::write(fixture.root_path().join("current.json"), b"rewrite").is_err());
+            drop(reader);
+            assert_eq!(pointer_fingerprint(&fixture), before);
+        }
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn offline_pointer_recovery_finishes_failed_final_parent_flush_without_rewriting() {
+        let fixture = TransactionFixture::new();
+        let (mut lease, staged, pair, observed) = prepare_offline_recovery_fixture(&fixture);
+        let published = publish_offline_recovery_fixture(&mut lease, staged).unwrap();
+        fail_next_flush(ParentFlushPoint::LaterLedgerPhase);
+        assert_eq!(
+            crate::install_broker_pointer_writer::create_offline_pointer_fixture(
+                &mut lease, published
+            )
+            .err()
+            .unwrap(),
+            "WAKE_BROKER_PARENT_FLUSH_FAILED"
+        );
+        drop(lease);
+        let before = pointer_fingerprint(&fixture);
+        assert_eq!(before.len(), 8);
+        let result = resume(&fixture, &pair, &observed).unwrap();
+        assert!(matches!(result, OfflineRecoveryV2::PointerSwitched { .. }));
+        drop(result);
+        assert_eq!(pointer_fingerprint(&fixture), before);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn offline_pointer_recovery_partial_attempt_is_attention_before_and_after_native_rename() {
+        for point in [
+            ParentFlushPoint::PointerAttempt,
+            ParentFlushPoint::PointerTempEntry,
+            ParentFlushPoint::PointerReplacement,
+        ] {
+            let fixture = TransactionFixture::new();
+            let (mut lease, staged, pair, observed) = prepare_offline_recovery_fixture(&fixture);
+            let published = publish_offline_recovery_fixture(&mut lease, staged).unwrap();
+            fail_next_flush(point);
+            assert!(
+                crate::install_broker_pointer_writer::create_offline_pointer_fixture(
+                    &mut lease, published
+                )
+                .is_err()
+            );
+            drop(lease);
+            let before = pointer_fingerprint(&fixture);
+            assert_eq!(
+                resume(&fixture, &pair, &observed).err().unwrap(),
+                "WAKE_OFFLINE_POINTER_ATTENTION"
+            );
+            assert_eq!(pointer_fingerprint(&fixture), before);
+            fixture.cleanup();
+        }
+    }
+
+    fn replace_json_string(file: &std::path::Path, field: &str, replacement: &str) {
+        let bytes = std::fs::read(file).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let old = value[field].as_str().unwrap();
+        let original = String::from_utf8(bytes).unwrap();
+        let changed = original.replacen(
+            &format!("\"{field}\":\"{old}\""),
+            &format!("\"{field}\":\"{replacement}\""),
+            1,
+        );
+        assert_ne!(original, changed);
+        std::fs::write(file, changed).unwrap();
+    }
+
+    #[test]
+    fn offline_pointer_recovery_refuses_tampered_attempt_link_and_full_identity() {
+        for mode in 0..3 {
+            let fixture = TransactionFixture::new();
+            let (lease, reader, pair, observed) = pointer_completed(&fixture);
+            let id = reader
+                .pointer_binding()
+                .pointer_file
+                .full
+                .file_id_hex
+                .clone();
+            drop(reader);
+            drop(lease);
+            if mode == 0 {
+                replace_json_string(
+                    &path(&fixture, "pointer-attempt"),
+                    "plannedPointerSha256",
+                    &"f".repeat(64),
+                );
+            } else if mode == 1 {
+                replace_json_string(
+                    &path(&fixture, "pointer-switched"),
+                    "pointerAttemptSha256",
+                    &"f".repeat(64),
+                );
+            } else {
+                let file = path(&fixture, "pointer-switched");
+                let bytes = std::fs::read_to_string(&file).unwrap();
+                let changed = bytes.replacen(&id, &"f".repeat(32), 1);
+                assert_ne!(bytes, changed);
+                std::fs::write(file, changed).unwrap();
+            }
+            let before = pointer_fingerprint(&fixture);
+            assert!(resume(&fixture, &pair, &observed).is_err());
+            assert_eq!(pointer_fingerprint(&fixture), before);
+            fixture.cleanup();
+        }
+    }
+
+    #[test]
+    fn offline_pointer_recovery_refuses_replaced_current_or_changed_pointer_bytes() {
+        for replace in [false, true] {
+            let fixture = TransactionFixture::new();
+            let (lease, reader, pair, observed) = pointer_completed(&fixture);
+            drop(reader);
+            drop(lease);
+            let current = fixture.root_path().join("current.json");
+            if replace {
+                let bytes = std::fs::read(&current).unwrap();
+                std::fs::rename(&current, fixture.root_path().join("preserved-current.json"))
+                    .unwrap();
+                std::fs::write(&current, bytes).unwrap();
+            } else {
+                std::fs::write(&current, b"changed").unwrap();
+            }
+            let before = pointer_fingerprint(&fixture);
+            assert!(resume(&fixture, &pair, &observed).is_err());
+            assert_eq!(pointer_fingerprint(&fixture), before);
+            fixture.cleanup();
+        }
+    }
+
+    #[test]
+    fn offline_pointer_recovery_refuses_extra_pending_unknown_fields_and_clock_rollback() {
+        for mode in 0..3 {
+            let fixture = TransactionFixture::new();
+            let (lease, reader, pair, mut observed) = pointer_completed(&fixture);
+            drop(reader);
+            drop(lease);
+            match mode {
+                0 => std::fs::write(
+                    fixture
+                        .root_path()
+                        .join("current-00000000000000000001.pending.json"),
+                    b"foreign pending",
+                )
+                .unwrap(),
+                1 => {
+                    let file = path(&fixture, "pointer-switched");
+                    let mut bytes = std::fs::read(&file).unwrap();
+                    assert_eq!(bytes.pop(), Some(b'}'));
+                    bytes.extend(b",\"unknown\":true}");
+                    std::fs::write(file, bytes).unwrap();
+                }
+                _ => observed.now_utc_seconds = pair.checked_at_utc_seconds() - 1,
+            }
+            let before = pointer_fingerprint(&fixture);
+            assert!(resume(&fixture, &pair, &observed).is_err());
+            assert_eq!(pointer_fingerprint(&fixture), before);
+            fixture.cleanup();
+        }
+    }
+
+    #[test]
+    fn offline_pointer_recovery_flush_failure_keeps_complete_history_recoverable() {
+        let fixture = TransactionFixture::new();
+        let (lease, reader, pair, observed) = pointer_completed(&fixture);
+        drop(reader);
+        drop(lease);
+        let before = pointer_fingerprint(&fixture);
+        fail_next_flush(ParentFlushPoint::LaterLedgerPhase);
+        assert_eq!(
+            resume(&fixture, &pair, &observed).err().unwrap(),
+            "WAKE_BROKER_PARENT_FLUSH_FAILED"
+        );
+        assert_eq!(pointer_fingerprint(&fixture), before);
+        let result = resume(&fixture, &pair, &observed).unwrap();
+        drop(result);
+        assert_eq!(pointer_fingerprint(&fixture), before);
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn offline_pointer_recovery_retains_all_seven_record_pins_through_admission() {
+        let fixture = TransactionFixture::new();
+        let (lease, reader, pair, observed) = pointer_completed(&fixture);
+        drop(reader);
+        drop(lease);
+        let before = pointer_fingerprint(&fixture);
+        let guard = BrokerLedgerGuard::acquire(fixture.root()).unwrap();
+        let history = RecoveryHistory::open(fixture.root()).unwrap();
+        let writer = Arc::new(
+            RetainedDirectoryWriterV2::acquire(fixture.root(), &observed.target_protected_root)
+                .unwrap(),
+        );
+        let result = guard
+            .resume_offline_checked(
+                history,
+                &pair,
+                &observed,
+                OfflineMutationChecks {
+                    revalidate: Box::new(|| Ok(())),
+                    root_flush: OfflineRootFlush::Retained(writer),
+                },
+                None,
+                || {
+                    for phase in [
+                        "intent",
+                        "stage-started",
+                        "staged",
+                        "publication-attempt",
+                        "published",
+                        "pointer-attempt",
+                        "pointer-switched",
+                    ] {
+                        assert!(
+                            std::fs::write(path(&fixture, phase), b"blocked").is_err(),
+                            "journal pin: {phase}"
+                        );
+                    }
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert!(matches!(result, OfflineRecoveryV2::PointerSwitched { .. }));
+        drop(result);
+        assert_eq!(pointer_fingerprint(&fixture), before);
         fixture.cleanup();
     }
 }

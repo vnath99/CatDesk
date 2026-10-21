@@ -4,9 +4,9 @@
 //! PID or process snapshot as an offline migration. The production admission
 //! entry point still refuses before INTENT because independent launch-entry
 //! quarantine is not implemented. Disposable fixtures exercise the create-once
-//! engine through first-pointer readback and STAGED/PUBLISHED recovery.
-//! Uncertain attempts stay held; pointer-phase recovery and owner launch
-//! remain incomplete. Normal launch readers are not switched by this API.
+//! engine through first-pointer readback and complete-phase recovery.
+//! Uncertain attempts stay held; owner launch remains incomplete. Normal
+//! launch readers are not switched by this API.
 //! This source does not activate an installation.
 
 use super::*;

@@ -1,3 +1,33 @@
+## 2026-10-21 — complete-pointer V2 recovery (SOURCE/FIXTURE ONLY)
+
+Recovery now accepts exact complete POINTER_SWITCHED history, retaining all
+seven canonical journal files through admission, pointer/package reconstruction
+and final parent reflush. It restores a retained reader without creating a file,
+renaming current.json or rewriting a record. Production pointer security is
+re-derived from fixed protected policy. A leftover pending file, changed plan/
+link/full ID/bytes, unknown record fields, rollback clock or partial attempt
+refuses recovery; uncertain attempts never authorize another pointer write.
+
+Eight new recovery cases pass, including repeated byte/physical-ID-preserving
+reopen, failed final/recovery flushes, partial locations, tamper refusal and
+all-seven-record pin lifetime through admission. Complete all-feature Wake
+passes 361 library tests / one ignored plus enabled binaries/integrations and
+adapter/response Python regressions. Strict root/Wake Clippy, formatting, diff
+and unchanged runtime-source hashes pass. Root main tests remain historical.
+Fixtures close/reopen handles; no installed restart/process-kill/power-loss or
+independent migration/owner-quiescence acceptance is claimed.
+
+Next: normal launch-reader/new-owner integration from the completed retained
+pointer proof. Broker-owned observation/clock, independent closed inventory/
+quarantine, exact CI/provisioning and installed multi-project acceptance remain
+open. Existing admission and service holds stay closed; no selected build or
+production pointer changes. Five original bindings/history and both STOPPED
+selections remain exact; cleanup finds zero scoped processes. Native status
+reads show three original chats active and one idle with no reported turn error;
+none is messaged or changed. No operational/recurring worker or canary replay
+starts. Connector evidence remains the 19:03:49 UTC HTTP 429; no new probe is made.
+Parent dated audit: checkpoints/offline-v2-pointer-recovery-oct21.
+
 ## 2026-10-21 — integrated V2 first-pointer creation/readback (SOURCE/FIXTURE ONLY)
 
 The checked first-pointer plan now drives the existing fixed temp-file, byte

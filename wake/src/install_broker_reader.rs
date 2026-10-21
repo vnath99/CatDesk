@@ -57,6 +57,7 @@ const INVALID_HANDLE_VALUE: *mut c_void = -1isize as *mut c_void;
 #[path = "install_broker_reader_v2.rs"]
 mod offline_v2;
 pub(crate) use offline_v2::pin_created_offline_pointer;
+pub(crate) use offline_v2::reopen_recovered_offline_pointer;
 pub use offline_v2::{ProtectedInstallPinV2, ProtectedInstallReadOnlySnapshotV2};
 const ARTIFACT_NAMES: [&str; 4] = [
     "CatDeskWakeHost.exe",

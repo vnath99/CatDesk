@@ -1,5 +1,56 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 complete-pointer V2 recovery (SOURCE/FIXTURE ONLY)
+
+`resume_offline_v2` now reconstructs complete POINTER_SWITCHED state as a retained
+lease plus protected pointer/package reader. The five base records and the two
+pointer records remain exclusively pinned through signed-pair/current-role
+checks, independent admission, physical readback and final parent reflush. The
+existing canonical plan/attempt/completion builders and bounds are shared with
+fresh creation; their serialized bytes are unchanged. No new file, rename or
+journal rewrite occurs during recovery. A completed phase cannot re-enter the
+creation API, and a failed recovery flush can safely reopen the same exact
+complete history later.
+
+Production recovery derives the expected pointer owner/DACL from fixed
+protected policy, then verifies canonical pointer bytes, full physical ID and
+the exact published package through retained read pins. Fixture mode remains
+test-only and does not establish independently provisioned SYSTEM security.
+Missing completion, unknown/mixed history, a leftover pending file, wrong plan/
+attempt link/full ID, replaced/changed current.json or clock rollback refuses
+resumption. A marker or matching pointer without complete authorized history
+never grants a second write or owner/launch authority.
+
+Eight new tests pass. They compare bytes and physical file IDs across repeated
+reopening, finish a failed final completion flush without rewriting, preserve
+partial pre/post-rename attempts as attention, reject canonical record/identity/
+current-byte tampering and pending/unknown/clock conflicts, retry a failed
+recovery flush, and prove all seven journal pins reject competing writes during
+admission. Complete all-feature Wake passes 361 library tests / one ignored plus
+enabled binaries/integrations and adapter/response Python regressions. Strict
+all-target/all-feature root/Wake Clippy, formatting, diff and unchanged source
+hash checks pass. Root main runtime tests remain prior-checkpoint evidence.
+These are filesystem close/reopen fixtures, not installed service restart,
+process-kill/power-loss or independent predecessor/owner-quiescence acceptance.
+
+Normal launch-reader/new-owner integration, broker-owned observation/clock,
+independent closed inventory/quarantine, exact-source CI/provisioning and
+installed multi-project monitoring/routing/rollover/development-cycle acceptance
+remain open. Quarantine/installer/service holds remain; no package is selected
+or installed. The restored pointer proof still carries no launch authority.
+
+Five original registry/Wake pairs/history and stopped selected v33/production
+pointers remain exact; cleanup at 19:30:09 UTC finds zero scoped processes. Native
+app snapshots at 19:30:09/19:30:37 UTC show three original chats active and one
+idle, with no reported turn error. These are status reads only; no messaging,
+goal/model/configuration changes or interruptions occur. No operational browser/
+WakeHost/recurring worker, message send or completed canary replay starts. No
+connector probe is repeated; the last 19:03:49 UTC read returned HTTP 429 at the
+OpenAI tunnel SSE probe before local CatDesk access was proven. Source work
+continues independently. Next: launch-reader/new-owner integration from this
+completed retained proof while operational admission remains closed.
+Parent dated audit: checkpoints/offline-v2-pointer-recovery-oct21.
+
 ## October 21 integrated V2 first-pointer writer/reader (SOURCE/FIXTURE ONLY)
 
 `create_first_protected_pointer_v2` now uses the checked plan and durable
