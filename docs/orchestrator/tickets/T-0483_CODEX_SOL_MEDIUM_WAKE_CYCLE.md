@@ -1,5 +1,25 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-21 real full-profile result and child path correction (PARTIAL)
+
+A fresh native report-isolation candidate preserves its captured source through
+all four fixed commands. Ruff format/lint and whole-source mypy pass; pytest
+exits 1. The complete LOCAL_COMMAND_FAILURE artifact remains immutable. One
+bounded first-failure diagnostic finds SYNCED_RUNTIME_ROOT because Python views
+the canonical local Windows drive spelling as UNC. The identified browser test
+passes with normal local-drive child temp selectors; no Wake2 safety policy is
+changed. This is a diagnostic, not complete qualification.
+
+The verifier now reuses the existing path normalizer only for generated child
+environment values. Canonical internal pins, overlap checks, fixed commands,
+environment hashing and historical artifacts stay intact. Actual UNC spelling
+remains UNC. The queue subtree passes 93 / two ignored; strict all-target/all-
+feature Clippy and formatting/diff pass. The explicit real UV/Python boundary
+probe passes, including physical runtime binding and the child-observed temp
+drive. Fresh full-profile acceptance, independent review and natural Wake/next-
+task continuation remain open. This source fix is not in selected stopped v35.
+Parent UTC evidence: checkpoints/verification-hypothesis-oct21.
+
 ## 2026-10-21 actual-verifier DLL path incompatibility (source)
 
 The real isolated project verifier starts Python and passes Ruff lint and

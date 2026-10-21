@@ -1086,7 +1086,13 @@ impl VerificationRuntime {
     }
 
     fn environment(&self) -> Result<Vec<(OsString, OsString)>, String> {
-        let pytest_cache = self.root.join("pytest");
+        // Canonical Windows paths retain a verbatim prefix internally, but
+        // Python consumers can classify \\?\C:\ as a UNC drive. Supply the
+        // existing normalized spelling only at the child environment boundary;
+        // revalidation and overlap checks keep the retained canonical paths.
+        let root = crate::command::normalize_windows_verbatim_path(self.root.clone());
+        let uv_cache = crate::command::normalize_windows_verbatim_path(self.uv_cache.clone());
+        let pytest_cache = root.join("pytest");
         let cache_option = format!(
             "cache_dir={}",
             pytest_cache
@@ -1099,23 +1105,14 @@ impl VerificationRuntime {
         let mut variables = vec![
             (
                 "UV_PROJECT_ENVIRONMENT".into(),
-                self.root.join("venv").into_os_string(),
+                root.join("venv").into_os_string(),
             ),
-            (
-                "UV_CACHE_DIR".into(),
-                self.uv_cache.clone().into_os_string(),
-            ),
-            (
-                "RUFF_CACHE_DIR".into(),
-                self.root.join("ruff").into_os_string(),
-            ),
-            (
-                "MYPY_CACHE_DIR".into(),
-                self.root.join("mypy").into_os_string(),
-            ),
+            ("UV_CACHE_DIR".into(), uv_cache.into_os_string()),
+            ("RUFF_CACHE_DIR".into(), root.join("ruff").into_os_string()),
+            ("MYPY_CACHE_DIR".into(), root.join("mypy").into_os_string()),
             (
                 "PYTHONPYCACHEPREFIX".into(),
-                self.root.join("pycache").into_os_string(),
+                root.join("pycache").into_os_string(),
             ),
             (
                 "PYTEST_ADDOPTS".into(),
@@ -1123,15 +1120,12 @@ impl VerificationRuntime {
             ),
             (
                 "HYPOTHESIS_STORAGE_DIRECTORY".into(),
-                self.root.join("hypothesis").into_os_string(),
+                root.join("hypothesis").into_os_string(),
             ),
-            (
-                "XDG_CACHE_HOME".into(),
-                self.root.join("cache").into_os_string(),
-            ),
+            ("XDG_CACHE_HOME".into(), root.join("cache").into_os_string()),
         ];
         for name in ["TEMP", "TMP", "TMPDIR"] {
-            variables.push((name.into(), self.root.join("tmp").into_os_string()));
+            variables.push((name.into(), root.join("tmp").into_os_string()));
         }
         Ok(variables)
     }
@@ -8555,8 +8549,30 @@ mod tests {
             .collect::<std::collections::BTreeMap<_, _>>();
         assert_eq!(
             environment.get(std::ffi::OsStr::new("UV_PROJECT_ENVIRONMENT")),
-            Some(&first.root.join("venv").into_os_string())
+            Some(
+                &crate::command::normalize_windows_verbatim_path(first.root.join("venv"))
+                    .into_os_string()
+            )
         );
+        for (name, value) in &first.environment().unwrap() {
+            if name == "PYTEST_ADDOPTS" {
+                continue;
+            }
+            let path = PathBuf::from(value);
+            assert!(path.is_absolute());
+            #[cfg(windows)]
+            assert!(matches!(
+                path.components().next(),
+                Some(std::path::Component::Prefix(prefix))
+                    if matches!(prefix.kind(), std::path::Prefix::Disk(_))
+            ));
+            let actual = if name == "UV_PROJECT_ENVIRONMENT" {
+                path.parent().unwrap().canonicalize().unwrap()
+            } else {
+                path.canonicalize().unwrap()
+            };
+            assert!(actual == first.uv_cache || actual.starts_with(&first.root));
+        }
         for name in [
             "UV_PROJECT_ENVIRONMENT",
             "UV_CACHE_DIR",
@@ -8596,7 +8612,11 @@ mod tests {
         let hypothesis = environment
             .get(std::ffi::OsStr::new("HYPOTHESIS_STORAGE_DIRECTORY"))
             .unwrap();
-        assert_eq!(hypothesis, &first.root.join("hypothesis").into_os_string());
+        assert_eq!(
+            hypothesis,
+            &crate::command::normalize_windows_verbatim_path(first.root.join("hypothesis"))
+                .into_os_string()
+        );
         fs::remove_dir(first.root.join("hypothesis")).unwrap();
         assert!(
             verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, Some(&first))
@@ -8706,7 +8726,7 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(prepared.exit_code, Some(0));
-        let script = "import os,sys,pathlib,shlex; root=pathlib.Path(os.environ['UV_PROJECT_ENVIRONMENT']).parent; assert os.path.samefile(sys.prefix,root/'venv'); assert shlex.split(os.environ['PYTEST_ADDOPTS'])==['-o','cache_dir='+str(root/'pytest')]; assert not pathlib.Path('.venv').exists(); (root/'real-uv-observed-scope').write_text(sys.prefix); print('EXTERNAL_UV_RUNTIME_OK')";
+        let script = "import os,sys,pathlib,shlex; root=pathlib.Path(os.environ['UV_PROJECT_ENVIRONMENT']).parent; assert os.path.samefile(sys.prefix,root/'venv'); assert os.path.samefile(pathlib.Path(os.environ['TEMP']).parent,root); assert not pathlib.Path(os.environ['TEMP']).drive.startswith(chr(92)*2); assert shlex.split(os.environ['PYTEST_ADDOPTS'])==['-o','cache_dir='+str(root/'pytest')]; assert not pathlib.Path('.venv').exists(); (root/'real-uv-observed-scope').write_text(sys.prefix); print('EXTERNAL_UV_RUNTIME_OK')";
         let mut argv = [
             "uv",
             "run",

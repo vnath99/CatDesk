@@ -1,5 +1,16 @@
 # CatDesk — Important Command Reference
 
+## October 21 generated child path compatibility (SOURCE)
+
+Fixed verification retains canonical internal runtime paths but supplies their
+existing normalized Windows spelling in generated UV/cache/temp selectors.
+This avoids Python consumers treating a local verbatim drive as UNC, while
+leaving actual UNC paths, physical directories and project safeguards unchanged.
+Generated values remain included in the command environment digest. Historical
+verification artifacts are not rewritten or retried into success. A failed full
+profile remains failed; a passing named diagnostic or real UV boundary probe
+does not qualify the complete project or installed review/Wake cycle.
+
 ## October 21 standalone read-only context capture (DEVELOPMENT TESTED)
 
 With a matched selected package and its registered control workspace,

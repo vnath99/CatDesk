@@ -1,3 +1,26 @@
+## 2026-10-21 — child runtime path spelling (SOURCE; FULL PROFILE OPEN)
+
+The fixed real-project profile now preserves its source witness, but pytest
+fails: Python classifies the canonical local-drive prefix as a UNC drive and
+Wake2 correctly refuses that spelling with SYNCED_RUNTIME_ROOT. A bounded
+first-failure run identifies this before runtime initialization. The exact
+failed browser test then passes with normal local-drive child temp selectors.
+The complete failed verification artifact remains unchanged and unaccepted.
+
+Generated child environment paths now reuse CatDesk's existing Windows path
+normalizer. Internal canonical directories, overlap/reparse checks, fixed argv,
+environment hashes and project runtime safeguards remain. Real UNC paths are
+still UNC; no Wake2 guard or global setting changes. Historical artifacts and
+runtime directories retain their original paths and bytes.
+
+The entire queue subtree passes 93 tests / two ignored; strict all-target/all-
+feature Clippy, formatting and diff checks pass. The explicit real UV/Python
+probe passes with two 60-second child caps, physically bound external storage
+and no checkout caches. Its child checks the temp drive spelling itself.
+Fresh full-profile qualification is still required. The stopped v35 development
+package is the preceding source checkpoint, not this additional source fix.
+Parent UTC audit: checkpoints/verification-hypothesis-oct21.
+
 ## 2026-10-21 — context observation wait-state reporting (SOURCE)
 
 After a context capture reaches its pressure threshold, automatic monitoring
