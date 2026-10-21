@@ -25,7 +25,13 @@ Source browser ingestion now exposes monotonic per-conversation capture time as
 time without increasing tokens; legacy/new-generation freshness remains unknown.
 Freshness commits after snapshot validation and the final target/cancellation
 check; rejected reads retain previous freshness.
-This source increment does not change the stopped v22 or production package.
+Full root regression passes 1,538 CatDesk tests / 28 ignored and all enabled
+integrations, strict Clippy, formatting and diff checks. Source `41a8c49` was
+built into stopped development v23; one bounded authenticated CatDesk capture
+verifies its current timestamp and exact target without sending or starting a
+host/scheduler. Cleanup proves zero owned processes observed, both controls
+stopped and all five pairs preserved. Production is unchanged. Private evidence:
+parent `checkpoints/web-context-freshness-oct20/live-freshness-result.json`.
 
 ### October 20 current acceptance and contention correction
 

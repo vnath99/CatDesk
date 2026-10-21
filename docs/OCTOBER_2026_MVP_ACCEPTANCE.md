@@ -55,7 +55,16 @@ enabled targets, including the nested Wake suite. Strict all-target/all-feature
 Clippy, formatting and diff checks pass. The first run exposed a replay equality
 assertion that needed to permit advancing capture time; its failure and corrected
 rerun are retained in parent `checkpoints/web-context-freshness-oct20`.
-This increment remains source-only; v22 and production are unchanged.
+Source checkpoint `41a8c49e19a01e2f6b72142bf7652248dde0271a` was built and
+selected as stopped **development v23** through the supported package update.
+WakeHost and both Python inputs are unchanged. One bounded standalone capture
+then verified the exact CatDesk target and generation, current capture timestamp,
+2,123 advisory visible tokens and retained incomplete-history warnings. It sent
+no USER message, started no host/scheduler, and exited with zero owned processes
+remaining. All five pairs and existing policies are preserved. Both controls
+remain STOPPED; the protected production package/pointer is unchanged. Private
+`live-freshness-result.json` and timestamped audit in the freshness checkpoint
+record this controlled development evidence; it is not production acceptance.
 
 ## October 20 acceptance audit and central context-wait reporting (SOURCE)
 

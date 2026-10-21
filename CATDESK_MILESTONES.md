@@ -14,9 +14,14 @@ A single connector read still returns HTTP 429. Protected installation, exact
 remote CI, central connector acceptance and a genuine next-task development
 cycle remain open. The source continues with per-conversation capture freshness
 that advances on deduplicated observations without inventing legacy timestamps
-or clearing coverage uncertainty; it has not been selected into v22. Full root
+or clearing coverage uncertainty. Full root
 regression passes 1,538 CatDesk tests / 28 ignored and all enabled integrations;
 strict all-target/all-feature Clippy, formatting and diff checks pass.
+Source `41a8c49` is built into stopped development v23. One bounded authenticated
+context capture verifies the new timestamp and exact CatDesk target, with no
+message/host/scheduler start. Cleanup and original pairs pass; production remains
+unchanged. The complete private freshness audit is in parent
+`checkpoints/web-context-freshness-oct20`.
 
 ## 2026-10-20 — Web context capture and current acceptance (SOURCE; MVP PARTIAL)
 

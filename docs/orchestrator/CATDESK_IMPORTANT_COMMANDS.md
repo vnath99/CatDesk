@@ -14,8 +14,11 @@ Current source capture/status additionally reports optional
 `browserCoverage.lastObservedAtUnix`: latest validated capture for that exact
 conversation, even when its token estimate is unchanged. Missing means unknown,
 including old ledgers and new generations. It does not imply full history or a
-provider context bound. This field is source-only until a matched package update;
-do not silently rewrite existing live state using an older selected app.
+provider context bound. Source `41a8c49` is now selected in stopped development
+v23 and verified by one bounded authenticated capture, with no send or host/
+scheduler start and zero owned processes afterward. The protected production
+package is unchanged. Use the matched app for this updated development state;
+older strict readers may reject the added field rather than report pressure.
 
 ## October 20 foreground development ownership
 
