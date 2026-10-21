@@ -15,8 +15,12 @@ passes afterward, including three actual bound review fixtures, distinct target
 generations, independent cutoffs, registration ambiguity and late target drift.
 Main 1,539 / 28 ignored, Wake 295 library / 1 ignored plus integrations, both
 strict Clippy checks and format/diff pass. Dated private evidence: parent
-`checkpoints/web-review-discovery-oct21`. Current v28 is unchanged until matched
-package readback; no live native/Wake event or new native session was created.
+`checkpoints/web-review-discovery-oct21`. Matched normal app/Wake v29 at
+`8f8b456` is selected stopped and passes the bounded 20-second loopback metadata
+readback, preserving seven paired statuses, continuation proof, all original
+five bindings, profile, previous package and production. Zero owned processes
+remain, both controls STOPPED. This does not prove live producer/natural-cycle
+acceptance; no live native/Wake event or new native session was created.
 
 Read-only ordinary native queue status preserves all registrations: seven jobs,
 four native zero exits, two failed, one paused; one verified/package-bound job.

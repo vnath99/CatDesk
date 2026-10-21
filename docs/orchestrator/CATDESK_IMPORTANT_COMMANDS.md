@@ -16,7 +16,12 @@ document or shared persistence failure still refuses discovery. Completed
 sibling reviews require their own bound contract/artifacts; the old CatDesk
 missing-contract exception grants no sibling authority. Use a matched app/Wake
 package before claiming this behavior from an installed runtime. Source
-regressions pass; current development v28 remains unchanged pending update.
+regressions pass. Matched normal app/Wake v29 (`8f8b456`) is selected in stopped
+development, with unchanged Python/profile and preserved v28. Its 20-second
+loopback metadata readback passes with no events, browser or WakeHost start;
+both controls remain STOPPED and all original pairs are preserved. Live
+producer/natural-cycle and protected production acceptance remain separate.
+Dated private evidence: parent `checkpoints/web-review-discovery-oct21`.
 
 ## October 20 Web orchestration tools in Multi Tools (SOURCE)
 

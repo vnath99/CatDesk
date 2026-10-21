@@ -1,6 +1,6 @@
 # CatDesk October 2026 MVP acceptance
 
-## October 21 standalone multi-project discovery (SOURCE; MVP PARTIAL)
+## October 21 standalone multi-project discovery (SOURCE + MATCHED DEVELOPMENT READBACK; MVP PARTIAL)
 
 Independent Wake discovery now routes records from its configured CatDesk
 control inbox by each record's project. Each uses its own current Wake target,
@@ -31,14 +31,27 @@ enabled integrations. Strict all-target/all-feature Clippy for both crates and
 format/diff checks pass. Private dated evidence:
 parent `checkpoints/web-review-discovery-oct21`.
 
-This is source verification. The last accepted development package is still
-v28 until the matched app/Wake update and readback finish. No live review event,
+Source `8f8b456` is built into matched normal release app/Wake images and
+selected through the supported stopped development **v29** update. The host
+build excludes test support; Python inputs are unchanged. All 79 checked
+non-selection files, v28 and the authenticated profile are preserved. A fresh
+internally bounded **20-second** loopback readback passes authentication, five
+closed-scope Web tool checks, seven paired project statuses and the preserved
+continuation proof. Of 81 checked files only usage counters change; launch
+settings and project/history data remain unchanged. Normal listener exit,
+zero owned browser/Wake processes, both controls STOPPED and the independent
+original-five pair comparison pass. Production is unchanged. Private evidence:
+`approved-discovery-package-readback-20261021T044233418Z` under the checkpoint.
+
+This is selected development metadata/serving acceptance. Producer execution
+remains fixture-verified; no new live natural review cycle is claimed. No live review event,
 browser, recurring automation or Wake runtime was started. A separate read-only
 native queue status preserves its registry and shows seven historical jobs:
 four native zero exits, two failed and one paused; only one has verification
 and a review package. This does not prove a current native development/review/
 next-task cycle. Existing native chats are untouched. Production, exact remote
-CI, connector and genuine natural-cycle acceptance remain open.
+CI, connector and genuine natural-cycle acceptance remain open. One intermittent
+connector read still returns HTTP 429; no retry or transport/settings change follows.
 
 ## October 20 natural review producer trace (SOURCE; MVP PARTIAL)
 

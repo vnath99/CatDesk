@@ -1,3 +1,26 @@
+## 2026-10-21 — Independent registered-project inbox discovery (SOURCE + DEVELOPMENT READBACK)
+
+Standalone Wake discovery now checks each record's registered project target
+and own generation cutoff, then revalidates the pair under the existing queue
+lock. Malformed, drifted, duplicate and conflicting records are held without
+stopping valid siblings. Completed-review proof remains required; the legacy
+CatDesk exception grants no sibling completion authority. Bounded reads and
+redacted per-project attention preserve history. A disposable three-project
+fixture covers distinct generations/cutoffs and late target/registry changes.
+Main 1,539 / 28 ignored, Wake 295 library / 1 ignored plus enabled integrations,
+both strict Clippy checks and format/diff pass.
+
+Matched normal app/Wake v29 (`8f8b456`) is selected stopped, with unchanged
+Python/profile and preserved v28. Its 20-second loopback metadata readback
+passes authentication, five Web tool scope checks, seven paired projects and
+preserved continuation proof. Only usage counters change among 81 checked
+files; both controls remain STOPPED, owned browser/Wake processes are zero,
+five original pairs and production are preserved. No review event, browser,
+WakeHost or native session was started. Producer execution remains fixture-only;
+installed production and natural-cycle acceptance remain open. One connector
+read remains HTTP 429; exact CI is unverified. Private dated evidence:
+parent `checkpoints/web-review-discovery-oct21`. Overall MVP PARTIAL.
+
 ## 2026-10-20 — Natural review notification scope and rollover CAS (SOURCE)
 
 Both authentic review producers now share project-scoped notifications instead
