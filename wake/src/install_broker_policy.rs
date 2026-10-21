@@ -5,7 +5,8 @@
 //! must be broker-only writable, canonical and bounded, and physically bound
 //! to its root and own file object. Root pins deny delete sharing; policy-file
 //! pins deny write/delete sharing. Use sites recheck them. A separate V2
-//! transaction writer excludes new protected-root write/delete opens.
+//! transaction writer excludes new protected-root write/delete opens until a
+//! durable namespace attempt permits WRITE sharing; DELETE remains denied.
 //! This proves a snapshot of installed bytes, not that an independent offline
 //! authority approved the bootstrap, nor that a service or worker token is
 //! correctly provisioned. It grants no install or launch authority.
@@ -1121,6 +1122,44 @@ pub(crate) mod tests {
                     .is_err(),
                 "role still excludes write opens: {}",
                 path.display()
+            );
+        }
+        writer
+            .prepare_namespace_write(guard.root(), writer.identity())
+            .unwrap();
+        policy.revalidate().unwrap();
+        pins.transaction_root_writer()
+            .unwrap()
+            .require_identity(writer.identity())
+            .unwrap();
+        drop(
+            OpenOptions::new()
+                .write(true)
+                .share_mode(3)
+                .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+                .open(&first.path)
+                .expect(
+                    "namespace WRITE sharing is compatible with the policy and shared target role",
+                ),
+        );
+        for path in [
+            &pointer,
+            &config,
+            &lock,
+            &image,
+            &registry,
+            &policy_path,
+            &service,
+            &old,
+        ] {
+            assert!(
+                OpenOptions::new()
+                    .write(true)
+                    .share_mode(3)
+                    .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+                    .open(path)
+                    .is_err(),
+                "non-root role sharing remains unchanged"
             );
         }
         drop(writer);

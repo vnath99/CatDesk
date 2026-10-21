@@ -296,6 +296,8 @@ pub struct OfflineLedgerLeaseV2<'a, 'p> {
     publication_attempt_digest: Option<String>,
     publication_finish_attempted: bool,
     published_digest: Option<String>,
+    pointer_namespace_attempted: bool,
+    pointer_namespace_digest: Option<String>,
 }
 
 enum OfflineRootFlush {
@@ -305,6 +307,17 @@ enum OfflineRootFlush {
 }
 
 impl OfflineRootFlush {
+    fn prepare_namespace_write(
+        &self,
+        root: &OwnedHandle,
+        expected: &OfflineObjectIdentityV2,
+    ) -> Result<()> {
+        match self {
+            Self::Retained(writer) => writer.prepare_namespace_write(root, expected),
+            #[cfg(test)]
+            Self::FixtureReopen => Err("WAKE_OFFLINE_TRANSACTION_ROOT_REQUIRED".into()),
+        }
+    }
     fn require_root(&self, root: &OwnedHandle, expected: &OfflineObjectIdentityV2) -> Result<()> {
         match self {
             Self::Retained(writer) => writer.require_root(root, expected),
@@ -335,6 +348,10 @@ struct OfflineMutationChecks<'p> {
 #[path = "install_broker_offline_recovery.rs"]
 mod recovery;
 pub use recovery::OfflineRecoveryV2;
+
+#[path = "install_broker_offline_pointer.rs"]
+mod pointer;
+pub use pointer::OfflinePointerPlanV2;
 
 impl<'a> BrokerLedgerGuard<'a> {
     /// Future fixed-broker V2 admission. Current physical observations must
@@ -499,6 +516,8 @@ impl<'a> BrokerLedgerGuard<'a> {
             publication_attempt_digest: None,
             publication_finish_attempted: false,
             published_digest: None,
+            pointer_namespace_attempted: false,
+            pointer_namespace_digest: None,
         })
     }
 }

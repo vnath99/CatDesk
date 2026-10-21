@@ -713,6 +713,28 @@ pub struct OfflineMigrationObjectPathsV2<'a> {
     pub broker_service_image: &'a Path,
 }
 
+enum OfflineTargetRootPinV2 {
+    Diagnostic(OfflineObjectPinV2),
+    Transaction(Arc<RetainedDirectoryWriterV2>),
+}
+
+impl OfflineTargetRootPinV2 {
+    fn matches(&self, expected: &OfflineObjectIdentityV2) -> Result<()> {
+        match self {
+            Self::Diagnostic(pin) => pin.matches(expected),
+            Self::Transaction(writer) => writer.require_identity(expected),
+        }
+    }
+
+    #[cfg(test)]
+    fn identity(&self) -> &OfflineObjectIdentityV2 {
+        match self {
+            Self::Diagnostic(pin) => &pin.identity,
+            Self::Transaction(writer) => writer.identity(),
+        }
+    }
+}
+
 /// Eight signed role handles plus the exact old root's fixed config.json.
 /// The fixed-policy diagnostic retains these throughout signature comparison.
 pub struct OfflineMigrationPinsV2 {
@@ -722,10 +744,9 @@ pub struct OfflineMigrationPinsV2 {
     old_runtime_lock: OfflineObjectPinV2,
     old_host_image: OfflineObjectPinV2,
     project_registration_object: OfflineObjectPinV2,
-    target_protected_root: OfflineObjectPinV2,
+    target_protected_root: OfflineTargetRootPinV2,
     broker_policy_file: OfflineObjectPinV2,
     broker_service_image: OfflineObjectPinV2,
-    protected_root_writer: Option<Arc<RetainedDirectoryWriterV2>>,
 }
 
 impl OfflineMigrationPinsV2 {
@@ -742,10 +763,12 @@ impl OfflineMigrationPinsV2 {
                 paths.project_registration_object,
                 false,
             )?,
-            target_protected_root: OfflineObjectPinV2::open(paths.target_protected_root, true)?,
+            target_protected_root: OfflineTargetRootPinV2::Diagnostic(OfflineObjectPinV2::open(
+                paths.target_protected_root,
+                true,
+            )?),
             broker_policy_file: OfflineObjectPinV2::open(paths.broker_policy_file, false)?,
             broker_service_image: OfflineObjectPinV2::open(paths.broker_service_image, false)?,
-            protected_root_writer: None,
         })
     }
 
@@ -776,13 +799,10 @@ impl OfflineMigrationPinsV2 {
             fixed_root,
             expected_root,
         )?);
-        let file = writer.duplicate_role_file()?;
-        let identity = inspect(&file, true)?;
-        let target_protected_root = OfflineObjectPinV2 {
-            file,
-            identity,
-            directory: true,
-        };
+        // Share the one owned writer capability, rather than duplicating its
+        // kernel open. A later marked namespace handoff can then replace that
+        // open while every role/lease observes the same checked state.
+        let target_protected_root = OfflineTargetRootPinV2::Transaction(writer);
         target_protected_root.matches(expected_root)?;
         Ok(Self {
             predecessor_pointer,
@@ -794,15 +814,13 @@ impl OfflineMigrationPinsV2 {
             target_protected_root,
             broker_policy_file,
             broker_service_image,
-            protected_root_writer: Some(writer),
         })
     }
 
     pub(crate) fn transaction_root_writer(&self) -> Result<Arc<RetainedDirectoryWriterV2>> {
-        let writer = self
-            .protected_root_writer
-            .as_ref()
-            .ok_or("WAKE_OFFLINE_TRANSACTION_ROOT_REQUIRED")?;
+        let OfflineTargetRootPinV2::Transaction(writer) = &self.target_protected_root else {
+            return Err("WAKE_OFFLINE_TRANSACTION_ROOT_REQUIRED".into());
+        };
         self.target_protected_root.matches(writer.identity())?;
         Ok(Arc::clone(writer))
     }
@@ -1246,7 +1264,7 @@ mod tests {
             desired_state: crate::install_broker_offline_v2::OfflineDesiredStateV2::Stopped,
             closed_store_inventory_sha256: String::new(),
             quarantined_launch_entrypoints_sha256: String::new(),
-            target_protected_root: pins.target_protected_root.identity.clone(),
+            target_protected_root: pins.target_protected_root.identity().clone(),
             broker_policy_file: pins.broker_policy_file.identity.clone(),
             broker_policy_sha256: String::new(),
             broker_service_image: pins.broker_service_image.identity.clone(),

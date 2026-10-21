@@ -9,11 +9,13 @@ use crate::{
     install_broker_offline_pins::full_identity_of_handle,
     install_broker_offline_v2::OfflineObjectIdentityV2,
 };
+#[cfg(test)]
+use std::fs::File;
 use std::{
     ffi::c_void,
-    fs::File,
     os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle},
     ptr,
+    sync::Mutex,
 };
 
 const FILE_OPEN: u32 = 1;
@@ -256,12 +258,28 @@ fn flush_directory_handle(
 }
 
 /// Exact directory writer retained by one broker transaction. It denies new
-/// write/delete opens and flushes its own already granted handle. Construction
+/// write/delete opens until a marked namespace handoff permits WRITE sharing;
+/// DELETE sharing stays denied. Flush uses its already granted handle. Construction
 /// is crate-private; production obtains it from fixed policy under the ledger
 /// guard, never from a serialized capability or caller-selected trusted path.
 pub(crate) struct RetainedDirectoryWriterV2 {
-    handle: OwnedHandle,
+    state: Mutex<DirectoryWriterStateV2>,
     expected: OfflineObjectIdentityV2,
+}
+
+enum DirectoryWriterStateV2 {
+    Exclusive(OwnedHandle),
+    Namespace(OwnedHandle),
+    Attention,
+}
+
+impl DirectoryWriterStateV2 {
+    fn handle(&self) -> Result<&OwnedHandle> {
+        match self {
+            Self::Exclusive(handle) | Self::Namespace(handle) => Ok(handle),
+            Self::Attention => Err("WAKE_OFFLINE_TRANSACTION_ROOT_ATTENTION".into()),
+        }
+    }
 }
 
 impl RetainedDirectoryWriterV2 {
@@ -279,7 +297,7 @@ impl RetainedDirectoryWriterV2 {
             FILE_SHARE_READ,
         )?;
         let writer = Self {
-            handle,
+            state: Mutex::new(DirectoryWriterStateV2::Exclusive(handle)),
             expected: expected.clone(),
         };
         writer.require_root(pinned, expected)?;
@@ -294,15 +312,73 @@ impl RetainedDirectoryWriterV2 {
         if self.expected != *expected {
             return Err("WAKE_OFFLINE_TRANSACTION_ROOT_MISMATCH".into());
         }
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| "WAKE_OFFLINE_TRANSACTION_ROOT_ATTENTION")?;
         require_full_directory(root, expected)?;
-        require_full_directory(&self.handle, expected)
+        require_full_directory(state.handle()?, expected)
     }
 
+    pub(crate) fn require_identity(&self, expected: &OfflineObjectIdentityV2) -> Result<()> {
+        if self.expected != *expected {
+            return Err("WAKE_OFFLINE_TRANSACTION_ROOT_MISMATCH".into());
+        }
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| "WAKE_OFFLINE_TRANSACTION_ROOT_ATTENTION")?;
+        require_full_directory(state.handle()?, expected)
+    }
+
+    /// Called only after a durable namespace-attempt marker under the global
+    /// ledger guard. Fixed policy and guard no-delete pins remain live while
+    /// the exclusive writer is replaced through the same pinned root. Windows
+    /// needs WRITE sharing for its internal rename target open. Any failed
+    /// handoff stays attention; it cannot silently reacquire or retry.
+    pub(crate) fn prepare_namespace_write(
+        &self,
+        root: &OwnedHandle,
+        expected: &OfflineObjectIdentityV2,
+    ) -> Result<()> {
+        if self.expected != *expected {
+            return Err("WAKE_OFFLINE_TRANSACTION_ROOT_MISMATCH".into());
+        }
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| "WAKE_OFFLINE_TRANSACTION_ROOT_ATTENTION")?;
+        require_full_directory(root, expected)?;
+        require_full_directory(state.handle()?, expected)?;
+        if !matches!(*state, DirectoryWriterStateV2::Exclusive(_)) {
+            return Err("WAKE_OFFLINE_TRANSACTION_ROOT_ATTENTION".into());
+        }
+        drop(std::mem::replace(
+            &mut *state,
+            DirectoryWriterStateV2::Attention,
+        ));
+        let handle = open_relative_directory(
+            root,
+            FILE_READ_DATA | FILE_ADD_FILE | FILE_READ_ATTRIBUTES | READ_CONTROL | SYNCHRONIZE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+        )?;
+        require_full_directory(root, expected)?;
+        require_full_directory(&handle, expected)?;
+        *state = DirectoryWriterStateV2::Namespace(handle);
+        Ok(())
+    }
+
+    #[cfg(test)]
     pub(crate) fn duplicate_role_file(&self) -> Result<File> {
-        require_full_directory(&self.handle, &self.expected)?;
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| "WAKE_OFFLINE_TRANSACTION_ROOT_ATTENTION")?;
+        let handle = state.handle()?;
+        require_full_directory(handle, &self.expected)?;
         // DuplicateHandle preserves this open's access/share contract; no
         // second path open or right upgrade occurs.
-        self.handle
+        handle
             .try_clone()
             .map(File::from)
             .map_err(|_| "WAKE_OFFLINE_TRANSACTION_ROOT_UNAVAILABLE".into())
@@ -314,9 +390,19 @@ impl RetainedDirectoryWriterV2 {
         expected: &OfflineObjectIdentityV2,
         point: ParentFlushPoint,
     ) -> Result<()> {
-        self.require_root(root, expected)?;
-        flush_directory_handle(&self.handle, &expected.legacy, point)?;
-        self.require_root(root, expected)
+        if self.expected != *expected {
+            return Err("WAKE_OFFLINE_TRANSACTION_ROOT_MISMATCH".into());
+        }
+        let state = self
+            .state
+            .lock()
+            .map_err(|_| "WAKE_OFFLINE_TRANSACTION_ROOT_ATTENTION")?;
+        let handle = state.handle()?;
+        require_full_directory(root, expected)?;
+        require_full_directory(handle, expected)?;
+        flush_directory_handle(handle, &expected.legacy, point)?;
+        require_full_directory(root, expected)?;
+        require_full_directory(handle, expected)
     }
 }
 
@@ -428,5 +514,37 @@ mod retained_writer_tests {
         drop(writer);
         first.cleanup();
         second.cleanup();
+    }
+
+    #[test]
+    fn failed_namespace_handoff_stays_attention_after_conflicting_duplicate_closes() {
+        let fixture = TransactionFixture::new();
+        let expected = expected(fixture.root());
+        let writer = RetainedDirectoryWriterV2::acquire(fixture.root(), &expected).unwrap();
+        let conflicting = writer.duplicate_role_file().unwrap();
+        assert!(
+            writer
+                .prepare_namespace_write(fixture.root(), &expected)
+                .is_err()
+        );
+        drop(conflicting);
+        assert_eq!(
+            writer.require_identity(&expected).unwrap_err(),
+            "WAKE_OFFLINE_TRANSACTION_ROOT_ATTENTION"
+        );
+        assert_eq!(
+            writer
+                .prepare_namespace_write(fixture.root(), &expected)
+                .unwrap_err(),
+            "WAKE_OFFLINE_TRANSACTION_ROOT_ATTENTION"
+        );
+        assert_eq!(
+            writer
+                .flush(fixture.root(), &expected, ParentFlushPoint::PointerAttempt)
+                .unwrap_err(),
+            "WAKE_OFFLINE_TRANSACTION_ROOT_ATTENTION"
+        );
+        drop(writer);
+        fixture.cleanup();
     }
 }

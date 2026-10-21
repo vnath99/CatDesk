@@ -1,3 +1,34 @@
+## 2026-10-21 — marked first-pointer namespace handoff (SOURCE/FIXTURE; CUTOVER PENDING)
+
+A native fixture found that the strict retained root writer also blocks the
+filesystem's pointer rename, even via a write-capable duplicate. V2 now retains
+strict sharing through PUBLISHED, then admits WRITE sharing only after a durable
+first-pointer attempt tied to exact PUBLISHED/stage objects and canonical planned
+bytes. Fixed policy/global-guard root pins stay live, DELETE sharing remains
+denied, and full identity is checked before/after the one-time handle handoff.
+A failed handoff stays attention. Diagnostic and non-root role sharing remain
+unchanged; transaction roles share the same checked capability without duplicate
+kernel opens that would prevent that handoff.
+
+Seven new cases pass, including the native strict-fail/handoff-success control,
+sticky failed handoff, durable namespace admission, existing current/pending
+preservation, flush failure, plan/marker tamper and cross-root receipt refusal.
+The policy test additionally verifies all non-root pins after handoff. Complete
+Wake passes 346 library tests / one ignored plus enabled binaries/integrations
+and adapter/response Python regressions. Strict root/Wake Clippy, formatting,
+diff and final source-hash checks pass. Initial failed native evidence and both
+full candidate runs remain retained; the final run includes an explicit receipt-
+to-ledger binding comparison. Root main runtime tests remain historical.
+
+Preparation does not create current.json. Next: connect the planned bytes to the
+V2 no-replace pointer writer, protected reader and POINTER_SWITCHED proof. The
+legacy predecessor stays separate and preserved. Quarantine/service admission,
+owner cutover, independent CI/provisioning and installed multi-project acceptance
+remain open. No selected/production package, binding, operational worker or canary
+is changed; cleanup finds zero scoped processes and both controls remain STOPPED.
+No new connector probe this increment; last 18:18:18 UTC read returned HTTP 429.
+Parent dated audit: checkpoints/offline-v2-pointer-oct21.
+
 ## 2026-10-21 — V2 exact complete-phase recovery (SOURCE/FIXTURE; ADMISSION HELD)
 
 V2 now reopens complete STAGED or PUBLISHED history under the matching global

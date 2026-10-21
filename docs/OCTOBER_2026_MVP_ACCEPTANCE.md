@@ -1,5 +1,62 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 first-pointer namespace handoff (SOURCE/FIXTURE; CUTOVER PENDING)
+
+A real Windows fixture established a remaining compatibility issue: the strict
+retained root writer blocks the native pointer rename even through an owned
+write-capable duplicate. The retained writer now has a guarded namespace phase.
+It remains strict through publication; only a durable first-pointer attempt
+bound to exact signed intent/PUBLISHED/stage history, physical package receipt
+and canonical planned bytes can initiate the one-time handoff. The fixed policy
+and global guard keep the same root pinned against delete throughout, full root
+identity is rechecked, and DELETE sharing stays denied. Namespace WRITE sharing
+permits the filesystem's internal rename target open. This is an explicit phase
+exception to the earlier all-lifetime WRITE exclusion, not an installed policy
+change. Any failed handoff stays attention and cannot reacquire automatically.
+
+Transaction target-role checks now share the one owned writer capability, so
+they follow that handoff without retaining conflicting duplicate kernel opens.
+Read-only diagnostic target pins and all predecessor/config/lock/image/registry/
+policy/service pins retain their existing sharing. A policy fixture verifies
+readback and target identity after handoff, plus write denial for every non-root
+role. The first-generation plan carries full protected/predecessor/stage IDs,
+signed-origin intent linkage and manifest/package identity under an 8-KiB bound.
+Plan bytes are claims, not install authority. Existing protected current.json or
+the fixed pending file refuse before marker creation; neither is overwritten.
+
+Seven new cases pass: native strict-failure/handoff-success compatibility,
+sticky failed handoff after a conflicting test duplicate closes, typed durable
+admission, pre-existing current/pending preservation, failed marker flush that
+never changes sharing, changed plan/marker and cross-root receipt refusal. The
+complete all-feature Wake command passes 346 library tests / one ignored plus
+all enabled binary/integration and adapter/response Python regressions. Strict
+root/Wake all-target/all-feature Clippy, formatting, diff and final runtime-source
+hash checks pass. The first failed native probe is retained; the final test
+asserts both sides of that behavior. The first full candidate run passed before
+an explicit receipt-to-ledger comparison and cross-root case were added; a
+separate complete final run passes on the unchanged final source. Root main
+runtime tests remain prior-checkpoint evidence.
+
+The separate native compatibility probe uses noncanonical fixture canary bytes;
+it does not demonstrate the integrated V2 pointer writer/reader. The preparation
+API creates a durable marker and returns planned bytes; it does
+not create/select a protected pointer or establish owner-stop/launch authority.
+V2 current.json creation, protected reader/POINTER_SWITCHED binding and owner
+cutover remain incomplete. The original predecessor pointer remains separately
+pinned in the legacy runtime. Existing unimplemented quarantine and installer/
+service holds remain; no source fixture bypass can enable production admission.
+Independent exact-source CI, provisioning and installed multi-project context/
+routing/rollover/development-cycle acceptance remain open.
+
+Five original registry/Wake pairs/history, stopped selected v33 and production
+pointers remain exact. Cleanup at 18:41:31 UTC finds zero scoped processes. No
+operational browser/WakeHost/recurring worker, event send or completed canary
+replay starts. No connector probe is repeated in this increment; the last read
+at 18:18:18 UTC returned HTTP 429 at the OpenAI tunnel SSE probe before local
+CatDesk access was proven. Next: use the checked plan for the V2 no-replace
+pointer writer and protected reader while these operational holds remain.
+Parent dated audit: checkpoints/offline-v2-pointer-oct21.
+
 ## October 21 exact V2 complete-phase recovery (SOURCE/FIXTURE ONLY)
 
 The dormant broker now supports exact STAGED/PUBLISHED recovery through
