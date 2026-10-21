@@ -449,18 +449,35 @@ def bounded_response_observation(bridge, sink, cdp, message, message_digest,
     clock = clock or time.monotonic
     sleep = sleep or time.sleep
     deadline = clock() + timeout
+    unmounted = object()
+
+    def sample():
+        try:
+            return sink.observe_cooperative_response(cdp, message, message_digest)
+        except bridge.Attention as error:
+            if str(error) != "RESPONSE_USER_DOCUMENT_NOT_HYDRATED":
+                raise
+            # This is not positive pending/receipt evidence. If the document
+            # never mounts, preserve the refusal at the original deadline.
+            if clock() >= deadline:
+                raise
+            return unmounted
+
     while True:
-        stage = sink.observe_cooperative_response(cdp, message, message_digest)
-        if stage not in {"RESPONSE_PENDING", "RESPONSE_COMPLETE"}:
+        stage = sample()
+        if stage not in {unmounted, "RESPONSE_PENDING", "RESPONSE_COMPLETE"}:
             raise bridge.Attention("RESPONSE_PROBE_STATE_INVALID")
         if stage == "RESPONSE_COMPLETE":
             sleep(.25)
-            stage = sink.observe_cooperative_response(cdp, message, message_digest)
-            if stage not in {"RESPONSE_PENDING", "RESPONSE_COMPLETE"}:
+            stage = sample()
+            if stage not in {unmounted, "RESPONSE_PENDING", "RESPONSE_COMPLETE"}:
                 raise bridge.Attention("RESPONSE_PROBE_STATE_INVALID")
-            return stage
+            if stage is not unmounted:
+                return stage
         remaining = deadline - clock()
         if remaining <= 0:
+            if stage is unmounted:
+                raise bridge.Attention("RESPONSE_USER_DOCUMENT_NOT_HYDRATED")
             return stage
         sleep(min(.5, remaining))
 

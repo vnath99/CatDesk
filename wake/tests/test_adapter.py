@@ -200,6 +200,76 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(len(cdp.timeline), 4)
         self.assertEqual(now[0], 1)
 
+    def test_empty_user_mount_wait_is_bounded_and_requires_new_complete_proof(self):
+        for frames, timeout, expected in (
+            ([None, "RESPONSE_COMPLETE", "RESPONSE_COMPLETE"], 1, "RESPONSE_COMPLETE"),
+            (["RESPONSE_COMPLETE", None, "RESPONSE_COMPLETE", "RESPONSE_COMPLETE"], 1, "RESPONSE_COMPLETE"),
+            ([None, None, None], 1, "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"),
+            ([None], 0, "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"),
+        ):
+            with self.subTest(frames=frames, timeout=timeout):
+                now = [0.0]
+                samples = list(frames)
+                cdp = FakeCdp()
+                class Sink:
+                    def observe_cooperative_response(self, cdp, message, digest):
+                        cdp.timeline.append("observe")
+                        stage = samples.pop(0)
+                        if stage is None:
+                            raise bridge.Attention("RESPONSE_USER_DOCUMENT_NOT_HYDRATED")
+                        return stage
+                def pause(seconds): now[0] += seconds
+                def observe():
+                    return adapter.bounded_response_observation(
+                        bridge, Sink(), cdp, "bounded wake", bridge.digest("bounded wake"),
+                        timeout=timeout, clock=lambda: now[0], sleep=pause)
+                if expected.startswith("RESPONSE_USER_"):
+                    with self.assertRaisesRegex(bridge.Attention, expected):
+                        observe()
+                else:
+                    self.assertEqual(observe(), expected)
+                self.assertEqual(samples, [])
+                self.assertLessEqual(now[0], timeout)
+                self.assertFalse(cdp.sent)
+                self.assertEqual(cdp.keys, [])
+
+    def test_response_wait_never_retries_scope_or_nonempty_user_failures(self):
+        for reason in ("RESPONSE_TARGET_DRIFT", "LOGIN_OR_PROFILE_REQUIRED",
+                       "RESPONSE_EXACT_USER_MISSING_OR_AMBIGUOUS", "RESPONSE_SEQUENCE_DRIFT"):
+            with self.subTest(reason=reason):
+                sink = types.SimpleNamespace(observe_cooperative_response=lambda *args: None)
+                with patch.object(sink, "observe_cooperative_response", side_effect=bridge.Attention(reason)) as sample:
+                    with self.assertRaisesRegex(bridge.Attention, reason):
+                        adapter.bounded_response_observation(
+                            bridge, sink, FakeCdp(), "bounded wake", bridge.digest("bounded wake"),
+                            clock=lambda: 0, sleep=lambda _: self.fail("refusal must not wait"))
+                self.assertEqual(sample.call_count, 1)
+
+        with self.assertRaisesRegex(bridge.Attention, "RESPONSE_PROBE_STATE_INVALID"):
+            adapter.bounded_response_observation(
+                bridge, types.SimpleNamespace(observe_cooperative_response=lambda *args: None),
+                FakeCdp(), "bounded wake", bridge.digest("bounded wake"), clock=lambda: 0,
+                sleep=lambda _: self.fail("malformed state must not wait"))
+
+    def test_only_empty_user_and_empty_anchor_view_is_mount_pending(self):
+        cdp = FakeCdp()
+        expected = bridge.digest("bounded wake")
+        with tempfile.TemporaryDirectory() as profile:
+            sink = bridge.CdpSink(cdp.url, Path(profile), 1, 1)
+            for users, anchor, reason in (
+                ([], (0, 0), "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"),
+                ([], (1, 0), "RESPONSE_EXACT_USER_MISSING_OR_AMBIGUOUS"),
+                (["0" * 64], (0, 0), "RESPONSE_EXACT_USER_MISSING_OR_AMBIGUOUS"),
+                ([expected, expected], (2, 0), "RESPONSE_EXACT_USER_MISSING_OR_AMBIGUOUS"),
+            ):
+                with self.subTest(users=users, anchor=anchor), patch.object(
+                    bridge.CdpSink, "post_submit_visible_any", return_value=False
+                ), patch.object(bridge.CdpSink, "document_ready_state", return_value="complete"), patch.object(
+                    bridge.CdpSink, "user_message_digests", return_value=users
+                ), patch.object(bridge.CdpSink, "trusted_turn_anchor_state", return_value=anchor), \
+                        self.assertRaisesRegex(bridge.Attention, reason):
+                    sink.observe_cooperative_response(cdp, "bounded wake", expected)
+
     @staticmethod
     def probe_request(url="https://chatgpt.com/c/exact", event_id="review-1"):
         target = {"url": url, "digest": bridge.digest(url), "generation": 1}

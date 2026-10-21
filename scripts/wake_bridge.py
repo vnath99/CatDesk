@@ -1194,6 +1194,11 @@ class CdpSink:
             count, turns_after = self.trusted_turn_anchor_state(cdp, message)
         except Attention as error:
             raise Attention("RESPONSE_SEQUENCE_QUERY_FAILED") from error
+        # readyState can precede React's conversation mount. Only a wholly
+        # empty USER/anchor view is eligible for the caller's bounded wait.
+        # A nonempty wrong/duplicate view must still fail immediately.
+        if not users and count == 0:
+            raise Attention("RESPONSE_USER_DOCUMENT_NOT_HYDRATED")
         if users.count(expected_digest) != 1 or not users:
             raise Attention("RESPONSE_EXACT_USER_MISSING_OR_AMBIGUOUS")
         if users[-1] != expected_digest or count != 1 or turns_after > 1:

@@ -1,3 +1,35 @@
+## 2026-10-21 — bounded empty-document observation (SOURCE)
+
+The second read-only inspection returns the compact code
+RESPONSE_EXACT_USER_MISSING_OR_AMBIGUOUS. It sends nothing, leaves all 81
+protected records exact, and exits with no scoped processes. This is an older
+quarantined attempt; the completed fast canary remains complete and untouched.
+The observation does not establish whether the candidate lacks the expected
+message or whether it was not yet mounted. No receipt or retirement is inferred.
+
+Source now distinguishes an empty USER list with zero trusted anchors from a
+nonempty wrong/duplicate USER view. Only the empty view can wait within the
+existing ten-second read-only observation budget. Deadline expiry is a refusal,
+never positive pending/receipt evidence. After a remount, completion still needs
+two matching completed observations. Wrong target, login, nonempty mismatch,
+sequence drift and malformed observation states fail immediately. No reload,
+Retry click, composer edit, send or Wake binding change is added.
+
+Temporary debug v38's local metadata probe times out and is not qualified.
+The supported stopped updater restores previously qualified normal release v37;
+79 other protected records remain exact, both prior packages are preserved and
+both runtimes stay STOPPED. The initial restore validator mistakenly included
+its two intended development selection updates; a separate read-only finalizer
+corrects that classification without repeating the update. Production is unchanged.
+All five original Web pairs/history remain exact, and all four original native
+development chats are active with no reported turn error at the read-only check.
+Complete offline Python discovery passes 64 Wake tests and 230 root tests /
+one skip. The final Wake rerun also rejects a malformed None observation
+without waiting; both suites start no live browser. Source diff checks pass.
+Matched normal package qualification remains a separate gate; these tests are
+not installed production acceptance.
+Parent UTC evidence: checkpoints/web-inspection-codes-v38-oct21.
+
 ## 2026-10-21 — real native profile qualification and inspection diagnostics
 
 The fresh isolated native candidate passes all four fixed commands, including
