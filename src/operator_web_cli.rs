@@ -105,6 +105,10 @@ pub(crate) enum WebAction {
         project_id: String,
         expected_intent_id: String,
     },
+    RolloverInspectQuarantine {
+        project_id: String,
+        expected_intent_id: String,
+    },
     RolloverArchiveDraft {
         project_id: String,
         expected_intent_id: String,
@@ -280,14 +284,19 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("rollover", "execute") if options.is_empty() => Ok(WebAction::RolloverExecute {
             project_id: project_id.into(),
         }),
-        ("rollover", "inspect-draft" | "archive-draft") => {
+        ("rollover", "inspect-draft" | "archive-draft" | "inspect-quarantine") => {
             let expected_intent_id = options
                 .remove("--expected-intent-id")
                 .ok_or("WEB_USAGE: --expected-intent-id is required")?;
             if !catdesk_wake::protocol::valid_id(expected_intent_id) || !options.is_empty() {
                 return Err("WEB_USAGE: invalid draft intent or unexpected option".into());
             }
-            if verb == "inspect-draft" {
+            if verb == "inspect-quarantine" {
+                Ok(WebAction::RolloverInspectQuarantine {
+                    project_id: project_id.into(),
+                    expected_intent_id: expected_intent_id.into(),
+                })
+            } else if verb == "inspect-draft" {
                 Ok(WebAction::RolloverInspectDraft {
                     project_id: project_id.into(),
                     expected_intent_id: expected_intent_id.into(),
@@ -950,6 +959,10 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             expected_intent_id,
         } => rollover::inspect_draft(&workspace, &project_id, &expected_intent_id),
+        WebAction::RolloverInspectQuarantine {
+            project_id,
+            expected_intent_id,
+        } => rollover::inspect_quarantine(&workspace, &project_id, &expected_intent_id),
         WebAction::RolloverArchiveDraft {
             project_id,
             expected_intent_id,
@@ -1163,6 +1176,24 @@ mod tests {
             matches!(parse(&complete), Ok(WebAction::RolloverQuarantine { project_id, expected_intent_id, .. }) if project_id == "alpha" && expected_intent_id == "intent-a")
         );
         assert!(parse(&complete[..8]).is_err());
+        let inspection = args(&[
+            "operator",
+            "web",
+            "rollover",
+            "inspect-quarantine",
+            "--project-id",
+            "alpha",
+            "--expected-intent-id",
+            "intent-a",
+        ]);
+        assert!(
+            matches!(parse(&inspection), Ok(WebAction::RolloverInspectQuarantine {
+            project_id, expected_intent_id }) if project_id == "alpha" && expected_intent_id == "intent-a")
+        );
+        assert!(parse(&inspection[..6]).is_err());
+        let mut redirect = inspection;
+        redirect.extend(args(&["--candidate-url", "https://chatgpt.com/c/other"]));
+        assert!(parse(&redirect).is_err());
         let mut invalid = complete.clone();
         *invalid.last_mut().unwrap() = "https://example.com/c/untrusted".into();
         assert!(parse(&invalid).is_err());

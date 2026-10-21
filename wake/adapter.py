@@ -38,7 +38,8 @@ def read_job_request():
         raise ValueError("invalid job request")
     request = json.loads(line)
     if not isinstance(request, dict) or (not any(request.get(kind) is True for kind in
-            ("bootstrap", "bootstrapDraftInspect", "bootstrapDraftArchive")) and len(line) > 8192):
+            ("bootstrap", "bootstrapDraftInspect", "bootstrapDraftArchive",
+             "bootstrapQuarantineInspect")) and len(line) > 8192):
         raise ValueError("invalid job request")
     return request
 
@@ -505,6 +506,43 @@ def bootstrap_probe(bridge, sb, request):
         raise bridge.Attention("BOOTSTRAP_PROBE_STATE_INVALID")
 
 
+def bootstrap_quarantine_inspect(bridge, sb, request):
+    """Read a saved orphan candidate without creating a receipt or any write authority."""
+    if (set(request) != {"bootstrapQuarantineInspect", "projectId", "intentId",
+                         "source", "handoff", "candidateUrl"} or
+            request["bootstrapQuarantineInspect"] is not True):
+        raise bridge.Attention("BOOTSTRAP_QUARANTINE_REQUEST_INVALID")
+    source = request["source"]
+    if not isinstance(source, dict) or set(source) != {"url", "digest", "generation"}:
+        raise bridge.Attention("BOOTSTRAP_QUARANTINE_REQUEST_INVALID")
+    source_url = bridge.canonical_conversation_url(source["url"])
+    candidate = bridge.canonical_conversation_url(request["candidateUrl"])
+    if (source_url != source["url"] or bridge.digest(source_url) != source["digest"] or
+            type(source["generation"]) is not int or not 0 < source["generation"] < 2**63 or
+            candidate != request["candidateUrl"] or candidate == source_url):
+        raise bridge.Attention("BOOTSTRAP_QUARANTINE_SCOPE_INVALID")
+    message = bridge.compose_bootstrap_message(
+        request["projectId"], request["intentId"], source_url, request["handoff"])
+    expected = bridge.digest(bridge.normalize_message(message))
+    sink = bridge.CdpSink(candidate, ROOT / "browser-profile", 30, 20)
+    cdp = prepare_cdp_target(bridge, sb, candidate)
+    stage = bounded_response_observation(bridge, sink, cdp, message, expected)
+    # Pending can mean the document never hydrated. A historical probe has a
+    # receipt already, but this diagnostic must independently see the USER now.
+    if not sink.exact(cdp.get_current_url()) or sink.document_ready_state(cdp) != "complete":
+        raise bridge.Attention("BOOTSTRAP_QUARANTINE_USER_UNPROVEN")
+    users = sink.user_message_digests(cdp)
+    count, turns_after = sink.trusted_turn_anchor_state(cdp, message)
+    if (users.count(expected) != 1 or not users or users[-1] != expected or
+            count != 1 or turns_after > 1 or not sink.exact(cdp.get_current_url())):
+        raise bridge.Attention("BOOTSTRAP_QUARANTINE_USER_UNPROVEN")
+    emit({"stage": "BOOTSTRAP_QUARANTINE_INSPECTED", "projectId": request["projectId"],
+          "intentId": request["intentId"], "sourceGeneration": source["generation"],
+          "sourceDigest": source["digest"], "candidateDigest": bridge.digest(candidate),
+          "messageDigest": expected, "existingUserMessageVerified": True,
+          "responseState": stage, "observationOnly": True})
+
+
 def bounded_source_snapshot(bridge, sink, cdp, *, timeout=10, clock=None, sleep=None):
     """Wait in one document for matching complete final message frames.
 
@@ -724,7 +762,9 @@ def main():
                     emit({"stage": "READY"})
                     try:
                         request = read_job_request()
-                        if request.get("bootstrapDraftArchive") is True:
+                        if request.get("bootstrapQuarantineInspect") is True:
+                            bootstrap_quarantine_inspect(bridge, sb, request)
+                        elif request.get("bootstrapDraftArchive") is True:
                             bootstrap_draft_archive(bridge, sb, request)
                         elif request.get("bootstrapDraftInspect") is True:
                             bootstrap_draft_inspect(bridge, sb, request)

@@ -1058,5 +1058,112 @@ class NewConversationTests(unittest.TestCase):
         self.assertEqual(cdp.navigation, [])
 
 
+    def test_quarantined_candidate_inspection_reads_without_receipt_or_submit(self):
+        original = self.request()
+        request = {"bootstrapQuarantineInspect": True, "projectId": original["projectId"],
+                   "intentId": original["intentId"], "source": original["source"],
+                   "handoff": original["handoff"], "candidateUrl": ISSUED}
+        expected = bridge.compose_bootstrap_message(
+            request["projectId"], request["intentId"], SOURCE, request["handoff"])
+
+        class ReadSink:
+            response = "RESPONSE_COMPLETE"
+            ready = "complete"
+
+            def __init__(self, url, profile, ui_timeout, submit_timeout):
+                assert url == ISSUED
+
+            def observe_cooperative_response(self, cdp, message, message_digest):
+                assert cdp.url == ISSUED and cdp.sent == 0
+                assert message == expected
+                assert message_digest == bridge.digest(bridge.normalize_message(expected))
+                return self.response
+
+            def exact(self, url):
+                return url == ISSUED
+
+            def document_ready_state(self, cdp):
+                return self.ready
+
+            def user_message_digests(self, cdp):
+                return [bridge.digest(bridge.normalize_message(expected))]
+
+            def trusted_turn_anchor_state(self, cdp, message):
+                assert message == expected
+                return 1, 1
+
+        for response in ("RESPONSE_PENDING", "RESPONSE_COMPLETE"):
+            with self.subTest(response=response):
+                ReadSink.response = response
+                cdp = AttemptCdp()
+                output = []
+                sb = types.SimpleNamespace(cdp=cdp)
+                with patch.object(bridge, "CdpSink", ReadSink), patch.object(adapter, "emit", output.append), \
+                        patch.object(adapter.time, "sleep"), patch.object(adapter.time, "monotonic", side_effect=range(100)):
+                    adapter.bootstrap_quarantine_inspect(bridge, sb, request)
+                result = output[-1]
+                self.assertEqual(result["stage"], "BOOTSTRAP_QUARANTINE_INSPECTED")
+                self.assertEqual(result["responseState"], response)
+                self.assertTrue(result["existingUserMessageVerified"])
+                self.assertTrue(result["observationOnly"])
+                self.assertEqual(cdp.sent, 0)
+                self.assertNotIn("receipt", result)
+                self.assertNotIn("sentUtc", result)
+                self.assertNotIn(ISSUED, json.dumps(result))
+                self.assertNotIn(request["handoff"], json.dumps(result))
+
+        for changed in (
+            dict(request, candidateUrl=SOURCE),
+            dict(request, source=dict(request["source"], generation=True)),
+            dict(request, source=dict(request["source"], digest="0" * 64)),
+            dict(request, receipt={"evidence": "EXACT_USER_MESSAGE_APPENDED"}),
+        ):
+            cdp = AttemptCdp()
+            with self.assertRaises(bridge.Attention), patch.object(bridge, "CdpSink", ReadSink):
+                adapter.bootstrap_quarantine_inspect(bridge, types.SimpleNamespace(cdp=cdp), changed)
+            self.assertEqual(cdp.navigation, [])
+            self.assertEqual(cdp.sent, 0)
+
+        class MismatchedUser(ReadSink):
+            def observe_cooperative_response(self, cdp, message, message_digest):
+                raise bridge.Attention("RECEIPT_USER_MISMATCH")
+
+        output = []
+        cdp = AttemptCdp()
+        with patch.object(bridge, "CdpSink", MismatchedUser), patch.object(adapter, "emit", output.append), \
+                self.assertRaisesRegex(bridge.Attention, "RECEIPT_USER_MISMATCH"):
+            adapter.bootstrap_quarantine_inspect(bridge, types.SimpleNamespace(cdp=cdp), request)
+        self.assertEqual(cdp.sent, 0)
+        self.assertNotIn("BOOTSTRAP_QUARANTINE_INSPECTED", [item["stage"] for item in output])
+
+        class Unhydrated(ReadSink):
+            response = "RESPONSE_PENDING"
+            ready = "loading"
+
+        class WrongUser(ReadSink):
+            def user_message_digests(self, cdp):
+                return ["0" * 64]
+
+        for sink_type in (Unhydrated, WrongUser):
+            cdp = AttemptCdp()
+            output = []
+            with patch.object(bridge, "CdpSink", sink_type), patch.object(adapter, "emit", output.append), \
+                    patch.object(adapter.time, "sleep"), patch.object(adapter.time, "monotonic", side_effect=range(100)), \
+                    self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_QUARANTINE_USER_UNPROVEN"):
+                adapter.bootstrap_quarantine_inspect(bridge, types.SimpleNamespace(cdp=cdp), request)
+            self.assertEqual(cdp.sent, 0)
+            self.assertNotIn("BOOTSTRAP_QUARANTINE_INSPECTED", [item["stage"] for item in output])
+
+    def test_quarantine_inspection_request_uses_existing_bounded_handoff_reader(self):
+        request = {"bootstrapQuarantineInspect": True, "handoff": "x" * 9000}
+        raw = json.dumps(request).encode() + b"\n"
+        self.assertGreater(len(raw), 8192)
+        with patch.object(adapter.sys, "stdin", types.SimpleNamespace(buffer=io.BytesIO(raw))):
+            self.assertEqual(adapter.read_job_request(), request)
+        raw = json.dumps(dict(request, handoff="x" * (32 * 1024))).encode() + b"\n"
+        with patch.object(adapter.sys, "stdin", types.SimpleNamespace(buffer=io.BytesIO(raw))), self.assertRaises(ValueError):
+            adapter.read_job_request()
+
+
 if __name__ == "__main__":
     unittest.main()

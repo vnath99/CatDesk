@@ -1,5 +1,21 @@
 # CatDesk — Important Command Reference
 
+## October 21 inspect a quarantined bootstrap (SOURCE; LIVE PENDING)
+
+`operator web rollover inspect-quarantine --project-id PROJECT --expected-intent-id INTENT`
+reads only the active quarantined record's saved candidate. There is no URL
+override. The paired source must remain unchanged, the intent must match, and
+no receipt or bound replacement may already exist. It needs a matched package
+with the new adapter mode; an older package refuses before browser startup.
+
+The command reuses the existing profile and bounded browser owner. It reads an
+exact bootstrap USER and response without typing, clicking Retry, sending or
+changing the journal/bindings. An unhydrated document or missing/ambiguous USER
+is unproven. Observation is not an original send receipt or continuation/work
+authority. The quarantine remains in force; preserve its history and inspect
+the result before deciding any separate recovery action. The completed fast
+canary is a different intent and must not be replayed to resolve this hold.
+
 ## October 21 generated child path compatibility (SOURCE)
 
 Fixed verification retains canonical internal runtime paths but supplies their

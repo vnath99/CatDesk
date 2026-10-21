@@ -1,3 +1,28 @@
+## 2026-10-21 — read-only quarantined conversation inspection (SOURCE)
+
+An older quarantined attempt still blocks new Web work for its own project;
+the separate completed fast canary does not resolve that history. The existing
+pending-response probe requires a saved receipt, which the quarantined attempt
+lacks. The new operator inspect-quarantine command selects only the active
+record's saved candidate, with an exact intent and unchanged paired source.
+
+The bounded existing browser owner reads the exact bootstrap USER and response
+through the current authenticated profile. Pending hydration alone cannot prove
+USER presence: a separate ready-document, exact-target and unique/latest-USER
+check is required. Output contains digests and observation state, never raw
+handoff text, a synthesized send time or a receipt. The intent remains
+QUARANTINED; no send, rebind, retirement, work admission or continuation follows.
+
+Wake all-feature regression passes 362 library tests / one ignored plus enabled
+integrations; all 68 Web orchestration tests pass. Offline Python discovery
+passes 61 Wake tests and 230 root tests / one skip. The 38 bootstrap tests are
+a subset of Wake discovery. Strict root/Wake all-target/all-feature Clippy,
+format and diff checks pass. Complete root Rust regression is prior-checkpoint
+evidence; this scoped addition does not claim a new full-root run. Packaging
+and one bounded live read remain separate gates. No live browser, WakeHost,
+recurring worker, binding change or completed-canary replay starts in these tests.
+Parent UTC evidence: checkpoints/web-quarantine-inspection-oct21.
+
 ## 2026-10-21 — child runtime path spelling (SOURCE; FULL PROFILE OPEN)
 
 The fixed real-project profile now preserves its source witness, but pytest

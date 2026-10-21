@@ -2499,6 +2499,113 @@ pub fn inspect_bootstrap_draft(
     }
 }
 
+fn quarantine_inspection_payload(
+    value: serde_json::Value,
+    project: &str,
+    intent: &str,
+    source: &Target,
+    candidate_digest: &str,
+    message_digest: &str,
+) -> Result<serde_json::Value> {
+    if value.as_object().is_none_or(|fields| fields.len() != 10)
+        || value["stage"] != "BOOTSTRAP_QUARANTINE_INSPECTED"
+        || value["projectId"] != project
+        || value["intentId"] != intent
+        || value["sourceGeneration"].as_u64() != Some(source.generation)
+        || value["sourceDigest"] != source.digest
+        || value["candidateDigest"] != candidate_digest
+        || value["messageDigest"] != message_digest
+        || value["existingUserMessageVerified"] != true
+        || value["observationOnly"] != true
+        || !matches!(
+            value["responseState"].as_str(),
+            Some("RESPONSE_PENDING" | "RESPONSE_COMPLETE")
+        )
+    {
+        return Err("BOOTSTRAP_QUARANTINE_INSPECTION_INVALID".into());
+    }
+    Ok(value)
+}
+
+/// Observe only the saved candidate selected by the operator's quarantine
+/// record. This creates no BootstrapReceipt and cannot authorize continuation.
+pub fn inspect_quarantined_bootstrap(
+    store: &Store,
+    project: &str,
+    intent: &str,
+    source: &Target,
+    handoff: &str,
+    candidate_url: &str,
+) -> Result<serde_json::Value> {
+    source.validate()?;
+    crate::protocol::validate_target(candidate_url)?;
+    if candidate_url == source.url {
+        return Err("BOOTSTRAP_QUARANTINE_SCOPE_INVALID".into());
+    }
+    let expected = bootstrap_message_digest(project, intent, source, handoff)?;
+    let candidate_digest = crate::protocol::digest(candidate_url);
+    let _owner = browser_owner_guard(store)?;
+    if store.config()?.targets.get(project) != Some(source) {
+        return Err("BOOTSTRAP_SOURCE_BINDING_CHANGED".into());
+    }
+    let installed = installed_bootstrap_directory(store)?;
+    let bytes =
+        std::fs::read(installed.join("adapter.py")).map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?;
+    if !bytes
+        .windows(b"def bootstrap_quarantine_inspect(".len())
+        .any(|part| part == b"def bootstrap_quarantine_inspect(")
+    {
+        return Err("BOOTSTRAP_QUARANTINE_INSPECT_PACKAGE_REQUIRED".into());
+    }
+    let mut adapter = Adapter::spawn_from_installed(store.root(), &installed)?;
+    adapter.send(serde_json::json!({"bootstrapQuarantineInspect":true,
+        "projectId":project,"intentId":intent,"source":source,
+        "handoff":handoff,"candidateUrl":candidate_url}))?;
+    let deadline = Instant::now() + Duration::from_secs(90);
+    loop {
+        if Instant::now() >= deadline {
+            return Err("BOOTSTRAP_QUARANTINE_INSPECTION_TIMEOUT".into());
+        }
+        match adapter.output.recv_timeout(Duration::from_millis(250)) {
+            Ok(Ok(value)) => match value.get("stage").and_then(|stage| stage.as_str()) {
+                Some("BOOTSTRAP_QUARANTINE_INSPECTED") => {
+                    if store.config()?.targets.get(project) != Some(source) {
+                        return Err("BOOTSTRAP_SOURCE_BINDING_CHANGED".into());
+                    }
+                    let result = quarantine_inspection_payload(
+                        value,
+                        project,
+                        intent,
+                        source,
+                        &candidate_digest,
+                        &expected,
+                    )?;
+                    let _ = adapter.allow_graceful_exit(Duration::from_secs(5));
+                    return Ok(result);
+                }
+                Some(
+                    "CDP_REUSE_BEGIN" | "CDP_REUSE_DONE" | "CDP_ACTIVATE_BEGIN"
+                    | "CDP_ACTIVATE_DONE",
+                ) => {}
+                Some("ATTENTION") => {
+                    return Err(value
+                        .get("reason")
+                        .and_then(|reason| reason.as_str())
+                        .filter(|reason| crate::protocol::valid_id(reason))
+                        .unwrap_or("BOOTSTRAP_QUARANTINE_INSPECTION_ATTENTION")
+                        .into());
+                }
+                _ => return Err("BOOTSTRAP_QUARANTINE_INSPECTION_INVALID".into()),
+            },
+            Ok(Err(reason)) => return Err(reason),
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err("BROWSER_ADAPTER_EXITED".into());
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+    }
+}
+
 fn draft_archive_frame_scope(
     value: &serde_json::Value,
     stage: &str,
@@ -3118,6 +3225,61 @@ mod bootstrap_runtime_tests {
         );
         drop(lease);
         std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn quarantined_bootstrap_observation_cannot_become_receipt_authority() {
+        let source = source();
+        let candidate = crate::protocol::digest("https://chatgpt.com/c/candidate");
+        let message = bootstrap_message_digest("alpha", "intent-a", &source, "handoff").unwrap();
+        let frame = serde_json::json!({"stage":"BOOTSTRAP_QUARANTINE_INSPECTED",
+            "projectId":"alpha","intentId":"intent-a","sourceGeneration":source.generation,
+            "sourceDigest":source.digest,"candidateDigest":candidate,"messageDigest":message,
+            "existingUserMessageVerified":true,"responseState":"RESPONSE_COMPLETE","observationOnly":true});
+        assert!(
+            quarantine_inspection_payload(
+                frame.clone(),
+                "alpha",
+                "intent-a",
+                &source,
+                &candidate,
+                &message
+            )
+            .is_ok()
+        );
+        for (key, changed) in [
+            ("projectId", serde_json::json!("beta")),
+            ("intentId", serde_json::json!("intent-b")),
+            ("sourceGeneration", serde_json::json!(source.generation + 1)),
+            ("sourceDigest", serde_json::json!("0".repeat(64))),
+            ("candidateDigest", serde_json::json!("0".repeat(64))),
+            ("messageDigest", serde_json::json!("0".repeat(64))),
+            ("existingUserMessageVerified", serde_json::json!(false)),
+            ("observationOnly", serde_json::json!(false)),
+            ("responseState", serde_json::json!("SENT")),
+            (
+                "receipt",
+                serde_json::json!({"evidence":"EXACT_USER_MESSAGE_APPENDED"}),
+            ),
+        ] {
+            let mut wrong = frame.clone();
+            wrong[key] = changed;
+            assert!(
+                quarantine_inspection_payload(
+                    wrong, "alpha", "intent-a", &source, &candidate, &message
+                )
+                .is_err(),
+                "{key}"
+            );
+        }
+        let mut pending = frame;
+        pending["responseState"] = serde_json::json!("RESPONSE_PENDING");
+        assert!(
+            quarantine_inspection_payload(
+                pending, "alpha", "intent-a", &source, &candidate, &message
+            )
+            .is_ok()
+        );
     }
 
     #[test]

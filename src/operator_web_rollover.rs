@@ -2266,6 +2266,78 @@ pub(super) fn inspect_draft(
         "submissionVerified":false}))
 }
 
+pub(super) fn inspect_quarantine(
+    workspace: &Path,
+    project: &str,
+    expected_intent: &str,
+) -> Result<Value, String> {
+    if !valid_id(expected_intent) {
+        return Err("WEB_ROLLOVER_INTENT_INVALID".into());
+    }
+    let store = ProjectStore::open_existing(workspace, project)?;
+    let record = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
+    let source = paired(workspace, project)?;
+    let candidate = quarantine_inspection_candidate(&record, expected_intent, &source)?;
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+    let wake = Store::open(&root)?;
+    catdesk_wake::development_runtime::validate_selected_target_isolation(
+        workspace,
+        wake.root(),
+        &source.url,
+    )?;
+    let inspection = runtime::inspect_quarantined_bootstrap(
+        &wake,
+        project,
+        &record.intent_id,
+        &source,
+        &record.handoff,
+        candidate,
+    )?;
+    if paired(workspace, project)? != source {
+        return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
+    }
+    Ok(json!({"projectId":project,"intentId":record.intent_id,
+        "sourceGeneration":source.generation,"sourceDigest":source.digest,
+        "sourceSnapshotVerified":record.source_snapshot_verified,"inspection":inspection,
+        "phase":"QUARANTINED","receiptCreated":false,"continuationAuthorized":false,
+        "workAdmissionChanged":false,"readOnly":true}))
+}
+
+fn quarantine_inspection_candidate<'a>(
+    record: &'a Record,
+    expected_intent: &str,
+    source: &Target,
+) -> Result<&'a str, String> {
+    if record.intent_id != expected_intent {
+        return Err("WEB_ROLLOVER_INTENT_CHANGED".into());
+    }
+    if record.phase != Phase::Quarantined
+        || record.receipt.is_some()
+        || record.bound_target.is_some()
+    {
+        return Err("WEB_ROLLOVER_QUARANTINE_INSPECTION_PHASE_INVALID".into());
+    }
+    if &record.source != source {
+        return Err("WEB_ROLLOVER_SOURCE_CHANGED".into());
+    }
+    let candidate = &record
+        .quarantine
+        .as_ref()
+        .ok_or("WEB_ROLLOVER_QUARANTINE_INSPECTION_PHASE_INVALID")?
+        .observed_conversation_url;
+    if crate::delegated::autonomy_projects::canonical_project_chat_target(candidate)
+        .ok()
+        .as_deref()
+        != Some(candidate.as_str())
+    {
+        return Err("WEB_ROLLOVER_QUARANTINE_INVALID".into());
+    }
+    if candidate == &source.url {
+        return Err("WEB_ROLLOVER_QUARANTINE_INVALID".into());
+    }
+    Ok(candidate)
+}
+
 /// Release one legacy unknown-submit home draft only after preserving its
 /// actual text under the project lock and proving an empty home afterward.
 /// The original SUBMITTING intent remains permanently non-replayable.
@@ -3245,6 +3317,19 @@ mod tests {
         );
         let saved = store.active().unwrap().unwrap();
         assert_eq!(saved.source, original.source);
+        assert_eq!(
+            quarantine_inspection_candidate(&saved, &original.intent_id, &original.source).unwrap(),
+            observed_url
+        );
+        assert!(quarantine_inspection_candidate(&saved, "other-intent", &original.source).is_err());
+        let changed_source = Target::new(2, "https://chatgpt.com/c/changed".into()).unwrap();
+        assert!(
+            quarantine_inspection_candidate(&saved, &original.intent_id, &changed_source).is_err()
+        );
+        assert!(
+            quarantine_inspection_candidate(&original, &original.intent_id, &original.source)
+                .is_err()
+        );
         assert_eq!(saved.handoff, original.handoff);
         assert_eq!(saved.message_digest, original.message_digest);
         assert_eq!(saved.source_task_id, original.source_task_id);
