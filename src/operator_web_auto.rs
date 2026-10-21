@@ -522,6 +522,33 @@ fn tick_background_project(
     })
 }
 
+fn retry_busy_browser(
+    cancel: &AtomicBool,
+    mut step: impl FnMut() -> Result<Value, String>,
+    mut wait: impl FnMut() -> Result<(), String>,
+) -> Result<Value, String> {
+    // A cold browser read can outlast the 30-second admission wait. Retain
+    // this project's owner for two local retries rather than dropping it for
+    // another entire scheduler interval. Other projects keep their own slots.
+    for attempt in 0..3 {
+        require_scheduler_running(cancel)?;
+        match step() {
+            Err(reason) if reason == "BROWSER_SESSION_BUSY" && attempt < 2 => wait()?,
+            result => return result,
+        }
+    }
+    unreachable!()
+}
+
+fn wait_for_browser_retry(cancel: &AtomicBool) -> Result<(), String> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while std::time::Instant::now() < deadline {
+        require_scheduler_running(cancel)?;
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    require_scheduler_running(cancel)
+}
+
 fn registered_projects(workspace: &Path) -> Result<Vec<String>, String> {
     let registry =
         AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
@@ -635,8 +662,11 @@ pub(crate) fn start_scheduler_scoped(state: SharedState, projects: Option<BTreeS
                     let project_for_task = project.clone();
                     let task_cancel = cancel.clone();
                     let handle = tokio::task::spawn_blocking(move || {
-                        let _ =
-                            tick_background_project(&workspace, &project_for_task, &task_cancel);
+                        let _ = retry_busy_browser(
+                            &task_cancel,
+                            || tick_background_project(&workspace, &project_for_task, &task_cancel),
+                            || wait_for_browser_retry(&task_cancel),
+                        );
                     });
                     active.insert(project, handle);
                 }
@@ -771,9 +801,7 @@ mod tests {
             active.insert(
                 project.into(),
                 tokio::task::spawn_blocking(move || {
-                    while require_scheduler_running(&cancelled).is_ok() {
-                        std::thread::sleep(Duration::from_millis(1));
-                    }
+                    let _ = wait_for_browser_retry(&cancelled);
                     finished.fetch_add(1, Ordering::Release);
                 }),
             );
@@ -1191,6 +1219,70 @@ mod tests {
 
     #[test]
     fn busy_shared_browser_is_retryable_per_project() {
+        use std::cell::Cell;
+        let cancel = AtomicBool::new(false);
+        let calls = Cell::new(0);
+        let waits = Cell::new(0);
+        let result = retry_busy_browser(
+            &cancel,
+            || {
+                calls.set(calls.get() + 1);
+                if calls.get() < 3 {
+                    Err("BROWSER_SESSION_BUSY".into())
+                } else {
+                    Ok(json!({"observed":true}))
+                }
+            },
+            || {
+                waits.set(waits.get() + 1);
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(result["observed"], true);
+        assert_eq!((calls.get(), waits.get()), (3, 2));
+        calls.set(0);
+        assert_eq!(
+            retry_busy_browser(
+                &cancel,
+                || {
+                    calls.set(calls.get() + 1);
+                    Err("BROWSER_SESSION_BUSY".into())
+                },
+                || Ok(())
+            )
+            .unwrap_err(),
+            "BROWSER_SESSION_BUSY"
+        );
+        assert_eq!(calls.get(), 3);
+        for reason in ["WEB_CONTEXT_BUSY", "COOPERATIVE_HOST_PROTOCOL_REQUIRED"] {
+            assert_eq!(
+                retry_busy_browser(
+                    &cancel,
+                    || Err(reason.into()),
+                    || panic!("only local browser contention is retried")
+                )
+                .unwrap_err(),
+                reason
+            );
+        }
+        calls.set(0);
+        assert_eq!(
+            retry_busy_browser(
+                &cancel,
+                || {
+                    calls.set(calls.get() + 1);
+                    Err("BROWSER_SESSION_BUSY".into())
+                },
+                || {
+                    cancel.store(true, Ordering::Release);
+                    Ok(())
+                }
+            )
+            .unwrap_err(),
+            "WEB_AUTO_OWNER_STOPPED"
+        );
+        assert_eq!(calls.get(), 1);
         assert_eq!(error_stage("WAKE_STOPPED"), "WAKE_STOPPED");
         assert_eq!(error_stage("WAKE_TARGET_CHANGED"), "WAKE_TARGET_CHANGED");
         assert_eq!(error_stage("BROWSER_SESSION_BUSY"), "AWAITING_BROWSER");

@@ -963,7 +963,12 @@ pub(super) fn record_auto_status(
         if valid_auto_reason(value) {
             value.to_owned()
         } else {
-            "WEB_AUTO_ATTENTION".into()
+            let code = crate::operator_web_error_code(value);
+            if code == "WEB_OPERATION_REFUSED" {
+                "WEB_AUTO_ATTENTION".into()
+            } else {
+                code.into()
+            }
         }
     });
     let store = ProjectStore::open(workspace, project)?;
@@ -2843,6 +2848,21 @@ mod tests {
             "WEB_AUTO_ATTENTION"
         );
         assert!(!status.to_string().contains("private/path"));
+        record_auto_status(
+            &root,
+            "alpha",
+            "ATTENTION",
+            Some(7),
+            Some("WEB_CONTEXT_IO: C:\\private\\profile access denied"),
+        )
+        .unwrap();
+        let status = status_read_only(&root, "alpha").unwrap();
+        assert_eq!(status["automation"]["reason"], "WEB_CONTEXT_IO");
+        assert_eq!(
+            status["automation"]["lastFailure"]["reason"],
+            "WEB_CONTEXT_IO"
+        );
+        assert!(!status.to_string().contains("private"));
         let store = ProjectStore::open(&root, "alpha").unwrap();
         atomic(
             &store.root.join("auto-status.json"),

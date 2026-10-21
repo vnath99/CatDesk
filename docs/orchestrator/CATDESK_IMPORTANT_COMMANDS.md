@@ -20,6 +20,14 @@ replay, composer clearing or authority replacement. Source/fixture checks pass;
 the periodic live demonstration is tracked separately in the private monitor
 checkpoint.
 
+The first periodic run is PARTIAL (Wake2 observed; siblings encountered
+contention), with full cleanup and policy restoration. Corrected source now
+preserves `BROWSER_` refusal codes and retries only local `BROWSER_SESSION_BUSY`
+twice per retained project worker, with cancellable 30-second waits. Other
+errors are not retried by that loop. This is separate from the normal scheduler
+interval. Select the matched candidate stopped before its bounded periodic
+retest; source checks do not establish live acceptance.
+
 ## October 20 approved live test and context freshness
 
 The operator-approved three-project v22 foreground test completed and cleaned

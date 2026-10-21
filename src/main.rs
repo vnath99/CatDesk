@@ -2560,6 +2560,7 @@ fn operator_web_error_code(error: &str) -> &str {
             "SOURCE_",
             "QUEUE_",
             "BOOTSTRAP_",
+            "BROWSER_",
             "REGISTRY_",
         ]
         .iter()
@@ -3537,6 +3538,14 @@ mod tests {
 
     #[test]
     fn operator_web_attention_exposes_only_bounded_stable_codes() {
+        assert_eq!(
+            operator_web_error_code("BROWSER_SESSION_BUSY"),
+            "BROWSER_SESSION_BUSY"
+        );
+        assert_eq!(
+            operator_web_error_code("BROWSER_SESSION_BUSY: C:\\private\\profile"),
+            "BROWSER_SESSION_BUSY"
+        );
         assert_eq!(
             operator_web_error_code("DEV_LOGIN_CLEANUP_UNVERIFIED"),
             "DEV_LOGIN_CLEANUP_UNVERIFIED"

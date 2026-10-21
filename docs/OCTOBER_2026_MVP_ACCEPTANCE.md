@@ -21,8 +21,39 @@ Main CatDesk passes **1,539 / 28 ignored**, both native headless fixtures pass,
 strict all-target/all-feature Clippy, build, format and diff checks pass. Wake
 and Python source are unchanged and their preceding accepted source gates were
 not repeated. Private evidence: parent `checkpoints/web-quarantine-monitor-oct20`.
-Actual scoped periodic observation is prepared separately and is not proved by
-these source/fixture checks.
+The source-matched stopped development **v24** update preserved the authenticated
+profile and production pointer. Its actual scoped periodic test is **PARTIAL**:
+an internally bounded 480-second headless run captured Wake2, while CatDesk and
+PortfolioDesk encountered browser contention/attention and did not record fresh
+captures within the test. Native listener exit was normal, the foreground host
+proved its tree exited, owned process count was zero, both controls STOPPED,
+all policies restored exactly, all five bindings and canary history preserved,
+and no old delivery/timer changed. No messages were sent. Source success does
+not close this concurrent monitoring gap.
+
+Private periodic evidence:
+`approved-monitor-run-20261021T014418207Z` under the monitor checkpoint. A
+separate, single non-recurring CatDesk quarantine-step probe succeeds against
+the authenticated browser, retains QUARANTINED/`rolloverAdvanced:false`, leaves
+the journal byte-identical and cleans up. It narrows the problem to concurrent
+operation; it is not periodic-monitor acceptance. The first parallel CLI probe
+also erased browser errors because its code filter omitted `BROWSER_`. That
+omission is now corrected; scheduler status retains recognized code prefixes
+before private details. Existing privacy regressions verify paths stay excluded.
+The corrected source diagnostic confirms `BROWSER_SESSION_BUSY`, with normal
+exit and zero owned processes after cleanup.
+
+A cold capture can exceed the profile's 30-second admission wait. The scheduler
+now retains each project worker for at most two extra local admission retries,
+separated by cancellable 30-second waits. It retries only `BROWSER_SESSION_BUSY`,
+not metadata, authority or provider failures. Other projects retain independent
+worker slots. Cancellation is checked before attempts and during waits. The
+existing busy-browser regression covers success, exhaustion, other failures and
+cancellation; the existing worker-drain regression exercises the actual retry
+wait. The main suite passed 1,539 / 28 ignored after the error-code correction;
+then all 61 Web tests, strict Clippy and build passed after the retry change.
+Wake/Python and headless entry behavior are unchanged by that retry correction.
+Periodic acceptance of the corrected candidate still requires a fresh bounded run.
 
 ## October 20 approved three-project live test (CONTROLLED DEVELOPMENT)
 
