@@ -16,8 +16,24 @@ covering catalog/dispatch agreement, invalid scope refusal, no state creation
 and private-error redaction. The broader initial run passes 1,538 with one
 outdated exact-catalog expectation, which is updated for these five tools.
 The final full main suite passes **1,539 / 28 ignored**; strict all-target,
-all-feature Clippy, formatting and diff checks pass. The selected stopped
-development package remains v26 until a matched update is verified.
+all-feature Clippy, formatting and diff checks pass. Source `784c729` is
+built normally and selected into stopped development v27, preserving 77
+non-selection state files, the authentication profile and production.
+
+The first internally bounded 20-second loopback probe finishes its functional
+checks and exits normally with zero owned browser/Wake processes. Its final
+preservation gate is **PARTIAL**: only the isolated `catdesk.toml` changes.
+Usage accounting persists the process's temporary mode/listener settings.
+No exact pre-probe configuration backup is found, so defaults are not guessed
+or reconstructed. The post-probe file and first controller/exit evidence are
+preserved; all five bindings and project/canary history remain intact.
+
+The existing configuration regression now reproduces that headless side
+effect. Source keeps headless mode/tool mode/bind address/port overrides
+process-local while still persisting usage counters and explicit ordinary
+configuration updates. This correction requires its own matched package
+readback. Legitimate accounting changes must be distinguished from launch
+setting drift rather than silently exempting the whole configuration file.
 Private dated evidence: parent `checkpoints/web-serving-parity-oct20`.
 Connector HTTP 429 and protected installation remain independent live gates.
 

@@ -12,6 +12,14 @@ This source serving correction does not refresh the external connector,
 restart the tunnel, enable rollover policy, or install a production package.
 The provider catalog and production serving path require separate acceptance.
 
+Headless command-line mode/port overrides are temporary. Usage accounting
+must preserve the configured mode, tool mode, bind address and port; ordinary
+TUI/configuration persistence still saves explicit changes. The first v27
+loopback probe exposed this persistence bug and remains PARTIAL despite normal
+listener cleanup. Its source correction needs matched package verification.
+Configuration usage counters can legitimately advance during MCP calls; verify
+the remaining settings instead of treating every config byte change as drift.
+
 ## October 20 optimized stopped development readback
 
 Use the existing release profile for a normally built operator image:
