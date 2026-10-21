@@ -1,5 +1,25 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 retained tool/worker context pressure (SOURCE; MVP PARTIAL)
+
+Tool arguments now contribute once to the retained conversation's observed
+pressure as well as its separate traffic breakdown. `WORKER_MESSAGE` supports
+explicit observations of model-visible worker deliveries through the existing
+paired, closed-scope MCP/CLI path. Revisions/shared dedup keys avoid repeated
+snapshot/surface counts; no global native traffic attribution or provider
+context measurement is inferred. Existing argument metadata is recomputed on
+read, with old history preserved. Automatic rollover remains an explicit opt-in.
+
+An existing regression reproduces the 5-versus-11 token undercount. All 17
+context-store tests and the extended authenticated three-project MCP fixture
+pass, covering pressure, opt-in, replay, revision, generation and sibling
+isolation. Source evidence is in parent `checkpoints/web-observed-context-oct21`.
+The final full main suite passes **1,540 / 28 ignored**, including enabled
+integrations and its nested independent Wake suite. Strict all-target/all-feature
+Clippy, formatting and diff checks pass. Wake source is unchanged in this increment.
+Development v29 and production remain unchanged at this source checkpoint;
+installed/live acceptance and the genuine natural cycle remain open.
+
 ## October 21 offline migration inventory comparison (SOURCE; MVP PARTIAL)
 
 The existing fixed-policy V2 diagnostic now compares its signed inventory

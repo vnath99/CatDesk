@@ -1,3 +1,14 @@
+## 2026-10-21 — Retained tool/worker context accounting (SOURCE)
+
+Per-conversation pressure now includes observed retained tool arguments and
+explicit `WORKER_MESSAGE` content once through the existing dedup/revision
+ledger. Traffic counters remain separate breakdowns. The streaming regression
+reproduces the old undercount; 17 context-store tests and the authenticated
+three-project MCP fixture pass. Reopen/history, rollover opt-in and sibling
+isolation are preserved. Selected development v29 and production are unchanged;
+this source checkpoint does not close installed/live acceptance. Dated audit:
+parent `checkpoints/web-observed-context-oct21`.
+
 ## 2026-10-21 — Retained offline store inventory binding (SOURCE ONLY)
 
 The existing V2 fixed-policy diagnostic now checks the signed inventory digest

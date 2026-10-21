@@ -530,6 +530,14 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
     assert!(names.contains(&"catdesk_web_work_resolve"));
     assert!(names.contains(&"catdesk_web_context_configure"));
     assert!(names.contains(&"catdesk_web_context_observe"));
+    let observation_schema = listed["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "catdesk_web_context_observe")
+        .unwrap();
+    assert!(observation_schema["inputSchema"]["properties"]["event"]["properties"]["sourceKind"]["enum"]
+        .as_array().unwrap().contains(&json!("WORKER_MESSAGE")));
     assert!(!names.contains(&"run_command"));
 
     let context_config = |project: &str| {
@@ -741,8 +749,53 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
     );
     assert_eq!(
         traffic["result"]["structuredContent"]["pressure"]["visibleUniqueTokens"],
-        json!(before[0].visible_unique_tokens)
+        json!(
+            before[0].visible_unique_tokens
+                + traffic["result"]["structuredContent"]["pressure"]["observedToolArgumentTokens"]
+                    .as_u64()
+                    .unwrap()
+        )
     );
+    let beta_before_worker = meter.project_history("beta").unwrap();
+    let mut worker = context_event("alpha");
+    worker["event"]["eventId"] = json!("worker-message");
+    worker["event"]["dedupKey"] = json!("worker-message");
+    worker["event"]["sourceKind"] = json!("WORKER_MESSAGE");
+    let worker_reply = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_context_observe",
+        worker.clone(),
+    )
+    .await;
+    let worker_pressure = &worker_reply["result"]["structuredContent"]["pressure"];
+    assert!(
+        worker_pressure["visibleUniqueTokens"].as_u64().unwrap()
+            > traffic["result"]["structuredContent"]["pressure"]["visibleUniqueTokens"]
+                .as_u64()
+                .unwrap()
+    );
+    let replayed = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_context_observe",
+        worker.clone(),
+    )
+    .await;
+    assert_eq!(
+        replayed["result"]["structuredContent"]["pressure"],
+        *worker_pressure
+    );
+    worker["event"]["eventId"] = json!("worker-rendered-copy");
+    worker["event"]["sourceKind"] = json!("ASSISTANT_MESSAGE");
+    let duplicate = web_mcp_tool(&client, &url, token, "catdesk_web_context_observe", worker).await;
+    assert_eq!(
+        duplicate["result"]["structuredContent"]["pressure"]["visibleUniqueTokens"],
+        worker_pressure["visibleUniqueTokens"]
+    );
+    assert_eq!(meter.project_history("beta").unwrap(), beta_before_worker);
     let mut unknown = context_event("beta");
     unknown["event"]["eventId"] = json!("unknown-attachment");
     unknown["event"]["dedupKey"] = json!("unknown-attachment");

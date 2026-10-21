@@ -109,15 +109,21 @@ pub enum VisibleSourceKind {
     AssistantMessage,
     ToolResult,
     ToolArguments,
+    WorkerMessage,
     Handoff,
     UnknownAttachment,
 }
 
 impl VisibleSourceKind {
-    fn counts_in_visible_pressure(self) -> bool {
+    fn counts_in_context_pressure(self) -> bool {
         matches!(
             self,
-            Self::UserMessage | Self::AssistantMessage | Self::ToolResult | Self::Handoff
+            Self::UserMessage
+                | Self::AssistantMessage
+                | Self::ToolResult
+                | Self::ToolArguments
+                | Self::WorkerMessage
+                | Self::Handoff
         )
     }
 }
@@ -224,8 +230,10 @@ pub struct PressureStatus {
     pub target_sha256: String,
     pub is_current: bool,
     pub recorded_events: usize,
+    /// Deduplicated observed model-visible content, including structured tool
+    /// arguments and worker messages. The field name remains wire-compatible.
     pub visible_unique_tokens: u64,
-    /// Measured visible text only. Older unseen history has no finite bound.
+    /// Observed content only. Older unseen history has no finite bound.
     #[serde(default)]
     pub observed_estimate_tokens: u64,
     pub unknown_source_count: usize,
@@ -886,7 +894,7 @@ fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> Press
             continue;
         }
         let tokens = event.estimated_tokens.unwrap_or(0);
-        if event.source_kind.counts_in_visible_pressure() {
+        if event.source_kind.counts_in_context_pressure() {
             let entry = visible.entry(&event.dedup_key).or_default();
             *entry = (*entry).max(tokens);
         }
@@ -945,7 +953,7 @@ fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> Press
         automatic_observation_enabled: project.policy.automatic_observation_enabled,
         incomplete_history_rollover: project.policy.incomplete_history_rollover,
         rollover_intent: ledger.rollover_intent.clone(),
-        estimate_method: "O200K_VISIBLE_TEXT_PROXY_WITH_CONFIGURED_UNKNOWN_RESERVE".into(),
+        estimate_method: "O200K_OBSERVED_CONTEXT_PROXY_WITH_CONFIGURED_UNKNOWN_RESERVE".into(),
         advisory: true,
         origin_authenticated: false,
     }
@@ -1415,7 +1423,7 @@ mod tests {
         );
         assert_eq!(
             arguments.visible_unique_tokens,
-            duplicate.visible_unique_tokens
+            duplicate.visible_unique_tokens + estimate_tokens("a large model-to-tool argument")
         );
         assert_eq!(
             arguments.observed_tool_argument_tokens,
@@ -1437,6 +1445,118 @@ mod tests {
                 )
                 .is_err()
         );
+    }
+
+    #[test]
+    fn retained_arguments_and_worker_messages_trigger_only_their_conversation() {
+        let fixture = Fixture::new("retained-tool-worker-pressure");
+        let alpha = Fixture::key("alpha", "tool-worker-alpha", 1);
+        let beta = Fixture::key("beta", "tool-worker-beta", 1);
+        for key in [&alpha, &beta] {
+            fixture
+                .store
+                .bind_observed_target(key.clone(), None)
+                .unwrap();
+        }
+        let arguments = "retained model-to-tool arguments ".repeat(30);
+        let worker = "model-visible worker delivery ".repeat(30);
+        let total = estimate_tokens(&arguments) + estimate_tokens(&worker);
+        let mut policy = ContextPressurePolicy {
+            configured_budget_tokens: total,
+            safety_headroom_tokens: 1,
+            unknown_source_reserve_tokens: 0,
+            ..ContextPressurePolicy::default()
+        };
+        fixture
+            .store
+            .configure_policy("alpha", policy.clone())
+            .unwrap();
+        let sibling = fixture.observe(
+            &beta,
+            "same-event",
+            1,
+            "same-content",
+            VisibleSourceKind::UserMessage,
+            Some("beta"),
+        );
+        let first = fixture.observe(
+            &alpha,
+            "same-event",
+            1,
+            "same-content",
+            VisibleSourceKind::ToolArguments,
+            Some(&arguments),
+        );
+        assert_eq!(first.observed_estimate_tokens, estimate_tokens(&arguments));
+        assert!(!first.near_capacity);
+        let pressured = fixture.observe(
+            &alpha,
+            "worker",
+            1,
+            "worker-content",
+            VisibleSourceKind::WorkerMessage,
+            Some(&worker),
+        );
+        assert_eq!(pressured.observed_estimate_tokens, total);
+        assert!(pressured.near_capacity);
+        assert!(
+            fixture
+                .store
+                .request_rollover_if_due(&alpha, &alpha.target_sha256(), "task", true, 200,)
+                .unwrap()
+                .is_none(),
+            "pressure alone cannot enable automatic rollover"
+        );
+        let duplicate = fixture.observe(
+            &alpha,
+            "worker-copy",
+            1,
+            "worker-content",
+            VisibleSourceKind::ToolResult,
+            Some(&worker),
+        );
+        assert_eq!(duplicate.observed_estimate_tokens, total);
+        assert_eq!(
+            duplicate.observed_tool_result_tokens,
+            estimate_tokens(&worker)
+        );
+        let revised_text = format!("{worker}more retained worker context");
+        let revised = fixture.observe(
+            &alpha,
+            "worker",
+            2,
+            "worker-content",
+            VisibleSourceKind::WorkerMessage,
+            Some(&revised_text),
+        );
+        assert_eq!(
+            revised.observed_estimate_tokens,
+            estimate_tokens(&arguments) + estimate_tokens(&revised_text)
+        );
+        let reopened = WebContextStore::open(&fixture.root).unwrap();
+        assert_eq!(reopened.pressure(&alpha).unwrap(), revised);
+        assert_eq!(reopened.pressure(&beta).unwrap(), sibling);
+        policy.automatic_rollover_enabled = true;
+        reopened.configure_policy("alpha", policy).unwrap();
+        let intent = reopened
+            .request_rollover_if_due(&alpha, &alpha.target_sha256(), "task", true, 201)
+            .unwrap()
+            .expect("retained observed content reaches configured pressure");
+        assert_eq!(intent.trigger_reason, "OBSERVED_PRESSURE");
+        assert_eq!(
+            intent.estimated_upper_tokens,
+            revised.observed_estimate_tokens
+        );
+        let next = Fixture::key("alpha", "tool-worker-alpha-next", 2);
+        reopened
+            .bind_observed_target(next.clone(), Some(&alpha))
+            .unwrap();
+        assert_eq!(
+            reopened.pressure(&next).unwrap().observed_estimate_tokens,
+            0
+        );
+        assert!(!reopened.pressure(&alpha).unwrap().is_current);
+        assert_eq!(reopened.pressure(&beta).unwrap(), sibling);
     }
 
     #[test]

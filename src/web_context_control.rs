@@ -407,7 +407,7 @@ pub(crate) fn tool_schemas() -> [(&'static str, &'static str, &'static str, Valu
         (
             "catdesk_web_context_observe",
             "Record one advisory context observation",
-            "Record bounded caller-reported visible text or unknown-attachment metadata for the exact paired project conversation. Use stable event/dedup IDs and revisions for retries and streaming updates. Only hashes and token counts persist. Scope is explicit caller-reported data, not authenticated ChatGPT origin; no global traffic attribution, browser capture, or delivery authority is created.",
+            "Record bounded caller-reported model-visible text, including retained tool arguments and worker messages, or unknown-attachment metadata for the exact paired project conversation. Use the same dedup key for multiple representations of one retained message and stable revisions for streaming updates. Only hashes and token counts persist. Scope is explicit caller-reported data, not authenticated ChatGPT origin; no global traffic attribution, browser capture, or delivery authority is created.",
             json!({"type":"object","additionalProperties":false,"properties":{
             "projectId":{"type":"string","pattern":"^[A-Za-z0-9_-]{1,128}$"},
             "expectedTargetGeneration":{"type":"integer","minimum":1},
@@ -416,7 +416,7 @@ pub(crate) fn tool_schemas() -> [(&'static str, &'static str, &'static str, Valu
                 "eventId":{"type":"string","pattern":"^[A-Za-z0-9_.:-]{1,200}$"},
                 "revision":{"type":"integer","minimum":1},
                 "dedupKey":{"type":"string","pattern":"^[A-Za-z0-9_.:-]{1,200}$"},
-                "sourceKind":{"type":"string","enum":["USER_MESSAGE","ASSISTANT_MESSAGE","TOOL_RESULT","TOOL_ARGUMENTS","HANDOFF","UNKNOWN_ATTACHMENT"]},
+                "sourceKind":{"type":"string","enum":["USER_MESSAGE","ASSISTANT_MESSAGE","TOOL_RESULT","TOOL_ARGUMENTS","WORKER_MESSAGE","HANDOFF","UNKNOWN_ATTACHMENT"]},
                 "visibleText":{"type":["string","null"],"maxLength":65536,"description":"UTF-8 bytes also limited to 65536; null only for UNKNOWN_ATTACHMENT"}},
                 "required":["eventId","revision","dedupKey","sourceKind","visibleText"]}},
             "required":["projectId","expectedTargetGeneration","expectedTargetSha256","event"]}),

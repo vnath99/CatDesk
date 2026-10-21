@@ -7,6 +7,32 @@
 
 ## Operator requirements
 
+### October 21 retained tool and worker content accounting (source)
+
+Recorded model-to-tool arguments previously appeared only in the advisory
+traffic counter, so retained arguments could never contribute to rollover
+pressure. The existing streaming regression reproduces 5 tokens instead of
+11. Arguments now join the same deduplicated observed-context estimate as
+messages/results. A `WORKER_MESSAGE` observation explicitly records worker
+content that was delivered into that conversation's model context; it does
+not attribute arbitrary native stdout or identify a trusted caller.
+
+The existing `visibleUniqueTokens` field remains compatible in name and now
+includes these structured/worker sources. `observedEstimateTokens` reports
+the same total, and `estimateMethod` identifies the observed-context proxy.
+Argument/result traffic counters remain separate breakdowns and are not added
+again. Revisions and shared dedup keys prevent repeated surfaces from summing.
+Existing stored argument metadata contributes on read without rewriting it;
+new worker records need this source's reader. No transcript is persisted.
+
+Unit fixtures cover the pressure trigger, explicit rollover opt-in, dedup,
+streaming revision, reopen, sibling isolation and a fresh generation's empty
+estimate. The authenticated three-project MCP fixture checks schema/dispatch,
+argument/worker deltas, worker replay, duplicate rendering and sibling state.
+This is source verification; selected development/installed and live acceptance
+must be recorded separately. Private dated evidence: parent
+`checkpoints/web-observed-context-oct21`.
+
 ### October 20 guarded Web serving parity verified locally
 
 Source `784c729` exposes the five existing work/context tools in both Computer

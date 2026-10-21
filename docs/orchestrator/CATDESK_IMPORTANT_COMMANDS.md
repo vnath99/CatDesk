@@ -1,5 +1,17 @@
 # CatDesk — Important Command Reference
 
+## October 21 retained context observations (SOURCE)
+
+The existing `catdesk_web_context_observe` and `operator web context-observe`
+accept `WORKER_MESSAGE` for worker content actually delivered to the scoped
+conversation. `TOOL_ARGUMENTS` now contributes to observed pressure. Use one
+dedup key for multiple representations of the same retained content and newer
+revisions for streaming updates. Do not add traffic-counter totals to pressure
+again. Caller identity stays unauthenticated; paired target witnesses, token
+estimation and hash-only storage remain in force. Existing argument metadata
+is counted on read without resetting history. New worker records require this
+reader; verify the selected package separately before using them in live state.
+
 ## October 21 offline inventory diagnostic (SOURCE)
 
 `BrokerProtectedPolicyV1::inspect_offline_pair_read_only` additionally requires
