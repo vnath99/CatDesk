@@ -1,5 +1,26 @@
 # CatDesk — Important Command Reference
 
+## October 21 automatic Web retry pacing (SOURCE; LIVE PENDING)
+
+The existing automatic context/rollover driver defers repeated project
+`ATTENTION` failures for 5, 10, 20, then at most 30 minutes, admitted on a later
+existing scheduler tick. The deadline and capped failure count live in that
+project's `automation.retry` status. Reading/deferred/stopped/disabled ticks do
+not renew the deadline; successful observation/handoff progress clears delay
+without discarding unrelated retained failure diagnostics. Siblings and new
+target generations remain independent. Explicit operator ticks bypass only
+this pacing, retaining all target, owner, Wake and duplicate guards.
+
+New auto-status records use schema 2; legacy schema-1 records remain readable
+and legacy attention gets a conservative first delay without a rewrite. Older
+readers refuse new status records. Use a matched updated package. This adds no
+scheduler, service, policy setting, account change or permission bypass. It
+does not retry the external connector's 429 or start stopped browser/Wake
+workers. Local shared-browser contention retains its existing bounded retries.
+Source fixtures, selected-package readback and actual background browser
+behavior are separate acceptance stages. Dated parent checkpoint:
+`checkpoints/web-auto-backoff-oct21`.
+
 ## October 21 optional per-task Windows implementation (SOURCE + DEVELOPMENT READBACK)
 
 The existing `operator codex queue add` accepts `--windows-sandbox mxc` for an

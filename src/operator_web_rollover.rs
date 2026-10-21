@@ -187,6 +187,27 @@ struct AutoStatus {
     reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     last_failure: Option<AutoFailure>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    retry: Option<AutoRetry>,
+}
+
+const AUTO_STATUS_SCHEMA_VERSION: u32 = 2;
+const AUTO_RETRY_BASE_SECONDS: u64 = 300;
+const AUTO_RETRY_MAX_SECONDS: u64 = 1800;
+const AUTO_RETRY_MAX_FAILURES: u32 = 16;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AutoRetry {
+    consecutive_failures: u32,
+    next_attempt_utc: u64,
+    target_generation: Option<u64>,
+}
+
+fn auto_retry_delay(failures: u32) -> u64 {
+    AUTO_RETRY_BASE_SECONDS
+        .saturating_mul(1u64 << failures.saturating_sub(1).min(3))
+        .min(AUTO_RETRY_MAX_SECONDS)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -956,7 +977,18 @@ pub(super) fn record_auto_status(
     target_generation: Option<u64>,
     reason: Option<&str>,
 ) -> Result<(), String> {
-    if !valid_auto_stage(stage) {
+    record_auto_status_at(workspace, project, stage, target_generation, reason, now())
+}
+
+fn record_auto_status_at(
+    workspace: &Path,
+    project: &str,
+    stage: &str,
+    target_generation: Option<u64>,
+    reason: Option<&str>,
+    tick_utc: u64,
+) -> Result<(), String> {
+    if !valid_auto_stage(stage) || tick_utc == 0 {
         return Err("WEB_AUTO_STATUS_INVALID".into());
     }
     let reason = reason.map(|value| {
@@ -972,24 +1004,9 @@ pub(super) fn record_auto_status(
         }
     });
     let store = ProjectStore::open(workspace, project)?;
-    let tick_utc = now();
-    let previous_failure = read_auto_status(&store).ok().flatten().and_then(|status| {
-        status.last_failure.or_else(|| {
-            if status.stage == "ATTENTION" {
-                status
-                    .reason
-                    .as_deref()
-                    .filter(|reason| *reason != "WEB_ROLLOVER_NOT_DUE_OR_DISABLED")
-                    .map(|reason| AutoFailure {
-                        reason: reason.into(),
-                        tick_utc: status.tick_utc,
-                        target_generation: status.target_generation,
-                    })
-            } else {
-                None
-            }
-        })
-    });
+    let previous = read_auto_status(&store).ok().flatten();
+    let previous_failure = previous.as_ref().and_then(retained_auto_failure);
+    let previous_retry = previous.as_ref().and_then(retained_auto_retry);
     let last_failure = if matches!(stage, "AWAITING_RESPONSE" | "ROLLOVER_ADVANCED") {
         None
     } else if stage == "ATTENTION"
@@ -1004,18 +1021,98 @@ pub(super) fn record_auto_status(
     } else {
         previous_failure
     };
+    let retry = if stage == "ATTENTION"
+        && reason
+            .as_deref()
+            .is_some_and(|code| code != "WEB_ROLLOVER_NOT_DUE_OR_DISABLED")
+    {
+        let failures = previous_retry
+            .filter(|retry| retry.target_generation == target_generation)
+            .map_or(1, |retry| retry.consecutive_failures.saturating_add(1))
+            .min(AUTO_RETRY_MAX_FAILURES);
+        Some(AutoRetry {
+            consecutive_failures: failures,
+            next_attempt_utc: tick_utc.saturating_add(auto_retry_delay(failures)),
+            target_generation,
+        })
+    } else if matches!(
+        stage,
+        "OBSERVED"
+            | "HANDOFF_REQUESTED"
+            | "AWAITING_HANDOFF"
+            | "AWAITING_RESPONSE"
+            | "ROLLOVER_ADVANCED"
+    ) {
+        // A successful browser step clears delay, independently of retained
+        // failure diagnostics. Waiting/stopped/disabled ticks do not renew it.
+        None
+    } else {
+        previous_retry
+    };
     atomic(
         &store.root.join("auto-status.json"),
         &AutoStatus {
-            schema_version: 1,
+            schema_version: AUTO_STATUS_SCHEMA_VERSION,
             project_id: project.into(),
             tick_utc,
             stage: stage.into(),
             target_generation,
             reason,
             last_failure,
+            retry,
         },
     )
+}
+
+fn retained_auto_failure(status: &AutoStatus) -> Option<AutoFailure> {
+    status.last_failure.clone().or_else(|| {
+        (status.stage == "ATTENTION")
+            .then_some(status.reason.as_deref())
+            .flatten()
+            .filter(|reason| *reason != "WEB_ROLLOVER_NOT_DUE_OR_DISABLED")
+            .map(|reason| AutoFailure {
+                reason: reason.into(),
+                tick_utc: status.tick_utc,
+                target_generation: status.target_generation,
+            })
+    })
+}
+
+fn retained_auto_retry(status: &AutoStatus) -> Option<AutoRetry> {
+    status.retry.clone().or_else(|| {
+        // Read older attention records conservatively without rewriting them.
+        if status.schema_version != 1 || status.stage != "ATTENTION" {
+            return None;
+        }
+        let failure = retained_auto_failure(status)?;
+        Some(AutoRetry {
+            consecutive_failures: 1,
+            next_attempt_utc: failure.tick_utc.saturating_add(AUTO_RETRY_BASE_SECONDS),
+            target_generation: failure.target_generation,
+        })
+    })
+}
+
+pub(super) fn automatic_retry_after(
+    workspace: &Path,
+    project: &str,
+    generation: u64,
+) -> Result<Option<u64>, String> {
+    if !valid_id(project) {
+        return Err("WEB_PROJECT_INVALID".into());
+    }
+    let root = workspace.join(".catdesk/web-rollovers").join(project);
+    match fs::symlink_metadata(&root) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(_) => return Err("WEB_AUTO_STATUS_UNAVAILABLE".into()),
+        Ok(_) => {}
+    }
+    let store = ProjectStore::open_existing(workspace, project)?;
+    Ok(read_auto_status(&store)?
+        .as_ref()
+        .and_then(retained_auto_retry)
+        .filter(|retry| retry.target_generation == Some(generation))
+        .map(|retry| retry.next_attempt_utc))
 }
 
 fn valid_auto_stage(value: &str) -> bool {
@@ -1041,7 +1138,8 @@ fn read_auto_status(store: &ProjectStore) -> Result<Option<AutoStatus>, String> 
         return Ok(None);
     }
     let status: AutoStatus = read(&path)?;
-    if status.schema_version != 1
+    if (status.schema_version != 1 && status.schema_version != AUTO_STATUS_SCHEMA_VERSION)
+        || (status.schema_version == 1 && status.retry.is_some())
         || status.project_id
             != store
                 .root
@@ -1058,6 +1156,17 @@ fn read_auto_status(store: &ProjectStore) -> Result<Option<AutoStatus>, String> 
             .last_failure
             .as_ref()
             .is_some_and(|failure| failure.tick_utc == 0 || !valid_auto_reason(&failure.reason))
+        || status.retry.as_ref().is_some_and(|retry| {
+            retry.consecutive_failures == 0
+                || retry.consecutive_failures > AUTO_RETRY_MAX_FAILURES
+                || retained_auto_failure(&status).is_none_or(|failure| {
+                    failure.target_generation != retry.target_generation
+                        || retry.next_attempt_utc
+                            != failure
+                                .tick_utc
+                                .saturating_add(auto_retry_delay(retry.consecutive_failures))
+                })
+        })
     {
         return Err("WEB_AUTO_STATUS_INVALID".into());
     }
@@ -2777,6 +2886,133 @@ mod tests {
             "WEB_DRAFT_ARCHIVE_INVALID"
         );
         drop(store);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn automatic_retry_is_durable_bounded_and_scoped_without_extending_on_wait() {
+        let root = fixture();
+        for (index, delay) in [300, 600, 1200, 1800, 1800].into_iter().enumerate() {
+            let observed = 1000 + index as u64 * 2000;
+            record_auto_status_at(
+                &root,
+                "alpha",
+                "ATTENTION",
+                Some(7),
+                Some("EXISTING_DRAFT"),
+                observed,
+            )
+            .unwrap();
+            let expected = Some(observed + delay);
+            assert_eq!(automatic_retry_after(&root, "alpha", 7).unwrap(), expected);
+            assert_eq!(automatic_retry_after(&root, "alpha", 8).unwrap(), None);
+            assert_eq!(automatic_retry_after(&root, "beta", 7).unwrap(), None);
+            for (offset, stage) in [
+                (10, "IN_PROGRESS"),
+                (20, "OBSERVATION_DISABLED"),
+                (30, "WAKE_STOPPED"),
+            ] {
+                record_auto_status_at(&root, "alpha", stage, Some(7), None, observed + offset)
+                    .unwrap();
+                assert_eq!(automatic_retry_after(&root, "alpha", 7).unwrap(), expected);
+            }
+            let reopened = status_read_only(&root, "alpha").unwrap();
+            assert_eq!(reopened["automation"]["schemaVersion"], 2);
+            assert_eq!(
+                reopened["automation"]["retry"]["consecutiveFailures"],
+                index as u64 + 1
+            );
+            assert_eq!(
+                reopened["automation"]["lastFailure"]["reason"],
+                "EXISTING_DRAFT"
+            );
+        }
+        record_auto_status_at(&root, "alpha", "OBSERVED", Some(7), None, 10_000).unwrap();
+        assert_eq!(automatic_retry_after(&root, "alpha", 7).unwrap(), None);
+        let recovered = status_read_only(&root, "alpha").unwrap();
+        assert!(recovered["automation"]["retry"].is_null());
+        assert_eq!(
+            recovered["automation"]["lastFailure"]["reason"],
+            "EXISTING_DRAFT"
+        );
+        record_auto_status_at(
+            &root,
+            "alpha",
+            "ATTENTION",
+            Some(7),
+            Some("WEB_ROLLOVER_NOT_DUE_OR_DISABLED"),
+            10_001,
+        )
+        .unwrap();
+        assert_eq!(
+            automatic_retry_after(&root, "alpha", 7).unwrap(),
+            None,
+            "old diagnostics cannot resurrect a recovered retry"
+        );
+        record_auto_status_at(
+            &root,
+            "alpha",
+            "ATTENTION",
+            Some(8),
+            Some("COOPERATIVE_HOST_PROTOCOL_REQUIRED"),
+            11_000,
+        )
+        .unwrap();
+        assert_eq!(automatic_retry_after(&root, "alpha", 7).unwrap(), None);
+        assert_eq!(
+            automatic_retry_after(&root, "alpha", 8).unwrap(),
+            Some(11_300)
+        );
+        record_auto_status_at(&root, "alpha", "AWAITING_RESPONSE", Some(8), None, 11_001).unwrap();
+        assert_eq!(automatic_retry_after(&root, "alpha", 8).unwrap(), None);
+        assert!(status_read_only(&root, "alpha").unwrap()["automation"]["lastFailure"].is_null());
+        assert_eq!(auto_retry_delay(u32::MAX), AUTO_RETRY_MAX_SECONDS);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn automatic_retry_reads_legacy_attention_without_rewriting_and_refuses_corruption() {
+        let root = fixture();
+        assert_eq!(automatic_retry_after(&root, "missing", 7).unwrap(), None);
+        assert!(!root.join(".catdesk/web-rollovers/missing").exists());
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let path = store.root.join("auto-status.json");
+        atomic(
+            &path,
+            &json!({"schemaVersion":1,"projectId":"alpha","tickUtc":1000,
+            "stage":"ATTENTION","targetGeneration":7,"reason":"EXISTING_DRAFT"}),
+        )
+        .unwrap();
+        let original = fs::read(&path).unwrap();
+        drop(store);
+        assert_eq!(
+            automatic_retry_after(&root, "alpha", 7).unwrap(),
+            Some(1300)
+        );
+        assert_eq!(
+            fs::read(&path).unwrap(),
+            original,
+            "read-only gate must not renew a failure"
+        );
+        record_auto_status_at(&root, "alpha", "IN_PROGRESS", Some(7), None, 1100).unwrap();
+        assert_eq!(
+            automatic_retry_after(&root, "alpha", 7).unwrap(),
+            Some(1300)
+        );
+        for (count, deadline) in [(0, 1300), (17, 2800), (1, 999_999)] {
+            let store = ProjectStore::open(&root, "alpha").unwrap();
+            atomic(&path, &json!({"schemaVersion":2,"projectId":"alpha","tickUtc":1100,
+                "stage":"IN_PROGRESS","targetGeneration":7,"reason":null,
+                "lastFailure":{"reason":"EXISTING_DRAFT","tickUtc":1000,"targetGeneration":7},
+                "retry":{"consecutiveFailures":count,"nextAttemptUtc":deadline,"targetGeneration":7}})).unwrap();
+            let bytes = fs::read(&path).unwrap();
+            drop(store);
+            assert_eq!(
+                automatic_retry_after(&root, "alpha", 7).unwrap_err(),
+                "WEB_AUTO_STATUS_INVALID"
+            );
+            assert_eq!(fs::read(&path).unwrap(), bytes);
+        }
         fs::remove_dir_all(root).unwrap();
     }
 

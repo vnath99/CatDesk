@@ -7,6 +7,30 @@
 
 ## Operator requirements
 
+### October 21 durable retry pacing for automatic browser failures (source)
+
+The existing automatic context/rollover driver now reads a project/generation
+retry deadline before browser work. Attention failures back off 5/10/20/30
+minutes with a 30-minute cap, retaining the count/deadline in `automation.retry`.
+Deferred ticks preserve diagnostic/state bytes; stopped/disabled ticks retain
+the deadline without extending it. Successful observation or handoff progress
+clears pacing. Siblings and replacement generations remain independent;
+explicit operator ticks bypass pacing while keeping existing execution guards.
+
+New auto-status schema 2 reads legacy schema 1 without rewriting it; legacy
+attention receives a conservative initial delay. Old readers refuse schema 2.
+Fixtures cover durable reopen, cross-project/generation isolation, deadline
+expiry, recovery, malformed deadlines/counts and browser callback exclusion.
+The existing bounded shared-browser busy retries and cancellation remain.
+This starts no browser/WakeHost/recurring job, and does not retry the external
+connector's 429. Source, selected-package metadata and actual background
+browser behavior remain separately verified. Parent dated checkpoint:
+`checkpoints/web-auto-backoff-oct21`.
+
+The final source suite passes 1,544 / 28 ignored, enabled integrations/nested
+Wake, strict all-target/all-feature Clippy, formatting and diff checks. No
+installed background backoff claim follows from these fixture tests.
+
 ### October 21 retained tool and worker content accounting (source)
 
 Recorded model-to-tool arguments previously appeared only in the advisory

@@ -1,3 +1,15 @@
+## 2026-10-21 — Durable automatic Web retry pacing (SOURCE; LIVE PENDING)
+
+The existing context/rollover driver now defers repeated project attention
+failures for 5/10/20/30 minutes using durable schema-2 auto-status. Deferred
+ticks do not enter browser work or extend the deadline; successful progress
+clears pacing. Other projects/new generations and explicit guarded ticks remain
+eligible. Legacy records remain readable; new records require the updated
+reader. No recurring worker, browser/WakeHost, permission change or connector
+retry is started. This addresses repeated attempts while existing protected
+installation evidence remains missing. Source and selected/live acceptance
+are separate. Parent checkpoint: checkpoints/web-auto-backoff-oct21.
+
 ## 2026-10-21 — Selected package and fresh qualification outcome (PARTIAL)
 
 Normal matched development v31 at `49f421a` is selected stopped. Its bounded

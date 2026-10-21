@@ -1,5 +1,31 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 repeated automatic browser failures (SOURCE; LIVE PENDING)
+
+Automatic Web context/rollover work previously became eligible every existing
+120-second scheduler interval after an attention failure. The driver now
+checks a persisted project/generation deadline before entering browser work or
+rewriting progress status. Repeated failures wait 5/10/20/30 minutes, capped at
+30; deferred and stopped ticks do not extend that deadline. Successful progress
+clears delay. Siblings, replacement generations and explicit guarded operator
+ticks remain eligible. Existing cancellation, quiescence and no-replay guards
+are unchanged. Schema-2 status reads schema 1 but requires an updated reader
+for new records. The external connector is not automatically retried.
+
+The installation audit still cannot promote supplied offline predecessor
+snapshots into independent migration/provisioning authority. Those existing
+holds remain. Retry pacing instead addresses repeated browser attempts in the
+core monitoring/rollover driver without adding a scheduler or security
+framework. All implementation tests use disposable fixtures. Selected-package
+and live background acceptance remain separately tracked; no browser/WakeHost
+or recurring job is started. Dated private evidence: parent
+`checkpoints/web-auto-backoff-oct21`.
+
+Final source gates pass: **1,544 main tests / 28 ignored**, all enabled
+integrations and nested Wake, strict all-target/all-feature Clippy, formatting
+and diff checks. The three new persisted/gated regressions are included. These
+results do not demonstrate a running installed scheduler or browser backoff.
+
 ## October 21 selected v31 / bounded native qualification (PARTIAL)
 
 Normal app and default-feature WakeHost builds at `49f421a` form development

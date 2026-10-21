@@ -11,7 +11,7 @@ use crate::{
 use catdesk_wake::{
     protocol::{Target, valid_id},
     runtime,
-    store::{Phase, ResponseState, Store, read},
+    store::{Phase, ResponseState, Store, now, read},
 };
 use serde_json::{Value, json};
 use std::{
@@ -464,48 +464,77 @@ fn tick_project_mode(
             );
         }
     }
-    rollover::record_auto_status(
-        workspace,
-        project,
-        "IN_PROGRESS",
-        Some(source.generation),
-        None,
-    )?;
-    let result = (|| {
-        let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
-            workspace,
-        )?)?;
-        let wake_state = running_wake_state(&wake, project, &source)?;
-        if wake_state == "RUNNING" {
-            catdesk_wake::development_runtime::validate_selected_target_isolation(
-                workspace,
-                wake.root(),
-                &source.url,
-            )?;
-        }
-        gated_browser_step(wake_state, || {
-            run_step(workspace, project, &key, &source, keep_running)
-        })
-    })();
-    // A replaced/stopped owner must not overwrite the next run's status.
+    let retry_after = if background {
+        rollover::automatic_retry_after(workspace, project, source.generation)?
+    } else {
+        None
+    };
     keep_running()?;
-    match result {
-        Ok((stage, value)) => {
-            rollover::record_auto_status(workspace, project, stage, Some(source.generation), None)?;
-            Ok(json!({"action":"web_auto_tick","projectId":project,"stage":stage,"result":value}))
-        }
-        Err(reason) => {
-            let stage = error_stage(&reason);
-            let _ = rollover::record_auto_status(
+    run_after_retry_gate(project, retry_after, now(), || {
+        rollover::record_auto_status(
+            workspace,
+            project,
+            "IN_PROGRESS",
+            Some(source.generation),
+            None,
+        )?;
+        let result = (|| {
+            let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
                 workspace,
-                project,
-                stage,
-                Some(source.generation),
-                Some(&reason),
-            );
-            Err(reason)
+            )?)?;
+            let wake_state = running_wake_state(&wake, project, &source)?;
+            if wake_state == "RUNNING" {
+                catdesk_wake::development_runtime::validate_selected_target_isolation(
+                    workspace,
+                    wake.root(),
+                    &source.url,
+                )?;
+            }
+            gated_browser_step(wake_state, || {
+                run_step(workspace, project, &key, &source, keep_running)
+            })
+        })();
+        // A replaced/stopped owner must not overwrite the next run's status.
+        keep_running()?;
+        match result {
+            Ok((stage, value)) => {
+                rollover::record_auto_status(
+                    workspace,
+                    project,
+                    stage,
+                    Some(source.generation),
+                    None,
+                )?;
+                Ok(
+                    json!({"action":"web_auto_tick","projectId":project,"stage":stage,"result":value}),
+                )
+            }
+            Err(reason) => {
+                let stage = error_stage(&reason);
+                let _ = rollover::record_auto_status(
+                    workspace,
+                    project,
+                    stage,
+                    Some(source.generation),
+                    Some(&reason),
+                );
+                Err(reason)
+            }
         }
+    })
+}
+
+fn run_after_retry_gate(
+    project: &str,
+    retry_after: Option<u64>,
+    observed_utc: u64,
+    action: impl FnOnce() -> Result<Value, String>,
+) -> Result<Value, String> {
+    if let Some(deadline) = retry_after.filter(|deadline| *deadline > observed_utc) {
+        return Ok(json!({"action":"web_auto_tick","projectId":project,
+            "stage":"RETRY_DEFERRED","nextAttemptUtc":deadline,"browserAction":"NONE"}));
     }
+    action()
 }
 
 pub(super) fn tick_project(workspace: &Path, project: &str) -> Result<Value, String> {
@@ -1215,6 +1244,52 @@ mod tests {
         .unwrap();
         assert_eq!(stage, "WAKE_STOPPED");
         assert_eq!(result["browserAction"], "NONE");
+    }
+
+    #[test]
+    fn retained_attention_defers_background_io_without_blocking_siblings_or_manual_retry() {
+        use std::cell::Cell;
+        let root = std::env::temp_dir().join(format!("web-auto-retry-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        rollover::record_auto_status(&root, "alpha", "ATTENTION", Some(7), Some("EXISTING_DRAFT"))
+            .unwrap();
+        let path = root.join(".catdesk/web-rollovers/alpha/auto-status.json");
+        let bytes = std::fs::read(&path).unwrap();
+        let deadline = rollover::automatic_retry_after(&root, "alpha", 7)
+            .unwrap()
+            .unwrap();
+        let result = run_after_retry_gate("alpha", Some(deadline), deadline - 1, || {
+            panic!("a deferred background project must not enter browser or status mutation")
+        })
+        .unwrap();
+        assert_eq!(result["stage"], "RETRY_DEFERRED");
+        assert_eq!(result["browserAction"], "NONE");
+        assert_eq!(result["nextAttemptUtc"], deadline);
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        let calls = Cell::new(0);
+        for (project, gate, observed) in [
+            (
+                "beta",
+                rollover::automatic_retry_after(&root, "beta", 7).unwrap(),
+                deadline - 1,
+            ),
+            ("alpha", None, deadline - 1), // Explicit ticks bypass automatic pacing.
+            (
+                "alpha",
+                rollover::automatic_retry_after(&root, "alpha", 8).unwrap(),
+                deadline - 1,
+            ),
+            ("alpha", Some(deadline), deadline),
+        ] {
+            run_after_retry_gate(project, gate, observed, || {
+                calls.set(calls.get() + 1);
+                Ok(json!({"admitted":true}))
+            })
+            .unwrap();
+        }
+        assert_eq!(calls.get(), 4);
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
