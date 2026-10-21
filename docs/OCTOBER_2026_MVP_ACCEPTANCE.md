@@ -1,5 +1,41 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 selected v31 / bounded native qualification (PARTIAL)
+
+Normal app and default-feature WakeHost builds at `49f421a` form development
+v31 (`1.0.0-dev.85-ac50cb157a0b3fbb7d3e3374b4e3831a2aa534830b96e20a19eb1b15bd512585`).
+The stopped package update preserves v30, Python inputs, profile and all 79
+checked state files. Its 20-second loopback probe passes authentication/scope
+refusals, seven paired project records, three retained advisory estimates and
+the completed rollover proof. It publishes no event and captures no fresh
+browser context. Cleanup exits normally; only four usage counters change.
+
+One fresh task on the existing isolated Wake2 thread finishes in about 139
+seconds, below its 600-second native bound. Exact turn metadata proves
+Sol/medium and workspace-write/approval-never; schema-2 job, receipt and
+candidate preserve the requested MXC mode. Only the requested report changes,
+all five previous artifacts and the native registry are preserved, and the
+lease releases. **Qualification fails:** all three checks return launcher
+exit 101 before Python starts. Native exit zero is not qualification success.
+The source-bound candidate matched immediately after exit; checkpointing its
+reviewed report makes that candidate historical, with no formal verification.
+
+A separate 60-second managed `:workspace` Python startup probe exits zero in
+about one second, preserving config, ACLs, registry and source. It does not
+explain or repair the resumed-turn execution difference. No further task is
+replayed or permission changed. Preserved v30 actually refuses the schema-2
+record with `CODEX_QUEUE: job record is invalid`, exit 2.
+
+Final readback preserves all five original Web bindings, both STOPPED controls
+and the production pointer; scoped processes are zero. No recurring worker,
+browser, WakeHost or canary resend is started. Original Wake2/Portfolio chats
+remain active; Bug Bounty is idle. BYOVD's own latest turn reports a provider
+cybersecurity restriction, separate from CatDesk and left unchanged. Connector
+HTTP 429 and zero exact-source GitHub workflow/check runs remain separate
+dependencies. Full profile verification, native target/review cycle and
+protected production acceptance remain open. UTC audit and detailed results:
+parent `checkpoints/native-mxc-optin-oct21`.
+
 ## October 21 fresh native task / Python runtime diagnosis (PARTIAL)
 
 The already isolated Wake2 worktree's three preserved corpus artifacts are

@@ -1,6 +1,6 @@
 # CatDesk — Important Command Reference
 
-## October 21 optional per-task Windows implementation (SOURCE)
+## October 21 optional per-task Windows implementation (SOURCE + DEVELOPMENT READBACK)
 
 The existing `operator codex queue add` accepts `--windows-sandbox mxc` for an
 explicit native Windows task. Omit it to retain the existing native settings.
@@ -15,6 +15,15 @@ package and bound/quiescent task owner before live execution. The successful
 managed read-only compatibility probe is not proof of a queued task's tests,
 review or Wake delivery. Current evidence is in the parent native-mxc-optin-oct21
 and native-cycle-readiness-oct21 checkpoints.
+
+Normal development v31 at `49f421a` now passes stopped-package selection and
+20-second metadata/cleanup checks. A fresh existing-thread queue turn binds
+the requested mode and observed Sol/medium but **does not qualify Python**:
+all three checks fail to launch with 101. A separate managed workspace probe
+starts Python unchanged. Do not present this option as a proven fix, infer
+effective implementation or repeat the failed task. The older v30 reader
+refuses new records with exit 2; use the updated reader for this queue. No
+production activation, browser/WakeHost start or binding update occurs.
 
 ## October 21 retained context observations (SOURCE)
 

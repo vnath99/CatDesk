@@ -1,5 +1,23 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## 2026-10-21 v31 fresh native qualification result (PARTIAL)
+
+Selected normal development v31 is built at `49f421a`; its bounded loopback
+metadata readback passes and leaves both controls stopped. Receipt
+`ce0fcf8b-497b-4e02-b2d6-2ff89e11916b` binds the requested MXC mode in schema 2
+and proves observed Sol/medium for exact existing-thread turn
+`01a15d3b-8ace-7fb3-bab3-bc831a3beccb`. Native exits zero in about 139 seconds
+and releases the lease. **All three qualification checks fail before Python
+starts (launcher 101)**. The report is reviewed/checkpointed in the isolated
+Wake2 branch; no source edit, formal verification, review publication, native
+target binding or Wake delivery is claimed. A separate bounded managed
+workspace probe starts the same base interpreter, with config/ACLs/state
+unchanged. That is diagnostic evidence, not a resumed-turn repair or effective
+mode attestation. Preserved old v30 actually refuses new records, exit 2.
+All five Web bindings/history and the production pointer remain preserved,
+scoped processes zero; no browser, host, recurrence or canary replay starts.
+Detailed UTC audit: parent `checkpoints/native-mxc-optin-oct21`.
+
 ## 2026-10-21 isolated native resumption and per-task MXC (source)
 
 The existing isolated Wake2 thread resumes through the actual operator queue

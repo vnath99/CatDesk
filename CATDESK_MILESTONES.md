@@ -1,3 +1,21 @@
+## 2026-10-21 — Selected package and fresh qualification outcome (PARTIAL)
+
+Normal matched development v31 at `49f421a` is selected stopped. Its bounded
+20-second readback passes seven paired records, three retained independent
+context estimates, preserved rollover proof, authentication/scope refusals and
+cleanup. V30/profile/state and production are preserved. One fresh native
+Sol/medium turn on the existing isolated Wake2 thread finishes in about 139
+seconds against a 600-second bound and releases its lease, but **all three qualification checks fail
+before Python starts** (launcher 101). Requested MXC mode is bound in schema-2
+records, not attested effective policy. The separate managed workspace Python
+probe succeeds unchanged; the resumed-turn difference remains unresolved.
+Actual old v30 rejects new records with exit 2. The reviewed single report is
+checkpointed locally; no current formal verification or natural review cycle
+is claimed. Five Web bindings and both stopped controls remain exact, scoped
+processes zero; no browser/WakeHost, recurring worker or canary replay. BYOVD's
+provider restriction, connector 429, absent exact-source remote CI and protected
+activation remain independent gates. Parent audit: checkpoints/native-mxc-optin-oct21.
+
 ## 2026-10-21 — Fresh native resumption and requested MXC option (PARTIAL)
 
 The preserved isolated Wake2 artifacts are checkpointed after three mypy fixes;
