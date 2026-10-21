@@ -22,10 +22,13 @@ fn full_object(raw: *mut c_void, directory: bool) -> Result<OfflineObjectIdentit
     })
 }
 
-/// Freshly materialized bytes and retained exact objects. Binding data alone
-/// cannot construct this value or authorize a STAGED record.
+/// Materialized bytes or a physically revalidated stage reopened only through
+/// admitted exact durable history. Binding data alone cannot construct this
+/// value or authorize a STAGED record.
 pub struct BrokerStageReceiptV2<'p> {
-    source: PinnedCandidateSourceV1,
+    // A reopened stage derives provenance from exact admitted durable history,
+    // not the continued presence of the original untrusted intake directory.
+    source: Option<PinnedCandidateSourceV1>,
     staged: PinnedCandidateSourceV1,
     security: StageSecurityMode,
     policy: Option<&'p BrokerProtectedPolicyV1>,
@@ -79,7 +82,9 @@ impl BrokerStageReceiptV2<'_> {
                 return Err("WAKE_BROKER_STAGE_POLICY_CHANGED".into());
             }
         }
-        self.source.revalidate_manifest(manifest, manifest_sha256)?;
+        if let Some(source) = self.source.as_mut() {
+            source.revalidate_manifest(manifest, manifest_sha256)?;
+        }
         self.staged.revalidate_manifest(manifest, manifest_sha256)?;
         let now = binding_of(
             &self.staging,
@@ -169,6 +174,128 @@ pub fn materialize_fixed_candidate_stage_v2<'p>(
     )?;
     lease.record_staged(&mut receipt)?;
     Ok(receipt)
+}
+
+pub(crate) fn reopen_stage_after_verified_history<'p>(
+    lease: &OfflineLedgerLeaseV2<'_, 'p>,
+    policy: Option<&'p BrokerProtectedPolicyV1>,
+) -> Result<BrokerStageReceiptV2<'p>> {
+    let security = recovery_security(policy)?;
+    if lease.phase() != "STAGED" {
+        return Err("WAKE_OFFLINE_STAGE_ATTENTION".into());
+    }
+    lease.revalidate_inputs()?;
+    let root = lease.protected_root();
+    let expected = lease.stage_binding_for_recovery()?.clone();
+    let manifest = lease.approved_manifest().clone();
+    let manifest_sha256 = lease.approved_manifest_sha256().to_owned();
+    let staged = pin_staged_candidate_manifest(root, &manifest, &manifest_sha256)?;
+    let sid = security.service_sid();
+    let staging = open_child(root, STAGING, true, false, sid)?;
+    let packages = open_child(root, PACKAGES, true, false, sid)?;
+    let candidate = open_child(&staging, CANDIDATE, true, false, sid)?;
+    let manifest_file = open_child(&candidate, MANIFEST, false, false, sid)?;
+    let artifacts: [OwnedHandle; 4] = ARTIFACTS
+        .into_iter()
+        .map(|name| open_child(&candidate, name, false, false, sid))
+        .collect::<Result<Vec<_>>>()?
+        .try_into()
+        .map_err(|_| "WAKE_OFFLINE_STAGE_OBJECT_CHANGED")?;
+    let binding = binding_of(&staging, &packages, &candidate, &manifest_file, &artifacts)?;
+    if binding != expected {
+        return Err("WAKE_OFFLINE_STAGE_OBJECT_CHANGED".into());
+    }
+    let mut receipt = BrokerStageReceiptV2 {
+        source: None,
+        staged,
+        security,
+        policy,
+        root_id: lease.protected_root_identity().clone(),
+        manifest,
+        manifest_sha256,
+        intent_sha256: lease.intent_record_sha256().to_owned(),
+        binding,
+        staging,
+        packages,
+        candidate,
+        manifest_file,
+        artifacts,
+    };
+    receipt.binding_for_ledger(
+        root,
+        lease.protected_root_identity(),
+        lease.intent_record_sha256(),
+        lease.approved_manifest(),
+        lease.approved_manifest_sha256(),
+    )?;
+    Ok(receipt)
+}
+
+fn recovery_security(policy: Option<&BrokerProtectedPolicyV1>) -> Result<StageSecurityMode> {
+    if let Some(policy) = policy {
+        policy.revalidate()?;
+        Ok(StageSecurityMode::Protected(
+            policy.checked_endpoint_sids()?.0.into(),
+        ))
+    } else {
+        #[cfg(test)]
+        return Ok(StageSecurityMode::Fixture);
+        #[cfg(not(test))]
+        return Err("WAKE_BROKER_STAGE_POLICY_CHANGED".into());
+    }
+}
+
+pub(crate) fn reopen_published_after_verified_history<'p>(
+    lease: &OfflineLedgerLeaseV2<'_, 'p>,
+    policy: Option<&'p BrokerProtectedPolicyV1>,
+) -> Result<BrokerPublishedReceiptV2<'p>> {
+    publication::reopen_published_receipt(lease, recovery_security(policy)?, policy, None)
+}
+
+#[cfg(test)]
+pub(crate) fn prepare_offline_recovery_fixture(
+    fixture: &super::tests::TransactionFixture,
+) -> (
+    OfflineLedgerLeaseV2<'_, 'static>,
+    BrokerStageReceiptV2<'static>,
+    crate::install_broker_offline_v2::CheckedOfflinePairV2,
+    crate::install_broker_offline_v2::OfflineMigrationObservationV2,
+) {
+    use crate::{
+        install_broker_durability::RetainedDirectoryWriterV2,
+        install_broker_ledger::{BrokerLedgerGuard, begin_offline_writer_fixture},
+        install_broker_source::pin_fixture_candidate_manifest,
+    };
+    let (pair, observed) = tests::pair(fixture);
+    let writer = std::sync::Arc::new(
+        RetainedDirectoryWriterV2::acquire(fixture.root(), &observed.target_protected_root)
+            .unwrap(),
+    );
+    let mut lease = begin_offline_writer_fixture(
+        BrokerLedgerGuard::acquire(fixture.root()).unwrap(),
+        &pair,
+        &observed,
+        writer,
+    )
+    .unwrap();
+    let source = pin_fixture_candidate_manifest(
+        fixture.root_path(),
+        &pair.approval().manifest,
+        &pair.approval().manifest_sha256,
+    )
+    .unwrap();
+    let mut receipt =
+        materialize_pinned_stage(&mut lease, source, StageSecurityMode::Fixture, None).unwrap();
+    lease.record_staged(&mut receipt).unwrap();
+    (lease, receipt, pair, observed)
+}
+
+#[cfg(test)]
+pub(crate) fn publish_offline_recovery_fixture<'p>(
+    lease: &mut OfflineLedgerLeaseV2<'_, 'p>,
+    receipt: BrokerStageReceiptV2<'p>,
+) -> Result<BrokerPublishedReceiptV2<'p>> {
+    publication::publish_pinned_stage(lease, receipt)
 }
 
 fn materialize_pinned_stage<'p>(
@@ -274,7 +401,7 @@ fn materialize_pinned_stage<'p>(
         return Err("WAKE_OFFLINE_STAGE_OBJECT_CHANGED".into());
     }
     let receipt = BrokerStageReceiptV2 {
-        source,
+        source: Some(source),
         staged,
         security,
         policy,

@@ -159,7 +159,7 @@ pub fn publish_fixed_candidate_stage_v2<'p>(
     publish_pinned_stage(lease, receipt)
 }
 
-fn publish_pinned_stage<'p>(
+pub(super) fn publish_pinned_stage<'p>(
     lease: &mut OfflineLedgerLeaseV2<'_, 'p>,
     mut receipt: BrokerStageReceiptV2<'p>,
 ) -> Result<BrokerPublishedReceiptV2<'p>> {
@@ -258,6 +258,23 @@ fn publish_pinned_stage<'p>(
     drop(staging);
     drop(packages);
     lease.revalidate_inputs()?;
+    let mut published = reopen_published_receipt(lease, security, policy, Some(exact_security))?;
+    lease.record_published(&mut published)?;
+    Ok(published)
+}
+
+pub(super) fn reopen_published_receipt<'p>(
+    lease: &OfflineLedgerLeaseV2<'_, 'p>,
+    security: StageSecurityMode,
+    policy: Option<&'p BrokerProtectedPolicyV1>,
+    expected_security: Option<[(String, String); 9]>,
+) -> Result<BrokerPublishedReceiptV2<'p>> {
+    lease.revalidate_inputs()?;
+    let root_id = lease.protected_root_identity().clone();
+    let intent_sha256 = lease.intent_record_sha256().to_owned();
+    let manifest = lease.approved_manifest().clone();
+    let manifest_sha256 = lease.approved_manifest_sha256().to_owned();
+    let binding = lease.stage_binding_for_recovery()?.clone();
     let root = lease.protected_root();
     let bytes = pin_published_candidate_manifest(root, &manifest, &manifest_sha256)?;
     let sid = security.service_sid();
@@ -271,6 +288,25 @@ fn publish_pinned_stage<'p>(
         .collect::<Result<Vec<_>>>()?
         .try_into()
         .map_err(|_| "WAKE_OFFLINE_PUBLICATION_OBJECT_CHANGED")?;
+    let exact_security = match expected_security {
+        Some(value) => value,
+        None => [
+            root,
+            &staging,
+            &packages,
+            &package,
+            &manifest_file,
+            &artifacts[0],
+            &artifacts[1],
+            &artifacts[2],
+            &artifacts[3],
+        ]
+        .into_iter()
+        .map(|handle| protected_security_raw(handle.as_raw_handle()))
+        .collect::<Result<Vec<_>>>()?
+        .try_into()
+        .map_err(|_| "WAKE_BROKER_PUBLICATION_ACL_MISMATCH")?,
+    };
     let mut published = BrokerPublishedReceiptV2 {
         bytes,
         security,
@@ -287,7 +323,13 @@ fn publish_pinned_stage<'p>(
         manifest_file,
         artifacts,
     };
-    lease.record_published(&mut published)?;
+    published.binding_for_ledger(
+        root,
+        lease.protected_root_identity(),
+        lease.intent_record_sha256(),
+        lease.approved_manifest(),
+        lease.approved_manifest_sha256(),
+    )?;
     Ok(published)
 }
 

@@ -73,6 +73,11 @@ pub use offline_v2::{
     BrokerPublishedReceiptV2, BrokerStageReceiptV2, materialize_fixed_candidate_stage_v2,
     publish_fixed_candidate_stage_v2,
 };
+#[cfg(test)]
+pub(crate) use offline_v2::{prepare_offline_recovery_fixture, publish_offline_recovery_fixture};
+pub(crate) use offline_v2::{
+    reopen_published_after_verified_history, reopen_stage_after_verified_history,
+};
 
 #[derive(Clone)]
 enum StageSecurityMode {

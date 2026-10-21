@@ -4,8 +4,9 @@
 //! PID or process snapshot as an offline migration. The production admission
 //! entry point still refuses before INTENT because independent launch-entry
 //! quarantine is not implemented. Disposable fixtures exercise the create-once
-//! engine through physical publication. Restart recovery and reader/owner
-//! cutover remain incomplete; this source does not activate an installation.
+//! engine through physical publication and exact complete-phase recovery.
+//! Uncertain attempts stay held; reader/owner cutover remains incomplete.
+//! This source does not activate an installation.
 
 use super::*;
 use crate::{
@@ -331,6 +332,10 @@ struct OfflineMutationChecks<'p> {
     root_flush: OfflineRootFlush,
 }
 
+#[path = "install_broker_offline_recovery.rs"]
+mod recovery;
+pub use recovery::OfflineRecoveryV2;
+
 impl<'a> BrokerLedgerGuard<'a> {
     /// Future fixed-broker V2 admission. Current physical observations must
     /// originate in the broker while its global lock/clock are retained.
@@ -528,6 +533,11 @@ impl<'p> OfflineLedgerLeaseV2<'_, 'p> {
     }
     pub(crate) fn policy(&self) -> Option<&'p BrokerProtectedPolicyV1> {
         self.policy
+    }
+    pub(crate) fn stage_binding_for_recovery(&self) -> Result<&StageBindingV2> {
+        self.staged_binding
+            .as_ref()
+            .ok_or_else(|| "WAKE_OFFLINE_STAGE_ATTENTION".into())
     }
     pub(crate) fn revalidate_inputs(&self) -> Result<()> {
         (self.revalidate)()?;

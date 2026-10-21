@@ -1,3 +1,32 @@
+## 2026-10-21 — V2 exact complete-phase recovery (SOURCE/FIXTURE; ADMISSION HELD)
+
+V2 now reopens complete STAGED or PUBLISHED history under the matching global
+guard, retained root writer and all canonical hash-linked journal pins. It
+checks the exact signed pair at original acceptance time plus current pinned
+roles and existing admission gates, then reconstructs full-ID/byte/ACL-checked
+package receipts. STAGED can publish once without the original intake directory;
+PUBLISHED reopens without another rename or record write. Existing phase parent
+entries are flushed again; uncertain attempt markers remain sticky attention.
+
+Eight recovery tests pass, including continuation, exact final-flush recovery,
+missing quarantine, changed bytes/full IDs, chain/clock/mixed history refusal,
+receipt/lock lifetime and retry after a recovery-flush fault. Complete Wake
+all-feature tests pass (339 library / one ignored, enabled binaries/integrations
+and adapter/response Python regressions), as do strict root/Wake Clippy, format,
+diff and unchanged source hashes. These are filesystem close/reopen fixtures;
+installed service restart, abrupt termination and power-loss proof remain absent.
+
+Protected pointer/reader and owner cutover, broker-owned observations/clock,
+closed inventory/quarantine, independent CI/provisioning and installed multi-
+project acceptance remain open. Next: V2 protected pointer/reader cutover from
+the retained PUBLISHED receipt. Production admission and service holds stay in
+force; this source is not selected or installed. Five bindings/history and both
+stopped selections remain unchanged; cleanup finds zero scoped processes. No
+operational/recurring workers, new message or canary replay starts. One read-only
+connector check at 18:18:18 UTC still returns HTTP 429 at the OpenAI SSE probe,
+about 30 minutes after the prior attempt. Source progress continues separately.
+Parent dated audit: checkpoints/offline-v2-recovery-oct21.
+
 ## 2026-10-21 — V2 typed package publication (SOURCE/FIXTURE; ADMISSION HELD)
 
 V2 now consumes its fresh STAGED receipt, persists a create-once hash-linked

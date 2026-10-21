@@ -1,5 +1,54 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 exact V2 complete-phase recovery (SOURCE/FIXTURE ONLY)
+
+The dormant broker now supports exact STAGED/PUBLISHED recovery through
+`resume_offline_v2`. All canonical journal files stay exclusively pinned through
+pair validation, current role/store checks, package reconstruction and parent
+flush. Original acceptance time is used only to verify the matching signed pair;
+current observed roles, the retained root writer/global guard, independent
+quarantine and exact CI are still required. Missing quarantine continues to
+refuse before CI or any recovery flush. No record/hash flag bypass is added.
+
+A complete unattempted STAGED package reopens into a physical receipt and can
+publish once. The original untrusted intake directory is no longer required;
+provenance instead comes from admitted exact durable history, retained stage
+bytes, full identities and canonical protected security. A complete PUBLISHED
+package reopens into its retained moved-byte receipt without rename or record
+rewrite. The existing parent entry is flushed again before success is returned.
+An attempt marker without PUBLISHED remains attention-only at either namespace
+location, and a partial stage or mixed/unknown phase history cannot resume.
+V1 bytes and behavior stay unchanged; no V1 process-owner proof is fabricated.
+
+Eight new recovery tests pass. They cover continuation after intake relocation,
+repeated PUBLISHED reopening, the existing failed PUBLISHED parent flush,
+uncertain publication locations, changed bytes/full-ID aliases, broken chains,
+clock rollback/mixed generations, missing quarantine before CI, retained lock/
+receipt lifetime and retry after a recovery-flush failure. Complete all-feature
+Wake passes 339 library tests / one ignored plus enabled binaries/integrations
+and adapter/response Python regressions. Strict root/Wake all-target/all-feature
+Clippy, formatting, diff and unchanged source-under-test hashes pass. The first
+compile's unused-mut warning is retained and corrected; focused/full runtime
+runs pass. Root main runtime tests remain prior-checkpoint evidence. These tests
+close and reopen real fixture handles; they do not demonstrate an installed
+service restart, process-kill recovery or sudden-power-loss durability.
+
+Protected pointer/reader and new-owner cutover, broker-owned observations/clock,
+independent closed-inventory/quarantine and exact CI/provisioning remain open.
+Existing quarantine, installer and service holds remain. No new package is
+selected or installed. Installed independent multi-project context monitoring,
+Wake routing, rollover and the natural development/review cycle are unaccepted.
+
+Five original registry/Wake pairs/history and stopped selected v33/production
+pointers remain exact; cleanup at 18:19:31 UTC finds zero scoped processes. No
+operational browser/WakeHost/recurring worker, message send or completed canary
+replay starts. Existing native development chats are inspected read-only without
+messages or configuration changes; Bug Bounty's own missing Intigriti credential
+remains a separate project dependency. One connector read at 18:18:18 UTC, about
+30 minutes after its predecessor, still returns HTTP 429 at the OpenAI tunnel
+SSE probe before local CatDesk reachability is proven. Source work continues.
+Parent dated audit: checkpoints/offline-v2-recovery-oct21.
+
 ## October 21 typed V2 physical publication (SOURCE/FIXTURE ONLY)
 
 V2 now publishes a freshly staged signed package through the existing native
