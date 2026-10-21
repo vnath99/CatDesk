@@ -42,6 +42,10 @@ const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
 const FILE_RENAME_INFORMATION_CLASS: u32 = 10;
 const INVALID_HANDLE_VALUE: *mut c_void = -1isize as *mut c_void;
 
+#[path = "install_broker_pointer_writer_v2.rs"]
+mod offline_v2;
+pub use offline_v2::create_first_protected_pointer_v2;
+
 #[repr(C)]
 struct UnicodeString {
     length: u16,

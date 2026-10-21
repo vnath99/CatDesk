@@ -1,3 +1,37 @@
+## 2026-10-21 — integrated V2 first-pointer creation/readback (SOURCE/FIXTURE ONLY)
+
+The checked first-pointer plan now drives the existing fixed temp-file, byte
+readback and native no-replace rename primitives. A retained V2 reader compares
+canonical bytes, full physical identity, creation-time security and published
+package proof before a typed POINTER_SWITCHED record can finish. The pointer
+and package stay pinned after the lease drops. Existing protected pointers are
+never replaced by this first-generation API; the legacy predecessor is separate.
+No V1 owner/stop proof or launch authority is synthesized.
+
+Seven integrated cases pass: real complete pointer creation/readback/record,
+four flush-failure boundaries without replay, a native collision race preserving
+foreign current.json, changed identity/bytes/security, torn marker, missing
+public policy and wrong-root reader context. Full all-feature Wake passes 353
+library tests / one ignored plus enabled binaries/integrations and adapter/
+response Python regressions. Strict root/Wake Clippy, format, diff and unchanged
+source-under-test hashes pass. Root main runtime tests remain historical.
+
+This proves disposable filesystem integration, not real migration, installed
+activation or old-owner quiescence. The preserved separate legacy fixture is
+not independent signed-owner evidence. Pointer-phase restart recovery, normal
+launch-reader/new-owner integration, broker-owned observation/clock/quarantine,
+exact CI/provisioning and installed multi-project acceptance remain open. Next:
+exact complete-pointer recovery without another rename; keep uncertain attempts
+held. The public API still requires protected policy and an admitted opaque V2
+lease; quarantine and installer/service gates remain closed.
+
+Five original bindings/history and stopped v33/production selections remain
+unchanged; cleanup finds zero scoped processes. No operational/recurring worker,
+message or completed canary replay starts. One connector read at 19:03:49 UTC,
+about 45 minutes after its predecessor, still returns HTTP 429 at the OpenAI SSE
+probe before local access is proven. Safe source work continues independently.
+Parent dated audit: checkpoints/offline-v2-pointer-cutover-oct21.
+
 ## 2026-10-21 — marked first-pointer namespace handoff (SOURCE/FIXTURE; CUTOVER PENDING)
 
 A native fixture found that the strict retained root writer also blocks the

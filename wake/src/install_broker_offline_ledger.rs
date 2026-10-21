@@ -4,8 +4,9 @@
 //! PID or process snapshot as an offline migration. The production admission
 //! entry point still refuses before INTENT because independent launch-entry
 //! quarantine is not implemented. Disposable fixtures exercise the create-once
-//! engine through physical publication and exact complete-phase recovery.
-//! Uncertain attempts stay held; reader/owner cutover remains incomplete.
+//! engine through first-pointer readback and STAGED/PUBLISHED recovery.
+//! Uncertain attempts stay held; pointer-phase recovery and owner launch
+//! remain incomplete. Normal launch readers are not switched by this API.
 //! This source does not activate an installation.
 
 use super::*;
@@ -298,6 +299,9 @@ pub struct OfflineLedgerLeaseV2<'a, 'p> {
     published_digest: Option<String>,
     pointer_namespace_attempted: bool,
     pointer_namespace_digest: Option<String>,
+    pointer_finish_attempted: bool,
+    pointer_binding: Option<pointer::OfflinePointerBindingV2>,
+    pointer_digest: Option<String>,
 }
 
 enum OfflineRootFlush {
@@ -351,7 +355,7 @@ pub use recovery::OfflineRecoveryV2;
 
 #[path = "install_broker_offline_pointer.rs"]
 mod pointer;
-pub use pointer::OfflinePointerPlanV2;
+pub use pointer::{OfflinePointerBindingV2, OfflinePointerPlanV2};
 
 impl<'a> BrokerLedgerGuard<'a> {
     /// Future fixed-broker V2 admission. Current physical observations must
@@ -518,13 +522,18 @@ impl<'a> BrokerLedgerGuard<'a> {
             published_digest: None,
             pointer_namespace_attempted: false,
             pointer_namespace_digest: None,
+            pointer_finish_attempted: false,
+            pointer_binding: None,
+            pointer_digest: None,
         })
     }
 }
 
 impl<'p> OfflineLedgerLeaseV2<'_, 'p> {
     pub fn phase(&self) -> &'static str {
-        if self.published_digest.is_some() {
+        if self.pointer_binding.is_some() {
+            "POINTER_SWITCHED"
+        } else if self.published_digest.is_some() {
             "PUBLISHED"
         } else if self.staged_binding.is_some() {
             "STAGED"

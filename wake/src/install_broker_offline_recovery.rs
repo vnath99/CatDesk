@@ -232,6 +232,9 @@ impl<'a> BrokerLedgerGuard<'a> {
             published_digest: history.records.get(4).map(|entry| entry.digest.clone()),
             pointer_namespace_attempted: false,
             pointer_namespace_digest: None,
+            pointer_finish_attempted: false,
+            pointer_binding: None,
+            pointer_digest: None,
         };
         let result = if history.published {
             let mut receipt = reopen_published_after_verified_history(&lease, policy)?;

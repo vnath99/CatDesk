@@ -7,6 +7,48 @@ use crate::install_broker_stage_writer::BrokerPublishedReceiptV2;
 
 const MAX_POINTER_V2_BYTES: usize = 8 * 1024;
 const ATTEMPT_DOMAIN: &[u8] = b"CatDeskWakeOfflinePointerAttemptV2\0";
+const CREATED_DOMAIN: &[u8] = b"CatDeskWakeOfflinePointerCreatedV2\0";
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OfflinePointerBindingV2 {
+    pub pointer_file: OfflineObjectIdentityV2,
+    pub pointer_sha256: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PointerCreatedRecordV2 {
+    schema_version: u32,
+    purpose: String,
+    install_generation: u64,
+    intent_record_sha256: String,
+    published_record_sha256: String,
+    pointer_attempt_sha256: String,
+    protected_root: OfflineObjectIdentityV2,
+    pointer_binding: OfflinePointerBindingV2,
+    stage_binding: StageBindingV2,
+}
+
+fn read_created(file: &mut File) -> Result<(PointerCreatedRecordV2, String)> {
+    file_info_bounded(file, None, MAX_OFFLINE_RECORD_BYTES)?;
+    file.seek(SeekFrom::Start(0))
+        .map_err(|_| "WAKE_LEDGER_RECORD_UNAVAILABLE")?;
+    let mut bytes = Vec::new();
+    file.take(MAX_OFFLINE_RECORD_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "WAKE_LEDGER_RECORD_UNAVAILABLE")?;
+    file_info_bounded(file, Some(bytes.len()), MAX_OFFLINE_RECORD_BYTES)?;
+    let record: PointerCreatedRecordV2 =
+        serde_json::from_slice(&bytes).map_err(|_| "WAKE_OFFLINE_POINTER_RECORD_INVALID")?;
+    if serde_json::to_vec(&record).map_err(|_| "WAKE_OFFLINE_POINTER_RECORD_INVALID")? != bytes {
+        return Err("WAKE_OFFLINE_POINTER_RECORD_INVALID".into());
+    }
+    let mut hash = Sha256::new();
+    hash.update(CREATED_DOMAIN);
+    hash.update(bytes);
+    Ok((record, format!("{:x}", hash.finalize())))
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -124,6 +166,25 @@ impl OfflineLedgerLeaseV2<'_, '_> {
         })
     }
 
+    pub(crate) fn checked_initial_pointer_plan(&self) -> Result<OfflinePointerPlanV2> {
+        self.revalidate_inputs()?;
+        if !self.pointer_namespace_attempted || self.pointer_namespace_digest.is_none() {
+            return Err("WAKE_OFFLINE_POINTER_ATTENTION".into());
+        }
+        self.pointer_plan()
+    }
+
+    pub fn pointer_record_sha256(&self) -> Option<&str> {
+        self.pointer_digest.as_deref()
+    }
+
+    pub(crate) fn flush_initial_pointer_parent(&self, point: ParentFlushPoint) -> Result<()> {
+        self.revalidate_inputs()?;
+        self.root_flush
+            .flush(self.root, &self.intent.protected_root, point)?;
+        self.revalidate_inputs()
+    }
+
     fn exact_published_record(&mut self) -> Result<String> {
         let (mut expected, attempt_digest) = self.exact_publication_attempt()?;
         expected.phase = "PUBLISHED".into();
@@ -137,7 +198,7 @@ impl OfflineLedgerLeaseV2<'_, '_> {
         Ok(digest)
     }
 
-    fn pointer_inventory(&self, attempted: bool) -> Result<()> {
+    fn pointer_inventory(&self, attempted: bool, created: bool) -> Result<()> {
         let mut slots = [false; LEDGER_SLOT_COUNT];
         for phase in [
             InstallPhaseV1::Intent,
@@ -149,6 +210,7 @@ impl OfflineLedgerLeaseV2<'_, '_> {
         }
         slots[PUBLICATION_ATTEMPT_SLOT] = true;
         slots[POINTER_ATTEMPT_SLOT] = attempted;
+        slots[InstallPhaseV1::PointerSwitched.index()] = created;
         let inventory = ledger_inventory(self.root)?;
         if inventory.len() != 1 || inventory.get(&1) != Some(&slots) {
             return Err("WAKE_OFFLINE_POINTER_ATTENTION".into());
@@ -194,7 +256,7 @@ impl OfflineLedgerLeaseV2<'_, '_> {
         self.require_published_receipt(published)?;
         let plan = self.pointer_plan()?;
         let digest = self.exact_published_record()?;
-        self.pointer_inventory(false)?;
+        self.pointer_inventory(false, false)?;
         for name in ["current.json", "current-00000000000000000001.pending.json"] {
             if open_optional(self.root, name)?.is_some() {
                 return Err("WAKE_OFFLINE_POINTER_EXISTING_OBJECT".into());
@@ -223,7 +285,7 @@ impl OfflineLedgerLeaseV2<'_, '_> {
             ParentFlushPoint::PointerAttempt,
         )?;
         self.exact_published_record()?;
-        self.pointer_inventory(true)?;
+        self.pointer_inventory(true, false)?;
         self.require_published_receipt(published)?;
         if read_attempt(&mut file)? != (expected, digest.clone()) {
             return Err("WAKE_OFFLINE_POINTER_ATTEMPT_INVALID".into());
@@ -241,7 +303,17 @@ impl OfflineLedgerLeaseV2<'_, '_> {
         plan: &OfflinePointerPlanV2,
         published: &mut BrokerPublishedReceiptV2<'_>,
     ) -> Result<()> {
-        if self.phase() != "PUBLISHED"
+        self.check_initial_pointer_namespace(plan, published, false)
+    }
+
+    fn check_initial_pointer_namespace(
+        &mut self,
+        plan: &OfflinePointerPlanV2,
+        published: &mut BrokerPublishedReceiptV2<'_>,
+        created: bool,
+    ) -> Result<()> {
+        if (!created && self.phase() != "PUBLISHED")
+            || !matches!(self.phase(), "PUBLISHED" | "POINTER_SWITCHED")
             || !self.pointer_namespace_attempted
             || self.pointer_namespace_digest.is_none()
         {
@@ -252,7 +324,7 @@ impl OfflineLedgerLeaseV2<'_, '_> {
             return Err("WAKE_OFFLINE_POINTER_PLAN_INVALID".into());
         }
         let published_digest = self.exact_published_record()?;
-        self.pointer_inventory(true)?;
+        self.pointer_inventory(true, created)?;
         let mut file = open_optional(self.root, &pointer_attempt_name(1))?
             .ok_or("WAKE_OFFLINE_POINTER_ATTENTION")?;
         let (actual, digest) = read_attempt(&mut file)?;
@@ -262,6 +334,88 @@ impl OfflineLedgerLeaseV2<'_, '_> {
             return Err("WAKE_OFFLINE_POINTER_ATTEMPT_INVALID".into());
         }
         self.require_published_receipt(published)?;
+        Ok(())
+    }
+
+    pub(crate) fn record_initial_pointer_created(
+        &mut self,
+        switched: &mut crate::install_broker_reader::ProtectedInstallPinV2<'_>,
+    ) -> Result<()> {
+        if self.phase() != "PUBLISHED" || self.pointer_finish_attempted {
+            return Err("WAKE_OFFLINE_POINTER_ATTENTION".into());
+        }
+        switched.revalidate(self)?;
+        let plan = self.checked_initial_pointer_plan()?;
+        self.check_initial_pointer_namespace(&plan, switched.published_mut(), false)?;
+        let binding = switched.pointer_binding().clone();
+        let root = &self.intent.protected_root;
+        let stage = self.stage_binding_for_recovery()?.clone();
+        let objects = [
+            &root.full,
+            &self.intent.predecessor_pointer.full,
+            &stage.staging_directory.full,
+            &stage.packages_directory.full,
+            &stage.candidate_directory.full,
+            &stage.manifest_file.full,
+            &stage.artifacts[0].full,
+            &stage.artifacts[1].full,
+            &stage.artifacts[2].full,
+            &stage.artifacts[3].full,
+        ];
+        if !crate::install_broker_offline_v2::valid_object(&binding.pointer_file)
+            || binding.pointer_file.full.volume_serial != root.full.volume_serial
+            || binding.pointer_file.legacy.volume_serial != root.legacy.volume_serial
+            || objects.contains(&&binding.pointer_file.full)
+            || binding.pointer_sha256 != plan.sha256
+        {
+            return Err("WAKE_OFFLINE_POINTER_RECORD_INVALID".into());
+        }
+        let expected = PointerCreatedRecordV2 {
+            schema_version: 2,
+            purpose: "catdesk-wake-offline-pointer-created".into(),
+            install_generation: 1,
+            intent_record_sha256: self.intent_digest.clone(),
+            published_record_sha256: self.exact_published_record()?,
+            pointer_attempt_sha256: self
+                .pointer_namespace_digest
+                .clone()
+                .ok_or("WAKE_OFFLINE_POINTER_ATTENTION")?,
+            protected_root: self.intent.protected_root.clone(),
+            pointer_binding: binding.clone(),
+            stage_binding: stage,
+        };
+        self.pointer_finish_attempted = true;
+        let mut file = open_relative(
+            self.root,
+            &record_name(1, InstallPhaseV1::PointerSwitched),
+            FILE_CREATE,
+        )
+        .map_err(|_| "WAKE_OFFLINE_POINTER_ATTENTION")?;
+        file_info_bounded(&file, Some(0), MAX_OFFLINE_RECORD_BYTES)?;
+        let bytes =
+            serde_json::to_vec(&expected).map_err(|_| "WAKE_OFFLINE_POINTER_RECORD_INVALID")?;
+        if bytes.is_empty() || bytes.len() > MAX_OFFLINE_RECORD_BYTES {
+            return Err("WAKE_OFFLINE_POINTER_RECORD_INVALID".into());
+        }
+        file.write_all(&bytes)
+            .and_then(|_| file.sync_all())
+            .map_err(|_| "WAKE_LEDGER_WRITE_FAILED")?;
+        let (actual, digest) = read_created(&mut file)?;
+        if actual != expected {
+            return Err("WAKE_OFFLINE_POINTER_RECORD_INVALID".into());
+        }
+        self.root_flush.flush(
+            self.root,
+            &self.intent.protected_root,
+            ParentFlushPoint::LaterLedgerPhase,
+        )?;
+        self.check_initial_pointer_namespace(&plan, switched.published_mut(), true)?;
+        switched.revalidate(self)?;
+        if read_created(&mut file)? != (expected, digest.clone()) {
+            return Err("WAKE_OFFLINE_POINTER_RECORD_INVALID".into());
+        }
+        self.pointer_binding = Some(binding);
+        self.pointer_digest = Some(digest);
         Ok(())
     }
 }

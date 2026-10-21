@@ -1,5 +1,61 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 integrated V2 first-pointer writer/reader (SOURCE/FIXTURE ONLY)
+
+`create_first_protected_pointer_v2` now uses the checked plan and durable
+namespace admission to create the fixed generation-one pending file, write/
+flush/re-read its canonical bytes, and invoke the existing native no-replace
+rename to protected current.json. An existing pointer is never replaced by
+this API. Both temp-entry and post-rename parent entries flush through the
+retained writer. No predecessor file is opened for writing, and the separately
+pinned legacy runtime remains outside this target namespace.
+
+The new retained V2 reader checks the exact canonical plan, legacy plus full
+FileIdInfo identity, temp-creation owner/DACL, protected-policy security and
+the exact published package receipt. It reopens current.json and rehashes its
+bytes while pointer/package pins deny writes and deletes. Only that physical
+reader proof may create the distinct bounded V2 POINTER_SWITCHED record, which
+binds intent/PUBLISHED/attempt digests, full root/stage/pointer IDs and pointer
+hash. Earlier V1/V2 journal bytes stay unchanged. A failed or uncertain writer
+leaves its marker/pending/current/record residue intact and cannot replay on
+the same lease. No owner stop, launch or installation acceptance follows from
+this record or read-only snapshot.
+
+Seven new integrated cases pass. They cover actual canonical pointer creation,
+readback and completion with retained pins; all four flush-failure boundaries;
+a foreign-current race after the marker that exercises native no-replace;
+identity substitution, byte and DACL changes after temp creation; torn-marker
+veto before rename; missing policy on the public entry; and reader rejection
+under a different root. A separate legacy fixture's bytes and physical identity
+remain unchanged, but that fixture does not prove independent signed predecessor
+or owner-quiescence admission. All fixture bypasses remain test-only; normal
+code requires protected policy and the opaque admitted V2 lease.
+
+Complete all-feature Wake passes 353 library tests / one ignored plus enabled
+binary/integration and adapter/response Python regressions. Strict root/Wake
+all-target/all-feature Clippy, formatting, diff and unchanged source-under-test
+hash checks pass. Root main runtime tests remain prior-checkpoint evidence.
+These are real disposable filesystem operations, not installed migration,
+process-kill/power-loss acceptance or a production pointer change.
+
+Complete-pointer restart recovery is not implemented yet; later/mixed history
+still refuses entry and uncertain pointer attempts remain attention. Normal
+launch readers are not switched to this V2 proof by the new API. Protected
+new-owner integration, broker-owned observations/clock, independent closed
+inventory/quarantine, exact-source CI/provisioning and installed multi-project
+monitoring/routing/rollover/development-cycle acceptance remain open. Existing
+quarantine, installer and service holds remain; no selected release is updated.
+
+Five original registry/Wake pairs/history, stopped selected v33 and production
+pointers remain exact. Cleanup at 19:03:49 UTC finds zero scoped processes. No
+operational browser/WakeHost/recurring worker, message send or completed canary
+replay starts. One read-only connector probe at 19:03:49 UTC, about 45 minutes
+after its predecessor, still returns HTTP 429 at the OpenAI tunnel SSE probe
+before local CatDesk reachability is proven. This limits connector verification
+while safe source work continues. Next: complete-pointer recovery using retained
+reader proof without another rename or journal rewrite.
+Parent dated audit: checkpoints/offline-v2-pointer-cutover-oct21.
+
 ## October 21 first-pointer namespace handoff (SOURCE/FIXTURE; CUTOVER PENDING)
 
 A real Windows fixture established a remaining compatibility issue: the strict
