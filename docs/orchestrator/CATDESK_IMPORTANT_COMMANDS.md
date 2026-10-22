@@ -1,5 +1,25 @@
 # CatDesk — Important Command Reference
 
+## October 22 Binagotchy Web project view (SOURCE / TESTED_LOCAL)
+
+In a source-qualified Binagotchy console, use `web projects` or `web status`.
+Both are exact read-only commands with no arguments. They use the selected
+control workspace's existing paired Web status reader. Existing `projects`
+continues to show native project registration/binding presence.
+
+The Web view shows bounded project metadata, paired generation/digest prefix,
+history/queue counts, advisory observed tokens and saved rollover/scheduler
+progress. UNKNOWN coverage has no reliable capacity percentage. A saved tick
+is never proof of an active scheduler. Conversation URLs, native session IDs,
+paths and raw handoffs are omitted from this aggregate view. Detailed local
+JSON remains `operator web status` with its existing schema.
+
+These console commands start no browser, WakeHost, task or scheduler and change
+no binding. Qualification of this increment in a normal development package and
+installed console is still separate from its local regression evidence. Legacy
+console startup/status/control surfaces retain their existing behavior; this
+increment does not redirect production Wake controls to a development root.
+
 ## October 21 inspect a quarantined bootstrap (SOURCE; LIVE PENDING)
 
 `operator web rollover inspect-quarantine --project-id PROJECT --expected-intent-id INTENT`

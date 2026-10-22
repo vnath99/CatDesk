@@ -1,3 +1,34 @@
+## 2026-10-22 — central Web project console (SOURCE / TESTED_LOCAL)
+
+Binagotchy now accepts exact `web projects` and `web status` commands. They use
+the existing paired Web status reader, independently of native Codex queue
+presentation. The bounded view shows project ID, pairing, generation, digest
+prefix, history count, queued count, advisory observed context and saved
+rollover/scheduler progress. URLs, native session IDs, paths and handoff bodies
+are omitted. Context requires matching project, URL, digest and generation;
+UNKNOWN coverage never becomes a capacity percentage. Saved scheduler ticks
+remain observations, including stale-generation records, not live-worker proof.
+
+Local verification: 19 Binagotchy regressions and three existing Web development
+integration tests pass. The latter check three independent paired projects and
+byte-for-byte preservation of control state through the new read path. Normal
+package qualification and installed console acceptance are separate gates.
+See [October execution log](docs/OCT22_31_EXECUTION_LOG.md) for exact evidence,
+publication readback and remaining acceptance.
+
+The earlier bounded development stop-guard run passed: 82 protected records
+unchanged, three allowed scheduler snapshots updated, zero scoped processes on
+exit, no browser/WakeHost or sends. It proved opt-out/stopped gates, not positive
+automatic observation. Fresh October 22 readback preserves all five original
+pairs/history and both STOPPED controls; one connector read still returns 429.
+The completed fast canary remains complete. The separate older CatDesk attempt
+remains quarantined after `RESPONSE_EXPECTED_USER_NOT_FOUND`; no replay or
+invented receipt is authorized by this status work.
+
+CatDesk remains intentionally PUBLIC under the operator's October 22 exception.
+Only reviewed, verified, sanitized source/documentation may be pushed to the
+existing branch. Other projects retain their own private-publication rules.
+
 ## 2026-10-21 — precise read-only USER refusal diagnostics (SOURCE)
 
 Cooperative observation now separates missing expected USER text, duplicate

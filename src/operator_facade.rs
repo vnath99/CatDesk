@@ -16,6 +16,10 @@ use crate::mcp;
 #[path = "operator_web_cli.rs"]
 mod web;
 
+pub(crate) fn read_web_status(workspace: &Path) -> Result<serde_json::Value, String> {
+    web::read_status(workspace)
+}
+
 pub(crate) fn start_web_auto_scheduler(state: crate::state::SharedState) {
     web::start_auto_scheduler(state);
 }

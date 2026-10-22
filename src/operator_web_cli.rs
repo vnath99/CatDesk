@@ -780,6 +780,42 @@ fn registry_rollover_projection(raw: &Value) -> Value {
     })
 }
 
+pub(crate) fn read_status(workspace: &Path) -> Result<Value, String> {
+    let workspace = workspace
+        .canonicalize()
+        .map_err(|_| "WEB_SCOPE: control workspace is unavailable")?;
+    let runtime_mode = crate::wake_protocol_client::wake_runtime_mode_for_workspace(&workspace)?;
+    let registry =
+        AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
+            .and_then(|store| store.load_registry())
+            .map_err(|_| "WEB_SCOPE: control registry is unavailable")?;
+    let web_projects =
+        mcp::web_project_registry_status(&workspace, &json!({"projects":&registry.projects}));
+    let projects: Vec<_> = registry
+        .projects
+        .iter()
+        .map(|project| {
+            let stored = serde_json::to_value(project).unwrap_or(Value::Null);
+            json!({
+                "projectId":project.project_id,
+                "workspace":project.workspace,
+                "nativeThreadId":project.codex_thread_id,
+                "registeredConversationUrl":project.chatgpt_target_url,
+                "conversationHistory":stored.get("chatgptTargetHistory"),
+                "wake":target_status(&workspace, &project.project_id, runtime_mode),
+                "context":context_status(&workspace,&project.project_id),
+                "rollover":operator_rollover_status(&workspace,&project.project_id)
+                    .unwrap_or_else(|_| json!({"status":"UNAVAILABLE_OR_BUSY"})),
+            })
+        })
+        .collect();
+    Ok(
+        json!({"action":"web_status", "readOnly":true, "projects":projects,
+        "runtimeMode":runtime_mode, "webProjects":web_projects,
+        "meaning":"Per-project registration and paired Wake readback. Browser authentication, delivery and continuation require their own receipts."}),
+    )
+}
+
 pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value, String> {
     let workspace = workspace
         .canonicalize()
@@ -813,42 +849,7 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
                 "nativeSessionAction":"NONE", "wakeAction":"NONE",
             }))
         }
-        WebAction::Status => {
-            let runtime_mode =
-                crate::wake_protocol_client::wake_runtime_mode_for_workspace(&workspace)?;
-            let registry = AutonomousProjectRegistryStoreV1::open_read_only(
-                workspace.join(".catdesk/projects"),
-            )
-            .and_then(|store| store.load_registry())
-            .map_err(|_| "WEB_SCOPE: control registry is unavailable")?;
-            let web_projects = mcp::web_project_registry_status(
-                &workspace,
-                &json!({"projects":&registry.projects}),
-            );
-            let projects: Vec<_> = registry
-                .projects
-                .iter()
-                .map(|project| {
-                    let stored = serde_json::to_value(project).unwrap_or(Value::Null);
-                    json!({
-                        "projectId":project.project_id,
-                        "workspace":project.workspace,
-                        "nativeThreadId":project.codex_thread_id,
-                        "registeredConversationUrl":project.chatgpt_target_url,
-                        "conversationHistory":stored.get("chatgptTargetHistory"),
-                        "wake":target_status(&workspace, &project.project_id, runtime_mode),
-                        "context":context_status(&workspace,&project.project_id),
-                        "rollover":operator_rollover_status(&workspace,&project.project_id)
-                            .unwrap_or_else(|_| json!({"status":"UNAVAILABLE_OR_BUSY"})),
-                    })
-                })
-                .collect();
-            Ok(
-                json!({"action":"web_status", "readOnly":true, "projects":projects,
-                "runtimeMode":runtime_mode, "webProjects":web_projects,
-                "meaning":"Per-project registration and paired Wake readback. Browser authentication, delivery and continuation require their own receipts."}),
-            )
-        }
+        WebAction::Status => read_status(&workspace),
         WebAction::ReadTarget { project_id } => {
             let runtime_mode =
                 crate::wake_protocol_client::wake_runtime_mode_for_workspace(&workspace)?;

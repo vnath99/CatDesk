@@ -1,5 +1,31 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 22 acceptance reconciliation
+
+| Capability | Evidence and current boundary |
+| --- | --- |
+| Central Web project controls | SOURCE / TESTED_LOCAL: new Binagotchy `web projects` / `web status`; 19 console tests and three Web development integration tests pass. Shared paired reader; current context validated independently from native status. Not installed console acceptance. |
+| Five original Web bindings/history | Read-only October 22 readback passes all five, with stable registry/Wake bytes and exact baseline history. No binding mutation. |
+| Multi-project stopped/opt-out behavior | Bounded development run passed, preserving 82 protected records and exiting with zero scoped processes. Three saved stages: two observation-disabled, one Wake-stopped. No positive monitoring or sends were exercised. |
+| Controlled rollover | Prior fast canary's replacement, pairing, history and continuation remain accepted in development. Preserve it; do not replay. |
+| Legacy CatDesk quarantine | BLOCKED for that intent: latest bounded inspection reports `RESPONSE_EXPECTED_USER_NOT_FOUND`. No original send/source proof, receipt or safe unquarantine established. Sibling work is independent. |
+| External connector | WAITING: one read-only attempt at 2026-10-22T20:33:25Z returned HTTP 429 from OpenAI tunnel MCP SSE. No browser-text workaround, service restart or tunnel change. |
+| Runtime cleanup | At 20:36:03Z, zero scoped browser/Wake processes; development and production desired controls STOPPED; protected production pointer unchanged. No listeners observed at source-default MCP 3200 or supervisor 3201; this does not establish an overridden/tunneled endpoint. |
+| Production / natural review cycle | OPEN: protected provisioning/release acceptance, installed automatic monitoring/routing, productive sibling Web work during rollover and one natural independent deliverable → review → next task. Source tests and prior controlled sends do not close these gates. |
+
+The new aggregate view bounds output to 24 projects and omits conversation URLs,
+native session IDs, paths and raw messages. It shows observed tokens and the
+configured trigger, explicitly advisory. Missing coverage remains UNKNOWN;
+saved scheduler ticks, including same-generation ticks, are not live liveness.
+Existing detailed `operator web status` JSON remains available to the local
+operator and retains its existing schema. The new console shares that reader.
+
+Publication is authorized to the existing public CatDesk repository with an
+exact source/documentation allowlist and secret/privacy review. See the
+[execution log](OCT22_31_EXECUTION_LOG.md) for source, test and publication records.
+Overall multi-project acceptance remains PARTIAL; no recurring automation is
+activated by this increment.
+
 ## October 21 current operator capabilities and USER representation fix
 
 `TESTED_LOCAL`: the qualified stopped development CLI can read the seven paired

@@ -5,7 +5,37 @@ maintainer. It records the current durable project state without granting new
 authority. Read it before selecting a ticket or operating a local lifecycle
 surface.
 
-## Current checkpoint — 2026-10-07
+## Current checkpoint — 2026-10-22
+
+This section supersedes the historical runtime, model, branch and scheduling
+claims below. Current development uses `codex/web-rollover-oct17`, based on
+`5f1bb58900581453c1ffc427746794ac55b6f7f3`; the older orchestrator branch is an
+ancestor, not a separate unmerged development line. Consult the
+[execution log](../OCT22_31_EXECUTION_LOG.md) for subsequent exact publications.
+
+All five original Web pairs/history and existing native development conversations
+are preserved. Each native project retains its implementation ownership. The
+completed development fast canary must not be resent. A separate older CatDesk
+attempt remains quarantined without expected USER/source proof; its failure does
+not authorize clearing history, changing a binding or blocking sibling projects.
+
+Both Wake desired controls are STOPPED. No hourly deadman, recurring browser
+automation or operational scheduler is authorized for automatic restart. One
+October 22 external connector read returned HTTP 429; treat that as a connector
+verification dependency, not source failure or permission to alter the tunnel.
+The protected production package remains separate from qualified development.
+
+New Binagotchy `web projects` / `web status` commands expose bounded Web metadata
+through the existing read-only paired status reader. Source/local regressions
+pass; matched normal package/installed acceptance remains separate. The
+[acceptance matrix](../OCTOBER_2026_MVP_ACCEPTANCE.md) states the remaining gates.
+Do not copy historical chat URLs or native identifiers into new public evidence.
+
+CatDesk's existing repository is intentionally public. The operator authorizes
+normal publication of reviewed, verified, sanitized source on the existing
+development branch; preserve visibility and exclude private runtime/project data.
+
+## Historical checkpoint — 2026-10-07
 
 This section supersedes older operating-picture text below when the two disagree.
 

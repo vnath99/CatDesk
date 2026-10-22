@@ -359,6 +359,18 @@ async fn three_projects_route_only_to_prepared_development_wake() {
             && event.event_id == format!("dev-{id}")));
     }
     let status = web_action(&control, &["operator", "web", "status"]).await;
+    let before_read = tree_snapshot(&control);
+    let console_status = operator_facade::read_web_status(&control).unwrap();
+    assert_eq!(console_status, status);
+    let mut console = Vec::new();
+    crate::binagotchy_cli::render_web_projects(&console_status, &mut console).unwrap();
+    let console = String::from_utf8(console).unwrap();
+    for id in ["catdesk", "alpha", "beta"] {
+        assert!(console.contains(&format!("{id} | Wake PAIRED")));
+    }
+    assert!(!console.contains("https://"));
+    assert!(!console.contains("private-fixture"));
+    assert_eq!(tree_snapshot(&control), before_read);
     assert_eq!(status["runtimeMode"], "DEVELOPMENT_UNPROTECTED");
     assert_eq!(status["projects"].as_array().unwrap().len(), 3);
     let central = &status["webProjects"];
@@ -384,6 +396,7 @@ async fn three_projects_route_only_to_prepared_development_wake() {
     )
     .unwrap();
     assert!(wake_protocol_client::wake_root_for_workspace(&control).is_err());
+    assert!(operator_facade::read_web_status(&control).is_err());
     assert!(
         web_action_result(&control, &["operator", "web", "status"])
             .await
@@ -399,6 +412,23 @@ async fn web_action_result(control: &Path, args: &[&str]) -> Result<serde_json::
     let action = operator_facade::parse_operator_action(args.iter().map(|value| (*value).into()))?
         .ok_or("FIXTURE_ACTION_MISSING")?;
     operator_facade::execute_operator_action(action, control).await
+}
+
+fn tree_snapshot(root: &Path) -> Vec<(PathBuf, String)> {
+    let mut snapshot = Vec::new();
+    for entry in fs::read_dir(root).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            snapshot.extend(tree_snapshot(&path));
+        } else {
+            snapshot.push((
+                path.clone(),
+                format!("{:x}", Sha256::digest(fs::read(path).unwrap())),
+            ));
+        }
+    }
+    snapshot.sort();
+    snapshot
 }
 
 #[tokio::test(flavor = "current_thread")]
