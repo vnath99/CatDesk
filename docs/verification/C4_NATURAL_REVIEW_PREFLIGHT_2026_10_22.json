@@ -1,0 +1,74 @@
+{
+  "recordedUtc": "2026-10-22T23:09:12.3136982Z",
+  "task": "C4-NATURAL-REVIEW-CANDIDATE-PREFLIGHT",
+  "owner": "Existing CatDesk development conversation",
+  "branch": "codex/web-rollover-oct17",
+  "baseHead": "1f9222d8b3b161de7d33549057f9a31fbdcbec88",
+  "runtimeSourceChanged": false,
+  "primaryCandidate": {
+    "actualDeliverable": true,
+    "sourceCommit": "9a0047644cd103afe1b1b678e445d53e5ebe8cfd",
+    "classification": "PREPARED_UNQUEUED",
+    "taskBytes": 820,
+    "wireBytes": 1229,
+    "existingLimitsSatisfied": true,
+    "admission": "BLOCKED_WEB_WORK_ROLLOVER_PENDING",
+    "quarantinePreserved": true,
+    "stateRecordsChecked": 114,
+    "stateChanges": 0,
+    "queued": 0
+  },
+  "independentCandidate": {
+    "classification": "PREPARED_UNQUEUED_REAL_OWNED_DELIVERABLE",
+    "originalNativeOwnerCoordinated": true,
+    "priorIdleStateVerified": true,
+    "handoffCompletedWithoutTurnError": true,
+    "sourceAndRecordedVerificationMatched": true,
+    "originalDirtyCheckoutPreserved": true,
+    "newSourceChangesOrTestReruns": 0,
+    "privateSourcePublished": false,
+    "pendingRolloverOrOpenWebWorkObserved": false,
+    "admissionMustBeRecheckedAtPublication": true,
+    "stateRecordsChecked": 114,
+    "stateChanges": 0,
+    "queued": 0,
+    "payloadRepresentation": "Prose and exact expression; no indentation-dependent fragment"
+  },
+  "routeBoundaries": {
+    "existingWorkApiContractMatched": true,
+    "actualPublicationAttempt": false,
+    "nativeQueueReviewRequiresAuthenticReceipt": true,
+    "nativeReceiptManufactured": false,
+    "controlledTestEventReclassifiedAsNatural": false,
+    "primaryQuarantineBypassed": false,
+    "candidateIsIndependentReviewProof": false
+  },
+  "retainedPreparationFailure": {
+    "kind": "Private preparation expected a literal context filename; actual store hashes filenames",
+    "effect": "Stopped on read before publication; private receipt retained; existing project-key lookup used",
+    "runtimeStateChanged": false
+  },
+  "liveException": {
+    "status": "REQUESTED_NOT_ASSUMED",
+    "reason": "Earlier explicit instruction keeps WakeHost stopped",
+    "foregroundHostMaximumSeconds": 180,
+    "recurringAutomationPermitted": false,
+    "protectedProductionPermitted": false,
+    "bindingsChangesPermitted": false,
+    "nativeExecutionPermitted": false,
+    "externalConnectorDependency": "Last HTTP429; no new connector call this increment"
+  },
+  "browserActions": 0,
+  "wakeHostStarts": 0,
+  "newThreadsCreated": 0,
+  "acceptedCanaryReplayed": false,
+  "naturalReviewProved": false,
+  "overallAcceptance": "PARTIAL",
+  "nextTask": "On explicit stop-rule exception, run one existing guarded foreground delivery for the prepared independently owned source review, verify exact event/response, stop and audit; otherwise preserve candidates and continue eligible local work",
+  "publication": {
+    "status": "LOCAL_ONLY_NOT_PUSHED",
+    "remote": "https://github.com/vnath99/CatDesk",
+    "branch": "codex/web-rollover-oct17",
+    "ci": "UNVERIFIED"
+  }
+}

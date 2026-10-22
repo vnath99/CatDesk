@@ -1,3 +1,15 @@
+## 2026-10-22 — actual development review candidates (PREPARED / UNQUEUED)
+
+Prepared source-bound review requests for CatDesk and one independently owned
+development checkpoint. Original owner coordination, exact source/recorded
+verification and payload limits are checked privately; dirty work and all 114
+CatDesk metadata records remain unchanged. No send, native execution or live
+review proof. Primary quarantine remains a specific blocker; the sibling's
+snapshot requires final publisher admission. The prior WakeHost stop instruction
+is preserved pending an explicit bounded-test exception. Public evidence omits
+private sibling project/source/target data. See the
+[execution log](docs/OCT22_31_EXECUTION_LOG.md).
+
 ## 2026-10-22 — observation-age selected development release
 
 The normal app verifies all five original saved observation ages in 13.91s,

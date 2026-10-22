@@ -7,6 +7,15 @@ surface.
 
 ## Current checkpoint — 2026-10-22
 
+The next natural-review candidates are prepared privately and remain unqueued.
+The primary project is still refused by its older quarantine. An original
+sibling owner supplied a current source/verification handoff, independently
+checked locally without edits or test reruns; its exact pair is preserved.
+Do not treat preparation or owner self-review as independent Web proof. One
+bounded foreground host exception to the earlier stop instruction is requested
+but not assumed. Do not use completed event IDs, controlled test transport,
+invented native receipts or a changed binding to bypass those gates.
+
 The observation-age display now also passes a normal app readback against all
 five saved timestamps, with 114 records exact and zero processes. Its normal
 release is selected through the supported STOPPED development updater and the

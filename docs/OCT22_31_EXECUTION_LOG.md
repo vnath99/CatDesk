@@ -446,3 +446,51 @@ Exact-SHA readback returns **0 workflow runs and 0 check runs**; CI remains
 No dispatch, settings or tunnel change. A subsequent receipt is documentation
 only. Full automatic/natural-cycle and protected production acceptance remain
 OPEN; no completed event or canary was replayed. Goal remains ACTIVE/PARTIAL.
+
+## 2026-10-22 — real deliverable review candidates and publication preflight
+
+- **Owner/base:** existing CatDesk developer; `codex/web-rollover-oct17`, clean
+  base `1f9222d8b3b161de7d33549057f9a31fbdcbec88`. No runtime source change,
+  build, installed update, browser capture or completed test/canary replay.
+- **Actual CatDesk candidate:** prepared a read-only review of current public
+  source and qualified development evidence. The existing work-request and wire
+  bounds are satisfied (820 and 1,229 bytes). Its exact saved pair is unchanged,
+  but source admission remains `WEB_WORK_ROLLOVER_PENDING` because the primary
+  older quarantine is active. No publication attempt, lease bypass, receipt or
+  replacement binding is manufactured. Controlled `test` enqueue cannot be
+  relabeled as natural review; native review publication needs a genuine native
+  verification receipt/package, which this direct-work deliverable does not have.
+- **Independent real-development candidate:** under existing user coordination
+  authority, verified one original sibling chat idle, then requested a compact
+  read-only handoff from its original implementation owner. The owner completed
+  it without turn error and without new edits/tests or task takeover. Local Git
+  blob/current file and its existing source-bound verification receipt match.
+  Dirty checkout and ongoing ownership are preserved. A separate exact-project
+  request is prepared privately; no pending rollover/open Web task is observed,
+  but the real publisher must recheck admission and target atomically at send.
+  No private project identity, source excerpt, commit, artifact or chat URL is
+  copied into this public record.
+- **Preparation correction:** a private helper initially expected a literal
+  context filename, while the existing store hashes filenames. It stopped on a
+  read before publication. The failed receipt remains; a project-key lookup
+  prepares the candidate successfully. The final excerpt uses prose and exact
+  expressions, avoiding indentation-dependent code in normalized task text.
+- **Verification boundary:** each private preparation compares all 114 current
+  CatDesk metadata records and finds no change. No new source test is needed or
+  claimed; this increment verifies actual source/owner/payload provenance and
+  transport bounds. No event is queued or sent, and no natural review proof is
+  claimed from preparation or the owner's own summary.
+- **Live dependency:** the explicit prior WakeHost stop instruction still applies.
+  One exception is requested for at most 180s of the existing foreground
+  development host, one prepared review, exact receipt/response verification and
+  cleanup. Approval is not assumed. No recurring/production activation, binding
+  or native execution. Connector last HTTP429 remains separate; no new probe,
+  tunnel change, manual browser text or unsupported transport workaround.
+- **Evidence/next:** private immutable candidates and handoff checks remain in
+  the parent checkpoint. Public sanitized projection:
+  [C4 preflight](verification/C4_NATURAL_REVIEW_PREFLIGHT_2026_10_22.json).
+  On an explicit exception, use the existing guarded publisher/foreground owner,
+  not the old completed event IDs. Otherwise retain candidates and work locally.
+  Overall goal ACTIVE/PARTIAL; full natural/live acceptance remains OPEN.
+- **Publication:** LOCAL_ONLY / NOT_PUSHED until scoped documentation/privacy
+  review; exact remote SHA and CI are recorded after normal push.

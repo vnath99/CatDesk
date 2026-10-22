@@ -2,6 +2,22 @@
 
 ## October 22 acceptance reconciliation
 
+### Natural review preparation — unqueued, not live acceptance
+
+Actual deliverable review candidates now exist privately: one for CatDesk's
+qualified source, and one from an independently owned sibling development
+checkpoint. Owner handoff, current source and recorded verification were
+checked without edits, new tests, native writer takeover or private-source
+publication. Both preparations preserve 114 CatDesk records and queue nothing.
+
+CatDesk's own request remains blocked by its older quarantine. The sibling
+snapshot has no pending rollover/open task; admission must be rechecked by the
+existing publisher. No native receipt is fabricated and a controlled test event
+cannot stand in for natural review. The earlier WakeHost stop instruction is
+preserved; one bounded foreground exception is requested, not assumed. Natural
+review/next-task and full automatic/live acceptance remain OPEN. See the
+[sanitized preflight](verification/C4_NATURAL_REVIEW_PREFLIGHT_2026_10_22.json).
+
 ### Observation-age display — normal app and selected development release
 
 The later normal app check compares all five original projects' displayed ages
