@@ -72,7 +72,7 @@
     "timedOut": false,
     "terminationFailed": false
   },
-  "selectedPackageQualification": "OPEN_FOR_THIS_DISPLAY_INCREMENT",
+  "selectedPackageQualification": "PASS_STOPPED_UNPROTECTED_NORMAL_RELEASE_VIEW_ONLY",
   "selectedPriorRuntime": "PRESERVED_QUALIFIED_NO_WEB_AUTO",
   "browserActions": 0,
   "eventsPublished": 0,
@@ -83,7 +83,7 @@
   "externalConnector": "HTTP429 separate verification dependency; no new attempt",
   "completedCanaryReplayed": false,
   "overallAcceptance": "PARTIAL",
-  "nextExecutableTask": "Build normal app candidate for bounded read-only observation-age view; preserve selected prior package until qualified",
+  "nextExecutableTask": "Prepare a source-bound natural review candidate using existing routing and exact target checks; do not enqueue, start Wake or resend completed events under current stop instruction",
   "operatorActionRequired": false,
   "publication": {
     "observedUtc": "2026-10-22T22:42:11.8521275Z",
@@ -97,5 +97,6 @@
     "ci": "UNVERIFIED",
     "force": false,
     "visibilityChange": false
-  }
+  },
+  "runtimeQualificationReceipt": "C2_CONTEXT_AGE_RELEASE_2026_10_22.json"
 }

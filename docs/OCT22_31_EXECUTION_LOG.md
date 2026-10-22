@@ -385,3 +385,46 @@ Exact-SHA GitHub readback returns **0 workflow runs and 0 check runs**; CI remai
 receipt publication changes documentation only. Normal app/package qualification
 of this display increment remains next; no installed/live proof is inferred.
 Goal remains ACTIVE/PARTIAL, and no operator action is needed for this next task.
+
+## 2026-10-22 — observation-age executable and stopped package qualification
+
+- **Owner/source:** existing CatDesk developer; `codex/web-rollover-oct17`, clean
+  qualified source `7d118f56d0b9c4a9b076fb1f7bdc1413c378bb9e`. This increment
+  changes documentation/evidence only; tested runtime source remains unchanged.
+- **Normal app:** locked offline build exits 0 at 22:44:52Z in 26.12s, within
+  its 240s process cap. Image SHA256
+  `a2bccbb1103d11c110ca5df009897d94a840608454859051df68b1509050296a`.
+  At 22:46:14Z, a 13.91s read-only command matches all five original displayed
+  ages to saved timestamps within the measured time window. All 114 metadata
+  records exact, no new state, root exited and zero scoped processes. No capture.
+- **Normal release/package:** locked offline normal app and default-feature
+  WakeHost builds pass. Exact UTC times, immutable image/log/source hashes and
+  four matched artifact hashes are in the sanitized
+  [receipt](verification/C2_CONTEXT_AGE_RELEASE_2026_10_22.json). No dev-support
+  feature, Python/profile recopy or reauthentication. Supported stopped updater
+  selects the matched version and the selected age view passes for all five
+  original pairs. Only the two intended package pointers change; every other
+  checked record and prior package remains preserved, with zero scoped processes.
+- **Existing review inspected:** local read of the retained approved event-bound
+  CatDesk review confirms advice to keep protected install, connector recovery,
+  independently correlated fresh delivery and natural-cycle gates open. It is
+  old-source advice, not a new runtime observation or current-source approval;
+  no browser request, send or review-body workaround was used.
+- **Native independence:** supported read-only owner snapshots show three sibling
+  developers active and one completed with new implementation progress, all with
+  null turn errors. No messages, resumes, source changes or writer takeovers.
+  This is native-session evidence only, not independent productive Web proof.
+- **CI dependency:** read-only authenticated settings report repository Actions
+  enabled, allowed actions all, workflow active. Source declares push/PR but no
+  workflow_dispatch. Settings do not prove execution or explain missing exact
+  commit runs. No dispatch/settings/account change and no administrative/billing
+  disable conclusion. CI remains UNVERIFIED pending actual exact-SHA runs.
+- **Scope/remaining:** both Wake controls remain STOPPED. No browser, WakeHost,
+  recurring automation, event, target/history or protected-production change;
+  accepted canary is preserved. Overall PARTIAL. Connector 429 and primary
+  quarantine are separate dependencies; active automatic routing, natural
+  independent review/next-task and protected production remain OPEN. Next safe
+  task is to prepare a source-bound natural review candidate through existing
+  exact-target routing; no enqueue or activation under the current stop rule.
+- **Publication:** LOCAL_ONLY / NOT_PUSHED pending exact documentation allowlist
+  and privacy checks. Exact pushed SHA/branch/CI readback follows publication.

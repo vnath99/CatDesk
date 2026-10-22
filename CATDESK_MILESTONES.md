@@ -1,3 +1,15 @@
+## 2026-10-22 — observation-age selected development release
+
+The normal app verifies all five original saved observation ages in 13.91s,
+preserving 114 records exactly. A normal release is then selected by the
+supported STOPPED updater; the selected view passes for all five pairs. Only
+two package-authority pointers change, with no unexpected state changes or
+owned processes. Previous package/profile, bindings/history and production
+remain preserved. No browser, WakeHost, recurring automation or event starts.
+This closes the display's stopped development gate, not automatic/live or
+protected production acceptance. See the
+[dated execution log](docs/OCT22_31_EXECUTION_LOG.md).
+
 ## 2026-10-22 — independent context observation age (SOURCE / TESTED_LOCAL)
 
 The Web view now exposes each exact paired context's last browser observation

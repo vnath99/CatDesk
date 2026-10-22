@@ -7,12 +7,21 @@ surface.
 
 ## Current checkpoint — 2026-10-22
 
+The observation-age display now also passes a normal app readback against all
+five saved timestamps, with 114 records exact and zero processes. Its normal
+release is selected through the supported STOPPED development updater and the
+selected five-project view passes. Only the two intended package pointers
+change; previous version/profile, original bindings/history and production are
+preserved. This supersedes the display-only qualification gap below, while
+automatic/live and protected production remain OPEN. No recurring worker or
+WakeHost start. Use the dated execution log for exact build/package/source hashes.
+
 The latest source view also displays the age of the saved browser observation
 for each exact paired context. Missing/legacy, invalid/future or unknown-clock
 time stays UNKNOWN; a target-generation mismatch hides old context and age.
 Twenty-two console regressions, strict Clippy and formatting pass. This display
-increment still needs normal app/package readback; it is not a fresh browser
-observation or live monitoring proof. Selected prior package remains untouched.
+increment subsequently passed normal app/selected-package readback above.
+It is not a fresh browser observation or live monitoring proof.
 
 This section supersedes the historical runtime, model, branch and scheduling
 claims below. Current development uses `codex/web-rollover-oct17`, based on

@@ -1,0 +1,152 @@
+{
+  "recordedUtc": "2026-10-22T22:56:16.6406156Z",
+  "task": "C2-CONTEXT-AGE-NORMAL-AND-SELECTED-RELEASE",
+  "owner": "Existing CatDesk development conversation",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "7d118f56d0b9c4a9b076fb1f7bdc1413c378bb9e",
+  "sourceTree": "c7aaf0c56f5c425c785f66933d3b8537e22fbb01",
+  "sourceFiles": [
+    {
+      "path": "src/binagotchy_cli.rs",
+      "sha256": "8e05fa6157b8807cc50d3bd08afa9ceba76730e0bbce40f60080a936f0418679"
+    },
+    {
+      "path": "src/main.rs",
+      "sha256": "7146ea95391dfff0249f465d4eb1efe17ae12a45330cd5df29280d3b22b06869"
+    },
+    {
+      "path": "src/operator_facade.rs",
+      "sha256": "b2d5e5284309ab6ddab38a2c9e4f4d07976f733487a8d76e5c1310a2038f9264"
+    },
+    {
+      "path": "src/operator_web_cli.rs",
+      "sha256": "ff7708349b65432a82689b1e4f67a26dfa20f1445437adc3e5235a19e2f152a9"
+    }
+  ],
+  "runtimeSourceChangedThisIncrement": false,
+  "normalDebug": {
+    "finishedUtc": "2026-10-22T22:44:52.052247Z",
+    "exitCode": 0,
+    "profile": "NORMAL_DEBUG_APP_NO_DEV_DEPENDENCIES",
+    "appSha256": "a2bccbb1103d11c110ca5df009897d94a840608454859051df68b1509050296a",
+    "imageBytes": 66969088,
+    "buildMaximumSeconds": 240,
+    "viewObservedUtc": "2026-10-22T22:46:14.0700711Z",
+    "viewSeconds": 13.9078762,
+    "commandMaximumSeconds": 20,
+    "originalProjectAgesMatched": 5,
+    "coverage": "ADVISORY_UNKNOWN",
+    "stateRecordsExact": 114,
+    "newRecords": 0,
+    "ownedProcesses": 0,
+    "browserActions": 0,
+    "rootExitProved": true
+  },
+  "normalRelease": {
+    "startedUtc": "2026-10-22T22:47:17.793339Z",
+    "finishedUtc": "2026-10-22T22:54:27.8612646Z",
+    "exitCode": 0,
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "imageSha256": "6e58b104eaad1170886093cab158ae7974179a9aa2906be090310397b1782c4e",
+    "imageBytes": 33356800,
+    "buildLogSha256": "bd539722f7f5773a78f9cf3186412104d2f1b87ea6f7476a085a8a5beb8372c4",
+    "maximumSeconds": 600
+  },
+  "selectedDevelopment": {
+    "observedUtc": "2026-10-22T22:55:39.5531059Z",
+    "classification": "SELECTED_STOPPED_UNPROTECTED_DEVELOPMENT_PACKAGE",
+    "packageId": "1.0.0-dev.85-0f5cb42de213b7504780b1f61e5d4fe1d07ccad34989c158af97afb9d3fffa89",
+    "previousPackage": "1.0.0-dev.85-263d018e53ce9d47baf537c5d46e09c3d41314219cc768fba5446f48703d5179",
+    "selectedViewPassed": true,
+    "originalProjectAgesVisible": 5,
+    "stateRecordsChecked": 114,
+    "unchangedOtherRecords": 112,
+    "allowedPointerChanges": 2,
+    "unexpectedChanges": 0,
+    "newRecords": 0,
+    "ownedProcesses": 0,
+    "previousPackagePreserved": true,
+    "browserProfileAction": "NONE",
+    "wakeTargetsChanged": false,
+    "productionModified": false,
+    "desiredControls": "STOPPED"
+  },
+  "packageArtifacts": [
+    {
+      "name": "CatDeskBinagotchy.exe",
+      "sha256": "6e58b104eaad1170886093cab158ae7974179a9aa2906be090310397b1782c4e",
+      "bytes": 33356800
+    },
+    {
+      "name": "CatDeskWakeHost.exe",
+      "sha256": "df5250727bd2db8fe9b4db719ab8030a99dcc06bae012c86894b5a0d0dc97bca",
+      "bytes": 2033664
+    },
+    {
+      "name": "adapter.py",
+      "sha256": "f742b36270dc10f34c47982d3f9fe811386f29d92b3eeb20ffb4d21cc551bdfb",
+      "bytes": 46664
+    },
+    {
+      "name": "wake_bridge.py",
+      "sha256": "7c519de51c29b1a530fb5541f7d2367edb23c8e864271115384d6e3d50dfed7e",
+      "bytes": 157819
+    }
+  ],
+  "retainedWebReview": {
+    "receiptReadOnly": true,
+    "newBrowserRead": false,
+    "freshRuntimeVerification": false,
+    "findings": [
+      "Protected installation identity and startup proof remain open",
+      "Connector recovery and fresh independently correlated delivery required",
+      "Preserve completed canary"
+    ],
+    "adviceOnly": true
+  },
+  "nativeOwnerReadback": {
+    "originalOtherProjects": 4,
+    "active": 3,
+    "completed": 1,
+    "reportedTurnErrors": 0,
+    "messagesOrTakeovers": 0,
+    "webProgressProof": false
+  },
+  "githubActions": {
+    "settingsReadOnly": true,
+    "repositoryEnabled": true,
+    "allowedActions": "all",
+    "workflowState": "active",
+    "pushTrigger": true,
+    "pullRequestTrigger": true,
+    "workflowDispatch": false,
+    "administrativeOrBillingDisableConfirmed": false,
+    "exactCommitCi": "UNVERIFIED",
+    "dispatchAttempts": 0,
+    "settingsChanges": 0
+  },
+  "preserved": {
+    "originalProjectBindingsAndHistories": 5,
+    "completedCanaryReplayed": false,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "recurringAutomationStarted": false,
+    "nativeWritersTouched": false,
+    "protectedProductionChanged": false
+  },
+  "overallAcceptance": "PARTIAL_INSTALLED_DEVELOPMENT_UNPROTECTED",
+  "remaining": [
+    "Connector HTTP429",
+    "Legacy primary quarantine without source proof",
+    "Active installed automatic routing and natural independent review-next-task cycle",
+    "Protected production provisioning/acceptance"
+  ],
+  "nextExecutableTask": "Prepare a source-bound natural review candidate using existing routing and exact target checks; do not enqueue, start Wake or resend completed events under current stop instruction",
+  "operatorActionRequiredForPreparation": false,
+  "publication": {
+    "status": "LOCAL_ONLY_NOT_PUSHED",
+    "remote": "https://github.com/vnath99/CatDesk",
+    "branch": "codex/web-rollover-oct17",
+    "ci": "UNVERIFIED"
+  }
+}

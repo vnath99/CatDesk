@@ -2,6 +2,22 @@
 
 ## October 22 acceptance reconciliation
 
+### Observation-age display — normal app and selected development release
+
+The later normal app check compares all five original projects' displayed ages
+against their exact saved browser timestamps; all match the observed time window.
+The bounded command completes in 13.91s with all 114 metadata records exact,
+no new state and zero owned processes. This is a metadata read, not fresh capture.
+The normal release then qualifies and the supported STOPPED updater selects its
+matched package. The selected release displays ages for all five original pairs;
+only its two package pointers change, previous version/profile are preserved,
+and no browser/WakeHost, event, recurring worker or native writer is started.
+
+This closes the display increment's normal-app/selected-development gate.
+Protected production, active automatic routing and natural review/next task
+remain OPEN. The earlier source-only boundary below is retained as history.
+See [release/view evidence](verification/C2_CONTEXT_AGE_RELEASE_2026_10_22.json).
+
 ### Context observation age — SOURCE / TESTED_LOCAL
 
 The central Web view now shows how many seconds have elapsed since each exact
@@ -16,8 +32,8 @@ All 22 console regressions pass, including independent per-project ages and the
 invalid/legacy/generation cases. Strict all-target Clippy and formatting pass
 under a 600-second contained local gate. No browser, WakeHost, scheduler,
 message, binding, package, policy or original native writer changes occur.
-This increment is SOURCE / TESTED_LOCAL only. Its normal app/package view gate
-remains OPEN; selected prior release acceptance below is preserved separately.
+At that source-only checkpoint, normal app/package qualification was OPEN.
+The later normal/selected-release receipt above closes that display gate.
 See [sanitized source evidence](verification/C2_CONTEXT_OBSERVATION_AGE_2026_10_22.json).
 
 ### Latest selected normal release and controlled local queue

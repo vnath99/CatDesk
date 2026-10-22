@@ -1,5 +1,15 @@
 # CatDesk — Important Command Reference
 
+## October 22 selected observation-age view
+
+The later normal app and selected STOPPED development release both qualify the
+observation-age display below. All five exact saved timestamps match the normal
+view; selected release displays all five ages. Viewing status starts no browser,
+listener, scheduler or WakeHost. The supported updater preserves the previous
+version/profile; no protected production acceptance is inferred. Current exact
+hashes and package authority are recorded in the dated execution/verification
+records. Earlier source-only qualification text below is historical.
+
 ## October 22 context observation age (SOURCE / TESTED_LOCAL)
 
 The Web summary's `browser observation: Ns ago` is elapsed local time since
@@ -7,8 +17,8 @@ the existing browser capture timestamp for that exact paired context. UNKNOWN
 means no usable timestamp, invalid/future time or unavailable local clock.
 Generation mismatch suppresses the old estimate and age. A saved observation
 does not prove an active monitor or complete provider context. No capture is
-triggered by viewing status. This display increment awaits normal app/package
-qualification separately from the selected prior release.
+triggered by viewing status. This display increment subsequently passed normal
+app/selected-package qualification, as recorded above.
 
 ## October 22 headless metadata probes without automatic Web work
 
