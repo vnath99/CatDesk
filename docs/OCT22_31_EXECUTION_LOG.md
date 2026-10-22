@@ -319,3 +319,23 @@ source. Overall production/multi-project acceptance remains PARTIAL.
 - **Publication:** LOCAL_ONLY / NOT_PUSHED pending exact staged documentation
   allowlist/privacy review. Exact remote SHA and CI are recorded after push;
   prior runtime source publication remains independently documented above.
+
+### Selected-release/local-queue acceptance publication
+
+At **2026-10-22T22:36:30Z**, normal push and authenticated remote readback
+confirm **`2fc62c3a7dcef5d5b9ee849d94b21717dd151a3b`** on
+`refs/heads/codex/web-rollover-oct17`:
+[published acceptance checkpoint](https://github.com/vnath99/CatDesk/commit/2fc62c3a7dcef5d5b9ee849d94b21717dd151a3b).
+The six-file documentation/evidence allowlist passes added-line secret/privacy
+and binary checks; no runtime source, raw log, profile, private URL, native ID,
+machine path or protected state is included. Tree is clean after push. The
+initial preflight refused before staging because CRLF warnings entered its path
+list; stdout and private stderr are separated before the corrected exact scan.
+No data or Git policy change was needed.
+
+Exact-SHA readback reports **0 workflow runs and 0 check runs**; remote CI remains
+**UNVERIFIED**. Repository visibility, existing draft PR and protected production
+are unchanged. The subsequent publication receipt is documentation only; it does
+not change the qualified runtime source. Goal remains ACTIVE/PARTIAL. Next source
+task is context observation freshness in the bounded central view; no operator
+action is needed, and no recurring browser/Wake restart or canary replay occurs.

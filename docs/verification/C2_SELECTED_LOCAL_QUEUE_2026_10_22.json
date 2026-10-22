@@ -111,10 +111,16 @@
   "nextTask": "Expose browser context observation freshness independently of current target binding, with focused local regressions",
   "operatorActionRequiredForNextTask": false,
   "publication": {
-    "status": "LOCAL_ONLY_NOT_PUSHED",
-    "remote": "https://github.com/vnath99/CatDesk",
+    "observedUtc": "2026-10-22T22:36:30.6490951Z",
+    "status": "PUSHED_EXACT_REMOTE_MATCH",
+    "documentationCommit": "2fc62c3a7dcef5d5b9ee849d94b21717dd151a3b",
+    "remoteSha": "2fc62c3a7dcef5d5b9ee849d94b21717dd151a3b",
     "branch": "codex/web-rollover-oct17",
+    "remote": "https://github.com/vnath99/CatDesk",
+    "workflowRuns": 0,
+    "checkRuns": 0,
     "ci": "UNVERIFIED",
-    "reason": "Scoped documentation/privacy review precedes normal push"
+    "force": false,
+    "visibilityChange": false
   }
 }
