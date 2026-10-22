@@ -554,3 +554,22 @@ with natural/live proof unclaimed and prepared private candidates preserved.
   [C4 preflight](verification/C4_NATURAL_REVIEW_PREFLIGHT_2026_10_22.json).
   LOCAL_ONLY / NOT_PUSHED pending scoped documentation/privacy review; exact
   remote SHA/CI follow normal publication. Goal ACTIVE/PARTIAL.
+
+### Bounded-controller preparation publication
+
+At **2026-10-22T23:29:28Z**, normal push and authenticated remote readback confirm
+**`41d5429a4646d31c533d1b987d801239e22dbcf2`** on
+`refs/heads/codex/web-rollover-oct17`:
+[published controller-preparation evidence](https://github.com/vnath99/CatDesk/commit/41d5429a4646d31c533d1b987d801239e22dbcf2).
+Five reviewed documentation/evidence paths pass secret/privacy/binary checks.
+The private controller, payloads, source excerpts, project identities, chat URLs,
+native IDs, machine paths, profiles and runtime records are excluded. Product
+source/package unchanged, local/remote exact match and tree clean. PUBLIC
+visibility, draft PR and protected production are preserved.
+
+Exact-SHA readback reports **0 workflow runs and 0 check runs**; CI remains
+**UNVERIFIED**. No settings or dispatch change. The subsequent receipt is
+documentation only. Live execution remains pending the explicit stop-rule
+exception, not authorized by preparation; no queued event/browser/host start.
+The complete goal remains ACTIVE/PARTIAL, with accepted canary and sibling
+implementation ownership preserved.

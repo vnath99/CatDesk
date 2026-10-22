@@ -125,8 +125,16 @@
     "productionOrRecurringStart": false,
     "naturalReviewProved": false,
     "publication": {
-      "status": "LOCAL_ONLY_NOT_PUSHED",
-      "ci": "UNVERIFIED"
+      "observedUtc": "2026-10-22T23:29:28.9682013Z",
+      "status": "PUSHED_EXACT_REMOTE_MATCH",
+      "documentationCommit": "41d5429a4646d31c533d1b987d801239e22dbcf2",
+      "remoteSha": "41d5429a4646d31c533d1b987d801239e22dbcf2",
+      "branch": "codex/web-rollover-oct17",
+      "workflowRuns": 0,
+      "checkRuns": 0,
+      "ci": "UNVERIFIED",
+      "privateControllerPublished": false,
+      "runtimeSourceChanged": false
     }
   }
 }
