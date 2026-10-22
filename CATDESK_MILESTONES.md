@@ -1,3 +1,21 @@
+## 2026-10-22 — selected normal release and three-project local queuing
+
+The normal release containing `--no-web-auto` is now selected through the
+existing guarded STOPPED development updater. Its view and bounded authenticated
+MCP pass; all five original pairs, previous version/profile and production are
+preserved. The flag's normal-release/selected-package gates are closed. No
+automatic browser/scheduler or WakeHost activation is implied.
+
+A controlled 60-second local test accepts work in three original-project queues
+while CatDesk's quarantined project refuses. Namespace, wrong-target, replay and
+conflict checks pass. All test requests are safely retired before submission;
+closed replay does not republish. Natural listener exit, zero owned processes and
+no unexpected state changes are proved; own audit records are retained. This is
+local queue acceptance, not browser routing or productive project progress.
+Connector 429, active Web automatic operation, natural review/next task and
+protected production gates remain OPEN. See the
+[execution log](docs/OCT22_31_EXECUTION_LOG.md) for source/artifact hashes and scope.
+
 ## 2026-10-22 — selected development release and explicit scheduler disable
 
 The standalone Web view is now qualified in a normal release from source

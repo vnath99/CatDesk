@@ -2,6 +2,31 @@
 
 ## October 22 acceptance reconciliation
 
+### Latest selected normal release and controlled local queue
+
+At 22:03:39Z the supported STOPPED updater selects the normal release from
+`6748e7139d99b65bafc0c2dbeb39d41f6c093530`, now including `--no-web-auto`.
+Build exit 0; selected view passes; previous version/profile and all five pairs
+remain preserved. Only two intended package pointers change. Selected 45-second
+MCP authentication/catalog/scope and independent advisory context checks pass;
+the listener exits naturally with zero owned processes. This closes normal
+release/selected-package qualification of the flag, not production activation.
+
+At 22:28:39Z a bounded 60-second selected-package test verifies three independent
+original-project local queues, project-specific quarantine isolation, wrong-target
+and conflicting-task refusals, idempotent replay and safe pre-submit retirement.
+All three controlled requests finish CLOSED/retired without receipts or sends;
+closed retry does not requeue. At 22:29:29Z cleanup proves natural exit, zero
+owned processes, no pending test queue/timer and no unexpected state change.
+Nine expected test ledger/delivery/archive records are preserved as evidence.
+This proves local queuing only. Productive concurrent browser work, automatic
+monitoring/routing and natural review/next-task acceptance remain OPEN. Both
+Wake controls stay STOPPED; no recurring automation or operational WakeHost starts.
+
+See the [sanitized receipt](verification/C2_SELECTED_LOCAL_QUEUE_2026_10_22.json)
+and [dated execution log](OCT22_31_EXECUTION_LOG.md). Exact publication and CI
+readback follow staged privacy review. The earlier evidence below is retained.
+
 ### Selected development release and MCP diagnostic lifecycle
 
 The frontend's normal release qualification passes at 21:26:34Z in 3.14 seconds
@@ -29,8 +54,8 @@ process about one second before the internal 45-second expiry. That lifecycle
 failure is retained. One rerun after fixing the monotonic remaining wait passes
 natural exit. These are local authenticated MCP reads, not acceptance of the
 external connector or fresh browser delivery. Normal release/selected-package
-qualification of the new flag remains OPEN; the selected frontend package
-predates it.
+qualification of the new flag was OPEN at this earlier checkpoint. The later
+selected normal release and controlled local queue results above supersede it.
 
 `WEB_WORK_ROLLOVER_PENDING` is a project-specific admission blocker for CatDesk
 while its older quarantine remains active. Sibling project stores are independent;
@@ -66,7 +91,7 @@ missing task/root or authorization to activate/repair production.
 At this earlier checkpoint the selected development package and protected
 production installation were unchanged. The later normal-release selection
 above supersedes the frontend development-package gate; protected production
-acceptance and the newest scheduler-disable flag's release gate remain OPEN.
+acceptance remains OPEN; the later selected release closes the flag's gate.
 Scoped regression gates pass: 20 console tests, three Web integration tests,
 the changed exact test rerun, final strict all-target Clippy and formatting.
 The initial test-only Clippy failure and correction are retained in the
@@ -75,13 +100,14 @@ for that test-only edit.
 
 | Capability | Evidence and current boundary |
 | --- | --- |
-| Central Web project controls | Frontend: 20 console and three Web integration tests pass; normal release and selected stopped development view pass above. Shared paired reader; current context scoped independently from native status. The new scheduler-disable flag has 15 passing headless tests and debug MCP proof; its release/selected-package gate is separate. |
+| Central Web project controls | Frontend: 20 console and three Web integration tests pass; normal release and selected stopped development view pass above. Shared paired reader; current context scoped independently from native status. The scheduler-disable flag has 15 passing headless tests and selected normal-release MCP proof; active production remains separate. |
 | Five original Web bindings/history | Read-only October 22 readback passes all five, with stable registry/Wake bytes and exact baseline history. No binding mutation. |
+| Three-project local queue | Selected normal release passes independent admission while CatDesk is quarantined, exact-target/conflict guards, idempotent replay and retirement. Three controlled requests CLOSED/retired, no sends or native execution; browser routing/productive progress remains unproven. |
 | Multi-project stopped/opt-out behavior | Bounded development run passed, preserving 82 protected records and exiting with zero scoped processes. Three saved stages: two observation-disabled, one Wake-stopped. No positive monitoring or sends were exercised. |
 | Controlled rollover | Prior fast canary's replacement, pairing, history and continuation remain accepted in development. Preserve it; do not replay. |
 | Legacy CatDesk quarantine | BLOCKED for that project's new work admission: latest bounded inspection reports `RESPONSE_EXPECTED_USER_NOT_FOUND`; the lease refuses with `WEB_WORK_ROLLOVER_PENDING`. No original send/source proof, receipt or safe unquarantine established. Sibling work remains independent. |
-| External connector | WAITING: one read-only attempt at 2026-10-22T20:33:25Z returned HTTP 429 from OpenAI tunnel MCP SSE. No browser-text workaround, service restart or tunnel change. |
-| Runtime cleanup | Latest corrected 45-second MCP probe exits naturally, zero scoped processes; controls STOPPED and production pointer unchanged. Among 87 records only four numeric usage counters change. The ephemeral loopback check does not establish the official tunnel or fixed production endpoints. |
+| External connector | WAITING: one read-only attempt at 2026-10-22T22:08:50Z after 95 minutes of cooldown still returned HTTP 429 from OpenAI tunnel MCP SSE. No browser-text workaround, service restart or tunnel change. |
+| Runtime cleanup | Selected 45-second MCP and 60-second controlled queue probes exit naturally, zero scoped processes; controls STOPPED and production unchanged. Queue cleanup checks 105 records, retains nine expected own test records and finds no unexpected changes. The ephemeral loopback check does not establish the official tunnel or fixed production endpoints. |
 | Production / natural review cycle | OPEN: protected provisioning/release acceptance, installed automatic monitoring/routing, productive sibling Web work during rollover and one natural independent deliverable → review → next task. Source tests and prior controlled sends do not close these gates. |
 
 The new aggregate view bounds output to 24 projects and omits conversation URLs,

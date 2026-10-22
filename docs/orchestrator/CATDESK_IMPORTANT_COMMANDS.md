@@ -10,9 +10,10 @@ startup for that process; it does not change persisted per-project policy.
 It cannot be combined with `--web-auto-project`, and duplicates are rejected.
 Without the option, the existing scheduling behavior remains unchanged.
 
-The new option passes source tests and one corrected bounded normal-debug MCP
-probe; its normal release/package qualification remains separate. The selected
-development frontend package predates this option. Never assume a short runtime
+The option passes source tests, normal release qualification and a bounded MCP
+probe from the selected STOPPED unprotected development package (source 6748e71).
+Ready reports scheduling disabled and cleanup proves natural exit. Protected
+production/automatic operation remains unaccepted. Never assume a short runtime
 alone disables scheduling, or silently drop an unsupported disable option.
 No recurring browser worker or WakeHost restart is part of this metadata workflow.
 

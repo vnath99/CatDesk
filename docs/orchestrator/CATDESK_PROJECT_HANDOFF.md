@@ -46,8 +46,13 @@ previous version/profile, project bindings/history and production remain exact.
 The selected view passes. Source additionally supports process-local headless
 `--no-web-auto`, rejecting mixed project scopes and reporting its state in ready
 output. Fifteen tests and a corrected 45-second normal-debug MCP read probe pass
-without scheduler/browser/WakeHost starts or events. Its release/package
-qualification is still separate; the selected frontend predates the new flag.
+without scheduler/browser/WakeHost starts or events. The later normal release
+from 6748e71 is selected through the stopped updater and repeats this MCP proof.
+The flag is now qualified in the selected unprotected development package.
+A 60-second three-project controlled local queue test passes admission isolation,
+replay/conflict guards and pre-submit retirement, with no browser sends or native
+execution. Natural exit and zero owned processes are proved; own audit records
+remain. This does not close active automatic Web or production acceptance.
 The old CatDesk quarantine blocks new work admission for that project only;
 preserve it and continue eligible sibling/source work.
 

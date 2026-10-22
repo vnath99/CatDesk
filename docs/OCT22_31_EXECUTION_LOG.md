@@ -262,3 +262,60 @@ normal release qualification, followed by the supported stopped development
 update/readback if qualified. Existing canary steps and browser sends are not
 repeated. A documentation receipt commit may follow without changing runtime
 source. Overall production/multi-project acceptance remains PARTIAL.
+
+## 2026-10-22 — selected normal release and three-project local queue
+
+- **Owner/source:** existing CatDesk development conversation, branch
+  `codex/web-rollover-oct17`, clean qualified HEAD
+  `6748e7139d99b65bafc0c2dbeb39d41f6c093530`, tree
+  `17e10e132c60557ece478afb87c2263c42d8f8ad`. This increment changes
+  documentation/evidence only; runtime source remains the reviewed prior source.
+- **Normal release:** locked offline app build exits 0 at 22:01:18Z in 6m27s
+  under the existing 600s contained cap. Image SHA256
+  `21afa1fd22523b966257602a3dd52a08f6a6f897af4c903138f989187883803f`,
+  33,356,288 bytes. Host/adapter/bridge retain previously qualified bytes.
+- **INSTALLED_DEVELOPMENT_UNPROTECTED:** at 22:03:39Z the supported stopped
+  updater selects the matched immutable package, preserves its predecessor and
+  authenticated profile, changes only two package-authority pointers and leaves
+  85 other records exact. The selected view passes for all five original pairs.
+  The new `--no-web-auto` flag is now in this selected normal release.
+- **Selected MCP, 45s:** at 22:04:18Z automatic scheduling reports disabled;
+  authentication, catalog/schema, five invalid scopes, five exact advisory
+  context scopes and saved completed continuation pass. Natural exit is proved
+  at 22:05:02Z; zero owned processes. Among 87 checked records only four numeric
+  usage counters change, no new records. No browser/WakeHost or events.
+- **Controlled local queue, 60s / 75s lifecycle budget:** at 22:28:39Z three
+  original project registrations accept independent metadata-only work requests
+  using the same request ID in separate project namespaces. CatDesk's older
+  quarantine is refused without blocking siblings. Wrong target, changed task
+  replay and second active request are refused; identical replay is idempotent.
+  All three requests are retired through the existing exact-target pre-submit
+  API. Closed retry does not requeue. Delivery receipts remain absent; no browser
+  sends or native work occurs. These are controlled local queue tests, not live
+  browser routing, actual project development or natural review acceptance.
+- **Cleanup:** at 22:29:29Z the listener has exited naturally, with zero owned
+  processes. The three CLOSED/retired ledgers and own delivery/archive evidence
+  remain as an audit trail; no test queue/timer remains. Of 105 checked state
+  records, no unexpected mutation or new record is found. Nine expected new
+  test records are retained; four numeric usage counters may advance. Original
+  bindings, history, quarantine and completed canary remain preserved.
+- **External dependency:** one registry read at 22:08:50Z after 95 minutes of
+  cooldown still returns HTTP 429 from OpenAI tunnel MCP SSE. It is separate
+  from successful selected local MCP. No retries, browser-text workaround,
+  tunnel or service changes. The prior failed harness receipt is retained.
+- **Permissions/scope:** existing bounded-test and stopped unprotected package
+  update authorization only. Both Wake controls remain STOPPED. No recurring
+  browser, hourly scheduler, operational WakeHost, production activation,
+  original project writer, binding/history, account/security or visibility change.
+- **Evidence:** dated private build/package/local-MCP/queue receipts remain
+  outside the source tree. Public sanitized projection:
+  [`verification/C2_SELECTED_LOCAL_QUEUE_2026_10_22.json`](verification/C2_SELECTED_LOCAL_QUEUE_2026_10_22.json).
+- **Remaining:** active automatic observation/routing, productive independent
+  Web progress during rollover, natural independent review/next task, connector
+  availability and protected production acceptance remain OPEN. The old CatDesk
+  source-proof quarantine is project-specific. Full multi-project MVP remains
+  PARTIAL. Next eligible source task: expose observation freshness separately
+  from target currency, then focused local regressions; no operator action needed.
+- **Publication:** LOCAL_ONLY / NOT_PUSHED pending exact staged documentation
+  allowlist/privacy review. Exact remote SHA and CI are recorded after push;
+  prior runtime source publication remains independently documented above.
