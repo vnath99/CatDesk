@@ -620,3 +620,22 @@ implementation ownership preserved.
   held under the stop rule. Goal ACTIVE/PARTIAL; natural/live/production gates open.
 - **Publication:** LOCAL_ONLY / NOT_PUSHED pending exact eight-path source/docs
   allowlist and secret/privacy review. Full pushed SHA and CI follow normal push.
+
+### Web work operator CLI source publication
+
+At **2026-10-22T23:52:00Z**, normal push and authenticated remote readback confirm
+**`96b93bd14597302b9d9c03a95b15f32f8f841cd1`** on
+`refs/heads/codex/web-rollover-oct17`:
+[published Web work CLI source](https://github.com/vnath99/CatDesk/commit/96b93bd14597302b9d9c03a95b15f32f8f841cd1).
+Eight reviewed source/documentation paths pass secret/privacy/binary checks;
+both source hashes match the tested normal-app candidate. No credentials,
+private project/source/chat data, machine paths, profiles, raw logs or runtime
+artifacts are published. Local/remote match and tree is clean. PUBLIC visibility,
+existing draft PR and selected/protected packages remain unchanged.
+
+Exact-SHA GitHub readback reports **0 workflow runs and 0 check runs**; CI remains
+**UNVERIFIED**. No dispatch/settings change. The following receipt changes
+only documentation, preserving tested runtime code. Next is clean normal-release
+qualification and supported stopped development selection for these commands;
+no operator action is needed for that source work. The actual review/host step
+remains held under the pending explicit exception. Goal stays ACTIVE/PARTIAL.

@@ -193,9 +193,17 @@
   "nextExecutableTask": "Qualify normal release of these CLI commands, then supported stopped development package/readback; prepared live review remains held until explicit stop-rule exception",
   "operatorActionRequiredForSourceQualification": false,
   "publication": {
-    "status": "LOCAL_ONLY_NOT_PUSHED",
-    "remote": "https://github.com/vnath99/CatDesk",
+    "observedUtc": "2026-10-22T23:52:00.3950846Z",
+    "status": "PUSHED_EXACT_REMOTE_MATCH",
+    "sourceCommit": "96b93bd14597302b9d9c03a95b15f32f8f841cd1",
+    "remoteSha": "96b93bd14597302b9d9c03a95b15f32f8f841cd1",
     "branch": "codex/web-rollover-oct17",
-    "ci": "UNVERIFIED"
+    "remote": "https://github.com/vnath99/CatDesk",
+    "sourceFileHashesMatch": true,
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false
   }
 }
