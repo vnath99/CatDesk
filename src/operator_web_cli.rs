@@ -781,6 +781,14 @@ fn registry_rollover_projection(raw: &Value) -> Value {
 }
 
 pub(crate) fn read_status(workspace: &Path) -> Result<Value, String> {
+    read_status_projection(workspace, true)
+}
+
+pub(crate) fn read_summary(workspace: &Path) -> Result<Value, String> {
+    read_status_projection(workspace, false)
+}
+
+fn read_status_projection(workspace: &Path, include_legacy_details: bool) -> Result<Value, String> {
     let workspace = workspace
         .canonicalize()
         .map_err(|_| "WEB_SCOPE: control workspace is unavailable")?;
@@ -791,6 +799,12 @@ pub(crate) fn read_status(workspace: &Path) -> Result<Value, String> {
             .map_err(|_| "WEB_SCOPE: control registry is unavailable")?;
     let web_projects =
         mcp::web_project_registry_status(&workspace, &json!({"projects":&registry.projects}));
+    let mut report = json!({"action":"web_status", "readOnly":true,
+        "runtimeMode":runtime_mode, "webProjects":web_projects,
+        "meaning":"Per-project registration and paired Wake readback. Browser authentication, delivery and continuation require their own receipts."});
+    if !include_legacy_details {
+        return Ok(report);
+    }
     let projects: Vec<_> = registry
         .projects
         .iter()
@@ -809,11 +823,8 @@ pub(crate) fn read_status(workspace: &Path) -> Result<Value, String> {
             })
         })
         .collect();
-    Ok(
-        json!({"action":"web_status", "readOnly":true, "projects":projects,
-        "runtimeMode":runtime_mode, "webProjects":web_projects,
-        "meaning":"Per-project registration and paired Wake readback. Browser authentication, delivery and continuation require their own receipts."}),
-    )
+    report["projects"] = json!(projects);
+    Ok(report)
 }
 
 pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value, String> {

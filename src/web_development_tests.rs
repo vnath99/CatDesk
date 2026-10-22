@@ -362,8 +362,11 @@ async fn three_projects_route_only_to_prepared_development_wake() {
     let before_read = tree_snapshot(&control);
     let console_status = operator_facade::read_web_status(&control).unwrap();
     assert_eq!(console_status, status);
+    let console_summary = operator_facade::read_web_summary(&control).unwrap();
+    assert_eq!(console_summary["webProjects"], status["webProjects"]);
+    assert!(console_summary.get("projects").is_none());
     let mut console = Vec::new();
-    crate::binagotchy_cli::render_web_projects(&console_status, &mut console).unwrap();
+    crate::binagotchy_cli::render_web_projects(&console_summary, &mut console).unwrap();
     let console = String::from_utf8(console).unwrap();
     for id in ["catdesk", "alpha", "beta"] {
         assert!(console.contains(&format!("{id} | Wake PAIRED")));

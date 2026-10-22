@@ -31,6 +31,15 @@ pass; matched normal package/installed acceptance remains separate. The
 [acceptance matrix](../OCTOBER_2026_MVP_ACCEPTANCE.md) states the remaining gates.
 Do not copy historical chat URLs or native identifiers into new public evidence.
 
+Prepared development workspaces also support the standalone source-built
+`--catdesk-binagotchy-web-status` view. Its normal debug executable passes the
+bounded real-state check with 85 protected records exact, including rejection
+of mixed mutation arguments and preservation of the legacy full-console guard.
+It does not initialize the interactive console or select a package. The first
+debug timeout and the subsequent summary-only fix are recorded in the execution
+log. Production supervisor status remains guarded: root availability, startup
+policy/task lookup and the fixed front door are unproven; no activation occurred.
+
 CatDesk's existing repository is intentionally public. The operator authorizes
 normal publication of reviewed, verified, sanitized source on the existing
 development branch; preserve visibility and exclude private runtime/project data.

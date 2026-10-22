@@ -84,3 +84,77 @@ The new interactive console view still needs normal package/installed acceptance
 legacy console startup is not presumed free of initialization writes. Source
 changes and remote publication are not installed acceptance. No operator action
 is required for the next offline build/read-only qualification work.
+
+## 2026-10-22 — C1 normal executable and C2 standalone frontend
+
+- **Owner/source:** existing CatDesk conversation, branch
+  `codex/web-rollover-oct17`, base `f5e2458c666546b733ab4bf38544504e29c83f51`.
+  Normal release build of that clean source passes at 20:52:59Z in 6m26s under
+  the existing kill-on-job-close helper's 600-second cap. Image SHA256
+  `80efd3c685af80198466b18d815348818f748f4a4baaca2f75fc982a65bae28a`;
+  33,353,216 bytes; no dev dependencies, installation or package selection.
+- **TESTED_LOCAL / real development metadata:** at 20:54:42Z all five exact
+  paired context scopes and saved completed continuation verify through that
+  executable. All 85 records stay exact, no new records or scoped processes.
+  The harness then reports failure because it expected supervisor status from
+  a development root to succeed. Source inspection confirms the intended
+  installed-operation guard. The original failure receipt is retained; Web
+  reads are not repeated to relabel it as success.
+- **Supported supervisor read:** separate bounded status-only invocation from
+  a non-development working directory exits 0. It reports root unavailable,
+  startup policy unproven, task lookup failed and fixed-front-door probe
+  unavailable. This does not prove physical absence or authorize activation,
+  ACL changes, scheduler registration or protected installation.
+- **Decision/source:** add `--catdesk-binagotchy-web-status` as an exact single
+  read-only frontend, before the development guard and before interactive
+  startup. Keep full-console/production restrictions intact. Source changes:
+  `src/main.rs`, `src/binagotchy_cli.rs`, `src/operator_facade.rs`,
+  `src/operator_web_cli.rs`, `src/web_development_tests.rs`.
+- **Observed failure and fix:** first normal-debug view hits its 15-second
+  command cap with no output; retained root terminates, 85 records unchanged,
+  no new records or scoped processes. Console previously requested central
+  status plus unused legacy detail reads. Summary-only projection now skips
+  that second pass; shared pairing validation and detailed JSON remain intact.
+- **Executable result:** normal-debug build passes at 21:02:36Z under a
+  240-second contained cap. Image SHA256
+  `0fb88284fb79464eae150a1a8389e4c9bb3ca269365d3e09cfa88830f7ad4012`;
+  66,962,944 bytes. At 21:03:25Z, real-state frontend passes positive display,
+  mixed-mutation rejection and preservation of the legacy development guard,
+  in 15.03 seconds under a 45-second total / 15-second-per-command cap. All 85
+  records remain exact, no new state, no scoped processes, no browser/WakeHost,
+  send, binding or package selection. This is **TESTED_LOCAL**, not fresh Web
+  delivery, selected-package or protected installed acceptance.
+- **Independent ownership:** one supported native status snapshot shows all
+  four sibling development chats active with no turn errors. No messages,
+  pauses, writer transfers or source changes in their repositories.
+- **Audit:** private `checkpoints/web-console-oct22` retains the failed and
+  successful bounded receipts, source/image witnesses, build and action logs.
+  The new sanitized verification record below captures final regression gates;
+  no private runtime output or binary belongs in the source allowlist.
+- **External boundary:** no new connector attempt, tunnel/settings change,
+  recurring automation, hourly worker or operational service start. Existing
+  429 and installed provisioning gates remain separate from source progress.
+- **Publication:** pending scoped regression/lint/privacy gates for this
+  increment; exact source commit and remote readback will be recorded below.
+
+### Frontend verification gates
+
+`cargo test --bin catdesk binagotchy_cli::tests -- --test-threads=1` passes
+**20 tests**, exit 0 at 21:05:12Z. `cargo test --bin catdesk
+web_development_tests:: -- --test-threads=1` passes **3 tests**, exit 0 at
+21:06:05Z, including equivalence of central summary data and preservation of
+the full legacy JSON/read-only state. Initial strict Clippy exits 101 for a
+redundant clone in the new test. The test now uses `std::slice::from_ref`;
+its exact rerun passes, and final strict all-target Clippy and formatting both
+exit 0. No lint suppression is added. The test-only edit is after the executable
+probe: reconstructing the prior whole source file matches the build's exact
+hash, proving production code was unchanged. The successful real-state probe
+is retained without another runtime invocation.
+
+Sanitized code/image/log hashes and exact check results:
+[`verification/C2_WEB_STATUS_FRONTEND_2026_10_22.json`](verification/C2_WEB_STATUS_FRONTEND_2026_10_22.json).
+Normal release qualification of the new standalone entry point remains OPEN;
+the normal release image recorded above predates that entry point. Selected
+development package and protected production acceptance are unchanged. Next
+safe task is the new source's normal release qualification without selecting
+the package or starting any services. No operator action is needed for that.

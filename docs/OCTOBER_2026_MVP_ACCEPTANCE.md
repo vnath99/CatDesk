@@ -2,6 +2,41 @@
 
 ## October 22 acceptance reconciliation
 
+### Normal executable follow-up
+
+The new `--catdesk-binagotchy-web-status` command was exercised using a normal
+debug executable against the preserved development control state. It passes
+the positive view and both negative controls (extra mutation arguments refused;
+legacy full-console development guard preserved) in 15.03 seconds under a
+45-second total cap. All 85 protected metadata records remain exact; no new
+records, browser/Wake processes, sends, target changes or package selections.
+Output includes all five original projects and saved quarantine/continuation
+progress without exposing full URLs or native identifiers. No fresh browser
+observation, delivery or automatic scheduling is claimed.
+
+The first debug probe exceeded its 15-second command cap before output and was
+terminated cleanly. The summary path now skips unused legacy detail reads while
+retaining the existing paired authority checks and detailed JSON schema. The
+successful probe used the same per-command cap. Failed and successful receipts
+remain private and dated; this is not universal latency or installed proof.
+
+The prior source's normal release executable also verifies five paired context
+scopes and retained continuation metadata. Its optional supervisor check from
+the development root was refused by the existing scope guard, so that harness
+reported failure after its Web checks passed. A subsequent supported read from
+a non-development working directory returns `SUPERVISOR_ROOT_UNAVAILABLE`,
+`SUPERVISOR_STARTUP_POLICY_UNPROVEN`, `SUPERVISOR_STARTUP_TASK_LOOKUP_FAILED` and
+`SUPERVISOR_3201_PROBE_UNAVAILABLE`. These are reported gates, not proof of a
+missing task/root or authorization to activate/repair production.
+
+The selected development package and protected production installation remain
+unchanged. New frontend release-package and installed acceptance remain OPEN.
+Scoped regression gates pass: 20 console tests, three Web integration tests,
+the changed exact test rerun, final strict all-target Clippy and formatting.
+The initial test-only Clippy failure and correction are retained in the
+execution log and sanitized verification record; no live probe was repeated
+for that test-only edit.
+
 | Capability | Evidence and current boundary |
 | --- | --- |
 | Central Web project controls | SOURCE / TESTED_LOCAL: new Binagotchy `web projects` / `web status`; 19 console tests and three Web development integration tests pass. Shared paired reader; current context validated independently from native status. Not installed console acceptance. |

@@ -1,3 +1,30 @@
+## 2026-10-22 — standalone Web view on real development state
+
+`--catdesk-binagotchy-web-status` now provides the bounded Web view as a single
+read-only command. It runs before the development workspace's legacy-console
+guard, and returns before interactive initialization or daemon construction.
+Additional arguments are rejected. The full interactive development guard and
+production controls are unchanged. The view reads the central summary directly,
+skipping the unused second pass of legacy detail reads; detailed `operator web
+status` JSON keeps its existing schema.
+
+A normal debug executable passes the real development-state check in 15.03
+seconds under a 45-second total cap: all five original projects visible,
+advisory UNKNOWN coverage, saved quarantine and completed continuation visible,
+mixed mutation arguments refused, legacy console guard preserved. All 85
+protected records remain exact, no new state records or scoped processes remain,
+and no browser, WakeHost, send, binding or package selection occurs. The earlier
+15-second debug timeout is retained; summary-only reads resolved that observed
+timeout with the same per-command cap. This is local executable qualification,
+not selected-package or protected installed acceptance.
+
+The previous source's normal release executable separately passes the paired
+context/continuation metadata read. Supervisor status is correctly refused from
+a development workspace. A supported read reports root unavailable, startup
+policy unproven and task lookup failure; no activation/recovery is attempted.
+Exact evidence, tests and publication follow in the
+[execution log](docs/OCT22_31_EXECUTION_LOG.md).
+
 ## 2026-10-22 — central Web project console (SOURCE / TESTED_LOCAL)
 
 Binagotchy now accepts exact `web projects` and `web status` commands. They use

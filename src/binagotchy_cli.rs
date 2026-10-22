@@ -27,7 +27,28 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 pub const BINAGOTCHY_CLI_MODE_FLAG: &str = "--catdesk-binagotchy-cli";
+pub const BINAGOTCHY_WEB_STATUS_FLAG: &str = "--catdesk-binagotchy-web-status";
 static MANUAL_EVENT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+/// A single read-only view avoids the interactive console's legacy startup
+/// status/initialization and production controls in a development workspace.
+pub fn parse_binagotchy_web_status_mode(args: &[String]) -> Result<bool, String> {
+    if !args.iter().any(|arg| arg == BINAGOTCHY_WEB_STATUS_FLAG) {
+        return Ok(false);
+    }
+    if args.len() != 1 {
+        return Err(format!(
+            "{BINAGOTCHY_WEB_STATUS_FLAG} accepts no additional arguments"
+        ));
+    }
+    Ok(true)
+}
+
+pub fn run_web_status(workspace: &Path) -> Result<(), String> {
+    let mut stdout = io::stdout().lock();
+    print_web_projects(workspace, &mut stdout)?;
+    stdout.flush().map_err(|_| "CLI_OUTPUT_FAILED".into())
+}
 
 pub fn parse_binagotchy_cli_mode(args: &[String]) -> Result<bool, String> {
     let count = args
@@ -926,7 +947,7 @@ fn safe_report_token(value: &Value) -> &str {
 }
 
 fn print_web_projects(workspace: &Path, out: &mut impl Write) -> Result<(), String> {
-    let report = crate::operator_facade::read_web_status(workspace)?;
+    let report = crate::operator_facade::read_web_summary(workspace)?;
     render_web_projects(&report, out)
 }
 
@@ -1563,6 +1584,28 @@ mod tests {
             "web projects; wake start",
         ] {
             assert_eq!(parse_command(command), ParsedCommand::Unknown);
+        }
+    }
+
+    #[test]
+    fn standalone_web_status_cannot_be_combined_with_runtime_controls() {
+        let flag = super::BINAGOTCHY_WEB_STATUS_FLAG.to_string();
+        assert_eq!(
+            super::parse_binagotchy_web_status_mode(std::slice::from_ref(&flag)),
+            Ok(true)
+        );
+        assert_eq!(super::parse_binagotchy_web_status_mode(&[]), Ok(false));
+        assert_eq!(
+            super::parse_binagotchy_web_status_mode(&[BINAGOTCHY_CLI_MODE_FLAG.into()]),
+            Ok(false)
+        );
+        for extra in [
+            flag.clone(),
+            "wake".into(),
+            "--headless-mcp".into(),
+            BINAGOTCHY_CLI_MODE_FLAG.into(),
+        ] {
+            assert!(super::parse_binagotchy_web_status_mode(&[flag.clone(), extra]).is_err());
         }
     }
 

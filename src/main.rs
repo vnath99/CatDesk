@@ -2629,6 +2629,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::process::exit(2);
         }
     }
+    // This one-shot view uses only the paired Web reader. It cannot enter the
+    // interactive console, initialize legacy Wake state or start services.
+    match binagotchy_cli::parse_binagotchy_web_status_mode(&args) {
+        Ok(true) => {
+            if binagotchy_cli::run_web_status(&std::env::current_dir()?).is_err() {
+                eprintln!("CatDesk Web status unavailable.");
+                std::process::exit(2);
+            }
+            return Ok(());
+        }
+        Ok(false) => {}
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::exit(2);
+        }
+    }
     if !args.iter().any(|arg| arg == "--headless-mcp")
         && catdesk_wake::development_runtime::root_for_workspace(&std::env::current_dir()?)?
             .is_some()

@@ -2,6 +2,21 @@
 
 ## October 22 Binagotchy Web project view (SOURCE / TESTED_LOCAL)
 
+For a prepared development control workspace, run the qualified source-built
+executable with exactly one flag:
+
+```text
+<source-built-catdesk.exe> --catdesk-binagotchy-web-status
+```
+
+This reads the existing paired summary and exits, with no legacy console
+initialization, daemon, listener or service start. Extra arguments are refused.
+A normal debug executable passes a bounded real-state view and two negative
+controls with 85 protected records unchanged. It is not yet selected/installed
+package acceptance. The interactive development-console guard remains in force;
+do not bypass it to reach production controls. For detailed local JSON continue
+using `operator web status`.
+
 In a source-qualified Binagotchy console, use `web projects` or `web status`.
 Both are exact read-only commands with no arguments. They use the selected
 control workspace's existing paired Web status reader. Existing `projects`
