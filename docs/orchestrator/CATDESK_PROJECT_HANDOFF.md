@@ -7,6 +7,20 @@ surface.
 
 ## Current checkpoint — 2026-10-22
 
+### Real-review controller — locally checked, live branch unexecuted
+
+The private bounded controller is prepared using the existing publisher and
+foreground owner, with one publication call and no automatic replay or work
+resolution. All three scripts parse and 47 local decision fixtures pass. These
+check scope/digest/receipt/timer/response handling without processes or browser
+activity. At 23:24:00Z its read-only preflight passes; 114 original records stay
+hash-exact, 18 historical timers are complete and no runtime owner is present.
+The live host budget is 180s; response reading and cleanup have separate bounds.
+No host, event, browser or native execution starts. The requested exception to
+the prior stop instruction remains pending, so live cleanup, natural review and
+next-task proof remain OPEN. See the [sanitized C4 evidence](../verification/C4_NATURAL_REVIEW_PREFLIGHT_2026_10_22.json).
+
+
 The next natural-review candidates are prepared privately and remain unqueued.
 The primary project is still refused by its older quarantine. An original
 sibling owner supplied a current source/verification handoff, independently

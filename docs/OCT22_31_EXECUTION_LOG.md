@@ -514,3 +514,43 @@ No event, browser, WakeHost or recurring activation occurred. The explicit
 bounded foreground exception is still pending; its absence is not approval.
 A subsequent receipt commit changes documentation only. Goal remains ACTIVE,
 with natural/live proof unclaimed and prepared private candidates preserved.
+
+## 2026-10-22 — bounded real-review controller preparation
+
+- **Owner/base:** existing CatDesk developer; `codex/web-rollover-oct17`, clean
+  base `285985eb18256a6f73d26636980e17ea89e522fe`. Product/runtime source and
+  selected development package unchanged; no repeated build or canary test.
+- **Concrete controller prepared privately:** uses the existing work API and
+  selected foreground host. The immutable candidate/request/target digests are
+  checked; an existing event or prior attempt refuses replay. Publication is one
+  local authenticated call with automatic Web scheduling disabled, not a native
+  task or controlled `test` event. Host budget 180s, publisher 30s, separate
+  response read 45s, outer kill-on-close containment 400s including preparation,
+  graceful stop and cleanup. Recurring/production activation is absent.
+- **Local verification:** all three PowerShell files parse, zero errors. Forty-
+  seven pure decision fixtures pass for wrong project/chat/generation, changed
+  event/message/receipt, malformed fields, incomplete/attention timers and exact
+  read-only response binding. They start no processes and are controller checks,
+  not product regressions or end-to-end live cleanup proof.
+- **Read-only preflight:** at 23:24:00Z, selected bytes, source excerpt and saved
+  paired target match; no existing runtime owner or queued/discovery work.
+  Eighteen historical timers are COMPLETE; deliveries are eighteen SENT and
+  three already retired, none in flight. It enumerates 132 metadata records;
+  before/after hashes prove all 114 original protected records unchanged. No
+  publication, browser, host or native action. No original project is interrupted.
+- **Outcome handling:** unknown publication/submission/body state remains held
+  without replay or automatic retirement. A verified response remains separate
+  from independent review quality, next-task authority and task completion.
+  Original work history and launch settings are checked; final Job closure and
+  runtime/process state get a separate receipt. These live paths are prepared,
+  not executed or claimed accepted.
+- **Waiting:** the explicit prior WakeHost stop rule remains effective. The one
+  requested bounded-test exception has no answer at this checkpoint. Preparation
+  does not grant it. No connector probe, browser-text workaround, binding change,
+  protected install or new coordination framework. Natural/live and production
+  acceptance remain OPEN; existing canary and sibling writers are preserved.
+- **Evidence/publication:** private controller/fixture/preflight records stay
+  outside the source allowlist; sanitized counters and scope are added to
+  [C4 preflight](verification/C4_NATURAL_REVIEW_PREFLIGHT_2026_10_22.json).
+  LOCAL_ONLY / NOT_PUSHED pending scoped documentation/privacy review; exact
+  remote SHA/CI follow normal publication. Goal ACTIVE/PARTIAL.

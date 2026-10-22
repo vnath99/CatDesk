@@ -1,3 +1,14 @@
+## 2026-10-22 — bounded real-review controller (PREPARED / LOCAL CHECKS)
+
+The private controller uses existing publication/foreground ownership and is
+checked by three parse gates, 47 pure decision fixtures and one read-only
+preflight. Original 114 state records remain exact; no browser, host or event
+starts. One publication attempt, bounded lifetime/cleanup and preserved unknown
+outcomes are prepared. Live behavior remains UNEXECUTED pending the requested
+exception to the prior WakeHost stop rule. This does not close natural review,
+next-task, automatic operation or production acceptance. See the
+[execution log](docs/OCT22_31_EXECUTION_LOG.md).
+
 ## 2026-10-22 — actual development review candidates (PREPARED / UNQUEUED)
 
 Prepared source-bound review requests for CatDesk and one independently owned
