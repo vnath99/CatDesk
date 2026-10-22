@@ -2,7 +2,41 @@
 
 ## October 22 acceptance reconciliation
 
-### Normal executable follow-up
+### Selected development release and MCP diagnostic lifecycle
+
+The frontend's normal release qualification passes at 21:26:34Z in 3.14 seconds
+under a 45-second cap, retaining all 85 records. At 21:31:44Z the existing
+guarded development updater selects its immutable package while STOPPED. The
+selected frontend passes. Of 87 records, only the two package-authority pointers
+change; all 85 other records, previous package, existing profile, project pairs,
+history and production remain preserved. No browser/WakeHost starts or event
+is published. This is **INSTALLED_DEVELOPMENT_UNPROTECTED / READ_ONLY** evidence;
+protected production and active automatic operation remain unaccepted.
+
+Source also adds process-local `--no-web-auto` for headless MCP diagnostics.
+The normal headless path otherwise starts a scheduler; a short time budget alone
+is not a scheduling opt-out. The new flag creates no owner/tasks, preserves
+isolated-fixture suppression and rejects duplicate/conflicting project scopes.
+Fifteen headless tests, strict all-target Clippy and formatting pass. Normal-debug
+MCP ready reports `web_auto_scheduler_enabled=false`; catalog/auth checks,
+invalid-scope refusals, five exact advisory context scopes and retained saved
+continuation proof pass. The 45-second process exits naturally with zero scoped
+processes. Among 87 checked records only four numeric usage counters change;
+no new records, browser/WakeHost, sends, target or policy mutations occur.
+
+The initial probe's functional checks passed but its old outer wait killed the
+process about one second before the internal 45-second expiry. That lifecycle
+failure is retained. One rerun after fixing the monotonic remaining wait passes
+natural exit. These are local authenticated MCP reads, not acceptance of the
+external connector or fresh browser delivery. Normal release/selected-package
+qualification of the new flag remains OPEN; the selected frontend package
+predates it.
+
+`WEB_WORK_ROLLOVER_PENDING` is a project-specific admission blocker for CatDesk
+while its older quarantine remains active. Sibling project stores are independent;
+the completed fast canary is preserved. No unquarantine or binding reset occurs.
+
+### Earlier normal-debug frontend follow-up (retained evidence)
 
 The new `--catdesk-binagotchy-web-status` command was exercised using a normal
 debug executable against the preserved development control state. It passes
@@ -29,8 +63,10 @@ a non-development working directory returns `SUPERVISOR_ROOT_UNAVAILABLE`,
 `SUPERVISOR_3201_PROBE_UNAVAILABLE`. These are reported gates, not proof of a
 missing task/root or authorization to activate/repair production.
 
-The selected development package and protected production installation remain
-unchanged. New frontend release-package and installed acceptance remain OPEN.
+At this earlier checkpoint the selected development package and protected
+production installation were unchanged. The later normal-release selection
+above supersedes the frontend development-package gate; protected production
+acceptance and the newest scheduler-disable flag's release gate remain OPEN.
 Scoped regression gates pass: 20 console tests, three Web integration tests,
 the changed exact test rerun, final strict all-target Clippy and formatting.
 The initial test-only Clippy failure and correction are retained in the
@@ -39,13 +75,13 @@ for that test-only edit.
 
 | Capability | Evidence and current boundary |
 | --- | --- |
-| Central Web project controls | SOURCE / TESTED_LOCAL: new Binagotchy `web projects` / `web status`; 19 console tests and three Web development integration tests pass. Shared paired reader; current context validated independently from native status. Not installed console acceptance. |
+| Central Web project controls | Frontend: 20 console and three Web integration tests pass; normal release and selected stopped development view pass above. Shared paired reader; current context scoped independently from native status. The new scheduler-disable flag has 15 passing headless tests and debug MCP proof; its release/selected-package gate is separate. |
 | Five original Web bindings/history | Read-only October 22 readback passes all five, with stable registry/Wake bytes and exact baseline history. No binding mutation. |
 | Multi-project stopped/opt-out behavior | Bounded development run passed, preserving 82 protected records and exiting with zero scoped processes. Three saved stages: two observation-disabled, one Wake-stopped. No positive monitoring or sends were exercised. |
 | Controlled rollover | Prior fast canary's replacement, pairing, history and continuation remain accepted in development. Preserve it; do not replay. |
-| Legacy CatDesk quarantine | BLOCKED for that intent: latest bounded inspection reports `RESPONSE_EXPECTED_USER_NOT_FOUND`. No original send/source proof, receipt or safe unquarantine established. Sibling work is independent. |
+| Legacy CatDesk quarantine | BLOCKED for that project's new work admission: latest bounded inspection reports `RESPONSE_EXPECTED_USER_NOT_FOUND`; the lease refuses with `WEB_WORK_ROLLOVER_PENDING`. No original send/source proof, receipt or safe unquarantine established. Sibling work remains independent. |
 | External connector | WAITING: one read-only attempt at 2026-10-22T20:33:25Z returned HTTP 429 from OpenAI tunnel MCP SSE. No browser-text workaround, service restart or tunnel change. |
-| Runtime cleanup | At 20:36:03Z, zero scoped browser/Wake processes; development and production desired controls STOPPED; protected production pointer unchanged. No listeners observed at source-default MCP 3200 or supervisor 3201; this does not establish an overridden/tunneled endpoint. |
+| Runtime cleanup | Latest corrected 45-second MCP probe exits naturally, zero scoped processes; controls STOPPED and production pointer unchanged. Among 87 records only four numeric usage counters change. The ephemeral loopback check does not establish the official tunnel or fixed production endpoints. |
 | Production / natural review cycle | OPEN: protected provisioning/release acceptance, installed automatic monitoring/routing, productive sibling Web work during rollover and one natural independent deliverable → review → next task. Source tests and prior controlled sends do not close these gates. |
 
 The new aggregate view bounds output to 24 projects and omits conversation URLs,

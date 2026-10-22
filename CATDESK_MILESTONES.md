@@ -1,3 +1,37 @@
+## 2026-10-22 — selected development release and explicit scheduler disable
+
+The standalone Web view is now qualified in a normal release from source
+`8fd6250ae33d4ebc53cfaea59444321b80334b90`. Its bounded real-state check passes
+in 3.14 seconds with 85 records exact. Normal app/WakeHost packaging uses the
+existing four-file layout. The supported stopped development updater selects
+the new immutable package, retains the prior package and profile, changes only
+the two package-authority pointers, and preserves 85 other records. The selected
+view passes for all five original projects. Both desired controls remain STOPPED;
+production, project targets/history and native development writers are unchanged.
+This is selected **unprotected development** acceptance, not production release.
+
+A concrete remaining diagnostic gap is fixed in source: normal headless startup
+previously started the Web scheduler even for bounded metadata probes. Explicit
+`--no-web-auto` now suppresses that startup for this process without changing
+persisted policy. Duplicate flags and conflicting `--web-auto-project` scopes
+are refused. Ready output reports `web_auto_scheduler_enabled`. Defaults are
+unchanged when the option is omitted; isolated fixtures still suppress scheduling.
+
+Fifteen headless tests, strict Clippy and formatting pass. A normal-debug,
+45-second authenticated loopback probe reports scheduling disabled, reads all
+five exact context scopes and preserved continuation, passes auth/scope guards,
+and exits naturally with zero scoped processes. Across 87 records, only four
+numeric usage counters change; no new state, sends, browser or WakeHost. An
+earlier harness wait ended before the internal deadline; that failed receipt is
+retained and the outer deadline corrected before one rerun. The new disable flag
+is not yet in the selected package; normal release qualification is next.
+
+The older CatDesk quarantine specifically blocks new Web work requests for that
+project with `WEB_WORK_ROLLOVER_PENDING`. Its source proof is still missing;
+sibling project stores/queues remain independent. No authority is reset.
+See the [execution log](docs/OCT22_31_EXECUTION_LOG.md) for exact source/artifact
+hashes, publication and remaining installed/live gates.
+
 ## 2026-10-22 — standalone Web view on real development state
 
 `--catdesk-binagotchy-web-status` now provides the bounded Web view as a single

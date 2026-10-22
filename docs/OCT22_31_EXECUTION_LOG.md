@@ -179,3 +179,67 @@ change occurs. Draft PR 4 follows the existing branch; it is not made ready or
 merged. The documentation receipt may follow without changing tested runtime
 source. Normal release qualification of this new entry point remains next;
 installed multi-project acceptance remains PARTIAL.
+
+## 2026-10-22 — normal release selection and headless scheduling opt-out
+
+- **Owner/source:** existing CatDesk conversation; branch
+  `codex/web-rollover-oct17`; clean release HEAD
+  `8fd6250ae33d4ebc53cfaea59444321b80334b90`, tree
+  `6c8847b28f2d2ff446d290db0904bb10f9160107`.
+- **Normal release:** offline locked app build exits 0 at 21:25:47Z in 7m47s
+  under the existing 600-second contained cap. Image SHA256
+  `f3d0f7c032ba30c33c61d6d425b5c2dec6683797f5196e419bc393e6116acf91`,
+  33,356,288 bytes. At 21:26:34Z its bounded view and negative controls pass in
+  3.14 seconds, 85 records exact, no new state or scoped processes.
+- **Matched package:** normal default-feature WakeHost build exits 0; its bytes,
+  adapter and bridge match the prior qualified version. The existing four-file
+  package layout is used; Python/profile are not recopied or reauthenticated.
+- **INSTALLED_DEVELOPMENT_UNPROTECTED / READ_ONLY:** at 21:31:44Z, existing
+  guarded `update-package` returns `PACKAGE_UPDATED_STOPPED`, retains prior
+  version/profile and selects the new package. Selected frontend passes for
+  all five original projects. Of 87 records, only authority/package pointers
+  change; 85 others remain exact, with no unexpected/new records or scoped
+  processes. Both desired controls stay STOPPED; no browser/WakeHost, message,
+  Wake target/history, production, tunnel or native writer changes occur.
+- **Concrete source gap:** normal headless mode starts the Web scheduler even
+  for bounded metadata probes. Source adds exact `--no-web-auto` to suppress
+  startup for this process, with no persisted policy edit. Duplicate flags and
+  conflicting project scopes are refused. Ready output exposes the configured
+  enable state. Defaults and isolated-fixture suppression remain intact.
+- **Changed source:** `src/main.rs` only. Updated development/acceptance/handoff/
+  command documentation and sanitized verification are allowlisted separately.
+  No Python/WakeHost implementation change or production operation.
+- **TESTED_LOCAL:** normal debug build passes. Fifteen headless tests pass,
+  including direct proof that no scheduler owner/tasks are created while the
+  server remains running. Strict all-target Clippy and formatting pass, exit 0.
+- **Bounded MCP:** candidate normal-debug image uses the selected development
+  state, explicit disable flag and 45-second internal lifetime. Auth rejection,
+  catalog/schema and five invalid-scope refusals pass; all five exact advisory
+  context scopes and saved completed continuation read correctly. No fresh
+  context capture, browser send or natural review is inferred.
+- **Retained harness failure:** first functional check passes, but the inherited
+  30-second outer finish wait kills the root about one second before its
+  45-second internal expiry. All state except four allowed usage counters is
+  preserved, no new records or scoped processes. The failed receipt remains.
+  A monotonic remaining 55-second lifecycle budget replaces that outer wait;
+  one corrected run at 21:43:51Z proves natural exit, zero owned processes and
+  no unexpected changes among 87 records. Ready reports automatic work disabled.
+- **Specific admission blocker:** source reconciliation confirms the older
+  CatDesk `QUARANTINED` record refuses new work with
+  `WEB_WORK_ROLLOVER_PENDING` for that project. Sibling stores/queues are separate.
+  No receipt, unquarantine, target change or authority reset is manufactured.
+- **Permissions/external actions:** existing bounded-test/development authority
+  used for supported stopped unprotected package update and local ephemeral
+  MCP reads. No recurring scheduler/browser or operational WakeHost starts,
+  no protected installation or account/security/tunnel action, and no new
+  external connector probe. Existing HTTP 429 remains a separate dependency.
+- **Evidence:** private parent `checkpoints/web-console-oct22` retains immutable
+  release/build, stopped-package and both MCP run receipts. Sanitized hashes,
+  checks and scope:
+  [`verification/C2_RELEASE_AND_AUTO_DISABLE_2026_10_22.json`](verification/C2_RELEASE_AND_AUTO_DISABLE_2026_10_22.json).
+- **Remaining/next:** new disable flag is not yet in the selected package;
+  build/qualify its normal release next, without activation. Installed automatic
+  operation, natural review/next-task, external connector and protected
+  provisioning gates remain OPEN. No operator action is needed for safe source
+  qualification. Publication follows scoped test/privacy gates; exact SHA and
+  CI readback are recorded below after push.

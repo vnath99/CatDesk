@@ -1,0 +1,127 @@
+{
+  "recordedUtc": "2026-10-22T21:48:20.0995879Z",
+  "task": "C2-RELEASE-AND-HEADLESS-AUTO-DISABLE",
+  "baseHead": "8fd6250ae33d4ebc53cfaea59444321b80334b90",
+  "branch": "codex/web-rollover-oct17",
+  "frontendRelease": {
+    "sourceCommit": "8fd6250ae33d4ebc53cfaea59444321b80334b90",
+    "sourceTree": "6c8847b28f2d2ff446d290db0904bb10f9160107",
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "imageSha256": "f3d0f7c032ba30c33c61d6d425b5c2dec6683797f5196e419bc393e6116acf91",
+    "imageBytes": 33356288,
+    "buildLogSha256": "533a9a4cc344064fc73a3cf43683e7d9aabded6ad9d64748164c90367ea56fc9",
+    "buildExit": 0,
+    "boundedViewSeconds": 3.1367062,
+    "protectedRecordsExact": 85
+  },
+  "selectedDevelopmentPackage": {
+    "classification": "SELECTED_STOPPED_UNPROTECTED_DEVELOPMENT_PACKAGE",
+    "packageId": "1.0.0-dev.85-fd5f77a08c04a089be8954c0f0829ef1000e264e2f6a48d88c2773e3870d1172",
+    "selectedViewPassed": true,
+    "stateRecordsChecked": 87,
+    "allowedPointerChanges": 2,
+    "unchangedProtectedRecords": 85,
+    "unexpectedChanges": 0,
+    "newStateRecords": 0,
+    "previousPackagePreserved": true,
+    "browserProfileAction": "NONE",
+    "productionModified": false,
+    "wakeTargetsChanged": false,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "containsNewDisableFlag": false
+  },
+  "schedulerDisableCandidate": {
+    "profile": "NORMAL_DEBUG_APP_NO_DEV_DEPENDENCIES",
+    "imageSha256": "7d9c571354efee1243f45fbced75fdde85cbfd1d13798aecef93b9856ca49f91",
+    "imageBytes": 66966528,
+    "sourceFiles": [
+      {
+        "path": "src/main.rs",
+        "sha256": "7146ea95391dfff0249f465d4eb1efe17ae12a45330cd5df29280d3b22b06869"
+      },
+      {
+        "path": "src/binagotchy_cli.rs",
+        "sha256": "3c62ca2da6ec597ad730640207b7387c9dcdf1ecc880ab62566026843bd2a720"
+      },
+      {
+        "path": "src/operator_web_cli.rs",
+        "sha256": "ff7708349b65432a82689b1e4f67a26dfa20f1445437adc3e5235a19e2f152a9"
+      },
+      {
+        "path": "src/operator_facade.rs",
+        "sha256": "b2d5e5284309ab6ddab38a2c9e4f4d07976f733487a8d76e5c1310a2038f9264"
+      }
+    ],
+    "headlessTestsPassed": 15,
+    "checks": [
+      {
+        "label": "no-web-auto-headless-tests",
+        "arguments": [
+          "test",
+          "--bin",
+          "catdesk",
+          "headless_",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "finishedUtc": "2026-10-22T21:38:54.208074Z",
+        "logSha256": "442a52dcce58064494e0acbdbc0881276c8d70ece278d91a7c4d4add11bf4070"
+      },
+      {
+        "label": "no-web-auto-clippy",
+        "arguments": [
+          "clippy",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "finishedUtc": "2026-10-22T21:39:17.7717379Z",
+        "logSha256": "c1e361742c44ef545a3133a0856f910a21fc7a33547567c5a59ae99fda383c06"
+      },
+      {
+        "label": "no-web-auto-format",
+        "arguments": [
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exitCode": 0,
+        "finishedUtc": "2026-10-22T21:39:20.2542735Z",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "normalReleaseQualification": "OPEN",
+    "selectedPackageQualification": "OPEN"
+  },
+  "authenticatedLoopbackMcp": {
+    "observedUtc": "2026-10-22T21:43:51.9883299Z",
+    "internalLifetimeSeconds": 45,
+    "webAutoSchedulerEnabled": false,
+    "authRejectionStatus": 401,
+    "scopeGuardsPassed": 5,
+    "originalProjectContextScopesValidated": 5,
+    "registryProjectsPaired": 7,
+    "savedContinuationProved": true,
+    "listenerNaturalExit": true,
+    "stateRecordsChecked": 87,
+    "unexpectedChanges": 0,
+    "newRecords": 0,
+    "allowedChanges": "Four numeric usage counters only",
+    "launchSettingsPreserved": true,
+    "ownedProcesses": 0,
+    "eventsPublished": 0,
+    "browserStarted": false,
+    "wakeHostStarted": false
+  },
+  "retainedFailure": "First MCP functional pass had an outer cleanup timeout before the 45s internal deadline; receipt retained; corrected monotonic finish budget yields natural exit",
+  "quarantineAdmission": "CatDesk project new work requests refused by WEB_WORK_ROLLOVER_PENDING; sibling stores remain separate",
+  "protectedProductionAcceptance": "UNVERIFIED",
+  "externalConnector": "Last one-shot probe HTTP429; not retried this increment",
+  "remote": "https://github.com/vnath99/CatDesk",
+  "publication": "Pending reviewed source commit and exact remote/CI readback"
+}

@@ -916,6 +916,19 @@ struct HeadlessMcpOptions {
     isolated_dev_fixture: bool,
     maximum_runtime_seconds: Option<u64>,
     web_auto_projects: std::collections::BTreeSet<String>,
+    no_web_auto: bool,
+}
+
+fn start_headless_web_auto(options: &HeadlessMcpOptions, state: SharedState) -> bool {
+    if options.isolated_dev_fixture || options.no_web_auto {
+        return false;
+    }
+    if options.web_auto_projects.is_empty() {
+        operator_facade::start_web_auto_scheduler(state);
+    } else {
+        operator_facade::start_scoped_web_auto_scheduler(state, options.web_auto_projects.clone());
+    }
+    true
 }
 
 struct ReviewedCandidateMcpOptions {
@@ -1131,6 +1144,7 @@ fn parse_headless_mcp_options(
     let mut isolated_dev_fixture = false;
     let mut maximum_runtime_seconds = None;
     let mut web_auto_projects = std::collections::BTreeSet::new();
+    let mut no_web_auto = false;
 
     let mut index = 0;
     while index < args.len() {
@@ -1144,6 +1158,13 @@ fn parse_headless_mcp_options(
                     return Err("duplicate --isolated-dev-fixture".into());
                 }
                 isolated_dev_fixture = true;
+                index += 1;
+            }
+            "--no-web-auto" => {
+                if no_web_auto {
+                    return Err("duplicate --no-web-auto".into());
+                }
+                no_web_auto = true;
                 index += 1;
             }
             "--max-runtime-seconds" => {
@@ -1201,6 +1222,9 @@ fn parse_headless_mcp_options(
         }
     }
 
+    if no_web_auto && !web_auto_projects.is_empty() {
+        return Err("--no-web-auto cannot be combined with --web-auto-project".into());
+    }
     validate_loopback_host(&host)?;
     if mode.browser_enabled() {
         return Err("headless MCP currently supports --mode computer only".into());
@@ -1239,6 +1263,7 @@ fn parse_headless_mcp_options(
     Ok(Some(HeadlessMcpOptions {
         maximum_runtime_seconds,
         web_auto_projects,
+        no_web_auto,
         isolated_dev_fixture,
         host,
         port,
@@ -1558,6 +1583,7 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
         }
     });
     let mut serve_handle = tokio::spawn(async move { axum::serve(listener, router).await });
+    let web_auto_scheduler_enabled = start_headless_web_auto(&options, state.clone());
 
     println!(
         "{}",
@@ -1569,6 +1595,7 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
             "config_path": options.config_path,
             "maximum_runtime_seconds": options.maximum_runtime_seconds,
             "web_auto_projects": options.web_auto_projects,
+            "web_auto_scheduler_enabled": web_auto_scheduler_enabled,
             "mcp_url": format!("http://{local_addr}{mcp_path}"),
             "auth": {
                 "scheme": "bearer",
@@ -1577,17 +1604,6 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
             },
         })
     );
-
-    if !options.isolated_dev_fixture {
-        if options.web_auto_projects.is_empty() {
-            operator_facade::start_web_auto_scheduler(state.clone());
-        } else {
-            operator_facade::start_scoped_web_auto_scheduler(
-                state.clone(),
-                options.web_auto_projects,
-            );
-        }
-    }
 
     let deadline = async {
         if let Some(seconds) = options.maximum_runtime_seconds {
@@ -4421,6 +4437,9 @@ mod tests {
             vec!["--max-runtime-seconds", "1", "--max-runtime-seconds", "2"],
             vec!["--web-auto-project", "../other"],
             vec!["--web-auto-project", "alpha", "--web-auto-project", "alpha"],
+            vec!["--no-web-auto", "--no-web-auto"],
+            vec!["--no-web-auto", "--web-auto-project", "alpha"],
+            vec!["--web-auto-project", "alpha", "--no-web-auto"],
         ] {
             let mut args = vec![
                 "--headless-mcp",
@@ -4449,6 +4468,66 @@ mod tests {
         assert!(matches!(options.tool_mode, ToolMode::ReadOnly));
         assert_eq!(options.maximum_runtime_seconds, None);
         assert!(options.web_auto_projects.is_empty());
+        assert!(!options.no_web_auto);
+    }
+
+    #[tokio::test]
+    async fn headless_no_web_auto_creates_no_scheduler_owner_or_tasks() {
+        use super::{AppState, start_headless_web_auto};
+
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-headless-auto-disabled-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let mut app = AppState::new_isolated_fixture(
+            0,
+            root.to_string_lossy().into_owned(),
+            root.join("config.toml"),
+        )
+        .unwrap();
+        app.server_running = true;
+        let state = std::sync::Arc::new(tokio::sync::Mutex::new(app));
+        let mut options = parse_headless_mcp_options(
+            [
+                "--headless-mcp",
+                "--no-web-auto",
+                "--config-path",
+                "unused.toml",
+                "--auth-token",
+                "catdesk-test-token-1234567890",
+            ]
+            .into_iter()
+            .map(str::to_owned),
+        )
+        .unwrap()
+        .unwrap();
+        assert!(!start_headless_web_auto(&options, state.clone()));
+        // Fixture mode must still suppress automatic work independently of
+        // the new operator flag.
+        options.no_web_auto = false;
+        options.isolated_dev_fixture = true;
+        assert!(!start_headless_web_auto(&options, state.clone()));
+        tokio::task::yield_now().await;
+        {
+            let app = state.lock().await;
+            assert!(app.web_auto_cancel.is_none());
+            assert!(app.web_auto_tasks.is_empty());
+            assert!(app.server_running);
+        }
+        drop(state);
+        let canonical = root.canonicalize().unwrap();
+        let temporary = std::env::temp_dir().canonicalize().unwrap();
+        assert!(canonical.starts_with(&temporary) && canonical != temporary);
+        assert!(
+            canonical
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with("catdesk-headless-auto-disabled-")
+        );
+        std::fs::remove_dir_all(canonical).unwrap();
     }
 
     #[test]

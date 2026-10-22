@@ -40,6 +40,17 @@ debug timeout and the subsequent summary-only fix are recorded in the execution
 log. Production supervisor status remains guarded: root availability, startup
 policy/task lookup and the fixed front door are unproven; no activation occurred.
 
+The frontend's normal release is now selected through the supported STOPPED
+development updater. Only package-authority pointers changed; 85 other records,
+previous version/profile, project bindings/history and production remain exact.
+The selected view passes. Source additionally supports process-local headless
+`--no-web-auto`, rejecting mixed project scopes and reporting its state in ready
+output. Fifteen tests and a corrected 45-second normal-debug MCP read probe pass
+without scheduler/browser/WakeHost starts or events. Its release/package
+qualification is still separate; the selected frontend predates the new flag.
+The old CatDesk quarantine blocks new work admission for that project only;
+preserve it and continue eligible sibling/source work.
+
 CatDesk's existing repository is intentionally public. The operator authorizes
 normal publication of reviewed, verified, sanitized source on the existing
 development branch; preserve visibility and exclude private runtime/project data.

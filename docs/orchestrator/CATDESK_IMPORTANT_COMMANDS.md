@@ -1,5 +1,21 @@
 # CatDesk — Important Command Reference
 
+## October 22 headless metadata probes without automatic Web work
+
+With a matched source-qualified executable, add `--no-web-auto` to a normal
+`--headless-mcp` command. Keep the existing explicit loopback/config/auth and
+bounded-runtime arguments. Require the ready response to contain
+`web_auto_scheduler_enabled=false`. This suppresses automatic Web scheduler
+startup for that process; it does not change persisted per-project policy.
+It cannot be combined with `--web-auto-project`, and duplicates are rejected.
+Without the option, the existing scheduling behavior remains unchanged.
+
+The new option passes source tests and one corrected bounded normal-debug MCP
+probe; its normal release/package qualification remains separate. The selected
+development frontend package predates this option. Never assume a short runtime
+alone disables scheduling, or silently drop an unsupported disable option.
+No recurring browser worker or WakeHost restart is part of this metadata workflow.
+
 ## October 22 Binagotchy Web project view (SOURCE / TESTED_LOCAL)
 
 For a prepared development control workspace, run the qualified source-built
@@ -11,9 +27,10 @@ executable with exactly one flag:
 
 This reads the existing paired summary and exits, with no legacy console
 initialization, daemon, listener or service start. Extra arguments are refused.
-A normal debug executable passes a bounded real-state view and two negative
-controls with 85 protected records unchanged. It is not yet selected/installed
-package acceptance. The interactive development-console guard remains in force;
+A normal debug and normal release executable pass a bounded real-state view and
+two negative controls with 85 protected records unchanged. The existing stopped
+development updater selects the normal package and its view passes; this is
+unprotected development acceptance, not production activation. The interactive development-console guard remains in force;
 do not bypass it to reach production controls. For detailed local JSON continue
 using `operator web status`.
 
