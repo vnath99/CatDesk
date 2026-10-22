@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("current_dom_bridge", ROOT / "scripts/wake_bridge.py")
@@ -70,11 +71,15 @@ class Element {
 const el = (tag, attrs = {}, text = '', children = []) => new Element(tag, attrs, text, children);
 const button = label => el('button', {'aria-label':label}, label);
 const user = el('div', {'data-content-search-unit-key':'fallback-turn-0:0:user'}, '', [
-  el('div', {'data-user-message-bubble':'true'}, '', [
+  el('div', options.userClassOnly ? {class:'group/user-message'} : {'data-user-message-bubble':'true'}, '', [
     el('div', options.userBodyClass ? {class:'whitespace-pre-wrap'} : {'data-markdown-text-tone':'user-message'}, 'exact wake message'),
     el('div', {class:'turn-action-controls'}, '', [button(options.userCopy || 'Copy message')]),
   ]),
 ]);
+if (options.userMultipleMarkers) {
+  user.attrs['data-message-author-role'] = 'user';
+  user.children[0].attrs.class = 'group/user-message';
+}
 if (options.userShowMore) user.children[0].children.push(el('span', {}, '…'), button('Show more'));
 const answer = options.loadError ? "This response couldn’t load" : (options.answer ?? 'A useful answer');
 const assistant = el('div', {'data-content-search-unit-key':'fallback-turn-0:2:assistant'}, '', [
@@ -85,7 +90,8 @@ const assistant = el('div', {'data-content-search-unit-key':'fallback-turn-0:2:a
     ]),
   ]),
 ]);
-const children = [user, assistant];
+const children = options.userOnly ? [user] : [user, assistant];
+if (options.duplicateUser) children.splice(1, 0, user.cloneNode());
 for (const control of options.submitControls || []) children.push(el('button', {
   'aria-label':control.label, type:control.type, disabled:control.disabled || false
 }));
@@ -95,10 +101,26 @@ if (options.extraAssistant) children.push(el('div', {'data-content-search-unit-k
 if (options.toolbar !== false) children.push(el('div', {class:'turn-action-controls'}, '', [button('Copy')]));
 if (options.duplicateToolbar) children.push(el('div', {class:'turn-action-controls'}, '', [button('Copy')]));
 const paired = el('div', {'data-content-search-turn-key':'fallback-turn-0'}, '', children);
+if (options.bareUser) {
+  delete user.attrs['data-content-search-unit-key'];
+  delete paired.attrs['data-content-search-turn-key'];
+}
 global.document = el('document', {}, '', [paired]);
 global.window = {getComputedStyle: () => ({visibility:'visible', display:'block'})};
+global.location = {href:options.location || 'https://chatgpt.com/c/current-dom'};
+let mutations = 0;
+if (options.traceMutations) {
+  const editor = el('div', {id:'prompt-textarea', contenteditable:'true'}, 'owned draft');
+  editor.isContentEditable = true;
+  editor.focus = () => {mutations++;};
+  document.children.push(editor);
+  document.createRange = () => ({selectNodeContents:() => {}});
+  window.getSelection = () => ({removeAllRanges:() => {}, addRange:() => {}});
+  document.execCommand = () => {mutations++; return true;};
+}
 global.Node = {DOCUMENT_POSITION_FOLLOWING:4};
-process.stdout.write(JSON.stringify(eval(fs.readFileSync(0, 'utf8'))));
+const value = eval(fs.readFileSync(0, 'utf8'));
+process.stdout.write(JSON.stringify(options.traceMutations ? {value, mutations} : value));
 """
 
 
@@ -116,7 +138,11 @@ class CurrentDom:
         )
         if result.returncode:
             raise AssertionError(result.stderr)
-        return json.loads(result.stdout)
+        observed = json.loads(result.stdout)
+        if self.options.get("traceMutations"):
+            self.mutations = observed["mutations"]
+            return observed["value"]
+        return observed
 
 
 @unittest.skipUnless(shutil.which("node"), "Node.js required for offline DOM probes")
@@ -158,6 +184,33 @@ class CurrentDomTests(unittest.TestCase):
     def test_current_user_receipt_and_following_assistant_anchor(self):
         self.assertEqual(self.sink.user_message_digests(CurrentDom()), [bridge.digest("exact wake message")])
         self.assertEqual(self.sink.trusted_turn_anchor_state(CurrentDom(), "exact wake message"), (1, 1))
+
+    def test_class_only_user_receipt_agrees_with_snapshot_and_turn_anchor(self):
+        cdp = CurrentDom(userClassOnly=True, answer="exact wake message")
+        observed = self.sink.visible_message_snapshot(cdp)
+        self.assertEqual(observed["messages"][0]["role"], "USER")
+        self.assertEqual(observed["messages"][0]["text"], "exact wake message")
+        self.assertEqual(self.sink.trusted_turn_anchor_state(cdp, "exact wake message"), (1, 1))
+        # An assistant echo of the message must not become a second USER.
+        self.assertEqual(self.sink.user_message_digests(cdp), [bridge.digest("exact wake message")])
+
+    def test_user_representations_do_not_duplicate_but_distinct_turns_do(self):
+        expected = bridge.digest("exact wake message")
+        self.assertEqual(self.sink.user_message_digests(CurrentDom(userMultipleMarkers=True)), [expected])
+        cdp = CurrentDom(userClassOnly=True, duplicateUser=True)
+        self.assertEqual(self.sink.user_message_digests(cdp), [expected, expected])
+        self.assertEqual(self.sink.trusted_turn_anchor_state(cdp, "exact wake message"), (2, 0))
+
+    def test_class_only_user_blocks_home_clear_even_after_prior_checks(self):
+        cdp = CurrentDom(userClassOnly=True, userOnly=True, bareUser=True,
+                         location=bridge.NEW_CONVERSATION_HOME, traceMutations=True)
+        self.assertEqual(self.sink.visible_role_counts(cdp), (1, 0, 0))
+        # Simulate the prior checks passing before a USER mounts. The atomic
+        # clear expression must independently refuse before focusing/deleting.
+        with patch.object(self.sink, "check_typed_home"), self.assertRaisesRegex(
+                bridge.Attention, "BOOTSTRAP_ARCHIVE_CLEAR_UNVERIFIED"):
+            self.sink.clear_archived_home_draft(cdp, "owned draft", "owned draft")
+        self.assertEqual(cdp.mutations, 0)
 
     def test_private_body_shape_diagnostics_contain_no_message_text(self):
         for options, count in (({}, 1), ({"controlsOnly": True}, 0)):

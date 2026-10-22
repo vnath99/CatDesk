@@ -1,5 +1,50 @@
 # CatDesk October 2026 MVP acceptance
 
+## October 21 current operator capabilities and USER representation fix
+
+`TESTED_LOCAL`: the qualified stopped development CLI can read the seven paired
+registrations, all five original projects' separate advisory context estimates,
+and the retained completed fast-canary continuation proof. Original bindings
+and history remain exact. Four existing native development chats remain usable;
+the separately owned Wake2 task passes its full fixed verification profile,
+has a private immutable review package and is checkpointed. No independent Web
+review or automatic next task is inferred from that local qualification.
+
+The subsequent bounded read of an older quarantined attempt still refuses
+exact USER verification and exits cleanly without sending or changing its 81
+protected records. Two new offline DOM tests reproduce a reader disagreement
+for class-based USER bubbles. Receipt/snapshot readers and HOME/atomic-clear
+guards now recognize that representation, matching the existing trusted anchor.
+All 14 DOM cases pass, including assistant echoes, duplicate turns, and refusal
+with zero editor mutations after a USER mounts between the earlier checks and
+the atomic clear. Complete offline Python discovery passes 64 Wake tests and
+233 root tests / one skip. This is `TESTED_LOCAL`, not corrected live verification.
+
+### Three-minute read-only operator demonstration
+
+Run these using the qualified **development** package from its existing control
+workspace; the historical production package is not assumed compatible:
+
+```text
+<qualified-development-CatDeskBinagotchy.exe> operator web status
+<qualified-development-CatDeskBinagotchy.exe> operator web context status --project-id byovd
+<qualified-development-CatDeskBinagotchy.exe> operator web context status --project-id bug-bounty
+<qualified-development-CatDeskBinagotchy.exe> operator web context status --project-id wake2
+<qualified-development-CatDeskBinagotchy.exe> operator web rollover status --project-id catdesk-rollover-fast-canary
+```
+
+These reads demonstrate central durable status without restarting the browser,
+WakeHost or recurring workers. Context estimates remain advisory and history
+coverage incomplete. No send, binding update or rollover is part of this demo.
+The exact package, commands, dated outputs and cleanup belong in the parent
+audit `checkpoints/web-user-units-oct21`; matched package/readback and demo
+execution are separate gates until their actual results are recorded there.
+
+Overall remains `PARTIAL`: protected production installation, productive sibling
+Web work through a rollover, and the natural independent review/next-task cycle
+are unaccepted. Connector access remains a separate HTTP 429 dependency. The
+older quarantine retains its hold; the successful canary is not replayed.
+
 ## October 21 long-message context estimates (SOURCE; LIVE PENDING)
 
 The existing browser snapshot clips each body and bounds its total payload.

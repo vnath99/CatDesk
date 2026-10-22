@@ -612,6 +612,16 @@ class CdpSink:
         script = """(() => {
             const roleUsers = Array.from(document.querySelectorAll(\"[data-message-author-role='user'], article[data-turn='user']:not(:has([data-message-author-role='user']))\"));
             const bubbles = Array.from(document.querySelectorAll('[data-user-message-bubble]'));
+            const classUsers = Array.from(document.querySelectorAll("[class~='group/user-message']"));
+            const semanticUsers = Array.from(document.querySelectorAll('[data-content-search-unit-key]'))
+                .filter(turn => {
+                    const user = "[data-message-author-role='user'], [data-turn='user'], " +
+                        "[data-user-message-bubble], [class~='group/user-message']";
+                    const assistant = "[data-message-author-role='assistant'], [data-turn='assistant'], " +
+                        "h4[data-conversation-role='assistant']";
+                    return (turn.matches(user) || turn.querySelector(user)) &&
+                        !turn.matches(assistant) && !turn.querySelector(assistant);
+                });
             const turnContainers = Array.from(new Set([
                 ...document.querySelectorAll(\"[data-testid^='conversation-turn-']\"),
                 ...document.querySelectorAll(\"article[id^='conversation-turn-']\"),
@@ -623,7 +633,10 @@ class CdpSink:
                     turn.querySelector(\"[data-message-author-role=\'user\'], [data-message-content], .whitespace-pre-wrap\")
                 )
             );
-            const containers = roleUsers.length ? roleUsers : bubbles.length ? bubbles : fallbackUsers;
+            // Use one representation, matching the trusted-anchor reader.
+            // Never merge a semantic unit with its nested bubble/role node.
+            const containers = semanticUsers.length ? semanticUsers : roleUsers.length ? roleUsers :
+                bubbles.length ? bubbles : classUsers.length ? classUsers : fallbackUsers;
             return containers.map(container => {
             const content = container.querySelector(\"[data-message-content], [data-markdown-text-tone='user-message'], .whitespace-pre-wrap\") || container;
             return content.innerText || content.textContent || '';
@@ -2226,7 +2239,7 @@ class NewConversationSink(CdpSink):
                 document.querySelectorAll(selector)
             )).filter(visible).length;
             return [
-                count("[data-message-author-role='user'], article[data-turn='user'], [data-user-message-bubble]"),
+                count("[data-message-author-role='user'], article[data-turn='user'], [data-user-message-bubble], [class~='group/user-message']"),
                 count("[data-message-author-role='assistant'], article[data-turn='assistant'], [data-content-search-unit-key]:has(h4[data-conversation-role='assistant'])"),
                 count("[data-content-search-turn-key], [data-testid^='conversation-turn-'], article[id^='conversation-turn-'], [data-content-search-unit-key]"),
             ];
@@ -2271,7 +2284,8 @@ class NewConversationSink(CdpSink):
                 tier = 'SEMANTIC_UNIT';
                 nodes = Array.from(document.querySelectorAll('[data-content-search-unit-key]'))
                     .filter(node => visible(node) && node.querySelector('h4[data-conversation-role="assistant"]') &&
-                        !node.querySelector('[data-user-message-bubble]'));
+                        !node.matches("[data-user-message-bubble], [class~='group/user-message']") &&
+                        !node.querySelector("[data-user-message-bubble], [class~='group/user-message']"));
             }
             const node = nodes[nodes.length - 1];
             if (!node) return null;
@@ -2331,7 +2345,8 @@ class NewConversationSink(CdpSink):
                 // The current Web UI identifies each message by a search unit,
                 // with the USER bubble or ASSISTANT heading inside it. A paired
                 // wrapper containing both roles must never become one message.
-                const user = Boolean(node.querySelector('[data-user-message-bubble]'));
+                const userSelector = "[data-user-message-bubble], [class~='group/user-message']";
+                const user = node.matches(userSelector) || Boolean(node.querySelector(userSelector));
                 const assistant = Boolean(node.querySelector('h4[data-conversation-role="assistant"]'));
                 return user !== assistant ? (user ? 'user' : 'assistant') : null;
             };
@@ -2642,7 +2657,7 @@ class NewConversationSink(CdpSink):
             if (document.querySelector(
                 '[data-message-author-role="user"], [data-message-author-role="assistant"], '
                 + 'article[data-turn="user"], article[data-turn="assistant"], '
-                + '[data-user-message-bubble], h4[data-conversation-role="assistant"]'
+                + '[data-user-message-bubble], [class~="group/user-message"], h4[data-conversation-role="assistant"]'
             )) return 'UNAVAILABLE';
             const visible = Array.from(document.querySelectorAll(
                 '#prompt-textarea, div.ProseMirror[contenteditable="true"], [contenteditable="true"][data-lexical-editor="true"]'

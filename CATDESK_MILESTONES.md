@@ -1,3 +1,26 @@
+## 2026-10-21 — consistent current USER units (SOURCE)
+
+The qualified hydration observer still refuses the older quarantine candidate;
+its 81 protected records stay exact, its retained root exits and zero scoped
+processes remain. The empty-document timeout does not fire. No completed canary
+is replayed and no message, receipt, retirement or binding change is created.
+
+Two new offline DOM regressions reproduce a separate current-UI disagreement:
+trusted anchors recognize class-based USER bubbles while receipt/snapshot
+readers omit them. Readers now recognize the same USER representation. Receipt
+extraction selects one semantic-unit tier before nested roles/bubbles, excludes
+assistant units even when they echo the exact text, and keeps genuine repeated
+USER turns distinct. Snapshot roles, private body diagnostics, HOME role counts
+and the atomic draft-clear guard also recognize the class-based marker.
+
+The final 14 DOM cases pass. A class-only USER mounting after the prior clear
+checks refuses inside the atomic expression with zero focus/delete mutations.
+Complete offline Python regression passes 64 Wake tests and 233 root tests /
+one skip. Normal package qualification and corrected live inspection remain
+separate gates. These fixtures do not establish the live
+candidate's actual DOM shape or grant recovery authority.
+Parent dated evidence: checkpoints/web-user-units-oct21.
+
 ## 2026-10-21 — bounded empty-document observation (SOURCE)
 
 The second read-only inspection returns the compact code
