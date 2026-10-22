@@ -52,12 +52,35 @@ allowlist; this log contains sanitized summaries only.
   action/test logs and runtime metadata; existing dated stop-guard and binding
   receipts remain private. No runtime artifact is staged for publication.
 - **Publication:** public `https://github.com/vnath99/CatDesk`, branch
-  `codex/web-rollover-oct17`. Pending the source/privacy review and test gate;
-  no new push is claimed by this entry. Exact remote SHA/checks follow below.
+  `codex/web-rollover-oct17`; reviewed source commit and exact remote readback
+  follow below. No private runtime artifact is included.
 
 ### Verification and publication readback
 
 The source-file hashes and exact local check results are recorded in
 [`verification/C2_WEB_CONSOLE_2026_10_22.json`](verification/C2_WEB_CONSOLE_2026_10_22.json).
-Publication readback follows after the reviewed source commit. Source changes
-are not installed acceptance.
+At **2026-10-22T20:42:29Z**, normal push succeeded and `git ls-remote` returned
+exactly **`d719658abe4f0d628c66b2a0543f38d16e5496d4`** on
+`refs/heads/codex/web-rollover-oct17`:
+[published source commit](https://github.com/vnath99/CatDesk/commit/d719658abe4f0d628c66b2a0543f38d16e5496d4).
+The working tree was clean and all four qualified source-file hashes matched.
+Review covered the ten-path source/documentation allowlist; credential patterns,
+real conversation URLs and machine-path checks found no added sensitive content.
+Synthetic privacy-test values are fixtures, not real project data. No binaries,
+profiles, logs or protected runtime state were staged.
+
+Authenticated GitHub readback for that exact SHA returned **0 workflow runs and
+0 check runs**. Remote CI acceptance is **UNVERIFIED**, not passing. No manual
+dispatch, account/Actions setting change, visibility change or tunnel operation
+was attempted. The earlier workflow lacks `workflow_dispatch`; the historical
+422 text and absent raw response do not establish an administrative or billing
+diagnosis. A documentation receipt commit may follow this source commit without
+changing its tested source tree.
+
+**Next executable task:** build/qualify the normal development executable and
+exercise its existing read-only status against the preserved control workspace,
+without changing the selected package, starting services or replaying events.
+The new interactive console view still needs normal package/installed acceptance;
+legacy console startup is not presumed free of initialization writes. Source
+changes and remote publication are not installed acceptance. No operator action
+is required for the next offline build/read-only qualification work.

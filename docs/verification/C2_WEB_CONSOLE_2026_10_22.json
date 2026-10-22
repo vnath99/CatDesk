@@ -74,5 +74,16 @@
   "wakeHostStarted": false,
   "productionModified": false,
   "remote": "https://github.com/vnath99/CatDesk",
-  "publication": "Pending exact source commit and remote readback; no CI success inferred"
+  "publication": {
+    "observedUtc": "2026-10-22T20:42:29.8841254Z",
+    "status": "PUSHED_EXACT_REMOTE_MATCH",
+    "sourceCommit": "d719658abe4f0d628c66b2a0543f38d16e5496d4",
+    "remoteSha": "d719658abe4f0d628c66b2a0543f38d16e5496d4",
+    "branch": "codex/web-rollover-oct17",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ciAcceptance": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false
+  }
 }
