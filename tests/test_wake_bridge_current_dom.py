@@ -72,7 +72,7 @@ const el = (tag, attrs = {}, text = '', children = []) => new Element(tag, attrs
 const button = label => el('button', {'aria-label':label}, label);
 const user = el('div', {'data-content-search-unit-key':'fallback-turn-0:0:user'}, '', [
   el('div', options.userClassOnly ? {class:'group/user-message'} : {'data-user-message-bubble':'true'}, '', [
-    el('div', options.userBodyClass ? {class:'whitespace-pre-wrap'} : {'data-markdown-text-tone':'user-message'}, 'exact wake message'),
+    el('div', options.userBodyClass ? {class:'whitespace-pre-wrap'} : {'data-markdown-text-tone':'user-message'}, options.userText ?? 'exact wake message'),
     el('div', {class:'turn-action-controls'}, '', [button(options.userCopy || 'Copy message')]),
   ]),
 ]);
@@ -211,6 +211,34 @@ class CurrentDomTests(unittest.TestCase):
                 bridge.Attention, "BOOTSTRAP_ARCHIVE_CLEAR_UNVERIFIED"):
             self.sink.clear_archived_home_draft(cdp, "owned draft", "owned draft")
         self.assertEqual(cdp.mutations, 0)
+
+    def test_observer_classifies_actual_dom_mismatch_without_positive_evidence(self):
+        header = "CatDesk bootstrap.\nProject: alpha\nIntent: owned\nPredecessor: exact"
+        message = header + "\n\nPRIVATE_EXPECTED_HANDOFF"
+        for text, duplicate, reason in (
+            (header + "\n\nchanged body", False, "RESPONSE_EXPECTED_USER_BODY_MISMATCH"),
+            (header.replace("Intent: owned", "Intent: other") + "\n\nchanged body", False,
+             "RESPONSE_EXPECTED_USER_NOT_FOUND"),
+            (message, True, "RESPONSE_EXPECTED_USER_DUPLICATED"),
+        ):
+            cdp = CurrentDom(userClassOnly=True, userText=text, duplicateUser=duplicate)
+            with self.subTest(reason=reason), patch.object(
+                self.sink, "post_submit_visible_any", return_value=False
+            ), patch.object(self.sink, "document_ready_state", return_value="complete"), \
+                    patch.object(self.sink, "response_snapshot", side_effect=AssertionError("must refuse before assistant")), \
+                    self.assertRaisesRegex(bridge.Attention, reason) as error:
+                self.sink.observe_cooperative_response(cdp, message, bridge.digest(bridge.normalize_message(message)))
+            self.assertNotIn("PRIVATE_EXPECTED_HANDOFF", str(error.exception))
+
+    def test_exact_dom_response_completion_does_not_enter_mismatch_diagnostics(self):
+        with patch.object(self.sink, "post_submit_visible_any", return_value=False), patch.object(
+            self.sink, "document_ready_state", return_value="complete"
+        ), patch.object(self.sink, "editor_state", return_value=("ready", True)), patch.object(
+            self.sink, "missing_user_reason", side_effect=AssertionError("exact message must not enter diagnostic")
+        ):
+            self.assertEqual(self.sink.observe_cooperative_response(
+                CurrentDom(userClassOnly=True), "exact wake message", bridge.digest("exact wake message")),
+                "RESPONSE_COMPLETE")
 
     def test_private_body_shape_diagnostics_contain_no_message_text(self):
         for options, count in (({}, 1), ({"controlsOnly": True}, 0)):

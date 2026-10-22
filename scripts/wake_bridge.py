@@ -604,7 +604,7 @@ class CdpSink:
             return "count", False
         raise Attention("EDITOR_SELECTOR")
     @staticmethod
-    def user_message_digests(cdp: Any) -> list[str]:
+    def _user_message_texts(cdp: Any) -> list[str]:
         # Query only dedicated USER message containers, never the whole page.
         # ChatGPT puts message controls beside/inside the author container on
         # some current surfaces; hash the dedicated message-content node when
@@ -643,10 +643,50 @@ class CdpSink:
             });
         })()"""
         try:
-            value = CdpSink.bounded_cdp_strings(cdp.evaluate(script))
-            return [digest(normalize_message(item)) for item in value]
+            return CdpSink.bounded_cdp_strings(cdp.evaluate(script))
         except Exception as error:
             raise Attention("USER_MESSAGE_RECEIPT") from error
+
+    @staticmethod
+    def user_message_digests(cdp: Any) -> list[str]:
+        try:
+            return [digest(normalize_message(item)) for item in CdpSink._user_message_texts(cdp)]
+        except Exception as error:
+            raise Attention("USER_MESSAGE_RECEIPT") from error
+
+    def missing_user_reason(self, cdp: Any, message: str, observed_digests: list[str]) -> str:
+        """Classify a refusal only; a matching scope header is never a receipt.
+
+        Reuse the bounded private USER reader without emitting text. Generic
+        single-line Wake messages have no structured bootstrap header to check.
+        """
+        if "\n\n" not in message:
+            return "RESPONSE_EXPECTED_USER_NOT_FOUND"
+        try:
+            current_url = str(cdp.get_current_url())
+        except Exception:
+            return "RESPONSE_TARGET_QUERY_FAILED"
+        if not self.exact(current_url):
+            return "RESPONSE_TARGET_DRIFT"
+        try:
+            texts = self._user_message_texts(cdp)
+            current = [digest(normalize_message(text)) for text in texts]
+        except Exception:
+            return "RESPONSE_SEQUENCE_QUERY_FAILED"
+        try:
+            current_url = str(cdp.get_current_url())
+        except Exception:
+            return "RESPONSE_TARGET_QUERY_FAILED"
+        if not self.exact(current_url):
+            return "RESPONSE_TARGET_DRIFT"
+        if current != observed_digests:
+            return "RESPONSE_USER_VIEW_CHANGED"
+        header = normalize_message(message.split("\n\n", 1)[0])
+        latest = normalize_message(texts[-1]) if texts else ""
+        if header and (latest == header or latest.startswith(header + " ")):
+            return "RESPONSE_EXPECTED_USER_BODY_MISMATCH"
+        return "RESPONSE_EXPECTED_USER_NOT_FOUND"
+
     @staticmethod
     def trusted_turn_anchor_state(cdp: Any, message: str) -> tuple[int, int]:
         """Return exact wake-turn match count and trusted turns after it."""
@@ -1212,8 +1252,13 @@ class CdpSink:
         # A nonempty wrong/duplicate view must still fail immediately.
         if not users and count == 0:
             raise Attention("RESPONSE_USER_DOCUMENT_NOT_HYDRATED")
-        if users.count(expected_digest) != 1 or not users:
-            raise Attention("RESPONSE_EXACT_USER_MISSING_OR_AMBIGUOUS")
+        matches = users.count(expected_digest)
+        if matches > 1:
+            raise Attention("RESPONSE_EXPECTED_USER_DUPLICATED")
+        if matches == 0:
+            if count > 0:
+                raise Attention("RESPONSE_USER_REPRESENTATION_MISMATCH")
+            raise Attention(self.missing_user_reason(cdp, message, users))
         if users[-1] != expected_digest or count != 1 or turns_after > 1:
             raise Attention("RESPONSE_SEQUENCE_DRIFT")
         if self.post_submit_visible_any(cdp, STOP):

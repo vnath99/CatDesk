@@ -1,3 +1,25 @@
+## 2026-10-21 — precise read-only USER refusal diagnostics (SOURCE)
+
+Cooperative observation now separates missing expected USER text, duplicate
+exact USER messages and disagreement between body and trusted-anchor readers.
+For a multiline bootstrap with no exact match, one additional bounded private
+USER read can distinguish a matching full scope header with a different body.
+The second read must retain the exact target and the same digest list; query
+failure, target drift or a changing view returns a fixed refusal code.
+
+Header matching creates no positive USER/assistant proof, receipt, send time,
+binding update, retirement or continuation authority. It never retries a send,
+clicks controls, changes a composer or exports text. The existing empty-document
+hydration wait remains the only transient refusal retried within that probe.
+An exact completed DOM response still follows the original completion path.
+
+The complete offline Wake suite passes 66 cases, and actual DOM query/observer
+tests pass 16. Complete root Python discovery passes 235 cases / one skip under
+a ten-minute cap, retaining unchanged hashes for all three code/test files.
+Matched package/live qualification remains separate. Existing five project bindings/history, completed canary,
+native sessions and stopped runtime controls are preserved.
+Parent dated evidence: checkpoints/web-user-mismatch-oct21.
+
 ## 2026-10-21 — consistent current USER units (SOURCE)
 
 The qualified hydration observer still refuses the older quarantine candidate;

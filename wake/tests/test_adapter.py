@@ -235,7 +235,10 @@ class AdapterTests(unittest.TestCase):
 
     def test_response_wait_never_retries_scope_or_nonempty_user_failures(self):
         for reason in ("RESPONSE_TARGET_DRIFT", "LOGIN_OR_PROFILE_REQUIRED",
-                       "RESPONSE_EXACT_USER_MISSING_OR_AMBIGUOUS", "RESPONSE_SEQUENCE_DRIFT"):
+                       "RESPONSE_EXACT_USER_MISSING_OR_AMBIGUOUS", "RESPONSE_SEQUENCE_DRIFT",
+                       "RESPONSE_EXPECTED_USER_DUPLICATED", "RESPONSE_USER_REPRESENTATION_MISMATCH",
+                       "RESPONSE_EXPECTED_USER_NOT_FOUND", "RESPONSE_USER_VIEW_CHANGED",
+                       "RESPONSE_EXPECTED_USER_BODY_MISMATCH"):
             with self.subTest(reason=reason):
                 sink = types.SimpleNamespace(observe_cooperative_response=lambda *args: None)
                 with patch.object(sink, "observe_cooperative_response", side_effect=bridge.Attention(reason)) as sample:
@@ -258,9 +261,10 @@ class AdapterTests(unittest.TestCase):
             sink = bridge.CdpSink(cdp.url, Path(profile), 1, 1)
             for users, anchor, reason in (
                 ([], (0, 0), "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"),
-                ([], (1, 0), "RESPONSE_EXACT_USER_MISSING_OR_AMBIGUOUS"),
-                (["0" * 64], (0, 0), "RESPONSE_EXACT_USER_MISSING_OR_AMBIGUOUS"),
-                ([expected, expected], (2, 0), "RESPONSE_EXACT_USER_MISSING_OR_AMBIGUOUS"),
+                ([], (1, 0), "RESPONSE_USER_REPRESENTATION_MISMATCH"),
+                (["0" * 64], (0, 0), "RESPONSE_EXPECTED_USER_NOT_FOUND"),
+                (["0" * 64], (1, 0), "RESPONSE_USER_REPRESENTATION_MISMATCH"),
+                ([expected, expected], (2, 0), "RESPONSE_EXPECTED_USER_DUPLICATED"),
             ):
                 with self.subTest(users=users, anchor=anchor), patch.object(
                     bridge.CdpSink, "post_submit_visible_any", return_value=False
@@ -281,6 +285,54 @@ class AdapterTests(unittest.TestCase):
             "sentUtc": 99, "evidence": "EXACT_USER_MESSAGE_APPENDED",
         }
         return {"observeResponse": True, "event": event, "target": target, "receipt": receipt}
+
+    def test_missing_user_scope_hint_is_bounded_read_only_and_not_positive_evidence(self):
+        header = "CatDesk bootstrap.\nProject: alpha\nIntent: owned-intent\nPredecessor: exact"
+        message = header + "\n\nPRIVATE_HANDOFF_EXPECTED"
+        for texts, reason in (
+            ([header + " changed body"], "RESPONSE_EXPECTED_USER_BODY_MISMATCH"),
+            ([header], "RESPONSE_EXPECTED_USER_BODY_MISMATCH"),
+            ([header.replace("owned-intent", "other-intent") + " changed body"], "RESPONSE_EXPECTED_USER_NOT_FOUND"),
+        ):
+            with self.subTest(reason=reason), tempfile.TemporaryDirectory() as profile:
+                cdp = FakeCdp()
+                sink = bridge.CdpSink(cdp.url, Path(profile), 1, 1)
+                observed = [bridge.digest(bridge.normalize_message(text)) for text in texts]
+                with patch.object(sink, "post_submit_visible_any", return_value=False), patch.object(
+                    sink, "document_ready_state", return_value="complete"
+                ), patch.object(sink, "user_message_digests", return_value=observed), patch.object(
+                    sink, "trusted_turn_anchor_state", return_value=(0, 0)
+                ), patch.object(sink, "_user_message_texts", return_value=texts) as reader, patch.object(
+                    sink, "response_snapshot", side_effect=AssertionError("scope hint must not read/promote assistant")
+                ), self.assertRaisesRegex(bridge.Attention, reason) as error:
+                    adapter.bounded_response_observation(
+                        bridge, sink, cdp, message, bridge.digest(bridge.normalize_message(message)),
+                        clock=lambda: 0, sleep=lambda _: self.fail("mismatch must not wait"))
+                self.assertEqual(reader.call_count, 1)
+                self.assertNotIn("PRIVATE_HANDOFF", str(error.exception))
+                self.assertFalse(cdp.sent)
+                self.assertEqual(cdp.keys, [])
+
+    def test_scope_hint_refuses_changed_view_drift_and_private_query_errors(self):
+        message = "exact header\n\nPRIVATE_HANDOFF_EXPECTED"
+        with tempfile.TemporaryDirectory() as profile:
+            cdp = FakeCdp()
+            sink = bridge.CdpSink(cdp.url, Path(profile), 1, 1)
+            texts = ["exact header changed body"]
+            with patch.object(sink, "_user_message_texts", return_value=texts):
+                self.assertEqual(sink.missing_user_reason(cdp, message, ["0" * 64]), "RESPONSE_USER_VIEW_CHANGED")
+            with patch.object(sink, "_user_message_texts", side_effect=RuntimeError("PRIVATE_HANDOFF error")):
+                self.assertEqual(sink.missing_user_reason(cdp, message, []), "RESPONSE_SEQUENCE_QUERY_FAILED")
+            def drift(_cdp):
+                cdp.url = "https://chatgpt.com/c/foreign"
+                return texts
+            with patch.object(sink, "_user_message_texts", side_effect=drift):
+                self.assertEqual(sink.missing_user_reason(cdp, message, []), "RESPONSE_TARGET_DRIFT")
+            cdp.url = sink.url
+            with patch.object(cdp, "get_current_url", side_effect=RuntimeError("PRIVATE_TARGET")):
+                self.assertEqual(sink.missing_user_reason(cdp, message, []), "RESPONSE_TARGET_QUERY_FAILED")
+            with patch.object(sink, "_user_message_texts", side_effect=AssertionError("single-line hint must not query")):
+                self.assertEqual(sink.missing_user_reason(cdp, "one line", []), "RESPONSE_EXPECTED_USER_NOT_FOUND")
 
     def test_initial_navigation_enters_cdp_directly_on_same_exact_url(self):
         cdp = FakeCdp()

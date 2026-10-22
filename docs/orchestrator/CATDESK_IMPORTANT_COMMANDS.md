@@ -1449,3 +1449,23 @@ pytest tests/test_wake_smoke_state.py -q
 ```
 
 Root pytest configuration must add the workspace root to `pythonpath` so `experimental.advisors` resolves under the console-script `pytest` entrypoint. `tests/test_stable_wake_browser_adapter.py` must unit-test version-controlled `scripts/stable_wake_browser_adapter.py`, **not** assume that the separately installed `.catdesk/wake-bridge/stable-runtime-v1` exists. The installed adapter's provenance, SHA, presence, and browser acceptance remain independent release gates: passing source tests does **not** attest or install that runtime. A 30-second `verify_project` timeout is not equivalent to a test failure; the receipt test subset alone can take over 20 seconds. Preserve full-suite verification status separately from focused results.
+## Current read-only USER mismatch codes
+
+The existing `operator web rollover inspect-quarantine --project-id PROJECT
+--expected-intent-id INTENT` reads the active saved candidate. These compact
+refusal codes carry no message text or recovery authority:
+
+| Code | Observation |
+| --- | --- |
+| `RESPONSE_EXPECTED_USER_NOT_FOUND` | No exact message or trusted full-message anchor; no complete matching bootstrap header was verified. |
+| `RESPONSE_EXPECTED_USER_DUPLICATED` | Multiple exact USER digests are present. |
+| `RESPONSE_USER_REPRESENTATION_MISMATCH` | Trusted anchors see the expected text while the dedicated USER reader does not. |
+| `RESPONSE_EXPECTED_USER_BODY_MISMATCH` | The latest USER has the complete expected bootstrap header, but its full normalized body differs. |
+| `RESPONSE_USER_VIEW_CHANGED` | The additional private read changed the digest list; the hint is discarded. |
+| `RESPONSE_USER_DOCUMENT_NOT_HYDRATED` | Both USER and anchor views remain empty at the existing bounded wait deadline. |
+
+All preserve the quarantine and saved receipt/binding state. Body mismatch can
+reflect altered or incomplete UI text; it does not establish its cause. Matching
+only a header cannot authorize continuation. Target/query failures retain their
+existing fixed refusal codes. Package/live evidence is recorded separately from
+source fixtures in the parent dated audit.
