@@ -368,3 +368,20 @@ action is needed, and no recurring browser/Wake restart or canary replay occurs.
   needed for the next source qualification. Goal ACTIVE / overall PARTIAL.
 - **Publication:** LOCAL_ONLY / NOT_PUSHED until exact allowlist, source hash
   and secret/privacy checks; exact pushed SHA/CI are recorded after publication.
+
+### Context observation-age source publication
+
+At **2026-10-22T22:42:11Z**, normal push and authenticated readback confirm
+**`9a0047644cd103afe1b1b678e445d53e5ebe8cfd`** on
+`refs/heads/codex/web-rollover-oct17`:
+[published context-age source](https://github.com/vnath99/CatDesk/commit/9a0047644cd103afe1b1b678e445d53e5ebe8cfd).
+All seven allowlisted source/documentation paths pass secret/privacy/binary
+review and the final source hash matches the tested file. Exact remote matches
+local; tree clean. No credentials, private URLs, raw identifiers, machine paths,
+profiles, protected state or raw logs are included.
+
+Exact-SHA GitHub readback returns **0 workflow runs and 0 check runs**; CI remains
+**UNVERIFIED**. No dispatch or account/repository setting change. Subsequent
+receipt publication changes documentation only. Normal app/package qualification
+of this display increment remains next; no installed/live proof is inferred.
+Goal remains ACTIVE/PARTIAL, and no operator action is needed for this next task.

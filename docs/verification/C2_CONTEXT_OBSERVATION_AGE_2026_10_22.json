@@ -86,9 +86,16 @@
   "nextExecutableTask": "Build normal app candidate for bounded read-only observation-age view; preserve selected prior package until qualified",
   "operatorActionRequired": false,
   "publication": {
-    "status": "LOCAL_ONLY_NOT_PUSHED",
-    "remote": "https://github.com/vnath99/CatDesk",
+    "observedUtc": "2026-10-22T22:42:11.8521275Z",
+    "status": "PUSHED_EXACT_REMOTE_MATCH",
+    "sourceCommit": "9a0047644cd103afe1b1b678e445d53e5ebe8cfd",
+    "remoteSha": "9a0047644cd103afe1b1b678e445d53e5ebe8cfd",
     "branch": "codex/web-rollover-oct17",
-    "ci": "UNVERIFIED"
+    "remote": "https://github.com/vnath99/CatDesk",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false
   }
 }
