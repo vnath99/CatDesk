@@ -1,3 +1,16 @@
+## 2026-10-22 — guarded local Web work commands (SOURCE / TESTED_LOCAL)
+
+Added operator CLI request/resolve commands using the existing Web handlers,
+strict JSON schema and exact command/file project agreement. No listener,
+scheduler, browser, host or native session start is needed for local publication.
+Twelve CLI tests and three Web integration tests pass, including shared
+CLI/direct/MCP isolation and original-witness resolution after target change;
+strict Clippy/format pass. Normal app refusal checks preserve 132 real records
+exactly and queue nothing. Positive publication remains fixture-only; qualify
+normal release/selected package next. Existing v44, live hold, primary quarantine,
+five bindings/history and canary are preserved. See the
+[execution log](docs/OCT22_31_EXECUTION_LOG.md).
+
 ## 2026-10-22 — bounded real-review controller (PREPARED / LOCAL CHECKS)
 
 The private controller uses existing publication/foreground ownership and is

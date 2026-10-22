@@ -7,6 +7,17 @@ surface.
 
 ## Current checkpoint — 2026-10-22
 
+Continued eligible C2 source work while the live exception is pending: the local
+Web work CLI now calls the existing request/resolve handlers from exact-project
+JSON input, requiring no temporary MCP listener. Twelve CLI/three integration
+tests, strict Clippy/format and a normal app's three refusal checks pass; 132
+real metadata records stay exact and no events/services start. Positive queue
+proof remains disposable-fixture only. Qualify its normal release/package next;
+the selected prior v44 is unchanged. Existing prepared live review is still held.
+The latest one-shot connector check, after 96 minutes, fails in OpenAI MCP backend
+transport without an HTTP status; earlier 429 is the last explicit HTTP result,
+not proof of recovery. No retry, settings/tunnel or production change occurs.
+
 ### Real-review controller — locally checked, live branch unexecuted
 
 The private bounded controller is prepared using the existing publisher and

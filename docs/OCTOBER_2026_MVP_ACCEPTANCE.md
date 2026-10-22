@@ -2,6 +2,23 @@
 
 ## October 22 acceptance reconciliation
 
+### Web work operator CLI — SOURCE / local fixture and negative app proof
+
+`operator web work request/resolve --project-id ... --input-file ...` now call
+the existing guarded handlers directly. They require command/file project
+agreement and start no listener, browser, host or native writer. This allows
+local operator queue coordination without a temporary MCP server. Connector
+availability and actual ChatGPT tool exposure remain separate installed gates.
+
+Twelve CLI and three Web integration tests, strict Clippy and formatting pass.
+The integration fixture covers three independent CLI/direct/MCP routes and
+original-witness resolution after target rollover. A normal app's three real-root
+refusal checks pass in 3.06s with 132 records exact, no new state or processes:
+request/resolve scope mismatch and preserved primary quarantine. No real request
+is queued. Positive publication is fixture-only; normal release and selected
+package qualification for the new commands remain OPEN. Existing v44 is retained.
+See the [sanitized receipt](verification/C2_WEB_WORK_OPERATOR_CLI_2026_10_22.json).
+
 ### Real-review controller — locally checked, live branch unexecuted
 
 The private bounded controller is prepared using the existing publisher and

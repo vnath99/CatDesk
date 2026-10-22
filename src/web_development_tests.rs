@@ -417,6 +417,30 @@ async fn web_action_result(control: &Path, args: &[&str]) -> Result<serde_json::
     operator_facade::execute_operator_action(action, control).await
 }
 
+async fn web_work_file_action(
+    control: &Path,
+    input_file: &Path,
+    project: &str,
+    verb: &str,
+    input: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    fs::write(input_file, serde_json::to_vec(input).unwrap()).unwrap();
+    web_action_result(
+        control,
+        &[
+            "operator",
+            "web",
+            "work",
+            verb,
+            "--project-id",
+            project,
+            "--input-file",
+            input_file.to_str().unwrap(),
+        ],
+    )
+    .await
+}
+
 fn tree_snapshot(root: &Path) -> Vec<(PathBuf, String)> {
     let mut snapshot = Vec::new();
     for entry in fs::read_dir(root).unwrap() {
@@ -852,6 +876,33 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
         );
     }
 
+    let work_input_file = parent.join("operator-work-input.json");
+    let before_scope_refusal = tree_snapshot(&control);
+    for verb in ["request", "resolve"] {
+        assert_eq!(
+            web_work_file_action(
+                &control,
+                &work_input_file,
+                "alpha",
+                verb,
+                &arguments("beta", "wrong-file-project"),
+            )
+            .await
+            .unwrap_err(),
+            "WEB_WORK_PROJECT_SCOPE_MISMATCH"
+        );
+        assert_eq!(tree_snapshot(&control), before_scope_refusal);
+    }
+    let mut overridden = arguments("alpha", "scope-override");
+    overridden["workspace"] = json!("private-scope-override");
+    assert_eq!(
+        web_work_file_action(&control, &work_input_file, "alpha", "request", &overridden)
+            .await
+            .unwrap_err(),
+        "WEB_WORK_ARGUMENTS_INVALID"
+    );
+    assert_eq!(tree_snapshot(&control), before_scope_refusal);
+
     let mut event_ids = std::collections::BTreeSet::new();
     for (project, _) in &projects {
         let input = arguments(project, "same-request-id");
@@ -866,6 +917,10 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
             .await;
             assert_ne!(response["result"]["isError"], true);
             response["result"]["structuredContent"].clone()
+        } else if *project == "alpha" {
+            web_work_file_action(&control, &work_input_file, project, "request", &input)
+                .await
+                .unwrap()
         } else {
             crate::web_work::request(&control, input.clone()).unwrap()
         };
@@ -884,6 +939,10 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
             .await;
             assert_ne!(response["result"]["isError"], true);
             response["result"]["structuredContent"].clone()
+        } else if *project == "alpha" {
+            web_work_file_action(&control, &work_input_file, project, "request", &input)
+                .await
+                .unwrap()
         } else {
             crate::web_work::request(&control, input.clone()).unwrap()
         };
@@ -906,6 +965,25 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
             .await;
             assert_eq!(response["result"]["isError"], true);
             assert!(response.to_string().contains("WEB_WORK_ACTIVE_REQUEST"));
+        } else if *project == "alpha" {
+            assert_eq!(
+                web_work_file_action(&control, &work_input_file, project, "request", &conflict)
+                    .await
+                    .unwrap_err(),
+                "WEB_WORK_REQUEST_CONFLICT"
+            );
+            assert_eq!(
+                web_work_file_action(
+                    &control,
+                    &work_input_file,
+                    project,
+                    "request",
+                    &arguments(project, "another-task"),
+                )
+                .await
+                .unwrap_err(),
+                "WEB_WORK_ACTIVE_REQUEST"
+            );
         } else {
             assert_eq!(
                 crate::web_work::request(&control, conflict).unwrap_err(),
@@ -1160,10 +1238,26 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
         crate::web_work::resolve(&control, new_witness).unwrap_err(),
         "WEB_WORK_TARGET_CHANGED"
     );
-    let closed = crate::web_work::resolve(&control, resolution("catdesk", "completed")).unwrap();
+    let closed = web_work_file_action(
+        &control,
+        &work_input_file,
+        "catdesk",
+        "resolve",
+        &resolution("catdesk", "completed"),
+    )
+    .await
+    .unwrap();
     assert_eq!(closed["taskCompletionVerified"], false);
     assert_eq!(
-        crate::web_work::resolve(&control, resolution("catdesk", "completed")).unwrap(),
+        web_work_file_action(
+            &control,
+            &work_input_file,
+            "catdesk",
+            "resolve",
+            &resolution("catdesk", "completed"),
+        )
+        .await
+        .unwrap(),
         closed
     );
     let mut wrong_resolution = resolution("alpha", "retired");

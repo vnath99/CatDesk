@@ -76,6 +76,14 @@ pub(crate) enum WebAction {
         project_id: String,
         event_id: String,
     },
+    WorkRequest {
+        project_id: String,
+        input_file: PathBuf,
+    },
+    WorkResolve {
+        project_id: String,
+        input_file: PathBuf,
+    },
     ContextConfigure {
         project_id: String,
         input_file: PathBuf,
@@ -162,6 +170,26 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         return Err("WEB_USAGE: invalid project ID".into());
     }
     match (group, verb) {
+        ("work", "request" | "resolve") => {
+            let input_file = options
+                .remove("--input-file")
+                .filter(|path| !path.is_empty())
+                .ok_or("WEB_USAGE: --input-file is required")?;
+            if !options.is_empty() {
+                return Err("WEB_USAGE: unexpected work option".into());
+            }
+            if verb == "request" {
+                Ok(WebAction::WorkRequest {
+                    project_id: project_id.into(),
+                    input_file: input_file.into(),
+                })
+            } else {
+                Ok(WebAction::WorkResolve {
+                    project_id: project_id.into(),
+                    input_file: input_file.into(),
+                })
+            }
+        }
         ("project", "register") => {
             let candidate = options
                 .remove("--workspace")
@@ -381,6 +409,14 @@ fn read_input<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> 
         return Err("WEB_INPUT_TOO_LARGE".into());
     }
     serde_json::from_slice(&bytes).map_err(|_| "WEB_INPUT_INVALID".into())
+}
+
+fn read_work_input(path: &Path, project_id: &str) -> Result<Value, String> {
+    let input: Value = read_input(path)?;
+    if input.get("projectId").and_then(Value::as_str) != Some(project_id) {
+        return Err("WEB_WORK_PROJECT_SCOPE_MISMATCH".into());
+    }
+    Ok(input)
 }
 
 #[derive(Deserialize)]
@@ -899,6 +935,14 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             event_id,
         } => read_review(&workspace, &project_id, &event_id),
+        WebAction::WorkRequest {
+            project_id,
+            input_file,
+        } => crate::web_work::request(&workspace, read_work_input(&input_file, &project_id)?),
+        WebAction::WorkResolve {
+            project_id,
+            input_file,
+        } => crate::web_work::resolve(&workspace, read_work_input(&input_file, &project_id)?),
         WebAction::ContextConfigure {
             project_id,
             input_file,
@@ -998,6 +1042,52 @@ mod tests {
     use super::*;
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|v| (*v).into()).collect()
+    }
+
+    #[test]
+    fn work_commands_require_exact_project_and_input_without_scope_overrides() {
+        for verb in ["request", "resolve"] {
+            let command = args(&[
+                "operator",
+                "web",
+                "work",
+                verb,
+                "--project-id",
+                "alpha",
+                "--input-file",
+                "work.json",
+            ]);
+            let parsed = parse(&command).unwrap();
+            assert_eq!(
+                parsed,
+                if verb == "request" {
+                    WebAction::WorkRequest {
+                        project_id: "alpha".into(),
+                        input_file: "work.json".into(),
+                    }
+                } else {
+                    WebAction::WorkResolve {
+                        project_id: "alpha".into(),
+                        input_file: "work.json".into(),
+                    }
+                }
+            );
+            assert!(parse(&command[..6]).is_err());
+            for (option, value) in [
+                ("--project-id", "beta"),
+                ("--input-file", "other.json"),
+                ("--workspace", "private-workspace"),
+                ("--conversation-url", "private-target"),
+                ("--force", "true"),
+            ] {
+                let mut invalid = command.clone();
+                invalid.extend(args(&[option, value]));
+                assert!(parse(&invalid).is_err());
+            }
+            let mut empty = command;
+            empty.last_mut().unwrap().clear();
+            assert!(parse(&empty).is_err());
+        }
     }
 
     #[test]

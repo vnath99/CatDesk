@@ -1,5 +1,34 @@
 # CatDesk — Important Command Reference
 
+## October 22 Web work request/resolution CLI (SOURCE / TESTED_LOCAL)
+
+Use a qualified new executable for local operator publication/resolution:
+
+```text
+<qualified-catdesk.exe> operator web work request --project-id PROJECT --input-file REQUEST.json
+<qualified-catdesk.exe> operator web work resolve --project-id PROJECT --input-file RESOLUTION.json
+```
+
+The JSON `projectId` must exactly match the command. The existing bounded JSON
+reader and shared work handlers retain strict schema, paired target, generation,
+rollover, registration, idempotency and conflict checks. No target URL/workspace
+override or force option exists. Normal refusal output contains a fixed code,
+without the task or input path. Inputs use the same schema as the Web work tools:
+
+| Action | Required JSON fields |
+| --- | --- |
+| request | `projectId`, `requestId`, `expectedTargetGeneration`, `expectedTargetSha256`, `taskText` |
+| resolve | Same intent scope, plus `outcome` (`completed` or `retired`) and `summary`; no `taskText` |
+
+A new request uses the current paired target witness. Resolution uses the
+intent's original witness, including after a target changes. Request enqueues
+the real guarded work event; an already running Wake can deliver it. Neither
+command starts a listener, browser, host, scheduler or native session. Resolution
+retains receipt/response/pre-submit-retirement requirements; reported completion
+does not become independently verified task completion. Existing primary
+quarantine remains effective. The selected prior package lacks these commands;
+normal release/selected-package qualification is still OPEN for this increment.
+
 ## October 22 selected observation-age view
 
 The later normal app and selected STOPPED development release both qualify the

@@ -573,3 +573,50 @@ documentation only. Live execution remains pending the explicit stop-rule
 exception, not authorized by preparation; no queued event/browser/host start.
 The complete goal remains ACTIVE/PARTIAL, with accepted canary and sibling
 implementation ownership preserved.
+
+## 2026-10-22 — guarded Web work operator CLI
+
+- **Owner/source:** existing CatDesk developer; `codex/web-rollover-oct17`, base
+  `4e4025a1d5706fc032947c79f399a43188fec92a`. Source changes only
+  `src/operator_web_cli.rs` and `src/web_development_tests.rs`.
+- **Eligible implementation:** source inspection found local request/resolution
+  controls absent while guarded Web work handlers already exist. Added thin
+  `operator web work request/resolve --project-id ... --input-file ...` routes.
+  Command/file project must match before invoking work handlers; existing schema, target,
+  generation, rollover, conflict, durable ownership and receipt guards are reused.
+  Local publication/resolution no longer requires a temporary MCP listener.
+  No new native-session backend, scheduler or transport authority is added.
+- **TESTED_LOCAL:** twelve operator Web CLI tests and three Web integration tests
+  pass. The shared three-project fixture exercises CLI/direct/MCP routes,
+  side-effect-free mismatched/overridden input refusals, idempotent/conflicting
+  requests and original-witness CLI resolution after the paired target changes.
+  Sibling checkout and production preservation remain asserted. Strict all-target
+  Clippy and formatting pass, exit0; all under existing 600s containment.
+- **Retained harness failure:** first twelve CLI tests pass, then a copied
+  source-witness variable is uninitialized. Strict wrapper exits before the
+  other gates. Corrected two-file frozen witness run passes every gate. Both
+  receipts remain; no source test failure is relabeled or omitted.
+- **Normal app:** locked offline build exits0 at23:43:13Z in17.88s under240s.
+  This is a tested working-tree candidate with exact source-file hashes, not
+  the unchanged base commit's bytes. At23:45:01Z, three refusal probes finish
+  in3.06s under45s: both scope mismatches and primary quarantine refusal,
+  each exit2/fixed code with no private input echo. All132 metadata records exact,
+  no new records, events or owned processes; both controls STOPPED. Positive real
+  publication is deliberately unexercised. Normal release/selection is next.
+- **Connector dependency:** one recovery read at23:45:14–23:45:33Z after96 minutes
+  fails in OpenAI MCP backend transport with no HTTP status. Prior22:08:50Z HTTP429
+  remains the last explicit response; recovery is unproven. Current connector
+  catalog does not advertise named Web work/context tools; source/local catalog
+  and connected/installed tool availability remain separate. No alternate
+  connector, retry loop, tunnel/account/settings change or browser-text workaround.
+- **Preservation/permission:** source/local/negative tests only. No original
+  native writer, profile, selected v44, five pairs/history, completed canary or
+  protected production change. No real queued work, browser, WakeHost or recurring
+  process start. The pending bounded live-test exception is not assumed.
+- **Evidence/next:** exact source/test/log/app hashes and scope in
+  [C2 work CLI evidence](verification/C2_WEB_WORK_OPERATOR_CLI_2026_10_22.json).
+  Continue normal release qualification and supported stopped package readback;
+  no operator action needed for that source task. Keep actual review delivery
+  held under the stop rule. Goal ACTIVE/PARTIAL; natural/live/production gates open.
+- **Publication:** LOCAL_ONLY / NOT_PUSHED pending exact eight-path source/docs
+  allowlist and secret/privacy review. Full pushed SHA and CI follow normal push.

@@ -1,0 +1,201 @@
+{
+  "recordedUtc": "2026-10-22T23:49:23.3324848Z",
+  "task": "C2-WEB-WORK-OPERATOR-CLI",
+  "owner": "Existing CatDesk development conversation",
+  "branch": "codex/web-rollover-oct17",
+  "baseHead": "4e4025a1d5706fc032947c79f399a43188fec92a",
+  "sourceFiles": [
+    {
+      "path": "src/operator_web_cli.rs",
+      "sha256": "6b4ad4d00e6195da049bbc24251c4032326b9526b41f729888b559645a85e92a"
+    },
+    {
+      "path": "src/web_development_tests.rs",
+      "sha256": "e19236b13d6cc4c62b522420b709144d536bf72ee74382a53a8260c0171dc6fa"
+    }
+  ],
+  "classification": "SOURCE_TESTED_LOCAL_AND_NORMAL_DEBUG_NEGATIVE_ADMISSION",
+  "implementation": {
+    "commands": [
+      "operator web work request --project-id PROJECT --input-file REQUEST.json",
+      "operator web work resolve --project-id PROJECT --input-file RESOLUTION.json"
+    ],
+    "existingHandlers": [
+      "web_work::request",
+      "web_work::resolve"
+    ],
+    "cliAndFileProjectMustMatch": true,
+    "fileReader": "Existing bounded ordinary-file JSON reader",
+    "requestSchemaChanged": false,
+    "queueOrRolloverSafeguardsChanged": false,
+    "nativeSessionAction": "NONE",
+    "listenerOrSchedulerStartRequired": false,
+    "browserOrHostStartRequiredForPublication": false
+  },
+  "tests": {
+    "operatorWebCliPassed": 12,
+    "webIntegrationPassed": 3,
+    "checks": [
+      {
+        "label": "operator-web-cli-tests",
+        "startedUtc": "2026-10-22T23:39:55.7188353Z",
+        "finishedUtc": "2026-10-22T23:39:58.5647949Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "operator_facade::web::tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "05679e1bde96a1fc8d36c3457f27a26d97c2b2da7bffcb3cc851ac17c5ffc188"
+      },
+      {
+        "label": "web-integration-tests",
+        "startedUtc": "2026-10-22T23:39:58.5977654Z",
+        "finishedUtc": "2026-10-22T23:40:36.9800277Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "web_development_tests::",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "d45020413d0f8d09bbe4bc6e04553d369f2538e0fd2f314c045b6a288e1da943"
+      },
+      {
+        "label": "strict-clippy",
+        "startedUtc": "2026-10-22T23:40:36.9900503Z",
+        "finishedUtc": "2026-10-22T23:40:56.5989336Z",
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "logSha256": "f88af21c31e21b051389333f313f4568091abe1d958601505f97ce207facae66"
+      },
+      {
+        "label": "format-check",
+        "startedUtc": "2026-10-22T23:40:56.6092695Z",
+        "finishedUtc": "2026-10-22T23:40:59.0871801Z",
+        "arguments": [
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "containmentMaximumSeconds": 600,
+    "coverage": [
+      "Command/input scope mismatch refuses before state writes",
+      "Unknown payload scope overrides refused",
+      "CLI/direct/MCP projects share durable independent queue",
+      "Idempotent retry and conflicting work refusals",
+      "CLI resolution preserves original intent witness after paired target generation changes",
+      "No sibling checkout or production writes"
+    ],
+    "firstHarnessFailure": "Twelve CLI tests passed, then copied source-witness variable was uninitialized; strict wrapper stopped before remaining gates; corrected frozen two-file run passes all gates",
+    "failureReceiptsRetained": true
+  },
+  "normalApp": {
+    "baseHead": "4e4025a1d5706fc032947c79f399a43188fec92a",
+    "sourceState": "TESTED_WORKING_TREE_CANDIDATE_NOT_COMMIT",
+    "profile": "NORMAL_DEBUG_APP_NO_DEV_DEPENDENCIES",
+    "finishedUtc": "2026-10-22T23:43:13.8342528Z",
+    "buildExitCode": 0,
+    "buildMaximumSeconds": 240,
+    "imageSha256": "0c5e5f58d3414d6ac698bd54c0731a3d3d947bfa4484118340c99d13cff5dc37",
+    "imageBytes": 66976768,
+    "buildLogSha256": "17048b0b7ae1a63ba1ad54666ced4061f8b370134b9866794d93677c6ba4d048",
+    "negativeObservedUtc": "2026-10-22T23:45:01.6404289Z",
+    "negativeMaximumSeconds": 45,
+    "negativeSeconds": 3.0593579,
+    "cases": [
+      {
+        "case": "request-project-mismatch",
+        "errorCode": "WEB_WORK_PROJECT_SCOPE_MISMATCH",
+        "exitCode": 2,
+        "retainedRootExited": true,
+        "inputNotEchoed": true
+      },
+      {
+        "case": "resolve-project-mismatch",
+        "errorCode": "WEB_WORK_PROJECT_SCOPE_MISMATCH",
+        "exitCode": 2,
+        "retainedRootExited": true,
+        "inputNotEchoed": true
+      },
+      {
+        "case": "primary-quarantine-preserved",
+        "errorCode": "WEB_WORK_ROLLOVER_PENDING",
+        "exitCode": 2,
+        "retainedRootExited": true,
+        "inputNotEchoed": true
+      }
+    ],
+    "stateRecordsExact": 132,
+    "stateChanges": 0,
+    "newState": 0,
+    "ownedProcesses": 0,
+    "eventsQueued": 0,
+    "listenerStarted": false,
+    "browserStarted": false,
+    "wakeHostStarted": false
+  },
+  "acceptance": {
+    "positivePublication": "DISPOSABLE_THREE_PROJECT_FIXTURE_ONLY",
+    "normalAppRealRootChecks": "NEGATIVE_ONLY",
+    "normalReleaseQualification": "OPEN",
+    "selectedDevelopmentQualification": "OPEN_FOR_NEW_CLI_COMMANDS",
+    "selectedPriorV44Preserved": true,
+    "protectedProductionAcceptance": "OPEN",
+    "fullMultiProjectMvp": "PARTIAL"
+  },
+  "connector": {
+    "observedStartUtc": "2026-10-22T23:45:14Z",
+    "observedEndUtc": "2026-10-22T23:45:33Z",
+    "attempts": 1,
+    "cooldownMinutes": 96,
+    "result": "OPENAI_MCP_BACKEND_TRANSPORT_SEND_FAILURE_NO_HTTP_STATUS",
+    "priorExplicitHttpStatus": 429,
+    "priorHttpObservedUtc": "2026-10-22T22:08:50Z",
+    "recoveryProved": false,
+    "retries": 0,
+    "namedWebWorkToolsCurrentlyAdvertised": false,
+    "localCliDoesNotProveConnectedChatGptToolAcceptance": true
+  },
+  "preserved": {
+    "originalProjectBindingsAndHistory": 5,
+    "nativeWritersTouched": false,
+    "protectedProductionChanged": false,
+    "selectedPackageChanged": false,
+    "profileChanged": false,
+    "completedCanaryReplayed": false,
+    "wakeControls": "STOPPED",
+    "liveStopException": "REQUESTED_NOT_ASSUMED"
+  },
+  "goal": "ACTIVE_SOURCE_PROGRESS",
+  "nextExecutableTask": "Qualify normal release of these CLI commands, then supported stopped development package/readback; prepared live review remains held until explicit stop-rule exception",
+  "operatorActionRequiredForSourceQualification": false,
+  "publication": {
+    "status": "LOCAL_ONLY_NOT_PUSHED",
+    "remote": "https://github.com/vnath99/CatDesk",
+    "branch": "codex/web-rollover-oct17",
+    "ci": "UNVERIFIED"
+  }
+}
