@@ -2,6 +2,24 @@
 
 ## October 22 acceptance reconciliation
 
+### Context observation age — SOURCE / TESTED_LOCAL
+
+The central Web view now shows how many seconds have elapsed since each exact
+paired conversation's last saved browser observation. It reads the existing
+timestamp; it performs no browser capture. Missing/legacy, zero, invalid, future
+or unavailable-clock timestamps show UNKNOWN. A generation mismatch suppresses
+both context and age. The saved snapshot label explicitly leaves monitoring
+unverified; UNKNOWN coverage still has no reliable percentage. This closes the
+source display gap where a target-current context estimate had no visible age.
+
+All 22 console regressions pass, including independent per-project ages and the
+invalid/legacy/generation cases. Strict all-target Clippy and formatting pass
+under a 600-second contained local gate. No browser, WakeHost, scheduler,
+message, binding, package, policy or original native writer changes occur.
+This increment is SOURCE / TESTED_LOCAL only. Its normal app/package view gate
+remains OPEN; selected prior release acceptance below is preserved separately.
+See [sanitized source evidence](verification/C2_CONTEXT_OBSERVATION_AGE_2026_10_22.json).
+
 ### Latest selected normal release and controlled local queue
 
 At 22:03:39Z the supported STOPPED updater selects the normal release from

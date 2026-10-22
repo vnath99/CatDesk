@@ -7,6 +7,13 @@ surface.
 
 ## Current checkpoint — 2026-10-22
 
+The latest source view also displays the age of the saved browser observation
+for each exact paired context. Missing/legacy, invalid/future or unknown-clock
+time stays UNKNOWN; a target-generation mismatch hides old context and age.
+Twenty-two console regressions, strict Clippy and formatting pass. This display
+increment still needs normal app/package readback; it is not a fresh browser
+observation or live monitoring proof. Selected prior package remains untouched.
+
 This section supersedes the historical runtime, model, branch and scheduling
 claims below. Current development uses `codex/web-rollover-oct17`, based on
 `5f1bb58900581453c1ffc427746794ac55b6f7f3`; the older orchestrator branch is an

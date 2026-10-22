@@ -954,6 +954,18 @@ fn print_web_projects(workspace: &Path, out: &mut impl Write) -> Result<(), Stri
 /// Display only bounded metadata from the shared paired Web reader. Saved
 /// scheduler/rollover observations never establish that a worker is running.
 pub(crate) fn render_web_projects(report: &Value, out: &mut impl Write) -> Result<(), String> {
+    let now_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|duration| duration.as_secs());
+    render_web_projects_at(report, out, now_unix)
+}
+
+fn render_web_projects_at(
+    report: &Value,
+    out: &mut impl Write,
+    now_unix: Option<u64>,
+) -> Result<(), String> {
     let central = &report["webProjects"];
     if report["action"] != "web_status"
         || report["readOnly"] != true
@@ -1037,6 +1049,18 @@ pub(crate) fn render_web_projects(report: &Value, out: &mut impl Write) -> Resul
                 .unwrap_or_else(|| "UNKNOWN".into());
             writeln!(out, "    context: observed {tokens} tokens (advisory), coverage {coverage}, configured trigger {trigger}")
                 .map_err(|_| "CLI_OUTPUT_FAILED")?;
+            let capture = &pressure["browserCoverage"];
+            let age = capture["lastObservedAtUnix"]
+                .as_u64()
+                .filter(|timestamp| *timestamp > 0 && capture["observed"] == true)
+                .and_then(|timestamp| now_unix?.checked_sub(timestamp))
+                .map(|seconds| format!("{seconds}s ago"))
+                .unwrap_or_else(|| "UNKNOWN".into());
+            writeln!(
+                out,
+                "    browser observation: {age} | saved snapshot; monitoring not verified"
+            )
+            .map_err(|_| "CLI_OUTPUT_FAILED")?;
         } else {
             writeln!(
                 out,
@@ -1682,6 +1706,69 @@ mod tests {
                 .unwrap()
                 .contains("STALE_OR_UNVERIFIED_SNAPSHOT")
         );
+    }
+
+    #[test]
+    fn web_view_shows_independent_saved_browser_observation_ages() {
+        let mut report = web_report();
+        for (project, timestamp) in report["webProjects"]["projects"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .zip([100, 950, 1000])
+        {
+            project["context"]["currentPressure"]["browserCoverage"] =
+                serde_json::json!({"observed":true,"lastObservedAtUnix":timestamp});
+        }
+        let mut out = Vec::new();
+        super::render_web_projects_at(&report, &mut out, Some(1000)).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        for age in ["900s ago", "50s ago", "0s ago"] {
+            assert!(text.contains(&format!("browser observation: {age} | saved snapshot")));
+        }
+        assert_eq!(text.matches("monitoring not verified").count(), 3);
+        assert_eq!(text.matches("coverage UNKNOWN").count(), 3);
+        assert!(!text.contains('%'));
+
+        report["webProjects"]["projects"][0]["wake"]["target"]["generation"] = serde_json::json!(3);
+        let mut out = Vec::new();
+        super::render_web_projects_at(&report, &mut out, Some(1000)).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(!text.contains("900s ago"));
+        assert_eq!(text.matches("browser observation:").count(), 2);
+    }
+
+    #[test]
+    fn web_view_does_not_invent_browser_freshness_from_invalid_or_legacy_snapshots() {
+        for coverage in [
+            serde_json::Value::Null,
+            serde_json::json!({"observed":true}),
+            serde_json::json!({"observed":false,"lastObservedAtUnix":900}),
+            serde_json::json!({"observed":true,"lastObservedAtUnix":0}),
+            serde_json::json!({"observed":true,"lastObservedAtUnix":1001}),
+            serde_json::json!({"observed":true,"lastObservedAtUnix":-1}),
+            serde_json::json!({"observed":true,"lastObservedAtUnix":"private-value"}),
+        ] {
+            let mut report = web_report();
+            report["webProjects"]["projects"]
+                .as_array_mut()
+                .unwrap()
+                .truncate(1);
+            report["webProjects"]["projects"][0]["context"]["currentPressure"]["browserCoverage"] =
+                coverage;
+            let mut out = Vec::new();
+            super::render_web_projects_at(&report, &mut out, Some(1000)).unwrap();
+            let text = String::from_utf8(out).unwrap();
+            assert!(text.contains("browser observation: UNKNOWN | saved snapshot"));
+            assert!(!text.contains("private-value"));
+        }
+        let mut report = web_report();
+        report["webProjects"]["projects"][0]["context"]["currentPressure"]["browserCoverage"] =
+            serde_json::json!({"observed":true,"lastObservedAtUnix":900});
+        let mut out = Vec::new();
+        super::render_web_projects_at(&report, &mut out, None).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert_eq!(text.matches("browser observation: UNKNOWN").count(), 3);
     }
 
     #[test]

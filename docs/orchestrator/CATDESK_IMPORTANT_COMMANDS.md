@@ -1,5 +1,15 @@
 # CatDesk — Important Command Reference
 
+## October 22 context observation age (SOURCE / TESTED_LOCAL)
+
+The Web summary's `browser observation: Ns ago` is elapsed local time since
+the existing browser capture timestamp for that exact paired context. UNKNOWN
+means no usable timestamp, invalid/future time or unavailable local clock.
+Generation mismatch suppresses the old estimate and age. A saved observation
+does not prove an active monitor or complete provider context. No capture is
+triggered by viewing status. This display increment awaits normal app/package
+qualification separately from the selected prior release.
+
 ## October 22 headless metadata probes without automatic Web work
 
 With a matched source-qualified executable, add `--no-web-auto` to a normal

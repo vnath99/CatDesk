@@ -339,3 +339,32 @@ are unchanged. The subsequent publication receipt is documentation only; it does
 not change the qualified runtime source. Goal remains ACTIVE/PARTIAL. Next source
 task is context observation freshness in the bounded central view; no operator
 action is needed, and no recurring browser/Wake restart or canary replay occurs.
+
+## 2026-10-22 — per-conversation browser observation age
+
+- **Owner/base:** existing CatDesk developer, branch `codex/web-rollover-oct17`,
+  base `48b1c2e9200165607f939499c9f4141506bdb544`. Changed source:
+  `src/binagotchy_cli.rs`; no schema, scheduler, policy or browser changes.
+- **Reason/implementation:** exact current-target checks could still display
+  an old context estimate without an observation age. The view now renders
+  elapsed seconds from that conversation's saved browser timestamp only after
+  the same full paired-key check. Missing/legacy, zero, invalid, future or
+  unavailable-clock times remain UNKNOWN. No invented age threshold or context
+  completeness, liveness or provider-capacity claim is introduced.
+- **SOURCE / TESTED_LOCAL:** 22 console regressions pass, including two new
+  cross-project/invalid-time/generation scenarios. Strict all-target Clippy and
+  final formatting pass, all exit 0 under a 600-second contained process job.
+  Exact UTC start/finish/log/source hashes are retained in the sanitized
+  [verification record](verification/C2_CONTEXT_OBSERVATION_AGE_2026_10_22.json).
+- **Scope:** local source/test work only, no new external probe, send, native
+  writer action, profile, binding/history, selected package or protected runtime
+  change. Recurring automation and Wake remain stopped. Completed canary is
+  preserved without replay. The already selected no-auto/local queue acceptance
+  remains valid for its prior bytes; this display increment is not yet selected.
+- **Remaining/next:** bounded normal app view qualification of this display,
+  then supported stopped package update if qualified. Active automatic routing,
+  productive sibling Web continuation, natural independent review/next task,
+  connector 429 and protected production gates remain OPEN. No operator action
+  needed for the next source qualification. Goal ACTIVE / overall PARTIAL.
+- **Publication:** LOCAL_ONLY / NOT_PUSHED until exact allowlist, source hash
+  and secret/privacy checks; exact pushed SHA/CI are recorded after publication.

@@ -1,3 +1,14 @@
+## 2026-10-22 — independent context observation age (SOURCE / TESTED_LOCAL)
+
+The Web view now exposes each exact paired context's last browser observation
+age using existing metadata. Invalid/missing/future time remains UNKNOWN;
+generation mismatch hides old context and age. Saved observation and live
+monitoring are explicitly separate. All 22 console tests, strict all-target
+Clippy and formatting pass. No browser/runtime/binding/package or native writer
+action. Normal app/selected package qualification for this display change is
+still OPEN; existing selected no-auto/queue acceptance remains preserved.
+See the [execution log](docs/OCT22_31_EXECUTION_LOG.md) for the dated test evidence.
+
 ## 2026-10-22 — selected normal release and three-project local queuing
 
 The normal release containing `--no-web-auto` is now selected through the
