@@ -494,3 +494,23 @@ OPEN; no completed event or canary was replayed. Goal remains ACTIVE/PARTIAL.
   Overall goal ACTIVE/PARTIAL; full natural/live acceptance remains OPEN.
 - **Publication:** LOCAL_ONLY / NOT_PUSHED until scoped documentation/privacy
   review; exact remote SHA and CI are recorded after normal push.
+
+### Actual-deliverable preflight publication
+
+At **2026-10-22T23:11:01Z**, normal push and authenticated remote readback confirm
+**`e9b96e187ac2390a72cf30725688ff8da08c5d9a`** on
+`refs/heads/codex/web-rollover-oct17`:
+[published preflight checkpoint](https://github.com/vnath99/CatDesk/commit/e9b96e187ac2390a72cf30725688ff8da08c5d9a).
+The five-path documentation/evidence allowlist passes secret/privacy/binary
+review. Private sibling source, identity, commits, chat URLs, native identifiers,
+machine paths, transcripts and runtime artifacts are excluded. No runtime source
+change. The initial whitespace gate refused an extra JSON EOF blank line before
+commit; it was corrected and only the exact owned index resumed. No history or
+Git policy change. Final local/remote match and tree is clean.
+
+Exact-SHA GitHub reports **0 workflow runs and 0 check runs**; CI stays
+**UNVERIFIED**. Public visibility and the existing draft PR remain unchanged.
+No event, browser, WakeHost or recurring activation occurred. The explicit
+bounded foreground exception is still pending; its absence is not approval.
+A subsequent receipt commit changes documentation only. Goal remains ACTIVE,
+with natural/live proof unclaimed and prepared private candidates preserved.

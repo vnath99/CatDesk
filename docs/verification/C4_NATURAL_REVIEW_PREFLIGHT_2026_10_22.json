@@ -66,9 +66,16 @@
   "overallAcceptance": "PARTIAL",
   "nextTask": "On explicit stop-rule exception, run one existing guarded foreground delivery for the prepared independently owned source review, verify exact event/response, stop and audit; otherwise preserve candidates and continue eligible local work",
   "publication": {
-    "status": "LOCAL_ONLY_NOT_PUSHED",
-    "remote": "https://github.com/vnath99/CatDesk",
+    "observedUtc": "2026-10-22T23:11:01.278602Z",
+    "status": "PUSHED_EXACT_REMOTE_MATCH",
+    "documentationCommit": "e9b96e187ac2390a72cf30725688ff8da08c5d9a",
+    "remoteSha": "e9b96e187ac2390a72cf30725688ff8da08c5d9a",
     "branch": "codex/web-rollover-oct17",
-    "ci": "UNVERIFIED"
+    "remote": "https://github.com/vnath99/CatDesk",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false
   }
 }
