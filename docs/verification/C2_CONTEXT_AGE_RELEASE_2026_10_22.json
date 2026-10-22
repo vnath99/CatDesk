@@ -144,9 +144,16 @@
   "nextExecutableTask": "Prepare a source-bound natural review candidate using existing routing and exact target checks; do not enqueue, start Wake or resend completed events under current stop instruction",
   "operatorActionRequiredForPreparation": false,
   "publication": {
-    "status": "LOCAL_ONLY_NOT_PUSHED",
-    "remote": "https://github.com/vnath99/CatDesk",
+    "observedUtc": "2026-10-22T22:56:55.699635Z",
+    "status": "PUSHED_EXACT_REMOTE_MATCH",
+    "documentationCommit": "8452666fff5798ae024464b1225350714eb98040",
+    "remoteSha": "8452666fff5798ae024464b1225350714eb98040",
     "branch": "codex/web-rollover-oct17",
-    "ci": "UNVERIFIED"
+    "remote": "https://github.com/vnath99/CatDesk",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false
   }
 }

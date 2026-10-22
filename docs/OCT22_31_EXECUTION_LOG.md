@@ -428,3 +428,21 @@ Goal remains ACTIVE/PARTIAL, and no operator action is needed for this next task
   exact-target routing; no enqueue or activation under the current stop rule.
 - **Publication:** LOCAL_ONLY / NOT_PUSHED pending exact documentation allowlist
   and privacy checks. Exact pushed SHA/branch/CI readback follows publication.
+
+### Observation-age release acceptance publication
+
+At **2026-10-22T22:56:55Z**, normal push and authenticated readback confirm
+**`8452666fff5798ae024464b1225350714eb98040`** on
+`refs/heads/codex/web-rollover-oct17`:
+[published selected-release acceptance](https://github.com/vnath99/CatDesk/commit/8452666fff5798ae024464b1225350714eb98040).
+Seven allowlisted documentation/evidence paths pass secret/privacy/binary
+review; all four source hashes still match the qualified release. No runtime
+source, credential, private conversation URL, native identifier, machine path,
+profile, raw log or protected artifact is included. Exact remote equals local
+HEAD and tree is clean. PUBLIC visibility and the existing draft PR are preserved.
+
+Exact-SHA readback returns **0 workflow runs and 0 check runs**; CI remains
+**UNVERIFIED** despite enabled repository settings and an active workflow.
+No dispatch, settings or tunnel change. A subsequent receipt is documentation
+only. Full automatic/natural-cycle and protected production acceptance remain
+OPEN; no completed event or canary was replayed. Goal remains ACTIVE/PARTIAL.
