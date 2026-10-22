@@ -128,5 +128,16 @@
   "newFrontendNormalReleaseQualification": "OPEN",
   "connector": "Last single read HTTP429; no new probe this increment",
   "remote": "https://github.com/vnath99/CatDesk",
-  "publication": "Pending reviewed source commit and exact remote readback"
+  "publication": {
+    "observedUtc": "2026-10-22T21:12:51.6466647Z",
+    "status": "PUSHED_EXACT_REMOTE_MATCH",
+    "sourceCommit": "2e9ebe83f4fcefa6994e362d6cade1f96bab323b",
+    "remoteSha": "2e9ebe83f4fcefa6994e362d6cade1f96bab323b",
+    "branch": "codex/web-rollover-oct17",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ciAcceptance": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false
+  }
 }

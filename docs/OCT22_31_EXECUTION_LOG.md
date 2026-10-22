@@ -134,8 +134,8 @@ is required for the next offline build/read-only qualification work.
 - **External boundary:** no new connector attempt, tunnel/settings change,
   recurring automation, hourly worker or operational service start. Existing
   429 and installed provisioning gates remain separate from source progress.
-- **Publication:** pending scoped regression/lint/privacy gates for this
-  increment; exact source commit and remote readback will be recorded below.
+- **Publication:** scoped regression/lint/privacy gates passed. Source commit
+  and exact remote readback are recorded below.
 
 ### Frontend verification gates
 
@@ -158,3 +158,24 @@ the normal release image recorded above predates that entry point. Selected
 development package and protected production acceptance are unchanged. Next
 safe task is the new source's normal release qualification without selecting
 the package or starting any services. No operator action is needed for that.
+
+### Frontend source publication
+
+At **2026-10-22T21:12:51Z**, normal push and authenticated remote readback
+confirm **`2e9ebe83f4fcefa6994e362d6cade1f96bab323b`** on
+`refs/heads/codex/web-rollover-oct17`:
+[published frontend source](https://github.com/vnath99/CatDesk/commit/2e9ebe83f4fcefa6994e362d6cade1f96bab323b).
+The tree is clean and all five final source hashes match the sanitized
+verification record. Eleven allowlisted source/documentation paths were
+reviewed; no binary, profile, raw log, runtime record, private URL, native
+identifier or machine path was included. Initial scanning stopped before
+commit on the public flag's `sk-` suffix; the literal was confirmed and the
+credential pattern corrected to require a token boundary before a full rescan.
+No actual credential was found or printed.
+
+Exact-SHA GitHub readback reports **0 workflow runs and 0 check runs**. CI
+acceptance remains **UNVERIFIED**; no dispatch or account/repository setting
+change occurs. Draft PR 4 follows the existing branch; it is not made ready or
+merged. The documentation receipt may follow without changing tested runtime
+source. Normal release qualification of this new entry point remains next;
+installed multi-project acceptance remains PARTIAL.
