@@ -123,5 +123,16 @@
   "protectedProductionAcceptance": "UNVERIFIED",
   "externalConnector": "Last one-shot probe HTTP429; not retried this increment",
   "remote": "https://github.com/vnath99/CatDesk",
-  "publication": "Pending reviewed source commit and exact remote/CI readback"
+  "publication": {
+    "observedUtc": "2026-10-22T21:49:49.9084657Z",
+    "status": "PUSHED_EXACT_REMOTE_MATCH",
+    "sourceCommit": "4d37f1e4eb37d338785386e37c7a1901ce585920",
+    "remoteSha": "4d37f1e4eb37d338785386e37c7a1901ce585920",
+    "branch": "codex/web-rollover-oct17",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ciAcceptance": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false
+  }
 }

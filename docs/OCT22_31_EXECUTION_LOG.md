@@ -243,3 +243,22 @@ installed multi-project acceptance remains PARTIAL.
   provisioning gates remain OPEN. No operator action is needed for safe source
   qualification. Publication follows scoped test/privacy gates; exact SHA and
   CI readback are recorded below after push.
+
+### Release/disable source publication
+
+At **2026-10-22T21:49:49Z**, normal push and authenticated remote readback
+confirm **`4d37f1e4eb37d338785386e37c7a1901ce585920`** on
+`refs/heads/codex/web-rollover-oct17`:
+[published scheduler-disable source](https://github.com/vnath99/CatDesk/commit/4d37f1e4eb37d338785386e37c7a1901ce585920).
+The tree is clean and the four candidate source hashes match the tested build.
+Seven explicit source/documentation paths were reviewed and scanned. No real
+credentials, private conversation URLs, raw identifiers, machine paths, binary,
+profile, runtime state or raw diagnostic logs were staged.
+
+Exact-SHA readback reports **0 workflow runs and 0 check runs**; CI remains
+**UNVERIFIED**. No dispatch, account/repository setting, protected install or
+official tunnel change was attempted. The next eligible work is the new flag's
+normal release qualification, followed by the supported stopped development
+update/readback if qualified. Existing canary steps and browser sends are not
+repeated. A documentation receipt commit may follow without changing runtime
+source. Overall production/multi-project acceptance remains PARTIAL.
