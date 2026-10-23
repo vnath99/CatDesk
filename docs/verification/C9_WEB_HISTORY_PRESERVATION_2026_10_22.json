@@ -127,5 +127,15 @@
     "unattended": "NOT_ACTIVATED",
     "fullMilestone": "PARTIAL"
   },
-  "nextTask": "Use the existing registry resolver and browser journals to implement reliable immutable project execution context and durable fair shared-browser rollover admission. Do not use caller project labels as authenticated ChatGPT origin; preserve native writer ownership and all completed canaries."
+  "nextTask": "Use the existing registry resolver and browser journals to implement reliable immutable project execution context and durable fair shared-browser rollover admission. Do not use caller project labels as authenticated ChatGPT origin; preserve native writer ownership and all completed canaries.",
+  "sourcePublication": {
+    "atUtc": "2026-10-23T03:40:32.8668083Z",
+    "sourceCommit": "cb73e3f158433dc1b6cc66b9a37c86ff1bc6507d",
+    "remoteSha": "cb73e3f158433dc1b6cc66b9a37c86ff1bc6507d",
+    "branch": "codex/web-rollover-oct17",
+    "privacyScan": "PASS",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED"
+  }
 }

@@ -2,6 +2,13 @@
 
 ## 2026-10-22 late evening — mandatory Web criteria and predecessor retention
 
+- **Published at 03:40:32 UTC October 23:** ten reviewed, sanitized paths
+  pushed normally as `cb73e3f158433dc1b6cc66b9a37c86ff1bc6507d` on
+  `codex/web-rollover-oct17`; exact remote SHA matched. Full private directive
+  stays local; public docs/evidence omit private workspace names, conversation
+  URLs, authentication, profiles, research and protected runtime artifacts.
+  Zero workflow/check runs: CI UNVERIFIED. No visibility/history/force changes.
+
 The operator made registry lifecycle/history, genuine parallel project-bound Web
 MCP work, context-aware continuation and durable fair shared-browser creation
 mandatory. Full wording is preserved in the local master/project goals. The
