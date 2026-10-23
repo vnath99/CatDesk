@@ -1,4 +1,4 @@
-## October 23 C49 — verified contract context in task continuation (source qualified)
+## October 23 C49 — task contract context, normal CLI and stopped development qualified
 
 Granted-task handoffs now carry the exact archived assignment objective, allowed
 and forbidden paths, ordered steps, acceptance criteria, expected artifacts,
@@ -18,20 +18,45 @@ recovers the pending patch, applies it once through central dispatch, preserves 
 native original and refuses replay. This is source/fixture evidence.
 
 A fresh controlled canary's exact existing file was checkpointed without byte changes
-and a separate linked task worktree plus frozen inputs were prepared privately.
-Nothing was published to Wake or granted; its previous continuity-only work remains
-open until supported resolution. Unknown submissions and older coding verification
-remain preserved. No browser, host, recurring process or native session was started.
+and a separate linked task worktree prepared. Supported metadata closed only the
+verified earlier continuity acknowledgement, preserving older coding verification.
+One frozen new event is queued with both hosts stopped; its assignment is associated
+without an execution grant. An initial local contract refusal was corrected using a
+declared label with no executable profile, preserving the refused input and exact
+queued message. Only association was resumed; publication was never repeated.
+The controlled work ledger changed and two expected state records were added.
+All bindings, unknown submissions and native development sessions stay preserved.
+No browser, host, recurring process or actual message was started/sent.
 
-Selected development remains stopped C48/v64; C49 normal build and live transfer are
-not yet qualified. A single connector read after a long gap still returned HTTP429.
-Three native development chats are active and one is idle/completed; no session action
-was taken. Full actual Web, protected installation and unattended acceptance stay open.
-No additional actual Web A–J gate is closed by these source tests.
+Normal source `dfc3e2cd3152ac9a93ea46a303eee5d4f29e5773` built at
+23:03:21.507–23:09:46.151 UTC in 384.65 seconds. App SHA:
+`a1491526297ee86cea63f09451827149f612b9f71f02ffefb92ccde9ebe838e7`.
+At 23:10:06.681–23:10:10.161 UTC, two cold operator CLI reads passed three
+checks in 3.48 seconds. The preserved revoked synthetic fixture exposed exact
+contract context, omitted unavailable verification profiles and retained old
+admission bytes. All 45 fixture records and 243 real records stayed exact.
+No grant, source event or task execution was created by this narrow CLI check.
 
-Next: normal C49 qualification, then a fresh bounded granted-task Web integration
-using existing browser authentication and guarded project authority. No operator
-action is needed for safe preparation. Evidence:
+At 23:12:14.791 UTC, guarded stopped development selection passed in 6.28
+seconds. Matched C49/v65 passed its redacted status view and all nine paired
+target readbacks. Only the two permitted package pointers changed; 241 protected
+records and all bindings/history stayed exact, with no new records or owners.
+The old package and authenticated profile remain preserved. Exact unchanged
+host/adapter/bridge qualification was reused; no new host was built or started.
+
+These are source, normal local CLI and stopped unprotected development passes.
+Actual collector/browser credential transfer, ChatGPT Web task execution,
+protected installation and unattended acceptance remain open. HTTP429 still
+blocks connector verification, and the current connector catalog does not
+advertise the new scoped task tool. No additional actual Web A–J gate is closed.
+Three native development chats remain active and one idle/completed at the
+read-only snapshot; no native session action was taken.
+
+Next: deliver the one already queued fresh source event under bounded ownership,
+verify its exact receipt/completion, then grant only that task and run a bounded
+automatic collector/browser test. Preserve ambiguous old submissions and pending
+C28 independent coding verification. No operator action is needed for staging;
+actual Web MCP execution requires connector/tool availability. Evidence:
 `docs/verification/C49_VERIFIED_TASK_CONTRACT_CONTINUATION_2026_10_23.json`.
 
 ### October 23 C48 — normal task components and stopped development qualified; live still open

@@ -1,4 +1,4 @@
-## October 23 C49 — exact task-contract handoff context (source only)
+## October 23 C49 — exact task-contract context (selected stopped development)
 
 The existing `operator web work resume-prepare` display and private automatic granted
 rollover payload now include `taskContract`: objective, allowed/forbidden paths,
@@ -8,9 +8,13 @@ Use only those IDs; executable argv stays local. Reported limits are original co
 limits, not renewed permission or remaining allowance. All host checks remain active.
 
 No new command or registry. Old persisted prepare-only admission bytes stay exact;
-the display addition creates no run. Source 65 tests and strict checks pass. Selected
-stopped development remains C48/v64; C49 normal executable and browser transfer are
-not yet qualified. Fresh canary inputs are prepared, not published or granted. Keep
+the display addition creates no run. Source 65 tests and strict checks pass. C49 source
+`dfc3e2cd3152ac9a93ea46a303eee5d4f29e5773` passes three normal CLI checks/two
+cold reads with 45 fixture and 243 real records exact; no new grant or event.
+Matched C49/v65 is selected STOPPED in unprotected development: nine paired
+readbacks/status pass, only two package pointers changed, 241 protected exact.
+Actual collector/browser transfer and Web task execution remain open. The fresh canary has one queued event and an associated isolated assignment, no
+execution grant or actual delivery. Preserve its frozen event; never republish it. Keep
 completed and ambiguous older canaries intact. Actual Web coding remains HTTP429-blocked.
 See `../verification/C49_VERIFIED_TASK_CONTRACT_CONTINUATION_2026_10_23.json`.
 
