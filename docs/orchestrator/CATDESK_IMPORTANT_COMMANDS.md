@@ -1,5 +1,20 @@
 # CatDesk — Important Command Reference
 
+## October 23 — C18 read-only source reconciliation
+
+An initial source seed with a recorded SEND_ATTEMPTED outcome must not be sent
+again. Preserve its original journal; independent recovery proof is a separate
+record. Provider history-search decorations may identify a navigation candidate,
+but only the exact canonical browser URL plus exact message/reply verification
+can establish authority. No relaxed binding URL validator or direct registry edit.
+Nested overlapping role wrappers represent one logical turn only when known
+identities do not conflict. Separate sibling messages remain distinct even when
+text matches. Empty assistant Markdown shells provide no complete response,
+revision or context evidence. C18 source is not yet in selected C17 v52.
+All browser operations still require exclusive profile/composer ownership,
+retained bounded process cleanup and draft checks; no recurring activation.
+[C18 evidence](../verification/C18_INITIAL_SOURCE_RECOVERY_2026_10_23.json).
+
 ## October 23 — selected structured-handoff package C17
 
 Matched v52 includes C16 schema2 handoffs and is selected STOPPED through existing

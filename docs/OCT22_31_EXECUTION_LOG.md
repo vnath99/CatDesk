@@ -1,5 +1,41 @@
 # October 22–31 execution log
 
+## 2026-10-23 — C18 source seed recovery and DOM completeness
+
+At07:46 UTC one frozen initial source seed was submitted once under retained
+180s ownership containment. Strict URL verification refused after SEND_ATTEMPTED;
+the durable journal records uncertainty, not proof of an unsent message. No replay
+was attempted. Bounded read-only recovery first found no match among recent links,
+then encountered a changed Search label. The observed Search control found one
+exact marker result at08:05 UTC. Search-decorated href was used only to derive an
+unverified navigation candidate; authoritative URL rules were not relaxed.
+
+A fresh canonical-page read found three nested USER representations but only one
+semantic USER. The installed reader refused sequence proof. Another snapshot
+contained an empty mounted assistant Markdown shell that the old reader marked
+complete. Source now collapses only compatible overlapping DOM representations,
+retains separate sibling/conflicting identities, and refuses complete-body/revision
+claims for empty or whitespace bodies. Four new regression cases reproduce these
+guards. At08:23 UTC a separate proposed-reader browser independently observed the
+canonical URL, exact single frozen USER and exact completed assistant reply.
+Private screenshot visually agrees. Reply was present before scrolling; no causal
+hydration claim. Original uncertain journal remains intact, linked to a separate
+positive proof. No second send, source registration or binding mutation.
+
+Affected tests PASS08:31:46 UTC:20 current-DOM plus66 adapter/bootstrap tests,4.79s.
+Two broader bridge-suite attempts each hit180s; full-suite acceptance is explicitly
+unqualified. All test owners terminated/cleaned up;139 runtime records exact and
+zero owned processes after browser attempts. Original five pairs/history/native
+sessions preserved, selected C17 v52 and production remain STOPPED. No Wake worker,
+recurring process, completed canary replay or production promotion. One connector
+read07:53:32 UTC still returned429/UNAVAILABLE; no retry or settings change.
+
+Next execute the second frozen seed once using a reviewed diagnostic driver;
+unknown outcomes require read-only reconciliation. Register only independently
+verified unique sources, then qualify matched runtime before fresh G/H/I. Existing
+completed rollover/Wake proofs are retained. No operator action currently needed.
+See [C18 evidence](verification/C18_INITIAL_SOURCE_RECOVERY_2026_10_23.json).
+
 ## 2026-10-23 — C17 selected handoff runtime and browser readiness
 
 Normal locked offline release app build PASS07:27:47 UTC from clean

@@ -2282,11 +2282,29 @@ class NewConversationSink(CdpSink):
             };
             const count = selector => Array.from(new Set(
                 document.querySelectorAll(selector)
-            )).filter(visible).length;
+            )).filter(visible);
+            const logicalCount = selector => {
+                const nodes = count(selector);
+                const unit = node => {
+                    const owner = node.closest('[data-content-search-unit-key], [data-chatgpt-search-unit-key]');
+                    return owner && (owner.getAttribute('data-content-search-unit-key') || owner.getAttribute('data-chatgpt-search-unit-key'));
+                };
+                const message = node => {
+                    const owner = node.closest('[data-chatgpt-selection-message-id], [data-message-id]');
+                    return owner && (owner.getAttribute('data-chatgpt-selection-message-id') || owner.getAttribute('data-message-id'));
+                };
+                return nodes.filter(node => !nodes.some(child => {
+                    if (node === child || !node.contains(child)) return false;
+                    const a = unit(node), b = unit(child), m = message(node), n = message(child);
+                    // Collapse overlapping representations, never separate
+                    // sibling turns or nested nodes with conflicting identity.
+                    return !(a && b && a !== b) && !(m && n && m !== n);
+                })).length;
+            };
             return [
-                count("[data-message-author-role='user'], article[data-turn='user'], [data-user-message-bubble], [class~='group/user-message']"),
-                count("[data-message-author-role='assistant'], article[data-turn='assistant'], [data-content-search-unit-key]:has(h4[data-conversation-role='assistant'])"),
-                count("[data-content-search-turn-key], [data-testid^='conversation-turn-'], article[id^='conversation-turn-'], [data-content-search-unit-key]"),
+                logicalCount("[data-message-author-role='user'], article[data-turn='user'], [data-user-message-bubble], [class~='group/user-message']"),
+                logicalCount("[data-message-author-role='assistant'], article[data-turn='assistant'], [data-content-search-unit-key]:has(h4[data-conversation-role='assistant'])"),
+                logicalCount("[data-content-search-turn-key], [data-testid^='conversation-turn-'], article[id^='conversation-turn-'], [data-content-search-unit-key]"),
             ];
         })()"""
         try:
@@ -2448,7 +2466,9 @@ class NewConversationSink(CdpSink):
                     // body. It must never be counted as complete answer text.
                     text = String(node.innerText || node.textContent || '');
                 }
-                const bodyProven = completeBody;
+                // An empty mounted Markdown shell is not a complete response.
+                // Preserve uncertainty for context estimation and handoff reads.
+                const bodyProven = completeBody && Boolean(text.trim());
                 let excerpt = text.slice(-4096);
                 // JavaScript slices UTF-16 units. A tail can begin with half
                 // of an emoji; omit that half before Python's UTF-8 encoding.

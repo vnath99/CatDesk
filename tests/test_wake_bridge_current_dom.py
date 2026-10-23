@@ -35,6 +35,8 @@ class Element {
   getClientRects() { return [1]; }
   matches(selector) { return selector.split(',').some(raw => {
     const s = raw.trim();
+    const has = s.match(/^([^:]+):has\(([^()]+)\)$/);
+    if (has) return this.matches(has[1]) && Boolean(this.querySelector(has[2]));
     if (s.includes(':')) return false;
     const parts = s.split(/\s+(?![^\[]*\])/);
     if (parts.length > 1) {
@@ -79,6 +81,17 @@ const user = el('div', {'data-content-search-unit-key':'fallback-turn-0:0:user'}
 if (options.userMultipleMarkers) {
   user.attrs['data-message-author-role'] = 'user';
   user.children[0].attrs.class = 'group/user-message';
+}
+if (options.nestedUserMarkers) {
+  user.attrs.class = 'group/user-message';
+  const inner = user.children[0];
+  const wrapper = el('div', {class:'group/user-message'}, '', [inner]);
+  wrapper.parentElement = user;
+  user.children = [wrapper];
+  if (options.conflictingNestedUserIds) {
+    user.attrs['data-chatgpt-selection-message-id'] = 'outer-message';
+    wrapper.attrs['data-chatgpt-selection-message-id'] = 'inner-message';
+  }
 }
 if (options.userShowMore) user.children[0].children.push(el('span', {}, '…'), button('Show more'));
 const answer = options.loadError ? "This response couldn’t load" : (options.answer ?? 'A useful answer');
@@ -200,6 +213,35 @@ class CurrentDomTests(unittest.TestCase):
         cdp = CurrentDom(userClassOnly=True, duplicateUser=True)
         self.assertEqual(self.sink.user_message_digests(cdp), [expected, expected])
         self.assertEqual(self.sink.trusted_turn_anchor_state(cdp, "exact wake message"), (2, 0))
+
+    def test_nested_current_user_markers_count_one_logical_turn(self):
+        cdp = CurrentDom(nestedUserMarkers=True)
+        self.assertEqual(self.sink.visible_role_counts(cdp)[:2], (1, 1))
+        self.assertEqual(self.sink.user_message_digests(cdp), [bridge.digest("exact wake message")])
+        self.sink.prove_single_bootstrap_user(cdp, "exact wake message")
+
+    def test_distinct_identical_users_are_not_collapsed_by_text_or_key(self):
+        cdp = CurrentDom(nestedUserMarkers=True, duplicateUser=True)
+        self.assertEqual(self.sink.visible_role_counts(cdp)[0], 2)
+        with self.assertRaisesRegex(bridge.PostSubmitUnknown, "BOOTSTRAP_RECEIPT_SEQUENCE_DRIFT"):
+            self.sink.prove_single_bootstrap_user(cdp, "exact wake message")
+
+    def test_empty_or_whitespace_assistant_body_is_incomplete_context(self):
+        for answer in ("", " \n\t"):
+            with self.subTest(answer=repr(answer)):
+                message = self.sink.visible_message_snapshot(CurrentDom(answer=answer))["messages"][-1]
+                self.assertFalse(message["bodyTextObserved"])
+                self.assertFalse(message["textComplete"])
+                self.assertFalse(message["revisionComplete"])
+                self.assertIsNone(message["revisionHash"])
+                with self.assertRaisesRegex(bridge.PostSubmitUnknown, "BOOTSTRAP_ASSISTANT_UNAVAILABLE"):
+                    self.sink.prove_single_bootstrap_user(CurrentDom(answer=answer), "exact wake message")
+
+    def test_nested_conflicting_message_ids_remain_separate(self):
+        cdp = CurrentDom(nestedUserMarkers=True, conflictingNestedUserIds=True)
+        self.assertEqual(self.sink.visible_role_counts(cdp)[0], 2)
+        with self.assertRaisesRegex(bridge.PostSubmitUnknown, "BOOTSTRAP_RECEIPT_SEQUENCE_DRIFT"):
+            self.sink.prove_single_bootstrap_user(cdp, "exact wake message")
 
     def test_class_only_user_blocks_home_clear_even_after_prior_checks(self):
         cdp = CurrentDom(userClassOnly=True, userOnly=True, bareUser=True,

@@ -3186,3 +3186,19 @@ OPERATOR ACTION: NONE. Expected continuation: event-driven Python browser wake o
 - `31890c9` repaired persisted lease handling: expired ownership fails closed pending reconciliation, and lease publication uses no-replace semantics. `ec7d824` added Binagotchy read-only `projects` and `queue` views. `6c6c798` added a scoped writer guard shared by the direct Codex route and managed provider, with a pending marker outside worker-writable roots. The final source tree passed 1,265 main Rust tests (0 failed, 28 ignored) and focused strict checks. These are local source gates, not installed or GitHub CI acceptance.
 - A binary built from `6c6c798` (SHA-256 `97C828B25CB7B2BDBA0216B8396F4C5FEE24A1F8A247BB6DA98F2831F2CCAAAF`) completed four authenticated Codex turns in three disposable Git roots, explicitly ordered alpha, beta, catdesk, alpha. Exact-thread alpha continuation and wrong-workspace refusal passed. The result is `TESTED_LOCAL` fixture evidence at `docs/OCTOBER_2026_MVP_ACCEPTANCE.md`; the runner assigned task IDs in its report, so automatic fair dispatch and durable task receipts remain open. The Binagotchy REPL also remained usable when Wake status was unavailable in an isolated profile fixture.
 - The actual Desktop control root still refuses `codex run` and `resume` with `CODEX_LOCK` because historical in-flight queue claims and open activity spans need owner reconciliation. Do not clear them from terminal labels or start a second writer. Protected Wake, installed recovery and a fresh natural receipt remain unverified. GitHub Actions settings report enabled and the CI workflow active, but the pushed branch head has no run/check; the recorded dispatch HTTP 422 and absent `workflow_dispatch` trigger are distinct facts.
+## 2026-10-23 — C18 initial source recovery and snapshot guards
+
+One new controlled source-chat seed was submitted once. Initial URL verification
+refused after the attempted send; no resend followed. Provider history search and
+a fresh, bounded read independently recovered the canonical URL, exact USER and
+exact completed ASSISTANT reply. The original uncertain journal is preserved.
+Two source fixes count overlapping nested role wrappers as one logical message
+without merging sibling/conflicting identities, and keep empty assistant bodies
+incomplete.86 affected tests PASS; two broader suite runs reached180s, so the full
+suite is unqualified. The live recovery used the proposed reader, not a selected
+package containing these fixes. All139 runtime records/five pairs remain exact,
+both controls STOPPED and no owned processes remain. Second seed unattempted;
+neither new source registered. B/G/H/I remain open; next create the frozen second
+seed once with diagnostic capture, then qualify a matched package before actual
+simultaneous rollover. Connector429 is independent. See
+[C18 evidence](docs/verification/C18_INITIAL_SOURCE_RECOVERY_2026_10_23.json).

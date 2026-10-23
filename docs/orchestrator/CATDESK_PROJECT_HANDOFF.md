@@ -1,5 +1,19 @@
 # CatDesk Project Handoff and Continuity Guide
 
+C18 recovers one new initial source seed without resend: provider search gives a
+candidate, independent fresh browser verifies exact canonical URL/USER/ASSISTANT.
+Original uncertain journal retained and linked to separate positive proof. Source
+counts compatible nested role wrappers once but preserves sibling/conflicting
+identities; empty assistant shells remain incomplete.86 affected tests PASS; two
+broader180s timeouts leave full suite unqualified. Live positive read used proposed
+source; selected C17 v52 does not include C18.139 runtime records/five pairs exact,
+both controls STOPPED/zero owned processes. Second frozen source unattempted;
+neither new source registered. Next create second once with post-send diagnostic
+capture, verify independently, then matched qualification before actual G/H/I.
+Do not repeat alpha, old canary or completed reviews. Connector07:53UTC429 remains
+separate; no new sign-in/operator action needed. See
+[C18 evidence](../verification/C18_INITIAL_SOURCE_RECOVERY_2026_10_23.json).
+
 C17 selects matched C16 v52 STOPPED from `ecf1cc9`. Normal release/default host
 builds PASS; exact unchanged host gate reused without launch.139 records: two
 package pointers changed,137 exact, previous v51/five pairs/profile preserved.

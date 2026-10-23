@@ -1,5 +1,20 @@
 # CatDesk October 2026 MVP acceptance
 
+### October 23 C18 — initial source recovered, snapshot guards source-tested
+
+One new source seed submitted once, then strict URL uncertainty reconciled through
+provider search and an independent fresh read. Exact canonical URL, one USER and
+one completed expected ASSISTANT reply verified with proposed source; no resend.
+Nested role wrappers and empty assistant completeness guards fixed;86 affected
+tests PASS. Two broader suites timed out180s, so no full-suite/CI pass is claimed.
+139 runtime records/five pairs exact, controls STOPPED, zero owned processes after
+bounded attempts. No second source attempted or either source registered. This
+initial seed recovery does not satisfy actual rollover interruption H. Selected
+C17 v52 lacks C18; actual parallel Web coding B, two-rollover G, transaction H and
+pending-rollover restart I remain OPEN. Connector429 blocks connector verification
+only. No protected or unattended acceptance. See
+[C18 evidence](verification/C18_INITIAL_SOURCE_RECOVERY_2026_10_23.json).
+
 ### October 23 C17 — selected structured handoff runtime and home readiness
 
 C16 is included in v52 selected STOPPED through the existing updater:139 records,
