@@ -1,5 +1,27 @@
 # October 22–31 execution log
 
+## 2026-10-23 — C27 normal release and guarded stopped selection
+
+C26 source is now in matched v54. Normal app release PASS in404.29s; default
+WakeHost release PASS in18.74s without test support. New host image refuses owner
+EOF and exits without runtime-state creation; this gate proves no delivery.
+Existing guarded update selects only stopped unprotected development in4.13s:
+181 records checked, two intended package pointers changed,179 protected records
+exact, no new records/owned processes. All nine saved paired rows read back through
+the new normal image. Prior package, registry/Wake history, profile, native owners
+and production preserved. No browser/Wake worker/recurring start or message.
+
+This qualifies normal artifacts and stopped selection. It does not qualify a
+registered new-format browser rollover, automatic driver, protected installation
+or unattended operation. C26 source canary is complete; do not resend it. Next is
+a fresh registered beta task and critical DRAFT_READY recovery/paired continuation
+on selected v54. Keep C24 quarantined and all accepted C23 operations untouched.
+Source156-test/strict-check proof is reused by exact bytes. No operator action
+needed for the next controlled test; connector429 remains specific to Web B/C.
+
+UTC app build12:03:06–12:09:51; host12:11:09–12:11:28; owner gate/package12:11:29; stopped selection12:13:39. Qualified source commit `1fe093686f950786d54fbc71451770a7be57677e` includes published code `6dab09fcfb0c2e1c51841dc087e0945c229c78d1`. Both existing remote SHA readbacks match; CI remains UNVERIFIED.
+[C27 evidence](verification/C27_SELECTED_ENVELOPE_RUNTIME_2026_10_23.json).
+
 ## 2026-10-23 — C25 observed editor; C26 working escaped transport
 
 Actual editor diagnosis found generated URL spans and layout newlines. Native

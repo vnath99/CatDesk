@@ -1,5 +1,16 @@
 # CatDesk — Important Command Reference
 
+## October 23 — C27 qualified stopped v54 selection
+
+The existing `operator web-dev-runtime update-package --package PACKAGE` has
+selected matched v54 while STOPPED. Previous package/profile/state are preserved;
+new normal status view reads all nine saved pairs. No host worker, scheduler or
+browser was started. Qualified app/default-host artifacts are recorded in C27.
+Use the selected image and current authority for subsequent fresh controlled
+operations; frozen v53 canary plans are historical and must not be replayed or
+silently retargeted. No protected or unattended acceptance follows from selection.
+[C27 evidence](../verification/C27_SELECTED_ENVELOPE_RUNTIME_2026_10_23.json).
+
 ## October 23 — C26 saved transport controls exact bootstrap bytes
 
 New `rollover prepare`/`handoff-collect` records mark their immutable handoff as

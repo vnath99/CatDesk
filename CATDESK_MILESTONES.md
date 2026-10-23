@@ -1,3 +1,23 @@
+## 2026-10-23 — C27 matched envelope runtime selected while stopped
+
+C26 source is now in matched v54. Normal app release PASS in404.29s; default
+WakeHost release PASS in18.74s without test support. New host image refuses owner
+EOF and exits without runtime-state creation; this gate proves no delivery.
+Existing guarded update selects only stopped unprotected development in4.13s:
+181 records checked, two intended package pointers changed,179 protected records
+exact, no new records/owned processes. All nine saved paired rows read back through
+the new normal image. Prior package, registry/Wake history, profile, native owners
+and production preserved. No browser/Wake worker/recurring start or message.
+
+This qualifies normal artifacts and stopped selection. It does not qualify a
+registered new-format browser rollover, automatic driver, protected installation
+or unattended operation. C26 source canary is complete; do not resend it. Next is
+a fresh registered beta task and critical DRAFT_READY recovery/paired continuation
+on selected v54. Keep C24 quarantined and all accepted C23 operations untouched.
+Source156-test/strict-check proof is reused by exact bytes. No operator action
+needed for the next controlled test; connector429 remains specific to Web B/C.
+[C27 evidence](docs/verification/C27_SELECTED_ENVELOPE_RUNTIME_2026_10_23.json).
+
 ## 2026-10-23 — C26 escaped handoff survives real draft restart
 
 Actual editor diagnosis found generated URL spans and layout newlines. Native
