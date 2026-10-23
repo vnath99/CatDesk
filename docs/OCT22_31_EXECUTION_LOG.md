@@ -2,6 +2,23 @@
 
 ## 2026-10-22 evening — project timer isolation and deployment prerequisites
 
+- **Published source at 03:19:10 UTC October 23:** nine reviewed, sanitized
+  paths committed/pushed normally as `27b2ba0c38859f7b428507fd767387d8c70adf80`
+  on `codex/web-rollover-oct17`; full remote SHA matched. No credential, private
+  conversation/research, profile, binary or protected runtime artifacts published.
+  Zero workflow/check runs: CI UNVERIFIED, independently of local passes.
+- **Normal executable qualification at 03:20:35 UTC:** clean source above
+  builds the app and default-feature `CatDeskWakeHost`, no development dependencies,
+  under 240s containment. App SHA256
+  `a011a03b933493775cf92493e545e42ac60c182d04fab8318ce3f6f6c30375aa`;
+  WakeHost SHA256 `244e46359aa66e1b149b2d696c75f575b439abd95c0e84194943b73f7022a07f`.
+  Initial build job completed the app but named a nonexistent Wake binary;
+  corrected bounded job passes, with the failed receipt preserved. Neither image
+  was selected, installed, signed or run as a host. Final state comparison keeps
+  all 99 checked records exact, five original bindings preserved, controls STOPPED
+  and zero owned processes. Next prepare the existing normal release/development
+  update path; do not reopen completed review/rollover or activate recurring work.
+
 At 03:07:32–03:07:36 UTC October 23, the qualified normal C7 image ran only
 `operator supervisor status` and `operator release-pair result` against existing
 authority. Both exited 0 under separate 15s caps. Existing recovery readers

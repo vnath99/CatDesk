@@ -207,7 +207,8 @@
     "initialHarnessIssues": [
       "Wrong scheduler filter selected zero tests; not qualified; corrected with positive-test-count gate",
       "Timer assertion compared fields instead of requiring PartialEq",
-      "Qualified existing valid_id path after compile diagnostic"
+      "Qualified existing valid_id path after compile diagnostic",
+      "Initial normal-build job used nonexistent Wake binary target; app built successfully, corrected target CatDeskWakeHost; final bounded job exited 0"
     ],
     "failedReceiptsRetained": true
   },
@@ -270,7 +271,7 @@
   },
   "acceptance": {
     "source": "PASS",
-    "normalExecutable": "NOT_YET_BUILT_FOR_C8",
+    "normalExecutable": "PASS_NORMAL_DEBUG_APP_AND_DEFAULT_FEATURE_WAKEHOST",
     "selectedPackage": "PRIOR_C6_V48_UNCHANGED",
     "liveTimerFaultIsolation": "NOT_ATTEMPTED",
     "existingSelectedWebProof": "PRESERVED_NOT_REPLAYED",
@@ -278,5 +279,69 @@
     "protectedProduction": "OPEN_CANONICAL_PAIR_LKG_STARTUP_GATES",
     "fullMvp": "PARTIAL"
   },
-  "nextTask": "Build normal app and WakeHost from the reviewed C8 checkpoint. Do not select/install, rotate pending signed images, activate services, clear claims or replay accepted Web events. Protected deployment needs the existing reviewed owner procedure for the intended exact build and startup authority."
+  "nextTask": "Prepare the normal release for the C8 source through existing bounded build and stopped development updater. Preserve prior selected package and completed Web proofs; no protected promotion or recurring activation. External connector and exact-build protected installation authority remain separate gates.",
+  "sourcePublication": {
+    "atUtc": "2026-10-23T03:19:10.077415Z",
+    "action": "project-timer-published-exact-match",
+    "sourceBase": "3f2df3c09e63fb9c251fb47caceb5f89e69cc71a",
+    "sourceFiles": [
+      {
+        "path": "src/operator_web_auto.rs",
+        "sha256": "b1c627504bc18742566f4b2409e2fd55774af98cc665c660745f931cb1ab22e3"
+      },
+      {
+        "path": "wake/src/store.rs",
+        "sha256": "2ede1d287764186fae7c91a8ec6ef950ce4e7cd59ebdef159074f6cf4d2c5c63"
+      },
+      {
+        "path": "wake/src/runtime.rs",
+        "sha256": "544460dba82cc5b6b11bb42e65b95df00a0710fd77a3c8a186a3f843c9dbfc2f"
+      }
+    ],
+    "head": "27b2ba0c38859f7b428507fd767387d8c70adf80",
+    "remoteSha": "27b2ba0c38859f7b428507fd767387d8c70adf80",
+    "branch": "codex/web-rollover-oct17",
+    "remote": "https://github.com/vnath99/CatDesk",
+    "tree": "CLEAN",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false,
+    "protectedProductionAccepted": false
+  },
+  "normalBuild": {
+    "startedUtc": "2026-10-23T03:20:34.6994242Z",
+    "finishedUtc": "2026-10-23T03:20:35.3531536Z",
+    "sourceCommit": "27b2ba0c38859f7b428507fd767387d8c70adf80",
+    "baseCommitTree": "67b4d7637241f2b91979715fd76c2c9e365868e2",
+    "sourceState": "CLEAN_COMMITTED_SOURCE",
+    "sourceFiles": [
+      {
+        "path": "src/operator_web_auto.rs",
+        "sha256": "b1c627504bc18742566f4b2409e2fd55774af98cc665c660745f931cb1ab22e3"
+      },
+      {
+        "path": "wake/src/store.rs",
+        "sha256": "2ede1d287764186fae7c91a8ec6ef950ce4e7cd59ebdef159074f6cf4d2c5c63"
+      },
+      {
+        "path": "wake/src/runtime.rs",
+        "sha256": "544460dba82cc5b6b11bb42e65b95df00a0710fd77a3c8a186a3f843c9dbfc2f"
+      }
+    ],
+    "profile": "NORMAL_DEBUG_APP_NO_DEV_DEPENDENCIES",
+    "exitCode": 0,
+    "maximumSeconds": 240,
+    "packageSelectionChanged": false,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "imageSha256": "a011a03b933493775cf92493e545e42ac60c182d04fab8318ce3f6f6c30375aa",
+    "imageBytes": 67099136,
+    "buildLogSha256": "8568deb3ba4ae6bdcf04869d3d2619db39c69a248aa46c30ef138e3d2e9a7b83",
+    "wakeImageSha256": "244e46359aa66e1b149b2d696c75f575b439abd95c0e84194943b73f7022a07f",
+    "wakeImageBytes": 3485696,
+    "wakeBuildLogSha256": "dab4e4707b2e6fdbdead361b4487be475974a047edea846dd92bac44f319f872",
+    "wakeProfile": "NORMAL_DEBUG_DEFAULT_FEATURES_NO_DEV_DEPENDENCIES"
+  }
 }
