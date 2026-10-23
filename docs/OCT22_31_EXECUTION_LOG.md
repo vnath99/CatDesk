@@ -1,5 +1,51 @@
 # October 22–31 execution log
 
+## 2026-10-23 — C23 actual serialized two-project rollover and continuation
+
+C22 checkpoint published09:49:43 UTC as `3829749371c2b9f39907e2b9d2ce439af0c52b3b`,
+exact remote/clean; zero runs/checks, CI UNVERIFIED. No new runtime source changes,
+builds or unit reruns this stage; matched selected v53/source proofs retained.
+
+At09:52:59 UTC two `rollover execute` CLI commands start23.22ms apart. Live durable
+admission records alpha sequence1 ACTIVE and beta sequence2 WAITING. Samples never
+show more than one active creator. Alpha advances to CONTINUATION_QUEUED/gen2 in
+119.33s; beta's initial command exits with the expected queued result and no typing/
+submission checkpoint. A fresh beta CLI starts09:55:33 UTC, first verifying the same
+PREPARED/no-receipt/no-bootstrap-progress WAITING identity, and completes its first
+creation in117.20s. This is durable queue continuation, not resubmission.
+
+Both actual issued URLs differ from all registered URLs/history at test start; receipts
+and completed answers are independently verified before commit. Source handoff
+snapshots rechecked before guarded paired updates; both generations advance1→2.
+Both new-chat USER sequences are unique. Seven prior rows/targets/history remain
+exact. Each new registry predecessor and both context generations persist. No old
+ambiguous journal or accepted historical canary is replayed or retired. Both
+creation tickets end CREATION_RECORDED with their original identities/sequences.
+
+At09:59:38 UTC supported configuration restores both controlled policies to their
+original96k budget/72k trigger with automatic observation/rollover disabled. No
+production policy changes. One bounded foreground test10:00:32–10:02:26 UTC114.09s
+delivers the two queued continuations once, verifies SENT/COMPLETE and exits its
+owned tree. No unexpected state, zero owned processes, both controls STOPPED.
+
+Read-only event-bound assistant reads preserve exact project marker and task ID
+for both. Alpha local CLI read succeeded, but its harness expected a hash field
+only the MCP wrapper adds. Its saved verified body was independently hashed and
+reconciled without another browser read; beta passes the corrected optional-field
+check. Raw responses/URLs stay private. Authenticated app inventory separately
+contains both issued conversation IDs. Fresh selected CLI status10:14:27 UTC
+proves both continuations, predecessor/current bindings and context histories;
+170 records exact/zero owned processes, workspace canaries unchanged, nine pairs.
+
+One connector health read10:11:13 UTC after more than two hours still returns
+429/UNAVAILABLE. No retry, tunnel/settings change or global stop. Native chats were
+inspected read-only, without messages, pause/resume or ownership changes. No
+recurring scheduler or protected production activation. This closes selected
+controlled live G and adds two genuine continuations; critical crash/ambiguous H,
+remaining pending-phase I, actual Web MCP coding B/C and automatic monitoring remain
+open. Next fresh recovery/driver qualification, preserving these completed proofs.
+See [C23 evidence](verification/C23_TWO_PROJECT_ROLLOVER_2026_10_23.json).
+
 ## 2026-10-23 — C22 source-generated compaction handoffs, bounded delivery
 
 C21 publication09:22:36 UTC `17cde688c314be97d05835c4c05d647b4f88165e` matched

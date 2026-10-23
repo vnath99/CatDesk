@@ -1,5 +1,19 @@
 # CatDesk — Important Command Reference
 
+## October 23 — C23 competing creation and durable queued continuation
+
+Two actual `operator web rollover execute --project-id PROJECT` requests now pass
+selected controlled browser qualification. A queued result is not send evidence.
+This test continued beta only after its durable phase remained PREPARED with no
+receipt/bootstrap progress and its exact admission ticket WAITING. Unknown submission
+never permits the same treatment. Both C23 operations are now complete: phase
+CONTINUATION_QUEUED plus fresh `rollover status` continuationProved=true, generation2,
+preserved predecessor/context history. Do not execute them again as a new test.
+Low test policies were restored; automatic flags off. Read-only event-bound response
+checks validate marker/task, without assuming local CLI includes the MCP wrapper's
+extra response hash field. No recurring activation or protected release acceptance.
+[C23 evidence](../verification/C23_TWO_PROJECT_ROLLOVER_2026_10_23.json).
+
 ## October 23 — C22 actual handoff exchange
 
 Supported `operator web rollover handoff-request --project-id PROJECT --source-task-id STABLE_TASK`

@@ -1,5 +1,21 @@
 # CatDesk Project Handoff and Continuity Guide
 
+C23 actual competing requests complete:23.22ms start gap, alpha admission1 ACTIVE/
+beta2 WAITING, no overlapping sampled creators. Beta's queued invocation does not
+submit; fresh CLI validates identical PREPARED/unsent ticket and performs its first
+creation. Both distinct actual URLs/unique USER receipts/completed answers/source
+rechecks pass, guarded pairs1→2/history preserved. Both continuations SENT/COMPLETE;
+event-bound assistant replies retain correct marker/task ID. Authenticated app
+inventory corroborates URLs; fresh CLI continuationProved=true for both,170 records
+exact/zero owned processes, workspace canaries unchanged. Seven prior pairs/history
+preserved. Restore of both test policies verified; automatic flags off. No historical
+replay, recurring/native/protected changes. Alpha reader's wrapper-hash assumption
+was reconciled from its successful saved local read without repeat. Connector one
+10:11UTC check still429; no retry/settings change. G selected controlled PASS;
+H/critical pending-I, actual B/C, automatic monitoring/protected/unattended OPEN.
+Next fresh recovery/driver qualification, preserve these completed rollovers.
+[C23 evidence](../verification/C23_TWO_PROJECT_ROLLOVER_2026_10_23.json).
+
 C22: two controlled sources now have actual source-generated schema2 handoffs saved
 as distinct PREPARED intents. Explicit low128-token test trigger against132/137
 observed tokens; production policies unchanged. Requests sent once each/SENT exact

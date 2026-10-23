@@ -1,5 +1,20 @@
 # CatDesk October 2026 MVP acceptance
 
+### October 23 C23 — live competing creation, paired updates and continuation
+
+Two requests start23.22ms apart and retain durable FIFO identities: alpha ACTIVE,
+beta WAITING; maximum sampled active creators1. Beta's queued process exits without
+submission, then a fresh process advances its unchanged unsent ticket. Two actual
+ChatGPT-issued replacement URLs, unique bootstrap USER receipts, completed answers
+and source snapshot rechecks precede paired1→2 commits. Both continuations deliver
+once, timers COMPLETE, and event-bound replies retain correct marker/task IDs.
+Fresh CLI continuationProved=true for both; authenticated app inventory corroborates
+the issued chats. Seven old pairs/history preserved, test policies restored,
+170 final records exact/zero owned processes. Live G passes in selected controlled
+scope. Operator-triggered tests do not qualify automatic monitoring, protected or
+unattended operation. H and remaining critical pending-restart phases stay open.
+See [C23 evidence](verification/C23_TWO_PROJECT_ROLLOVER_2026_10_23.json).
+
 ### October 23 C22 — actual source-generated schema2 compaction
 
 Two real test source chats answer distinct stable handoff requests under explicit
@@ -170,23 +185,24 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | C. Blocked project while sibling makes useful progress | PARTIAL: scheduler fixtures, C7 granted-reader and C8 timer-fault regressions demonstrate source isolation. Existing independent native owners were preserved. | Bounded real Web project blocking/progress proof on the intended runtime. Unreadable/unattributable shared state still fails closed. |
 | D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
 | E. Context pressure and durable handoff | PARTIAL: C21 actual132/137 observed-token ledgers persist independently. C22 low test policies trigger two actual source-generated schema2 handoffs, exact receipts/completed timers and verified markers/Git/decisions, saved PREPARED. Coverage stays UNKNOWN_OR_INCOMPLETE. | Coordinated automatic monitoring qualification; do not infer exact context from lifetime MCP counters or source Git reports. Actual schema2 exchange is proved. |
-| F. Actual replacement URL and continuation | PASS, one controlled browser canary: issued replacement URL, paired generation update, predecessor preservation and continuation are already verified. | Preserve proof; no repeat required. This does not prove two simultaneous rollovers. |
-| G. Two simultaneous synthetic rollover requests | SOURCE / TESTED_LOCAL admission implemented in C10: durable eligible FIFO, retained creation owner, abandoned/ineligible quarantine, stable identity, timestamps and separate source-journal proof. Existing shared browser owner remains required. | Normal/selected qualification, then two fresh actual controlled project browser requests with isolated identities/bindings and no duplicate message. Source threads are not live browser acceptance. |
+| F. Actual replacement URL and continuation | PASS, controlled selected browser scope: original accepted canary preserved. C23 adds two fresh issued replacements, paired1→2 updates, source rechecks, preserved history and event-bound marker/task continuations. | No repeat required. Protected/unattended and actual coding acceptance remain separate. |
+| G. Two simultaneous synthetic rollover requests | PASS, SELECTED CONTROLLED LIVE C23:23.22ms request gap, alpha ACTIVE/beta WAITING, maximum sampled creator1; stable unsent waiting ticket survives process exit and completes next. Both issued URLs/pairs/continuations verified, seven prior pairs/history exact, no duplicate submissions. | Automatic recurring driver, critical crash H and protected/unattended qualification remain separate. Preserve these completed operations. |
 | H. Interruption and ambiguous-submission recovery | PARTIAL: source recovery/draft/receipt tests and retained real ambiguous/quarantined state exist. No blind resend is allowed. | Bounded controlled interruption at specified transaction phases, with actual browser evidence and cleanup. Preserve historical ambiguity; never manufacture its missing receipt. |
-| I. Restart preserves registrations/history/pending rollovers | PARTIAL: C21 fresh CLI processes recover nine paired registrations and two separate live context ledgers; original history/saved continuation/quarantine remain.143 records exact. | Controlled restart during a pending transaction, verifying registry, predecessor/handoff and queue/journal recovery. No recurring service activation implied. |
+| I. Restart preserves registrations/history/pending rollovers | PARTIAL: C23 fresh CLI reopens an actual PREPARED/WAITING rollover after its queued process exits, retaining intent/handoff/admission identity; both completed continuations, current/predecessor/context histories then recover in fresh CLI processes.170 records exact. | Controlled crash/restart in additional critical submission and paired-commit phases, together with H. No recurring service activation implied. |
 | J. No orphan browser/Wake processes | PASS for recorded bounded tests, including current stopped selection. Root/Job exits and zero owned processes are checked. | Normal unattended operation is NOT ACTIVATED or accepted. Each future bounded test needs its own cleanup proof. |
 
 **Current implementation versus gaps:** the existing registry, immutable project
 connections/assigned-task tools, durable fair browser admission, context store,
 schema2 Git/decision handoffs, browser ownership and rollover journals are already
 implemented and source-tested. Selected C21 v53 includes C18-C20 browser guard/call/
-provisional-URL fixes and actual separate context captures. Remaining gaps include actual
-concurrent Web coding, live competing-rollover/recovery/restart acceptance,
+provisional-URL fixes and actual separate context captures. C23 now qualifies two
+competing selected browser creations/paired commits/continuations. Remaining gaps include actual
+concurrent Web coding and critical crash/recovery/restart acceptance,
 coordinated automatic monitoring, supported project removal and history archival
 beyond the64-predecessor inline limit. C9 refuses before Wake commit at that limit
 instead of evicting history. Two fresh source chats are verified and paired to
-isolated test roots; their saved context prepares G/H/I without satisfying those
-transaction gates.
+isolated test roots; their completed C23 operations close controlled G while H and
+additional critical pending-phase I remain open.
 Keep source/fixture, isolated browser, selected runtime, protected installation
 and unattended operation separate. Connector transport and protected deployment
 are specific live dependencies; neither blocks eligible source work. All other

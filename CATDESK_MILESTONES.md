@@ -1,3 +1,22 @@
+## 2026-10-23 — C23 two competing actual Web rollovers continued
+
+Two selected execute commands launch23.22ms apart. Durable admission gives alpha
+sequence1/ACTIVE and beta sequence2/WAITING, never more than one sampled creator.
+Alpha completes; a fresh CLI reopens beta's exact PREPARED, unsubmitted waiting
+ticket and performs its first creation. Both real issued URLs/USER receipts/source
+rechecks pass, both paired targets advance1→2, and both continuations are queued.
+Original seven registrations/targets/history remain unchanged. Each new registry
+history retains its predecessor; context history retains both generations.
+
+One114.09s bounded foreground run delivers both continuations once and completes
+both timers. Event-bound reads verify both project markers/task IDs. Fresh CLI
+reports continuationProved for both; authenticated app inventory independently
+lists both issued chats. Test policies restored,170 records exact/zero owned
+processes; no recurring/native/production change or historical replay. Live G
+passes for selected controlled requests. H crash/ambiguity, Web B/C, automatic
+monitoring and protected/unattended acceptance remain open. See
+[C23 evidence](docs/verification/C23_TWO_PROJECT_ROLLOVER_2026_10_23.json).
+
 ## 2026-10-23 — C22 actual source-generated schema2 handoffs
 
 Two isolated test policies use an explicit128-token trigger against saved132/137
