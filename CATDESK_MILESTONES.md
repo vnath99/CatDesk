@@ -6,8 +6,10 @@ attestation; partial knowledge does not imply HEAD/cleanliness. Legacy schema1
 prompts/absent-field serialization stay exact. Recovery also preserves an old
 request file when its active-pointer write was interrupted; conflicting/malformed
 records cannot be overwritten.73 distinct tests/81 executions, strict Clippy/format
-PASS. Normal executable qualification pending; selected C15 v51 remains STOPPED
-without C16. Actual new handoff Web exchange and Web B/G/H/I remain OPEN. See
+PASS. Normal build and14.55s read-only legacy status qualification PASS; five
+paired rows/saved continuation/quarantine visible,139 records exact/no new or owned
+processes. Selected C15 v51 remains STOPPED without C16. Actual new handoff Web
+exchange and Web B/G/H/I remain OPEN. See
 [C16 evidence](docs/verification/C16_STRUCTURED_HANDOFF_2026_10_23.json).
 
 ## 2026-10-23 — C15 command-enabled development package selected STOPPED

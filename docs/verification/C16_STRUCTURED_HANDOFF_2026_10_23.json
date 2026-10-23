@@ -190,7 +190,7 @@
     "completedCanaryReplayed": false
   },
   "acceptance": {
-    "normalExecutable": "PENDING_BUILD_AND_READ_ONLY_LEGACY_STATUS_QUALIFICATION",
+    "normalExecutable": "PASS_NORMAL_BUILD_AND_READ_ONLY_LEGACY_STATUS_NOT_NEW_WEB_HANDOFF",
     "selectedDevelopment": "C15_V51_STOPPED_WITHOUT_C16",
     "actualNewHandoffWebExchange": "OPEN",
     "actualWebB": "OPEN",
@@ -198,5 +198,82 @@
     "protectedProduction": "OPEN",
     "unattended": "NOT_ACTIVATED",
     "ci": "UNVERIFIED"
+  },
+  "sourcePublication": {
+    "atUtc": "2026-10-23T07:14:20.1259706Z",
+    "action": "handoff-context-published-exact-match",
+    "sourceBase": "325c6d7b454774ff51c31dcdbb6f2c5229283ccf",
+    "sourceFiles": [
+      {
+        "path": "src/operator_web_rollover.rs",
+        "sha256": "48e2720401bcd462b59c5d8969870faefae958d4b97c3e8f67a37c3aa82a0087"
+      }
+    ],
+    "head": "6370c93e5b36aa95361dde3d2ec0f46a0c5b4184",
+    "remoteSha": "6370c93e5b36aa95361dde3d2ec0f46a0c5b4184",
+    "branch": "codex/web-rollover-oct17",
+    "remote": "https://github.com/vnath99/CatDesk",
+    "tree": "CLEAN",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false,
+    "protectedProductionAccepted": false
+  },
+  "normalExecutableBuild": {
+    "startedUtc": "2026-10-23T07:14:26.8656611Z",
+    "finishedUtc": "2026-10-23T07:15:02.4025045Z",
+    "sourceCommit": "6370c93e5b36aa95361dde3d2ec0f46a0c5b4184",
+    "baseCommitTree": "ad34c470f5e69ef31f779a075dc0f3c4104192bd",
+    "sourceState": "CLEAN_COMMITTED_SOURCE",
+    "sourceFiles": [
+      {
+        "path": "src/operator_web_rollover.rs",
+        "sha256": "48e2720401bcd462b59c5d8969870faefae958d4b97c3e8f67a37c3aa82a0087"
+      }
+    ],
+    "profile": "NORMAL_DEBUG_APP_NO_DEV_DEPENDENCIES",
+    "exitCode": 0,
+    "maximumSeconds": 240,
+    "packageSelectionChanged": false,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "imageSha256": "d7b23cf17e2a9db9bdd1b93ecc1c781340133a0db3d51afabf7bc8d7f2ea9812",
+    "imageBytes": 68020224,
+    "buildLogSha256": "de901262ef58f2a286dc536470311e50a4ceb36bb93a47640d3118a81b97c1e2"
+  },
+  "normalReadOnlyLegacyStatus": {
+    "startedUtc": "2026-10-23T07:15:58.7084833Z",
+    "finishedUtc": "2026-10-23T07:16:13.2612479Z",
+    "classification": "NORMAL_EXECUTABLE_READ_ONLY_EXISTING_LEGACY_STATUS",
+    "sourceCommit": "6370c93e5b36aa95361dde3d2ec0f46a0c5b4184",
+    "imageSha256": "d7b23cf17e2a9db9bdd1b93ecc1c781340133a0db3d51afabf7bc8d7f2ea9812",
+    "maximumSeconds": 90,
+    "commandMaximumSeconds": 30,
+    "exitCode": 0,
+    "viewPassed": true,
+    "fiveOriginalPairsVisible": true,
+    "legacyContinuationAndQuarantineVisible": true,
+    "recordsChecked": 139,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "ownedProcesses": 0,
+    "failure": null,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "connectorCalls": 0,
+    "messagesSent": 0,
+    "nativeSessionsChanged": false,
+    "selectedPackageChanged": false,
+    "recurringStarted": false,
+    "productionModified": false,
+    "completedCanaryReplayed": false,
+    "elapsedSeconds": 14.55,
+    "containment": {
+      "ExitCode": 0,
+      "TimedOut": false,
+      "TerminationFailed": false
+    }
   }
 }

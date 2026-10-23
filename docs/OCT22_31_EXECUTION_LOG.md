@@ -20,8 +20,15 @@ Final source checks PASS07:12:06 UTC under600s retained Job:73 distinct tests/
 81 executions, including seven new context/recovery cases and existing rollover,
 quarantine, owner, scheduler and status regressions; strict Clippy/format PASS.
 An earlier five-case pass preceded the additional interrupted-pointer checks;
-the final evidence covers the completed source. Normal executable qualification
-follows this checkpoint. Selected C15 v51 stays STOPPED without C16. No browser,
+the final evidence covers the completed source. Source published07:14:20 UTC as
+`6370c93e5b36aa95361dde3d2ec0f46a0c5b4184`, exact remote/clean; zero workflow/
+check runs, CI UNVERIFIED. Normal build PASS07:15:02 UTC, SHA256
+`d7b23cf17e2a9db9bdd1b93ecc1c781340133a0db3d51afabf7bc8d7f2ea9812`.
+At07:16:13 UTC, the normal narrow read-only Web status command exits0 in14.55s,
+under30s command/90s outer limits. Five original paired rows and legacy saved
+continuation/quarantine visible;139 records exact, no new records/owned processes.
+This checks normal compatibility, not a new Web handoff. Selected C15 v51 stays
+STOPPED without C16. No browser,
 Wake worker, connector call, recurring/native/production action or canary replay.
 Actual new schema2 Web exchange and Web B/G/H/I remain separate open acceptance.
 See [C16 evidence](verification/C16_STRUCTURED_HANDOFF_2026_10_23.json).

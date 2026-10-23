@@ -6,8 +6,10 @@ preserved. Interrupted request-file/active-pointer recovery reuses exact old con
 identity conflict/malformed state never permits replacement. New Git basis remains
 UNKNOWN or SOURCE_REPORTED, not native attestation; latest-source comparison covers
 Git/decision changes before guarded binding.73 distinct tests/81 executions plus
-strict Clippy/format PASS. Normal executable qualification pending. Selected C15 v51
-stays STOPPED without C16; actual schema2 Web exchange, B/G/H/I and production remain
+strict Clippy/format PASS. Source published `6370c93`, exact remote; normal build and
+14.55s read-only legacy status proof PASS. Five pairs/saved continuation/quarantine
+visible,139 records exact/no new or owned processes. CI unverified, zero runs/checks.
+Selected C15 v51 stays STOPPED without C16; actual schema2 Web exchange, B/G/H/I and production remain
 unaccepted. No browser/Wake/native/recurring/binding action. See
 [C16 evidence](../verification/C16_STRUCTURED_HANDOFF_2026_10_23.json).
 
