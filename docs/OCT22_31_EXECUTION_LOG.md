@@ -1,6 +1,12 @@
 # October 22–31 execution log
 
 ## 2026-10-22 evening — selected positive observation path PASS
+- **Exact publication at 01:38:31 UTC October 23:** five reviewed sanitized
+  documentation paths pushed normally as
+  `5b78c86b2c3ae3cdc451cf4b86ec1305a4e0ad8b` to
+  `codex/web-rollover-oct17`; full remote SHA matches. No private review text,
+  target URL, profile, source from other projects or runtime artifact published.
+  Zero workflow runs/checks reported; CI UNVERIFIED. Protected production unchanged.
 
 At 01:35–01:36 UTC October 23 (October 22 New York), the current matched
 normal release package completed one `operator web auto tick` observation in

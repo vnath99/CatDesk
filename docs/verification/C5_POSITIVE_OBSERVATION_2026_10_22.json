@@ -67,5 +67,16 @@
     "protectedProduction": "OPEN",
     "fullMvp": "PARTIAL"
   },
-  "nextTask": "Qualify bounded independent-project monitoring with existing owner/admission controls; reconcile native ownership before any next-task dispatch"
+  "nextTask": "Qualify bounded independent-project monitoring with existing owner/admission controls; reconcile native ownership before any next-task dispatch",
+  "publication": {
+    "observedUtc": "2026-10-23T01:38:31.8875606Z",
+    "documentationCommit": "5b78c86b2c3ae3cdc451cf4b86ec1305a4e0ad8b",
+    "remoteSha": "5b78c86b2c3ae3cdc451cf4b86ec1305a4e0ad8b",
+    "branch": "codex/web-rollover-oct17",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "privacyScan": "PASS",
+    "protectedProductionAccepted": false
+  }
 }
