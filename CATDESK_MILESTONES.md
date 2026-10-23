@@ -1,3 +1,30 @@
+## October 23 C46 — durable work/task association and resume preparation
+
+C46 adds explicit opt-in association between an existing work request and its
+isolated task assignment. Exact assignment bytes are archived before linking
+task/assignment/scope digests into the existing work ledger. The scope pins
+workspace, Git identity, verification profile and native owner. A later Web
+generation requires the verified continuation of that same source work event.
+Resume preparation returns PREPARED_ONLY with launchAuthorized:false; it starts
+no endpoint, worker or native turn and retains completed-call replay refusals.
+
+The 19:49:57.779Z–19:50:54.193Z source gate passed 34 distinct tests, seven added;
+two existing native-sandbox tests remain ignored. One existing continuation test
+was enhanced. Strict workspace Clippy, formatting and whitespace checks passed
+at 19:51:36.771Z with the five source hashes frozen. Three earlier failed gates
+are retained: digest-prefix mismatch, runtime-fixture setup order, and a same-URL
+generation-change assumption, each corrected before the final gate.
+
+C46 is source-qualified and pending publication/normal qualification. Selected
+STOPPED v61 remains C45/source `a55bcab4a460ea6645ffa1f33e4718b41ad2f180`.
+Automatic endpoint launch/task reinstantiation, actual Web coding and protected/
+unattended acceptance remain open. Next: review/publication and isolated normal
+CLI qualification; preserve completed browser canaries without replay.
+At 19:52:58Z all 243 protected records were exact, with zero new records/runtime
+owners and both controls STOPPED. One 19:52:22Z connector probe returned HTTP 429;
+four native chats remained active in the same read-only snapshot.
+[C46 evidence](docs/verification/C46_DURABLE_WORK_TASK_RESUMPTION_2026_10_23.json).
+
 ## October 23 C45 — automatic MCP traffic qualified in selected local HTTP
 
 Project-scoped MCP requests/results now contribute counts and hashes to the

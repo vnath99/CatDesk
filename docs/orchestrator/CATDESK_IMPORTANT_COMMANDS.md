@@ -1,5 +1,35 @@
 # CatDesk — Important Command Reference
 
+## October 23 C46 — opt-in assignment association and prepare-only resume
+
+These operator commands are source-qualified, pending normal image/CLI
+qualification; selected STOPPED v61 does not contain C46:
+
+```text
+<C46-qualified-catdesk.exe> operator web work associate --project-id PROJECT --input-file pins.json --assignment-file assignment.json
+<C46-qualified-catdesk.exe> operator web work resume-prepare --project-id PROJECT --input-file pins.json
+```
+
+The pins file requires projectId, requestId, sourceEventId,
+expectedTargetGeneration, expectedTargetSha256 and assignmentSha256.
+The assignment must explicitly opt in through webWork:{requestId,eventId}.
+Association archives exact bytes before the existing ledger link and returns
+ASSOCIATED_ONLY. Resume preparation returns PREPARED_ONLY; both set
+launchAuthorized:false. Source publication/delivery, current paired witness and
+any cross-generation continuation must match the same work event. No launch,
+force, port or token option is accepted. Existing completed/unknown journal-call
+refusals remain; preparation never clears them or grants endpoint launch.
+
+The source gate passed 34 distinct tests, seven added, with two existing native
+sandbox tests ignored; strict checks passed at 19:51:36.771Z. Earlier digest,
+fixture-order and same-URL test failures are retained. Selected v61 remains
+C45/source `a55bcab4a460ea6645ffa1f33e4718b41ad2f180`; normal qualification and
+actual Web coding remain open. Preserve completed deliveries and native owners.
+The 19:52:58Z preservation read found 243 exact records, zero new records/runtime
+owners and both controls STOPPED. The one 19:52:22Z probe remains HTTP 429, while
+four native chats remain active; no operator action is needed for source work.
+[C46 evidence](../verification/C46_DURABLE_WORK_TASK_RESUMPTION_2026_10_23.json).
+
 ## October 23 C45 — selected project MCP accounting, local HTTP qualified
 
 C45 attaches request/result count/hash observations to the existing fixed

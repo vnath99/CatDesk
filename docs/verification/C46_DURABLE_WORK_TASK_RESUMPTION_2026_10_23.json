@@ -1,0 +1,240 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-10-23T19:54:56.0543752Z",
+  "task": "C46-DURABLE-WORK-TASK-RESUMPTION",
+  "classification": "SOURCE_ONLY_OPT_IN_ASSOCIATION_AND_PREPARE_ONLY_RESTORATION",
+  "sourceBaseCommit": "b9d11b046421b4fb67017a547e2acd40647273f8",
+  "sourceFiles": [
+    {
+      "path": "src/project_mcp_task.rs",
+      "sha256": "ecd03999c83dc333f43c68a8db24680427d28db3997c41a8ff3c7c52587274b7"
+    },
+    {
+      "path": "src/web_work_state.rs",
+      "sha256": "f4394a3a441fff6663aedd9b0a006dca0cd9e0abb82d83331c813ef66e56f33d"
+    },
+    {
+      "path": "src/web_work.rs",
+      "sha256": "3bb191d33722ed47d3e8ddf4d9873d6c4a6529e1c98bdf1b5fd2713e59173516"
+    },
+    {
+      "path": "src/operator_web_cli.rs",
+      "sha256": "0f0148714625f469900b8bed37f64f6a9359a64403af2c012eceedba03404f60"
+    },
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "5ce91260de51e5bef4a06323ef50182e27b2477debd608332e9758567d8626a8"
+    }
+  ],
+  "change": {
+    "existingRegistryAndLedgerReused": true,
+    "assignmentOptIn": "OPTIONAL_WEB_WORK_REQUEST_AND_EVENT",
+    "archiveBeforeLedgerLink": true,
+    "archiveMustMatchExactBytes": true,
+    "unlinkedArchiveGrantsExecution": false,
+    "workRecordAssociation": [
+      "taskId",
+      "assignmentSha256",
+      "scopeSha256"
+    ],
+    "scopePins": [
+      "control workspace",
+      "project identity",
+      "registered workspace",
+      "Git identity",
+      "verification profile",
+      "native owner"
+    ],
+    "webUrlAndHistoryAreAssignmentScope": false,
+    "changedWebGenerationRequiresExactVerifiedSourceContinuation": true,
+    "associationStatus": "ASSOCIATED_ONLY",
+    "resumeStatus": "PREPARED_ONLY",
+    "launchAuthorized": false,
+    "endpointLauncherImplemented": false,
+    "automaticTaskReinstantiationImplemented": false,
+    "unknownJournalCallsCleared": false,
+    "completedCallsMayReplay": false,
+    "contractOrCommandProfileReplacementAllowed": false,
+    "nativeCheckoutClaimed": false
+  },
+  "operatorSurface": {
+    "associate": "operator web work associate --project-id PROJECT --input-file pins.json --assignment-file assignment.json",
+    "resumePrepare": "operator web work resume-prepare --project-id PROJECT --input-file pins.json",
+    "pinFields": [
+      "projectId",
+      "requestId",
+      "sourceEventId",
+      "expectedTargetGeneration",
+      "expectedTargetSha256",
+      "assignmentSha256"
+    ],
+    "extraLaunchOptionsAccepted": false,
+    "sourcePublicationRequiredForAssociation": true,
+    "exactSentOrVerifiedContinuationRequiredForResume": true
+  },
+  "sourceGate": {
+    "startedUtc": "2026-10-23T19:49:57.7794179Z",
+    "finishedUtc": "2026-10-23T19:50:54.1930126Z",
+    "distinctPassedTests": 34,
+    "addedTests": 7,
+    "enhancedExistingTests": 1,
+    "ignoredExistingTests": 2,
+    "ignoredReason": "Preexisting native command-sandbox tests intentionally excluded.",
+    "suiteCounts": {
+      "operatorCli": 16,
+      "webWork": 4,
+      "existingContinuationProof": 1,
+      "workLedger": 4,
+      "projectTask": 9
+    },
+    "maximumSecondsPerProcess": 600,
+    "allFiveCargoOwnersExitedNaturally": true,
+    "allOutputDrained": true,
+    "timedOut": false,
+    "newCoverage": [
+      "Legacy ledger bytes remain unchanged without opt-in association.",
+      "Exact assignment archive and inert link survive reopening; conflicting bytes refuse.",
+      "Preparation preserves contract, command authority and completed-call replay refusal.",
+      "Unresolved journal state and busy writer refuse without clearing state.",
+      "Operator association requires source publication; original-target preparation requires exact sent source.",
+      "Changed native owner, profile or registration refuse before task execution.",
+      "Cross-generation work admission requires the verified continuation of the original source task."
+    ]
+  },
+  "finalChecks": {
+    "startedUtc": "2026-10-23T19:51:05.2321480Z",
+    "finishedUtc": "2026-10-23T19:51:36.7708899Z",
+    "sourceHashesFrozen": true,
+    "checks": [
+      {
+        "name": "strict-workspace-clippy",
+        "elapsedSeconds": 28.7638824,
+        "maximumSeconds": 600,
+        "exitCode": 0,
+        "timedOut": false,
+        "ownerExited": true
+      },
+      {
+        "name": "workspace-format",
+        "elapsedSeconds": 2.6325652,
+        "maximumSeconds": 120,
+        "exitCode": 0,
+        "timedOut": false,
+        "ownerExited": true
+      },
+      {
+        "name": "diff-whitespace",
+        "elapsedSeconds": 0.0990379,
+        "maximumSeconds": 60,
+        "exitCode": 0,
+        "timedOut": false,
+        "ownerExited": true
+      }
+    ],
+    "status": "PASS"
+  },
+  "earlierAttempts": [
+    {
+      "startedUtc": "2026-10-23T19:40:28.5216400Z",
+      "finishedUtc": "2026-10-23T19:41:37.4140652Z",
+      "status": "FAILED_NEW_ASSERTIONS",
+      "passedBeforeFailure": 6,
+      "failed": 3,
+      "ignored": 2,
+      "cause": "New assignment/request digest used the wrong prefixed representation.",
+      "correction": "Use the existing unprefixed protocol digest consistently.",
+      "ownedProcessesExited": true,
+      "timedOut": false
+    },
+    {
+      "startedUtc": "2026-10-23T19:44:56.6524229Z",
+      "finishedUtc": "2026-10-23T19:46:01.5673893Z",
+      "status": "FAILED_FIXTURE_SETUP",
+      "earlierSuitesPassed": [
+        9,
+        4
+      ],
+      "failingSuitePassed": 2,
+      "failingSuiteFailed": 2,
+      "cause": "Development preparation ran after the test control was already populated.",
+      "correction": "Use a separate empty runtime-control fixture.",
+      "ownedProcessesExited": true,
+      "timedOut": false
+    },
+    {
+      "startedUtc": "2026-10-23T19:47:49.9237398Z",
+      "finishedUtc": "2026-10-23T19:48:41.7879294Z",
+      "status": "FAILED_TEST_ASSUMPTION",
+      "earlierSuitesPassed": [
+        9,
+        4
+      ],
+      "failingSuitePassed": 2,
+      "failingSuiteFailed": 2,
+      "cause": "The test expected idempotent same-URL set_target to advance generation.",
+      "correction": "Use a genuine URL CAS roundtrip; production target API unchanged.",
+      "ownedProcessesExited": true,
+      "timedOut": false
+    }
+  ],
+  "preservation": {
+    "atUtc": "2026-10-23T19:52:58.524Z",
+    "protectedRecords": 243,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "ownedRuntimeProcesses": 0,
+    "controls": [
+      "STOPPED",
+      "STOPPED"
+    ],
+    "realBindingsChanged": false,
+    "nativeActions": 0,
+    "browserActions": 0,
+    "wakeHostStarts": 0,
+    "recurringStarts": 0,
+    "productionChanged": false,
+    "completedCanaryReplayed": false
+  },
+  "externalDependency": {
+    "atUtc": "2026-10-23T19:52:22.250Z",
+    "connector": "HTTP_429_UNAVAILABLE",
+    "requests": 1,
+    "immediateRetries": 0,
+    "activeNativeChats": 4,
+    "inProgressNativeChats": 4,
+    "nativeErrors": 0,
+    "nativeActions": 0,
+    "actualWebCoding": "OPEN"
+  },
+  "independentReview": "PASS_FROZEN_SOURCE_C35_REVIEW",
+  "selectedRuntime": {
+    "version": "V61_STOPPED",
+    "sourceCommit": "a55bcab4a460ea6645ffa1f33e4718b41ad2f180",
+    "containsC46": false,
+    "priorC45NormalLocalHttpQualification": "PRESERVED",
+    "completedC43": "PRESERVED_NO_REPLAY"
+  },
+  "privateProofHashes": {
+    "finalFunctionalResult": "06ff74abd49e5fe6b1a5857a86dc722a350b5a77fd2314930bf0fd0b818c0a74",
+    "finalStrictResult": "75e0e760c3dd226c367c51e74d3c264c678f41a746281b45754f06e6f77f93ac",
+    "realStatePreservation": "88e5994f661037745742e34394505d17234c4d0e178f7c058d77e344c9e764b5",
+    "externalDependencies": "c5922fa09134af397c861d8f32d0c150082349366661f6b5ef28ca3e07431f6f"
+  },
+  "publication": {
+    "force": false,
+    "visibilityChanged": false,
+    "status": "PENDING_REVIEWED_SOURCE_PUBLICATION"
+  },
+  "acceptance": {
+    "isolatedNormalCli": "PENDING",
+    "actualWebCoding": "OPEN_CONNECTOR_429",
+    "fullMultiProjectMvp": "OPEN",
+    "source": "PASS",
+    "unattendedOperation": "NOT_ACTIVATED",
+    "protectedInstalledRuntime": "NOT_QUALIFIED",
+    "normalImage": "PENDING",
+    "automaticEndpointLaunch": "NOT_IMPLEMENTED",
+    "automaticAssignedTaskReinstantiation": "NOT_IMPLEMENTED"
+  },
+  "nextTask": "Review and publish frozen source, then qualify the matching normal image through isolated CLI association, preparation, restart and replay refusals; preserve completed browser canaries."
+}

@@ -1,3 +1,29 @@
+## October 23 C46 — qualify explicit association and inert resume preparation
+
+C46 source now archives an explicitly opted-in assignment and associates its
+task/assignment/scope digests with existing work. Resume preparation preserves
+the original source event, archived bytes, separate worktree, native owner and
+tool journal. A changed Web generation needs that source's verified continuation.
+ASSOCIATED_ONLY and PREPARED_ONLY both have launchAuthorized:false. No endpoint,
+worker or native turn is started, and unresolved calls are not cleared or retried.
+
+The final source gate passed 34 distinct tests, seven added and one existing
+continuation proof enhanced; two existing native-sandbox tests remain ignored.
+Strict workspace Clippy/format/whitespace passed at 19:51:36.771Z. Three prior
+digest/fixture/idempotency-assumption failures are preserved and superseded by
+the final frozen-source proof. Source publication and normal qualification are
+pending. Selected STOPPED v61 still contains C45/source
+`a55bcab4a460ea6645ffa1f33e4718b41ad2f180`.
+
+Next: reviewed publication, then isolated normal CLI association/restart/replay
+qualification. Automatic task endpoint restoration remains another stage. Keep
+C42 fencing, completed C43 and native owners intact; actual Web coding remains
+connector-429 dependent. No operator action is needed for eligible source work.
+The 19:52:58Z check preserves 243 records with zero new records/runtime owners
+and both controls STOPPED. One 19:52:22Z HTTP 429 probe and four active native
+chats were recorded without actions.
+[C46 evidence](../verification/C46_DURABLE_WORK_TASK_RESUMPTION_2026_10_23.json).
+
 ## October 23 C45 — preserve selected local HTTP qualification
 
 C45 source adds observable request/result count/hash accounting to the existing

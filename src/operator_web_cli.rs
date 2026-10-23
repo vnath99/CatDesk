@@ -92,6 +92,15 @@ pub(crate) enum WebAction {
         project_id: String,
         input_file: PathBuf,
     },
+    WorkAssociate {
+        project_id: String,
+        input_file: PathBuf,
+        assignment_file: PathBuf,
+    },
+    WorkResumePrepare {
+        project_id: String,
+        input_file: PathBuf,
+    },
     ContextConfigure {
         project_id: String,
         input_file: PathBuf,
@@ -219,11 +228,21 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                 expected_digest,
             })
         }
-        ("work", "request" | "resolve") => {
+        ("work", "request" | "resolve" | "associate" | "resume-prepare") => {
             let input_file = options
                 .remove("--input-file")
                 .filter(|path| !path.is_empty())
                 .ok_or("WEB_USAGE: --input-file is required")?;
+            let assignment_file = if verb == "associate" {
+                Some(
+                    options
+                        .remove("--assignment-file")
+                        .filter(|path| !path.is_empty())
+                        .ok_or("WEB_USAGE: --assignment-file is required")?,
+                )
+            } else {
+                None
+            };
             if !options.is_empty() {
                 return Err("WEB_USAGE: unexpected work option".into());
             }
@@ -232,8 +251,19 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                     project_id: project_id.into(),
                     input_file: input_file.into(),
                 })
-            } else {
+            } else if verb == "resolve" {
                 Ok(WebAction::WorkResolve {
+                    project_id: project_id.into(),
+                    input_file: input_file.into(),
+                })
+            } else if let Some(assignment_file) = assignment_file {
+                Ok(WebAction::WorkAssociate {
+                    project_id: project_id.into(),
+                    input_file: input_file.into(),
+                    assignment_file: assignment_file.into(),
+                })
+            } else {
+                Ok(WebAction::WorkResumePrepare {
                     project_id: project_id.into(),
                     input_file: input_file.into(),
                 })
@@ -1110,6 +1140,21 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             input_file,
         } => crate::web_work::resolve(&workspace, read_work_input(&input_file, &project_id)?),
+        WebAction::WorkAssociate {
+            project_id,
+            input_file,
+            assignment_file,
+        } => crate::web_work::associate(
+            &workspace,
+            read_work_input(&input_file, &project_id)?,
+            &assignment_file,
+        ),
+        WebAction::WorkResumePrepare {
+            project_id,
+            input_file,
+        } => {
+            crate::web_work::resume_prepare(&workspace, read_work_input(&input_file, &project_id)?)
+        }
         WebAction::ContextConfigure {
             project_id,
             input_file,
@@ -1363,6 +1408,50 @@ mod tests {
         let mut invalid = valid;
         invalid.extend(args(&["--submit", "true"]));
         assert!(parse(&invalid).is_err());
+    }
+
+    #[test]
+    fn assignment_commands_are_operator_only_explicit_and_prepare_never_accepts_launch_options() {
+        let common = [
+            "operator",
+            "web",
+            "work",
+            "resume-prepare",
+            "--project-id",
+            "alpha",
+            "--input-file",
+            "pins.json",
+        ];
+        assert_eq!(
+            parse(&args(&common)).unwrap(),
+            WebAction::WorkResumePrepare {
+                project_id: "alpha".into(),
+                input_file: "pins.json".into()
+            }
+        );
+        let mut associate = args(&common);
+        associate[3] = "associate".into();
+        assert!(parse(&associate).is_err());
+        associate.extend(args(&["--assignment-file", "assignment.json"]));
+        assert_eq!(
+            parse(&associate).unwrap(),
+            WebAction::WorkAssociate {
+                project_id: "alpha".into(),
+                input_file: "pins.json".into(),
+                assignment_file: "assignment.json".into()
+            }
+        );
+        for option in [
+            "--assignment-file",
+            "--launch",
+            "--force",
+            "--port",
+            "--token",
+        ] {
+            let mut invalid = args(&common);
+            invalid.extend(args(&[option, "value"]));
+            assert!(parse(&invalid).is_err());
+        }
     }
 
     #[test]

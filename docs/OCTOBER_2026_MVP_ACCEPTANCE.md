@@ -1,5 +1,30 @@
 # CatDesk October 2026 MVP acceptance
 
+### October 23 C46 — source-qualified opt-in association; preparation only
+
+An existing work request may explicitly associate an exact archived assignment
+for its separate task worktree. Original request/event, assignment digest,
+canonical roots, Git identity, profile and native ownership are revalidated.
+Cross-generation admission requires that source task's verified continuation.
+PREPARED_ONLY/launchAuthorized:false metadata starts no endpoint or coding turn;
+unknown/incomplete calls remain blocked and completed calls cannot replay.
+
+The source gate passed 34 distinct tests at 19:50:54.193Z: seven added and one
+existing continuation proof enhanced; two existing native-sandbox tests ignored.
+Strict workspace Clippy, formatting and whitespace checks passed at
+19:51:36.771Z. Three earlier failed gates are retained and corrected: digest
+representation, fixture setup order and same-URL generation-test assumption.
+
+This is the source-only first slice. C46 publication, matching normal image and
+isolated CLI qualification remain pending. Selected STOPPED v61 remains C45/
+`a55bcab4a460ea6645ffa1f33e4718b41ad2f180`. Automatic task endpoint/restoration,
+actual Web B/C coding, protected installation and unattended operation remain
+open. No completed browser canary was replayed and no live A–J gate is closed.
+The 19:52:58.524Z read preserves all 243 records, with zero new records/runtime
+owners and both controls STOPPED. The one 19:52:22.250Z connector check still
+returns HTTP 429; four native chats remain active without errors or actions.
+[C46 evidence](verification/C46_DURABLE_WORK_TASK_RESUMPTION_2026_10_23.json).
+
 ### October 23 C45 — selected normal-image local HTTP qualification
 
 The fixed authenticated project connection meters observable request/result

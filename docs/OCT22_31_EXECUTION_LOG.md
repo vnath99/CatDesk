@@ -1,5 +1,43 @@
 # October 22–31 execution log
 
+## October 23 C46 — source-only durable assignment association and resume preparation
+
+The optional assignment webWork identity now links exact archived assignment bytes
+to the original OPEN work request/event. The existing ledger stores task,
+assignment and scope digests; archive-before-link interruption leaves an inert
+archive. Scope includes canonical roots, Git identity, profile and native owner.
+Changing Web URL/generation alone grants no assignment; verified continuation
+must retain the original source task. Admission and per-call checks preserve
+the contract, command profiles, separate worktree and completed-call journal.
+
+Operator association returns ASSOCIATED_ONLY. Resume preparation requires exact
+source delivery or its verified continuation and returns PREPARED_ONLY with
+launchAuthorized:false. Busy writers, changed assignment/scope, incomplete calls
+and unknown journal outcomes refuse; no journal is cleared. This slice launches
+no endpoint, worker, browser or native task.
+
+The final 19:49:57.779Z–19:50:54.193Z gate passed 34 distinct tests: work 4,
+project task 9, ledger 4, CLI 16 and existing continuation proof 1. Seven tests
+are added; one existing proof is enhanced. Two existing native-sandbox tests
+remain ignored. All five bounded cargo processes exited naturally and drained.
+Strict checks passed at 19:51:36.771Z: Clippy 28.76s, formatting 2.63s and
+whitespace 0.10s; source hashes stayed frozen. Retained failed attempts exposed
+the new digest-prefix bug, fixture setup after populated development preparation,
+and an incorrect assumption that same-URL set_target advances generation. The
+final tests use the correct digest, separate empty fixture control and a genuine
+URL CAS roundtrip; the production target API was unchanged.
+
+Publication and matching normal/isolated CLI qualification remain pending.
+Selected STOPPED v61 is still C45/source `a55bcab4a460ea6645ffa1f33e4718b41ad2f180`;
+verified documentation checkpoint is `b9d11b046421b4fb67017a547e2acd40647273f8`.
+No actual Web coding or automatic endpoint restoration is qualified. HTTP 429
+remains specific to B/C; eligible source work continues without operator action.
+The independent 19:52:58.524Z preservation read verified 243 records exact,
+zero new records/runtime owners and both controls STOPPED. One 19:52:22.250Z
+connector probe still returned HTTP 429; all four native chats were active/in
+progress with no errors or actions. No completed browser test was replayed.
+[C46 evidence](verification/C46_DURABLE_WORK_TASK_RESUMPTION_2026_10_23.json).
+
 ## October 23 C45 — automatic MCP traffic, normal build and local HTTP qualification
 
 The existing fixed project connection now records observable request/result

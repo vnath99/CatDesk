@@ -361,6 +361,7 @@ struct ProjectStore {
 pub(crate) struct WorkLease {
     _store: ProjectStore,
     approved_target: Option<Target>,
+    approved_source_task_id: Option<String>,
 }
 
 impl WorkLease {
@@ -375,6 +376,24 @@ impl WorkLease {
             .is_some_and(|approved| approved != current)
         {
             return Err("WEB_WORK_ROLLOVER_PENDING".into());
+        }
+        Ok(())
+    }
+
+    /// A historical work event may continue only through its own verified
+    /// rollover, whose proof and immutable journal remain fenced by this lease.
+    pub(crate) fn check_source_task(
+        &self,
+        original: &Target,
+        current: &Target,
+        event_id: &str,
+    ) -> Result<(), String> {
+        self.check_target(current)?;
+        if original != current
+            && (self.approved_target.as_ref() != Some(current)
+                || self.approved_source_task_id.as_deref() != Some(event_id))
+        {
+            return Err("WEB_WORK_CONTINUATION_SOURCE_REQUIRED".into());
         }
         Ok(())
     }
@@ -526,6 +545,11 @@ fn acquire_web_project_lease(
     }
     Ok(WorkLease {
         _store: store,
+        // completed_target has already verified the exact continuation proof,
+        // including this source-task identity. Never infer it from a URL alone.
+        approved_source_task_id: approved_target
+            .as_ref()
+            .and_then(|_| active.as_ref().map(|record| record.source_task_id.clone())),
         approved_target,
     })
 }
@@ -5561,6 +5585,7 @@ mod tests {
         let approved = WorkLease {
             _store: completed_store,
             approved_target: Some(current.clone()),
+            approved_source_task_id: Some(record.source_task_id.clone()),
         };
         approved.check_target(&current).unwrap();
         assert_eq!(
@@ -5570,6 +5595,17 @@ mod tests {
         drop(approved);
         let work = acquire_web_work_lease(&root, "alpha").unwrap();
         work.check_target(&current).unwrap();
+        work.check_source_task(&record.source, &current, "task-a")
+            .unwrap();
+        assert_eq!(
+            work.check_source_task(&record.source, &current, "task-other")
+                .unwrap_err(),
+            "WEB_WORK_CONTINUATION_SOURCE_REQUIRED"
+        );
+        assert!(
+            work.check_source_task(&record.source, &changed, "task-a")
+                .is_err()
+        );
         drop(work);
         drop(acquire_web_work_lease(&root, "beta").unwrap());
         let project_file = fs::read_dir(root.join(".catdesk/web-context/projects"))

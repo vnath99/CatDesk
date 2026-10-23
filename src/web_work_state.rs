@@ -16,6 +16,14 @@ const MAX_BYTES: usize = 256 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct WorkTaskAssignment {
+    pub(crate) task_id: String,
+    pub(crate) assignment_sha256: String,
+    pub(crate) scope_sha256: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct WorkRecord {
     pub(crate) request_id: String,
     pub(crate) event_id: String,
@@ -24,6 +32,8 @@ pub(crate) struct WorkRecord {
     pub(crate) phase: String,
     pub(crate) outcome: Option<String>,
     pub(crate) summary_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) task_assignment: Option<WorkTaskAssignment>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -99,6 +109,11 @@ impl LedgerFile {
                 || record.event_id != expected_event(project_id, &record.request_id)
                 || !sha256(&record.message_sha256)
                 || record.target.validate().is_err()
+                || record.task_assignment.as_ref().is_some_and(|assignment| {
+                    !valid_request(&assignment.task_id)
+                        || !sha256(&assignment.assignment_sha256)
+                        || !sha256(&assignment.scope_sha256)
+                })
             {
                 return Err("WEB_WORK_LEDGER_INVALID".into());
             }
@@ -265,6 +280,7 @@ impl WorkLedger {
             phase: "OPEN".into(),
             outcome: None,
             summary_sha256: None,
+            task_assignment: None,
         });
         self.save(&state)?;
         Ok("OPEN_NEW".into())
@@ -279,6 +295,31 @@ impl WorkLedger {
             .records
             .into_iter()
             .find(|record| record.request_id == request_id))
+    }
+
+    /// The assignment archive is persisted and read back before this link.
+    /// An unlinked archive never grants permission to start or resume work.
+    pub(crate) fn associate(
+        &self,
+        request_id: &str,
+        event_id: &str,
+        assignment: &WorkTaskAssignment,
+    ) -> Result<(), String> {
+        let mut state = self.load()?;
+        let record = state
+            .records
+            .iter_mut()
+            .find(|record| record.request_id == request_id)
+            .ok_or("WEB_WORK_REQUEST_MISSING")?;
+        if record.phase != "OPEN" || record.event_id != event_id {
+            return Err("WEB_WORK_ASSIGNMENT_SOURCE_CHANGED".into());
+        }
+        match &record.task_assignment {
+            Some(saved) if saved == assignment => return Ok(()),
+            Some(_) => return Err("WEB_WORK_ASSIGNMENT_CONFLICT".into()),
+            None => record.task_assignment = Some(assignment.clone()),
+        }
+        self.save(&state)
     }
 
     pub(crate) fn resolve(
@@ -355,7 +396,7 @@ impl WorkLedger {
                 "active":active.map(|record| json!({"requestId":record.request_id,
                     "eventId":record.event_id,"targetGeneration":record.target.generation,
                     "targetSha256":record.target.digest,"messageSha256":record.message_sha256,
-                    "phase":record.phase}))}),
+                    "phase":record.phase,"taskAssignment":record.task_assignment}))}),
             )
         })();
         result.unwrap_or_else(
@@ -464,6 +505,57 @@ mod tests {
         assert_eq!(prepare(&alpha, "two", "next").unwrap(), "OPEN_NEW");
         assert_eq!(alpha.record("one").unwrap().unwrap().phase, "CLOSED");
         assert_eq!(alpha.record("two").unwrap().unwrap().phase, "OPEN");
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn optional_assignment_preserves_legacy_bytes_and_exact_original_work_identity() {
+        let (workspace, alpha, beta) = fixture();
+        prepare(&alpha, "one", "body").unwrap();
+        let before = fs::read(&alpha.path).unwrap();
+        assert!(
+            !String::from_utf8(before.clone())
+                .unwrap()
+                .contains("taskAssignment")
+        );
+        let record = alpha.record("one").unwrap().unwrap();
+        assert_eq!(
+            serde_json::to_vec(&alpha.load().unwrap()).unwrap(),
+            before[..before.len() - 1]
+        );
+        let link = WorkTaskAssignment {
+            task_id: "task-a".into(),
+            assignment_sha256: "a".repeat(64),
+            scope_sha256: "b".repeat(64),
+        };
+        alpha.associate("one", &record.event_id, &link).unwrap();
+        let linked = fs::read(&alpha.path).unwrap();
+        alpha.associate("one", &record.event_id, &link).unwrap();
+        assert_eq!(fs::read(&alpha.path).unwrap(), linked);
+        let saved = alpha.record("one").unwrap().unwrap();
+        assert_eq!(saved.target, record.target);
+        assert_eq!(saved.event_id, record.event_id);
+        assert_eq!(saved.message_sha256, record.message_sha256);
+        assert!(beta.record("one").unwrap().is_none());
+        let mut conflicting = link.clone();
+        conflicting.scope_sha256 = "c".repeat(64);
+        assert_eq!(
+            alpha
+                .associate("one", &record.event_id, &conflicting)
+                .unwrap_err(),
+            "WEB_WORK_ASSIGNMENT_CONFLICT"
+        );
+        assert_eq!(
+            alpha.associate("one", "wrong-event", &link).unwrap_err(),
+            "WEB_WORK_ASSIGNMENT_SOURCE_CHANGED"
+        );
+        alpha
+            .resolve("one", &target(), "retired", "explicitly closed")
+            .unwrap();
+        assert_eq!(
+            alpha.associate("one", &record.event_id, &link).unwrap_err(),
+            "WEB_WORK_ASSIGNMENT_SOURCE_CHANGED"
+        );
         fs::remove_dir_all(workspace).unwrap();
     }
 

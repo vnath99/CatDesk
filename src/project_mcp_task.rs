@@ -42,6 +42,41 @@ struct Assignment {
     contract: ExecutionContractV1,
     #[serde(default)]
     command_profiles: Vec<CommandProfile>,
+    #[serde(default)]
+    web_work: Option<AssignmentWork>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AssignmentWork {
+    request_id: String,
+    event_id: String,
+}
+
+#[derive(Clone)]
+struct AssignmentInspection {
+    bytes: Vec<u8>,
+    contract: ExecutionContractV1,
+    command_profiles: Vec<CommandProfile>,
+    root: PathBuf,
+    witness: (PathBuf, PathBuf, String, String),
+    web_work: Option<AssignmentWork>,
+}
+
+/// Conversation URLs and generations are deliberately excluded: a proved
+/// rollover may change those, but cannot grant a different native owner/root.
+pub(crate) fn assignment_scope_sha256(project: &ResolvedProjectScopeV1) -> String {
+    catdesk_wake::protocol::digest(
+        &serde_json::to_string(&(
+            &project.control_workspace,
+            &project.project.project_id,
+            &project.project.workspace,
+            &project.project.git_identity,
+            &project.project.verification_profile,
+            &project.project.codex_thread_id,
+        ))
+        .expect("serializable project identity"),
+    )
 }
 
 struct TaskState {
@@ -61,6 +96,7 @@ pub(crate) struct ProjectTask {
     started: std::time::Instant,
     connection_budget: std::time::Duration,
     command_profiles: Vec<CommandProfile>,
+    linked_assignment: Option<AssignmentInspection>,
     state: Mutex<TaskState>,
 }
 
@@ -110,6 +146,379 @@ fn require_registered_scope(project: &ResolvedProjectScopeV1) -> Result<(), Stri
     Ok(())
 }
 
+fn inspect_assignment(
+    project: &ResolvedProjectScopeV1,
+    assignment: &Path,
+    connection_seconds: u64,
+) -> Result<AssignmentInspection, String> {
+    if !regular(assignment) {
+        return Err("PROJECT_TASK_ASSIGNMENT_UNAVAILABLE".into());
+    }
+    let mut bytes = Vec::new();
+    fs::File::open(assignment)
+        .map_err(|_| "PROJECT_TASK_ASSIGNMENT_UNAVAILABLE")?
+        .take(128 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "PROJECT_TASK_ASSIGNMENT_UNAVAILABLE")?;
+    if bytes.len() > 128 * 1024 {
+        return Err("PROJECT_TASK_ASSIGNMENT_TOO_LARGE".into());
+    }
+    let assignment: Assignment =
+        serde_json::from_slice(&bytes).map_err(|_| "PROJECT_TASK_ASSIGNMENT_INVALID")?;
+    let web_work = assignment.web_work;
+    let contract = assignment.contract;
+    let command_profiles = assignment.command_profiles;
+    validate_contract(&contract).map_err(|_| "PROJECT_TASK_CONTRACT_INVALID")?;
+    if assignment.schema_version != 1
+        || assignment.project_id != project.project.project_id
+        || !catdesk_wake::protocol::valid_id(&contract.task_id)
+        || contract.task_id.len() > 128
+        || contract.max_elapsed_seconds > 180
+        || contract.max_tool_calls > 256
+        || contract.advisor_policy.is_some()
+        || contract.approval_requirements.iter().any(|r| r.required)
+    {
+        return Err("PROJECT_TASK_ASSIGNMENT_INVALID".into());
+    }
+    if command_profiles.len() > 8 || !(1..=180).contains(&connection_seconds) {
+        return Err("PROJECT_TASK_COMMAND_AUTHORITY_INVALID".into());
+    }
+    let mut ids = std::collections::BTreeSet::new();
+    for profile in &command_profiles {
+        profile.validate()?;
+        if !ids.insert(&profile.id) || !contract.allowed_command_profiles.contains(&profile.id) {
+            return Err("PROJECT_TASK_COMMAND_PROFILE_NOT_ASSIGNED".into());
+        }
+    }
+    let root = Path::new(&contract.workspace)
+        .canonicalize()
+        .map_err(|_| "PROJECT_TASK_WORKTREE_UNAVAILABLE")?;
+    // Writes always go to a separately assigned linked worktree. The
+    // existing native project's registered checkout is never claimed.
+    if root == project.project.workspace
+        || root.starts_with(&project.control_workspace)
+        || project.control_workspace.starts_with(&root)
+        || !regular(&root.join(".git"))
+    {
+        return Err("PROJECT_TASK_REQUIRES_SEPARATE_LINKED_WORKTREE".into());
+    }
+    unregistered_task_root(project, &root)?;
+    let witness = web_task_worktree_witness(&root)?;
+    let source = web_task_worktree_witness(&project.project.workspace)?;
+    if witness.0 != source.0
+        || witness.1 == witness.0
+        || witness.1 == source.1
+        || witness.2 != assignment.base_commit
+        || witness.3 != contract.feature_branch
+        || witness.3 == source.3
+    {
+        return Err("PROJECT_TASK_WORKTREE_IDENTITY_MISMATCH".into());
+    }
+    if let Some(work) = &web_work {
+        if work.request_id.len() > 128
+            || !catdesk_wake::protocol::valid_id(&work.request_id)
+            || work.event_id
+                != format!(
+                    "web-work-{}",
+                    catdesk_wake::protocol::digest(&format!(
+                        "{}\0{}",
+                        project.project.project_id, work.request_id
+                    ))
+                )
+        {
+            return Err("PROJECT_TASK_WORK_SCOPE_CHANGED".into());
+        }
+    }
+    Ok(AssignmentInspection {
+        bytes,
+        contract,
+        command_profiles,
+        root,
+        witness,
+        web_work,
+    })
+}
+
+fn state_root(project: &ResolvedProjectScopeV1, task_id: &str) -> PathBuf {
+    project
+        .control_workspace
+        .join(".catdesk/project-mcp-tasks")
+        .join(&project.project.project_id)
+        .join(task_id)
+}
+
+fn plain_directory(path: &Path) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(path).map_err(|_| "PROJECT_TASK_ARCHIVE_UNAVAILABLE")?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if metadata.file_attributes() & 0x400 != 0 {
+            return Err("PROJECT_TASK_ARCHIVE_UNSAFE".into());
+        }
+    }
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Err("PROJECT_TASK_ARCHIVE_UNSAFE".into());
+    }
+    Ok(())
+}
+
+fn task_directory(
+    project: &ResolvedProjectScopeV1,
+    task_id: &str,
+    create: bool,
+) -> Result<PathBuf, String> {
+    if task_id.len() > 128 || !catdesk_wake::protocol::valid_id(task_id) {
+        return Err("PROJECT_TASK_ASSIGNMENT_INVALID".into());
+    }
+    let mut path = project.control_workspace.join(".catdesk");
+    plain_directory(&path)?;
+    for component in ["project-mcp-tasks", &project.project.project_id, task_id] {
+        path.push(component);
+        if create
+            && !path
+                .try_exists()
+                .map_err(|_| "PROJECT_TASK_ARCHIVE_UNAVAILABLE")?
+        {
+            fs::create_dir(&path).map_err(|_| "PROJECT_TASK_ARCHIVE_UNAVAILABLE")?;
+        }
+        plain_directory(&path)?;
+    }
+    Ok(path)
+}
+
+fn read_assignment_bytes(path: &Path) -> Result<Vec<u8>, String> {
+    if !regular(path) {
+        return Err("PROJECT_TASK_ASSIGNMENT_UNAVAILABLE".into());
+    }
+    let mut bytes = Vec::new();
+    fs::File::open(path)
+        .map_err(|_| "PROJECT_TASK_ASSIGNMENT_UNAVAILABLE")?
+        .take(128 * 1024 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "PROJECT_TASK_ASSIGNMENT_UNAVAILABLE")?;
+    if bytes.len() > 128 * 1024 {
+        return Err("PROJECT_TASK_ASSIGNMENT_TOO_LARGE".into());
+    }
+    Ok(bytes)
+}
+
+fn exact_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    use std::io::Write;
+    if path
+        .try_exists()
+        .map_err(|_| "PROJECT_TASK_ARCHIVE_UNAVAILABLE")?
+    {
+        if read_assignment_bytes(path)? != bytes {
+            return Err("PROJECT_TASK_ARCHIVE_CONFLICT".into());
+        }
+        return Ok(());
+    }
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|_| "PROJECT_TASK_ARCHIVE_UNAVAILABLE")?;
+    file.write_all(bytes)
+        .and_then(|_| file.sync_all())
+        .map_err(|_| "PROJECT_TASK_ARCHIVE_UNAVAILABLE")?;
+    drop(file);
+    if read_assignment_bytes(path)? != bytes {
+        return Err("PROJECT_TASK_ARCHIVE_READBACK_CHANGED".into());
+    }
+    Ok(())
+}
+
+fn assignment_link(
+    project: &ResolvedProjectScopeV1,
+    inspected: &AssignmentInspection,
+) -> crate::web_work_state::WorkTaskAssignment {
+    crate::web_work_state::WorkTaskAssignment {
+        task_id: inspected.contract.task_id.clone(),
+        assignment_sha256: catdesk_wake::protocol::digest(
+            std::str::from_utf8(&inspected.bytes).expect("parsed JSON is UTF-8"),
+        ),
+        scope_sha256: assignment_scope_sha256(project),
+    }
+}
+
+fn check_source(
+    inspected: &AssignmentInspection,
+    request: &str,
+    event: &str,
+) -> Result<(), String> {
+    if !inspected
+        .web_work
+        .as_ref()
+        .is_some_and(|source| source.request_id == request && source.event_id == event)
+    {
+        return Err("PROJECT_TASK_EXPLICIT_WORK_ASSOCIATION_REQUIRED".into());
+    }
+    Ok(())
+}
+
+/// Archive first; a crash before the ledger link leaves an inert exact archive.
+pub(crate) fn archive_work_assignment(
+    project: &ResolvedProjectScopeV1,
+    path: &Path,
+    expected_sha256: &str,
+    request: &str,
+    event: &str,
+) -> Result<crate::web_work_state::WorkTaskAssignment, String> {
+    let inspected = inspect_assignment(project, path, 180)?;
+    check_source(&inspected, request, event)?;
+    let link = assignment_link(project, &inspected);
+    if link.assignment_sha256 != expected_sha256 {
+        return Err("PROJECT_TASK_ASSIGNMENT_DIGEST_CHANGED".into());
+    }
+    let _writer = acquire_project_writer_lock(&inspected.root)
+        .map_err(|_| "PROJECT_TASK_WRITER_BUSY_OR_UNRESOLVED")?;
+    let directory = task_directory(project, &link.task_id, true)?;
+    let archive = directory.join("assignment.json");
+    if !archive.exists() && directory.join("journal").exists() {
+        return Err("PROJECT_TASK_LEGACY_JOURNAL_NOT_ASSOCIATED".into());
+    }
+    exact_file(&archive, &inspected.bytes)?;
+    Ok(link)
+}
+
+fn check_record_assignment(
+    project: &ResolvedProjectScopeV1,
+    inspected: &AssignmentInspection,
+    record: &crate::web_work_state::WorkRecord,
+) -> Result<(), String> {
+    check_source(inspected, &record.request_id, &record.event_id)?;
+    if record.phase != "OPEN"
+        || record.task_assignment.as_ref() != Some(&assignment_link(project, inspected))
+    {
+        return Err("PROJECT_TASK_WORK_ASSOCIATION_CHANGED".into());
+    }
+    let archive =
+        task_directory(project, &inspected.contract.task_id, false)?.join("assignment.json");
+    if read_assignment_bytes(&archive)? != inspected.bytes {
+        return Err("PROJECT_TASK_ARCHIVE_CONFLICT".into());
+    }
+    Ok(())
+}
+
+fn check_linked_assignment(
+    project: &ResolvedProjectScopeV1,
+    inspected: &AssignmentInspection,
+    lease: &crate::operator_facade::WebWorkLease,
+) -> Result<(), String> {
+    let source = inspected
+        .web_work
+        .as_ref()
+        .ok_or("PROJECT_TASK_EXPLICIT_WORK_ASSOCIATION_REQUIRED")?;
+    let paired = crate::mcp::operator_read_project_web_target_diagnosed(
+        &project.control_workspace,
+        &project.project.project_id,
+    )
+    .map_err(|failure| failure.code)?
+    .ok_or("PROJECT_TASK_PAIRED_TARGET_REQUIRED")?;
+    crate::mcp::with_current_project_web_target(
+        &project.control_workspace,
+        &project.project.project_id,
+        paired.generation,
+        &paired.sha256,
+        |_, paired| {
+            let current =
+                catdesk_wake::protocol::Target::new(paired.generation, paired.url.clone())?;
+            require_registered_scope(project)?;
+            let record = crate::web_work_state::WorkLedger::open(
+                &project.control_workspace,
+                &project.project.project_id,
+            )?
+            .record(&source.request_id)?
+            .ok_or("WEB_WORK_REQUEST_MISSING")?;
+            lease.check_source_task(&record.target, &current, &record.event_id)?;
+            crate::web_work::require_assignment_source(
+                &project.control_workspace,
+                &project.project.project_id,
+                &record,
+                record.target == current,
+            )?;
+            check_record_assignment(project, inspected, &record)
+        },
+    )
+}
+
+/// Admission is durable metadata only. It never starts a service, writer turn,
+/// endpoint or provider; a later launcher must reacquire and revalidate pins.
+pub(crate) fn prepare_work_resume(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    current: &catdesk_wake::protocol::Target,
+) -> Result<Value, String> {
+    let link = record
+        .task_assignment
+        .as_ref()
+        .ok_or("PROJECT_TASK_EXPLICIT_WORK_ASSOCIATION_REQUIRED")?;
+    let directory = task_directory(project, &link.task_id, false)?;
+    let inspected = inspect_assignment(project, &directory.join("assignment.json"), 180)?;
+    check_record_assignment(project, &inspected, record)?;
+    let _writer = acquire_project_writer_lock(&inspected.root)
+        .map_err(|_| "PROJECT_TASK_WRITER_BUSY_OR_UNRESOLVED")?;
+    let journal_root = directory.join("journal");
+    let mut call_count = 0;
+    if journal_root
+        .try_exists()
+        .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?
+    {
+        plain_directory(&journal_root)?;
+        let journal =
+            DelegatedJournal::open(&journal_root).map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
+        let run = RunId::new(&link.task_id).map_err(|_| "PROJECT_TASK_CONTRACT_INVALID")?;
+        if journal
+            .load_contract(&run)
+            .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?
+            != inspected.contract
+        {
+            return Err("PROJECT_TASK_CONTRACT_CHANGED".into());
+        }
+        let calls = journal
+            .load_tool_calls(&run)
+            .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
+        if calls.values().any(|call| {
+            !matches!(
+                call.status,
+                ToolCallStatus::Completed | ToolCallStatus::Failed
+            )
+        }) {
+            return Err("PROJECT_TASK_RECOVERY_REQUIRED".into());
+        }
+        call_count = calls.len();
+        let profiles = directory.join("command-profiles.json");
+        if profiles.exists() {
+            let saved: Vec<CommandProfile> =
+                serde_json::from_slice(&read_assignment_bytes(&profiles)?)
+                    .map_err(|_| "PROJECT_TASK_COMMAND_AUTHORITY_INVALID")?;
+            if saved != inspected.command_profiles {
+                return Err("PROJECT_TASK_COMMAND_AUTHORITY_CHANGED".into());
+            }
+        } else if !inspected.command_profiles.is_empty() {
+            return Err("PROJECT_TASK_COMMAND_AUTHORITY_CHANGED".into());
+        }
+    }
+    let admission = json!({"schemaVersion":1,"status":"PREPARED_ONLY","launchAuthorized":false,
+        "projectId":project.project.project_id,"requestId":record.request_id,"sourceEventId":record.event_id,
+        "taskId":link.task_id,"assignmentSha256":link.assignment_sha256,"scopeSha256":link.scope_sha256,
+        "originalTargetGeneration":record.target.generation,"originalTargetSha256":record.target.digest,
+        "targetGeneration":current.generation,"targetSha256":current.digest,
+        "executionWorkspace":inspected.root,"baseCommit":inspected.witness.2,"branch":inspected.witness.3});
+    exact_file(
+        &directory.join(format!(
+            "resume-prepared-{}-{}.json",
+            current.generation, current.digest
+        )),
+        &serde_json::to_vec(&admission).map_err(|_| "PROJECT_TASK_ARCHIVE_UNAVAILABLE")?,
+    )?;
+    let mut output = admission;
+    output["journaledCallCount"] = json!(call_count);
+    output["completedCallReplayAllowed"] = json!(false);
+    output["nativeSessionAction"] = json!("NONE");
+    Ok(output)
+}
+
 impl ProjectTask {
     #[cfg(test)]
     pub(crate) fn open(
@@ -133,76 +542,21 @@ impl ProjectTask {
             &project.project.project_id,
         )?;
         require_registered_scope(project)?;
-        if !regular(assignment) {
-            return Err("PROJECT_TASK_ASSIGNMENT_UNAVAILABLE".into());
+        let inspected = inspect_assignment(project, assignment, connection_seconds)?;
+        if inspected.web_work.is_some() {
+            check_linked_assignment(project, &inspected, &project_lease)?;
         }
-        let mut bytes = Vec::new();
-        fs::File::open(assignment)
-            .map_err(|_| "PROJECT_TASK_ASSIGNMENT_UNAVAILABLE")?
-            .take(128 * 1024 + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|_| "PROJECT_TASK_ASSIGNMENT_UNAVAILABLE")?;
-        if bytes.len() > 128 * 1024 {
-            return Err("PROJECT_TASK_ASSIGNMENT_TOO_LARGE".into());
-        }
-        let assignment: Assignment =
-            serde_json::from_slice(&bytes).map_err(|_| "PROJECT_TASK_ASSIGNMENT_INVALID")?;
-        let contract = assignment.contract;
-        let command_profiles = assignment.command_profiles;
-        validate_contract(&contract).map_err(|_| "PROJECT_TASK_CONTRACT_INVALID")?;
-        if assignment.schema_version != 1
-            || assignment.project_id != project.project.project_id
-            || !catdesk_wake::protocol::valid_id(&contract.task_id)
-            || contract.task_id.len() > 128
-            || contract.max_elapsed_seconds > 180
-            || contract.max_tool_calls > 256
-            || contract.advisor_policy.is_some()
-            || contract.approval_requirements.iter().any(|r| r.required)
-        {
-            return Err("PROJECT_TASK_ASSIGNMENT_INVALID".into());
-        }
-        if command_profiles.len() > 8 || !(1..=180).contains(&connection_seconds) {
-            return Err("PROJECT_TASK_COMMAND_AUTHORITY_INVALID".into());
-        }
-        let mut ids = std::collections::BTreeSet::new();
-        for profile in &command_profiles {
-            profile.validate()?;
-            if !ids.insert(&profile.id) || !contract.allowed_command_profiles.contains(&profile.id)
-            {
-                return Err("PROJECT_TASK_COMMAND_PROFILE_NOT_ASSIGNED".into());
-            }
-        }
-        let root = Path::new(&contract.workspace)
-            .canonicalize()
-            .map_err(|_| "PROJECT_TASK_WORKTREE_UNAVAILABLE")?;
-        // Writes always go to a separately assigned linked worktree. The
-        // existing native project's registered checkout is never claimed.
-        if root == project.project.workspace
-            || root.starts_with(&project.control_workspace)
-            || project.control_workspace.starts_with(&root)
-            || !regular(&root.join(".git"))
-        {
-            return Err("PROJECT_TASK_REQUIRES_SEPARATE_LINKED_WORKTREE".into());
-        }
-        unregistered_task_root(project, &root)?;
-        let witness = web_task_worktree_witness(&root)?;
-        let source = web_task_worktree_witness(&project.project.workspace)?;
-        if witness.0 != source.0
-            || witness.1 == witness.0
-            || witness.1 == source.1
-            || witness.2 != assignment.base_commit
-            || witness.3 != contract.feature_branch
-            || witness.3 == source.3
-        {
-            return Err("PROJECT_TASK_WORKTREE_IDENTITY_MISMATCH".into());
-        }
+        let linked_assignment = inspected.web_work.as_ref().map(|_| inspected.clone());
+        let AssignmentInspection {
+            contract,
+            command_profiles,
+            root,
+            witness,
+            ..
+        } = inspected;
         let mut writer = acquire_project_writer_lock(&root)
             .map_err(|_| "PROJECT_TASK_WRITER_BUSY_OR_UNRESOLVED")?;
-        let state_root = project
-            .control_workspace
-            .join(".catdesk/project-mcp-tasks")
-            .join(&project.project.project_id)
-            .join(&contract.task_id);
+        let state_root = state_root(project, &contract.task_id);
         let journal_root = state_root.join("journal");
         let journal = DelegatedJournal::open(&journal_root)
             .map_err(|_| "PROJECT_TASK_JOURNAL_UNAVAILABLE")?;
@@ -295,6 +649,7 @@ impl ProjectTask {
             started: std::time::Instant::now(),
             connection_budget,
             command_profiles,
+            linked_assignment,
             state: Mutex::new(TaskState {
                 service,
                 writer: Some(writer),
@@ -443,6 +798,16 @@ impl ProjectTask {
                 .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
             if state.closed || state.uncertain {
                 return Err("PROJECT_TASK_RECOVERY_REQUIRED".into());
+            }
+            if let Some(assignment) = &task.linked_assignment {
+                check_linked_assignment(
+                    &task.project,
+                    assignment,
+                    state
+                        .project_lease
+                        .as_ref()
+                        .ok_or("PROJECT_TASK_RECOVERY_REQUIRED")?,
+                )?;
             }
             unregistered_task_root(&task.project, &task.root)?;
             if task.started.elapsed() >= task.connection_budget {
@@ -679,7 +1044,7 @@ fn schema(tools: Vec<&str>) -> Value {
 }
 
 #[cfg(all(test, windows))]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::delegated::autonomy_projects::AutonomousProjectV1;
 
@@ -697,7 +1062,7 @@ mod tests {
         );
     }
 
-    pub(super) fn fixture(id: &str) -> (ResolvedProjectScopeV1, PathBuf, PathBuf) {
+    pub(crate) fn fixture(id: &str) -> (ResolvedProjectScopeV1, PathBuf, PathBuf) {
         let parent = std::env::temp_dir().join(format!("project-task-{}", uuid::Uuid::new_v4()));
         let source = parent.join("source");
         let control = parent.join("control");
@@ -781,6 +1146,213 @@ mod tests {
 
     fn call(id: &str, tool: &str, arguments: Value) -> Value {
         json!({"taskId":"task-fixture","callId":id,"tool":tool,"arguments":arguments})
+    }
+
+    fn linked_fixture() -> (
+        ResolvedProjectScopeV1,
+        PathBuf,
+        PathBuf,
+        crate::web_work_state::WorkRecord,
+    ) {
+        let (scope, root, path) = fixture("alpha");
+        let event = format!(
+            "web-work-{}",
+            catdesk_wake::protocol::digest("alpha\0request-a")
+        );
+        let mut value: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        value["webWork"] = json!({"requestId":"request-a","eventId":event});
+        fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+        let ledger =
+            crate::web_work_state::WorkLedger::open(&scope.control_workspace, "alpha").unwrap();
+        ledger
+            .prepare(
+                "request-a",
+                &event,
+                &"a".repeat(64),
+                &catdesk_wake::protocol::Target::new(1, "https://chatgpt.com/c/task-source".into())
+                    .unwrap(),
+            )
+            .unwrap();
+        let sha = catdesk_wake::protocol::digest(&fs::read_to_string(&path).unwrap());
+        let link = archive_work_assignment(&scope, &path, &sha, "request-a", &event).unwrap();
+        let orphan = ledger.record("request-a").unwrap().unwrap();
+        assert!(orphan.task_assignment.is_none());
+        assert_eq!(
+            prepare_work_resume(&scope, &orphan, &orphan.target).unwrap_err(),
+            "PROJECT_TASK_EXPLICIT_WORK_ASSOCIATION_REQUIRED"
+        );
+        let archived =
+            fs::read(state_root(&scope, "task-fixture").join("assignment.json")).unwrap();
+        assert_eq!(
+            archive_work_assignment(&scope, &path, &sha, "request-a", &event).unwrap(),
+            link
+        );
+        assert_eq!(
+            fs::read(state_root(&scope, "task-fixture").join("assignment.json")).unwrap(),
+            archived
+        );
+        ledger.associate("request-a", &event, &link).unwrap();
+        (
+            scope,
+            root,
+            path,
+            ledger.record("request-a").unwrap().unwrap(),
+        )
+    }
+
+    #[test]
+    fn assignment_archive_and_prepare_are_exact_inert_and_scope_stable_across_only_web_rollover() {
+        let (scope, root, path, record) = linked_fixture();
+        let directory = state_root(&scope, "task-fixture");
+        assert_eq!(
+            fs::read(directory.join("assignment.json")).unwrap(),
+            fs::read(&path).unwrap()
+        );
+        assert!(!directory.join("journal").exists());
+        let output = prepare_work_resume(&scope, &record, &record.target).unwrap();
+        assert_eq!(output["status"], "PREPARED_ONLY");
+        assert_eq!(output["launchAuthorized"], false);
+        assert!(!directory.join("journal").exists());
+        assert!(!directory.join("jobs").exists());
+        drop(acquire_project_writer_lock(&root).unwrap());
+        drop(acquire_project_writer_lock(&scope.project.workspace).unwrap());
+        let mut after_rollover = scope.clone();
+        after_rollover.project.chatgpt_target_url =
+            Some("https://chatgpt.com/c/replacement".into());
+        after_rollover.project.chatgpt_target_sha256 = Some("b".repeat(64));
+        after_rollover
+            .project
+            .chatgpt_target_history
+            .push("https://chatgpt.com/c/task-source".into());
+        assert_eq!(
+            assignment_scope_sha256(&scope),
+            assignment_scope_sha256(&after_rollover)
+        );
+        let replacement =
+            catdesk_wake::protocol::Target::new(2, "https://chatgpt.com/c/replacement".into())
+                .unwrap();
+        prepare_work_resume(&after_rollover, &record, &replacement).unwrap();
+        let mut changed_owner = after_rollover;
+        changed_owner.project.codex_thread_id = Some("replacement-native-owner".into());
+        assert_eq!(
+            prepare_work_resume(&changed_owner, &record, &replacement).unwrap_err(),
+            "PROJECT_TASK_WORK_ASSOCIATION_CHANGED"
+        );
+        assert_eq!(
+            fs::read(directory.join("assignment.json")).unwrap(),
+            fs::read(path).unwrap()
+        );
+    }
+
+    #[test]
+    fn linked_assignment_rejects_unarchived_legacy_tampering_closed_source_and_busy_writer() {
+        let (scope, root, path, record) = linked_fixture();
+        let bytes = fs::read(&path).unwrap();
+        let sha = catdesk_wake::protocol::digest(std::str::from_utf8(&bytes).unwrap());
+        assert_eq!(
+            archive_work_assignment(
+                &scope,
+                &path,
+                &"0".repeat(64),
+                "request-a",
+                &record.event_id
+            )
+            .unwrap_err(),
+            "PROJECT_TASK_ASSIGNMENT_DIGEST_CHANGED"
+        );
+        let held = acquire_project_writer_lock(&root).unwrap();
+        assert_eq!(
+            prepare_work_resume(&scope, &record, &record.target).unwrap_err(),
+            "PROJECT_TASK_WRITER_BUSY_OR_UNRESOLVED"
+        );
+        drop(held);
+        let mut closed = record.clone();
+        closed.phase = "CLOSED".into();
+        assert_eq!(
+            prepare_work_resume(&scope, &closed, &record.target).unwrap_err(),
+            "PROJECT_TASK_WORK_ASSOCIATION_CHANGED"
+        );
+        let directory = state_root(&scope, "task-fixture");
+        fs::write(directory.join("assignment.json"), b"{}").unwrap();
+        assert_eq!(
+            archive_work_assignment(&scope, &path, &sha, "request-a", &record.event_id)
+                .unwrap_err(),
+            "PROJECT_TASK_ARCHIVE_CONFLICT"
+        );
+        fs::remove_file(directory.join("assignment.json")).unwrap();
+        let inspected = inspect_assignment(&scope, &path, 180).unwrap();
+        DelegatedJournal::open(directory.join("journal"))
+            .unwrap()
+            .create_run(&inspected.contract)
+            .unwrap();
+        assert_eq!(
+            archive_work_assignment(&scope, &path, &sha, "request-a", &record.event_id)
+                .unwrap_err(),
+            "PROJECT_TASK_LEGACY_JOURNAL_NOT_ASSOCIATED"
+        );
+    }
+
+    #[test]
+    fn prepared_admission_never_clears_unresolved_journal_call_or_changes_contract() {
+        use crate::delegated::journal::{ToolCallRecordV1, ToolMutationKind};
+        let (scope, _, path, record) = linked_fixture();
+        let inspected = inspect_assignment(&scope, &path, 180).unwrap();
+        let journal =
+            DelegatedJournal::open(state_root(&scope, "task-fixture").join("journal")).unwrap();
+        journal.create_run(&inspected.contract).unwrap();
+        let run = RunId::new("task-fixture").unwrap();
+        let call = ToolCallRecordV1 {
+            schema_version: 1,
+            run_id: run.clone(),
+            tool_call_id: ToolCallId::new("uncertain-call").unwrap(),
+            tool_name: "patch.apply".into(),
+            request_hash: "a".repeat(64),
+            arguments_hash: "b".repeat(64),
+            mutation_kind: ToolMutationKind::Mutating,
+            status: ToolCallStatus::Requested,
+            result_hash: None,
+            outcome_summary: None,
+        };
+        journal.record_tool_call_requested(call).unwrap();
+        for phase in [
+            ToolCallStatus::PolicyAllowed,
+            ToolCallStatus::Executing,
+            ToolCallStatus::OutcomeUnknown,
+        ] {
+            journal
+                .transition_tool_call(
+                    &run,
+                    &ToolCallId::new("uncertain-call").unwrap(),
+                    phase,
+                    None,
+                    None,
+                )
+                .unwrap();
+        }
+        let before = journal.load_tool_calls(&run).unwrap();
+        assert_eq!(
+            prepare_work_resume(&scope, &record, &record.target).unwrap_err(),
+            "PROJECT_TASK_RECOVERY_REQUIRED"
+        );
+        assert_eq!(journal.load_tool_calls(&run).unwrap(), before);
+        let mut changed = inspected.contract;
+        changed.objective.push_str(" changed");
+        let journal_root = state_root(&scope, "task-fixture").join("journal");
+        let run_directory = fs::read_dir(journal_root)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        fs::write(
+            run_directory.join("contract.json"),
+            serde_json::to_vec(&changed).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            prepare_work_resume(&scope, &record, &record.target).unwrap_err(),
+            "PROJECT_TASK_CONTRACT_CHANGED"
+        );
     }
 
     fn preview(id: &str) -> Value {
