@@ -2,6 +2,35 @@
 
 ## October 22 acceptance reconciliation
 
+### October 22 evening — bounded live checkpoint review PASS
+
+The matched normal app/host package passed the release marker/owner gate and
+was selected through the stopped updater. All 134 unrelated records stayed
+exact; only two package pointers changed. Five project pairs and the existing
+authenticated profile were preserved. This is a development package selection.
+
+At 01:21–01:24 UTC October 23 (October 22 New York), the already queued,
+unchanged approved historical-checkpoint review was delivered once. Continuation
+made zero publication calls. Receipt EXACT_USER_MESSAGE_APPENDED, SENT state,
+COMPLETE assistant turn and event-bound read-only response-body capture passed.
+Completion was observed at 137s within the 180s foreground limit. The host
+released its lease and proved its owned tree exited; the outer Job closed and
+cleanup found zero owned processes, empty queue and both controls STOPPED.
+No binding, native-session, production or recurring-automation changes occurred.
+
+The response identified no defect from the supplied selector excerpt and
+suggested one dynamic-state regression for the existing native owner. It also
+reported HTTP429 preventing live source/ownership queries: no independent
+source inspection or test rerun occurred. This advances actual project review
+transport acceptance, while the complete review-to-next-native-task cycle
+remains PARTIAL. The suggestion was not dispatched or duplicated. The supported
+metadata-only resolver closed only this completed review intent; native task
+completion remains unverified. Its first sandbox project-read refusal made no
+mutation; the owner-context call succeeded, with only the own ledger changed
+among 139 records. Full multi-project and protected production acceptance remain
+open, independently of this passing live test. See the
+[sanitized C4 receipt](verification/C4_FOREGROUND_RELEASE_MARKER_2026_10_22.json).
+
 ### October 22 evening — approved review queued; release marker defect fixed
 
 The operator approved the frozen revised review. It was published once to its

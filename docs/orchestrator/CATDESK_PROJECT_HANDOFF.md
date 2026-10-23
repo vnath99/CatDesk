@@ -7,17 +7,33 @@ surface.
 
 ## Current checkpoint — 2026-10-22
 
-Exact revised review/payload authorization is now granted. One request was
-published; foreground launch refused the normal host's missing optimized-image
-marker before delivery. The request is still queued with no delivery/turn/
-submission marker, unchanged target and payload, zero owned processes, both
-controls STOPPED. Do not republish or clear its original attempt marker.
-Source now preserves the marker without changing ownership validation. Five
-lifecycle/owner tests plus one package test and the normal release host probe,
-strict Wake Clippy/fmt pass. Build the matched app and select the fixed package
-with the existing guarded stopped updater, preserving the queue. Continue the
-same pre-submit request with a separately audited bounded foreground attempt;
-no native session, recurring automation, binding or production changes.
+The approved historical-checkpoint review is COMPLETE; do not resend it.
+Matched normal release app/host selected through the stopped updater, preserving
+five pairs, profile and 134 unrelated records. Actual foreground continuation
+published nothing new. Exact appended-user receipt, SENT state, COMPLETE timer
+and event-bound assistant body verified. Completion observed at 137s under 180s.
+Root owned-tree exit, outer Job closure, zero owned processes, empty queue and
+both controls STOPPED were verified. Supported resolution closed only its
+review intent, with native taskCompletionVerified false; 139 records compared,
+only own ledger changed. Original attempt/refusal and all histories retained.
+
+The review found no defect from supplied selector text and suggested a dynamic
+regression. Its HTTP429 source-query failure limits the result: no independent
+source inspection or test rerun. Do not automatically dispatch its suggestion
+or duplicate the active native owner's task. The full review-to-next-task cycle,
+connector-dependent verification and protected production acceptance stay open.
+No binding, recurring, production or native session changes. See sanitized C4
+receipt and the execution log. Next qualify remaining independent context and
+multi-project acceptance gates without replaying completed reviews/canaries.
+
+Current selected app SHA256:
+`b9c468f0a59172d69ca0a6e0541364049d339e35a415ed72c18e182b25353223`.
+
+## Historical checkpoints (superseded by current checkpoint above)
+
+Earlier pending-approval, queued-only and package-next statements below describe
+their recorded times. They do not authorize replay or override today's completed
+review and cleanup evidence.
 
 Latest qualification: normal release and selected stopped context CLI PASS;
 one live read-only capture through the selected package also PASS with exact
