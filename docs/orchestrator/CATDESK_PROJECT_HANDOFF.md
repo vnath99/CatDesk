@@ -1,5 +1,16 @@
 # CatDesk Project Handoff and Continuity Guide
 
+C16 source adds explicit Git observations and important decisions to new automatic
+schema2 handoffs. Schema1 serialized bytes/prompts and stored pending requests are
+preserved. Interrupted request-file/active-pointer recovery reuses exact old content;
+identity conflict/malformed state never permits replacement. New Git basis remains
+UNKNOWN or SOURCE_REPORTED, not native attestation; latest-source comparison covers
+Git/decision changes before guarded binding.73 distinct tests/81 executions plus
+strict Clippy/format PASS. Normal executable qualification pending. Selected C15 v51
+stays STOPPED without C16; actual schema2 Web exchange, B/G/H/I and production remain
+unaccepted. No browser/Wake/native/recurring/binding action. See
+[C16 evidence](../verification/C16_STRUCTURED_HANDOFF_2026_10_23.json).
+
 C15 selects matched C14 command-enabled v51 development package STOPPED from
 `4beddb2`. Normal release/default WakeHost builds PASS; exact unchanged host gate
 reused without launch. Guarded update changes two package pointers among139 records,

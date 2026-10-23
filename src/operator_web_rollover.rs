@@ -25,6 +25,52 @@ use std::{
 #[path = "web_rollover_admission.rs"]
 mod admission;
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub(super) enum GitStateBasis {
+    Unknown,
+    SourceReported,
+}
+
+/// A source conversation's observations, never an authoritative native Git read.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct HandoffGitState {
+    pub basis: GitStateBasis,
+    pub branch: Option<String>,
+    pub head_commit: Option<String>,
+    pub worktree_summary: Option<String>,
+    pub evidence: Vec<String>,
+}
+
+impl HandoffGitState {
+    fn validate(&self) -> Result<(), String> {
+        let known =
+            self.branch.is_some() || self.head_commit.is_some() || self.worktree_summary.is_some();
+        if (self.basis == GitStateBasis::Unknown && known)
+            || (self.basis == GitStateBasis::SourceReported && (!known || self.evidence.is_empty()))
+            || self.branch.as_ref().is_some_and(|s| {
+                s.trim().is_empty() || s.len() > 256 || s.chars().any(char::is_control)
+            })
+            || self.head_commit.as_ref().is_some_and(|s| {
+                !matches!(s.len(), 40 | 64) || !s.bytes().all(|b| b.is_ascii_hexdigit())
+            })
+            || self
+                .worktree_summary
+                .as_ref()
+                .is_some_and(|s| s.trim().is_empty() || s.len() > 2048 || s.contains('\0'))
+            || self.evidence.len() > 32
+            || self
+                .evidence
+                .iter()
+                .any(|s| s.trim().is_empty() || s.contains('\0'))
+        {
+            return Err("WEB_HANDOFF_GIT_STATE_INVALID".into());
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct Handoff {
@@ -38,11 +84,16 @@ pub(super) struct Handoff {
     pub owned_paths: Vec<String>,
     pub verification: Vec<String>,
     pub blockers: Vec<String>,
+    // Omitted v1 fields stay omitted: historical handoff bytes/digests survive.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_state: Option<HandoffGitState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub important_decisions: Option<Vec<String>>,
 }
 
 impl Handoff {
     fn validate(&self, project: &str) -> Result<(), String> {
-        if self.schema_version != 1
+        if !matches!(self.schema_version, 1 | 2)
             || self.project_id != project
             || !valid_id(&self.source_task_id)
             || self.objective.trim().is_empty()
@@ -59,6 +110,22 @@ impl Handoff {
             .any(|items| items.len() > 32 || items.iter().any(|s| s.trim().is_empty()))
         {
             return Err("WEB_HANDOFF_INVALID".into());
+        }
+        if self.schema_version == 2
+            && (self.git_state.is_none() || self.important_decisions.is_none())
+        {
+            return Err("WEB_HANDOFF_CONTEXT_REQUIRED".into());
+        }
+        if let Some(state) = &self.git_state {
+            state.validate()?;
+        }
+        if self.important_decisions.as_ref().is_some_and(|items| {
+            items.len() > 32
+                || items
+                    .iter()
+                    .any(|s| s.trim().is_empty() || s.contains('\0'))
+        }) {
+            return Err("WEB_HANDOFF_DECISIONS_INVALID".into());
         }
         let bytes = serde_json::to_vec(self).map_err(|_| "WEB_HANDOFF_INVALID")?;
         if bytes.len() > 10 * 1024 || bytes.contains(&0) {
@@ -223,13 +290,17 @@ struct AutoFailure {
 
 impl HandoffRequest {
     fn validate(&self, project: &str) -> Result<(), String> {
-        if self.schema_version != 1
-            || self.project_id != project
+        let expected = match self.schema_version {
+            1 => handoff_request_message,
+            2 => handoff_request_message_v2,
+            _ => return Err("WEB_HANDOFF_REQUEST_INVALID".into()),
+        };
+        if self.project_id != project
             || !valid_id(&self.intent_id)
             || !valid_id(&self.source_task_id)
             || self.event_id != format!("web-handoff-{}", self.intent_id)
             || self.message
-                != handoff_request_message(
+                != expected(
                     project,
                     &self.intent_id,
                     &self.source_task_id,
@@ -549,14 +620,48 @@ impl ProjectStore {
         }
         Ok(Some(request))
     }
+    fn preserve_recorded_handoff_request(
+        &self,
+        proposed: HandoffRequest,
+    ) -> Result<HandoffRequest, String> {
+        let project = self.root.file_name().and_then(|v| v.to_str()).unwrap_or("");
+        proposed.validate(project)?;
+        let path = self
+            .root
+            .join(format!("handoff-{}.json", proposed.intent_id));
+        if !path
+            .try_exists()
+            .map_err(|_| "WEB_HANDOFF_REQUEST_UNAVAILABLE")?
+        {
+            return Ok(proposed);
+        }
+        plain(&path, false)?;
+        let saved: HandoffRequest = read(&path)?;
+        saved.validate(project)?;
+        let mut comparable = saved.clone();
+        comparable.schema_version = proposed.schema_version;
+        comparable.message = proposed.message.clone();
+        if comparable != proposed {
+            return Err("WEB_HANDOFF_REQUEST_IDENTITY_CHANGED".into());
+        }
+        // A crash may leave the request file before its active pointer. Its
+        // exact prompt/version wins; never replace it with a newer template.
+        Ok(saved)
+    }
+
     fn save_handoff_request(&self, request: &HandoffRequest) -> Result<(), String> {
-        request.validate(&request.project_id)?;
-        atomic(
-            &self
-                .root
-                .join(format!("handoff-{}.json", request.intent_id)),
-            request,
-        )?;
+        if self.preserve_recorded_handoff_request(request.clone())? != *request {
+            return Err("WEB_HANDOFF_REQUEST_ALREADY_RECORDED".into());
+        }
+        let path = self
+            .root
+            .join(format!("handoff-{}.json", request.intent_id));
+        if !path
+            .try_exists()
+            .map_err(|_| "WEB_HANDOFF_REQUEST_UNAVAILABLE")?
+        {
+            atomic(&path, request)?;
+        }
         atomic(&self.root.join("handoff-active.json"), &request.intent_id)
     }
 }
@@ -738,6 +843,18 @@ fn handoff_request_message(
     let owner = native_thread.as_deref().unwrap_or("UNBOUND");
     format!(
         "CatDesk handoff request for project {project}, task {source_task}, intent {intent}. Native Codex thread: {owner}. Reply with exactly one JSON object, no Markdown or surrounding prose, at most 3000 UTF-8 bytes: {{\"schemaVersion\":1,\"projectId\":\"{project}\",\"sourceTaskId\":\"{source_task}\",\"objective\":\"...\",\"completed\":[],\"remaining\":[\"...\"],\"nextAction\":\"...\",\"ownedPaths\":[],\"verification\":[],\"blockers\":[]}}. Report only your own observed work, evidence and unresolved steps. Do not infer native work completion from a process exit or queue status, claim native-owned paths, execute code, or repeat work owned by the native thread. This request is only for a durable handoff."
+    )
+}
+
+fn handoff_request_message_v2(
+    project: &str,
+    intent: &str,
+    source_task: &str,
+    native_thread: &Option<String>,
+) -> String {
+    let owner = native_thread.as_deref().unwrap_or("UNBOUND");
+    format!(
+        "CatDesk handoff request for project {project}, task {source_task}, intent {intent}. Native Codex thread: {owner}. Reply with exactly one JSON object, no Markdown or surrounding prose, at most 3000 UTF-8 bytes: {{\"schemaVersion\":2,\"projectId\":\"{project}\",\"sourceTaskId\":\"{source_task}\",\"objective\":\"...\",\"completed\":[],\"remaining\":[\"...\"],\"nextAction\":\"...\",\"ownedPaths\":[],\"verification\":[],\"blockers\":[],\"gitState\":{{\"basis\":\"UNKNOWN\",\"branch\":null,\"headCommit\":null,\"worktreeSummary\":null,\"evidence\":[]}},\"importantDecisions\":[]}}. Retain important decisions. Git state is source-reported, not verified native state: use SOURCE_REPORTED only for observed fields with evidence; otherwise keep UNKNOWN and null fields. Report only your own observed work, evidence and unresolved steps. Do not infer native work completion from a process exit or queue status, claim native-owned paths, execute code, or repeat work owned by the native thread. This request is only for a durable handoff."
     )
 }
 
@@ -1394,7 +1511,7 @@ pub(super) fn request_handoff_guarded(
         return Err("WEB_HANDOFF_TASK_CHANGED".into());
     }
     let request = HandoffRequest {
-        schema_version: 1,
+        schema_version: 2,
         project_id: project.into(),
         intent_id: intent.intent_id.clone(),
         source_task_id: source_task_id.into(),
@@ -1402,7 +1519,7 @@ pub(super) fn request_handoff_guarded(
         native_workspace: registered.workspace.clone(),
         native_thread_id: registered.codex_thread_id.clone(),
         event_id: format!("web-handoff-{}", intent.intent_id),
-        message: handoff_request_message(
+        message: handoff_request_message_v2(
             project,
             &intent.intent_id,
             source_task_id,
@@ -1410,6 +1527,7 @@ pub(super) fn request_handoff_guarded(
         ),
     };
     request.validate(project)?;
+    let request = store.preserve_recorded_handoff_request(request)?;
     // Save before queue publication. A retry after a crash republishes only
     // these exact bytes under the same Wake event ID.
     keep_running()?;
@@ -1564,6 +1682,9 @@ fn handoff_from_source_snapshot(
     let handoff: Handoff =
         serde_json::from_str(response).map_err(|_| "WEB_HANDOFF_JSON_REQUIRED")?;
     handoff.validate(&request.project_id)?;
+    if request.schema_version == 2 && handoff.schema_version != 2 {
+        return Err("WEB_HANDOFF_CONTEXT_REQUIRED".into());
+    }
     if handoff.source_task_id != request.source_task_id {
         return Err("WEB_HANDOFF_TASK_CHANGED".into());
     }
@@ -3592,6 +3713,294 @@ mod tests {
             owned_paths: Vec::new(),
             verification: vec!["Source conversation report only".into()],
             blockers: Vec::new(),
+            git_state: None,
+            important_decisions: None,
+        }
+    }
+
+    fn context_handoff() -> Handoff {
+        let mut handoff = source_handoff();
+        handoff.schema_version = 2;
+        handoff.git_state = Some(HandoffGitState {
+            basis: GitStateBasis::Unknown,
+            branch: None,
+            head_commit: None,
+            worktree_summary: None,
+            evidence: Vec::new(),
+        });
+        handoff.important_decisions = Some(vec!["Preserve the native task owner".into()]);
+        handoff
+    }
+
+    fn context_request(root: &Path) -> HandoffRequest {
+        let mut request = handoff_request(root);
+        request.schema_version = 2;
+        request.message = handoff_request_message_v2(
+            &request.project_id,
+            &request.intent_id,
+            &request.source_task_id,
+            &request.native_thread_id,
+        );
+        request
+    }
+
+    #[test]
+    fn handoff_context_legacy_bytes_and_request_recovery_stay_exact() {
+        let original = r#"{"schemaVersion":1,"projectId":"alpha","sourceTaskId":"task-a","objective":"Finish the project MVP","completed":["Reviewed current project status"],"remaining":["Confirm task ownership"],"nextAction":"Read project status and check owners","ownedPaths":[],"verification":["Source conversation report only"],"blockers":[]}"#;
+        let parsed: Handoff = serde_json::from_str(original).unwrap();
+        parsed.validate("alpha").unwrap();
+        assert_eq!(serde_json::to_string(&parsed).unwrap(), original);
+        let root = fixture();
+        let request = handoff_request(&root);
+        request.validate("alpha").unwrap();
+        // Baseline digest independently captured from the pre-change prompt.
+        assert_eq!(
+            digest(&request.message),
+            "cb4b62811fec24640e1eb4d34b0bb822bdad7c5e3125ae6e4a904bfe92c09aa7"
+        );
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        store.save_handoff_request(&request).unwrap();
+        let path = store.root.join("handoff-intent-a.json");
+        let before = fs::read(&path).unwrap();
+        drop(store);
+        let reopened = ProjectStore::open_existing(&root, "alpha").unwrap();
+        assert_eq!(reopened.handoff_request().unwrap().unwrap(), request);
+        assert_eq!(fs::read(&path).unwrap(), before);
+    }
+
+    #[test]
+    fn handoff_context_interrupted_pointer_recovers_exact_legacy_request() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let old = handoff_request(&root);
+        let path = store.root.join("handoff-intent-a.json");
+        // Deliberately noncanonical whitespace proves recovery does not rewrite.
+        fs::write(
+            &path,
+            format!("\n{}\n", serde_json::to_string(&old).unwrap()),
+        )
+        .unwrap();
+        let before = fs::read(&path).unwrap();
+        assert!(store.handoff_request().unwrap().is_none());
+        drop(store);
+        let store = ProjectStore::open_existing(&root, "alpha").unwrap();
+        let new = context_request(&root);
+        let recovered = store
+            .preserve_recorded_handoff_request(new.clone())
+            .unwrap();
+        assert_eq!(recovered, old);
+        assert_eq!(
+            store.save_handoff_request(&new).unwrap_err(),
+            "WEB_HANDOFF_REQUEST_ALREADY_RECORDED"
+        );
+        assert_eq!(fs::read(&path).unwrap(), before);
+        store.save_handoff_request(&recovered).unwrap();
+        assert_eq!(store.handoff_request().unwrap().unwrap(), old);
+        assert_eq!(fs::read(&path).unwrap(), before);
+        let mut conflict = new;
+        conflict.source = Target::new(2, conflict.source.url.clone()).unwrap();
+        assert_eq!(
+            store
+                .preserve_recorded_handoff_request(conflict)
+                .unwrap_err(),
+            "WEB_HANDOFF_REQUEST_IDENTITY_CHANGED"
+        );
+        assert_eq!(fs::read(&path).unwrap(), before);
+    }
+
+    #[test]
+    fn handoff_context_malformed_interrupted_request_is_not_overwritten() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let path = store.root.join("handoff-intent-a.json");
+        let unknown = b"unknown retained request bytes";
+        fs::write(&path, unknown).unwrap();
+        assert!(
+            store
+                .preserve_recorded_handoff_request(context_request(&root))
+                .is_err()
+        );
+        assert_eq!(fs::read(&path).unwrap(), unknown);
+        assert!(!store.root.join("handoff-active.json").exists());
+    }
+
+    #[test]
+    fn handoff_context_versioned_prompt_is_bounded_and_cannot_downgrade() {
+        let root = fixture();
+        let legacy = handoff_request(&root);
+        let mut request = context_request(&root);
+        request.validate("alpha").unwrap();
+        assert_ne!(request.message, legacy.message);
+        request.message = legacy.message;
+        assert_eq!(
+            request.validate("alpha").unwrap_err(),
+            "WEB_HANDOFF_REQUEST_INVALID"
+        );
+        request = context_request(&root);
+        request.project_id = "p".repeat(128);
+        request.source_task_id = "t".repeat(128);
+        request.intent_id = "a".repeat(64);
+        request.native_thread_id = Some("n".repeat(128));
+        request.event_id = format!("web-handoff-{}", request.intent_id);
+        request.message = handoff_request_message_v2(
+            &request.project_id,
+            &request.intent_id,
+            &request.source_task_id,
+            &request.native_thread_id,
+        );
+        request.validate(&request.project_id).unwrap();
+        assert!(request.message.len() <= 2048);
+        let request = context_request(&root);
+        assert_eq!(
+            handoff_from_source_snapshot(
+                &request,
+                &source_snapshot(&request, &request.message, &source_handoff())
+            )
+            .unwrap_err(),
+            "WEB_HANDOFF_CONTEXT_REQUIRED"
+        );
+    }
+
+    #[test]
+    fn handoff_context_unknown_and_partial_observations_remain_explicit() {
+        let root = fixture();
+        let request = context_request(&root);
+        let mut handoff = context_handoff();
+        let unknown = handoff_from_source_snapshot(
+            &request,
+            &source_snapshot(&request, &request.message, &handoff),
+        )
+        .unwrap();
+        assert_eq!(unknown.git_state.unwrap().basis, GitStateBasis::Unknown);
+        // A source can know only the branch. Do not infer HEAD or cleanliness.
+        let git = handoff.git_state.as_mut().unwrap();
+        git.basis = GitStateBasis::SourceReported;
+        git.branch = Some("codex/observed-task".into());
+        git.evidence.push(
+            "Earlier source conversation branch observation; not a native Git attestation".into(),
+        );
+        let parsed = handoff_from_source_snapshot(
+            &request,
+            &source_snapshot(&request, &request.message, &handoff),
+        )
+        .unwrap();
+        let saved: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string(&parsed).unwrap()).unwrap();
+        assert_eq!(saved["gitState"]["branch"], "codex/observed-task");
+        assert!(saved["gitState"]["headCommit"].is_null());
+        assert!(saved["gitState"]["worktreeSummary"].is_null());
+        assert_eq!(
+            saved["importantDecisions"][0],
+            "Preserve the native task owner"
+        );
+    }
+
+    #[test]
+    fn handoff_context_rejects_missing_contradictory_or_oversized_context() {
+        let base = context_handoff();
+        for missing_git in [true, false] {
+            let mut handoff = base.clone();
+            if missing_git {
+                handoff.git_state = None;
+            } else {
+                handoff.important_decisions = None;
+            }
+            assert_eq!(
+                handoff.validate("alpha").unwrap_err(),
+                "WEB_HANDOFF_CONTEXT_REQUIRED"
+            );
+        }
+        let mut handoff = base.clone();
+        handoff.git_state.as_mut().unwrap().branch = Some("claimed-under-unknown".into());
+        assert_eq!(
+            handoff.validate("alpha").unwrap_err(),
+            "WEB_HANDOFF_GIT_STATE_INVALID"
+        );
+        handoff.git_state.as_mut().unwrap().basis = GitStateBasis::SourceReported;
+        assert_eq!(
+            handoff.validate("alpha").unwrap_err(),
+            "WEB_HANDOFF_GIT_STATE_INVALID"
+        );
+        handoff
+            .git_state
+            .as_mut()
+            .unwrap()
+            .evidence
+            .push("source report".into());
+        handoff.git_state.as_mut().unwrap().head_commit = Some("not-a-commit".into());
+        assert_eq!(
+            handoff.validate("alpha").unwrap_err(),
+            "WEB_HANDOFF_GIT_STATE_INVALID"
+        );
+        handoff = base.clone();
+        handoff.important_decisions = Some(vec!["decision".into(); 33]);
+        assert_eq!(
+            handoff.validate("alpha").unwrap_err(),
+            "WEB_HANDOFF_DECISIONS_INVALID"
+        );
+        handoff.important_decisions = Some(vec!["bad\0decision".into()]);
+        assert_eq!(
+            handoff.validate("alpha").unwrap_err(),
+            "WEB_HANDOFF_DECISIONS_INVALID"
+        );
+        handoff.important_decisions = Some(vec!["x".repeat(11 * 1024)]);
+        assert_eq!(
+            handoff.validate("alpha").unwrap_err(),
+            "WEB_HANDOFF_TOO_LARGE"
+        );
+    }
+
+    #[test]
+    fn handoff_context_git_and_decisions_are_bound_to_the_source_before_commit() {
+        let root = fixture();
+        let request = context_request(&root);
+        let registered = AutonomousProjectV1 {
+            project_id: "alpha".into(),
+            workspace: root,
+            git_identity: "fixture".into(),
+            verification_profile: "fixture".into(),
+            codex_thread_id: request.native_thread_id.clone(),
+            chatgpt_target_url: Some(request.source.url.clone()),
+            chatgpt_target_sha256: Some(request.source.digest.clone()),
+            chatgpt_target_history: vec![request.source.url.clone()],
+        };
+        let handoff = context_handoff();
+        let mut prepared = record();
+        prepared.handoff_event_id = Some(request.event_id.clone());
+        prepared.handoff = compose_handoff_content(&registered, &handoff).unwrap();
+        source_snapshot_matches_record(
+            &request,
+            &prepared,
+            &registered,
+            &source_snapshot(&request, &request.message, &handoff),
+        )
+        .unwrap();
+        for change_decision in [true, false] {
+            let mut changed = handoff.clone();
+            if change_decision {
+                changed
+                    .important_decisions
+                    .as_mut()
+                    .unwrap()
+                    .push("Changed decision after capture".into());
+            } else {
+                changed
+                    .git_state
+                    .as_mut()
+                    .unwrap()
+                    .evidence
+                    .push("New Git observation after capture".into());
+            }
+            assert_eq!(
+                source_snapshot_matches_record(
+                    &request,
+                    &prepared,
+                    &registered,
+                    &source_snapshot(&request, &request.message, &changed)
+                )
+                .unwrap_err(),
+                "WEB_ROLLOVER_SOURCE_HANDOFF_CHANGED_RECONCILIATION_REQUIRED"
+            );
         }
     }
 

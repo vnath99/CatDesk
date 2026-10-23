@@ -1,5 +1,30 @@
 # CatDesk — Important Command Reference
 
+## October 23 — schema2 handoff context, C16 source
+
+Existing automatic handoff commands now issue version2 requests for a version2
+response. Retain the usual project/task/objective/completed/remaining/next-action/
+owned-paths/verification/blockers fields, plus:
+
+```json
+{"gitState":{"basis":"UNKNOWN","branch":null,"headCommit":null,"worktreeSummary":null,"evidence":[]},"importantDecisions":[]}
+```
+
+Use SOURCE_REPORTED only for actually observed fields with evidence. Unobserved
+values stay null; branch knowledge does not establish HEAD or cleanliness. These
+are source reports, never authoritative native Git reads, ownership or completion.
+The existing continuation still requires rereading current artifacts/owners.
+Schema2 requires both fields; decisions may be an explicit empty list. Existing
+size/vector limits apply. A new request cannot accept a schema1 downgrade.
+
+Legacy schema1 saved/manual handoffs remain accepted. Never rewrite their version,
+prompt, content or digest to upgrade them. Recovery reuses an exact matching
+request file even if its active-pointer write was interrupted. Conflicting or
+malformed retained state requires reconciliation, not deletion or resend. No new
+CLI, browser, Wake or registry mechanism. C16 is not in selected C15 v51 yet; source,
+normal/selected and actual Web exchange proof stay separate. See
+[C16 evidence](../verification/C16_STRUCTURED_HANDOFF_2026_10_23.json).
+
 ## October 23 — selected command-enabled package C15
 
 Matched v51 includes C14 optional command profiles and is selected STOPPED using

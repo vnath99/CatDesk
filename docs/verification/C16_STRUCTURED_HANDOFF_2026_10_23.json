@@ -1,0 +1,202 @@
+{
+  "recordedUtc": "2026-10-23T07:14:14.8362604Z",
+  "localDate": "2026-10-23",
+  "task": "C16-STRUCTURED-GIT-DECISION-HANDOFF",
+  "classification": "SOURCE_LOCAL_REGRESSION_QUALIFICATION",
+  "branch": "codex/web-rollover-oct17",
+  "baseCommit": "325c6d7b454774ff51c31dcdbb6f2c5229283ccf",
+  "sourceFiles": [
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "48e2720401bcd462b59c5d8969870faefae958d4b97c3e8f67a37c3aa82a0087"
+    }
+  ],
+  "implementation": {
+    "newAutomaticRequestSchema": 2,
+    "newHandoffSchema": 2,
+    "legacySchemaAccepted": 1,
+    "legacyPromptAndHandoffBytesChanged": false,
+    "legacyAbsentFieldsOmitted": true,
+    "newFields": [
+      "gitState.basis",
+      "gitState.branch",
+      "gitState.headCommit",
+      "gitState.worktreeSummary",
+      "gitState.evidence",
+      "importantDecisions"
+    ],
+    "gitBasis": [
+      "UNKNOWN",
+      "SOURCE_REPORTED"
+    ],
+    "nativeGitAttestation": false,
+    "implicitNativeOwnership": false,
+    "missingV2FieldsRefused": true,
+    "v2RequestDowngradeRefused": true,
+    "sourceContextChangeRequiresReconciliation": true,
+    "existingSnapshotAndPairedCommitReused": true
+  },
+  "tests": {
+    "finishedUtc": "2026-10-23T07:12:06.8505504Z",
+    "distinctTestsPassed": 73,
+    "testExecutions": 81,
+    "newFocusedTests": 7,
+    "checks": [
+      {
+        "label": "versioned-handoff-context",
+        "startedUtc": "2026-10-23T07:11:07.0764234Z",
+        "finishedUtc": "2026-10-23T07:11:43.0551717Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "handoff_context_",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "e7f981be2aa618df0623b35cd752b1276da68a0544897abe9359ce99b7f55db7"
+      },
+      {
+        "label": "creation-admission-status",
+        "startedUtc": "2026-10-23T07:11:43.0913343Z",
+        "finishedUtc": "2026-10-23T07:11:43.7360902Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "creation_admission_projection",
+          "--",
+          "--nocapture"
+        ],
+        "exitCode": 0,
+        "logSha256": "774dfab22c1b3fd738ababc5d7baabd372dc787497c684856e39631cb629fd35"
+      },
+      {
+        "label": "existing-rollover-recovery",
+        "startedUtc": "2026-10-23T07:11:43.7459989Z",
+        "finishedUtc": "2026-10-23T07:11:47.5498925Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "operator_facade::web::rollover::tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "03c1106132f098c9caddbf68b2b3fc045097690e2f084020b50c10ef1772109e"
+      },
+      {
+        "label": "existing-scheduler-ownership",
+        "startedUtc": "2026-10-23T07:11:47.5592586Z",
+        "finishedUtc": "2026-10-23T07:11:49.233845Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "operator_facade::web::auto::tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "81bd84906f9394f80a8c3ac9f40db327b2bf6baa1c25e80e132452ca16998a0a"
+      },
+      {
+        "label": "existing-web-status-cli",
+        "startedUtc": "2026-10-23T07:11:49.2445504Z",
+        "finishedUtc": "2026-10-23T07:11:49.8744907Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "operator_facade::web::tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "f561e00918ad87038703fb2adf6fe19c50cdb1a5706152e5d1db94ea361b669c"
+      },
+      {
+        "label": "strict-root-clippy",
+        "startedUtc": "2026-10-23T07:11:49.8849519Z",
+        "finishedUtc": "2026-10-23T07:12:04.2331402Z",
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "logSha256": "f5dc418da0744061b9df5a610bf4739de15568430f36734ac1386b6fa99b1023"
+      },
+      {
+        "label": "root-format",
+        "startedUtc": "2026-10-23T07:12:04.2413716Z",
+        "finishedUtc": "2026-10-23T07:12:06.8482323Z",
+        "arguments": [
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "containment": {
+      "ExitCode": 0,
+      "TimedOut": false,
+      "TerminationFailed": false
+    },
+    "maximumSeconds": 600,
+    "cases": [
+      "legacy-prompt-baseline-digest-and-exact-handoff-serialization",
+      "stored-legacy-request-reopen-with-no-byte-rewrite",
+      "interrupted-active-pointer-restores-exact-legacy-prompt-and-file-bytes",
+      "conflicting-or-malformed-orphan-request-preserved-no-overwrite",
+      "versioned-prompt-maximum-identity-size",
+      "new-request-no-schema-downgrade",
+      "unknown-partial-Git-state-no-inferred-HEAD-or-cleanliness",
+      "missing-contradictory-malformed-oversized-context-refused",
+      "Git-or-decision-change-after-capture-requires-reconciliation",
+      "existing-rollover-quarantine-no-resend-native-owner-scheduler-status-regressions"
+    ]
+  },
+  "external": {
+    "connectorCalls": 0,
+    "actualWebCalls": false,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "messagesSent": 0,
+    "selectedPackageChanged": false,
+    "recurringStarted": false,
+    "productionModified": false,
+    "nativeSessionsChanged": false,
+    "completedCanaryReplayed": false
+  },
+  "acceptance": {
+    "normalExecutable": "PENDING_BUILD_AND_READ_ONLY_LEGACY_STATUS_QUALIFICATION",
+    "selectedDevelopment": "C15_V51_STOPPED_WITHOUT_C16",
+    "actualNewHandoffWebExchange": "OPEN",
+    "actualWebB": "OPEN",
+    "actualBrowserGHI": "OPEN",
+    "protectedProduction": "OPEN",
+    "unattended": "NOT_ACTIVATED",
+    "ci": "UNVERIFIED"
+  }
+}

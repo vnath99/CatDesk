@@ -1,5 +1,31 @@
 # October 22–31 execution log
 
+## 2026-10-23 — C16 versioned Git/decision handoff context
+
+New automatic handoff requests and responses use schema2. Explicit `gitState`
+records UNKNOWN or SOURCE_REPORTED basis, optional branch/HEAD/worktree summary
+and evidence; `importantDecisions` records retained decisions. Unknown or partial
+observations never imply a verified native Git state or task completion. Existing
+snapshot/source equality and guarded Wake binding mechanisms remain authoritative.
+Changing these fields after capture requires reconciliation before binding.
+
+Schema1 prompts remain byte-identical; absent new fields remain absent on
+serialization. New requests cannot accept a downgraded schema1 response. Inspection
+also found the request-file-before-active-pointer crash boundary: recovery now
+reuses the exact stored legacy version/prompt and file bytes. Identity conflicts,
+malformed retained data and attempts to overwrite a different recorded prompt
+refuse. No stored requests are upgraded in place or blindly resent.
+
+Final source checks PASS07:12:06 UTC under600s retained Job:73 distinct tests/
+81 executions, including seven new context/recovery cases and existing rollover,
+quarantine, owner, scheduler and status regressions; strict Clippy/format PASS.
+An earlier five-case pass preceded the additional interrupted-pointer checks;
+the final evidence covers the completed source. Normal executable qualification
+follows this checkpoint. Selected C15 v51 stays STOPPED without C16. No browser,
+Wake worker, connector call, recurring/native/production action or canary replay.
+Actual new schema2 Web exchange and Web B/G/H/I remain separate open acceptance.
+See [C16 evidence](verification/C16_STRUCTURED_HANDOFF_2026_10_23.json).
+
 ## 2026-10-23 — C15 matched command-enabled development package
 
 Normal release app build PASS06:54:23 UTC from clean `4beddb28919e704bdbbc3bfc8ef96570ac6de1c8`,
