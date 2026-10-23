@@ -60,6 +60,7 @@ mod ordinary_worker_artifact_provider;
 #[allow(dead_code)] // T-0387 typed review authority; pair provisioning remains separate.
 mod ordinary_worker_pair_approval;
 mod planning;
+mod project_mcp;
 mod project_memory;
 mod prompt_templates;
 mod repo_map;
@@ -917,6 +918,7 @@ struct HeadlessMcpOptions {
     maximum_runtime_seconds: Option<u64>,
     web_auto_projects: std::collections::BTreeSet<String>,
     no_web_auto: bool,
+    project_scope: Option<project_mcp::Selection>,
 }
 
 fn start_headless_web_auto(options: &HeadlessMcpOptions, state: SharedState) -> bool {
@@ -1145,6 +1147,9 @@ fn parse_headless_mcp_options(
     let mut maximum_runtime_seconds = None;
     let mut web_auto_projects = std::collections::BTreeSet::new();
     let mut no_web_auto = false;
+    let mut project_id = None;
+    let mut project_generation = None;
+    let mut project_digest = None;
 
     let mut index = 0;
     while index < args.len() {
@@ -1152,6 +1157,34 @@ fn parse_headless_mcp_options(
         match arg.as_str() {
             "--headless-mcp" | "--no-ngrok" => {
                 index += 1;
+            }
+            "--project-id" => {
+                let value = next_arg(&args, &mut index, "--project-id")?;
+                if !catdesk_wake::protocol::valid_id(&value) || project_id.replace(value).is_some()
+                {
+                    return Err("invalid or duplicate --project-id".into());
+                }
+            }
+            "--project-target-generation" => {
+                let value = next_arg(&args, &mut index, "--project-target-generation")?
+                    .parse::<u64>()
+                    .ok()
+                    .filter(|value| *value > 0)
+                    .ok_or("invalid project target generation")?;
+                if project_generation.replace(value).is_some() {
+                    return Err("duplicate project target generation".into());
+                }
+            }
+            "--project-target-sha256" => {
+                let value = next_arg(&args, &mut index, "--project-target-sha256")?;
+                if value.len() != 64
+                    || !value
+                        .bytes()
+                        .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+                    || project_digest.replace(value).is_some()
+                {
+                    return Err("invalid or duplicate project target digest".into());
+                }
             }
             "--isolated-dev-fixture" => {
                 if isolated_dev_fixture {
@@ -1225,6 +1258,24 @@ fn parse_headless_mcp_options(
     if no_web_auto && !web_auto_projects.is_empty() {
         return Err("--no-web-auto cannot be combined with --web-auto-project".into());
     }
+    let project_scope = match (project_id, project_generation, project_digest) {
+        (None, None, None) => None,
+        (Some(project_id), Some(target_generation), Some(target_sha256)) => {
+            if isolated_dev_fixture
+                || !no_web_auto
+                || !matches!(tool_mode, ToolMode::ReadOnly)
+                || !maximum_runtime_seconds.is_some_and(|seconds| seconds <= 180)
+            {
+                return Err("project MCP requires read-only mode, --no-web-auto and a bound of 1..180 seconds".into());
+            }
+            Some(project_mcp::Selection {
+                project_id,
+                target_generation,
+                target_sha256,
+            })
+        }
+        _ => return Err("project MCP requires project ID, generation and digest together".into()),
+    };
     validate_loopback_host(&host)?;
     if mode.browser_enabled() {
         return Err("headless MCP currently supports --mode computer only".into());
@@ -1261,6 +1312,7 @@ fn parse_headless_mcp_options(
         return Err("isolated fixture requires explicit workspace, config, /dev/mcp, loopback port 0 and read-only computer mode".into());
     }
     Ok(Some(HeadlessMcpOptions {
+        project_scope,
         maximum_runtime_seconds,
         web_auto_projects,
         no_web_auto,
@@ -1451,6 +1503,13 @@ fn validate_isolated_fixture_scope(
 
 async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std::error::Error>> {
     let workspace_root = resolve_headless_workspace(&options.workspace)?;
+    let project_context = match options.project_scope.clone() {
+        Some(selection) => Some(
+            project_mcp::ProjectContext::bind(std::path::Path::new(&workspace_root), selection)
+                .await?,
+        ),
+        None => None,
+    };
     if catdesk_wake::development_runtime::root_for_workspace(std::path::Path::new(&workspace_root))?
         .is_some()
     {
@@ -1533,7 +1592,9 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
     };
 
     let (ui_event_tx, mut ui_event_rx) = unbounded_channel();
-    let router = if options.isolated_dev_fixture {
+    let router = if let Some(context) = &project_context {
+        project_mcp::router(context.clone(), &mcp_path, options.auth_token.clone())?
+    } else if options.isolated_dev_fixture {
         server::isolated_fixture_router(
             state.clone(),
             mcp_path.clone(),
@@ -1592,6 +1653,7 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
             "mode": options.mode.label(),
             "tool_mode": options.tool_mode.label(),
             "workspace": workspace_root,
+            "project_scope": project_context.as_ref().map(|context| context.metadata()),
             "config_path": options.config_path,
             "maximum_runtime_seconds": options.maximum_runtime_seconds,
             "web_auto_projects": options.web_auto_projects,
@@ -4426,6 +4488,55 @@ mod tests {
             options.web_auto_projects.into_iter().collect::<Vec<_>>(),
             ["catdesk", "wake2"]
         );
+    }
+
+    #[test]
+    fn project_mcp_headless_requires_complete_scope_read_only_and_bounded_no_auto() {
+        let mut args: Vec<String> = [
+            "--headless-mcp",
+            "--config-path",
+            "fixture.toml",
+            "--auth-token",
+            "fixture-project-auth-token-000000",
+            "--no-web-auto",
+            "--max-runtime-seconds",
+            "60",
+            "--project-id",
+            "alpha",
+            "--project-target-generation",
+            "1",
+            "--project-target-sha256",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+        args.push("a".repeat(64));
+        let parsed = parse_headless_mcp_options(args.clone()).unwrap().unwrap();
+        assert_eq!(parsed.project_scope.unwrap().project_id, "alpha");
+        for (flag, value) in [
+            ("--tool-mode", "multi-tools"),
+            ("--max-runtime-seconds", "181"),
+            ("--project-target-generation", "0"),
+            ("--project-id", "../beta"),
+        ] {
+            let mut bad = args.clone();
+            if let Some(index) = bad.iter().position(|arg| arg == flag) {
+                bad[index + 1] = value.into();
+            } else {
+                bad.extend([flag.into(), value.into()]);
+            }
+            assert!(parse_headless_mcp_options(bad).is_err());
+        }
+        let mut automatic = args.clone();
+        automatic.retain(|arg| arg != "--no-web-auto");
+        assert!(parse_headless_mcp_options(automatic).is_err());
+        let mut partial = args;
+        let index = partial
+            .iter()
+            .position(|arg| arg == "--project-target-generation")
+            .unwrap();
+        partial.drain(index..index + 2);
+        assert!(parse_headless_mcp_options(partial).is_err());
     }
 
     #[test]

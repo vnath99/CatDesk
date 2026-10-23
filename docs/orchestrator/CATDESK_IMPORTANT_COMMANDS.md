@@ -1,5 +1,26 @@
 # CatDesk — Important Command Reference
 
+## October 23 — project MCP connections (source/local fixtures)
+
+Use the existing bounded headless launcher with all three scope flags:
+
+```text
+catdesk --headless-mcp --host 127.0.0.1 --port 0 --workspace CONTROL_ROOT --config-path APPROVED_CONFIG --mcp-path /project/mcp --mode computer --tool-mode read-only --no-ngrok --no-web-auto --max-runtime-seconds 60 --project-id PROJECT --project-target-generation GENERATION --project-target-sha256 DIGEST
+```
+
+`CONTROL_ROOT` is registry authority. Execution uses its registered workspace,
+never a remote path. Keep credentials in process-scoped `CATDESK_MCP_AUTH_TOKEN`,
+separate per connection; never publish them. Startup checks the initial paired
+witness. Calls require `projectId`, `expectedTargetGeneration` and
+`expectedTargetSha256`; `catdesk_project_scope` reports current authority.
+Guarded rollover refreshes witnesses without changing workspace/restarting the
+endpoint; stale values refuse. No global directory switch or browser/UI mutation
+route. Direct write/command tools are denied in this stage; ownership-backed
+coding remains required. Source/local HTTP proof, not selected v49 or external
+connector acceptance. Preserve owner containment and retained process handles
+for foreground qualification. See
+[C11 evidence](../verification/C11_PROJECT_MCP_SCOPE_2026_10_23.json).
+
 ## October 23 — creation admission in existing rollover commands
 
 The existing Web rollover execution path now uses durable shared creation

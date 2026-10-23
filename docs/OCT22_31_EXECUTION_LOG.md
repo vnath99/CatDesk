@@ -1,5 +1,45 @@
 # October 22–31 execution log
 
+## 2026-10-23 — immutable project MCP connection stage
+
+Reused existing registry/Git verification, bearer auth, read-only tools and
+bounded headless lifecycle. Explicit local startup selects project ID plus paired
+generation/digest before configuration initialization. An immutable connection
+context routes to the registered workspace; remote input cannot replace it, and
+no application working-directory variable changes. Per-call project/target
+witnesses are checked before dispatch; registration/paired authority is rechecked
+before content disclosure. Workspace/Git identity drift refuses that connection.
+The connection is project-bound, not authenticated provider-origin conversation ID.
+
+Only project ID is constant in tool schemas: cached catalogs must permit new
+generation/digest values after rollover. `catdesk_project_scope` reports current
+paired context. A guarded fixture target change accepted its fresh witness on the
+same endpoint and refused the predecessor. Direct write/command tools are denied
+until ownership-backed mutation/delegation is wired; that remains core MVP work.
+No browser/UI mutation routes or separate scheduler. New headless flags are
+`--project-id`, `--project-target-generation`, `--project-target-sha256`, required
+together with read-only, `--no-web-auto` and 1..180s runtime. Existing loopback/
+auth/config requirements and default unscoped behavior are preserved.
+
+At 04:41:08 UTC, 21 executions/20 distinct tests passed: three project HTTP/CLI,
+16 headless lifecycle and two read-only tools. Strict all-target/all-feature
+Clippy and formatting pass under600s Job containment, exit0/no timeout/termination
+failure. Two loopback sockets prove concurrent directory reads, wrong bearer/
+project/path refusal, ignored caller workspace override, denied write/command,
+absent UI routes, fresh witness after paired fixture binding, stale witness
+refusal and sibling progress after workspace drift. Native progress is simulated
+by a local fixture edit; no native Codex or ChatGPT Web chat executed this test.
+Both socket tasks stop/join before assertions. Source: `src/project_mcp.rs`,
+`src/main.rs`, `src/server.rs`. Base `1c62422bbfb9c26f6a5eb3a049dae7d384653b15`,
+branch `codex/web-rollover-oct17`.
+
+SOURCE / TESTED_LOCAL_HTTP_FIXTURES, not installed or live B acceptance. No actual
+project binding/native chat/browser/WakeHost/package/recurring/protected change
+or connector retry. Next build normal and qualify two bounded listeners against
+disposable registered roots, then ownership-backed coding through this context.
+Publication receipt follows exact remote SHA readback. See
+[C11 evidence](verification/C11_PROJECT_MCP_SCOPE_2026_10_23.json).
+
 ## 2026-10-23 early morning — durable fair New Chat admission
 
 - **Connector dependency at 04:16:16 UTC:** one read-only transport status after

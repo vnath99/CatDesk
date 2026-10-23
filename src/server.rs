@@ -264,7 +264,7 @@ fn unauthorized_mcp_response() -> Response<Body> {
     )
 }
 
-fn mcp_authorized(headers: &HeaderMap, expected_token: Option<&str>) -> bool {
+pub(crate) fn mcp_authorized(headers: &HeaderMap, expected_token: Option<&str>) -> bool {
     let Some(expected_token) = expected_token.filter(|token| !token.trim().is_empty()) else {
         return true;
     };

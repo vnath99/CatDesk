@@ -1,3 +1,15 @@
+## 2026-10-23 — immutable project MCP connections SOURCE / LOCAL HTTP PASS
+
+Explicit headless project connections bind the existing registry/Git identity
+before listening, with bearer auth and per-call project/paired witnesses. They
+use an immutable workspace instead of mutable application state. Guarded rollover
+refreshes authority without endpoint restart; stale witnesses and workspace
+drift refuse. Two socket fixtures prove independent reads and sibling progress.
+20 distinct tests, strict Clippy/format pass. This stage is read-only: ownership-
+backed coding and actual ChatGPT Web B remain required. Native writers, bindings,
+browsers and selected packages are untouched. See
+[C11 evidence](docs/verification/C11_PROJECT_MCP_SCOPE_2026_10_23.json).
+
 ## 2026-10-23 — durable fair creation admission SOURCE PASS
 
 Existing rollover now enqueues New Chat creation by stable project/intent/source/

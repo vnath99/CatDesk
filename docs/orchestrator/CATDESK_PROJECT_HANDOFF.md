@@ -7,6 +7,16 @@ surface.
 
 ## Current checkpoint — 2026-10-23
 
+C11 headless project connections route inspection through an immutable registered
+workspace with existing Git verification/bearer auth. Per-call paired witnesses,
+before/after scope checks and drift refusal; guarded generation changes work
+without endpoint restart or cached-schema pin. Two concurrent socket fixtures
+pass with wrong auth/path/scope/mutation refusal and independent sibling progress.
+20 distinct tests + strict Clippy/format pass. Normal process qualification next.
+Ownership-backed coding and actual Web B remain required; do not redefine the
+goal as read-only. Selected C8 v49/native chats/five bindings unchanged. See
+[C11 evidence](../verification/C11_PROJECT_MCP_SCOPE_2026_10_23.json).
+
 C10 source adds durable fair admission for New Chat creation using existing
 project journals/browser ownership. Stable identity, UTC metadata, FIFO eligible
 waiters, retained lease, abandoned/ineligible quarantine, and no re-admission after
