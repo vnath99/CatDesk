@@ -179,9 +179,16 @@
   "retainedHarnessIssue": "Dot-sourced private library reset execution switch, yielding preflight only; explicit switch forwarding tested in true/false cases before the actual request publication",
   "nextTask": "Build matched normal app, use guarded stopped update preserving queued identity, then resume that existing pre-submit event without another publication or payload edit",
   "publication": {
-    "status": "LOCAL_ONLY_NOT_PUSHED",
-    "remote": "https://github.com/vnath99/CatDesk",
+    "observedUtc": "2026-10-23T01:07:58.5533103Z",
+    "status": "PUSHED_EXACT_REMOTE_MATCH",
+    "sourceCommit": "7d10ad0511da928e912d6031ba7d02331f6fb4f8",
+    "remoteSha": "7d10ad0511da928e912d6031ba7d02331f6fb4f8",
     "branch": "codex/web-rollover-oct17",
-    "ci": "UNVERIFIED"
+    "remote": "https://github.com/vnath99/CatDesk",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false
   }
 }

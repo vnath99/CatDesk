@@ -2,6 +2,13 @@
 
 ## 2026-10-22 evening — C4 approved request preserved across release-marker refusal
 
+- **Exact source publication at 01:07:58 UTC October 23:** reviewed/scanned
+  source, CI regression and sanitized evidence pushed as
+  `7d10ad0511da928e912d6031ba7d02331f6fb4f8` on
+  `codex/web-rollover-oct17`; exact remote SHA read back. Eight allowlisted paths,
+  no private review/source/target/auth/runtime artifact. Visibility/history
+  unchanged. Zero reported runs/checks; CI UNVERIFIED. Later receipt is docs only.
+
 - Frozen revised payload/identity/destination revalidated after exact human
   approval. A private library parameter collision first yielded preflight only;
   explicit switch forwarding passed true/false checks before actual execution.
