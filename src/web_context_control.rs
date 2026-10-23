@@ -29,6 +29,96 @@ pub(crate) struct CaptureRequest {
     pub(crate) expected_target_sha256: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReviewRequest {
+    project_id: String,
+    event_id: String,
+    expected_target_generation: u64,
+    expected_target_sha256: String,
+}
+
+/// Explicit response reads share context capture's bounded worker and browser
+/// admission. Diagnostic snapshots stay confined to the local operator reader.
+pub(crate) async fn read_review(workspace: &Path, args: Value) -> Result<Value, String> {
+    let request: ReviewRequest =
+        serde_json::from_value(args).map_err(|_| "WEB_REVIEW_ARGUMENTS_INVALID")?;
+    validate_scope(
+        &request.project_id,
+        request.expected_target_generation,
+        &request.expected_target_sha256,
+    )
+    .map_err(|_| "WEB_REVIEW_ARGUMENTS_INVALID")?;
+    if request.event_id.len() > 128 || !valid_id(&request.event_id) {
+        return Err("WEB_REVIEW_ARGUMENTS_INVALID".into());
+    }
+    let capture_args = json!({"projectId":request.project_id,
+        "expectedTargetGeneration":request.expected_target_generation,
+        "expectedTargetSha256":request.expected_target_sha256});
+    capture_with(
+        workspace,
+        capture_args,
+        move |control, scope, keep_running| {
+            let response = crate::operator_facade::read_web_review_expected_guarded(
+                control,
+                &scope.project_id,
+                &request.event_id,
+                (
+                    scope.expected_target_generation,
+                    &scope.expected_target_sha256,
+                ),
+                keep_running,
+            )?;
+            verified_review_response(&request, response)
+        },
+    )
+    .await
+    .map_err(|error| {
+        let prefix = if error.starts_with("WEB_CONTEXT_") {
+            "WEB_CONTEXT_"
+        } else {
+            "WEB_REVIEW_"
+        };
+        match error.strip_prefix(prefix).filter(|code| {
+            !code.is_empty()
+                && code.len() <= 80
+                && code
+                    .bytes()
+                    .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+        }) {
+            Some(code) => format!("WEB_REVIEW_{code}"),
+            None => "WEB_REVIEW_UNAVAILABLE".into(),
+        }
+    })
+}
+
+fn verified_review_response(request: &ReviewRequest, response: Value) -> Result<Value, String> {
+    let text = response["response"]
+        .as_str()
+        .filter(|text| !text.trim().is_empty() && text.len() <= 8192);
+    if response["action"] != "web_review_read"
+        || response["eventVerified"] != true
+        || response["readOnly"] != true
+        || response["sendAttempted"] != false
+        || response["projectId"] != request.project_id
+        || response["eventId"] != request.event_id
+        || response["target"]["generation"] != request.expected_target_generation
+        || response["target"]["digest"] != request.expected_target_sha256
+        || text.is_none()
+    {
+        return Err("WEB_REVIEW_EVENT_NOT_VERIFIED".into());
+    }
+    // Build a closed response rather than forwarding local diagnostic fields.
+    let text = text.expect("checked review text");
+    Ok(
+        json!({"action":"web_review_read","projectId":request.project_id,
+        "eventId":request.event_id,"target":response["target"],"response":text,
+        "responseSha256":catdesk_wake::protocol::digest(text),
+        "readOnly":true,"eventVerified":true,"sendAttempted":false,
+        "taskCompletionVerified":false}),
+    )
+}
+
 // Cover the existing 30s profile-lock wait and 90s adapter initialization,
 // with remaining time for the bounded page/snapshot read. An outer 60s cap
 // cancelled valid startup before its own diagnostic deadline could report.
@@ -427,6 +517,71 @@ pub(crate) fn tool_schemas() -> [(&'static str, &'static str, &'static str, Valu
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn review_reads_reject_scope_overrides_before_state_creation() {
+        let root =
+            std::env::temp_dir().join(format!("web-review-invalid-{}", uuid::Uuid::new_v4()));
+        let valid = json!({"projectId":"alpha","eventId":"review-one",
+            "expectedTargetGeneration":1,"expectedTargetSha256":"a".repeat(64)});
+        for (field, value) in [
+            ("workspace", json!("private-secret")),
+            ("conversationUrl", json!("https://chatgpt.com/c/override")),
+            ("projectId", json!("../other")),
+            ("eventId", json!("../other")),
+            ("eventId", json!("x".repeat(129))),
+            ("expectedTargetGeneration", json!(0)),
+            ("expectedTargetSha256", json!("A".repeat(64))),
+        ] {
+            let mut args = valid.clone();
+            args[field] = value;
+            assert_eq!(
+                read_review(&root, args).await.unwrap_err(),
+                "WEB_REVIEW_ARGUMENTS_INVALID"
+            );
+            assert!(!root.exists());
+        }
+    }
+
+    #[test]
+    fn review_response_never_forwards_unverified_or_unrelated_text() {
+        let request: ReviewRequest = serde_json::from_value(json!({
+            "projectId":"alpha","eventId":"review-one",
+            "expectedTargetGeneration":1,"expectedTargetSha256":"a".repeat(64)
+        }))
+        .unwrap();
+        let valid = json!({"action":"web_review_read","projectId":"alpha",
+            "eventId":"review-one","eventVerified":true,"readOnly":true,"sendAttempted":false,
+            "target":{"generation":1,"digest":"a".repeat(64),"url":"https://chatgpt.com/c/alpha"},
+            "response":"A bounded review finding.","snapshot":{"private":"diagnostic-secret"}});
+        let result = verified_review_response(&request, valid.clone()).unwrap();
+        assert_eq!(result["taskCompletionVerified"], false);
+        assert_eq!(
+            result["responseSha256"],
+            catdesk_wake::protocol::digest("A bounded review finding.")
+        );
+        assert!(result.get("snapshot").is_none());
+        assert!(!result.to_string().contains("diagnostic-secret"));
+        for (field, value) in [
+            ("projectId", json!("beta")),
+            ("eventId", json!("review-two")),
+            ("eventVerified", json!(false)),
+            ("eventVerified", json!("true")),
+            ("readOnly", json!(false)),
+            ("sendAttempted", json!(true)),
+            ("response", json!("")),
+            ("response", json!("x".repeat(8193))),
+            ("target", json!({"generation":2,"digest":"a".repeat(64)})),
+            ("target", json!({"generation":1,"digest":"b".repeat(64)})),
+        ] {
+            let mut invalid = valid.clone();
+            invalid[field] = value;
+            assert_eq!(
+                verified_review_response(&request, invalid).unwrap_err(),
+                "WEB_REVIEW_EVENT_NOT_VERIFIED"
+            );
+        }
+    }
 
     #[test]
     fn context_controls_reject_invalid_payloads_before_state_creation() {

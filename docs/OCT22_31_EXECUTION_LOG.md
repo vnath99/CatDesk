@@ -1,5 +1,34 @@
 # October 22–31 execution log
 
+## 2026-10-22 evening — central review response reader implemented
+
+Source inspection found that the coordinator could queue work/read status but
+could read completed peer-review bodies only through the local operator CLI.
+Added `catdesk_web_review_read` in the existing supervisor modes, with exact
+project/event/generation/digest witnesses and no URL/workspace override. It
+reuses context capture's bounded worker/admission/cancellation and the existing
+browser reader. Only an event-verified latest complete response crosses MCP;
+local unverified diagnostic snapshots are withheld. Receipt/event/message
+consistency is checked, response text remains bounded and task completion false.
+The local diagnostic CLI remains available. No new coordination framework.
+
+At 01:52:51 UTC October 23 (October 22 New York), nine focused tests passed,
+including closed scope/privacy, mode/catalog, local response proof, three-project
+HTTP missing-delivery refusals with unchanged fixture trees, and cooperative
+cancellation before adapter creation. Strict all-target/all-feature Clippy for
+app and WakeHost and both format checks passed under 600s containment. The first
+catalog check caught an expected-order mismatch; corrected and passed, with the
+failed receipt preserved. No browser, WakeHost, recurring process, live message,
+binding, native session, selected package or protected production change.
+
+This is SOURCE / TESTED_LOCAL. Normal executable/local-MCP qualification,
+matched release selection and positive live use through the new tool remain
+OPEN; the external connector inventory/transport is not updated or recovered.
+Build and qualify the normal executable without Web scheduling next. Existing
+completed review/observation/rollover must not be replayed. See the
+[sanitized C6 receipt](verification/C6_WEB_REVIEW_READ_2026_10_22.json).
+
+
 ## 2026-10-22 evening — selected positive observation path PASS
 - **Exact publication at 01:38:31 UTC October 23:** five reviewed sanitized
   documentation paths pushed normally as

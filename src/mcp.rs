@@ -95,6 +95,7 @@ const WEB_WORK_RESOLVE_TOOL: &str = "catdesk_web_work_resolve";
 const WEB_CONTEXT_CONFIGURE_TOOL: &str = "catdesk_web_context_configure";
 const WEB_CONTEXT_OBSERVE_TOOL: &str = "catdesk_web_context_observe";
 const WEB_CONTEXT_CAPTURE_TOOL: &str = "catdesk_web_context_capture";
+const WEB_REVIEW_READ_TOOL: &str = "catdesk_web_review_read";
 static QUEUE_REVIEW_PACKAGE_READ_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 struct QueueReviewReadLease<'a>(&'a AtomicBool);
@@ -785,6 +786,17 @@ async fn handle_tools_list(
             "annotations": { "readOnlyHint": true, "openWorldHint": false, "destructiveHint": false }
         }));
         if tool_mode.supervisor_tools_enabled() {
+            tools.push(json!({
+                "name":WEB_REVIEW_READ_TOOL,"title":"Read a completed Web review response",
+                "description":"Read one already delivered event's verified assistant response from an exact registered project's current paired conversation. Explicit browser read with bounded admission/cancellation; starts no WakeHost and sends no message. Requires project, event, generation and target digest witnesses. No URL/workspace override or unverified diagnostic snapshot. A completed response does not verify project task completion.",
+                "inputSchema":{"type":"object","additionalProperties":false,
+                    "properties":{"projectId":{"type":"string","minLength":1,"maxLength":128},
+                        "eventId":{"type":"string","minLength":1,"maxLength":128},
+                        "expectedTargetGeneration":{"type":"integer","minimum":1},
+                        "expectedTargetSha256":{"type":"string","pattern":"^[0-9a-f]{64}$"}},
+                    "required":["projectId","eventId","expectedTargetGeneration","expectedTargetSha256"]},
+                "annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}
+            }));
             for (name, title, description, input_schema) in
                 crate::web_context_control::tool_schemas()
             {
@@ -1472,6 +1484,22 @@ where
                         )
                         .await;
                         web_context_response(req, result)
+                    }
+                    WEB_REVIEW_READ_TOOL if tool_mode.supervisor_tools_enabled() => {
+                        match crate::web_context_control::read_review(
+                            Path::new(workspace_root), tool_arguments(req),
+                        ).await {
+                            Ok(value) => tool_success_response_with_structured(
+                                req, "Event-bound review response returned; task completion remains unverified".into(), value,
+                            ),
+                            Err(error) => {
+                                let code = if error.starts_with("WEB_REVIEW_") && error.len() <= 96
+                                    && error.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_') {
+                                    error.as_str()
+                                } else { "WEB_REVIEW_UNAVAILABLE" };
+                                tool_error_response(req, format!("code: {code}\nmessage: Verified review response unavailable; no message was sent"))
+                            }
+                        }
                     }
                     QUEUE_REVIEW_PACKAGE_READ_TOOL
                         if matches!(tool_mode, ToolMode::SupervisorOnly) =>
@@ -12881,6 +12909,7 @@ mod tests {
                 "catdesk_transport_status",
                 "ollama_model_probe",
                 "read",
+                "catdesk_web_review_read",
                 "catdesk_web_context_capture",
                 "catdesk_web_context_configure",
                 "catdesk_web_context_observe",
@@ -17481,6 +17510,62 @@ hello world"
                     }
                     assert!(!root.exists());
                 }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn web_review_read_has_exact_scope_and_supervisor_mode_gate() {
+        let root = std::env::temp_dir().join(format!("web-review-mcp-{}", Uuid::new_v4()));
+        let list = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!(1)),
+            method: "tools/list".into(),
+            params: json!({}),
+        };
+        for mode in [Mode::Computer, Mode::Both, Mode::Browser] {
+            for tool_mode in [
+                ToolMode::ReadOnly,
+                ToolMode::MultiTools,
+                ToolMode::SupervisorOnly,
+            ] {
+                let listed = handle_tools_list(&list, mode, tool_mode, &None).await;
+                let tool = listed.result.as_ref().unwrap()["tools"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|tool| tool["name"] == WEB_REVIEW_READ_TOOL);
+                let exposed = mode.computer_enabled() && tool_mode.supervisor_tools_enabled();
+                assert_eq!(tool.is_some(), exposed);
+                if let Some(tool) = tool {
+                    assert_eq!(tool["inputSchema"]["additionalProperties"], false);
+                    assert_eq!(
+                        tool["inputSchema"]["required"],
+                        json!([
+                            "projectId",
+                            "eventId",
+                            "expectedTargetGeneration",
+                            "expectedTargetSha256"
+                        ])
+                    );
+                    assert_eq!(tool["annotations"]["readOnlyHint"], true);
+                    assert_eq!(tool["annotations"]["destructiveHint"], false);
+                }
+                let denied = handle_tools_call(
+                    &tool_call_request(WEB_REVIEW_READ_TOOL, json!({"workspace":"private-secret"})),
+                    &root.to_string_lossy(),
+                    0,
+                    mode,
+                    tool_mode,
+                    false,
+                    &None,
+                )
+                .await;
+                assert_tool_error("review read refuses extra scope", &denied);
+                let encoded = serde_json::to_string(&denied).unwrap();
+                assert!(!encoded.contains("private-secret"));
+                assert_eq!(encoded.contains("WEB_REVIEW_ARGUMENTS_INVALID"), exposed);
+                assert!(!root.exists());
             }
         }
     }

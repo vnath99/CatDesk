@@ -590,7 +590,23 @@ fn review_text(snapshot: &Value, expected_message_digest: &str) -> Result<String
 
 /// Explicit local read only; private response text is never a status field.
 fn read_review(workspace: &Path, project: &str, event_id: &str) -> Result<Value, String> {
+    read_review_guarded(workspace, project, event_id, None, &|| Ok(()))
+}
+
+pub(super) fn read_review_guarded(
+    workspace: &Path,
+    project: &str,
+    event_id: &str,
+    expected: Option<(u64, &str)>,
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<Value, String> {
+    keep_running()?;
     let key = paired_key(workspace, project)?;
+    if expected.is_some_and(|(generation, digest)| {
+        key.target_generation != generation || key.target_sha256() != digest
+    }) {
+        return Err("WEB_REVIEW_TARGET_CHANGED".into());
+    }
     let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
     let wake = catdesk_wake::store::Store::open(&root)?;
     let target =
@@ -603,11 +619,16 @@ fn read_review(workspace: &Path, project: &str, event_id: &str) -> Result<Value,
         .as_ref()
         .ok_or("WEB_REVIEW_DELIVERY_REQUIRED")?;
     if delivery.phase != catdesk_wake::store::Phase::Sent
+        || delivery.event.event_id != event_id
         || delivery.event.project_id != project
+        || delivery.event.target_generation != target.generation
         || delivery.target != target
         || receipt.event_id != event_id
         || receipt.target_digest != target.digest
         || receipt.target_generation != target.generation
+        || receipt.evidence != "EXACT_USER_MESSAGE_APPENDED"
+        || receipt.message_digest != delivery.message_digest
+        || receipt.message_digest != catdesk_wake::protocol::digest(&delivery.event.message)
     {
         return Err("WEB_REVIEW_DELIVERY_SCOPE_CHANGED".into());
     }
@@ -616,8 +637,15 @@ fn read_review(workspace: &Path, project: &str, event_id: &str) -> Result<Value,
         wake.root(),
         &target.url,
     )?;
-    let snapshot =
-        catdesk_wake::runtime::snapshot_sent_conversation(&wake, project, &target, event_id)?;
+    keep_running()?;
+    let snapshot = catdesk_wake::runtime::snapshot_sent_conversation_guarded(
+        &wake,
+        project,
+        &target,
+        event_id,
+        keep_running,
+    )?;
+    keep_running()?;
     if paired_key(workspace, project)? != key {
         return Err("WEB_REVIEW_TARGET_CHANGED".into());
     }

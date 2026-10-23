@@ -1004,6 +1004,22 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
 
     let work_input_file = parent.join("operator-work-input.json");
     let before_scope_refusal = tree_snapshot(&control);
+    // The coordinator can ask for a response, but no nonexistent receipt can
+    // authorize a browser read or disclose another project's conversation.
+    for (project, _) in &projects {
+        let missing = web_mcp_tool(
+            &client,
+            &url,
+            token,
+            "catdesk_web_review_read",
+            json!({"projectId":project,"eventId":"review-not-delivered",
+                "expectedTargetGeneration":1,"expectedTargetSha256":bindings[*project].digest}),
+        )
+        .await;
+        assert!(missing.to_string().contains("WEB_REVIEW_DELIVERY_REQUIRED"));
+        assert!(!missing.to_string().contains("snapshot"));
+        assert_eq!(tree_snapshot(&control), before_scope_refusal);
+    }
     for verb in ["request", "resolve"] {
         assert_eq!(
             web_work_file_action(

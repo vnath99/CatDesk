@@ -2913,7 +2913,17 @@ pub fn snapshot_sent_conversation(
     source: &Target,
     event_id: &str,
 ) -> Result<serde_json::Value> {
-    snapshot_conversation_inner(store, project_id, source, Some(event_id), &|| Ok(()))
+    snapshot_sent_conversation_guarded(store, project_id, source, event_id, &|| Ok(()))
+}
+
+pub fn snapshot_sent_conversation_guarded(
+    store: &Store,
+    project_id: &str,
+    source: &Target,
+    event_id: &str,
+    keep_running: &dyn Fn() -> Result<()>,
+) -> Result<serde_json::Value> {
+    snapshot_conversation_inner(store, project_id, source, Some(event_id), keep_running)
 }
 
 fn snapshot_conversation_inner(
@@ -3042,6 +3052,11 @@ mod bootstrap_runtime_tests {
         let guard = || Err("WEB_AUTO_OWNER_STOPPED".into());
         assert_eq!(
             snapshot_conversation_guarded(&store, "alpha", &source, &guard).unwrap_err(),
+            "WEB_AUTO_OWNER_STOPPED"
+        );
+        assert_eq!(
+            snapshot_sent_conversation_guarded(&store, "alpha", &source, "review-one", &guard)
+                .unwrap_err(),
             "WEB_AUTO_OWNER_STOPPED"
         );
         assert_eq!(

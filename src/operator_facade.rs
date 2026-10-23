@@ -57,6 +57,16 @@ pub(crate) fn capture_web_context_expected_guarded(
     web::capture_context_expected_guarded(workspace, project, expected, keep_running)
 }
 
+pub(crate) fn read_web_review_expected_guarded(
+    workspace: &Path,
+    project: &str,
+    event_id: &str,
+    expected: (u64, &str),
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<serde_json::Value, String> {
+    web::read_review_guarded(workspace, project, event_id, Some(expected), keep_running)
+}
+
 #[cfg(test)]
 pub(crate) fn capture_web_context_with_snapshot<F>(
     workspace: &Path,

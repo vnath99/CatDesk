@@ -1,0 +1,251 @@
+{
+  "recordedUtc": "2026-10-23T01:55:05.2279998Z",
+  "task": "C6-COORDINATOR-REVIEW-READ",
+  "classification": "SOURCE_TESTED_LOCAL",
+  "branch": "codex/web-rollover-oct17",
+  "baseHead": "27e10389bf9d3460a586112b29265b9cc29fda56",
+  "sourceFiles": [
+    {
+      "path": "src/mcp.rs",
+      "sha256": "0aa6316fa86bf4e4a91b2b62b9e25330bb3279f5fb65993095e8c1a34e94911b"
+    },
+    {
+      "path": "src/operator_facade.rs",
+      "sha256": "33b393a0e862573dae7014f9a7e9aaa8810bd2595f7d5b02a495a471610d534e"
+    },
+    {
+      "path": "src/operator_web_cli.rs",
+      "sha256": "0c78f5825c1ce34db09e42dd99509abe5b440137e20372b46dbf01c0f160c167"
+    },
+    {
+      "path": "src/web_context_control.rs",
+      "sha256": "8770de6737946e5e175d6ac3295350493c36bce5917d3a623df24f84a133129e"
+    },
+    {
+      "path": "src/web_development_tests.rs",
+      "sha256": "64c3ff515d1d1625607aa01db24cbaecaec9b0007ff141b2bc58c70b445bedff"
+    },
+    {
+      "path": "wake/src/runtime.rs",
+      "sha256": "45dd970d8c167951e553869fde236d851bed16a2b86cc006cb5facfd4029e1fa"
+    }
+  ],
+  "gap": "Central coordinator could queue requests and read status, but completed event response bodies were only available through the local CLI",
+  "implementation": {
+    "tool": "catdesk_web_review_read",
+    "witnesses": [
+      "projectId",
+      "eventId",
+      "expectedTargetGeneration",
+      "expectedTargetSha256"
+    ],
+    "overrides": "No workspace or conversation URL override",
+    "modes": "Computer/Both with existing supervisor-tool admission",
+    "bounds": "Shared context capture worker admission, 180s cancellation/deadline, existing browser owner and installed isolation",
+    "response": "Verified latest complete event response only, at most 8192 bytes, response SHA256, taskCompletionVerified false",
+    "diagnostics": "Unverified raw snapshots never cross MCP response boundary",
+    "receipt": "SENT, exact USER evidence, event/project/target/message digest consistency",
+    "newFramework": false
+  },
+  "tests": {
+    "focusedTestsPassed": 9,
+    "checks": [
+      {
+        "label": "review-context-controls",
+        "startedUtc": "2026-10-23T01:51:25.3981003Z",
+        "finishedUtc": "2026-10-23T01:51:44.9634842Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "web_context_control::tests::",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "8633c329729fb6a10f0852d6926443c625f32ac8668f2a3069286382c7cbc417"
+      },
+      {
+        "label": "review-mcp-scope",
+        "startedUtc": "2026-10-23T01:51:45.0035305Z",
+        "finishedUtc": "2026-10-23T01:51:46.2161035Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "mcp::tests::web_review_read_has_exact_scope_and_supervisor_mode_gate",
+          "--",
+          "--exact"
+        ],
+        "exitCode": 0,
+        "logSha256": "40ce2ae3a3320513704f8fa3f18c90ac90de16273c56b8f242d9d0d355a0817b"
+      },
+      {
+        "label": "mcp-catalog",
+        "startedUtc": "2026-10-23T01:51:46.2276579Z",
+        "finishedUtc": "2026-10-23T01:51:46.8530903Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "mcp::tests::multi_tools_list_exposes_run_command_mv_without_move_path_tool",
+          "--",
+          "--exact"
+        ],
+        "exitCode": 0,
+        "logSha256": "b3ea016a8a2a09aca7ce7ece30de64a247548e773160bba6316e8154b4d08ece"
+      },
+      {
+        "label": "review-local-proof",
+        "startedUtc": "2026-10-23T01:51:46.8858805Z",
+        "finishedUtc": "2026-10-23T01:51:47.4803267Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "operator_facade::web::tests::review_read_requires_exact_latest_complete_delivered_pair",
+          "--",
+          "--exact"
+        ],
+        "exitCode": 0,
+        "logSha256": "293bfd6f5b85b13c080f3d829dfc36edd677ee563f166ada443e7f3777480bfa"
+      },
+      {
+        "label": "review-three-project-http",
+        "startedUtc": "2026-10-23T01:51:47.4897906Z",
+        "finishedUtc": "2026-10-23T01:52:12.4513944Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "web_development_tests::central_web_work_requests_are_independent_durable_and_generation_bound",
+          "--",
+          "--exact",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "d6918ef7682971d74abcdbb120265e7ab7bcf0e1723b08ab6102465ca2ccfdc2"
+      },
+      {
+        "label": "review-browser-cancel",
+        "startedUtc": "2026-10-23T01:52:12.4622727Z",
+        "finishedUtc": "2026-10-23T01:52:17.2641224Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "--lib",
+          "runtime::tests::cancelled_browser_operations_cannot_initialize_an_adapter_or_lock",
+          "--",
+          "--exact"
+        ],
+        "exitCode": 0,
+        "logSha256": "cbb3674c89447cb1b53396c00c84adb59afb2ac926f1f8246deb1dff841e0016"
+      },
+      {
+        "label": "strict-root-clippy",
+        "startedUtc": "2026-10-23T01:52:17.2737463Z",
+        "finishedUtc": "2026-10-23T01:52:42.7736502Z",
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "logSha256": "af62577f251c397db150a11ffa43086a991304f10f68082614c128624598927c"
+      },
+      {
+        "label": "strict-wake-clippy",
+        "startedUtc": "2026-10-23T01:52:42.7865962Z",
+        "finishedUtc": "2026-10-23T01:52:47.6901536Z",
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "logSha256": "0e831e019e3a1d6278bddaeb106d90626ad6f7e66d15ffae8a6ccb9709c6cff8"
+      },
+      {
+        "label": "root-format",
+        "startedUtc": "2026-10-23T01:52:47.6992283Z",
+        "finishedUtc": "2026-10-23T01:52:50.433762Z",
+        "arguments": [
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "wake-format",
+        "startedUtc": "2026-10-23T01:52:50.4368306Z",
+        "finishedUtc": "2026-10-23T01:52:51.2374993Z",
+        "arguments": [
+          "fmt",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "threeProjectHttp": "Missing delivered event refused before browser read; registered fixture trees unchanged",
+    "sharedCancellation": "Delivered-review snapshot passes the existing cooperative stop guard",
+    "rootClippy": "PASS_ALL_TARGETS_ALL_FEATURES",
+    "wakeClippy": "PASS_ALL_TARGETS_ALL_FEATURES",
+    "format": "PASS_BOTH",
+    "initialFailure": "Catalog expected-order mismatch corrected; retained first test receipt"
+  },
+  "external": {
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "recurringStarted": false,
+    "liveMessages": 0,
+    "bindingsChanged": false,
+    "nativeSessionsChanged": false,
+    "selectedPackageChanged": false,
+    "protectedProductionChanged": false,
+    "connectorCalled": false
+  },
+  "acceptance": {
+    "source": "PASS",
+    "normalExecutable": "OPEN",
+    "selectedDevelopmentPackage": "NOT_UPDATED",
+    "localMcpBinary": "OPEN",
+    "externalConnector": "UNVERIFIED",
+    "positiveLiveReviewBodyViaNewTool": "OPEN",
+    "protectedProduction": "OPEN",
+    "fullMvp": "PARTIAL"
+  },
+  "nextTask": "Build a normal app, qualify discovery/refusal through a bounded no-web-auto local MCP process, then qualify matched release/package before any new-tool live body test; do not resend completed review/canary"
+}

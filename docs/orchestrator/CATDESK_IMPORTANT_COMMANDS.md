@@ -1,5 +1,22 @@
 # CatDesk — Important Command Reference
 
+## October 22 source addition — exact-event Web review read
+
+`catdesk_web_review_read` requires `projectId`, `eventId`,
+`expectedTargetGeneration` and `expectedTargetSha256` from the paired project.
+It is a bounded explicit browser read in existing supervisor modes, starts no
+WakeHost and sends no message. It returns only verified event responses plus a
+response digest; raw unverified diagnostic snapshots are local-CLI only. The
+caller-supplied project does not authenticate the calling ChatGPT conversation.
+`taskCompletionVerified` remains false; review transport is separate from native
+implementation ownership. No URL/workspace override or automatic next-task run.
+
+This new MCP tool is source-tested only: qualify the normal executable/package
+and actual connector catalog before use. Current selected package and external
+connector have not been updated. Preserve completed events; do not resend for
+this qualification. Evidence: [C6 source checks](../verification/C6_WEB_REVIEW_READ_2026_10_22.json).
+
+
 ## October 22 Web work request/resolution CLI (SOURCE / TESTED_LOCAL)
 
 Use a qualified new executable for local operator publication/resolution:

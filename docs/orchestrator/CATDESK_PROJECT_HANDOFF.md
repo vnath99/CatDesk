@@ -7,6 +7,15 @@ surface.
 
 ## Current checkpoint — 2026-10-22
 
+The central coordinator now has a SOURCE/TESTED_LOCAL exact-event response
+reader, `catdesk_web_review_read`, using existing bounded capture ownership.
+Closed project/event/generation/digest scope, no URL/workspace override, no
+unverified diagnostic snapshot, bounded response, task completion false. Nine
+focused tests, three-project HTTP refusal fixture, strict app/Wake Clippy and
+format passed. Normal/local MCP, selected package and new-tool live acceptance
+remain open. Existing runtimes, five bindings and native sessions unchanged.
+See the [C6 receipt](../verification/C6_WEB_REVIEW_READ_2026_10_22.json).
+
 Current package passed one positive context observation in 60.79s: exact paired
 conversation, advisory UNKNOWN history, 139 compared records, only own ledger
 and two status changes. Clean root/Job exit and zero owned processes verified.
