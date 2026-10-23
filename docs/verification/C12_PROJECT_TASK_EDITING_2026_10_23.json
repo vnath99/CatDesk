@@ -163,8 +163,8 @@
   },
   "acceptance": {
     "source": "PASS_CONTRACT_PATCH_STAGE",
-    "normalExecutable": "PENDING",
-    "normalTwoProcessHttp": "PENDING",
+    "normalExecutable": "PASS_NORMAL_DEBUG_NO_DEV_DEPENDENCIES",
+    "normalTwoProcessHttp": "PASS_PARALLEL_PATCHES_AND_THIRD_PROCESS_RESTART_REPLAY_REFUSAL",
     "actualWebB": "OPEN",
     "workspaceContainedCommandExecution": "REQUIRED_NOT_IMPLEMENTED",
     "selectedPackage": "C8_V49_UNCHANGED",
@@ -174,5 +174,63 @@
     "unattended": "NOT_ACTIVATED",
     "fullMilestone": "PARTIAL"
   },
-  "nextTask": "Build normal executable and qualify two project-task HTTP listeners with separate linked worktrees and replay refusal after restart, then workspace-contained command execution and selected/live Web B/G/H/I. Preserve native owners and completed canaries."
+  "nextTask": "Qualify a matched stopped development package and workspace-contained command execution, then actual Web B/G/H/I with fresh controlled sources. Task journal restart does not close pending-browser recovery acceptance. Preserve native sessions and completed canaries.",
+  "normalBuild": {
+    "sourceCommit": "f132657924cc498f7c5ca9b23c4a869a2816c165",
+    "finishedUtc": "2026-10-23T05:13:37.1876256Z",
+    "imageSha256": "97479245bf11336d35db012d344e2409f8ceafd95ae3a1119e46b192f94f163a",
+    "profile": "NORMAL_DEBUG_APP_NO_DEV_DEPENDENCIES",
+    "exitCode": 0,
+    "maximumSeconds": 240
+  },
+  "normalHttp": {
+    "startedUtc": "2026-10-23T05:14:17.3679711Z",
+    "finishedUtc": "2026-10-23T05:15:09.2895427Z",
+    "classification": "NORMAL_LOCAL_MCP_ASSIGNED_LINKED_WORKTREE_EDITING",
+    "elapsedSeconds": 51.92,
+    "maximumSeconds": 180,
+    "checks": [
+      "two-normal-process-parallel-own-root-reads",
+      "two-normal-process-parallel-contract-patches-original-roots-unchanged",
+      "recorded-patch-call-refused-without-replay",
+      "wrong-bearer-401",
+      "wrong-project-witness-refused",
+      "sibling-path-write-and-command-refused",
+      "simulated-independent-writer-progress",
+      "both-listeners-natural-deadline-exit-zero",
+      "normal-process-restart-exact-contract-recorded-call-refused-exit-zero"
+    ],
+    "parallelListeners": 2,
+    "normalProcessCount": 3,
+    "naturalLifetimesSeconds": [
+      35,
+      35,
+      10
+    ],
+    "exitCodes": [
+      0,
+      0,
+      0
+    ],
+    "containment": {
+      "ExitCode": 0,
+      "TimedOut": false,
+      "TerminationFailed": false
+    },
+    "ownedProcesses": 0,
+    "liveControlProcesses": 0,
+    "protectedRecords": 139,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "actualWebCalls": false
+  },
+  "publication": {
+    "head": "f132657924cc498f7c5ca9b23c4a869a2816c165",
+    "remoteSha": "f132657924cc498f7c5ca9b23c4a869a2816c165",
+    "branch": "codex/web-rollover-oct17",
+    "atUtc": "2026-10-23T05:12:37.3319288Z",
+    "ci": "UNVERIFIED",
+    "workflowRuns": 0,
+    "checkRuns": 0
+  }
 }

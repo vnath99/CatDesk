@@ -8,6 +8,13 @@ editing mode; no shell/provider/verification command route. Source, normal
 executable, selected runtime and actual Web coding remain distinct. See
 [C12 evidence](docs/verification/C12_PROJECT_TASK_EDITING_2026_10_23.json).
 
+Published `f132657924cc498f7c5ca9b23c4a869a2816c165`, exact remote SHA; CI
+UNVERIFIED, zero runs/checks.24 distinct tests plus strict Clippy/format PASS.
+Normal build and51.92s HTTP editing/restart proof PASS: two concurrent assigned
+patches, originals unchanged, replay refused before/after restart. Three natural
+exits0 at35/35/10s;139 records exact/zero new or owned processes. Selected C8 v49
+unchanged; no actual ChatGPT Web/installed proof.
+
 ## 2026-10-23 — immutable project MCP connections SOURCE / LOCAL HTTP PASS
 
 Explicit headless project connections bind the existing registry/Git identity

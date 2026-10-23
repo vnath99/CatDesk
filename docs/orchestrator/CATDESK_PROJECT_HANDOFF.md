@@ -7,8 +7,13 @@ native roots, no shell/provider/verification commands. Recorded calls never repl
 unknown mutation retains the existing marker. Contract changes and registered
 worktree reassignment refuse. Source/normal/selected/live acceptance stay separate;
 see [C12 evidence](../verification/C12_PROJECT_TASK_EDITING_2026_10_23.json).
-Next qualify bounded normal editing and workspace-contained execution, then
-matched selected runtime and actual Web coding. Preserve accepted canaries.
+24 distinct tests, strict Clippy/format and normal build PASS; source
+`f132657924cc498f7c5ca9b23c4a869a2816c165`, exact remote/clean, CI unverified.
+Normal HTTP parallel editing plus a third restart/replay refusal PASS51.92s
+under180s Job; all three exit0,139 records exact/no owned processes. No actual
+Web/native/package/production change. Next qualify matched development package
+and workspace-contained execution, then actual Web coding. Preserve accepted
+canaries; task journal restart does not close browser H/I.
 
 This is the starting point for a new ChatGPT conversation or a newly assigned
 maintainer. It records the current durable project state without granting new

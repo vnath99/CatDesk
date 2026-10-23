@@ -2,6 +2,27 @@
 
 ## 2026-10-23 — assigned Web task editing in separate worktrees
 
+Published at05:12:37 UTC as `f132657924cc498f7c5ca9b23c4a869a2816c165`, branch
+`codex/web-rollover-oct17`, exact remote SHA matched/clean. Reviewed sanitized
+source only; zero workflow/check runs, CI UNVERIFIED. At05:11:49 UTC,24 distinct
+tests/25 executions, strict all-target/all-feature Clippy and format passed under
+600s containment. Includes parallel tasks, native checkout preservation, restart/
+replay refusal, changed contract/registered-root refusal and sibling progress
+after unknown-outcome quarantine. Only disposable fixture markers are retained
+by the quarantine regression; no historical owner is reconciled.
+
+Normal locked offline debug build passed at05:13:37 UTC without dev dependencies;
+image SHA256 `97479245bf11336d35db012d344e2409f8ceafd95ae3a1119e46b192f94f163a`.
+At05:15:09 UTC, normal HTTP qualification passed in51.92s under180s outer Job.
+Two normal executable listeners performed parallel preview/apply requests in
+separate assigned worktrees, with original registered roots unchanged. Recorded
+patch retry refused; after35/35s natural exits, a10s restarted listener loaded
+the exact contract/journal and again refused replay. All three exited0. Wrong
+bearer/project/path and generic writes/commands refused. All139 protected records
+exact; zero new records/owned or live-control processes. No actual Web calls,
+browser/messages/WakeHost/native sessions, package selection, recurring or
+protected production change. Task journal restart is not browser H/I acceptance.
+
 C12 connects project MCP requests to existing delegated contracts, patch
 preimages/journals and per-worktree writer locks. Local assignment fixes project,
 task, base commit, branch and allowed paths in a separate linked Git worktree of
@@ -30,7 +51,9 @@ its encoded run path; a regression exposed and corrected that initial mistake.
 Source/normal evidence is maintained separately in
 [C12 qualification](verification/C12_PROJECT_TASK_EDITING_2026_10_23.json).
 No actual Web coding or selected/installed acceptance is implied. B/G/H/I remain
-open. Existing real canaries, native owners and all five bindings are preserved.
+open. Next qualify a matched development package and workspace-contained command
+execution before actual Web coding. Existing canaries, native owners and all five
+bindings are preserved.
 
 ## 2026-10-23 — immutable project MCP connection stage
 
