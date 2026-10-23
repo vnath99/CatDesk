@@ -1,3 +1,13 @@
+## 2026-10-22 evening — selected positive observation PASS
+
+Current package passed one positive context observation in 60.79s: exact paired
+conversation, advisory UNKNOWN history, 139 compared records, only own ledger
+and two status changes. Clean root/Job exit and zero owned processes verified.
+Existing observation policy preserved; no scheduler loop, message or rollover.
+Earlier three-project monitoring passed on its prior package and is preserved,
+not replayed. Current concurrent qualification and protected production remain
+open. See the [C5 receipt](docs/verification/C5_POSITIVE_OBSERVATION_2026_10_22.json).
+
 ## 2026-10-22 evening — selected development live review PASS
 
 Matched normal release package selected stopped; five pairs/profile preserved.

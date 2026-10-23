@@ -1,5 +1,27 @@
 # October 22–31 execution log
 
+## 2026-10-22 evening — selected positive observation path PASS
+
+At 01:35–01:36 UTC October 23 (October 22 New York), the current matched
+normal release package completed one `operator web auto tick` observation in
+60.79s. The existing project policy opted into observation and kept rollover
+disabled. Exact conversation binding, four visible messages and a 1,556-token
+proxy were recorded; full pressure remains UNKNOWN_OR_INCOMPLETE due unseen
+older history and truncation. No policy, message, binding or native-session
+change occurred. Only the selected context ledger and two status records
+changed among 139 compared records. No unexpected or new records appeared.
+Retained host exit, outer Job closure, zero scoped processes and both controls
+STOPPED passed. No scheduler loop, recurring service or rollover was activated.
+
+Reconciliation found an earlier successful three-project monitoring receipt,
+completed October 21 at 02:18 UTC: three independently observed conversations,
+policies restored, bindings preserved and clean exit. It was not rerun. That
+historical package proof and this current-package single-project test have
+different scopes; current concurrent monitoring and protected production
+acceptance remain open. No new source change was needed. See the
+[sanitized C5 receipt](verification/C5_POSITIVE_OBSERVATION_2026_10_22.json).
+
+
 ## 2026-10-22 evening — bounded live checkpoint review PASS
 - **Exact acceptance publication at 01:29:20 UTC October 23:** sanitized
   documentation committed/pushed as

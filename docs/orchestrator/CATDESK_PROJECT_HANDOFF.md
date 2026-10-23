@@ -7,6 +7,14 @@ surface.
 
 ## Current checkpoint — 2026-10-22
 
+Current package passed one positive context observation in 60.79s: exact paired
+conversation, advisory UNKNOWN history, 139 compared records, only own ledger
+and two status changes. Clean root/Job exit and zero owned processes verified.
+Existing observation policy preserved; no scheduler loop, message or rollover.
+Earlier three-project monitoring passed on its prior package and is preserved,
+not replayed. Current concurrent qualification and protected production remain
+open. See the [C5 receipt](../verification/C5_POSITIVE_OBSERVATION_2026_10_22.json).
+
 The approved historical-checkpoint review is COMPLETE; do not resend it.
 Matched normal release app/host selected through the stopped updater, preserving
 five pairs, profile and 134 unrelated records. Actual foreground continuation
