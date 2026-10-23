@@ -215,5 +215,16 @@
     "productionModified": false,
     "browserOrWakeStarted": false,
     "qualification": "Existing fixed installed-image trust only; does not qualify new build promotion, canonical release pair, supervisor startup or external MCP"
+  },
+  "normalAndInstalledReadbackPublication": {
+    "observedUtc": "2026-10-23T02:50:01.3000962Z",
+    "documentationCommit": "301994c93aa82aa5f8092db3dbfacccacd552605",
+    "remoteSha": "301994c93aa82aa5f8092db3dbfacccacd552605",
+    "branch": "codex/web-rollover-oct17",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "privacyScan": "PASS",
+    "protectedProductionAccepted": false
   }
 }

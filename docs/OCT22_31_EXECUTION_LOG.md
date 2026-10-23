@@ -1,6 +1,12 @@
 # October 22–31 execution log
 
 ## 2026-10-22 evening — reader independence normal build and installed readback
+- **Exact qualification publication at 02:50:01 UTC October 23:** six reviewed
+  sanitized documentation paths pushed normally as
+  `301994c93aa82aa5f8092db3dbfacccacd552605` on
+  `codex/web-rollover-oct17`; full remote SHA matched. No private grants,
+  source/research data, target URLs, profiles or protected artifacts published.
+  Zero workflow/check runs; CI UNVERIFIED. Protected production unchanged.
 
 Normal app build from clean `ccdb6aee5c76de2b0f3293874c3f9e05f0024814`
 passed at 02:44:54 UTC October 23 without development dependencies, under 240s.
