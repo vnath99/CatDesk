@@ -1,4 +1,4 @@
-### October 23 C47 — source and test-binary central HTTP qualification
+### October 23 C47 — source and unselected normal central HTTP qualification
 
 C47 adds `catdesk_web_task_tool` to the existing authenticated central HTTP
 route. A local `execution-grant` binds a private key to one exact archived task,
@@ -20,14 +20,32 @@ still completes its exact patch and releases ownership; the same call ID cannot
 execute again. Native originals remain unchanged. Failed contention and test
 compile attempts are retained in private evidence.
 
-This is source/test-binary local qualification. Normal release and installed/Web
-acceptance remain open. All 243 real records/nine pairs stay exact, zero runtime
-owners and both controls STOPPED; v61 remains C45. No completed browser canary
-was replayed. The one 20:37 UTC connector probe returned HTTP 429; three native
-chats were active and one completed/idle, with no native actions.
+Published source `3967cbaf348010d6b0b2703d72fead570b5ee713` also passes
+unselected normal release qualification. The 376.81-second app build produced
+image `7e4e19812939b9f141e33544691f9786e8627549e460faa13bdb185dc1acf7fa`.
+Normal central HTTP qualification ran 2026-10-23T21:15:46.3258729Z–2026-10-23T21:16:57.823551Z
+(71.50 seconds): seven checks, 32 CLI/Git commands, two natural
+process exits, parallel isolated patches, independent blocked-project progress,
+cold-process grant/journal retention and exact returned project file text.
+Both fixture grants were revoked and their exact private keys removed.
 
-Next: normal executable/central route qualification and automatic transfer of
-exact task/grant context through structured rollover handoffs.
+Four controller failures are retained: an incomplete verb allowlist, packaged
+Windows user-state path validation, and two cold-read assertions that did not
+account for existing identical-read suppression. Direct response/journal review
+confirmed suppression; explicit line bounds qualify a fresh read. No product
+source change or duplicate-guard bypass was needed. All five grants from those
+failed attempts were separately revoked and their exact owned keys removed.
+
+All 243 real records/nine pairs stay exact, zero runtime owners and both controls
+STOPPED; selected v61 remains C45. No browser/Wake/recurring/native actions or
+completed-canary replay. This advances local normal-executable qualification,
+not actual Web A–J, selected/protected installation or unattended acceptance.
+The 20:37 UTC connector probe returned HTTP 429; three native chats were active
+and one completed/idle, with no native actions. CI remains unverified.
+
+Next: automatic transfer of exact task/grant context through structured rollover
+handoffs, matched stopped development qualification, and actual Web B/C testing
+when connector access permits. No operator action is required for source work.
 C47 closes no additional actual Web A–J gate; prior controlled evidence is preserved.
 [C47 evidence](verification/C47_CENTRAL_SCOPED_TASK_DISPATCH_2026_10_23.json).
 
@@ -774,7 +792,7 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | Gate | Existing evidence and exact scope | Remaining acceptance |
 | --- | --- | --- |
 | A. At least three registered project Web conversations | PASS, development: C21 selected status reads nine paired registrations, including two newly verified source conversations bound to isolated Git roots. Seven prior rows/history unchanged. | Protected runtime acceptance remains separate. |
-| B. Two Web conversations make tools calls in separate directories | PARTIAL LOCAL: C45 selected normal HTTP reads and earlier isolated edits remain. C47 test-binary central HTTP now patches two separate assigned worktrees through one authenticated route with per-task keys, original native files preserved, wrong-key/path/witness refusal and durable replay prevention. | OPEN: actual concurrent ChatGPT Web coding, normal C47/selected runtime and protected installation. Provider conversation origin remains unverified. |
+| B. Two Web conversations make tools calls in separate directories | PARTIAL LOCAL: C45 selected normal HTTP reads and earlier isolated edits remain. C47 test-binary and unselected normal central HTTP now patch two separate assigned worktrees through one authenticated route with per-task keys, original native files preserved, wrong-key/path/witness refusal and durable replay prevention. | OPEN: actual concurrent ChatGPT Web coding, selected C47 runtime and protected installation. Provider conversation origin remains unverified. |
 | C. Blocked project while sibling makes useful progress | PARTIAL LOCAL: C47 central HTTP holds alpha project ownership while beta reads its useful patch. Metadata checks retry briefly, without replaying tool actions or globally holding the execution workspace. Earlier scheduler/timer evidence remains. | OPEN: bounded actual Web project blocking/progress proof. Automatic grant/task handoff transfer and installed qualification remain separate. |
 | D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
 | E. Context pressure and durable handoff | RECOVERED CONTROLLED CHAIN VERIFIED: C33/C38–C40 remain preserved. C43 resumes its existing source on v60: one handoff/new intent, fresh DRAFT_READY/SEND_ATTEMPTED, no repair, verified source snapshot, RECORDED context and completed generation 3-to-4 rollover/continuation. Estimates remain advisory with UNKNOWN_OR_INCOMPLETE coverage. | Fresh atomic entry qualifies within this new controlled intent. The original C43 attempt was interrupted; whole-original-chain uninterrupted and unattended operation remain unqualified. Preserve completed proof. |

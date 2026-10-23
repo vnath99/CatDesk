@@ -1,4 +1,4 @@
-## October 23 C47 — central scoped task execution (source-qualified)
+## October 23 C47 — central scoped task execution (normal HTTP qualified, unselected)
 
 ```text
 <C47-qualified-catdesk.exe> operator web work execution-grant --project-id PROJECT --input-file pins.json
@@ -26,10 +26,14 @@ with additional startup/check overhead; metadata-only contention retries are
 bounded to two seconds. Results carry project scope and lifecycle metadata,
 including writer release after confirmed close. Preparation stays inert by default.
 
-39 source tests and strict checks pass. Actual local test-binary HTTP patches and
-cancellation drain are qualified; normal/selected/Web qualification remains
-pending. Selected STOPPED v61 does not contain C47. Automatic task/key transfer
-into rollover handoffs remains to implement. Preserve completed canaries.
+39 source tests and strict checks pass. Unselected normal app source
+`3967cbaf348010d6b0b2703d72fead570b5ee713` passes seven central HTTP checks:
+parallel isolated patches, sibling progress while blocked, wrong authority
+refusal, cold-process journal/grant retention, replay refusal and exact key/
+writer cleanup. Existing identical-read suppression survives restart; request
+explicit line bounds for a fresh bounded file excerpt. Selected STOPPED v61
+still does not contain C47. Actual Web, protected installation and automatic
+task/key transfer through rollover handoffs remain open. Preserve canaries.
 [C47 evidence](../verification/C47_CENTRAL_SCOPED_TASK_DISPATCH_2026_10_23.json).
 
 # CatDesk — Important Command Reference

@@ -20,14 +20,32 @@ still completes its exact patch and releases ownership; the same call ID cannot
 execute again. Native originals remain unchanged. Failed contention and test
 compile attempts are retained in private evidence.
 
-This is source/test-binary local qualification. Normal release and installed/Web
-acceptance remain open. All 243 real records/nine pairs stay exact, zero runtime
-owners and both controls STOPPED; v61 remains C45. No completed browser canary
-was replayed. The one 20:37 UTC connector probe returned HTTP 429; three native
-chats were active and one completed/idle, with no native actions.
+Published source `3967cbaf348010d6b0b2703d72fead570b5ee713` also passes
+unselected normal release qualification. The 376.81-second app build produced
+image `7e4e19812939b9f141e33544691f9786e8627549e460faa13bdb185dc1acf7fa`.
+Normal central HTTP qualification ran 2026-10-23T21:15:46.3258729Z–2026-10-23T21:16:57.823551Z
+(71.50 seconds): seven checks, 32 CLI/Git commands, two natural
+process exits, parallel isolated patches, independent blocked-project progress,
+cold-process grant/journal retention and exact returned project file text.
+Both fixture grants were revoked and their exact private keys removed.
 
-Next: normal executable/central route qualification and automatic transfer of
-exact task/grant context through structured rollover handoffs.
+Four controller failures are retained: an incomplete verb allowlist, packaged
+Windows user-state path validation, and two cold-read assertions that did not
+account for existing identical-read suppression. Direct response/journal review
+confirmed suppression; explicit line bounds qualify a fresh read. No product
+source change or duplicate-guard bypass was needed. All five grants from those
+failed attempts were separately revoked and their exact owned keys removed.
+
+All 243 real records/nine pairs stay exact, zero runtime owners and both controls
+STOPPED; selected v61 remains C45. No browser/Wake/recurring/native actions or
+completed-canary replay. This advances local normal-executable qualification,
+not actual Web A–J, selected/protected installation or unattended acceptance.
+The 20:37 UTC connector probe returned HTTP 429; three native chats were active
+and one completed/idle, with no native actions. CI remains unverified.
+
+Next: automatic transfer of exact task/grant context through structured rollover
+handoffs, matched stopped development qualification, and actual Web B/C testing
+when connector access permits. No operator action is required for source work.
 [C47 evidence](../verification/C47_CENTRAL_SCOPED_TASK_DISPATCH_2026_10_23.json).
 
 ## October 23 C46 — preserve normal CLI association/preparation qualification

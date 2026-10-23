@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "recordedUtc": "2026-10-23T20:51:19.5903536Z",
+  "recordedUtc": "2026-10-23T21:17:53.3892478Z",
   "task": "C47-CENTRAL-SCOPED-TASK-DISPATCH",
-  "classification": "SOURCE_AND_TEST_BINARY_LOCAL_HTTP_ONLY",
+  "classification": "SOURCE_TEST_BINARY_AND_UNSELECTED_NORMAL_CENTRAL_HTTP_QUALIFIED",
   "sourceBaseCommit": "94ee32beb0306294d4d836ea0a97c91b0d7faae5",
   "sourceFiles": [
     {
@@ -199,7 +199,7 @@
     "Final scope metadata now reports writer released after confirmed close"
   ],
   "preservation": {
-    "observedUtc": "2026-10-23T20:44:50.5197963Z",
+    "observedUtc": "2026-10-23T21:17:00.256367Z",
     "protectedRecords": 243,
     "changedRecords": 0,
     "newRecords": 0,
@@ -218,7 +218,7 @@
     "recurringStarts": 0,
     "productionChanged": false,
     "completedCanaryReplayed": false,
-    "syntheticCredentials": "Retained private disposable-fixture artifacts only; never published"
+    "syntheticCredentials": "Normal fixture grants revoked and exact owned keys removed; prior unit-fixture private artifacts retained separately"
   },
   "externalDependency": {
     "observedUtc": "2026-10-23T20:37:23.547Z",
@@ -241,7 +241,7 @@
   "acceptance": {
     "source": "PASS",
     "testBinaryLocalHttp": "PASS",
-    "normalRelease": "PENDING",
+    "normalRelease": "PASS_UNSELECTED_NORMAL_CENTRAL_HTTP",
     "selectedDevelopmentRuntime": "NOT_UPDATED",
     "actualChatGptWebCoding": "OPEN_CONNECTOR_429",
     "automaticKeyAndTaskHandoffTransfer": "NOT_IMPLEMENTED",
@@ -250,9 +250,120 @@
     "fullMilestone": "OPEN"
   },
   "publication": {
-    "status": "PENDING_REVIEWED_PUBLICATION",
+    "branch": "codex/web-rollover-oct17",
+    "sourceCommit": "3967cbaf348010d6b0b2703d72fead570b5ee713",
     "force": false,
+    "status": "SOURCE_PUBLISHED_REMOTE_SHA_VERIFIED",
     "visibilityChanged": false
   },
-  "next": "Qualify the normal executable/central HTTP route, then transfer exact task/grant context through structured rollover handoffs. Preserve completed canaries and independent native sessions."
+  "next": "Transfer exact task/grant context through structured rollover handoffs, then qualify the matched stopped development package and actual Web execution when connector access permits.",
+  "sourceCommit": "3967cbaf348010d6b0b2703d72fead570b5ee713",
+  "normalRelease": {
+    "status": "PASS_UNSELECTED",
+    "sourceCommit": "3967cbaf348010d6b0b2703d72fead570b5ee713",
+    "startedUtc": "2026-10-23T20:55:13.9591587Z",
+    "finishedUtc": "2026-10-23T21:01:30.7670665Z",
+    "imageSha256": "7e4e19812939b9f141e33544691f9786e8627549e460faa13bdb185dc1acf7fa",
+    "imageBytes": 34712576,
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "maximumSeconds": 600,
+    "buildLogSha256": "2968d904fdf812dd2f7a2e91d9629b7d9127bc3491a1751486a2c152bc718711"
+  },
+  "normalHttp": {
+    "status": "PASS_DISPOSABLE_ONLY",
+    "startedUtc": "2026-10-23T21:15:46.3258729Z",
+    "finishedUtc": "2026-10-23T21:16:57.823551Z",
+    "maximumSeconds": 180,
+    "listenerMaximumSeconds": [
+      45,
+      15
+    ],
+    "normalProcesses": 2,
+    "coldProcessRestart": true,
+    "checks": [
+      "two-exact-disposable-assignment-grants-with-synthetic-source-receipts",
+      "central-catalog-and-wrong-bearer-project-key-refusal-before-journal",
+      "parallel-central-http-previews-and-patches-with-isolated-results-and-native-originals",
+      "blocked-alpha-writer-does-not-stall-beta-useful-read",
+      "completed-apply-stable-call-id-refused",
+      "cold-process-grant-journal-retention-and-independent-continuation",
+      "exact-fixture-grants-revoked-keys-cleaned-and-writer-leases-released"
+    ],
+    "commandCount": 32,
+    "commandsExitedAndDrained": true,
+    "wrongBearerRefused": true,
+    "wrongProjectKeyRefusedBeforeJournal": true,
+    "isolatedParallelPatches": true,
+    "blockedProjectLeavesSiblingUseful": true,
+    "completedApplyReplayRefusedAcrossRestart": true,
+    "returnedColdFileTextMatchesExactProjectWorktree": true,
+    "fixtureGrantsRevoked": 2,
+    "exactFixtureKeysRemoved": 2,
+    "actualWebToolCalls": 0,
+    "actualMessages": 0,
+    "transportProof": "SYNTHETIC_LOCAL_SENT_RECEIPTS_ONLY",
+    "resultSha256": "898fef629b6948d76fc72782483969826daff480ed95a228b78b63f105029d2c",
+    "cleanupSha256": "e7a5d13a4045530563d1ff3db52f8a87366aaca5a4a98997a135d729b4f1ca01",
+    "controllerSha256": "b1e6feadebe43310dd92d485d1bcc1fbe74ab6f2e18af3f87a6ad82032ca0cdc"
+  },
+  "retainedNormalControllerFailures": [
+    {
+      "startedUtc": "2026-10-23T21:03:47.7167525Z",
+      "finishedUtc": "2026-10-23T21:03:52.2793043Z",
+      "resultSha256": "4e79da993899b320d0e0be16ee4932ebe2573c3522ed3e893fd33ae7828c3725",
+      "failure": "C47_FORBIDDEN_COMMAND_CLASS",
+      "normalProcesses": 0,
+      "protectedRecords": 243,
+      "changedRecords": 0,
+      "ownersAfterCleanup": 0,
+      "checksCompleted": 0
+    },
+    {
+      "startedUtc": "2026-10-23T21:04:47.0886473Z",
+      "finishedUtc": "2026-10-23T21:04:52.2451633Z",
+      "resultSha256": "eb8bee7b5e899a7faca5dd44212ab0ffa6753076ef1840b3d98d85d0fc9ea0ac",
+      "failure": "C47_PRIVATE_KEY_SCOPE_INVALID",
+      "normalProcesses": 0,
+      "protectedRecords": 243,
+      "changedRecords": 0,
+      "ownersAfterCleanup": 0,
+      "checksCompleted": 0
+    },
+    {
+      "startedUtc": "2026-10-23T21:10:17.1237537Z",
+      "finishedUtc": "2026-10-23T21:11:22.2362572Z",
+      "resultSha256": "26df699d6be9f87989fc27b5f7b8f9ba8e0d15048384d6a943f6366ab5334e59",
+      "failure": "C47_COLD_PROJECT_READ_MISROUTED",
+      "normalProcesses": 2,
+      "protectedRecords": 243,
+      "changedRecords": 0,
+      "ownersAfterCleanup": 0,
+      "checksCompleted": 5
+    },
+    {
+      "startedUtc": "2026-10-23T21:13:06.9444675Z",
+      "finishedUtc": "2026-10-23T21:14:09.7650036Z",
+      "resultSha256": "af132b258b0b3cfa36cde43775e0ac4303cb1927975a5dcb86cf9dcbf0cdfd0a",
+      "failure": "The property 'text' cannot be found on this object. Verify that the property exists.",
+      "normalProcesses": 2,
+      "protectedRecords": 243,
+      "changedRecords": 0,
+      "ownersAfterCleanup": 0,
+      "checksCompleted": 5
+    }
+  ],
+  "normalControllerCorrections": [
+    "Exact grant/revoke command allowlist",
+    "Allow exact fixed packaged-app user-state namespace in private controller",
+    "Compare read payload directly and retain HTTP responses",
+    "Cold reads use explicit line bounds; existing identical-read suppression remains intact"
+  ],
+  "failedAttemptCredentialCleanup": {
+    "resultSha256": "377ad03917c3ca21a74f9e8e0724a465b37d0cfefdcc750d88a40b94e2dcd2c3",
+    "protectedRecords": 243,
+    "exactOwnedKeyFilesRemoved": 5,
+    "status": "PASS",
+    "exactFixtureGrantsRevoked": 5,
+    "changedRecords": 0
+  }
 }
