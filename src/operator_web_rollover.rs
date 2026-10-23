@@ -22,6 +22,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[path = "web_rollover_admission.rs"]
+mod admission;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct Handoff {
@@ -1176,6 +1179,15 @@ fn read_auto_status(store: &ProjectStore) -> Result<Option<AutoStatus>, String> 
 pub(super) fn status_read_only(workspace: &Path, project: &str) -> Result<Value, String> {
     let store = ProjectStore::open_existing(workspace, project)?;
     let mut result = status_from_store(&store, project)?;
+    if let Some(record) = store.active()? {
+        result["creationAdmission"] =
+            match crate::wake_protocol_client::wake_root_for_workspace(workspace)
+                .and_then(|root| admission::status(&root, &creation_identity(&record)))
+            {
+                Ok(status) => status,
+                Err(_) => json!({"status":"UNAVAILABLE","liveOwnerVerified":false}),
+            };
+    }
     if let Some(record) = store
         .active()?
         .filter(|record| record.phase == Phase::ContinuationQueued)
@@ -2456,6 +2468,38 @@ pub(super) fn execute(workspace: &Path, project: &str) -> Result<Value, String> 
     execute_with_mode(workspace, project, false, &|| Ok(()))
 }
 
+fn creation_identity(record: &Record) -> admission::Identity {
+    admission::Identity {
+        project_id: record.project_id.clone(),
+        intent_id: record.intent_id.clone(),
+        source_generation: record.source.generation,
+        source_digest: record.source.digest.clone(),
+        message_digest: record.message_digest.clone(),
+    }
+}
+
+fn queued_creation_eligible(workspace: &Path, identity: &admission::Identity) -> bool {
+    let store = match ProjectStore::open_existing(workspace, &identity.project_id) {
+        Ok(store) => store,
+        // Another operation still owns this project. Do not retire its ticket.
+        Err(reason) if reason == "WEB_ROLLOVER_PROJECT_BUSY" => return true,
+        Err(_) => return false,
+    };
+    let Ok(Some(record)) = store.active() else {
+        return false;
+    };
+    if creation_identity(&record) != *identity
+        || !(record.phase == Phase::Prepared || resumable_bootstrap(&record))
+        || !matches!(paired(workspace, &identity.project_id), Ok(target) if target == record.source)
+    {
+        return false;
+    }
+    // Read the existing policy without requesting or rewriting its intent.
+    WebContextStore::open_read_only(workspace.join(".catdesk/web-context"))
+        .and_then(|meter| meter.rollover_readiness(&key(&record.project_id, &record.source)))
+        .is_ok_and(|(_, due)| due)
+}
+
 pub(super) fn execute_automatic(
     workspace: &Path,
     project: &str,
@@ -2518,6 +2562,12 @@ fn execute_with_mode(
         // that owner while a handoff was being collected, do not acquire a
         // standalone browser lease and start a replacement conversation.
         automatic_wake_running(automatic, &wake, project, &record.source)?;
+        keep_running()?;
+        let creation = admission::try_acquire(wake.root(), creation_identity(&record), |head| {
+            queued_creation_eligible(workspace, head)
+        })?
+        .ok_or("WEB_ROLLOVER_CREATION_QUEUED")?;
+        keep_running()?;
         let source = record.source.clone();
         let intent_id = record.intent_id.clone();
         let handoff = record.handoff.clone();
@@ -2567,6 +2617,9 @@ fn execute_with_mode(
         record.receipt = Some(receipt);
         record.phase = Phase::ResponsePending;
         store.save(&record)?;
+        // Exact USER and independent issued URL are now durable. Release New
+        // Chat admission before completion probes and paired local commit.
+        creation.creation_recorded()?;
     }
     if record.phase == Phase::ResponsePending {
         let pending = record

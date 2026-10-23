@@ -282,7 +282,10 @@ fn error_stage(reason: &str) -> &'static str {
         "WAKE_HOST_NOT_RUNNING"
     } else if reason == "WAKE_TARGET_CHANGED" {
         "WAKE_TARGET_CHANGED"
-    } else if reason == "BROWSER_SESSION_BUSY" {
+    } else if matches!(
+        reason,
+        "BROWSER_SESSION_BUSY" | "WEB_ROLLOVER_CREATION_QUEUED" | "WEB_ROLLOVER_ADMISSION_BUSY"
+    ) {
         "AWAITING_BROWSER"
     } else if reason == "WEB_CONTEXT_BUSY" {
         "AWAITING_CONTEXT"

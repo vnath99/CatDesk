@@ -1,3 +1,16 @@
+## 2026-10-23 — durable fair creation admission SOURCE PASS
+
+Existing rollover now enqueues New Chat creation by stable project/intent/source/
+handoff identity in a durable FIFO journal. A retained admission lease excludes
+competing creation; existing browser ownership still applies. Abandoned or
+ineligible admissions are quarantined without changing project journals/drafts.
+Release follows validated exact-USER/issued-URL receipt persistence, before
+completion probes and binding. Unknown submissions remain non-replayable.
+72 distinct tests, strict Clippy/format pass. No browser, selected-package,
+binding, native-owner, recurring or production action. Live simultaneous requests
+and crash/restart demonstrations remain OPEN. See
+[C10 evidence](docs/verification/C10_ROLLOVER_ADMISSION_2026_10_23.json).
+
 ## Mandatory October 31 Web acceptance clarification
 
 Immediate source increment C9 stops silent predecessor eviction at the 64-URL

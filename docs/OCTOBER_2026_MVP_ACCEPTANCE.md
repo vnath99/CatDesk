@@ -48,13 +48,13 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
 | E. Context pressure and durable handoff | PARTIAL: per-conversation saved estimates/policies and actual browser observations; completed canary has a durable handoff. Coverage remains advisory/UNKNOWN when incomplete. | Full required handoff fields and coordinated automatic monitoring qualification; do not infer exact context from lifetime MCP counters. |
 | F. Actual replacement URL and continuation | PASS, one controlled browser canary: issued replacement URL, paired generation update, predecessor preservation and continuation are already verified. | Preserve proof; no repeat required. This does not prove two simultaneous rollovers. |
-| G. Two simultaneous synthetic rollover requests | OPEN. Existing shared browser OS lock and project journals prevent overlapping owners; task round robin is not proof of a durable fair creation queue. | Durable fair rollover admission, then two fresh controlled project requests with isolated identities/bindings and no duplicate message. |
+| G. Two simultaneous synthetic rollover requests | SOURCE / TESTED_LOCAL admission implemented in C10: durable eligible FIFO, retained creation owner, abandoned/ineligible quarantine, stable identity, timestamps and separate source-journal proof. Existing shared browser owner remains required. | Normal/selected qualification, then two fresh actual controlled project browser requests with isolated identities/bindings and no duplicate message. Source threads are not live browser acceptance. |
 | H. Interruption and ambiguous-submission recovery | PARTIAL: source recovery/draft/receipt tests and retained real ambiguous/quarantined state exist. No blind resend is allowed. | Bounded controlled interruption at specified transaction phases, with actual browser evidence and cleanup. Preserve historical ambiguity; never manufacture its missing receipt. |
 | I. Restart preserves registrations/history/pending rollovers | PARTIAL: fresh read-only CLI processes recover stored paired targets, saved continuation and quarantine; atomic durable stores exist. | Controlled restart during a pending transaction, verifying registry, predecessor/handoff and queue/journal recovery. No recurring service activation implied. |
 | J. No orphan browser/Wake processes | PASS for recorded bounded tests, including current stopped selection. Root/Job exits and zero owned processes are checked. | Normal unattended operation is NOT ACTIVATED or accepted. Each future bounded test needs its own cleanup proof. |
 
 **Implementation gaps identified:** no proven per-conversation generic MCP
-workspace routing, no demonstrated durable fair new-chat admission queue, no
+workspace routing, no live-qualified durable fair new-chat admission queue, no
 supported Web project removal path found, bounded predecessor storage, and no
 explicit structured Git/decision fields in the current handoff schema. Existing
 registry, context store, browser ownership and rollover journals will be reused.
@@ -75,6 +75,21 @@ The prior C8 source is now a normal release selected STOPPED; 139 records checke
 only two package pointer changes, five original pairs and prior package preserved,
 zero owned processes. This is a development package/status qualification, not
 protected installation or the new simultaneous-rollover acceptance.
+
+### October 23 — fair creation admission SOURCE / TESTED_LOCAL
+
+C10 adds durable FIFO admission only around shared New Chat creation. Existing
+phase/policy/target checks, browser/profile ownership and ambiguous-submission
+refusals remain authoritative. An exact USER/issued-URL receipt must be validated
+and saved in the project journal before releasing creation admission. Later
+completion probes and binding use existing independent checkpoints. An abandoned
+lease or ineligible waiting source quarantines only its admission; unknown drafts
+and original project state remain intact. Independent tools/native development
+receive no global lock. Status is durable metadata, never liveness/delivery proof.
+72 distinct tests, strict Clippy/format PASS. Storage is bounded to 512 entries/
+256KiB with no eviction. No actual browser or protected installation was tested;
+live G/H/I, true project-bound MCP work B and unattended operation remain OPEN.
+See [C10 evidence](verification/C10_ROLLOVER_ADMISSION_2026_10_23.json).
 
 ### October 22 evening — timer fault isolation SOURCE / TESTED_LOCAL
 

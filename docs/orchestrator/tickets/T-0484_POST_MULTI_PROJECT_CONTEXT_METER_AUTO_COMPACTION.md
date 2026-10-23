@@ -2,6 +2,14 @@
 
 ## Mandatory October 22 acceptance clarification
 
+October 23 source increment C10 implements durable fair creation admission
+around the existing bootstrap/journal path. Stable scope, timestamps, retained
+lease and quarantine preserve unknown outcomes; receipt persistence releases
+creation before later probes/binding. 72 distinct tests and strict Clippy/format
+pass. This is not the required two-request actual-browser or interruption/restart
+demonstration; those live gates remain open. No existing canary is repeated.
+See [C10 evidence](../../verification/C10_ROLLOVER_ADMISSION_2026_10_23.json).
+
 Context monitoring/compaction and rollover remain core October 31 acceptance,
 alongside true parallel project-bound Web MCP operations. Shared authenticated
 browser creation must use durable fair exclusive admission, stable rollover IDs,

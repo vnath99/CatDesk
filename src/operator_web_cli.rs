@@ -841,6 +841,24 @@ fn registry_rollover_projection(raw: &Value) -> Value {
             )
         })
         .unwrap_or("NOT_CHECKED");
+    let creation_admission = raw.get("creationAdmission").map(|admission| {
+        let phase = admission
+            .get("phase")
+            .and_then(Value::as_str)
+            .filter(|phase| {
+                matches!(
+                    *phase,
+                    "WAITING" | "ACTIVE" | "CREATION_RECORDED" | "QUARANTINED"
+                )
+            });
+        match (admission.get("status").and_then(Value::as_str), phase) {
+            (Some("DURABLE_SNAPSHOT"), Some(phase)) => json!({"status":"DURABLE_SNAPSHOT",
+                "phase":phase,"waitingAhead":admission.get("waitingAhead").and_then(Value::as_u64),
+                "liveOwnerVerified":false,"creationProof":false}),
+            (Some("UNOBSERVED"), _) => json!({"status":"UNOBSERVED","liveOwnerVerified":false}),
+            _ => json!({"status":"UNAVAILABLE","liveOwnerVerified":false}),
+        }
+    });
     json!({
         "status":if phase == "NONE" && raw.get("handoffRequest").is_none() {"NO_ROLLOVER"} else {"DURABLE_SNAPSHOT"},
         "phase":phase,
@@ -854,6 +872,7 @@ fn registry_rollover_projection(raw: &Value) -> Value {
         "continuationProved":phase == "CONTINUATION_QUEUED" && continuation_proof == "VERIFIED" && raw.get("continuationProved") == Some(&Value::Bool(true)),
         "continuationProofStatus":continuation_proof,
         "automation":automation,
+        "creationAdmission":creation_admission,
     })
 }
 
@@ -1427,6 +1446,18 @@ mod tests {
             "true",
         ]);
         assert!(parse(&extra).is_err());
+    }
+
+    #[test]
+    fn creation_admission_projection_is_durable_metadata_not_delivery_or_owner_proof() {
+        let projected = registry_rollover_projection(&json!({"phase":"PREPARED",
+            "creationAdmission":{"status":"DURABLE_SNAPSHOT","phase":"WAITING","waitingAhead":2,
+                "liveOwnerVerified":true,"creationProof":true,"handoff":"private text"}}));
+        assert_eq!(projected["creationAdmission"]["phase"], "WAITING");
+        assert_eq!(projected["creationAdmission"]["waitingAhead"], 2);
+        assert_eq!(projected["creationAdmission"]["liveOwnerVerified"], false);
+        assert_eq!(projected["creationAdmission"]["creationProof"], false);
+        assert!(!projected.to_string().contains("private text"));
     }
 
     #[test]

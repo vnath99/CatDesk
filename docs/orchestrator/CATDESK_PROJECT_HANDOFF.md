@@ -5,7 +5,18 @@ maintainer. It records the current durable project state without granting new
 authority. Read it before selecting a ticket or operating a local lifecycle
 surface.
 
-## Current checkpoint — 2026-10-22
+## Current checkpoint — 2026-10-23
+
+C10 source adds durable fair admission for New Chat creation using existing
+project journals/browser ownership. Stable identity, UTC metadata, FIFO eligible
+waiters, retained lease, abandoned/ineligible quarantine, and no re-admission after
+creation recorded. Release only after exact USER/issued-URL receipt validation and
+project-journal save. Later probes/binding are separate; unrelated MCP/native
+tasks gain no global lock. 72 distinct tests, strict Clippy/format PASS. Source
+fixtures only: live simultaneous creation/interruption/restart remain OPEN, as
+does immutable per-conversation MCP workspace authority. No completed canary is
+replayed. Selected v49 remains unchanged. See
+[C10 evidence](../verification/C10_ROLLOVER_ADMISSION_2026_10_23.json).
 
 The operator strengthened mandatory Web acceptance: one registry with complete
 history/lifecycle; actual parallel Web MCP work in reliable immutable project

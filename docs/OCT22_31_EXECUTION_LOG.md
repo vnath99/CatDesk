@@ -1,5 +1,45 @@
 # October 22–31 execution log
 
+## 2026-10-23 early morning — durable fair New Chat admission
+
+Inspection confirmed existing project journals and shared browser ownership;
+reused both. New admission applies only to creation, not unrelated MCP/native
+work or the later completion/binding stages. A bounded FIFO journal retains
+project/intent/source generation/digests, monotonic order and UTC activity times.
+The source phase/policy/target guards run before admission. The retained OS
+admission lease lasts through independent issued-URL/exact-USER proof and its
+project-journal save. Existing browser/profile owner and cancellation guards
+remain required. A possibly submitted task never gains resend authority from
+queue metadata. Abandoned ACTIVE entries and ineligible heads are quarantined;
+project journals, unknown drafts, history and bindings are preserved. Completed
+creation refuses another admission for the same identity. A safe journal-approved
+re-entry joins behind existing eligible waiters. Storage caps at 512 rows/256KiB
+and refuses overflow without eviction; no new transcript or general registry.
+
+Source paths: `src/web_rollover_admission.rs`, `src/operator_web_rollover.rs`,
+`src/operator_web_auto.rs`, `src/operator_web_cli.rs`. Central status adds only
+closed admission metadata with liveOwnerVerified/creationProof false. Waiting
+creation maps to AWAITING_BROWSER rather than global execution locking.
+
+Final gates at 04:00:29 UTC, October 23 New York: six admission tests, one
+projection execution, 37 existing rollover recovery tests, 16 scheduler ownership
+tests and 13 Web CLI tests: 73 executions/72 distinct tests, all PASS. Strict
+all-target/all-feature Clippy and formatting pass under 600s Job containment,
+exit0/no timeout/no termination failure. Initial validation passed, then UTC
+journal fields were added and final gates repeated for the changed source.
+Threaded owner test releases and joins its worker before assertions. Owner loss
+is simulated by dropping an admission lease, not by crashing a live browser.
+See [C10 evidence](verification/C10_ROLLOVER_ADMISSION_2026_10_23.json).
+
+Base `991655bd9bf1d4f8289376b9d6d7bd9a3b0a3ee1`, branch
+`codex/web-rollover-oct17`. SOURCE / TESTED_LOCAL only. No actual browser,
+WakeHost, message, binding, native owner, package, recurring or protected state
+change. Existing v49 and completed Web canaries stay intact. Live G/H/I and
+project-bound MCP identity B remain OPEN. Next build the normal executable and
+qualify the modified read-only status path, then prepare actual two-request
+browser acceptance through the existing development release workflow. Exact
+publication receipt follows remote SHA readback; CI remains separate.
+
 ## 2026-10-22 late evening — mandatory Web criteria and predecessor retention
 
 - **Published at 03:40:32 UTC October 23:** ten reviewed, sanitized paths

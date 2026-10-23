@@ -1,5 +1,17 @@
 # CatDesk — Important Command Reference
 
+## October 23 — creation admission in existing rollover commands
+
+The existing Web rollover execution path now uses durable shared creation
+admission. `WEB_ROLLOVER_CREATION_QUEUED` or `WEB_ROLLOVER_ADMISSION_BUSY`
+means AWAITING_BROWSER; an already authorized scheduler can take a later slice.
+Do not manually delete admission files, reset the project journal, clear an
+unknown draft or resend a bootstrap. Admission metadata is not owner/delivery
+proof. Completed creation cannot be re-admitted; source journal recovery and
+receipt checks stay required. No new background process or recurring command.
+The current selected v49 predates this source increment. See
+[C10 evidence](../verification/C10_ROLLOVER_ADMISSION_2026_10_23.json).
+
 ## Mandatory multi-project Web authority
 
 The [A–J acceptance ledger](../OCTOBER_2026_MVP_ACCEPTANCE.md#mandatory-web-architecture--operator-clarification-october-22)
