@@ -464,6 +464,59 @@ class NewConversationTests(unittest.TestCase):
             with self.assertRaisesRegex(bridge.PostSubmitUnknown, "BOOTSTRAP_DESTINATION_DRIFT"):
                 sink.latch_issued_url(cdp)
 
+    def test_provisional_route_waits_without_latching_or_submitting(self):
+        provisional = "https://chatgpt.com/c/local-chatgpt%3A" + "-".join(
+            ["a" * 8, "b" * 4, "c" * 4, "d" * 4, "e" * 12])
+        with tempfile.TemporaryDirectory() as profile:
+            sink = bridge.NewConversationSink(SOURCE, Path(profile), 1, 1)
+            cdp = StructuralCdp(provisional)
+            ticks = [0.0]
+            def sleep(seconds):
+                self.assertIsNone(sink.destination_url)
+                self.assertEqual(sink.url, SOURCE)
+                ticks[0] += seconds
+                if ticks[0] >= 1:
+                    cdp.url = ISSUED
+            self.assertEqual(sink.latch_issued_url(
+                cdp, monotonic=lambda: ticks[0], sleeper=sleep), ISSUED)
+            self.assertEqual(cdp.navigation, [])
+            self.assertEqual(sink.destination_url, ISSUED)
+            cdp.url = provisional
+            with self.assertRaisesRegex(bridge.PostSubmitUnknown, "BOOTSTRAP_URL_INVALID"):
+                sink.latch_issued_url(cdp)
+
+    def test_provisional_route_timeout_never_grants_destination(self):
+        provisional = "https://chatgpt.com/c/local-chatgpt%3A" + "-".join(
+            ["a" * 8, "b" * 4, "c" * 4, "d" * 4, "e" * 12])
+        with tempfile.TemporaryDirectory() as profile:
+            sink = bridge.NewConversationSink(SOURCE, Path(profile), 1, 1)
+            cdp = StructuralCdp(provisional)
+            ticks = [0.0]
+            def sleep(seconds):
+                ticks[0] += seconds
+            with self.assertRaisesRegex(bridge.PostSubmitUnknown, "BOOTSTRAP_URL_UNISSUED"):
+                sink.latch_issued_url(cdp, monotonic=lambda: ticks[0], sleeper=sleep)
+            self.assertIsNone(sink.destination_url)
+            self.assertEqual(sink.url, SOURCE)
+            self.assertEqual(cdp.navigation, [])
+            self.assertLessEqual(ticks[0], max(1, bridge.POST_SUBMIT_RECEIPT_WINDOW_SECONDS))
+            with self.assertRaises(bridge.Attention):
+                bridge.canonical_conversation_url(provisional)
+
+    def test_provisional_lookalikes_still_refuse_immediately(self):
+        provisional = "https://chatgpt.com/c/local-chatgpt%3A" + "-".join(
+            ["a" * 8, "b" * 4, "c" * 4, "d" * 4, "e" * 12])
+        for invalid in (provisional + "?q=x", provisional + "#x",
+                        provisional.replace("chatgpt.com", "example.invalid"),
+                        provisional.replace("https://", "http://"),
+                        provisional.replace("chatgpt.com/", "chatgpt.com:443/"),
+                        provisional.replace("%3A", "%3a")):
+            with self.subTest(invalid=invalid), tempfile.TemporaryDirectory() as profile:
+                sink = bridge.NewConversationSink(SOURCE, Path(profile), 1, 1)
+                with self.assertRaisesRegex(bridge.PostSubmitUnknown, "BOOTSTRAP_URL_INVALID"):
+                    sink.latch_issued_url(StructuralCdp(invalid), sleeper=lambda _s: self.fail("must refuse immediately"))
+                self.assertIsNone(sink.destination_url)
+
     def test_load_error_placeholder_is_neither_usable_source_nor_fresh_answer(self):
         with tempfile.TemporaryDirectory() as profile:
             sink = bridge.NewConversationSink(SOURCE, Path(profile), 1, 1)

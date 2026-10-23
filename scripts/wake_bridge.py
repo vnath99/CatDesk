@@ -2816,6 +2816,17 @@ class NewConversationSink(CdpSink):
             if current == NEW_CONVERSATION_HOME:
                 sleeper(READINESS_POLL_SECONDS)
                 continue
+            # ChatGPT briefly exposes a client-only route after Send before
+            # issuing its durable conversation ID. It is a pending observation,
+            # never an identity to latch, navigate to or bind. All other invalid
+            # routes still refuse immediately, within the same fixed deadline.
+            if self.destination_url is None and re.fullmatch(
+                r"https://chatgpt\.com/c/local-chatgpt%3A"
+                r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+                current,
+            ):
+                sleeper(READINESS_POLL_SECONDS)
+                continue
             try:
                 canonical = canonical_conversation_url(current)
             except Attention as error:

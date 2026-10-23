@@ -1,5 +1,16 @@
 # CatDesk — Important Command Reference
 
+## October 23 — C20 provisional URL is pending, never authority
+
+Before destination latch only, the exact observed client-only New Chat route shape
+may be polled until the existing receipt deadline. It never supplies a durable URL,
+navigation target or paired binding. A timeout remains unknown and forbids resend;
+invalid lookalikes refuse immediately. After a destination is latched, provisional
+return is drift. Durable canonical URL validation is unchanged. Source89 tests
+pass; actual provisional-wait qualification requires a matched package. No extra
+browser process, operator command or recurring worker was introduced.
+[C20 evidence](../verification/C20_PROVISIONAL_URL_2026_10_23.json).
+
 ## October 23 — C19 observer arguments and source setup
 
 Turn-anchor and response observers accept exact message text, not its digest.

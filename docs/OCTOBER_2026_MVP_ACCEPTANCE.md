@@ -1,5 +1,15 @@
 # CatDesk October 2026 MVP acceptance
 
+### October 23 C20 — provisional URL source handling
+
+Creation waits for the observed client-only provisional route to become canonical
+within the existing deadline, without granting it identity/binding authority or
+changing durable URL validation. Unknown timeout still forbids blind resend.
+89 affected tests PASS; no new live/package/binding action. Actual pending-to-issued
+browser qualification remains open, as do B/G/H/I. Two fresh sources remain verified
+and unregistered; selected C17 v52 lacks C18-C20. Next matched package qualification.
+See [C20 evidence](verification/C20_PROVISIONAL_URL_2026_10_23.json).
+
 ### October 23 C19 — two source conversations verified, affected suite passes
 
 Two fresh initial source conversations now have independently verified distinct

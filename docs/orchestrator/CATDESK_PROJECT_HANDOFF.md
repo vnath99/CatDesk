@@ -1,5 +1,15 @@
 # CatDesk Project Handoff and Continuity Guide
 
+C20 source waits, within the existing receipt deadline, for the exact observed
+client-only New Chat route shape to become a canonical issued URL. Never latch or
+bind provisional identity; after destination latch it is drift. Other invalid URLs
+refuse and durable validator is unchanged.89 affected tests PASS; no new browser,
+Send, connector, native, binding or package action. C19 full208 proof retained for
+unchanged ordinary Wake calls. Next one matched development package containing
+C18-C20, then supported registration of two verified unique sources and actual
+G/H/I. Selected C17 v52 still lacks these fixes; no operator action required.
+[C20 evidence](../verification/C20_PROVISIONAL_URL_2026_10_23.json).
+
 C19: both fresh initial source chats now have distinct canonical URLs and exact
 USER/ASSISTANT pairs verified in independent reads. One seed send each/no resends;
 neither registered. Beta driver response refusal exposed digest passed instead of

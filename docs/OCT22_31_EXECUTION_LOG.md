@@ -1,5 +1,31 @@
 # October 22–31 execution log
 
+## 2026-10-23 — C20 pending provider URL before canonical issuance
+
+C19 published08:54:34 UTC as `7175ccc6803ef4859a7566a5a15d6bf5323b1111`,
+exact remote SHA/clean; zero workflow/check runs, CI UNVERIFIED. Final139 records
+exact, zero owned processes, both controls STOPPED; two fresh sources verified,
+unregistered. Source package qualification was next. Reviewing the already-saved
+beta trace exposed a concrete creation hazard: ChatGPT briefly returns a client-only
+provisional route before its canonical server-issued URL. Strict latch could refuse
+too early, forcing manual recovery despite successful submission.
+
+C20 recognizes only the observed provisional host/path/encoding/ID shape as pending
+before destination latch. It waits within the unchanged receipt deadline; never
+accepts that URL as authority, navigates to it, submits again, or replaces a latched
+destination with it. All other invalid routes still refuse immediately and the
+canonical durable URL validator remains unchanged. Three deterministic tests cover
+pending-to-issued transition, finite timeout with no authority and hostile/invalid
+lookalikes. No production UUIDs or URLs copied into fixtures.
+
+Affected source gate PASS08:58:32 UTC:20 current-DOM plus69 adapter/bootstrap tests,
+4.89s within180s retained Job. C19 full208-test proof retained for unchanged ordinary
+Wake paths; no new browser, Send, connector, native, binding or package operation.
+Live provisional wait remains unqualified. Next build/select/qualify one matched
+development package including C18-C20, then supported isolated source registration
+and actual G/H/I. No operator action required. See
+[C20 evidence](verification/C20_PROVISIONAL_URL_2026_10_23.json).
+
 ## 2026-10-23 — C19 message-text call boundary and second source
 
 C18 reviewed source/docs published08:43:41 UTC as

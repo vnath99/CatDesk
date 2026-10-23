@@ -1,3 +1,15 @@
+## 2026-10-23 — C20 bounded provisional New Chat URL wait
+
+The retained beta trace showed a client-only route before its canonical issued
+URL. Creation now waits only for that exact provisional route shape within the
+existing deadline; it cannot latch/bind it or return there after destination latch.
+Other invalid routes still refuse immediately; canonical URL validation unchanged.
+89 affected tests PASS, including three new transition/timeout/lookalike cases.
+No new browser/Send/connector/binding/native/package action. C19 full208-test proof
+retained for unchanged ordinary Wake calls. Next one matched development package
+for C18-C20, then supported registration of the two independently verified sources
+and actual G/H/I. See [C20 evidence](docs/verification/C20_PROVISIONAL_URL_2026_10_23.json).
+
 ## 2026-10-23 — C19 exact message observer calls and second source recovered
 
 Two fresh controlled source conversations now have distinct independently verified
