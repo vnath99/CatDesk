@@ -12,12 +12,16 @@ use std::{
 pub(super) const OWNER_GATE: &[u8] = b"CATDESK_DEV_FOREGROUND_OWNER_V1\n";
 
 pub(super) fn require_owner(reader: impl Read) -> Result<()> {
+    // The launcher checks this marker in the installed host before changing
+    // control state. Keep its contiguous bytes in optimized release images;
+    // constant-folded comparisons alone can erase the compatibility marker.
+    let owner_gate = std::hint::black_box(OWNER_GATE);
     let mut value = Vec::new();
     reader
-        .take((OWNER_GATE.len() + 1) as u64)
+        .take((owner_gate.len() + 1) as u64)
         .read_to_end(&mut value)
         .map_err(|_| "DEV_RUNTIME_FOREGROUND_OWNER_UNAVAILABLE")?;
-    if value != OWNER_GATE {
+    if value != owner_gate {
         return Err("DEV_RUNTIME_FOREGROUND_OWNER_UNAVAILABLE".into());
     }
     Ok(())

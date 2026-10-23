@@ -1,5 +1,34 @@
 # October 22–31 execution log
 
+## 2026-10-22 evening — C4 approved request preserved across release-marker refusal
+
+- Frozen revised payload/identity/destination revalidated after exact human
+  approval. A private library parameter collision first yielded preflight only;
+  explicit switch forwarding passed true/false checks before actual execution.
+- At 00:58 UTC October 23 (October 22 New York), request publication exited 0
+  exactly once. Launcher exited 2 with DEV_RUNTIME_FOREGROUND_PACKAGE_REQUIRED
+  before runtime startup. Outer cleanup: both controls STOPPED, zero owned
+  processes, unrelated metadata unchanged. Exact queued request retained OPEN;
+  no delivery/turn/submission marker exists. No resend or canary replay.
+- Diagnostic: selected normal host lacked contiguous marker bytes but its
+  foreground entry rejected EOF with DEV_RUNTIME_FOREGROUND_OWNER_UNAVAILABLE.
+  Optimization had removed the image marker despite the supported entry point.
+- Source: wake/src/development_foreground.rs retains marker bytes through
+  std::hint::black_box; exact owner comparison and installed-image guard stay.
+  scripts/test-wake-foreground-release-gate.ps1 verifies normal-release marker
+  and EOF refusal in an empty disposable workspace. CI adds normal release
+  build/probe; no triggers, accounts, security settings or deployments changed.
+- At 01:04:47 UTC, 5 owner/lifecycle tests +1 package-refusal test, normal
+  default-feature host build/probe, strict all-target/all-feature Wake Clippy
+  and fmt all exit 0 within 600s containment. Old image reproduces probe refusal;
+  corrected image passes marker and owner EOF checks without runtime state.
+- Matched app/fixed selected package/live review delivery remain OPEN. Next
+  supported update preserves the existing queued event; resume it only after
+  exact no-submission checks, with no second publication or payload changes.
+- No native project edit/session interruption, production/binding change,
+  recurring start or review delivery. SOURCE / TESTED_LOCAL / normal-host-gate
+  evidence only. [C4 receipt](verification/C4_FOREGROUND_RELEASE_MARKER_2026_10_22.json).
+
 ## 2026-10-22 evening — release/selected context qualification and bounded live read
 
 - **Exact publication at 00:39:38 UTC October 23:** sanitized qualification

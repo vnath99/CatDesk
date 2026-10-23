@@ -7,6 +7,18 @@ surface.
 
 ## Current checkpoint — 2026-10-22
 
+Exact revised review/payload authorization is now granted. One request was
+published; foreground launch refused the normal host's missing optimized-image
+marker before delivery. The request is still queued with no delivery/turn/
+submission marker, unchanged target and payload, zero owned processes, both
+controls STOPPED. Do not republish or clear its original attempt marker.
+Source now preserves the marker without changing ownership validation. Five
+lifecycle/owner tests plus one package test and the normal release host probe,
+strict Wake Clippy/fmt pass. Build the matched app and select the fixed package
+with the existing guarded stopped updater, preserving the queue. Continue the
+same pre-submit request with a separately audited bounded foreground attempt;
+no native session, recurring automation, binding or production changes.
+
 Latest qualification: normal release and selected stopped context CLI PASS;
 one live read-only capture through the selected package also PASS with exact
 paired destination, preserved history and zero remaining browser processes.

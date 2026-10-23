@@ -1,3 +1,12 @@
+## 2026-10-22 evening — normal release foreground marker repair
+
+Approved review queued once, then launcher refused a missing optimized-image
+marker before delivery. Queue/payload/target preserved; cleanup verified.
+A focused source fix and normal-release regression pass, keeping the owner
+handshake intact. Matched package selection and delivery remain open; continue
+the queued event without republishing. See the
+[execution log](docs/OCT22_31_EXECUTION_LOG.md).
+
 ## 2026-10-22 evening — selected context CLI and live observation PASS
 
 Normal release, stopped package/readback and three context refusals passed.

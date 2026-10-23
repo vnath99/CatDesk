@@ -2,6 +2,29 @@
 
 ## October 22 acceptance reconciliation
 
+### October 22 evening — approved review queued; release marker defect fixed
+
+The operator approved the frozen revised review. It was published once to its
+existing project queue, but the foreground launcher refused the selected normal
+host with `DEV_RUNTIME_FOREGROUND_PACKAGE_REQUIRED`. No delivery, turn or
+submission marker was created. Cleanup verified zero owned processes and both
+controls STOPPED; the same request remains queued, without payload or target edits.
+
+The release host's entry point correctly rejected missing owner input, while
+its raw protocol marker was absent from the optimized image. Owner validation
+now retains the contiguous marker through an optimization barrier. The exact
+owner handshake, image compatibility guard and runtime authority remain intact.
+Five owner/lifecycle tests, one package-refusal test, a normal default-feature
+release host build/probe, strict Wake Clippy and formatting pass. The release
+probe checks both marker presence and EOF refusal without creating runtime
+state. CI now includes that normal-release regression; remote CI is unverified.
+
+Matched app/fixed-package selection and actual review delivery remain OPEN.
+Next build and select the matched package through the stopped updater while
+preserving the queue, then resume only that already queued pre-submit event.
+Do not publish it again or replay completed canaries. See the
+[sanitized C4 evidence](verification/C4_FOREGROUND_RELEASE_MARKER_2026_10_22.json).
+
 ### October 22 evening — selected context CLI and one live read qualified
 
 Normal release finished at 00:26:59 UTC October 23 (October 22 New York), within

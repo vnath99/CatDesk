@@ -1,0 +1,187 @@
+{
+  "recordedUtc": "2026-10-23T01:07:09.8526226Z",
+  "task": "C4-NORMAL-RELEASE-FOREGROUND-MARKER",
+  "baseHead": "3fa828a0274fa8db2d092396305380137633d41b",
+  "branch": "codex/web-rollover-oct17",
+  "sourceFiles": [
+    {
+      "path": "wake/src/development_foreground.rs",
+      "sha256": "078f96a3cb626d13bbaefae0e24f38174818b3452e0e50484470c55033559aa2"
+    },
+    {
+      "path": "scripts/test-wake-foreground-release-gate.ps1",
+      "sha256": "6d7016f95ce4d30f52f05c2087b73e9cdd2ed174a4a727356e55221857da727b"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "5d4ea6e712a7a5a21950588715d18f3c4483226dc2e98765b437fabdcde20ece"
+    }
+  ],
+  "classification": "SOURCE_TESTED_NORMAL_RELEASE_HOST_NO_OWNER_PROBE",
+  "observedFailure": {
+    "approvedRequestPublications": 1,
+    "approvedPayloadChanged": false,
+    "foregroundRefusal": "DEV_RUNTIME_FOREGROUND_PACKAGE_REQUIRED",
+    "selectedOldHostSha256": "df5250727bd2db8fe9b4db719ab8030a99dcc06bae012c86894b5a0d0dc97bca",
+    "oldMarkerPresent": false,
+    "oldEntryPointEofRefused": true,
+    "deliveryRecordPresent": false,
+    "turnRecordPresent": false,
+    "submissionMarkerPresent": false,
+    "queueRequestPreserved": true,
+    "bindingsChanged": false,
+    "ownedProcessesAfterCleanup": 0,
+    "controls": "BOTH_STOPPED"
+  },
+  "implementation": {
+    "change": "Keep contiguous protocol marker bytes through an optimization barrier in owner-input validation",
+    "ownershipHandshakeChanged": false,
+    "launcherMarkerGuardRemoved": false,
+    "runtimeAuthorityChanged": false,
+    "ciRegression": "Build normal release host, check marker and reject stdin EOF before runtime state",
+    "newFramework": false
+  },
+  "tests": {
+    "foregroundOwnerCasesPassed": 5,
+    "packagePreflightCasesPassed": 1,
+    "checks": [
+      {
+        "label": "foreground-owner-tests",
+        "startedUtc": "2026-10-23T01:04:01.8648373Z",
+        "finishedUtc": "2026-10-23T01:04:18.7591906Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "--lib",
+          "development_runtime::foreground::tests::",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "29e18093aa0870b70c66ec957410d2ed8d96162f4358f42f48a732ff4aead26e"
+      },
+      {
+        "label": "foreground-package-refusal-test",
+        "startedUtc": "2026-10-23T01:04:18.7863724Z",
+        "finishedUtc": "2026-10-23T01:04:19.0810642Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "--lib",
+          "development_runtime::tests::foreground_requires_owned_startup_protocol_before_control_change",
+          "--",
+          "--exact",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "d7a521ca9c79846d1a358596ab8e01127e23b8a4124077f19388985b12bd543e"
+      },
+      {
+        "label": "normal-release-host-build",
+        "startedUtc": "2026-10-23T01:04:19.0924509Z",
+        "finishedUtc": "2026-10-23T01:04:41.0796203Z",
+        "arguments": [
+          "build",
+          "--locked",
+          "--offline",
+          "--release",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "--bin",
+          "CatDeskWakeHost"
+        ],
+        "exitCode": 0,
+        "logSha256": "0fc6728bb53fc6c734814ae27fa4c7568fc1cb6fd748bc62454d3f0bb2dca771"
+      },
+      {
+        "label": "normal-release-gate-probe",
+        "startedUtc": "2026-10-23T01:04:41.0897377Z",
+        "finishedUtc": "2026-10-23T01:04:41.5907469Z",
+        "arguments": [
+          "-NoProfile",
+          "-File",
+          "scripts/test-wake-foreground-release-gate.ps1",
+          "-Executable",
+          "wake/target/release/CatDeskWakeHost.exe"
+        ],
+        "exitCode": 0,
+        "logSha256": "2639b068d08a80db343e388ff18bbc2eebf90446a2280be429e556336b7504b2"
+      },
+      {
+        "label": "strict-wake-clippy",
+        "startedUtc": "2026-10-23T01:04:41.5999842Z",
+        "finishedUtc": "2026-10-23T01:04:46.4910694Z",
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "logSha256": "5a7489fda18e4207a5aca2d3e8f78a4173e24abde9612b5bace9554a44e12863"
+      },
+      {
+        "label": "wake-format-check",
+        "startedUtc": "2026-10-23T01:04:46.5015155Z",
+        "finishedUtc": "2026-10-23T01:04:47.3154672Z",
+        "arguments": [
+          "fmt",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "maximumSeconds": 600,
+    "normalDefaultFeatureHostBuild": "PASS",
+    "normalReleaseHostSha256": "6b87b46cea5d2b224412716e82aa8960040a49ba5e2ef8c5f97878817d131d90",
+    "normalReleaseMarkerPresent": true,
+    "missingOwnerGateRefused": true,
+    "probeRuntimeStateCreated": false,
+    "strictWakeClippy": "PASS",
+    "wakeFormat": "PASS"
+  },
+  "preserved": {
+    "approvedMessageUnchanged": true,
+    "approvedRequestIdentityUnchanged": true,
+    "approvedTargetUnchanged": true,
+    "originalProjectBindingsAndHistory": 5,
+    "nativeDeveloperSessionsTouched": false,
+    "queuedRequestRepublished": false,
+    "completedCanaryReplayed": false,
+    "recurringStarted": false,
+    "protectedProductionChanged": false
+  },
+  "acceptance": {
+    "sourceAndNormalHostGate": "PASS",
+    "matchedNormalAppBuild": "OPEN",
+    "selectedFixedPackage": "OPEN",
+    "approvedReviewDelivery": "QUEUED_NOT_DELIVERED",
+    "assistantResponse": "NOT_VERIFIED",
+    "fullMultiProjectMvp": "PARTIAL"
+  },
+  "retainedHarnessIssue": "Dot-sourced private library reset execution switch, yielding preflight only; explicit switch forwarding tested in true/false cases before the actual request publication",
+  "nextTask": "Build matched normal app, use guarded stopped update preserving queued identity, then resume that existing pre-submit event without another publication or payload edit",
+  "publication": {
+    "status": "LOCAL_ONLY_NOT_PUSHED",
+    "remote": "https://github.com/vnath99/CatDesk",
+    "branch": "codex/web-rollover-oct17",
+    "ci": "UNVERIFIED"
+  }
+}
