@@ -1152,8 +1152,8 @@ fn key(project: &str, target: &Target) -> ConversationKey {
 }
 
 fn paired(workspace: &Path, project: &str) -> Result<Target, String> {
-    let target = mcp::operator_read_project_web_target(workspace, project)
-        .map_err(|_| "WEB_ROLLOVER_PAIRED_TARGET_REQUIRED")?
+    let target = mcp::operator_read_project_web_target_diagnosed(workspace, project)
+        .map_err(|failure| failure.code)?
         .ok_or("WEB_ROLLOVER_TARGET_UNBOUND")?;
     Target::new(target.generation, target.url)
 }
@@ -3394,6 +3394,129 @@ mod tests {
             .unwrap()
             .unwrap();
         (control, dev_root)
+    }
+    #[cfg(windows)]
+    fn paired_handoff_fixture() -> (PathBuf, PathBuf, PathBuf, Target, Target) {
+        let parent = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("web-handoff-paired-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&parent).unwrap();
+        let (control, dev_root) = prepared_dev_fixture(&parent);
+        let registry =
+            AutonomousProjectRegistryStoreV1::open(control.join(".catdesk/projects")).unwrap();
+        registry.initialize(1, 1).unwrap();
+        let wake = Store::open(&dev_root).unwrap();
+        for project in ["catdesk", "alpha", "beta"] {
+            let origin = format!("https://example.test/{project}.git");
+            let workspace = if project == "catdesk" {
+                control.clone()
+            } else {
+                git_fixture(&parent.join(project), &origin)
+            };
+            let target = wake
+                .set_target(project, 0, &format!("https://chatgpt.com/c/{project}"))
+                .unwrap();
+            registry
+                .register_project(AutonomousProjectV1 {
+                    project_id: project.into(),
+                    workspace,
+                    git_identity: origin,
+                    verification_profile: "web_only_v1".into(),
+                    codex_thread_id: None,
+                    chatgpt_target_url: Some(target.url.clone()),
+                    chatgpt_target_sha256: Some(target.digest.clone()),
+                    chatgpt_target_history: vec![target.url],
+                })
+                .unwrap();
+        }
+        let alpha = paired(&control, "alpha").unwrap();
+        let beta = paired(&control, "beta").unwrap();
+        (parent, control, dev_root, alpha, beta)
+    }
+    #[cfg(windows)]
+    fn assert_no_handoff_actions(control: &Path, dev_root: &Path) {
+        for directory in ["queue", "archive", "deliveries", "turns", "logs"] {
+            assert_eq!(fs::read_dir(dev_root.join(directory)).unwrap().count(), 0);
+        }
+        let project = ProjectStore::open(control, "alpha").unwrap();
+        assert!(project.active().unwrap().is_none());
+        assert!(project.handoff_request().unwrap().is_none());
+        assert!(!control.join(".catdesk/web-context").exists());
+    }
+    #[cfg(windows)]
+    #[test]
+    fn handoff_target_config_writer_contention_preserves_code_and_recovers_without_actions() {
+        let (parent, control, dev_root, alpha, beta) = paired_handoff_fixture();
+        let registry_path = control.join(".catdesk/projects/projects.json");
+        let config_path = dev_root.join("config.json");
+        let registry_before = fs::read(&registry_path).unwrap();
+        let config_before = fs::read(&config_path).unwrap();
+        let held = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(dev_root.join("transaction.lock"))
+            .unwrap();
+        held.try_lock().unwrap();
+        let started = std::time::Instant::now();
+        assert_eq!(
+            paired(&control, "alpha").unwrap_err(),
+            "WEB_TARGET_WAKE_CONFIG_BUSY"
+        );
+        assert_eq!(
+            request_handoff_guarded(&control, "alpha", "task-a", &|| Ok(())).unwrap_err(),
+            "WEB_TARGET_WAKE_CONFIG_BUSY"
+        );
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
+        // The read failure must not release the writer's actual OS lock.
+        let contender = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(dev_root.join("transaction.lock"))
+            .unwrap();
+        assert!(contender.try_lock().is_err());
+        drop(contender);
+        assert_eq!(fs::read(&registry_path).unwrap(), registry_before);
+        assert_eq!(fs::read(&config_path).unwrap(), config_before);
+        assert_no_handoff_actions(&control, &dev_root);
+        drop(held);
+        assert_eq!(paired(&control, "alpha").unwrap(), alpha);
+        assert_eq!(paired(&control, "beta").unwrap(), beta);
+        assert_eq!(fs::read(&registry_path).unwrap(), registry_before);
+        assert_eq!(fs::read(&config_path).unwrap(), config_before);
+        assert_no_handoff_actions(&control, &dev_root);
+        fs::remove_dir_all(parent).unwrap();
+    }
+    #[cfg(windows)]
+    #[test]
+    fn handoff_target_permanent_mismatch_preserves_refusal_without_actions() {
+        let (parent, control, dev_root, alpha, beta) = paired_handoff_fixture();
+        // A valid Wake generation with a different URL is still unpaired.
+        let wake = Store::open(&dev_root).unwrap();
+        wake.set_target(
+            "alpha",
+            alpha.generation,
+            "https://chatgpt.com/c/alpha-drift",
+        )
+        .unwrap();
+        let registry_path = control.join(".catdesk/projects/projects.json");
+        let config_path = dev_root.join("config.json");
+        let registry_before = fs::read(&registry_path).unwrap();
+        let config_before = fs::read(&config_path).unwrap();
+        for _ in 0..2 {
+            assert_eq!(
+                paired(&control, "alpha").unwrap_err(),
+                "WEB_TARGET_REGISTRY_WAKE_MISMATCH"
+            );
+            assert_eq!(
+                request_handoff_guarded(&control, "alpha", "task-a", &|| Ok(())).unwrap_err(),
+                "WEB_TARGET_REGISTRY_WAKE_MISMATCH"
+            );
+            assert_eq!(paired(&control, "beta").unwrap(), beta);
+            assert_eq!(fs::read(&registry_path).unwrap(), registry_before);
+            assert_eq!(fs::read(&config_path).unwrap(), config_before);
+            assert_no_handoff_actions(&control, &dev_root);
+        }
+        fs::remove_dir_all(parent).unwrap();
     }
     fn record() -> Record {
         let source = Target::new(1, "https://chatgpt.com/c/old".into()).unwrap();

@@ -1,5 +1,28 @@
 # CatDesk — Important Command Reference
 
+## October 23 C44 — read the specific target error
+
+Source now preserves fixed nested target-read diagnostic codes. In particular,
+`WEB_TARGET_WAKE_CONFIG_BUSY` can reach the existing bounded transient retry;
+`WEB_TARGET_REGISTRY_WAKE_MISMATCH` remains a refusal. Do not treat all target
+errors as permission to retry or rebind. The 66-test source gate, strict Clippy
+and format passed; selected v59 does not yet contain this change. No operator
+command, blind resend or journal reset is introduced by C44.
+[C44 evidence](../verification/C44_NESTED_TARGET_DIAGNOSTICS_2026_10_23.json).
+
+## October 23 C43 — delivered source is not a new request
+
+C43's beta source request is already SENT with an exact receipt and COMPLETE
+response. No handoff or rollover intent was created. Preserve that request and
+the 232-record stopped snapshot; do not repeat work preparation or delivery to
+recover the generic target-read failure. The prior C28 request was retired with
+its independent-verification limitation retained. C42's uncertain intent and
+alpha's quarantine remain separate. The selected v59 package is STOPPED with
+zero owners after bounded cleanup. Nested diagnostic propagation is source work
+in progress, not an installed recovery mechanism.
+The source-ready body was verified read-only at 18:15:16Z; do not resend it.
+[C43 evidence](../verification/C43_PAIRED_READ_ATTEMPT_2026_10_23.json).
+
 ## October 23 C42 — ambiguous entry diagnosis
 
 For the preserved C42 intent, use the existing read-only command with its exact

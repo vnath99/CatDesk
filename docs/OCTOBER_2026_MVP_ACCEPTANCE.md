@@ -1,5 +1,34 @@
 # CatDesk October 2026 MVP acceptance
 
+### October 23 C44 — source fix; runtime qualification pending
+
+Nested paired-target reads retain fixed diagnosed errors. Config-lock contention
+can use the existing bounded transient retry; mismatched targets still refuse.
+The real-lock and permanent-mismatch regressions, full rollover and automatic
+driver suites passed: 66 distinct tests, two added, strict root Clippy and format
+passed. No live action occurred. The selected v59 runtime does not include C44;
+its package and live recovery qualification remain open. C43's historical cause
+is still unconfirmed. [C44 evidence](verification/C44_NESTED_TARGET_DIAGNOSTICS_2026_10_23.json).
+
+### October 23 C43 — no new rollover acceptance
+
+The selected-v59 beta test delivered its distinct source event with exact receipt
+and completed response. It stopped before handoff publication with the generic
+`WEB_ROLLOVER_PAIRED_TARGET_REQUIRED` error. No new intent, bootstrap, URL or binding
+exists. Observation progressed independently of C42's preserved uncertain operation,
+but this is not coding or rollover acceptance. The exact nested read failure was
+lost; config contention remains unconfirmed.
+A separate 18:15:16Z read verified the event-bound source-ready response. It
+preserved all 232 records with no new sends or owners; no handoff body exists.
+
+The monitored test was deliberately stopped after 578.37 seconds, within its
+900-second outer limit. Cleanup, policy restoration, nine unchanged pairs,
+preserved histories and zero owners are verified; 232 current records remain.
+The source request must not be resent. Narrow error propagation and real-lock
+regression are the next eligible source work. B/C, uninterrupted E, additional H/I,
+protected installation and unattended operation remain open.
+[C43 evidence](verification/C43_PAIRED_READ_ATTEMPT_2026_10_23.json).
+
 ### October 23 C42 — fresh entry is not yet accepted
 
 | Evidence class | Result |

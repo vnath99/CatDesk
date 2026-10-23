@@ -1,3 +1,44 @@
+## October 23 C44 — preserve nested target diagnostics
+
+The nested rollover `paired()` helper now retains the existing reader's fixed
+diagnostic codes. A busy Wake configuration can reach the scheduler's existing
+bounded retry handling; permanent target mismatches still refuse. No new retry
+mechanism or relaxed authority check was added. C43's erased historical cause
+remains unconfirmed.
+
+At 18:18:27Z–18:19:09Z, 66 distinct tests passed: 49 rollover and 17 automatic
+driver tests, including two new real-lock/mismatch regressions. Strict root
+Clippy and formatting passed. The first sandboxed run failed during fixture
+setup; the same source passed with authorized Windows filesystem access.
+This is source qualification only. Selected v59 remains STOPPED and does not
+include C44. Next: matching package qualification, then resume C43's existing
+delivered work without requeuing its source event.
+[C44 evidence](docs/verification/C44_NESTED_TARGET_DIAGNOSTICS_2026_10_23.json).
+
+## October 23 C43 — source delivered; nested target-read failure preserved
+
+The distinct beta test ran on selected v59 from 17:55:00Z to 18:04:39Z, within
+its 900-second outer bound. Its source delivery has an exact receipt and a
+COMPLETE response timer. Automatic observation then reported
+`WEB_ROLLOVER_PAIRED_TARGET_REQUIRED` before creating any handoff, rollover intent,
+replacement URL or binding. The listener was deliberately stopped through its
+verified process handle; the controller stopped its host and restored policy.
+All nine pairs and prior rollover records remain exact. Cleanup verified zero
+owners and both controls STOPPED; the 232-record snapshot is retained.
+
+The old beta test request was retired without claiming its pending independent
+verification completed. The new source request stays recorded and must not be
+queued or delivered again. C42's uncertain operation and alpha's quarantine
+remain intact. Source inspection found that the nested `paired()` helper erases
+specific target-read failures, including config-lock contention, into the
+generic error. The exact C43 cause cannot be recovered from that generic record.
+C44 subsequently source-qualified the narrow diagnostic correction and real-lock
+regressions; no corrected runtime or successful C43 rollover is claimed here.
+A read-only source-body check at 18:14:37Z–18:15:16Z verified the exact event's
+ready marker. All 232 records stayed unchanged and no owners remained; this
+verifies source delivery only, not a handoff or task implementation.
+[C43 evidence](docs/verification/C43_PAIRED_READ_ATTEMPT_2026_10_23.json).
+
 ## October 23 C42 — fresh-entry failure isolated without replay
 
 The guarded v58 development selection passed at 17:08:09Z: nine paired projects,

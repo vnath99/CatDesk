@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-10-23 18:19:49 UTC",
+  "task": "C44-NESTED-PAIRED-TARGET-DIAGNOSTICS",
+  "classification": "TESTED_LOCAL_SOURCE",
+  "branch": "codex/web-rollover-oct17",
+  "baseHead": "ad687fbb2ea202ed7f022a6e19759cb1860e4826",
+  "sourceFiles": [
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "824ee5239a1a6a5f3daffa497f692739e0b82f8f10fe829103ead2a704af97a4"
+    }
+  ],
+  "change": {
+    "helper": "paired",
+    "usesExistingDiagnosedReader": true,
+    "diagnosedCodesPreserved": true,
+    "existingTransientRetryReachedForConfigBusy": true,
+    "authorityChecksRelaxed": false,
+    "newRetryMechanism": false,
+    "blindResendAllowed": false
+  },
+  "sourceGate": {
+    "startedUtc": "2026-10-23T18:18:27.539Z",
+    "finishedUtc": "2026-10-23T18:19:09.049Z",
+    "distinctTests": 66,
+    "addedTests": 2,
+    "successfulExecutions": 68,
+    "repeatedFocusedTests": 2,
+    "rolloverTests": 49,
+    "automaticDriverTests": 17,
+    "strictClippy": "PASS_ROOT_ALL_TARGETS_ALL_FEATURES_WARNINGS_DENIED",
+    "format": "PASS_ROOT",
+    "maximumSeconds": 600,
+    "exitCode": 0,
+    "timedOut": false,
+    "terminationFailed": false,
+    "priorAttempt": {
+      "status": "FAILED_DURING_FIXTURE_SETUP",
+      "reason": "CONFIG_ROOT_UNAVAILABLE",
+      "logicReached": false,
+      "sourceChangedForRetry": false,
+      "correction": "Run the same frozen tests with the authorized Windows filesystem access."
+    }
+  },
+  "proof": {
+    "actualTransactionLockHeld": true,
+    "busyCode": "WEB_TARGET_WAKE_CONFIG_BUSY",
+    "nestedHandoffRefusesBeforeActions": true,
+    "writerLockNotReleasedByReader": true,
+    "registryAndConfigUnchanged": true,
+    "afterReleaseBothProjectsRead": true,
+    "permanentMismatchCode": "WEB_TARGET_REGISTRY_WAKE_MISMATCH",
+    "permanentMismatchStillRefused": true,
+    "siblingTargetPreserved": true
+  },
+  "scope": {
+    "browserActions": 0,
+    "wakeHostStarts": 0,
+    "projectBindingsChanged": false,
+    "selectedRuntimeChanged": false,
+    "productionChanged": false,
+    "nativeSessionActions": 0,
+    "recurringStarts": 0
+  },
+  "acceptance": {
+    "source": "PASS",
+    "selectedRuntime": "V59_DOES_NOT_INCLUDE_THIS_CHANGE",
+    "normalRelease": "PENDING_V60",
+    "liveNestedRecovery": "NOT_QUALIFIED",
+    "historicalC43Cause": "UNCONFIRMED_DETAIL_WAS_ERASED",
+    "fullMultiProjectMvp": "OPEN"
+  },
+  "publication": {
+    "status": "PENDING",
+    "force": false,
+    "visibilityChanged": false
+  },
+  "nextTask": "Build and qualify a matching stopped development package, then resume the existing delivered C43 work without requeuing its source event."
+}

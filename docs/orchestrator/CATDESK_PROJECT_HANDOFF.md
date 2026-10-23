@@ -1,3 +1,34 @@
+## October 23 C44 — qualify the corrected nested reader next
+
+Source-qualified C44 preserves existing fixed diagnostics through the nested
+rollover target read. The existing scheduler can retry config-lock contention;
+permanent mismatches still refuse. Sixty-six distinct tests, including two real
+lock/mismatch regressions, strict root Clippy and formatting passed. C43's original
+generic failure cannot be assigned a precise cause retrospectively.
+
+Selected v59 remains STOPPED and does not contain C44. Build and qualify the
+matching package before resuming the existing C43 request. Do not requeue its
+source event, change the C42/alpha records, or restart recurring automation.
+[C44 evidence](../verification/C44_NESTED_TARGET_DIAGNOSTICS_2026_10_23.json).
+
+## October 23 C43 — preserve the delivered beta request
+
+Selected v59 remains STOPPED. C43's distinct beta source delivery is SENT with an
+exact receipt and COMPLETE response. Nested target verification failed before
+handoff publication; no new intent, URL or binding exists. The generic recorded
+error cannot establish its underlying cause. Do not requeue the delivered source.
+The prior beta request was retired without claiming its pending independent
+verification completed. C42 and alpha remain preserved.
+
+The 578.37-second test was deliberately stopped through its verified listener
+handle. Separate host/Job cleanup and policy restoration passed: zero owners,
+both controls STOPPED, all nine pairs exact, 232 current records preserved.
+Next: retain diagnosed target errors through nested reads and test real config
+lock contention; then qualify that source before resuming eligible work.
+The 18:15:16Z read-only source-body check passed with 232 records unchanged and
+zero owners. It verifies the ready response, not implementation or rollover.
+[C43 evidence](../verification/C43_PAIRED_READ_ATTEMPT_2026_10_23.json).
+
 ## October 23 C42 — preserve the failed fresh-entry intent
 
 Development v59 is selected STOPPED. The distinct C42 automatic attempt on v58 delivered

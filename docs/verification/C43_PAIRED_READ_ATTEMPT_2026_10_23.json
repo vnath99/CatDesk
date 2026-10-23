@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-10-23T18:15:46.5546654Z",
+  "task": "C43-CONTROLLED-BETA-ATTEMPT",
+  "classification": "STOPPED_BEFORE_HANDOFF_PRESERVED",
+  "sourceCommit": "524273f81130576601ba9b098bd5c728e71425d8",
+  "developmentPackage": "V59_STOPPED",
+  "preparation": {
+    "startedUtc": "2026-10-23T17:54:46.041Z",
+    "finishedUtc": "2026-10-23T17:54:48.271Z",
+    "priorWorkOutcome": "RETIRED_NOT_COMPLETED",
+    "pendingVerificationPreserved": true,
+    "newSourceQueuedOnce": true,
+    "recordsChecked": 228,
+    "changedLedgerRecords": 1,
+    "newQueueRecords": 1,
+    "browserStarted": false,
+    "hostStarted": false
+  },
+  "attempt": {
+    "startedUtc": "2026-10-23T17:55:00.909Z",
+    "finishedUtc": "2026-10-23T18:04:39.277Z",
+    "seconds": 578.366981,
+    "listenerMaximumSeconds": 800,
+    "hostMaximumSeconds": 820,
+    "outerMaximumSeconds": 900,
+    "sourceDelivery": "SENT_EXACT_USER_MESSAGE_APPENDED",
+    "sourceResponse": "EVENT_BOUND_READY_MARKER_VERIFIED",
+    "newHandoffEvents": 0,
+    "newRolloverIntents": 0,
+    "newBootstrapSubmissions": 0,
+    "newUrls": 0,
+    "newBindings": 0,
+    "recordedAutoReason": "WEB_ROLLOVER_PAIRED_TARGET_REQUIRED",
+    "underlyingCause": "UNCONFIRMED_DETAIL_DISCARDED",
+    "observationProgressed": true
+  },
+  "stop": {
+    "atUtc": "2026-10-23T18:04:37.397Z",
+    "method": "EXACT_TEST_LISTENER_RETAINED_HANDLE_AND_VERIFIED_DESCENDANTS",
+    "controllerFailure": "C43_LISTENER_JOIN_NOT_PROVED",
+    "listenerNaturalExit": false,
+    "listenerExitIndependentlyProved": true,
+    "hostTreeExitProved": true,
+    "outerJobClosed": true,
+    "policyRestored": true,
+    "ownedProcessesAfter": 0,
+    "controls": [
+      "STOPPED",
+      "STOPPED"
+    ],
+    "originalNativeSessionsModified": false
+  },
+  "state": {
+    "baselineRecords": 229,
+    "expectedChangedRecords": 5,
+    "newRecords": 4,
+    "archivedSourceQueueRecords": 1,
+    "finalRecords": 232,
+    "unexpectedChanges": 0,
+    "unexpectedNewRecords": 0,
+    "otherEightRegistryAndWakeTargetsExact": true,
+    "allNinePairsPreserved": true,
+    "priorHistoryPrefixesExact": true,
+    "previousBetaRolloverExact": true,
+    "controlledWorkspaceFileExact": true,
+    "unknownFastCanaryPreserved": true,
+    "alphaQuarantinePreserved": true,
+    "sharedAdmissionPreserved": true,
+    "completedDeliveriesReplayed": 0,
+    "newRepairRecords": 0
+  },
+  "sourceFinding": {
+    "location": "src/operator_web_rollover.rs:paired",
+    "issue": "Nested target reader maps detailed fixed errors to one generic paired-target error.",
+    "possibleConsequence": "Transient config-lock contention cannot reach the existing specific retry handling.",
+    "contentionCausedThisAttempt": "NOT_PROVEN",
+    "nextTask": "Preserve diagnosed codes and test actual held-config-lock recovery."
+  },
+  "acceptance": {
+    "sourceDelivery": "VERIFIED",
+    "sourceBody": "PASS_SOURCE_READY_ONLY",
+    "newRollover": "NOT_REACHED",
+    "actualWebCoding": "NOT_TESTED",
+    "protectedInstalledRuntime": "NOT_QUALIFIED",
+    "unattendedOperation": "NOT_ACTIVATED"
+  },
+  "resumeRules": [
+    "Do not queue or deliver the existing C43 source request again.",
+    "No new handoff or bootstrap was submitted by this attempt.",
+    "Keep prior C28 verification pending; retirement is a test-work disposition only.",
+    "Preserve the separate uncertain C42 intent and alpha quarantine.",
+    "Resume eligible automatic work only after current state and specific failure are verified."
+  ],
+  "sourceBodyRead": {
+    "startedUtc": "2026-10-23T18:14:37.948Z",
+    "finishedUtc": "2026-10-23T18:15:16.236Z",
+    "responseCharacters": 48,
+    "eventVerified": true,
+    "requiredMarkersObserved": true,
+    "projectOrTaskIdInBody": false,
+    "responseSha256": "f859dbdd51db50f1b13cf3533f57c88ca4fd5e5ccbf8e892342f57ffb9ece06f",
+    "recordsUnchanged": 232,
+    "newRecords": 0,
+    "ownedProcessesAfter": 0,
+    "newSends": 0,
+    "sourceResponseOnly": true
+  }
+}

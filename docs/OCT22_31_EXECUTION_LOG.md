@@ -1,5 +1,66 @@
 # October 22–31 execution log
 
+## October 23 C44 — nested paired-read diagnostic propagation
+
+Source changes only the rollover `paired()` helper's error propagation. It uses
+the existing diagnosed reader and returns its fixed code. The existing automatic
+scheduler can classify `WEB_TARGET_WAKE_CONFIG_BUSY` as transient. A permanent
+registry/Wake mismatch remains a refusal. No blind resend or new retry policy is
+introduced; later post-binding reconciliation rules remain unchanged.
+
+The 18:18:27.539Z–18:19:09.049Z gate passed 66 distinct tests: rollover 49 and
+automatic driver 17. The two new regressions were also run separately, giving
+68 successful executions. They hold the actual transaction lock, check that the
+nested handoff returns BUSY without actions or releasing another owner's lock,
+then verify both projects recover after release. A permanent mismatch preserves
+the sibling target and all saved bytes. Strict root Clippy with all targets,
+all features and denied warnings passed, as did formatting. The initial sandboxed
+run failed before logic in fixture setup; the same frozen source passed with
+authorized filesystem access. Both attempts and logs are retained.
+
+No browser, host, native-session, binding, selected-package or production action
+occurred in this gate. Selected v59 does not contain C44. The exact C43 failure
+cannot be reconstructed from its generic record. Next: matching normal package
+qualification and continuation of the already-delivered C43 work, with no source
+requeue. [C44 evidence](verification/C44_NESTED_TARGET_DIAGNOSTICS_2026_10_23.json).
+
+## October 23 C43 — bounded beta attempt stopped before handoff
+
+At 17:54:46.041Z–17:54:48.271Z, supported work commands retired the prior beta
+test request and queued one distinct read-only request. Retirement explicitly
+preserves the prior pending independent verification; it does not claim task
+completion. One ledger changed and one queue record was added, yielding 229
+records. No browser, host, target or native-session action occurred in preparation.
+
+The monitored automatic attempt ran 17:55:00.909Z–18:04:39.277Z (578.37s) under
+800s listener, 820s host and 900s outer limits. Source delivery is SENT with an
+exact receipt and COMPLETE response timer. Observation ran, but nested target
+verification returned `WEB_ROLLOVER_PAIRED_TARGET_REQUIRED`; no handoff, rollover
+intent, bootstrap, new URL or binding was created. The precise underlying error
+was discarded by the existing `paired()` helper and cannot be inferred from this
+record. Running-host config contention is a hypothesis, not a confirmed cause.
+
+At 18:04:37Z the exact test listener was stopped with a retained handle after
+checking executable, parent, arguments and creation time. The reported
+`C43_LISTENER_JOIN_NOT_PROVED` reflects that deliberate nonzero stop, not failed
+cleanup. Host-tree exit, outer-job closure, policy restoration, zero owners and
+both controls STOPPED are separately verified. There were five expected record
+changes, four new records and one archived source queue record: 232 final records,
+zero unexpected changes. All nine pairs, prior histories, C42's uncertain journal,
+alpha's quarantine and native ownership remain preserved. No continuation reader
+was run and no source event was requeued.
+
+Next source work preserves existing detailed target-read errors through nested
+rollover verification, so config contention can use the already implemented
+transient retry path. Permanent mismatches still refuse. Real-lock regression
+passed in C44 at source level; no installed fix or successful C43 rollover is claimed.
+At 18:14:37.948Z–18:15:16.236Z, a separate bounded read verified the exact source
+event's 48-character assistant response and both required ready markers. The
+body does not mention project/task IDs; event, target generation and digest
+provide its scope. All 232 records were unchanged with zero owners, both controls
+STOPPED and no sends. This is source-response verification only.
+[C43 evidence](verification/C43_PAIRED_READ_ATTEMPT_2026_10_23.json).
+
 ## October 23 C42 — fresh-entry diagnosis and narrow placeholder correction
 
 At 17:08:09.979Z, the existing guarded update selected development v58. It checked
