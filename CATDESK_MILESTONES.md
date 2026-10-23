@@ -1,4 +1,4 @@
-## October 23 C46 — durable work/task association and resume preparation
+## October 23 C46 — normal CLI qualifies durable association and preparation
 
 C46 adds explicit opt-in association between an existing work request and its
 isolated task assignment. Exact assignment bytes are archived before linking
@@ -15,11 +15,17 @@ at 19:51:36.771Z with the five source hashes frozen. Three earlier failed gates
 are retained: digest-prefix mismatch, runtime-fixture setup order, and a same-URL
 generation-change assumption, each corrected before the final gate.
 
-C46 is source-qualified and pending publication/normal qualification. Selected
-STOPPED v61 remains C45/source `a55bcab4a460ea6645ffa1f33e4718b41ad2f180`.
-Automatic endpoint launch/task reinstantiation, actual Web coding and protected/
-unattended acceptance remain open. Next: review/publication and isolated normal
-CLI qualification; preserve completed browser canaries without replay.
+C46 source `3403d855c603311b822c5b4cc59a19d20faefddc` is published with exact remote
+readback. Its normal app build passed in 366.56s; the image remains unselected.
+The 20:09:14.667Z–20:09:23.022Z isolated normal CLI test passed six checks and
+23 CLI/Git commands, including two expected refusals. Exact archive/cold retry,
+queued-source refusal, conflicting-byte refusal and cold PREPARED_ONLY admission
+passed using a synthetic local SENT receipt. All 243 real records and nine pairs
+were preserved, with zero owners and both controls STOPPED. No endpoint or Web
+task ran. Selected v61 remains C45/source `a55bcab4a460ea6645ffa1f33e4718b41ad2f180`.
+Central dispatch with explicit per-project execution authority is the next source
+gap; actual Web coding, protected/unattended and automatic endpoint gates remain
+open. Preserve completed browser canaries without replay.
 At 19:52:58Z all 243 protected records were exact, with zero new records/runtime
 owners and both controls STOPPED. One 19:52:22Z connector probe returned HTTP 429;
 four native chats remained active in the same read-only snapshot.

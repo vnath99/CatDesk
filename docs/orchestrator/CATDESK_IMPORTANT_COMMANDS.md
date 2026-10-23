@@ -2,8 +2,8 @@
 
 ## October 23 C46 — opt-in assignment association and prepare-only resume
 
-These operator commands are source-qualified, pending normal image/CLI
-qualification; selected STOPPED v61 does not contain C46:
+These commands passed isolated normal CLI qualification on unselected C46 source
+`3403d855c603311b822c5b4cc59a19d20faefddc`; selected STOPPED v61 remains C45:
 
 ```text
 <C46-qualified-catdesk.exe> operator web work associate --project-id PROJECT --input-file pins.json --assignment-file assignment.json
@@ -22,12 +22,19 @@ refusals remain; preparation never clears them or grants endpoint launch.
 
 The source gate passed 34 distinct tests, seven added, with two existing native
 sandbox tests ignored; strict checks passed at 19:51:36.771Z. Earlier digest,
-fixture-order and same-URL test failures are retained. Selected v61 remains
-C45/source `a55bcab4a460ea6645ffa1f33e4718b41ad2f180`; normal qualification and
-actual Web coding remain open. Preserve completed deliveries and native owners.
+fixture-order and same-URL test failures are retained. The normal app built in
+366.56s; the 20:09:23.022Z CLI fixture passed six checks/23 commands in 8.354s,
+including two expected refusals. It used synthetic SENT transport only and
+started no endpoint. All 243 real records/nine pairs and zero-owner STOPPED state
+were preserved. The initial zero-command PowerShell alias failure is retained;
+only the private helper name changed. Selected v61 remains C45/source
+`a55bcab4a460ea6645ffa1f33e4718b41ad2f180`. Central dispatch/per-project authority,
+actual Web coding and protected/unattended qualification remain open. Preserve
+completed deliveries and native owners.
 The 19:52:58Z preservation read found 243 exact records, zero new records/runtime
-owners and both controls STOPPED. The one 19:52:22Z probe remains HTTP 429, while
-four native chats remain active; no operator action is needed for source work.
+owners and both controls STOPPED. The 19:52:22Z probe returned HTTP 429, with
+four active native chats at that observation; no operator action is needed for
+source work.
 [C46 evidence](../verification/C46_DURABLE_WORK_TASK_RESUMPTION_2026_10_23.json).
 
 ## October 23 C45 — selected project MCP accounting, local HTTP qualified

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "recordedUtc": "2026-10-23T19:54:56.0543752Z",
+  "recordedUtc": "2026-10-23T20:12:53.1482203Z",
   "task": "C46-DURABLE-WORK-TASK-RESUMPTION",
-  "classification": "SOURCE_ONLY_OPT_IN_ASSOCIATION_AND_PREPARE_ONLY_RESTORATION",
+  "classification": "SOURCE_AND_UNSELECTED_NORMAL_CLI_ASSOCIATION_PREPARATION_QUALIFIED",
   "sourceBaseCommit": "b9d11b046421b4fb67017a547e2acd40647273f8",
   "sourceFiles": [
     {
@@ -102,7 +102,7 @@
     ]
   },
   "finalChecks": {
-    "startedUtc": "2026-10-23T19:51:05.2321480Z",
+    "startedUtc": "2026-10-23T19:51:05.232148Z",
     "finishedUtc": "2026-10-23T19:51:36.7708899Z",
     "sourceHashesFrozen": true,
     "checks": [
@@ -135,7 +135,7 @@
   },
   "earlierAttempts": [
     {
-      "startedUtc": "2026-10-23T19:40:28.5216400Z",
+      "startedUtc": "2026-10-23T19:40:28.52164Z",
       "finishedUtc": "2026-10-23T19:41:37.4140652Z",
       "status": "FAILED_NEW_ASSERTIONS",
       "passedBeforeFailure": 6,
@@ -196,7 +196,7 @@
     "completedCanaryReplayed": false
   },
   "externalDependency": {
-    "atUtc": "2026-10-23T19:52:22.250Z",
+    "atUtc": "2026-10-23T19:52:22.25Z",
     "connector": "HTTP_429_UNAVAILABLE",
     "requests": 1,
     "immediateRetries": 0,
@@ -218,23 +218,127 @@
     "finalFunctionalResult": "06ff74abd49e5fe6b1a5857a86dc722a350b5a77fd2314930bf0fd0b818c0a74",
     "finalStrictResult": "75e0e760c3dd226c367c51e74d3c264c678f41a746281b45754f06e6f77f93ac",
     "realStatePreservation": "88e5994f661037745742e34394505d17234c4d0e178f7c058d77e344c9e764b5",
-    "externalDependencies": "c5922fa09134af397c861d8f32d0c150082349366661f6b5ef28ca3e07431f6f"
+    "externalDependencies": "c5922fa09134af397c861d8f32d0c150082349366661f6b5ef28ca3e07431f6f",
+    "normalCliResult": "674f0462fbf2c240f9bd4d946980b368feedacd2b6a36c9f8f3ddc84c80d7140",
+    "normalCliOuterCleanup": "8c6ec2d8d08252e0b52b9238cbb55bc7c3a46779f9182b548a897ee034ac587b"
   },
   "publication": {
-    "force": false,
+    "status": "PUSHED_EXACT_REMOTE_READBACK",
     "visibilityChanged": false,
-    "status": "PENDING_REVIEWED_SOURCE_PUBLICATION"
+    "sourceCommit": "3403d855c603311b822c5b4cc59a19d20faefddc",
+    "remoteSha": "3403d855c603311b822c5b4cc59a19d20faefddc",
+    "atUtc": "2026-10-23T19:56:08.930Z",
+    "force": false
   },
   "acceptance": {
-    "isolatedNormalCli": "PENDING",
+    "isolatedNormalCli": "PASS_ASSOCIATION_PREPARE_ONLY_SYNTHETIC_LOCAL_TRANSPORT",
     "actualWebCoding": "OPEN_CONNECTOR_429",
     "fullMultiProjectMvp": "OPEN",
     "source": "PASS",
     "unattendedOperation": "NOT_ACTIVATED",
     "protectedInstalledRuntime": "NOT_QUALIFIED",
-    "normalImage": "PENDING",
+    "normalImage": "PASS_UNSELECTED_NORMAL_RELEASE_APP",
     "automaticEndpointLaunch": "NOT_IMPLEMENTED",
-    "automaticAssignedTaskReinstantiation": "NOT_IMPLEMENTED"
+    "automaticAssignedTaskReinstantiation": "NOT_IMPLEMENTED",
+    "centralDispatchAndPerProjectExecutionAuthority": "OPEN_SOURCE_GAP"
   },
-  "nextTask": "Review and publish frozen source, then qualify the matching normal image through isolated CLI association, preparation, restart and replay refusals; preserve completed browser canaries."
+  "nextTask": "Implement central dispatch with explicit per-project execution authority. Preserve selected v61/C45, completed browser canaries and native sessions. Actual Web coding, endpoint restoration, protected installation and unattended operation remain separate gates.",
+  "sourceCommit": "3403d855c603311b822c5b4cc59a19d20faefddc",
+  "remoteCi": {
+    "status": "UNVERIFIED",
+    "visibleRuns": 0,
+    "observedUtc": "2026-10-23T19:56:40.644Z",
+    "visibleChecks": 0
+  },
+  "normalBuild": {
+    "classification": "NORMAL_RELEASE_APP_UNSELECTED",
+    "sourceCommit": "3403d855c603311b822c5b4cc59a19d20faefddc",
+    "startedUtc": "2026-10-23T19:56:17.0066Z",
+    "finishedUtc": "2026-10-23T20:02:23.564Z",
+    "elapsedSeconds": 366.559,
+    "maximumSeconds": 600,
+    "imageSha256": "47f3d477a26db9a85c7c3df06f63c1a7b0f9644f670ab6b3d93af95d5da1b489",
+    "imageBytes": 34505728,
+    "ownedJobExited": true,
+    "outputDrained": true,
+    "selected": false
+  },
+  "normalCliQualification": {
+    "classification": "C46_NORMAL_IMAGE_DISPOSABLE_OPERATOR_CLI_QUALIFICATION",
+    "sourceCommit": "3403d855c603311b822c5b4cc59a19d20faefddc",
+    "imageSha256": "47f3d477a26db9a85c7c3df06f63c1a7b0f9644f670ab6b3d93af95d5da1b489",
+    "startedUtc": "2026-10-23T20:09:14.6672717Z",
+    "finishedUtc": "2026-10-23T20:09:23.0216727Z",
+    "elapsedSeconds": 8.354401,
+    "maximumSeconds": 180,
+    "commandMaximumSeconds": 10,
+    "cliAndGitCommands": 23,
+    "expectedRefusals": 2,
+    "checks": [
+      "normal-cli-archive-first-association-and-cold-exact-retry",
+      "queued-source-does-not-authorize-resume",
+      "different-assignment-bytes-refused-without-authority-replacement",
+      "synthetic-sent-cold-process-prepared-only-admission-with-no-launch",
+      "exact-fixture-writer-guard-released-with-no-pending-marker",
+      "native-and-isolated-fixture-files-heads-and-clean-state-preserved"
+    ],
+    "checkCount": 6,
+    "sourceAndIsolatedFixtureFilesHeadsClean": true,
+    "exactArchiveAndColdRetry": true,
+    "queuedSourceResumeRefused": true,
+    "conflictingAssignmentRefused": true,
+    "coldPreparedOnlyAdmission": true,
+    "launchAuthorized": false,
+    "transportProof": "SYNTHETIC_LOCAL_SENT_RECEIPT_ONLY",
+    "fixtureWriterGuard": {
+      "atUtc": "2026-10-23T20:09:22.0932262Z",
+      "fixedUserGuardFileRetained": true,
+      "pendingMarkerAbsent": true,
+      "exclusiveHandleAcquiredAfterCliExit": true
+    },
+    "protectedRecords": 243,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "realPairedAuthorities": 9,
+    "ownedProcesses": 0,
+    "realOwners": 0,
+    "controls": [
+      "STOPPED",
+      "STOPPED"
+    ],
+    "outerCleanupUtc": "2026-10-23T20:09:25.3604079Z",
+    "outerJobClosed": true,
+    "allCommandOwnersExited": true,
+    "timedOut": false,
+    "actualWebConversations": false,
+    "actualWebToolCalls": 0,
+    "actualMessagesSent": 0,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "recurringStarted": false,
+    "nativeSessionsChanged": false,
+    "nativeTaskExecution": false,
+    "endpointStarted": false,
+    "automaticEndpointResumption": false,
+    "completedCanaryReplayed": false,
+    "realBindingsChanged": false,
+    "productionModified": false,
+    "installedProductionAcceptance": false,
+    "independentReview": "PASS_243_RECORD_HASHES_FIVE_SOURCE_PINS_AND_OUTER_CLEANUP",
+    "firstAttempt": {
+      "startedUtc": "2026-10-23T20:08:43.4105201Z",
+      "finishedUtc": "2026-10-23T20:08:44.3371453Z",
+      "status": "PRIVATE_HELPER_DISPATCH_FAILURE_BEFORE_COMMANDS",
+      "cliAndGitCommands": 0,
+      "cause": "PowerShell CLI alias collision",
+      "correction": "Rename the private helper to Invoke-C46Cli",
+      "sourceChanged": false,
+      "protectedRecords": 243,
+      "changedRecords": 0,
+      "newRecords": 0,
+      "ownedProcesses": 0,
+      "realOwners": 0,
+      "retained": true
+    }
+  }
 }

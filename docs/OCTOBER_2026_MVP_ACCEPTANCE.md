@@ -1,6 +1,6 @@
 # CatDesk October 2026 MVP acceptance
 
-### October 23 C46 — source-qualified opt-in association; preparation only
+### October 23 C46 — normal CLI qualifies opt-in association; preparation only
 
 An existing work request may explicitly associate an exact archived assignment
 for its separate task worktree. Original request/event, assignment digest,
@@ -15,14 +15,26 @@ Strict workspace Clippy, formatting and whitespace checks passed at
 19:51:36.771Z. Three earlier failed gates are retained and corrected: digest
 representation, fixture setup order and same-URL generation-test assumption.
 
-This is the source-only first slice. C46 publication, matching normal image and
-isolated CLI qualification remain pending. Selected STOPPED v61 remains C45/
-`a55bcab4a460ea6645ffa1f33e4718b41ad2f180`. Automatic task endpoint/restoration,
-actual Web B/C coding, protected installation and unattended operation remain
-open. No completed browser canary was replayed and no live A–J gate is closed.
+Published source `3403d855c603311b822c5b4cc59a19d20faefddc` has exact remote
+readback; CI remains unverified with zero runs/checks at 19:56:40.644Z. Normal app
+build passed in 366.56s; its image is unselected. The 20:09:14.667Z–20:09:23.022Z
+normal CLI fixture passed six checks/23 commands (two expected refusals) in
+8.354s. Archive/cold retry, queued-source refusal, byte conflict and cold
+PREPARED_ONLY admission passed with a synthetic local SENT receipt. All 243 real
+records and nine pairs stayed exact; outer cleanup verified zero owners and both
+controls STOPPED. The initial private-helper alias failure ran zero commands,
+remained preserved and was corrected without source change.
+
+Selected STOPPED v61 remains C45/`a55bcab4a460ea6645ffa1f33e4718b41ad2f180`.
+This normal CLI proof launches no endpoint and executes no Web coding task.
+Central dispatch/per-project execution authority, automatic task restoration,
+actual Web B/C, protected installation and unattended operation remain open.
+No completed browser canary was replayed. C46 closes no additional actual Web
+A–J gate; prior controlled evidence remains preserved.
 The 19:52:58.524Z read preserves all 243 records, with zero new records/runtime
 owners and both controls STOPPED. The one 19:52:22.250Z connector check still
-returns HTTP 429; four native chats remain active without errors or actions.
+returned HTTP 429; four native chats were active without errors or actions at
+that observation.
 [C46 evidence](verification/C46_DURABLE_WORK_TASK_RESUMPTION_2026_10_23.json).
 
 ### October 23 C45 — selected normal-image local HTTP qualification
@@ -729,8 +741,8 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | Gate | Existing evidence and exact scope | Remaining acceptance |
 | --- | --- | --- |
 | A. At least three registered project Web conversations | PASS, development: C21 selected status reads nine paired registrations, including two newly verified source conversations bound to isolated Git roots. Seven prior rows/history unchanged. | Protected runtime acceptance remains separate. |
-| B. Two Web conversations make tools calls in separate directories | PARTIAL SOURCE / NORMAL AND SELECTED DEVELOPMENT IMAGE LOCAL HTTP: C11 binds immutable roots/current paired witnesses. C12 editing reuses contracts/journals/writer locks. C15 selected image includes C14 and proves parallel fixture patch/command verification plus restart refusal, with outside writes refused. Native fixture roots preserved; provider-origin chat ID is not authenticated. | Actual concurrent Web coding and protected installed acceptance. Local fixtures, CLI threads and review reads do not close live B. |
-| C. Blocked project while sibling makes useful progress | PARTIAL: scheduler fixtures, C7 granted-reader and C8 timer-fault regressions demonstrate source isolation. Existing independent native owners were preserved. | Bounded real Web project blocking/progress proof on the intended runtime. Unreadable/unattributable shared state still fails closed. |
+| B. Two Web conversations make tools calls in separate directories | PARTIAL LOCAL QUALIFICATION: earlier C11–C15 isolated editing/restart proofs remain. C45's selected normal image proves simultaneous separate-workspace HTTP reads and all four argument/result meter parts. C46's unselected normal CLI proves durable assignment/cold preparation, with synthetic SENT transport only and no endpoint launch. Native workspaces/owners remain preserved; provider-origin chat identity is not authenticated. | OPEN: actual concurrent ChatGPT Web coding and protected installed acceptance. Local HTTP/CLI fixtures and review reads do not close live B. |
+| C. Blocked project while sibling makes useful progress | PARTIAL LOCAL QUALIFICATION: source scheduler/timer/reader isolation remains. C45's normal local HTTP fixture refuses stale alpha while beta continues reading and recording; C46 retains writer/unknown-journal refusals and prepare-only admission. Existing independent native sessions remain preserved. | OPEN: bounded actual Web project blocking/progress proof. Central dispatch needs explicit per-project execution authority; local fixture progress does not close live C. |
 | D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
 | E. Context pressure and durable handoff | RECOVERED CONTROLLED CHAIN VERIFIED: C33/C38–C40 remain preserved. C43 resumes its existing source on v60: one handoff/new intent, fresh DRAFT_READY/SEND_ATTEMPTED, no repair, verified source snapshot, RECORDED context and completed generation 3-to-4 rollover/continuation. Estimates remain advisory with UNKNOWN_OR_INCOMPLETE coverage. | Fresh atomic entry qualifies within this new controlled intent. The original C43 attempt was interrupted; whole-original-chain uninterrupted and unattended operation remain unqualified. Preserve completed proof. |
 | F. Actual replacement URL and continuation | PASS, controlled selected scope: original canary, C23 and C40 remain preserved. C43 independently verifies another issued URL, paired generation 3-to-4 update and completed continuation. A separate event-bound read verifies its 858-character assistant body and all project/task/marker checks; 243 records remain exact. | C43 is a recovered chain after the original stop, with no repair or source replay. The body acknowledges continuity without executing commands/files/MCP work. Actual coding, protected production and unattended operation remain separate. |

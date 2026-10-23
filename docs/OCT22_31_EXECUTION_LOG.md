@@ -1,6 +1,6 @@
 # October 22–31 execution log
 
-## October 23 C46 — source-only durable assignment association and resume preparation
+## October 23 C46 — durable association and unselected normal CLI qualification
 
 The optional assignment webWork identity now links exact archived assignment bytes
 to the original OPEN work request/event. The existing ledger stores task,
@@ -27,11 +27,27 @@ and an incorrect assumption that same-URL set_target advances generation. The
 final tests use the correct digest, separate empty fixture control and a genuine
 URL CAS roundtrip; the production target API was unchanged.
 
-Publication and matching normal/isolated CLI qualification remain pending.
-Selected STOPPED v61 is still C45/source `a55bcab4a460ea6645ffa1f33e4718b41ad2f180`;
-verified documentation checkpoint is `b9d11b046421b4fb67017a547e2acd40647273f8`.
-No actual Web coding or automatic endpoint restoration is qualified. HTTP 429
-remains specific to B/C; eligible source work continues without operator action.
+Source `3403d855c603311b822c5b4cc59a19d20faefddc` was published at 19:56:08.930Z
+with exact remote SHA readback. CI had zero runs/checks at 19:56:40.644Z and stays
+unverified. The normal app build passed at 19:56:17.007Z–20:02:23.564Z (366.56s),
+with its owned job exited and output drained; this image remains unselected.
+
+The isolated normal CLI qualification passed at 20:09:14.667Z–20:09:23.022Z
+(8.354s) under 10s command/180s outer bounds: 23 CLI/Git commands, two expected
+refusals and six checks. Exact archive/cold association retry, queued-source
+refusal, conflicting-byte refusal and cold PREPARED_ONLY admission passed.
+Transport was a synthetic local SENT receipt only. Fixture files/heads stayed
+clean, the exact writer guard was released and no pending marker remained.
+All 243 real records and nine pairs were preserved. Outer cleanup at
+20:09:25.360Z confirmed zero owners, both controls STOPPED and no state changes.
+An earlier attempt stopped before any command because of a PowerShell CLI alias
+collision; its evidence remains. Renaming the private helper corrected it without
+source changes. No endpoint, browser, Wake, native task or Web message was started.
+
+Selected STOPPED v61 remains C45/source `a55bcab4a460ea6645ffa1f33e4718b41ad2f180`.
+Next source gap: central dispatch with explicit per-project execution authority.
+Actual Web B/C, endpoint restoration and protected/unattended gates remain open;
+eligible source work continues without operator action or browser-canary replay.
 The independent 19:52:58.524Z preservation read verified 243 records exact,
 zero new records/runtime owners and both controls STOPPED. One 19:52:22.250Z
 connector probe still returned HTTP 429; all four native chats were active/in
