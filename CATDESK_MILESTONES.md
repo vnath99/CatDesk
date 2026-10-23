@@ -1,3 +1,17 @@
+## 2026-10-23 — C15 command-enabled development package selected STOPPED
+
+Normal release/default WakeHost builds PASS from `4beddb2`; the unchanged exact
+host gate is reused without a new host process. Guarded update selects v51 while
+STOPPED:139 records checked, only two intended package pointers changed,137 others
+exact, previous package and five original pairs preserved. Selected image passes
+76.25s local MCP patch/command/restart proof in disposable projects: parallel
+native sandbox verification, outside writes refused, third process rejects both
+recorded patch and command replay. Three natural exits0;139 records exact/zero
+new or owned processes. No browser/Wake worker/native/recurring/production action.
+Actual Web B and browser G/H/I remain OPEN. Next add explicit Git/decision handoff
+fields without changing old pending message serialization. See
+[C15 evidence](docs/verification/C15_TASK_COMMAND_PACKAGE_2026_10_23.json).
+
 ## 2026-10-23 — C14 fixed task verification commands
 
 Explicit assigned linked-worktree tasks can select fixed operator command profiles

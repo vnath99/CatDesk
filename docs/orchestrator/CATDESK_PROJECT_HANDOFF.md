@@ -1,5 +1,17 @@
 # CatDesk Project Handoff and Continuity Guide
 
+C15 selects matched C14 command-enabled v51 development package STOPPED from
+`4beddb2`. Normal release/default WakeHost builds PASS; exact unchanged host gate
+reused without launch. Guarded update changes two package pointers among139 records,
+preserves137 others, old package and five original target pairs/history. Selected
+image passes76.25s local parallel patch+native command verification and third-process
+restart/refusal for both completed calls. Three natural exits0;139 records exact/
+zero new or owned processes. No browser, WakeHost worker, native chat, recurring or
+protected production change. Actual Web B/G/H/I remain open; connector last06:42UTC
+429, no new call this stage. Next add explicit structured Git state/important
+decisions to new handoffs, retaining old pending serialization/digests. See
+[C15 evidence](../verification/C15_TASK_COMMAND_PACKAGE_2026_10_23.json).
+
 C14 source adds explicit fixed command verification to assigned task worktrees.
 It reuses contracts/journals, native sandbox and retained Job cleanup.28 distinct
 tests/29 executions, strict Clippy/format PASS, including two concurrent commands,

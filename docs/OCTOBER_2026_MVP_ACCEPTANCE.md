@@ -1,5 +1,19 @@
 # CatDesk October 2026 MVP acceptance
 
+### October 23 C15 — selected development command verification
+
+C14 is now included in matched v51, selected STOPPED through the existing guarded
+updater. Normal release/default host builds PASS; unchanged exact host gate reused
+without launch.139 records checked: two package pointers changed,137 exact, no new
+state; old package and five original pairs preserved. Selected image's76.25s local
+HTTP test proves parallel patch/command verification and third-process restart
+refusal for both completed operations, all natural exits0.139 records exact/zero
+new or owned processes. No actual Web/browser/Wake/native/recurring/production
+action. This is selected development qualification, not actual Web B/G/H/I,
+protected installation or unattended acceptance. Explicit Git/decision handoff
+fields remain the next eligible source task. See
+[C15 evidence](verification/C15_TASK_COMMAND_PACKAGE_2026_10_23.json).
+
 ### October 23 C14 — task verification source and native fixture proof
 
 Fixed operator command profiles extend C12 assigned worktrees using the existing
@@ -57,7 +71,7 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | Gate | Existing evidence and exact scope | Remaining acceptance |
 | --- | --- | --- |
 | A. At least three registered project Web conversations | PASS, development: five original paired registrations read by the selected status view; registry/workspace binding and target/history stores exist. | Protected runtime acceptance remains separate. |
-| B. Two Web conversations make tools calls in separate directories | PARTIAL SOURCE / NORMAL AND SELECTED DEVELOPMENT IMAGE LOCAL HTTP: C11 binds immutable roots/current paired witnesses. C12 editing reuses contracts/journals/writer locks. C13 selected image performs parallel fixture patches/restart refusal. C14 normal image also verifies both tasks using native command profiles with outside writes refused and restart no-replay. Native fixture roots preserved; provider-origin chat ID is not authenticated. | Select/qualify C14 matched development package, actual concurrent Web coding and protected installed acceptance. Local fixtures, CLI threads and review reads do not close live B. |
+| B. Two Web conversations make tools calls in separate directories | PARTIAL SOURCE / NORMAL AND SELECTED DEVELOPMENT IMAGE LOCAL HTTP: C11 binds immutable roots/current paired witnesses. C12 editing reuses contracts/journals/writer locks. C15 selected image includes C14 and proves parallel fixture patch/command verification plus restart refusal, with outside writes refused. Native fixture roots preserved; provider-origin chat ID is not authenticated. | Actual concurrent Web coding and protected installed acceptance. Local fixtures, CLI threads and review reads do not close live B. |
 | C. Blocked project while sibling makes useful progress | PARTIAL: scheduler fixtures, C7 granted-reader and C8 timer-fault regressions demonstrate source isolation. Existing independent native owners were preserved. | Bounded real Web project blocking/progress proof on the intended runtime. Unreadable/unattributable shared state still fails closed. |
 | D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
 | E. Context pressure and durable handoff | PARTIAL: per-conversation saved estimates/policies and actual browser observations; completed canary has a durable handoff. Coverage remains advisory/UNKNOWN when incomplete. | Full required handoff fields and coordinated automatic monitoring qualification; do not infer exact context from lifetime MCP counters. |

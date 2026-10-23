@@ -1,5 +1,19 @@
 # CatDesk — Important Command Reference
 
+## October 23 — selected command-enabled package C15
+
+Matched v51 includes C14 optional command profiles and is selected STOPPED using
+the existing guarded `operator web-dev-runtime update-package --package REVIEWED_MATCHED_PACKAGE`.
+The old package, five paired targets/history and authenticated profile are
+preserved. The selected executable passes disposable-project parallel patch/command
+verification and restart no-replay under180s ownership containment, with no runtime
+record changes or owned processes left. Commands retain the existing native broad
+read posture described below; outside-worktree writes are refused. No browser,
+WakeHost worker, native chat, recurring or protected installation is started.
+Selected local qualification does not close actual Web B/browser G/H/I. Never
+select inert fixture packages into a real runtime. See
+[C15 evidence](../verification/C15_TASK_COMMAND_PACKAGE_2026_10_23.json).
+
 ## October 23 — optional fixed command profiles, C14 source
 
 The existing `--project-task-contract` assignment may additionally contain

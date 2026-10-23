@@ -1,5 +1,35 @@
 # October 22–31 execution log
 
+## 2026-10-23 — C15 matched command-enabled development package
+
+Normal release app build PASS06:54:23 UTC from clean `4beddb28919e704bdbbc3bfc8ef96570ac6de1c8`,
+under600s containment. App SHA256
+`7476b26e6ec52cd90ef95bc263774f4cc8cbc1bf46df1eab3b3294c020594e8f`.
+Default-feature WakeHost build PASS; host/adapter/bridge hashes are unchanged.
+Prior exact-image foreground-owner proof reused without launching the host.
+No new runtime source edits or source-test reruns; C14 proof retained.
+
+Guarded supported development update at06:54:43 UTC selects v51 STOPPED in3.71s.
+139 records checked, exactly two package pointers changed,137 others exact/no new
+records. Previous v50 and all five original paired targets/history preserved.
+Selected central status exits0, saved continuation/quarantine visible, browser
+profile untouched. Protected production remains stopped and unchanged.
+
+Selected image HTTP proof PASS06:56:05 UTC in76.25s,180s outer Job: two independent
+disposable project listeners patch separate linked worktrees and verify with native
+sandbox profiles concurrently; original/peer/Git writes refused, bearer scrubbed,
+exact project/call receipts. A third process refuses recorded patch and command
+replay after restart. Three natural60/60/10s exits0;139 records exact/no new state
+or owned processes. This qualifies the selected development executable; no actual
+ChatGPT Web coding, browser G/H/I or protected production acceptance is claimed.
+No browser, WakeHost worker, recurring, native session or completed-canary action.
+
+No connector call this stage; latest06:42:18 UTC read stillHTTP429/UNAVAILABLE.
+Next source task: explicit structured Git state and important decisions in newly
+created handoffs, preserving historical serialization/digests and native ownership.
+Actual Web B and fresh two-project browser/recovery G/H/I remain separate gates.
+See [C15 evidence](verification/C15_TASK_COMMAND_PACKAGE_2026_10_23.json).
+
 ## 2026-10-23 — assigned task command verification, C14
 
 At06:38:12 UTC,28 distinct source tests/29 executions, strict all-target/all-feature
