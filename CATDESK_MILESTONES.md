@@ -1,3 +1,11 @@
+## 2026-10-22 evening — selected release local Web work CLI PASS
+
+Normal release and stopped development package qualify the new request/resolve
+commands. One metadata-only event was retired before browser submission; queue
+empty, prior history and five pairs preserved, no services or messages started.
+Live Web, connector and protected production gates remain open. See the
+[execution log](docs/OCT22_31_EXECUTION_LOG.md) and sanitized CLI receipt.
+
 ## 2026-10-22 — guarded local Web work commands (SOURCE / TESTED_LOCAL)
 
 Added operator CLI request/resolve commands using the existing Web handlers,

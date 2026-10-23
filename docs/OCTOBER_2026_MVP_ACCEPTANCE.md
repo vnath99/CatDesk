@@ -2,6 +2,27 @@
 
 ## October 22 acceptance reconciliation
 
+### October 22 evening — selected release Web work CLI qualified locally
+
+At 00:01–00:03 UTC October 23 (October 22 in New York), the normal release
+build and matched four-artifact development package passed. App SHA256:
+`6fab0769e69e4a9503daf59cfbb5b072fce594036288713aff0e488b0b5e2650`.
+The existing guarded updater selected the package while both runtimes stayed
+STOPPED. Its five-project view passed; 130 unrelated records stayed exact and
+only the two permitted package pointers changed. The prior package remains.
+
+The new selected CLI then recorded one metadata-only work request and retired
+it before submission in 1.63 seconds, under a 120-second contained outer cap.
+Of 132 existing records, only its project ledger changed; old ledger entries
+were preserved. The only new records were its archive and STALE/OPERATOR_RETIRED
+delivery without a receipt. Queue empty; no listener, browser, host, recurring
+process, native writer or message send. Production and all five bindings/history
+were untouched. This qualifies **selected development local queue operations**;
+live Web delivery, natural review, connected tool exposure and protected
+production acceptance remain OPEN. No source code changed after its prior tests.
+The following earlier checkpoint records the qualification sequence, not the
+current package gate. See the [sanitized CLI receipt](verification/C2_WEB_WORK_OPERATOR_CLI_2026_10_22.json).
+
 ### Web work operator CLI — SOURCE / local fixture and negative app proof
 
 `operator web work request/resolve --project-id ... --input-file ...` now call

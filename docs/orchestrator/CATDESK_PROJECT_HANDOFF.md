@@ -7,6 +7,19 @@ surface.
 
 ## Current checkpoint — 2026-10-22
 
+Latest qualification: normal release and selected STOPPED development local
+Web work CLI request/resolve PASS. The selected image is
+`6fab0769e69e4a9503daf59cfbb5b072fce594036288713aff0e488b0b5e2650`,
+built from clean `758fb6187ba4dc3161587d80dd53b431240c2ca6`.
+One local metadata request was retired before submission; queue empty, previous
+ledger history intact, all five pairs unchanged, no browser/host/native action.
+Both runtimes remain STOPPED; protected production stays unaccepted. Do not
+replay this test or the completed rollover. Next adapt the private prepared
+review controller to use this CLI instead of its temporary MCP listener;
+actual delivery still awaits the pending exception to the explicit host stop.
+The connector's last read failed in backend transport without an HTTP status;
+no recovery claim or repeated probe. Earlier checkpoints follow chronologically.
+
 Continued eligible C2 source work while the live exception is pending: the local
 Web work CLI now calls the existing request/resolve handlers from exact-project
 JSON input, requiring no temporary MCP listener. Twelve CLI/three integration

@@ -26,8 +26,8 @@ the real guarded work event; an already running Wake can deliver it. Neither
 command starts a listener, browser, host, scheduler or native session. Resolution
 retains receipt/response/pre-submit-retirement requirements; reported completion
 does not become independently verified task completion. Existing primary
-quarantine remains effective. The selected prior package lacks these commands;
-normal release/selected-package qualification is still OPEN for this increment.
+quarantine remains effective. Normal release and the selected stopped development package now pass local
+request/retire qualification. Live delivery and protected production remain OPEN.
 
 ## October 22 selected observation-age view
 

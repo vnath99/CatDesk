@@ -1,5 +1,27 @@
 # October 22–31 execution log
 
+## 2026-10-22 evening — normal release / selected CLI local queue acceptance
+
+- Normal release from clean `758fb6187ba4dc3161587d80dd53b431240c2ca6`
+  completed at 00:01:20 UTC October 23, within the 600s cap. Normal host build
+  uses default features without test support. Four artifacts matched source.
+- At 00:01:50 UTC the existing guarded stopped updater passed in 3.23s:
+  five-project view, previous package retention, 132 records checked, two
+  permitted pointers changed, 130 other records exact, zero new state/processes.
+  An initial sandbox process-inventory read was denied before mutation; the
+  approved owner-level run passed. No permissions or security settings changed.
+- At 00:03:23 UTC selected CLI local publication and pre-submit retirement
+  passed in 1.63s with a 120s kill-on-close outer cap. One own ledger changed;
+  its prior records survived. Two expected archive/delivery records added;
+  no receipt, queue/timer, listener, browser, host, native execution or send.
+- Source tests remain the prior 12 CLI / 3 integration plus strict Clippy/fmt;
+  they were not repeated. All original pairs/history, native sessions, profile,
+  quarantine, completed canary and protected production are preserved.
+- This is selected development local queue proof, not installed live Web or
+  protected production acceptance. Pending foreground-host exception and
+  connector transport failure affect their own gates. CI remains UNVERIFIED.
+- Sanitized evidence: [C2 CLI qualification](verification/C2_WEB_WORK_OPERATOR_CLI_2026_10_22.json).
+
 Milestone overview: [CATDESK_MILESTONES](../CATDESK_MILESTONES.md).
 Acceptance: [October MVP matrix](OCTOBER_2026_MVP_ACCEPTANCE.md).
 Owner: existing CatDesk development conversation. Native sibling projects retain

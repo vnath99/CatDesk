@@ -1,5 +1,5 @@
 {
-  "recordedUtc": "2026-10-22T23:49:23.3324848Z",
+  "recordedUtc": "2026-10-23T00:04:34.8784001Z",
   "task": "C2-WEB-WORK-OPERATOR-CLI",
   "owner": "Existing CatDesk development conversation",
   "branch": "codex/web-rollover-oct17",
@@ -14,7 +14,7 @@
       "sha256": "e19236b13d6cc4c62b522420b709144d536bf72ee74382a53a8260c0171dc6fa"
     }
   ],
-  "classification": "SOURCE_TESTED_LOCAL_AND_NORMAL_DEBUG_NEGATIVE_ADMISSION",
+  "classification": "SOURCE_TESTED_NORMAL_RELEASE_SELECTED_DEVELOPMENT_LOCAL_CLI_QUEUE",
   "implementation": {
     "commands": [
       "operator web work request --project-id PROJECT --input-file REQUEST.json",
@@ -158,10 +158,10 @@
     "wakeHostStarted": false
   },
   "acceptance": {
-    "positivePublication": "DISPOSABLE_THREE_PROJECT_FIXTURE_ONLY",
-    "normalAppRealRootChecks": "NEGATIVE_ONLY",
-    "normalReleaseQualification": "OPEN",
-    "selectedDevelopmentQualification": "OPEN_FOR_NEW_CLI_COMMANDS",
+    "positivePublication": "SELECTED_DEVELOPMENT_LOCAL_REQUEST_AND_PRE_SUBMIT_RETIREMENT",
+    "normalAppRealRootChecks": "NEGATIVE_DEBUG_AND_POSITIVE_SELECTED_RELEASE_LOCAL_QUEUE",
+    "normalReleaseQualification": "PASS",
+    "selectedDevelopmentQualification": "PASS_LOCAL_CLI_ONLY_NO_LIVE_WEB_DELIVERY",
     "selectedPriorV44Preserved": true,
     "protectedProductionAcceptance": "OPEN",
     "fullMultiProjectMvp": "PARTIAL"
@@ -183,14 +183,14 @@
     "originalProjectBindingsAndHistory": 5,
     "nativeWritersTouched": false,
     "protectedProductionChanged": false,
-    "selectedPackageChanged": false,
+    "selectedPackageChanged": true,
     "profileChanged": false,
     "completedCanaryReplayed": false,
     "wakeControls": "STOPPED",
     "liveStopException": "REQUESTED_NOT_ASSUMED"
   },
   "goal": "ACTIVE_SOURCE_PROGRESS",
-  "nextExecutableTask": "Qualify normal release of these CLI commands, then supported stopped development package/readback; prepared live review remains held until explicit stop-rule exception",
+  "nextExecutableTask": "Adapt the prepared private live controller to the selected local CLI without changing its payload; actual bounded WakeHost delivery still requires the pending stop-rule exception. Continue safe source work independently.",
   "operatorActionRequiredForSourceQualification": false,
   "publication": {
     "observedUtc": "2026-10-22T23:52:00.3950846Z",
@@ -205,5 +205,55 @@
     "ci": "UNVERIFIED",
     "force": false,
     "visibilityChange": false
+  },
+  "normalReleaseSelected": {
+    "sourceCommit": "758fb6187ba4dc3161587d80dd53b431240c2ca6",
+    "sourceTree": "e97435c98c1a7ab9c77405dc21eaba9552e12093",
+    "startedUtc": "2026-10-22T23:55:47.2088315Z",
+    "finishedUtc": "2026-10-23T00:01:20.6786561Z",
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "maximumSeconds": 600,
+    "exitCode": 0,
+    "imageSha256": "6fab0769e69e4a9503daf59cfbb5b072fce594036288713aff0e488b0b5e2650",
+    "imageBytes": 33360384,
+    "hostProfile": "NORMAL_RELEASE_WAKE_DEFAULT_FEATURES_NO_TEST_SUPPORT",
+    "selectedUtc": "2026-10-23T00:01:50.5431477Z",
+    "selectedPackage": "1.0.0-dev.85-0d98744fa0fd5659c81e42d588ab9b2b001a481245961a54983685f90e17088e",
+    "previousPackagePreserved": true,
+    "selectionSeconds": 3.2262391,
+    "metadataRecordsChecked": 132,
+    "unrelatedMetadataExact": 130,
+    "allowedPointerChanges": 2,
+    "unexpectedChanges": 0,
+    "newState": 0,
+    "selectedFiveProjectViewPassed": true,
+    "scopedProcessCount": 0
+  },
+  "selectedLocalQueue": {
+    "observedUtc": "2026-10-23T00:03:23.4070204Z",
+    "classification": "SELECTED_DEVELOPMENT_LOCAL_CLI_QUEUE_ONLY",
+    "maximumSeconds": 120,
+    "elapsedSeconds": 1.6255497,
+    "outerContainmentExitCode": 0,
+    "requestRecorded": true,
+    "retiredBeforeSubmission": true,
+    "retiredDelivery": "STALE_OPERATOR_RETIRED_NO_RECEIPT",
+    "oldLedgerRecordsPreserved": true,
+    "existingMetadataChecked": 132,
+    "existingChanges": 1,
+    "expectedChange": "Own project work ledger only",
+    "unrelatedExistingMetadataExact": 131,
+    "newState": 2,
+    "expectedNew": "Own archived event and retired delivery only",
+    "queueEmptyAfter": true,
+    "scopedProcessCount": 0,
+    "listenerStarted": false,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "recurringStarted": false,
+    "messagesSent": 0,
+    "nativeSessionAction": "NONE",
+    "liveWebAcceptance": false,
+    "protectedProductionAcceptance": false
   }
 }
