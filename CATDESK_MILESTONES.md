@@ -21,9 +21,13 @@ This is not another accepted rollover.
 Both inspections preserved all 228 current records, all project bindings and
 history, with zero test-owned processes and both controls STOPPED. Four native
 development sessions remain active. One 17:26:32Z connector read returned HTTP
-429 without retry. Next: qualify the corrected development package.
-Protected installation and
-unattended operation remain open.
+429 without retry. Reviewed source `524273f81130576601ba9b098bd5c728e71425d8`
+was published with exact remote SHA verification. The normal app and host builds
+passed, including the host's owner-EOF/no-state check. At 17:50:14Z development
+v59 was selected STOPPED: nine paired readbacks, only two pointer changes among
+228 records, no new records or owners. The previous package and uncertain C42
+intent remain intact. Next: a distinct controlled beta automatic test. Protected
+installation and unattended operation remain open; remote CI has zero runs/checks.
 [C42 evidence](docs/verification/C42_FRESH_ENTRY_GUARD_2026_10_23.json).
 
 ## October 23 C41 — recoverable retirement of an idle Web project

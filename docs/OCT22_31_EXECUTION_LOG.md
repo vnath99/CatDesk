@@ -54,6 +54,19 @@ refusals made no runtime change. One connector transport read at 17:26:32Z again
 returned HTTP 429; no retry or settings change. The four native project sessions
 were observed active without sending them messages. Full Web coding, protected
 installation and unattended acceptance remain separate open gates.
+Reviewed source `524273f81130576601ba9b098bd5c728e71425d8` was published at
+17:36:20Z; the eight-path privacy review and exact remote SHA readback passed.
+That exact source has zero GitHub workflow runs and zero checks, so remote CI is
+UNVERIFIED. The normal app build passed at 17:36:40.025Z–17:43:38.668Z; its SHA-256
+is `11bf285738cf0de508a22bc2baf76e417fd01e8b172a49d6f0971e6988d5385a`.
+The normal host built at 17:46:44.617Z–17:47:07.363Z, SHA-256
+`2c7367ebc9687037f6f0d813ec5e09018fcfbae3b1ff9aff60761f1bd13a6c83`.
+Its disposable owner-EOF/no-state gate passed; this did not start a real host.
+At 17:50:14.204Z the existing guarded update selected v59 STOPPED in 6.39 seconds:
+228 records checked, two package pointers changed, 226 exact, no new state,
+nine exact paired readbacks, zero owners. Previous package/profile, C42's unknown
+intent, histories and production remained intact. This is selected development
+qualification, not a new insertion, rollover or protected installation test.
 [C42 evidence](verification/C42_FRESH_ENTRY_GUARD_2026_10_23.json).
 
 ## October 23 C41 — recoverable Web-project retirement

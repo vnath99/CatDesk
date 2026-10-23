@@ -4,7 +4,8 @@
 
 | Evidence class | Result |
 | --- | --- |
-| Selected development runtime | v58 selected STOPPED; nine paired projects read, 218 records checked, only two package pointers changed |
+| Selected development runtime | v59 selected STOPPED at 17:50:14Z after normal app/host builds and owner-EOF check; nine paired readbacks, 228 records checked, only two package pointers changed |
+| Published source | `524273f81130576601ba9b098bd5c728e71425d8`, exact remote SHA verified; eight-path privacy review passed; CI UNVERIFIED with zero runs/checks |
 | New automatic attempt | Source event and handoff completed; fresh entry failed at `TEXT_ENTRY_AUTHORIZED`; no verified bootstrap receipt, replacement URL or generation-4 binding |
 | Read-only diagnosis | Empty composer; observed `data-empty-paragraph` placeholder is rejected by the old guard; both inspections preserve 228 records with zero owned processes |
 | Source correction | Narrow empty-paragraph allowance and fixed pre/post-edit diagnostic codes; 246 distinct Python tests pass, including five added tests |

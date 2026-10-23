@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedUtc": "2026-10-23T17:36:13.8331399Z",
+  "recordedUtc": "2026-10-23T17:52:15.4280686Z",
   "localDate": "2026-10-23",
   "task": "C42-FRESH-ENTRY-GUARD",
   "branch": "codex/web-rollover-oct17",
@@ -153,7 +153,7 @@
   },
   "acceptance": {
     "source": "TESTED_LOCAL",
-    "correctedPackage": "NOT_SELECTED",
+    "correctedPackage": "V59_SELECTED_STOPPED_NORMAL_BUILDS_PASS",
     "guardOnlyLive": "PASS_NO_INSERTION_OR_SEND",
     "freshUninterruptedRollover": "NOT_QUALIFIED",
     "priorRecoveredRollovers": "PRESERVED",
@@ -162,7 +162,14 @@
     "unattendedOperation": "NOT_ACTIVATED"
   },
   "publication": {
-    "status": "PENDING",
+    "status": "PUBLISHED_VERIFIED",
+    "sourceCommit": "524273f81130576601ba9b098bd5c728e71425d8",
+    "remoteSha": "524273f81130576601ba9b098bd5c728e71425d8",
+    "atUtc": "2026-10-23T17:36:20.524Z",
+    "privacyReview": "PASS_8_PATHS",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "remoteCi": "UNVERIFIED",
     "force": false,
     "visibilityChanged": false
   },
@@ -171,5 +178,32 @@
     "The original generic failure cannot be retroactively assigned a precise pre-edit stage.",
     "Read-only guard acceptance does not prove insertion, submission or rollover.",
     "All prior accepted rollovers and their histories remain preserved."
-  ]
+  ],
+  "normalQualification": {
+    "appStartedUtc": "2026-10-23T17:36:40.025Z",
+    "appFinishedUtc": "2026-10-23T17:43:38.668Z",
+    "appSha256": "11bf285738cf0de508a22bc2baf76e417fd01e8b172a49d6f0971e6988d5385a",
+    "hostStartedUtc": "2026-10-23T17:46:44.617Z",
+    "hostFinishedUtc": "2026-10-23T17:47:07.363Z",
+    "hostSha256": "2c7367ebc9687037f6f0d813ec5e09018fcfbae3b1ff9aff60761f1bd13a6c83",
+    "normalApp": true,
+    "normalHost": true,
+    "ownerEofRefused": true,
+    "gateRuntimeStateCreated": false,
+    "selectedUtc": "2026-10-23T17:50:14.204Z",
+    "selectionSeconds": 6.387448,
+    "selected": "V59_STOPPED",
+    "recordsChecked": 228,
+    "packagePointerChanges": 2,
+    "unchangedRecords": 226,
+    "newStateRecords": 0,
+    "exactPairedReads": 9,
+    "ownedProcessesAfter": 0,
+    "previousPackagePreserved": true,
+    "uncertainC42IntentPreserved": true,
+    "browserStarted": false,
+    "realWakeHostStarted": false,
+    "productionChanged": false,
+    "protectedInstalledAcceptance": false
+  }
 }
