@@ -213,7 +213,6 @@ def bootstrap_attempt(bridge, sb, request):
         if observed["classification"] != "EXACT_OWNED":
             raise bridge.Attention("BOOTSTRAP_DRAFT_MISMATCH")
         existing_draft = observed["classification"] == "EXACT_OWNED"
-        sink.check_plain_home_draft(cdp)
         emit({"stage": "BOOTSTRAP_HOME_READY"})
     else:
         cdp = prepare_cdp_target(bridge, sb, source_url)
@@ -254,6 +253,11 @@ def bootstrap_attempt(bridge, sb, request):
         if not existing_draft:
             cdp.send_keys(editor_selector, typed_message, timeout=sink.ui_timeout)
         sink.check_typed_home(cdp, message)
+        if protocol_v2:
+            # Only after the parent's durable text-entry ACK. This native
+            # formatting repair preserves text data, is idempotent, and uses
+            # no keyboard or send event.
+            sink.normalize_owned_home_draft(cdp, message)
         sink.check_plain_home_draft(cdp)
         if protocol_v2:
             emit({"stage": "DRAFT_READY", "projectId": project_id,

@@ -29,9 +29,12 @@ class Element {
     for (const child of children) child.parentElement = this;
   }
   get textContent() { return this.text + this.children.map(c => c.textContent).join(''); }
-  get innerText() { return this.textContent; }
+  get innerText() { return (options.generatedLink && this.attrs['text-link-href'] ? '\n' : '') + this.text + this.children.map(c => c.innerText).join(''); }
+  get nodeType() { return 1; }
+  get childNodes() { return [{nodeType:3, nodeValue:this.text}, ...this.children]; }
   get disabled() { return this.attrs.disabled === true; }
   getAttribute(name) { return this.attrs[name] ?? null; }
+  hasAttribute(name) { return Object.hasOwn(this.attrs, name); }
   getClientRects() { return [1]; }
   matches(selector) { return selector.split(',').some(raw => {
     const s = raw.trim();
@@ -49,11 +52,15 @@ class Element {
     if (id && this.getAttribute('id') !== id[1]) return false;
     const classes = [...s.matchAll(/\.([a-zA-Z0-9_-]+)/g)].map(m => m[1]);
     if (classes.some(c => !(this.attrs.class || '').split(' ').includes(c))) return false;
-    for (const m of s.matchAll(/\[([^\s~^=\]]+)(?:(~=|\^=|=)["']?([^\]"']*)["']?)?\]/g)) {
-      const value = this.getAttribute(m[1]);
-      if (value === null || (m[2] === '=' && value !== m[3]) ||
-          (m[2] === '~=' && !value.split(' ').includes(m[3])) ||
-          (m[2] === '^=' && !value.startsWith(m[3]))) return false;
+    for (const m of s.matchAll(/\[([^\s~^*=\]]+)(?:(~=|\^=|\*=|=)(?:"([^"]*)"|'([^']*)'|([^\]\s]+))(?:\s+(i))?)?\]/g)) {
+      let value = this.getAttribute(m[1]);
+      let expected = m[3] ?? m[4] ?? m[5];
+      if (value === null) return false;
+      if (m[6] === 'i') {value = value.toLowerCase(); expected = expected?.toLowerCase();}
+      if ((m[2] === '=' && value !== expected) ||
+          (m[2] === '~=' && !value.split(' ').includes(expected)) ||
+          (m[2] === '^=' && !value.startsWith(expected)) ||
+          (m[2] === '*=' && !value.includes(expected))) return false;
     }
     return true;
   }); }
@@ -124,13 +131,46 @@ global.location = {href:options.location || 'https://chatgpt.com/c/current-dom'}
 if (options.composerCount !== undefined) {
   document.children = [];
   for (let i = 0; i < options.composerCount; i++) {
-    const body = options.composerLink ? [el('a', {href:'https://example.test/predecessor'}, 'https://example.test/predecessor')] : [];
-    const editor = el('div', {id:'prompt-textarea', contenteditable:'true'}, options.composerText || '', body);
+    const body = options.composerLink ? [
+      el(options.generatedLink ? 'SPAN' : 'A', options.generatedLink ? {
+        'text-link-href':options.linkHref || 'https://example.test/predecessor',
+        'data-rich-text-generated-autolink':''
+      } : {href:options.linkHref || 'https://example.test/predecessor'},
+        options.linkText || 'https://example.test/predecessor'),
+      el('span', {}, options.composerSuffix || '')
+    ] : [];
+    const editor = el('div', {id:'prompt-textarea', contenteditable:'true'},
+      options.composerLink ? options.composerPrefix || '' : options.composerText || '', body);
+    editor.isContentEditable = true;
+    if (options.unknownMark) editor.children.push(el('strong'));
+    editor.focus = () => {if (options.focusDrift) editor.text += ' changed';};
     editor.parentElement = document;
     document.children.push(editor);
   }
 }
 let mutations = 0;
+const commands = [];
+if (options.normalizationTrace) {
+  let selected;
+  document.createRange = () => ({selectNodeContents:editor => {selected = editor;}});
+  window.getSelection = () => ({removeAllRanges:() => {}, addRange:() => {}, collapseToEnd:() => {}});
+  document.execCommand = (command, ui, value) => {
+    commands.push(command);
+    if (!['unlink','insertText'].includes(command) || ui !== false || !selected) throw Error('unexpected edit');
+    if (options.unlinkUnsupported) return false;
+    if (command === 'insertText') {
+      if (typeof value !== 'string') throw Error('plain text required');
+      selected.text = value; selected.children = []; mutations++;
+    } else {
+      if (value !== null) throw Error('unlink has no text');
+      for (const a of selected.querySelectorAll('a[href]')) {
+        a.tagName = 'SPAN'; delete a.attrs.href; mutations++;
+      }
+    }
+    if (options.unlinkTextDrift) selected.text += ' changed';
+    return true;
+  };
+}
 if (options.traceMutations) {
   const editor = el('div', {id:'prompt-textarea', contenteditable:'true'}, 'owned draft');
   editor.isContentEditable = true;
@@ -142,7 +182,10 @@ if (options.traceMutations) {
 }
 global.Node = {DOCUMENT_POSITION_FOLLOWING:4};
 const value = eval(fs.readFileSync(0, 'utf8'));
-process.stdout.write(JSON.stringify(options.traceMutations ? {value, mutations} : value));
+const editor = document.querySelector('#prompt-textarea');
+process.stdout.write(JSON.stringify(options.normalizationTrace ? {
+  value, mutations, commands, editorText:editor?.textContent || '', linked:Boolean(editor?.querySelector('a[href], [text-link-href]'))
+} : options.traceMutations ? {value, mutations} : value));
 """
 
 
@@ -151,7 +194,16 @@ class CurrentDom:
         self.options = options
 
     def get_current_url(self):
-        return "https://chatgpt.com/c/current-dom"
+        return self.options.get("location", "https://chatgpt.com/c/current-dom")
+
+    def get_attribute(self, selector, attribute, timeout):
+        return self.evaluate(f"document.querySelector({json.dumps(selector)})?.getAttribute({json.dumps(attribute)}) ?? null")
+
+    def get_text(self, selector, timeout):
+        return self.evaluate(f"document.querySelector({json.dumps(selector)})?.innerText || ''")
+
+    def is_element_visible(self, selector):
+        return self.evaluate(f"Boolean(document.querySelector({json.dumps(selector)}))")
 
     def evaluate(self, script):
         result = subprocess.run(
@@ -161,6 +213,12 @@ class CurrentDom:
         if result.returncode:
             raise AssertionError(result.stderr)
         observed = json.loads(result.stdout)
+        if self.options.get("normalizationTrace"):
+            self.mutations = getattr(self, "mutations", 0) + observed["mutations"]
+            self.commands = getattr(self, "commands", []) + observed["commands"]
+            if not observed["linked"]:
+                self.options.update(composerLink=False, composerText=observed["editorText"])
+            return observed["value"]
         if self.options.get("traceMutations"):
             self.mutations = observed["mutations"]
             return observed["value"]
@@ -190,6 +248,58 @@ class CurrentDomTests(unittest.TestCase):
                 self.sink.check_plain_home_draft(CurrentDom(location=home, composerCount=count))
         with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_HOME_DRIFT"):
             self.sink.check_plain_home_draft(CurrentDom(composerCount=1))
+
+    def test_owned_json_url_unlinks_without_changing_text_and_is_idempotent(self):
+        expected = '{"predecessor":"https://example.test/predecessor"}'
+        cdp = CurrentDom(location=bridge.NEW_CONVERSATION_HOME, composerCount=1,
+                         composerLink=True, composerPrefix='{"predecessor":"',
+                         composerSuffix='"}', normalizationTrace=True)
+        self.assertTrue(self.sink.normalize_owned_home_draft(cdp, expected))
+        self.assertEqual(cdp.options["composerText"], expected)
+        self.assertEqual((cdp.commands, cdp.mutations), (["unlink"], 1))
+        self.assertFalse(self.sink.normalize_owned_home_draft(cdp, expected))
+        self.assertEqual((cdp.commands, cdp.mutations), (["unlink"], 1))
+
+    def test_actual_generated_url_span_is_read_without_layout_and_flattened_natively(self):
+        expected = '{"predecessor":"https://example.test/predecessor"}'
+        cdp = CurrentDom(location=bridge.NEW_CONVERSATION_HOME, composerCount=1,
+                         composerLink=True, generatedLink=True, composerPrefix='{"predecessor":"',
+                         composerSuffix='"}', normalizationTrace=True)
+        self.assertNotEqual(cdp.get_text('#prompt-textarea', 1), expected)
+        self.assertEqual(self.sink.composer_plain_text(cdp), expected)
+        with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_RICH_DRAFT_UNVERIFIED"):
+            self.sink.check_plain_home_draft(cdp)
+        self.assertTrue(self.sink.normalize_owned_home_draft(cdp, expected))
+        self.assertEqual((cdp.commands, cdp.mutations), (["insertText"], 1))
+        self.assertEqual(self.sink.composer_plain_text(cdp), expected)
+        self.assertFalse(self.sink.normalize_owned_home_draft(cdp, expected))
+        self.assertEqual(cdp.commands, ["insertText"])
+
+    def test_owned_draft_unlink_refuses_foreign_text_concealed_links_and_focus_drift(self):
+        expected = 'https://example.test/predecessor'
+        for changed in ({"linkText":"foreign operator draft"},
+                        {"linkHref":"https://example.test/other"},
+                        {"focusDrift":True}, {"composerCount":2}, {"unknownMark":True}):
+            with self.subTest(changed=changed):
+                options = dict(location=bridge.NEW_CONVERSATION_HOME, composerCount=1,
+                               composerLink=True, normalizationTrace=True)
+                options.update(changed)
+                cdp = CurrentDom(**options)
+                with self.assertRaises(bridge.Attention):
+                    self.sink.normalize_owned_home_draft(cdp, expected)
+                self.assertEqual((getattr(cdp, "commands", []), getattr(cdp, "mutations", 0)), ([], 0))
+
+    def test_unlink_failure_or_text_change_never_becomes_positive_normalization(self):
+        expected = 'https://example.test/predecessor'
+        for changed in ({"unlinkUnsupported":True}, {"unlinkTextDrift":True}):
+            with self.subTest(changed=changed):
+                options = dict(location=bridge.NEW_CONVERSATION_HOME, composerCount=1,
+                               composerLink=True, normalizationTrace=True)
+                options.update(changed)
+                cdp = CurrentDom(**options)
+                with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_DRAFT_NORMALIZATION_UNVERIFIED"):
+                    self.sink.normalize_owned_home_draft(cdp, expected)
+                self.assertEqual(cdp.commands, ["unlink"])
 
     def test_snapshot_uses_real_semantic_units_without_legacy_role_nodes(self):
         observed = self.sink.visible_message_snapshot(CurrentDom())

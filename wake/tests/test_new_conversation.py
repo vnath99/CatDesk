@@ -63,6 +63,8 @@ class StructuralCdp:
     def evaluate(self, script):
         if script == "document.readyState":
             return "complete"
+        if "return composerText(visible[0])" in script:
+            return getattr(self, "plain_draft", self.draft)
         if "new TextEncoder().encode(text).length" in script:
             return ["ready", self.draft]
         if "const count = selector" in script:
@@ -192,6 +194,14 @@ class AttemptSink:
         if getattr(cdp, "rich_link", False):
             raise bridge.Attention("BOOTSTRAP_RICH_DRAFT_UNVERIFIED")
 
+    def normalize_owned_home_draft(self, cdp, message):
+        self.check_typed_home(cdp, message)
+        if getattr(cdp, "rich_link", False):
+            cdp.timeline.append("unlink")
+            cdp.rich_link = False
+            return True
+        return False
+
     def wait_for_send_control(self, cdp, timeout):
         return "send"
 
@@ -320,11 +330,12 @@ class NewConversationTests(unittest.TestCase):
             request["resumeProgress"] = resume_progress
         return request
 
-    def run_v2_attempt(self, *, request=None, draft="", users=0, deny_stage=None):
+    def run_v2_attempt(self, *, request=None, draft="", users=0, deny_stage=None, rich_link=False):
         request = request or self.v2_request()
         cdp = AttemptCdp()
         cdp.draft = draft
         cdp.users = users
+        cdp.rich_link = rich_link
         if draft:
             cdp.typed_message = draft
         sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
@@ -373,6 +384,24 @@ class NewConversationTests(unittest.TestCase):
         )
         with self.assertRaises(bridge.Attention):
             bridge.compose_bootstrap_message("project-one", "rollover-1", SOURCE, "é" * 9000)
+
+    def test_json_bootstrap_envelope_round_trips_urls_and_matches_rust_digest(self):
+        content = 'Keep https://example.test/a/b, "quotes", caf\u00e9, and \\path.\nNext.'
+        message = bridge.compose_bootstrap_message(
+            "project-one", "rollover-1", SOURCE, bridge.JSON_BOOTSTRAP_HANDOFF_PREFIX + content)
+        self.assertTrue(message.startswith(bridge.JSON_BOOTSTRAP_MESSAGE_PREFIX))
+        self.assertNotIn("/", message)
+        envelope = json.loads(message[len(bridge.JSON_BOOTSTRAP_MESSAGE_PREFIX):])
+        self.assertEqual(envelope, {"schemaVersion":1, "projectId":"project-one",
+                                   "intentId":"rollover-1", "predecessor":SOURCE, "handoff":content})
+        self.assertEqual(bridge.digest(bridge.normalize_message(message)),
+                         "f83dd687c0a2470e5a583845926fd8e5c9ce6d858397c2d9e6a4b8feee698c0f")
+        legacy = bridge.compose_bootstrap_message("project-one", "rollover-1", SOURCE, "legacy\nline")
+        self.assertEqual(legacy, "CatDesk project rollover bootstrap.\nProject: project-one\n"
+                                "Intent: rollover-1\nPredecessor: " + SOURCE + "\n\nlegacy\nline")
+        with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_MESSAGE_TOO_LONG"):
+            bridge.compose_bootstrap_message("project-one", "rollover-1", SOURCE,
+                bridge.JSON_BOOTSTRAP_HANDOFF_PREFIX + "/" * 3000)
 
     def test_real_sink_rejects_wrong_home_draft_messages_and_login(self):
         with tempfile.TemporaryDirectory() as profile:
@@ -425,7 +454,7 @@ class NewConversationTests(unittest.TestCase):
                 def evaluate(self, script):
                     if "document.execCommand('delete'" in script:
                         self.assert_safe_script = script
-                        if self.draft != expected:
+                        if self.draft != getattr(self, "expected_raw", expected):
                             return "UNAVAILABLE"
                         self.draft = ""
                         return "CLEARED"
@@ -455,6 +484,15 @@ class NewConversationTests(unittest.TestCase):
                 with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_ARCHIVE_CLEAR_UNVERIFIED"):
                     sink.clear_archived_home_draft(cdp, expected, expected)
             self.assertEqual(cdp.draft, "foreign late edit")
+
+            logical = '{"url":"https://example.test/predecessor"}'
+            raw = logical.replace('"https:', '"\nhttps:')
+            cdp = ClearCdp()
+            cdp.draft, cdp.plain_draft, cdp.expected_raw = raw, logical, raw
+            with patch.object(sink, "wait_home_draft", return_value={"classification":"EMPTY_HOME"}):
+                sink.clear_archived_home_draft(cdp, logical, raw)
+            self.assertEqual(cdp.draft, "")
+            self.assertIn(json.dumps(raw), cdp.assert_safe_script)
 
     def test_real_sink_latches_only_new_canonical_identity(self):
         with tempfile.TemporaryDirectory() as profile:
@@ -808,17 +846,36 @@ class NewConversationTests(unittest.TestCase):
         self.assertEqual((resumed.timeline.count("type"), resumed.sent), (0, 1))
         self.assertEqual(emitted[-1]["stage"], "BOOTSTRAP_SUBMITTED")
 
-    def test_restored_rich_link_never_receives_text_or_send_authorization(self):
+    def test_unverified_rich_draft_normalization_never_receives_send_authorization(self):
         request = self.v2_request(resume_progress="DRAFT_READY")
         expected = bridge.compose_bootstrap_message(
             request["projectId"], request["intentId"], SOURCE, request["handoff"])
-        with patch.object(AttemptSink, "check_plain_home_draft", side_effect=
-                          bridge.Attention("BOOTSTRAP_RICH_DRAFT_UNVERIFIED")):
+        with patch.object(AttemptSink, "normalize_owned_home_draft", side_effect=
+                          bridge.Attention("BOOTSTRAP_DRAFT_NORMALIZATION_UNVERIFIED")):
             cdp, emitted, acks, error = self.run_v2_attempt(request=request, draft=expected)
-        self.assertEqual(error, "BOOTSTRAP_RICH_DRAFT_UNVERIFIED")
-        self.assertEqual((cdp.sent, cdp.timeline, acks), (0, [], []))
+        self.assertIsNone(error)
+        self.assertEqual((cdp.sent, cdp.timeline, acks), (0, [], ["TEXT_ENTRY_AUTHORIZED"]))
         self.assertEqual(cdp.draft, expected)
+        self.assertEqual(emitted[-1], {"stage": "BOOTSTRAP_UNKNOWN",
+                                      "reason": "BOOTSTRAP_DRAFT_NORMALIZATION_UNVERIFIED"})
         self.assertNotIn("BOOTSTRAP_SUBMITTED", [frame["stage"] for frame in emitted])
+
+    def test_exact_restored_rich_draft_unlinks_after_ack_without_retyping(self):
+        request = self.v2_request(resume_progress="DRAFT_READY")
+        expected = bridge.compose_bootstrap_message(
+            request["projectId"], request["intentId"], SOURCE, request["handoff"])
+        cdp, emitted, acks, error = self.run_v2_attempt(
+            request=request, draft=expected, rich_link=True)
+        self.assertIsNone(error)
+        self.assertEqual(cdp.timeline, ["unlink", "submit", "accepted", "fresh-document", "exact-receipt"])
+        self.assertEqual(cdp.sent, 1)
+        self.assertEqual(acks, ["TEXT_ENTRY_AUTHORIZED", "DRAFT_READY", "SEND_ATTEMPTED"])
+        self.assertEqual(emitted[-1]["stage"], "BOOTSTRAP_SUBMITTED")
+        cdp, emitted, acks, error = self.run_v2_attempt(
+            request=request, draft="foreign operator draft", rich_link=True)
+        self.assertEqual(error, "BOOTSTRAP_DRAFT_MISMATCH")
+        self.assertEqual((cdp.sent, cdp.timeline, acks), (0, [], []))
+        self.assertEqual(cdp.draft, "foreign operator draft")
 
     def test_rich_link_appearing_at_later_guards_preserves_draft_without_click(self):
         for failed_check, expected_acks in (
