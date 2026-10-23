@@ -1,4 +1,4 @@
-## October 23 C48 — next: normal granted-task handoff qualification
+## October 23 C48 — next: bounded granted-task Web integration
 
 C48 carries an existing local task grant into the replacement project's private
 bootstrap. The workspace rollover journal stores only an exact reference; the
@@ -26,17 +26,37 @@ grants refuse transfer. A transient shared-context read now retries for at most
 two seconds before task startup; mutations never retry. Failed attempts remain
 in private evidence, including the single-line Wake message correction.
 
-All 243 real records/nine pairs remain exact, zero real/test owners and both
-controls STOPPED. No browser, WakeHost, recurring/native action, real binding
-change or completed-canary replay. The new source is not installed: selected
-v61 remains C45, and prior C47 normal HTTP proof is preserved separately.
-Connector status at 22:10 UTC remains HTTP 429; no immediate retry. Actual Web
-coding, browser credential handoff, protected installation and unattended
-acceptance remain open. C48 closes no additional actual Web A–J gate.
+Published source `c16cab92faa1440404cf0593338241bda9024cae` also passes normal
+release qualification: build 22:16:57.662–22:23:04.161 UTC, 366.50 seconds;
+app SHA `d2a89eb04cb4c87ebe5ddd55f77ba33a2f9874e25e9d3760369d64d5a35f0708`.
+The normal executable passed eight checks/35 CLI-Git commands at
+22:26:24.655–22:27:36.609 UTC (71.95 seconds), under a 180-second owner.
+Two HTTP processes exited naturally. Parallel patches, sibling progress,
+authority/refusal checks, restart retention, cold private-payload reading,
+redacted status and missing-payload refusal passed. The private reader used
+explicit injected fixture metadata: normal collector creation and browser key
+transfer were not proved. Both fixture grants/keys and the private blob were
+cleaned up; all 243 real records were exact before package selection.
 
-Next: normal C48 executable and matched stopped-development qualification, then
-bounded fresh granted-task Web integration when dependencies permit. No operator
-action is required for the eligible build work.
+At 22:35:20.391 UTC, the existing guarded updater selected matched v64/C48 in
+5.91 seconds with both hosts STOPPED. Nine exact paired readbacks and the
+selected executable's redacted status view passed. Of 243 existing records,
+only two allowed development package pointers changed; 241 protected records
+and all nine Wake pairs/history stayed exact, with zero new records or owners.
+The old package/profile is retained. The unchanged host's exact owner-EOF proof
+was reused without starting a host. Production remains unchanged.
+
+No browser, WakeHost, recurring/native action, live message or completed-canary
+replay. This qualifies source, normal local components and the selected stopped
+development package. Actual Web coding, normal collector/browser key transfer,
+protected installation and unattended acceptance remain open. C48 closes no
+additional actual Web A–J gate. The 22:10 UTC connector read remains HTTP 429;
+source CI showed zero runs/checks at 22:17 UTC and remains unverified.
+
+Next: prepare a fresh bounded granted-task Web integration using selected C48,
+without replaying completed canaries or enabling recurring automation. No
+operator action is required for safe preparation; Web MCP proof depends on
+connector recovery.
 [C48 evidence](../verification/C48_PRIVATE_GRANTED_TASK_HANDOFF_2026_10_23.json).
 
 ## October 23 C47 — qualify the central granted-task dispatcher

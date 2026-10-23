@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "recordedUtc": "2026-10-23T22:13:22.5813389Z",
+  "recordedUtc": "2026-10-23T22:40:25.1021766Z",
   "task": "C48-PRIVATE-GRANTED-TASK-HANDOFF",
-  "classification": "SOURCE_AND_SYNTHETIC_LOCAL_CONTINUATION_ONLY",
+  "classification": "SOURCE_SYNTHETIC_CONTINUATION_NORMAL_BINARY_AND_STOPPED_DEVELOPMENT_QUALIFIED",
   "sourceBaseCommit": "dd855a6961fda2ebcc04bd95927171737cad1dfa",
   "branch": "codex/web-rollover-oct17",
   "sourceFiles": [
@@ -61,7 +61,7 @@
   },
   "sourceGate": {
     "startedUtc": "2026-10-23T22:04:19.7378428Z",
-    "finishedUtc": "2026-10-23T22:06:59.6687070Z",
+    "finishedUtc": "2026-10-23T22:06:59.668707Z",
     "distinctPassedTests": 86,
     "newTests": 4,
     "ignoredExistingNativeCommandTests": 2,
@@ -113,7 +113,7 @@
   },
   "strictChecks": {
     "status": "PASS",
-    "startedUtc": "2026-10-23T22:04:02.2043850Z",
+    "startedUtc": "2026-10-23T22:04:02.204385Z",
     "finishedUtc": "2026-10-23T22:04:19.7221933Z",
     "sourceFrozen": true,
     "checks": [
@@ -183,7 +183,7 @@
       "status": "FAIL_RETAINED",
       "resultSha256": "0b90eb6dc1b9f156323dc1494c6eb100298be1cce601ad2b464ad2fcf1c6a022",
       "allOwnersExited": true,
-      "startedUtc": "2026-10-23T21:40:48.2520630Z"
+      "startedUtc": "2026-10-23T21:40:48.252063Z"
     },
     {
       "finishedUtc": "2026-10-23T21:46:02.4804512Z",
@@ -247,20 +247,140 @@
     "strictChecks": "82dbe5e215e6571df045e85eafdc4c17499a890f20bc12c978d05a73bd234aee"
   },
   "acceptance": {
-    "normalRelease": "PENDING",
+    "normalRelease": "PASS_NORMAL_HTTP_AND_INJECTED_PRIVATE_READER",
     "syntheticLocalContinuation": "PASS",
     "actualWebCoding": "OPEN_CONNECTOR_429",
     "source": "PASS",
     "protectedInstalled": "NOT_QUALIFIED",
     "fullMilestone": "OPEN",
     "actualBrowserCredentialHandoff": "NOT_RUN",
-    "selectedDevelopment": "V61_C45_STOPPED_UNCHANGED",
+    "selectedDevelopment": "QUALIFIED_STOPPED_V64_C48_ONLY",
     "unattended": "NOT_ACTIVATED"
   },
   "publication": {
     "force": false,
     "workflow": "REVIEWED_NORMAL_PUSH_WITH_EXACT_REMOTE_READBACK_RECORDED_SEPARATELY",
-    "visibilityChanged": false
+    "visibilityChanged": false,
+    "sourceCommit": "c16cab92faa1440404cf0593338241bda9024cae",
+    "sourceRemoteShaVerified": "c16cab92faa1440404cf0593338241bda9024cae"
   },
-  "next": "Build and qualify the normal C48 executable, then the matched stopped development package and a bounded fresh granted-task Web integration when its dependencies permit. Preserve completed canaries."
+  "next": "Prepare a fresh bounded granted-task Web integration using the selected stopped C48 package. Actual normal collector/browser key transfer and Web MCP coding remain open; connector HTTP 429 is a separate dependency. Preserve completed canaries and all native owners.",
+  "sourceCommit": "c16cab92faa1440404cf0593338241bda9024cae",
+  "normalRelease": {
+    "status": "PASS",
+    "sourceCommit": "c16cab92faa1440404cf0593338241bda9024cae",
+    "sourceTree": "43674a9d1f8f0f5286cb89233d8e614ab9a24c9c",
+    "startedUtc": "2026-10-23T22:16:57.6617178Z",
+    "finishedUtc": "2026-10-23T22:23:04.1605654Z",
+    "elapsedSeconds": 366.5000795,
+    "maximumSeconds": 600,
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "imageSha256": "d2a89eb04cb4c87ebe5ddd55f77ba33a2f9874e25e9d3760369d64d5a35f0708",
+    "imageBytes": 34825216,
+    "buildLogSha256": "8fd77631aa1ab328da9503d735b0c02351b774e44bb27d6267478d858b1abd0c",
+    "allOwnedBuildProcessesExited": true
+  },
+  "normalQualification": {
+    "status": "PASS_DISPOSABLE_ONLY",
+    "startedUtc": "2026-10-23T22:26:24.6554208Z",
+    "finishedUtc": "2026-10-23T22:27:36.6094900Z",
+    "elapsedSeconds": 71.9540692,
+    "maximumSeconds": 180,
+    "listenerSeconds": [
+      45,
+      15
+    ],
+    "checks": [
+      "two-exact-disposable-assignment-grants-with-synthetic-source-receipts",
+      "central-catalog-and-wrong-bearer-project-key-refusal-before-journal",
+      "parallel-central-http-previews-and-patches-with-isolated-results-and-native-originals",
+      "blocked-alpha-writer-does-not-stall-beta-useful-read",
+      "completed-apply-stable-call-id-refused",
+      "cold-process-grant-journal-retention-and-independent-continuation",
+      "normal-private-handoff-cold-read-missing-payload-refusal-and-redacted-status",
+      "exact-fixture-grants-revoked-keys-cleaned-and-writer-leases-released"
+    ],
+    "cliGitCommands": 35,
+    "expectedMissingPayloadRefusals": 1,
+    "normalHttpProcesses": 2,
+    "naturalListenerExits": 2,
+    "privateReaderFixture": "EXPLICIT_SYNTHETIC_ON_DISK_INJECTION",
+    "coldPrivateReadback": true,
+    "missingPayloadRefusedWithoutRegeneration": true,
+    "workspaceRecordAndStatusExcludeKey": true,
+    "normalCollectorCreationProved": false,
+    "browserCredentialTransferProved": false,
+    "parallelScopedPatchesAndSiblingProgress": true,
+    "completedReplayRefusedAcrossRestart": true,
+    "fixtureGrantsRevoked": 2,
+    "exactOwnedKeysRemoved": 2,
+    "injectedPrivatePayloadRemoved": true,
+    "protectedRecordsBeforeSelection": 243,
+    "changesBeforeSelection": 0,
+    "newRecords": 0,
+    "ownersAfterCleanup": 0,
+    "actualWebCalls": 0,
+    "messages": 0,
+    "browserStarts": 0,
+    "wakeHostStarts": 0,
+    "recurringStarts": 0,
+    "resultSha256": "ecf19756c618d481927f5852d27bea2dfb4ff699008dda73c77ad20f282af609",
+    "cleanupSha256": "514e512fa4f8db466b3e57744954fcfab8ba9fdf22b6c27e4e5a1607db90f85d",
+    "controllerSha256": "9da0bfc91b713683fe372a895e921ba1aadc60566a83b9e5aed46509c27c627e"
+  },
+  "stoppedDevelopmentSelection": {
+    "status": "QUALIFIED_STOPPED_UNPROTECTED_ONLY",
+    "observedUtc": "2026-10-23T22:35:20.3909795Z",
+    "elapsedSeconds": 5.9125294,
+    "sourceCommit": "c16cab92faa1440404cf0593338241bda9024cae",
+    "selectedPackage": "1.0.0-dev.85-3ad868cec0879691ef31aa3fef0e10f831c46a691f9b7d978046ab529120d3d7",
+    "previousPackagePreserved": true,
+    "normalFiles": [
+      {
+        "name": "CatDeskBinagotchy.exe",
+        "sha256": "d2a89eb04cb4c87ebe5ddd55f77ba33a2f9874e25e9d3760369d64d5a35f0708",
+        "bytes": 34825216
+      },
+      {
+        "name": "CatDeskWakeHost.exe",
+        "sha256": "2c7367ebc9687037f6f0d813ec5e09018fcfbae3b1ff9aff60761f1bd13a6c83",
+        "bytes": 2081792
+      },
+      {
+        "name": "adapter.py",
+        "sha256": "0686ae77d3f4ed7ff6fc1dcfcffe07c212f8e4aea515ed069c73e11993782b97",
+        "bytes": 51207
+      },
+      {
+        "name": "wake_bridge.py",
+        "sha256": "a3d6bd20fd017c32dd8917a5f06e0c30c2e7aba547fe09ae9877066fa1d84498",
+        "bytes": 179201
+      }
+    ],
+    "exactPairedReadbacks": 9,
+    "statusViewPassed": true,
+    "existingStateRecords": 243,
+    "unchangedProtectedRecords": 241,
+    "permittedPackagePointersChanged": 2,
+    "unexpectedChanges": 0,
+    "newStateRecords": 0,
+    "owners": 0,
+    "controls": [
+      "STOPPED",
+      "STOPPED"
+    ],
+    "browserProfileTouched": false,
+    "wakeTargetsChanged": false,
+    "nativeSessionActions": 0,
+    "browserStarts": 0,
+    "wakeHostStarts": 0,
+    "recurringStarts": 0,
+    "productionChanged": false,
+    "protectedInstalledAcceptance": false,
+    "resultSha256": "d30ea89f4b8258afd7d26d540f44da67d130dc411511d08a05797250812195b0",
+    "hostBuildSha256": "276d8a73a45a65c3e82e258572c283f59023d68a8dec1f89ed6b9c34d760cbc1",
+    "hostImageSha256": "2c7367ebc9687037f6f0d813ec5e09018fcfbae3b1ff9aff60761f1bd13a6c83",
+    "hostOwnerEofProofReused": true,
+    "newHostProcessForGate": false
+  }
 }

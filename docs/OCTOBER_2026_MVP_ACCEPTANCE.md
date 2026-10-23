@@ -1,4 +1,4 @@
-### October 23 C48 — source task continuation; installed/live still open
+### October 23 C48 — normal task components and stopped development qualified; live still open
 
 C48 carries an existing local task grant into the replacement project's private
 bootstrap. The workspace rollover journal stores only an exact reference; the
@@ -26,17 +26,37 @@ grants refuse transfer. A transient shared-context read now retries for at most
 two seconds before task startup; mutations never retry. Failed attempts remain
 in private evidence, including the single-line Wake message correction.
 
-All 243 real records/nine pairs remain exact, zero real/test owners and both
-controls STOPPED. No browser, WakeHost, recurring/native action, real binding
-change or completed-canary replay. The new source is not installed: selected
-v61 remains C45, and prior C47 normal HTTP proof is preserved separately.
-Connector status at 22:10 UTC remains HTTP 429; no immediate retry. Actual Web
-coding, browser credential handoff, protected installation and unattended
-acceptance remain open. C48 closes no additional actual Web A–J gate.
+Published source `c16cab92faa1440404cf0593338241bda9024cae` also passes normal
+release qualification: build 22:16:57.662–22:23:04.161 UTC, 366.50 seconds;
+app SHA `d2a89eb04cb4c87ebe5ddd55f77ba33a2f9874e25e9d3760369d64d5a35f0708`.
+The normal executable passed eight checks/35 CLI-Git commands at
+22:26:24.655–22:27:36.609 UTC (71.95 seconds), under a 180-second owner.
+Two HTTP processes exited naturally. Parallel patches, sibling progress,
+authority/refusal checks, restart retention, cold private-payload reading,
+redacted status and missing-payload refusal passed. The private reader used
+explicit injected fixture metadata: normal collector creation and browser key
+transfer were not proved. Both fixture grants/keys and the private blob were
+cleaned up; all 243 real records were exact before package selection.
 
-Next: normal C48 executable and matched stopped-development qualification, then
-bounded fresh granted-task Web integration when dependencies permit. No operator
-action is required for the eligible build work.
+At 22:35:20.391 UTC, the existing guarded updater selected matched v64/C48 in
+5.91 seconds with both hosts STOPPED. Nine exact paired readbacks and the
+selected executable's redacted status view passed. Of 243 existing records,
+only two allowed development package pointers changed; 241 protected records
+and all nine Wake pairs/history stayed exact, with zero new records or owners.
+The old package/profile is retained. The unchanged host's exact owner-EOF proof
+was reused without starting a host. Production remains unchanged.
+
+No browser, WakeHost, recurring/native action, live message or completed-canary
+replay. This qualifies source, normal local components and the selected stopped
+development package. Actual Web coding, normal collector/browser key transfer,
+protected installation and unattended acceptance remain open. C48 closes no
+additional actual Web A–J gate. The 22:10 UTC connector read remains HTTP 429;
+source CI showed zero runs/checks at 22:17 UTC and remains unverified.
+
+Next: prepare a fresh bounded granted-task Web integration using selected C48,
+without replaying completed canaries or enabling recurring automation. No
+operator action is required for safe preparation; Web MCP proof depends on
+connector recovery.
 [C48 evidence](verification/C48_PRIVATE_GRANTED_TASK_HANDOFF_2026_10_23.json).
 
 ### October 23 C47 — source and unselected normal central HTTP qualification
@@ -833,8 +853,8 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | Gate | Existing evidence and exact scope | Remaining acceptance |
 | --- | --- | --- |
 | A. At least three registered project Web conversations | PASS, development: C21 selected status reads nine paired registrations, including two newly verified source conversations bound to isolated Git roots. Seven prior rows/history unchanged. | Protected runtime acceptance remains separate. |
-| B. Two Web conversations make tools calls in separate directories | PARTIAL LOCAL: C45 selected normal HTTP reads and earlier isolated edits remain. C47 test-binary and unselected normal central HTTP now patch two separate assigned worktrees through one authenticated route with per-task keys, original native files preserved, wrong-key/path/witness refusal and durable replay prevention. | OPEN: actual concurrent ChatGPT Web coding, selected C47 runtime and protected installation. Provider conversation origin remains unverified. |
-| C. Blocked project while sibling makes useful progress | PARTIAL LOCAL: C47 central HTTP holds alpha project ownership while beta reads its useful patch. Metadata checks retry briefly, without replaying tool actions or globally holding the execution workspace. Earlier scheduler/timer evidence remains. | OPEN: bounded actual Web project blocking/progress proof. C48 implements private granted-task handoff and post-acknowledgement resume in source, with a synthetic pending-patch continuation and durable event recovery; normal/installed/Web qualification remain separate. |
+| B. Two Web conversations make tools calls in separate directories | PARTIAL LOCAL: C45 selected normal HTTP reads and earlier isolated edits remain. C47 and C48 normal central HTTP patch two separate assigned worktrees through one authenticated route with per-task keys, original native files preserved, wrong-key/path/witness refusal and durable replay prevention. | OPEN: actual concurrent ChatGPT Web coding, normal collector/browser key transfer and protected installation. Stopped C48 development selection is qualified separately. Provider conversation origin remains unverified. |
+| C. Blocked project while sibling makes useful progress | PARTIAL LOCAL: C47 central HTTP holds alpha project ownership while beta reads its useful patch. Metadata checks retry briefly, without replaying tool actions or globally holding the execution workspace. Earlier scheduler/timer evidence remains. | OPEN: bounded actual Web project blocking/progress proof. C48 implements private granted-task handoff and post-acknowledgement resume in source, with a synthetic pending-patch continuation and durable event recovery; C48 normal local components and stopped development selection are qualified; actual collector/browser/Web/protected acceptance remain separate. |
 | D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
 | E. Context pressure and durable handoff | RECOVERED CONTROLLED CHAIN VERIFIED: C33/C38–C40 remain preserved. C43 resumes its existing source on v60: one handoff/new intent, fresh DRAFT_READY/SEND_ATTEMPTED, no repair, verified source snapshot, RECORDED context and completed generation 3-to-4 rollover/continuation. Estimates remain advisory with UNKNOWN_OR_INCOMPLETE coverage. | Fresh atomic entry qualifies within this new controlled intent. The original C43 attempt was interrupted; whole-original-chain uninterrupted and unattended operation remain unqualified. Preserve completed proof. |
 | F. Actual replacement URL and continuation | PASS, controlled selected scope: original canary, C23 and C40 remain preserved. C43 independently verifies another issued URL, paired generation 3-to-4 update and completed continuation. A separate event-bound read verifies its 858-character assistant body and all project/task/marker checks; 243 records remain exact. | C43 is a recovered chain after the original stop, with no repair or source replay. The body acknowledges continuity without executing commands/files/MCP work. Actual coding, protected production and unattended operation remain separate. |

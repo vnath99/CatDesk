@@ -1,6 +1,6 @@
-## October 23 C48 — granted-task automatic continuation (source only)
+## October 23 C48 — granted-task automatic continuation (selected stopped development)
 
-C48 is not selected or installed. Use the existing local association and
+C48 v64 is selected in the stopped unprotected development profile. Use existing local association and
 `execution-grant` commands only for an explicitly assigned isolated task.
 Rollover uses the existing automatic `handoff-request` / `handoff-collect`
 workflow. Manual `rollover prepare` for a granted task refuses with
@@ -24,10 +24,14 @@ Missing/tampered payloads and unknown mutation outcomes require recovery; they
 never authorize regeneration or blind resubmission. Native sessions retain
 their original ownership.
 
-Source 86 tests/strict checks PASS; synthetic paired rollover resumes an actual
-pending patch once. Normal C48, browser transfer, actual Web MCP coding and
-protected/unattended acceptance remain unqualified. Preserve completed canaries.
+Source 86 tests/strict checks PASS; synthetic paired rollover resumes a pending
+patch once. Normal C48 passes eight local checks, including an injected private
+reader fixture; matched stopped selection/status/nine paired readbacks pass.
+Normal collector/browser key transfer, actual Web coding and protected/
+unattended acceptance remain open. Source commit: `c16cab92faa1440404cf0593338241bda9024cae`.
+Use the designated control workspace; preserve completed canaries and native owners.
 [C48 evidence](../verification/C48_PRIVATE_GRANTED_TASK_HANDOFF_2026_10_23.json).
+
 ## October 23 C47 — central scoped task execution (normal HTTP qualified, unselected)
 
 ```text
