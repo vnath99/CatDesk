@@ -1,6 +1,12 @@
 # October 22–31 execution log
 
 ## 2026-10-22 evening — selected release review reader LIVE PASS
+- **Exact live qualification publication at 02:20:09 UTC October 23:** six
+  reviewed sanitized documentation paths pushed normally as
+  `aca25d95438acab8b87a6f85cc0c3d801edc8afc` on
+  `codex/web-rollover-oct17`; full remote SHA matches. No private response,
+  target URL, profile, native-session identifier or runtime artifact published.
+  Zero workflow/check runs reported; CI UNVERIFIED. Protected production unchanged.
 - **One external dependency check, 02:17:44–02:18:03 UTC:** after over two
   hours since the prior direct probe, connected transport status failed in
   OpenAI MCP backend send before an HTTP status was exposed. This is not a new

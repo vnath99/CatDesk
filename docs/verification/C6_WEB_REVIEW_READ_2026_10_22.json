@@ -445,5 +445,16 @@
     "browserStarted": false,
     "settingsOrTunnelChanges": false,
     "sourceAndLocalMcpAcceptanceAffected": false
+  },
+  "selectedLivePublication": {
+    "observedUtc": "2026-10-23T02:20:09.4077513Z",
+    "documentationCommit": "aca25d95438acab8b87a6f85cc0c3d801edc8afc",
+    "remoteSha": "aca25d95438acab8b87a6f85cc0c3d801edc8afc",
+    "branch": "codex/web-rollover-oct17",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "privacyScan": "PASS",
+    "protectedProductionAccepted": false
   }
 }
