@@ -1,3 +1,33 @@
+## October 23 C48 — granted-task automatic continuation (source only)
+
+C48 is not selected or installed. Use the existing local association and
+`execution-grant` commands only for an explicitly assigned isolated task.
+Rollover uses the existing automatic `handoff-request` / `handoff-collect`
+workflow. Manual `rollover prepare` for a granted task refuses with
+`WEB_TASK_HANDOFF_AUTOMATIC_SOURCE_REQUIRED`; ungranted legacy handoffs stay
+compatible. Preparation never mints or broadens an execution grant.
+
+The private bootstrap carries the exact request/event/task/assignment, current
+Git/workspace context, recorded call IDs and patch proposal/application IDs.
+Keep executionKey inside its intended project conversation; never copy it into
+source, logs, replies, other chats or shared workspace files. A source handoff
+containing that active key is refused. The existing browser wire bound is
+16 KiB; oversized or missing private payloads refuse before submission.
+
+`operator web rollover status --project-id PROJECT` reports
+`grantedTaskContextPreserved` and `taskResumeEventId`, without the key. The latter
+proves publication only: inspect the existing Wake receipt/response separately.
+After the exact acknowledgement completes, one stable resume event starts the
+work turn using its verified generation/digest. Reuse completed call IDs only
+for inspection/refusal; never invent a new ID to repeat an uncertain operation.
+Missing/tampered payloads and unknown mutation outcomes require recovery; they
+never authorize regeneration or blind resubmission. Native sessions retain
+their original ownership.
+
+Source 86 tests/strict checks PASS; synthetic paired rollover resumes an actual
+pending patch once. Normal C48, browser transfer, actual Web MCP coding and
+protected/unattended acceptance remain unqualified. Preserve completed canaries.
+[C48 evidence](../verification/C48_PRIVATE_GRANTED_TASK_HANDOFF_2026_10_23.json).
 ## October 23 C47 — central scoped task execution (normal HTTP qualified, unselected)
 
 ```text

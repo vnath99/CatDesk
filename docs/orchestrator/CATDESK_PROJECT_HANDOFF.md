@@ -1,3 +1,44 @@
+## October 23 C48 — next: normal granted-task handoff qualification
+
+C48 carries an existing local task grant into the replacement project's private
+bootstrap. The workspace rollover journal stores only an exact reference; the
+credential-bearing payload and draft-recovery artifacts use existing per-user
+storage outside control and assigned workspaces. Source/task/assignment/Git and
+native ownership stay pinned. Missing, tampered or wrong-scope data refuses
+without regeneration. Old ungranted records and continuation bytes stay valid.
+An automatic source-handoff witness is required for granted task rollover;
+manual preparation cannot strand a granted task behind an unproved continuation.
+
+After the exact continuation acknowledgement completes, the existing scheduler
+queues one stable task-resume event with the verified new generation/digest.
+Pending acknowledgements perform no browser action. Publication precedes the
+local marker, so restart in that window uses the same event ID/body. Keys never
+appear in that Wake event or status. No new registry, browser profile, global
+working directory switch or worker manager is added.
+
+86 focused tests/four added and strict workspace Clippy/format/whitespace PASS.
+The synthetic chain freezes a pre-rollover patch proposal, recovers the private
+handoff, updates the paired fixture target, completes the acknowledgement and
+applies that proposal once through the actual task dispatcher. It reads back the
+patch, preserves the native original and refuses replay. Proposal/application
+metadata and completed call IDs survive; unknown mutation outcomes and withdrawn
+grants refuse transfer. A transient shared-context read now retries for at most
+two seconds before task startup; mutations never retry. Failed attempts remain
+in private evidence, including the single-line Wake message correction.
+
+All 243 real records/nine pairs remain exact, zero real/test owners and both
+controls STOPPED. No browser, WakeHost, recurring/native action, real binding
+change or completed-canary replay. The new source is not installed: selected
+v61 remains C45, and prior C47 normal HTTP proof is preserved separately.
+Connector status at 22:10 UTC remains HTTP 429; no immediate retry. Actual Web
+coding, browser credential handoff, protected installation and unattended
+acceptance remain open. C48 closes no additional actual Web A–J gate.
+
+Next: normal C48 executable and matched stopped-development qualification, then
+bounded fresh granted-task Web integration when dependencies permit. No operator
+action is required for the eligible build work.
+[C48 evidence](../verification/C48_PRIVATE_GRANTED_TASK_HANDOFF_2026_10_23.json).
+
 ## October 23 C47 — qualify the central granted-task dispatcher
 
 C47 adds `catdesk_web_task_tool` to the existing authenticated central HTTP

@@ -286,7 +286,7 @@ fn task_directory(
     Ok(path)
 }
 
-fn read_assignment_bytes(path: &Path) -> Result<Vec<u8>, String> {
+pub(crate) fn read_assignment_bytes(path: &Path) -> Result<Vec<u8>, String> {
     if !regular(path) {
         return Err("PROJECT_TASK_ASSIGNMENT_UNAVAILABLE".into());
     }
@@ -302,7 +302,7 @@ fn read_assignment_bytes(path: &Path) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-fn exact_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
+pub(crate) fn exact_file(path: &Path, bytes: &[u8]) -> Result<(), String> {
     use std::io::Write;
     if path
         .try_exists()
@@ -439,27 +439,7 @@ pub(crate) fn grant_web_execution(
     {
         return Err("WEB_TASK_GRANT_REVOKED".into());
     }
-    // A shared central read tool must not disclose a sibling task's key.
-    // Reuse the fixed OS user-state root, outside every registered workspace.
-    let key_directory = crate::delegated::autonomy_runtime::fixed_current_user_catdesk_state_root()
-        .map_err(|_| "WEB_TASK_KEY_STORE_UNAVAILABLE")?
-        .join("WebTaskKeys");
-    if !key_directory
-        .try_exists()
-        .map_err(|_| "WEB_TASK_KEY_STORE_UNAVAILABLE")?
-    {
-        fs::create_dir(&key_directory).map_err(|_| "WEB_TASK_KEY_STORE_UNAVAILABLE")?;
-    }
-    plain_directory(&key_directory)?;
-    let key_identity = catdesk_wake::protocol::digest(
-        &serde_json::to_string(&(
-            &project.control_workspace,
-            &project.project.project_id,
-            link,
-        ))
-        .map_err(|_| "WEB_TASK_GRANT_INVALID")?,
-    );
-    let key_path = key_directory.join(format!("{key_identity}.json"));
+    let key_path = execution_key_path(project, link, true)?;
     let key = if key_path
         .try_exists()
         .map_err(|_| "WEB_TASK_GRANT_UNAVAILABLE")?
@@ -502,6 +482,114 @@ pub(crate) fn grant_web_execution(
         "targetGeneration":prepared["targetGeneration"],"targetSha256":prepared["targetSha256"],
         "executionBudgetSeconds":180,"executionAuthorized":true,"workerStarted":false,"nativeSessionAction":"NONE"}),
     )
+}
+
+fn execution_key_path(
+    project: &ResolvedProjectScopeV1,
+    link: &crate::web_work_state::WorkTaskAssignment,
+    create: bool,
+) -> Result<PathBuf, String> {
+    // A shared central read tool must not disclose a sibling task's key.
+    // Reuse the fixed OS user-state root, outside every registered workspace.
+    let key_directory = crate::delegated::autonomy_runtime::fixed_current_user_catdesk_state_root()
+        .map_err(|_| "WEB_TASK_KEY_STORE_UNAVAILABLE")?
+        .join("WebTaskKeys");
+    if create
+        && !key_directory
+            .try_exists()
+            .map_err(|_| "WEB_TASK_KEY_STORE_UNAVAILABLE")?
+    {
+        fs::create_dir(&key_directory).map_err(|_| "WEB_TASK_KEY_STORE_UNAVAILABLE")?;
+    }
+    plain_directory(&key_directory)?;
+    let key_identity = catdesk_wake::protocol::digest(
+        &serde_json::to_string(&(
+            &project.control_workspace,
+            &project.project.project_id,
+            link,
+        ))
+        .map_err(|_| "WEB_TASK_GRANT_INVALID")?,
+    );
+    Ok(key_directory.join(format!("{key_identity}.json")))
+}
+
+/// Called only by the local rollover owner while its existing project fence is
+/// held. Reads an existing opt-in grant; it can never create new authority.
+pub(crate) fn granted_handoff_context(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    current: &catdesk_wake::protocol::Target,
+) -> Result<Option<Value>, String> {
+    let Some(link) = &record.task_assignment else {
+        return Ok(None);
+    };
+    let directory = task_directory(project, &link.task_id, false)?;
+    if !directory
+        .join("execution-grant.json")
+        .try_exists()
+        .map_err(|_| "WEB_TASK_GRANT_UNAVAILABLE")?
+        || directory
+            .join("execution-revoked.json")
+            .try_exists()
+            .map_err(|_| "WEB_TASK_GRANT_UNAVAILABLE")?
+    {
+        return Ok(None);
+    }
+    let key: String = serde_json::from_slice(&read_assignment_bytes(&execution_key_path(
+        project, link, false,
+    )?)?)
+    .map_err(|_| "WEB_TASK_GRANT_INVALID")?;
+    authorized_web_assignment(project, record, &key)?;
+    let prepared = prepare_work_resume(project, record, current)?;
+    let journal_root = directory.join("journal");
+    let (calls, proposals, applications) = if journal_root
+        .try_exists()
+        .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?
+    {
+        let journal =
+            DelegatedJournal::open(&journal_root).map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
+        let run = RunId::new(&link.task_id).map_err(|_| "PROJECT_TASK_CONTRACT_INVALID")?;
+        let calls = journal
+            .load_tool_calls(&run)
+            .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
+        let proposals = journal
+            .load_patch_proposals(&run)
+            .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
+        let applications = journal
+            .load_patch_applications(&run)
+            .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
+        if applications.iter().any(|application| {
+            matches!(
+                application.status,
+                crate::delegated::journal::PatchApplicationStatus::OutcomeUnknown
+            )
+        }) {
+            return Err("PROJECT_TASK_RECOVERY_REQUIRED".into());
+        }
+        (calls, proposals, applications)
+    } else {
+        (Default::default(), Vec::new(), Vec::new())
+    };
+    let journaled: Vec<_> = calls
+        .values()
+        .map(|call| {
+            json!({"callId":call.tool_call_id,"tool":call.tool_name,
+        "status":call.status,"argumentsSha256":call.arguments_hash,"outcome":call.outcome_summary})
+        })
+        .collect();
+    Ok(Some(
+        json!({"schemaVersion":1,"mcpTool":"catdesk_web_task_tool","projectId":project.project.project_id,
+        "requestId":record.request_id,"sourceEventId":record.event_id,"taskId":link.task_id,
+        "assignmentSha256":link.assignment_sha256,"scopeSha256":link.scope_sha256,"executionKey":key,
+        "executionWorkspace":prepared["executionWorkspace"],"registeredWorkspace":project.project.workspace,
+        "baseCommit":prepared["baseCommit"],"branch":prepared["branch"],
+        "targetSelection":"USE_VERIFIED_CONTINUATION_GENERATION_AND_DIGEST","journaledCalls":journaled,
+        "patchProposals":proposals.iter().map(|proposal|json!({"patchId":proposal.patch_id,
+            "targetPaths":proposal.target_paths,"proposedDiffSha256":proposal.proposed_diff_hash})).collect::<Vec<_>>(),
+        "patchApplications":applications.iter().map(|application|json!({"patchId":application.patch_id,
+            "callId":application.tool_call_id,"status":application.status,"pathsChanged":application.actual_paths_changed})).collect::<Vec<_>>(),
+        "completedCallReplayAllowed":false,"unknownCallReplayAllowed":false,"nativeSessionAction":"NONE"}),
+    ))
 }
 
 fn valid_execution_key(key: &str) -> bool {

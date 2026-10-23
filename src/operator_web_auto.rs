@@ -326,6 +326,10 @@ pub(super) fn run_step_with_capture(
 ) -> Result<(&'static str, Value), String> {
     keep_running()?;
     match rollover::auto_stage(workspace, project, source)? {
+        rollover::AutoStage::AwaitContinuation => Ok((
+            "AWAITING_RESPONSE",
+            json!({"reason":"WEB_TASK_CONTINUATION_RESPONSE_PENDING","browserAction":"NONE"}),
+        )),
         rollover::AutoStage::SourceWitnessRequired => Ok((
             "SOURCE_WITNESS_REQUIRED",
             json!({"reason":"WEB_AUTO_SOURCE_WITNESS_REQUIRED"}),

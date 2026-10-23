@@ -24,6 +24,8 @@ use std::{
 
 #[path = "web_rollover_admission.rs"]
 mod admission;
+#[path = "web_task_handoff.rs"]
+mod task_handoff;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -168,6 +170,10 @@ struct Record {
     #[serde(default)]
     bootstrap_progress: Option<runtime::BootstrapProgress>,
     handoff: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    task_handoff: Option<task_handoff::Reference>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    task_resume_event_id: Option<String>,
     message_digest: String,
     created_utc: u64,
     receipt: Option<runtime::BootstrapReceipt>,
@@ -269,6 +275,7 @@ struct HandoffRequest {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum AutoStage {
     Observe,
+    AwaitContinuation,
     CollectHandoff,
     Execute,
     SourceWitnessRequired,
@@ -521,9 +528,21 @@ fn acquire_web_project_lease(
         .try_exists()
         .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
     {
-        WebContextStore::open_nonblocking(&context_root)
-            .and_then(|meter| meter.active_pressure(project))
-            .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?
+        // A sibling may briefly meter its result. Retry only this metadata
+        // read before admitting any tool; never replay a task operation.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            match WebContextStore::open_nonblocking(&context_root)
+                .and_then(|meter| meter.active_pressure(project))
+            {
+                Err(reason)
+                    if reason == "WEB_CONTEXT_BUSY" && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(10))
+                }
+                result => break result.map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?,
+            }
+        }
     } else {
         None
     };
@@ -668,12 +687,20 @@ impl ProjectStore {
         if record.bootstrap_progress.is_some() && record.phase == Phase::Prepared {
             return Err("WEB_ROLLOVER_STATE_INVALID".into());
         }
+        task_handoff::validate_reference(self, &record)?;
+        if record.task_resume_event_id.as_ref().is_some_and(|id| {
+            record.task_handoff.is_none()
+                || record.phase != Phase::ContinuationQueued
+                || id != &task_resume_id(&record)
+        }) {
+            return Err("WEB_TASK_RESUME_STATE_INVALID".into());
+        }
         if record.message_digest
             != message_digest(
                 &record.project_id,
                 &record.intent_id,
                 &record.source.url,
-                &record.handoff,
+                &task_handoff::content(&record)?,
             )?
         {
             return Err("WEB_ROLLOVER_HANDOFF_CHANGED".into());
@@ -751,23 +778,35 @@ impl ProjectStore {
     }
 }
 
-fn draft_archive_path(store: &ProjectStore, record: &Record) -> PathBuf {
-    store
-        .root
-        .join(format!("draft-archive-{}.json", record.intent_id))
+fn draft_artifact_path(
+    store: &ProjectStore,
+    record: &Record,
+    name: String,
+) -> Result<PathBuf, String> {
+    Ok(task_handoff::artifact_root(record)?
+        .unwrap_or_else(|| store.root.clone())
+        .join(name))
 }
-
-fn draft_archive_receipt_path(store: &ProjectStore, record: &Record) -> PathBuf {
-    store
-        .root
-        .join(format!("draft-archive-complete-{}.json", record.intent_id))
+fn draft_archive_path(store: &ProjectStore, record: &Record) -> Result<PathBuf, String> {
+    draft_artifact_path(
+        store,
+        record,
+        format!("draft-archive-{}.json", record.intent_id),
+    )
+}
+fn draft_archive_receipt_path(store: &ProjectStore, record: &Record) -> Result<PathBuf, String> {
+    draft_artifact_path(
+        store,
+        record,
+        format!("draft-archive-complete-{}.json", record.intent_id),
+    )
 }
 
 fn read_draft_archive(
     store: &ProjectStore,
     record: &Record,
 ) -> Result<Option<DraftArchive>, String> {
-    let path = draft_archive_path(store, record);
+    let path = draft_archive_path(store, record)?;
     if !path
         .try_exists()
         .map_err(|_| "WEB_DRAFT_ARCHIVE_UNAVAILABLE")?
@@ -780,7 +819,7 @@ fn read_draft_archive(
         &record.project_id,
         &record.intent_id,
         &record.source,
-        &record.handoff,
+        &task_handoff::content(record)?,
     )?;
     if archive.schema_version != 1
         || archive.project_id != record.project_id
@@ -868,13 +907,13 @@ fn save_draft_archive(
             &record.project_id,
             &record.intent_id,
             &record.source,
-            &record.handoff,
+            &task_handoff::content(record)?,
         )?,
         actual_text: actual_text.into(),
         observed_bytes,
         recorded_utc: now(),
     };
-    create_private_once(&draft_archive_path(store, record), &archive)?;
+    create_private_once(&draft_archive_path(store, record)?, &archive)?;
     if read_draft_archive(store, record)?.as_ref() != Some(&archive) {
         return Err("WEB_DRAFT_ARCHIVE_READBACK_FAILED".into());
     }
@@ -885,7 +924,7 @@ fn read_draft_archive_receipt(
     store: &ProjectStore,
     record: &Record,
 ) -> Result<Option<DraftArchiveReceipt>, String> {
-    let path = draft_archive_receipt_path(store, record);
+    let path = draft_archive_receipt_path(store, record)?;
     if !path
         .try_exists()
         .map_err(|_| "WEB_DRAFT_ARCHIVE_UNAVAILABLE")?
@@ -908,10 +947,12 @@ fn read_draft_archive_receipt(
     Ok(Some(receipt))
 }
 
-fn draft_repair_path(store: &ProjectStore, record: &Record, kind: &str) -> PathBuf {
-    store
-        .root
-        .join(format!("draft-repair-{kind}-{}.json", record.intent_id))
+fn draft_repair_path(store: &ProjectStore, record: &Record, kind: &str) -> Result<PathBuf, String> {
+    draft_artifact_path(
+        store,
+        record,
+        format!("draft-repair-{kind}-{}.json", record.intent_id),
+    )
 }
 
 fn require_draft_repair_record(record: &Record, intent: &str, raw: &str) -> Result<(), String> {
@@ -954,7 +995,7 @@ fn read_draft_repair_witness(
     record: &Record,
     raw: &str,
 ) -> Result<Option<DraftRepairWitness>, String> {
-    let path = draft_repair_path(store, record, "witness");
+    let path = draft_repair_path(store, record, "witness")?;
     if !path
         .try_exists()
         .map_err(|_| "WEB_DRAFT_REPAIR_UNAVAILABLE")?
@@ -975,7 +1016,7 @@ fn read_draft_repair_witness(
         &record.project_id,
         &record.intent_id,
         &record.source,
-        &record.handoff,
+        &task_handoff::content(record)?,
     )?;
     if witness.schema_version != 1
         || witness.project_id != record.project_id
@@ -1004,7 +1045,7 @@ fn save_draft_repair_witness(
         &record.project_id,
         &record.intent_id,
         &record.source,
-        &record.handoff,
+        &task_handoff::content(record)?,
     )?;
     runtime::validate_bootstrap_repair_witness(actual, &expected, raw)?;
     require_draft_repair_identity(record, actual)?;
@@ -1027,7 +1068,7 @@ fn save_draft_repair_witness(
         actual_raw_digest: raw.into(),
         recorded_utc: now(),
     };
-    create_private_once(&draft_repair_path(store, record, "witness"), &witness)?;
+    create_private_once(&draft_repair_path(store, record, "witness")?, &witness)?;
     if read_draft_repair_witness(store, record, raw)?.as_ref() != Some(&witness) {
         return Err("WEB_DRAFT_REPAIR_READBACK_FAILED".into());
     }
@@ -1041,7 +1082,7 @@ fn read_draft_repair_checkpoint(
     kind: &str,
     evidence: &str,
 ) -> Result<Option<DraftRepairCheckpoint>, String> {
-    let path = draft_repair_path(store, record, kind);
+    let path = draft_repair_path(store, record, kind)?;
     if !path
         .try_exists()
         .map_err(|_| "WEB_DRAFT_REPAIR_UNAVAILABLE")?
@@ -1106,7 +1147,7 @@ fn save_draft_repair_checkpoint(
         evidence: evidence.into(),
         recorded_utc: now(),
     };
-    create_private_once(&draft_repair_path(store, record, kind), &checkpoint)?;
+    create_private_once(&draft_repair_path(store, record, kind)?, &checkpoint)?;
     if read_draft_repair_checkpoint(store, record, raw, kind, evidence)?.as_ref()
         != Some(&checkpoint)
     {
@@ -1212,6 +1253,8 @@ fn summary(record: &Record) -> Value {
         "handoffEventId":record.handoff_event_id,
         "sourceProgressFingerprint":record.source_fingerprint,
         "sourceSnapshotVerified":record.source_snapshot_verified,
+        "grantedTaskContextPreserved":record.task_handoff.is_some(),
+        "taskResumeEventId":record.task_resume_event_id,
         "quarantine":record.quarantine,
         "continuationProved":false,"continuationProofStatus":"NOT_CHECKED",
         "oldConversationPreserved":true})
@@ -1314,6 +1357,24 @@ pub(super) fn auto_stage(
             }
             Phase::ContinuationQueued if record.source == *current => {
                 return Err("WEB_ROLLOVER_QUEUED_SOURCE_STILL_BOUND".into());
+            }
+            Phase::ContinuationQueued
+                if record.task_handoff.is_some() && record.task_resume_event_id.is_none() =>
+            {
+                let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
+                    workspace,
+                )?)?;
+                return Ok(
+                    if continuation_ready_for_work(
+                        &store, &wake, workspace, project, current, &record,
+                    )
+                    .is_ok()
+                    {
+                        AutoStage::Execute
+                    } else {
+                        AutoStage::AwaitContinuation
+                    },
+                );
             }
             Phase::ContinuationQueued => {}
         }
@@ -2092,6 +2153,78 @@ pub(super) fn prepare(workspace: &Path, project: &str, handoff: Handoff) -> Resu
     prepare_with_request(workspace, project, handoff, None, None)
 }
 
+// ProjectStore already fences this project's tasks. Never acquire it again or
+// hold the shared registry transaction while inspecting Git/native ownership.
+fn locally_granted_task_context(
+    workspace: &Path,
+    project: &str,
+    source_task: &str,
+    current: &Target,
+    store: &ProjectStore,
+) -> Result<Option<Value>, String> {
+    let snapshot = WorkLedger::status(workspace, project);
+    if snapshot["status"] == "ATTENTION" {
+        return Err("WEB_WORK_LEDGER_UNAVAILABLE".into());
+    }
+    let Some(request) = snapshot["active"]["requestId"].as_str() else {
+        return Ok(None);
+    };
+    let work = WorkLedger::open(workspace, project)?
+        .record(request)?
+        .ok_or("WEB_WORK_REQUEST_MISSING")?;
+    if work.task_assignment.is_none() {
+        return Ok(None);
+    }
+    if work.event_id != source_task {
+        return Err("WEB_TASK_HANDOFF_SOURCE_CHANGED".into());
+    }
+    if work.target != *current {
+        let previous = store
+            .active()?
+            .ok_or("WEB_WORK_CONTINUATION_SOURCE_REQUIRED")?;
+        let request: HandoffRequest = read(
+            &store
+                .root
+                .join(format!("handoff-{}.json", previous.intent_id)),
+        )?;
+        request.validate(project)?;
+        let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
+            workspace,
+        )?)?;
+        let delivery = wake
+            .delivery(&previous.continuation_event_id)?
+            .ok_or("WEB_WORK_CONTINUATION_SOURCE_REQUIRED")?;
+        let timer = wake
+            .timer(&previous.continuation_event_id)?
+            .ok_or("WEB_WORK_CONTINUATION_SOURCE_REQUIRED")?;
+        if previous.phase != Phase::ContinuationQueued
+            || previous.context_meter_status == ContextMeterStatus::Pending
+            || continuation_task_from_proof(
+                &previous,
+                &request,
+                &registered_project(workspace, project)?,
+                current,
+                &delivery,
+                &timer,
+            )?
+            .as_deref()
+                != Some(source_task)
+        {
+            return Err("WEB_WORK_CONTINUATION_SOURCE_REQUIRED".into());
+        }
+    }
+    crate::web_work::require_assignment_source(workspace, project, &work, work.target == *current)?;
+    let scope = crate::delegated::autonomy_projects::resolve_registered_project_from_control_root(
+        workspace, project,
+    )
+    .map_err(|_| "WEB_TASK_PROJECT_UNAVAILABLE")?;
+    let context = crate::project_mcp_task::granted_handoff_context(&scope, &work, current)?;
+    if paired(workspace, project)? != *current {
+        return Err("WEB_HANDOFF_SOURCE_CHANGED".into());
+    }
+    Ok(context)
+}
+
 fn compose_handoff_content(
     registered: &AutonomousProjectV1,
     handoff: &Handoff,
@@ -2160,7 +2293,21 @@ fn prepare_with_request(
         return Err("WEB_HANDOFF_NATIVE_OWNER_CHANGED".into());
     }
     let content = compose_handoff_content(&registered, &handoff)?;
-    let record = Record {
+    let context =
+        locally_granted_task_context(workspace, project, &handoff.source_task_id, &source, &store)?;
+    if context.is_some() && request.is_none() {
+        return Err("WEB_TASK_HANDOFF_AUTOMATIC_SOURCE_REQUIRED".into());
+    }
+    if let Some(request) = request {
+        request.validate(project)?;
+        if request.intent_id != intent.intent_id
+            || request.source != source
+            || request.source_task_id != handoff.source_task_id
+        {
+            return Err("WEB_TASK_HANDOFF_SOURCE_CHANGED".into());
+        }
+    }
+    let mut record = Record {
         schema_version: 1,
         intent_id: intent.intent_id.clone(),
         project_id: project.into(),
@@ -2170,6 +2317,8 @@ fn prepare_with_request(
         phase: Phase::Prepared,
         bootstrap_progress: None,
         handoff: content,
+        task_handoff: None,
+        task_resume_event_id: None,
         created_utc: now(),
         receipt: None,
         continuation_event_id: format!("web-continue-{}", intent.intent_id),
@@ -2181,6 +2330,15 @@ fn prepare_with_request(
         source_snapshot_verified: false,
         quarantine: None,
     };
+    if let Some(context) = context {
+        task_handoff::prepare(&store, &mut record, context)?;
+        record.message_digest = message_digest(
+            project,
+            &record.intent_id,
+            &record.source.url,
+            &task_handoff::content(&record)?,
+        )?;
+    }
     store.save(&record)?;
     atomic(&store.root.join("active.json"), &record.intent_id)?;
     Ok(summary(&record))
@@ -2323,15 +2481,15 @@ fn record_context_meter(workspace: &Path, record: &Record, bound: &Target) -> Re
     )?;
     // Include the actual encoded wire text for new envelopes. Legacy events
     // keep their old observation bytes and dedup identity on interrupted retry.
-    let encoded = record
-        .handoff
+    let handoff = task_handoff::content(record)?;
+    let encoded = handoff
         .starts_with(runtime::JSON_BOOTSTRAP_HANDOFF_PREFIX)
         .then(|| {
             runtime::compose_bootstrap_message(
                 &record.project_id,
                 &record.intent_id,
                 &record.source,
-                &record.handoff,
+                &handoff,
             )
         })
         .transpose()?;
@@ -2342,7 +2500,7 @@ fn record_context_meter(workspace: &Path, record: &Record, bound: &Target) -> Re
             revision: 1,
             dedup_key: &record.intent_id,
             source_kind: VisibleSourceKind::Handoff,
-            visible_text: Some(encoded.as_deref().unwrap_or(&record.handoff)),
+            visible_text: Some(encoded.as_deref().unwrap_or(&handoff)),
             observed_at_unix: now(),
         },
     )?;
@@ -2419,10 +2577,86 @@ where
 }
 
 fn continuation_message(record: &Record, bound: &Target) -> String {
-    format!(
+    let mut message = format!(
         "CatDesk continuation for project {}: rollover {} has verified the new conversation URL and paired Wake binding at generation {}. Resume task {} from the handoff in this conversation after checking current ownership and artifacts. Existing native sessions keep their tasks; do not duplicate their execution. Preserve predecessor history.",
         record.project_id, record.intent_id, bound.generation, record.source_task_id
+    );
+    if let Some(selection) = task_handoff::continuation(record, bound) {
+        message.push_str(&selection);
+    }
+    message
+}
+
+fn task_resume_id(record: &Record) -> String {
+    format!("web-task-resume-{}", record.intent_id)
+}
+
+fn enqueue_granted_task_resume(
+    workspace: &Path,
+    store: &ProjectStore,
+    record: &mut Record,
+    automatic: bool,
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<(), String> {
+    if record.task_handoff.is_none() || record.task_resume_event_id.is_some() {
+        return Ok(());
+    }
+    keep_running()?;
+    let current = paired(workspace, &record.project_id)?;
+    let wake = Store::open(&crate::wake_protocol_client::wake_root_for_workspace(
+        workspace,
+    )?)?;
+    // Waiting for an exact completed acknowledgement is expected. A separate
+    // stable event starts the work turn, after this admission fence can open.
+    if continuation_ready_for_work(
+        store,
+        &wake,
+        workspace,
+        &record.project_id,
+        &current,
+        record,
     )
+    .is_err()
+    {
+        return Ok(());
+    }
+    task_handoff::authorize(workspace, record)?;
+    automatic_wake_running(automatic, &wake, &record.project_id, &current)?;
+    let id = task_resume_id(record);
+    let message = format!(
+        "CatDesk granted task resume for project {}, rollover {}. The exact continuation acknowledgement completed. Continue the unfinished assigned task from this conversation's private bootstrap context and durable handoff. Recheck assigned artifacts using bounded reads. Preserve recorded call IDs; never replay completed or unknown operations, or native-owned work.{}",
+        record.project_id,
+        record.intent_id,
+        task_handoff::continuation(record, &current)
+            .ok_or("WEB_TASK_HANDOFF_REFERENCE_REQUIRED")?
+    );
+    keep_running()?;
+    // Match central work publication's lock order: read the paired target
+    // first, retain registration, then let Wake CAS under its own queue lock.
+    let registry =
+        AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
+            .map_err(|_| "WEB_WORK_REGISTRY_UNAVAILABLE")?;
+    registry.with_registration_lock(|| {
+        keep_running()?;
+        let registered = registered_project(workspace, &record.project_id)?;
+        if registered.chatgpt_target_url.as_deref() != Some(current.url.as_str())
+            || registered.chatgpt_target_sha256.as_deref() != Some(current.digest.as_str())
+        {
+            return Err("WEB_WORK_TARGET_CHANGED".into());
+        }
+        wake.produce_expected(
+            &id,
+            &record.project_id,
+            "engineering_attention",
+            &message,
+            &current,
+        )
+        .map(|_| ())
+    })?;
+    // Publish before the marker. Recovery uses the same exact event ID/body;
+    // a queued, submitted or archived event can never be duplicated.
+    record.task_resume_event_id = Some(id);
+    store.save(record)
 }
 
 fn continuation_task_from_proof(
@@ -2724,7 +2958,7 @@ pub(super) fn inspect_draft(
         project,
         &record.intent_id,
         &record.source,
-        &record.handoff,
+        &task_handoff::content(&record)?,
     )?;
     Ok(json!({"projectId":project,"intentId":record.intent_id,
         "sourceGeneration":record.source.generation,"sourceDigest":record.source.digest,
@@ -2758,7 +2992,7 @@ pub(super) fn inspect_quarantine(
         project,
         &record.intent_id,
         &source,
-        &record.handoff,
+        &task_handoff::content(&record)?,
         candidate,
     )?;
     if paired(workspace, project)? != source {
@@ -2893,7 +3127,7 @@ pub(super) fn repair_draft(
         project,
         &record.intent_id,
         &record.source,
-        &record.handoff,
+        &task_handoff::content(&record)?,
         expected_raw_digest,
         attempted,
         |actual| {
@@ -2986,7 +3220,7 @@ pub(super) fn archive_draft(
         project,
         &record.intent_id,
         &record.source,
-        &record.handoff,
+        &task_handoff::content(&record)?,
         archive_recorded,
         |actual, count| {
             if paired(workspace, project)? != record.source {
@@ -3012,7 +3246,7 @@ pub(super) fn archive_draft(
         archived_utc: now(),
         evidence: "ARCHIVE_RECORDED_HOME_EMPTY".into(),
     };
-    create_private_once(&draft_archive_receipt_path(&store, &record), &receipt)?;
+    create_private_once(&draft_archive_receipt_path(&store, &record)?, &receipt)?;
     if read_draft_archive_receipt(&store, &record)?.as_ref() != Some(&receipt) {
         return Err("WEB_DRAFT_ARCHIVE_RECEIPT_INVALID".into());
     }
@@ -3130,8 +3364,10 @@ fn execute_with_mode(
                 |record| store.save(record),
             )?;
         }
+        enqueue_granted_task_resume(workspace, &store, &mut record, automatic, keep_running)?;
         return Ok(summary(&record));
     }
+    task_handoff::authorize(workspace, &record)?;
     let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
     let wake = Store::open(&root)?;
     catdesk_wake::development_runtime::validate_selected_target_isolation(
@@ -3156,7 +3392,7 @@ fn execute_with_mode(
         keep_running()?;
         let source = record.source.clone();
         let intent_id = record.intent_id.clone();
-        let handoff = record.handoff.clone();
+        let handoff = task_handoff::content(&record)?;
         let resume = record.bootstrap_progress;
         let receipt = runtime::bootstrap_submit_conversation_guarded(
             &wake,
@@ -3223,7 +3459,7 @@ fn execute_with_mode(
             &wake,
             &record.source,
             pending,
-            &record.handoff,
+            &task_handoff::content(&record)?,
             keep_running,
         )?
         else {
@@ -3542,6 +3778,618 @@ mod tests {
         }
         fs::remove_dir_all(parent).unwrap();
     }
+    fn private_context(root: &Path, record: &Record, secret: &str) -> Value {
+        json!({"projectId":record.project_id,"sourceEventId":record.source_task_id,"requestId":"request-a",
+            "taskId":"assigned-a","assignmentSha256":"a".repeat(64),"executionKey":secret,
+            "registeredWorkspace":root,"executionWorkspace":root,"journaledCalls":[{"callId":"done-a","status":"COMPLETED"}]})
+    }
+
+    #[test]
+    fn work_admission_retries_only_brief_context_metadata_contention_before_task_start() {
+        let root = fixture();
+        let meter_root = root.join(".catdesk/web-context");
+        let meter = WebContextStore::open(&meter_root).unwrap();
+        meter
+            .bind_observed_target(key("alpha", &record().source), None)
+            .unwrap();
+        let project_before =
+            fs::read(meter_root.join(format!("projects/{}.json", digest("alpha")))).unwrap();
+        let held = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(meter_root.join("ledger.lock"))
+            .unwrap();
+        held.lock().unwrap();
+        let other = root.clone();
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            acquire_web_work_lease(&other, "alpha").map(drop)
+        });
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        drop(held);
+        worker.join().unwrap().unwrap();
+        assert_eq!(
+            fs::read(meter_root.join(format!("projects/{}.json", digest("alpha")))).unwrap(),
+            project_before
+        );
+        assert!(!root.join(".catdesk/project-mcp-tasks").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    fn remove_private_handoff_fixture(record: &Record) {
+        if let Some(path) = task_handoff::artifact_root(record).unwrap() {
+            assert_eq!(
+                path.parent().unwrap().file_name().unwrap(),
+                "WebTaskHandoffs"
+            );
+            assert_eq!(path.file_name().unwrap().to_string_lossy().len(), 64);
+            fs::remove_dir_all(path).unwrap();
+        }
+    }
+
+    #[test]
+    fn granted_task_private_handoff_restarts_without_workspace_or_status_key_disclosure() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut saved = record();
+        let secret = "7".repeat(64);
+        task_handoff::prepare(
+            &store,
+            &mut saved,
+            private_context(&root, &record(), &secret),
+        )
+        .unwrap();
+        saved.message_digest = message_digest(
+            "alpha",
+            &saved.intent_id,
+            &saved.source.url,
+            &task_handoff::content(&saved).unwrap(),
+        )
+        .unwrap();
+        let bytes = serde_json::to_vec(&saved).unwrap();
+        assert!(!String::from_utf8(bytes.clone()).unwrap().contains(&secret));
+        assert!(!summary(&saved).to_string().contains(&secret));
+        assert!(task_handoff::content(&saved).unwrap().contains(&secret));
+        assert_eq!(
+            task_handoff::content(&saved).unwrap(),
+            task_handoff::content(&saved).unwrap()
+        );
+        let private = task_handoff::artifact_root(&saved).unwrap().unwrap();
+        assert!(!private.starts_with(root.canonicalize().unwrap()));
+        let archive = draft_archive_path(&store, &saved).unwrap();
+        let witness = draft_repair_path(&store, &saved, "witness").unwrap();
+        assert!(archive.starts_with(&private) && witness.starts_with(&private));
+        create_private_once(
+            &archive,
+            &json!({"expectedText":task_handoff::content(&saved).unwrap()}),
+        )
+        .unwrap();
+        store.save(&saved).unwrap();
+        atomic(&store.root.join("active.json"), &saved.intent_id).unwrap();
+        let before = fs::read(store.root.join(format!("{}.json", saved.intent_id))).unwrap();
+        drop(store);
+        let reopened = ProjectStore::open(&root, "alpha").unwrap();
+        let recovered = reopened.active().unwrap().unwrap();
+        assert_eq!(
+            before,
+            fs::read(reopened.root.join(format!("{}.json", saved.intent_id))).unwrap()
+        );
+        assert_eq!(
+            task_handoff::content(&recovered).unwrap(),
+            task_handoff::content(&saved).unwrap()
+        );
+        let bound = Target::new(2, "https://chatgpt.com/c/private-next".into()).unwrap();
+        let message = continuation_message(&recovered, &bound);
+        assert!(
+            message.contains(&bound.digest)
+                && message.contains("assigned-a")
+                && !message.contains(&secret)
+        );
+        let other_root = fixture();
+        let other = ProjectStore::open(&other_root, "alpha").unwrap();
+        other.save(&recovered).unwrap();
+        atomic(&other.root.join("active.json"), &recovered.intent_id).unwrap();
+        assert_eq!(
+            other.active().unwrap_err(),
+            "WEB_TASK_HANDOFF_CONTROL_SCOPE_CHANGED"
+        );
+        drop(other);
+        drop(reopened);
+        remove_private_handoff_fixture(&saved);
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(other_root).unwrap();
+    }
+
+    #[test]
+    fn granted_task_private_handoff_tamper_missing_payload_and_wrong_project_never_regenerate() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut saved = record();
+        let secret = "8".repeat(64);
+        let legacy = serde_json::to_vec(&saved).unwrap();
+        assert!(!String::from_utf8(legacy).unwrap().contains("taskHandoff"));
+        assert_eq!(task_handoff::content(&saved).unwrap(), saved.handoff);
+        task_handoff::prepare(
+            &store,
+            &mut saved,
+            private_context(&root, &record(), &secret),
+        )
+        .unwrap();
+        let path = task_handoff::artifact_root(&saved)
+            .unwrap()
+            .unwrap()
+            .join("payload.json");
+        let before = fs::read(&path).unwrap();
+        fs::write(&path, b"{}").unwrap();
+        assert_eq!(
+            task_handoff::content(&saved).unwrap_err(),
+            "WEB_TASK_HANDOFF_PAYLOAD_CHANGED"
+        );
+        assert_eq!(fs::read(&path).unwrap(), b"{}");
+        fs::write(&path, &before).unwrap();
+        let hidden = path.with_extension("withheld");
+        fs::rename(&path, &hidden).unwrap();
+        assert!(task_handoff::content(&saved).is_err());
+        assert!(!path.exists());
+        fs::rename(&hidden, &path).unwrap();
+        let mut wrong = saved.clone();
+        wrong.project_id = "beta".into();
+        assert_eq!(
+            task_handoff::content(&wrong).unwrap_err(),
+            "WEB_TASK_HANDOFF_PAYLOAD_SCOPE_MISMATCH"
+        );
+        wrong = saved.clone();
+        wrong.intent_id = "other-intent".into();
+        assert!(task_handoff::content(&wrong).is_err());
+        let mut oversized = record();
+        oversized.handoff = "x".repeat(16000);
+        assert!(
+            task_handoff::prepare(
+                &store,
+                &mut oversized,
+                private_context(&root, &record(), &secret)
+            )
+            .is_err()
+        );
+        assert!(oversized.task_handoff.is_none());
+        let mut credential_source = record();
+        credential_source.handoff.push_str(&secret);
+        assert_eq!(
+            task_handoff::prepare(
+                &store,
+                &mut credential_source,
+                private_context(&root, &record(), &secret)
+            )
+            .unwrap_err(),
+            "WEB_TASK_HANDOFF_CREDENTIAL_IN_SOURCE_REFUSED"
+        );
+        assert!(credential_source.task_handoff.is_none());
+        assert_eq!(fs::read(&path).unwrap(), before);
+        drop(store);
+        remove_private_handoff_fixture(&saved);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn granted_task_automatic_preparation_transfers_exact_context_and_journal_without_new_authority()
+     {
+        let (control, assignment, wake, pins, event) =
+            crate::web_work::tests::assignment_fixture_for("alpha");
+        wake.publish(&event).unwrap();
+        crate::web_work::associate(&control, pins.clone(), &assignment).unwrap();
+        let target = wake.config().unwrap().targets["alpha"].clone();
+        let host = wake.host_lock().unwrap();
+        let delivery = wake.claim(&event, &host).unwrap();
+        wake.transition(
+            &event.event_id,
+            &delivery.owner,
+            DeliveryPhase::Submitting,
+            None,
+            None,
+        )
+        .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: event.event_id.clone(),
+            target_generation: target.generation,
+            target_digest: target.digest.clone(),
+            message_digest: digest(&event.message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        wake.record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        wake.transition(
+            &event.event_id,
+            &delivery.owner,
+            DeliveryPhase::Sent,
+            Some(receipt),
+            None,
+        )
+        .unwrap();
+        drop(host);
+        let store = ProjectStore::open(&control, "alpha").unwrap();
+        assert!(
+            locally_granted_task_context(&control, "alpha", &event.event_id, &target, &store)
+                .unwrap()
+                .is_none()
+        );
+        drop(store);
+        let grant = crate::web_work::execution_permission(&control, pins.clone(), false).unwrap();
+        let key_path = PathBuf::from(grant["executionKeyFile"].as_str().unwrap());
+        let secret: String = serde_json::from_slice(&fs::read(&key_path).unwrap()).unwrap();
+        let scope =
+            crate::delegated::autonomy_projects::resolve_registered_project_from_control_root(
+                &control, "alpha",
+            )
+            .unwrap();
+        let task = crate::project_mcp_task::ProjectTask::open_with_budget(&scope, &assignment, 60)
+            .unwrap();
+        let task_id = grant["taskId"].as_str().unwrap();
+        let native_before = fs::read(scope.project.workspace.join("src/lib.rs")).unwrap();
+        task.execute(json!({"taskId":task_id,"callId":"before-rollover-preview","tool":"patch.preview",
+            "arguments":{"patchId":"rollover-patch","operations":[{"path":"src/lib.rs","old":"{ 1 }","new":"{ 47 }"}]}})).await.unwrap();
+        task.execute(json!({"taskId":task_id,"callId":"before-rollover-read","tool":"read","arguments":{"path":"src/lib.rs"}})).await.unwrap();
+        task.close().await.unwrap();
+        drop(task);
+        let meter = WebContextStore::open(control.join(".catdesk/web-context")).unwrap();
+        let source_key = key("alpha", &target);
+        meter
+            .bind_observed_target(source_key.clone(), None)
+            .unwrap();
+        meter
+            .configure_policy(
+                "alpha",
+                crate::web_conversation_context::ContextPressurePolicy {
+                    configured_budget_tokens: 128,
+                    safety_headroom_tokens: 127,
+                    unknown_source_reserve_tokens: 0,
+                    automatic_rollover_enabled: true,
+                    incomplete_history_rollover: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        meter
+            .record_observation(
+                &source_key,
+                Observation {
+                    event_id: "pressure-a",
+                    revision: 1,
+                    dedup_key: "pressure-a",
+                    source_kind: VisibleSourceKind::Handoff,
+                    visible_text: Some("Recorded useful assigned work and pending continuation"),
+                    observed_at_unix: now(),
+                },
+            )
+            .unwrap();
+        let mut handoff = source_handoff();
+        handoff.source_task_id = event.event_id.clone();
+        assert_eq!(
+            prepare(&control, "alpha", handoff.clone()).unwrap_err(),
+            "WEB_TASK_HANDOFF_AUTOMATIC_SOURCE_REQUIRED"
+        );
+        let intent = meter
+            .pressure(&source_key)
+            .unwrap()
+            .rollover_intent
+            .unwrap();
+        let mut request = handoff_request(&scope.project.workspace);
+        request.intent_id = intent.intent_id;
+        request.source = target.clone();
+        request.source_task_id = event.event_id.clone();
+        request.native_thread_id = scope.project.codex_thread_id.clone();
+        request.event_id = format!("web-handoff-{}", request.intent_id);
+        request.message = handoff_request_message(
+            "alpha",
+            &request.intent_id,
+            &event.event_id,
+            &request.native_thread_id,
+        );
+        let source_store = ProjectStore::open(&control, "alpha").unwrap();
+        source_store.save_handoff_request(&request).unwrap();
+        drop(source_store);
+        let prepared = prepare_with_request(
+            &control,
+            "alpha",
+            handoff,
+            Some(&request),
+            Some("a".repeat(64)),
+        )
+        .unwrap();
+        assert_eq!(prepared["grantedTaskContextPreserved"], true);
+        let store = ProjectStore::open(&control, "alpha").unwrap();
+        let mut saved = store.active().unwrap().unwrap();
+        let text = task_handoff::content(&saved).unwrap();
+        assert!(
+            text.contains(&secret)
+                && text.contains("before-rollover-read")
+                && text.contains(task_id)
+        );
+        task_handoff::authorize(&control, &saved).unwrap();
+        let capsule: Value = serde_json::from_slice(
+            &fs::read(
+                task_handoff::artifact_root(&saved)
+                    .unwrap()
+                    .unwrap()
+                    .join("payload.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let pending_patch = capsule["context"]["patchProposals"][0]["patchId"].clone();
+        assert_eq!(pending_patch, "rollover-patch");
+        for path in [
+            store.root.join(format!("{}.json", saved.intent_id)),
+            control.join(".catdesk/web-work/alpha.json"),
+        ] {
+            assert!(!fs::read_to_string(path).unwrap().contains(&secret));
+        }
+        // Synthetic receipt/response proof only: no browser or real message.
+        // Exercise the actual paired binder and task dispatcher after restart.
+        let bound = Target::new(
+            2,
+            "https://chatgpt.com/c/granted-task-synthetic-next".into(),
+        )
+        .unwrap();
+        mcp::operator_bind_project_web_target(
+            &control,
+            "alpha",
+            &bound.url,
+            Some(&target.digest),
+            target.generation,
+        )
+        .unwrap();
+        let mut receipt = receipt_for(&saved);
+        receipt.destination_url = bound.url.clone();
+        receipt.destination_digest = bound.digest.clone();
+        saved.receipt = Some(receipt);
+        saved.handoff_event_id = Some(request.event_id.clone());
+        saved.bound_target = Some(bound.clone());
+        saved.phase = Phase::ContinuationQueued;
+        saved.context_meter_status = ContextMeterStatus::Recorded;
+        saved.source_snapshot_verified = true;
+        saved.source_fingerprint = Some("a".repeat(64));
+        record_context_meter(&control, &saved, &bound).unwrap();
+        store.save(&saved).unwrap();
+        drop(store);
+        assert_eq!(
+            auto_stage(&control, "alpha", &bound).unwrap(),
+            AutoStage::AwaitContinuation
+        );
+        assert!(execute(&control, "alpha").unwrap()["taskResumeEventId"].is_null());
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        let message = continuation_message(&saved, &bound);
+        assert!(!message.contains(&secret));
+        let continued = wake
+            .produce_expected(
+                &saved.continuation_event_id,
+                "alpha",
+                "engineering_attention",
+                &message,
+                &bound,
+            )
+            .unwrap();
+        let host = wake.host_lock().unwrap();
+        let claimed = wake.claim(&continued, &host).unwrap();
+        wake.transition(
+            &continued.event_id,
+            &claimed.owner,
+            DeliveryPhase::Submitting,
+            None,
+            None,
+        )
+        .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: continued.event_id.clone(),
+            target_generation: bound.generation,
+            target_digest: bound.digest.clone(),
+            message_digest: digest(&message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        wake.record_exact_receipt_timer(&continued.event_id, &receipt)
+            .unwrap();
+        wake.transition(
+            &continued.event_id,
+            &claimed.owner,
+            DeliveryPhase::Sent,
+            Some(receipt),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            auto_stage(&control, "alpha", &bound).unwrap(),
+            AutoStage::AwaitContinuation
+        );
+        wake.complete_timer(&continued.event_id).unwrap();
+        drop(host);
+        assert_eq!(
+            auto_stage(&control, "alpha", &bound).unwrap(),
+            AutoStage::Execute
+        );
+        let queued = execute(&control, "alpha").unwrap();
+        let resume_id = task_resume_id(&saved);
+        assert_eq!(queued["taskResumeEventId"], resume_id);
+        let resume_event = wake
+            .events()
+            .unwrap()
+            .into_iter()
+            .find(|event| event.event_id == resume_id)
+            .unwrap();
+        let event_bytes = fs::read(wake.root().join(format!("queue/{resume_id}.json"))).unwrap();
+        assert!(!resume_event.message.contains(&secret));
+        execute(&control, "alpha").unwrap();
+        // Crash window: publication persisted, local marker did not.
+        let retry_store = ProjectStore::open(&control, "alpha").unwrap();
+        let mut retry = retry_store.active().unwrap().unwrap();
+        retry.task_resume_event_id = None;
+        retry_store.save(&retry).unwrap();
+        drop(retry_store);
+        execute(&control, "alpha").unwrap();
+        assert_eq!(
+            event_bytes,
+            fs::read(wake.root().join(format!("queue/{resume_id}.json"))).unwrap()
+        );
+        assert_eq!(
+            wake.events()
+                .unwrap()
+                .iter()
+                .filter(|event| event.event_id == resume_id)
+                .count(),
+            1
+        );
+        let host = wake.host_lock().unwrap();
+        let claimed = wake.claim(&resume_event, &host).unwrap();
+        wake.transition(
+            &resume_id,
+            &claimed.owner,
+            DeliveryPhase::Submitting,
+            None,
+            None,
+        )
+        .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: resume_id.clone(),
+            target_generation: bound.generation,
+            target_digest: bound.digest.clone(),
+            message_digest: digest(&resume_event.message),
+            sent_utc: now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        wake.record_exact_receipt_timer(&resume_id, &receipt)
+            .unwrap();
+        wake.transition(
+            &resume_id,
+            &claimed.owner,
+            DeliveryPhase::Sent,
+            Some(receipt),
+            None,
+        )
+        .unwrap();
+        drop(host);
+        let mut current_pins = pins.clone();
+        current_pins["expectedTargetGeneration"] = json!(bound.generation);
+        current_pins["expectedTargetSha256"] = json!(bound.digest);
+        let rpc = |call_id: &str, tool: &str, arguments: Value| {
+            let mut args = current_pins.clone();
+            args["executionKey"] = json!(secret);
+            args["taskId"] = json!(task_id);
+            args["callId"] = json!(call_id);
+            args["tool"] = json!(tool);
+            args["arguments"] = arguments;
+            serde_json::from_value::<mcp::JsonRpcRequest>(
+                json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+                "params":{"name":crate::web_task_dispatch::TOOL,"arguments":args}}),
+            )
+            .unwrap()
+        };
+        let apply = rpc(
+            "apply-after-rollover",
+            "patch.apply",
+            json!({"patchId":pending_patch}),
+        );
+        let applied = crate::web_task_dispatch::handle(control.to_str().unwrap(), &apply).await;
+        let applied = serde_json::to_value(applied).unwrap();
+        assert!(applied.get("error").is_none(), "{applied}");
+        assert_eq!(
+            applied["result"]["_meta"]["catdeskTaskLifecycle"]["status"],
+            "CLOSED"
+        );
+        let replay = crate::web_task_dispatch::handle(control.to_str().unwrap(), &apply).await;
+        assert_eq!(
+            serde_json::to_value(replay).unwrap()["error"]["message"],
+            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+        );
+        assert_eq!(
+            fs::read(scope.project.workspace.join("src/lib.rs")).unwrap(),
+            native_before
+        );
+        let response = crate::web_task_dispatch::handle(
+            control.to_str().unwrap(),
+            &rpc(
+                "after-rollover-read",
+                "read",
+                json!({"path":"src/lib.rs","startLine":1,"endLine":1}),
+            ),
+        )
+        .await;
+        let response = serde_json::to_value(response).unwrap();
+        assert!(response.get("error").is_none(), "{response}");
+        assert_eq!(
+            response["result"]["_meta"]["catdeskTaskLifecycle"]["status"],
+            "CLOSED"
+        );
+        assert!(
+            response["result"]["structuredContent"]["payload"]["text"]
+                .as_str()
+                .unwrap()
+                .contains("{ 47 }")
+        );
+        let replay = crate::web_task_dispatch::handle(
+            control.to_str().unwrap(),
+            &rpc("before-rollover-read", "read", json!({"path":"src/lib.rs"})),
+        )
+        .await;
+        assert_eq!(
+            serde_json::to_value(replay).unwrap()["error"]["message"],
+            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+        );
+        let store = ProjectStore::open(&control, "alpha").unwrap();
+        let recovered = store.active().unwrap().unwrap();
+        let next = locally_granted_task_context(&control, "alpha", &event.event_id, &bound, &store)
+            .unwrap()
+            .unwrap();
+        assert_eq!(next["journaledCalls"].as_array().unwrap().len(), 4);
+        assert_eq!(next["patchApplications"][0]["status"], "APPLIED");
+        let journal_root = control.join(format!(
+            ".catdesk/project-mcp-tasks/alpha/{task_id}/journal"
+        ));
+        let application_path = fs::read_dir(&journal_root)
+            .unwrap()
+            .map(|entry| entry.unwrap().path().join("patch_applications.json"))
+            .find(|path| path.is_file())
+            .unwrap();
+        let applications_before = fs::read(&application_path).unwrap();
+        let mut unknown: Value = serde_json::from_slice(&applications_before).unwrap();
+        unknown[0]["status"] = json!("OUTCOME_UNKNOWN");
+        fs::write(&application_path, serde_json::to_vec(&unknown).unwrap()).unwrap();
+        assert_eq!(
+            locally_granted_task_context(&control, "alpha", &event.event_id, &bound, &store)
+                .unwrap_err(),
+            "PROJECT_TASK_RECOVERY_REQUIRED"
+        );
+        fs::write(&application_path, applications_before).unwrap();
+        assert!(task_handoff::content(&recovered).unwrap().contains(&secret));
+        drop(store);
+        // Supported local revocation fences the frozen context on recovery.
+        crate::web_work::execution_permission(&control, current_pins, true).unwrap();
+        assert_eq!(
+            task_handoff::authorize(&control, &saved).unwrap_err(),
+            "WEB_TASK_GRANT_REVOKED"
+        );
+        let work = WorkLedger::open(&control, "alpha")
+            .unwrap()
+            .record(pins["requestId"].as_str().unwrap())
+            .unwrap()
+            .unwrap();
+        assert!(
+            crate::project_mcp_task::granted_handoff_context(&scope, &work, &target)
+                .unwrap()
+                .is_none()
+        );
+        remove_private_handoff_fixture(&saved);
+        assert!(!key_path.starts_with(&control));
+        fs::remove_file(key_path).unwrap();
+    }
+
     fn record() -> Record {
         let source = Target::new(1, "https://chatgpt.com/c/old".into()).unwrap();
         Record {
@@ -3555,6 +4403,8 @@ mod tests {
             phase: Phase::Prepared,
             bootstrap_progress: None,
             handoff: "private handoff".into(),
+            task_handoff: None,
+            task_resume_event_id: None,
             created_utc: 10,
             receipt: None,
             continuation_event_id: "continue-a".into(),
@@ -3800,7 +4650,7 @@ mod tests {
             .is_err()
         );
         save_draft_repair_checkpoint(&store, &saved, &raw, "attempt", "WRITE_ATTEMPTED").unwrap();
-        let before = fs::read(draft_repair_path(&store, &saved, "attempt")).unwrap();
+        let before = fs::read(draft_repair_path(&store, &saved, "attempt").unwrap()).unwrap();
         drop(store);
         let store = ProjectStore::open_existing(&root, "alpha").unwrap();
         assert!(
@@ -3810,7 +4660,7 @@ mod tests {
         );
         save_draft_repair_checkpoint(&store, &saved, &raw, "attempt", "WRITE_ATTEMPTED").unwrap();
         assert_eq!(
-            fs::read(draft_repair_path(&store, &saved, "attempt")).unwrap(),
+            fs::read(draft_repair_path(&store, &saved, "attempt").unwrap()).unwrap(),
             before
         );
         assert!(read_draft_repair_witness(&store, &saved, &"0".repeat(64)).is_err());
@@ -3879,8 +4729,16 @@ mod tests {
                 save_draft_repair_witness(&store, &saved, &raw, actual).unwrap_err(),
                 "WEB_DRAFT_REPAIR_IDENTITY_WITNESS_REQUIRED"
             );
-            assert!(!draft_repair_path(&store, &saved, "witness").exists());
-            assert!(!draft_repair_path(&store, &saved, "attempt").exists());
+            assert!(
+                !draft_repair_path(&store, &saved, "witness")
+                    .unwrap()
+                    .exists()
+            );
+            assert!(
+                !draft_repair_path(&store, &saved, "attempt")
+                    .unwrap()
+                    .exists()
+            );
         }
         assert_eq!(
             require_draft_repair_identity(&saved, "alpha-other task-a").unwrap_err(),
@@ -3899,12 +4757,20 @@ mod tests {
             actual_raw_digest: digest(wrong_task),
             recorded_utc: 1,
         };
-        create_private_once(&draft_repair_path(&store, &saved, "witness"), &forged).unwrap();
+        create_private_once(
+            &draft_repair_path(&store, &saved, "witness").unwrap(),
+            &forged,
+        )
+        .unwrap();
         assert_eq!(
             read_draft_repair_witness(&store, &saved, &forged.actual_raw_digest).unwrap_err(),
             "WEB_DRAFT_REPAIR_IDENTITY_WITNESS_REQUIRED"
         );
-        assert!(!draft_repair_path(&store, &saved, "attempt").exists());
+        assert!(
+            !draft_repair_path(&store, &saved, "attempt")
+                .unwrap()
+                .exists()
+        );
         drop(store);
         fs::remove_dir_all(root).unwrap();
     }

@@ -1,3 +1,44 @@
+### October 23 C48 — source task continuation; installed/live still open
+
+C48 carries an existing local task grant into the replacement project's private
+bootstrap. The workspace rollover journal stores only an exact reference; the
+credential-bearing payload and draft-recovery artifacts use existing per-user
+storage outside control and assigned workspaces. Source/task/assignment/Git and
+native ownership stay pinned. Missing, tampered or wrong-scope data refuses
+without regeneration. Old ungranted records and continuation bytes stay valid.
+An automatic source-handoff witness is required for granted task rollover;
+manual preparation cannot strand a granted task behind an unproved continuation.
+
+After the exact continuation acknowledgement completes, the existing scheduler
+queues one stable task-resume event with the verified new generation/digest.
+Pending acknowledgements perform no browser action. Publication precedes the
+local marker, so restart in that window uses the same event ID/body. Keys never
+appear in that Wake event or status. No new registry, browser profile, global
+working directory switch or worker manager is added.
+
+86 focused tests/four added and strict workspace Clippy/format/whitespace PASS.
+The synthetic chain freezes a pre-rollover patch proposal, recovers the private
+handoff, updates the paired fixture target, completes the acknowledgement and
+applies that proposal once through the actual task dispatcher. It reads back the
+patch, preserves the native original and refuses replay. Proposal/application
+metadata and completed call IDs survive; unknown mutation outcomes and withdrawn
+grants refuse transfer. A transient shared-context read now retries for at most
+two seconds before task startup; mutations never retry. Failed attempts remain
+in private evidence, including the single-line Wake message correction.
+
+All 243 real records/nine pairs remain exact, zero real/test owners and both
+controls STOPPED. No browser, WakeHost, recurring/native action, real binding
+change or completed-canary replay. The new source is not installed: selected
+v61 remains C45, and prior C47 normal HTTP proof is preserved separately.
+Connector status at 22:10 UTC remains HTTP 429; no immediate retry. Actual Web
+coding, browser credential handoff, protected installation and unattended
+acceptance remain open. C48 closes no additional actual Web A–J gate.
+
+Next: normal C48 executable and matched stopped-development qualification, then
+bounded fresh granted-task Web integration when dependencies permit. No operator
+action is required for the eligible build work.
+[C48 evidence](verification/C48_PRIVATE_GRANTED_TASK_HANDOFF_2026_10_23.json).
+
 ### October 23 C47 — source and unselected normal central HTTP qualification
 
 C47 adds `catdesk_web_task_tool` to the existing authenticated central HTTP
@@ -793,7 +834,7 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | --- | --- | --- |
 | A. At least three registered project Web conversations | PASS, development: C21 selected status reads nine paired registrations, including two newly verified source conversations bound to isolated Git roots. Seven prior rows/history unchanged. | Protected runtime acceptance remains separate. |
 | B. Two Web conversations make tools calls in separate directories | PARTIAL LOCAL: C45 selected normal HTTP reads and earlier isolated edits remain. C47 test-binary and unselected normal central HTTP now patch two separate assigned worktrees through one authenticated route with per-task keys, original native files preserved, wrong-key/path/witness refusal and durable replay prevention. | OPEN: actual concurrent ChatGPT Web coding, selected C47 runtime and protected installation. Provider conversation origin remains unverified. |
-| C. Blocked project while sibling makes useful progress | PARTIAL LOCAL: C47 central HTTP holds alpha project ownership while beta reads its useful patch. Metadata checks retry briefly, without replaying tool actions or globally holding the execution workspace. Earlier scheduler/timer evidence remains. | OPEN: bounded actual Web project blocking/progress proof. Automatic grant/task handoff transfer and installed qualification remain separate. |
+| C. Blocked project while sibling makes useful progress | PARTIAL LOCAL: C47 central HTTP holds alpha project ownership while beta reads its useful patch. Metadata checks retry briefly, without replaying tool actions or globally holding the execution workspace. Earlier scheduler/timer evidence remains. | OPEN: bounded actual Web project blocking/progress proof. C48 implements private granted-task handoff and post-acknowledgement resume in source, with a synthetic pending-patch continuation and durable event recovery; normal/installed/Web qualification remain separate. |
 | D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
 | E. Context pressure and durable handoff | RECOVERED CONTROLLED CHAIN VERIFIED: C33/C38–C40 remain preserved. C43 resumes its existing source on v60: one handoff/new intent, fresh DRAFT_READY/SEND_ATTEMPTED, no repair, verified source snapshot, RECORDED context and completed generation 3-to-4 rollover/continuation. Estimates remain advisory with UNKNOWN_OR_INCOMPLETE coverage. | Fresh atomic entry qualifies within this new controlled intent. The original C43 attempt was interrupted; whole-original-chain uninterrupted and unattended operation remain unqualified. Preserve completed proof. |
 | F. Actual replacement URL and continuation | PASS, controlled selected scope: original canary, C23 and C40 remain preserved. C43 independently verifies another issued URL, paired generation 3-to-4 update and completed continuation. A separate event-bound read verifies its 858-character assistant body and all project/task/marker checks; 243 records remain exact. | C43 is a recovered chain after the original stop, with no repair or source replay. The body acknowledges continuity without executing commands/files/MCP work. Actual coding, protected production and unattended operation remain separate. |
