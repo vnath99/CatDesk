@@ -1,6 +1,6 @@
 # October 22–31 execution log
 
-## October 23 C45 — automatically meter project MCP traffic, source only
+## October 23 C45 — automatic MCP traffic, normal build and local HTTP qualification
 
 The existing fixed project connection now records observable request/result
 counts and hashes in its conversation ledger. Local scope attribution and direct
@@ -20,11 +20,31 @@ test runtime changed from 125.34s to 33.46s; this is not the stress-test duratio
 
 The seven C43/C44 acceptance files were published at 19:02:12Z as
 `98b562361186c5e5dd2686a528578546fc30a2df`, with exact remote SHA readback and C45
-source excluded. C45 remains SOURCE_ONLY and pending publication. Selected normal
-v60/source `7cc95489b85084adca643d8cf32ac11dfa613610` is unchanged. New normal-package
-qualification and actual Web MCP exchange remain required; HTTP 429 is still the
-specific B/C live dependency. This source gate changed no selected runtime and
-started no browser or Wake host.
+source excluded. C45 source `a55bcab4a460ea6645ffa1f33e4718b41ad2f180` was published
+at 19:07:09.444Z with exact remote SHA readback. The 19:08Z read found zero CI
+runs/checks; remote CI remains unverified.
+
+The normal app built at 19:11:49.736Z–19:18:13.445Z (383.71s). Matching host build
+passed; its unchanged image reused the exact owner-EOF/no-state proof without a
+new host process. Package inputs were frozen at 19:18:49.106Z. Stopped v61
+selection passed at 19:19:28.772Z in 5.94s: 243 records checked, two package pointer
+changes, 241 protected exact, nine paired reads, no new records and zero owners.
+
+The selected normal image passed seven disposable local HTTP checks at
+19:20:43.760Z–19:21:48.237Z (64.48s), within 60s listener/180s outer bounds.
+Parallel alpha/beta argument and result meters recorded all four parts; beta
+continued reading/recording after alpha's fixture binding became stale. Wrong
+credentials/project, outside paths, writes and commands refused. Counts/hash-only
+storage and cold-process registry/binding/context retention passed. All 243 real
+records stayed exact with zero new records, fixture owners or real runtime owners.
+No browser, Wake, real binding, native or recurring action occurred. This is
+normal/selected local HTTP qualification; actual Web MCP coding remains HTTP-429
+dependent, and protected/unattended acceptance remains open. One 19:22:30Z
+connector probe returned HTTP 429 without immediate retry; four native chats
+were active/in progress with no errors or actions in the same read-only snapshot.
+C46 task-assignment association and resume preparation work is separate from
+selected v61; no coding task was completed
+by this read-only fixture.
 [C45 evidence](verification/C45_AUTOMATIC_MCP_CONTEXT_TRAFFIC_2026_10_23.json).
 
 ## October 23 C44 — nested diagnostics and stopped v60 qualification

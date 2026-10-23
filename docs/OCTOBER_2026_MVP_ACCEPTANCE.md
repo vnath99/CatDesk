@@ -1,6 +1,6 @@
 # CatDesk October 2026 MVP acceptance
 
-### October 23 C45 — automatic MCP context traffic is SOURCE_ONLY
+### October 23 C45 — selected normal-image local HTTP qualification
 
 The fixed authenticated project connection meters observable request/result
 counts and hashes without persisting raw traffic. Direct HTTP fixtures verify
@@ -13,10 +13,26 @@ All 28 distinct tests passed, including six added (six project and 22 context
 tests overall). Strict Clippy and formatting passed at 19:01:18Z. Separate stress
 qualification passed 2MiB initial-plus-replay in 5,512ms under 10s. Project-suite
 125.34s-to-33.46s timing is a different measurement. C43/C44 evidence is published
-as `98b562361186c5e5dd2686a528578546fc30a2df`; C45 source publication is pending.
-Selected normal v60/source `7cc95489b85084adca643d8cf32ac11dfa613610` remains unchanged.
-This adds no live A–J acceptance. Matching normal-package and actual multi-chat
-Web MCP testing remain open; the 18:48:04Z connector probe returned HTTP 429.
+as `98b562361186c5e5dd2686a528578546fc30a2df`. C45 source
+`a55bcab4a460ea6645ffa1f33e4718b41ad2f180` was published at 19:07:09Z with exact
+remote SHA readback; CI has zero runs/checks at 19:08Z and remains unverified.
+
+Normal app/host builds passed; unchanged host qualification was reused without
+starting a host. Stopped v61 selection passed at 19:19:28.772Z: 243 records,
+two pointer changes, 241 protected exact, nine pairs and zero owners. The
+19:20:43.760Z–19:21:48.237Z local HTTP test passed seven checks in 64.48s under
+60s/180s bounds. Both parallel project meters recorded arguments/results, and
+beta continued while alpha was refused. Wrong scope/credentials, outside writes
+and commands refused; durable counts/hash-only storage and cold-process retention
+passed. All 243 real records stayed exact with zero new records or owners.
+
+This qualifies the normal selected image in isolated local HTTP, adding no actual
+Web B/C acceptance. The fixture read data and completed no coding task. No Web
+conversation, browser, Wake, native or recurring action occurred. Actual multi-chat
+Web MCP remains blocked by the one 19:22:30Z HTTP 429 probe, without immediate
+retry; four native chats were active/in progress without errors in the same
+read-only snapshot. Protected/unattended gates remain open. C46 task-assignment
+association and resume preparation work is separate from selected v61.
 [C45 evidence](verification/C45_AUTOMATIC_MCP_CONTEXT_TRAFFIC_2026_10_23.json).
 
 ### October 23 C44 — v60 qualified; recovered C43 chain verified

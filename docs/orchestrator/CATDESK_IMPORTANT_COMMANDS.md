@@ -1,6 +1,6 @@
 # CatDesk — Important Command Reference
 
-## October 23 C45 — automatic project MCP accounting, source only
+## October 23 C45 — selected project MCP accounting, local HTTP qualified
 
 C45 attaches request/result count/hash observations to the existing fixed
 project MCP connection; it introduces no new operator command. A result completing
@@ -13,9 +13,18 @@ at 19:01:18Z. A separate 2MiB initial-plus-replay check passed in 5,512ms under 
 project-suite 125.34s-to-33.46s timings describe the whole suite instead. Tokenization
 is outside authority locks in 256-byte units; legacy exact replay is preserved.
 C43/C44 documentation is published as `98b562361186c5e5dd2686a528578546fc30a2df`.
-C45 publication and matching normal-package/live qualification are pending.
-Selected v60 still uses `7cc95489b85084adca643d8cf32ac11dfa613610`. Preserve completed
-deliveries; the connector's HTTP 429 remains a specific actual-Web test dependency.
+C45 source `a55bcab4a460ea6645ffa1f33e4718b41ad2f180` is published with exact remote
+readback at 19:07:09Z. Normal builds and stopped v61 selection passed; only two
+pointers changed among 243 records, with 241 protected exact and all nine pairs.
+The 19:21:48.237Z local HTTP qualifier passed seven bounded checks, including
+parallel argument/result recording and beta progress while alpha was blocked.
+All 243 real records stayed exact, zero owners remained, and no browser/Wake/
+native activation occurred. Local HTTP qualification does not complete a coding
+task or actual Web acceptance. Preserve completed deliveries; HTTP 429 remains
+the actual-Web dependency on the one 19:22:30Z probe. Four native chats remained
+active in the same read-only snapshot. C46 task-assignment association and resume
+preparation work is not in v61;
+protected/unattended operation remains unqualified. CI was empty at 19:08Z.
 [C45 evidence](../verification/C45_AUTOMATIC_MCP_CONTEXT_TRAFFIC_2026_10_23.json).
 
 ## October 23 C44 — read the specific target error

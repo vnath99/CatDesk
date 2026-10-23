@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "recordedUtc": "2026-10-23T19:03:47Z",
+  "recordedUtc": "2026-10-23T19:30:37.3819702Z",
   "task": "C45-AUTOMATIC-MCP-CONTEXT-TRAFFIC",
-  "classification": "SOURCE_AND_ISOLATED_LOCAL_HTTP_FIXTURES_ONLY",
+  "classification": "SOURCE_NORMAL_SELECTED_DEVELOPMENT_AND_DISPOSABLE_LOCAL_HTTP_QUALIFIED",
   "sourceBaseCommit": "7cc95489b85084adca643d8cf32ac11dfa613610",
   "sourceFiles": [
     {
@@ -30,7 +30,12 @@
   },
   "privacyAndUncertainty": {
     "rawArgumentsOrResultsPersisted": false,
-    "persistedEvidence": ["content digest", "visible byte count", "token estimate", "invocation part identity"],
+    "persistedEvidence": [
+      "content digest",
+      "visible byte count",
+      "token estimate",
+      "invocation part identity"
+    ],
     "authenticationHeadersIncluded": false,
     "responseMetaIncluded": false,
     "binaryAndOverflowHandling": "UNKNOWN_SOURCE_METADATA_WITH_EXISTING_CONFIGURED_RESERVE",
@@ -141,16 +146,149 @@
     "normalReleaseBuilds": 0,
     "existingProjectBindingsChanged": false,
     "productionChanged": false,
-    "fixturePairedTargetTransitions": true
+    "fixturePairedTargetTransitions": true,
+    "description": "SOURCE_GATE_ONLY; normal builds, stopped selection and local HTTP qualification recorded separately"
   },
   "acceptance": {
     "source": "PASS",
     "isolatedLocalHttpFixtures": "PASS",
-    "selectedRuntimeForThisChange": "NOT_BUILT_OR_SELECTED",
-    "actualWebMcpCoding": "OPEN_CONNECTOR_DEPENDENCY_SEPARATE",
+    "selectedRuntimeForThisChange": "PASS_V61_STOPPED_UNPROTECTED_DEVELOPMENT",
+    "actualWebMcpCoding": "OPEN_HTTP_429_AT_192230Z",
     "protectedInstalledRuntime": "NOT_QUALIFIED",
     "unattendedOperation": "NOT_ACTIVATED",
-    "fullMultiProjectMvp": "OPEN"
+    "fullMultiProjectMvp": "OPEN",
+    "normalImageLocalHttp": "PASS_SEVEN_CHECKS_DISPOSABLE_FIXTURE",
+    "codingTaskCompletion": "NOT_EXECUTED_BY_THIS_READ_ONLY_FIXTURE",
+    "taskAssignmentAssociationAndResumePreparation": "C46_SOURCE_WORK_SEPARATE_NOT_SELECTED"
   },
-  "nextTask": "Review and publish the source evidence, then qualify a matching normal package separately. Preserve completed live rollover proof; actual independent ChatGPT Web tool calls and installed acceptance remain separate gates."
+  "nextTask": "Continue separate C46 task-assignment association and resume preparation source work and regression tests. Actual multi-chat ChatGPT Web MCP and protected/unattended qualification remain open; preserve completed C43 without replay.",
+  "sourceCommit": "a55bcab4a460ea6645ffa1f33e4718b41ad2f180",
+  "publication": {
+    "sourceCommit": "a55bcab4a460ea6645ffa1f33e4718b41ad2f180",
+    "privacyReview": "PASS",
+    "visibilityChanged": false,
+    "remoteSha": "a55bcab4a460ea6645ffa1f33e4718b41ad2f180",
+    "baseCommit": "98b562361186c5e5dd2686a528578546fc30a2df",
+    "atUtc": "2026-10-23T19:07:09.4440831Z",
+    "force": false
+  },
+  "remoteCi": {
+    "visibleChecks": 0,
+    "sourceCommit": "a55bcab4a460ea6645ffa1f33e4718b41ad2f180",
+    "acceptance": "UNVERIFIED",
+    "visibleRuns": 0,
+    "observedUtcMinute": "2026-10-23T19:08Z"
+  },
+  "normalBuild": {
+    "sourceCommit": "a55bcab4a460ea6645ffa1f33e4718b41ad2f180",
+    "app": {
+      "exitCode": 0,
+      "imageSha256": "2d80a8716863874020053d3bec058e9507288373cb4ac993be2517dbdc4ae49e",
+      "elapsedSeconds": 383.7092028,
+      "startedUtc": "2026-10-23T19:11:49.7361825Z",
+      "finishedUtc": "2026-10-23T19:18:13.4453853Z",
+      "imageBytes": 34393600,
+      "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES"
+    },
+    "host": {
+      "exitCode": 0,
+      "imageSha256": "2c7367ebc9687037f6f0d813ec5e09018fcfbae3b1ff9aff60761f1bd13a6c83",
+      "profile": "NORMAL_RELEASE_WAKE_DEFAULT_FEATURES_NO_TEST_SUPPORT",
+      "startedUtc": "2026-10-23T19:18:47.4978516Z",
+      "finishedUtc": "2026-10-23T19:18:48.6592162Z",
+      "imageBytes": 2081792
+    },
+    "exactHostGateReused": true,
+    "hostGateReuseUtc": "2026-10-23T19:18:48.7661121Z",
+    "newHostProcessStarted": false,
+    "packageInputsRecordedUtc": "2026-10-23T19:18:49.1061725Z",
+    "bridgeAndAdapterUnchanged": true
+  },
+  "stoppedSelection": {
+    "atUtc": "2026-10-23T19:19:28.7723338Z",
+    "elapsedSeconds": 5.9448063,
+    "classification": "SELECTED_STOPPED_UNPROTECTED_DEVELOPMENT_PACKAGE",
+    "sourceCommit": "a55bcab4a460ea6645ffa1f33e4718b41ad2f180",
+    "selectedPackage": "1.0.0-dev.85-eef432419de790076ff936a5adc50d5a0927226f6542772c4d9daf6daebd4c60",
+    "stateRecordsChecked": 243,
+    "allowedPackagePointerChanges": 2,
+    "unchangedProtectedRecords": 241,
+    "exactPairedReads": 9,
+    "unexpectedChanges": 0,
+    "newStateRecords": 0,
+    "previousPackagePreserved": true,
+    "profilePreserved": true,
+    "scopedProcessCount": 0,
+    "controls": [
+      "STOPPED",
+      "STOPPED"
+    ],
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "recurringStarted": false,
+    "messagesSent": 0,
+    "realBindingsChanged": false,
+    "productionModified": false
+  },
+  "normalImageLocalHttp": {
+    "classification": "C45_SELECTED_NORMAL_IMAGE_DISPOSABLE_LOCAL_HTTP_QUALIFICATION",
+    "startedUtc": "2026-10-23T19:20:43.7597651Z",
+    "finishedUtc": "2026-10-23T19:21:48.2366149Z",
+    "elapsedSeconds": 64.4768498,
+    "sourceCommit": "a55bcab4a460ea6645ffa1f33e4718b41ad2f180",
+    "imageSha256": "2d80a8716863874020053d3bec058e9507288373cb4ac993be2517dbdc4ae49e",
+    "maximumSeconds": 180,
+    "listenerMaximumSeconds": 60,
+    "checks": [
+      "two-simultaneous-local-http-own-workspace-reads",
+      "same-rpc-id-counts-new-invocations-and-independent-durable-meters",
+      "wrong-bearer-and-project-refused-before-accounting",
+      "outside-workspace-path-write-and-command-refused",
+      "alpha-stale-generation-refused-while-beta-reads-updated-fixture",
+      "durable-context-records-contain-counts-and-digests-without-visible-content-or-bearers",
+      "natural-listener-exit-and-cold-process-registry-binding-context-retention"
+    ],
+    "checkCount": 7,
+    "parallelArgumentsAndResults": "ALL_FOUR_PARTS_RECORDED",
+    "betaArgumentsAndResultWhileAlphaBlocked": "BOTH_RECORDED",
+    "concurrentMeterLimitation": null,
+    "cleanupProved": true,
+    "independentReview": "PASS_SOURCE_IMAGE_MANIFEST_AND_ALL_243_RECORDS_REHASHED",
+    "protectedRecords": 243,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "ownedProcesses": 0,
+    "realOwners": 0,
+    "controls": [
+      "STOPPED",
+      "STOPPED"
+    ],
+    "actualWebConversations": false,
+    "actualWebToolCalls": 0,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "messagesSent": 0,
+    "realBindingsChanged": false,
+    "recurringStarted": false,
+    "nativeSessionsChanged": false,
+    "nativeTaskExecution": false,
+    "fixtureWriterOnly": true,
+    "fixtureAlphaBindingOnly": true,
+    "completedCanaryReplayed": false,
+    "installedProductionAcceptance": false
+  },
+  "externalDependency": {
+    "atUtc": "2026-10-23T19:22:30Z",
+    "connector": "HTTP_429_UNAVAILABLE",
+    "requests": 1,
+    "immediateRetries": 0,
+    "settingsChanges": 0,
+    "actualWebCoding": "OPEN",
+    "nativeReadOnlySnapshot": {
+      "errors": 0,
+      "inProgressChats": 4,
+      "nativeActions": 0,
+      "activeChats": 4
+    }
+  }
 }

@@ -1,4 +1,4 @@
-## October 23 C45 — automatic MCP context traffic, source qualification
+## October 23 C45 — automatic MCP traffic qualified in selected local HTTP
 
 Project-scoped MCP requests/results now contribute counts and hashes to the
 conversation context ledger. Attribution uses the authenticated fixed project
@@ -13,9 +13,21 @@ and formatting at 19:01:18Z. A separate 2MiB initial-plus-replay stress test too
 5,512ms against a 10s limit. The project suite improved from 125.34s to 33.46s;
 those suite times are distinct from the stress measurement. C43/C44 evidence was
 published as `98b562361186c5e5dd2686a528578546fc30a2df` with exact remote readback.
-C45 publication is pending. Selected normal v60 still uses source
-`7cc95489b85084adca643d8cf32ac11dfa613610`; a matching package and actual Web MCP
-acceptance remain required. No completed live gate is replayed.
+C45 source `a55bcab4a460ea6645ffa1f33e4718b41ad2f180` was published at 19:07:09Z
+with exact remote readback; the 19:08Z CI check found zero runs/checks.
+
+The normal app build passed in 383.71s and the unchanged host reused its exact
+qualification proof. Development v61 was selected STOPPED at 19:19:28.772Z:
+243 records, only two pointer changes, 241 protected exact, nine pairs and zero
+owners. The 19:20:43.760Z–19:21:48.237Z disposable local HTTP test passed seven
+checks in 64.48s. Both parallel project argument/result meters recorded all four
+parts; beta kept recording while alpha was blocked. All 243 real records stayed
+exact, with zero fixture/real owners and no browser, Wake or native actions.
+Actual Web MCP coding, protected production and unattended acceptance remain
+open. One 19:22:30Z connector probe still returned HTTP 429; four native chats
+were active in the same read-only snapshot. C46 task-assignment association and
+resume preparation work is separate and absent from selected v61.
+Completed C43/C44 operations remain preserved without replay.
 [C45 evidence](docs/verification/C45_AUTOMATIC_MCP_CONTEXT_TRAFFIC_2026_10_23.json).
 
 ## October 23 C44 — v60 qualified; C43 recovered chain verified

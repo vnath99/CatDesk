@@ -1,4 +1,4 @@
-## October 23 C45 — qualify automatic MCP context traffic next
+## October 23 C45 — preserve selected local HTTP qualification
 
 C45 source adds observable request/result count/hash accounting to the existing
 fixed project connection. Results completing after rollover retain the original
@@ -11,12 +11,22 @@ The source gate passed 28 distinct tests, six added, strict Clippy and format at
 19:01:18Z. Separate 2MiB initial-plus-replay stress passed in 5,512ms under 10s;
 the project-suite improvement from 125.34s to 33.46s is a separate measurement.
 C43/C44 documentation is published as `98b562361186c5e5dd2686a528578546fc30a2df`.
-C45 publication is pending; selected v60/source
-`7cc95489b85084adca643d8cf32ac11dfa613610` is unchanged. Next: reviewed source
-publication, matching normal package and bounded actual Web MCP qualification.
-Connector HTTP 429 blocks the live B/C exchange, while source development remains
-eligible. Preserve completed C43/C44 and all native owners; no operator action is
-needed for the independent source work.
+C45 source `a55bcab4a460ea6645ffa1f33e4718b41ad2f180` was published at 19:07:09Z
+with exact remote verification; CI was empty at 19:08Z. Normal app/host builds
+passed and v61 selected STOPPED at 19:19:28.772Z, changing only two pointers among
+243 records and verifying all nine pairs. The normal app built in 383.71s;
+unchanged host qualification was reused without a host start.
+
+The 64.48-second local HTTP qualification passed seven checks at 19:21:48.237Z:
+both project argument/result meters RECORDED, beta progressed while alpha was
+blocked, scope/write/command refusals, counts/hash-only storage and cold-process
+retention. All 243 real records were exact with zero new records, fixture/real
+owners or Web/browser/Wake/native actions. Actual Web MCP coding and protected/
+unattended operation remain open; the one 19:22:30Z HTTP 429 probe is specific to
+B/C, with four native chats active in the same read-only snapshot. Next independent
+work is C46 task-assignment association and resume preparation, absent from v61.
+Preserve completed C43/C44 and native owners; no operator action is needed for
+eligible source work.
 [C45 evidence](../verification/C45_AUTOMATIC_MCP_CONTEXT_TRAFFIC_2026_10_23.json).
 
 ## October 23 C44 — v60 qualified; recovered C43 chain complete
