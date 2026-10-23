@@ -1,5 +1,34 @@
 # CatDesk October 2026 MVP acceptance
 
+### October 23 C28 — registered exact-draft recovery, paired commit and continuation
+
+Selected v54 now completes a fresh registered escaped-handoff rollover after an
+actual process interruption at pinned DRAFT_READY. Fresh read-only inspection
+finds EXACT_OWNED:4,379 bytes/digest match;192 records unchanged/zero owned processes.
+Supported resume reuses that saved draft, sends once, verifies the actual issued
+URL, exact USER receipt/completed bootstrap and source snapshot, then performs the
+existing guarded paired2-to3 commit in71.05s. Other eight pairs/history and the old
+completed record remain exact. No unknown draft or legacy uncertain send adopted.
+
+Normal96k/72k test policy restored, both automatic flags OFF. One queued continuation
+SENT/COMPLETE in88.37s, owned host tree exited. Read-only event-bound body verifies
+project marker/intent/generation3 and pending checkpoint. It does not echo task ID;
+it reports three read-only MCP calls returning429 and stops without project work.
+This proves delivery and retained context, not useful Web coding. Fresh CLI proves
+continuation receipt, paired gen3, two predecessors/three context generations and
+all nine paired rows;197 records exact/zero owned processes/both controls STOPPED.
+
+H/I advance for actual selected registered pre-send recovery. Paired-commit crash
+phases, current automatic monitor, actual Web MCP coding B/C, removal/history archive,
+protected installed and unattended acceptance remain OPEN. One direct connector
+health read after cooldown still429; no retry/settings change. No recurring starts,
+production changes, native-session actions or replay. Runtime source unchanged;
+156-test proof reused by exact bytes. Full mandatory wording is already retained
+in both local master/project goals; existing registry/guarded mechanisms reused.
+Next: bounded scoped current context-monitor qualification, then remaining recovery.
+No operator action required for independently eligible work.
+[C28 evidence](verification/C28_REGISTERED_ROLLOVER_RECOVERY_2026_10_23.json).
+
 ### October 23 C27 — matched normal artifacts and stopped development selection
 
 C26 source is now in matched v54. Normal app release PASS in404.29s; default
@@ -252,8 +281,8 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | E. Context pressure and durable handoff | PARTIAL: C21 actual132/137 observed-token ledgers persist independently. C22 low test policies trigger two actual source-generated schema2 handoffs, exact receipts/completed timers and verified markers/Git/decisions, saved PREPARED. Coverage stays UNKNOWN_OR_INCOMPLETE. | Coordinated automatic monitoring qualification; do not infer exact context from lifetime MCP counters or source Git reports. Actual schema2 exchange is proved. |
 | F. Actual replacement URL and continuation | PASS, controlled selected browser scope: original accepted canary preserved. C23 adds two fresh issued replacements, paired1→2 updates, source rechecks, preserved history and event-bound marker/task continuations. | No repeat required. Protected/unattended and actual coding acceptance remain separate. |
 | G. Two simultaneous synthetic rollover requests | PASS, SELECTED CONTROLLED LIVE C23:23.22ms request gap, alpha ACTIVE/beta WAITING, maximum sampled creator1; stable unsent waiting ticket survives process exit and completes next. Both issued URLs/pairs/continuations verified, seven prior pairs/history exact, no duplicate submissions. | Automatic recurring driver, critical crash H and protected/unattended qualification remain separate. Preserve these completed operations. |
-| H. Interruptions, recovery and ambiguous submission | PARTIAL LIVE: C24 pinned DRAFT_READY crash/reopen and unknown-send quarantine. C26 escaped source canary reopens a saved draft, sends once and verifies issued URL/exact USER/completed body. Legacy formats retained. | Matched selected-package registered rollover and additional critical phases. Old uncertain sends are not adopted by the new format. |
-| I. Restart preserves registrations/history/pending rollovers | PARTIAL: C23 WAITING/completed restart, C24 critical-phase reopen, C26 isolated encoded draft restart.181 protected records/nine pairs exact. | Selected normal-runtime new-format pending rollover and paired-commit crash phases. No recurring activation. |
+| H. Interruptions, recovery and ambiguous submission | PARTIAL LIVE: C24 unknown-send quarantine preserved. C28 selected registered DRAFT_READY interruption, exact fresh draft inspection, first-send recovery, verified source/issued URL, paired2-to3 commit and continuation receipt PASS. Legacy formats retained. | Additional critical phases, including paired-commit crashes. Old uncertain sends are not adopted by the new format. |
+| I. Restart preserves registrations/history/pending rollovers | PARTIAL: C23 WAITING/completed restart; C28 selected pending exact-draft recovery and fresh-process completed-state readback.197 records exact/nine pairs, two predecessors/three context generations. | Paired-commit crash phases remain open. No recurring activation. |
 | J. No orphan browser/Wake processes | PASS for recorded bounded tests, including current stopped selection. Root/Job exits and zero owned processes are checked. | Normal unattended operation is NOT ACTIVATED or accepted. Each future bounded test needs its own cleanup proof. |
 
 **Current implementation versus gaps:** the existing registry, immutable project

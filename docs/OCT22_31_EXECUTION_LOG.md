@@ -1,5 +1,36 @@
 # October 22–31 execution log
 
+## 2026-10-23 — C28 actual registered recovery and connector-limited continuation
+
+Selected v54 now completes a fresh registered escaped-handoff rollover after an
+actual process interruption at pinned DRAFT_READY. Fresh read-only inspection
+finds EXACT_OWNED:4,379 bytes/digest match;192 records unchanged/zero owned processes.
+Supported resume reuses that saved draft, sends once, verifies the actual issued
+URL, exact USER receipt/completed bootstrap and source snapshot, then performs the
+existing guarded paired2-to3 commit in71.05s. Other eight pairs/history and the old
+completed record remain exact. No unknown draft or legacy uncertain send adopted.
+
+Normal96k/72k test policy restored, both automatic flags OFF. One queued continuation
+SENT/COMPLETE in88.37s, owned host tree exited. Read-only event-bound body verifies
+project marker/intent/generation3 and pending checkpoint. It does not echo task ID;
+it reports three read-only MCP calls returning429 and stops without project work.
+This proves delivery and retained context, not useful Web coding. Fresh CLI proves
+continuation receipt, paired gen3, two predecessors/three context generations and
+all nine paired rows;197 records exact/zero owned processes/both controls STOPPED.
+
+H/I advance for actual selected registered pre-send recovery. Paired-commit crash
+phases, current automatic monitor, actual Web MCP coding B/C, removal/history archive,
+protected installed and unattended acceptance remain OPEN. One direct connector
+health read after cooldown still429; no retry/settings change. No recurring starts,
+production changes, native-session actions or replay. Runtime source unchanged;
+156-test proof reused by exact bytes. Full mandatory wording is already retained
+in both local master/project goals; existing registry/guarded mechanisms reused.
+Next: bounded scoped current context-monitor qualification, then remaining recovery.
+No operator action required for independently eligible work.
+
+UTC interruption12:38:57–12:40:02; exact read12:46:34–12:46:47; resume12:47:02–12:48:14; policy restore12:48:21; continuation12:48:35–12:50:03; body read12:50:19–12:50:54; fresh process12:51:44–12:51:47. Qualified runtime source `1fe093686f950786d54fbc71451770a7be57677e`; prior published checkpoint `6945fbee84a618d86617312ab3f8ae1c84c598a2`. CI remains UNVERIFIED.
+[C28 evidence](verification/C28_REGISTERED_ROLLOVER_RECOVERY_2026_10_23.json).
+
 ## 2026-10-23 — C27 normal release and guarded stopped selection
 
 C26 source is now in matched v54. Normal app release PASS in404.29s; default

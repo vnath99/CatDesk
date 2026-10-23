@@ -1,5 +1,19 @@
 # CatDesk — Important Command Reference
 
+## October 23 — C28 completed recovery: inspect saved evidence, do not replay
+
+Existing `operator web rollover inspect-draft` independently identified the exact
+interrupted draft. Supported `operator web rollover execute` resumed it for its
+first send and completed the guarded pair; it is now COMPLETE and must not be
+re-executed as a new test. `operator web review read --project-id PROJECT --event-id
+EVENT` verified the one completed continuation body. Fresh `operator web rollover
+status --project-id PROJECT` and the web status view recover gen3/history/all9 pairs
+without browser work. The body reports429 and leaves coding pending; do not resend.
+Use new frozen test identity only when new external work is necessary. Do not reuse
+old plans or silently retarget completed canaries. Both controls are STOPPED; no
+recurring automation, native-session action or protected runtime activation.
+[C28 evidence](../verification/C28_REGISTERED_ROLLOVER_RECOVERY_2026_10_23.json).
+
 ## October 23 — C27 qualified stopped v54 selection
 
 The existing `operator web-dev-runtime update-package --package PACKAGE` has
