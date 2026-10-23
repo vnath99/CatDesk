@@ -1,6 +1,11 @@
 # October 22–31 execution log
 
 ## 2026-10-22 evening — coordinator reader normal executable qualified
+- **Exact qualification publication at 02:01:39 UTC October 23:** six reviewed
+  documentation paths pushed as `7e9611ffa23f8c2e2fa0bd69bc69636a3a40f4d8` on
+  `codex/web-rollover-oct17`; exact remote SHA matched. Source remains the tested
+  implementation. No private inputs/runtime data published. Zero reported CI
+  runs/checks; CI UNVERIFIED. Selected and protected production unchanged.
 
 Normal app build from clean `bb83aa95c2edfa438df3e07f3f9d0f18f35d172f`
 passed at 01:57:19 UTC October 23 without development dependencies. App SHA256:
