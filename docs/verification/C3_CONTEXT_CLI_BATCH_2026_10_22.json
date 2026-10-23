@@ -1,5 +1,5 @@
 {
-  "recordedUtc": "2026-10-23T00:19:06.6182630Z",
+  "recordedUtc": "2026-10-23T00:19:06.618263Z",
   "task": "C3-CONTEXT-CLI-INDEPENDENCE-AND-ATOMIC-IMPORT",
   "branch": "codex/web-rollover-oct17",
   "baseHead": "388b84b3ad20735f2b45da38ee408e33bf87a504",
@@ -209,9 +209,17 @@
   ],
   "nextTask": "Qualify a normal release of this tested source, then the supported stopped development package; preserve the prepared live review hold",
   "publication": {
-    "status": "LOCAL_ONLY_NOT_PUSHED",
-    "remote": "https://github.com/vnath99/CatDesk",
+    "observedUtc": "2026-10-23T00:19:37.3539423Z",
+    "status": "PUSHED_EXACT_REMOTE_MATCH",
+    "sourceCommit": "c46680002ab9aa81d78dff694652340ee832e051",
+    "remoteSha": "c46680002ab9aa81d78dff694652340ee832e051",
     "branch": "codex/web-rollover-oct17",
-    "ci": "UNVERIFIED"
+    "remote": "https://github.com/vnath99/CatDesk",
+    "sourceFileHashesMatch": true,
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false
   }
 }

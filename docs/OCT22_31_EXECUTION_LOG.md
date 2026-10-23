@@ -2,6 +2,14 @@
 
 ## 2026-10-22 evening — C3 context CLI independence and atomic batch import
 
+- **Publication verified at 00:19:37 UTC October 23:** source/test/sanitized
+  evidence commit `c46680002ab9aa81d78dff694652340ee832e051` pushed normally
+  to existing public `codex/web-rollover-oct17`; remote full SHA matches.
+  Eight allowlisted paths scanned/reviewed, no private payload/URL/auth/profile/
+  machine/runtime artifact; visibility and protected history unchanged.
+  Zero workflow runs/checks are reported for this source SHA, so CI is UNVERIFIED.
+  The later publication receipt does not change the tested runtime sources.
+
 - **Source/base:** `codex/web-rollover-oct17`, clean starting HEAD
   `388b84b3ad20735f2b45da38ee408e33bf87a504`. Changes:
   `src/operator_web_cli.rs`, `src/web_conversation_context.rs`,
