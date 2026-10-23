@@ -1,5 +1,16 @@
 # CatDesk — Important Command Reference
 
+## October 22 source change — granted-package reader independence
+
+Reuse `catdesk_codex_queue_review_package_read` in supervisor-only mode for
+receipt-bound disclosed source/patch pages. Explicit local disclosure is still
+required. Source now admits one read per canonical control/project and at most
+two heavy reads overall; a cancelled request does not free its worker's slot
+early. No caller path/target override, generic cross-project file API or new
+disclosure authority is added. This change is source-tested; current selected
+C6 package is unchanged. [C7 evidence](../verification/C7_REVIEW_READ_INDEPENDENCE_2026_10_22.json).
+
+
 ## October 22 source addition — exact-event Web review read
 
 `catdesk_web_review_read` requires `projectId`, `eventId`,

@@ -1,3 +1,14 @@
+## 2026-10-22 evening — project review read independence SOURCE PASS
+
+The existing granted review-package reader now admits independently by canonical
+control/project, with one reader per project and two heavy reads overall.
+Reproduced global sibling rejection, fixed without adding a file API or changing
+disclosure/receipt/native safeguards. Ten tests, strict Clippy and formatting
+pass. Awaiter cancellation retains the worker's project slot until exit.
+Normal executable/selected granted-project concurrency remain unqualified;
+prior C6 selected live result is preserved. See the
+[C7 receipt](docs/verification/C7_REVIEW_READ_INDEPENDENCE_2026_10_22.json).
+
 ## 2026-10-22 evening — selected release coordinator reader LIVE PASS
 
 The coordinator review reader is now qualified in a matched selected development

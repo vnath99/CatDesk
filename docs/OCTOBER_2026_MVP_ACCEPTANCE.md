@@ -2,6 +2,32 @@
 
 ## October 22 acceptance reconciliation
 
+### October 22 evening — independent granted review reads fixed
+
+The existing receipt-bound granted-package reader already supplies project
+source/patch inspection. No new file API was needed. A regression showed its
+process-wide heavy-reader flag made one waiting project reject every sibling.
+Admission now uses canonical control root plus project ID: one reader per
+project, at most two heavy reads overall. The worker owns its lease until exit,
+even if its awaiting MCP request is cancelled. Disclosure grants, receipt/package
+binding, revocation, byte/page limits and native ownership are unchanged.
+
+The original regression failed with exit 101 after releasing/joining its blocked
+worker; after the fix, ten focused tests passed at 02:38:52 UTC October 23
+(October 22 New York). These cover sibling progress, duplicate/alias rejection,
+total admission limit, cancelled-request worker retention and slot resumption,
+existing grant/receipt/revocation protections and bounded multibyte pages.
+Strict all-target/all-feature Clippy and formatting passed under 600s containment.
+An initial test-only cancellation assertion compile error was corrected without
+adding Debug to the RPC response type; all failed receipts remain private.
+
+This is SOURCE / TESTED_LOCAL, not actual granted-project concurrency or installed
+acceptance. No browser, WakeHost, native session, grant, message, binding,
+recurring process or selected package was changed. Prior C6 selected/live proof
+remains intact. Next qualify the normal executable and reuse the existing
+review/disclosure path; do not replace it or manufacture a real disclosure grant.
+See the [C7 receipt](verification/C7_REVIEW_READ_INDEPENDENCE_2026_10_22.json).
+
 ### October 22 evening — selected release review reader LIVE PASS
 
 Normal release from clean `a33b631f2205cbec5aacf32e9203d51432d3b1cf`

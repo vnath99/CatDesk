@@ -7,6 +7,15 @@ surface.
 
 ## Current checkpoint — 2026-10-22
 
+The existing granted review-package reader now admits independently by canonical
+control/project, with one reader per project and two heavy reads overall.
+Reproduced global sibling rejection, fixed without adding a file API or changing
+disclosure/receipt/native safeguards. Ten tests, strict Clippy and formatting
+pass. Awaiter cancellation retains the worker's project slot until exit.
+Normal executable/selected granted-project concurrency remain unqualified;
+prior C6 selected live result is preserved. See the
+[C7 receipt](../verification/C7_REVIEW_READ_INDEPENDENCE_2026_10_22.json).
+
 The coordinator review reader is now qualified in a matched selected development
 release, with one positive live-browser read through local MCP in 34.77s.
 Exact event/target/body/digest verified; no new message, event or WakeHost.
