@@ -1,3 +1,16 @@
+## 2026-10-22 evening — project timer isolation SOURCE PASS
+
+Reproduced a sibling timer error blocking automatic task-anchor discovery.
+Project-local timer/status reads now isolate attributable sibling validation
+errors in readiness, completed-task lookup and rollover source quiescence.
+The affected project and global diagnostics still report the error; unreadable
+or unattributable state still fails closed. No timer repair or new scheduler.
+28 tests, strict app/Wake Clippy and format pass. Not selected or installed.
+Read-only deployment checks confirm canonical binary/sidecar mismatch, missing
+trusted rollback authority and incomplete supervisor startup policy/task proof.
+No activation, browser, WakeHost, binding or native-session change. See
+[C8 evidence](docs/verification/C8_PROJECT_TIMER_ISOLATION_2026_10_22.json).
+
 ## 2026-10-22 evening — normal build and installed identity readback PASS
 
 The project-scoped granted-reader fix also passes a normal app build. No new

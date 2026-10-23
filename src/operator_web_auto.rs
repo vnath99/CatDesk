@@ -71,7 +71,7 @@ fn completed_task_anchor(
     source: &Target,
 ) -> Result<Option<String>, String> {
     let mut latest = None;
-    let timers = wake.timers()?;
+    let timers = wake.timers_for_project(project)?;
     if timers.len() > 10_000 {
         return Err("WEB_AUTO_TIMER_LIMIT".into());
     }
@@ -201,7 +201,7 @@ pub(super) fn running_wake_state(
         "RUNNING" => {}
         _ => return Err("WEB_AUTO_WAKE_CONTROL_INVALID".into()),
     }
-    let status = runtime::status(wake)?;
+    let status = runtime::status_for_project(wake, project)?;
     if status.host != "RUNNING" || status.pid == 0 {
         return Ok("WAKE_HOST_NOT_RUNNING");
     }
@@ -1395,6 +1395,67 @@ mod tests {
         };
         meter.configure_policy("alpha", policy).unwrap();
         assert!(background_observation_enabled(&root, &key).unwrap());
+    }
+
+    #[test]
+    fn completed_task_anchor_isolates_invalid_sibling_timer() {
+        let root =
+            std::env::temp_dir().join(format!("web-auto-timer-isolation-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        let wake = Store::open_scoped_for_test(&root.join("wake"), &root).unwrap();
+        wake.initialize().unwrap();
+        let alpha = wake
+            .set_target("alpha", 0, "https://chatgpt.com/c/alpha")
+            .unwrap();
+        let beta = wake
+            .set_target("beta", 0, "https://chatgpt.com/c/beta")
+            .unwrap();
+        let lease = wake.host_lock().unwrap();
+        for (id, project, target) in [
+            ("alpha-task", "alpha", &alpha),
+            ("beta-task", "beta", &beta),
+        ] {
+            let event = wake
+                .produce(id, project, "review_ready", "review work")
+                .unwrap();
+            wake.claim(&event, &lease).unwrap();
+            wake.transition(id, lease.owner(), Phase::Submitting, None, None)
+                .unwrap();
+            let receipt = Receipt {
+                schema_version: 1,
+                event_id: id.into(),
+                target_generation: target.generation,
+                target_digest: target.digest.clone(),
+                message_digest: digest(&event.message),
+                sent_utc: catdesk_wake::store::now(),
+                evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+            };
+            wake.record_exact_receipt_timer(id, &receipt).unwrap();
+            wake.transition(id, lease.owner(), Phase::Sent, Some(receipt), None)
+                .unwrap();
+            wake.complete_timer(id).unwrap();
+        }
+        let beta_path = wake.root().join("turns/beta-task.json");
+        let mut timer: catdesk_wake::store::TurnTimer = read(&beta_path).unwrap();
+        timer.completed_utc = Some(timer.started_utc - 1);
+        catdesk_wake::store::atomic(&beta_path, &timer).unwrap();
+        assert!(
+            wake.timers().is_err(),
+            "global diagnostics must still report damaged state"
+        );
+        assert!(runtime::status(&wake).is_err());
+        let scoped = runtime::status_for_project(&wake, "alpha").unwrap();
+        assert_eq!(scoped.turn_timers.len(), 1);
+        assert_eq!(scoped.turn_timers[0].event_id, "alpha-task");
+        assert!(runtime::status_for_project(&wake, "beta").is_err());
+        assert_eq!(
+            completed_task_anchor(&wake, "alpha", &alpha).unwrap(),
+            Some("alpha-task".into())
+        );
+        assert!(
+            completed_task_anchor(&wake, "beta", &beta).is_err(),
+            "the affected project must retain its error"
+        );
     }
 
     #[test]

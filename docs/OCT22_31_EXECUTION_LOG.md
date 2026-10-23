@@ -1,5 +1,42 @@
 # October 22–31 execution log
 
+## 2026-10-22 evening — project timer isolation and deployment prerequisites
+
+At 03:07:32–03:07:36 UTC October 23, the qualified normal C7 image ran only
+`operator supervisor status` and `operator release-pair result` against existing
+authority. Both exited 0 under separate 15s caps. Existing recovery readers
+refused the canonical binary/SHA pair and found no trusted rollback snapshot.
+Release-pair result is unavailable; supervisor reports root unavailable,
+startup policy unproven, startup task lookup failed and port probe unavailable.
+These are deployment prerequisites, not a reason to stop source development.
+All 99 checked records remained exact, no new records, zero owned processes,
+both controls STOPPED. No prepare/confirm/activate/sign/rotate or tunnel action.
+Prior signed-image trust proof remains valid but does not qualify this build.
+
+Source inspection found a concrete multi-project fault: automatic handoff
+discovery and readiness validated every project's timers. A regression failed
+with `TURN_TIMER_INVALID` from an attributable sibling, exit 101. Project-scoped
+timer/status reads now isolate that error for automatic readiness, completed-task
+anchor selection and source quiescence. Own-project validation, global diagnostics,
+host ownership/heartbeat, exact targets and delivery receipts stay strict.
+Unreadable/unparseable/unattributable state remains a refusal; no repair/clear.
+
+Final gates completed 03:16:19 UTC: 16 automatic scheduler tests, one scoped timer
+test, nine runtime status tests, one quiescence test and one review timer
+exemption test: 28 passes. Strict all-target/all-feature Clippy and format pass
+for both app and Wake. Each test Job exited 0, no timeout/termination failure.
+Initial wrong test filter, assertion and import compile diagnostics are retained;
+zero selected tests are explicitly not qualification. Final source hashes and
+exact commands are in [C8 evidence](verification/C8_PROJECT_TIMER_ISOLATION_2026_10_22.json).
+Base `3f2df3c09e63fb9c251fb47caceb5f89e69cc71a`, branch
+`codex/web-rollover-oct17`. Source changes: `src/operator_web_auto.rs`,
+`wake/src/store.rs`, `wake/src/runtime.rs`. SOURCE / TESTED_LOCAL, not installed
+or live fault injection. Existing selected C6 release and completed Web proofs
+preserved; no browser, WakeHost, message, native writer, binding, package,
+recurring or protected production change. Next build normal app/WakeHost;
+protected promotion and external coordinator transport remain separate gates.
+Publication receipt follows only after exact GitHub SHA readback.
+
 ## 2026-10-22 evening — reader independence normal build and installed readback
 - **Exact qualification publication at 02:50:01 UTC October 23:** six reviewed
   sanitized documentation paths pushed normally as

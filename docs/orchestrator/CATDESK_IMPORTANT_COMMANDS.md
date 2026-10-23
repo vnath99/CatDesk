@@ -1,5 +1,22 @@
 # CatDesk — Important Command Reference
 
+## October 22 bounded deployment diagnosis
+
+The existing read-only commands are:
+
+```text
+<qualified-catdesk.exe> operator supervisor status
+<qualified-catdesk.exe> operator release-pair result
+```
+
+Use the original authoritative workspace for release-pair result, not a fresh
+worktree. Result reads a stored outcome; it does not establish that actual binary
+and sidecar match. Existing recovery readers separately verify that pair and
+trusted rollback authority. Current readback reports mismatch/missing authority
+and incomplete supervisor startup policy/task proof. Do not substitute prepare,
+confirm, activate or pending-image rotation for status. No service is started.
+See [C8 receipt](../verification/C8_PROJECT_TIMER_ISOLATION_2026_10_22.json).
+
 ## October 22 source change — granted-package reader independence
 
 Reuse `catdesk_codex_queue_review_package_read` in supervisor-only mode for

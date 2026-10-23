@@ -528,6 +528,19 @@ fn desired(store: &Store) -> Result<String> {
 }
 
 pub fn status(store: &Store) -> Result<Status> {
+    status_scoped(store, None)
+}
+
+/// Project-local readiness keeps the same live host/heartbeat checks while
+/// scoping timer observability. The ordinary status surface remains global.
+pub fn status_for_project(store: &Store, project: &str) -> Result<Status> {
+    if !crate::protocol::valid_id(project) {
+        return Err("TURN_PROJECT_INVALID".into());
+    }
+    status_scoped(store, Some(project))
+}
+
+fn status_scoped(store: &Store, project: Option<&str>) -> Result<Status> {
     let config = store.config()?;
     let mut status = match read::<Status>(&store.root().join("status.json")) {
         Ok(status) => status,
@@ -557,7 +570,7 @@ pub fn status(store: &Store) -> Result<Status> {
     };
     status.targets = config.targets;
     let observed_utc = now();
-    refresh_live_observability(store, &mut status, observed_utc)?;
+    refresh_live_observability_scoped(store, &mut status, observed_utc, project)?;
     // Browser/login/submission are live-attempt fields, not historical health.
     // Once no current-generation event remains actionable, carrying an old
     // ATTENTION/CLAIMED value forward makes a healthy idle host look broken.
@@ -610,8 +623,20 @@ pub fn turn_timer_status(timer: TurnTimer, observed_utc: u64) -> TurnStatus {
 }
 
 fn refresh_live_observability(store: &Store, status: &mut Status, observed_utc: u64) -> Result<()> {
-    status.turn_timers = store
-        .timers()?
+    refresh_live_observability_scoped(store, status, observed_utc, None)
+}
+
+fn refresh_live_observability_scoped(
+    store: &Store,
+    status: &mut Status,
+    observed_utc: u64,
+    project: Option<&str>,
+) -> Result<()> {
+    let timers = match project {
+        Some(project) => store.timers_for_project(project)?,
+        None => store.timers()?,
+    };
+    status.turn_timers = timers
         .into_iter()
         .filter(|timer| {
             status.targets.get(&timer.project_id).is_some_and(|target| {
@@ -637,6 +662,9 @@ fn refresh_live_observability(store: &Store, status: &mut Status, observed_utc: 
     status.queue_depth = 0;
     status.stale_count = 0;
     for event in store.events()? {
+        if project.is_some_and(|project| event.project_id != project) {
+            continue;
+        }
         let delivery = store.delivery(&event.event_id)?;
         if delivery
             .as_ref()
@@ -1940,7 +1968,7 @@ fn ensure_source_snapshot_available(
             return Err("BOOTSTRAP_SOURCE_QUEUE_PENDING".into());
         }
     }
-    if store.timers()?.iter().any(|timer| {
+    if store.timers_for_project(project_id)?.iter().any(|timer| {
         timer.project_id == project_id
             && timer.target_generation == source.generation
             && timer.target_digest == source.digest

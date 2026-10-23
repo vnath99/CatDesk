@@ -1,0 +1,282 @@
+{
+  "recordedUtc": "2026-10-23T03:18:17.4060445Z",
+  "localDate": "2026-10-22",
+  "task": "C8-PROJECT-TIMER-ISOLATION",
+  "classification": "SOURCE_TESTED_LOCAL",
+  "branch": "codex/web-rollover-oct17",
+  "baseHead": "3f2df3c09e63fb9c251fb47caceb5f89e69cc71a",
+  "sourceFiles": [
+    {
+      "path": "src/operator_web_auto.rs",
+      "sha256": "b1c627504bc18742566f4b2409e2fd55774af98cc665c660745f931cb1ab22e3"
+    },
+    {
+      "path": "wake/src/store.rs",
+      "sha256": "2ede1d287764186fae7c91a8ec6ef950ce4e7cd59ebdef159074f6cf4d2c5c63"
+    },
+    {
+      "path": "wake/src/runtime.rs",
+      "sha256": "544460dba82cc5b6b11bb42e65b95df00a0710fd77a3c8a186a3f843c9dbfc2f"
+    }
+  ],
+  "finding": "Automatic task-anchor and runtime readiness scans validated all project timers, allowing an attributable sibling timer error to deny progress",
+  "reproduction": {
+    "test": "completed_task_anchor_isolates_invalid_sibling_timer",
+    "beforeFixExit": 101,
+    "beforeFix": "TURN_TIMER_INVALID_FROM_SIBLING",
+    "logSha256": "b531e3a40655c347ddec01ed176b32d92bda132d613fc71e7f8d9a48f14b0f5c"
+  },
+  "implementation": {
+    "scopedTimerRead": "timers_for_project",
+    "scopedRuntimeStatus": "status_for_project",
+    "usedBy": [
+      "automatic Wake readiness",
+      "completed task anchor selection",
+      "rollover source quiescence"
+    ],
+    "globalDiagnosticValidation": "UNCHANGED_STRICT",
+    "affectedProjectValidation": "UNCHANGED_STRICT",
+    "unreadableOrUnattributableState": "FAIL_CLOSED",
+    "stateSchemaChanged": false,
+    "newToolOrScheduler": false,
+    "hostOwnershipAndHeartbeatChecks": "PRESERVED",
+    "deliveryReceiptAndTargetChecks": "PRESERVED"
+  },
+  "tests": {
+    "focusedTestsPassed": 28,
+    "automaticScheduler": 16,
+    "scopedTimerRead": 1,
+    "runtimeStatus": 9,
+    "sourceQuiescence": 1,
+    "reviewReadTimerExemption": 1,
+    "checks": [
+      {
+        "label": "project-context-scheduler-tests",
+        "startedUtc": "2026-10-23T03:14:51.1690763Z",
+        "finishedUtc": "2026-10-23T03:15:19.6833497Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "operator_facade::web::auto::tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "8c1d7a6047c9f781f17bb1d2a1516d3273f4a08e71cec65ea069ac97ef200c3f"
+      },
+      {
+        "label": "wake-project-timer-tests",
+        "startedUtc": "2026-10-23T03:15:19.7161958Z",
+        "finishedUtc": "2026-10-23T03:15:26.7370329Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "project_timer",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "ab4a3f0f0e5bd17d3f6dc6f5602944276ebb9d1d5c1d81b023de0c8af33aed98"
+      },
+      {
+        "label": "strict-root-clippy",
+        "startedUtc": "2026-10-23T03:15:26.7481815Z",
+        "finishedUtc": "2026-10-23T03:15:44.0832725Z",
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "logSha256": "844f58e704d50d9f3bb944d42f275ee2b5b262cd1726533b69872dd6434b4a01"
+      },
+      {
+        "label": "strict-wake-clippy",
+        "startedUtc": "2026-10-23T03:15:44.0925989Z",
+        "finishedUtc": "2026-10-23T03:15:48.9550215Z",
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "logSha256": "5a7489fda18e4207a5aca2d3e8f78a4173e24abde9612b5bace9554a44e12863"
+      },
+      {
+        "label": "root-format",
+        "startedUtc": "2026-10-23T03:15:48.9746554Z",
+        "finishedUtc": "2026-10-23T03:15:51.738943Z",
+        "arguments": [
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "wake-format",
+        "startedUtc": "2026-10-23T03:15:51.7415343Z",
+        "finishedUtc": "2026-10-23T03:15:52.505619Z",
+        "arguments": [
+          "fmt",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "label": "wake-status-regressions",
+        "startedUtc": "2026-10-23T03:16:16.1943631Z",
+        "finishedUtc": "2026-10-23T03:16:18.162997Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "status",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "926c415da2909d1f689ba4eba3483ad8d931515d7a8c9f841a3431bb3c73736b"
+      },
+      {
+        "label": "source-quiescence-regression",
+        "startedUtc": "2026-10-23T03:16:18.194626Z",
+        "finishedUtc": "2026-10-23T03:16:18.5732785Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "source_guard_refuses_pending_timer_and_queued_event",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "d05f0b625f3f5316dbf2cd5d273d7a2e6b20aa969730a14b4aac938e6b67fdc0"
+      },
+      {
+        "label": "review-read-timer-exemption",
+        "startedUtc": "2026-10-23T03:16:18.5843091Z",
+        "finishedUtc": "2026-10-23T03:16:19.0163346Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "delivered_review_read_exempts_only_its_own_pending_timer",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "d3690c2ceb0369f54bd6879a7b6f69b231084b536f78af4642e509bde8feb898"
+      }
+    ],
+    "strictClippy": "PASS_ROOT_AND_WAKE_ALL_TARGETS_ALL_FEATURES",
+    "format": "PASS_ROOT_AND_WAKE",
+    "containment": "TERMINAL_EXIT0_NO_TIMEOUT_NO_TERMINATION_FAILURE",
+    "maximumSecondsPerJob": 600,
+    "initialHarnessIssues": [
+      "Wrong scheduler filter selected zero tests; not qualified; corrected with positive-test-count gate",
+      "Timer assertion compared fields instead of requiring PartialEq",
+      "Qualified existing valid_id path after compile diagnostic"
+    ],
+    "failedReceiptsRetained": true
+  },
+  "deploymentDiagnostic": {
+    "startedUtc": "2026-10-23T03:07:32.4166877Z",
+    "finishedUtc": "2026-10-23T03:07:36.8708505Z",
+    "classification": "READ_ONLY_EXISTING_DEPLOYMENT",
+    "readerSourceCommit": "ccdb6aee5c76de2b0f3293874c3f9e05f0024814",
+    "readerSha256": "5de359c757f15fcbef9de5878d66111d28ce0d9fc559098915bb2578ee5c7533",
+    "maximumSecondsPerCommand": 15,
+    "commands": [
+      {
+        "label": "supervisor-status",
+        "exitCode": 0,
+        "timedOut": false,
+        "retainedRootExited": true
+      },
+      {
+        "label": "release-pair-result",
+        "exitCode": 0,
+        "timedOut": false,
+        "retainedRootExited": true
+      }
+    ],
+    "supervisor": {
+      "action": "supervisor_status",
+      "activationBlocked": "SUPERVISOR_STARTUP_POLICY_UNPROVEN",
+      "frontDoor3201": "SUPERVISOR_3201_PROBE_UNAVAILABLE",
+      "readiness": "SUPERVISOR_ROOT_UNAVAILABLE",
+      "reviewedSupervisorImage": "SUPERVISOR_LIFECYCLE_READY",
+      "startup": "SUPERVISOR_LIFECYCLE_READY",
+      "startupDefinition": "SUPERVISOR_STARTUP_TASK_LOOKUP_FAILED",
+      "startupPolicy": "SUPERVISOR_STARTUP_POLICY_UNPROVEN"
+    },
+    "releasePairResult": "RESULT_UNAVAILABLE",
+    "canonicalPair": {
+      "state": "REFUSED",
+      "reason": "canonical release pair does not match"
+    },
+    "lastKnownGood": {
+      "state": "LKG_AUTHORITY_MISSING",
+      "reason": "no trusted release recovery snapshot is available"
+    },
+    "protectedRecordsChecked": 99,
+    "changedRecordCount": 0,
+    "newRecordCount": 0,
+    "ownedProcessCount": 0
+  },
+  "external": {
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "messagesSent": 0,
+    "bindingsChanged": false,
+    "nativeSessionsChanged": false,
+    "recurringStarted": false,
+    "selectedPackageChanged": false,
+    "protectedProductionChanged": false,
+    "connectorCalled": false,
+    "completedCanaryReplayed": false
+  },
+  "acceptance": {
+    "source": "PASS",
+    "normalExecutable": "NOT_YET_BUILT_FOR_C8",
+    "selectedPackage": "PRIOR_C6_V48_UNCHANGED",
+    "liveTimerFaultIsolation": "NOT_ATTEMPTED",
+    "existingSelectedWebProof": "PRESERVED_NOT_REPLAYED",
+    "externalConnector": "UNVERIFIED_PRIOR_BACKEND_FAILURE",
+    "protectedProduction": "OPEN_CANONICAL_PAIR_LKG_STARTUP_GATES",
+    "fullMvp": "PARTIAL"
+  },
+  "nextTask": "Build normal app and WakeHost from the reviewed C8 checkpoint. Do not select/install, rotate pending signed images, activate services, clear claims or replay accepted Web events. Protected deployment needs the existing reviewed owner procedure for the intended exact build and startup authority."
+}

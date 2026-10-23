@@ -2,6 +2,26 @@
 
 ## October 22 acceptance reconciliation
 
+### October 22 evening — timer fault isolation SOURCE / TESTED_LOCAL
+
+Automatic readiness, completed-task lookup and rollover source quiescence now
+use project-scoped timer reads. A reproduced attributable sibling timer error
+no longer denies another project's lookup. The affected project and global
+diagnostics still refuse; unreadable or unattributable state is not bypassed.
+28 tests, strict app/Wake Clippy and format pass. No installed or real-project
+timer fault injection, selected package update or Web proof replay is claimed.
+
+Read-only actual deployment checks returned canonical binary/sidecar mismatch,
+missing trusted rollback authority, no release-pair result and incomplete
+supervisor startup policy/task proof. Both commands exited within 15s; all 99
+checked records exact, no new records or owned processes; controls STOPPED.
+Existing installed signed-image trust is separate from current-MVP promotion.
+No operator action is needed to build the reviewed normal executables next.
+Protected installation must use existing exact-build review/owner procedures;
+do not activate the pending historical image to satisfy new source acceptance.
+External connector availability remains an independent live dependency.
+See [C8 evidence](verification/C8_PROJECT_TIMER_ISOLATION_2026_10_22.json).
+
 ### October 22 evening — reader independence normal build and installed readback
 
 Normal app build from clean `ccdb6aee5c76de2b0f3293874c3f9e05f0024814`

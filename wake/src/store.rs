@@ -983,6 +983,18 @@ impl Store {
         self.read_timer(id)
     }
     pub fn timers(&self) -> Result<Vec<TurnTimer>> {
+        self.read_timers(None)
+    }
+    /// Scope automatic task discovery to one registered project. An attributable
+    /// sibling's invalid timer must not deny this project's progress. Unreadable
+    /// or unparseable state still fails closed; global diagnostics stay strict.
+    pub fn timers_for_project(&self, project: &str) -> Result<Vec<TurnTimer>> {
+        if !valid_id(project) {
+            return Err("TURN_PROJECT_INVALID".into());
+        }
+        self.read_timers(Some(project))
+    }
+    fn read_timers(&self, project: Option<&str>) -> Result<Vec<TurnTimer>> {
         let _lock = self.read_lock()?;
         let mut timers = Vec::new();
         for entry in fs::read_dir(self.root.join("turns")).map_err(|_| "TURN_TIMER_UNAVAILABLE")? {
@@ -991,6 +1003,11 @@ impl Store {
                 continue;
             }
             let timer: TurnTimer = read(&path)?;
+            if valid_id(&timer.project_id)
+                && project.is_some_and(|project| timer.project_id != project)
+            {
+                continue;
+            }
             timer.validate()?;
             if path.file_stem().and_then(|value| value.to_str()) != Some(&timer.event_id) {
                 return Err("TURN_EVENT_MISMATCH".into());
@@ -2637,6 +2654,56 @@ mod turn_timer_tests {
         let timer = store.timer(&event.event_id).unwrap().unwrap();
         assert_eq!(timer.response_state, ResponseState::Complete);
         assert!(timer.completed_utc.is_some());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn project_timer_read_isolates_sibling_validation_and_preserves_strict_errors() {
+        let (root, store, event, _lease, receipt) = fixture();
+        store
+            .record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        let own = store.timer(&event.event_id).unwrap().unwrap();
+        let mut sibling = own.clone();
+        sibling.event_id = "sibling-task".into();
+        sibling.project_id = "beta".into();
+        sibling.completed_utc = Some(sibling.started_utc - 1);
+        sibling.response_state = ResponseState::Complete;
+        let sibling_path = store.timer_path(&sibling.event_id);
+        atomic(&sibling_path, &sibling).unwrap();
+        let scoped = store.timers_for_project("catdesk").unwrap();
+        assert_eq!(scoped.len(), 1);
+        assert_eq!(scoped[0].event_id, own.event_id);
+        assert_eq!(scoped[0].started_utc, own.started_utc);
+        assert_eq!(
+            store.timers_for_project("beta").unwrap_err(),
+            "TURN_TIMER_INVALID"
+        );
+        assert_eq!(store.timers().unwrap_err(), "TURN_TIMER_INVALID");
+        assert_eq!(
+            store.timers_for_project("../beta").unwrap_err(),
+            "TURN_PROJECT_INVALID"
+        );
+        sibling.project_id = "../beta".into();
+        atomic(&sibling_path, &sibling).unwrap();
+        assert_eq!(
+            store.timers_for_project("catdesk").unwrap_err(),
+            "TURN_TIMER_INVALID"
+        );
+        fs::write(&sibling_path, b"not json").unwrap();
+        assert_eq!(
+            store.timers_for_project("catdesk").unwrap_err(),
+            "STATE_MALFORMED"
+        );
+        sibling.project_id = "catdesk".into();
+        sibling.completed_utc = None;
+        sibling.response_state = ResponseState::Observing;
+        sibling.event_id = "different-name".into();
+        atomic(&sibling_path, &sibling).unwrap();
+        assert_eq!(
+            store.timers_for_project("catdesk").unwrap_err(),
+            "TURN_EVENT_MISMATCH"
+        );
         let _ = fs::remove_dir_all(root);
     }
 

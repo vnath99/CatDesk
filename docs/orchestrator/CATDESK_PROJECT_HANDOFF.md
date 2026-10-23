@@ -7,6 +7,17 @@ surface.
 
 ## Current checkpoint — 2026-10-22
 
+Latest source isolates attributable sibling timer validation errors in automatic
+readiness, completed-task lookup and rollover source quiescence. Own-project and
+global validation remain strict; malformed/unattributable records still refuse.
+28 tests, strict app/Wake Clippy and format PASS. Next normal app/WakeHost build;
+prior C6 selected release and all completed Web proofs are preserved.
+Read-only deployment checks confirm canonical binary/sidecar mismatch, missing
+trusted rollback authority and unproven supervisor startup policy/task definition.
+No activation or repair attempted; 99 records exact, no owned processes,
+controls STOPPED. No source test is installed acceptance. See
+[C8 evidence](../verification/C8_PROJECT_TIMER_ISOLATION_2026_10_22.json).
+
 The project-scoped granted-reader fix also passes a normal app build. No new
 package selection or real grant/concurrent-read claim. One existing fixed
 read-only command signature-verifies installed bootstrap epoch 1 and pending
