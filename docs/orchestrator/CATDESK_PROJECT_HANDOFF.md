@@ -7,6 +7,16 @@ surface.
 
 ## Current checkpoint — 2026-10-22
 
+Latest source increment fixes older context CLI blocking and partial imports:
+configure uses the existing guarded control; observe validates and atomically
+imports its batch under the paired-target guard with nonblocking ledger access.
+A rejected batch previously changed state; the regression now passes. Eighteen
+context-store / twelve CLI / one three-project integration tests, strict
+Clippy/format pass. Normal debug refusal checks preserve 134 actual records
+exactly, without new state or process. Qualify this fix's normal release next;
+selected prior v45 remains intact and its completed local queue test is not
+replayed. Prepared review still awaits the existing explicit host-stop exception.
+
 Latest qualification: normal release and selected STOPPED development local
 Web work CLI request/resolve PASS. The selected image is
 `6fab0769e69e4a9503daf59cfbb5b072fce594036288713aff0e488b0b5e2650`,

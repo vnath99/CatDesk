@@ -437,6 +437,19 @@ struct ContextEvent {
     observed_at_unix: u64,
 }
 
+impl ContextEvent {
+    fn observation(&self) -> Observation<'_> {
+        Observation {
+            event_id: &self.event_id,
+            revision: self.revision,
+            dedup_key: &self.dedup_key,
+            source_kind: self.source_kind,
+            visible_text: self.visible_text.as_deref(),
+            observed_at_unix: self.observed_at_unix,
+        }
+    }
+}
+
 fn paired_key(workspace: &Path, project: &str) -> Result<ConversationKey, String> {
     let target = mcp::operator_read_project_web_target(workspace, project)
         .map_err(|e| format!("WEB_TARGET: {}", reason(e)))?
@@ -949,11 +962,11 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
         } => {
             let key = paired_key(&workspace, &project_id)?;
             let policy: ContextPressurePolicy = read_input(&input_file)?;
-            let store = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
-            store.configure_policy(&project_id, policy)?;
-            let previous = store.active_key(&project_id)?;
-            store.bind_observed_target(key.clone(), previous.as_ref())?;
-            Ok(json!({"action":"web_context_configure","pressure":store.pressure(&key)?}))
+            crate::web_context_control::configure(
+                &workspace,
+                json!({"projectId":project_id,"expectedTargetGeneration":key.target_generation,
+                    "expectedTargetSha256":key.target_sha256(),"policy":policy}),
+            )
         }
         WebAction::ContextObserve {
             project_id,
@@ -968,28 +981,27 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             {
                 return Err("WEB_CONTEXT_INPUT_SCOPE_INVALID".into());
             }
-            let store = WebContextStore::open(workspace.join(".catdesk/web-context"))?;
-            let previous = store.active_key(&project_id)?;
-            store.bind_observed_target(key.clone(), previous.as_ref())?;
             for event in &input.events {
-                // Recheck independently of the file's claimed project key.
-                if paired_key(&workspace, &project_id)? != key {
-                    return Err("WEB_CONTEXT_TARGET_CHANGED".into());
-                }
-                store.record_observation(
-                    &key,
-                    Observation {
-                        event_id: &event.event_id,
-                        revision: event.revision,
-                        dedup_key: &event.dedup_key,
-                        source_kind: event.source_kind,
-                        visible_text: event.visible_text.as_deref(),
-                        observed_at_unix: event.observed_at_unix,
-                    },
-                )?;
+                crate::web_conversation_context::validate_observation(event.observation())?;
             }
-            Ok(
-                json!({"action":"web_context_observe","pressure":store.pressure(&key)?,"originAuthenticated":false}),
+            mcp::with_current_project_web_target(
+                &workspace,
+                &project_id,
+                key.target_generation,
+                &key.target_sha256(),
+                |control, _| {
+                    let store =
+                        WebContextStore::open_nonblocking(control.join(".catdesk/web-context"))?;
+                    let previous = store.active_key(&project_id)?;
+                    store.bind_observed_target(key.clone(), previous.as_ref())?;
+                    let pressure = store.record_observation_batch(
+                        &key,
+                        input.events.iter().map(ContextEvent::observation),
+                    )?;
+                    Ok(json!({"action":"web_context_observe","pressure":pressure,
+                        "originAuthenticated":false,"pairedTargetVerified":true,
+                        "rawTextPersisted":false,"browserAction":"NONE","hostStarted":false}))
+                },
             )
         }
         WebAction::RolloverStatus { project_id } => {

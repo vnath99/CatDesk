@@ -1,5 +1,35 @@
 # October 22–31 execution log
 
+## 2026-10-22 evening — C3 context CLI independence and atomic batch import
+
+- **Source/base:** `codex/web-rollover-oct17`, clean starting HEAD
+  `388b84b3ad20735f2b45da38ee408e33bf87a504`. Changes:
+  `src/operator_web_cli.rs`, `src/web_conversation_context.rs`,
+  `src/web_development_tests.rs`. Reuse existing paired-target guard and
+  nonblocking context store; configure shares its existing handler. Batch event
+  revisions apply in memory and replace one ledger once, keeping single-event
+  semantics/schema and idempotent replay. No new worker or coordination layer.
+- **Regression:** first restricted run stopped at fixture CONFIG_ROOT_UNAVAILABLE;
+  normal-access run then reproduced rejected-import state mutation. Both failed
+  receipts retained privately. No actual project state was involved.
+- **Verification:** at 00:16:21 UTC October 23 (October 22 New York), 18 store,
+  12 CLI and one three-project integration tests, strict all-target Clippy and
+  format exit 0 under 600s containment. The integration covers late invalid and
+  conflicting events, prompt contention refusal, sibling status/context,
+  successful import/replay and existing queue/rollover scope. No old unrelated
+  test suite was rerun.
+- **Normal executable:** build exits 0 at 00:17:03 UTC within 240s; three real-root
+  refusal checks finish 00:17:41 UTC in 10.60s under 45s. Fixed codes,
+  no private input echo; 134 records exact, zero new state/process/event. Both
+  runtimes remain STOPPED. No browser, host, recurring process, native writer,
+  completed canary, target, profile or protected production action.
+- **Acceptance:** SOURCE / TESTED_LOCAL plus normal-debug refusal evidence.
+  Positive batch import is fixture-only; selected prior v45 remains unchanged.
+  Qualify normal release/selected package next; live review remains held for
+  the pending host-stop exception. Connector not called this increment.
+- **Publication:** LOCAL_ONLY / NOT_PUSHED pending exact allowlist/privacy review.
+  [Sanitized C3 evidence](verification/C3_CONTEXT_CLI_BATCH_2026_10_22.json).
+
 ## 2026-10-22 evening — normal release / selected CLI local queue acceptance
 
 - **Exact publication:** reviewed sanitized qualification committed and pushed as

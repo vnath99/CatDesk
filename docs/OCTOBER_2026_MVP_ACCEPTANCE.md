@@ -2,6 +2,26 @@
 
 ## October 22 acceptance reconciliation
 
+### October 22 evening — context CLI independence and atomic imports
+
+Source inspection found the older CLI context path used a blocking ledger lock
+and wrote imported events one at a time. A regression reproduced a rejected
+batch changing state. Configure now reuses the guarded context control; observe
+retains the existing paired target during its bounded, nonblocking metadata
+operation. A batch validates and applies revisions in memory, then replaces one
+ledger once. Invalid/conflicting batches count no earlier events. Single-event
+revision rules and stored schema are unchanged; replay writes nothing.
+
+Eighteen context-store tests, twelve CLI tests, the three-project integration
+test, strict all-target Clippy and formatting pass. A normal executable's three
+refusal checks pass in 10.60s under 45s: configure/observe ledger contention and
+late invalid-event refusal. All 134 real metadata records stay exact; no new
+state, process, event, browser or host. Positive imports remain fixture evidence.
+The selected prior release is preserved and does not contain this fix. Normal
+release/selected qualification for this increment, live Web, connector and
+protected production acceptance remain OPEN. See the
+[sanitized C3 receipt](verification/C3_CONTEXT_CLI_BATCH_2026_10_22.json).
+
 ### October 22 evening — selected release Web work CLI qualified locally
 
 At 00:01–00:03 UTC October 23 (October 22 in New York), the normal release

@@ -458,6 +458,30 @@ fn tree_snapshot(root: &Path) -> Vec<(PathBuf, String)> {
     snapshot
 }
 
+async fn context_file_action(
+    control: &Path,
+    input_file: &Path,
+    project: &str,
+    verb: &str,
+    input: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    fs::write(input_file, serde_json::to_vec(input).unwrap()).unwrap();
+    web_action_result(
+        control,
+        &[
+            "operator",
+            "web",
+            "context",
+            verb,
+            "--project-id",
+            project,
+            "--input-file",
+            input_file.to_str().unwrap(),
+        ],
+    )
+    .await
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn central_web_work_requests_are_independent_durable_and_generation_bound() {
     use serde_json::json;
@@ -664,6 +688,38 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
             result["pressure"]
         );
     }
+    // The local CLI must reject the whole batch before counting an earlier
+    // valid event. Invalid/revision-conflicting imports cannot change pressure.
+    let context_input_file = parent.join("context-input.json");
+    let cli_context_key = ConversationKey {
+        project_id: "alpha".into(),
+        conversation_url: bindings["alpha"].url.clone(),
+        target_generation: 1,
+    };
+    let cli_event = json!({"eventId":"cli-import", "revision":1,
+        "dedupKey":"cli-import", "sourceKind":"USER_MESSAGE",
+        "visibleText":"private local context", "observedAtUnix":1});
+    let cli_input = json!({"schemaVersion":1,"key":cli_context_key,"events":[cli_event]});
+    let before_invalid_import = tree_snapshot(&control);
+    for late_event in [
+        json!({"eventId":"invalid", "revision":0,"dedupKey":"invalid",
+            "sourceKind":"USER_MESSAGE","visibleText":"invalid revision","observedAtUnix":1}),
+        json!({"eventId":"same-event", "revision":1,"dedupKey":"same-output",
+            "sourceKind":"TOOL_RESULT","visibleText":"conflicting revision","observedAtUnix":1}),
+    ] {
+        let mut invalid = cli_input.clone();
+        invalid["events"].as_array_mut().unwrap().push(late_event);
+        assert!(
+            context_file_action(&control, &context_input_file, "alpha", "observe", &invalid)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            tree_snapshot(&control),
+            before_invalid_import,
+            "rejected context import changed state"
+        );
+    }
     // A contended metadata lock must refuse immediately instead of freezing
     // the HTTP reactor. The separate thread bounds the old blocking behavior
     // so this regression cannot hang the suite before the fix.
@@ -678,6 +734,22 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
         let _ = release_rx.recv_timeout(std::time::Duration::from_secs(30));
         drop(held);
     });
+    let busy_cli_configure = context_file_action(
+        &control,
+        &context_input_file,
+        "alpha",
+        "configure",
+        &context_config("alpha")["policy"],
+    )
+    .await;
+    let busy_cli_observe = context_file_action(
+        &control,
+        &context_input_file,
+        "alpha",
+        "observe",
+        &cli_input,
+    )
+    .await;
     let busy = web_mcp_tool(
         &client,
         &url,
@@ -713,6 +785,8 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
         "context mutation waited for held lock: {busy}"
     );
     assert!(busy_observe.to_string().contains("WEB_CONTEXT_BUSY"));
+    assert_eq!(busy_cli_configure.unwrap_err(), "WEB_CONTEXT_BUSY");
+    assert_eq!(busy_cli_observe.unwrap_err(), "WEB_CONTEXT_BUSY");
     assert_ne!(sibling_status["result"]["isError"], true);
     let busy_projects = sibling_status["result"]["structuredContent"]["webProjects"]["projects"]
         .as_array()
@@ -722,6 +796,58 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
         busy_projects
             .iter()
             .all(|project| project["wake"]["status"] == "PAIRED")
+    );
+
+    let configured_cli = context_file_action(
+        &control,
+        &context_input_file,
+        "alpha",
+        "configure",
+        &context_config("alpha")["policy"],
+    )
+    .await
+    .unwrap();
+    assert_eq!(configured_cli["pairedTargetVerified"], true);
+    assert_eq!(configured_cli["pressure"]["configuredBudgetTokens"], 6000);
+    let meter_snapshot =
+        WebContextStore::open_read_only(control.join(".catdesk/web-context")).unwrap();
+    let sibling_before_import = meter_snapshot.project_history("beta").unwrap();
+    let mut successful_input = cli_input.clone();
+    successful_input["events"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({
+        "eventId":"cli-worker", "revision":1,"dedupKey":"cli-worker",
+        "sourceKind":"WORKER_MESSAGE","visibleText":"private worker context","observedAtUnix":1}));
+    let imported = context_file_action(
+        &control,
+        &context_input_file,
+        "alpha",
+        "observe",
+        &successful_input,
+    )
+    .await
+    .unwrap();
+    assert_eq!(imported["pressure"]["recordedEvents"], 3);
+    assert_eq!(imported["pairedTargetVerified"], true);
+    assert_eq!(imported["rawTextPersisted"], false);
+    assert!(!imported.to_string().contains("private local context"));
+    assert!(!imported.to_string().contains("private worker context"));
+    let after_import = tree_snapshot(&control);
+    let replay = context_file_action(
+        &control,
+        &context_input_file,
+        "alpha",
+        "observe",
+        &successful_input,
+    )
+    .await
+    .unwrap();
+    assert_eq!(replay, imported);
+    assert_eq!(tree_snapshot(&control), after_import);
+    assert_eq!(
+        meter_snapshot.project_history("beta").unwrap(),
+        sibling_before_import
     );
 
     let independent = crate::mcp::with_current_project_web_target(

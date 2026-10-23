@@ -395,6 +395,39 @@ impl WebContextStore {
         self.record_event_locked(&project, &mut ledger, event)
     }
 
+    /// Validate and apply a bounded import in memory, then replace its one
+    /// conversation ledger once. A late invalid or conflicting revision cannot
+    /// leave an earlier event counted in a rejected batch.
+    pub(crate) fn record_observation_batch<'a>(
+        &self,
+        key: &ConversationKey,
+        observations: impl IntoIterator<Item = Observation<'a>>,
+    ) -> Result<PressureStatus, String> {
+        key.validate()?;
+        let events = observations
+            .into_iter()
+            .take(513)
+            .map(observation_metadata)
+            .collect::<Result<Vec<_>, _>>()?;
+        if events.is_empty() || events.len() > 512 {
+            return Err("WEB_CONTEXT_INPUT_SCOPE_INVALID".into());
+        }
+        let _lock = self.lock()?;
+        let project = self.read_project(&key.project_id)?;
+        if project.active.as_ref() != Some(key) {
+            return Err("WEB_CONTEXT_OLD_GENERATION".into());
+        }
+        let mut ledger = self.read_ledger(key)?;
+        let mut changed = false;
+        for event in events {
+            changed |= apply_event(&mut ledger, event)?;
+        }
+        if changed {
+            self.write_ledger(&ledger)?;
+        }
+        Ok(pressure_status(&project, &ledger))
+    }
+
     /// Ingests a browser-visible snapshot with a stable event identity. The
     /// content hash determines whether the existing revision is replayed or
     /// advanced. This remains an advisory estimate; the caller must separately
@@ -542,34 +575,7 @@ impl WebContextStore {
         ledger: &mut ConversationLedger,
         event: EventMetadata,
     ) -> Result<PressureStatus, String> {
-        if let Some(previous) = ledger
-            .events
-            .iter_mut()
-            .find(|previous| previous.event_id == event.event_id)
-        {
-            if event.revision < previous.revision
-                || event.source_kind != previous.source_kind
-                || event.dedup_key != previous.dedup_key
-            {
-                return Err("WEB_CONTEXT_EVENT_REVISION_CONFLICT".into());
-            }
-            if event.revision == previous.revision {
-                if event.content_sha256 != previous.content_sha256
-                    || event.visible_bytes != previous.visible_bytes
-                    || event.estimated_tokens != previous.estimated_tokens
-                    || event.excerpt_only != previous.excerpt_only
-                {
-                    return Err("WEB_CONTEXT_EVENT_REVISION_CONFLICT".into());
-                }
-            } else {
-                *previous = event;
-                self.write_ledger(ledger)?;
-            }
-        } else {
-            if ledger.events.len() >= MAX_EVENTS {
-                return Err("WEB_CONTEXT_EVENT_LIMIT".into());
-            }
-            ledger.events.push(event);
+        if apply_event(ledger, event)? {
             self.write_ledger(ledger)?;
         }
         Ok(pressure_status(project, ledger))
@@ -913,6 +919,38 @@ impl WebContextStore {
 
 pub(crate) fn validate_observation(observation: Observation<'_>) -> Result<(), String> {
     observation_metadata(observation).map(|_| ())
+}
+
+fn apply_event(ledger: &mut ConversationLedger, event: EventMetadata) -> Result<bool, String> {
+    if let Some(previous) = ledger
+        .events
+        .iter_mut()
+        .find(|previous| previous.event_id == event.event_id)
+    {
+        if event.revision < previous.revision
+            || event.source_kind != previous.source_kind
+            || event.dedup_key != previous.dedup_key
+        {
+            return Err("WEB_CONTEXT_EVENT_REVISION_CONFLICT".into());
+        }
+        if event.revision == previous.revision {
+            if event.content_sha256 != previous.content_sha256
+                || event.visible_bytes != previous.visible_bytes
+                || event.estimated_tokens != previous.estimated_tokens
+                || event.excerpt_only != previous.excerpt_only
+            {
+                return Err("WEB_CONTEXT_EVENT_REVISION_CONFLICT".into());
+            }
+            return Ok(false);
+        }
+        *previous = event;
+    } else {
+        if ledger.events.len() >= MAX_EVENTS {
+            return Err("WEB_CONTEXT_EVENT_LIMIT".into());
+        }
+        ledger.events.push(event);
+    }
+    Ok(true)
 }
 
 fn observation_metadata(observation: Observation<'_>) -> Result<EventMetadata, String> {
@@ -1314,6 +1352,55 @@ mod tests {
                 let _ = fs::remove_dir_all(&self.root);
             }
         }
+    }
+
+    #[test]
+    fn batch_import_refuses_empty_oversized_and_internal_conflict_without_writes() {
+        let fixture = Fixture::new("batch-import");
+        let key = Fixture::key("alpha", "batch-import", 1);
+        fixture
+            .store
+            .bind_observed_target(key.clone(), None)
+            .unwrap();
+        let before = fs::read(fixture.store.ledger_path(&key)).unwrap();
+        let event = |text| Observation {
+            event_id: "same-event",
+            revision: 1,
+            dedup_key: "same-event",
+            source_kind: VisibleSourceKind::UserMessage,
+            visible_text: Some(text),
+            observed_at_unix: 1,
+        };
+        assert_eq!(
+            fixture
+                .store
+                .record_observation_batch(&key, [])
+                .unwrap_err(),
+            "WEB_CONTEXT_INPUT_SCOPE_INVALID"
+        );
+        assert_eq!(
+            fixture
+                .store
+                .record_observation_batch(&key, (0..513).map(|_| event("text")))
+                .unwrap_err(),
+            "WEB_CONTEXT_INPUT_SCOPE_INVALID"
+        );
+        assert_eq!(
+            fixture
+                .store
+                .record_observation_batch(&key, [event("first"), event("different")])
+                .unwrap_err(),
+            "WEB_CONTEXT_EVENT_REVISION_CONFLICT"
+        );
+        assert_eq!(fs::read(fixture.store.ledger_path(&key)).unwrap(), before);
+        let reader = WebContextStore::open_read_only(&fixture.root).unwrap();
+        assert_eq!(
+            reader
+                .record_observation_batch(&key, [event("text")])
+                .unwrap_err(),
+            "WEB_CONTEXT_READ_ONLY"
+        );
+        assert_eq!(fs::read(fixture.store.ledger_path(&key)).unwrap(), before);
     }
 
     #[test]

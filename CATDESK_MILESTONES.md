@@ -1,3 +1,12 @@
+## 2026-10-22 evening — context CLI atomic imports and independence
+
+Reproduced and fixed rejected-import partial counting; context CLI operations
+now reuse exact-target guards and refuse ledger contention promptly. Eighteen
+store/twelve CLI/one three-project integration checks, strict Clippy/format and
+normal-app refusal checks pass; 134 real records exact. Selected prior package
+retained; release/live qualification for this fix remains open. See the
+[execution log](docs/OCT22_31_EXECUTION_LOG.md).
+
 ## 2026-10-22 evening — selected release local Web work CLI PASS
 
 Normal release and stopped development package qualify the new request/resolve
