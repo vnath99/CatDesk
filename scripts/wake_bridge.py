@@ -2781,6 +2781,38 @@ class NewConversationSink(CdpSink):
             sleeper(READINESS_POLL_SECONDS)
         raise Attention("BOOTSTRAP_HOME_NOT_READY")
 
+    def check_plain_home_draft(self, cdp: Any) -> None:
+        """Refuse rich links whose submitted serialization is not proven.
+
+        A restored composer can display the exact expected plain text while
+        serializing a link inside a JSON string as Markdown. Rendered-text
+        equality alone cannot authorize that submission. This read never
+        flattens, clears or retypes an owned or unknown draft.
+        """
+        script = f"""(() => {{
+            if (location.href !== {json.dumps(NEW_CONVERSATION_HOME)}) return 'HOME_DRIFT';
+            const visible = Array.from(document.querySelectorAll(
+                '#prompt-textarea, div.ProseMirror[contenteditable="true"], [contenteditable="true"][data-lexical-editor="true"]'
+            )).filter(element => {{
+                const style = window.getComputedStyle(element);
+                return element.getClientRects().length > 0 &&
+                    style.visibility !== 'hidden' && style.display !== 'none';
+            }});
+            if (visible.length !== 1) return 'EDITOR_UNPROVEN';
+            return visible[0].querySelector('a[href], [role="link"], [data-type="link"]') ?
+                'RICH_LINK' : 'PLAIN';
+        }})()"""
+        try:
+            observed = CdpSink.cdp_value(cdp.evaluate(script))
+        except Exception as error:
+            raise Attention("BOOTSTRAP_DRAFT_SERIALIZATION_UNVERIFIED") from error
+        if observed == 'HOME_DRIFT':
+            raise Attention("BOOTSTRAP_HOME_DRIFT")
+        if observed == 'RICH_LINK':
+            raise Attention("BOOTSTRAP_RICH_DRAFT_UNVERIFIED")
+        if observed != 'PLAIN':
+            raise Attention("BOOTSTRAP_DRAFT_SERIALIZATION_UNVERIFIED")
+
     def check_typed_home(self, cdp: Any, message: str) -> None:
         """Repeat home and exact-draft guards before the intentional send."""
         try:

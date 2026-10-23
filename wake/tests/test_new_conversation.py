@@ -188,6 +188,10 @@ class AttemptSink:
         if bridge.normalize_message(cdp.draft) != bridge.normalize_message(message):
             raise bridge.Attention("BOOTSTRAP_DRAFT_DRIFT")
 
+    def check_plain_home_draft(self, cdp):
+        if getattr(cdp, "rich_link", False):
+            raise bridge.Attention("BOOTSTRAP_RICH_DRAFT_UNVERIFIED")
+
     def wait_for_send_control(self, cdp, timeout):
         return "send"
 
@@ -803,6 +807,39 @@ class NewConversationTests(unittest.TestCase):
         self.assertIsNone(error)
         self.assertEqual((resumed.timeline.count("type"), resumed.sent), (0, 1))
         self.assertEqual(emitted[-1]["stage"], "BOOTSTRAP_SUBMITTED")
+
+    def test_restored_rich_link_never_receives_text_or_send_authorization(self):
+        request = self.v2_request(resume_progress="DRAFT_READY")
+        expected = bridge.compose_bootstrap_message(
+            request["projectId"], request["intentId"], SOURCE, request["handoff"])
+        with patch.object(AttemptSink, "check_plain_home_draft", side_effect=
+                          bridge.Attention("BOOTSTRAP_RICH_DRAFT_UNVERIFIED")):
+            cdp, emitted, acks, error = self.run_v2_attempt(request=request, draft=expected)
+        self.assertEqual(error, "BOOTSTRAP_RICH_DRAFT_UNVERIFIED")
+        self.assertEqual((cdp.sent, cdp.timeline, acks), (0, [], []))
+        self.assertEqual(cdp.draft, expected)
+        self.assertNotIn("BOOTSTRAP_SUBMITTED", [frame["stage"] for frame in emitted])
+
+    def test_rich_link_appearing_at_later_guards_preserves_draft_without_click(self):
+        for failed_check, expected_acks in (
+                (1, ["TEXT_ENTRY_AUTHORIZED"]),
+                (2, ["TEXT_ENTRY_AUTHORIZED", "DRAFT_READY"]),
+                (3, ["TEXT_ENTRY_AUTHORIZED", "DRAFT_READY", "SEND_ATTEMPTED"])):
+            calls = []
+            def check(_self, cdp):
+                calls.append(True)
+                if len(calls) == failed_check:
+                    raise bridge.Attention("BOOTSTRAP_RICH_DRAFT_UNVERIFIED")
+            with self.subTest(failed_check=failed_check), patch.object(
+                    AttemptSink, "check_plain_home_draft", check):
+                cdp, emitted, acks, error = self.run_v2_attempt()
+                self.assertIsNone(error)
+                self.assertEqual(cdp.sent, 0)
+                self.assertEqual(cdp.timeline, ["type"])
+                self.assertEqual(acks, expected_acks)
+                self.assertTrue(cdp.draft)
+                self.assertEqual(emitted[-1], {"stage": "BOOTSTRAP_UNKNOWN",
+                                              "reason": "BOOTSTRAP_RICH_DRAFT_UNVERIFIED"})
 
     def test_large_inspector_request_uses_bootstrap_bound_without_exposing_text(self):
         request = {"bootstrapDraftInspect": True, "bootstrapProtocol": 2,

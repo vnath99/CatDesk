@@ -213,6 +213,7 @@ def bootstrap_attempt(bridge, sb, request):
         if observed["classification"] != "EXACT_OWNED":
             raise bridge.Attention("BOOTSTRAP_DRAFT_MISMATCH")
         existing_draft = observed["classification"] == "EXACT_OWNED"
+        sink.check_plain_home_draft(cdp)
         emit({"stage": "BOOTSTRAP_HOME_READY"})
     else:
         cdp = prepare_cdp_target(bridge, sb, source_url)
@@ -253,6 +254,7 @@ def bootstrap_attempt(bridge, sb, request):
         if not existing_draft:
             cdp.send_keys(editor_selector, typed_message, timeout=sink.ui_timeout)
         sink.check_typed_home(cdp, message)
+        sink.check_plain_home_draft(cdp)
         if protocol_v2:
             emit({"stage": "DRAFT_READY", "projectId": project_id,
                   "intentId": intent_id, "sourceGeneration": source["generation"],
@@ -264,6 +266,7 @@ def bootstrap_attempt(bridge, sb, request):
         if send_selector is None:
             raise bridge.Attention("BOOTSTRAP_SEND_CONTROL_MISSING")
         sink.check_typed_home(cdp, message)
+        sink.check_plain_home_draft(cdp)
         send_selector = sink.wait_for_send_control(cdp, 5)
         if send_selector is None:
             raise bridge.Attention("BOOTSTRAP_SEND_CONTROL_MISSING")
@@ -275,6 +278,7 @@ def bootstrap_attempt(bridge, sb, request):
                 raise bridge.Attention("SUBMISSION_NOT_AUTHORIZED")
             send_authorized = True
             sink.check_typed_home(cdp, message)
+            sink.check_plain_home_draft(cdp)
         sink.smoke_path_submit(cdp, send_selector, sink.ui_timeout, editor_selector)
         sink.latch_issued_url(cdp)
         accepted_at = sink.wait_for_submission_accepted(cdp, 0, message_digest, message)

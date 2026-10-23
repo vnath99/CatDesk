@@ -1,5 +1,19 @@
 # CatDesk — Important Command Reference
 
+## October 23 — C24 do not replay an uncertain bootstrap
+
+`rollover inspect-draft --project-id PROJECT --expected-intent-id INTENT` reads a
+persisted pre-send composer; EXACT_OWNED text/digest alone does not prove the
+restored rich editor will serialize identically. The new source guard refuses
+unproved rich links before authorization/send, without clearing or retyping.
+After SEND_ATTEMPTED without a receipt, do not use ordinary draft resume. The
+supported project-scoped `rollover quarantine` records an observed candidate;
+`rollover inspect-quarantine` observes it without granting receipt/bind authority.
+C24 is held at that boundary with a confirmed USER body mismatch. Fresh execute
+refuses QUARANTINED before browser launch. All prior bindings/history are intact.
+No manual lock clearing, receipt injection, resend or recurring activation.
+[C24 evidence](../verification/C24_DRAFT_RESTART_SERIALIZATION_2026_10_23.json).
+
 ## October 23 — C23 competing creation and durable queued continuation
 
 Two actual `operator web rollover execute --project-id PROJECT` requests now pass

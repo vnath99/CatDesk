@@ -1,3 +1,22 @@
+## 2026-10-23 — C24 critical-phase restart exposes draft serialization gap
+
+Fresh distinct recovery task: actual owned-root interruption at durable DRAFT_READY
+before send authorization; fresh read finds EXACT_OWNED digest, no typing or send.
+Supported resume reuses the draft without retyping, attempts its first send, then
+returns BOOTSTRAP_OUTCOME_UNKNOWN. Authenticated app independently shows the new
+candidate; browser diagnosis refuses RESPONSE_EXPECTED_USER_BODY_MISMATCH. One URL
+inside the JSON handoff changed to Markdown link syntax. Rich composer serialization
+is an inference from the observed text change, not captured pre-send DOM proof.
+Only this incident is quarantined; no receipt/binding/continuation is fabricated,
+no resend. Normal test policy restored. Fresh CLI:181 records exact, all nine pairs,
+full registry/Wake history byte-exact since C23, old completed record exact, beta
+continuationProved=true, zero owned processes/both controls STOPPED. H/I advance
+partially; successful automatic recovery, Web B/C and automatic monitoring remain
+OPEN. Source adds a read-only rich-link guard before resume authorization and send;
+21 DOM+71 adapter/bootstrap tests PASS. The guard is not selected/installed or live
+qualified; it refuses unproved rich drafts and does not yet recover them losslessly.
+[C24 evidence](docs/verification/C24_DRAFT_RESTART_SERIALIZATION_2026_10_23.json).
+
 ## 2026-10-23 — C23 two competing actual Web rollovers continued
 
 Two selected execute commands launch23.22ms apart. Durable admission gives alpha

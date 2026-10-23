@@ -1,5 +1,24 @@
 # CatDesk October 2026 MVP acceptance
 
+### October 23 C24 — real draft restart and unknown-submission isolation
+
+Fresh distinct recovery task: actual owned-root interruption at durable DRAFT_READY
+before send authorization; fresh read finds EXACT_OWNED digest, no typing or send.
+Supported resume reuses the draft without retyping, attempts its first send, then
+returns BOOTSTRAP_OUTCOME_UNKNOWN. Authenticated app independently shows the new
+candidate; browser diagnosis refuses RESPONSE_EXPECTED_USER_BODY_MISMATCH. One URL
+inside the JSON handoff changed to Markdown link syntax. Rich composer serialization
+is an inference from the observed text change, not captured pre-send DOM proof.
+Only this incident is quarantined; no receipt/binding/continuation is fabricated,
+no resend. Normal test policy restored. Fresh CLI:181 records exact, all nine pairs,
+full registry/Wake history byte-exact since C23, old completed record exact, beta
+continuationProved=true, zero owned processes/both controls STOPPED. H/I advance
+partially; successful automatic recovery, Web B/C and automatic monitoring remain
+OPEN. Source adds a read-only rich-link guard before resume authorization and send;
+21 DOM+71 adapter/bootstrap tests PASS. The guard is not selected/installed or live
+qualified; it refuses unproved rich drafts and does not yet recover them losslessly.
+[C24 evidence](verification/C24_DRAFT_RESTART_SERIALIZATION_2026_10_23.json).
+
 ### October 23 C23 — live competing creation, paired updates and continuation
 
 Two requests start23.22ms apart and retain durable FIFO identities: alpha ACTIVE,
@@ -187,8 +206,8 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | E. Context pressure and durable handoff | PARTIAL: C21 actual132/137 observed-token ledgers persist independently. C22 low test policies trigger two actual source-generated schema2 handoffs, exact receipts/completed timers and verified markers/Git/decisions, saved PREPARED. Coverage stays UNKNOWN_OR_INCOMPLETE. | Coordinated automatic monitoring qualification; do not infer exact context from lifetime MCP counters or source Git reports. Actual schema2 exchange is proved. |
 | F. Actual replacement URL and continuation | PASS, controlled selected browser scope: original accepted canary preserved. C23 adds two fresh issued replacements, paired1→2 updates, source rechecks, preserved history and event-bound marker/task continuations. | No repeat required. Protected/unattended and actual coding acceptance remain separate. |
 | G. Two simultaneous synthetic rollover requests | PASS, SELECTED CONTROLLED LIVE C23:23.22ms request gap, alpha ACTIVE/beta WAITING, maximum sampled creator1; stable unsent waiting ticket survives process exit and completes next. Both issued URLs/pairs/continuations verified, seven prior pairs/history exact, no duplicate submissions. | Automatic recurring driver, critical crash H and protected/unattended qualification remain separate. Preserve these completed operations. |
-| H. Interruption and ambiguous-submission recovery | PARTIAL: source recovery/draft/receipt tests and retained real ambiguous/quarantined state exist. No blind resend is allowed. | Bounded controlled interruption at specified transaction phases, with actual browser evidence and cleanup. Preserve historical ambiguity; never manufacture its missing receipt. |
-| I. Restart preserves registrations/history/pending rollovers | PARTIAL: C23 fresh CLI reopens an actual PREPARED/WAITING rollover after its queued process exits, retaining intent/handoff/admission identity; both completed continuations, current/predecessor/context histories then recover in fresh CLI processes.170 records exact. | Controlled crash/restart in additional critical submission and paired-commit phases, together with H. No recurring service activation implied. |
+| H. Interruptions, recovery and ambiguous submission | PARTIAL LIVE C24: retained-handle crash at pinned DRAFT_READY; fresh browser verifies the exact draft. Resume performs its first send but body mismatch leaves outcome unknown. Supported quarantine preserves candidate/history; fresh execute refuses before browser. No resend. | Lossless restored-draft serialization and independently verified receipt reconciliation; additional critical phases. Source rich-link refusal guard passes92 tests, not yet selected/live qualified. |
+| I. Restart preserves registrations/history/pending rollovers | PARTIAL: prior C23 WAITING/completed restarts plus C24 DRAFT_READY and quarantined SEND_ATTEMPTED reopen. Final181 records exact, nine pairs and full registry/Wake history unchanged, independent sibling completion intact. | Additional paired-commit crash phases and successful unknown-outcome reconciliation. No recurring activation. |
 | J. No orphan browser/Wake processes | PASS for recorded bounded tests, including current stopped selection. Root/Job exits and zero owned processes are checked. | Normal unattended operation is NOT ACTIVATED or accepted. Each future bounded test needs its own cleanup proof. |
 
 **Current implementation versus gaps:** the existing registry, immutable project

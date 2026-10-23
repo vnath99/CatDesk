@@ -1,3 +1,24 @@
+## October 23 — C24 pending incident preserved; next serialization recovery
+
+Fresh distinct recovery task: actual owned-root interruption at durable DRAFT_READY
+before send authorization; fresh read finds EXACT_OWNED digest, no typing or send.
+Supported resume reuses the draft without retyping, attempts its first send, then
+returns BOOTSTRAP_OUTCOME_UNKNOWN. Authenticated app independently shows the new
+candidate; browser diagnosis refuses RESPONSE_EXPECTED_USER_BODY_MISMATCH. One URL
+inside the JSON handoff changed to Markdown link syntax. Rich composer serialization
+is an inference from the observed text change, not captured pre-send DOM proof.
+Only this incident is quarantined; no receipt/binding/continuation is fabricated,
+no resend. Normal test policy restored. Fresh CLI:181 records exact, all nine pairs,
+full registry/Wake history byte-exact since C23, old completed record exact, beta
+continuationProved=true, zero owned processes/both controls STOPPED. H/I advance
+partially; successful automatic recovery, Web B/C and automatic monitoring remain
+OPEN. Source adds a read-only rich-link guard before resume authorization and send;
+21 DOM+71 adapter/bootstrap tests PASS. The guard is not selected/installed or live
+qualified; it refuses unproved rich drafts and does not yet recover them losslessly.
+
+Next executable source work: lossless handling of an exact known restored draft and independent receipt reconciliation. Do not execute/resend the quarantined C24 incident or accepted C23 operations. No CatDesk operator action is required for eligible source work. Connector429 is separate; the selected v53 does not contain the new guard. Preserve existing native owners and original bindings.
+[C24 evidence](../verification/C24_DRAFT_RESTART_SERIALIZATION_2026_10_23.json).
+
 # CatDesk Project Handoff and Continuity Guide
 
 C23 actual competing requests complete:23.22ms start gap, alpha admission1 ACTIVE/

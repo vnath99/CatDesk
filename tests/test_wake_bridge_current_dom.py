@@ -121,6 +121,15 @@ if (options.bareUser) {
 global.document = el('document', {}, '', [paired]);
 global.window = {getComputedStyle: () => ({visibility:'visible', display:'block'})};
 global.location = {href:options.location || 'https://chatgpt.com/c/current-dom'};
+if (options.composerCount !== undefined) {
+  document.children = [];
+  for (let i = 0; i < options.composerCount; i++) {
+    const body = options.composerLink ? [el('a', {href:'https://example.test/predecessor'}, 'https://example.test/predecessor')] : [];
+    const editor = el('div', {id:'prompt-textarea', contenteditable:'true'}, options.composerText || '', body);
+    editor.parentElement = document;
+    document.children.push(editor);
+  }
+}
 let mutations = 0;
 if (options.traceMutations) {
   const editor = el('div', {id:'prompt-textarea', contenteditable:'true'}, 'owned draft');
@@ -166,6 +175,21 @@ class CurrentDomTests(unittest.TestCase):
         self.sink = bridge.NewConversationSink(
             "https://chatgpt.com/c/current-dom", Path(self.directory.name), 1, 1
         )
+
+    def test_bootstrap_serialization_probe_reads_only_one_plain_home_composer(self):
+        home = bridge.NEW_CONVERSATION_HOME
+        self.sink.check_plain_home_draft(CurrentDom(
+            location=home, composerCount=1,
+            composerText='{"predecessor":"https://example.test/predecessor"}'))
+        with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_RICH_DRAFT_UNVERIFIED"):
+            self.sink.check_plain_home_draft(CurrentDom(
+                location=home, composerCount=1, composerLink=True))
+        for count in (0, 2):
+            with self.subTest(count=count), self.assertRaisesRegex(
+                    bridge.Attention, "BOOTSTRAP_DRAFT_SERIALIZATION_UNVERIFIED"):
+                self.sink.check_plain_home_draft(CurrentDom(location=home, composerCount=count))
+        with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_HOME_DRIFT"):
+            self.sink.check_plain_home_draft(CurrentDom(composerCount=1))
 
     def test_snapshot_uses_real_semantic_units_without_legacy_role_nodes(self):
         observed = self.sink.visible_message_snapshot(CurrentDom())

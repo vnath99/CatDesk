@@ -1,5 +1,26 @@
 # October 22–31 execution log
 
+## 2026-10-23 — C24 draft checkpoint interruption, unknown send and source guard
+
+Fresh distinct recovery task: actual owned-root interruption at durable DRAFT_READY
+before send authorization; fresh read finds EXACT_OWNED digest, no typing or send.
+Supported resume reuses the draft without retyping, attempts its first send, then
+returns BOOTSTRAP_OUTCOME_UNKNOWN. Authenticated app independently shows the new
+candidate; browser diagnosis refuses RESPONSE_EXPECTED_USER_BODY_MISMATCH. One URL
+inside the JSON handoff changed to Markdown link syntax. Rich composer serialization
+is an inference from the observed text change, not captured pre-send DOM proof.
+Only this incident is quarantined; no receipt/binding/continuation is fabricated,
+no resend. Normal test policy restored. Fresh CLI:181 records exact, all nine pairs,
+full registry/Wake history byte-exact since C23, old completed record exact, beta
+continuationProved=true, zero owned processes/both controls STOPPED. H/I advance
+partially; successful automatic recovery, Web B/C and automatic monitoring remain
+OPEN. Source adds a read-only rich-link guard before resume authorization and send;
+21 DOM+71 adapter/bootstrap tests PASS. The guard is not selected/installed or live
+qualified; it refuses unproved rich drafts and does not yet recover them losslessly.
+
+Times UTC: interruption10:49:51–10:50:54; read-only draft inspection10:51:09–10:51:23; resume10:52:07–10:53:26; candidate quarantine/inspection10:54:42–10:54:52; corrected body diagnostic10:57:15–10:57:28; policy restored10:58:33; source tests11:00:46–11:00:51; fresh final readback11:01:53–11:01:56. Bounded helpers/Jobs retained with terminal cleanup; first wrong-sink diagnostic and first completion-only policy guard refusals retained and corrected without sends. No connector call, recurring start, native session message or production change this stage.
+[C24 evidence](verification/C24_DRAFT_RESTART_SERIALIZATION_2026_10_23.json).
+
 ## 2026-10-23 — C23 actual serialized two-project rollover and continuation
 
 C22 checkpoint published09:49:43 UTC as `3829749371c2b9f39907e2b9d2ce439af0c52b3b`,
