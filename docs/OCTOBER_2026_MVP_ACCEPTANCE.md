@@ -1,5 +1,45 @@
 # CatDesk October 2026 MVP acceptance
 
+### October 23 C38 — automatic handoff complete; interrupted draft preserved
+
+The selected v56 core resumed the existing unfinished controlled task without
+resending its completed source event. The bounded run lasted
+2026-10-23T15:16:25.856Z–15:28:51.387Z (745.53 seconds), within limits of 740 seconds
+for the listener, 755 for the foreground host and 800 for the outer process job.
+The automatic driver requested and collected a new project-specific schema2
+handoff after its response observer recovered without another send. The handoff
+retained the objective, observed accomplishments, remaining task, next action,
+decisions and ownership restrictions; unverified Git state remained UNKNOWN.
+
+A new rollover record reached SUBMITTING/TEXT_ENTRY_AUTHORIZED, with no receipt,
+bound target or verified source snapshot. Read-only inspection at
+15:29:54.868Z–15:30:08.141Z found a mismatched unsent draft. A separate body read
+at 15:31:32.103Z–15:32:00.684Z found 2,765 actual bytes against 3,855 expected.
+The normalized text is a prefix, but raw equality and raw-prefix checks fail;
+the intent and predecessor are not reached in the truncated content. This is an
+incomplete preserved draft, not an exact-owned completed bootstrap. Neither
+read sent or cleared anything; both left all 210 records exact and zero owners.
+No replacement URL, new binding or completed continuation is established.
+
+An independent sibling received a fresh observation and its temporary policy
+was restored; the quarantined project stayed isolated. The main run compared
+204 baseline records: ten expected changes, six new records, zero unexpected
+changes. The other eight registry/Wake targets, predecessor history, previous
+completed rollover and controlled workspace file stayed exact. Original policies
+were restored. The listener exited naturally and its owned host tree drained.
+Cleanup at 15:28:52.687Z verified zero test-owned processes, the outer job closed
+and both controls STOPPED. No native-session, production or recurring action
+occurred, and no completed canary was replayed. The wrapper's exit 1 records
+incomplete acceptance, not a timeout or failed termination.
+
+Acceptance E and this automatic-chain attempt remain PARTIAL. Earlier completed
+rollover and simultaneous-creation F/G evidence remains intact. C37's projection
+fix is published source only; selected v56 still uses the C35 core. No new source
+tests were run for this milestone. Next: implement and qualify reliable interrupted
+text-entry recovery for the same preserved transaction. Do not infer ownership
+from a normalized prefix, clear unknown text or blindly resend a bootstrap.
+[C38 evidence](verification/C38_AUTOMATIC_HANDOFF_INTERRUPTION_2026_10_23.json).
+
 ### October 23 C34–C37 — interrupted automatic chain and target-contention repair
 
 C34 remains PARTIAL. The bounded run lasted 2026-10-23T14:00:47.571Z–14:10:10.661Z
@@ -428,7 +468,7 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | B. Two Web conversations make tools calls in separate directories | PARTIAL SOURCE / NORMAL AND SELECTED DEVELOPMENT IMAGE LOCAL HTTP: C11 binds immutable roots/current paired witnesses. C12 editing reuses contracts/journals/writer locks. C15 selected image includes C14 and proves parallel fixture patch/command verification plus restart refusal, with outside writes refused. Native fixture roots preserved; provider-origin chat ID is not authenticated. | Actual concurrent Web coding and protected installed acceptance. Local fixtures, CLI threads and review reads do not close live B. |
 | C. Blocked project while sibling makes useful progress | PARTIAL: scheduler fixtures, C7 granted-reader and C8 timer-fault regressions demonstrate source isolation. Existing independent native owners were preserved. | Bounded real Web project blocking/progress proof on the intended runtime. Unreadable/unattributable shared state still fails closed. |
 | D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
-| E. Context pressure and durable handoff | PARTIAL: C22 actual source-generated schema2 handoffs and C33 selected automatic per-conversation monitoring remain verified; estimates retain UNKNOWN_OR_INCOMPLETE coverage. C34 sent one fresh source request and independently verified its completed response, but produced no new handoff, intent, rollover or binding. | C35 retry/authority repair passes 85 source tests; C36 normal selected held-lock/readback passes with all 204 records exact. C37 projection passes 13 overlapping source tests and is published, not selected. The full automatic monitoring-to-handoff-to-rollover chain remains OPEN; C29/C34 historical causes remain unproven. Do not infer exact context from incomplete history. |
+| E. Context pressure and durable handoff | PARTIAL: C22 handoffs and C33 independent automatic monitoring remain verified. C38 resumed the existing task, automatically collected a schema2 handoff after observation recovery, and started a new rollover while a sibling was observed and a quarantined project stayed isolated. Estimates retain UNKNOWN_OR_INCOMPLETE coverage. | C38 stopped at SUBMITTING/TEXT_ENTRY_AUTHORIZED: preserved draft is 2,765 of 3,855 expected bytes, only a normalized prefix, with no receipt or binding. Read-only inspections preserve 210 records. Reliable interrupted text-entry recovery and full automatic-chain completion remain OPEN; earlier F/G proofs are retained. C37 projection is published source only, selected v56 remains C35. |
 | F. Actual replacement URL and continuation | PASS, controlled selected browser scope: original accepted canary preserved. C23 adds two fresh issued replacements, paired1→2 updates, source rechecks, preserved history and event-bound marker/task continuations. | No repeat required. Protected/unattended and actual coding acceptance remain separate. |
 | G. Two simultaneous synthetic rollover requests | PASS, SELECTED CONTROLLED LIVE C23:23.22ms request gap, alpha ACTIVE/beta WAITING, maximum sampled creator1; stable unsent waiting ticket survives process exit and completes next. Both issued URLs/pairs/continuations verified, seven prior pairs/history exact, no duplicate submissions. | Automatic recurring driver, critical crash H and protected/unattended qualification remain separate. Preserve these completed operations. |
 | H. Interruptions, recovery and ambiguous submission | PARTIAL LIVE: C24 unknown-send quarantine preserved. C28 selected registered DRAFT_READY interruption, exact fresh draft inspection, first-send recovery, verified source/issued URL, paired2-to3 commit and continuation receipt PASS. Legacy formats retained. | Additional critical phases, including paired-commit crashes. Old uncertain sends are not adopted by the new format. |

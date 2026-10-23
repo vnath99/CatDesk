@@ -1,3 +1,43 @@
+## October 23 C38 — automatic handoff complete; interrupted draft preserved
+
+The selected v56 core resumed the existing unfinished controlled task without
+resending its completed source event. The bounded run lasted
+2026-10-23T15:16:25.856Z–15:28:51.387Z (745.53 seconds), within limits of 740 seconds
+for the listener, 755 for the foreground host and 800 for the outer process job.
+The automatic driver requested and collected a new project-specific schema2
+handoff after its response observer recovered without another send. The handoff
+retained the objective, observed accomplishments, remaining task, next action,
+decisions and ownership restrictions; unverified Git state remained UNKNOWN.
+
+A new rollover record reached SUBMITTING/TEXT_ENTRY_AUTHORIZED, with no receipt,
+bound target or verified source snapshot. Read-only inspection at
+15:29:54.868Z–15:30:08.141Z found a mismatched unsent draft. A separate body read
+at 15:31:32.103Z–15:32:00.684Z found 2,765 actual bytes against 3,855 expected.
+The normalized text is a prefix, but raw equality and raw-prefix checks fail;
+the intent and predecessor are not reached in the truncated content. This is an
+incomplete preserved draft, not an exact-owned completed bootstrap. Neither
+read sent or cleared anything; both left all 210 records exact and zero owners.
+No replacement URL, new binding or completed continuation is established.
+
+An independent sibling received a fresh observation and its temporary policy
+was restored; the quarantined project stayed isolated. The main run compared
+204 baseline records: ten expected changes, six new records, zero unexpected
+changes. The other eight registry/Wake targets, predecessor history, previous
+completed rollover and controlled workspace file stayed exact. Original policies
+were restored. The listener exited naturally and its owned host tree drained.
+Cleanup at 15:28:52.687Z verified zero test-owned processes, the outer job closed
+and both controls STOPPED. No native-session, production or recurring action
+occurred, and no completed canary was replayed. The wrapper's exit 1 records
+incomplete acceptance, not a timeout or failed termination.
+
+Acceptance E and this automatic-chain attempt remain PARTIAL. Earlier completed
+rollover and simultaneous-creation F/G evidence remains intact. C37's projection
+fix is published source only; selected v56 still uses the C35 core. No new source
+tests were run for this milestone. Next: implement and qualify reliable interrupted
+text-entry recovery for the same preserved transaction. Do not infer ownership
+from a normalized prefix, clear unknown text or blindly resend a bootstrap.
+[C38 evidence](../verification/C38_AUTOMATIC_HANDOFF_INTERRUPTION_2026_10_23.json).
+
 ## October 23 C34–C37 — interrupted automatic chain and target-contention repair
 
 C34 remains PARTIAL. The bounded run lasted 2026-10-23T14:00:47.571Z–14:10:10.661Z
