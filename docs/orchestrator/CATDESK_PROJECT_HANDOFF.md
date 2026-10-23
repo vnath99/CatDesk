@@ -1,5 +1,18 @@
 # CatDesk Project Handoff and Continuity Guide
 
+C22: two controlled sources now have actual source-generated schema2 handoffs saved
+as distinct PREPARED intents. Explicit low128-token test trigger against132/137
+observed tokens; production policies unchanged. Requests sent once each/SENT exact
+receipts; first bounded host stops with OBSERVING timers, separate empty-queue
+observation completes both without resend. Both owner trees exit/zero owned
+processes. Collection validates latest source JSON/receipt/timer and correct markers,
+objective, task, Git fields/decisions. Both bindings remain generation1; source
+snapshot recheck at bind still pending. No replacement yet. Next simultaneous
+execute through existing fair admission, then recovery/restart proof. Low policies
+remain enabled only for these prepared projects, no recurring process; native
+owners/original history preserved. No operator action or connector call.
+[C22 evidence](../verification/C22_SCHEMA2_HANDOFF_EXCHANGE_2026_10_23.json).
+
 C21 selects matched v53 STOPPED from `bf62b48`, including C18-C20. Normal app/default
 host builds and new exact owner-refusal gate PASS.139 records: two pointers change,
 137 exact; previous package/five pairs/profile preserved. Selected read-only source

@@ -1,5 +1,19 @@
 # CatDesk — Important Command Reference
 
+## October 23 — C22 actual handoff exchange
+
+Supported `operator web rollover handoff-request --project-id PROJECT --source-task-id STABLE_TASK`
+reads the paired idle source and durably queues its exact schema2 prompt. A saved
+request is not send authority for a new event. After exact SENT receipt and COMPLETE
+response timer, `operator web rollover handoff-collect --project-id PROJECT` reads
+the actual latest JSON answer and saves PREPARED. Two controlled exchanges now pass.
+OBSERVING after a bounded stop does not authorize resend: this test completed the
+existing responses in a separate empty-queue, delivery-pinned observation run.
+Low thresholds are confined to the two prepared test projects; recurring scheduling
+is off. Next explicit simultaneous execute via existing admission. Preserve old
+bindings until replacement/source checks and paired commit succeed.
+[C22 evidence](../verification/C22_SCHEMA2_HANDOFF_EXCHANGE_2026_10_23.json).
+
 ## October 23 — C21 selected source registration and context
 
 Matched v53 contains C18-C20 and is selected STOPPED. Existing `operator web project

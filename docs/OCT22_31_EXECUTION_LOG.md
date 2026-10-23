@@ -1,5 +1,43 @@
 # October 22–31 execution log
 
+## 2026-10-23 — C22 source-generated compaction handoffs, bounded delivery
+
+C21 publication09:22:36 UTC `17cde688c314be97d05835c4c05d647b4f88165e` matched
+remote/clean; CI UNVERIFIED, zero runs/checks. This stage reuses selected v53 and
+prior source gates with no runtime source changes or rebuild. Low controlled-test
+policies configured09:28:49 UTC:512-token budget/384 headroom/128 trigger, rollover
+enabled only for the two isolated projects, periodic observation disabled. These
+are synthetic test thresholds, never claims about actual provider capacity. Five
+production policies/native sessions and all paired targets/history preserved.
+
+Supported handoff-request commands take fresh idle source snapshots and queue
+distinct stable schema2 requests: alpha09:30:30 UTC36.37s, beta09:31:41 UTC36.37s.
+Beta progresses while alpha waits in the queue; this is project preparation
+isolation, not concurrent Web coding acceptance. Each changes its source ledger
+and adds exactly request/active-pointer/queue records; no message sent yet.
+
+Bounded foreground delivery09:38:48–09:40:56 UTC runs at most130s inside180s owner.
+Both new requests reach SENT with exact receipts, but timers are still OBSERVING
+at the monitored stop. Host tree exits normally; zero owned processes, no unexpected
+old/new state, controls STOPPED. No resend. Follow-up observation-only run uses an
+empty queue and pins every delivery read-only:09:42:56–09:43:24 UTC27.65s, both
+timers COMPLETE, zero new messages/records or owned processes, normal owner exit.
+No recurring scheduler, protected runtime or unrelated delivery was activated.
+
+Supported collection independently reads the actual source JSON and verifies
+receipt/timer/task/source ownership: alpha09:44:30 UTC36.29s, beta09:45:58 UTC68.49s.
+Both structured handoffs preserve correct marker, objective, unfinished task,
+schema2 Git state and decisions. They are durable PREPARED intents with no receipt
+or destination binding yet. The source snapshot recheck before binding remains
+pending. Original requests/predecessors/history preserved, no native takeover.
+
+Next submit both fresh execute commands concurrently through existing durable
+admission and browser ownership, independently verify issued URLs/pairs/continuation,
+then interruption/restart gates. Do not repeat seed, handoff or historical canary
+sends. Both controls STOPPED; low test policies remain enabled only for these
+prepared projects, no recurring process. No connector calls/operator action.
+See [C22 evidence](verification/C22_SCHEMA2_HANDOFF_EXCHANGE_2026_10_23.json).
+
 ## 2026-10-23 — C21 matched runtime, two source registrations and live context
 
 C20 source published09:00:05 UTC as `bf62b48945903e69ab02a7cf0e07f6a48b8feadb`,

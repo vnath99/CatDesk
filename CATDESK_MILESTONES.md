@@ -1,3 +1,17 @@
+## 2026-10-23 — C22 actual source-generated schema2 handoffs
+
+Two isolated test policies use an explicit128-token trigger against saved132/137
+observed tokens; production policies unchanged. Each real source chat receives one
+durable schema2 request and returns its project marker, objective, remaining task,
+Git state and decisions. Both handoffs collected into distinct PREPARED journals;
+bindings stay generation1. Beta preparation succeeds while alpha is queued.
+One bounded foreground run sends both once with SENT receipts, then stops while
+timers OBSERVING. Separate empty-queue observation run pins deliveries read-only,
+completes both timers in27.65s, sends nothing and stops cleanly. Both source reads/
+collections pass; zero owned processes/no recurring/native/production changes.
+No creation yet; next simultaneous execute requests through existing admission.
+See [C22 evidence](docs/verification/C22_SCHEMA2_HANDOFF_EXCHANGE_2026_10_23.json).
+
 ## 2026-10-23 — C21 selected fixes and live independent context ledgers
 
 Matched v53 includes C18-C20. Normal app release build PASS6m31s; default host
