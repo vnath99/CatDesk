@@ -1,5 +1,36 @@
 # October 22–31 execution log
 
+## 2026-10-22 evening — release/selected context qualification and bounded live read
+
+- Normal release from clean `10a874bb48a39f7f8b81b76f1f238aeb6055f7c0`
+  completed 00:26:59 UTC October 23 within its 600s Job. Matching normal host,
+  adapter and bridge retained. No source changed after the prior passed gates.
+- Existing stopped updater passed at 00:27:27 UTC in 3.69s; prior package/profile
+  preserved, 134 records checked with only two package pointers changed,
+  five-project view passed, no new state or process. Production untouched.
+- Selected release context refusals passed 00:27:35 UTC in 2.06s under 45s.
+  All 134 records exact, no new state/process/event or private input echo.
+- One actual read-only capture ran 00:29:22–00:30:15 UTC under 240s reader/300s
+  outer containment. Exact paired browser binding verified, advisory context
+  recorded without raw text, unknown older history retained. Eighty-six protected
+  files exact; history preserved, no message/canary replay/host/recurring start.
+  Both controls STOPPED and zero processes verified after root and outer Job exit.
+  Earlier copied-helper manifest mismatch stopped at preflight; failure retained,
+  corrected before the single actual capture. Existing authentication reused.
+- Human granted limited actively monitored foreground tests. Native source drift
+  refused the original review before queue/start; active native owner left alone.
+  A replacement explicitly reviews the already handed historical checkpoint,
+  verified against immutable Git source and its committed test evidence.
+  Replacement preflight passed at 00:35:15 UTC with 134 records enumerated.
+- Automatic approval review rejected the modified-payload send before process
+  creation because exact revised-text approval is required. No attempt marker,
+  queued event or host start; corrected exact-payload approval card is pending.
+  Neither payload was sent; no workaround or automatic retry used.
+- Gates: selected development context CLI/refusals and one live context read PASS;
+  natural review/next-task, active independent multi-project delivery, connector
+  recovery, exact CI and protected production remain OPEN. Connector not called.
+- [Sanitized C3 receipt](verification/C3_CONTEXT_CLI_BATCH_2026_10_22.json).
+
 ## 2026-10-22 evening — C3 context CLI independence and atomic batch import
 
 - **Publication verified at 00:19:37 UTC October 23:** source/test/sanitized

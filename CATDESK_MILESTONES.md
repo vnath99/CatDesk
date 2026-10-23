@@ -1,3 +1,13 @@
+## 2026-10-22 evening — selected context CLI and live observation PASS
+
+Normal release, stopped package/readback and three context refusals passed.
+One read-only browser capture verified its paired destination and advisory
+context without a message or WakeHost; history preserved, zero owned processes.
+Full multi-project/live production gates remain open. Historical native review
+is prepared; automatic approval review holds revised-payload sending for exact
+approval. Existing native owner continues. See the
+[execution log](docs/OCT22_31_EXECUTION_LOG.md).
+
 ## 2026-10-22 evening — context CLI atomic imports and independence
 
 Reproduced and fixed rejected-import partial counting; context CLI operations

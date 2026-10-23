@@ -2,6 +2,35 @@
 
 ## October 22 acceptance reconciliation
 
+### October 22 evening — selected context CLI and one live read qualified
+
+Normal release finished at 00:26:59 UTC October 23 (October 22 New York), within
+600s. App SHA256:
+`a35b6af645f00a57e8a36729f4070b2677ea825359420627541f8fb7e8f26c45`.
+The matched development package was selected stopped through the existing
+updater; previous package retained, five-project view passed, 132 unrelated
+records exact and only two package pointers changed. Selected context refusal
+checks passed in 2.06s, leaving all 134 records exact and zero new state/processes.
+
+One live read-only context capture passed in 52.90s using the existing
+authenticated profile, without WakeHost. It verified the paired destination
+and recorded an advisory text proxy; unseen older history remains UNKNOWN.
+Eighty-six protected files stayed exact, selected context history was preserved,
+no message was sent, and both controls stayed STOPPED. Root exit, outer Job exit
+and zero scoped browser processes were checked. A copied private helper's older
+manifest reference stopped its first preflight before browser startup; the
+corrected helper made one actual capture. This is selected development plus one
+live read, not active multi-project routing or protected production acceptance.
+
+The operator granted bounded actively monitored foreground tests. The prepared
+review's native checkout advanced during normal work, so its unsent candidate
+was preserved. A separately labelled historical-checkpoint candidate verifies
+immutable source and recorded tests from the existing owner handoff. Automatic
+approval review rejected sending that revised payload before process startup;
+exact revised-text approval is pending. No review event/attempt/host start exists.
+Native development continues uninterrupted. See the
+[sanitized C3 evidence](verification/C3_CONTEXT_CLI_BATCH_2026_10_22.json).
+
 ### October 22 evening — context CLI independence and atomic imports
 
 Source inspection found the older CLI context path used a blocking ledger lock

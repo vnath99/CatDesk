@@ -7,6 +7,20 @@ surface.
 
 ## Current checkpoint — 2026-10-22
 
+Latest qualification: normal release and selected stopped context CLI PASS;
+one live read-only capture through the selected package also PASS with exact
+paired destination, preserved history and zero remaining browser processes.
+Selected image SHA256
+`a35b6af645f00a57e8a36729f4070b2677ea825359420627541f8fb7e8f26c45`.
+Both controls remain STOPPED; full routing and production are unaccepted.
+Limited monitored foreground tests are now human-authorized. The original
+review candidate remains unsent because native source advanced. Its explicitly
+historical replacement verifies the original owner's immutable checkpoint and
+recorded tests; it does not interrupt the active native owner. Sending revised
+text was rejected by automatic approval review before process startup; await
+its exact-payload approval in the corrected card. No attempt/event/host start.
+Do not replay the completed capture, selected refusal checks or rollover.
+
 Latest source increment fixes older context CLI blocking and partial imports:
 configure uses the existing guarded control; observe validates and atomically
 imports its batch under the paired-target guard with nonblocking ledger access.

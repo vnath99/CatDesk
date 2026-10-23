@@ -1,5 +1,5 @@
 {
-  "recordedUtc": "2026-10-23T00:19:06.618263Z",
+  "recordedUtc": "2026-10-23T00:38:52.1700958Z",
   "task": "C3-CONTEXT-CLI-INDEPENDENCE-AND-ATOMIC-IMPORT",
   "branch": "codex/web-rollover-oct17",
   "baseHead": "388b84b3ad20735f2b45da38ee408e33bf87a504",
@@ -17,7 +17,7 @@
       "sha256": "0e48c64cf68459352be434c1091a8747c2f6ac31e058659bb67d1f37b76b061d"
     }
   ],
-  "classification": "SOURCE_TESTED_LOCAL_NORMAL_DEBUG_NEGATIVE_ADMISSION",
+  "classification": "SOURCE_TESTED_NORMAL_RELEASE_SELECTED_REFUSALS_AND_SINGLE_LIVE_CONTEXT_READ",
   "defect": "A rejected multi-event context import could count earlier events; older CLI configure/observe could wait on a shared ledger lock",
   "reproduced": {
     "beforeFix": "FAIL rejected context import changed state",
@@ -185,29 +185,30 @@
     "source": "PASS",
     "normalDebugNegativeRealRoot": "PASS",
     "positiveBatchImport": "DISPOSABLE_THREE_PROJECT_FIXTURE_ONLY",
-    "normalRelease": "OPEN_FOR_THIS_FIX",
-    "selectedDevelopment": "PRIOR_PACKAGE_PRESERVED_DOES_NOT_INCLUDE_THIS_FIX",
+    "normalRelease": "PASS",
+    "selectedDevelopment": "PASS_CONTEXT_REFUSALS_AND_ONE_READ_ONLY_BROWSER_CAPTURE",
     "protectedProduction": "OPEN",
     "fullMultiProjectMvp": "PARTIAL"
   },
   "preserved": {
     "originalBindingsAndHistory": 5,
-    "selectedPackageChanged": false,
+    "selectedPackageChanged": true,
     "nativeSessionAction": "NONE",
     "wakeControls": "BOTH_STOPPED",
     "completedCanaryReplayed": false,
     "connectorCalls": 0,
     "messagesSent": 0,
     "recurringStarts": 0,
-    "protectedProductionChanged": false
+    "protectedProductionChanged": false,
+    "browserActions": "ONE_READ_ONLY_CONTEXT_CAPTURE_NO_SEND"
   },
   "blockers": [
-    "Prepared live review pending explicit exception to WakeHost stop instruction",
+    "Modified historical-checkpoint review held: automatic approval review requires exact revised-payload approval; broad bounded-test exception granted",
     "Connector last attempt failed backend transport without HTTP status; prior explicit status429, recovery unproved",
     "Legacy primary quarantine retains missing source USER proof",
     "Current source CI unverified"
   ],
-  "nextTask": "Qualify a normal release of this tested source, then the supported stopped development package; preserve the prepared live review hold",
+  "nextTask": "After exact revised-payload approval, run prepared historical native checkpoint review once under 180s foreground and 400s outer bounds; preserve active native owner and unsent candidate history",
   "publication": {
     "observedUtc": "2026-10-23T00:19:37.3539423Z",
     "status": "PUSHED_EXACT_REMOTE_MATCH",
@@ -221,5 +222,99 @@
     "ci": "UNVERIFIED",
     "force": false,
     "visibilityChange": false
+  },
+  "normalReleaseSelected": {
+    "sourceCommit": "10a874bb48a39f7f8b81b76f1f238aeb6055f7c0",
+    "sourceTree": "61df1a45ef38a8b1b69a2983c704045414439a9f",
+    "startedUtc": "2026-10-23T00:20:18.2326078Z",
+    "finishedUtc": "2026-10-23T00:26:59.8898329Z",
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "maximumSeconds": 600,
+    "exitCode": 0,
+    "imageSha256": "a35b6af645f00a57e8a36729f4070b2677ea825359420627541f8fb7e8f26c45",
+    "imageBytes": 33374208,
+    "hostProfile": "NORMAL_RELEASE_WAKE_DEFAULT_FEATURES_NO_TEST_SUPPORT",
+    "selectedUtc": "2026-10-23T00:27:27.0674471Z",
+    "selectedPackage": "1.0.0-dev.85-2833f16d9978b23eb0f5fae24f000f7d4bc3289b1c2128c15a4e5d55ce70a5a4",
+    "previousPackagePreserved": true,
+    "selectionSeconds": 3.6855521,
+    "metadataRecordsChecked": 134,
+    "unrelatedMetadataExact": 132,
+    "allowedPointerChanges": 2,
+    "unexpectedChanges": 0,
+    "newState": 0,
+    "selectedFiveProjectViewPassed": true,
+    "scopedProcesses": 0,
+    "negativeObservedUtc": "2026-10-23T00:27:35.9332193Z",
+    "negativeSeconds": 2.064481,
+    "negativeMaximumSeconds": 45,
+    "negativeCases": [
+      {
+        "case": "configure-ledger-busy",
+        "errorCode": "WEB_CONTEXT_BUSY",
+        "exitCode": 2,
+        "retainedRootExited": true,
+        "inputNotEchoed": true
+      },
+      {
+        "case": "observe-ledger-busy",
+        "errorCode": "WEB_CONTEXT_BUSY",
+        "exitCode": 2,
+        "retainedRootExited": true,
+        "inputNotEchoed": true
+      },
+      {
+        "case": "invalid-late-event-before-lock",
+        "errorCode": "WEB_CONTEXT_EVENT_INVALID",
+        "exitCode": 2,
+        "retainedRootExited": true,
+        "inputNotEchoed": true
+      }
+    ],
+    "negativeRecordsExact": 134,
+    "negativeStateChanges": 0,
+    "negativeNewState": 0
+  },
+  "singleLiveContextCapture": {
+    "observedUtc": "2026-10-23T00:30:16.1630709Z",
+    "projects": 1,
+    "captured": true,
+    "durationSeconds": 52.9,
+    "readerMaximumSeconds": 240,
+    "outerMaximumSeconds": 300,
+    "outerExitCode": 0,
+    "targetBindingVerified": true,
+    "existingAuthenticatedProfileReused": true,
+    "advisoryEstimateRecorded": true,
+    "fullHistoryCoverage": "UNKNOWN",
+    "rawTextPersisted": false,
+    "userMessageSent": false,
+    "protectedFilesChecked": 86,
+    "protectedChanges": 0,
+    "contextHistoryChanges": 0,
+    "scopedProcesses": 0,
+    "postJobScopedProcesses": 0,
+    "bothControls": "STOPPED",
+    "wakeHostStarted": false,
+    "recurringStarted": false,
+    "canaryReplayed": false,
+    "protectedProductionAccepted": false,
+    "fullMultiProjectAcceptance": false,
+    "retainedPreparationFailure": "Copied private helper referenced earlier manifest; stopped before browser. Corrected preflight, then one actual capture"
+  },
+  "naturalReviewHold": {
+    "boundedTestAuthorization": "HUMAN_GRANTED_LIMITED_ACTIVELY_MONITORED_TESTS",
+    "currentNativeOwner": "ACTIVE_UNINTERRUPTED",
+    "originalCandidate": "PRESERVED_UNSENT_SOURCE_ADVANCED",
+    "replacementCandidate": "HISTORICAL_COMPLETED_CHECKPOINT_WITH_IMMUTABLE_OWNER_AND_TEST_EVIDENCE",
+    "replacementPreflight": "PASS_READ_ONLY",
+    "externalExecution": "REJECTED_BY_AUTOMATIC_APPROVAL_REVIEW_BEFORE_PROCESS_START",
+    "rejectionReason": "Revised payload requires exact approval",
+    "operatorAction": "Approve revised review payload in corrected pending card",
+    "attemptMarker": false,
+    "queued": 0,
+    "hostStarts": 0,
+    "messagesSent": 0,
+    "naturalReviewProved": false
   }
 }
