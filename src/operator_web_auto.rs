@@ -289,6 +289,8 @@ fn error_stage(reason: &str) -> &'static str {
         "AWAITING_BROWSER"
     } else if reason == "WEB_CONTEXT_BUSY" {
         "AWAITING_CONTEXT"
+    } else if reason == "WEB_TARGET_WAKE_CONFIG_BUSY" {
+        "AWAITING_TARGET"
     } else if matches!(
         reason,
         "SOURCE_SNAPSHOT_SCOPE_INVALID"
@@ -418,14 +420,21 @@ fn tick_project_mode(
             let source = Target::new(key.target_generation, key.conversation_url.clone())?;
             (key, source)
         }
-        Err(reason) => match rollover::automatic_recovery_authority(workspace, project) {
+        Err(reason) => match if reason == "WEB_TARGET_WAKE_CONFIG_BUSY" {
+            // A live Wake transaction is not evidence of a split target pair.
+            // Recovery opens a writer-capable store and could wait on that same
+            // transaction. Keep this admission nonblocking and retry locally.
+            Ok(None)
+        } else {
+            rollover::automatic_recovery_authority(workspace, project)
+        } {
             Ok(Some(authority)) => authority,
             Ok(None) | Err(_) => {
                 keep_running()?;
                 let _ = rollover::record_auto_status(
                     workspace,
                     project,
-                    "ATTENTION",
+                    error_stage(crate::operator_web_error_code(&reason)),
                     None,
                     Some(crate::operator_web_error_code(&reason)),
                 );
@@ -558,18 +567,26 @@ fn tick_background_project(
     })
 }
 
-fn retry_busy_browser(
+fn retry_transient_admission(
     cancel: &AtomicBool,
     mut step: impl FnMut() -> Result<Value, String>,
     mut wait: impl FnMut() -> Result<(), String>,
 ) -> Result<Value, String> {
-    // A cold browser read can outlast the 30-second admission wait. Retain
-    // this project's owner for two local retries rather than dropping it for
-    // another entire scheduler interval. Other projects keep their own slots.
+    // Retain this project's owner for two bounded local retries on shared
+    // browser admission or a live Wake target transaction. Neither represents
+    // broken authority or warrants an ATTENTION failure cooldown. Sibling
+    // projects keep their own slots; actual invalid state is never retried here.
     for attempt in 0..3 {
         require_scheduler_running(cancel)?;
         match step() {
-            Err(reason) if reason == "BROWSER_SESSION_BUSY" && attempt < 2 => wait()?,
+            Err(reason)
+                if matches!(
+                    reason.as_str(),
+                    "BROWSER_SESSION_BUSY" | "WEB_TARGET_WAKE_CONFIG_BUSY"
+                ) && attempt < 2 =>
+            {
+                wait()?
+            }
             result => return result,
         }
     }
@@ -698,7 +715,7 @@ pub(crate) fn start_scheduler_scoped(state: SharedState, projects: Option<BTreeS
                     let project_for_task = project.clone();
                     let task_cancel = cancel.clone();
                     let handle = tokio::task::spawn_blocking(move || {
-                        let _ = retry_busy_browser(
+                        let _ = retry_transient_admission(
                             &task_cancel,
                             || tick_background_project(&workspace, &project_for_task, &task_cancel),
                             || wait_for_browser_retry(&task_cancel),
@@ -1301,12 +1318,66 @@ mod tests {
     }
 
     #[test]
+    fn target_transaction_contention_retries_without_retrying_invalid_authority() {
+        use std::cell::Cell;
+        let cancel = AtomicBool::new(false);
+        let calls = Cell::new(0);
+        let waits = Cell::new(0);
+        let result = retry_transient_admission(
+            &cancel,
+            || {
+                calls.set(calls.get() + 1);
+                if calls.get() == 1 {
+                    Err("WEB_TARGET_WAKE_CONFIG_BUSY".into())
+                } else {
+                    Ok(json!({"paired":true}))
+                }
+            },
+            || {
+                waits.set(waits.get() + 1);
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(result["paired"], true);
+        assert_eq!((calls.get(), waits.get()), (2, 1));
+        calls.set(0);
+        assert_eq!(
+            retry_transient_admission(
+                &cancel,
+                || {
+                    calls.set(calls.get() + 1);
+                    Err("WEB_TARGET_WAKE_CONFIG_BUSY".into())
+                },
+                || Ok(())
+            )
+            .unwrap_err(),
+            "WEB_TARGET_WAKE_CONFIG_BUSY"
+        );
+        assert_eq!(calls.get(), 3);
+        for reason in [
+            "WEB_TARGET_WAKE_CONFIG_UNAVAILABLE",
+            "WEB_TARGET_PAIRING_CHANGED",
+        ] {
+            assert_eq!(
+                retry_transient_admission(
+                    &cancel,
+                    || Err(reason.into()),
+                    || panic!("invalid or unavailable authority must not be retried locally")
+                )
+                .unwrap_err(),
+                reason
+            );
+        }
+    }
+
+    #[test]
     fn busy_shared_browser_is_retryable_per_project() {
         use std::cell::Cell;
         let cancel = AtomicBool::new(false);
         let calls = Cell::new(0);
         let waits = Cell::new(0);
-        let result = retry_busy_browser(
+        let result = retry_transient_admission(
             &cancel,
             || {
                 calls.set(calls.get() + 1);
@@ -1326,7 +1397,7 @@ mod tests {
         assert_eq!((calls.get(), waits.get()), (3, 2));
         calls.set(0);
         assert_eq!(
-            retry_busy_browser(
+            retry_transient_admission(
                 &cancel,
                 || {
                     calls.set(calls.get() + 1);
@@ -1340,7 +1411,7 @@ mod tests {
         assert_eq!(calls.get(), 3);
         for reason in ["WEB_CONTEXT_BUSY", "COOPERATIVE_HOST_PROTOCOL_REQUIRED"] {
             assert_eq!(
-                retry_busy_browser(
+                retry_transient_admission(
                     &cancel,
                     || Err(reason.into()),
                     || panic!("only local browser contention is retried")
@@ -1351,7 +1422,7 @@ mod tests {
         }
         calls.set(0);
         assert_eq!(
-            retry_busy_browser(
+            retry_transient_admission(
                 &cancel,
                 || {
                     calls.set(calls.get() + 1);
@@ -1370,6 +1441,10 @@ mod tests {
         assert_eq!(error_stage("WAKE_TARGET_CHANGED"), "WAKE_TARGET_CHANGED");
         assert_eq!(error_stage("BROWSER_SESSION_BUSY"), "AWAITING_BROWSER");
         assert_eq!(error_stage("WEB_CONTEXT_BUSY"), "AWAITING_CONTEXT");
+        assert_eq!(
+            error_stage("WEB_TARGET_WAKE_CONFIG_BUSY"),
+            "AWAITING_TARGET"
+        );
         assert_eq!(
             error_stage("BOOTSTRAP_SOURCE_QUEUE_PENDING"),
             "AWAITING_QUIESCENCE"

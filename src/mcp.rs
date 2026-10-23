@@ -4058,8 +4058,12 @@ pub(crate) fn operator_read_project_web_target_diagnosed(
     })?;
     let (control_workspace, wake_store) =
         project_web_store_expected_diagnosed(control_workspace, project_id, None, true)?;
-    let config = wake_store.config().map_err(|_| {
-        ProjectWebTargetReadFailureV1::mismatch("WEB_TARGET_WAKE_CONFIG_UNAVAILABLE")
+    let config = wake_store.config().map_err(|reason| {
+        ProjectWebTargetReadFailureV1::mismatch(if reason == "CONFIG_LOCK_BUSY" {
+            "WEB_TARGET_WAKE_CONFIG_BUSY"
+        } else {
+            "WEB_TARGET_WAKE_CONFIG_UNAVAILABLE"
+        })
     })?;
     paired_project_target_readback_with_config_diagnosed(&control_workspace, project_id, &config)
 }

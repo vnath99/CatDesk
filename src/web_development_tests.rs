@@ -198,6 +198,47 @@ async fn target_diagnostics_retain_project_git_failure_and_keep_sibling_independ
     }
     let registry_path = control.join(".catdesk/projects/projects.json");
     let registry_before = fs::read(&registry_path).unwrap();
+    // A foreground Wake transaction may overlap any project's paired read.
+    // Preserve the busy reason and do not fall through to writer recovery.
+    let wake_root = wake_protocol_client::wake_root_for_workspace(&control).unwrap();
+    let config_before = fs::read(wake_root.join("config.json")).unwrap();
+    let held = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(wake_root.join("transaction.lock"))
+        .unwrap();
+    held.lock().unwrap();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let release = std::thread::spawn(move || {
+        let _ = release_rx.recv_timeout(std::time::Duration::from_secs(5));
+        drop(held);
+    });
+    let start = std::time::Instant::now();
+    let busy = crate::mcp::operator_read_project_web_target_diagnosed(&control, "beta");
+    let busy_action = operator_facade::parse_operator_action(
+        ["operator", "web", "auto", "tick", "--project-id", "beta"].map(str::to_string),
+    )
+    .unwrap()
+    .unwrap();
+    let busy_tick = operator_facade::execute_operator_action(busy_action, &control).await;
+    let elapsed = start.elapsed();
+    let _ = release_tx.send(());
+    release.join().unwrap();
+    assert_eq!(busy.unwrap_err().code, "WEB_TARGET_WAKE_CONFIG_BUSY");
+    assert_eq!(busy_tick.unwrap_err(), "WEB_TARGET_WAKE_CONFIG_BUSY");
+    assert!(elapsed < std::time::Duration::from_secs(2));
+    let waiting: serde_json::Value = serde_json::from_slice(
+        &fs::read(control.join(".catdesk/web-rollovers/beta/auto-status.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(waiting["stage"], "AWAITING_TARGET");
+    assert_eq!(waiting["reason"], "WEB_TARGET_WAKE_CONFIG_BUSY");
+    assert!(waiting["lastFailure"].is_null());
+    assert!(waiting["retry"].is_null());
+    assert_eq!(
+        fs::read(wake_root.join("config.json")).unwrap(),
+        config_before
+    );
     assert!(
         Command::new("git")
             .arg("-C")
