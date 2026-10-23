@@ -1,5 +1,41 @@
 # October 22–31 execution log
 
+## 2026-10-23 — C31/C32 normal release and stopped-runtime qualification
+
+C31 preserves precise sanitized target-read failures through the existing guarded
+read path and automatic status journal. Single-project target read adds
+diagnosticCode on refusal; legacy coarse error variants and pairing/ownership
+checks are preserved. No new registry or lock. An induced project Git-identity
+failure retains WEB_TARGET_PROJECT_GIT_UNAVAILABLE while its sibling stays paired.
+Malformed registry and real pairing mismatch remain distinguishable. Raw paths,
+Git output and URLs are excluded. 40 tests, 3 new, strict Clippy/format PASS; another
+44 rollover regressions PASS after the read-path change. Source commit
+`5973f1437953ed57a591bc70927631e96c5f6016` was pushed with exact remote SHA readback.
+The original C29 cause cannot be recovered from its collapsed log; it stays open.
+
+C32 normal app release PASS in 325.44s. Default WakeHost rebuild has the exact C27
+hash; its owner-EOF gate proof is reused without another gate process. Existing
+guarded updater selects v55 while STOPPED: 199 records, only two package pointers
+change, 197 protected records exact, previous package/profile/history preserved.
+New normal image reads all nine exact paired targets. A bounded saved-context test
+sets beta's warning to 1,000 against its observed 1,741-token estimate, renders the
+warning once, remains below the 72,000 rollover trigger, and restores the original
+policy byte-for-byte. Automatic flags remain OFF. Unknown history stays UNKNOWN.
+All 199 records exact afterward; old alpha attention/quarantine are preserved.
+
+This qualifies normal artifacts, selected diagnosed reads and saved-context warning
+controls. It is not a new browser observation or automatic monitoring-to-rollover
+proof. No browser/Wake worker/recurring start, message, binding/native-session or
+production change. Zero owned processes; both controls STOPPED. C28/C23/C26 remain
+completed and must not be replayed. Actual Web MCP coding, current coordinated
+monitor, paired-commit crash phases, removal/history archive, protected production,
+CI and unattended acceptance remain OPEN. Next eligible work is a scoped bounded
+monitor qualification on the new image, then remaining recovery phases. No operator
+action is required for independently eligible work; goal remains ACTIVE/PARTIAL.
+
+UTC source gate 13:23:04–13:24:36; source push 13:25:24; app build 13:25:57–13:31:22; rollover regressions 13:32:16–13:32:20; host/package 13:32:17–13:32:19; stopped selection 13:32:51; controlled reads/warning 13:32:57–13:33:03. The normal image includes C30 warning source `8db2686e13bf4bce9da6b6949cce9c3d01e29a69`. Exact CI remains UNVERIFIED; no dispatch or settings change.
+[C31 diagnostics](verification/C31_TARGET_AUTHORITY_DIAGNOSTICS_2026_10_23.json), [C32 controls](verification/C32_SELECTED_WARNING_CONTROLS_2026_10_23.json).
+
 ## 2026-10-23 — C29 monitor limits and C30 warning implementation
 
 C29 runs the existing scoped automatic driver on selected v54, one120s interval

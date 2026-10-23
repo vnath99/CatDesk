@@ -1,5 +1,21 @@
 # CatDesk — Important Command Reference
 
+## October 23 — v55 supports warnings and precise target-read diagnostics
+
+Selected v55 now supports optional `warningThresholdTokens` through existing
+`operator web context configure --project-id PROJECT --input-file POLICY`. Status
+returns `warningTokens`/`warningReached`. Omitted/null uses 80% of budget-minus-
+headroom; explicit values must be positive and not exceed the rollover trigger.
+`operator web target read --project-id PROJECT` reports a fixed `diagnosticCode`
+when refused, preserving project/control Git, registry and pairing failure stages.
+The automatic status journal now retains this code. No target mutation, browser,
+host start or rollover authorization follows from either control. Saved-context
+warning and nine target reads passed on the normal selected image. Policies were
+restored; both controls STOPPED. Historical C29 error is preserved, not cleared or
+reclassified as repaired. New monitored browser qualification remains a separate
+bounded task; prior completed canaries and old frozen plans are not replay inputs.
+[C31 diagnostics](../verification/C31_TARGET_AUTHORITY_DIAGNOSTICS_2026_10_23.json), [C32 controls](../verification/C32_SELECTED_WARNING_CONTROLS_2026_10_23.json).
+
 ## October 23 — C30 warning controls are source-only
 
 After matched qualification, existing `operator web context configure --project-id
