@@ -1,5 +1,84 @@
 # CatDesk October 2026 MVP acceptance
 
+### October 23 C40 — recovered automatic rollover and continuation verified
+
+The selected v57 runtime resumed the same C38 transaction after C39's explicit,
+journaled no-send repair. The bounded automatic run lasted
+2026-10-23T16:13:53.590Z–16:18:57.158Z (303.57 seconds); limits were 300 seconds
+for the listener, 315 for the host and 360 for the outer job. No new source event,
+handoff request or rollover intent was created, and the sibling observation was
+not repeated.
+
+The first bootstrap submission for this intent succeeded. The actual issued
+replacement URL and source snapshot were verified; the project registry and Wake
+target advanced together from generation 2 to 3, retaining both predecessor
+histories. Context recording completed. The continuation has an exact SENT receipt
+and a COMPLETE response timer. A separate read at 16:19:24.936Z–16:20:00.560Z
+verified the 979-character assistant body against its event, project, task and
+continuation marker. Receipt and timer state alone were not used as body proof.
+
+The run checked 213 prior records: eight expected changes, five new records and
+zero unexpected changes. The other eight registrations/Wake targets, controlled
+workspace and native owner stayed exact. The policy was restored after the
+verified binding. Listener and host tree exited cleanly; both controls STOPPED,
+zero owned processes. The body read preserved all 218 records with no new records
+or owners. No native-session, recurring-automation or production changes occurred.
+A final 16:20:39.208Z checkpoint re-read all nine exact pairs and all 218 records,
+acquired the host/browser locks, and confirmed zero owners with both controls STOPPED.
+
+This qualifies a recovered automatic chain after explicit C39 draft repair. It
+does not qualify uninterrupted recovery or unattended operation. Fresh empty-home
+atomic insertion remains source/offline qualified only. Earlier F/G proofs remain
+intact; the completed C38–C40 operation must not be replayed.
+
+Source remains `b692ffbc14d3133a7fe5eabb5db68de5cb5ff3e7` on selected v57; this
+milestone adds no source-test counts. Actual concurrent Web MCP coding remains
+blocked by the connector's last observed HTTP 429. Further crash phases, protected
+production qualification and remote CI remain open. Continue independently
+eligible work, including fresh-entry qualification, without replaying this chain.
+[C40 evidence](verification/C40_RECOVERED_AUTOMATIC_ROLLOVER_2026_10_23.json).
+
+### October 23 C39 — selected atomic entry and live no-send draft repair
+
+C39 uses one native editor transaction for fresh bootstrap text and adds a
+separate repair-draft command. Repair requires exact project/intent/raw-digest
+scope, whole project and task identifier tokens, stopped controls and existing
+ownership locks. It archives the raw witness and records WRITE_ATTEMPTED before
+one edit acknowledgement. Uncertain attempts allow only read-only reconciliation;
+ordinary exact-owned resume and unknown-submit safeguards remain unchanged.
+
+The 16:01:05.438Z–16:02:01.605Z source gate passed 143 distinct tests:
+14 CLI, 47 rollover, 16 Wake bootstrap and 66 Python tests, including 27 new tests.
+Root/Wake strict Clippy and formatting passed. Two earlier fixture-setup failures
+(CONFIG_ROOT_UNAVAILABLE under restricted access) passed with required access;
+an interrupted optional broad suite contributes no passing evidence. Reviewed
+source was published at 16:02:56.477Z on codex/web-rollover-oct17:
+`b692ffbc14d3133a7fe5eabb5db68de5cb5ff3e7`, exact remote SHA verified. CI remains
+UNVERIFIED: zero workflow/check runs; privacy scan passed with no visibility change.
+
+Normal app build passed at 16:03:24.013Z–16:10:00.436Z (396.42 seconds).
+The matched default-feature host passed its owner-EOF/no-state gate. Guarded
+selection at 16:12:10.832Z took 4.32 seconds: two package pointers changed,
+208 of 210 records stayed exact, no new records or owners, previous package retained.
+
+The selected v57 no-send repair passed at 16:12:22.426Z–16:12:54.729Z (32.30 seconds),
+under a 180-second outer limit. It repaired the existing witnessed C38 draft once.
+Three immutable repair journals and one expected admission update were recorded;
+there were zero unexpected changes among 210 prior records. A second fresh browser
+read verified the complete 3,855-byte EXACT_OWNED draft and matching message digest.
+The original rollover journal remained exact at TEXT_ENTRY_AUTHORIZED. No bootstrap
+or continuation was sent, no conversation created and no binding changed. All
+owned processes exited; no WakeHost, native-session, recurring or production changes.
+
+This qualifies recovery of the existing controlled draft on the selected normal
+development package. Fresh empty-home atomic insertion remains source/offline
+qualified, not live-qualified. C38's full automatic chain remains PARTIAL; the next
+bounded test resumes this same intent through normal execution without recreating
+the handoff or replaying completed deliveries. Earlier F/G evidence remains intact.
+One connector read at 15:53Z returned HTTP 429; source work continued. A read-only
+native-session observation at 16:03:59Z found all four sibling sessions active.
+[C39 evidence](verification/C39_ATOMIC_DRAFT_REPAIR_2026_10_23.json).
+
 ### October 23 C38 — automatic handoff complete; interrupted draft preserved
 
 The selected v56 core resumed the existing unfinished controlled task without
@@ -468,10 +547,10 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | B. Two Web conversations make tools calls in separate directories | PARTIAL SOURCE / NORMAL AND SELECTED DEVELOPMENT IMAGE LOCAL HTTP: C11 binds immutable roots/current paired witnesses. C12 editing reuses contracts/journals/writer locks. C15 selected image includes C14 and proves parallel fixture patch/command verification plus restart refusal, with outside writes refused. Native fixture roots preserved; provider-origin chat ID is not authenticated. | Actual concurrent Web coding and protected installed acceptance. Local fixtures, CLI threads and review reads do not close live B. |
 | C. Blocked project while sibling makes useful progress | PARTIAL: scheduler fixtures, C7 granted-reader and C8 timer-fault regressions demonstrate source isolation. Existing independent native owners were preserved. | Bounded real Web project blocking/progress proof on the intended runtime. Unreadable/unattributable shared state still fails closed. |
 | D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
-| E. Context pressure and durable handoff | PARTIAL: C22 handoffs and C33 independent automatic monitoring remain verified. C38 resumed the existing task, automatically collected a schema2 handoff after observation recovery, and started a new rollover while a sibling was observed and a quarantined project stayed isolated. Estimates retain UNKNOWN_OR_INCOMPLETE coverage. | C38 stopped at SUBMITTING/TEXT_ENTRY_AUTHORIZED: preserved draft is 2,765 of 3,855 expected bytes, only a normalized prefix, with no receipt or binding. Read-only inspections preserve 210 records. Reliable interrupted text-entry recovery and full automatic-chain completion remain OPEN; earlier F/G proofs are retained. C37 projection is published source only, selected v56 remains C35. |
-| F. Actual replacement URL and continuation | PASS, controlled selected browser scope: original accepted canary preserved. C23 adds two fresh issued replacements, paired1→2 updates, source rechecks, preserved history and event-bound marker/task continuations. | No repeat required. Protected/unattended and actual coding acceptance remain separate. |
+| E. Context pressure and durable handoff | RECOVERED CONTROLLED CHAIN VERIFIED: C33 independent monitoring, C38 automatically collected schema2 handoff, C39 explicit journaled no-send draft repair, and C40 same-intent automatic generation 2-to-3 rollover/continuation are verified. Context recording is RECORDED and predecessor history retained; estimates remain advisory with UNKNOWN_OR_INCOMPLETE coverage. | Uninterrupted and unattended operation remain unqualified. Fresh empty-home atomic insertion remains source/offline only. No new source tests counted; preserve the completed chain and earlier proofs. |
+| F. Actual replacement URL and continuation | PASS, controlled selected scope: original canary and C23 two-replacement proofs remain preserved. C40 verifies another actual issued URL, exact bootstrap receipt, paired generation 2-to-3 update, preserved registry/Wake histories and completed continuation; a separate event-bound read verifies the assistant body, project, task and marker. | C40 follows explicit C39 no-send repair; it is recovered automatic execution, not uninterrupted or unattended acceptance. Do not replay completed operations. Actual coding and protected production remain separate. |
 | G. Two simultaneous synthetic rollover requests | PASS, SELECTED CONTROLLED LIVE C23:23.22ms request gap, alpha ACTIVE/beta WAITING, maximum sampled creator1; stable unsent waiting ticket survives process exit and completes next. Both issued URLs/pairs/continuations verified, seven prior pairs/history exact, no duplicate submissions. | Automatic recurring driver, critical crash H and protected/unattended qualification remain separate. Preserve these completed operations. |
-| H. Interruptions, recovery and ambiguous submission | PARTIAL LIVE: C24 unknown-send quarantine preserved. C28 selected registered DRAFT_READY interruption, exact fresh draft inspection, first-send recovery, verified source/issued URL, paired2-to3 commit and continuation receipt PASS. Legacy formats retained. | Additional critical phases, including paired-commit crashes. Old uncertain sends are not adopted by the new format. |
+| H. Interruptions, recovery and ambiguous submission | PARTIAL LIVE: C24 unknown-send quarantine and C28 exact-draft recovery remain preserved. C38 interrupted text entry was archived and repaired once by the journal-bound C39 no-send path; C40 resumed the same intent, completed its first bootstrap submission, verified URL/source, bound generation 3 and delivered the verified continuation without new source/handoff events. | Additional critical phases, including paired-commit crashes, remain open. Prefix evidence alone never grants repair or send authority. C40 is a recovered chain after explicit repair, not unattended recovery. |
 | I. Restart preserves registrations/history/pending rollovers | PARTIAL: C23 WAITING/completed restart; C28 selected pending exact-draft recovery and fresh-process completed-state readback.197 records exact/nine pairs, two predecessors/three context generations. | Paired-commit crash phases remain open. No recurring activation. |
 | J. No orphan browser/Wake processes | PASS for recorded bounded tests, including current stopped selection. Root/Job exits and zero owned processes are checked. | Normal unattended operation is NOT ACTIVATED or accepted. Each future bounded test needs its own cleanup proof. |
 

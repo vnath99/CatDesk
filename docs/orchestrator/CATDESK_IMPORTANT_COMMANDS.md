@@ -1,5 +1,84 @@
 # CatDesk — Important Command Reference
 
+## October 23 C40 — recovered automatic rollover and continuation verified
+
+The selected v57 runtime resumed the same C38 transaction after C39's explicit,
+journaled no-send repair. The bounded automatic run lasted
+2026-10-23T16:13:53.590Z–16:18:57.158Z (303.57 seconds); limits were 300 seconds
+for the listener, 315 for the host and 360 for the outer job. No new source event,
+handoff request or rollover intent was created, and the sibling observation was
+not repeated.
+
+The first bootstrap submission for this intent succeeded. The actual issued
+replacement URL and source snapshot were verified; the project registry and Wake
+target advanced together from generation 2 to 3, retaining both predecessor
+histories. Context recording completed. The continuation has an exact SENT receipt
+and a COMPLETE response timer. A separate read at 16:19:24.936Z–16:20:00.560Z
+verified the 979-character assistant body against its event, project, task and
+continuation marker. Receipt and timer state alone were not used as body proof.
+
+The run checked 213 prior records: eight expected changes, five new records and
+zero unexpected changes. The other eight registrations/Wake targets, controlled
+workspace and native owner stayed exact. The policy was restored after the
+verified binding. Listener and host tree exited cleanly; both controls STOPPED,
+zero owned processes. The body read preserved all 218 records with no new records
+or owners. No native-session, recurring-automation or production changes occurred.
+A final 16:20:39.208Z checkpoint re-read all nine exact pairs and all 218 records,
+acquired the host/browser locks, and confirmed zero owners with both controls STOPPED.
+
+This qualifies a recovered automatic chain after explicit C39 draft repair. It
+does not qualify uninterrupted recovery or unattended operation. Fresh empty-home
+atomic insertion remains source/offline qualified only. Earlier F/G proofs remain
+intact; the completed C38–C40 operation must not be replayed.
+
+Source remains `b692ffbc14d3133a7fe5eabb5db68de5cb5ff3e7` on selected v57; this
+milestone adds no source-test counts. Actual concurrent Web MCP coding remains
+blocked by the connector's last observed HTTP 429. Further crash phases, protected
+production qualification and remote CI remain open. Continue independently
+eligible work, including fresh-entry qualification, without replaying this chain.
+[C40 evidence](../verification/C40_RECOVERED_AUTOMATIC_ROLLOVER_2026_10_23.json).
+
+## October 23 C39 — selected atomic entry and live no-send draft repair
+
+C39 uses one native editor transaction for fresh bootstrap text and adds a
+separate repair-draft command. Repair requires exact project/intent/raw-digest
+scope, whole project and task identifier tokens, stopped controls and existing
+ownership locks. It archives the raw witness and records WRITE_ATTEMPTED before
+one edit acknowledgement. Uncertain attempts allow only read-only reconciliation;
+ordinary exact-owned resume and unknown-submit safeguards remain unchanged.
+
+The 16:01:05.438Z–16:02:01.605Z source gate passed 143 distinct tests:
+14 CLI, 47 rollover, 16 Wake bootstrap and 66 Python tests, including 27 new tests.
+Root/Wake strict Clippy and formatting passed. Two earlier fixture-setup failures
+(CONFIG_ROOT_UNAVAILABLE under restricted access) passed with required access;
+an interrupted optional broad suite contributes no passing evidence. Reviewed
+source was published at 16:02:56.477Z on codex/web-rollover-oct17:
+`b692ffbc14d3133a7fe5eabb5db68de5cb5ff3e7`, exact remote SHA verified. CI remains
+UNVERIFIED: zero workflow/check runs; privacy scan passed with no visibility change.
+
+Normal app build passed at 16:03:24.013Z–16:10:00.436Z (396.42 seconds).
+The matched default-feature host passed its owner-EOF/no-state gate. Guarded
+selection at 16:12:10.832Z took 4.32 seconds: two package pointers changed,
+208 of 210 records stayed exact, no new records or owners, previous package retained.
+
+The selected v57 no-send repair passed at 16:12:22.426Z–16:12:54.729Z (32.30 seconds),
+under a 180-second outer limit. It repaired the existing witnessed C38 draft once.
+Three immutable repair journals and one expected admission update were recorded;
+there were zero unexpected changes among 210 prior records. A second fresh browser
+read verified the complete 3,855-byte EXACT_OWNED draft and matching message digest.
+The original rollover journal remained exact at TEXT_ENTRY_AUTHORIZED. No bootstrap
+or continuation was sent, no conversation created and no binding changed. All
+owned processes exited; no WakeHost, native-session, recurring or production changes.
+
+This qualifies recovery of the existing controlled draft on the selected normal
+development package. Fresh empty-home atomic insertion remains source/offline
+qualified, not live-qualified. C38's full automatic chain remains PARTIAL; the next
+bounded test resumes this same intent through normal execution without recreating
+the handoff or replaying completed deliveries. Earlier F/G evidence remains intact.
+One connector read at 15:53Z returned HTTP 429; source work continued. A read-only
+native-session observation at 16:03:59Z found all four sibling sessions active.
+[C39 evidence](../verification/C39_ATOMIC_DRAFT_REPAIR_2026_10_23.json).
+
 ## October 23 C38 — automatic handoff complete; interrupted draft preserved
 
 The selected v56 core resumed the existing unfinished controlled task without
