@@ -272,14 +272,14 @@
   "acceptance": {
     "source": "PASS",
     "normalExecutable": "PASS_NORMAL_DEBUG_APP_AND_DEFAULT_FEATURE_WAKEHOST",
-    "selectedPackage": "PRIOR_C6_V48_UNCHANGED",
+    "selectedPackage": "PASS_SELECTED_STOPPED_DEVELOPMENT_V49",
     "liveTimerFaultIsolation": "NOT_ATTEMPTED",
     "existingSelectedWebProof": "PRESERVED_NOT_REPLAYED",
     "externalConnector": "UNVERIFIED_PRIOR_BACKEND_FAILURE",
     "protectedProduction": "OPEN_CANONICAL_PAIR_LKG_STARTUP_GATES",
     "fullMvp": "PARTIAL"
   },
-  "nextTask": "Prepare the normal release for the C8 source through existing bounded build and stopped development updater. Preserve prior selected package and completed Web proofs; no protected promotion or recurring activation. External connector and exact-build protected installation authority remain separate gates.",
+  "nextTask": "Mandatory updated Web acceptance requires immutable conversation/project workspace authority and durable fair competing rollover admission. Preserve selected C8 package and prior live proofs. C9 history guard is a later source increment, not part of this selected image.",
   "sourcePublication": {
     "atUtc": "2026-10-23T03:19:10.077415Z",
     "action": "project-timer-published-exact-match",
@@ -343,5 +343,94 @@
     "wakeImageBytes": 3485696,
     "wakeBuildLogSha256": "dab4e4707b2e6fdbdead361b4487be475974a047edea846dd92bac44f319f872",
     "wakeProfile": "NORMAL_DEBUG_DEFAULT_FEATURES_NO_DEV_DEPENDENCIES"
+  },
+  "releaseBuild": {
+    "startedUtc": "2026-10-23T03:22:52.1395458Z",
+    "finishedUtc": "2026-10-23T03:29:24.2480938Z",
+    "sourceCommit": "8591900d4882bacb1dc4753e29f42d3e351abcf7",
+    "sourceTree": "47f799b757df4e03f0da1b50e12d13923f05e76d",
+    "sourceFiles": [
+      {
+        "path": "src/operator_web_auto.rs",
+        "sha256": "b1c627504bc18742566f4b2409e2fd55774af98cc665c660745f931cb1ab22e3"
+      },
+      {
+        "path": "wake/src/store.rs",
+        "sha256": "2ede1d287764186fae7c91a8ec6ef950ce4e7cd59ebdef159074f6cf4d2c5c63"
+      },
+      {
+        "path": "wake/src/runtime.rs",
+        "sha256": "544460dba82cc5b6b11bb42e65b95df00a0710fd77a3c8a186a3f843c9dbfc2f"
+      }
+    ],
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "exitCode": 0,
+    "maximumSeconds": 600,
+    "packageSelectionChanged": false,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "imageSha256": "e57d6658eec06c53fa471702b61a91a6ef296d8d107c62e13bad287298b122e2",
+    "imageBytes": 33453568,
+    "buildLogSha256": "b3a58169e56535c3b602f4a0d98bcc4e883ed98d653b1ac625fe45d94ea61a2c"
+  },
+  "selectedDevelopmentQualification": {
+    "sourceCommit": "8591900d4882bacb1dc4753e29f42d3e351abcf7",
+    "observedUtc": "2026-10-23T03:30:41.3694063Z",
+    "selectedPackage": "1.0.0-dev.85-a78149232fc6af235dbce0fbec6e0c40dcd1fd0ccdd1cd247eb49174e97e7637",
+    "previousPackage": "1.0.0-dev.85-dc9a32b1762592291e240f49cc754a4f4b338439c42eb0228146a7eb037b022e",
+    "appAndHostProfiles": [
+      "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+      "NORMAL_RELEASE_WAKE_DEFAULT_FEATURES_NO_TEST_SUPPORT"
+    ],
+    "artifacts": [
+      {
+        "name": "CatDeskBinagotchy.exe",
+        "sha256": "e57d6658eec06c53fa471702b61a91a6ef296d8d107c62e13bad287298b122e2",
+        "bytes": 33453568
+      },
+      {
+        "name": "CatDeskWakeHost.exe",
+        "sha256": "75c49dc855baf5aeb272fbffc4a25ada5e91786e1dd3888bbd41388d4a33fa84",
+        "bytes": 2034176
+      },
+      {
+        "name": "adapter.py",
+        "sha256": "f742b36270dc10f34c47982d3f9fe811386f29d92b3eeb20ffb4d21cc551bdfb",
+        "bytes": 46664
+      },
+      {
+        "name": "wake_bridge.py",
+        "sha256": "7c519de51c29b1a530fb5541f7d2367edb23c8e864271115384d6e3d50dfed7e",
+        "bytes": 157819
+      }
+    ],
+    "foregroundGate": {
+      "schemaVersion": 1,
+      "classification": "NORMAL_RELEASE_FOREGROUND_GATE_PROBE",
+      "imageSha256": "75c49dc855baf5aeb272fbffc4a25ada5e91786e1dd3888bbd41388d4a33fa84",
+      "markerPresent": true,
+      "ownerEofRefused": true,
+      "exitCode": 1,
+      "runtimeStateCreated": false,
+      "ownedProcessExited": true,
+      "deliveryProved": false
+    },
+    "elapsedSeconds": 3.3121821,
+    "stateRecordsChecked": 139,
+    "unchangedRecords": 137,
+    "allowedPointerChanges": 2,
+    "unexpectedChanges": 0,
+    "newRecords": 0,
+    "fiveOriginalPairsPreserved": true,
+    "previousPackagePreserved": true,
+    "authenticatedProfile": "PRESERVED_NOT_OPENED",
+    "selectedViewPassed": true,
+    "ownedProcessCount": 0,
+    "controls": "BOTH_STOPPED",
+    "browserStarted": false,
+    "wakeHostRuntimeStarted": false,
+    "messagesSent": 0,
+    "recurringStarted": false,
+    "protectedProductionChanged": false
   }
 }

@@ -1,5 +1,15 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## October 22 Web milestone scope clarification
+
+This native deliverable/review backend remains useful and existing native owners
+must keep progressing. Its multi-thread proofs do not satisfy the mandatory
+parallel ChatGPT Web workspace criterion. See the updated
+[A–J acceptance ledger](../../OCTOBER_2026_MVP_ACCEPTANCE.md#mandatory-web-architecture--operator-clarification-october-22).
+Project-aware Web execution and fair browser rollover transactions remain
+independent required gates; do not seize native writers or repeat accepted
+review/delivery events to simulate them.
+
 ## 2026-10-21 real full-profile result and child path correction (PARTIAL)
 
 A fresh native report-isolation candidate preserves its captured source through

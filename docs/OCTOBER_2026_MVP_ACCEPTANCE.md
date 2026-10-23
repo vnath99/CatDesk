@@ -2,6 +2,80 @@
 
 ## October 22 acceptance reconciliation
 
+### Mandatory Web architecture — operator clarification October 22
+
+These are core October 31 criteria, not optional later enhancements. The complete
+operator wording is retained in the local project goal; this public record omits
+private workspace names, conversation URLs and runtime identifiers. This section
+supersedes earlier wording that defers compaction until after CLI scheduling.
+
+1. **One project registry.** Reuse the existing unique project ID and canonical
+   workspace registration. Track exact current Web URL, every predecessor and
+   durable handoff, paired Wake target/generation/digest, status/current task,
+   advisory context and last activity. Supported operator add/update/removal and
+   restart recovery are required. No implicit inheritance from another project.
+2. **Parallel Web work.** Independent ChatGPT conversations must make MCP calls
+   against their own immutable project workspace bindings, with reliable project
+   identity, scoped file writes/tasks and duplicate prevention. An unsafe mutable
+   process working directory is not a router. Shared-resource exclusion must not
+   serialize unrelated project tools or steal existing native Codex ownership.
+3. **Context continuation.** Estimate each conversation from observed messages,
+   tool traffic and known content, retaining uncertainty about hidden context and
+   attachments. Configurable warning/rollover safety margins, durable checkpoints
+   and structured handoffs must retain objective, verified work, Git state,
+   decisions, unfinished tasks, blockers and next actions. Reuse the authenticated
+   browser, verify the issued URL and continuation, update only that project's
+   paired authority and preserve predecessors. Never overwrite an unknown draft.
+4. **Recoverable browser transaction.** Use exclusive profile/composer ownership,
+   a durable fair queue of competing rollover IDs and journals, correct project/
+   handoff/state checks, no duplicate submission after uncertainty, independent
+   issued-URL proof and the existing guarded registry/Wake commit. Keep the old
+   binding until replacement checks pass. Recover every phase; release ownership
+   after completion or safe quarantine. Browser and filesystem are separate
+   systems. Unknown submission never permits blind resend. Exclude only the
+   genuinely shared browser step, not independent development or MCP calls.
+
+#### Required live demonstration ledger A–J
+
+No row below grants installed or unattended acceptance. Preserve completed proof;
+new gates do not authorize replaying accepted deliveries or rollover canaries.
+
+| Gate | Existing evidence and exact scope | Remaining acceptance |
+| --- | --- | --- |
+| A. At least three registered project Web conversations | PASS, development: five original paired registrations read by the selected status view; registry/workspace binding and target/history stores exist. | Protected runtime acceptance remains separate. |
+| B. Two Web conversations make tools calls in separate directories | OPEN. Generic file/command tools receive the server-configured root. The server snapshots it per request; this is not authenticated per-conversation project routing. Explicit project IDs in Web controls do not authenticate ChatGPT origin. | Implement reliable immutable project execution context and scoped workspace resolution; demonstrate concurrent Web operations and cross-project refusal while preserving native owners. CLI thread concurrency and granted review reads do not close B. |
+| C. Blocked project while sibling makes useful progress | PARTIAL: scheduler fixtures, C7 granted-reader and C8 timer-fault regressions demonstrate source isolation. Existing independent native owners were preserved. | Bounded real Web project blocking/progress proof on the intended runtime. Unreadable/unattributable shared state still fails closed. |
+| D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
+| E. Context pressure and durable handoff | PARTIAL: per-conversation saved estimates/policies and actual browser observations; completed canary has a durable handoff. Coverage remains advisory/UNKNOWN when incomplete. | Full required handoff fields and coordinated automatic monitoring qualification; do not infer exact context from lifetime MCP counters. |
+| F. Actual replacement URL and continuation | PASS, one controlled browser canary: issued replacement URL, paired generation update, predecessor preservation and continuation are already verified. | Preserve proof; no repeat required. This does not prove two simultaneous rollovers. |
+| G. Two simultaneous synthetic rollover requests | OPEN. Existing shared browser OS lock and project journals prevent overlapping owners; task round robin is not proof of a durable fair creation queue. | Durable fair rollover admission, then two fresh controlled project requests with isolated identities/bindings and no duplicate message. |
+| H. Interruption and ambiguous-submission recovery | PARTIAL: source recovery/draft/receipt tests and retained real ambiguous/quarantined state exist. No blind resend is allowed. | Bounded controlled interruption at specified transaction phases, with actual browser evidence and cleanup. Preserve historical ambiguity; never manufacture its missing receipt. |
+| I. Restart preserves registrations/history/pending rollovers | PARTIAL: fresh read-only CLI processes recover stored paired targets, saved continuation and quarantine; atomic durable stores exist. | Controlled restart during a pending transaction, verifying registry, predecessor/handoff and queue/journal recovery. No recurring service activation implied. |
+| J. No orphan browser/Wake processes | PASS for recorded bounded tests, including current stopped selection. Root/Job exits and zero owned processes are checked. | Normal unattended operation is NOT ACTIVATED or accepted. Each future bounded test needs its own cleanup proof. |
+
+**Implementation gaps identified:** no proven per-conversation generic MCP
+workspace routing, no demonstrated durable fair new-chat admission queue, no
+supported Web project removal path found, bounded predecessor storage, and no
+explicit structured Git/decision fields in the current handoff schema. Existing
+registry, context store, browser ownership and rollover journals will be reused.
+First eliminate silent predecessor eviction before Wake commit, then implement
+immutable project execution context and fair browser transaction admission.
+Keep source/fixture, isolated browser, selected runtime, protected installation
+and unattended operation separate. Connector transport and protected deployment
+are specific live dependencies; neither blocks eligible source work. All other
+projects continue through their existing native development owners.
+
+Immediate C9 source fix removes silent predecessor eviction. At the existing
+64-entry inline capacity, another target change now refuses before the paired
+Wake callback, preserving every stored predecessor and registry bytes. Same-URL
+rebinding and another project's binding still work. Two focused tests, strict
+Clippy and format pass. No unlimited archive or live history-boundary acceptance
+is claimed. C9 is not selected; [C9 evidence](verification/C9_WEB_HISTORY_PRESERVATION_2026_10_22.json).
+The prior C8 source is now a normal release selected STOPPED; 139 records checked,
+only two package pointer changes, five original pairs and prior package preserved,
+zero owned processes. This is a development package/status qualification, not
+protected installation or the new simultaneous-rollover acceptance.
+
 ### October 22 evening — timer fault isolation SOURCE / TESTED_LOCAL
 
 Automatic readiness, completed-task lookup and rollover source quiescence now

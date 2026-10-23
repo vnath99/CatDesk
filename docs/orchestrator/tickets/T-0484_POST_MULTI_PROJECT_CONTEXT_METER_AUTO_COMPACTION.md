@@ -1,4 +1,19 @@
 # T-0484 — Per-conversation context pressure, token accounting and safe automatic rollover
+
+## Mandatory October 22 acceptance clarification
+
+Context monitoring/compaction and rollover remain core October 31 acceptance,
+alongside true parallel project-bound Web MCP operations. Shared authenticated
+browser creation must use durable fair exclusive admission, stable rollover IDs,
+journaled multi-stage recovery, issued-URL/continuation proof and guarded paired
+commit. Unknown submission never permits blind resend. Preserve predecessor
+history and unknown drafts; serialize only shared browser operations. The updated
+[A–J ledger](../../OCTOBER_2026_MVP_ACCEPTANCE.md#mandatory-web-architecture--operator-clarification-october-22)
+records simultaneous-rollover, interruption and restart demonstrations as open.
+The accepted single rollover is preserved and must not be replayed. C9 source
+prevents silent predecessor eviction at inline capacity; it does not supply an
+unlimited archive or complete the new live gates.
+
 **Priority:** October 31 combined P3/P4 user milestone. The operator's October 17 revision supersedes the earlier deferral below. Independent ChatGPT Web project continuation and a demonstrated project rollover are required for overall acceptance.
 **Date:** 2026-10-14; priority revised 2026-10-17; acceptance updated 2026-10-21 | **Status:** Controlled rollover, continuation and three-project delivery verified; five independent context meters observed; retry pacing source and stopped package readback pass; live background, installed, central connector and natural-cycle acceptance pending.
 **Owner:** Codex Desktop, alongside continued development in each project's existing Codex conversation.

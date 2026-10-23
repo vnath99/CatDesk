@@ -1,5 +1,50 @@
 # October 22–31 execution log
 
+## 2026-10-22 late evening — mandatory Web criteria and predecessor retention
+
+The operator made registry lifecycle/history, genuine parallel project-bound Web
+MCP work, context-aware continuation and durable fair shared-browser creation
+mandatory. Full wording is preserved in the local master/project goals. The
+established acceptance document now has an explicit A–J evidence/gap ledger;
+milestones, handoff, commands and related tickets point to it. Private workspace
+names and conversation URLs are not published. Existing routing/rollover proof
+is retained, never replayed. Generic tool roots are snapshotted per request, but
+that is not reliable per-conversation project identity. No proven durable fair
+new-chat queue, Web project removal path or explicit Git/decision handoff fields
+was found; these remain implementation/acceptance gaps.
+
+A concrete registry defect violated predecessor preservation: after 64 prior
+URLs, binding silently removed the oldest after the paired Wake pre-commit
+callback. The regression reproduced exit 101. C9 refuses capacity overflow
+before that callback and preserves registry bytes/history. Rebinding the same
+URL at capacity remains valid, and another project can still bind independently.
+Two focused tests, strict all-target/all-feature Clippy and format pass at
+03:36:54 UTC October 23, within 600s Job containment. The 64-entry inline limit
+remains; this is loss prevention, not an unlimited archive. No actual project
+binding or browser was changed by C9 tests; callback non-invocation is fixture
+proof, not a live Wake mutation. C9 is source-tested only, not in selected v49.
+See [C9 evidence](verification/C9_WEB_HISTORY_PRESERVATION_2026_10_22.json).
+
+Before that source increment, clean `8591900d4882bacb1dc4753e29f42d3e351abcf7`
+built a normal release at 03:29:24 UTC in 6m32s under 600s. Matched normal
+default-feature WakeHost build and owner-marker/EOF refusal passed; no runtime
+initialized. Existing guarded stopped updater selected development v49 in 3.31s
+at 03:30:41 UTC. App SHA256
+`e57d6658eec06c53fa471702b61a91a6ef296d8d107c62e13bad287298b122e2`.
+139 records compared: only two package pointers changed, 137 others exact,
+zero new records/processes, all five original pairs/history/profile and prior
+package preserved, both controls STOPPED. Selected status view passed. No
+message, live fault injection, recurring activation, native ownership change,
+protected install, signing or rotation. This qualifies selected C8 development
+status, not C9 history behavior, new browser acceptance G/H or production.
+See [C8 qualification](verification/C8_PROJECT_TIMER_ISOLATION_2026_10_22.json).
+
+Next implement immutable project execution context and durable fair browser
+transaction admission using existing stores. Connector transport, canonical
+pair/rollback/startup authority and historical quarantine remain separate live
+dependencies. Other projects keep their existing native development owners.
+Publication receipt is added after exact remote SHA readback; CI remains separate.
+
 ## 2026-10-22 evening — project timer isolation and deployment prerequisites
 
 - **Published source at 03:19:10 UTC October 23:** nine reviewed, sanitized

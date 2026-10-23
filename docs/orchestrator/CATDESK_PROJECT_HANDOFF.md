@@ -7,6 +7,25 @@ surface.
 
 ## Current checkpoint — 2026-10-22
 
+The operator strengthened mandatory Web acceptance: one registry with complete
+history/lifecycle; actual parallel Web MCP work in reliable immutable project
+contexts; context-aware handoff/rollover; durable fair serialized shared-browser
+creation with crash/ambiguous-outcome recovery. See the A–J ledger in
+[October acceptance](../OCTOBER_2026_MVP_ACCEPTANCE.md#mandatory-web-architecture--operator-clarification-october-22).
+Do not substitute native CLI threads, source fixtures, a global workspace snapshot
+or one prior rollover for the new live B/G/H/I gates. Existing browser locks and
+project journals are reused, not a second registry or a global development lock.
+Full operator wording is preserved in the local October project goal. Native
+owners remain independent; no completed Web canary or delivery is replayed.
+
+C9 source/test pass prevents silent history eviction at 64 inline predecessors
+before paired Wake pre-commit. Existing history bytes remain intact; this is a
+capacity refusal, not an unlimited archive. Two tests, strict Clippy/format pass.
+C9 is not selected. C8 normal release is selected STOPPED with exact paired
+status, two pointer changes among 139 records and zero owned processes. Preserve
+the previous package. Continue project-context authority/fair rollover admission;
+do not replay live proofs or treat source labels as authenticated caller identity.
+
 Latest source isolates attributable sibling timer validation errors in automatic
 readiness, completed-task lookup and rollover source quiescence. Own-project and
 global validation remain strict; malformed/unattributable records still refuse.

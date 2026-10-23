@@ -1179,13 +1179,20 @@ impl AutonomousProjectRegistryStoreV1 {
                 "project target compare-and-swap did not match".into(),
             ));
         }
+        // Check capacity before the caller updates paired Wake authority. A
+        // bounded registry may refuse another predecessor, never evict one.
+        if project.chatgpt_target_url.as_deref() != Some(target_url.as_str())
+            && project.chatgpt_target_url.is_some()
+            && project.chatgpt_target_history.len() >= MAX_PROJECT_CHAT_TARGET_HISTORY
+        {
+            return Err(RuntimeError::Validation(
+                "project ChatGPT target history capacity reached; predecessors preserved".into(),
+            ));
+        }
         before_commit()?;
         if project.chatgpt_target_url.as_deref() != Some(target_url.as_str()) {
             if let Some(previous) = project.chatgpt_target_url.take() {
                 project.chatgpt_target_history.push(previous);
-                if project.chatgpt_target_history.len() > MAX_PROJECT_CHAT_TARGET_HISTORY {
-                    project.chatgpt_target_history.remove(0);
-                }
             }
         }
         project.chatgpt_target_url = Some(target_url);
@@ -2240,6 +2247,55 @@ mod tests {
             chatgpt_target_sha256: None,
             chatgpt_target_history: Vec::new(),
         }
+    }
+
+    #[test]
+    fn target_history_capacity_refuses_before_wake_commit_without_losing_predecessors() {
+        use std::cell::Cell;
+        let (root, store, _) = scheduler_preflight_fixture("history-capacity");
+        let current = "https://chatgpt.com/c/current-alpha";
+        let mut registry = store.load_registry().unwrap();
+        registry.projects[0].chatgpt_target_url = Some(current.into());
+        registry.projects[0].chatgpt_target_sha256 = Some(project_chat_target_digest(current));
+        registry.projects[0].chatgpt_target_history = (0..MAX_PROJECT_CHAT_TARGET_HISTORY)
+            .map(|index| format!("https://chatgpt.com/c/history-{index}"))
+            .collect();
+        store.save_registry(&registry).unwrap();
+        let before = fs::read(store.registry_path()).unwrap();
+        let called = Cell::new(false);
+        let result = store.bind_project_chat_target_after(
+            "alpha",
+            "https://chatgpt.com/c/replacement-alpha",
+            Some(&project_chat_target_digest(current)),
+            || {
+                called.set(true);
+                Ok(())
+            },
+        );
+        assert!(
+            result.is_err(),
+            "full history must not discard its oldest predecessor"
+        );
+        assert!(
+            !called.get(),
+            "Wake pre-commit must not run when registry cannot retain history"
+        );
+        assert_eq!(fs::read(store.registry_path()).unwrap(), before);
+        let same = store
+            .bind_project_chat_target("alpha", current, Some(&project_chat_target_digest(current)))
+            .unwrap();
+        assert_eq!(
+            same.chatgpt_target_history,
+            registry.projects[0].chatgpt_target_history
+        );
+        let sibling = root.join("beta");
+        fs::create_dir(&sibling).unwrap();
+        store.register_project(project("beta", sibling)).unwrap();
+        assert!(
+            store
+                .bind_project_chat_target("beta", "https://chatgpt.com/c/current-beta", None)
+                .is_ok()
+        );
     }
 
     #[test]

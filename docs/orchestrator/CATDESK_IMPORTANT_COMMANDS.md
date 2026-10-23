@@ -1,5 +1,21 @@
 # CatDesk — Important Command Reference
 
+## Mandatory multi-project Web authority
+
+The [A–J acceptance ledger](../OCTOBER_2026_MVP_ACCEPTANCE.md#mandatory-web-architecture--operator-clarification-october-22)
+distinguishes implemented controls from live gaps. Existing `operator web project
+register` and guarded `operator web target bind` manage the same registry and
+paired Wake authority; they do not authenticate the calling ChatGPT or make the
+generic file/exec tools project-aware. Do not change a global workspace between
+concurrent chats or use a caller path as project authority. A Web project removal
+command and durable fair competing-rollover admission remain unqualified; do not
+delete registry entries, journals or history by hand to simulate them.
+
+C9 source refuses a new target when the existing 64-predecessor inline history
+is full, before paired Wake pre-commit. Do not remove old URLs to bypass that
+refusal. Same-URL binding consumes no history slot. Current selected development
+v49 predates C9; source tests are not installed behavior.
+
 ## October 22 bounded deployment diagnosis
 
 The existing read-only commands are:

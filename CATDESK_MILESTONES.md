@@ -1,3 +1,21 @@
+## Mandatory October 31 Web acceptance clarification
+
+Immediate source increment C9 stops silent predecessor eviction at the 64-URL
+inline bound before paired Wake commit. Two regressions, strict Clippy and format
+pass; the inline capacity remains a limitation, not an unlimited archive. C9 is
+not selected. Existing C8 normal release is now selected STOPPED with 139-record
+comparison, only two pointer changes and zero owned processes; no Web replay.
+See [C9 evidence](docs/verification/C9_WEB_HISTORY_PRESERVATION_2026_10_22.json).
+
+The four core requirements are the existing project registry with full Web
+history/lifecycle, true parallel project-bound Web MCP work, context-aware
+continuation, and durable fair serialized shared-browser creation. All live
+demonstrations A–J are required; CLI concurrency does not close Web execution.
+The detailed current evidence/gap ledger is in
+[October acceptance](docs/OCTOBER_2026_MVP_ACCEPTANCE.md#mandatory-web-architecture--operator-clarification-october-22).
+Reuse completed routing/rollover proof. Per-conversation workspace authority and
+fair durable competing-rollover admission remain open; no unattended activation.
+
 ## 2026-10-22 evening — project timer isolation SOURCE PASS
 
 Reproduced a sibling timer error blocking automatic task-anchor discovery.
