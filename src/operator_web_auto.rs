@@ -896,6 +896,7 @@ mod tests {
                     automatic_observation_enabled: true,
                     automatic_rollover_enabled: true,
                     incomplete_history_rollover: false,
+                    ..Default::default()
                 },
             )
             .unwrap();

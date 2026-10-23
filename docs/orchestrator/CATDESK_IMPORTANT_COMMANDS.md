@@ -1,5 +1,19 @@
 # CatDesk — Important Command Reference
 
+## October 23 — C30 warning controls are source-only
+
+After matched qualification, existing `operator web context configure --project-id
+PROJECT --input-file POLICY` accepts optional `warningThresholdTokens` alongside
+the complete existing policy. The MCP configure tool exposes the same optional
+field. Omitted/null selects80% of budget-minus-headroom; explicit values must be
+positive and not exceed the rollover trigger. Status returns `warningTokens` and
+`warningReached`; warnings do not enable browser reads or rollover. Current selected
+v54 does NOT yet accept this new field. Do not send it to the installed old schema.
+C29 monitor plans are consumed. Preserve completed captures and partial assertions;
+no further browser cycle is necessary to diagnose the saved authority discrepancy.
+Both controls remain STOPPED; use existing status/source diagnostics next.
+[C29 monitor](../verification/C29_AUTOMATIC_CONTEXT_MONITOR_2026_10_23.json), [C30 warning](../verification/C30_CONTEXT_WARNING_POLICY_2026_10_23.json).
+
 ## October 23 — C28 completed recovery: inspect saved evidence, do not replay
 
 Existing `operator web rollover inspect-draft` independently identified the exact

@@ -5329,6 +5329,7 @@ mod tests {
             automatic_rollover_enabled: true,
             automatic_observation_enabled: false,
             incomplete_history_rollover: false,
+            ..Default::default()
         };
         meter.configure_policy("alpha", policy.clone()).unwrap();
         meter.bind_observed_target(key.clone(), None).unwrap();

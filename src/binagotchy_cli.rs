@@ -1049,6 +1049,19 @@ fn render_web_projects_at(
                 .unwrap_or_else(|| "UNKNOWN".into());
             writeln!(out, "    context: observed {tokens} tokens (advisory), coverage {coverage}, configured trigger {trigger}")
                 .map_err(|_| "CLI_OUTPUT_FAILED")?;
+            if let (Some(warning), Some(reached)) = (
+                pressure["warningTokens"]
+                    .as_u64()
+                    .filter(|tokens| *tokens > 0),
+                pressure["warningReached"].as_bool(),
+            ) {
+                let level = if reached { "REACHED" } else { "NOT_REACHED" };
+                writeln!(
+                    out,
+                    "    context warning: {level} at {warning} observed tokens (advisory)"
+                )
+                .map_err(|_| "CLI_OUTPUT_FAILED")?;
+            }
             let capture = &pressure["browserCoverage"];
             let age = capture["lastObservedAtUnix"]
                 .as_u64()
@@ -1705,6 +1718,32 @@ mod tests {
             String::from_utf8(out)
                 .unwrap()
                 .contains("STALE_OR_UNVERIFIED_SNAPSHOT")
+        );
+    }
+
+    #[test]
+    fn web_warning_view_requires_current_pair_and_keeps_unknown_coverage() {
+        let mut report = web_report();
+        let pressure = &mut report["webProjects"]["projects"][0]["context"]["currentPressure"];
+        pressure["warningTokens"] = serde_json::json!(1200);
+        pressure["warningReached"] = serde_json::json!(true);
+        let mut output = Vec::new();
+        super::render_web_projects(&report, &mut output).unwrap();
+        let text = String::from_utf8(output).unwrap();
+        assert_eq!(
+            text.matches("context warning: REACHED at 1200 observed tokens (advisory)")
+                .count(),
+            1
+        );
+        assert!(text.contains("coverage UNKNOWN"));
+        report["webProjects"]["projects"][0]["context"]["currentPressure"]["key"]["targetGeneration"] =
+            serde_json::json!(1);
+        let mut output = Vec::new();
+        super::render_web_projects(&report, &mut output).unwrap();
+        assert!(
+            !String::from_utf8(output)
+                .unwrap()
+                .contains("context warning:")
         );
     }
 

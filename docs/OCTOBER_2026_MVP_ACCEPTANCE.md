@@ -1,5 +1,41 @@
 # CatDesk October 2026 MVP acceptance
 
+### October 23 C29/C30 — actual automatic context captures and source warning policy
+
+C29 runs the existing scoped automatic driver on selected v54, one120s interval
+per200s listener (210s owned foreground host/240s outer Job). First three-project
+run preserves quarantine, observes one current conversation and cancels the
+second capture at the frozen deadline; listener exits normally and drains work.
+Second run targets only the pending conversation plus quarantine, preserving the
+completed browser read. It records a fresh independent observation. The two
+current conversations have1657/1741 observed-token estimates, distinct generations
+and durable coverage UNKNOWN_OR_INCOMPLETE; hidden context remains unbounded.
+
+Both run assertions are PARTIAL: the second records an unexpected generic
+WEB_AUTO_PAIRED_TARGET_REQUIRED for the quarantined project, target generation
+unavailable at that tick. Fresh normal status still verifies all9 pairs; registry,
+Wake config/history and old rollover journals are byte-exact. Underlying cause is
+unproved because the driver collapses the admission diagnostic. Do not rerun
+completed reads to obtain a greener result. Both policies restored, zero messages,
+binding/native/production changes; both controls STOPPED, zero owned processes.
+No recurring automation or connector probe. Actual Web MCP coding stays separate.
+
+C30 fills a source gap: optional per-project warningThresholdTokens, validated1
+through rollover trigger; omitted/null defaults to80% of trigger (57600 at default
+72000 rollover). Legacy omitted policy serialization is preserved. warningTokens/
+warningReached and the central paired-generation view remain advisory; unknown
+coverage and automatic rollover authorization are unchanged.92 distinct tests,
+including4 new cases, strict all-target/all-feature Clippy and format PASS. Warning
+feature is SOURCE ONLY: no new normal build, selected update or live threshold
+acceptance. The monitor tested the unchanged older selected image.
+
+NEXT: source/read-only diagnosis of the automatic tick authority discrepancy,
+then normal warning build/selected qualification and remaining paired-commit
+recovery phases. B/C connector429, full automatic rollover, removal/history archive,
+protected installation, CI and unattended remain open. No operator action required
+for this independently eligible work. The goal remains ACTIVE/PARTIAL.
+[C29 monitor](verification/C29_AUTOMATIC_CONTEXT_MONITOR_2026_10_23.json), [C30 warning](verification/C30_CONTEXT_WARNING_POLICY_2026_10_23.json).
+
 ### October 23 C28 — registered exact-draft recovery, paired commit and continuation
 
 Selected v54 now completes a fresh registered escaped-handoff rollover after an
@@ -278,7 +314,7 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | B. Two Web conversations make tools calls in separate directories | PARTIAL SOURCE / NORMAL AND SELECTED DEVELOPMENT IMAGE LOCAL HTTP: C11 binds immutable roots/current paired witnesses. C12 editing reuses contracts/journals/writer locks. C15 selected image includes C14 and proves parallel fixture patch/command verification plus restart refusal, with outside writes refused. Native fixture roots preserved; provider-origin chat ID is not authenticated. | Actual concurrent Web coding and protected installed acceptance. Local fixtures, CLI threads and review reads do not close live B. |
 | C. Blocked project while sibling makes useful progress | PARTIAL: scheduler fixtures, C7 granted-reader and C8 timer-fault regressions demonstrate source isolation. Existing independent native owners were preserved. | Bounded real Web project blocking/progress proof on the intended runtime. Unreadable/unattributable shared state still fails closed. |
 | D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
-| E. Context pressure and durable handoff | PARTIAL: C21 actual132/137 observed-token ledgers persist independently. C22 low test policies trigger two actual source-generated schema2 handoffs, exact receipts/completed timers and verified markers/Git/decisions, saved PREPARED. Coverage stays UNKNOWN_OR_INCOMPLETE. | Coordinated automatic monitoring qualification; do not infer exact context from lifetime MCP counters or source Git reports. Actual schema2 exchange is proved. |
+| E. Context pressure and durable handoff | PARTIAL: C21 actual132/137 observed-token ledgers persist independently. C22 low test policies trigger two actual source-generated schema2 handoffs, exact receipts/completed timers and verified markers/Git/decisions, saved PREPARED. Coverage stays UNKNOWN_OR_INCOMPLETE. | C29 actual automatic ticks observe two distinct current conversations across two bounded runs; overall monitor qualification remains PARTIAL on a collapsed target-authority diagnostic. C30 warning threshold is source-tested only. Do not infer exact context from lifetime counters or incomplete browser history. |
 | F. Actual replacement URL and continuation | PASS, controlled selected browser scope: original accepted canary preserved. C23 adds two fresh issued replacements, paired1→2 updates, source rechecks, preserved history and event-bound marker/task continuations. | No repeat required. Protected/unattended and actual coding acceptance remain separate. |
 | G. Two simultaneous synthetic rollover requests | PASS, SELECTED CONTROLLED LIVE C23:23.22ms request gap, alpha ACTIVE/beta WAITING, maximum sampled creator1; stable unsent waiting ticket survives process exit and completes next. Both issued URLs/pairs/continuations verified, seven prior pairs/history exact, no duplicate submissions. | Automatic recurring driver, critical crash H and protected/unattended qualification remain separate. Preserve these completed operations. |
 | H. Interruptions, recovery and ambiguous submission | PARTIAL LIVE: C24 unknown-send quarantine preserved. C28 selected registered DRAFT_READY interruption, exact fresh draft inspection, first-send recovery, verified source/issued URL, paired2-to3 commit and continuation receipt PASS. Legacy formats retained. | Additional critical phases, including paired-commit crashes. Old uncertain sends are not adopted by the new format. |

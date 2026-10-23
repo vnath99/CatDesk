@@ -35,6 +35,10 @@ pub struct ContextPressurePolicy {
     pub configured_budget_tokens: u64,
     pub safety_headroom_tokens: u64,
     pub unknown_source_reserve_tokens: u64,
+    /// Early advisory warning, independently configurable below the rollover
+    /// trigger. Omission preserves legacy policy bytes and uses 80% of trigger.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning_threshold_tokens: Option<u64>,
     pub automatic_rollover_enabled: bool,
     /// Explicit consent for periodic browser reads when rollover is disabled.
     #[serde(default)]
@@ -51,6 +55,7 @@ impl Default for ContextPressurePolicy {
             configured_budget_tokens: 96_000,
             safety_headroom_tokens: 24_000,
             unknown_source_reserve_tokens: 8_000,
+            warning_threshold_tokens: None,
             automatic_rollover_enabled: false,
             automatic_observation_enabled: false,
             incomplete_history_rollover: false,
@@ -64,6 +69,9 @@ impl ContextPressurePolicy {
             || self.configured_budget_tokens > 2_000_000
             || self.safety_headroom_tokens >= self.configured_budget_tokens
             || self.unknown_source_reserve_tokens > self.configured_budget_tokens
+            || self
+                .warning_threshold_tokens
+                .is_some_and(|tokens| tokens == 0 || tokens > self.trigger_tokens())
         {
             return Err("WEB_CONTEXT_POLICY_INVALID".into());
         }
@@ -72,6 +80,11 @@ impl ContextPressurePolicy {
 
     pub fn trigger_tokens(&self) -> u64 {
         self.configured_budget_tokens - self.safety_headroom_tokens
+    }
+
+    pub fn warning_tokens(&self) -> u64 {
+        self.warning_threshold_tokens
+            .unwrap_or_else(|| (self.trigger_tokens() * 4 / 5).max(1))
     }
 }
 
@@ -254,6 +267,11 @@ pub struct PressureStatus {
     pub safety_headroom_tokens: u64,
     pub trigger_tokens: u64,
     pub near_capacity: bool,
+    #[serde(default)]
+    pub warning_tokens: u64,
+    /// A threshold on observed content, not a claim about hidden context.
+    #[serde(default)]
+    pub warning_reached: bool,
     #[serde(default)]
     pub coverage_known: bool,
     #[serde(default)]
@@ -1053,6 +1071,8 @@ fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> Press
         trigger_tokens: project.policy.trigger_tokens(),
         // A configured reserve is a proxy, not a bound on unseen history.
         near_capacity: visible_unique_tokens >= project.policy.trigger_tokens(),
+        warning_tokens: project.policy.warning_tokens(),
+        warning_reached: visible_unique_tokens >= project.policy.warning_tokens(),
         coverage_known,
         browser_coverage: ledger.browser_coverage.clone(),
         pressure_assessment: pressure_assessment.into(),
@@ -1516,6 +1536,8 @@ mod tests {
         let status = fixture.store.pressure(&key).unwrap();
         assert_eq!(status.configured_budget_tokens, 96_000);
         assert_eq!(status.trigger_tokens, 72_000);
+        assert_eq!(status.warning_tokens, 57_600);
+        assert!(!status.warning_reached);
         assert!(!status.automatic_rollover_enabled);
         assert!(status.advisory);
         assert!(!status.origin_authenticated);
@@ -1523,6 +1545,105 @@ mod tests {
             status.target_sha256,
             sha256(key.conversation_url.as_bytes())
         );
+    }
+
+    #[test]
+    fn warning_policy_is_legacy_compatible_and_validates_before_writes() {
+        let fixture = Fixture::new("warning-policy");
+        let legacy = serde_json::json!({
+            "configuredBudgetTokens":96000,"safetyHeadroomTokens":24000,
+            "unknownSourceReserveTokens":8000,"automaticRolloverEnabled":false,
+            "automaticObservationEnabled":false,"incompleteHistoryRollover":false
+        });
+        let policy: ContextPressurePolicy = serde_json::from_value(legacy.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&policy).unwrap(), legacy);
+        assert_eq!(policy.warning_tokens(), 57_600);
+        fixture
+            .store
+            .configure_policy("alpha", policy.clone())
+            .unwrap();
+        let before = fs::read(fixture.store.project_path("alpha")).unwrap();
+        for warning in [0, 72_001, u64::MAX] {
+            let mut invalid = policy.clone();
+            invalid.warning_threshold_tokens = Some(warning);
+            assert_eq!(
+                fixture
+                    .store
+                    .configure_policy("alpha", invalid)
+                    .unwrap_err(),
+                "WEB_CONTEXT_POLICY_INVALID"
+            );
+            assert_eq!(
+                fs::read(fixture.store.project_path("alpha")).unwrap(),
+                before
+            );
+        }
+        let minimal = ContextPressurePolicy {
+            configured_budget_tokens: 1,
+            safety_headroom_tokens: 0,
+            unknown_source_reserve_tokens: 0,
+            ..Default::default()
+        };
+        minimal.validate().unwrap();
+        assert_eq!(minimal.warning_tokens(), 1);
+    }
+
+    #[test]
+    fn warning_is_scoped_durable_observed_only_and_does_not_trigger_rollover() {
+        let fixture = Fixture::new("warning-boundary");
+        let alpha = Fixture::key("alpha", "warning-alpha", 1);
+        let beta = Fixture::key("beta", "warning-beta", 1);
+        for key in [&alpha, &beta] {
+            fixture
+                .store
+                .bind_observed_target(key.clone(), None)
+                .unwrap();
+        }
+        let observed = fixture.observe(
+            &alpha,
+            "observed",
+            1,
+            "observed",
+            VisibleSourceKind::UserMessage,
+            Some("hello context"),
+        );
+        let tokens = observed.observed_estimate_tokens;
+        assert!(tokens > 0);
+        let mut policy = ContextPressurePolicy {
+            configured_budget_tokens: tokens + 100,
+            safety_headroom_tokens: 50,
+            unknown_source_reserve_tokens: 0,
+            warning_threshold_tokens: Some(tokens + 1),
+            automatic_rollover_enabled: true,
+            ..Default::default()
+        };
+        fixture
+            .store
+            .configure_policy("alpha", policy.clone())
+            .unwrap();
+        assert!(!fixture.store.pressure(&alpha).unwrap().warning_reached);
+        policy.warning_threshold_tokens = Some(tokens);
+        fixture.store.configure_policy("alpha", policy).unwrap();
+        let warning = fixture.store.pressure(&alpha).unwrap();
+        assert!(warning.warning_reached && !warning.near_capacity);
+        assert!(!warning.coverage_known);
+        assert_eq!(warning.pressure_assessment, "UNKNOWN_OR_INCOMPLETE");
+        assert!(
+            fixture
+                .store
+                .request_rollover_if_due(&alpha, &alpha.target_sha256(), "task-one", true, 101)
+                .unwrap()
+                .is_none()
+        );
+        assert!(!fixture.store.pressure(&beta).unwrap().warning_reached);
+        assert_eq!(
+            fixture.store.pressure(&beta).unwrap().warning_tokens,
+            57_600
+        );
+        let reopened = WebContextStore::open_read_only(&fixture.root).unwrap();
+        assert!(reopened.pressure(&alpha).unwrap().warning_reached);
+        assert_eq!(reopened.pressure(&alpha).unwrap().warning_tokens, tokens);
+        assert!(!reopened.pressure(&beta).unwrap().warning_reached);
     }
 
     #[test]
@@ -2036,6 +2157,7 @@ mod tests {
             automatic_rollover_enabled: true,
             automatic_observation_enabled: false,
             incomplete_history_rollover: false,
+            ..Default::default()
         };
         fixture
             .store
@@ -2240,6 +2362,7 @@ mod tests {
             automatic_rollover_enabled: false,
             automatic_observation_enabled: false,
             incomplete_history_rollover: false,
+            ..Default::default()
         };
         fixture
             .store

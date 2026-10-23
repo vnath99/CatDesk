@@ -1,3 +1,39 @@
+## 2026-10-23 — C29 bounded automatic observations; C30 context warnings
+
+C29 runs the existing scoped automatic driver on selected v54, one120s interval
+per200s listener (210s owned foreground host/240s outer Job). First three-project
+run preserves quarantine, observes one current conversation and cancels the
+second capture at the frozen deadline; listener exits normally and drains work.
+Second run targets only the pending conversation plus quarantine, preserving the
+completed browser read. It records a fresh independent observation. The two
+current conversations have1657/1741 observed-token estimates, distinct generations
+and durable coverage UNKNOWN_OR_INCOMPLETE; hidden context remains unbounded.
+
+Both run assertions are PARTIAL: the second records an unexpected generic
+WEB_AUTO_PAIRED_TARGET_REQUIRED for the quarantined project, target generation
+unavailable at that tick. Fresh normal status still verifies all9 pairs; registry,
+Wake config/history and old rollover journals are byte-exact. Underlying cause is
+unproved because the driver collapses the admission diagnostic. Do not rerun
+completed reads to obtain a greener result. Both policies restored, zero messages,
+binding/native/production changes; both controls STOPPED, zero owned processes.
+No recurring automation or connector probe. Actual Web MCP coding stays separate.
+
+C30 fills a source gap: optional per-project warningThresholdTokens, validated1
+through rollover trigger; omitted/null defaults to80% of trigger (57600 at default
+72000 rollover). Legacy omitted policy serialization is preserved. warningTokens/
+warningReached and the central paired-generation view remain advisory; unknown
+coverage and automatic rollover authorization are unchanged.92 distinct tests,
+including4 new cases, strict all-target/all-feature Clippy and format PASS. Warning
+feature is SOURCE ONLY: no new normal build, selected update or live threshold
+acceptance. The monitor tested the unchanged older selected image.
+
+NEXT: source/read-only diagnosis of the automatic tick authority discrepancy,
+then normal warning build/selected qualification and remaining paired-commit
+recovery phases. B/C connector429, full automatic rollover, removal/history archive,
+protected installation, CI and unattended remain open. No operator action required
+for this independently eligible work. The goal remains ACTIVE/PARTIAL.
+[C29 monitor](docs/verification/C29_AUTOMATIC_CONTEXT_MONITOR_2026_10_23.json), [C30 warning](docs/verification/C30_CONTEXT_WARNING_POLICY_2026_10_23.json).
+
 ## 2026-10-23 — C28 registered rollover recovers after pre-send interruption
 
 Selected v54 now completes a fresh registered escaped-handoff rollover after an

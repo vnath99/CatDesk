@@ -321,6 +321,8 @@ struct PolicyInput {
     configured_budget_tokens: u64,
     safety_headroom_tokens: u64,
     unknown_source_reserve_tokens: u64,
+    #[serde(default)]
+    warning_threshold_tokens: Option<u64>,
     automatic_rollover_enabled: bool,
     automatic_observation_enabled: bool,
     incomplete_history_rollover: bool,
@@ -332,6 +334,7 @@ impl PolicyInput {
             configured_budget_tokens: self.configured_budget_tokens,
             safety_headroom_tokens: self.safety_headroom_tokens,
             unknown_source_reserve_tokens: self.unknown_source_reserve_tokens,
+            warning_threshold_tokens: self.warning_threshold_tokens,
             automatic_rollover_enabled: self.automatic_rollover_enabled,
             automatic_observation_enabled: self.automatic_observation_enabled,
             incomplete_history_rollover: self.incomplete_history_rollover,
@@ -488,6 +491,7 @@ pub(crate) fn tool_schemas() -> [(&'static str, &'static str, &'static str, Valu
                 "configuredBudgetTokens":{"type":"integer","minimum":1,"maximum":2000000},
                 "safetyHeadroomTokens":{"type":"integer","minimum":0,"description":"Must be smaller than the configured budget"},
                 "unknownSourceReserveTokens":{"type":"integer","minimum":0,"description":"Must not exceed the configured budget"},
+                "warningThresholdTokens":{"type":["integer","null"],"minimum":1,"maximum":2000000,"description":"Optional observed-token warning at or below budget minus safety headroom; omitted or null uses 80% of rollover trigger. Does not authorize rollover or imply complete history."},
                 "automaticRolloverEnabled":{"type":"boolean"},
                 "automaticObservationEnabled":{"type":"boolean"},
                 "incompleteHistoryRollover":{"type":"boolean"}},
@@ -604,6 +608,12 @@ mod tests {
         let mut invalid_policy = valid.clone();
         invalid_policy["policy"]["safetyHeadroomTokens"] = json!(96000);
         assert!(configure(&root, invalid_policy).is_err());
+        for warning in [json!(0), json!(72001), json!("early")] {
+            let mut invalid = valid.clone();
+            invalid["policy"]["warningThresholdTokens"] = warning;
+            assert!(configure(&root, invalid).is_err());
+            assert!(!root.exists());
+        }
         let mut unknown_policy = valid.clone();
         unknown_policy["policy"]["conversationUrl"] = json!("C:/private-secret");
         assert!(configure(&root, unknown_policy).is_err());
@@ -621,6 +631,34 @@ mod tests {
             assert!(observe(&root, args).is_err());
             assert!(!root.exists());
         }
+    }
+
+    #[test]
+    fn warning_policy_control_and_schema_retain_legacy_omission() {
+        let legacy = serde_json::to_value(ContextPressurePolicy::default()).unwrap();
+        let parsed: PolicyInput = serde_json::from_value(legacy.clone()).unwrap();
+        assert_eq!(parsed.into_policy(), ContextPressurePolicy::default());
+        let mut custom = legacy;
+        custom["warningThresholdTokens"] = json!(12345);
+        let parsed: PolicyInput = serde_json::from_value(custom).unwrap();
+        let policy = parsed.into_policy();
+        policy.validate().unwrap();
+        assert_eq!(policy.warning_tokens(), 12345);
+        assert!(!policy.automatic_rollover_enabled && !policy.automatic_observation_enabled);
+        let (_, _, _, schema) = tool_schemas()
+            .into_iter()
+            .find(|(name, _, _, _)| *name == "catdesk_web_context_configure")
+            .unwrap();
+        assert_eq!(
+            schema["properties"]["policy"]["properties"]["warningThresholdTokens"]["type"],
+            json!(["integer", "null"])
+        );
+        assert!(
+            !schema["properties"]["policy"]["required"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("warningThresholdTokens"))
+        );
     }
 
     #[tokio::test]
