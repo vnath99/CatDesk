@@ -5,17 +5,30 @@
 | Evidence class | Current result |
 | --- | --- |
 | Source implementation | **TESTED_LOCAL**: 160 distinct tests passed, including 24 added; two existing native sandbox tests ignored; strict root/Wake Clippy and formatting passed |
+| Published source | `cb52cf30d3307d729237622e178725b631da22a6`, exact remote SHA verified; 17-path privacy scan passed; remote CI **UNVERIFIED** (zero runs/checks) |
+| Normal release / isolated CLI | App and matching host build passed; owner-EOF/no-state gate passed; metadata-only 24-command CLI retirement/replay fixture passed |
 | Installed runtime | Retirement **NOT_RUN**; selected v57 and C40 evidence unchanged |
-| Live project state | Original five projects and completed canaries preserved; no retirement performed |
+| Live project state | Nine actual pairs read with all 218 records unchanged; original five projects and completed canaries preserved; no production retirement performed |
 | Normal unattended operation | **NOT_QUALIFIED** |
 
 The final gate ran 2026-10-23T16:45:35.305Z–16:47:27.950Z. Its suite totals are
 coordinator 6, CLI 15, registry 38, assigned tasks 6, rollover 47, Wake store 31
 and development isolation 17. An earlier 159-test pass failed strict Clippy on
 four redundant references; the corrected final gate supersedes that attempt.
-Source publication and exact remote SHA verification remain pending. No browser
-or host was started; a single 16:42:53Z connector read returned HTTP 429 without
-retry. [C41 evidence](verification/C41_PROJECT_RETIREMENT_2026_10_23.json).
+Source publication completed at 16:49:39Z. The release app built in 435.33 seconds
+and the host in 19.88 seconds. Inert v58 was prepared, not selected. The normal
+app read passed at 17:00:11.250Z–17:00:17.036Z. The isolated CLI test passed at
+17:01:50.255Z–17:01:55.226Z, preserving 13 protected inputs and ending with zero
+owners. Its real Python executable was fixture metadata only; no browser
+dependencies or Web delivery were exercised. A single 16:42:53Z connector read
+returned HTTP 429 without retry.
+
+The full-runtime Python copy exceeded 90 seconds; immediate exit was not proven
+within five seconds, then outer-job cleanup established zero owners. The partial
+fixture remains preserved. An earlier Git-before-prepare attempt was rejected
+without runtime action. Full-runtime preparation remains unqualified; this
+bounded-copy limitation and prior assigned-task close proof remain open.
+[C41 evidence](verification/C41_PROJECT_RETIREMENT_2026_10_23.json).
 
 Retirement uses the existing registry and a durable request with exact project,
 generation and target digest. The same request can resume a Wake-first

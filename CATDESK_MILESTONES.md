@@ -5,9 +5,20 @@ Source status: **TESTED_LOCAL**. The final gate at
 added tests; two existing native sandbox tests remained ignored. Strict root/Wake
 Clippy and formatting passed. An earlier gate passed 159 tests but failed strict
 Clippy on four redundant references; the corrected final gate is authoritative.
-Source publication and remote SHA verification are pending. Installed/live
-retirement and unattended operation remain **NOT_QUALIFIED**. C40 evidence and
-the selected v57 runtime remain unchanged.
+Reviewed source was published at 16:49:39Z as
+`cb52cf30d3307d729237622e178725b631da22a6`; exact remote SHA and the 17-path
+privacy scan passed. Remote CI remains **UNVERIFIED**: zero runs and zero checks.
+Installed/Web retirement and unattended operation remain **NOT_QUALIFIED**.
+
+The normal release app built in 435.33 seconds; its matching default-feature host
+passed the owner-EOF/no-state gate. An inert v58 package was prepared but not
+selected. A normal-app read at 17:00:11.250Z–17:00:17.036Z verified all nine actual
+pairs and preserved all 218 protected records. An isolated metadata-only normal
+CLI test passed at 17:01:50.255Z–17:01:55.226Z: 24 commands covered three project
+registrations, unbound retirement, restart replay, wrong-ID/reuse refusal and
+unchanged sibling state. Thirteen protected inputs stayed exact; zero owners
+remained. This used only a real Python executable as fixture metadata, without
+browser dependencies; it is not installed or Web acceptance.
 
 The existing project registry now supports retirement through a stable operator
 request. A durable intent coordinates Wake retirement followed by the local
@@ -25,9 +36,12 @@ unresolved ownership. Any prior assigned MCP task directory currently requires
 explicit clean-close/recovery proof and blocks retirement; that durable proof is
 not yet implemented. This intentional limit preserves work instead of inferring
 that a task directory is safe to remove. The original five projects and completed
-canaries are unchanged. No browser or host was started. Next: publish the reviewed
-source with exact remote SHA verification, then qualify the selected runtime with
-an isolated disposable project; never replay C40 to test retirement. The single
+canaries and selected v57 remain unchanged. A full-runtime Python-copy attempt
+exceeded its 90-second bound; immediate exit was not proven within five seconds,
+then the outer job closed and final zero-owner cleanup was verified. Its partial
+fixture was preserved. Full-runtime preparation remains unqualified. Next:
+resolve that bounded-copy limitation and durable prior-task close proof before
+broader qualification; never replay C40 to test retirement. The single
 16:42:53Z connector read returned HTTP 429 and was not retried.
 [C41 evidence](docs/verification/C41_PROJECT_RETIREMENT_2026_10_23.json).
 

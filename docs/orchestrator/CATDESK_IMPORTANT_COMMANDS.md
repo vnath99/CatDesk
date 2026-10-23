@@ -5,10 +5,18 @@
 Source status: **TESTED_LOCAL**. The final 16:45:35.305Z–16:47:27.950Z gate passed
 160 distinct tests, including 24 added tests; two existing native sandbox tests
 remained ignored. Strict root/Wake Clippy and formatting passed after correcting
-four redundant references from the earlier gate. Source publication and exact
-remote SHA verification are pending. No browser or host was started. This command
-has not been qualified on the installed runtime. Use an isolated disposable project for
-qualification; the original five projects and completed C40 chain stay intact.
+four redundant references from the earlier gate. Source
+`cb52cf30d3307d729237622e178725b631da22a6` was published at 16:49:39Z with exact
+remote SHA and a passing 17-path privacy scan. CI remains **UNVERIFIED** with zero
+runs/checks. The normal app/host builds and owner-EOF/no-state gate passed; inert
+v58 was prepared but not selected.
+
+The metadata-only normal CLI test passed 24 commands at
+17:01:50.255Z–17:01:55.226Z, preserving 13 protected inputs and leaving zero
+owners. It covers registration, unbound retirement, restart replay, wrong-ID/reuse
+refusal and sibling preservation. Its real Python executable was fixture metadata
+only, without browser dependencies. This command remains unqualified on installed
+Web state; the original five projects, selected v57 and C40 stay intact.
 [C41 evidence](../verification/C41_PROJECT_RETIREMENT_2026_10_23.json).
 
 ```text
@@ -32,7 +40,10 @@ Control/native-bound projects, active work and unresolved ownership refuse.
 still needs explicit durable clean-close/recovery proof. That proof is not yet
 implemented; do not remove the directory or clear locks to bypass it. This is
 retirement of an eligible idle project, not deletion of its data or a native
-session handoff. Installed/live and unattended acceptance remain open.
+session handoff. Full-runtime Python preparation also remains unqualified: its
+copy exceeded the 90-second bound, immediate exit was not proven within five
+seconds, then outer-job cleanup verified zero owners and preserved the partial
+fixture. Installed/Web and unattended acceptance remain open.
 
 ## October 23 C40 — recovered automatic rollover and continuation verified
 

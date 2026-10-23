@@ -5,9 +5,20 @@ Source status is **TESTED_LOCAL**: the final
 24 added tests; two existing native sandbox tests remained ignored. Strict
 root/Wake Clippy and formatting passed. The earlier 159-test gate failed strict
 Clippy on four redundant references, which were corrected before the final gate.
-Publication and exact remote SHA verification are pending. Installed/live
-retirement is **NOT_QUALIFIED**. The selected v57 runtime, original five projects,
-native sessions and completed C40 chain remain unchanged. Do not replay a canary.
+Published source is `cb52cf30d3307d729237622e178725b631da22a6` at 16:49:39Z;
+exact remote SHA and the 17-path privacy scan passed. CI remains **UNVERIFIED**:
+zero runs/checks. Installed/Web retirement is **NOT_QUALIFIED**. The selected v57
+runtime, original five projects, native sessions and C40 remain unchanged.
+
+The normal app built in 435.33 seconds; the matching host built in 19.88 seconds
+and passed owner-EOF/no-state qualification. Inert v58 was prepared, not selected.
+The normal-app nine-pair read at 17:00:11.250Z–17:00:17.036Z preserved 218 records.
+The isolated metadata-only normal CLI test passed at
+17:01:50.255Z–17:01:55.226Z: 24 commands exercised three registrations, retirement,
+restart replay, wrong-ID/reuse refusal and exact sibling state. All 13 protected
+inputs remained exact and zero owners remained. Its real Python executable was
+metadata only, with no browser dependencies; it does not qualify installed/Web
+operation or full-runtime preparation.
 
 The supported `operator web project retire` command coordinates the existing
 project registry and independent Wake configuration. It records a stable intent,
@@ -22,12 +33,15 @@ ownership. Any prior assigned MCP task directory also blocks retirement until
 explicit durable clean-close/recovery proof is available; that proof is not yet
 implemented. Do not clear locks or remove task directories to force acceptance.
 
-Next executable work: publish reviewed source and verify the exact remote SHA,
-then qualify a selected runtime using an isolated disposable Web-only
-project with no prior assigned MCP task. Keep source, installed/runtime and
+The complete Python-runtime copy exceeded its 90-second bound; immediate exit
+was not proven within five seconds, then the outer job closed and zero-owner
+cleanup passed. Preserve its partial fixture. An earlier Git-before-prepare
+attempt returned `DEV_WORKSPACE_NOT_NEW` without runtime action. Next: resolve
+bounded full-runtime preparation and durable prior-task close proof, then
+continue isolated qualification. Keep source, CLI fixture, installed/Web and
 unattended acceptance separate. Concurrent Web MCP execution remains constrained
 by the single 16:42:53Z connector read returning HTTP 429, with no retry;
-independently eligible work can continue. No browser or host was started for C41.
+independently eligible work can continue. No browser or delivery was exercised.
 [C41 evidence](../verification/C41_PROJECT_RETIREMENT_2026_10_23.json).
 
 ## October 23 C40 — recovered automatic rollover and continuation verified

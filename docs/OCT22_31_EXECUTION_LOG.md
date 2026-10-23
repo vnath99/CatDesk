@@ -8,8 +8,33 @@ The final gate at 16:45:35.305Z–16:47:27.950Z passed 160 distinct tests: coord
 isolation 17. This includes 24 added tests; two existing native sandbox tests
 remained ignored. Strict root/Wake Clippy and formatting passed. The first gate
 passed 159 tests but failed strict Clippy on four redundant references; those were
-corrected and the final gate is authoritative. Source status is **TESTED_LOCAL**;
-publication and exact remote SHA verification are pending.
+corrected and the final gate is authoritative. Source status is **TESTED_LOCAL**.
+At 16:49:39Z source `cb52cf30d3307d729237622e178725b631da22a6` was published;
+exact remote SHA and the 17-path privacy scan passed. CI remains **UNVERIFIED**
+with zero runs and zero checks.
+
+Normal release app build passed at 16:50:29.770Z–16:57:45.104Z (435.33 seconds),
+SHA-256 `f7d3fc05b30babaff3dfdb8eb91179c850d6ccf2decfff18b43da853ab7fcf52`.
+The matching default-feature host built in 19.88 seconds, SHA-256
+`ad6021f27ac96b8571a40454379f46acf5da311cec1e363820e8176617810faf`, and passed
+the owner-EOF/no-state gate. The inert v58 package was prepared, not selected.
+At 17:00:11.250Z–17:00:17.036Z the normal app read all nine actual pairs with
+zero changes among 218 protected records.
+
+The isolated metadata-only normal CLI test passed at
+17:01:50.255Z–17:01:55.226Z (4.97 seconds). Its 24 commands covered three
+registrations, unbound retirement, restart replay, wrong-ID/reuse refusal and
+exact sibling preservation. Thirteen protected inputs were unchanged, with zero
+owners afterward. Only the real Python executable supplied fixture metadata;
+browser dependencies were deliberately absent. This is CLI fixture qualification,
+not installed/Web acceptance or full-runtime preparation qualification.
+
+Retained failed attempts: Git initialization before preparation returned
+`DEV_WORKSPACE_NOT_NEW` without a runtime action. Copying the complete qualified
+Python runtime exceeded its 90-second bound; immediate exit was not proven in
+five seconds. The outer job then closed, final zero owners were verified and the
+partial fixture was preserved. The bounded full-runtime-copy limitation remains
+open alongside prior assigned-task close/recovery proof.
 
 Source adds the supported retirement operation to the existing registry and Wake configuration.
 A stable request carries the exact project, generation and target digest; a
@@ -32,7 +57,7 @@ No directory may be deleted merely to bypass this refusal. No retirement has bee
 run against the original five projects or installed state. C40, all completed
 canaries, bindings and native development sessions remain unchanged. Installed
 runtime and unattended retirement acceptance remain **NOT_QUALIFIED**.
-No browser or host was started. One connector read at 16:42:53Z returned HTTP 429,
+No browser or delivery was exercised. One connector read at 16:42:53Z returned HTTP 429,
 with no retry. [C41 evidence](verification/C41_PROJECT_RETIREMENT_2026_10_23.json).
 
 ## October 23 C40 — recovered automatic rollover and continuation verified

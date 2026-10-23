@@ -1,5 +1,5 @@
 {
-  "recordedUtc": "2026-10-23T16:49:11.5016194Z",
+  "recordedUtc": "2026-10-23T17:04:56.1034026Z",
   "localDate": "2026-10-23",
   "task": "C41-PROJECT-RETIREMENT",
   "classification": "TESTED_LOCAL_SOURCE",
@@ -277,10 +277,11 @@
     "normalUnattended": "NOT_QUALIFIED",
     "priorAssignedTaskDirectory": "RETIREMENT_BLOCKED_PENDING_DURABLE_CLOSE_OR_RECOVERY_PROOF",
     "generalProjectRemoval": "PARTIAL",
-    "installedRetirement": "NOT_RUN"
+    "installedRetirement": "NOT_RUN_NORMAL_CLI_METADATA_FIXTURE_ONLY",
+    "fullRuntimePreparation": "COPY_EXCEEDED_90_SECOND_TEST_LIMIT_PARTIAL_FIXTURE_PRESERVED"
   },
   "preservation": {
-    "atUtc": "2026-10-23T16:48:54.397718Z",
+    "atUtc": "2026-10-23T17:04:40.1529912Z",
     "action": "c41-preservation-read",
     "baselineRecords": 218,
     "changedRecords": 0,
@@ -305,13 +306,240 @@
     "retries": 0
   },
   "publication": {
-    "status": "PENDING_REVIEWED_NORMAL_PUSH",
-    "remoteCi": "UNVERIFIED"
+    "privacyScan": "PASS",
+    "remoteCi": "UNVERIFIED",
+    "publishedUtc": "2026-10-23T16:49:39.3143899Z",
+    "sourceCommit": "cb52cf30d3307d729237622e178725b631da22a6",
+    "workflowRuns": 0,
+    "remoteSha": "cb52cf30d3307d729237622e178725b631da22a6",
+    "reviewedPaths": 17,
+    "visibilityChanged": false,
+    "status": "NORMAL_PUSH_EXACT_REMOTE_VERIFIED",
+    "checkRuns": 0
   },
   "acceptance": {
     "originalFive": "UNCHANGED",
     "completedRollover": "C40_PRESERVED_NOT_REPLAYED",
     "overall": "PARTIAL",
     "liveWebBAndC": "DEPENDENCY_BLOCKED"
+  },
+  "normalBuild": {
+    "host": {
+      "startedUtc": "2026-10-23T16:58:01.8648973Z",
+      "finishedUtc": "2026-10-23T16:58:21.7433973Z",
+      "sourceCommit": "cb52cf30d3307d729237622e178725b631da22a6",
+      "profile": "NORMAL_RELEASE_WAKE_DEFAULT_FEATURES_NO_TEST_SUPPORT",
+      "exitCode": 0,
+      "imageSha256": "ad6021f27ac96b8571a40454379f46acf5da311cec1e363820e8176617810faf",
+      "imageBytes": 2079744
+    },
+    "ownerGate": {
+      "schemaVersion": 1,
+      "classification": "NORMAL_RELEASE_FOREGROUND_GATE_PROBE",
+      "imageSha256": "ad6021f27ac96b8571a40454379f46acf5da311cec1e363820e8176617810faf",
+      "markerPresent": true,
+      "ownerEofRefused": true,
+      "exitCode": 1,
+      "runtimeStateCreated": false,
+      "ownedProcessExited": true,
+      "deliveryProved": false
+    },
+    "app": {
+      "sourceCommit": "cb52cf30d3307d729237622e178725b631da22a6",
+      "sourceTree": "c5d88b649edd2cd815a961b331f7326e5c503700",
+      "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+      "startedUtc": "2026-10-23T16:50:29.7704638Z",
+      "finishedUtc": "2026-10-23T16:57:45.1035076Z",
+      "imageSha256": "f7d3fc05b30babaff3dfdb8eb91179c850d6ccf2decfff18b43da853ab7fcf52",
+      "imageBytes": 34316800,
+      "exitCode": 0
+    },
+    "package": "INERT_V58_NOT_SELECTED"
+  },
+  "existingStateRead": {
+    "startedUtc": "2026-10-23T17:00:11.2502177Z",
+    "finishedUtc": "2026-10-23T17:00:17.0360298Z",
+    "action": "c41-normal-app-existing-status",
+    "sourceCommit": "cb52cf30d3307d729237622e178725b631da22a6",
+    "appSha256": "f7d3fc05b30babaff3dfdb8eb91179c850d6ccf2decfff18b43da853ab7fcf52",
+    "pairedProjects": 9,
+    "retiredProjects": 0,
+    "baselineRecords": 218,
+    "changedRecords": 0,
+    "newMessages": 0,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "packageSelectionChanged": false,
+    "productionChanged": false,
+    "maximumSeconds": 30,
+    "classification": "READ_ONLY_NORMAL_BINARY_EXISTING_STATE_COMPATIBILITY"
+  },
+  "normalCliFixture": {
+    "startedUtc": "2026-10-23T17:01:50.2554429Z",
+    "protectedInputsChecked": 13,
+    "failure": null,
+    "sourceCommit": "cb52cf30d3307d729237622e178725b631da22a6",
+    "installedAcceptance": false,
+    "finishedUtc": "2026-10-23T17:01:55.2263549Z",
+    "fixtureRetained": true,
+    "maximumSeconds": 360,
+    "protectedInputChanges": 0,
+    "commands": [
+      {
+        "timedOut": false,
+        "label": "prepare-supported-development-runtime",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "catdesk-git-init",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "catdesk-git-origin",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "catdesk-git-add",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "catdesk-git-commit",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "alpha-git-init",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "alpha-git-origin",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "alpha-git-add",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "alpha-git-commit",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "beta-git-init",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "beta-git-origin",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "beta-git-add",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "beta-git-commit",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "register-catdesk",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "register-alpha",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "register-beta",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "bind-synthetic-beta",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "beta-before",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "retire-unbound-alpha",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "retirement-fresh-process-replay",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "wrong-retirement-id-refused",
+        "exitCode": 2
+      },
+      {
+        "timedOut": false,
+        "label": "retired-project-reregister-refused",
+        "exitCode": 2
+      },
+      {
+        "timedOut": false,
+        "label": "fresh-process-final-status",
+        "exitCode": 0
+      },
+      {
+        "timedOut": false,
+        "label": "beta-after",
+        "exitCode": 0
+      }
+    ],
+    "syntheticBetaBinding": true,
+    "wakeHostStarted": false,
+    "productionChanged": false,
+    "normalApplicationSha256": "f7d3fc05b30babaff3dfdb8eb91179c850d6ccf2decfff18b43da853ab7fcf52",
+    "classification": "DISPOSABLE_NORMAL_CLI_PROJECT_RETIREMENT",
+    "actualChatGPTWebAcceptance": false,
+    "elapsedSeconds": 4.9689543,
+    "messagesSent": 0,
+    "nativeSessionsChanged": false,
+    "browserStarted": false,
+    "pythonInput": "EXACT_QUALIFIED_PYTHON_EXECUTABLE_METADATA_FIXTURE_NO_BROWSER_DEPENDENCIES",
+    "ownedProcesses": 0
+  },
+  "retainedFixtureFailures": [
+    {
+      "reason": "DEV_WORKSPACE_NOT_NEW",
+      "runtimeMutation": false,
+      "cause": "HARNESS_GIT_INITIALIZED_BEFORE_PREPARE"
+    },
+    {
+      "partialFixture": "PRESERVED",
+      "reason": "FULL_PYTHON_TREE_COPY_EXCEEDED_90_SECONDS",
+      "finalOwnedProcesses": 0,
+      "immediateExitProof": "NOT_OBTAINED_WITHIN_FIVE_SECONDS",
+      "productionChanged": false,
+      "outerJob": "CLOSED"
+    }
+  ],
+  "postQualificationCleanup": {
+    "action": "c41-post-qualification-cleanup",
+    "originalRuntimeState": "218_RECORDS_EXACT_NINE_PAIRS",
+    "recurringStarts": 0,
+    "atUtc": "2026-10-23T17:04:40.8031453Z",
+    "testProcesses": 0,
+    "partialPrepareRetained": true
   }
 }
