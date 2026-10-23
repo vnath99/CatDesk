@@ -1,5 +1,43 @@
 # October 22–31 execution log
 
+## 2026-10-23 — C19 message-text call boundary and second source
+
+C18 reviewed source/docs published08:43:41 UTC as
+`83d7466a6030457787d20b492233e14763e21935`, exact remote SHA/clean tree;
+zero workflow/check runs, CI UNVERIFIED. No visibility change or dispatch.
+
+Beta's frozen seed got one bounded send attempt08:44:56–08:45:24 UTC,27.68s.
+Private diagnostics captured a transient provider provisional route followed by
+a strict canonical issued URL. It reached accepted submission, then refused
+response sequence. The new test driver incorrectly passed the message digest to
+an observer requiring message text. Investigation found the same mismatch at the
+ordinary Wake caller's pre-submit anchor and response observer. These two source
+calls now use exact message text; receipt digest checks are unchanged. Strengthened
+call-argument assertions reproduce the old mismatch, then pass after correction.
+The timeline fixture's send-control wait is mocked; selector timing has separate
+tests. No runtime URL authority was relaxed.
+
+First bounded beta read08:46 UTC refused an empty assistant body immediately after
+fresh-document reload. Revised read-only verification polls that exact page/body
+for up to25s, never Retry/Send. At08:48:11 UTC it independently verified exact
+canonical URL, sole frozen USER and completed expected ASSISTANT reply in15.57s.
+Original uncertain journals remain intact. Both new sources now verified, neither
+registered; all139 original records exact after every live attempt/zero owned
+processes. Five original pairs, histories, native sessions and profile preserved.
+Both controls STOPPED; no Wake worker, recurring process or completed-proof replay.
+
+Source gate PASS08:52:46 UTC:142 bridge/current-DOM tests plus66 adapter/bootstrap,
+190.6s total within600s retained Job. This closes the affected Python regression
+gate that previously exceeded180s; it is not whole-repository, installed or CI
+acceptance. Source C18 nested-role/empty-body checks are included. Selected C17 v52
+does not include C18/C19. Connector429 last07:53 UTC is independent; no retry.
+
+Next qualify a matched package, register only the two independently verified unique
+test sources via existing project/paired-target commands, then actual simultaneous
+rollover, interruption and restart G/H/I. Unknown outcomes remain no-resend. No
+operator action currently required. See
+[C19 evidence](verification/C19_MESSAGE_IDENTITY_2026_10_23.json).
+
 ## 2026-10-23 — C18 source seed recovery and DOM completeness
 
 At07:46 UTC one frozen initial source seed was submitted once under retained

@@ -1,0 +1,100 @@
+{
+  "recordedUtc": "2026-10-23T08:53:03.1828283Z",
+  "localDate": "2026-10-23",
+  "task": "C19-MESSAGE-IDENTITY-AND-SECOND-SOURCE",
+  "classification": "SOURCE_REGRESSION_AND_BOUNDED_READ_ONLY_SOURCE_RECOVERY",
+  "branch": "codex/web-rollover-oct17",
+  "baseCommit": "83d7466a6030457787d20b492233e14763e21935",
+  "sourceFiles": [
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256": "d139872275d13452c83643bbddaf07c0205a874413b4870a0df2ca2c1745721c"
+    },
+    {
+      "path": "tests/test_wake_bridge.py",
+      "sha256": "bebd6d8fb4b6a6e3ea2a17944c82e6dfdc967dfa6c5b0d8683375abb4cc8b02c"
+    }
+  ],
+  "implementation": {
+    "receiptDigestStillChecked": true,
+    "regressionAssertedExactCallArguments": true,
+    "targetRulesRelaxed": false,
+    "selectedPackageChanged": false,
+    "messageTextPassedToTurnAnchor": true,
+    "messageTextPassedToResponseObserver": true
+  },
+  "tests": {
+    "ci": "UNVERIFIED",
+    "wholeRepositorySuiteClaim": false,
+    "redCallBoundaryReproduced": true,
+    "maximumSourceSeconds": 600,
+    "checks": [
+      {
+        "label": "bridge-and-current-dom",
+        "exitCode": 0,
+        "startedUtc": "2026-10-23T08:49:36.0159951Z",
+        "finishedUtc": "2026-10-23T08:52:45.3237188Z",
+        "logSha256": "a82457b4a9aa8e301a226df6292f5f65826dbca8ef3664c66121431cdad76ffe"
+      },
+      {
+        "label": "independent-wake-adapter-bootstrap",
+        "exitCode": 0,
+        "startedUtc": "2026-10-23T08:52:45.3403901Z",
+        "finishedUtc": "2026-10-23T08:52:46.6161431Z",
+        "logSha256": "45164dc09d16b689cb4c1e0c7f5116026abd83a28919bd7deda9ffd38ba43381"
+      }
+    ],
+    "adapterAndBootstrapPassed": 66,
+    "totalPassed": 208,
+    "fullBridgeAndCurrentDomPassed": 142,
+    "previousC18TimeoutsPreserved": true
+  },
+  "live": {
+    "initialSourceSendAttempts": 2,
+    "betaInitialCanonicalUrlLatched": true,
+    "maximumLiveSeconds": 180,
+    "originalUncertainJournalsPreserved": true,
+    "installedProductionAcceptance": false,
+    "betaFirstReadRefusal": "ASSISTANT_BODY_NOT_YET_HYDRATED_AFTER_RELOAD",
+    "rawUrlOrTranscriptPublished": false,
+    "proposedReaderUsed": true,
+    "betaProvisionalUrlObserved": true,
+    "freshSourcesVerified": 2,
+    "sourceResponsesVerifiedIndependently": true,
+    "unattendedAcceptance": false,
+    "betaSendElapsedSeconds": 27.68,
+    "betaSuccessfulReadElapsedSeconds": 15.57,
+    "betaFinalRead": "EXACT_USER_AND_REPLY_AFTER_BOUNDED_READ_ONLY_HYDRATION_WAIT",
+    "betaInitialResponseSequenceRefusal": "TEST_DRIVER_PASSED_DIGEST_INSTEAD_OF_TEXT",
+    "resendCalls": 0,
+    "newSourcesRegistered": 0,
+    "betaSendAttempts": 1
+  },
+  "cleanup": {
+    "recurringStarts": 0,
+    "originalFiveBindingsChanged": false,
+    "controls": "BOTH_STOPPED",
+    "nativeSessionsChanged": false,
+    "completedCanaryReplayed": false,
+    "wakeHostWorkerStarts": 0,
+    "changedRecords": 0,
+    "recordsChecked": 139,
+    "ownedProcessesAfterLiveTests": 0
+  },
+  "dependencies": {
+    "newConnectorRetry": false,
+    "connectorHttpStatus": 429,
+    "settingsChanged": false,
+    "connectorLastObservedUtc": "2026-10-23T07:53:32Z"
+  },
+  "acceptance": {
+    "selectedRuntime": "C17_V52_STOPPED_WITHOUT_C18_C19",
+    "milestone": "PARTIAL",
+    "webCodingB": "OPEN",
+    "twoInitialSourceChats": "VERIFIED_NOT_REGISTERED",
+    "pendingRolloverRestartI": "OPEN",
+    "simultaneousRolloverG": "OPEN_NOT_STARTED",
+    "criticalPhaseRecoveryH": "OPEN_INITIAL_SEEDS_ARE_NOT_ROLLOVER_PROOF"
+  },
+  "nextTask": "Qualify a matched package containing browser fixes; register only the two independently verified unique test sources through supported paired commands; exercise fresh simultaneous rollover and critical-phase recovery without replaying completed proofs. Handle provisional new-chat URLs as uncertainty, never binding authority."
+}

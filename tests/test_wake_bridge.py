@@ -2438,16 +2438,22 @@ class WakeBridgeTests(unittest.TestCase):
         with patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=SB)}), patch.object(
             wake_bridge.CdpSink, "best_effort_windows_foreground", side_effect=lambda _pid: timeline.append("native")
         ), patch.object(
+            sink, "pre_submit_receipt_snapshot", wraps=sink.pre_submit_receipt_snapshot
+        ) as prior_snapshot, patch.object(
             sink, "wait_for_submission_accepted", return_value=99.0
+        ), patch.object(
+            sink, "wait_for_send_control", return_value=None
         ), patch.object(
             sink, "durable_receipt_round_trip", side_effect=lambda _cdp: timeline.append("reload")
         ), patch.object(
             sink, "wait_for_response_completion", return_value=None
-        ), patch.object(
+        ) as response_observer, patch.object(
             sink, "confirm_exact_receipt",
             return_value=wake_bridge.receipt_for(self.record_id, message, sink.url, 99.0)
         ):
             sink.wake(self.record_id, message, lambda: True, lambda: timeline.append("boundary"))
+        prior_snapshot.assert_called_once_with(cdp, message)
+        response_observer.assert_called_once_with(cdp, message)
         self.assertEqual(["maximize", "foreground", "native", "boundary", "type", "submit", "reload"], timeline)
 
     def test_windows_foreground_requires_exact_current_cdp_pid_and_one_suitable_window(self):

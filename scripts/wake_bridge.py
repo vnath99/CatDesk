@@ -2209,7 +2209,7 @@ class CdpSink:
                         self.pre_typing_ready(cdp)
                         if not still_actionable(): raise Attention("WAKE_CANCELLED")
                         expected_digest = digest(normalize_message(message))
-                        prior_message_digests = self.pre_submit_receipt_snapshot(cdp, expected_digest)
+                        prior_message_digests = self.pre_submit_receipt_snapshot(cdp, message)
                         self.best_effort_present_browser(cdp)
                         # Presentation is allowed to fail, but may never weaken the exact
                         # target/editor contract before the first browser write.
@@ -2235,7 +2235,7 @@ class CdpSink:
                         # place, while a long-lived active Stop/Pause state may receive
                         # bounded same-target refreshes so stale client UI cannot wedge
                         # completion. No fresh browser or USER re-submit is permitted.
-                        self.wait_for_response_completion(cdp, expected_digest)
+                        self.wait_for_response_completion(cdp, message)
                         # Only after deterministic assistant completion is it safe
                         # to replace this document.  The fresh load proves the USER
                         # turn persisted independently of the sender's optimistic DOM.

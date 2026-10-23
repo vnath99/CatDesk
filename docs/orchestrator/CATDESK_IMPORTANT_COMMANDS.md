@@ -1,5 +1,19 @@
 # CatDesk — Important Command Reference
 
+## October 23 — C19 observer arguments and source setup
+
+Turn-anchor and response observers accept exact message text, not its digest.
+Keep cryptographic digests for receipt comparison. Ordinary Wake caller regression
+now asserts these argument boundaries. A provider provisional new-chat URL is not
+a canonical target or replay authority. Bounded fresh-page polling may wait for
+assistant body hydration without typing, Retry or Send. Both new controlled
+source chats are independently verified but unregistered; use supported project
+registration and guarded paired binding only after matching private proof to its
+project/request/payload/workspace. Preserve original uncertain journals separately.
+208 affected Python tests pass; selected C17 v52 lacks C18/C19. No new recurring
+command, production promotion or native-owner handoff is authorized by this proof.
+[C19 evidence](../verification/C19_MESSAGE_IDENTITY_2026_10_23.json).
+
 ## October 23 — C18 read-only source reconciliation
 
 An initial source seed with a recorded SEND_ATTEMPTED outcome must not be sent

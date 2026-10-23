@@ -1,5 +1,20 @@
 # CatDesk October 2026 MVP acceptance
 
+### October 23 C19 — two source conversations verified, affected suite passes
+
+Two fresh initial source conversations now have independently verified distinct
+canonical URLs and exact seed/reply pairs. One send each, no resend; no new source
+registered yet. Beta's response refusal revealed a fixture digest/text mismatch
+also present in ordinary Wake calls; both source call boundaries now pass message
+text while receipt digests remain checked.142 bridge/current-DOM plus66 adapter/
+bootstrap tests PASS within600s source containment. This resolves the affected
+suite's earlier180s timing gate; no whole-repository or CI pass is claimed.
+139 runtime records/five original pairs exact, both controls STOPPED/zero owned
+browser/Wake processes. Selected C17 v52 lacks C18/C19. Initial source recovery
+does not close B/G/H/I; matched qualification and supported test registration are
+next. Connector429 is separate. See
+[C19 evidence](verification/C19_MESSAGE_IDENTITY_2026_10_23.json).
+
 ### October 23 C18 — initial source recovered, snapshot guards source-tested
 
 One new source seed submitted once, then strict URL uncertainty reconciled through
@@ -122,13 +137,16 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | I. Restart preserves registrations/history/pending rollovers | PARTIAL: fresh read-only CLI processes recover stored paired targets, saved continuation and quarantine; atomic durable stores exist. | Controlled restart during a pending transaction, verifying registry, predecessor/handoff and queue/journal recovery. No recurring service activation implied. |
 | J. No orphan browser/Wake processes | PASS for recorded bounded tests, including current stopped selection. Root/Job exits and zero owned processes are checked. | Normal unattended operation is NOT ACTIVATED or accepted. Each future bounded test needs its own cleanup proof. |
 
-**Implementation gaps identified:** no proven per-conversation generic MCP
-coding/live workspace acceptance, no live-qualified durable fair new-chat admission queue, no
-supported Web project removal path found, bounded predecessor storage, and no
-explicit structured Git/decision fields in the current handoff schema. Existing
-registry, context store, browser ownership and rollover journals will be reused.
-First eliminate silent predecessor eviction before Wake commit, then implement
-immutable project execution context and fair browser transaction admission.
+**Current implementation versus gaps:** the existing registry, immutable project
+connections/assigned-task tools, durable fair browser admission, context store,
+schema2 Git/decision handoffs, browser ownership and rollover journals are already
+implemented and source-tested. Selected C17 includes these through C16; C18/C19
+browser guard/call fixes await matched qualification. Remaining gaps include actual
+concurrent Web coding, live competing-rollover/recovery/restart acceptance,
+coordinated automatic monitoring, supported project removal and history archival
+beyond the64-predecessor inline limit. C9 refuses before Wake commit at that limit
+instead of evicting history. Two fresh source chats are verified but unregistered;
+they prepare G/H/I and do not themselves satisfy those transaction gates.
 Keep source/fixture, isolated browser, selected runtime, protected installation
 and unattended operation separate. Connector transport and protected deployment
 are specific live dependencies; neither blocks eligible source work. All other

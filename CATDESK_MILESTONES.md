@@ -1,3 +1,19 @@
+## 2026-10-23 — C19 exact message observer calls and second source recovered
+
+Two fresh controlled source conversations now have distinct independently verified
+canonical URLs and exact USER/ASSISTANT replies. One seed send per project, no
+resends; neither source registered yet. Beta's initial response refusal exposed a
+test-driver digest/text mismatch also present in the ordinary Wake caller. Source
+now passes message text to turn-anchor and response observers, retaining digests
+for receipt comparison. Exact-argument regression reproduced red then passes.
+All142 bridge/current-DOM and66 adapter/bootstrap tests PASS in190.6s under600s
+source containment, resolving the narrower180s suite timing gate.139 real records
+remain exact; five pairs/native owners/history preserved, both controls STOPPED,
+zero test-owned browser/Wake processes. Selected C17 v52 lacks C18/C19. Next matched
+qualification and supported registration of these isolated sources, then actual
+G/H/I; no replay of completed proof. See
+[C19 evidence](docs/verification/C19_MESSAGE_IDENTITY_2026_10_23.json).
+
 ## 2026-10-23 — C17 structured handoff package selected STOPPED
 
 Matched v52 includes C16, built from `ecf1cc9` and selected by the existing guarded

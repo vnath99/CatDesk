@@ -1,5 +1,19 @@
 # CatDesk Project Handoff and Continuity Guide
 
+C19: both fresh initial source chats now have distinct canonical URLs and exact
+USER/ASSISTANT pairs verified in independent reads. One seed send each/no resends;
+neither registered. Beta driver response refusal exposed digest passed instead of
+message text, also in ordinary Wake callers. Source fixes those two callers and
+asserts exact arguments; receipt digests stay checked.142 bridge/current-DOM plus
+66 adapter/bootstrap tests PASS190.6s under600s retained source Job, resolving the
+affected180s timeout gate. No whole-repository/CI proof. All139 real records/five
+pairs exact; both controls STOPPED and zero test-owned browser/Wake processes.
+Selected C17 v52 lacks C18/C19. Next matched qualification, supported isolated test
+registration, actual G/H/I. Provider provisional URL is not binding authority;
+beta used a verified canonical URL. Never resend uncertain seed journals or replay
+completed canary/reviews. No operator action needed; connector429 remains separate.
+[C19 evidence](../verification/C19_MESSAGE_IDENTITY_2026_10_23.json).
+
 C18 recovers one new initial source seed without resend: provider search gives a
 candidate, independent fresh browser verifies exact canonical URL/USER/ASSISTANT.
 Original uncertain journal retained and linked to separate positive proof. Source
