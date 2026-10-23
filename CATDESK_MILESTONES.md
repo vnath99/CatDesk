@@ -1,4 +1,4 @@
-## October 23 C44 — preserve nested target diagnostics
+## October 23 C44 — v60 qualified; C43 recovered chain verified
 
 The nested rollover `paired()` helper now retains the existing reader's fixed
 diagnostic codes. A busy Wake configuration can reach the scheduler's existing
@@ -10,12 +10,23 @@ At 18:18:27Z–18:19:09Z, 66 distinct tests passed: 49 rollover and 17 automatic
 driver tests, including two new real-lock/mismatch regressions. Strict root
 Clippy and formatting passed. The first sandboxed run failed during fixture
 setup; the same source passed with authorized Windows filesystem access.
-This is source qualification only. Selected v59 remains STOPPED and does not
-include C44. Next: matching package qualification, then resume C43's existing
-delivered work without requeuing its source event.
+Reviewed source `7cc95489b85084adca643d8cf32ac11dfa613610` was published at
+18:20:26Z with exact remote SHA verification. Its normal app build passed at
+18:30:40Z; the unchanged host image retains its existing owner-EOF/no-state proof.
+At 18:31:22Z, v60 passed stopped development selection: nine paired reads, 232
+records checked, only two package pointers changed, 230 protected records exact,
+no new records or owned processes. Previous package, profiles and histories stayed
+intact; selection started no browser or host.
+
+The bounded C43 resume passed at 18:45:25Z, followed by independent response
+verification at 18:46:36Z. The recovered chain used the already-delivered source
+without work preparation or requeue, created one new intent and needed no draft
+repair. All sibling pairs and prior canaries are preserved. This qualifies the
+controlled development chain; actual Web MCP coding, protected production and
+unattended operation remain open.
 [C44 evidence](docs/verification/C44_NESTED_TARGET_DIAGNOSTICS_2026_10_23.json).
 
-## October 23 C43 — source delivered; nested target-read failure preserved
+## October 23 C43 — delivered source recovered through a new automatic rollover
 
 The distinct beta test ran on selected v59 from 17:55:00Z to 18:04:39Z, within
 its 900-second outer bound. Its source delivery has an exact receipt and a
@@ -32,11 +43,32 @@ queued or delivered again. C42's uncertain operation and alpha's quarantine
 remain intact. Source inspection found that the nested `paired()` helper erases
 specific target-read failures, including config-lock contention, into the
 generic error. The exact C43 cause cannot be recovered from that generic record.
-C44 subsequently source-qualified the narrow diagnostic correction and real-lock
-regressions; no corrected runtime or successful C43 rollover is claimed here.
+C44 subsequently qualified the narrow diagnostic correction and real-lock
+regressions; the initial attempt remains historical evidence.
 A read-only source-body check at 18:14:37Z–18:15:16Z verified the exact event's
 ready marker. All 232 records stayed unchanged and no owners remained; this
 verifies source delivery only, not a handoff or task implementation.
+
+The existing source resumed on v60 at 18:32:02Z–18:45:25Z (803.27s), within
+800s/820s/900s listener/host/outer bounds. One handoff and one new intent reached
+verified URL creation, source-snapshot verification, RECORDED context, paired
+generation 3-to-4 binding and completed continuation. Fresh DRAFT_READY and
+SEND_ATTEMPTED were observed; no source was resent and no draft repair occurred.
+The 232-record baseline had ten expected changes and eleven new records, yielding
+243 records with no unexpected changes. All eight sibling pairs/history,
+workspace/native-owner pins and prior completed rollover remained exact. C42's
+project journal stayed fenced; only its abandoned shared admission was quarantined
+through existing owner acquisition. Natural listener/host exit, exact policy
+restoration, zero owners and both controls STOPPED are verified.
+
+The separate 18:45:58Z–18:46:36Z read verified the 858-character continuation
+body and all four project/task/marker checks, preserving 243 records and ten
+evidence pins. It acknowledges continuity and retains prior pending verification;
+it executed no commands, files or MCP actions. Four native chats remained active
+in an 18:37:19Z read-only snapshot. This is a recovered controlled chain following
+the earlier stop. Whole-original-attempt uninterrupted, actual Web coding,
+protected installed and unattended acceptance remain open. One connector check
+at 18:48:04Z returned HTTP 429 without retry; eligible source work continues.
 [C43 evidence](docs/verification/C43_PAIRED_READ_ATTEMPT_2026_10_23.json).
 
 ## October 23 C42 — fresh-entry failure isolated without replay

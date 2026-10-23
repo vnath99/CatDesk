@@ -1,6 +1,6 @@
 # October 22–31 execution log
 
-## October 23 C44 — nested paired-read diagnostic propagation
+## October 23 C44 — nested diagnostics and stopped v60 qualification
 
 Source changes only the rollover `paired()` helper's error propagation. It uses
 the existing diagnosed reader and returns its fixed code. The existing automatic
@@ -19,12 +19,25 @@ run failed before logic in fixture setup; the same frozen source passed with
 authorized filesystem access. Both attempts and logs are retained.
 
 No browser, host, native-session, binding, selected-package or production action
-occurred in this gate. Selected v59 does not contain C44. The exact C43 failure
-cannot be reconstructed from its generic record. Next: matching normal package
-qualification and continuation of the already-delivered C43 work, with no source
-requeue. [C44 evidence](verification/C44_NESTED_TARGET_DIAGNOSTICS_2026_10_23.json).
+occurred in the source gate. Reviewed source
+`7cc95489b85084adca643d8cf32ac11dfa613610` was published at
+18:20:26.414Z with exact remote SHA readback. The normal app build passed at
+18:23:49.312Z–18:30:40.611Z (411.30s). Its matching host build passed at
+18:30:58.967Z–18:31:00.331Z; the host image is unchanged, so the existing exact-image
+owner-EOF/no-state proof was reused without starting another host.
 
-## October 23 C43 — bounded beta attempt stopped before handoff
+Stopped development v60 selection passed at 18:31:22.597Z in 7.06s. It checked
+232 records, changed only two package pointers, preserved 230 protected records
+and the prior package, added no records and read all nine pairs exactly. No browser,
+host, native or recurring process was started by selection; zero owners remained.
+The fresh 232-record resume baseline was frozen at 18:31:43.217Z.
+
+The existing C43 source resume subsequently passed under 800s listener, 820s host
+and 900s outer limits. Its terminal, independent body-read and cleanup evidence
+are recorded below. The exact original C43 failure remains unconfirmed.
+[C44 evidence](verification/C44_NESTED_TARGET_DIAGNOSTICS_2026_10_23.json).
+
+## October 23 C43 — initial stop preserved; corrected-runtime resume verified
 
 At 17:54:46.041Z–17:54:48.271Z, supported work commands retired the prior beta
 test request and queued one distinct read-only request. Retirement explicitly
@@ -53,12 +66,40 @@ was run and no source event was requeued.
 Next source work preserves existing detailed target-read errors through nested
 rollover verification, so config contention can use the already implemented
 transient retry path. Permanent mismatches still refuse. Real-lock regression
-passed in C44 at source level; no installed fix or successful C43 rollover is claimed.
+passed in C44 at source level before the later selected-v60 resume below.
 At 18:14:37.948Z–18:15:16.236Z, a separate bounded read verified the exact source
 event's 48-character assistant response and both required ready markers. The
 body does not mention project/task IDs; event, target generation and digest
 provide its scope. All 232 records were unchanged with zero owners, both controls
 STOPPED and no sends. This is source-response verification only.
+
+The same open request and delivered source resumed on v60 at
+18:32:02.160Z–18:45:25.434Z (803.27s). No work preparation or source delivery was
+repeated. One handoff and one new rollover intent traversed PREPARED, SUBMITTING,
+RESPONSE_PENDING, CREATED, BOUND and CONTINUATION_QUEUED. Fresh DRAFT_READY and
+SEND_ATTEMPTED were observed; repair records stayed zero. The actual replacement
+URL, source snapshot, RECORDED context and paired generation 3-to-4 binding were
+verified. Continuation delivery is SENT with a COMPLETE response timer.
+
+The 232-record baseline had ten expected changes and eleven new records, yielding
+243 records, with zero unexpected changes. All eight sibling pairs/history,
+workspace/native-owner pins, original attempt and prior completed rollover were
+exact. Existing owner acquisition quarantined only C42's abandoned shared admission;
+its project journal stayed unchanged, as did alpha's quarantine. Four native chats
+were active at the read-only 18:37:19Z checkpoint; no native action was taken.
+Natural listener exit, host-tree exit and outer Job closure passed. Exact original
+policy readback was confirmed at 18:45:26.928Z with zero owners and both controls
+STOPPED.
+
+The independent event-bound read at 18:45:58.591Z–18:46:36.029Z passed within its
+165s command/180s outer bounds: 858 characters, all four required project/task/marker
+checks, 243 state records and ten evidence pins unchanged, no sends or new records,
+zero owners and both controls STOPPED. The response acknowledges continuity and
+retains pending C28 verification; it explicitly reports no independent ownership,
+artifact or Git inspection and no command/file/MCP/external action. This is a
+recovered controlled automatic chain, not uninterrupted execution from the original
+attempt, Web coding, protected production or unattended acceptance. A single
+18:48:04Z connector check still returned HTTP 429; no retry or setting change occurred.
 [C43 evidence](verification/C43_PAIRED_READ_ATTEMPT_2026_10_23.json).
 
 ## October 23 C42 — fresh-entry diagnosis and narrow placeholder correction

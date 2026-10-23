@@ -6,21 +6,37 @@ Source now preserves fixed nested target-read diagnostic codes. In particular,
 `WEB_TARGET_WAKE_CONFIG_BUSY` can reach the existing bounded transient retry;
 `WEB_TARGET_REGISTRY_WAKE_MISMATCH` remains a refusal. Do not treat all target
 errors as permission to retry or rebind. The 66-test source gate, strict Clippy
-and format passed; selected v59 does not yet contain this change. No operator
-command, blind resend or journal reset is introduced by C44.
+and format passed. Published source `7cc95489b85084adca643d8cf32ac11dfa613610`
+is included in development v60, selected at 18:31:22.597Z after normal builds.
+Selection checked 232 records and nine pairs; only two package pointers changed,
+230 protected records remained exact and no owners remained. It started no
+browser or host. No operator command, blind resend or journal reset is introduced
+by C44.
+
+The reviewed C43 existing-source resume passed within its 900s outer bound,
+followed by an independent response-body read and verified cleanup. Preserve its
+completed source/handoff/rollover/continuation; do not run work preparation again
+or requeue those events. This controlled proof grants no protected-production or
+unattended activation authority.
 [C44 evidence](../verification/C44_NESTED_TARGET_DIAGNOSTICS_2026_10_23.json).
 
-## October 23 C43 — delivered source is not a new request
+## October 23 C43 — completed recovered chain must not be replayed
 
-C43's beta source request is already SENT with an exact receipt and COMPLETE
-response. No handoff or rollover intent was created. Preserve that request and
-the 232-record stopped snapshot; do not repeat work preparation or delivery to
-recover the generic target-read failure. The prior C28 request was retired with
-its independent-verification limitation retained. C42's uncertain intent and
-alpha's quarantine remain separate. The selected v59 package is STOPPED with
-zero owners after bounded cleanup. Nested diagnostic propagation is source work
-in progress, not an installed recovery mechanism.
-The source-ready body was verified read-only at 18:15:16Z; do not resend it.
+C43's beta source was sent once on v59 and verified read-only at 18:15:16Z.
+Its corrected-v60 automatic resume passed at 18:45:25Z: one handoff/new intent,
+fresh atomic DRAFT_READY, zero repairs, verified URL/source/context, paired
+generation 3-to-4 binding and completed continuation. The 18:46:36Z response read
+verified all four markers in 858 characters; it performs no commands/files/MCP
+work. All 243 records and ten evidence pins were unchanged during that read.
+
+Both controls are STOPPED, original policy is restored and zero test owners
+remain. Eight sibling pairs/history and native ownership stayed exact; four
+native chats remained active during the run. The prior C28 request retains its
+pending-verification limitation. C42's project journal stays fenced, while only
+its abandoned shared admission was safely quarantined by existing owner
+acquisition. Do not reset journals, requeue completed events or infer coding
+completion from a COMPLETE timer. Actual Web MCP coding remains HTTP-429-blocked
+on the single 18:48:04Z probe; source work can continue independently.
 [C43 evidence](../verification/C43_PAIRED_READ_ATTEMPT_2026_10_23.json).
 
 ## October 23 C42 — ambiguous entry diagnosis

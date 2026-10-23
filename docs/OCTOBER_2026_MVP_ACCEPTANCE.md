@@ -1,32 +1,61 @@
 # CatDesk October 2026 MVP acceptance
 
-### October 23 C44 — source fix; runtime qualification pending
+### October 23 C44 — v60 qualified; recovered C43 chain verified
 
 Nested paired-target reads retain fixed diagnosed errors. Config-lock contention
 can use the existing bounded transient retry; mismatched targets still refuse.
 The real-lock and permanent-mismatch regressions, full rollover and automatic
 driver suites passed: 66 distinct tests, two added, strict root Clippy and format
-passed. No live action occurred. The selected v59 runtime does not include C44;
-its package and live recovery qualification remain open. C43's historical cause
-is still unconfirmed. [C44 evidence](verification/C44_NESTED_TARGET_DIAGNOSTICS_2026_10_23.json).
+passed. The source gate performed no live actions. Reviewed source
+`7cc95489b85084adca643d8cf32ac11dfa613610` has an exact remote SHA readback.
+Matching normal app/host builds passed; the unchanged host reused its existing
+exact-image owner-EOF/no-state evidence without a new host process.
 
-### October 23 C43 — no new rollover acceptance
+At 18:31:22.597Z, development v60 passed stopped selection in 7.06s: nine paired
+reads, 232 records checked, two package pointer changes, 230 protected records
+exact, no new records and zero owned processes. This qualifies the selected
+development package. C43's subsequent controlled existing-source resume and
+independent assistant-body read passed; exact evidence and remaining limits are
+recorded below. C43's historical cause is still unconfirmed. Protected production,
+actual Web MCP coding and unattended acceptance remain open.
+[C44 evidence](verification/C44_NESTED_TARGET_DIAGNOSTICS_2026_10_23.json).
 
-The selected-v59 beta test delivered its distinct source event with exact receipt
+### October 23 C43 — recovered controlled automatic chain accepted
+
+The initial selected-v59 beta test delivered its distinct source event with exact receipt
 and completed response. It stopped before handoff publication with the generic
 `WEB_ROLLOVER_PAIRED_TARGET_REQUIRED` error. No new intent, bootstrap, URL or binding
-exists. Observation progressed independently of C42's preserved uncertain operation,
+was created by that first attempt. Observation progressed independently of C42's preserved uncertain operation,
 but this is not coding or rollover acceptance. The exact nested read failure was
 lost; config contention remains unconfirmed.
 A separate 18:15:16Z read verified the event-bound source-ready response. It
-preserved all 232 records with no new sends or owners; no handoff body exists.
+preserved all 232 records with no new sends or owners; no handoff body existed at that checkpoint.
 
 The monitored test was deliberately stopped after 578.37 seconds, within its
 900-second outer limit. Cleanup, policy restoration, nine unchanged pairs,
-preserved histories and zero owners are verified; 232 current records remain.
-The source request must not be resent. Narrow error propagation and real-lock
-regression are the next eligible source work. B/C, uninterrupted E, additional H/I,
-protected installation and unattended operation remain open.
+preserved histories and zero owners are verified; its 232-record checkpoint remains.
+The source request was preserved for the corrected-v60 resume; it was never resent.
+
+The 18:32:02.160Z–18:45:25.434Z resume passed in 803.27s under 800s/820s/900s
+bounds. One new handoff and intent, fresh DRAFT_READY/SEND_ATTEMPTED and zero
+repair records led to an independently verified replacement URL, source snapshot,
+RECORDED context, paired generation 3-to-4 update and SENT/COMPLETE continuation.
+All 232 baseline records were audited: ten expected changes, eleven new records,
+zero unexpected changes. Eight sibling pairs/history, native ownership, workspace,
+original attempt and prior completed rollover were exact. C42's project journal
+remains fenced; its abandoned shared admission alone was safely quarantined.
+Natural listener/host exit, exact original-policy restoration, zero owners and
+both controls STOPPED are verified.
+
+The separate 18:45:58.591Z–18:46:36.029Z assistant-body read passed: 858 characters,
+all four required markers, 243 records and ten evidence pins unchanged, no sends,
+zero owners and both controls STOPPED. The body acknowledges continuity and keeps
+C28 verification pending; it performs no commands, file or MCP actions. Four native
+chats were active during the test's 18:37:19Z read-only snapshot. This qualifies a
+recovered controlled chain with new atomic draft entry, without repair. It does
+not qualify the whole original attempt as uninterrupted, actual Web coding, full
+MVP, protected installation or unattended operation. B/C remains connector-specific
+HTTP 429 on the single 18:48:04Z check. Additional critical H/I phases remain open.
 [C43 evidence](verification/C43_PAIRED_READ_ATTEMPT_2026_10_23.json).
 
 ### October 23 C42 — fresh entry is not yet accepted
@@ -643,12 +672,12 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | B. Two Web conversations make tools calls in separate directories | PARTIAL SOURCE / NORMAL AND SELECTED DEVELOPMENT IMAGE LOCAL HTTP: C11 binds immutable roots/current paired witnesses. C12 editing reuses contracts/journals/writer locks. C15 selected image includes C14 and proves parallel fixture patch/command verification plus restart refusal, with outside writes refused. Native fixture roots preserved; provider-origin chat ID is not authenticated. | Actual concurrent Web coding and protected installed acceptance. Local fixtures, CLI threads and review reads do not close live B. |
 | C. Blocked project while sibling makes useful progress | PARTIAL: scheduler fixtures, C7 granted-reader and C8 timer-fault regressions demonstrate source isolation. Existing independent native owners were preserved. | Bounded real Web project blocking/progress proof on the intended runtime. Unreadable/unattributable shared state still fails closed. |
 | D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
-| E. Context pressure and durable handoff | RECOVERED CONTROLLED CHAIN VERIFIED: C33 independent monitoring, C38 automatically collected schema2 handoff, C39 explicit journaled no-send draft repair, and C40 same-intent automatic generation 2-to-3 rollover/continuation are verified. Context recording is RECORDED and predecessor history retained; estimates remain advisory with UNKNOWN_OR_INCOMPLETE coverage. | Uninterrupted and unattended operation remain unqualified. Fresh empty-home atomic insertion remains source/offline only. No new source tests counted; preserve the completed chain and earlier proofs. |
-| F. Actual replacement URL and continuation | PASS, controlled selected scope: original canary and C23 two-replacement proofs remain preserved. C40 verifies another actual issued URL, exact bootstrap receipt, paired generation 2-to-3 update, preserved registry/Wake histories and completed continuation; a separate event-bound read verifies the assistant body, project, task and marker. | C40 follows explicit C39 no-send repair; it is recovered automatic execution, not uninterrupted or unattended acceptance. Do not replay completed operations. Actual coding and protected production remain separate. |
+| E. Context pressure and durable handoff | RECOVERED CONTROLLED CHAIN VERIFIED: C33/C38–C40 remain preserved. C43 resumes its existing source on v60: one handoff/new intent, fresh DRAFT_READY/SEND_ATTEMPTED, no repair, verified source snapshot, RECORDED context and completed generation 3-to-4 rollover/continuation. Estimates remain advisory with UNKNOWN_OR_INCOMPLETE coverage. | Fresh atomic entry qualifies within this new controlled intent. The original C43 attempt was interrupted; whole-original-chain uninterrupted and unattended operation remain unqualified. Preserve completed proof. |
+| F. Actual replacement URL and continuation | PASS, controlled selected scope: original canary, C23 and C40 remain preserved. C43 independently verifies another issued URL, paired generation 3-to-4 update and completed continuation. A separate event-bound read verifies its 858-character assistant body and all project/task/marker checks; 243 records remain exact. | C43 is a recovered chain after the original stop, with no repair or source replay. The body acknowledges continuity without executing commands/files/MCP work. Actual coding, protected production and unattended operation remain separate. |
 | G. Two simultaneous synthetic rollover requests | PASS, SELECTED CONTROLLED LIVE C23:23.22ms request gap, alpha ACTIVE/beta WAITING, maximum sampled creator1; stable unsent waiting ticket survives process exit and completes next. Both issued URLs/pairs/continuations verified, seven prior pairs/history exact, no duplicate submissions. | Automatic recurring driver, critical crash H and protected/unattended qualification remain separate. Preserve these completed operations. |
-| H. Interruptions, recovery and ambiguous submission | PARTIAL LIVE: C24 unknown-send quarantine and C28 exact-draft recovery remain preserved. C38 interrupted text entry was archived and repaired once by the journal-bound C39 no-send path; C40 resumed the same intent, completed its first bootstrap submission, verified URL/source, bound generation 3 and delivered the verified continuation without new source/handoff events. | Additional critical phases, including paired-commit crashes, remain open. Prefix evidence alone never grants repair or send authority. C40 is a recovered chain after explicit repair, not unattended recovery. |
+| H. Interruptions, recovery and ambiguous submission | PARTIAL LIVE: C24/C28 and recovered C38–C40 remain preserved. C43 resumes an already delivered source after its controlled stop, completing one new no-repair rollover with verified response and cleanup. C42's uncertain project journal stays fenced; existing owner acquisition quarantines its abandoned shared admission without replay. | Additional critical phases, including paired-commit crashes, remain open. Prefix evidence alone never grants repair/send authority. No unattended recovery acceptance. |
 | I. Restart preserves registrations/history/pending rollovers | PARTIAL: C23 WAITING/completed restart; C28 selected pending exact-draft recovery and fresh-process completed-state readback.197 records exact/nine pairs, two predecessors/three context generations. | Paired-commit crash phases remain open. No recurring activation. |
-| J. No orphan browser/Wake processes | PASS for recorded bounded tests, including current stopped selection. Root/Job exits and zero owned processes are checked. | Normal unattended operation is NOT ACTIVATED or accepted. Each future bounded test needs its own cleanup proof. |
+| J. No orphan browser/Wake processes | PASS for recorded bounded tests, including C43 resume and its independent body read: natural listener/host/Job exits, exact policy restoration, both controls STOPPED, zero owned processes; 243 final records preserved. | Normal unattended operation is NOT ACTIVATED or accepted. Each future bounded test needs its own cleanup proof. |
 
 **Current implementation versus gaps:** the existing registry, immutable project
 connections/assigned-task tools, durable fair browser admission, context store,
@@ -657,7 +686,7 @@ implemented and source-tested. Selected C21 v53 includes C18-C20 browser guard/c
 provisional-URL fixes and actual separate context captures. C23 now qualifies two
 competing selected browser creations/paired commits/continuations. Remaining gaps include actual
 concurrent Web coding and critical crash/recovery/restart acceptance,
-uninterrupted automatic monitoring/entry and history archival
+whole-original-chain uninterrupted automatic operation and history archival
 beyond the64-predecessor inline limit. C41 adds source/isolated-CLI retirement;
 installed retirement and prior-task recovery proof remain open. C9 refuses before Wake commit at that limit
 instead of evicting history. Two fresh source chats are verified and paired to

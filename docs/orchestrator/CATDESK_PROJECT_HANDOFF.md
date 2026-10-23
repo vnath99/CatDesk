@@ -1,4 +1,4 @@
-## October 23 C44 — qualify the corrected nested reader next
+## October 23 C44 — v60 qualified; recovered C43 chain complete
 
 Source-qualified C44 preserves existing fixed diagnostics through the nested
 rollover target read. The existing scheduler can retry config-lock contention;
@@ -6,27 +6,58 @@ permanent mismatches still refuse. Sixty-six distinct tests, including two real
 lock/mismatch regressions, strict root Clippy and formatting passed. C43's original
 generic failure cannot be assigned a precise cause retrospectively.
 
-Selected v59 remains STOPPED and does not contain C44. Build and qualify the
-matching package before resuming the existing C43 request. Do not requeue its
-source event, change the C42/alpha records, or restart recurring automation.
+Reviewed source `7cc95489b85084adca643d8cf32ac11dfa613610` has exact remote
+verification and passing normal app/host builds. Development v60 was selected
+at 18:31:22.597Z: 232 records checked, only two package pointers changed, 230
+protected records and all nine pairs exact, no new records or owners. The
+unchanged host reused its existing owner-EOF/no-state proof; selection launched
+no browser or host and preserved the previous package.
+
+The existing C43 resume and separate response read passed. Preserve the completed
+source/handoff/rollover/continuation; do not repeat them. Both controls are STOPPED
+and zero owners remain after exact policy restoration. Continue eligible source
+work, with actual multi-chat MCP coding B/C still blocked by the single 18:48:04Z
+HTTP 429 probe. No operator action is required for independent source development.
+Keep C42/alpha and existing native sessions intact; recurring and protected
+production activation remain out of scope.
 [C44 evidence](../verification/C44_NESTED_TARGET_DIAGNOSTICS_2026_10_23.json).
 
-## October 23 C43 — preserve the delivered beta request
+## October 23 C43 — preserve the recovered beta chain
 
-Selected v59 remains STOPPED. C43's distinct beta source delivery is SENT with an
+The historical v59 attempt delivered C43's distinct beta source with an
 exact receipt and COMPLETE response. Nested target verification failed before
-handoff publication; no new intent, URL or binding exists. The generic recorded
+handoff publication; no new intent, URL or binding was created by that attempt. The generic recorded
 error cannot establish its underlying cause. Do not requeue the delivered source.
 The prior beta request was retired without claiming its pending independent
 verification completed. C42 and alpha remain preserved.
 
 The 578.37-second test was deliberately stopped through its verified listener
 handle. Separate host/Job cleanup and policy restoration passed: zero owners,
-both controls STOPPED, all nine pairs exact, 232 current records preserved.
-Next: retain diagnosed target errors through nested reads and test real config
-lock contention; then qualify that source before resuming eligible work.
+both controls STOPPED, all nine pairs exact, its 232-record checkpoint preserved.
+The generic historical cause remains unconfirmed; C44's diagnosed-error fix
+qualified before the later v60 resume.
 The 18:15:16Z read-only source-body check passed with 232 records unchanged and
 zero owners. It verifies the ready response, not implementation or rollover.
+
+The existing source resumed on v60 at 18:32:02.160Z–18:45:25.434Z (803.27s),
+under listener800s/host820s/outer900s. One handoff/new intent, fresh DRAFT_READY and
+SEND_ATTEMPTED, zero source resends and zero repairs led to a verified new URL,
+RECORDED context, source snapshot, paired generation 3-to-4 binding and completed
+continuation. There were ten expected changes and eleven new records among the
+232-record baseline; 243 current records remain with no unexpected changes.
+All eight sibling pairs/history, native ownership and controlled workspace are
+preserved. C42's project record remains fenced; existing owner acquisition safely
+quarantined only its abandoned shared admission. Four native chats remained active
+in the 18:37:19Z read-only snapshot.
+
+Natural listener/host exit, exact original policy, zero owners and both controls
+STOPPED passed. The 18:45:58.591Z–18:46:36.029Z event-bound read verified the
+858-character continuation body and all four markers, with 243 records and ten
+evidence pins unchanged. The body retains prior pending verification and claims
+no commands/files/MCP work. This is a recovered controlled chain; original-attempt
+uninterrupted, actual coding, critical crash phases, protected installation and
+unattended gates remain open. Do not replay completed tests or retire verification
+as completed merely because its transport succeeded.
 [C43 evidence](../verification/C43_PAIRED_READ_ATTEMPT_2026_10_23.json).
 
 ## October 23 C42 — preserve the failed fresh-entry intent
