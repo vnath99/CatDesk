@@ -2,6 +2,12 @@
 
 ## 2026-10-22 evening — release/selected context qualification and bounded live read
 
+- **Exact publication at 00:39:38 UTC October 23:** sanitized qualification
+  commit `43a58ed42f0e0be963224236a34996e2aa11982b` pushed normally to
+  `codex/web-rollover-oct17`; exact remote full SHA matches. Five documentation
+  paths reviewed/scanned; no private target/payload/source, authentication,
+  profile or runtime artifact published. Zero reported runs/checks; CI UNVERIFIED.
+
 - Normal release from clean `10a874bb48a39f7f8b81b76f1f238aeb6055f7c0`
   completed 00:26:59 UTC October 23 within its 600s Job. Matching normal host,
   adapter and bridge retained. No source changed after the prior passed gates.
