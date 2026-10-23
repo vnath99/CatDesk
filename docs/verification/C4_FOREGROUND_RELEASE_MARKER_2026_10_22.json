@@ -252,5 +252,16 @@
     "recordsCompared": 139,
     "onlyOwnLedgerChanged": true,
     "retainedHarnessIssue": "Initial sandbox project-read refusal before mutation; owner-context resolution succeeded without publication/browser/native action"
+  },
+  "liveAcceptancePublication": {
+    "observedUtc": "2026-10-23T01:29:20.6726233Z",
+    "documentationCommit": "565861428f68081f3dcb72985d086defdc50583f",
+    "remoteSha": "565861428f68081f3dcb72985d086defdc50583f",
+    "branch": "codex/web-rollover-oct17",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "privacyScan": "PASS",
+    "protectedProductionAccepted": false
   }
 }

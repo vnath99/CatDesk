@@ -1,6 +1,12 @@
 # October 22–31 execution log
 
 ## 2026-10-22 evening — bounded live checkpoint review PASS
+- **Exact acceptance publication at 01:29:20 UTC October 23:** sanitized
+  documentation committed/pushed as
+  `565861428f68081f3dcb72985d086defdc50583f` on
+  `codex/web-rollover-oct17`; exact remote SHA matches. Five allowlisted
+  documentation paths, no private payload/target/project source/profile/runtime
+  artifacts. Zero reported workflow runs/checks; CI remains UNVERIFIED.
 
 The matched normal app/host package passed the release marker/owner gate and
 was selected through the stopped updater. All 134 unrelated records stayed
