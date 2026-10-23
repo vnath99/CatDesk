@@ -1,5 +1,33 @@
 # October 22–31 execution log
 
+## 2026-10-23 — C25 observed editor; C26 working escaped transport
+
+Actual editor diagnosis found generated URL spans and layout newlines. Native
+plain-text repair recreated those spans and was refused before send. The exact
+unregistered test draft was durably archived/cleared, with reloaded EMPTY_HOME;
+no unknown draft or registered operation was cleared. Its old journal is retained.
+
+New preparations now mark their existing immutable handoff as JSON_ESCAPED_V1.
+Rust/Python produce matching JSON envelopes with Unicode-escaped URL slashes;
+decoding retains project/intent, predecessor and complete handoff content. Legacy
+records keep their exact composer/source-witness/context-dedup bytes. New context
+observations count actual encoded wire text. No new registry or relaxed receipt.
+156 affected tests and strict app/Wake Clippy/formats PASS. Native repair alone
+remains unqualified on the current UI; new envelopes do not require it.
+
+Escaped source canary:22.84s preparation, browser exit, then28.12s fresh-process
+resume; zero generated links/retyping, one send, actual issued URL, independent
+fresh-document exact USER receipt and completed expected assistant body. App
+inventory corroborates the issued ID. This unregistered canary uses a synthetic
+predecessor; it is not a paired runtime rollover.181 protected records/nine pairs
+exact, native owners untouched, zero owned processes/both controls STOPPED. C24
+uncertainty/C23 completed proof preserved; no recurring/Wake/production action.
+
+Code `6dab09fcfb0c2e1c51841dc087e0945c229c78d1` published on `codex/web-rollover-oct17`; exact remote SHA matches. CI zero runs/checks, UNVERIFIED. Next: matched normal release/stopped-development qualification, then a fresh registered rollover/continuation. Actual Web B/C, automatic monitoring, protected installation and unattended acceptance remain OPEN.
+
+UTC audit: original canary preparation11:18:49–11:19:10 refused draft drift; read11:20:36–11:20:49; DOM shape11:22:51–11:23:05; native repair11:30:43–11:30:59 refused rich serialization before send; control probe11:34:54–11:35:13 found no removal menu; exact-owned archive/clear11:39:20–11:39:42 verified EMPTY_HOME. Final156-test gate11:48:34–11:50:48; escaped preparation11:51:19–11:51:42 and resume11:52:18–11:52:46. Each browser run bounded180s. Failed fixture assumptions and diagnostics retained privately; no polling resend.
+[C26 evidence](verification/C26_ESCAPED_HANDOFF_2026_10_23.json).
+
 ## 2026-10-23 — C24 draft checkpoint interruption, unknown send and source guard
 
 Fresh distinct recovery task: actual owned-root interruption at durable DRAFT_READY

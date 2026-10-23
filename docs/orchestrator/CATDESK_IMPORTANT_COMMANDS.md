@@ -1,5 +1,16 @@
 # CatDesk — Important Command Reference
 
+## October 23 — C26 saved transport controls exact bootstrap bytes
+
+New `rollover prepare`/`handoff-collect` records mark their immutable handoff as
+JSON_ESCAPED_V1. Existing execute/probe commands derive the message from that
+saved witness. No new registry or binding command. Never rewrite old handoffs or
+digests to opt them in: legacy remains legacy, unknown sends remain non-replayable.
+Native formatting repair alone failed on current generated URL spans. The escaped
+source canary is complete and must not be replayed. Qualify the matched stopped
+development package before claiming a new-format registered paired rollover.
+[C26 evidence](../verification/C26_ESCAPED_HANDOFF_2026_10_23.json).
+
 ## October 23 — C24 do not replay an uncertain bootstrap
 
 `rollover inspect-draft --project-id PROJECT --expected-intent-id INTENT` reads a
