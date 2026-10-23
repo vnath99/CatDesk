@@ -1,5 +1,31 @@
 # October 22–31 execution log
 
+## 2026-10-22 evening — coordinator reader normal executable qualified
+
+Normal app build from clean `bb83aa95c2edfa438df3e07f3f9d0f18f35d172f`
+passed at 01:57:19 UTC October 23 without development dependencies. App SHA256:
+`4b798dc9069be15c741772ba749af706d524c052df7319cc2f00e568929c9afd`.
+One 45s loopback MCP process, with Web scheduling explicitly disabled, proved
+new-tool discovery, unauthenticated HTTP401, closed arguments, stale-generation,
+wrong-digest, missing-delivery and cross-project receipt refusals before browser
+access. Registered context estimates remained independently scoped for all five
+original projects; paired targets and accepted continuation were preserved.
+
+Root exit and outer Job cleanup passed. Of 139 state records, only the existing
+configuration's numeric usage counters changed; launch settings stayed exact,
+138 other records were unchanged and no records were added. Zero owned
+processes, both controls STOPPED, no browser, WakeHost, message, binding, native
+session or selected-package change. This qualifies normal executable/local MCP
+admission, not positive review-body retrieval or the external connector. The
+matched normal release/selected package and positive new-tool read remain next.
+No completed review/rollover was replayed. See the
+[C6 receipt](verification/C6_WEB_REVIEW_READ_2026_10_22.json).
+- **Source publication at 01:55:40 UTC:** twelve reviewed/scanned paths pushed
+  as `bb83aa95c2edfa438df3e07f3f9d0f18f35d172f` on
+  `codex/web-rollover-oct17`; exact remote SHA matched, zero runs/checks,
+  CI UNVERIFIED. No private payload, URL, machine/auth/profile or runtime artifact.
+
+
 ## 2026-10-22 evening — central review response reader implemented
 
 Source inspection found that the coordinator could queue work/read status but

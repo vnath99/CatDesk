@@ -239,13 +239,90 @@
   },
   "acceptance": {
     "source": "PASS",
-    "normalExecutable": "OPEN",
+    "normalExecutable": "PASS_NORMAL_DEBUG",
     "selectedDevelopmentPackage": "NOT_UPDATED",
-    "localMcpBinary": "OPEN",
+    "localMcpBinary": "PASS_DISCOVERY_AUTHENTICATION_AND_REFUSAL_ONLY",
     "externalConnector": "UNVERIFIED",
     "positiveLiveReviewBodyViaNewTool": "OPEN",
     "protectedProduction": "OPEN",
     "fullMvp": "PARTIAL"
   },
-  "nextTask": "Build a normal app, qualify discovery/refusal through a bounded no-web-auto local MCP process, then qualify matched release/package before any new-tool live body test; do not resend completed review/canary"
+  "nextTask": "Build and qualify matched normal release/package, then one bounded read-only positive body check through the new MCP entry point without sending/replaying any event; external connector and protected production remain separate gates",
+  "sourcePublication": {
+    "observedUtc": "2026-10-23T01:55:40.7881688Z",
+    "sourceCommit": "bb83aa95c2edfa438df3e07f3f9d0f18f35d172f",
+    "remoteSha": "bb83aa95c2edfa438df3e07f3f9d0f18f35d172f",
+    "branch": "codex/web-rollover-oct17",
+    "privacyScan": "PASS",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED"
+  },
+  "normalExecutableQualification": {
+    "sourceCommit": "bb83aa95c2edfa438df3e07f3f9d0f18f35d172f",
+    "profile": "NORMAL_DEBUG_APP_NO_DEV_DEPENDENCIES",
+    "buildStartedUtc": "2026-10-23T01:56:38.1534859Z",
+    "buildFinishedUtc": "2026-10-23T01:57:19.2374619Z",
+    "imageSha256": "4b798dc9069be15c741772ba749af706d524c052df7319cc2f00e568929c9afd",
+    "imageBytes": 67094528,
+    "buildExit": 0,
+    "localMcpMode": "computer/multi-tools",
+    "automaticSchedulerEnabled": false,
+    "listenerCapSeconds": 45,
+    "outerCapSeconds": 120,
+    "unauthenticatedStatus": 401,
+    "listedExactlyOnce": true,
+    "cases": [
+      {
+        "tool": "catdesk_web_review_read",
+        "listedExactlyOnce": true,
+        "invalidScopeRefused": true,
+        "errorCode": "WEB_REVIEW_ARGUMENTS_INVALID",
+        "privateInputRedacted": true
+      },
+      {
+        "case": "stale-generation",
+        "refusedBeforeBrowser": true,
+        "errorCode": "WEB_REVIEW_TARGET_CHANGED",
+        "privateBodyNotReturned": true
+      },
+      {
+        "case": "wrong-digest",
+        "refusedBeforeBrowser": true,
+        "errorCode": "WEB_REVIEW_TARGET_CHANGED",
+        "privateBodyNotReturned": true
+      },
+      {
+        "case": "missing-delivery",
+        "refusedBeforeBrowser": true,
+        "errorCode": "WEB_REVIEW_DELIVERY_REQUIRED",
+        "privateBodyNotReturned": true
+      },
+      {
+        "case": "cross-project-delivery",
+        "refusedBeforeBrowser": true,
+        "errorCode": "WEB_REVIEW_DELIVERY_SCOPE_CHANGED",
+        "privateBodyNotReturned": true
+      }
+    ],
+    "allOriginalPairedProjects": 5,
+    "registryProjects": 7,
+    "contextEstimatesIndependentlyScoped": true,
+    "completedContinuationPreserved": true,
+    "stateRecordsChecked": 139,
+    "unchangedRecords": 138,
+    "onlyChangedRecord": "Existing configuration numeric usageTotals counters",
+    "launchConfigurationPreserved": true,
+    "unexpectedChanges": 0,
+    "newRecords": 0,
+    "rootExitProved": true,
+    "outerJobClosed": true,
+    "ownedProcessesAfter": 0,
+    "controls": "BOTH_STOPPED",
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "newMessages": 0,
+    "packageSelectionChanged": false,
+    "protectedProductionAcceptance": false
+  }
 }

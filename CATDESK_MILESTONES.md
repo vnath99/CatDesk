@@ -1,3 +1,14 @@
+## 2026-10-22 evening — coordinator reader normal MCP admission PASS
+
+The new coordinator review reader also passed a normal executable build and
+45s no-web-auto local MCP qualification: authentication, closed scope, stale
+generation/digest, missing delivery and cross-project receipt refusals. 139
+records checked; only numeric usage counters changed, 138 others exact, no new
+records. Clean root/Job exit, zero owned processes, both controls STOPPED. No
+browser/message/WakeHost/selected-package/native changes. Positive new-tool
+body read, matched release and external connector remain OPEN. See the
+[C6 receipt](docs/verification/C6_WEB_REVIEW_READ_2026_10_22.json).
+
 ## 2026-10-22 evening — coordinator review reader SOURCE PASS
 
 The central coordinator now has a SOURCE/TESTED_LOCAL exact-event response
