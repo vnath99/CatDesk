@@ -39,7 +39,7 @@ def read_job_request():
     request = json.loads(line)
     if not isinstance(request, dict) or (not any(request.get(kind) is True for kind in
             ("bootstrap", "bootstrapDraftInspect", "bootstrapDraftArchive",
-             "bootstrapQuarantineInspect")) and len(line) > 8192):
+             "bootstrapDraftRepair", "bootstrapQuarantineInspect")) and len(line) > 8192):
         raise ValueError("invalid job request")
     return request
 
@@ -251,7 +251,10 @@ def bootstrap_attempt(bridge, sb, request):
             sink.check_empty_home(cdp)
         editor_selector = sink.editor_selector(cdp, prevalidated=True)
         if not existing_draft:
-            cdp.send_keys(editor_selector, typed_message, timeout=sink.ui_timeout)
+            if protocol_v2:
+                sink.insert_empty_home_draft(cdp, message)
+            else:
+                cdp.send_keys(editor_selector, typed_message, timeout=sink.ui_timeout)
         sink.check_typed_home(cdp, message)
         if protocol_v2:
             # Only after the parent's durable text-entry ACK. This native
@@ -445,6 +448,66 @@ def bootstrap_draft_archive(bridge, sb, request):
         raise bridge.Attention("BOOTSTRAP_DRAFT_CHANGED")
     sink.clear_archived_home_draft(cdp, message, actual_text)
     emit({"stage": "BOOTSTRAP_DRAFT_ARCHIVED", **scope, "actualBytes": 0})
+
+
+def bootstrap_draft_repair(bridge, sb, request):
+    """Repair only a journal-authorized partial draft; never send or clear it."""
+    fields = {"bootstrapDraftRepair", "bootstrapProtocol", "projectId", "intentId",
+              "source", "handoff", "expectedRawDigest", "attemptRecorded"}
+    if (set(request) != fields or request["bootstrapDraftRepair"] is not True or
+            type(request["bootstrapProtocol"]) is not int or request["bootstrapProtocol"] != 2 or
+            type(request["attemptRecorded"]) is not bool or
+            not isinstance(request["expectedRawDigest"], str) or
+            not bridge.SHA256_HEX.fullmatch(request["expectedRawDigest"])):
+        raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_REQUEST_INVALID")
+    source = request["source"]
+    if not isinstance(source, dict) or set(source) != {"url", "digest", "generation"}:
+        raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_REQUEST_INVALID")
+    source_url = bridge.canonical_conversation_url(source["url"])
+    if (source_url != source["url"] or bridge.digest(source_url) != source["digest"] or
+            type(source["generation"]) is not int or not 0 <= source["generation"] < 2**63):
+        raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_SOURCE_INVALID")
+    project_id, intent_id = request["projectId"], request["intentId"]
+    message = bridge.compose_bootstrap_message(project_id, intent_id, source_url, request["handoff"])
+    scope = {"projectId": project_id, "intentId": intent_id,
+             "sourceGeneration": source["generation"], "sourceDigest": source["digest"],
+             "messageDigest": bridge.digest(bridge.normalize_message(message))}
+    sink = bridge.NewConversationSink(source_url, ROOT / "browser-profile", 30, 20)
+    cdp = prepare_cdp_target(bridge, sb, bridge.NEW_CONVERSATION_HOME)
+    observed = sink.wait_home_draft(cdp, message)
+    if request["attemptRecorded"]:
+        # A saved write attempt can only be reconciled by a complete readback.
+        # Never retry replacement, even when the partial draft still matches.
+        if observed["classification"] != "EXACT_OWNED":
+            raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_RECONCILIATION_UNVERIFIED")
+        sink.check_typed_home(cdp, message)
+        sink.check_plain_home_draft(cdp)
+        emit({"stage": "BOOTSTRAP_DRAFT_REPAIRED", **scope, "reconciled": True})
+        return
+    if observed["classification"] != "MISMATCH":
+        raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_PREFIX_INVALID")
+    actual = sink.raw_editor_text(cdp)
+    raw_digest = bridge.digest(actual)
+    partial, full = bridge.normalize_message(actual), bridge.normalize_message(message)
+    if raw_digest != request["expectedRawDigest"]:
+        raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_CAS_CHANGED")
+    if not partial or partial == full or not full.startswith(partial):
+        raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_PREFIX_INVALID")
+    sink.check_typed_home(cdp, actual)
+    ready = {"stage": "BOOTSTRAP_DRAFT_REPAIR_READY", **scope,
+             "actualBytes": len(actual.encode("utf-8")), "actualText": actual,
+             "actualRawDigest": raw_digest}
+    if len((json.dumps(ready, separators=(",", ":")) + "\n").encode("utf-8")) > 8192:
+        raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_FRAME_TOO_LARGE")
+    emit(ready)
+    acknowledgement = read_request()
+    if (not isinstance(acknowledgement, dict) or set(acknowledgement) != {"repairDraft"} or
+            acknowledgement["repairDraft"] is not True):
+        raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_NOT_AUTHORIZED")
+    sink.repair_home_draft(cdp, message, actual)
+    sink.check_typed_home(cdp, message)
+    sink.check_plain_home_draft(cdp)
+    emit({"stage": "BOOTSTRAP_DRAFT_REPAIRED", **scope, "reconciled": False})
 
 
 def bounded_response_observation(bridge, sink, cdp, message, message_digest,
@@ -789,6 +852,8 @@ def main():
                         request = read_job_request()
                         if request.get("bootstrapQuarantineInspect") is True:
                             bootstrap_quarantine_inspect(bridge, sb, request)
+                        elif request.get("bootstrapDraftRepair") is True:
+                            bootstrap_draft_repair(bridge, sb, request)
                         elif request.get("bootstrapDraftArchive") is True:
                             bootstrap_draft_archive(bridge, sb, request)
                         elif request.get("bootstrapDraftInspect") is True:

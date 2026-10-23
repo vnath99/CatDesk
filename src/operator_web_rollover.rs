@@ -222,6 +222,36 @@ struct DraftArchiveReceipt {
     evidence: String,
 }
 
+/// Separate from legacy full-draft archival: a reviewed raw witness authorizes
+/// at most one no-send replacement of this exact interrupted transaction.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DraftRepairWitness {
+    schema_version: u32,
+    project_id: String,
+    intent_id: String,
+    source_task_id: String,
+    source: Target,
+    message_digest: String,
+    expected_text: String,
+    actual_text: String,
+    actual_raw_digest: String,
+    recorded_utc: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DraftRepairCheckpoint {
+    schema_version: u32,
+    project_id: String,
+    intent_id: String,
+    source: Target,
+    message_digest: String,
+    actual_raw_digest: String,
+    evidence: String,
+    recorded_utc: u64,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct HandoffRequest {
@@ -813,6 +843,213 @@ fn read_draft_archive_receipt(
         return Err("WEB_DRAFT_ARCHIVE_RECEIPT_INVALID".into());
     }
     Ok(Some(receipt))
+}
+
+fn draft_repair_path(store: &ProjectStore, record: &Record, kind: &str) -> PathBuf {
+    store
+        .root
+        .join(format!("draft-repair-{kind}-{}.json", record.intent_id))
+}
+
+fn require_draft_repair_record(record: &Record, intent: &str, raw: &str) -> Result<(), String> {
+    if record.intent_id != intent {
+        return Err("WEB_ROLLOVER_INTENT_CHANGED".into());
+    }
+    if raw.len() != 64
+        || !raw
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    {
+        return Err("WEB_DRAFT_REPAIR_RAW_DIGEST_INVALID".into());
+    }
+    if record.phase != Phase::Submitting
+        || record.bootstrap_progress != Some(runtime::BootstrapProgress::TextEntryAuthorized)
+        || record.receipt.is_some()
+        || record.bound_target.is_some()
+        || record.quarantine.is_some()
+        || record.reconciliation_reason.is_some()
+    {
+        return Err("WEB_DRAFT_REPAIR_PHASE_INVALID".into());
+    }
+    Ok(())
+}
+
+fn require_draft_repair_identity(record: &Record, actual: &str) -> Result<(), String> {
+    let has_identifier = |wanted: &str| {
+        actual
+            .split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_' && ch != '-')
+            .any(|token| token == wanted)
+    };
+    if !has_identifier(&record.project_id) || !has_identifier(&record.source_task_id) {
+        return Err("WEB_DRAFT_REPAIR_IDENTITY_WITNESS_REQUIRED".into());
+    }
+    Ok(())
+}
+
+fn read_draft_repair_witness(
+    store: &ProjectStore,
+    record: &Record,
+    raw: &str,
+) -> Result<Option<DraftRepairWitness>, String> {
+    let path = draft_repair_path(store, record, "witness");
+    if !path
+        .try_exists()
+        .map_err(|_| "WEB_DRAFT_REPAIR_UNAVAILABLE")?
+    {
+        return Ok(None);
+    }
+    plain(&path, false)?;
+    if fs::metadata(&path)
+        .map_err(|_| "WEB_DRAFT_REPAIR_UNAVAILABLE")?
+        .len()
+        > 40 * 1024
+    {
+        return Err("WEB_DRAFT_REPAIR_WITNESS_INVALID".into());
+    }
+    let witness: DraftRepairWitness =
+        read(&path).map_err(|_| "WEB_DRAFT_REPAIR_WITNESS_INVALID")?;
+    let expected = runtime::compose_bootstrap_message(
+        &record.project_id,
+        &record.intent_id,
+        &record.source,
+        &record.handoff,
+    )?;
+    if witness.schema_version != 1
+        || witness.project_id != record.project_id
+        || witness.intent_id != record.intent_id
+        || witness.source_task_id != record.source_task_id
+        || witness.source != record.source
+        || witness.message_digest != record.message_digest
+        || witness.expected_text != expected
+        || witness.actual_raw_digest != raw
+        || witness.recorded_utc == 0
+    {
+        return Err("WEB_DRAFT_REPAIR_WITNESS_INVALID".into());
+    }
+    runtime::validate_bootstrap_repair_witness(&witness.actual_text, &expected, raw)?;
+    require_draft_repair_identity(record, &witness.actual_text)?;
+    Ok(Some(witness))
+}
+
+fn save_draft_repair_witness(
+    store: &ProjectStore,
+    record: &Record,
+    raw: &str,
+    actual: &str,
+) -> Result<(), String> {
+    let expected = runtime::compose_bootstrap_message(
+        &record.project_id,
+        &record.intent_id,
+        &record.source,
+        &record.handoff,
+    )?;
+    runtime::validate_bootstrap_repair_witness(actual, &expected, raw)?;
+    require_draft_repair_identity(record, actual)?;
+    if let Some(previous) = read_draft_repair_witness(store, record, raw)? {
+        return if previous.actual_text == actual {
+            Ok(())
+        } else {
+            Err("WEB_DRAFT_REPAIR_WITNESS_CHANGED".into())
+        };
+    }
+    let witness = DraftRepairWitness {
+        schema_version: 1,
+        project_id: record.project_id.clone(),
+        intent_id: record.intent_id.clone(),
+        source_task_id: record.source_task_id.clone(),
+        source: record.source.clone(),
+        message_digest: record.message_digest.clone(),
+        expected_text: expected,
+        actual_text: actual.into(),
+        actual_raw_digest: raw.into(),
+        recorded_utc: now(),
+    };
+    create_private_once(&draft_repair_path(store, record, "witness"), &witness)?;
+    if read_draft_repair_witness(store, record, raw)?.as_ref() != Some(&witness) {
+        return Err("WEB_DRAFT_REPAIR_READBACK_FAILED".into());
+    }
+    Ok(())
+}
+
+fn read_draft_repair_checkpoint(
+    store: &ProjectStore,
+    record: &Record,
+    raw: &str,
+    kind: &str,
+    evidence: &str,
+) -> Result<Option<DraftRepairCheckpoint>, String> {
+    let path = draft_repair_path(store, record, kind);
+    if !path
+        .try_exists()
+        .map_err(|_| "WEB_DRAFT_REPAIR_UNAVAILABLE")?
+    {
+        return Ok(None);
+    }
+    plain(&path, false)?;
+    if fs::metadata(&path)
+        .map_err(|_| "WEB_DRAFT_REPAIR_UNAVAILABLE")?
+        .len()
+        > 4096
+    {
+        return Err("WEB_DRAFT_REPAIR_CHECKPOINT_INVALID".into());
+    }
+    let checkpoint: DraftRepairCheckpoint =
+        read(&path).map_err(|_| "WEB_DRAFT_REPAIR_CHECKPOINT_INVALID")?;
+    if checkpoint.schema_version != 1
+        || checkpoint.project_id != record.project_id
+        || checkpoint.intent_id != record.intent_id
+        || checkpoint.source != record.source
+        || checkpoint.message_digest != record.message_digest
+        || checkpoint.actual_raw_digest != raw
+        || checkpoint.evidence != evidence
+        || checkpoint.recorded_utc == 0
+        || read_draft_repair_witness(store, record, raw)?.is_none()
+    {
+        return Err("WEB_DRAFT_REPAIR_CHECKPOINT_INVALID".into());
+    }
+    if kind == "complete"
+        && read_draft_repair_checkpoint(store, record, raw, "attempt", "WRITE_ATTEMPTED")?.is_none()
+    {
+        return Err("WEB_DRAFT_REPAIR_ATTEMPT_REQUIRED".into());
+    }
+    Ok(Some(checkpoint))
+}
+
+fn save_draft_repair_checkpoint(
+    store: &ProjectStore,
+    record: &Record,
+    raw: &str,
+    kind: &str,
+    evidence: &str,
+) -> Result<(), String> {
+    if read_draft_repair_witness(store, record, raw)?.is_none() {
+        return Err("WEB_DRAFT_REPAIR_WITNESS_REQUIRED".into());
+    }
+    if kind == "complete"
+        && read_draft_repair_checkpoint(store, record, raw, "attempt", "WRITE_ATTEMPTED")?.is_none()
+    {
+        return Err("WEB_DRAFT_REPAIR_ATTEMPT_REQUIRED".into());
+    }
+    if read_draft_repair_checkpoint(store, record, raw, kind, evidence)?.is_some() {
+        return Ok(());
+    }
+    let checkpoint = DraftRepairCheckpoint {
+        schema_version: 1,
+        project_id: record.project_id.clone(),
+        intent_id: record.intent_id.clone(),
+        source: record.source.clone(),
+        message_digest: record.message_digest.clone(),
+        actual_raw_digest: raw.into(),
+        evidence: evidence.into(),
+        recorded_utc: now(),
+    };
+    create_private_once(&draft_repair_path(store, record, kind), &checkpoint)?;
+    if read_draft_repair_checkpoint(store, record, raw, kind, evidence)?.as_ref()
+        != Some(&checkpoint)
+    {
+        return Err("WEB_DRAFT_REPAIR_READBACK_FAILED".into());
+    }
+    Ok(())
 }
 
 fn registered_project(workspace: &Path, project: &str) -> Result<AutonomousProjectV1, String> {
@@ -2506,6 +2743,136 @@ fn quarantine_inspection_candidate<'a>(
     Ok(candidate)
 }
 
+/// Repair one explicitly witnessed interrupted edit, never submit it. A saved
+/// write-attempt marker permits only read-only full-draft reconciliation.
+pub(super) fn repair_draft(
+    workspace: &Path,
+    project: &str,
+    expected_intent_id: &str,
+    expected_raw_digest: &str,
+) -> Result<Value, String> {
+    if !valid_id(expected_intent_id) {
+        return Err("WEB_ROLLOVER_INTENT_INVALID".into());
+    }
+    let store = ProjectStore::open_existing(workspace, project)?;
+    let record = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
+    require_draft_repair_record(&record, expected_intent_id, expected_raw_digest)?;
+    let selected = catdesk_wake::development_runtime::root_for_workspace(workspace)?
+        .ok_or("WEB_DRAFT_REPAIR_DEVELOPMENT_REQUIRED")?;
+    let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)?;
+    let wake = Store::open(&root)?;
+    let verify = || -> Result<(), String> {
+        let current = store.active()?.ok_or("WEB_ROLLOVER_INTENT_REQUIRED")?;
+        require_draft_repair_record(&current, expected_intent_id, expected_raw_digest)?;
+        if serde_json::to_vec(&current).map_err(|_| "WEB_ROLLOVER_STATE_INVALID")?
+            != serde_json::to_vec(&record).map_err(|_| "WEB_ROLLOVER_STATE_INVALID")?
+            || paired(workspace, project)? != record.source
+            || root != selected
+        {
+            return Err("WEB_DRAFT_REPAIR_SCOPE_CHANGED".into());
+        }
+        catdesk_wake::development_runtime::validate_selected_target_isolation(
+            workspace,
+            wake.root(),
+            &record.source.url,
+        )?;
+        for control_path in [
+            root.join("control.json"),
+            runtime::default_root()?.join("control.json"),
+        ] {
+            if control_path != root.join("control.json")
+                && !control_path
+                    .try_exists()
+                    .map_err(|_| "WEB_DRAFT_REPAIR_CONTROL_UNAVAILABLE")?
+            {
+                continue;
+            }
+            plain(&control_path, false)?;
+            let control: runtime::Control = read(&control_path)?;
+            if control.schema_version != 1 || control.desired != "STOPPED" {
+                return Err("WEB_DRAFT_REPAIR_STOPPED_REQUIRED".into());
+            }
+        }
+        Ok(())
+    };
+    verify()?;
+    let attempted = read_draft_repair_checkpoint(
+        &store,
+        &record,
+        expected_raw_digest,
+        "attempt",
+        "WRITE_ATTEMPTED",
+    )?
+    .is_some();
+    if let Some(receipt) = read_draft_repair_checkpoint(
+        &store,
+        &record,
+        expected_raw_digest,
+        "complete",
+        "FULL_DRAFT_VERIFIED_NO_SEND",
+    )? {
+        if !attempted {
+            return Err("WEB_DRAFT_REPAIR_ATTEMPT_REQUIRED".into());
+        }
+        return Ok(json!({"projectId":project,"intentId":record.intent_id,
+            "status":"REPAIRED","currentComposerObserved":false,
+            "observedUtc":receipt.recorded_utc,"submissionVerified":false,"messagesSent":0}));
+    }
+    // Retain the existing global New Chat lease only for this browser edit;
+    // independent work and other projects' MCP operations remain unblocked.
+    let _creation = admission::try_acquire(wake.root(), creation_identity(&record), |head| {
+        queued_creation_eligible(workspace, head)
+    })?
+    .ok_or("WEB_ROLLOVER_CREATION_QUEUED")?;
+    verify()?;
+    let result = runtime::repair_bootstrap_draft(
+        &wake,
+        project,
+        &record.intent_id,
+        &record.source,
+        &record.handoff,
+        expected_raw_digest,
+        attempted,
+        |actual| {
+            verify()?;
+            save_draft_repair_witness(&store, &record, expected_raw_digest, actual)?;
+            // This durable, immutable marker precedes the only edit ACK.
+            // A crash or ambiguous response can never authorize another write.
+            save_draft_repair_checkpoint(
+                &store,
+                &record,
+                expected_raw_digest,
+                "attempt",
+                "WRITE_ATTEMPTED",
+            )
+        },
+    )?;
+    verify()?;
+    if read_draft_repair_checkpoint(
+        &store,
+        &record,
+        expected_raw_digest,
+        "attempt",
+        "WRITE_ATTEMPTED",
+    )?
+    .is_none()
+    {
+        return Err("WEB_DRAFT_REPAIR_ATTEMPT_REQUIRED".into());
+    }
+    save_draft_repair_checkpoint(
+        &store,
+        &record,
+        expected_raw_digest,
+        "complete",
+        "FULL_DRAFT_VERIFIED_NO_SEND",
+    )?;
+    Ok(
+        json!({"projectId":project,"intentId":record.intent_id,"status":"REPAIRED",
+        "currentComposerObserved":true,"reconciled":result["reconciled"],
+        "bootstrapProgress":record.bootstrap_progress,"submissionVerified":false,"messagesSent":0}),
+    )
+}
+
 /// Release one legacy unknown-submit home draft only after preserving its
 /// actual text under the project lock and proving an empty home afterward.
 /// The original SUBMITTING intent remains permanently non-replayable.
@@ -3166,6 +3533,192 @@ mod tests {
             read_draft_archive(&store, &record).unwrap_err(),
             "WEB_DRAFT_ARCHIVE_INVALID"
         );
+        drop(store);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn draft_repair_refuses_wrong_intent_and_any_submit_or_quarantine_state() {
+        let mut saved = record();
+        saved.phase = Phase::Submitting;
+        saved.bootstrap_progress = Some(runtime::BootstrapProgress::TextEntryAuthorized);
+        let raw = "a".repeat(64);
+        assert!(require_draft_repair_record(&saved, &saved.intent_id, &raw).is_ok());
+        assert!(require_draft_repair_record(&saved, "another", &raw).is_err());
+        assert!(require_draft_repair_record(&saved, &saved.intent_id, "bad").is_err());
+        for stage in [
+            None,
+            Some(runtime::BootstrapProgress::DraftReady),
+            Some(runtime::BootstrapProgress::SendAttempted),
+        ] {
+            saved.bootstrap_progress = stage;
+            assert!(require_draft_repair_record(&saved, &saved.intent_id, &raw).is_err());
+        }
+        saved.bootstrap_progress = Some(runtime::BootstrapProgress::TextEntryAuthorized);
+        saved.quarantine = Some(Quarantine {
+            observed_conversation_url: saved.source.url.clone(),
+            recorded_utc: 1,
+        });
+        assert!(require_draft_repair_record(&saved, &saved.intent_id, &raw).is_err());
+        saved.quarantine = None;
+        saved.bound_target = Some(saved.source.clone());
+        assert!(require_draft_repair_record(&saved, &saved.intent_id, &raw).is_err());
+        saved.bound_target = None;
+        saved.reconciliation_reason = Some("UNKNOWN".into());
+        assert!(require_draft_repair_record(&saved, &saved.intent_id, &raw).is_err());
+    }
+
+    #[test]
+    fn draft_repair_witness_and_attempt_survive_restart_without_granting_a_second_write() {
+        let root = fixture();
+        let mut saved = record();
+        saved.phase = Phase::Submitting;
+        saved.bootstrap_progress = Some(runtime::BootstrapProgress::TextEntryAuthorized);
+        saved.handoff = format!(
+            "Source task: {}. Continue only after binding.",
+            saved.source_task_id
+        );
+        saved.message_digest = message_digest(
+            &saved.project_id,
+            &saved.intent_id,
+            &saved.source.url,
+            &saved.handoff,
+        )
+        .unwrap();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let expected = runtime::compose_bootstrap_message(
+            &saved.project_id,
+            &saved.intent_id,
+            &saved.source,
+            &saved.handoff,
+        )
+        .unwrap();
+        let actual = expected[..expected.find("Continue only after binding.").unwrap()]
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join("\r\n");
+        let raw = digest(&actual);
+        assert!(
+            save_draft_repair_checkpoint(&store, &saved, &raw, "attempt", "WRITE_ATTEMPTED")
+                .is_err()
+        );
+        save_draft_repair_witness(&store, &saved, &raw, &actual).unwrap();
+        assert!(
+            save_draft_repair_checkpoint(
+                &store,
+                &saved,
+                &raw,
+                "complete",
+                "FULL_DRAFT_VERIFIED_NO_SEND"
+            )
+            .is_err()
+        );
+        save_draft_repair_checkpoint(&store, &saved, &raw, "attempt", "WRITE_ATTEMPTED").unwrap();
+        let before = fs::read(draft_repair_path(&store, &saved, "attempt")).unwrap();
+        drop(store);
+        let store = ProjectStore::open_existing(&root, "alpha").unwrap();
+        assert!(
+            read_draft_repair_checkpoint(&store, &saved, &raw, "attempt", "WRITE_ATTEMPTED")
+                .unwrap()
+                .is_some()
+        );
+        save_draft_repair_checkpoint(&store, &saved, &raw, "attempt", "WRITE_ATTEMPTED").unwrap();
+        assert_eq!(
+            fs::read(draft_repair_path(&store, &saved, "attempt")).unwrap(),
+            before
+        );
+        assert!(read_draft_repair_witness(&store, &saved, &"0".repeat(64)).is_err());
+        let mut changed = saved.clone();
+        changed.source =
+            Target::new(saved.source.generation + 1, saved.source.url.clone()).unwrap();
+        assert!(read_draft_repair_witness(&store, &changed, &raw).is_err());
+        save_draft_repair_checkpoint(
+            &store,
+            &saved,
+            &raw,
+            "complete",
+            "FULL_DRAFT_VERIFIED_NO_SEND",
+        )
+        .unwrap();
+        assert!(
+            read_draft_repair_checkpoint(
+                &store,
+                &saved,
+                &raw,
+                "complete",
+                "FULL_DRAFT_VERIFIED_NO_SEND"
+            )
+            .unwrap()
+            .is_some()
+        );
+        assert_eq!(
+            saved.bootstrap_progress,
+            Some(runtime::BootstrapProgress::TextEntryAuthorized)
+        );
+        assert!(saved.receipt.is_none());
+        drop(store);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn draft_repair_identity_requires_complete_project_and_task_tokens_before_archival() {
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut saved = record();
+        saved.phase = Phase::Submitting;
+        saved.bootstrap_progress = Some(runtime::BootstrapProgress::TextEntryAuthorized);
+        saved.handoff = format!(
+            "Recorded task: {}-other. Actual task: {}. Continue after binding.",
+            saved.source_task_id, saved.source_task_id
+        );
+        saved.message_digest = message_digest(
+            &saved.project_id,
+            &saved.intent_id,
+            &saved.source.url,
+            &saved.handoff,
+        )
+        .unwrap();
+        let expected = runtime::compose_bootstrap_message(
+            &saved.project_id,
+            &saved.intent_id,
+            &saved.source,
+            &saved.handoff,
+        )
+        .unwrap();
+        let wrong_task = &expected[..expected.find(" Actual task:").unwrap()];
+        for actual in ["CatDesk project rollover", wrong_task] {
+            let raw = digest(actual);
+            runtime::validate_bootstrap_repair_witness(actual, &expected, &raw).unwrap();
+            assert_eq!(
+                save_draft_repair_witness(&store, &saved, &raw, actual).unwrap_err(),
+                "WEB_DRAFT_REPAIR_IDENTITY_WITNESS_REQUIRED"
+            );
+            assert!(!draft_repair_path(&store, &saved, "witness").exists());
+            assert!(!draft_repair_path(&store, &saved, "attempt").exists());
+        }
+        assert_eq!(
+            require_draft_repair_identity(&saved, "alpha-other task-a").unwrap_err(),
+            "WEB_DRAFT_REPAIR_IDENTITY_WITNESS_REQUIRED"
+        );
+        assert!(require_draft_repair_identity(&saved, "\"alpha\": \"task-a\"").is_ok());
+        let forged = DraftRepairWitness {
+            schema_version: 1,
+            project_id: saved.project_id.clone(),
+            intent_id: saved.intent_id.clone(),
+            source_task_id: saved.source_task_id.clone(),
+            source: saved.source.clone(),
+            message_digest: saved.message_digest.clone(),
+            expected_text: expected.clone(),
+            actual_text: wrong_task.into(),
+            actual_raw_digest: digest(wrong_task),
+            recorded_utc: 1,
+        };
+        create_private_once(&draft_repair_path(&store, &saved, "witness"), &forged).unwrap();
+        assert_eq!(
+            read_draft_repair_witness(&store, &saved, &forged.actual_raw_digest).unwrap_err(),
+            "WEB_DRAFT_REPAIR_IDENTITY_WITNESS_REQUIRED"
+        );
+        assert!(!draft_repair_path(&store, &saved, "attempt").exists());
         drop(store);
         fs::remove_dir_all(root).unwrap();
     }

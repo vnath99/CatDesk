@@ -2809,6 +2809,126 @@ class NewConversationSink(CdpSink):
             sleeper(READINESS_POLL_SECONDS)
         raise Attention("BOOTSTRAP_HOME_NOT_READY")
 
+    def insert_empty_home_draft(self, cdp: Any, message: str) -> None:
+        """Insert once after the parent's durable protocol-v2 text-entry ACK.
+
+        A single native edit avoids per-character timeouts and physical Enter
+        events. The empty-home authority is checked again in the same browser
+        evaluation as the edit. An uncertain result is never retried here;
+        exact-draft recovery remains the only ordinary resume path.
+        """
+        self.check_empty_home(cdp)
+        self._replace_home_draft_once(cdp, message, None, "BOOTSTRAP_DRAFT_INSERT_UNVERIFIED")
+        # The caller next applies the existing text-preserving owned-link
+        # normalization and plain-composer check before DRAFT_READY.
+
+    def repair_home_draft(self, cdp: Any, message: str, actual_text: str) -> None:
+        """Replace one separately authorized raw partial draft, never submit it."""
+        partial = normalize_message(actual_text) if isinstance(actual_text, str) else ""
+        expected = normalize_message(message)
+        if not partial or not expected.startswith(partial) or partial == expected:
+            raise Attention("BOOTSTRAP_DRAFT_REPAIR_PREFIX_INVALID")
+        self.check_typed_home(cdp, actual_text)
+        self._replace_home_draft_once(cdp, message, actual_text, "BOOTSTRAP_DRAFT_REPAIR_UNVERIFIED")
+        self.check_plain_home_draft(cdp)
+
+    def _replace_home_draft_once(self, cdp: Any, message: str, expected_raw: str | None,
+                                 failure: str) -> None:
+        """One native input operation with a same-evaluation composer CAS."""
+        text = keyboard_safe_message(message)
+        if len(text.encode("utf-8")) > MAX_USER_MESSAGE_CHARS:
+            raise Attention("BOOTSTRAP_MESSAGE_TOO_LONG")
+        script = f"""(() => {{
+            {COMPOSER_TEXT_READER}
+            const text = {json.dumps(text)};
+            const expectedRaw = {json.dumps(expected_raw)};
+            const hasTurns = () => Boolean(document.querySelector(
+                '[data-message-author-role="user"], [data-message-author-role="assistant"], '
+                + 'article[data-turn="user"], article[data-turn="assistant"], '
+                + '[data-user-message-bubble], [class~="group/user-message"], h4[data-conversation-role="assistant"]'
+            ));
+            const editors = () => Array.from(document.querySelectorAll(
+                '#prompt-textarea, div.ProseMirror[contenteditable="true"], [contenteditable="true"][data-lexical-editor="true"]'
+            )).filter(element => {{
+                const style = window.getComputedStyle(element);
+                return element.getClientRects().length > 0 &&
+                    style.visibility !== 'hidden' && style.display !== 'none';
+            }});
+            if (location.href !== {json.dumps(NEW_CONVERSATION_HOME)} || hasTurns() ||
+                document.readyState === 'loading') return 'UNPROVEN';
+            const visible = editors();
+            if (visible.length !== 1) return 'UNPROVEN';
+            const editor = visible[0];
+            const plainStructure = () => {{
+                const tags = new Set(['P', 'DIV', 'SPAN', 'BR']);
+                const attributes = new Set(['class', 'dir', 'data-placeholder']);
+                const plain = node => {{
+                    if (node.nodeType === 3) return true;
+                    if (node.nodeType !== 1) return false;
+                    if (node !== editor) {{
+                        if (!tags.has(String(node.tagName).toUpperCase()) ||
+                            Array.from(node.attributes).some(attribute => !attributes.has(attribute.name)) ||
+                            (node.hasAttribute('dir') && !['auto', 'ltr', 'rtl'].includes(node.getAttribute('dir'))))
+                            return false;
+                        const style = window.getComputedStyle(node);
+                        if (node.hidden || node.inert || style.display === 'none' ||
+                            ['hidden', 'collapse'].includes(style.visibility) || style.opacity === '0' ||
+                            style.contentVisibility === 'hidden') return false;
+                    }}
+                    return Array.from(node.childNodes).every(plain);
+                }};
+                return plain(editor);
+            }};
+            const unchangedDraft = () => {{
+                const current = editors();
+                const raw = editor.value ?? editor.innerText ?? editor.textContent ?? '';
+                return location.href === {json.dumps(NEW_CONVERSATION_HOME)} && !hasTurns() &&
+                    current.length === 1 && current[0] === editor && editor.isConnected &&
+                    plainStructure() &&
+                    (expectedRaw === null ? composerText(editor).trim() === '' : raw === expectedRaw);
+            }};
+            if (!unchangedDraft() || (!editor.isContentEditable &&
+                !(editor instanceof HTMLTextAreaElement))) return 'UNPROVEN';
+            editor.focus();
+            if (!unchangedDraft() || document.activeElement !== editor) return 'UNPROVEN';
+            let selection = null;
+            if (editor.isContentEditable) {{
+                selection = window.getSelection();
+                if (!selection) return 'UNPROVEN';
+                const range = document.createRange();
+                range.selectNodeContents(editor);
+                selection.removeAllRanges();
+                selection.addRange(range);
+            }} else {{
+                editor.setSelectionRange(0, editor.value.length);
+            }}
+            const selectionOwned = () => {{
+                if (!editor.isContentEditable) return editor.selectionStart === 0 &&
+                    editor.selectionEnd === editor.value.length;
+                if (!selection || selection.rangeCount !== 1 || !editor.contains(selection.anchorNode) ||
+                    !editor.contains(selection.focusNode)) return false;
+                const selected = selection.getRangeAt(0);
+                return selected.startContainer === editor && selected.endContainer === editor &&
+                    selected.startOffset === 0 && selected.endOffset === editor.childNodes.length;
+            }};
+            if (!unchangedDraft() || document.activeElement !== editor || !selectionOwned()) return 'UNPROVEN';
+            // Use the editor's native input transaction, never textContent or
+            // innerHTML assignment. There is exactly one insertion attempt.
+            if (!document.execCommand('insertText', false, text)) return 'UNPROVEN';
+            const after = editors();
+            if (location.href !== {json.dumps(NEW_CONVERSATION_HOME)} || hasTurns() ||
+                after.length !== 1 || after[0] !== editor || !editor.isConnected ||
+                composerText(editor) !== text) return 'UNPROVEN';
+            return 'INSERTED';
+        }})()"""
+        try:
+            observed = CdpSink.cdp_value(cdp.evaluate(script))
+        except Exception as error:
+            raise Attention(failure) from error
+        if observed != "INSERTED":
+            raise Attention(failure)
+        self.check_typed_home(cdp, message)
+
     def composer_plain_text(self, cdp: Any) -> str:
         """Read bounded composer text data rather than layout/decorative text."""
         script = f"""(() => {{

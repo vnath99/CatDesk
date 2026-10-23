@@ -121,6 +121,11 @@ pub(crate) enum WebAction {
         project_id: String,
         expected_intent_id: String,
     },
+    RolloverRepairDraft {
+        project_id: String,
+        expected_intent_id: String,
+        expected_raw_digest: String,
+    },
     RolloverQuarantine {
         project_id: String,
         expected_intent_id: String,
@@ -312,6 +317,28 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         ("rollover", "execute") if options.is_empty() => Ok(WebAction::RolloverExecute {
             project_id: project_id.into(),
         }),
+        ("rollover", "repair-draft") => {
+            let expected_intent_id = options
+                .remove("--expected-intent-id")
+                .ok_or("WEB_USAGE: --expected-intent-id is required")?;
+            let expected_raw_digest = options
+                .remove("--expected-raw-digest")
+                .ok_or("WEB_USAGE: --expected-raw-digest is required")?;
+            if !catdesk_wake::protocol::valid_id(expected_intent_id)
+                || expected_raw_digest.len() != 64
+                || !expected_raw_digest
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                || !options.is_empty()
+            {
+                return Err("WEB_USAGE: invalid draft repair witness or unexpected option".into());
+            }
+            Ok(WebAction::RolloverRepairDraft {
+                project_id: project_id.into(),
+                expected_intent_id: expected_intent_id.into(),
+                expected_raw_digest: expected_raw_digest.into(),
+            })
+        }
         ("rollover", "inspect-draft" | "archive-draft" | "inspect-quarantine") => {
             let expected_intent_id = options
                 .remove("--expected-intent-id")
@@ -1093,6 +1120,16 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             expected_intent_id,
         } => rollover::archive_draft(&workspace, &project_id, &expected_intent_id),
+        WebAction::RolloverRepairDraft {
+            project_id,
+            expected_intent_id,
+            expected_raw_digest,
+        } => rollover::repair_draft(
+            &workspace,
+            &project_id,
+            &expected_intent_id,
+            &expected_raw_digest,
+        ),
         WebAction::RolloverQuarantine {
             project_id,
             expected_intent_id,
@@ -1327,6 +1364,38 @@ mod tests {
             assert!(parse(&invalid).is_err());
         }
         complete[7] = "../other".into();
+        assert!(parse(&complete).is_err());
+    }
+
+    #[test]
+    fn draft_repair_requires_exact_raw_witness_without_send_options() {
+        let mut complete = args(&[
+            "operator",
+            "web",
+            "rollover",
+            "repair-draft",
+            "--project-id",
+            "alpha",
+            "--expected-intent-id",
+            "intent-a",
+            "--expected-raw-digest",
+            &"a".repeat(64),
+        ]);
+        assert!(
+            matches!(parse(&complete), Ok(WebAction::RolloverRepairDraft {
+            project_id, expected_intent_id, expected_raw_digest
+        }) if project_id == "alpha" && expected_intent_id == "intent-a"
+            && expected_raw_digest == "a".repeat(64))
+        );
+        assert!(parse(&complete[..8]).is_err());
+        for flag in ["--force", "--submit", "--clear", "--draft-file"] {
+            let mut invalid = complete.clone();
+            invalid.extend(args(&[flag, "true"]));
+            assert!(parse(&invalid).is_err());
+        }
+        complete[9] = "a".repeat(63);
+        assert!(parse(&complete).is_err());
+        complete[9] = "G".repeat(64);
         assert!(parse(&complete).is_err());
     }
 

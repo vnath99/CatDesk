@@ -2792,6 +2792,198 @@ pub fn archive_bootstrap_draft(
     }
 }
 
+/// A separately approved raw witness may describe an incomplete draft. It is
+/// never an EXACT_OWNED result or permission to submit that draft.
+pub fn validate_bootstrap_repair_witness(actual: &str, expected: &str, raw: &str) -> Result<()> {
+    let observed = actual.split_whitespace().collect::<Vec<_>>().join(" ");
+    let wanted = expected.split_whitespace().collect::<Vec<_>>().join(" ");
+    if actual.is_empty()
+        || actual.len() > 16 * 1024
+        || actual.contains('\0')
+        || raw.len() != 64
+        || !raw
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        || crate::protocol::digest(actual) != raw
+        || observed.is_empty()
+        || observed.len() >= wanted.len()
+        || !wanted.starts_with(&observed)
+    {
+        return Err("BOOTSTRAP_DRAFT_REPAIR_WITNESS_INVALID".into());
+    }
+    Ok(())
+}
+
+fn draft_repair_ready_payload(
+    value: &serde_json::Value,
+    project: &str,
+    intent: &str,
+    source: &Target,
+    message_digest: &str,
+    expected: &str,
+    raw: &str,
+) -> Result<String> {
+    draft_archive_frame_scope(
+        value,
+        "BOOTSTRAP_DRAFT_REPAIR_READY",
+        project,
+        intent,
+        source,
+        message_digest,
+        9,
+    )?;
+    let actual = value
+        .get("actualText")
+        .and_then(|v| v.as_str())
+        .ok_or("BOOTSTRAP_DRAFT_REPAIR_WITNESS_INVALID")?;
+    if value.get("actualBytes").and_then(|v| v.as_u64()) != Some(actual.len() as u64)
+        || value.get("actualRawDigest").and_then(|v| v.as_str()) != Some(raw)
+    {
+        return Err("BOOTSTRAP_DRAFT_REPAIR_WITNESS_INVALID".into());
+    }
+    validate_bootstrap_repair_witness(actual, expected, raw)?;
+    Ok(actual.into())
+}
+
+fn draft_repair_done_payload(
+    value: &serde_json::Value,
+    project: &str,
+    intent: &str,
+    source: &Target,
+    message_digest: &str,
+    attempted: bool,
+) -> Result<()> {
+    draft_archive_frame_scope(
+        value,
+        "BOOTSTRAP_DRAFT_REPAIRED",
+        project,
+        intent,
+        source,
+        message_digest,
+        7,
+    )?;
+    if value.get("reconciled").and_then(|v| v.as_bool()) != Some(attempted) {
+        return Err("BOOTSTRAP_DRAFT_REPAIR_READBACK_INVALID".into());
+    }
+    Ok(())
+}
+
+/// Replace one exactly witnessed interrupted draft, never send. Once the
+/// parent records an attempt, the adapter can only read and reconcile.
+#[allow(clippy::too_many_arguments)]
+pub fn repair_bootstrap_draft(
+    store: &Store,
+    project: &str,
+    intent: &str,
+    source: &Target,
+    handoff: &str,
+    expected_raw_digest: &str,
+    attempt_recorded: bool,
+    mut persist_attempt: impl FnMut(&str) -> Result<()>,
+) -> Result<serde_json::Value> {
+    let expected = compose_bootstrap_message(project, intent, source, handoff)?;
+    let message_digest = bootstrap_message_digest(project, intent, source, handoff)?;
+    if expected_raw_digest.len() != 64
+        || !expected_raw_digest
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    {
+        return Err("BOOTSTRAP_DRAFT_REPAIR_WITNESS_INVALID".into());
+    }
+    if desired(store)? != "STOPPED" {
+        return Err("BOOTSTRAP_DRAFT_REPAIR_STOPPED_REQUIRED".into());
+    }
+    // Unlike ordinary browser operations, recovery must never join a running
+    // host. Retain this exclusive lease and the adapter's browser lock.
+    let _owner = store.host_lock()?;
+    if desired(store)? != "STOPPED" || store.config()?.targets.get(project) != Some(source) {
+        return Err("BOOTSTRAP_DRAFT_REPAIR_SCOPE_CHANGED".into());
+    }
+    let installed = installed_bootstrap_directory(store)?;
+    let bytes =
+        std::fs::read(installed.join("adapter.py")).map_err(|_| "BROWSER_ADAPTER_UNAVAILABLE")?;
+    if !bytes
+        .windows(b"def bootstrap_draft_repair(".len())
+        .any(|part| part == b"def bootstrap_draft_repair(")
+    {
+        return Err("BOOTSTRAP_DRAFT_REPAIR_PACKAGE_REQUIRED".into());
+    }
+    let mut adapter = Adapter::spawn_from_installed(store.root(), &installed)?;
+    adapter.send(
+        serde_json::json!({"bootstrapDraftRepair":true,"bootstrapProtocol":2,
+        "projectId":project,"intentId":intent,"source":source,"handoff":handoff,
+        "expectedRawDigest":expected_raw_digest,"attemptRecorded":attempt_recorded}),
+    )?;
+    let deadline = Instant::now() + Duration::from_secs(90);
+    let mut ready = false;
+    loop {
+        if Instant::now() >= deadline {
+            return Err("BOOTSTRAP_DRAFT_REPAIR_TIMEOUT".into());
+        }
+        match adapter.output.recv_timeout(Duration::from_millis(250)) {
+            Ok(Ok(value)) => match value.get("stage").and_then(|v| v.as_str()) {
+                Some("BOOTSTRAP_DRAFT_REPAIR_READY") if !attempt_recorded && !ready => {
+                    let actual = draft_repair_ready_payload(
+                        &value,
+                        project,
+                        intent,
+                        source,
+                        &message_digest,
+                        &expected,
+                        expected_raw_digest,
+                    )?;
+                    if desired(store)? != "STOPPED"
+                        || store.config()?.targets.get(project) != Some(source)
+                    {
+                        return Err("BOOTSTRAP_DRAFT_REPAIR_SCOPE_CHANGED".into());
+                    }
+                    persist_attempt(&actual)?;
+                    ready = true;
+                    adapter.send(serde_json::json!({"repairDraft":true}))?;
+                }
+                Some("BOOTSTRAP_DRAFT_REPAIRED") if ready || attempt_recorded => {
+                    draft_repair_done_payload(
+                        &value,
+                        project,
+                        intent,
+                        source,
+                        &message_digest,
+                        attempt_recorded,
+                    )?;
+                    if desired(store)? != "STOPPED"
+                        || store.config()?.targets.get(project) != Some(source)
+                    {
+                        return Err("BOOTSTRAP_DRAFT_REPAIR_SCOPE_CHANGED".into());
+                    }
+                    let _ = adapter.allow_graceful_exit(Duration::from_secs(5));
+                    return Ok(
+                        serde_json::json!({"draftVerified":true,"reconciled":attempt_recorded,
+                        "submissionVerified":false,"messagesSent":0}),
+                    );
+                }
+                Some(
+                    "CDP_REUSE_BEGIN" | "CDP_REUSE_DONE" | "CDP_ACTIVATE_BEGIN"
+                    | "CDP_ACTIVATE_DONE",
+                ) => {}
+                Some("ATTENTION") => {
+                    return Err(value
+                        .get("reason")
+                        .and_then(|v| v.as_str())
+                        .filter(|reason| crate::protocol::valid_id(reason))
+                        .unwrap_or("BOOTSTRAP_DRAFT_REPAIR_ATTENTION")
+                        .into());
+                }
+                _ => return Err("BOOTSTRAP_DRAFT_REPAIR_PROTOCOL_INVALID".into()),
+            },
+            Ok(Err(reason)) => return Err(reason),
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err("BROWSER_ADAPTER_EXITED".into());
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+    }
+}
+
 /// One bounded, read-only probe of a durably submitted replacement chat. It
 /// never opens New Chat or sends a USER message. `None` means try a later slice.
 pub fn bootstrap_probe_completion(
@@ -3492,6 +3684,83 @@ mod bootstrap_runtime_tests {
                 8
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn draft_repair_raw_witness_requires_a_proper_prefix_and_exact_operator_hash() {
+        let actual = "first\r\n  second";
+        let expected = "first second third";
+        let raw = crate::protocol::digest(actual);
+        assert!(validate_bootstrap_repair_witness(actual, expected, &raw).is_ok());
+        assert!(
+            validate_bootstrap_repair_witness(
+                actual,
+                expected,
+                &crate::protocol::digest("first second")
+            )
+            .is_err()
+        );
+        for text in ["", "first second third", "first changed", "first\0"] {
+            assert!(
+                validate_bootstrap_repair_witness(text, expected, &crate::protocol::digest(text))
+                    .is_err()
+            );
+        }
+        assert!(validate_bootstrap_repair_witness(actual, expected, &raw.to_uppercase()).is_err());
+    }
+
+    #[test]
+    fn draft_repair_protocol_binds_scope_raw_bytes_and_reconciliation_mode() {
+        let source = source();
+        let actual = "first\r\nsecond";
+        let expected = "first second third";
+        let raw = crate::protocol::digest(actual);
+        let message = crate::protocol::digest(expected);
+        let ready = serde_json::json!({"stage":"BOOTSTRAP_DRAFT_REPAIR_READY",
+            "projectId":"alpha","intentId":"intent-a","sourceGeneration":source.generation,
+            "sourceDigest":source.digest,"messageDigest":message,
+            "actualBytes":actual.len(),"actualText":actual,"actualRawDigest":raw});
+        assert_eq!(
+            draft_repair_ready_payload(
+                &ready, "alpha", "intent-a", &source, &message, expected, &raw
+            )
+            .unwrap(),
+            actual
+        );
+        assert!(
+            draft_repair_ready_payload(
+                &ready, "beta", "intent-a", &source, &message, expected, &raw
+            )
+            .is_err()
+        );
+        for (field, value) in [
+            ("actualBytes", serde_json::json!(1)),
+            ("actualRawDigest", serde_json::json!("0".repeat(64))),
+            ("intentId", serde_json::json!("intent-b")),
+            ("extra", serde_json::json!(true)),
+        ] {
+            let mut wrong = ready.clone();
+            wrong[field] = value;
+            assert!(
+                draft_repair_ready_payload(
+                    &wrong, "alpha", "intent-a", &source, &message, expected, &raw
+                )
+                .is_err()
+            );
+        }
+        let mut done = serde_json::json!({"stage":"BOOTSTRAP_DRAFT_REPAIRED",
+            "projectId":"alpha","intentId":"intent-a","sourceGeneration":source.generation,
+            "sourceDigest":source.digest,"messageDigest":message,"reconciled":false});
+        assert!(
+            draft_repair_done_payload(&done, "alpha", "intent-a", &source, &message, false).is_ok()
+        );
+        assert!(
+            draft_repair_done_payload(&done, "alpha", "intent-a", &source, &message, true).is_err()
+        );
+        done["reconciled"] = serde_json::json!(true);
+        assert!(
+            draft_repair_done_payload(&done, "alpha", "intent-a", &source, &message, true).is_ok()
         );
     }
 

@@ -3,6 +3,8 @@
 import importlib.util
 import io
 import json
+import shutil
+import subprocess
 import sys
 import tempfile
 import types
@@ -96,6 +98,12 @@ class AttemptCdp:
         self.timeline.append("type")
         self.draft = text
         self.typed_message = text
+
+    def insert_text(self, text):
+        self.timeline.append("insert")
+        self.draft = text
+        self.typed_message = text
+
     def press_keys(self, selector, text, timeout):
         raise AssertionError("human-speed press_keys must not type a handoff")
 
@@ -189,6 +197,19 @@ class AttemptSink:
             raise bridge.Attention("BOOTSTRAP_HOME_DRIFT")
         if bridge.normalize_message(cdp.draft) != bridge.normalize_message(message):
             raise bridge.Attention("BOOTSTRAP_DRAFT_DRIFT")
+
+    def insert_empty_home_draft(self, cdp, message):
+        self.check_empty_home(cdp)
+        cdp.insert_text(bridge.keyboard_safe_message(message))
+        self.check_typed_home(cdp, message)
+
+    def repair_home_draft(self, cdp, message, actual_text):
+        self.check_typed_home(cdp, actual_text)
+        if cdp.draft != actual_text:
+            raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_UNVERIFIED")
+        cdp.insert_text(bridge.keyboard_safe_message(message))
+        self.check_typed_home(cdp, message)
+        self.check_plain_home_draft(cdp)
 
     def check_plain_home_draft(self, cdp):
         if getattr(cdp, "rich_link", False):
@@ -288,6 +309,225 @@ class AttemptSink:
         return {"status": "UNAVAILABLE"}
 
 
+class NativeBootstrapInsertTests(unittest.TestCase):
+    # Execute the actual generated browser guard, not a Python reimplementation.
+    # This offline fixture does not create a browser or perform network I/O.
+    DOM_FIXTURE = r"""
+const fs = require('fs');
+const cfg = JSON.parse(fs.readFileSync(0, 'utf8'));
+let inserts = 0;
+let command = null;
+let liveEditors;
+global.location = {href: cfg.url || 'https://chatgpt.com/'};
+const makeEditor = () => ({
+    nodeType: 1, tagName: 'DIV', childNodes: [], isConnected: true,
+    isContentEditable: !cfg.textarea,
+    get innerText() { return this.childNodes.map(flatText).join(''); },
+    getAttribute: () => null, hasAttribute: () => false,
+    getClientRects: () => cfg.hidden ? [] : [1],
+    contains(node) { return node === this || this.childNodes.includes(node); },
+    focus() {
+        document.activeElement = cfg.focus === 'elsewhere' ? {} : this;
+        if (cfg.focus === 'draft') setText(this, 'operator draft');
+        if (cfg.focus === 'url') location.href = 'https://chatgpt.com/c/other';
+        if (cfg.focus === 'turn') cfg.turns = true;
+        if (cfg.focus === 'replace') liveEditors = [makeEditor()];
+        if (cfg.richAfterFocus) decorateEditor(cfg.richAfterFocus);
+    },
+    setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; },
+});
+const setText = (element, text) => {
+    if (cfg.textarea) element.value = text;
+    else element.childNodes = [{nodeType: 3, nodeValue: text}];
+};
+const flatText = node => node.nodeType === 3 ? node.nodeValue : node.childNodes.map(flatText).join('');
+const getText = element => cfg.textarea ? element.value : element.childNodes.map(flatText).join('');
+global.HTMLTextAreaElement = class {};
+const editor = makeEditor();
+if (cfg.textarea) Object.setPrototypeOf(editor, HTMLTextAreaElement.prototype);
+setText(editor, cfg.draft || '');
+const elementNode = (tagName, attrs = {}, children = []) => ({
+    nodeType: 1, tagName, childNodes: children,
+    attributes: Object.entries(attrs).map(([name, value]) => ({name, value})),
+    getAttribute: name => attrs[name] ?? null,
+    hasAttribute: name => Object.hasOwn(attrs, name),
+});
+const decorateEditor = kind => {
+    if (kind === 'link') editor.childNodes = [elementNode('SPAN', {'text-link-href':'https://example.test/secret'}, editor.childNodes)];
+    if (kind === 'anchor') editor.childNodes = [elementNode('A', {href:'https://example.test/secret'}, editor.childNodes)];
+    if (kind === 'chip') editor.childNodes = [elementNode('SPAN', {contenteditable:'false'}, editor.childNodes)];
+    if (kind === 'image') editor.childNodes.push(elementNode('IMG', {src:'https://example.test/image'}));
+    if (kind === 'hidden') {
+        const node = elementNode('SPAN', {class:'hidden'}, []);
+        node.testStyle = {display:'none'};
+        editor.childNodes.push(node);
+    }
+};
+if (cfg.rich) decorateEditor(cfg.rich);
+if (cfg.plainParagraph) editor.childNodes = [elementNode('P', {class:'paragraph', 'data-placeholder':'Ask anything'},
+    cfg.draft ? editor.childNodes : [elementNode('BR', {class:'ProseMirror-trailingBreak'})])];
+liveEditors = cfg.multiple ? [editor, makeEditor()] : [editor];
+const selection = {
+    rangeCount: 0, anchorNode: null, focusNode: null,
+    removeAllRanges() { this.rangeCount = 0; },
+    addRange(range) {
+        this.rangeCount = 1;
+        this.range = range;
+        if (cfg.partialSelection) this.range.endOffset = 0;
+        this.anchorNode = cfg.selectionDrift ? {} : range.node;
+        this.focusNode = this.anchorNode;
+        if (cfg.selectionFocusShift) document.activeElement = {};
+        if (cfg.richAfterSelection) decorateEditor(cfg.richAfterSelection);
+    },
+    getRangeAt() { return this.range; },
+};
+global.window = {getComputedStyle: node => ({visibility:'visible', display:'block', ...node.testStyle}),
+    getSelection: () => cfg.noSelection ? null : selection};
+global.document = {
+    readyState: cfg.loading ? 'loading' : 'complete',
+    querySelector: () => cfg.turns ? {} : null,
+    querySelectorAll: () => liveEditors,
+    createRange: () => ({selectNodeContents(node) {
+        this.node = node; this.startContainer = node; this.endContainer = node;
+        this.startOffset = 0; this.endOffset = node.childNodes.length;
+    }}),
+    execCommand(name, _ui, text) {
+        inserts++;
+        command = name;
+        if (cfg.outcome === 'refused') return false;
+        setText(editor, cfg.outcome === 'partial' ? text.slice(0, 30) : text);
+        if (cfg.outcome === 'changed') setText(editor, getText(editor) + '!');
+        if (cfg.outcome === 'throw') throw Error('lost acknowledgement');
+        return cfg.outcome !== 'partial';
+    },
+};
+let result;
+try { result = eval(cfg.script); } catch (error) { result = 'THREW'; }
+process.stdout.write(JSON.stringify({result, inserts, command, text:getText(editor)}));
+"""
+
+    def insertion_script(self, message, repair_raw=None):
+        scripts = []
+        cdp = types.SimpleNamespace(evaluate=lambda script: scripts.append(script) or "INSERTED")
+        with tempfile.TemporaryDirectory() as profile:
+            sink = REAL_NEW_SINK(SOURCE, Path(profile), 1, 1)
+            with patch.object(sink, "check_empty_home"), patch.object(sink, "check_typed_home"), \
+                    patch.object(sink, "check_plain_home_draft"):
+                if repair_raw is None:
+                    sink.insert_empty_home_draft(cdp, message)
+                else:
+                    sink.repair_home_draft(cdp, message, repair_raw)
+        self.assertEqual(len(scripts), 1)
+        return scripts[0]
+
+    def run_script(self, message, *, repair_raw=None, **state):
+        node = shutil.which("node")
+        if node is None:
+            self.skipTest("Node is required for the offline native editor DOM fixture")
+        state["script"] = self.insertion_script(message, repair_raw)
+        result = subprocess.run([node, "-e", self.DOM_FIXTURE], input=json.dumps(state),
+                                capture_output=True, text=True, encoding="utf-8", timeout=5, check=True)
+        return json.loads(result.stdout)
+
+    def test_native_insert_handles_long_unicode_contenteditable_and_textarea_once(self):
+        message = 'Long JSON {"path":"https://example.test/a", "note":"two  spaces"}\n' + '😀 café 漢字 ' * 700
+        for textarea in (False, True):
+            with self.subTest(textarea=textarea):
+                result = self.run_script(message, textarea=textarea)
+                self.assertEqual((result["result"], result["inserts"], result["command"]),
+                                 ("INSERTED", 1, "insertText"))
+                self.assertEqual(result["text"], bridge.keyboard_safe_message(message))
+
+    def test_native_guard_rejects_changed_authority_without_inserting(self):
+        cases = ({"url": ISSUED}, {"turns": True}, {"draft": "unknown"},
+                 {"multiple": True}, {"hidden": True}, {"loading": True},
+                 {"noSelection": True}, {"focus": "draft"}, {"focus": "url"},
+                 {"focus": "turn"}, {"focus": "replace"}, {"focus": "elsewhere"},
+                 {"selectionDrift": True}, {"selectionFocusShift": True})
+        for state in cases:
+            with self.subTest(state=state):
+                result = self.run_script("expected handoff", **state)
+                self.assertEqual((result["result"], result["inserts"]), ("UNPROVEN", 0))
+
+    def test_native_failure_is_not_repeated_and_never_reports_success(self):
+        for outcome in ("refused", "partial", "changed", "throw"):
+            with self.subTest(outcome=outcome):
+                result = self.run_script("a full long handoff " * 40, outcome=outcome)
+                self.assertEqual(result["inserts"], 1)
+                self.assertNotEqual(result["result"], "INSERTED")
+
+    def test_uncertain_evaluation_is_one_attempt_and_stops_before_body_checks(self):
+        for error in (None, TimeoutError("lost result")):
+            with self.subTest(error=error), tempfile.TemporaryDirectory() as profile:
+                sink = REAL_NEW_SINK(SOURCE, Path(profile), 1, 1)
+                calls = []
+                def evaluate(script):
+                    calls.append(script)
+                    if error is not None:
+                        raise error
+                    return "UNPROVEN"
+                cdp = types.SimpleNamespace(evaluate=evaluate)
+                with patch.object(sink, "check_empty_home"), \
+                        patch.object(sink, "check_typed_home") as body, \
+                        patch.object(sink, "check_plain_home_draft") as plain:
+                    with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_DRAFT_INSERT_UNVERIFIED"):
+                        sink.insert_empty_home_draft(cdp, "handoff")
+                self.assertEqual(len(calls), 1)
+                body.assert_not_called()
+                plain.assert_not_called()
+
+    def test_partial_repair_native_cas_replaces_once_without_clearing(self):
+        expected = 'Prefix with  spacing and café 😀. ' + 'remaining JSON {"x":1} ' * 60
+        partial = expected[:28]
+        for textarea in (False, True):
+            with self.subTest(textarea=textarea):
+                result = self.run_script(expected, repair_raw=partial, draft=partial, textarea=textarea)
+                self.assertEqual((result["result"], result["inserts"], result["command"]),
+                                 ("INSERTED", 1, "insertText"))
+                self.assertEqual(result["text"], expected)
+
+    def test_partial_repair_native_cas_rejects_raw_focus_selection_and_scope_drift(self):
+        expected = "Prefix with  spacing. Continue the exact task."
+        partial = "Prefix with  spacing."
+        cases = ({"draft": "Prefix with spacing."}, {"url": ISSUED}, {"turns": True},
+                 {"multiple": True}, {"focus": "draft"}, {"focus": "elsewhere"},
+                 {"selectionDrift": True}, {"selectionFocusShift": True}, {"partialSelection": True})
+        for state in cases:
+            with self.subTest(state=state):
+                result = self.run_script(expected, repair_raw=partial, **dict({"draft": partial}, **state))
+                self.assertEqual((result["result"], result["inserts"]), ("UNPROVEN", 0))
+
+    def test_partial_repair_uncertain_native_result_is_not_repeated(self):
+        expected = "Original prefix with remaining handoff"
+        for outcome in ("refused", "partial", "changed", "throw"):
+            with self.subTest(outcome=outcome):
+                result = self.run_script(expected, repair_raw="Original prefix", draft="Original prefix",
+                                         outcome=outcome)
+                self.assertEqual(result["inserts"], 1)
+                self.assertNotEqual(result["result"], "INSERTED")
+
+    def test_native_insert_and_repair_preserve_same_text_rich_or_hidden_nodes(self):
+        message, partial = "Known prefix and remaining handoff", "Known prefix"
+        for repairing in (False, True):
+            for kind in ("link", "anchor", "chip", "image", "hidden"):
+                for moment in ("rich", "richAfterFocus", "richAfterSelection"):
+                    with self.subTest(repairing=repairing, kind=kind, moment=moment):
+                        draft = partial if repairing else ""
+                        result = self.run_script(message, repair_raw=partial if repairing else None,
+                                                 draft=draft, **{moment: kind})
+                        self.assertEqual((result["result"], result["inserts"]), ("UNPROVEN", 0))
+                        self.assertEqual(result["text"], draft)
+
+    def test_native_plain_paragraph_and_trailing_break_remain_supported(self):
+        message, partial = "Known prefix and remaining handoff", "Known prefix"
+        for repairing in (False, True):
+            with self.subTest(repairing=repairing):
+                result = self.run_script(message, repair_raw=partial if repairing else None,
+                                         draft=partial if repairing else "", plainParagraph=True)
+                self.assertEqual((result["result"], result["inserts"], result["text"]),
+                                 ("INSERTED", 1, message))
+
+
 class NewConversationTests(unittest.TestCase):
     def request(self):
         return {
@@ -330,9 +570,10 @@ class NewConversationTests(unittest.TestCase):
             request["resumeProgress"] = resume_progress
         return request
 
-    def run_v2_attempt(self, *, request=None, draft="", users=0, deny_stage=None, rich_link=False):
+    def run_v2_attempt(self, *, request=None, draft="", users=0, deny_stage=None, rich_link=False,
+                       cdp_type=AttemptCdp, on_ack=None):
         request = request or self.v2_request()
-        cdp = AttemptCdp()
+        cdp = cdp_type()
         cdp.draft = draft
         cdp.users = users
         cdp.rich_link = rich_link
@@ -353,12 +594,15 @@ class NewConversationTests(unittest.TestCase):
             self.assertEqual(cdp.sent, 0, "a browser click cannot precede SEND_ATTEMPTED ACK")
             if stage == "TEXT_ENTRY_AUTHORIZED":
                 self.assertNotIn("type", cdp.timeline)
+                self.assertNotIn("insert", cdp.timeline)
             if stage in {"DRAFT_READY", "SEND_ATTEMPTED"}:
                 self.assertEqual(
                     bridge.normalize_message(cdp.draft),
                     bridge.normalize_message(bridge.compose_bootstrap_message(
                         request["projectId"], request["intentId"], SOURCE, request["handoff"])),
                 )
+            if on_ack is not None:
+                on_ack(stage, cdp)
             return {} if stage == deny_stage else responses[stage]
 
         with patch.object(bridge, "NewConversationSink", AttemptSink), patch.object(
@@ -781,7 +1025,8 @@ class NewConversationTests(unittest.TestCase):
         cdp, emitted, acks, error = self.run_v2_attempt()
         self.assertIsNone(error)
         self.assertEqual(acks, ["TEXT_ENTRY_AUTHORIZED", "DRAFT_READY", "SEND_ATTEMPTED"])
-        self.assertEqual((cdp.timeline.count("type"), cdp.timeline.count("submit")), (1, 1))
+        self.assertEqual((cdp.timeline.count("insert"), cdp.timeline.count("submit")), (1, 1))
+        self.assertNotIn("type", cdp.timeline)
         self.assertEqual(cdp.sent, 1)
         self.assertEqual(emitted[-1]["stage"], "BOOTSTRAP_SUBMITTED")
         for stage in acks:
@@ -796,7 +1041,8 @@ class NewConversationTests(unittest.TestCase):
             with self.subTest(denied=denied):
                 cdp, emitted, acks, error = self.run_v2_attempt(deny_stage=denied)
                 self.assertIsNotNone(error) if denied == "TEXT_ENTRY_AUTHORIZED" else self.assertIsNone(error)
-                self.assertEqual(cdp.timeline.count("type"), expected_types)
+                self.assertEqual(cdp.timeline.count("insert"), expected_types)
+                self.assertNotIn("type", cdp.timeline)
                 self.assertEqual(cdp.sent, 0)
                 self.assertEqual(acks[-1], denied)
                 self.assertNotIn("BOOTSTRAP_SUBMITTED", [item["stage"] for item in emitted])
@@ -892,7 +1138,7 @@ class NewConversationTests(unittest.TestCase):
                 cdp, emitted, acks, error = self.run_v2_attempt()
                 self.assertIsNone(error)
                 self.assertEqual(cdp.sent, 0)
-                self.assertEqual(cdp.timeline, ["type"])
+                self.assertEqual(cdp.timeline, ["insert"])
                 self.assertEqual(acks, expected_acks)
                 self.assertTrue(cdp.draft)
                 self.assertEqual(emitted[-1], {"stage": "BOOTSTRAP_UNKNOWN",
@@ -925,8 +1171,8 @@ class NewConversationTests(unittest.TestCase):
 
     def test_v2_ambiguous_text_entry_never_emits_send_authorization(self):
         class AmbiguousCdp(AttemptCdp):
-            def send_keys(self, selector, text, timeout):
-                self.timeline.append("type")
+            def insert_text(self, text):
+                self.timeline.append("insert")
                 self.url = ISSUED
                 raise RuntimeError("ambiguous browser input")
 
@@ -946,6 +1192,64 @@ class NewConversationTests(unittest.TestCase):
         self.assertEqual(emitted[-1]["stage"], "BOOTSTRAP_UNKNOWN")
         self.assertEqual(emitted[-1]["reason"], "BOOTSTRAP_PRE_SEND_RUNTIMEERROR")
         self.assertNotIn("SEND_ATTEMPTED", [item["stage"] for item in emitted])
+
+    def test_v2_long_unicode_entry_uses_one_insert_and_no_keyboard_input(self):
+        request = self.v2_request()
+        request["handoff"] = bridge.JSON_BOOTSTRAP_HANDOFF_PREFIX + (
+            'Keep {"note":"two  spaces"}; café 😀 漢字 / path.\n' * 100)
+        cdp, emitted, acks, error = self.run_v2_attempt(request=request)
+        self.assertIsNone(error)
+        self.assertEqual((cdp.timeline.count("insert"), cdp.timeline.count("type"), cdp.sent), (1, 0, 1))
+        expected = bridge.compose_bootstrap_message(
+            request["projectId"], request["intentId"], SOURCE, request["handoff"])
+        self.assertGreater(len(expected.encode("utf-8")), 4000)
+        self.assertEqual(cdp.typed_message, bridge.keyboard_safe_message(expected))
+        self.assertEqual(acks, ["TEXT_ENTRY_AUTHORIZED", "DRAFT_READY", "SEND_ATTEMPTED"])
+        self.assertEqual(emitted[-1]["stage"], "BOOTSTRAP_SUBMITTED")
+
+    def test_v2_authority_change_after_ack_prevents_insertion(self):
+        for change in (lambda cdp: setattr(cdp, "url", ISSUED),
+                       lambda cdp: setattr(cdp, "draft", "operator text"),
+                       lambda cdp: setattr(cdp, "users", 1)):
+            with self.subTest(change=change):
+                def on_ack(stage, cdp):
+                    if stage == "TEXT_ENTRY_AUTHORIZED":
+                        change(cdp)
+                cdp, emitted, acks, error = self.run_v2_attempt(on_ack=on_ack)
+                self.assertIsNone(error)
+                self.assertEqual((cdp.timeline, cdp.sent), ([], 0))
+                self.assertEqual(acks, ["TEXT_ENTRY_AUTHORIZED"])
+                self.assertEqual(emitted[-1]["stage"], "BOOTSTRAP_UNKNOWN")
+
+    def test_v2_interrupted_full_insert_recovers_exact_draft_without_reinsertion(self):
+        class LostInsertAck(AttemptCdp):
+            def insert_text(self, text):
+                super().insert_text(text)
+                raise TimeoutError("native insert completed but response was lost")
+        cdp, emitted, acks, error = self.run_v2_attempt(cdp_type=LostInsertAck)
+        self.assertIsNone(error)
+        self.assertEqual((cdp.timeline, cdp.sent, acks), (["insert"], 0, ["TEXT_ENTRY_AUTHORIZED"]))
+        self.assertEqual(emitted[-1]["stage"], "BOOTSTRAP_UNKNOWN")
+        recovered, emitted, acks, error = self.run_v2_attempt(
+            request=self.v2_request(resume_progress="TEXT_ENTRY_AUTHORIZED"), draft=cdp.draft)
+        self.assertIsNone(error)
+        self.assertNotIn("insert", recovered.timeline)
+        self.assertNotIn("type", recovered.timeline)
+        self.assertEqual(recovered.sent, 1)
+
+    def test_v2_partial_insert_is_preserved_and_not_repaired_by_resume(self):
+        class PartialInsert(AttemptCdp):
+            def insert_text(self, text):
+                super().insert_text(text[:len(text) // 2])
+                raise TimeoutError("partial native editor result")
+        cdp, emitted, acks, error = self.run_v2_attempt(cdp_type=PartialInsert)
+        self.assertIsNone(error)
+        self.assertEqual((cdp.timeline, cdp.sent, acks), (["insert"], 0, ["TEXT_ENTRY_AUTHORIZED"]))
+        self.assertNotIn("DRAFT_READY", [item["stage"] for item in emitted])
+        recovered, emitted, acks, error = self.run_v2_attempt(
+            request=self.v2_request(resume_progress="TEXT_ENTRY_AUTHORIZED"), draft=cdp.draft)
+        self.assertEqual(error, "BOOTSTRAP_DRAFT_MISMATCH")
+        self.assertEqual((recovered.draft, recovered.timeline, recovered.sent, acks), (cdp.draft, [], 0, []))
 
     def test_v2_draft_inspector_is_observe_only_and_bounded(self):
         request = self.v2_request()
@@ -977,6 +1281,147 @@ class NewConversationTests(unittest.TestCase):
                 self.assertEqual((cdp.timeline, cdp.sent, cdp.navigation),
                                  ([], 0, [bridge.NEW_CONVERSATION_HOME]))
                 self.assertNotIn("unrelated private draft", json.dumps(frame))
+
+    def repair_request(self, handoff=None):
+        source = self.request()
+        if handoff is not None:
+            source["handoff"] = handoff
+        request = {"bootstrapDraftRepair": True, "bootstrapProtocol": 2,
+                   "projectId": source["projectId"], "intentId": source["intentId"],
+                   "source": source["source"], "handoff": source["handoff"],
+                   "expectedRawDigest": "0" * 64, "attemptRecorded": False}
+        expected = bridge.compose_bootstrap_message(
+            request["projectId"], request["intentId"], SOURCE, request["handoff"])
+        return request, expected
+
+    def run_repair(self, request, draft, *, acknowledgement=None, after_ready=None,
+                   cdp_type=AttemptCdp, users=0, rich_link=False):
+        cdp = cdp_type()
+        cdp.draft, cdp.users, cdp.rich_link = draft, users, rich_link
+        sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
+        emitted, acknowledgements = [], []
+        def read_ack():
+            acknowledgements.append(True)
+            self.assertEqual(cdp.timeline, [], "repair must follow durable witness ACK")
+            self.assertEqual(emitted[-1]["stage"], "BOOTSTRAP_DRAFT_REPAIR_READY")
+            if after_ready is not None:
+                after_ready(cdp)
+            return {"repairDraft": True} if acknowledgement is None else acknowledgement
+        with patch.object(bridge, "NewConversationSink", AttemptSink), patch.object(
+                adapter, "emit", emitted.append), patch.object(adapter, "read_request", read_ack):
+            try:
+                adapter.bootstrap_draft_repair(bridge, sb, request)
+                error = None
+            except bridge.Attention as failure:
+                error = str(failure)
+        return cdp, emitted, len(acknowledgements), error
+
+    def test_partial_repair_protocol_archives_exact_raw_before_one_no_send_replacement(self):
+        request, expected = self.repair_request()
+        partial = bridge.keyboard_safe_message(expected)[:-25]
+        request["expectedRawDigest"] = bridge.digest(partial)
+        cdp, frames, acknowledgements, error = self.run_repair(request, partial)
+        self.assertIsNone(error)
+        self.assertEqual((cdp.timeline, cdp.sent, acknowledgements), (["insert"], 0, 1))
+        self.assertEqual(cdp.draft, bridge.keyboard_safe_message(expected))
+        ready, done = [frame for frame in frames if frame["stage"].startswith("BOOTSTRAP_DRAFT_")]
+        self.assertEqual(set(ready), {"stage", "projectId", "intentId", "sourceGeneration",
+                                     "sourceDigest", "messageDigest", "actualBytes", "actualText", "actualRawDigest"})
+        self.assertEqual((ready["actualText"], ready["actualBytes"], ready["actualRawDigest"]),
+                         (partial, len(partial.encode("utf-8")), request["expectedRawDigest"]))
+        self.assertEqual(set(done), {"stage", "projectId", "intentId", "sourceGeneration",
+                                    "sourceDigest", "messageDigest", "reconciled"})
+        self.assertFalse(done["reconciled"])
+        self.assertEqual(done["messageDigest"], bridge.digest(bridge.normalize_message(expected)))
+        self.assertEqual(cdp.navigation, [bridge.NEW_CONVERSATION_HOME])
+
+    def test_partial_repair_requires_exact_typed_ack_and_raw_cas(self):
+        request, expected = self.repair_request()
+        partial = bridge.keyboard_safe_message(expected)[:-25]
+        request["expectedRawDigest"] = bridge.digest(partial)
+        for ack in ({}, {"repairDraft": False}, {"repairDraft": 1}, {"repairDraft": True, "extra": 1}):
+            with self.subTest(ack=ack):
+                cdp, frames, count, error = self.run_repair(request, partial, acknowledgement=ack)
+                self.assertEqual(error, "BOOTSTRAP_DRAFT_REPAIR_NOT_AUTHORIZED")
+                self.assertEqual((cdp.draft, cdp.timeline, cdp.sent, count), (partial, [], 0, 1))
+        # Same normalized text is insufficient: the raw witness is the CAS key.
+        changed = partial.replace("CatDesk project", "CatDesk  project", 1)
+        cdp, frames, count, error = self.run_repair(
+            request, partial, after_ready=lambda cdp: setattr(cdp, "draft", changed))
+        self.assertEqual(error, "BOOTSTRAP_DRAFT_REPAIR_UNVERIFIED")
+        self.assertEqual((cdp.draft, cdp.timeline, cdp.sent), (changed, [], 0))
+
+    def test_partial_repair_refuses_wrong_digest_foreign_full_empty_and_existing_turn(self):
+        request, expected = self.repair_request()
+        partial = bridge.keyboard_safe_message(expected)[:-25]
+        for draft, users, digest, reason in (
+                (partial, 0, "a" * 64, "BOOTSTRAP_DRAFT_REPAIR_CAS_CHANGED"),
+                ("foreign draft", 0, bridge.digest("foreign draft"), "BOOTSTRAP_DRAFT_REPAIR_PREFIX_INVALID"),
+                (expected, 0, bridge.digest(expected), "BOOTSTRAP_DRAFT_REPAIR_PREFIX_INVALID"),
+                ("", 0, bridge.digest(""), "BOOTSTRAP_DRAFT_REPAIR_PREFIX_INVALID"),
+                (partial, 1, bridge.digest(partial), "BOOTSTRAP_HOME_HAS_TURNS")):
+            with self.subTest(reason=reason):
+                cdp, frames, count, error = self.run_repair(dict(request, expectedRawDigest=digest), draft, users=users)
+                self.assertEqual(error, reason)
+                self.assertEqual((cdp.draft, cdp.timeline, cdp.sent, count), (draft, [], 0, 0))
+
+    def test_partial_repair_recorded_attempt_only_reconciles_full_plain_draft(self):
+        request, expected = self.repair_request()
+        request["attemptRecorded"] = True
+        for draft, rich_link, wanted in (
+                (expected, False, None), (expected[:-25], False, "BOOTSTRAP_DRAFT_REPAIR_RECONCILIATION_UNVERIFIED"),
+                ("foreign", False, "BOOTSTRAP_DRAFT_REPAIR_RECONCILIATION_UNVERIFIED"),
+                ("", False, "BOOTSTRAP_DRAFT_REPAIR_RECONCILIATION_UNVERIFIED"),
+                (expected, True, "BOOTSTRAP_RICH_DRAFT_UNVERIFIED")):
+            with self.subTest(draft=draft[:12], rich_link=rich_link):
+                cdp, frames, count, error = self.run_repair(request, draft, rich_link=rich_link)
+                self.assertEqual(error, wanted)
+                self.assertEqual((cdp.draft, cdp.timeline, cdp.sent, count), (draft, [], 0, 0))
+                if wanted is None:
+                    self.assertTrue(frames[-1]["reconciled"])
+                    self.assertNotIn("BOOTSTRAP_DRAFT_REPAIR_READY", [frame["stage"] for frame in frames])
+
+    def test_partial_repair_lost_result_never_repeats_replacement(self):
+        class LostRepairResult(AttemptCdp):
+            def insert_text(self, text):
+                super().insert_text(text)
+                raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_UNVERIFIED")
+        request, expected = self.repair_request()
+        partial = bridge.keyboard_safe_message(expected)[:-25]
+        request["expectedRawDigest"] = bridge.digest(partial)
+        cdp, frames, count, error = self.run_repair(request, partial, cdp_type=LostRepairResult)
+        self.assertEqual(error, "BOOTSTRAP_DRAFT_REPAIR_UNVERIFIED")
+        self.assertEqual((cdp.timeline, cdp.sent, count), (["insert"], 0, 1))
+        self.assertNotIn("BOOTSTRAP_DRAFT_REPAIRED", [frame["stage"] for frame in frames])
+        recovered, frames, count, error = self.run_repair(dict(request, attemptRecorded=True), cdp.draft)
+        self.assertIsNone(error)
+        self.assertEqual((recovered.timeline, recovered.sent, count), ([], 0, 0))
+        self.assertTrue(frames[-1]["reconciled"])
+
+    def test_partial_repair_large_witness_refuses_before_ack(self):
+        request, expected = self.repair_request("😀" * 800 + " retained suffix")
+        partial = bridge.keyboard_safe_message(expected)[:-15]
+        request["expectedRawDigest"] = bridge.digest(partial)
+        cdp, frames, count, error = self.run_repair(request, partial)
+        self.assertEqual(error, "BOOTSTRAP_DRAFT_REPAIR_FRAME_TOO_LARGE")
+        self.assertEqual((cdp.draft, cdp.timeline, cdp.sent, count), (partial, [], 0, 0))
+
+    def test_partial_repair_invalid_request_fails_before_browser_navigation(self):
+        request, expected = self.repair_request()
+        for changes in ({"bootstrapProtocol": True}, {"attemptRecorded": 1},
+                        {"expectedRawDigest": "A" * 64}, {"extra": 1},
+                        {"source": dict(request["source"], generation=True)}):
+            with self.subTest(changes=changes):
+                cdp, frames, count, error = self.run_repair(dict(request, **changes), expected[:-20])
+                self.assertIsNotNone(error)
+                self.assertEqual((cdp.navigation, cdp.timeline, cdp.sent, count), ([], [], 0, 0))
+
+    def test_large_repair_request_uses_explicit_bootstrap_request_bound(self):
+        request, _expected = self.repair_request("x" * 9000)
+        wire = (json.dumps(request, separators=(",", ":")) + "\n").encode()
+        self.assertGreater(len(wire), 8192)
+        with patch.object(adapter.sys, "stdin", types.SimpleNamespace(buffer=io.BytesIO(wire))):
+            self.assertEqual(adapter.read_job_request(), request)
 
     def test_archive_requires_exact_owned_draft_and_durable_ack_before_clear(self):
         request = self.v2_request()
