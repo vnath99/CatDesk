@@ -1,5 +1,53 @@
 # October 22–31 execution log
 
+## October 23 C34–C37 — interrupted automatic chain and target-contention repair
+
+C34 remains PARTIAL. The bounded run lasted 2026-10-23T14:00:47.571Z–14:10:10.661Z
+(563.09 seconds); its listener exited naturally and the owned host tree drained.
+One fresh controlled source event was sent once and completed. The independent
+51.11-second read verified the event-bound response, marker and pending next action.
+No new handoff request, context intent, rollover record, conversation or binding
+was created. This is not another completed rollover or automatic-chain acceptance.
+The old target-unavailable result lost the original cause; lock contention is
+plausible but is not a retrospectively proven cause of C34 or C29.
+The 14:15:35.040Z checkpoint verified all nine paired targets, 204 saved records,
+original policy restoration, preserved old rollover/history/workspace state,
+empty delivery queue, both controls STOPPED and zero test-owned processes.
+
+C35 distinguishes WEB_TARGET_WAKE_CONFIG_BUSY from unavailable or invalid state.
+The automatic driver records AWAITING_TARGET and makes bounded local retries
+without entering writer-capable recovery; independent project slots remain intact.
+At 14:14:36.413Z, 85 distinct source tests, strict Clippy and formatting passed.
+This includes a real held-transaction-lock fixture and unchanged sibling authority.
+Reviewed source was published at 14:16:34.659Z on codex/web-rollover-oct17:
+`cdb39ba7d478841f54c271a3552dc1d9c1a6c1eb` (exact remote SHA readback).
+GitHub supplied no workflow runs or checks; remote CI acceptance remains UNVERIFIED.
+
+C36 built the normal release application from that exact source at
+14:17:29.550Z–14:24:08.242Z (398.69 seconds); the normal host rebuilt at
+15:06:19.705Z–15:06:21.681Z. Package preparation completed at 15:06:22.193Z.
+Stopped development selection passed at 15:07:13.169Z in 4.72 seconds: only two
+package pointers changed; 202 protected records and the previous package stayed exact.
+The 15:10:16.162Z–15:10:19.552Z normal selected read-only test returned the exact
+busy diagnostic under an actual held lock, then read all nine pairs after unlock.
+All 204 records stayed exact and no test-owned processes remained. No browser,
+Wake worker, message, native-session action or production change occurred.
+This qualifies selected target reads, not the automatic driver or protected runtime.
+
+C37 adds the missing AWAITING_TARGET central-status projection and safe-reason test.
+Thirteen projection/CLI source tests passed at 15:09:36.715Z. Published at
+15:10:51.652Z: `fac2e103b9458dd434b7118a5c92a621da63971c`, exact remote readback.
+These 13 tests overlap the C35 set; they are not 98 distinct tests in total.
+C37 remains source-tested/published only; selected v56 still contains C35.
+
+Acceptance E remains PARTIAL: C33 independently monitored two conversations while
+one stayed quarantined; C34 verified one source response but stopped before handoff.
+Next: continue the unfinished controlled task on the qualified core runtime
+without resending its source event; qualify C37 in the next normal image.
+Actual concurrent Web MCP coding, further paired-commit crash recovery, protected
+installed qualification and unattended operation remain open; preserve all bindings.
+[C34 partial chain](verification/C34_AUTOMATIC_CHAIN_PARTIAL_2026_10_23.json), [C35 source repair](verification/C35_TARGET_CONTENTION_RETRY_2026_10_23.json), [C36 selected reads](verification/C36_SELECTED_TARGET_CONTENTION_2026_10_23.json), [C37 projection](verification/C37_AWAITING_TARGET_PROJECTION_2026_10_23.json).
+
 ## 2026-10-23 — C33 monitored automatic context cycle
 
 The existing automatic driver now passes one bounded scoped monitoring cycle on

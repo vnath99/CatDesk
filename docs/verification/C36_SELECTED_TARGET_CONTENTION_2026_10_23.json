@@ -1,0 +1,62 @@
+{
+  "recordedUtc": "2026-10-23T15:13:01.5160128Z",
+  "localDate": "2026-10-23",
+  "task": "C36-NORMAL-SELECTED-TARGET-CONTENTION",
+  "classification": "SELECTED_STOPPED_UNPROTECTED_DEVELOPMENT_READS",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "cdb39ba7d478841f54c271a3552dc1d9c1a6c1eb",
+  "applicationBuild": {
+    "startedUtc": "2026-10-23T14:17:29.5504350Z",
+    "finishedUtc": "2026-10-23T14:24:08.2422765Z",
+    "elapsedSeconds": 398.6918415,
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "exitCode": 0,
+    "sha256": "273b4794a3f7e0fd9d632c4529127fef08fc8b8525f9426d3c0f192c673f30e9",
+    "bytes": 34044416
+  },
+  "hostBuild": {
+    "startedUtc": "2026-10-23T15:06:19.7059465Z",
+    "finishedUtc": "2026-10-23T15:06:21.6812324Z",
+    "profile": "NORMAL_RELEASE_WAKE_DEFAULT_FEATURES_NO_TEST_SUPPORT",
+    "exitCode": 0,
+    "sha256": "c5a9279f7f0a23fd6b84d0d44ed5fabc45b4045861cf0b6b300841835de369c9",
+    "bytes": 2041344,
+    "ownerEofGate": "REUSED_EXACT_IMAGE_PROOF_NO_NEW_HOST_PROCESS"
+  },
+  "packagePreparedUtc": "2026-10-23T15:06:22.1939976Z",
+  "selection": {
+    "atUtc": "2026-10-23T15:07:13.1697478Z",
+    "elapsedSeconds": 4.7184762,
+    "recordsChecked": 204,
+    "packagePointersChanged": 2,
+    "protectedRecordsExact": 202,
+    "unexpectedChanges": 0,
+    "newStateRecords": 0,
+    "previousPackagePreserved": true,
+    "selectedViewPassed": true
+  },
+  "readOnlyQualification": {
+    "startedUtc": "2026-10-23T15:10:16.1625404Z",
+    "finishedUtc": "2026-10-23T15:10:19.5525280Z",
+    "elapsedSeconds": 3.3899528,
+    "heldLockDiagnostic": "WEB_TARGET_WAKE_CONFIG_BUSY",
+    "postUnlockExactPairedReads": 9,
+    "recordsChecked": 204,
+    "changedRecords": 0,
+    "automaticDriverAccepted": false
+  },
+  "cleanup": {
+    "ownedProcesses": 0,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "messagesSent": 0,
+    "nativeSessionActions": 0,
+    "recurringStarted": false,
+    "wakeTargetsChanged": false,
+    "productionChanged": false,
+    "controls": "BOTH_STOPPED"
+  },
+  "c37Included": false,
+  "protectedInstalledAcceptance": false,
+  "unattendedAcceptance": false
+}
