@@ -755,6 +755,7 @@ fn registry_rollover_projection(raw: &Value) -> Value {
                     | "WAKE_TARGET_CHANGED"
                     | "AWAITING_BROWSER"
                     | "AWAITING_CONTEXT"
+                    | "AWAITING_TARGET"
                     | "AWAITING_QUIESCENCE"
                     | "AWAITING_RESPONSE"
                     | "AWAITING_HANDOFF"
@@ -1515,6 +1516,17 @@ mod tests {
         assert_eq!(bad["automation"]["stage"], "UNKNOWN_STAGE");
         assert!(bad["automation"]["reason"].is_null());
         assert!(!bad.to_string().contains("secret.txt"));
+        let target_wait = registry_rollover_projection(&json!({
+            "phase":"NONE","automation":{"stage":"AWAITING_TARGET",
+                "reason":"WEB_TARGET_WAKE_CONFIG_BUSY","targetGeneration":null}
+        }));
+        assert_eq!(target_wait["automation"]["stage"], "AWAITING_TARGET");
+        assert_eq!(
+            target_wait["automation"]["reason"],
+            "WEB_TARGET_WAKE_CONFIG_BUSY"
+        );
+        assert!(target_wait["automation"]["targetGeneration"].is_null());
+        assert!(target_wait["automation"]["lastFailure"].is_null());
         for progress in ["TEXT_ENTRY_AUTHORIZED", "DRAFT_READY", "SEND_ATTEMPTED"] {
             let projected = registry_rollover_projection(&json!({
                 "phase":"SUBMITTING", "bootstrapProgress":progress
