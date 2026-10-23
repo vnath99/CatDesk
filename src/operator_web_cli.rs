@@ -451,8 +451,8 @@ impl ContextEvent {
 }
 
 fn paired_key(workspace: &Path, project: &str) -> Result<ConversationKey, String> {
-    let target = mcp::operator_read_project_web_target(workspace, project)
-        .map_err(|e| format!("WEB_TARGET: {}", reason(e)))?
+    let target = mcp::operator_read_project_web_target_diagnosed(workspace, project)
+        .map_err(|failure| failure.code.to_string())?
         .ok_or("WEB_TARGET_UNBOUND")?;
     Ok(ConversationKey {
         project_id: project.into(),
@@ -672,6 +672,16 @@ fn target_status(workspace: &Path, project_id: &str, runtime_mode: &str) -> Valu
             "runtimeMode":runtime_mode}),
         Err(error) => json!({"status":"ATTENTION", "reason":reason(error), "deliveryProved":false,
             "runtimeMode":runtime_mode}),
+    }
+}
+
+fn target_status_diagnosed(workspace: &Path, project_id: &str, runtime_mode: &str) -> Value {
+    match mcp::operator_read_project_web_target_diagnosed(workspace, project_id) {
+        Ok(Some(target)) => json!({"status":"PAIRED", "target":target, "deliveryProved":false,
+            "runtimeMode":runtime_mode}),
+        Ok(None) => json!({"status":"UNBOUND", "deliveryProved":false, "runtimeMode":runtime_mode}),
+        Err(failure) => json!({"status":"ATTENTION", "reason":reason(failure.error),
+            "diagnosticCode":failure.code, "deliveryProved":false, "runtimeMode":runtime_mode}),
     }
 }
 
@@ -963,7 +973,7 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             Ok(json!({
                 "action":"web_target_read", "projectId":project_id,
                 "readOnly":true, "runtimeMode":runtime_mode,
-                "wake":target_status(&workspace, &project_id, runtime_mode),
+                "wake":target_status_diagnosed(&workspace, &project_id, runtime_mode),
             }))
         }
         WebAction::BindTarget {

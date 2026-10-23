@@ -427,7 +427,7 @@ fn tick_project_mode(
                     project,
                     "ATTENTION",
                     None,
-                    Some("WEB_AUTO_PAIRED_TARGET_REQUIRED"),
+                    Some(crate::operator_web_error_code(&reason)),
                 );
                 return Err(reason);
             }

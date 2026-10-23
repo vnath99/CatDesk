@@ -143,6 +143,121 @@ async fn web_mcp_request(
     (status, response.json().await.unwrap())
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn target_diagnostics_retain_project_git_failure_and_keep_sibling_independent() {
+    let production_before = production_snapshot();
+    let parent = fixture_parent();
+    let control = parent.join("control");
+    fs::create_dir(&control).unwrap();
+    let (package, python) = package_and_python(&parent);
+    development_runtime::prepare(&control, &package, &python).unwrap();
+    let projects = [
+        ("catdesk", control.clone()),
+        ("alpha", parent.join("alpha")),
+        ("beta", parent.join("beta")),
+    ];
+    for (id, workspace) in &projects {
+        let origin = format!("https://example.test/{id}.git");
+        git_root(workspace, &origin);
+        web_action(
+            &control,
+            &[
+                "operator",
+                "web",
+                "project",
+                "register",
+                "--project-id",
+                id,
+                "--workspace",
+                workspace.to_str().unwrap(),
+                "--git-identity",
+                &origin,
+            ],
+        )
+        .await;
+    }
+    for id in ["alpha", "beta"] {
+        web_action(
+            &control,
+            &[
+                "operator",
+                "web",
+                "target",
+                "bind",
+                "--project-id",
+                id,
+                "--conversation-url",
+                &format!("https://chatgpt.com/c/{id}"),
+                "--expected-current-target-sha256",
+                "none",
+                "--expected-wake-generation",
+                "0",
+            ],
+        )
+        .await;
+    }
+    let registry_path = control.join(".catdesk/projects/projects.json");
+    let registry_before = fs::read(&registry_path).unwrap();
+    assert!(
+        Command::new("git")
+            .arg("-C")
+            .arg(parent.join("alpha"))
+            .args([
+                "remote",
+                "set-url",
+                "origin",
+                "https://example.test/changed.git"
+            ])
+            .status()
+            .unwrap()
+            .success()
+    );
+    let rejected = web_action(
+        &control,
+        &["operator", "web", "target", "read", "--project-id", "alpha"],
+    )
+    .await;
+    assert_eq!(rejected["wake"]["status"], "ATTENTION");
+    assert_eq!(
+        rejected["wake"]["diagnosticCode"],
+        "WEB_TARGET_PROJECT_GIT_UNAVAILABLE"
+    );
+    let action = operator_facade::parse_operator_action(
+        ["operator", "web", "auto", "tick", "--project-id", "alpha"].map(str::to_string),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        operator_facade::execute_operator_action(action, &control)
+            .await
+            .unwrap_err(),
+        "WEB_TARGET_PROJECT_GIT_UNAVAILABLE"
+    );
+    let saved: serde_json::Value = serde_json::from_slice(
+        &fs::read(control.join(".catdesk/web-rollovers/alpha/auto-status.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(saved["stage"], "ATTENTION");
+    assert_eq!(saved["reason"], "WEB_TARGET_PROJECT_GIT_UNAVAILABLE");
+    assert!(!saved.to_string().contains("example.test"));
+    let sibling = web_action(
+        &control,
+        &["operator", "web", "target", "read", "--project-id", "beta"],
+    )
+    .await;
+    assert_eq!(sibling["wake"]["status"], "PAIRED");
+    assert_eq!(sibling["wake"]["target"]["projectId"], "beta");
+    let tick = web_action(
+        &control,
+        &["operator", "web", "auto", "tick", "--project-id", "beta"],
+    )
+    .await;
+    assert_eq!(tick["stage"], "WAKE_STOPPED");
+    assert_eq!(fs::read(&registry_path).unwrap(), registry_before);
+    assert_eq!(production_snapshot(), production_before);
+    cleanup(&parent);
+}
+
 async fn web_mcp_tool(
     client: &reqwest::Client,
     url: &str,

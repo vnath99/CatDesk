@@ -3600,6 +3600,55 @@ pub(crate) enum DesignatedChatTargetErrorV1 {
     Unavailable,
 }
 
+/// Fixed diagnostic codes for the existing read path. Never retain filesystem
+/// errors, Git output, workspace names or conversation URLs in scheduler status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProjectWebTargetReadFailureV1 {
+    pub(crate) error: DesignatedChatTargetErrorV1,
+    pub(crate) code: &'static str,
+}
+
+impl ProjectWebTargetReadFailureV1 {
+    fn unavailable(code: &'static str) -> Self {
+        Self {
+            error: DesignatedChatTargetErrorV1::Unavailable,
+            code,
+        }
+    }
+
+    fn mismatch(code: &'static str) -> Self {
+        Self {
+            error: DesignatedChatTargetErrorV1::ProtectedStateMismatch,
+            code,
+        }
+    }
+}
+
+fn project_scope_read_failure_code(
+    error: &crate::delegated::runtime::RuntimeError,
+) -> &'static str {
+    use crate::delegated::runtime::RuntimeError;
+    match error {
+        RuntimeError::Validation(reason) => match reason.as_str() {
+            "CatDesk control project is not registered" => "WEB_TARGET_CONTROL_NOT_REGISTERED",
+            "CatDesk control registry is bound to a different workspace"
+            | "CatDesk control workspace identity drifted" => {
+                "WEB_TARGET_CONTROL_WORKSPACE_CHANGED"
+            }
+            "CatDesk control Git identity is unavailable" => "WEB_TARGET_CONTROL_GIT_UNAVAILABLE",
+            "project is not registered" => "WEB_TARGET_PROJECT_NOT_REGISTERED",
+            "registered project Git identity is unavailable" => {
+                "WEB_TARGET_PROJECT_GIT_UNAVAILABLE"
+            }
+            "registered project workspace identity drifted" => {
+                "WEB_TARGET_PROJECT_WORKSPACE_CHANGED"
+            }
+            _ => "WEB_TARGET_PROJECT_SCOPE_UNAVAILABLE",
+        },
+        _ => "WEB_TARGET_PROJECT_SCOPE_UNAVAILABLE",
+    }
+}
+
 fn designated_chat_target_readback_locked(
     workspace: &Path,
 ) -> Result<DesignatedChatTargetV1, DesignatedChatTargetErrorV1> {
@@ -3876,6 +3925,15 @@ fn paired_project_target_readback_with_config(
     project_id: &str,
     config: &catdesk_wake::store::Config,
 ) -> Result<Option<ProjectWebTargetV1>, DesignatedChatTargetErrorV1> {
+    paired_project_target_readback_with_config_diagnosed(control_workspace, project_id, config)
+        .map_err(|failure| failure.error)
+}
+
+fn paired_project_target_readback_with_config_diagnosed(
+    control_workspace: &Path,
+    project_id: &str,
+    config: &catdesk_wake::store::Config,
+) -> Result<Option<ProjectWebTargetV1>, ProjectWebTargetReadFailureV1> {
     use crate::delegated::autonomy_projects::{
         AutonomousProjectRegistryStoreV1, project_chat_target_digest,
     };
@@ -3883,12 +3941,14 @@ fn paired_project_target_readback_with_config(
         control_workspace.join(".catdesk/projects"),
     )
     .and_then(|store| store.load_registry())
-    .map_err(|_| DesignatedChatTargetErrorV1::ProtectedStateMismatch)?;
+    .map_err(|_| ProjectWebTargetReadFailureV1::mismatch("WEB_TARGET_REGISTRY_UNAVAILABLE"))?;
     let project = registry
         .projects
         .iter()
         .find(|project| project.project_id == project_id)
-        .ok_or(DesignatedChatTargetErrorV1::Unavailable)?;
+        .ok_or_else(|| {
+            ProjectWebTargetReadFailureV1::unavailable("WEB_TARGET_PROJECT_NOT_REGISTERED")
+        })?;
     match (
         project.chatgpt_target_url.as_deref(),
         project.chatgpt_target_sha256.as_deref(),
@@ -3913,7 +3973,9 @@ fn paired_project_target_readback_with_config(
                 historical_urls: project.chatgpt_target_history.clone(),
             }))
         }
-        _ => Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch),
+        _ => Err(ProjectWebTargetReadFailureV1::mismatch(
+            "WEB_TARGET_REGISTRY_WAKE_MISMATCH",
+        )),
     }
 }
 
@@ -3930,26 +3992,41 @@ fn project_web_store_expected(
     expected_root: Option<&Path>,
     read_only: bool,
 ) -> Result<(PathBuf, catdesk_wake::store::Store), DesignatedChatTargetErrorV1> {
+    project_web_store_expected_diagnosed(control_workspace, project_id, expected_root, read_only)
+        .map_err(|failure| failure.error)
+}
+
+fn project_web_store_expected_diagnosed(
+    control_workspace: &Path,
+    project_id: &str,
+    expected_root: Option<&Path>,
+    read_only: bool,
+) -> Result<(PathBuf, catdesk_wake::store::Store), ProjectWebTargetReadFailureV1> {
     use crate::delegated::autonomy_projects::resolve_registered_project_from_control_root;
-    let control_workspace = control_workspace
-        .canonicalize()
-        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
-    if !crate::wake_protocol_client::selected(&control_workspace)
-        || resolve_registered_project_from_control_root(&control_workspace, project_id).is_err()
-    {
-        return Err(DesignatedChatTargetErrorV1::Unavailable);
+    let control_workspace = control_workspace.canonicalize().map_err(|_| {
+        ProjectWebTargetReadFailureV1::unavailable("WEB_TARGET_CONTROL_ROOT_UNAVAILABLE")
+    })?;
+    if !crate::wake_protocol_client::selected(&control_workspace) {
+        return Err(ProjectWebTargetReadFailureV1::unavailable(
+            "WEB_TARGET_RUNTIME_NOT_SELECTED",
+        ));
     }
-    let root = crate::wake_protocol_client::wake_root_for_workspace(&control_workspace)
-        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    resolve_registered_project_from_control_root(&control_workspace, project_id).map_err(
+        |error| ProjectWebTargetReadFailureV1::unavailable(project_scope_read_failure_code(&error)),
+    )?;
+    let root =
+        crate::wake_protocol_client::wake_root_for_workspace(&control_workspace).map_err(|_| {
+            ProjectWebTargetReadFailureV1::unavailable("WEB_TARGET_WAKE_ROOT_UNAVAILABLE")
+        })?;
     if let Some(expected) = expected_root {
-        if root
-            .canonicalize()
-            .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?
-            != expected
-                .canonicalize()
-                .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?
-        {
-            return Err(DesignatedChatTargetErrorV1::ProtectedStateMismatch);
+        if root.canonicalize().map_err(|_| {
+            ProjectWebTargetReadFailureV1::unavailable("WEB_TARGET_WAKE_ROOT_UNAVAILABLE")
+        })? != expected.canonicalize().map_err(|_| {
+            ProjectWebTargetReadFailureV1::unavailable("WEB_TARGET_EXPECTED_WAKE_ROOT_UNAVAILABLE")
+        })? {
+            return Err(ProjectWebTargetReadFailureV1::mismatch(
+                "WEB_TARGET_WAKE_ROOT_CHANGED",
+            ));
         }
     }
     let store = if read_only {
@@ -3957,7 +4034,7 @@ fn project_web_store_expected(
     } else {
         catdesk_wake::store::Store::open(&root)
     }
-    .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
+    .map_err(|_| ProjectWebTargetReadFailureV1::unavailable("WEB_TARGET_WAKE_STORE_UNAVAILABLE"))?;
     Ok((control_workspace, store))
 }
 
@@ -3965,13 +4042,26 @@ pub(crate) fn operator_read_project_web_target(
     control_workspace: &Path,
     project_id: &str,
 ) -> Result<Option<ProjectWebTargetV1>, DesignatedChatTargetErrorV1> {
-    let lock = wake_target_lock(control_workspace)
-        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
-    let _guard = lock
-        .lock()
-        .map_err(|_| DesignatedChatTargetErrorV1::Unavailable)?;
-    let (control_workspace, wake_store) = project_web_store(control_workspace, project_id)?;
-    paired_project_target_readback_locked(&control_workspace, &wake_store, project_id)
+    operator_read_project_web_target_diagnosed(control_workspace, project_id)
+        .map_err(|failure| failure.error)
+}
+
+pub(crate) fn operator_read_project_web_target_diagnosed(
+    control_workspace: &Path,
+    project_id: &str,
+) -> Result<Option<ProjectWebTargetV1>, ProjectWebTargetReadFailureV1> {
+    let lock = wake_target_lock(control_workspace).map_err(|_| {
+        ProjectWebTargetReadFailureV1::unavailable("WEB_TARGET_COORDINATION_UNAVAILABLE")
+    })?;
+    let _guard = lock.lock().map_err(|_| {
+        ProjectWebTargetReadFailureV1::unavailable("WEB_TARGET_COORDINATION_UNAVAILABLE")
+    })?;
+    let (control_workspace, wake_store) =
+        project_web_store_expected_diagnosed(control_workspace, project_id, None, true)?;
+    let config = wake_store.config().map_err(|_| {
+        ProjectWebTargetReadFailureV1::mismatch("WEB_TARGET_WAKE_CONFIG_UNAVAILABLE")
+    })?;
+    paired_project_target_readback_with_config_diagnosed(&control_workspace, project_id, &config)
 }
 
 pub(crate) fn operator_read_project_web_target_status(
@@ -11882,6 +11972,83 @@ mod tests {
             .expect("wake store");
         wake.initialize().expect("wake initialize");
         (root, wake)
+    }
+
+    #[test]
+    fn project_web_target_diagnostics_distinguish_unavailable_and_mismatched_authority() {
+        let (root, wake) = project_web_target_fixture("read-diagnostics");
+        for id in ["alpha", "beta"] {
+            bind_project_web_target_locked(
+                &root,
+                &wake,
+                id,
+                &format!("https://chatgpt.com/c/{id}"),
+                None,
+                0,
+            )
+            .unwrap();
+        }
+        let config = wake.config().unwrap();
+        let mut drifted = config.clone();
+        drifted.targets.get_mut("alpha").unwrap().digest = "f".repeat(64);
+        let mismatch =
+            paired_project_target_readback_with_config_diagnosed(&root, "alpha", &drifted)
+                .unwrap_err();
+        assert_eq!(mismatch.code, "WEB_TARGET_REGISTRY_WAKE_MISMATCH");
+        assert_eq!(
+            mismatch.error,
+            DesignatedChatTargetErrorV1::ProtectedStateMismatch
+        );
+        assert!(
+            paired_project_target_readback_with_config_diagnosed(&root, "beta", &drifted)
+                .unwrap()
+                .is_some()
+        );
+        let absent = paired_project_target_readback_with_config_diagnosed(&root, "absent", &config)
+            .unwrap_err();
+        assert_eq!(absent.code, "WEB_TARGET_PROJECT_NOT_REGISTERED");
+        assert_eq!(absent.error, DesignatedChatTargetErrorV1::Unavailable);
+        let path = root.join(".catdesk/projects/projects.json");
+        let saved = fs::read(&path).unwrap();
+        fs::write(&path, b"malformed registry").unwrap();
+        let unavailable =
+            paired_project_target_readback_with_config_diagnosed(&root, "alpha", &config)
+                .unwrap_err();
+        assert_eq!(unavailable.code, "WEB_TARGET_REGISTRY_UNAVAILABLE");
+        assert_eq!(
+            unavailable.error,
+            DesignatedChatTargetErrorV1::ProtectedStateMismatch
+        );
+        fs::write(&path, saved).unwrap();
+        assert!(
+            paired_project_target_readback_locked(&root, &wake, "alpha")
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn project_web_target_scope_diagnostics_only_emit_fixed_codes() {
+        use crate::delegated::runtime::RuntimeError;
+        for (reason, expected) in [
+            (
+                "registered project Git identity is unavailable",
+                "WEB_TARGET_PROJECT_GIT_UNAVAILABLE",
+            ),
+            (
+                "CatDesk control Git identity is unavailable",
+                "WEB_TARGET_CONTROL_GIT_UNAVAILABLE",
+            ),
+            (
+                "private-secret-path and Git stderr",
+                "WEB_TARGET_PROJECT_SCOPE_UNAVAILABLE",
+            ),
+        ] {
+            let code = project_scope_read_failure_code(&RuntimeError::Validation(reason.into()));
+            assert_eq!(code, expected);
+            assert_eq!(crate::operator_web_error_code(code), code);
+            assert!(!code.contains("private"));
+        }
     }
 
     #[test]
