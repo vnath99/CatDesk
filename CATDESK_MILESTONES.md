@@ -1,3 +1,35 @@
+## 2026-10-23 — C33 automatic multi-project context monitoring passes
+
+The existing automatic driver now passes one bounded scoped monitoring cycle on
+the selected normal v55 development image. Three projects are admitted independently:
+alpha remains QUARANTINED at generation2, while beta generation3 and fast generation2
+receive fresh browser observations. Their observed estimates remain 1,741 and 1,657
+tokens. Event counts remain4 and5: re-reading unchanged messages does not count them
+twice. Coverage remains UNKNOWN_OR_INCOMPLETE; these are not exact context totals.
+Shared-browser contention retries within the existing admission mechanism; both
+captures complete in the same bounded cycle. No new scheduler or registry is added.
+
+UTC13:42:06–13:46:04,238.20s total;120s interval,235s listener,245s foreground-host
+and270s outer Job limits. Listener exits naturally, owned host tree exits, temporary
+beta observation policy is restored, both controls STOPPED and zero owned processes.
+199 metadata records checked: six expected monitor/status updates,193 protected
+records exact, zero unexpected changes or new records. Nine exact paired targets
+read back afterward. All registry/Wake bindings, histories, prior rollover journals
+and native owners remain preserved. The old alpha auto-status was archived byte-exact
+before its normal QUARANTINED update; C29's original collapsed-error cause remains
+UNPROVEN and is not claimed repaired by this successful cycle.
+
+Zero messages, binding changes, rollover advances, connector calls, native-session
+actions or production changes. No recurring automation activated and no completed
+canary replayed. Source is unchanged from qualified5973f1437953ed57a591bc70927631e96c5f6016;
+84 distinct source tests are reused by exact file hashes, not rerun or counted anew.
+This advances bounded selected-development automatic context monitoring under E/J.
+It does not close actual Web MCP coding B/C, the full automatic monitoring-to-handoff-
+to-rollover chain, paired-commit crash phases, project removal/history archiving,
+protected installation, CI or unattended operation. Next: review controlled task/root
+ownership for a fresh automatic-chain test. No operator action for eligible work.
+[C33 evidence](docs/verification/C33_SCOPED_AUTOMATIC_MONITOR_2026_10_23.json).
+
 ## 2026-10-23 — C31 target diagnostics and C32 selected warning controls
 
 C31 preserves precise sanitized target-read failures through the existing guarded
