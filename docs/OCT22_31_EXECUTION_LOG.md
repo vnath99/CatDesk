@@ -1,3 +1,39 @@
+## October 23 C49 — verified contract context in task continuation (source qualified)
+
+Granted-task handoffs now carry the exact archived assignment objective, allowed
+and forbidden paths, ordered steps, acceptance criteria, expected artifacts,
+escalation conditions, verification profile and original contract limits. Effective
+tool names and configured verification profile IDs/timeouts are included; executable
+argv and absent profiles are omitted. The replacement chat can identify its assigned
+scope without guessing. Existing runtime checks remain authoritative.
+
+The prepare-only display adds `taskContract` after persisting the original admission
+bytes. Cold retries keep those bytes exact. No task, grant or registry is created by
+this display change; original contract limits are reported, not a fresh allowance.
+
+Source qualification passed 65 focused tests, with two enhanced existing regressions
+and two preexisting native tests ignored. Strict workspace Clippy, formatting and
+whitespace passed. The synthetic private rollover carries configured profile metadata,
+recovers the pending patch, applies it once through central dispatch, preserves the
+native original and refuses replay. This is source/fixture evidence.
+
+A fresh controlled canary's exact existing file was checkpointed without byte changes
+and a separate linked task worktree plus frozen inputs were prepared privately.
+Nothing was published to Wake or granted; its previous continuity-only work remains
+open until supported resolution. Unknown submissions and older coding verification
+remain preserved. No browser, host, recurring process or native session was started.
+
+Selected development remains stopped C48/v64; C49 normal build and live transfer are
+not yet qualified. A single connector read after a long gap still returned HTTP429.
+Three native development chats are active and one is idle/completed; no session action
+was taken. Full actual Web, protected installation and unattended acceptance stay open.
+No additional actual Web A–J gate is closed by these source tests.
+
+Next: normal C49 qualification, then a fresh bounded granted-task Web integration
+using existing browser authentication and guarded project authority. No operator
+action is needed for safe preparation. Evidence:
+`docs/verification/C49_VERIFIED_TASK_CONTRACT_CONTINUATION_2026_10_23.json`.
+
 ## October 23 C48 — preserve and resume granted Web tasks across rollover
 
 C48 carries an existing local task grant into the replacement project's private

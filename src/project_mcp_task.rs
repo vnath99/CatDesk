@@ -33,6 +33,14 @@ const TOOLS: &[&str] = &[
     "verify.command",
 ];
 
+fn effective_tools(profiles: &[CommandProfile]) -> Vec<&'static str> {
+    TOOLS
+        .iter()
+        .copied()
+        .filter(|tool| *tool != "verify.command" || !profiles.is_empty())
+        .collect()
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Assignment {
@@ -61,6 +69,20 @@ struct AssignmentInspection {
     root: PathBuf,
     witness: (PathBuf, PathBuf, String, String),
     web_work: Option<AssignmentWork>,
+}
+
+fn continuation_contract(inspected: &AssignmentInspection) -> Value {
+    let contract = &inspected.contract;
+    json!({"objective":contract.objective,"allowedPaths":contract.allowed_paths,
+        "forbiddenPaths":contract.forbidden_paths,"allowedTools":effective_tools(&inspected.command_profiles),
+        "orderedSteps":contract.ordered_steps,"acceptanceCriteria":contract.acceptance_criteria,
+        "expectedArtifacts":contract.expected_artifacts,"escalationConditions":contract.escalation_conditions,
+        "verificationProfile":contract.verification_profile,
+        "commandProfiles":inspected.command_profiles.iter().map(|profile|json!({"id":profile.id,
+            "timeoutSeconds":profile.timeout_seconds})).collect::<Vec<_>>(),
+        "contractLimits":{"maxToolCalls":contract.max_tool_calls,"maxElapsedSeconds":contract.max_elapsed_seconds,
+            "maxTurns":contract.max_turns,"retryBudget":contract.retry_budget},
+        "limitsRestartedByRollover":false})
 }
 
 /// Conversation URLs and generations are deliberately excluded: a proved
@@ -583,6 +605,7 @@ pub(crate) fn granted_handoff_context(
         "assignmentSha256":link.assignment_sha256,"scopeSha256":link.scope_sha256,"executionKey":key,
         "executionWorkspace":prepared["executionWorkspace"],"registeredWorkspace":project.project.workspace,
         "baseCommit":prepared["baseCommit"],"branch":prepared["branch"],
+        "taskContract":prepared["taskContract"],
         "targetSelection":"USE_VERIFIED_CONTINUATION_GENERATION_AND_DIGEST","journaledCalls":journaled,
         "patchProposals":proposals.iter().map(|proposal|json!({"patchId":proposal.patch_id,
             "targetPaths":proposal.target_paths,"proposedDiffSha256":proposal.proposed_diff_hash})).collect::<Vec<_>>(),
@@ -795,6 +818,9 @@ pub(crate) fn prepare_work_resume(
     output["journaledCallCount"] = json!(call_count);
     output["completedCallReplayAllowed"] = json!(false);
     output["nativeSessionAction"] = json!("NONE");
+    // Add display context after preserving the original immutable admission
+    // bytes. Older prepared records must remain exact on a cold retry.
+    output["taskContract"] = continuation_contract(&inspected);
     Ok(output)
 }
 
@@ -954,11 +980,7 @@ impl ProjectTask {
     }
 
     fn allowed_tools(&self) -> Vec<&'static str> {
-        TOOLS
-            .iter()
-            .copied()
-            .filter(|tool| *tool != "verify.command" || !self.command_profiles.is_empty())
-            .collect()
+        effective_tools(&self.command_profiles)
     }
 
     pub(crate) fn schema(&self) -> Value {
@@ -1491,6 +1513,44 @@ pub(crate) mod tests {
         let output = prepare_work_resume(&scope, &record, &record.target).unwrap();
         assert_eq!(output["status"], "PREPARED_ONLY");
         assert_eq!(output["launchAuthorized"], false);
+        let assignment: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        let context = &output["taskContract"];
+        for field in [
+            "objective",
+            "allowedPaths",
+            "forbiddenPaths",
+            "orderedSteps",
+            "acceptanceCriteria",
+            "expectedArtifacts",
+            "escalationConditions",
+            "verificationProfile",
+        ] {
+            assert_eq!(context[field], assignment["contract"][field]);
+        }
+        assert_eq!(context["commandProfiles"], json!([]));
+        assert!(
+            !context["allowedTools"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("verify.command"))
+        );
+        assert_eq!(
+            context["contractLimits"]["maxToolCalls"],
+            assignment["contract"]["maxToolCalls"]
+        );
+        assert_eq!(context["limitsRestartedByRollover"], false);
+        let admission_path = directory.join(format!(
+            "resume-prepared-{}-{}.json",
+            record.target.generation, record.target.digest
+        ));
+        let admission_before = fs::read(&admission_path).unwrap();
+        let persisted: Value = serde_json::from_slice(&admission_before).unwrap();
+        assert!(persisted.get("taskContract").is_none());
+        assert_eq!(
+            prepare_work_resume(&scope, &record, &record.target).unwrap(),
+            output
+        );
+        assert_eq!(fs::read(&admission_path).unwrap(), admission_before);
         assert!(!directory.join("journal").exists());
         assert!(!directory.join("jobs").exists());
         drop(acquire_project_writer_lock(&root).unwrap());

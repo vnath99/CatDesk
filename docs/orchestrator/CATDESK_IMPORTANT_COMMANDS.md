@@ -1,3 +1,19 @@
+## October 23 C49 — exact task-contract handoff context (source only)
+
+The existing `operator web work resume-prepare` display and private automatic granted
+rollover payload now include `taskContract`: objective, allowed/forbidden paths,
+ordered steps, acceptance criteria, artifacts, escalation conditions, verification
+profile, original limits, effective tools and configured command profile IDs/timeouts.
+Use only those IDs; executable argv stays local. Reported limits are original contract
+limits, not renewed permission or remaining allowance. All host checks remain active.
+
+No new command or registry. Old persisted prepare-only admission bytes stay exact;
+the display addition creates no run. Source 65 tests and strict checks pass. Selected
+stopped development remains C48/v64; C49 normal executable and browser transfer are
+not yet qualified. Fresh canary inputs are prepared, not published or granted. Keep
+completed and ambiguous older canaries intact. Actual Web coding remains HTTP429-blocked.
+See `../verification/C49_VERIFIED_TASK_CONTRACT_CONTINUATION_2026_10_23.json`.
+
 ## October 23 C48 — granted-task automatic continuation (selected stopped development)
 
 C48 v64 is selected in the stopped unprotected development profile. Use existing local association and

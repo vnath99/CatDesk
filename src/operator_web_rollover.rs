@@ -3978,8 +3978,16 @@ mod tests {
     #[tokio::test]
     async fn granted_task_automatic_preparation_transfers_exact_context_and_journal_without_new_authority()
      {
-        let (control, assignment, wake, pins, event) =
+        let (control, assignment, wake, mut pins, event) =
             crate::web_work::tests::assignment_fixture_for("alpha");
+        let mut assigned: Value = serde_json::from_slice(&fs::read(&assignment).unwrap()).unwrap();
+        assigned["contract"]["allowedCommandProfiles"] =
+            json!(["c49-verification", "not-installed"]);
+        let metadata_only_executable = std::env::current_exe().unwrap();
+        assigned["commandProfiles"] = json!([{"id":"c49-verification","timeoutSeconds":3,
+            "argv":[metadata_only_executable,"--never-execute-c49-metadata-fixture"]}]);
+        fs::write(&assignment, serde_json::to_vec(&assigned).unwrap()).unwrap();
+        pins["assignmentSha256"] = json!(digest(&fs::read_to_string(&assignment).unwrap()));
         wake.publish(&event).unwrap();
         crate::web_work::associate(&control, pins.clone(), &assignment).unwrap();
         let target = wake.config().unwrap().targets["alpha"].clone();
@@ -4124,6 +4132,49 @@ mod tests {
         .unwrap();
         let pending_patch = capsule["context"]["patchProposals"][0]["patchId"].clone();
         assert_eq!(pending_patch, "rollover-patch");
+        let contract = &capsule["context"]["taskContract"];
+        for field in [
+            "objective",
+            "allowedPaths",
+            "forbiddenPaths",
+            "orderedSteps",
+            "acceptanceCriteria",
+            "expectedArtifacts",
+            "escalationConditions",
+            "verificationProfile",
+        ] {
+            assert_eq!(contract[field], assigned["contract"][field]);
+        }
+        assert_eq!(
+            contract["commandProfiles"],
+            json!([{"id":"c49-verification","timeoutSeconds":3}])
+        );
+        assert!(
+            contract["allowedTools"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("verify.command"))
+        );
+        assert!(!contract.to_string().contains("not-installed"));
+        assert!(
+            !contract
+                .to_string()
+                .contains("--never-execute-c49-metadata-fixture")
+        );
+        assert!(
+            !contract
+                .to_string()
+                .contains(metadata_only_executable.to_str().unwrap())
+        );
+        assert_eq!(contract["limitsRestartedByRollover"], false);
+        assert_eq!(
+            contract["contractLimits"]["maxToolCalls"],
+            assigned["contract"]["maxToolCalls"]
+        );
+        assert_eq!(
+            task_handoff::content(&store.active().unwrap().unwrap()).unwrap(),
+            text
+        );
         for path in [
             store.root.join(format!("{}.json", saved.intent_id)),
             control.join(".catdesk/web-work/alpha.json"),

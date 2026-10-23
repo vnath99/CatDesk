@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C49_VERIFIED_TASK_CONTRACT_CONTINUATION",
+  "observedUtc": "2026-10-23T23:00:45.4168146Z",
+  "sourceBaseCommit": "242510c3a7b3e65330f299bddc9bc1c0edea3318",
+  "branch": "codex/web-rollover-oct17",
+  "implementation": [
+    "Carry the verified archived assignment objective, path restrictions, steps, acceptance criteria, expected artifacts, escalation conditions, verification profile and original contract limits into private granted-task handoffs.",
+    "Use effective task tools and configured verification profile IDs/timeouts; do not disclose executable argv or advertise absent profiles.",
+    "Add taskContract to prepare-only display output after writing the original immutable admission bytes; old cold retries stay byte-identical.",
+    "Reuse existing assignment archive, task grant, private payload and browser transaction; this adds no execution authority or registry."
+  ],
+  "sourceFiles": [
+    {
+      "path": "src/project_mcp_task.rs",
+      "sha256": "bf9c63f655d42e8b142a9b1d8ca6f2392922c550ac1ded099e9d82f6b5b2cb33"
+    },
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "7f49b5951a861b9d94f8f30862e745dee5d3bc83525e1a1502b62aeb4e6fa6ee"
+    }
+  ],
+  "sourceQualification": {
+    "enhancedExistingTests": 2,
+    "finishedUtc": "2026-10-23T18:58:09.7314378-04:00",
+    "startedUtc": "2026-10-23T18:55:28.6587732-04:00",
+    "distinctPassedTests": 65,
+    "whitespace": "PASS",
+    "strictClippy": "PASS",
+    "newTests": 0,
+    "suites": [
+      {
+        "summary": "test result: ok. 53 passed; 0 failed; 0 ignored; 0 measured; 1621 filtered out; finished in 32.45s",
+        "timedOut": false,
+        "exitCode": 0,
+        "elapsedSeconds": 88.220094,
+        "filter": "operator_facade::web::rollover::tests",
+        "ownerExited": true
+      },
+      {
+        "summary": "test result: ok. 9 passed; 0 failed; 2 ignored; 0 measured; 1663 filtered out; finished in 16.71s",
+        "timedOut": false,
+        "exitCode": 0,
+        "elapsedSeconds": 20.6438161,
+        "filter": "project_mcp_task::tests",
+        "ownerExited": true
+      },
+      {
+        "summary": "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 1671 filtered out; finished in 51.60s",
+        "timedOut": false,
+        "exitCode": 0,
+        "elapsedSeconds": 52.1666875,
+        "filter": "web_task_dispatch::tests",
+        "ownerExited": true
+      }
+    ],
+    "format": "PASS",
+    "ignoredExistingNativeTests": 2,
+    "failures": 0,
+    "classification": "SOURCE_AND_SYNTHETIC_LOCAL_TASK_CHAIN"
+  },
+  "exercised": [
+    "Prepare-only contract context comes from exact assignment, with no configured verification profile exposed when none is installed.",
+    "Cold preparation retains exact original persisted admission bytes and does not create a run or claim native ownership.",
+    "Synthetic automatic private rollover carries a configured verification profile ID and timeout, omits an unconfigured declared profile and executable argv, and retains task limits.",
+    "The same chain applies the pre-rollover pending patch once through central task dispatch, preserves the native original and refuses completed-call replay."
+  ],
+  "privateFreshCanaryPreparation": {
+    "sourceEventsPublished": 0,
+    "isolatedLinkedWorktreeCreated": true,
+    "controlledFixtureCheckpointCreated": true,
+    "priorCompletedContinuityWorkStillOpen": true,
+    "nativeDevelopmentSessionsChanged": false,
+    "sourceRequestAndAssignmentFrozen": true,
+    "messagesSent": 0,
+    "bindingsChanged": false,
+    "originalCanaryFileBytesChanged": false,
+    "executionGrantsIssued": 0,
+    "classification": "PREPARED_NOT_PUBLISHED_OR_GRANTED"
+  },
+  "acceptance": {
+    "protectedInstalled": "NOT_QUALIFIED",
+    "fullMilestone": "OPEN",
+    "source": "PASS",
+    "selectedDevelopment": "C48_V64_STOPPED_PRESERVED",
+    "actualC49BrowserHandoff": "NOT_RUN",
+    "unattended": "NOT_ACTIVATED",
+    "normalC49Executable": "NOT_BUILT",
+    "additionalActualWebAGatesClosed": 0,
+    "actualWebCoding": "OPEN_CONNECTOR_HTTP429"
+  },
+  "dependency": {
+    "requests": 1,
+    "immediateRetries": 0,
+    "settingsChanges": 0,
+    "nativeChatsIdle": 1,
+    "nativeActions": 0,
+    "connector": "HTTP429_MCP_SSE_PROBE",
+    "nativeChatsActive": 3
+  },
+  "review": "ROOT_SELF_REVIEW_NO_INDEPENDENT_REVIEW_CLAIM",
+  "recurringStarts": 0,
+  "browserStarts": 0,
+  "wakeHostStarts": 0,
+  "completedCanaryReplayed": false,
+  "productionChanged": false,
+  "nextExecutableTask": "Qualify the normal C49 executable, then stage a fresh bounded granted-task integration using the existing paired controlled project and authenticated browser. Preserve old uncertain submissions and pending independent coding verification.",
+  "operatorActionRequired": false,
+  "publication": {
+    "status": "SOURCE_PUBLICATION_RECORDED_SEPARATELY",
+    "visibilityChanged": false,
+    "force": false
+  }
+}
