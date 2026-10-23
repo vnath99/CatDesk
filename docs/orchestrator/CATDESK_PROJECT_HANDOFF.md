@@ -18,6 +18,12 @@ does immutable per-conversation MCP workspace authority. No completed canary is
 replayed. Selected v49 remains unchanged. See
 [C10 evidence](../verification/C10_ROLLOVER_ADMISSION_2026_10_23.json).
 
+Normal app build and read-only central frontend pass too: five paired rows,
+139 unchanged records, no new admission artifacts/processes. Full normal CLI
+status hit its separate15s probe cap with no output and is not qualified by the
+narrower frontend pass. Both probe roots exited; no state or browser action.
+Keep C10 distinct from current selected C8 v49 and actual simultaneous creation.
+
 The operator strengthened mandatory Web acceptance: one registry with complete
 history/lifecycle; actual parallel Web MCP work in reliable immutable project
 contexts; context-aware handoff/rollover; durable fair serialized shared-browser

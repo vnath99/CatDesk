@@ -91,6 +91,14 @@ receive no global lock. Status is durable metadata, never liveness/delivery proo
 live G/H/I, true project-bound MCP work B and unattended operation remain OPEN.
 See [C10 evidence](verification/C10_ROLLOVER_ADMISSION_2026_10_23.json).
 
+Normal executable build and existing central frontend qualification now PASS:
+five paired rows, all 139 checked records exact, zero new admission artifacts
+or owned processes; no browser/message/host/native changes. Full normal CLI
+status returned no output within its separate 15s probe; its root exited and
+state stayed exact. That path remains unqualified; the 14.33s narrower frontend
+pass under 30s is not a full CLI or actual-browser acceptance substitute.
+Selected v49 is unchanged, and no unattended or protected service was activated.
+
 ### October 22 evening — timer fault isolation SOURCE / TESTED_LOCAL
 
 Automatic readiness, completed-task lookup and rollover source quiescence now

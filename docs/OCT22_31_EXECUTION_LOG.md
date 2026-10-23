@@ -2,6 +2,26 @@
 
 ## 2026-10-23 early morning — durable fair New Chat admission
 
+- **Source published at 04:06:20 UTC:** eleven reviewed, sanitized paths pushed
+  normally as `2cba039f89f1bbe779567756871220a5edc5ed1c` on
+  `codex/web-rollover-oct17`; full remote SHA matched. No credentials, actual
+  conversation URLs, private project data, profiles or protected runtime
+  artifacts published. Zero workflow/check runs: CI UNVERIFIED.
+- **Normal build at 04:07:23 UTC:** clean source above built without development
+  dependencies within 240s. App SHA256
+  `c2ee2dc03acfda2b9b9b28287598a45139153ce594cf675c7df17e9a368e9d49`.
+- **Read-only qualification:** full `operator web status` produced no output
+  before its 15s probe cap; retained root was stopped/exited, 139 records exact,
+  zero new records/admission artifacts/owned browser-Wake processes. This is
+  unqualified, not a proven deadlock or production failure. A separate existing
+  central frontend call, omitting duplicate legacy details, passed at 04:12:36 UTC
+  in 14.33s under 30s: five PAIRED project rows, safe redacted display, all 139
+  records exact, zero new state/admission artifacts/processes, controls STOPPED.
+  No relevant live Git/shell process remained from the timed-out call's window.
+  Do not claim that this narrower pass qualifies the full normal CLI. No cause
+  or source performance repair is asserted. Selected v49 remains unchanged;
+  no browser, WakeHost, message, native owner, recurring or production action.
+
 Inspection confirmed existing project journals and shared browser ownership;
 reused both. New admission applies only to creation, not unrelated MCP/native
 work or the later completion/binding stages. A bounded FIFO journal retains

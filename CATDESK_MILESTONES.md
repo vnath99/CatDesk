@@ -11,6 +11,11 @@ binding, native-owner, recurring or production action. Live simultaneous request
 and crash/restart demonstrations remain OPEN. See
 [C10 evidence](docs/verification/C10_ROLLOVER_ADMISSION_2026_10_23.json).
 
+Normal app build and bounded read-only central frontend also pass: five paired
+rows, 139 records exact, zero new admission artifacts/processes. Full normal CLI
+status hit its separate 15s probe cap and remains unqualified. The narrower
+frontend pass is not selected/live creation or protected installation acceptance.
+
 ## Mandatory October 31 Web acceptance clarification
 
 Immediate source increment C9 stops silent predecessor eviction at the 64-URL

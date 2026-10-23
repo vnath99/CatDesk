@@ -210,7 +210,7 @@
   },
   "acceptance": {
     "source": "PASS",
-    "normalExecutable": "PENDING_C10_NORMAL_BUILD",
+    "normalExecutable": "PASS_NORMAL_BUILD_AND_BOUNDED_READ_ONLY_CENTRAL_FRONTEND",
     "selectedPackage": "PRIOR_C8_V49_UNCHANGED",
     "liveSimultaneousRolloverG": "OPEN",
     "liveInterruptionH": "OPEN",
@@ -220,5 +220,114 @@
     "unattended": "NOT_ACTIVATED",
     "fullMilestone": "PARTIAL"
   },
-  "nextTask": "Build normal executable and verify the changed read-only status path against preserved control state. Then qualify the matched development release before two fresh controlled rollover requests; never repeat accepted canaries. Reliable immutable project MCP workspace identity remains required."
+  "nextTask": "Qualify the matched development release and prepare two fresh controlled rollout sources before actual simultaneous browser acceptance G. Do not repeat completed canaries. Independently implement immutable project MCP execution context using the existing registry resolver/authentication and native writer boundaries. Full normal CLI 15s probe remains unqualified.",
+  "sourcePublication": {
+    "atUtc": "2026-10-23T04:06:20.4971346Z",
+    "action": "rollover-admission-published-exact-match",
+    "sourceBase": "991655bd9bf1d4f8289376b9d6d7bd9a3b0a3ee1",
+    "sourceFiles": [
+      {
+        "path": "src/web_rollover_admission.rs",
+        "sha256": "9fda2d7ac60c8cdcae628bec1c8c29fd920726bb10d343c89a0431337cc674d6"
+      },
+      {
+        "path": "src/operator_web_rollover.rs",
+        "sha256": "ee76250efafab4c39c23be67c92cf78cdcb5f8f85d7fdb604c20d5c0fdfcb99d"
+      },
+      {
+        "path": "src/operator_web_auto.rs",
+        "sha256": "f23d372abfd2c182433df492aa2219a0bf1499c5ea27d34203d978e212324f88"
+      },
+      {
+        "path": "src/operator_web_cli.rs",
+        "sha256": "1ee60798a914a06a8791a5b48dd6d3d6ba5c2dd3597816bb3993813328086c04"
+      }
+    ],
+    "head": "2cba039f89f1bbe779567756871220a5edc5ed1c",
+    "remoteSha": "2cba039f89f1bbe779567756871220a5edc5ed1c",
+    "branch": "codex/web-rollover-oct17",
+    "remote": "https://github.com/vnath99/CatDesk",
+    "tree": "CLEAN",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false,
+    "protectedProductionAccepted": false
+  },
+  "normalBuild": {
+    "startedUtc": "2026-10-23T04:06:36.9658973Z",
+    "finishedUtc": "2026-10-23T04:07:23.5559019Z",
+    "sourceCommit": "2cba039f89f1bbe779567756871220a5edc5ed1c",
+    "baseCommitTree": "245bb3d4a5bac267dc0f8b92d1f68ed1fb4f4363",
+    "sourceState": "CLEAN_COMMITTED_SOURCE",
+    "sourceFiles": [
+      {
+        "path": "src/web_rollover_admission.rs",
+        "sha256": "9fda2d7ac60c8cdcae628bec1c8c29fd920726bb10d343c89a0431337cc674d6"
+      },
+      {
+        "path": "src/operator_web_rollover.rs",
+        "sha256": "ee76250efafab4c39c23be67c92cf78cdcb5f8f85d7fdb604c20d5c0fdfcb99d"
+      },
+      {
+        "path": "src/operator_web_auto.rs",
+        "sha256": "f23d372abfd2c182433df492aa2219a0bf1499c5ea27d34203d978e212324f88"
+      },
+      {
+        "path": "src/operator_web_cli.rs",
+        "sha256": "1ee60798a914a06a8791a5b48dd6d3d6ba5c2dd3597816bb3993813328086c04"
+      }
+    ],
+    "profile": "NORMAL_DEBUG_APP_NO_DEV_DEPENDENCIES",
+    "exitCode": 0,
+    "maximumSeconds": 240,
+    "packageSelectionChanged": false,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "imageSha256": "c2ee2dc03acfda2b9b9b28287598a45139153ce594cf675c7df17e9a368e9d49",
+    "imageBytes": 67276288,
+    "buildLogSha256": "b015041a6892b788b9ccb767fd04051fec7a1d69a9227c04b0ca00b9d4065ac6"
+  },
+  "normalReadOnlyFrontend": {
+    "startedUtc": "2026-10-23T04:12:22.2777513Z",
+    "finishedUtc": "2026-10-23T04:12:36.6031412Z",
+    "classification": "NORMAL_C10_READ_ONLY_EXISTING_CONTROL_FRONTEND",
+    "sourceCommit": "2cba039f89f1bbe779567756871220a5edc5ed1c",
+    "imageSha256": "c2ee2dc03acfda2b9b9b28287598a45139153ce594cf675c7df17e9a368e9d49",
+    "maximumSeconds": 30,
+    "exitCode": 0,
+    "timedOut": false,
+    "failure": null,
+    "originalPairedProjects": 5,
+    "protectedRecordsChecked": 139,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "admissionArtifactsCreated": 0,
+    "ownedProcesses": 0,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "messagesSent": 0,
+    "selectedPackageChanged": false,
+    "recurringStarted": false,
+    "protectedProductionChanged": false,
+    "nativeSessionsChanged": false,
+    "completedCanaryReplayed": false
+  },
+  "fullNormalCliProbe": {
+    "startedUtc": "2026-10-23T04:09:39.8654853Z",
+    "finishedUtc": "2026-10-23T04:09:56.0433769Z",
+    "maximumSeconds": 15,
+    "exitCode": -1,
+    "timedOut": true,
+    "result": "NO_OUTPUT_UNVERIFIED",
+    "rootExited": true,
+    "checkedRecords": 139,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "admissionArtifactsCreated": 0,
+    "ownedBrowserWakeProcesses": 0,
+    "followup": "SEPARATE_NARROWER_CENTRAL_FRONTEND_PASS_NOT_FULL_CLI_ACCEPTANCE",
+    "cause": "NOT_PROVEN_NO_SOURCE_PERFORMANCE_FIX_CLAIMED"
+  }
 }
