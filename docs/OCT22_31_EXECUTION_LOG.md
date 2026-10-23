@@ -2,6 +2,24 @@
 
 ## 2026-10-23 — immutable project MCP connection stage
 
+Published source `74b2966a254e93cd9d384fadcf86a196500e7151` at 04:47:40 UTC
+on `codex/web-rollover-oct17`; exact remote SHA matched, clean tree. Reviewed
+source and sanitized documentation only; no force/visibility change. GitHub
+returned zero workflow/check runs, so remote CI remains UNVERIFIED.
+
+Normal locked offline debug build passed at 04:51:20 UTC, without development
+dependencies. Image SHA256
+`5f9444bfac6ebcf0bc9ab899cec86fd191b1a5de7b9c7e934027a51689fe997b`.
+At 04:53:42 UTC, two normal executable listeners passed parallel own-root reads,
+wrong bearer/project witness refusal, sibling-path/write/command refusal and
+simulated independent writer progress in disposable registered Git roots.
+Both naturally exited with code0 at their 35s deadlines, within180s outer Job
+containment. Zero owned/live-control processes; all139 protected records exact,
+zero new records. Synthetic target URLs were metadata only, never ChatGPT-issued
+or browser-verified conversations. No actual Web calls/messages/browser/WakeHost,
+native session, selected package, recurring or protected production changes.
+This qualifies normal local read-only routing and lifecycle, not live coding B.
+
 Reused existing registry/Git verification, bearer auth, read-only tools and
 bounded headless lifecycle. Explicit local startup selects project ID plus paired
 generation/digest before configuration initialization. An immutable connection
@@ -35,9 +53,8 @@ branch `codex/web-rollover-oct17`.
 
 SOURCE / TESTED_LOCAL_HTTP_FIXTURES, not installed or live B acceptance. No actual
 project binding/native chat/browser/WakeHost/package/recurring/protected change
-or connector retry. Next build normal and qualify two bounded listeners against
-disposable registered roots, then ownership-backed coding through this context.
-Publication receipt follows exact remote SHA readback. See
+or connector retry. Next wire ownership-backed coding through this context and
+qualify selected/runtime Web calls separately. See
 [C11 evidence](verification/C11_PROJECT_MCP_SCOPE_2026_10_23.json).
 
 ## 2026-10-23 early morning — durable fair New Chat admission

@@ -165,8 +165,8 @@
   },
   "acceptance": {
     "source": "PASS_READ_ONLY_CONNECTION_STAGE",
-    "normalExecutable": "PENDING",
-    "normalTwoProcessHttp": "PENDING",
+    "normalExecutable": "PASS_NORMAL_DEBUG_NO_DEV_DEPENDENCIES",
+    "normalTwoProcessHttp": "PASS_DISPOSABLE_REGISTERED_ROOTS_NO_ACTUAL_WEB_CALLS",
     "actualWebB": "OPEN",
     "ownershipBackedMutationAndExecution": "REQUIRED_NOT_IMPLEMENTED",
     "selectedPackage": "C8_V49_UNCHANGED",
@@ -176,5 +176,49 @@
     "unattended": "NOT_ACTIVATED",
     "fullMilestone": "PARTIAL"
   },
-  "nextTask": "Build normal executable and qualify two bounded project listeners against disposable registered roots using existing owner containment. Then wire ownership-backed mutation/delegation through this same immutable context; do not accept read-only inspection as completion of autonomous coding or actual Web B."
+  "nextTask": "Wire ownership-backed mutation/delegation through the same immutable context, preserving native owners. Qualify selected runtime and actual Web B independently, plus live G/H/I. No replay of completed canaries.",
+  "normalBuild": {
+    "finishedUtc": "2026-10-23T04:51:20.1227592Z",
+    "sourceCommit": "74b2966a254e93cd9d384fadcf86a196500e7151",
+    "imageSha256": "5f9444bfac6ebcf0bc9ab899cec86fd191b1a5de7b9c7e934027a51689fe997b",
+    "profile": "NORMAL_DEBUG_APP_NO_DEV_DEPENDENCIES",
+    "exitCode": 0,
+    "maximumSeconds": 240
+  },
+  "normalTwoProcess": {
+    "startedUtc": "2026-10-23T04:53:03.3284045Z",
+    "finishedUtc": "2026-10-23T04:53:42.5215214Z",
+    "classification": "NORMAL_LOCAL_MCP_DISPOSABLE_REGISTERED_PROJECTS",
+    "checks": [
+      "two-normal-process-parallel-own-root-reads",
+      "wrong-bearer-401",
+      "wrong-project-witness-refused",
+      "sibling-path-write-and-command-refused",
+      "simulated-independent-writer-progress",
+      "both-listeners-natural-deadline-exit-zero"
+    ],
+    "maximumSeconds": 180,
+    "listenerMaximumSeconds": 35,
+    "naturalExitCodes": [
+      0,
+      0
+    ],
+    "outerJobExitCode": 0,
+    "outerJobTimedOut": false,
+    "outerJobTerminationFailed": false,
+    "ownedProcesses": 0,
+    "protectedRecords": 139,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "actualWebCalls": false
+  },
+  "publication": {
+    "sourceHead": "74b2966a254e93cd9d384fadcf86a196500e7151",
+    "remoteSha": "74b2966a254e93cd9d384fadcf86a196500e7151",
+    "atUtc": "2026-10-23T04:47:40.7312176Z",
+    "branch": "codex/web-rollover-oct17",
+    "ci": "UNVERIFIED",
+    "workflowRuns": 0,
+    "checkRuns": 0
+  }
 }

@@ -10,6 +10,12 @@ backed coding and actual ChatGPT Web B remain required. Native writers, bindings
 browsers and selected packages are untouched. See
 [C11 evidence](docs/verification/C11_PROJECT_MCP_SCOPE_2026_10_23.json).
 
+Published source `74b2966a254e93cd9d384fadcf86a196500e7151`, exact remote match.
+Normal debug build and two-process disposable-project HTTP qualification pass.
+Both35s listener lifetimes exit0; zero owned processes, all139 protected records
+exact. No actual Web calls, installed/selected qualification or coding acceptance.
+GitHub CI remains UNVERIFIED with zero workflow/check runs.
+
 ## 2026-10-23 — durable fair creation admission SOURCE PASS
 
 Existing rollover now enqueues New Chat creation by stable project/intent/source/

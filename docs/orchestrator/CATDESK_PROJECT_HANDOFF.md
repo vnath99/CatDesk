@@ -12,7 +12,12 @@ workspace with existing Git verification/bearer auth. Per-call paired witnesses,
 before/after scope checks and drift refusal; guarded generation changes work
 without endpoint restart or cached-schema pin. Two concurrent socket fixtures
 pass with wrong auth/path/scope/mutation refusal and independent sibling progress.
-20 distinct tests + strict Clippy/format pass. Normal process qualification next.
+20 distinct tests + strict Clippy/format pass. Normal build and two independent
+normal read-only listeners in disposable registered Git roots also pass: own-root
+parallel reads, wrong bearer/project/path refusal and simulated sibling progress.
+Both35s lifetimes exit0 within180s Job; no owned processes,139 records exact.
+Published source `74b2966a254e93cd9d384fadcf86a196500e7151`, exact remote SHA;
+zero workflow/check runs, CI UNVERIFIED. No actual Web calls or issued URLs.
 Ownership-backed coding and actual Web B remain required; do not redefine the
 goal as read-only. Selected C8 v49/native chats/five bindings unchanged. See
 [C11 evidence](../verification/C11_PROJECT_MCP_SCOPE_2026_10_23.json).
