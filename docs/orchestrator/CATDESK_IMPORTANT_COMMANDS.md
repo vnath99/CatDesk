@@ -1,6 +1,26 @@
 # CatDesk — Important Command Reference
 
+## October 23 C42 — ambiguous entry diagnosis
+
+For the preserved C42 intent, use the existing read-only command with its exact
+project and intent witnesses:
+
+```text
+<qualified-catdesk.exe> operator web rollover inspect-draft --project-id PROJECT --expected-intent-id INTENT
+```
+
+`EMPTY_HOME` does not authorize re-entry. The current intent remains fenced at
+`TEXT_ENTRY_AUTHORIZED` with `WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND`; do not
+clear the journal, overwrite a draft or resend a completed event. Development
+v58 is selected STOPPED. The corrected empty-paragraph guard passes 246 distinct
+Python regressions and the 17:35:08Z read-only live guard comparison. Guard-only
+checks are not insertion or rollover acceptance.
+[C42 evidence](../verification/C42_FRESH_ENTRY_GUARD_2026_10_23.json).
+
 ## October 23 C41 — retire an idle Web-only project
+
+Historical C41 checkpoint: its v57/unselected-v58 statements precede the
+17:08:09Z C42 stopped selection recorded above.
 
 Source status: **TESTED_LOCAL**. The final 16:45:35.305Z–16:47:27.950Z gate passed
 160 distinct tests, including 24 added tests; two existing native sandbox tests

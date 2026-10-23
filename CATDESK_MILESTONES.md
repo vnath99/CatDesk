@@ -1,4 +1,35 @@
+## October 23 C42 — fresh-entry failure isolated without replay
+
+The guarded v58 development selection passed at 17:08:09Z: nine paired projects,
+218 records, only two package pointers changed. A distinct automatic test at
+17:13:54Z–17:21:11Z delivered its source task and handoff request, then stopped at
+`TEXT_ENTRY_AUTHORIZED` with `BOOTSTRAP_DRAFT_INSERT_UNVERIFIED`. No bootstrap
+receipt, replacement URL, generation-4 binding or continuation was verified.
+The uncertain intent is preserved; C38–C40 were not replayed.
+
+Read-only draft and DOM inspections found an empty composer and the current
+ProseMirror `P[data-empty-paragraph]` placeholder. The previous plain-structure
+guard rejects that attribute. The narrow source correction permits it only on
+an empty paragraph; fixed diagnostics distinguish pre-edit refusals from uncertain
+post-edit results. All 246 distinct Python regressions passed, including five
+added tests; the observed shape failed before the fix and passed afterward.
+The 17:34:54Z–17:35:08Z live guard-only comparison passed: the selected guard
+refused the same empty editor that the corrected guard accepted, without focus,
+selection or text changes. All 228 records stayed exact and zero owners remained.
+This is not another accepted rollover.
+
+Both inspections preserved all 228 current records, all project bindings and
+history, with zero test-owned processes and both controls STOPPED. Four native
+development sessions remain active. One 17:26:32Z connector read returned HTTP
+429 without retry. Next: qualify the corrected development package.
+Protected installation and
+unattended operation remain open.
+[C42 evidence](docs/verification/C42_FRESH_ENTRY_GUARD_2026_10_23.json).
+
 ## October 23 C41 — recoverable retirement of an idle Web project
+
+Historical C41 checkpoint: its v57/unselected-v58 statements precede the
+17:08:09Z C42 stopped selection recorded above.
 
 Source status: **TESTED_LOCAL**. The final gate at
 2026-10-23T16:45:35.305Z–16:47:27.950Z passed 160 distinct tests, including 24

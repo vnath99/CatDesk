@@ -1,6 +1,65 @@
 # October 22–31 execution log
 
+## October 23 C42 — fresh-entry diagnosis and narrow placeholder correction
+
+At 17:08:09.979Z, the existing guarded update selected development v58. It checked
+218 records, changed only the two expected package pointers and read all nine
+paired registrations. Previous package, profile, histories and production stayed
+intact; no browser or host was launched by selection.
+
+The new controlled automatic attempt ran 17:13:54.065Z–17:21:11.971Z (437.90s),
+within its 800s listener, 820s host and 900s outer-job bounds. Its distinct source
+event and generated handoff request completed. New-chat entry stopped after
+`TEXT_ENTRY_AUTHORIZED`: `BOOTSTRAP_DRAFT_INSERT_UNVERIFIED`, with a durable
+`WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND` fence. No bootstrap receipt or new URL
+was verified and the generation-3 binding remained authoritative. The policy was
+restored, the owned listener stopped and host-tree exit proved. Eight expected
+changes, ten new records and one archived source queue record leave 228 records;
+there were no unexpected changes. The other eight pairs and all completed C40
+records remain exact. No previous event was replayed.
+
+Read-only inspection at 17:25:08.243Z–17:25:24.618Z found `EMPTY_HOME`, zero bytes.
+This does not prove that the prior edit was never attempted and grants no retry.
+The 17:27:26.452Z–17:27:42.712Z metadata read found one visible empty ProseMirror
+editor with a `P[data-empty-paragraph]` child and trailing `BR`. That inert marker
+is absent from the previous structure allowlist. Both reads preserved all 228
+records and ended with zero owned processes and both controls STOPPED.
+
+The source fix is limited to this marker on a genuinely empty paragraph; unknown
+attributes, hidden/rich children and nonempty marked paragraphs still refuse.
+Bounded fixed diagnostic suffixes distinguish pre-edit refusals from post-edit
+uncertainty, without granting retry authority. The final source gate completed
+at 17:32:43.751Z: 246 distinct tests passed (71 new-conversation, 122 bridge,
+25 current-DOM, 28 adapter), including five added tests. The observed marker
+regression failed before the fix and passed afterward. There were 300 successful
+test executions including a targeted check and 53 overlapping repeat executions;
+those repeats do not increase the distinct count. The long bridge suite finished
+within its 300-second watchdog and all test owners exited. No Rust source changed;
+the prior normal Rust qualification is retained. Selection and submission rules
+are unchanged.
+
+The final read-only old/new guard comparison passed at
+17:34:54.411Z–17:35:08.359Z. Both guards ran in one synchronous browser evaluation,
+returning before focus or text entry. The selected guard returned `UNPROVEN`;
+the corrected guard returned `C42_PRE_EDIT_GUARDS_PASSED`. Selection and active
+element identities stayed unchanged, all 228 records stayed exact and no owners
+remained. This qualifies only the pre-edit guard, not insertion or rollover.
+The earlier 17:33:28Z comparison got the same guard results but failed its
+cross-evaluation selection measurement; that failed evidence is retained.
+
+A private metadata wrapper initially failed before launch because an imported
+function lacked its script root; explicit scope fixed it. The first guard-only
+comparison refused an existing source-test Python owner before launch. These
+refusals made no runtime change. One connector transport read at 17:26:32Z again
+returned HTTP 429; no retry or settings change. The four native project sessions
+were observed active without sending them messages. Full Web coding, protected
+installation and unattended acceptance remain separate open gates.
+[C42 evidence](verification/C42_FRESH_ENTRY_GUARD_2026_10_23.json).
+
 ## October 23 C41 — recoverable Web-project retirement
+
+Historical C41 checkpoint: its v57/unselected-v58 statements precede the
+17:08:09Z C42 stopped selection recorded above.
 
 2026-10-23T16:41:53Z documentation checkpoint initially recorded TESTS_PENDING.
 The final gate at 16:45:35.305Z–16:47:27.950Z passed 160 distinct tests: coordinator

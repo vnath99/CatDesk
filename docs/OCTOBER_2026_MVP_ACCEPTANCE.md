@@ -1,6 +1,26 @@
 # CatDesk October 2026 MVP acceptance
 
+### October 23 C42 — fresh entry is not yet accepted
+
+| Evidence class | Result |
+| --- | --- |
+| Selected development runtime | v58 selected STOPPED; nine paired projects read, 218 records checked, only two package pointers changed |
+| New automatic attempt | Source event and handoff completed; fresh entry failed at `TEXT_ENTRY_AUTHORIZED`; no verified bootstrap receipt, replacement URL or generation-4 binding |
+| Read-only diagnosis | Empty composer; observed `data-empty-paragraph` placeholder is rejected by the old guard; both inspections preserve 228 records with zero owned processes |
+| Source correction | Narrow empty-paragraph allowance and fixed pre/post-edit diagnostic codes; 246 distinct Python tests pass, including five added tests |
+| Live guard-only check | PASS at 17:35:08Z: old guard refuses, corrected guard accepts, exact active-element/selection identities and 228 records unchanged; zero owners; no insertion or send |
+| Preserved work | All five original bindings, eight sibling pairs, C38–C40 history and four active native development sessions |
+| External and installed gates | Connector HTTP 429 at 17:26:32Z; actual Web coding, protected installation and unattended operation remain open |
+
+The old attempt stays fenced without replay. An empty composer is not proof of
+an unattempted edit. Guard-only browser evidence cannot qualify insertion,
+submission or a complete rollover; earlier accepted F/G operations remain intact.
+[C42 evidence](verification/C42_FRESH_ENTRY_GUARD_2026_10_23.json).
+
 ### October 23 C41 — project retirement acceptance boundary
+
+Historical C41 checkpoint: its v57/unselected-v58 statements precede the
+17:08:09Z C42 stopped selection recorded above.
 
 | Evidence class | Current result |
 | --- | --- |
@@ -607,8 +627,9 @@ implemented and source-tested. Selected C21 v53 includes C18-C20 browser guard/c
 provisional-URL fixes and actual separate context captures. C23 now qualifies two
 competing selected browser creations/paired commits/continuations. Remaining gaps include actual
 concurrent Web coding and critical crash/recovery/restart acceptance,
-coordinated automatic monitoring, supported project removal and history archival
-beyond the64-predecessor inline limit. C9 refuses before Wake commit at that limit
+uninterrupted automatic monitoring/entry and history archival
+beyond the64-predecessor inline limit. C41 adds source/isolated-CLI retirement;
+installed retirement and prior-task recovery proof remain open. C9 refuses before Wake commit at that limit
 instead of evicting history. Two fresh source chats are verified and paired to
 isolated test roots; their completed C23 operations close controlled G while H and
 additional critical pending-phase I remain open.

@@ -320,8 +320,8 @@ let command = null;
 let liveEditors;
 global.location = {href: cfg.url || 'https://chatgpt.com/'};
 const makeEditor = () => ({
-    nodeType: 1, tagName: 'DIV', childNodes: [], isConnected: true,
-    isContentEditable: !cfg.textarea,
+    nodeType: 1, tagName: 'DIV', childNodes: [], isConnected: !cfg.disconnected,
+    isContentEditable: !cfg.textarea && !cfg.notEditable,
     get innerText() { return this.childNodes.map(flatText).join(''); },
     getAttribute: () => null, hasAttribute: () => false,
     getClientRects: () => cfg.hidden ? [] : [1],
@@ -332,6 +332,7 @@ const makeEditor = () => ({
         if (cfg.focus === 'url') location.href = 'https://chatgpt.com/c/other';
         if (cfg.focus === 'turn') cfg.turns = true;
         if (cfg.focus === 'replace') liveEditors = [makeEditor()];
+        if (cfg.focus === 'throw') throw Error('private focus details');
         if (cfg.richAfterFocus) decorateEditor(cfg.richAfterFocus);
     },
     setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; },
@@ -366,6 +367,16 @@ const decorateEditor = kind => {
 if (cfg.rich) decorateEditor(cfg.rich);
 if (cfg.plainParagraph) editor.childNodes = [elementNode('P', {class:'paragraph', 'data-placeholder':'Ask anything'},
     cfg.draft ? editor.childNodes : [elementNode('BR', {class:'ProseMirror-trailingBreak'})])];
+if (cfg.emptyParagraphMarker) {
+    const attrs = {'data-empty-paragraph':'', 'data-placeholder':'Ask anything', class:'paragraph'};
+    if (cfg.markerUnknownAttribute) attrs['data-unknown-draft'] = 'preserve';
+    const contents = cfg.markerText === undefined ? [elementNode('BR', {class:'ProseMirror-trailingBreak'})] :
+        [{nodeType:3, nodeValue:cfg.markerText}];
+    if (cfg.markerRich) contents.push(elementNode('IMG', {src:'https://example.test/preserve'}));
+    const paragraph = elementNode(cfg.markerTag || 'P', attrs, contents);
+    if (cfg.markerHidden) paragraph.testStyle = {display:'none'};
+    editor.childNodes = [paragraph];
+}
 liveEditors = cfg.multiple ? [editor, makeEditor()] : [editor];
 const selection = {
     rangeCount: 0, anchorNode: null, focusNode: null,
@@ -397,6 +408,9 @@ global.document = {
         if (cfg.outcome === 'refused') return false;
         setText(editor, cfg.outcome === 'partial' ? text.slice(0, 30) : text);
         if (cfg.outcome === 'changed') setText(editor, getText(editor) + '!');
+        if (cfg.outcome === 'post-url') location.href = 'https://chatgpt.com/c/other';
+        if (cfg.outcome === 'post-turn') cfg.turns = true;
+        if (cfg.outcome === 'post-replace') liveEditors = [makeEditor()];
         if (cfg.outcome === 'throw') throw Error('lost acknowledgement');
         return cfg.outcome !== 'partial';
     },
@@ -439,25 +453,32 @@ process.stdout.write(JSON.stringify({result, inserts, command, text:getText(edit
                 self.assertEqual(result["text"], bridge.keyboard_safe_message(message))
 
     def test_native_guard_rejects_changed_authority_without_inserting(self):
-        cases = ({"url": ISSUED}, {"turns": True}, {"draft": "unknown"},
-                 {"multiple": True}, {"hidden": True}, {"loading": True},
-                 {"noSelection": True}, {"focus": "draft"}, {"focus": "url"},
-                 {"focus": "turn"}, {"focus": "replace"}, {"focus": "elsewhere"},
-                 {"selectionDrift": True}, {"selectionFocusShift": True})
-        for state in cases:
+        cases = (({"url": ISSUED}, "PRE_HOME"), ({"turns": True}, "PRE_TURNS"),
+                 ({"draft": "unknown"}, "PRE_RAW_CAS"), ({"multiple": True}, "PRE_EDITOR_COUNT"),
+                 ({"hidden": True}, "PRE_EDITOR_COUNT"), ({"loading": True}, "PRE_NOT_READY"),
+                 ({"disconnected": True}, "PRE_EDITOR_CHANGED"), ({"notEditable": True}, "PRE_EDITABLE"),
+                 ({"noSelection": True}, "PRE_SELECTION"), ({"focus": "draft"}, "PRE_RAW_CAS"),
+                 ({"focus": "url"}, "PRE_HOME"), ({"focus": "turn"}, "PRE_TURNS"),
+                 ({"focus": "replace"}, "PRE_EDITOR_CHANGED"), ({"focus": "elsewhere"}, "PRE_FOCUS"),
+                 ({"focus": "throw"}, "PRE_EXCEPTION"), ({"selectionDrift": True}, "PRE_SELECTION"),
+                 ({"selectionFocusShift": True}, "PRE_FOCUS"))
+        for state, reason in cases:
             with self.subTest(state=state):
                 result = self.run_script("expected handoff", **state)
-                self.assertEqual((result["result"], result["inserts"]), ("UNPROVEN", 0))
+                self.assertEqual((result["result"], result["inserts"]), (reason, 0))
 
     def test_native_failure_is_not_repeated_and_never_reports_success(self):
-        for outcome in ("refused", "partial", "changed", "throw"):
+        for outcome, reason in (("refused", "POST_COMMAND_FALSE"), ("partial", "POST_COMMAND_FALSE"),
+                                ("changed", "POST_TEXT"), ("throw", "POST_EXCEPTION"),
+                                ("post-url", "POST_SCOPE"), ("post-turn", "POST_SCOPE"),
+                                ("post-replace", "POST_SCOPE")):
             with self.subTest(outcome=outcome):
                 result = self.run_script("a full long handoff " * 40, outcome=outcome)
                 self.assertEqual(result["inserts"], 1)
-                self.assertNotEqual(result["result"], "INSERTED")
+                self.assertEqual(result["result"], reason)
 
     def test_uncertain_evaluation_is_one_attempt_and_stops_before_body_checks(self):
-        for error in (None, TimeoutError("lost result")):
+        for error, reason in ((None, "RESULT_INVALID"), (TimeoutError("private lost result"), "EVALUATION_EXCEPTION")):
             with self.subTest(error=error), tempfile.TemporaryDirectory() as profile:
                 sink = REAL_NEW_SINK(SOURCE, Path(profile), 1, 1)
                 calls = []
@@ -470,8 +491,9 @@ process.stdout.write(JSON.stringify({result, inserts, command, text:getText(edit
                 with patch.object(sink, "check_empty_home"), \
                         patch.object(sink, "check_typed_home") as body, \
                         patch.object(sink, "check_plain_home_draft") as plain:
-                    with self.assertRaisesRegex(bridge.Attention, "BOOTSTRAP_DRAFT_INSERT_UNVERIFIED"):
+                    with self.assertRaises(bridge.Attention) as failure:
                         sink.insert_empty_home_draft(cdp, "handoff")
+                    self.assertEqual(str(failure.exception), f"BOOTSTRAP_DRAFT_INSERT_UNVERIFIED_{reason}")
                 self.assertEqual(len(calls), 1)
                 body.assert_not_called()
                 plain.assert_not_called()
@@ -495,7 +517,8 @@ process.stdout.write(JSON.stringify({result, inserts, command, text:getText(edit
         for state in cases:
             with self.subTest(state=state):
                 result = self.run_script(expected, repair_raw=partial, **dict({"draft": partial}, **state))
-                self.assertEqual((result["result"], result["inserts"]), ("UNPROVEN", 0))
+                self.assertTrue(result["result"].startswith("PRE_"), result)
+                self.assertEqual(result["inserts"], 0)
 
     def test_partial_repair_uncertain_native_result_is_not_repeated(self):
         expected = "Original prefix with remaining handoff"
@@ -515,7 +538,7 @@ process.stdout.write(JSON.stringify({result, inserts, command, text:getText(edit
                         draft = partial if repairing else ""
                         result = self.run_script(message, repair_raw=partial if repairing else None,
                                                  draft=draft, **{moment: kind})
-                        self.assertEqual((result["result"], result["inserts"]), ("UNPROVEN", 0))
+                        self.assertEqual((result["result"], result["inserts"]), ("PRE_STRUCTURE", 0))
                         self.assertEqual(result["text"], draft)
 
     def test_native_plain_paragraph_and_trailing_break_remain_supported(self):
@@ -526,6 +549,64 @@ process.stdout.write(JSON.stringify({result, inserts, command, text:getText(edit
                                          draft=partial if repairing else "", plainParagraph=True)
                 self.assertEqual((result["result"], result["inserts"], result["text"]),
                                  ("INSERTED", 1, message))
+
+    def test_observed_empty_paragraph_marker_allows_one_native_insert(self):
+        # C42 read-only DOM evidence: DIV editor >
+        # P[data-empty-paragraph][data-placeholder][class] > BR[class].
+        message = 'New controlled handoff with café 😀 and JSON {"task":"fresh"}'
+        for state in ({}, {"markerText": " \t "}):
+            with self.subTest(state=state):
+                result = self.run_script(message, emptyParagraphMarker=True, **state)
+                self.assertEqual((result["result"], result["inserts"], result["text"]),
+                                 ("INSERTED", 1, message))
+
+    def test_empty_paragraph_marker_never_exempts_nonempty_rich_hidden_or_unknown_content(self):
+        for state in ({"markerTag": "SPAN"}, {"markerTag": "DIV"},
+                      {"markerText": "private draft"}, {"markerUnknownAttribute": True},
+                      {"markerHidden": True}, {"markerRich": True}):
+            with self.subTest(state=state):
+                result = self.run_script("expected handoff", emptyParagraphMarker=True, **state)
+                self.assertEqual((result["result"], result["inserts"]), ("PRE_STRUCTURE", 0))
+                if "markerText" in state:
+                    self.assertEqual(result["text"], state["markerText"])
+        # Even a matching partial-draft witness cannot excuse a nonempty P
+        # carrying the empty marker. Preserve it for separate diagnosis.
+        result = self.run_script("known partial remaining handoff", repair_raw="known partial",
+                                 emptyParagraphMarker=True, markerText="known partial")
+        self.assertEqual((result["result"], result["inserts"], result["text"]),
+                         ("PRE_STRUCTURE", 0, "known partial"))
+
+    def test_native_diagnostic_results_are_bounded_whitelisted_and_never_authorize_retry(self):
+        for code in ("PRE_STRUCTURE", "PRE_SELECTION", "POST_COMMAND_FALSE", "POST_SCOPE", "POST_TEXT", "POST_EXCEPTION"):
+            with self.subTest(code=code), tempfile.TemporaryDirectory() as profile:
+                sink = REAL_NEW_SINK(SOURCE, Path(profile), 1, 1)
+                cdp = types.SimpleNamespace(evaluate=lambda _script: code)
+                with patch.object(sink, "check_empty_home"), patch.object(sink, "check_typed_home") as typed:
+                    with self.assertRaises(bridge.Attention) as error:
+                        sink.insert_empty_home_draft(cdp, "handoff")
+                    self.assertEqual(str(error.exception), f"BOOTSTRAP_DRAFT_INSERT_UNVERIFIED_{code}")
+                    self.assertLessEqual(len(str(error.exception)), 100)
+                    typed.assert_not_called()
+        for value in ("PRE_private detail", ["PRE_STRUCTURE"], {"code": "POST_TEXT"}, None):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as profile:
+                sink = REAL_NEW_SINK(SOURCE, Path(profile), 1, 1)
+                cdp = types.SimpleNamespace(evaluate=lambda _script: value)
+                with patch.object(sink, "check_empty_home"), patch.object(sink, "check_typed_home"):
+                    with self.assertRaises(bridge.Attention) as error:
+                        sink.insert_empty_home_draft(cdp, "handoff")
+                    self.assertEqual(str(error.exception), "BOOTSTRAP_DRAFT_INSERT_UNVERIFIED_RESULT_INVALID")
+
+    def test_successful_native_insertion_followed_by_failed_readback_is_post_verify(self):
+        with tempfile.TemporaryDirectory() as profile:
+            sink = REAL_NEW_SINK(SOURCE, Path(profile), 1, 1)
+            calls = []
+            cdp = types.SimpleNamespace(evaluate=lambda script: calls.append(script) or "INSERTED")
+            with patch.object(sink, "check_empty_home"), patch.object(
+                    sink, "check_typed_home", side_effect=bridge.Attention("private body details")):
+                with self.assertRaises(bridge.Attention) as error:
+                    sink.insert_empty_home_draft(cdp, "handoff")
+                self.assertEqual(str(error.exception), "BOOTSTRAP_DRAFT_INSERT_UNVERIFIED_POST_VERIFY")
+            self.assertEqual(len(calls), 1)
 
 
 class NewConversationTests(unittest.TestCase):
@@ -1206,6 +1287,18 @@ class NewConversationTests(unittest.TestCase):
         self.assertEqual(cdp.typed_message, bridge.keyboard_safe_message(expected))
         self.assertEqual(acks, ["TEXT_ENTRY_AUTHORIZED", "DRAFT_READY", "SEND_ATTEMPTED"])
         self.assertEqual(emitted[-1]["stage"], "BOOTSTRAP_SUBMITTED")
+
+    def test_v2_fixed_entry_diagnostics_survive_adapter_without_send_or_retry(self):
+        for suffix in ("PRE_STRUCTURE", "PRE_SELECTION", "POST_COMMAND_FALSE", "POST_TEXT", "EVALUATION_EXCEPTION"):
+            reason = "BOOTSTRAP_DRAFT_INSERT_UNVERIFIED_" + suffix
+            with self.subTest(suffix=suffix), patch.object(
+                    AttemptSink, "insert_empty_home_draft", side_effect=bridge.Attention(reason)) as insert:
+                cdp, emitted, acks, error = self.run_v2_attempt()
+            self.assertIsNone(error)
+            self.assertEqual(insert.call_count, 1)
+            self.assertEqual((cdp.sent, acks), (0, ["TEXT_ENTRY_AUTHORIZED"]))
+            self.assertEqual(emitted[-1], {"stage": "BOOTSTRAP_UNKNOWN", "reason": reason})
+            self.assertNotIn("DRAFT_READY", [frame["stage"] for frame in emitted])
 
     def test_v2_authority_change_after_ack_prevents_insertion(self):
         for change in (lambda cdp: setattr(cdp, "url", ISSUED),

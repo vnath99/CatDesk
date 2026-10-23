@@ -1,4 +1,26 @@
+## October 23 C42 — preserve the failed fresh-entry intent
+
+Development v58 is selected STOPPED. The distinct C42 automatic attempt delivered
+its source and handoff events but stopped at `TEXT_ENTRY_AUTHORIZED` with an
+ambiguous pre-send fence. No bootstrap receipt, replacement URL, generation-4
+binding or continuation is verified. Preserve this intent and the completed
+C38–C40 operations; do not retry from an empty-looking composer.
+
+Two bounded read-only inspections found an empty composer and a current DOM
+shape the old guard rejects: ProseMirror's `data-empty-paragraph` marker. All 228 current
+records stayed exact, zero test-owned processes remained and both controls are
+STOPPED. The narrow source correction and fixed diagnostics pass 246 distinct
+Python tests. A 17:35:08Z guard-only live comparison passed with unchanged active
+element, selection and state. Next is corrected development-package qualification,
+not another submission of C42. All nine paired registrations and four active
+native project sessions remain preserved. Connector HTTP 429 remains specific
+to live Web tool-call acceptance; protected and unattended gates remain open.
+[C42 evidence](../verification/C42_FRESH_ENTRY_GUARD_2026_10_23.json).
+
 ## October 23 C41 — idle Web-project retirement handoff
+
+Historical C41 checkpoint: its v57/unselected-v58 statements precede the
+17:08:09Z C42 stopped selection recorded above.
 
 Source status is **TESTED_LOCAL**: the final
 2026-10-23T16:45:35.305Z–16:47:27.950Z gate passed 160 distinct tests, including
