@@ -580,6 +580,7 @@ mod tests {
         Config {
             schema_version: 1,
             targets: BTreeMap::from([("catdesk".to_string(), target.clone())]),
+            retired_targets: BTreeMap::new(),
             history: vec![TargetChange {
                 project_id: "catdesk".to_string(),
                 target,
@@ -631,6 +632,7 @@ mod tests {
         let config = Config {
             schema_version: 1,
             targets: BTreeMap::from([("catdesk".to_string(), target)]),
+            retired_targets: BTreeMap::new(),
             history: Vec::new(),
         };
         assert_eq!(

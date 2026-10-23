@@ -16,6 +16,8 @@ use crate::mcp;
 #[path = "operator_web_cli.rs"]
 mod web;
 
+pub(crate) use web::WebWorkLease;
+
 #[cfg(test)]
 pub(crate) fn read_web_status(workspace: &Path) -> Result<serde_json::Value, String> {
     web::read_status(workspace)

@@ -1,3 +1,36 @@
+## October 23 C41 — recoverable retirement of an idle Web project
+
+Source status: **TESTED_LOCAL**. The final gate at
+2026-10-23T16:45:35.305Z–16:47:27.950Z passed 160 distinct tests, including 24
+added tests; two existing native sandbox tests remained ignored. Strict root/Wake
+Clippy and formatting passed. An earlier gate passed 159 tests but failed strict
+Clippy on four redundant references; the corrected final gate is authoritative.
+Source publication and remote SHA verification are pending. Installed/live
+retirement and unattended operation remain **NOT_QUALIFIED**. C40 evidence and
+the selected v57 runtime remain unchanged.
+
+The existing project registry now supports retirement through a stable operator
+request. A durable intent coordinates Wake retirement followed by the local
+registry commit. Retrying the exact request resumes an interrupted Wake-first
+commit or returns the completed result without repeating the mutation. Complete
+project snapshots and predecessor history remain in tombstones; retired project
+IDs and conversation URLs remain reserved. Workspace files are preserved.
+
+The first retirement promotes the existing registry and Wake configuration to
+schema 2. Schema 1 remains supported before retirement; older schema-1-only
+writers refuse the promoted state. No second project registry is introduced.
+
+Retirement refuses the control project, native-bound projects, active work and
+unresolved ownership. Any prior assigned MCP task directory currently requires
+explicit clean-close/recovery proof and blocks retirement; that durable proof is
+not yet implemented. This intentional limit preserves work instead of inferring
+that a task directory is safe to remove. The original five projects and completed
+canaries are unchanged. No browser or host was started. Next: publish the reviewed
+source with exact remote SHA verification, then qualify the selected runtime with
+an isolated disposable project; never replay C40 to test retirement. The single
+16:42:53Z connector read returned HTTP 429 and was not retried.
+[C41 evidence](docs/verification/C41_PROJECT_RETIREMENT_2026_10_23.json).
+
 ## October 23 C40 — recovered automatic rollover and continuation verified
 
 The selected v57 runtime resumed the same C38 transaction after C39's explicit,

@@ -20,6 +20,8 @@ use crate::web_conversation_context::{
 mod auto;
 #[path = "operator_web_observe.rs"]
 mod observe;
+#[path = "operator_web_retirement.rs"]
+mod retirement;
 #[path = "operator_web_rollover.rs"]
 mod rollover;
 
@@ -56,6 +58,12 @@ pub(crate) enum WebAction {
         project_id: String,
         workspace: PathBuf,
         git_identity: String,
+    },
+    RetireProject {
+        project_id: String,
+        retirement_id: String,
+        expected_generation: u64,
+        expected_digest: Option<String>,
     },
     ReadTarget {
         project_id: String,
@@ -175,6 +183,42 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
         return Err("WEB_USAGE: invalid project ID".into());
     }
     match (group, verb) {
+        ("project", "retire") => {
+            let retirement_id = options
+                .remove("--retirement-id")
+                .filter(|id| catdesk_wake::protocol::valid_id(id))
+                .ok_or("WEB_USAGE: --retirement-id is required")?;
+            let generation = options
+                .remove("--expected-wake-generation")
+                .ok_or("WEB_USAGE: --expected-wake-generation is required")?;
+            let expected_generation = generation
+                .parse::<u64>()
+                .map_err(|_| "WEB_USAGE: invalid generation")?;
+            let digest = options
+                .remove("--expected-target-sha256")
+                .ok_or("WEB_USAGE: --expected-target-sha256 is required")?;
+            let expected_digest = if digest == "none" && expected_generation == 0 {
+                None
+            } else if expected_generation > 0
+                && digest.len() == 64
+                && digest
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+            {
+                Some(digest.to_owned())
+            } else {
+                return Err("WEB_USAGE: invalid retirement target witness".into());
+            };
+            if generation != expected_generation.to_string() || !options.is_empty() {
+                return Err("WEB_USAGE: invalid retirement option".into());
+            }
+            Ok(WebAction::RetireProject {
+                project_id: project_id.into(),
+                retirement_id: retirement_id.into(),
+                expected_generation,
+                expected_digest,
+            })
+        }
         ("work", "request" | "resolve") => {
             let input_file = options
                 .remove("--input-file")
@@ -933,8 +977,21 @@ fn read_status_projection(workspace: &Path, include_legacy_details: bool) -> Res
             .map_err(|_| "WEB_SCOPE: control registry is unavailable")?;
     let web_projects =
         mcp::web_project_registry_status(&workspace, &json!({"projects":&registry.projects}));
+    let retired_projects: Vec<_> = registry
+        .retired_projects
+        .iter()
+        .map(|retired| {
+            json!({
+                "projectId":retired.project.project_id,
+                "retirementId":retired.retirement_id,
+                "retiredUtc":retired.retired_utc,
+                "workspacePreserved":true,
+                "historyPreserved":true
+            })
+        })
+        .collect();
     let mut report = json!({"action":"web_status", "readOnly":true,
-        "runtimeMode":runtime_mode, "webProjects":web_projects,
+        "runtimeMode":runtime_mode, "webProjects":web_projects,"retiredProjects":retired_projects,
         "meaning":"Per-project registration and paired Wake readback. Browser authentication, delivery and continuation require their own receipts."});
     if !include_legacy_details {
         return Ok(report);
@@ -995,6 +1052,18 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             }))
         }
         WebAction::Status => read_status(&workspace),
+        WebAction::RetireProject {
+            project_id,
+            retirement_id,
+            expected_generation,
+            expected_digest,
+        } => retirement::retire(
+            &workspace,
+            &project_id,
+            &retirement_id,
+            expected_generation,
+            expected_digest.as_deref(),
+        ),
         WebAction::ReadTarget { project_id } => {
             let runtime_mode =
                 crate::wake_protocol_client::wake_runtime_mode_for_workspace(&workspace)?;
@@ -1149,6 +1218,67 @@ mod tests {
     use super::*;
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|v| (*v).into()).collect()
+    }
+
+    #[test]
+    fn retirement_requires_stable_identity_and_exact_target_without_overrides() {
+        for (generation, digest) in [("0", "none".to_owned()), ("3", "a".repeat(64))] {
+            let command = args(&[
+                "operator",
+                "web",
+                "project",
+                "retire",
+                "--project-id",
+                "alpha",
+                "--retirement-id",
+                "retirement-one",
+                "--expected-wake-generation",
+                generation,
+                "--expected-target-sha256",
+                &digest,
+            ]);
+            assert!(matches!(
+                parse(&command),
+                Ok(WebAction::RetireProject { .. })
+            ));
+            for length in [6, 8, 10] {
+                assert!(parse(&command[..length]).is_err());
+            }
+            for (option, value) in [
+                ("--force", "true"),
+                ("--workspace", "elsewhere"),
+                ("--project-id", "beta"),
+                ("--retirement-id", "changed"),
+            ] {
+                let mut invalid = command.clone();
+                invalid.extend(args(&[option, value]));
+                assert!(parse(&invalid).is_err());
+            }
+            for (index, value) in [(7, "../other"), (9, "03"), (11, "bad-digest")] {
+                let mut invalid = command.clone();
+                invalid[index] = value.into();
+                assert!(parse(&invalid).is_err());
+            }
+        }
+        for (generation, digest) in [("0", "a".repeat(64)), ("1", "none".to_owned())] {
+            assert!(
+                parse(&args(&[
+                    "operator",
+                    "web",
+                    "project",
+                    "retire",
+                    "--project-id",
+                    "alpha",
+                    "--retirement-id",
+                    "retirement-one",
+                    "--expected-wake-generation",
+                    generation,
+                    "--expected-target-sha256",
+                    &digest
+                ]))
+                .is_err()
+            );
+        }
     }
 
     #[test]

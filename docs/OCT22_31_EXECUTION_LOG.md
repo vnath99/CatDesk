@@ -1,5 +1,40 @@
 # October 22–31 execution log
 
+## October 23 C41 — recoverable Web-project retirement
+
+2026-10-23T16:41:53Z documentation checkpoint initially recorded TESTS_PENDING.
+The final gate at 16:45:35.305Z–16:47:27.950Z passed 160 distinct tests: coordinator
+6, CLI 15, registry 38, assigned tasks 6, rollover 47, Wake store 31 and development
+isolation 17. This includes 24 added tests; two existing native sandbox tests
+remained ignored. Strict root/Wake Clippy and formatting passed. The first gate
+passed 159 tests but failed strict Clippy on four redundant references; those were
+corrected and the final gate is authoritative. Source status is **TESTED_LOCAL**;
+publication and exact remote SHA verification are pending.
+
+Source adds the supported retirement operation to the existing registry and Wake configuration.
+A stable request carries the exact project, generation and target digest; a
+durable intent preserves the original project snapshot. Wake retires first, then
+the registry commits its tombstone. An interrupted request resumes with the same
+identity; a completed request returns idempotently. A shared serialized-intent
+size limit is checked before mutation and during recovery.
+
+Retirement preserves workspace files, task records and conversation history.
+Retired IDs and current/predecessor conversation URLs remain reserved. The first
+retirement promotes both existing stores to schema 2, which preserves tombstones
+and refuses old schema-1-only writers; normal schema 1 state remains readable.
+Registration locking, sibling scheduling and the narrow CatDesk digest-repair
+path retain their existing behavior.
+
+Control/native-bound projects, active work and unresolved ownership refuse.
+A prior assigned MCP task directory also refuses until explicit durable
+clean-close/recovery proof exists; no such proof is currently implemented.
+No directory may be deleted merely to bypass this refusal. No retirement has been
+run against the original five projects or installed state. C40, all completed
+canaries, bindings and native development sessions remain unchanged. Installed
+runtime and unattended retirement acceptance remain **NOT_QUALIFIED**.
+No browser or host was started. One connector read at 16:42:53Z returned HTTP 429,
+with no retry. [C41 evidence](verification/C41_PROJECT_RETIREMENT_2026_10_23.json).
+
 ## October 23 C40 — recovered automatic rollover and continuation verified
 
 The selected v57 runtime resumed the same C38 transaction after C39's explicit,

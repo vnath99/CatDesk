@@ -735,7 +735,11 @@ impl AutonomousSupervisorV1 {
         let registry = store
             .load_registry()
             .map_err(|_| "project registry is unavailable".to_string())?;
-        if registry.schema_version != PROJECT_REGISTRY_SCHEMA_VERSION {
+        if !matches!(
+            registry.schema_version,
+            PROJECT_REGISTRY_SCHEMA_VERSION
+                | super::autonomy_projects::PROJECT_REGISTRY_RETIREMENT_SCHEMA_VERSION
+        ) {
             return Err("project registry schema is unsupported".into());
         }
         if let Some(existing) = registry

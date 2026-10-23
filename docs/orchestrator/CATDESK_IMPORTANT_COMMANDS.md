@@ -1,5 +1,39 @@
 # CatDesk — Important Command Reference
 
+## October 23 C41 — retire an idle Web-only project
+
+Source status: **TESTED_LOCAL**. The final 16:45:35.305Z–16:47:27.950Z gate passed
+160 distinct tests, including 24 added tests; two existing native sandbox tests
+remained ignored. Strict root/Wake Clippy and formatting passed after correcting
+four redundant references from the earlier gate. Source publication and exact
+remote SHA verification are pending. No browser or host was started. This command
+has not been qualified on the installed runtime. Use an isolated disposable project for
+qualification; the original five projects and completed C40 chain stay intact.
+[C41 evidence](../verification/C41_PROJECT_RETIREMENT_2026_10_23.json).
+
+```text
+<qualified-catdesk.exe> operator web project retire --project-id PROJECT --retirement-id RETIREMENT_ID --expected-wake-generation GENERATION --expected-target-sha256 SHA256
+```
+
+Read the project's exact paired generation/digest first. For an unbound project,
+use `--expected-wake-generation 0 --expected-target-sha256 none`. Keep the same
+retirement ID and witnesses for every retry of that operation. Recovery resumes
+an interrupted Wake-first commit; an already completed request returns its
+retired result without another mutation. `operator web status` reports
+`retiredProjects` after completion.
+
+The command uses the existing project registry and Wake configuration. Full
+project snapshots, predecessor URLs, workspace files and task records are
+preserved. Retired IDs and conversation URLs remain reserved. First retirement
+promotes both stores to schema 2; old schema-1-only writers then refuse them.
+
+Control/native-bound projects, active work and unresolved ownership refuse.
+`WEB_RETIREMENT_TASK_RECOVERY_REQUIRED` means a prior assigned MCP task directory
+still needs explicit durable clean-close/recovery proof. That proof is not yet
+implemented; do not remove the directory or clear locks to bypass it. This is
+retirement of an eligible idle project, not deletion of its data or a native
+session handoff. Installed/live and unattended acceptance remain open.
+
 ## October 23 C40 — recovered automatic rollover and continuation verified
 
 The selected v57 runtime resumed the same C38 transaction after C39's explicit,

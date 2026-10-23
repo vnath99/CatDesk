@@ -1141,13 +1141,19 @@ fn validate_against_production(authority: &Authority, target_url: &str) -> Resul
         }
         let config: Config = read_json(&root.join("config.json"), 1024 * 1024)
             .map_err(|_| "DEV_PRODUCTION_TARGETS_UNAVAILABLE")?;
-        if config.schema_version != 1 || config.targets.len() > 64 || config.history.len() > 128 {
-            return Err("DEV_PRODUCTION_TARGETS_INVALID".into());
-        }
+        config
+            .validate()
+            .map_err(|_| "DEV_PRODUCTION_TARGETS_INVALID")?;
         for target in config
             .targets
             .values()
             .chain(config.history.iter().map(|entry| &entry.target))
+            .chain(
+                config
+                    .retired_targets
+                    .values()
+                    .filter_map(|entry| entry.last_target.as_ref()),
+            )
         {
             target
                 .validate()
@@ -2040,6 +2046,7 @@ mod tests {
         let config = Config {
             schema_version: 1,
             targets: BTreeMap::from([("project-a".into(), current)]),
+            retired_targets: BTreeMap::new(),
             history: vec![crate::store::TargetChange {
                 project_id: "project-a".into(),
                 target: historic,

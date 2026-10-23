@@ -47,6 +47,7 @@ struct Assignment {
 struct TaskState {
     service: IntegratedDelegatedService,
     writer: Option<ProjectWriterGuard>,
+    project_lease: Option<crate::operator_facade::WebWorkLease>,
     closed: bool,
     uncertain: bool,
 }
@@ -93,6 +94,22 @@ fn unregistered_task_root(project: &ResolvedProjectScopeV1, root: &Path) -> Resu
     Ok(())
 }
 
+fn require_registered_scope(project: &ResolvedProjectScopeV1) -> Result<(), String> {
+    let registry = AutonomousProjectRegistryStoreV1::open_read_only(
+        project.control_workspace.join(".catdesk/projects"),
+    )
+    .and_then(|store| store.load_registry())
+    .map_err(|_| "PROJECT_TASK_REGISTRY_UNAVAILABLE")?;
+    if !registry
+        .projects
+        .iter()
+        .any(|current| current == &project.project)
+    {
+        return Err("PROJECT_TASK_REGISTRATION_CHANGED".into());
+    }
+    Ok(())
+}
+
 impl ProjectTask {
     #[cfg(test)]
     pub(crate) fn open(
@@ -107,6 +124,15 @@ impl ProjectTask {
         assignment: &Path,
         connection_seconds: u64,
     ) -> Result<Arc<Self>, String> {
+        require_registered_scope(project)?;
+        // Share retirement's per-project fence before creating task state.
+        // Recheck after acquiring it so a previously resolved connection
+        // cannot cross a concurrent registration retirement.
+        let project_lease = crate::operator_facade::acquire_web_work_lease(
+            &project.control_workspace,
+            &project.project.project_id,
+        )?;
+        require_registered_scope(project)?;
         if !regular(assignment) {
             return Err("PROJECT_TASK_ASSIGNMENT_UNAVAILABLE".into());
         }
@@ -272,6 +298,7 @@ impl ProjectTask {
             state: Mutex::new(TaskState {
                 service,
                 writer: Some(writer),
+                project_lease: Some(project_lease),
                 closed: false,
                 uncertain: false,
             }),
@@ -638,6 +665,7 @@ impl ProjectTask {
             // Confirmed drain/marker retirement releases this exact lock even
             // if a closed router/context Arc remains alive temporarily.
             state.writer.take();
+            state.project_lease.take();
             Ok(())
         })
         .await
@@ -728,6 +756,7 @@ mod tests {
                     schema_version: 1,
                     maximum_codex_workers: 2,
                     maximum_qwen_workers: 1,
+                    retired_projects: Vec::new(),
                     projects: vec![scope.project.clone()],
                 },
             )
@@ -837,6 +866,87 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn project_task_retirement_fence_is_project_scoped_and_released_after_clean_close() {
+        let (a_scope, _, a_assignment) = fixture("alpha");
+        let (mut b_scope, b_root, b_assignment) = fixture("beta");
+        let registry_path = a_scope
+            .control_workspace
+            .join(".catdesk/projects/projects.json");
+        let mut registry: crate::delegated::autonomy_projects::AutonomousProjectRegistryV1 =
+            serde_json::from_slice(&fs::read(&registry_path).unwrap()).unwrap();
+        registry.projects.push(b_scope.project.clone());
+        fs::write(&registry_path, serde_json::to_vec(&registry).unwrap()).unwrap();
+        b_scope.control_workspace = a_scope.control_workspace.clone();
+
+        let a = ProjectTask::open(&a_scope, &a_assignment).unwrap();
+        assert_eq!(
+            crate::operator_facade::acquire_web_work_lease(&a_scope.control_workspace, "alpha")
+                .err()
+                .unwrap(),
+            "WEB_ROLLOVER_PROJECT_BUSY"
+        );
+        let b = ProjectTask::open(&b_scope, &b_assignment).unwrap();
+        b.execute(preview("sibling-fence-preview")).await.unwrap();
+        b.execute(call(
+            "sibling-fence-apply",
+            "patch.apply",
+            json!({"patchId":"patch-fixture"}),
+        ))
+        .await
+        .unwrap();
+        assert!(
+            fs::read_to_string(b_root.join("src/lib.rs"))
+                .unwrap()
+                .contains("{ 2 }")
+        );
+        a.close().await.unwrap();
+        // A retained closed connection no longer prevents retirement.
+        drop(
+            crate::operator_facade::acquire_web_work_lease(&a_scope.control_workspace, "alpha")
+                .unwrap(),
+        );
+        assert_eq!(
+            crate::operator_facade::acquire_web_work_lease(&b_scope.control_workspace, "beta")
+                .err()
+                .unwrap(),
+            "WEB_ROLLOVER_PROJECT_BUSY"
+        );
+        b.close().await.unwrap();
+        drop(
+            crate::operator_facade::acquire_web_work_lease(&b_scope.control_workspace, "beta")
+                .unwrap(),
+        );
+    }
+
+    #[test]
+    fn project_task_stale_registration_refuses_before_creating_task_state() {
+        let (scope, _, assignment) = fixture("alpha");
+        let registry_path = scope
+            .control_workspace
+            .join(".catdesk/projects/projects.json");
+        let mut registry: crate::delegated::autonomy_projects::AutonomousProjectRegistryV1 =
+            serde_json::from_slice(&fs::read(&registry_path).unwrap()).unwrap();
+        registry.projects.clear();
+        fs::write(&registry_path, serde_json::to_vec(&registry).unwrap()).unwrap();
+        assert_eq!(
+            ProjectTask::open(&scope, &assignment).err().unwrap(),
+            "PROJECT_TASK_REGISTRATION_CHANGED"
+        );
+        assert!(
+            !scope
+                .control_workspace
+                .join(".catdesk/project-mcp-tasks")
+                .exists()
+        );
+        assert!(
+            !scope
+                .control_workspace
+                .join(".catdesk/web-rollovers")
+                .exists()
+        );
+    }
+
+    #[tokio::test]
     async fn project_task_refuses_wrong_task_paths_shell_and_original_checkout() {
         let (scope, root, assignment) = fixture("alpha");
         let task = ProjectTask::open(&scope, &assignment).unwrap();
@@ -891,6 +1001,12 @@ mod tests {
         assert_eq!(
             task.close().await.unwrap_err(),
             "PROJECT_TASK_UNCERTAIN_MARKER_RETAINED"
+        );
+        assert_eq!(
+            crate::operator_facade::acquire_web_work_lease(&scope.control_workspace, "alpha")
+                .err()
+                .unwrap(),
+            "WEB_ROLLOVER_PROJECT_BUSY"
         );
         drop(task);
         assert!(acquire_project_writer_lock(&root).is_err());

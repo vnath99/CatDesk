@@ -450,17 +450,48 @@ fn completed_retry_context_allows_work(
 }
 
 pub(crate) fn acquire_web_work_lease(workspace: &Path, project: &str) -> Result<WorkLease, String> {
+    acquire_web_project_lease(workspace, project, |store, record| {
+        let current = paired(workspace, project).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
+        let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)
+            .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
+        let wake = Store::open(&root).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
+        continuation_ready_for_work(store, &wake, workspace, project, &current, record)?;
+        Ok(current)
+    })
+}
+
+/// Retirement may already have removed the Wake target after a durable intent.
+/// The caller verifies that exact active target or its matching tombstone;
+/// this fence still proves the original continuation and context quiescence.
+pub(super) fn acquire_web_retirement_lease(
+    workspace: &Path,
+    project: &str,
+    wake: &Store,
+    expected: Option<&Target>,
+) -> Result<WorkLease, String> {
+    if let Some(expected) = expected {
+        expected
+            .validate()
+            .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
+    }
+    acquire_web_project_lease(workspace, project, |store, record| {
+        let current = expected.ok_or("WEB_WORK_ROLLOVER_PENDING")?;
+        continuation_ready_for_work(store, wake, workspace, project, current, record)?;
+        Ok(current.clone())
+    })
+}
+
+fn acquire_web_project_lease(
+    workspace: &Path,
+    project: &str,
+    completed_target: impl FnOnce(&ProjectStore, &Record) -> Result<Target, String>,
+) -> Result<WorkLease, String> {
     let store = ProjectStore::open(workspace, project)?;
     let active = store.active()?;
     let approved_target = match active.as_ref() {
         None if store.handoff_request()?.is_none() => None,
         Some(record) if record.phase == Phase::ContinuationQueued => {
-            let current = paired(workspace, project).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
-            let root = crate::wake_protocol_client::wake_root_for_workspace(workspace)
-                .map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
-            let wake = Store::open(&root).map_err(|_| "WEB_WORK_ROLLOVER_PENDING")?;
-            continuation_ready_for_work(&store, &wake, workspace, project, &current, record)?;
-            Some(current)
+            Some(completed_target(&store, record)?)
         }
         _ => return Err("WEB_WORK_ROLLOVER_PENDING".into()),
     };
@@ -499,7 +530,7 @@ pub(crate) fn acquire_web_work_lease(workspace: &Path, project: &str) -> Result<
     })
 }
 
-fn plain(path: &Path, directory: bool) -> Result<(), String> {
+pub(super) fn plain(path: &Path, directory: bool) -> Result<(), String> {
     let metadata = fs::symlink_metadata(path).map_err(|_| "WEB_ROLLOVER_STATE_UNAVAILABLE")?;
     #[cfg(windows)]
     {
@@ -517,7 +548,7 @@ fn plain(path: &Path, directory: bool) -> Result<(), String> {
     Ok(())
 }
 
-fn directory(path: &Path) -> Result<(), String> {
+pub(super) fn directory(path: &Path) -> Result<(), String> {
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
         directory(parent)?;
     }
@@ -748,9 +779,17 @@ fn read_draft_archive(
     Ok(Some(archive))
 }
 
-fn create_private_once<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
+pub(super) fn create_private_once<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
+    create_private_once_bounded(path, value, 40 * 1024)
+}
+
+pub(super) fn create_private_once_bounded<T: Serialize>(
+    path: &Path,
+    value: &T,
+    max_bytes: usize,
+) -> Result<(), String> {
     let bytes = serde_json::to_vec(value).map_err(|_| "WEB_DRAFT_ARCHIVE_INVALID")?;
-    if bytes.len() > 40 * 1024 {
+    if bytes.len() > max_bytes {
         return Err("WEB_DRAFT_ARCHIVE_TOO_LARGE".into());
     }
     let mut options = OpenOptions::new();
@@ -5448,6 +5487,47 @@ mod tests {
             Some("task-a".into())
         );
         drop(lease);
+
+        // A crash after Wake retirement must not strand the registry half of
+        // a completed rollover. Ordinary work still requires an active pair.
+        wake.retire_target_if_quiescent("alpha", Some(&current), "retirement-fixture")
+            .unwrap();
+        assert_eq!(
+            acquire_web_work_lease(&root, "alpha").err().unwrap(),
+            "WEB_WORK_ROLLOVER_PENDING"
+        );
+        let retirement =
+            acquire_web_retirement_lease(&root, "alpha", &wake, Some(&current)).unwrap();
+        retirement.check_target(&current).unwrap();
+        assert_eq!(
+            acquire_web_retirement_lease(&root, "alpha", &wake, Some(&current))
+                .err()
+                .unwrap(),
+            "WEB_ROLLOVER_PROJECT_BUSY"
+        );
+        drop(retirement);
+        assert!(acquire_web_retirement_lease(&root, "alpha", &wake, None).is_err());
+        assert!(acquire_web_retirement_lease(&root, "alpha", &wake, Some(&changed)).is_err());
+
+        // The retirement-specific target source cannot bypass the same saved
+        // continuation proof or context validation used by ordinary work.
+        let proof_path = root
+            .join(".catdesk/web-rollovers/alpha")
+            .join(format!("{}.json", record.intent_id));
+        let original_proof = fs::read(&proof_path).unwrap();
+        let mut unproved = record.clone();
+        unproved.context_meter_status = ContextMeterStatus::Pending;
+        {
+            let store = ProjectStore::open(&root, "alpha").unwrap();
+            store.save(&unproved).unwrap();
+        }
+        assert!(acquire_web_retirement_lease(&root, "alpha", &wake, Some(&current)).is_err());
+        fs::write(&proof_path, original_proof).unwrap();
+        let original_meter = fs::read(&project_file).unwrap();
+        fs::write(&project_file, b"corrupt").unwrap();
+        assert!(acquire_web_retirement_lease(&root, "alpha", &wake, Some(&current)).is_err());
+        fs::write(&project_file, original_meter).unwrap();
+        drop(acquire_web_retirement_lease(&root, "alpha", &wake, Some(&current)).unwrap());
         drop(wake);
         drop(meter);
         fs::remove_dir_all(parent).unwrap();

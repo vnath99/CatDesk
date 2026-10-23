@@ -1,5 +1,38 @@
 # CatDesk October 2026 MVP acceptance
 
+### October 23 C41 — project retirement acceptance boundary
+
+| Evidence class | Current result |
+| --- | --- |
+| Source implementation | **TESTED_LOCAL**: 160 distinct tests passed, including 24 added; two existing native sandbox tests ignored; strict root/Wake Clippy and formatting passed |
+| Installed runtime | Retirement **NOT_RUN**; selected v57 and C40 evidence unchanged |
+| Live project state | Original five projects and completed canaries preserved; no retirement performed |
+| Normal unattended operation | **NOT_QUALIFIED** |
+
+The final gate ran 2026-10-23T16:45:35.305Z–16:47:27.950Z. Its suite totals are
+coordinator 6, CLI 15, registry 38, assigned tasks 6, rollover 47, Wake store 31
+and development isolation 17. An earlier 159-test pass failed strict Clippy on
+four redundant references; the corrected final gate supersedes that attempt.
+Source publication and exact remote SHA verification remain pending. No browser
+or host was started; a single 16:42:53Z connector read returned HTTP 429 without
+retry. [C41 evidence](verification/C41_PROJECT_RETIREMENT_2026_10_23.json).
+
+Retirement uses the existing registry and a durable request with exact project,
+generation and target digest. The same request can resume a Wake-first
+interruption or read back a completed result without another mutation. Full
+project snapshots, predecessor URLs and workspace files remain preserved;
+retired identities and conversation URLs cannot be reassigned. The first
+retirement promotes existing stores to schema 2 so older schema-1-only writers
+cannot erase tombstones.
+
+Only an idle Web-only project with no native binding is eligible. Active work,
+the control project and unresolved ownership refuse. A prior assigned MCP task
+directory currently blocks retirement pending explicit durable clean-close or
+recovery proof, which is not implemented. This limit remains open and must not
+be reported as complete general-purpose project removal. Qualify source and an
+isolated installed-runtime retirement separately; do not modify the original
+five projects or replay the completed C40 chain for this demonstration.
+
 ### October 23 C40 — recovered automatic rollover and continuation verified
 
 The selected v57 runtime resumed the same C38 transaction after C39's explicit,

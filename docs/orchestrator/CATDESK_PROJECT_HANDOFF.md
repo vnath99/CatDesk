@@ -1,3 +1,35 @@
+## October 23 C41 — idle Web-project retirement handoff
+
+Source status is **TESTED_LOCAL**: the final
+2026-10-23T16:45:35.305Z–16:47:27.950Z gate passed 160 distinct tests, including
+24 added tests; two existing native sandbox tests remained ignored. Strict
+root/Wake Clippy and formatting passed. The earlier 159-test gate failed strict
+Clippy on four redundant references, which were corrected before the final gate.
+Publication and exact remote SHA verification are pending. Installed/live
+retirement is **NOT_QUALIFIED**. The selected v57 runtime, original five projects,
+native sessions and completed C40 chain remain unchanged. Do not replay a canary.
+
+The supported `operator web project retire` command coordinates the existing
+project registry and independent Wake configuration. It records a stable intent,
+retires Wake authority, then commits a full project tombstone. Exact retries
+resume a partial commit or return the completed result. Preserve the request ID,
+generation and target digest during recovery. Both stores promote to schema 2 on
+first retirement; older schema-1-only writers refuse it. IDs and current/history
+conversation URLs remain reserved, and workspace/task/history files are retained.
+
+The operation refuses control/native-bound projects, active work and unresolved
+ownership. Any prior assigned MCP task directory also blocks retirement until
+explicit durable clean-close/recovery proof is available; that proof is not yet
+implemented. Do not clear locks or remove task directories to force acceptance.
+
+Next executable work: publish reviewed source and verify the exact remote SHA,
+then qualify a selected runtime using an isolated disposable Web-only
+project with no prior assigned MCP task. Keep source, installed/runtime and
+unattended acceptance separate. Concurrent Web MCP execution remains constrained
+by the single 16:42:53Z connector read returning HTTP 429, with no retry;
+independently eligible work can continue. No browser or host was started for C41.
+[C41 evidence](../verification/C41_PROJECT_RETIREMENT_2026_10_23.json).
+
 ## October 23 C40 — recovered automatic rollover and continuation verified
 
 The selected v57 runtime resumed the same C38 transaction after C39's explicit,

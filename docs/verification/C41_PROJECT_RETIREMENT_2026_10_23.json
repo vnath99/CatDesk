@@ -1,0 +1,317 @@
+{
+  "recordedUtc": "2026-10-23T16:49:11.5016194Z",
+  "localDate": "2026-10-23",
+  "task": "C41-PROJECT-RETIREMENT",
+  "classification": "TESTED_LOCAL_SOURCE",
+  "branch": "codex/web-rollover-oct17",
+  "baseHead": "902857357f010c9179698412867623e277561f2c",
+  "sourceFiles": [
+    {
+      "path": "src/binagotchy_cli.rs",
+      "sha256": "9a25f41a677eedd5a1908fdd9fe9effd8062ea4e2cd76a4068e3a48ed987a179"
+    },
+    {
+      "path": "src/delegated/autonomy_projects.rs",
+      "sha256": "29a03c1d48a9a0407a5627f2b4884d34dfa538adf76c791bfc5ddcbb650c2fb5"
+    },
+    {
+      "path": "src/delegated/autonomy_supervisor.rs",
+      "sha256": "0d2ceee58e691e5e76cbbfa6c99372df0adfc4e8984e50409eced81e713501f6"
+    },
+    {
+      "path": "src/operator_facade.rs",
+      "sha256": "b2f3a4566c32935bd6c715e99c4bdf65550896e8a11ff6c53ad83c8ec69410e3"
+    },
+    {
+      "path": "src/operator_web_cli.rs",
+      "sha256": "36780f51411f698f78b80ef86f53129eee7fa5093ac1af1961460ba0f5ef08c2"
+    },
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "5b0c54b7d394f63d524cd766e4af49cac722e086845c4d85e3951762b9810a40"
+    },
+    {
+      "path": "src/operator_web_retirement.rs",
+      "sha256": "bc68bc91fdb70b0f7ddc96c989e948de99bb7084c1eecb05ba410b9609aa9bc3"
+    },
+    {
+      "path": "src/project_mcp_task.rs",
+      "sha256": "c749e6ae9fd4ace3f04fd5551181372b49401be29ccd9140538d9942b87868f6"
+    },
+    {
+      "path": "src/wake_protocol_client.rs",
+      "sha256": "8b28c846c2e029e166c2c8a07af52a5eef5a00a17b8dec00036ec6389b2147f1"
+    },
+    {
+      "path": "wake/src/development_runtime.rs",
+      "sha256": "9ac5ade7c19f6dc5425950e3b8f1b1702e97bcc2cc759a2817a5307a45fd2932"
+    },
+    {
+      "path": "wake/src/store.rs",
+      "sha256": "5635a605b46337bad963c751281cce297e55ae93c215684938c7309dff598728"
+    }
+  ],
+  "sourceGate": {
+    "checks": [
+      {
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "operator_facade::web::retirement::tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "testsPassed": 6,
+        "label": "retirement-coordinator",
+        "finishedUtc": "2026-10-23T16:46:18.0747166Z",
+        "logSha256": "cfa791b778e67aab20b1cc063bbdfc97d5b93a3df2322c22adbb3955c87b9ed4",
+        "startedUtc": "2026-10-23T16:45:35.3050906Z",
+        "exitCode": 0
+      },
+      {
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "operator_facade::web::tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "testsPassed": 15,
+        "label": "operator-cli",
+        "finishedUtc": "2026-10-23T16:46:18.7386656Z",
+        "logSha256": "fbf7116ef1dd4f129af7d3a2347e078d112126b3cf0f2d42f0b9beac3ee81f2f",
+        "startedUtc": "2026-10-23T16:46:18.1070423Z",
+        "exitCode": 0
+      },
+      {
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "delegated::autonomy_projects::tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "testsPassed": 38,
+        "label": "registry",
+        "finishedUtc": "2026-10-23T16:46:24.3523243Z",
+        "logSha256": "17ecf403c531c5946c4964f44c2764df9c5fcaf2743d64627e14a4589278b80e",
+        "startedUtc": "2026-10-23T16:46:18.7439626Z",
+        "exitCode": 0
+      },
+      {
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "project_mcp_task::tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "testsPassed": 6,
+        "label": "assigned-project-tasks",
+        "finishedUtc": "2026-10-23T16:46:35.1531488Z",
+        "logSha256": "502033a764eb76a4807b3ce694a274363d7d37080185f06c9b6d9f7d30ae7bc3",
+        "startedUtc": "2026-10-23T16:46:24.357608Z",
+        "exitCode": 0
+      },
+      {
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "operator_facade::web::rollover::tests",
+          "--",
+          "--test-threads=1"
+        ],
+        "testsPassed": 47,
+        "label": "rollover",
+        "finishedUtc": "2026-10-23T16:46:39.2580458Z",
+        "logSha256": "e35db2a9202629498f73883db0761223f41e30a65d7d2dab86566480c3babc01",
+        "startedUtc": "2026-10-23T16:46:35.1580237Z",
+        "exitCode": 0
+      },
+      {
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "store::",
+          "--",
+          "--test-threads=1"
+        ],
+        "testsPassed": 31,
+        "label": "wake-store",
+        "finishedUtc": "2026-10-23T16:46:42.8772192Z",
+        "logSha256": "2910d693ead06f6a663b3f4a0f7ba52403d3659cb6bd3a2a6ab720000b96e246",
+        "startedUtc": "2026-10-23T16:46:39.2630643Z",
+        "exitCode": 0
+      },
+      {
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "development_runtime::",
+          "--",
+          "--test-threads=1"
+        ],
+        "testsPassed": 17,
+        "label": "development-isolation",
+        "finishedUtc": "2026-10-23T16:46:46.1608711Z",
+        "logSha256": "06ef4b8b889a7185a38ee5bd22d1a2c97985486f65d5ba6674b240c1e63c663d",
+        "startedUtc": "2026-10-23T16:46:42.8806075Z",
+        "exitCode": 0
+      },
+      {
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "testsPassed": 0,
+        "label": "strict-root-clippy",
+        "finishedUtc": "2026-10-23T16:47:16.8071277Z",
+        "logSha256": "a436f2dfbf4d247c5a4ce9db3ca825c9ca4e5ab71c1efb83cb3f9d8ce622c74e",
+        "startedUtc": "2026-10-23T16:46:46.1661229Z",
+        "exitCode": 0
+      },
+      {
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "testsPassed": 0,
+        "label": "strict-wake-clippy",
+        "finishedUtc": "2026-10-23T16:47:24.3231234Z",
+        "logSha256": "1b0923939d04b020ef903288d1748c7e022468d3454cddeaff12d3cb4e76eea8",
+        "startedUtc": "2026-10-23T16:47:16.8173102Z",
+        "exitCode": 0
+      },
+      {
+        "arguments": [
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "testsPassed": 0,
+        "label": "root-format",
+        "finishedUtc": "2026-10-23T16:47:27.173749Z",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "startedUtc": "2026-10-23T16:47:24.3329216Z",
+        "exitCode": 0
+      },
+      {
+        "arguments": [
+          "fmt",
+          "--manifest-path",
+          "wake/Cargo.toml",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "testsPassed": 0,
+        "label": "wake-format",
+        "finishedUtc": "2026-10-23T16:47:27.9496266Z",
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "startedUtc": "2026-10-23T16:47:27.177802Z",
+        "exitCode": 0
+      }
+    ],
+    "distinctTests": 160,
+    "newTests": 24,
+    "startedUtc": "2026-10-23T16:45:35.3050906Z",
+    "outerLimitSeconds": 600,
+    "strictClippy": "PASS_ROOT_AND_WAKE",
+    "finishedUtc": "2026-10-23T16:47:27.9528132Z",
+    "existingNativeSandboxTestsIgnored": 2,
+    "format": "PASS_ROOT_AND_WAKE"
+  },
+  "earlierAttempt": {
+    "testsPassed": 159,
+    "disposition": "STRICT_CLIPPY_FAILED_FOUR_NEEDLESS_BORROWS_CORRECTED",
+    "failureRecordRetained": true
+  },
+  "implementation": {
+    "transaction": "IMMUTABLE_INTENT_WAKE_FIRST_EXACT_REPLAY_THEN_REGISTRY_COMMIT",
+    "retirementScope": "IDLE_WEB_ONLY_WITHOUT_NATIVE_BINDING",
+    "completedRolloverRecovery": "EXACT_CONTINUATION_AND_CONTEXT_PROOFS_STILL_REQUIRED",
+    "history": "PRESERVED",
+    "registry": "EXISTING_REGISTRY_WITH_RETIRED_PROJECT_SNAPSHOTS",
+    "workspaceFiles": "PRESERVED",
+    "schema": "UNCHANGED_SCHEMA1_UNTIL_FIRST_RETIREMENT_THEN_SCHEMA2_OLD_WRITERS_REFUSE",
+    "assignedTasks": "PROJECT_LIFETIME_FENCE",
+    "wake": "SAME_STORE_LOCK_OPTIONAL_TARGET_CAS_AND_PERMANENT_ID_RESERVATION"
+  },
+  "limits": {
+    "normalUnattended": "NOT_QUALIFIED",
+    "priorAssignedTaskDirectory": "RETIREMENT_BLOCKED_PENDING_DURABLE_CLOSE_OR_RECOVERY_PROOF",
+    "generalProjectRemoval": "PARTIAL",
+    "installedRetirement": "NOT_RUN"
+  },
+  "preservation": {
+    "atUtc": "2026-10-23T16:48:54.397718Z",
+    "action": "c41-preservation-read",
+    "baselineRecords": 218,
+    "changedRecords": 0,
+    "pairedProjects": 9,
+    "originalFiveUnchanged": true,
+    "ownedRuntimeProcesses": 0,
+    "hostAndBrowserLocksAcquired": true,
+    "controls": "BOTH_STOPPED",
+    "newMessages": 0,
+    "newBrowserActions": 0,
+    "nativeSessionActions": 0,
+    "packageSelectionChanged": false,
+    "productionChanged": false,
+    "recurringStarts": 0
+  },
+  "connector": {
+    "httpStatus": 429,
+    "probeCount": 1,
+    "settingsChanges": 0,
+    "observedUtc": "2026-10-23T16:42:53Z",
+    "status": "UNAVAILABLE",
+    "retries": 0
+  },
+  "publication": {
+    "status": "PENDING_REVIEWED_NORMAL_PUSH",
+    "remoteCi": "UNVERIFIED"
+  },
+  "acceptance": {
+    "originalFive": "UNCHANGED",
+    "completedRollover": "C40_PRESERVED_NOT_REPLAYED",
+    "overall": "PARTIAL",
+    "liveWebBAndC": "DEPENDENCY_BLOCKED"
+  }
+}

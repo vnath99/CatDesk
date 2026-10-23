@@ -2039,6 +2039,7 @@ mod tests {
             schema_version: PROJECT_REGISTRY_SCHEMA_VERSION,
             maximum_codex_workers: 1,
             maximum_qwen_workers: 1,
+            retired_projects: Vec::new(),
             projects: Vec::new(),
         };
         let jobs = (0..30)
@@ -2109,6 +2110,7 @@ mod tests {
             schema_version: PROJECT_REGISTRY_SCHEMA_VERSION,
             maximum_codex_workers: 1,
             maximum_qwen_workers: 1,
+            retired_projects: Vec::new(),
             projects: vec![
                 AutonomousProjectV1 {
                     project_id: "catdesk".into(),
@@ -2227,6 +2229,7 @@ mod tests {
             schema_version: PROJECT_REGISTRY_SCHEMA_VERSION,
             maximum_codex_workers: 1,
             maximum_qwen_workers: 1,
+            retired_projects: Vec::new(),
             projects: vec![project],
         };
         fs::write(
@@ -2251,6 +2254,7 @@ mod tests {
             schema_version: PROJECT_REGISTRY_SCHEMA_VERSION,
             maximum_codex_workers: 1,
             maximum_qwen_workers: 1,
+            retired_projects: Vec::new(),
             projects: vec![AutonomousProjectV1 {
                 project_id: "catdesk".into(),
                 workspace: root.clone(),
@@ -2399,6 +2403,7 @@ mod tests {
             schema_version: PROJECT_REGISTRY_SCHEMA_VERSION,
             maximum_codex_workers: 1,
             maximum_qwen_workers: 1,
+            retired_projects: Vec::new(),
             projects: vec![AutonomousProjectV1 {
                 project_id: "catdesk".into(),
                 workspace: root.clone(),
