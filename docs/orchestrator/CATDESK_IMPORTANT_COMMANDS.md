@@ -7,7 +7,7 @@ receipt-bound disclosed source/patch pages. Explicit local disclosure is still
 required. Source now admits one read per canonical control/project and at most
 two heavy reads overall; a cancelled request does not free its worker's slot
 early. No caller path/target override, generic cross-project file API or new
-disclosure authority is added. This change is source-tested; current selected
+disclosure authority is added. This change is source-tested and normal-built; current selected
 C6 package is unchanged. [C7 evidence](../verification/C7_REVIEW_READ_INDEPENDENCE_2026_10_22.json).
 
 

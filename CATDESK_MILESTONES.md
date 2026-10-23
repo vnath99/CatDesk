@@ -1,3 +1,13 @@
+## 2026-10-22 evening — normal build and installed identity readback PASS
+
+The project-scoped granted-reader fix also passes a normal app build. No new
+package selection or real grant/concurrent-read claim. One existing fixed
+read-only command signature-verifies installed bootstrap epoch 1 and pending
+rotation epoch 2, with no installed rotation receipt. No mutation or activation;
+this is existing-image trust proof only, not new MVP production acceptance.
+Next inspect supported canonical-pair/broker status for the operator handoff.
+See the [C7 receipt](docs/verification/C7_REVIEW_READ_INDEPENDENCE_2026_10_22.json).
+
 ## 2026-10-22 evening — project review read independence SOURCE PASS
 
 The existing granted review-package reader now admits independently by canonical

@@ -151,12 +151,69 @@
   },
   "acceptance": {
     "source": "PASS",
-    "normalExecutable": "OPEN",
+    "normalExecutable": "PASS_NORMAL_DEBUG_BUILD",
     "selectedPackage": "PRIOR_C6_V48_UNCHANGED",
     "actualGrantedProjectConcurrentRead": "NOT_ATTEMPTED",
     "externalConnector": "UNVERIFIED",
     "protectedProduction": "OPEN",
     "fullMvp": "PARTIAL"
   },
-  "nextTask": "Build normal executable without test dependencies; qualify only the changed reader admission if an existing supported granted fixture is available. Preserve grants and selected live records; no browser/event replay."
+  "nextTask": "Use existing read-only canonical release-pair and broker status to prepare the exact supported operator handoff. Preserve pending signed rotation and all native writers; selected C6 package stays unchanged. No real disclosure grant or new live reviewer run is authorized by these fixture results.",
+  "sourcePublication": {
+    "sourceCommit": "ccdb6aee5c76de2b0f3293874c3f9e05f0024814",
+    "baseHead": "b1481352f6c2d489e44b657abf961d434eea3e98",
+    "remoteSha": "ccdb6aee5c76de2b0f3293874c3f9e05f0024814",
+    "branch": "codex/web-rollover-oct17",
+    "observedUtc": "2026-10-23T02:43:44.8629706Z",
+    "privacyScan": "PASS",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED"
+  },
+  "normalBuild": {
+    "sourceCommit": "ccdb6aee5c76de2b0f3293874c3f9e05f0024814",
+    "profile": "NORMAL_DEBUG_APP_NO_DEV_DEPENDENCIES",
+    "startedUtc": "2026-10-23T02:44:29.0873459Z",
+    "finishedUtc": "2026-10-23T02:44:54.7589686Z",
+    "imageSha256": "5de359c757f15fcbef9de5878d66111d28ce0d9fc559098915bb2578ee5c7533",
+    "imageBytes": 67097088,
+    "exitCode": 0,
+    "maximumSeconds": 240,
+    "sourceFiles": [
+      {
+        "path": "src/mcp.rs",
+        "sha256": "37fcf81c22e70e78da119ebb4307b8db984eda71d2cc2de1beb9949cdf3db289"
+      },
+      {
+        "path": "src/operator_codex_cli/queue/review_reader.rs",
+        "sha256": "e8beea213b336af8c2be1665acce64182de204e294b0a8536d9593abc5158612"
+      },
+      {
+        "path": "src/operator_codex_cli/queue.rs",
+        "sha256": "28e3ded4c98fd3df91b9b221eb8fceb237cf03e73416fd0cb373a038ba5d30a5"
+      }
+    ],
+    "selectedPackageChanged": false,
+    "browserStarted": false,
+    "wakeHostStarted": false
+  },
+  "existingInstalledImageReadback": {
+    "recordedUtc": "2026-10-23T02:46:55.8981683Z",
+    "classification": "INSTALLED_READ_ONLY_EXISTING_SIGNED_IMAGE",
+    "command": "--catdesk-reviewed-main-image-status-fixed-policy",
+    "normalReaderSource": "ccdb6aee5c76de2b0f3293874c3f9e05f0024814",
+    "exitCode": 0,
+    "timedOut": false,
+    "maximumSeconds": 15,
+    "signatureAndInstalledPayloadVerified": true,
+    "bootstrapEpoch": 1,
+    "installedRotationEpoch": 0,
+    "pendingRotationEpoch": 2,
+    "pendingImageInstalled": false,
+    "currentMvpBuildInstalled": false,
+    "rotationOrSigningAttempted": false,
+    "productionModified": false,
+    "browserOrWakeStarted": false,
+    "qualification": "Existing fixed installed-image trust only; does not qualify new build promotion, canonical release pair, supervisor startup or external MCP"
+  }
 }

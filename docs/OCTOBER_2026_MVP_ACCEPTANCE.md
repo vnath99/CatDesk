@@ -2,6 +2,26 @@
 
 ## October 22 acceptance reconciliation
 
+### October 22 evening — reader independence normal build and installed readback
+
+Normal app build from clean `ccdb6aee5c76de2b0f3293874c3f9e05f0024814`
+passed at 02:44:54 UTC October 23 without development dependencies, under 240s.
+SHA256 `5de359c757f15fcbef9de5878d66111d28ce0d9fc559098915bb2578ee5c7533`.
+C7 remains source/normal-build qualification; actual granted-project concurrent
+reads and selected deployment are not claimed. The existing C6 release remains
+selected and its accepted live response-read proof is preserved.
+
+At 02:46:55 UTC, one existing zero-argument fixed signed-image status command
+exited 0 within 15s. It signature-verified the fixed installed payload with
+bootstrapEpoch 1, installedRotationEpoch 0, pendingRotationEpoch 2. The pending
+image is not installed. No signing, rotation, replacement, supervisor/browser/
+Wake start or protected state change occurred. This closes only current
+read-only installed-image identity proof, not new MVP promotion/startup,
+canonical release-pair recovery, external connector or production acceptance.
+Prepare the supported operator handoff from existing read-only status next;
+do not activate the pending image to satisfy an unrelated source milestone.
+See the [C7 receipt](verification/C7_REVIEW_READ_INDEPENDENCE_2026_10_22.json).
+
 ### October 22 evening — independent granted review reads fixed
 
 The existing receipt-bound granted-package reader already supplies project

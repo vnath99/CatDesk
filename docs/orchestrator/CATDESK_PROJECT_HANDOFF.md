@@ -7,12 +7,20 @@ surface.
 
 ## Current checkpoint — 2026-10-22
 
+The project-scoped granted-reader fix also passes a normal app build. No new
+package selection or real grant/concurrent-read claim. One existing fixed
+read-only command signature-verifies installed bootstrap epoch 1 and pending
+rotation epoch 2, with no installed rotation receipt. No mutation or activation;
+this is existing-image trust proof only, not new MVP production acceptance.
+Next inspect supported canonical-pair/broker status for the operator handoff.
+See the [C7 receipt](../verification/C7_REVIEW_READ_INDEPENDENCE_2026_10_22.json).
+
 The existing granted review-package reader now admits independently by canonical
 control/project, with one reader per project and two heavy reads overall.
 Reproduced global sibling rejection, fixed without adding a file API or changing
 disclosure/receipt/native safeguards. Ten tests, strict Clippy and formatting
 pass. Awaiter cancellation retains the worker's project slot until exit.
-Normal executable/selected granted-project concurrency remain unqualified;
+Normal executable build passes; selected granted-project concurrency remains unqualified;
 prior C6 selected live result is preserved. See the
 [C7 receipt](../verification/C7_REVIEW_READ_INDEPENDENCE_2026_10_22.json).
 
