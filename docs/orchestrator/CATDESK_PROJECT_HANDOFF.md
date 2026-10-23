@@ -7,27 +7,23 @@ surface.
 
 ## Current checkpoint — 2026-10-22
 
-The new coordinator review reader also passed a normal executable build and
-45s no-web-auto local MCP qualification: authentication, closed scope, stale
-generation/digest, missing delivery and cross-project receipt refusals. 139
-records checked; only numeric usage counters changed, 138 others exact, no new
-records. Clean root/Job exit, zero owned processes, both controls STOPPED. No
-browser/message/WakeHost/selected-package/native changes. Positive new-tool
-body read, matched release and external connector remain OPEN. See the
-[C6 receipt](../verification/C6_WEB_REVIEW_READ_2026_10_22.json).
+The coordinator review reader is now qualified in a matched selected development
+release, with one positive live-browser read through local MCP in 34.77s.
+Exact event/target/body/digest verified; no new message, event or WakeHost.
+Selection preserved 137 records except two package pointers; live read preserved
+138 records except numeric usage counters. Root/Job exits and zero owned
+processes proved; both controls STOPPED. External connector, protected production
+and review-to-next-native-task acceptance remain OPEN. Do not repeat completed
+read/delivery/rollover. See the [C6 receipt](../verification/C6_WEB_REVIEW_READ_2026_10_22.json).
 
-The central coordinator now has a SOURCE/TESTED_LOCAL exact-event response
-reader, `catdesk_web_review_read`, using existing bounded capture ownership.
-Closed project/event/generation/digest scope, no URL/workspace override, no
-unverified diagnostic snapshot, bounded response, task completion false. Nine
-focused tests, three-project HTTP refusal fixture, strict app/Wake Clippy and
-format passed. Normal/local admission is qualified above; selected package
-and positive new-tool live acceptance remain open. Existing runtimes, five bindings and native sessions unchanged.
-See the [C6 receipt](../verification/C6_WEB_REVIEW_READ_2026_10_22.json).
+The reader's source passed nine focused tests, strict app/Wake Clippy and
+format, then normal-debug authentication/scope/refusal qualification. The new
+positive release read adds actual browser proof; it does not recover the
+external connector or clear the canonical CatDesk rollover quarantine.
 
-Current package passed one positive context observation in 60.79s: exact paired
-conversation, advisory UNKNOWN history, 139 compared records, only own ledger
-and two status changes. Clean root/Job exit and zero owned processes verified.
+The previous selected package passed one positive context observation in 60.79s:
+exact paired conversation, advisory UNKNOWN history, 139 compared records,
+only own ledger and two status changes. Clean root/Job exit and zero owned processes verified.
 Existing observation policy preserved; no scheduler loop, message or rollover.
 Earlier three-project monitoring passed on its prior package and is preserved,
 not replayed. Current concurrent qualification and protected production remain
@@ -53,7 +49,7 @@ receipt and the execution log. Next qualify remaining independent context and
 multi-project acceptance gates without replaying completed reviews/canaries.
 
 Current selected app SHA256:
-`b9c468f0a59172d69ca0a6e0541364049d339e35a415ed72c18e182b25353223`.
+`11f12327264752cfdac007cf8ceb18c14c080162af34f1b1d0b0a664a28f75bf`.
 
 ## Historical checkpoints (superseded by current checkpoint above)
 

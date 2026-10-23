@@ -11,12 +11,12 @@ caller-supplied project does not authenticate the calling ChatGPT conversation.
 `taskCompletionVerified` remains false; review transport is separate from native
 implementation ownership. No URL/workspace override or automatic next-task run.
 
-This new MCP tool has source and normal-debug admission proof. Qualify its
-release/package, positive body read and actual connector catalog before
-operational use. Selected package and external
-connector have not been updated. Preserve completed events; do not resend for
-this qualification. Evidence: [C6 source checks](../verification/C6_WEB_REVIEW_READ_2026_10_22.json).
-
+Source, normal executable admission, matched release selection and one positive
+live read through the new local MCP entry point are verified. The external
+connector catalog/transport is still unverified; do not assume this tool is
+available there. The selected development release is distinct from protected
+production. Preserve the completed event and read; do not resend or repeat it.
+Evidence: [C6 qualification](../verification/C6_WEB_REVIEW_READ_2026_10_22.json).
 
 ## October 22 Web work request/resolution CLI (SOURCE / TESTED_LOCAL)
 

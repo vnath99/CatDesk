@@ -1,3 +1,14 @@
+## 2026-10-22 evening — selected release coordinator reader LIVE PASS
+
+The coordinator review reader is now qualified in a matched selected development
+release, with one positive live-browser read through local MCP in 34.77s.
+Exact event/target/body/digest verified; no new message, event or WakeHost.
+Selection preserved 137 records except two package pointers; live read preserved
+138 records except numeric usage counters. Root/Job exits and zero owned
+processes proved; both controls STOPPED. External connector, protected production
+and review-to-next-native-task acceptance remain OPEN. Do not repeat completed
+read/delivery/rollover. See the [C6 receipt](docs/verification/C6_WEB_REVIEW_READ_2026_10_22.json).
+
 ## 2026-10-22 evening — coordinator reader normal MCP admission PASS
 
 The new coordinator review reader also passed a normal executable build and

@@ -2,6 +2,37 @@
 
 ## October 22 acceptance reconciliation
 
+### October 22 evening — selected release review reader LIVE PASS
+
+Normal release from clean `a33b631f2205cbec5aacf32e9203d51432d3b1cf`
+finished at 02:10:27 UTC October 23 in 5m58s, within its 600s cap. The matched
+normal default-feature WakeHost and owner-marker/EOF probe passed. The existing
+stopped updater selected all four verified artifacts in 3.13s. Only two package
+pointers changed among 139 records; the other 137, all five pairs, prior package,
+histories and existing authenticated profile were preserved. App SHA256:
+`11f12327264752cfdac007cf8ceb18c14c080162af34f1b1d0b0a664a28f75bf`.
+
+One new-tool MCP read of the already completed review passed at 02:13:37 UTC in
+34.77s. Verified exact project/event/target, complete assistant body and response
+digest; no raw diagnostic snapshot, send, event publication, timer replay or
+native task completion claim. The selected executable served one bounded
+loopback MCP process with Web scheduling disabled. Browser ownership used the
+existing authenticated profile; no WakeHost or recurring process was started.
+
+Cleanup at 02:15:04 UTC verified retained root exit, outer Job closure, zero
+owned processes and both controls STOPPED. Of 139 records, only numeric usage
+counters changed; launch settings and 138 other records remained exact, with no
+new state records. No private response text or target URL is published. This is
+selected development + actual local-MCP/browser proof; external connector and
+protected production acceptance stay OPEN. Do not repeat this completed read.
+
+Read-only native snapshots found three active owners with no turn errors and
+one terminal provider-capacity failure; no chat, model or ownership was changed.
+That provider dependency does not block eligible CatDesk source work. Next
+reconcile external coordinator availability and the remaining review-to-next-task
+ownership gate, preserving completed events. See the
+[C6 receipt](verification/C6_WEB_REVIEW_READ_2026_10_22.json).
+
 ### October 22 evening — coordinator reader normal executable qualified
 
 Normal app build from clean `bb83aa95c2edfa438df3e07f3f9d0f18f35d172f`

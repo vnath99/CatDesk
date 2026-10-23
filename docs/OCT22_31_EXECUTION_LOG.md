@@ -1,5 +1,44 @@
 # October 22–31 execution log
 
+## 2026-10-22 evening — selected release review reader LIVE PASS
+- **One external dependency check, 02:17:44–02:18:03 UTC:** after over two
+  hours since the prior direct probe, connected transport status failed in
+  OpenAI MCP backend send before an HTTP status was exposed. This is not a new
+  429 observation or recovery proof. New API absent from this session's advertised
+  tools; actual external server catalog was not read successfully. No retry,
+  alternate connector, settings/tunnel change or browser start. Local live proof
+  remains valid independently; raw error retained privately.
+
+Normal release from clean `a33b631f2205cbec5aacf32e9203d51432d3b1cf`
+finished at 02:10:27 UTC October 23 in 5m58s, within its 600s cap. The matched
+normal default-feature WakeHost and owner-marker/EOF probe passed. The existing
+stopped updater selected all four verified artifacts in 3.13s. Only two package
+pointers changed among 139 records; the other 137, all five pairs, prior package,
+histories and existing authenticated profile were preserved. App SHA256:
+`11f12327264752cfdac007cf8ceb18c14c080162af34f1b1d0b0a664a28f75bf`.
+
+One new-tool MCP read of the already completed review passed at 02:13:37 UTC in
+34.77s. Verified exact project/event/target, complete assistant body and response
+digest; no raw diagnostic snapshot, send, event publication, timer replay or
+native task completion claim. The selected executable served one bounded
+loopback MCP process with Web scheduling disabled. Browser ownership used the
+existing authenticated profile; no WakeHost or recurring process was started.
+
+Cleanup at 02:15:04 UTC verified retained root exit, outer Job closure, zero
+owned processes and both controls STOPPED. Of 139 records, only numeric usage
+counters changed; launch settings and 138 other records remained exact, with no
+new state records. No private response text or target URL is published. This is
+selected development + actual local-MCP/browser proof; external connector and
+protected production acceptance stay OPEN. Do not repeat this completed read.
+
+Read-only native snapshots found three active owners with no turn errors and
+one terminal provider-capacity failure; no chat, model or ownership was changed.
+That provider dependency does not block eligible CatDesk source work. Next
+reconcile external coordinator availability and the remaining review-to-next-task
+ownership gate, preserving completed events. See the
+[C6 receipt](verification/C6_WEB_REVIEW_READ_2026_10_22.json).
+
+
 ## 2026-10-22 evening — coordinator reader normal executable qualified
 - **Exact qualification publication at 02:01:39 UTC October 23:** six reviewed
   documentation paths pushed as `7e9611ffa23f8c2e2fa0bd69bc69636a3a40f4d8` on
