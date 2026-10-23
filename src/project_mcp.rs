@@ -1,6 +1,6 @@
 //! Immutable, explicitly authenticated project connections. The local operator
 //! selects a registered project; remote requests cannot select a workspace.
-//! Direct mutations remain unavailable until native/task ownership is wired.
+//! Mutations require a separate local task assignment and isolated worktree.
 
 use crate::{
     delegated::autonomy_projects::{
@@ -33,10 +33,20 @@ pub(crate) struct Selection {
 pub(crate) struct ProjectContext {
     registered: ResolvedProjectScopeV1,
     selection: Selection,
+    task: Option<Arc<crate::project_mcp_task::ProjectTask>>,
 }
 
 impl ProjectContext {
+    #[cfg(test)]
     pub async fn bind(control: &Path, selection: Selection) -> Result<Arc<Self>, String> {
+        Self::bind_with_task(control, selection, None).await
+    }
+
+    pub async fn bind_with_task(
+        control: &Path,
+        selection: Selection,
+        assignment: Option<&Path>,
+    ) -> Result<Arc<Self>, String> {
         if selection.target_generation == 0
             || selection.target_sha256.len() != 64
             || !selection
@@ -47,18 +57,26 @@ impl ProjectContext {
             return Err("PROJECT_MCP_SELECTION_INVALID".into());
         }
         let control = control.to_path_buf();
+        let assignment = assignment.map(Path::to_path_buf);
         tokio::task::spawn_blocking(move || {
             let registered =
                 resolve_registered_project_from_control_root(&control, &selection.project_id)
                     .map_err(|_| "PROJECT_MCP_REGISTRATION_UNAVAILABLE")?;
-            let context = Arc::new(Self {
+            let mut context = Self {
                 registered,
                 selection,
-            });
+                task: None,
+            };
             if context.verify_now()? != context.selection {
                 return Err("PROJECT_MCP_BINDING_CHANGED".into());
             }
-            Ok(context)
+            if let Some(assignment) = assignment {
+                context.task = Some(crate::project_mcp_task::ProjectTask::open(
+                    &context.registered,
+                    &assignment,
+                )?);
+            }
+            Ok(Arc::new(context))
         })
         .await
         .map_err(|_| "PROJECT_MCP_SCOPE_UNAVAILABLE")?
@@ -101,11 +119,19 @@ impl ProjectContext {
         self.metadata_for(&self.selection)
     }
 
+    pub async fn close_task(&self) -> Result<(), String> {
+        if let Some(task) = &self.task {
+            task.close().await?;
+        }
+        Ok(())
+    }
+
     fn metadata_for(&self, current: &Selection) -> Value {
         json!({"projectId":current.project_id,"targetGeneration":current.target_generation,
             "targetSha256":current.target_sha256,"executionWorkspace":self.registered.project.workspace,
-            "access":"READ_ONLY","bindingSource":"OPERATOR_SELECTED_EXISTING_REGISTRY",
-            "conversationOriginAuthenticated":false,"nativeWriterClaimed":false})
+            "access":if self.task.is_some() {"READ_ONLY_INSPECTION_WITH_ASSIGNED_TASK_PATCH_TOOLS"} else {"READ_ONLY"},"bindingSource":"OPERATOR_SELECTED_EXISTING_REGISTRY",
+            "conversationOriginAuthenticated":false,"nativeWriterClaimed":false,
+            "assignedTask":self.task.as_ref().map(|task| task.metadata())})
     }
 
     fn take_witness(&self, req: &mut JsonRpcRequest, current: &Selection) -> Result<(), String> {
@@ -145,6 +171,9 @@ impl ProjectContext {
         else {
             return;
         };
+        if self.task.is_some() {
+            tools.push(crate::project_mcp_task::schema());
+        }
         for tool in tools.iter_mut() {
             let Some(schema) = tool.get_mut("inputSchema").and_then(Value::as_object_mut) else {
                 continue;
@@ -251,6 +280,20 @@ async fn project_post(
             req.id.clone(),
             json!({"content":[{"type":"text","text":"Fixed project connection"}],"structuredContent":server.context.metadata_for(&current),"isError":false}),
         ))
+    } else if req.method == "tools/call"
+        && req.params.get("name").and_then(Value::as_str) == Some(crate::project_mcp_task::TOOL)
+    {
+        let result = match &server.context.task {
+            Some(task) => task.execute(req.params["arguments"].clone()).await,
+            None => Err("PROJECT_TASK_NOT_ASSIGNED".into()),
+        };
+        Some(match result {
+            Ok(result) => JsonRpcResponse::success(
+                req.id.clone(),
+                json!({"content":[{"type":"text","text":result["boundedText"]}],"structuredContent":result,"isError":false}),
+            ),
+            Err(reason) => JsonRpcResponse::error(req.id.clone(), -32002, reason),
+        })
     } else {
         mcp::handle_request(
             &req,
@@ -281,7 +324,7 @@ async fn project_post(
     if req.method == "initialize" {
         if let Some(result) = response.result.as_mut() {
             result["instructions"] = json!(format!(
-                "This connection is fixed to project {}. Use current generation/digest witnesses from the project handoff or catdesk_project_scope. It exposes read-only project inspection; native task ownership is unchanged.",
+                "This connection is fixed to project {}. Use current generation/digest witnesses from the project handoff or catdesk_project_scope. Generic tools inspect the registered workspace read-only. If assignedTask is present, use catdesk_project_task_tool for that separate worktree, exact taskId and stable callId. Native task ownership is unchanged; recorded calls must never be replayed.",
                 current.project_id
             ));
             result["projectScope"] = server.context.metadata_for(&current);

@@ -1,5 +1,27 @@
 # CatDesk — Important Command Reference
 
+## October 23 — assigned project patch tools
+
+For an explicitly assigned task in a separate, unregistered linked Git worktree,
+use the project connection below with `--tool-mode multi-tools` and
+`--project-task-contract OPERATOR_ASSIGNMENT_JSON`. Both are required together;
+the default read-only connection gains no mutation authority. The local JSON is
+`{"schemaVersion":1,"projectId":"PROJECT","baseCommit":"EXACT_HEAD","contract":EXECUTION_CONTRACT_V1}`.
+Reuse the existing execution contract schema. Its workspace must be a separate
+linked worktree of the registered repository, with exact branch/base HEAD, allowed
+paths and bounded budgets. Assign distinct work from the native owner before
+starting a real task; this command never takes over that native session.
+
+`catdesk_project_scope` reports the assignment. Call
+`catdesk_project_task_tool` with normal project/paired witnesses plus `taskId`,
+stable `callId`, `tool` and `arguments`. Allowed tools are read, search,
+patch.preview, patch.apply, patch.compare and diff.actual. Generic tools still
+inspect the registered workspace read-only. No shell/provider/verification command
+is enabled by this bridge. A recorded/unknown call must not be blindly replayed.
+Uncertain marker recovery is explicit; never delete it to restart. Only graceful
+drained close retires the exact task marker. This source surface is not installed
+or actual Web acceptance; see C12 qualification evidence.
+
 ## October 23 — project MCP connections (source/local fixtures)
 
 Use the existing bounded headless launcher with all three scope flags:

@@ -61,6 +61,7 @@ mod ordinary_worker_artifact_provider;
 mod ordinary_worker_pair_approval;
 mod planning;
 mod project_mcp;
+mod project_mcp_task;
 mod project_memory;
 mod prompt_templates;
 mod repo_map;
@@ -919,6 +920,7 @@ struct HeadlessMcpOptions {
     web_auto_projects: std::collections::BTreeSet<String>,
     no_web_auto: bool,
     project_scope: Option<project_mcp::Selection>,
+    project_task_contract: Option<PathBuf>,
 }
 
 fn start_headless_web_auto(options: &HeadlessMcpOptions, state: SharedState) -> bool {
@@ -1150,6 +1152,7 @@ fn parse_headless_mcp_options(
     let mut project_id = None;
     let mut project_generation = None;
     let mut project_digest = None;
+    let mut project_task_contract = None;
 
     let mut index = 0;
     while index < args.len() {
@@ -1163,6 +1166,12 @@ fn parse_headless_mcp_options(
                 if !catdesk_wake::protocol::valid_id(&value) || project_id.replace(value).is_some()
                 {
                     return Err("invalid or duplicate --project-id".into());
+                }
+            }
+            "--project-task-contract" => {
+                let path = next_arg(&args, &mut index, "--project-task-contract")?;
+                if path.is_empty() || project_task_contract.replace(PathBuf::from(path)).is_some() {
+                    return Err("invalid or duplicate project task contract".into());
                 }
             }
             "--project-target-generation" => {
@@ -1263,10 +1272,14 @@ fn parse_headless_mcp_options(
         (Some(project_id), Some(target_generation), Some(target_sha256)) => {
             if isolated_dev_fixture
                 || !no_web_auto
-                || !matches!(tool_mode, ToolMode::ReadOnly)
+                || if project_task_contract.is_some() {
+                    !matches!(tool_mode, ToolMode::MultiTools)
+                } else {
+                    !matches!(tool_mode, ToolMode::ReadOnly)
+                }
                 || !maximum_runtime_seconds.is_some_and(|seconds| seconds <= 180)
             {
-                return Err("project MCP requires read-only mode, --no-web-auto and a bound of 1..180 seconds".into());
+                return Err("project MCP requires --no-web-auto, 1..180 seconds and read-only mode; an explicit project task contract requires multi-tools mode".into());
             }
             Some(project_mcp::Selection {
                 project_id,
@@ -1277,6 +1290,9 @@ fn parse_headless_mcp_options(
         _ => return Err("project MCP requires project ID, generation and digest together".into()),
     };
     validate_loopback_host(&host)?;
+    if project_task_contract.is_some() && project_scope.is_none() {
+        return Err("project task contract requires a fixed project MCP connection".into());
+    }
     if mode.browser_enabled() {
         return Err("headless MCP currently supports --mode computer only".into());
     }
@@ -1312,6 +1328,7 @@ fn parse_headless_mcp_options(
         return Err("isolated fixture requires explicit workspace, config, /dev/mcp, loopback port 0 and read-only computer mode".into());
     }
     Ok(Some(HeadlessMcpOptions {
+        project_task_contract,
         project_scope,
         maximum_runtime_seconds,
         web_auto_projects,
@@ -1505,8 +1522,12 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
     let workspace_root = resolve_headless_workspace(&options.workspace)?;
     let project_context = match options.project_scope.clone() {
         Some(selection) => Some(
-            project_mcp::ProjectContext::bind(std::path::Path::new(&workspace_root), selection)
-                .await?,
+            project_mcp::ProjectContext::bind_with_task(
+                std::path::Path::new(&workspace_root),
+                selection,
+                options.project_task_contract.as_deref(),
+            )
+            .await?,
         ),
         None => None,
     };
@@ -1692,6 +1713,9 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
     serve_handle.abort();
     drain_handle.abort();
     operator_facade::stop_web_auto_scheduler(state.clone()).await;
+    if let Some(context) = project_context {
+        context.close_task().await?;
+    }
     Ok(())
 }
 
@@ -4513,6 +4537,33 @@ mod tests {
         args.push("a".repeat(64));
         let parsed = parse_headless_mcp_options(args.clone()).unwrap().unwrap();
         assert_eq!(parsed.project_scope.unwrap().project_id, "alpha");
+        let mut task_args = args.clone();
+        task_args.extend(["--tool-mode".into(), "multi-tools".into()]);
+        task_args.extend(["--project-task-contract".into(), "fixture-task.json".into()]);
+        assert_eq!(
+            parse_headless_mcp_options(task_args.clone())
+                .unwrap()
+                .unwrap()
+                .project_task_contract,
+            Some(std::path::PathBuf::from("fixture-task.json"))
+        );
+        task_args.extend(["--project-task-contract".into(), "other-task.json".into()]);
+        assert!(parse_headless_mcp_options(task_args).is_err());
+        let mut unexpected_write = args.clone();
+        unexpected_write.extend(["--project-task-contract".into(), "fixture-task.json".into()]);
+        assert!(parse_headless_mcp_options(unexpected_write).is_err());
+        assert!(
+            parse_headless_mcp_options(
+                [
+                    "--headless-mcp",
+                    "--project-task-contract",
+                    "fixture-task.json"
+                ]
+                .into_iter()
+                .map(str::to_owned)
+            )
+            .is_err()
+        );
         for (flag, value) in [
             ("--tool-mode", "multi-tools"),
             ("--max-runtime-seconds", "181"),

@@ -43,7 +43,7 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | Gate | Existing evidence and exact scope | Remaining acceptance |
 | --- | --- | --- |
 | A. At least three registered project Web conversations | PASS, development: five original paired registrations read by the selected status view; registry/workspace binding and target/history stores exist. | Protected runtime acceptance remains separate. |
-| B. Two Web conversations make tools calls in separate directories | PARTIAL SOURCE / NORMAL LOCAL HTTP: C11 project connections bind registry/Git identity and bearer auth to an immutable workspace, require per-call paired witnesses, follow guarded rollover without restart and refuse drift. Socket fixtures and two normal executable processes in disposable registered roots pass. Default endpoint unchanged; this does not authenticate provider-origin conversation ID. | Selected/installed qualification, ownership-backed mutation/delegation and actual concurrent ChatGPT Web calls. Read-only inspection, CLI threads and granted review reads do not close autonomous coding B. |
+| B. Two Web conversations make tools calls in separate directories | PARTIAL SOURCE / NORMAL LOCAL HTTP: C11 binds immutable registered inspection roots/current paired witnesses. C12 adds assigned linked-worktree editing through existing contracts, patch journals and writer locks, preserving native roots. Default endpoint unchanged; this does not authenticate provider-origin conversation ID. | C12 normal/selected qualification, workspace-contained command execution and actual concurrent Web coding. Source patch tests, CLI threads and granted review reads do not close live B. |
 | C. Blocked project while sibling makes useful progress | PARTIAL: scheduler fixtures, C7 granted-reader and C8 timer-fault regressions demonstrate source isolation. Existing independent native owners were preserved. | Bounded real Web project blocking/progress proof on the intended runtime. Unreadable/unattributable shared state still fails closed. |
 | D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
 | E. Context pressure and durable handoff | PARTIAL: per-conversation saved estimates/policies and actual browser observations; completed canary has a durable handoff. Coverage remains advisory/UNKNOWN when incomplete. | Full required handoff fields and coordinated automatic monitoring qualification; do not infer exact context from lifetime MCP counters. |
@@ -75,6 +75,19 @@ The prior C8 source is now a normal release selected STOPPED; 139 records checke
 only two package pointer changes, five original pairs and prior package preserved,
 zero owned processes. This is a development package/status qualification, not
 protected installation or the new simultaneous-rollover acceptance.
+
+### October 23 — assigned task editing
+
+Explicit local task assignment plus multi-tools mode enables existing delegated
+patch tools in a separate linked Git worktree. Registered checkouts stay read-only
+and no native writer is claimed. Project, common repository, branch/base HEAD,
+unregistered task root, contract scope and stable call identity are checked.
+Existing journals and per-worktree writer authority are reused, without a global
+tool lock. Unknown calls retain their marker and cannot blindly replay. Graceful
+close drains the worker before marker/lock retirement. Shell, provider and
+verification commands are not enabled; workspace-contained execution remains core
+work. Actual Web B, selected/installed proof and unattended acceptance remain
+separate. See [C12 evidence](verification/C12_PROJECT_TASK_EDITING_2026_10_23.json).
 
 ### October 23 — project MCP connection SOURCE / LOCAL HTTP stage
 

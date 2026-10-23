@@ -1,5 +1,37 @@
 # October 22–31 execution log
 
+## 2026-10-23 — assigned Web task editing in separate worktrees
+
+C12 connects project MCP requests to existing delegated contracts, patch
+preimages/journals and per-worktree writer locks. Local assignment fixes project,
+task, base commit, branch and allowed paths in a separate linked Git worktree of
+the registered repository. Native registered checkouts and any other registered
+workspace cannot be claimed. Wrong common Git directory, changed HEAD/branch or
+changed contract is refused. No second registry, native session manager or global
+development lock is introduced.
+
+Editing requires explicit `--project-task-contract` and multi-tools mode on the
+bounded project connection. Default connections remain read-only. Generic tools
+inspect the registered root read-only; `catdesk_project_task_tool` uses only the
+assigned task worktree and existing read/search/patch.preview/patch.apply/
+patch.compare/diff.actual tools. Shell, provider launch and verification commands
+are not exposed yet. Contract command fields do not enable them through this
+bridge. Workspace-contained execution remains core work.
+
+Stable call IDs are required. Recorded completed calls cannot replay; different
+arguments under the same ID conflict. Existing nonterminal/unknown journal calls
+require recovery. The executing blocking worker retains its writer after HTTP
+awaiter cancellation. Graceful close drains it, retires its exact marker and
+releases its lock; uncertain mutation keeps the marker. No automatic stale-marker
+reconciliation is added. A quarantined task must not block a sibling or native
+checkout. Recovery loads the existing journal's contract rather than guessing
+its encoded run path; a regression exposed and corrected that initial mistake.
+
+Source/normal evidence is maintained separately in
+[C12 qualification](verification/C12_PROJECT_TASK_EDITING_2026_10_23.json).
+No actual Web coding or selected/installed acceptance is implied. B/G/H/I remain
+open. Existing real canaries, native owners and all five bindings are preserved.
+
 ## 2026-10-23 — immutable project MCP connection stage
 
 Published source `74b2966a254e93cd9d384fadcf86a196500e7151` at 04:47:40 UTC

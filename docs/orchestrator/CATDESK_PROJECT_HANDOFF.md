@@ -1,5 +1,15 @@
 # CatDesk Project Handoff and Continuity Guide
 
+C12 adds operator-assigned isolated worktree editing on the C11 project
+connection, using existing delegated contracts, patch journals and writer locks.
+Explicit task contract plus multi-tools mode required; no takeover of registered
+native roots, no shell/provider/verification commands. Recorded calls never replay;
+unknown mutation retains the existing marker. Contract changes and registered
+worktree reassignment refuse. Source/normal/selected/live acceptance stay separate;
+see [C12 evidence](../verification/C12_PROJECT_TASK_EDITING_2026_10_23.json).
+Next qualify bounded normal editing and workspace-contained execution, then
+matched selected runtime and actual Web coding. Preserve accepted canaries.
+
 This is the starting point for a new ChatGPT conversation or a newly assigned
 maintainer. It records the current durable project state without granting new
 authority. Read it before selecting a ticket or operating a local lifecycle

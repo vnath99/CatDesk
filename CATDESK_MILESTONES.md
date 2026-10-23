@@ -1,3 +1,13 @@
+## 2026-10-23 — assigned project task editing
+
+C12 adds an explicit operator-assigned linked-worktree task to the C11 connection,
+reusing delegated contracts, patch journals/preimages and per-worktree writer
+locks. Registered native roots cannot be claimed. Recorded calls cannot replay;
+uncertain mutations retain their marker. Assigned patch tools require explicit
+editing mode; no shell/provider/verification command route. Source, normal
+executable, selected runtime and actual Web coding remain distinct. See
+[C12 evidence](docs/verification/C12_PROJECT_TASK_EDITING_2026_10_23.json).
+
 ## 2026-10-23 — immutable project MCP connections SOURCE / LOCAL HTTP PASS
 
 Explicit headless project connections bind the existing registry/Git identity

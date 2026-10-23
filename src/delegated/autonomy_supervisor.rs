@@ -3759,6 +3759,36 @@ pub(super) fn verified_external_git_workspace(
     Ok(workspace)
 }
 
+/// Fixed, bounded metadata for an operator-assigned Web task worktree. Reuses
+/// registration's trusted Git probe and environment policy, without Git writes.
+pub(crate) fn web_task_worktree_witness(
+    workspace: &Path,
+) -> Result<(PathBuf, PathBuf, String, String), String> {
+    let probe = |args| {
+        bounded_git_metadata(workspace, GitMetadataStage::TopLevel, args)
+            .map_err(|_| "PROJECT_TASK_GIT_UNAVAILABLE".to_string())
+    };
+    let common = workspace.join(probe(["rev-parse", "--git-common-dir"])?);
+    let directory = workspace.join(probe(["rev-parse", "--absolute-git-dir"])?);
+    let head = probe(["rev-parse", "HEAD"])?;
+    let branch = bounded_git_metadata(
+        workspace,
+        GitMetadataStage::TopLevel,
+        ["symbolic-ref", "--short", "HEAD"],
+    )
+    .map_err(|_| "PROJECT_TASK_BRANCH_UNAVAILABLE")?;
+    Ok((
+        common
+            .canonicalize()
+            .map_err(|_| "PROJECT_TASK_GIT_UNAVAILABLE")?,
+        directory
+            .canonicalize()
+            .map_err(|_| "PROJECT_TASK_GIT_UNAVAILABLE")?,
+        head,
+        branch,
+    ))
+}
+
 /// Shared, bounded Git-only metadata probe. It accepts only an absolute,
 /// non-reparse exact repository root and never writes registry or repository
 /// state. Registration reuses this exact root/origin observation before it
