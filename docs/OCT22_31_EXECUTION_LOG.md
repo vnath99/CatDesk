@@ -1,5 +1,32 @@
 # October 22–31 execution log
 
+## October 23 C45 — automatically meter project MCP traffic, source only
+
+The existing fixed project connection now records observable request/result
+counts and hashes in its conversation ledger. Local scope attribution and direct
+HTTP fixtures cover project isolation, missing context, late completion against
+the original conversation key and accounting failures. Local authentication does
+not establish provider-origin chat identity. Meter failure never retries the tool
+or replaces its result; no raw traffic is persisted in the ledger.
+
+Tokenization moves outside authority locks and uses 256-byte work units to bound
+unbroken-input cost. Exact legacy replay preserves its prior estimate and saved
+bytes. The 18:57:13.816Z–18:58:29.251Z source gate passed 28 distinct tests: six
+project tests and 22 context tests, including six added overall. Strict Clippy
+passed in 27.02s and formatting in 4.67s; final checks completed at
+19:01:18.819Z. The separate 2MiB
+initial-plus-replay stress result is 5,512ms, below its 10s gate. Project-suite
+test runtime changed from 125.34s to 33.46s; this is not the stress-test duration.
+
+The seven C43/C44 acceptance files were published at 19:02:12Z as
+`98b562361186c5e5dd2686a528578546fc30a2df`, with exact remote SHA readback and C45
+source excluded. C45 remains SOURCE_ONLY and pending publication. Selected normal
+v60/source `7cc95489b85084adca643d8cf32ac11dfa613610` is unchanged. New normal-package
+qualification and actual Web MCP exchange remain required; HTTP 429 is still the
+specific B/C live dependency. This source gate changed no selected runtime and
+started no browser or Wake host.
+[C45 evidence](verification/C45_AUTOMATIC_MCP_CONTEXT_TRAFFIC_2026_10_23.json).
+
 ## October 23 C44 — nested diagnostics and stopped v60 qualification
 
 Source changes only the rollover `paired()` helper's error propagation. It uses

@@ -1,5 +1,23 @@
 # CatDesk — Important Command Reference
 
+## October 23 C45 — automatic project MCP accounting, source only
+
+C45 attaches request/result count/hash observations to the existing fixed
+project MCP connection; it introduces no new operator command. A result completing
+after rollover retains its original conversation key. An accounting failure must
+not cause tool resubmission. Raw traffic is not saved in the context ledger, and
+local connection attribution does not prove provider-origin conversation identity.
+
+Source qualification passed 28 distinct tests, six added, strict Clippy and format
+at 19:01:18Z. A separate 2MiB initial-plus-replay check passed in 5,512ms under 10s;
+project-suite 125.34s-to-33.46s timings describe the whole suite instead. Tokenization
+is outside authority locks in 256-byte units; legacy exact replay is preserved.
+C43/C44 documentation is published as `98b562361186c5e5dd2686a528578546fc30a2df`.
+C45 publication and matching normal-package/live qualification are pending.
+Selected v60 still uses `7cc95489b85084adca643d8cf32ac11dfa613610`. Preserve completed
+deliveries; the connector's HTTP 429 remains a specific actual-Web test dependency.
+[C45 evidence](../verification/C45_AUTOMATIC_MCP_CONTEXT_TRAFFIC_2026_10_23.json).
+
 ## October 23 C44 — read the specific target error
 
 Source now preserves fixed nested target-read diagnostic codes. In particular,

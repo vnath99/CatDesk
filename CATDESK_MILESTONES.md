@@ -1,3 +1,23 @@
+## October 23 C45 — automatic MCP context traffic, source qualification
+
+Project-scoped MCP requests/results now contribute counts and hashes to the
+conversation context ledger. Attribution uses the authenticated fixed project
+connection; provider-origin conversation identity remains unproven. A late result
+stays with its original conversation key after rollover. Meter failure does not
+retry a tool call or replace its result, and raw traffic is not stored in the
+ledger. Tokenization runs outside authority locks in 256-byte work units;
+legacy exact-content replays preserve stored estimates and bytes.
+
+The source gate passed 28 distinct tests, including six added, plus strict Clippy
+and formatting at 19:01:18Z. A separate 2MiB initial-plus-replay stress test took
+5,512ms against a 10s limit. The project suite improved from 125.34s to 33.46s;
+those suite times are distinct from the stress measurement. C43/C44 evidence was
+published as `98b562361186c5e5dd2686a528578546fc30a2df` with exact remote readback.
+C45 publication is pending. Selected normal v60 still uses source
+`7cc95489b85084adca643d8cf32ac11dfa613610`; a matching package and actual Web MCP
+acceptance remain required. No completed live gate is replayed.
+[C45 evidence](docs/verification/C45_AUTOMATIC_MCP_CONTEXT_TRAFFIC_2026_10_23.json).
+
 ## October 23 C44 — v60 qualified; C43 recovered chain verified
 
 The nested rollover `paired()` helper now retains the existing reader's fixed

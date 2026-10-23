@@ -421,6 +421,27 @@ impl WebContextStore {
         key: &ConversationKey,
         observations: impl IntoIterator<Item = Observation<'a>>,
     ) -> Result<PressureStatus, String> {
+        self.record_batch(key, observations, false)
+    }
+
+    /// Finish accounting for an already admitted project-connection call on
+    /// its original conversation, even if rollover completed during the call.
+    /// This cannot create, bind or reactivate a conversation. Ordinary caller
+    /// observations still require the active generation above.
+    pub(crate) fn record_existing_conversation_batch<'a>(
+        &self,
+        key: &ConversationKey,
+        observations: impl IntoIterator<Item = Observation<'a>>,
+    ) -> Result<PressureStatus, String> {
+        self.record_batch(key, observations, true)
+    }
+
+    fn record_batch<'a>(
+        &self,
+        key: &ConversationKey,
+        observations: impl IntoIterator<Item = Observation<'a>>,
+        allow_known_history: bool,
+    ) -> Result<PressureStatus, String> {
         key.validate()?;
         let events = observations
             .into_iter()
@@ -432,7 +453,9 @@ impl WebContextStore {
         }
         let _lock = self.lock()?;
         let project = self.read_project(&key.project_id)?;
-        if project.active.as_ref() != Some(key) {
+        if project.active.as_ref() != Some(key)
+            && !(allow_known_history && project.history.contains(key))
+        {
             return Err("WEB_CONTEXT_OLD_GENERATION".into());
         }
         let mut ledger = self.read_ledger(key)?;
@@ -534,7 +557,6 @@ impl WebContextStore {
             }
             event.revision = if previous.content_sha256 == event.content_sha256
                 && previous.visible_bytes == event.visible_bytes
-                && previous.estimated_tokens == event.estimated_tokens
                 && previous.excerpt_only == event.excerpt_only
             {
                 previous.revision
@@ -954,11 +976,13 @@ fn apply_event(ledger: &mut ConversationLedger, event: EventMetadata) -> Result<
         if event.revision == previous.revision {
             if event.content_sha256 != previous.content_sha256
                 || event.visible_bytes != previous.visible_bytes
-                || event.estimated_tokens != previous.estimated_tokens
                 || event.excerpt_only != previous.excerpt_only
             {
                 return Err("WEB_CONTEXT_EVENT_REVISION_CONFLICT".into());
             }
+            // Tokenizer implementation changes must not turn an exact-content
+            // replay into a conflicting revision or rewrite legacy counts.
+            // The content digest/bytes and all identity fields still match.
             return Ok(false);
         }
         *previous = event;
@@ -1126,11 +1150,28 @@ fn valid_event_metadata(event: &EventMetadata) -> bool {
 }
 
 fn estimate_tokens(text: &str) -> u64 {
-    o200k_base_singleton()
-        .encode_with_special_tokens(text)
-        .len()
-        .try_into()
-        .unwrap_or(u64::MAX)
+    // BPE on a long, unbroken run can be quadratic. Keep each work unit small
+    // independently of the persisted event size. Summed pieces are an advisory
+    // proxy, not an exact provider count or a bound on hidden context.
+    const WORK_BYTES: usize = 256;
+    let tokenizer = o200k_base_singleton();
+    let mut remaining = text;
+    let mut tokens = 0u64;
+    while !remaining.is_empty() {
+        let mut length = remaining.len().min(WORK_BYTES);
+        while !remaining.is_char_boundary(length) {
+            length -= 1;
+        }
+        tokens = tokens.saturating_add(
+            tokenizer
+                .encode_with_special_tokens(&remaining[..length])
+                .len()
+                .try_into()
+                .unwrap_or(u64::MAX),
+        );
+        remaining = &remaining[length..];
+    }
+    tokens
 }
 
 fn sha256(bytes: &[u8]) -> String {
@@ -1421,6 +1462,84 @@ mod tests {
             "WEB_CONTEXT_READ_ONLY"
         );
         assert_eq!(fs::read(fixture.store.ledger_path(&key)).unwrap(), before);
+    }
+
+    #[test]
+    fn admitted_traffic_finishes_only_on_exact_known_history_without_reactivating_it() {
+        let fixture = Fixture::new("traffic-history");
+        let old = Fixture::key("alpha", "traffic-old", 1);
+        let next = Fixture::key("alpha", "traffic-next", 2);
+        let beta = Fixture::key("beta", "traffic-beta", 1);
+        fixture
+            .store
+            .bind_observed_target(old.clone(), None)
+            .unwrap();
+        fixture
+            .store
+            .bind_observed_target(beta.clone(), None)
+            .unwrap();
+        fixture
+            .store
+            .bind_observed_target(next.clone(), Some(&old))
+            .unwrap();
+        let project_before = fs::read(fixture.store.project_path("alpha")).unwrap();
+        let next_before = fs::read(fixture.store.ledger_path(&next)).unwrap();
+        let beta_before = fs::read(fixture.store.ledger_path(&beta)).unwrap();
+        let event = || Observation {
+            event_id: "mcp-invocation:result:0",
+            revision: 1,
+            dedup_key: "mcp-invocation:result:0",
+            source_kind: VisibleSourceKind::ToolResult,
+            visible_text: Some("known final result"),
+            observed_at_unix: 1,
+        };
+        assert_eq!(
+            fixture
+                .store
+                .record_observation_batch(&old, [event()])
+                .unwrap_err(),
+            "WEB_CONTEXT_OLD_GENERATION"
+        );
+        let result = fixture
+            .store
+            .record_existing_conversation_batch(&old, [event()])
+            .unwrap();
+        assert!(!result.is_current);
+        assert_eq!(
+            result.observed_tool_result_tokens,
+            estimate_tokens("known final result")
+        );
+        assert_eq!(
+            fixture
+                .store
+                .record_existing_conversation_batch(&old, [event()])
+                .unwrap(),
+            result
+        );
+        assert_eq!(
+            fs::read(fixture.store.project_path("alpha")).unwrap(),
+            project_before
+        );
+        assert_eq!(
+            fs::read(fixture.store.ledger_path(&next)).unwrap(),
+            next_before
+        );
+        assert_eq!(
+            fs::read(fixture.store.ledger_path(&beta)).unwrap(),
+            beta_before
+        );
+        let unrecorded = Fixture::key("alpha", "unrecorded", 3);
+        assert_eq!(
+            fixture
+                .store
+                .record_existing_conversation_batch(&unrecorded, [event()])
+                .unwrap_err(),
+            "WEB_CONTEXT_OLD_GENERATION"
+        );
+        assert!(!fixture.store.ledger_path(&unrecorded).exists());
+        assert_eq!(fixture.store.active_key("alpha").unwrap(), Some(next));
+        assert!(!result.coverage_known);
+        assert!(!result.automatic_rollover_enabled);
     }
 
     #[test]
@@ -1727,6 +1846,96 @@ mod tests {
                 )
                 .is_err()
         );
+    }
+
+    #[test]
+    fn exact_legacy_content_replay_preserves_stored_token_estimate() {
+        let fixture = Fixture::new("legacy-estimate-replay");
+        let key = Fixture::key("alpha", "legacy-estimate", 1);
+        fixture
+            .store
+            .bind_observed_target(key.clone(), None)
+            .unwrap();
+        // Simulate an older tokenizer's persisted count without changing the
+        // content/identity. A normal observation cannot supply token metadata.
+        let text = "known unchanged text ".repeat(30);
+        fixture.observe(
+            &key,
+            "legacy",
+            1,
+            "legacy",
+            VisibleSourceKind::ToolResult,
+            Some(&text),
+        );
+        let mut ledger = fixture.store.read_ledger(&key).unwrap();
+        ledger.events[0].estimated_tokens = Some(17);
+        fixture.store.write_ledger(&ledger).unwrap();
+        let before = fs::read(fixture.store.ledger_path(&key)).unwrap();
+        let replay = fixture.observe(
+            &key,
+            "legacy",
+            1,
+            "legacy",
+            VisibleSourceKind::ToolResult,
+            Some(&text),
+        );
+        assert_eq!(replay.observed_tool_result_tokens, 17);
+        assert_eq!(fs::read(fixture.store.ledger_path(&key)).unwrap(), before);
+        for (id, excerpt) in [("browser-complete", false), ("browser-excerpt", true)] {
+            let record = || {
+                if excerpt {
+                    fixture.store.record_browser_excerpt_observation(
+                        &key,
+                        id,
+                        VisibleSourceKind::AssistantMessage,
+                        &text,
+                        100,
+                    )
+                } else {
+                    fixture.store.record_browser_observation(
+                        &key,
+                        id,
+                        VisibleSourceKind::UserMessage,
+                        Some(&text),
+                        100,
+                    )
+                }
+            };
+            record().unwrap();
+            let mut ledger = fixture.store.read_ledger(&key).unwrap();
+            let event = ledger
+                .events
+                .iter_mut()
+                .find(|event| event.event_id == id)
+                .unwrap();
+            event.estimated_tokens = Some(17);
+            fixture.store.write_ledger(&ledger).unwrap();
+            let before = fs::read(fixture.store.ledger_path(&key)).unwrap();
+            record().unwrap();
+            assert_eq!(
+                fs::read(fixture.store.ledger_path(&key)).unwrap(),
+                before,
+                "same browser content cannot invent a revision after an estimator change"
+            );
+        }
+        let before = fs::read(fixture.store.ledger_path(&key)).unwrap();
+        assert!(
+            fixture
+                .store
+                .record_observation(
+                    &key,
+                    Observation {
+                        event_id: "legacy",
+                        revision: 1,
+                        dedup_key: "legacy",
+                        source_kind: VisibleSourceKind::ToolResult,
+                        visible_text: Some("different content"),
+                        observed_at_unix: 100,
+                    }
+                )
+                .is_err()
+        );
+        assert_eq!(fs::read(fixture.store.ledger_path(&key)).unwrap(), before);
     }
 
     #[test]

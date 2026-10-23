@@ -1,3 +1,24 @@
+## October 23 C45 — qualify automatic MCP context traffic next
+
+C45 source adds observable request/result count/hash accounting to the existing
+fixed project connection. Results completing after rollover retain the original
+conversation key. Raw traffic is not persisted in the context ledger. Accounting
+failure does not retry the tool; local scope attribution does not authenticate
+provider-origin chat identity. Tokenization is outside authority locks in
+256-byte work units, and exact legacy replays preserve saved estimates.
+
+The source gate passed 28 distinct tests, six added, strict Clippy and format at
+19:01:18Z. Separate 2MiB initial-plus-replay stress passed in 5,512ms under 10s;
+the project-suite improvement from 125.34s to 33.46s is a separate measurement.
+C43/C44 documentation is published as `98b562361186c5e5dd2686a528578546fc30a2df`.
+C45 publication is pending; selected v60/source
+`7cc95489b85084adca643d8cf32ac11dfa613610` is unchanged. Next: reviewed source
+publication, matching normal package and bounded actual Web MCP qualification.
+Connector HTTP 429 blocks the live B/C exchange, while source development remains
+eligible. Preserve completed C43/C44 and all native owners; no operator action is
+needed for the independent source work.
+[C45 evidence](../verification/C45_AUTOMATIC_MCP_CONTEXT_TRAFFIC_2026_10_23.json).
+
 ## October 23 C44 — v60 qualified; recovered C43 chain complete
 
 Source-qualified C44 preserves existing fixed diagnostics through the nested

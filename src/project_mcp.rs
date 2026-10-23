@@ -8,6 +8,7 @@ use crate::{
     },
     mcp::{self, JsonRpcRequest, JsonRpcResponse},
     state::{Mode, ToolMode},
+    web_conversation_context::{ConversationKey, Observation, VisibleSourceKind, WebContextStore},
 };
 use axum::{
     Json, Router,
@@ -18,10 +19,273 @@ use axum::{
     routing::post,
 };
 use serde_json::{Value, json};
-use std::{path::Path, sync::Arc};
+use std::{
+    io::Write,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 const SCOPE_TOOL: &str = "catdesk_project_scope";
 const MAX_REQUEST_BYTES: usize = 2 * 1024 * 1024;
+const MAX_TRAFFIC_BYTES: usize = MAX_REQUEST_BYTES;
+// Bound each tokenizer input, including pathological text without separators.
+// The full 2MiB prefix plus one unknown marker still fits one 512-event batch.
+const TRAFFIC_CHUNK_BYTES: usize = 8 * 1024;
+
+/// One actual HTTP invocation, not an RPC ID, content hash or task ID. A
+/// transport retry may be a second provider-visible exchange; it is never
+/// silently merged with a legitimate equal call. Re-recording a part of this
+/// same invocation is idempotent in the existing context ledger.
+struct TrafficObservation {
+    control: PathBuf,
+    key: Option<ConversationKey>,
+    invocation: String,
+    arguments_status: &'static str,
+}
+
+struct TrafficText {
+    bytes: Vec<u8>,
+    incomplete: bool,
+}
+
+impl Write for TrafficText {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        let retained = bytes.len().min(MAX_TRAFFIC_BYTES - self.bytes.len());
+        self.bytes.extend_from_slice(&bytes[..retained]);
+        self.incomplete |= retained != bytes.len();
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl TrafficText {
+    fn from_value(value: &Value, incomplete: bool) -> Self {
+        let mut text = Self {
+            bytes: Vec::new(),
+            incomplete,
+        };
+        if serde_json::to_writer(&mut text, value).is_err() {
+            text.incomplete = true;
+        }
+        if let Err(error) = std::str::from_utf8(&text.bytes) {
+            text.bytes.truncate(error.valid_up_to());
+            text.incomplete = true;
+        }
+        text
+    }
+
+    fn record(
+        &self,
+        store: &WebContextStore,
+        key: &ConversationKey,
+        invocation: &str,
+        part: &str,
+        kind: VisibleSourceKind,
+    ) -> Result<(), String> {
+        let text =
+            std::str::from_utf8(&self.bytes).map_err(|_| "WEB_CONTEXT_EVENT_CONTENT_INVALID")?;
+        let mut chunks = Vec::new();
+        let mut rest = text;
+        while !rest.is_empty() {
+            let mut length = rest.len().min(TRAFFIC_CHUNK_BYTES);
+            while !rest.is_char_boundary(length) {
+                length -= 1;
+            }
+            chunks.push(&rest[..length]);
+            rest = &rest[length..];
+        }
+        let ids = (0..chunks.len())
+            .map(|index| format!("{invocation}:{part}:{index}"))
+            .collect::<Vec<_>>();
+        let unknown_id = format!("{invocation}:{part}:unknown");
+        let observed = catdesk_wake::store::now();
+        let mut events = chunks
+            .iter()
+            .zip(&ids)
+            .map(|(chunk, id)| Observation {
+                event_id: id,
+                revision: 1,
+                dedup_key: id,
+                source_kind: kind,
+                visible_text: Some(chunk),
+                observed_at_unix: observed,
+            })
+            .collect::<Vec<_>>();
+        if self.incomplete {
+            events.push(Observation {
+                event_id: &unknown_id,
+                revision: 1,
+                dedup_key: &unknown_id,
+                source_kind: VisibleSourceKind::UnknownAttachment,
+                visible_text: None,
+                observed_at_unix: observed,
+            });
+        }
+        if !events.is_empty() {
+            store.record_existing_conversation_batch(key, events)?;
+        }
+        Ok(())
+    }
+}
+
+fn traffic_status(result: Result<(), String>) -> &'static str {
+    match result.as_ref().map_err(String::as_str) {
+        Ok(()) => "RECORDED",
+        Err("WEB_CONTEXT_BUSY" | "WEB_CONTEXT_REGISTRATION_BUSY") => "BUSY",
+        Err("WEB_CONTEXT_OLD_GENERATION" | "WEB_CONTEXT_TARGET_CHANGED") => "TARGET_CHANGED",
+        Err(_) => "UNAVAILABLE",
+    }
+}
+
+fn response_traffic(response: &JsonRpcResponse) -> TrafficText {
+    let mut value = serde_json::Map::new();
+    let mut incomplete = false;
+    if let Some(error) = &response.error {
+        value.insert(
+            "error".into(),
+            json!({"code":error.code,"message":error.message}),
+        );
+    }
+    if let Some(result) = &response.result {
+        if let Some(result) = result.as_object() {
+            let mut visible = serde_json::Map::new();
+            if let Some(content) = result.get("content") {
+                let content = content.as_array().map(|blocks| {
+                    blocks
+                        .iter()
+                        .filter_map(|block| {
+                            if block["type"] == "text" && block["text"].is_string() {
+                                Some(json!({"type":"text","text":block["text"]}))
+                            } else {
+                                // Image/audio/resource payloads are not text tokens.
+                                // Retain uncertainty without tokenizing binary data.
+                                incomplete = true;
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                });
+                match content {
+                    Some(content) => {
+                        visible.insert("content".into(), json!(content));
+                    }
+                    None => incomplete = true,
+                }
+            }
+            for field in ["structuredContent", "isError"] {
+                if let Some(data) = result.get(field) {
+                    visible.insert(field.into(), data.clone());
+                }
+            }
+            value.insert("result".into(), Value::Object(visible));
+        } else {
+            value.insert("result".into(), result.clone());
+        }
+    }
+    TrafficText::from_value(&Value::Object(value), incomplete)
+}
+
+impl TrafficObservation {
+    async fn start(context: &ProjectContext, current: &Selection, params: Value) -> Self {
+        let control = context.registered.control_workspace.clone();
+        let mut observation = Self {
+            control: control.clone(),
+            key: None,
+            invocation: format!("mcp-{}", uuid::Uuid::new_v4().simple()),
+            arguments_status: "UNAVAILABLE",
+        };
+        let invocation = observation.invocation.clone();
+        let current = current.clone();
+        let started = tokio::task::spawn_blocking(move || {
+            let text = TrafficText::from_value(&params, false);
+            let (key, bound) = mcp::with_current_project_web_target(
+                &control,
+                &current.project_id,
+                current.target_generation,
+                &current.target_sha256,
+                |control, target| {
+                    let key = ConversationKey {
+                        project_id: current.project_id.clone(),
+                        conversation_url: target.url.clone(),
+                        target_generation: target.generation,
+                    };
+                    let bound = (|| {
+                        let store = WebContextStore::open_nonblocking(
+                            control.join(".catdesk/web-context"),
+                        )?;
+                        let previous = store.active_key(&key.project_id)?;
+                        store.bind_observed_target(key.clone(), previous.as_ref())
+                    })();
+                    Ok((key, bound))
+                },
+            )?;
+            // Tokenization and ledger recording retain no registry/Wake lock.
+            // A concurrent rollover can only move this exact key into history.
+            let status = traffic_status(bound.and_then(|()| {
+                WebContextStore::open_nonblocking(control.join(".catdesk/web-context")).and_then(
+                    |store| {
+                        text.record(
+                            &store,
+                            &key,
+                            &invocation,
+                            "arguments",
+                            VisibleSourceKind::ToolArguments,
+                        )
+                    },
+                )
+            }));
+            Ok::<_, String>((key, status))
+        })
+        .await;
+        match started {
+            Ok(Ok((key, status))) => {
+                observation.key = Some(key);
+                observation.arguments_status = status;
+            }
+            Ok(Err(reason)) => observation.arguments_status = traffic_status(Err(reason)),
+            Err(_) => {}
+        }
+        observation
+    }
+
+    async fn finish(self, response: &mut JsonRpcResponse) {
+        let mut result_status = "UNAVAILABLE";
+        if let Some(key) = self.key {
+            let text = response_traffic(response);
+            result_status = tokio::task::spawn_blocking(move || {
+                traffic_status(
+                    WebContextStore::open_nonblocking(self.control.join(".catdesk/web-context"))
+                        .and_then(|store| {
+                            text.record(
+                                &store,
+                                &key,
+                                &self.invocation,
+                                "result",
+                                VisibleSourceKind::ToolResult,
+                            )
+                        }),
+                )
+            })
+            .await
+            .unwrap_or("UNAVAILABLE");
+        }
+        if let Some(result) = response.result.as_mut().and_then(Value::as_object_mut) {
+            let meta = result.entry("_meta").or_insert_with(|| json!({}));
+            if let Some(meta) = meta.as_object_mut() {
+                meta.insert(
+                    "catdeskContextObservation".into(),
+                    json!({
+                    "arguments":self.arguments_status,"result":result_status,
+                    "source":"PROJECT_CONNECTION_TRAFFIC","rawTextPersisted":false,
+                    "advisory":true,"originAuthenticated":false,"providerReceiptVerified":false,
+                    "possibleRetryOrSurfaceOverlap":true}),
+                );
+            }
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Selection {
@@ -268,11 +532,19 @@ async fn project_post(
     };
     let scope_call = req.method == "tools/call"
         && req.params.get("name").and_then(Value::as_str) == Some(SCOPE_TOOL);
+    let traffic_params = (req.method == "tools/call").then(|| req.params.clone());
     if req.method == "tools/call" && !scope_call {
         if let Err(reason) = server.context.take_witness(&mut req, &current) {
             return rpc_error(req.id, StatusCode::OK, &reason);
         }
     }
+    // Only the locally selected authenticated connection supplies attribution.
+    // It does not prove which provider conversation received the exchange.
+    let traffic = if let Some(params) = traffic_params {
+        Some(TrafficObservation::start(&server.context, &current, params).await)
+    } else {
+        None
+    };
     let workspace = match server.context.registered.project.workspace.to_str() {
         Some(workspace) => workspace,
         None => return rpc_error(req.id, StatusCode::OK, "PROJECT_MCP_WORKSPACE_UNAVAILABLE"),
@@ -316,9 +588,20 @@ async fn project_post(
         // Do not disclose a result after a concurrent local rebind/revocation.
         match server.context.verify().await {
             Ok(after) if after == current => {}
-            Ok(_) => return rpc_error(req.id, StatusCode::OK, "PROJECT_MCP_BINDING_CHANGED"),
-            Err(reason) => return rpc_error(req.id, StatusCode::OK, &reason),
+            Ok(_) => {
+                response = JsonRpcResponse::error(
+                    req.id.clone(),
+                    -32002,
+                    "PROJECT_MCP_BINDING_CHANGED".into(),
+                )
+            }
+            Err(reason) => response = JsonRpcResponse::error(req.id.clone(), -32002, reason),
         }
+    }
+    if let Some(traffic) = traffic {
+        // Accounting cannot turn a successful mutation into a failed/replayed
+        // operation. The unchanged task journal remains execution authority.
+        traffic.finish(&mut response).await;
     }
     if req.method == "tools/list" {
         server.context.describe_tools(&mut response);
@@ -512,6 +795,377 @@ mod tests {
             .error_for_status()?
             .json()
             .await
+    }
+
+    fn pressure(
+        control: &Path,
+        selection: &Selection,
+        url: &str,
+    ) -> crate::web_conversation_context::PressureStatus {
+        WebContextStore::open_read_only(control.join(".catdesk/web-context"))
+            .unwrap()
+            .pressure(&ConversationKey {
+                project_id: selection.project_id.clone(),
+                conversation_url: url.into(),
+                target_generation: selection.target_generation,
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn traffic_projection_is_bounded_counts_only_and_marks_nontext_uncertainty() {
+        let response = JsonRpcResponse::success(
+            Some(json!(1)),
+            json!({
+            "content":[{"type":"text","text":"VISIBLE_TRAFFIC_SENTINEL"},
+                {"type":"image","data":"BINARY_SECRET_SENTINEL","mimeType":"image/png"}],
+            "structuredContent":{"summary":"STRUCTURED_TRAFFIC_SENTINEL"},
+            "_meta":{"private":"AUTH_SECRET_SENTINEL"}}),
+        );
+        let projected = response_traffic(&response);
+        let text = std::str::from_utf8(&projected.bytes).unwrap();
+        assert!(text.contains("VISIBLE_TRAFFIC_SENTINEL"));
+        assert!(text.contains("STRUCTURED_TRAFFIC_SENTINEL"));
+        assert!(!text.contains("SECRET_SENTINEL"));
+        assert!(projected.incomplete);
+
+        let root =
+            std::env::temp_dir().join(format!("project-traffic-text-{}", uuid::Uuid::new_v4()));
+        let store = WebContextStore::open(&root).unwrap();
+        let key = ConversationKey {
+            project_id: "alpha".into(),
+            conversation_url: "https://chatgpt.com/c/traffic-bounded".into(),
+            target_generation: 1,
+        };
+        store.bind_observed_target(key.clone(), None).unwrap();
+        let large = TrafficText::from_value(
+            &json!({"payload":"🙂".repeat(MAX_TRAFFIC_BYTES / 4 + 4)}),
+            false,
+        );
+        assert!(large.incomplete);
+        assert!(large.bytes.len() <= MAX_TRAFFIC_BYTES);
+        assert!(std::str::from_utf8(&large.bytes).is_ok());
+        let stress_started = std::time::Instant::now();
+        large
+            .record(
+                &store,
+                &key,
+                "mcp-invocation-a",
+                "arguments",
+                VisibleSourceKind::ToolArguments,
+            )
+            .unwrap();
+        let first = store.pressure(&key).unwrap();
+        large
+            .record(
+                &store,
+                &key,
+                "mcp-invocation-a",
+                "arguments",
+                VisibleSourceKind::ToolArguments,
+            )
+            .unwrap();
+        assert_eq!(store.pressure(&key).unwrap(), first);
+        let stress_elapsed = stress_started.elapsed();
+        eprintln!(
+            "C45_STRESS_2MIB_INITIAL_PLUS_REPLAY_MS={}",
+            stress_elapsed.as_millis()
+        );
+        assert!(
+            stress_elapsed < Duration::from_secs(10),
+            "advisory token estimation exceeded its stress budget: {stress_elapsed:?}"
+        );
+        assert!(first.recorded_events <= MAX_TRAFFIC_BYTES / TRAFFIC_CHUNK_BYTES + 2);
+        assert_eq!(first.unknown_source_count, 1);
+        projected
+            .record(
+                &store,
+                &key,
+                "mcp-invocation-a",
+                "result",
+                VisibleSourceKind::ToolResult,
+            )
+            .unwrap();
+        for path in fs::read_dir(root.join("conversations")).unwrap() {
+            let persisted = fs::read_to_string(path.unwrap().path()).unwrap();
+            for raw in [
+                "VISIBLE_TRAFFIC_SENTINEL",
+                "STRUCTURED_TRAFFIC_SENTINEL",
+                "AUTH_SECRET_SENTINEL",
+                "BINARY_SECRET_SENTINEL",
+                "🙂",
+            ] {
+                assert!(!persisted.contains(raw));
+            }
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn project_mcp_counts_same_rpc_id_invocations_separately_in_their_own_conversations() {
+        let (control, _, alpha, beta) = fixture().await;
+        let a = OwnedServer::start(alpha.clone(), ALPHA_TOKEN).await;
+        let b = OwnedServer::start(beta.clone(), BETA_TOKEN).await;
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(10))
+            .build()
+            .unwrap();
+        let request = call(&alpha.selection, "read", json!({"path":"note.txt"}));
+        let first = rpc(&client, &a, ALPHA_TOKEN, &request).await;
+        let first_pressure = pressure(
+            &control,
+            &alpha.selection,
+            alpha
+                .registered
+                .project
+                .chatgpt_target_url
+                .as_deref()
+                .unwrap(),
+        );
+        let second = rpc(&client, &a, ALPHA_TOKEN, &request).await;
+        let second_pressure = pressure(
+            &control,
+            &alpha.selection,
+            alpha
+                .registered
+                .project
+                .chatgpt_target_url
+                .as_deref()
+                .unwrap(),
+        );
+        let sibling = rpc(
+            &client,
+            &b,
+            BETA_TOKEN,
+            &call(&beta.selection, "read", json!({"path":"note.txt"})),
+        )
+        .await;
+        let sibling_pressure = pressure(
+            &control,
+            &beta.selection,
+            beta.registered
+                .project
+                .chatgpt_target_url
+                .as_deref()
+                .unwrap(),
+        );
+        drop(client);
+        let (a_stopped, b_stopped) = tokio::join!(a.finish(), b.finish());
+        assert!(a_stopped && b_stopped);
+        for response in [first.unwrap(), second.unwrap(), sibling.unwrap()] {
+            let status = &response["result"]["_meta"]["catdeskContextObservation"];
+            assert_eq!(status["arguments"], "RECORDED");
+            assert_eq!(status["result"], "RECORDED");
+            assert_eq!(status["possibleRetryOrSurfaceOverlap"], true);
+            assert_eq!(status["originAuthenticated"], false);
+        }
+        assert_eq!(first_pressure.recorded_events, 2);
+        assert_eq!(second_pressure.recorded_events, 4);
+        assert_eq!(
+            second_pressure.visible_unique_tokens,
+            first_pressure.visible_unique_tokens * 2
+        );
+        assert_eq!(sibling_pressure.recorded_events, 2);
+        assert!(sibling_pressure.observed_tool_argument_tokens > 0);
+        assert!(sibling_pressure.observed_tool_result_tokens > 0);
+        assert!(!sibling_pressure.coverage_known);
+        assert!(!sibling_pressure.automatic_rollover_enabled);
+        assert_eq!(
+            pressure(
+                &control,
+                &alpha.selection,
+                alpha
+                    .registered
+                    .project
+                    .chatgpt_target_url
+                    .as_deref()
+                    .unwrap()
+            ),
+            second_pressure
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn traffic_completion_after_rollover_updates_only_original_known_conversation() {
+        let (control, wake, alpha, _) = fixture().await;
+        let old = TrafficObservation::start(
+            &alpha,
+            &alpha.selection,
+            json!({"name":"read","arguments":{"path":"note.txt"}}),
+        )
+        .await;
+        assert_eq!(old.arguments_status, "RECORDED");
+        let old_key = old.key.clone().unwrap();
+        let next = mcp::operator_bind_project_web_target_at_root(
+            &control,
+            Some(&wake),
+            "alpha",
+            "https://chatgpt.com/c/traffic-next",
+            Some(&alpha.selection.target_sha256),
+            alpha.selection.target_generation,
+        )
+        .unwrap();
+        let fresh = Selection {
+            project_id: "alpha".into(),
+            target_generation: next.generation,
+            target_sha256: next.sha256,
+        };
+        let new = TrafficObservation::start(
+            &alpha,
+            &fresh,
+            json!({"name":"read","arguments":{"path":"note.txt"}}),
+        )
+        .await;
+        let new_key = new.key.clone().unwrap();
+        let mut new_result = JsonRpcResponse::success(
+            Some(json!(1)),
+            json!({"content":[{"type":"text","text":"new result"}]}),
+        );
+        new.finish(&mut new_result).await;
+        let meter = WebContextStore::open_read_only(control.join(".catdesk/web-context")).unwrap();
+        let new_before = meter.pressure(&new_key).unwrap();
+        let history_before = meter
+            .project_history("alpha")
+            .unwrap()
+            .into_iter()
+            .map(|entry| entry.key)
+            .collect::<Vec<_>>();
+        let mut old_result = JsonRpcResponse::success(
+            Some(json!(1)),
+            json!({"content":[{"type":"text","text":"old final result"}]}),
+        );
+        old.finish(&mut old_result).await;
+        assert_eq!(
+            old_result.result.as_ref().unwrap()["_meta"]["catdeskContextObservation"]["result"],
+            "RECORDED"
+        );
+        assert_eq!(meter.pressure(&new_key).unwrap(), new_before);
+        assert_eq!(
+            meter
+                .project_history("alpha")
+                .unwrap()
+                .into_iter()
+                .map(|entry| entry.key)
+                .collect::<Vec<_>>(),
+            history_before
+        );
+        assert_eq!(meter.active_key("alpha").unwrap(), Some(new_key));
+        let old_pressure = meter.pressure(&old_key).unwrap();
+        assert!(!old_pressure.is_current);
+        assert!(old_pressure.observed_tool_result_tokens > 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn project_mcp_meter_busy_does_not_fail_or_replay_an_applied_patch() {
+        let (control, _, alpha, _) = fixture().await;
+        let source = &alpha.registered.project.workspace;
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(source)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8(output.stdout).unwrap().trim().to_owned()
+        };
+        git(&["add", "note.txt"]);
+        git(&[
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.test",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "-qm",
+            "fixture",
+        ]);
+        let isolated = crate::command::normalize_windows_verbatim_path(
+            control.parent().unwrap().join("isolated-alpha"),
+        );
+        git(&[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "codex/context-meter-test",
+            isolated.to_str().unwrap(),
+        ]);
+        let isolated = isolated.canonicalize().unwrap();
+        let mut contract: crate::delegated::contracts::ExecutionContractV1 = serde_json::from_str(
+            include_str!("../tests/fixtures/delegated/execution_contract_v1.json"),
+        )
+        .unwrap();
+        contract.task_id = "meter-task".into();
+        contract.workspace = isolated.to_str().unwrap().into();
+        contract.feature_branch = "codex/context-meter-test".into();
+        contract.allowed_paths = vec!["note.txt".into()];
+        contract.max_elapsed_seconds = 180;
+        contract.approval_requirements.clear();
+        let assignment = control.parent().unwrap().join("meter-assignment.json");
+        fs::write(&assignment, serde_json::to_vec(&json!({"schemaVersion":1,"projectId":"alpha","baseCommit":git(&["rev-parse", "HEAD"]),"contract":contract})).unwrap()).unwrap();
+        let context = ProjectContext::bind_with_task(
+            &control,
+            alpha.selection.clone(),
+            Some(&assignment),
+            180,
+        )
+        .await
+        .unwrap();
+        let server = OwnedServer::start(context.clone(), ALPHA_TOKEN).await;
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .build()
+            .unwrap();
+        let preview = rpc(&client, &server, ALPHA_TOKEN, &call(&alpha.selection, crate::project_mcp_task::TOOL,
+            json!({"taskId":"meter-task","callId":"preview","tool":"patch.preview","arguments":{"patchId":"meter-patch","operations":[{"path":"note.txt","old":"alpha","new":"alpha changed once"}]}}))).await;
+        let held = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(control.join(".catdesk/web-context/ledger.lock"))
+            .unwrap();
+        held.try_lock().unwrap();
+        let apply_request = call(
+            &alpha.selection,
+            crate::project_mcp_task::TOOL,
+            json!({"taskId":"meter-task","callId":"apply","tool":"patch.apply","arguments":{"patchId":"meter-patch"}}),
+        );
+        let applied = rpc(&client, &server, ALPHA_TOKEN, &apply_request).await;
+        drop(held);
+        let replay = rpc(&client, &server, ALPHA_TOKEN, &apply_request).await;
+        drop(client);
+        let stopped = server.finish().await;
+        let closed = context.close_task().await;
+        assert!(stopped);
+        closed.unwrap();
+        assert!(preview.unwrap()["error"].is_null());
+        let applied = applied.unwrap();
+        assert!(applied["error"].is_null(), "{applied}");
+        assert_eq!(
+            applied["result"]["_meta"]["catdeskContextObservation"]["arguments"],
+            "BUSY"
+        );
+        assert_eq!(
+            applied["result"]["_meta"]["catdeskContextObservation"]["result"],
+            "BUSY"
+        );
+        assert_eq!(
+            fs::read_to_string(isolated.join("note.txt")).unwrap(),
+            "alpha changed once"
+        );
+        assert_eq!(
+            fs::read_to_string(source.join("note.txt")).unwrap(),
+            "alpha"
+        );
+        assert_eq!(
+            replay.unwrap()["error"]["message"],
+            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

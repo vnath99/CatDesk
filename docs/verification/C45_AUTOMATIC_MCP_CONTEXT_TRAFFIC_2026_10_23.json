@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-10-23T19:03:47Z",
+  "task": "C45-AUTOMATIC-MCP-CONTEXT-TRAFFIC",
+  "classification": "SOURCE_AND_ISOLATED_LOCAL_HTTP_FIXTURES_ONLY",
+  "sourceBaseCommit": "7cc95489b85084adca643d8cf32ac11dfa613610",
+  "sourceFiles": [
+    {
+      "path": "src/project_mcp.rs",
+      "sha256": "381b4c404adf24689f4dcb5b924fe3f5891a40d56653aff51046ac322e1143d0"
+    },
+    {
+      "path": "src/web_conversation_context.rs",
+      "sha256": "381d3c4eae6c8ed1bca995f68a7839a46f87704f7e6dc9ecdab6c34dab01e7d1"
+    }
+  ],
+  "change": {
+    "registryOrMeterDuplicated": false,
+    "connectionScope": "OPERATOR_SELECTED_PROJECT_AND_EXACT_PAIRED_CONVERSATION",
+    "automaticArgumentsAndResults": true,
+    "invocationIdentity": "NEW_UUID_PER_ACTUAL_HTTP_INVOCATION_WITH_STABLE_PART_IDENTITIES",
+    "sameRpcIdDistinctInvocationsCountSeparately": true,
+    "sameRecordedPartReplayDeduplicates": true,
+    "sharedAuthorityLocksReleasedBeforeTokenization": true,
+    "originalConversationRetainedAcrossMidCallRollover": true,
+    "historicalRecordingCanBindOrReactivateTarget": false,
+    "meterFailureChangesExecutionResult": false,
+    "meterFailureRetriesMutation": false,
+    "legacyExactContentReplayPreservesCountsAndRevisions": true
+  },
+  "privacyAndUncertainty": {
+    "rawArgumentsOrResultsPersisted": false,
+    "persistedEvidence": ["content digest", "visible byte count", "token estimate", "invocation part identity"],
+    "authenticationHeadersIncluded": false,
+    "responseMetaIncluded": false,
+    "binaryAndOverflowHandling": "UNKNOWN_SOURCE_METADATA_WITH_EXISTING_CONFIGURED_RESERVE",
+    "contextPolicyAndSafetyMarginsChanged": false,
+    "originAuthenticated": false,
+    "providerReceiptVerified": false,
+    "transportRetryOrManualSurfaceOverlapPossible": true,
+    "description": "Known local connection traffic is an additive advisory proxy. Separate actual invocations may include transport retries. Independent manual or browser representations may overlap. Neither exact provider retention nor complete hidden context is inferred."
+  },
+  "sourceGate": {
+    "startedUtc": "2026-10-23T18:57:13.8157003Z",
+    "finishedUtc": "2026-10-23T18:58:29.2507919Z",
+    "distinctTests": 28,
+    "addedTests": 6,
+    "priorTests": 22,
+    "projectMcpTests": 6,
+    "contextStoreTests": 22,
+    "projectMcpCargoElapsedSeconds": 73.3506946,
+    "projectMcpTestRuntimeSeconds": 33.46,
+    "contextCargoElapsedSeconds": 2.0307217,
+    "contextTestRuntimeSeconds": 1.35,
+    "maximumSecondsPerProcess": 600,
+    "exitCode": 0,
+    "timedOut": false,
+    "allOwnersExitedAndOutputDrained": true,
+    "newRegressionCoverage": [
+      "Bounded Unicode traffic, counts-only persistence, nontext uncertainty and stable-part deduplication",
+      "Identical RPC IDs and bodies count as separate invocations in independently scoped project conversations",
+      "In-flight completion after guarded rollover records only the original known conversation",
+      "Actual isolated patch succeeds while the meter is busy; recorded task call cannot execute twice",
+      "Historical recording cannot reactivate or invent a target and preserves sibling and active ledger bytes",
+      "Legacy explicit, complete-browser and excerpt replays preserve counts and raw ledger bytes; changed content still refuses"
+    ]
+  },
+  "performance": {
+    "case": "2_MIB_CONTIGUOUS_UNICODE_INITIAL_RECORD_PLUS_EXACT_REPLAY",
+    "elapsedMilliseconds": 5512,
+    "requiredMaximumMilliseconds": 10000,
+    "retainedMaximumBytesPerPart": 2097152,
+    "ledgerChunkBytes": 8192,
+    "maximumEventsPerPartIncludingUnknownMarker": 257,
+    "tokenizerWorkUnitMaximumBytes": 256,
+    "utf8BoundariesPreserved": true,
+    "tokenizerPieceSumIsExactProviderCountOrUpperBound": false
+  },
+  "finalChecks": {
+    "startedUtc": "2026-10-23T19:00:46.9824675Z",
+    "finishedUtc": "2026-10-23T19:01:18.8190859Z",
+    "sourceHashesUnchanged": true,
+    "strictClippy": {
+      "command": "cargo clippy --locked --offline --workspace --all-targets --all-features -- -D warnings",
+      "elapsedSeconds": 27.0209458,
+      "maximumSeconds": 600,
+      "exitCode": 0
+    },
+    "format": {
+      "command": "cargo fmt --all -- --check",
+      "elapsedSeconds": 4.6698804,
+      "maximumSeconds": 120,
+      "exitCode": 0
+    },
+    "diff": {
+      "command": "git diff --check",
+      "elapsedSeconds": 0.0950043,
+      "maximumSeconds": 60,
+      "exitCode": 0
+    },
+    "timedOut": false,
+    "allOwnersExitedAndOutputDrained": true
+  },
+  "earlierAttempts": [
+    {
+      "startedUtc": "2026-10-23T18:40:46.1440278Z",
+      "finishedUtc": "2026-10-23T18:45:46.3209144Z",
+      "status": "OWNED_TEST_TREE_STOPPED_AT_300_SECOND_BOUND",
+      "finalAcceptanceClaimed": false,
+      "findings": "A fixture passed a Windows verbatim worktree destination to Git; an adversarial long unbroken token input exceeded the initial test deadline. The exact owned test tree exited after bounded termination.",
+      "correctionsBeforeNextGate": "Normalize the fixture destination, move tokenization outside shared authority guards, and reduce persisted event chunks to 8KiB."
+    },
+    {
+      "startedUtc": "2026-10-23T18:48:13.9640537Z",
+      "finishedUtc": "2026-10-23T18:51:26.2834134Z",
+      "status": "27_LOGIC_TESTS_PASSED_PERFORMANCE_REJECTED",
+      "projectMcpTestRuntimeSeconds": 125.34,
+      "finalAcceptanceClaimed": false,
+      "remainingCorrection": "Bound tokenizer work units to 256 UTF-8-safe bytes independently of ledger event size and preserve legacy explicit/browser replay identities. Final evidence above uses only the corrected source hashes."
+    }
+  ],
+  "privateAuditLogHashes": {
+    "sourceGateResult": "f6810c1bc5441fccc787e4fa471a4252f6b131170630c45a580876f80083e3f2",
+    "projectMcpStdout": "628ce9880a9bf8510c48248de46c7ea4b32d7c0ffa7427dbb42fb74c71e68af4",
+    "projectMcpStderr": "ee7bc68e185ee2184b6016afa72a9dd34227a670ac419e78c7fb395374ec75ca",
+    "contextStdout": "9c00b2b155f82ef178b48ba6d7702131d3369f47b791948a74ebad61eea2197a",
+    "contextStderr": "078e4ac98ca5a559cdab944934450b4c10037ff3b841cd24a86973bf0b1de9d9",
+    "finalChecksResult": "26b8ea664c6a0b2951076d061f3f8e69c17d979f2982816663187911251efbf2",
+    "clippyStdout": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+    "clippyStderr": "534a8a9d20a70cfdaf171121fe31f65ecab3173c6e5abfc3c35a8a36d0155fee",
+    "formatStdout": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+    "formatStderr": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+    "diffStdout": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+    "diffStderr": "c24234a7cce709c4be7e424bdd276904302a80e9f0cd0dfe880eca1922813909"
+  },
+  "scope": {
+    "browserActions": 0,
+    "wakeHostStarts": 0,
+    "recurringStarts": 0,
+    "nativeCodexSessionActions": 0,
+    "normalReleaseBuilds": 0,
+    "existingProjectBindingsChanged": false,
+    "productionChanged": false,
+    "fixturePairedTargetTransitions": true
+  },
+  "acceptance": {
+    "source": "PASS",
+    "isolatedLocalHttpFixtures": "PASS",
+    "selectedRuntimeForThisChange": "NOT_BUILT_OR_SELECTED",
+    "actualWebMcpCoding": "OPEN_CONNECTOR_DEPENDENCY_SEPARATE",
+    "protectedInstalledRuntime": "NOT_QUALIFIED",
+    "unattendedOperation": "NOT_ACTIVATED",
+    "fullMultiProjectMvp": "OPEN"
+  },
+  "nextTask": "Review and publish the source evidence, then qualify a matching normal package separately. Preserve completed live rollover proof; actual independent ChatGPT Web tool calls and installed acceptance remain separate gates."
+}
