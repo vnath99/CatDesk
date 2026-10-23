@@ -1,5 +1,17 @@
 # CatDesk Project Handoff and Continuity Guide
 
+C13 now selects matched C9–C12 development release v50 STOPPED from `d453f06`.
+Normal release/default host builds PASS. Supported update changes only two package
+pointers among139 records, preserves137 others, old package and five original
+pairs. The unchanged exact host gate is reused without launching it. Selected app
+passes51.25s disposable MCP parallel task edits plus a third restart/replay refusal;
+three natural exits0,139 records exact/no owned processes. No actual Web/browser/
+WakeHost worker/native/recurring/protected action. Selected image qualification is
+not actual Web B/G/H/I or installed production. One05:23 UTC connector read still429;
+no retry. Next contained command execution using existing sandbox/lifecycle, then
+actual Web qualification. Generic run_program cannot supply that boundary unchanged.
+See [C13 evidence](../verification/C13_SELECTED_WEB_PACKAGE_2026_10_23.json).
+
 C12 adds operator-assigned isolated worktree editing on the C11 project
 connection, using existing delegated contracts, patch journals and writer locks.
 Explicit task contract plus multi-tools mode required; no takeover of registered

@@ -43,7 +43,7 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | Gate | Existing evidence and exact scope | Remaining acceptance |
 | --- | --- | --- |
 | A. At least three registered project Web conversations | PASS, development: five original paired registrations read by the selected status view; registry/workspace binding and target/history stores exist. | Protected runtime acceptance remains separate. |
-| B. Two Web conversations make tools calls in separate directories | PARTIAL SOURCE / NORMAL LOCAL HTTP: C11 binds immutable registered inspection roots/current paired witnesses. C12 assigned editing reuses contracts/journals/writer locks. Two normal listeners perform parallel patches; a third restart refuses replay, preserving native roots. Default endpoint unchanged; provider-origin conversation ID is not authenticated. | C12 selected/installed qualification, workspace-contained command execution and actual concurrent Web coding. Local HTTP/source patches, CLI threads and review reads do not close live B. |
+| B. Two Web conversations make tools calls in separate directories | PARTIAL SOURCE / SELECTED DEVELOPMENT IMAGE LOCAL HTTP: C11 binds immutable roots/current paired witnesses. C12 assigned editing reuses contracts/journals/writer locks. C13 selected release performs parallel fixture patches; a third process refuses replay after restart. Native fixture roots preserved; provider-origin chat ID is not authenticated. | Workspace-contained command execution, actual concurrent Web coding and protected installed acceptance. Selected image fixture patches, CLI threads and review reads do not close live B. |
 | C. Blocked project while sibling makes useful progress | PARTIAL: scheduler fixtures, C7 granted-reader and C8 timer-fault regressions demonstrate source isolation. Existing independent native owners were preserved. | Bounded real Web project blocking/progress proof on the intended runtime. Unreadable/unattributable shared state still fails closed. |
 | D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
 | E. Context pressure and durable handoff | PARTIAL: per-conversation saved estimates/policies and actual browser observations; completed canary has a durable handoff. Coverage remains advisory/UNKNOWN when incomplete. | Full required handoff fields and coordinated automatic monitoring qualification; do not infer exact context from lifetime MCP counters. |
@@ -75,6 +75,22 @@ The prior C8 source is now a normal release selected STOPPED; 139 records checke
 only two package pointer changes, five original pairs and prior package preserved,
 zero owned processes. This is a development package/status qualification, not
 protected installation or the new simultaneous-rollover acceptance.
+
+### October 23 — matched release selected STOPPED
+
+C13 includes C9 history preservation, C10 fair creation admission, C11 fixed
+project connections and C12 assigned task patching. Normal release app/default
+host builds and supported stopped selection PASS.139 records checked; only two
+package pointers change,137 others exact, no new state, five original pairs and
+previous package preserved. Exact unchanged host gate proof reused with no launch.
+The selected image passes51.25s local MCP task editing/restart proof: two parallel
+patch tasks and a third process refusing completed-call replay, all natural exit0.
+139 records exact/zero new or owned processes during this test. Control/worktrees
+were disposable; no actual Web message, browser, WakeHost worker, native session,
+recurring or production action. This is selected development image qualification,
+not protected installation, live B/G/H/I or unattended acceptance. One05:23 UTC
+connector read remainsHTTP429; source work continues. Contained command execution
+is required next. See [C13 evidence](verification/C13_SELECTED_WEB_PACKAGE_2026_10_23.json).
 
 ### October 23 — assigned task editing
 

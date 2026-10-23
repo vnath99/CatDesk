@@ -1,3 +1,16 @@
+## 2026-10-23 — C9–C12 selected development release qualification
+
+C13 normal release/default-feature host builds PASS from `d453f06`, with four
+matched artifact hashes. Existing guarded update selects v50 STOPPED:139 records,
+two package pointers changed,137 exact, previous package and five paired targets
+preserved. Exact unchanged host gate reused without another launch. Selected app
+image passes51.25s disposable-project parallel patch/restart/refusal qualification;
+all three processes exit0,139 records exact/zero new or owned processes. No browser,
+WakeHost worker, recurring or protected change. Selected image fixture proof does
+not close actual Web B, browser G/H/I, contained commands or installed production.
+One connector read stillHTTP429; no retry. See
+[C13 evidence](docs/verification/C13_SELECTED_WEB_PACKAGE_2026_10_23.json).
+
 ## 2026-10-23 — assigned project task editing
 
 C12 adds an explicit operator-assigned linked-worktree task to the C11 connection,

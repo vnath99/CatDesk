@@ -1,5 +1,17 @@
 # CatDesk — Important Command Reference
 
+## October 23 — selected development package C13
+
+Matched v50 now contains C9–C12 and is selected STOPPED through existing
+`operator web-dev-runtime update-package --package REVIEWED_MATCHED_PACKAGE`.
+No service/recurring start. The old package and all original bindings remain.
+The selected image supports the scoped inspection/task commands below; its
+parallel patch/restart proof uses disposable controls and does not establish
+actual Web coding, protected installation or unattended acceptance. Keep each
+headless test bounded, no-web-auto, with distinct process-scoped credentials and
+retained owner cleanup. Never select inert fixture packages into a real runtime.
+See [C13 qualification](../verification/C13_SELECTED_WEB_PACKAGE_2026_10_23.json).
+
 ## October 23 — assigned project patch tools
 
 For an explicitly assigned task in a separate, unregistered linked Git worktree,

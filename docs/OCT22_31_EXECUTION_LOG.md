@@ -1,5 +1,47 @@
 # October 22–31 execution log
 
+## 2026-10-23 — matched C9–C12 development release selected STOPPED
+
+C13 promotes reviewed source `d453f06b7fa469acaffd4dd35fea5cd09fb9dcfc` on
+`codex/web-rollover-oct17` through the existing development package updater.
+No runtime source changes or new registry/scheduler. Normal locked offline release
+app build passed05:25:51 UTC under600s containment. Default-feature WakeHost build
+passed too; its exact image is unchanged, so the prior foreground-owner gate
+evidence was reused without launching it. Four exact app/host/adapter/bridge hashes
+are recorded in [C13 evidence](verification/C13_SELECTED_WEB_PACKAGE_2026_10_23.json).
+App SHA256 `85e6971d4c6fbbab67e42617dd39f3af5cb416c4b4ef58bd290bb418fe6b1f07`.
+Existing24-test/strict-Clippy/format source proof was retained, not rerun.
+
+At05:26:34 UTC, supported guarded update-package selected v50 while STOPPED.
+139 state records checked: only the two intended package pointers changed,
+137 others exact, no new state; previous package preserved. All five original
+project rows still paired, saved continuation/quarantine still visible, no target
+or browser profile change. The selected central status command exited0.
+
+At05:27:38 UTC, the actual selected release image passed local MCP qualification
+in51.25s under180s containment: parallel task preview/apply in two separate linked
+worktrees, native fixture roots unchanged, wrong bearer/project/path refused,
+generic write/commands denied, and a third normal process refused recorded replay
+after restart. All three naturally exited0 at35/35/10s;139 records exact, zero new
+records or owned processes. Its control registrations were disposable fixtures;
+this is selected development image qualification, not actual Web coding B or
+protected production acceptance. C10 code is selected; live browser G/H/I remain
+open. Completed Web canaries/reviews were not replayed. No browser, WakeHost worker,
+recurring automation, native session or protected production change occurred.
+
+One connector status read after cooldown at05:23:01 UTC still returned HTTP429 /
+UNAVAILABLE. No retry, settings/tunnel change or workaround. This remains specific
+to connector verification. A read-only app observation made no native thread/goal
+changes. The original checkout owners remain independent.
+
+Next implement contained command execution, then actual Web B/G/H/I. Inspection
+found the generic verification runner's working directory is not a write boundary
+and its timeout does not establish descendant cleanup; it must not be exposed as
+contained task verification unchanged. Reuse existing runtime/sandbox and retained
+process ownership rather than replacing coordination or relaxing safeguards.
+Publication SHA/CI readback follows this checkpoint; protected installation and
+unattended operation remain unaccepted.
+
 ## 2026-10-23 — assigned Web task editing in separate worktrees
 
 Published at05:12:37 UTC as `f132657924cc498f7c5ca9b23c4a869a2816c165`, branch
