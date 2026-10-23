@@ -190,7 +190,7 @@
     "liveStopException": "REQUESTED_NOT_ASSUMED"
   },
   "goal": "ACTIVE_SOURCE_PROGRESS",
-  "nextExecutableTask": "Adapt the prepared private live controller to the selected local CLI without changing its payload; actual bounded WakeHost delivery still requires the pending stop-rule exception. Continue safe source work independently.",
+  "nextExecutableTask": "Audit automatic context sampling and per-project scheduler admission against current ownership and rate limits; continue source regression work without starting recurring automation. Actual prepared review is held for the pending explicit host-stop exception.",
   "operatorActionRequiredForSourceQualification": false,
   "publication": {
     "observedUtc": "2026-10-22T23:52:00.3950846Z",
@@ -255,5 +255,34 @@
     "nativeSessionAction": "NONE",
     "liveWebAcceptance": false,
     "protectedProductionAcceptance": false
+  },
+  "qualificationPublication": {
+    "observedUtc": "2026-10-23T00:04:56.883902Z",
+    "status": "PUSHED_EXACT_REMOTE_MATCH",
+    "documentationCommit": "1f772dbff134f1b594cd9fc5c9ce146bdefaa780",
+    "remoteSha": "1f772dbff134f1b594cd9fc5c9ce146bdefaa780",
+    "branch": "codex/web-rollover-oct17",
+    "remote": "https://github.com/vnath99/CatDesk",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false
+  },
+  "preparedReviewCliPreflight": {
+    "observedUtc": "2026-10-23T00:05:59.1425998Z",
+    "publicationMethod": "SELECTED_LOCAL_OPERATOR_CLI",
+    "publisherMaximumSeconds": 15,
+    "listenerRequired": false,
+    "authenticationTokenRequired": false,
+    "configurationMustRemainByteExact": true,
+    "payloadAndTargetChanged": false,
+    "metadataRecordsEnumerated": 134,
+    "preflight": "PASS_READ_ONLY",
+    "execution": "NOT_AUTHORIZED_PENDING_HOST_STOP_EXCEPTION",
+    "queued": 0,
+    "browserActions": 0,
+    "hostStarts": 0,
+    "naturalReviewProved": false
   }
 }

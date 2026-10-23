@@ -2,6 +2,20 @@
 
 ## 2026-10-22 evening — normal release / selected CLI local queue acceptance
 
+- **Exact publication:** reviewed sanitized qualification committed and pushed as
+  `1f772dbff134f1b594cd9fc5c9ce146bdefaa780` on
+  `codex/web-rollover-oct17`; exact remote SHA read back. Six documentation paths
+  only; public visibility preserved, no private payload/URL/profile/runtime data.
+  GitHub reports zero runs/checks for that SHA; CI remains UNVERIFIED.
+- **Private continuation preparation:** the pending controller now uses the
+  qualified local CLI (15s publication bound), removing its temporary MCP
+  listener/token and accounting allowance. Configuration must stay byte exact.
+  Read-only preflight at 00:05:59 UTC passes with 134 records enumerated, unchanged
+  candidate/paired target, zero queue/browser/host actions. The actual live branch
+  remains unexecuted pending the host-stop exception. No retry or new connector
+  call. Next safe source task: inspect automatic context sampling and project
+  admission against existing ownership/rate limits, then target concrete gaps.
+
 - Normal release from clean `758fb6187ba4dc3161587d80dd53b431240c2ca6`
   completed at 00:01:20 UTC October 23, within the 600s cap. Normal host build
   uses default features without test support. Four artifacts matched source.
