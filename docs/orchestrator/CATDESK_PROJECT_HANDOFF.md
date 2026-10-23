@@ -1,5 +1,17 @@
 # CatDesk Project Handoff and Continuity Guide
 
+C14 source adds explicit fixed command verification to assigned task worktrees.
+It reuses contracts/journals, native sandbox and retained Job cleanup.28 distinct
+tests/29 executions, strict Clippy/format PASS, including two concurrent commands,
+outside-write refusal, native-equivalent reader continuity, started-command timeout
+cleanup, receipt provenance and no replay after restart. Operator profiles retain
+the native broad read posture; generic file tools remain scoped. Extra read-deny
+rules proved disruptive and were removed without weakening write/continuity tests.
+Next build/qualify the normal executable; selected C13 v50 remains STOPPED without
+C14. Actual Web B and fresh browser G/H/I remain open, as do protected/unattended
+acceptance. No native chat or binding changes and no browser/Wake/recurring start.
+See [C14 evidence](../verification/C14_TASK_COMMAND_VERIFICATION_2026_10_23.json).
+
 C13 now selects matched C9–C12 development release v50 STOPPED from `d453f06`.
 Normal release/default host builds PASS. Supported update changes only two package
 pointers among139 records, preserves137 others, old package and five original

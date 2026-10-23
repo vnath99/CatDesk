@@ -1,3 +1,15 @@
+## 2026-10-23 — C14 fixed task verification commands
+
+Explicit assigned linked-worktree tasks can select fixed operator command profiles
+through the existing native Windows sandbox, contract/journal and retained Job
+owner. Source/native fixture proof:28 distinct tests/29 executions, strict Clippy/
+format PASS. Concurrent verification, outside-write refusal, native reader
+continuity, timeout cleanup and restart no-replay passed. Broad native read posture
+is retained; this is not filesystem confidentiality. Normal executable qualification
+is pending; selected C13 v50 remains STOPPED without C14. Actual Web B/G/H/I,
+protected installation and unattended acceptance remain OPEN. See
+[C14 evidence](docs/verification/C14_TASK_COMMAND_VERIFICATION_2026_10_23.json).
+
 ## 2026-10-23 — C9–C12 selected development release qualification
 
 C13 normal release/default-feature host builds PASS from `d453f06`, with four

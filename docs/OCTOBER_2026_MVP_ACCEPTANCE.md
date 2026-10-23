@@ -1,5 +1,18 @@
 # CatDesk October 2026 MVP acceptance
 
+### October 23 C14 — task verification source and native fixture proof
+
+Fixed operator command profiles extend C12 assigned worktrees using the existing
+native sandbox/process owner.28 distinct tests/29 executions, strict Clippy/format
+PASS: parallel task verification, original/peer/Git writes refused, concurrent
+native-equivalent reader unaffected, timeout cleanup and durable restart refusal.
+Broad native read posture remains; no claim of command read confidentiality.
+Normal executable qualification is pending; selected C13 v50 remains STOPPED and
+does not include C14. These local fixtures do not satisfy actual Web B, simultaneous
+browser G, interruption H, pending-browser restart I, protected production or
+unattended operation. Existing completed rollover and Wake review remain preserved.
+See [C14 evidence](verification/C14_TASK_COMMAND_VERIFICATION_2026_10_23.json).
+
 ## October 22 acceptance reconciliation
 
 ### Mandatory Web architecture — operator clarification October 22

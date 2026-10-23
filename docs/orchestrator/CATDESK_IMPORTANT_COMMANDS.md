@@ -1,5 +1,28 @@
 # CatDesk — Important Command Reference
 
+## October 23 — optional fixed command profiles, C14 source
+
+The existing `--project-task-contract` assignment may additionally contain
+`"commandProfiles":[{"id":"verify-project","argv":["ABSOLUTE_EXE","FIXED_ARGUMENT"],"timeoutSeconds":30}]`.
+Each ID must also occur in the contract's `allowedCommandProfiles`. At most eight
+unique profiles, direct absolute existing EXE, bounded argv and1–120s timeout.
+The exact profile list is durable and cannot change under an existing task ID.
+Use the existing task tool with `tool:"verify.command"` and
+`arguments:{"profile":"verify-project"}`. Remote argv/cwd/env/timeout overrides
+are not accepted. Omitting profiles preserves patch-only/default behavior.
+
+Commands run only in the assigned linked worktree through the installed native
+Windows sandbox with managed requirements, network disabled, environment scrubbed,
+bounded output and retained Job cleanup. They retain native broad filesystem read
+access; choose local profiles accordingly. Writes are limited to the task tree
+excluding control metadata, not merely by the contract's patch path list. No raw
+shell fallback, saved configuration/setup, provider turn or native chat action.
+The connection reserves20s for cleanup. Local receipts contain private paths and
+output: do not publish them wholesale. Stable call IDs never blindly replay;
+uncertain exit retains the marker. Exit0 is not task completion. Selected C13 v50
+does not yet contain this source addition; normal/selected/Web qualification must
+remain separate. [C14 evidence](../verification/C14_TASK_COMMAND_VERIFICATION_2026_10_23.json).
+
 ## October 23 — selected development package C13
 
 Matched v50 now contains C9–C12 and is selected STOPPED through existing

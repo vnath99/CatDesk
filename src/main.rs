@@ -63,6 +63,7 @@ mod planning;
 mod project_mcp;
 mod project_mcp_task;
 mod project_memory;
+mod project_task_command;
 mod prompt_templates;
 mod repo_map;
 mod reviewed_build;
@@ -1526,6 +1527,7 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
                 std::path::Path::new(&workspace_root),
                 selection,
                 options.project_task_contract.as_deref(),
+                options.maximum_runtime_seconds.unwrap_or(180),
             )
             .await?,
         ),

@@ -39,13 +39,14 @@ pub(crate) struct ProjectContext {
 impl ProjectContext {
     #[cfg(test)]
     pub async fn bind(control: &Path, selection: Selection) -> Result<Arc<Self>, String> {
-        Self::bind_with_task(control, selection, None).await
+        Self::bind_with_task(control, selection, None, 180).await
     }
 
     pub async fn bind_with_task(
         control: &Path,
         selection: Selection,
         assignment: Option<&Path>,
+        connection_seconds: u64,
     ) -> Result<Arc<Self>, String> {
         if selection.target_generation == 0
             || selection.target_sha256.len() != 64
@@ -71,9 +72,10 @@ impl ProjectContext {
                 return Err("PROJECT_MCP_BINDING_CHANGED".into());
             }
             if let Some(assignment) = assignment {
-                context.task = Some(crate::project_mcp_task::ProjectTask::open(
+                context.task = Some(crate::project_mcp_task::ProjectTask::open_with_budget(
                     &context.registered,
                     &assignment,
+                    connection_seconds,
                 )?);
             }
             Ok(Arc::new(context))
@@ -129,7 +131,7 @@ impl ProjectContext {
     fn metadata_for(&self, current: &Selection) -> Value {
         json!({"projectId":current.project_id,"targetGeneration":current.target_generation,
             "targetSha256":current.target_sha256,"executionWorkspace":self.registered.project.workspace,
-            "access":if self.task.is_some() {"READ_ONLY_INSPECTION_WITH_ASSIGNED_TASK_PATCH_TOOLS"} else {"READ_ONLY"},"bindingSource":"OPERATOR_SELECTED_EXISTING_REGISTRY",
+            "access":match &self.task {Some(task) if task.commands_enabled() => "READ_ONLY_INSPECTION_WITH_ASSIGNED_TASK_PATCH_AND_COMMAND_TOOLS", Some(_) => "READ_ONLY_INSPECTION_WITH_ASSIGNED_TASK_PATCH_TOOLS", None => "READ_ONLY"},"bindingSource":"OPERATOR_SELECTED_EXISTING_REGISTRY",
             "conversationOriginAuthenticated":false,"nativeWriterClaimed":false,
             "assignedTask":self.task.as_ref().map(|task| task.metadata())})
     }
@@ -171,8 +173,8 @@ impl ProjectContext {
         else {
             return;
         };
-        if self.task.is_some() {
-            tools.push(crate::project_mcp_task::schema());
+        if let Some(task) = &self.task {
+            tools.push(task.schema());
         }
         for tool in tools.iter_mut() {
             let Some(schema) = tool.get_mut("inputSchema").and_then(Value::as_object_mut) else {

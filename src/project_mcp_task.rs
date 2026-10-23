@@ -12,6 +12,7 @@ use crate::delegated::{
     patch_engine::stable_text_hash,
     runtime::NormalizedToolCallV1,
 };
+use crate::project_task_command::{CommandProfile, CommandResult};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
@@ -29,6 +30,7 @@ const TOOLS: &[&str] = &[
     "patch.apply",
     "patch.compare",
     "diff.actual",
+    "verify.command",
 ];
 
 #[derive(Deserialize)]
@@ -38,6 +40,8 @@ struct Assignment {
     project_id: String,
     base_commit: String,
     contract: ExecutionContractV1,
+    #[serde(default)]
+    command_profiles: Vec<CommandProfile>,
 }
 
 struct TaskState {
@@ -54,6 +58,8 @@ pub(crate) struct ProjectTask {
     contract: ExecutionContractV1,
     journal: DelegatedJournal,
     started: std::time::Instant,
+    connection_budget: std::time::Duration,
+    command_profiles: Vec<CommandProfile>,
     state: Mutex<TaskState>,
 }
 
@@ -88,9 +94,18 @@ fn unregistered_task_root(project: &ResolvedProjectScopeV1, root: &Path) -> Resu
 }
 
 impl ProjectTask {
+    #[cfg(test)]
     pub(crate) fn open(
         project: &ResolvedProjectScopeV1,
         assignment: &Path,
+    ) -> Result<Arc<Self>, String> {
+        Self::open_with_budget(project, assignment, 180)
+    }
+
+    pub(crate) fn open_with_budget(
+        project: &ResolvedProjectScopeV1,
+        assignment: &Path,
+        connection_seconds: u64,
     ) -> Result<Arc<Self>, String> {
         if !regular(assignment) {
             return Err("PROJECT_TASK_ASSIGNMENT_UNAVAILABLE".into());
@@ -107,6 +122,7 @@ impl ProjectTask {
         let assignment: Assignment =
             serde_json::from_slice(&bytes).map_err(|_| "PROJECT_TASK_ASSIGNMENT_INVALID")?;
         let contract = assignment.contract;
+        let command_profiles = assignment.command_profiles;
         validate_contract(&contract).map_err(|_| "PROJECT_TASK_CONTRACT_INVALID")?;
         if assignment.schema_version != 1
             || assignment.project_id != project.project.project_id
@@ -118,6 +134,17 @@ impl ProjectTask {
             || contract.approval_requirements.iter().any(|r| r.required)
         {
             return Err("PROJECT_TASK_ASSIGNMENT_INVALID".into());
+        }
+        if command_profiles.len() > 8 || !(1..=180).contains(&connection_seconds) {
+            return Err("PROJECT_TASK_COMMAND_AUTHORITY_INVALID".into());
+        }
+        let mut ids = std::collections::BTreeSet::new();
+        for profile in &command_profiles {
+            profile.validate()?;
+            if !ids.insert(&profile.id) || !contract.allowed_command_profiles.contains(&profile.id)
+            {
+                return Err("PROJECT_TASK_COMMAND_PROFILE_NOT_ASSIGNED".into());
+            }
         }
         let root = Path::new(&contract.workspace)
             .canonicalize()
@@ -159,11 +186,11 @@ impl ProjectTask {
         // DelegatedJournal owns its run-directory encoding. Any prior journal
         // bytes require loading that exact contract; do not guess its path or
         // mistake an incomplete run for a fresh assignment.
-        if fs::read_dir(&journal_root)
+        let existing_journal = fs::read_dir(&journal_root)
             .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?
             .next()
-            .is_some()
-        {
+            .is_some();
+        if existing_journal {
             let stored = journal
                 .load_contract(&run)
                 .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?;
@@ -178,6 +205,40 @@ impl ProjectTask {
             {
                 return Err("PROJECT_TASK_RECOVERY_REQUIRED".into());
             }
+        }
+        let profiles_path = state_root.join("command-profiles.json");
+        if profiles_path.exists() {
+            if !regular(&profiles_path)
+                || fs::metadata(&profiles_path)
+                    .map_err(|_| "PROJECT_TASK_COMMAND_AUTHORITY_INVALID")?
+                    .len()
+                    > 128 * 1024
+            {
+                return Err("PROJECT_TASK_COMMAND_AUTHORITY_INVALID".into());
+            }
+            let saved: Vec<CommandProfile> = serde_json::from_slice(
+                &fs::read(&profiles_path).map_err(|_| "PROJECT_TASK_COMMAND_AUTHORITY_INVALID")?,
+            )
+            .map_err(|_| "PROJECT_TASK_COMMAND_AUTHORITY_INVALID")?;
+            if saved != command_profiles {
+                return Err("PROJECT_TASK_COMMAND_AUTHORITY_CHANGED".into());
+            }
+        } else if !command_profiles.is_empty() {
+            if existing_journal {
+                return Err("PROJECT_TASK_COMMAND_AUTHORITY_CHANGED".into());
+            }
+            use std::io::Write;
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&profiles_path)
+                .map_err(|_| "PROJECT_TASK_COMMAND_AUTHORITY_INVALID")?;
+            file.write_all(
+                &serde_json::to_vec(&command_profiles)
+                    .map_err(|_| "PROJECT_TASK_COMMAND_AUTHORITY_INVALID")?,
+            )
+            .and_then(|_| file.sync_all())
+            .map_err(|_| "PROJECT_TASK_COMMAND_AUTHORITY_INVALID")?;
         }
         let mut service = IntegratedDelegatedService::recover(
             &root,
@@ -197,6 +258,8 @@ impl ProjectTask {
         service
             .start()
             .map_err(|_| "PROJECT_TASK_START_UNCERTAIN_MARKER_RETAINED")?;
+        let connection_budget =
+            std::time::Duration::from_secs(connection_seconds.min(contract.max_elapsed_seconds));
         Ok(Arc::new(Self {
             project: project.clone(),
             root,
@@ -204,6 +267,8 @@ impl ProjectTask {
             contract,
             journal,
             started: std::time::Instant::now(),
+            connection_budget,
+            command_profiles,
             state: Mutex::new(TaskState {
                 service,
                 writer: Some(writer),
@@ -215,10 +280,28 @@ impl ProjectTask {
 
     pub(crate) fn metadata(&self) -> Value {
         json!({"taskId":self.contract.task_id,"executionWorkspace":self.root,
-            "registeredWorkspace":self.project.project.workspace,"access":"CONTRACT_PATCH_TOOLS",
+            "registeredWorkspace":self.project.project.workspace,"access":if self.command_profiles.is_empty() {"CONTRACT_PATCH_TOOLS"} else {"CONTRACT_PATCH_AND_COMMAND_PROFILES"},
             "nativeWriterClaimed":false,"isolatedWorktreeWriterClaimed":true,
-            "allowedPaths":self.contract.allowed_paths,"allowedTools":TOOLS,
-            "commandsEnabled":false,"baseCommit":self.witness.2,"branch":self.witness.3})
+            "allowedPaths":self.contract.allowed_paths,"allowedTools":self.allowed_tools(),
+            "commandsEnabled":!self.command_profiles.is_empty(),
+            "commandProfiles":self.command_profiles.iter().map(|p|json!({"id":p.id,"timeoutSeconds":p.timeout_seconds})).collect::<Vec<_>>(),
+            "baseCommit":self.witness.2,"branch":self.witness.3})
+    }
+
+    pub(crate) fn commands_enabled(&self) -> bool {
+        !self.command_profiles.is_empty()
+    }
+
+    fn allowed_tools(&self) -> Vec<&'static str> {
+        TOOLS
+            .iter()
+            .copied()
+            .filter(|tool| *tool != "verify.command" || !self.command_profiles.is_empty())
+            .collect()
+    }
+
+    pub(crate) fn schema(&self) -> Value {
+        schema(self.allowed_tools())
     }
 
     fn validate_paths(&self, name: &str, args: &Value) -> Result<(), String> {
@@ -335,7 +418,7 @@ impl ProjectTask {
                 return Err("PROJECT_TASK_RECOVERY_REQUIRED".into());
             }
             unregistered_task_root(&task.project, &task.root)?;
-            if task.started.elapsed().as_secs() >= task.contract.max_elapsed_seconds {
+            if task.started.elapsed() >= task.connection_budget {
                 return Err("PROJECT_TASK_CONNECTION_BUDGET_EXPIRED".into());
             }
             if web_task_worktree_witness(&task.root)? != task.witness {
@@ -361,12 +444,50 @@ impl ProjectTask {
                 }
                 .into());
             }
+            if prior.len() >= task.contract.max_tool_calls as usize {
+                return Err("PROJECT_TASK_TOOL_BUDGET_EXCEEDED".into());
+            }
             let request = NormalizedToolCallV1 {
                 tool_call_id,
                 tool_name: call.tool,
                 arguments: call.arguments,
                 arguments_hash,
             };
+            if request.tool_name == "verify.command" {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Select {
+                    profile: String,
+                }
+                let selected: Select = serde_json::from_value(request.arguments.clone())
+                    .map_err(|_| "PROJECT_TASK_COMMAND_SELECTION_INVALID")?;
+                let profile = task
+                    .command_profiles
+                    .iter()
+                    .find(|p| p.id == selected.profile)
+                    .ok_or("PROJECT_TASK_COMMAND_PROFILE_NOT_ASSIGNED")?;
+                let budget = task
+                    .connection_budget
+                    .saturating_sub(task.started.elapsed())
+                    .saturating_sub(std::time::Duration::from_secs(20));
+                if budget < std::time::Duration::from_secs(1) {
+                    return Err("PROJECT_COMMAND_BUDGET_EXPIRED".into());
+                }
+                // From the first durable request until confirmed result/exit,
+                // any unexpected failure must retain the existing writer marker.
+                state.uncertain = true;
+                let result = task.execute_command(&request, &run, profile, budget);
+                state.uncertain = task
+                    .journal
+                    .load_tool_calls(&run)
+                    .map(|calls| {
+                        calls.values().any(|r| {
+                            !matches!(r.status, ToolCallStatus::Completed | ToolCallStatus::Failed)
+                        })
+                    })
+                    .unwrap_or(true);
+                return result;
+            }
             match runtime.block_on(state.service.execute_tool_call(&request)) {
                 Ok(result) => serde_json::to_value(result)
                     .map_err(|_| "PROJECT_TASK_RESULT_UNAVAILABLE".into()),
@@ -389,6 +510,112 @@ impl ProjectTask {
         })
         .await
         .map_err(|_| "PROJECT_TASK_RECOVERY_REQUIRED")?
+    }
+
+    fn execute_command(
+        &self,
+        request: &NormalizedToolCallV1,
+        run: &RunId,
+        profile: &CommandProfile,
+        budget: std::time::Duration,
+    ) -> Result<Value, String> {
+        use crate::delegated::journal::{ToolCallRecordV1, ToolMutationKind};
+        self.journal
+            .record_tool_call_requested(ToolCallRecordV1 {
+                schema_version: 1,
+                run_id: run.clone(),
+                tool_call_id: request.tool_call_id.clone(),
+                tool_name: request.tool_name.clone(),
+                request_hash: request.arguments_hash.clone(),
+                arguments_hash: request.arguments_hash.clone(),
+                mutation_kind: ToolMutationKind::Mutating,
+                status: ToolCallStatus::Requested,
+                result_hash: None,
+                outcome_summary: None,
+            })
+            .map_err(|_| "PROJECT_TASK_COMMAND_JOURNAL_UNAVAILABLE")?;
+        for phase in [ToolCallStatus::PolicyAllowed, ToolCallStatus::Executing] {
+            self.journal
+                .transition_tool_call(run, &request.tool_call_id, phase, None, None)
+                .map_err(|_| "PROJECT_TASK_COMMAND_JOURNAL_UNAVAILABLE")?;
+        }
+        let registry = AutonomousProjectRegistryStoreV1::open_read_only(
+            self.project.control_workspace.join(".catdesk/projects"),
+        )
+        .and_then(|s| s.load_registry())
+        .map_err(|_| "PROJECT_TASK_REGISTRY_UNAVAILABLE")?;
+        let mut deny: Vec<PathBuf> = registry.projects.into_iter().map(|p| p.workspace).collect();
+        deny.push(self.project.control_workspace.clone());
+        let started_utc = time::OffsetDateTime::now_utc().to_string();
+        let result: CommandResult =
+            match crate::project_task_command::run(&self.root, &deny, profile, budget) {
+                Ok(result) => result,
+                Err(reason) => {
+                    let _ = self.journal.transition_tool_call(
+                        run,
+                        &request.tool_call_id,
+                        if crate::project_task_command::failed_before_launch(&reason) {
+                            ToolCallStatus::Failed
+                        } else {
+                            ToolCallStatus::OutcomeUnknown
+                        },
+                        None,
+                        Some(reason.clone()),
+                    );
+                    return Err(reason);
+                }
+            };
+        // Persist enough identity to audit a result independently of its path.
+        // These local receipts may contain private paths/output; never publish
+        // them wholesale as acceptance evidence.
+        let mut receipt =
+            serde_json::to_value(&result).map_err(|_| "PROJECT_TASK_COMMAND_RESULT_UNAVAILABLE")?;
+        receipt["provenance"] = json!({
+            "schemaVersion":1,"projectId":self.project.project.project_id,
+            "taskId":self.contract.task_id,"callId":request.tool_call_id,
+            "requestSha256":request.arguments_hash,"executionWorkspace":self.root,
+            "baseCommit":self.witness.2,"branch":self.witness.3,
+            "startedUtc":started_utc,"finishedUtc":time::OffsetDateTime::now_utc().to_string()
+        });
+        let encoded =
+            serde_json::to_vec(&receipt).map_err(|_| "PROJECT_TASK_COMMAND_RESULT_UNAVAILABLE")?;
+        let digest = catdesk_wake::protocol::digest(&String::from_utf8_lossy(&encoded));
+        let results = self
+            .project
+            .control_workspace
+            .join(".catdesk/project-mcp-tasks")
+            .join(&self.project.project.project_id)
+            .join(&self.contract.task_id)
+            .join("command-results");
+        fs::create_dir_all(&results).map_err(|_| "PROJECT_TASK_COMMAND_RESULT_UNAVAILABLE")?;
+        use std::io::Write;
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(results.join(format!(
+                "{}.json",
+                catdesk_wake::protocol::digest(request.tool_call_id.as_str())
+            )))
+            .map_err(|_| "PROJECT_TASK_COMMAND_RESULT_UNAVAILABLE")?;
+        file.write_all(&encoded)
+            .and_then(|_| file.sync_all())
+            .map_err(|_| "PROJECT_TASK_COMMAND_RESULT_UNAVAILABLE")?;
+        let summary = format!(
+            "profile {}: exit {:?}, timedOut {}, cleanup proved",
+            profile.id, result.exit_code, result.timed_out
+        );
+        self.journal
+            .transition_tool_call(
+                run,
+                &request.tool_call_id,
+                ToolCallStatus::Completed,
+                Some(digest.clone()),
+                Some(summary.clone()),
+            )
+            .map_err(|_| "PROJECT_TASK_COMMAND_JOURNAL_UNAVAILABLE")?;
+        Ok(
+            json!({"toolName":"verify.command","summary":summary,"payload":receipt,"resultSha256":digest,"boundedText":format!("{}\n{}", result.stdout, result.stderr)}),
+        )
     }
 
     pub(crate) async fn close(self: &Arc<Self>) -> Result<(), String> {
@@ -418,9 +645,9 @@ impl ProjectTask {
     }
 }
 
-pub(crate) fn schema() -> Value {
+fn schema(tools: Vec<&str>) -> Value {
     json!({"name":TOOL,"description":"Use this connection's operator-assigned isolated task worktree and existing durable patch tools. Stable callId required; recorded calls are never replayed. No arbitrary shell or native session action.",
-        "inputSchema":{"type":"object","properties":{"taskId":{"type":"string"},"callId":{"type":"string"},"tool":{"type":"string","enum":TOOLS},"arguments":{"type":"object"}},"required":["taskId","callId","tool","arguments"],"additionalProperties":false}})
+        "inputSchema":{"type":"object","properties":{"taskId":{"type":"string"},"callId":{"type":"string"},"tool":{"type":"string","enum":tools},"arguments":{"type":"object"}},"required":["taskId","callId","tool","arguments"],"additionalProperties":false}})
 }
 
 #[cfg(all(test, windows))]
@@ -724,5 +951,253 @@ mod tests {
             ProjectTask::open(&scope, &assignment).err().unwrap(),
             "PROJECT_TASK_WORKTREE_ALREADY_REGISTERED"
         );
+    }
+
+    fn command_assignment(
+        scope: &ResolvedProjectScopeV1,
+        root: &Path,
+        assignment: &Path,
+        peer: &Path,
+        script: &str,
+        seconds: u64,
+    ) {
+        fs::write(root.join("verify.ps1"), script).unwrap();
+        fs::write(
+            root.join("paths.json"),
+            serde_json::to_vec(&json!({"source":crate::command::normalize_windows_verbatim_path(scope.project.workspace.clone()),"peer":crate::command::normalize_windows_verbatim_path(peer.to_path_buf())})).unwrap(),
+        )
+        .unwrap();
+        let program = PathBuf::from(std::env::var_os("SystemRoot").unwrap())
+            .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+        let mut data: Value = serde_json::from_slice(&fs::read(assignment).unwrap()).unwrap();
+        data["contract"]["allowedCommandProfiles"] = json!(["verify-fixture"]);
+        data["commandProfiles"] = json!([{"id":"verify-fixture","argv":[program,"-NoLogo","-NoProfile","-NonInteractive","-File",root.join("verify.ps1")],"timeoutSeconds":seconds}]);
+        fs::write(assignment, serde_json::to_vec(&data).unwrap()).unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    #[ignore = "requires installed native Windows command sandbox; explicit bounded qualification only"]
+    async fn project_task_commands_parallel_sandboxed_verification_and_restart() {
+        let (a_scope, a_root, a_assignment) = fixture("alpha");
+        let (b_scope, b_root, b_assignment) = fixture("beta");
+        let script = r#"
+$ErrorActionPreference='Stop'
+$paths=Get-Content (Join-Path $PSScriptRoot 'paths.json') -Raw|ConvertFrom-Json
+if($env:CATDESK_MCP_AUTH_TOKEN -or $env:OPENAI_API_KEY){throw 'Credential inherited'}
+$content=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'src/lib.rs'))
+if(-not $content.Contains('{ 2 }')){throw 'Patch absent'}
+foreach($target in @((Join-Path $paths.source 'src/lib.rs'),(Join-Path $paths.peer 'cross-write.txt'),(Join-Path $PSScriptRoot '.git'))){
+    try {[IO.File]::AppendAllText($target,'UNAUTHORIZED');exit 91}catch{}
+}
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'command-ready.txt'),'ready')
+$deadline=[DateTime]::UtcNow.AddSeconds(6)
+while(-not (Test-Path -LiteralPath (Join-Path $paths.peer 'command-ready.txt'))){if([DateTime]::UtcNow -gt $deadline){exit 93};Start-Sleep -Milliseconds 25}
+Write-Output 'PATCH_VERIFIED_PARALLEL_PEER_READY_OUTSIDE_WRITES_REFUSED'
+"#;
+        command_assignment(&a_scope, &a_root, &a_assignment, &b_root, script, 30);
+        command_assignment(&b_scope, &b_root, &b_assignment, &a_root, script, 30);
+        let a = ProjectTask::open(&a_scope, &a_assignment).unwrap();
+        let b = ProjectTask::open(&b_scope, &b_assignment).unwrap();
+        // A native-equivalent sandbox command keeps reading the original
+        // checkout while Web tasks verify patches and refuse outside writes.
+        // Shared ACL changes must not block this native-equivalent command.
+        fs::write(
+            a_scope.project.workspace.join("reader-paths.json"),
+            serde_json::to_vec(&json!([
+                crate::command::normalize_windows_verbatim_path(a_root.clone()),
+                crate::command::normalize_windows_verbatim_path(b_root.clone())
+            ]))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(a_scope.project.workspace.join("reader.ps1"), r#"
+$ErrorActionPreference='Stop'
+$roots=Get-Content (Join-Path $PSScriptRoot 'reader-paths.json') -Raw|ConvertFrom-Json
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'reader-ready.txt'),'ready')
+$deadline=[DateTime]::UtcNow.AddSeconds(20)
+do {
+    $content=[IO.File]::ReadAllText((Join-Path $PSScriptRoot 'src/lib.rs'))
+    if(-not $content.Contains('{ 1 }')){exit 94}
+    if([DateTime]::UtcNow -gt $deadline){exit 95}
+    Start-Sleep -Milliseconds 30
+} while(-not ((Test-Path (Join-Path $roots[0] 'command-ready.txt')) -and (Test-Path (Join-Path $roots[1] 'command-ready.txt'))))
+Write-Output 'NATIVE_EQUIVALENT_READER_CONTINUED_DURING_TASK_COMMANDS'
+"#).unwrap();
+        let native_root = a_scope.project.workspace.clone();
+        let mut native_writer = acquire_project_writer_lock(&native_root).unwrap();
+        native_writer.begin_writer_turn().unwrap();
+        let reader_root = native_root.clone();
+        let assignment_data: Value =
+            serde_json::from_slice(&fs::read(&a_assignment).unwrap()).unwrap();
+        let mut reader_profile: CommandProfile =
+            serde_json::from_value(assignment_data["commandProfiles"][0].clone()).unwrap();
+        reader_profile.id = "native-equivalent-reader".into();
+        *reader_profile.argv.last_mut().unwrap() = reader_root
+            .join("reader.ps1")
+            .to_string_lossy()
+            .into_owned();
+        reader_profile.timeout_seconds = 45;
+        let reader = tokio::task::spawn_blocking(move || {
+            crate::project_task_command::run(
+                &reader_root,
+                &[],
+                &reader_profile,
+                std::time::Duration::from_secs(60),
+            )
+        });
+        let readiness = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while !native_root.join("reader-ready.txt").exists()
+            && std::time::Instant::now() < readiness
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+        a.execute(preview("a-preview")).await.unwrap();
+        b.execute(preview("b-preview")).await.unwrap();
+        a.execute(call(
+            "a-apply",
+            "patch.apply",
+            json!({"patchId":"patch-fixture"}),
+        ))
+        .await
+        .unwrap();
+        b.execute(call(
+            "b-apply",
+            "patch.apply",
+            json!({"patchId":"patch-fixture"}),
+        ))
+        .await
+        .unwrap();
+        let verify = call(
+            "a-verify",
+            "verify.command",
+            json!({"profile":"verify-fixture"}),
+        );
+        let (ar, br) = tokio::join!(
+            a.execute(verify.clone()),
+            b.execute(call(
+                "b-verify",
+                "verify.command",
+                json!({"profile":"verify-fixture"})
+            ))
+        );
+        // Drain both exact owners before assertions, including a failed command.
+        let ac = a.close().await;
+        let bc = b.close().await;
+        let native_result = reader.await.unwrap().unwrap();
+        native_writer.finish_writer_turn().unwrap();
+        let ar = ar.unwrap();
+        let br = br.unwrap();
+        ac.unwrap();
+        bc.unwrap();
+        assert!(
+            native_result.success,
+            "native-equivalent command interrupted: {} {}",
+            native_result.stdout, native_result.stderr
+        );
+        for result in [&ar, &br] {
+            assert_eq!(result["payload"]["success"], true, "{result}");
+            assert_eq!(result["payload"]["cleanupProved"], true);
+            assert_eq!(result["payload"]["modelCalls"], 0);
+        }
+        assert_eq!(ar["payload"]["provenance"]["projectId"], "alpha");
+        assert_eq!(br["payload"]["provenance"]["projectId"], "beta");
+        assert_eq!(ar["payload"]["provenance"]["callId"], "a-verify");
+        let receipt_path = a_scope
+            .control_workspace
+            .join(".catdesk/project-mcp-tasks")
+            .join("alpha")
+            .join(&a.contract.task_id)
+            .join("command-results")
+            .join(format!(
+                "{}.json",
+                catdesk_wake::protocol::digest("a-verify")
+            ));
+        let recorded = fs::read_to_string(receipt_path).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&recorded).unwrap(),
+            ar["payload"]
+        );
+        assert_eq!(
+            catdesk_wake::protocol::digest(&recorded),
+            ar["resultSha256"]
+        );
+        assert!(
+            ar["payload"]["provenance"]["startedUtc"]
+                .as_str()
+                .unwrap()
+                .contains("+00:00")
+        );
+        assert!(
+            !a_root.join("cross-write.txt").exists() && !b_root.join("cross-write.txt").exists()
+        );
+        assert!(
+            fs::read_to_string(a_scope.project.workspace.join("src/lib.rs"))
+                .unwrap()
+                .contains("{ 1 }")
+        );
+        let resumed = ProjectTask::open(&a_scope, &a_assignment).unwrap();
+        assert_eq!(
+            resumed.execute(verify).await.unwrap_err(),
+            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+        );
+        assert!(
+            resumed
+                .execute(call(
+                    "bad-command",
+                    "verify.command",
+                    json!({"profile":"verify-fixture","argv":["injected"]})
+                ))
+                .await
+                .is_err()
+        );
+        resumed.close().await.unwrap();
+        let mut changed: Value = serde_json::from_slice(&fs::read(&a_assignment).unwrap()).unwrap();
+        changed["commandProfiles"][0]["timeoutSeconds"] = json!(31);
+        fs::write(&a_assignment, serde_json::to_vec(&changed).unwrap()).unwrap();
+        assert_eq!(
+            ProjectTask::open(&a_scope, &a_assignment).err().unwrap(),
+            "PROJECT_TASK_COMMAND_AUTHORITY_CHANGED"
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "requires installed native Windows command sandbox; explicit bounded qualification only"]
+    async fn project_task_commands_timeout_drains_owned_tree_and_preserves_receipt() {
+        let (scope, root, assignment) = fixture("alpha");
+        command_assignment(
+            &scope,
+            &root,
+            &assignment,
+            &root,
+            "Write-Output 'COMMAND_STARTED'; Start-Sleep -Seconds 30",
+            20,
+        );
+        let task = ProjectTask::open(&scope, &assignment).unwrap();
+        let request = call(
+            "timeout-verify",
+            "verify.command",
+            json!({"profile":"verify-fixture"}),
+        );
+        let result = task.execute(request.clone()).await;
+        let close = task.close().await;
+        let result = result.unwrap();
+        close.unwrap();
+        assert_eq!(result["payload"]["timedOut"], true, "{result}");
+        assert_eq!(result["payload"]["cleanupProved"], true);
+        assert_eq!(result["payload"]["success"], false);
+        assert!(
+            result["payload"]["stdout"]
+                .as_str()
+                .unwrap()
+                .contains("COMMAND_STARTED"),
+            "{result}"
+        );
+        assert!(result["payload"]["elapsedMs"].as_u64().unwrap() < 35000);
+        let resumed = ProjectTask::open(&scope, &assignment).unwrap();
+        assert_eq!(
+            resumed.execute(request).await.unwrap_err(),
+            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+        );
+        resumed.close().await.unwrap();
     }
 }

@@ -1,0 +1,229 @@
+{
+  "recordedUtc": "2026-10-23T06:40:08.7833829Z",
+  "localDate": "2026-10-23",
+  "task": "C14-ASSIGNED-TASK-COMMAND-VERIFICATION",
+  "classification": "SOURCE_AND_REAL_LOCAL_NATIVE_SANDBOX_FIXTURES",
+  "branch": "codex/web-rollover-oct17",
+  "baseCommit": "87e10b43dfc01f7034725af6cf6444c893a5a06f",
+  "sourceFiles": [
+    {
+      "path": "src/project_mcp.rs",
+      "sha256": "e663b71f3fa3efd1d31ae2a11474f7de0a97a0096682220c5df1cfb1e4069f63"
+    },
+    {
+      "path": "src/main.rs",
+      "sha256": "eecf0517779b50a01ce806cce06441f26dab0ea1cdf91ac9cac1311be2caa6c2"
+    },
+    {
+      "path": "src/project_mcp_task.rs",
+      "sha256": "5f6146e7f134d2eedf723f3c4423f29571166be7e7af2d7a4ecbeab57f8a04fe"
+    },
+    {
+      "path": "src/project_task_command.rs",
+      "sha256": "5a82b4eddf495098ef85d94cc8c2a192f33a3423e8200a21aaf1c37de1d16c2b"
+    }
+  ],
+  "implementation": {
+    "access": "CONTRACT_PATCH_AND_COMMAND_PROFILES",
+    "defaultCommandsEnabled": false,
+    "globalWorkspaceMutation": false,
+    "newProviderSession": false,
+    "operatorFixedArgv": true,
+    "readScope": "EXISTING_NATIVE_ROOT_READ_POSTURE_FILE_TOOLS_REMAIN_PROJECT_SCOPED",
+    "writeScope": "ASSIGNED_WORKTREE_EXCEPT_CONTROL_METADATA",
+    "networkEnabled": false,
+    "retainedJobCleanup": true,
+    "ambiguousOutcome": "RETAIN_MARKER_NO_REPLAY",
+    "commandSuccessMeansTaskComplete": false,
+    "receiptProvenance": [
+      "project",
+      "task",
+      "call",
+      "request digest",
+      "workspace",
+      "base commit",
+      "branch",
+      "start and finish UTC",
+      "image and profile hashes"
+    ]
+  },
+  "tests": {
+    "finishedUtc": "2026-10-23T06:38:12.3909995Z",
+    "distinctTestsPassed": 28,
+    "testExecutions": 29,
+    "checks": [
+      {
+        "label": "command-policy-and-output",
+        "startedUtc": "2026-10-23T06:36:12.802717Z",
+        "finishedUtc": "2026-10-23T06:36:50.309176Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "project_task_command",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "4dc56ca0469d6f29bc5ad96778ac337d7eaf4e598440330ca6fa60ac38d6b385"
+      },
+      {
+        "label": "native-sandbox-task-qualification",
+        "startedUtc": "2026-10-23T06:36:50.3620852Z",
+        "finishedUtc": "2026-10-23T06:37:33.7009077Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "project_task_commands_",
+          "--",
+          "--ignored",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "af1ef54f2cf3d6335130fdd20041f3422f03f22e220145767f251ccfe774de35"
+      },
+      {
+        "label": "project-mcp-http-and-cli",
+        "startedUtc": "2026-10-23T06:37:33.7118647Z",
+        "finishedUtc": "2026-10-23T06:37:53.2935067Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "project_mcp",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "8522fcc4dc3c9c8c10866f60a7b1a2cb2720f183974905a817894c0a8db0a582"
+      },
+      {
+        "label": "existing-headless-lifecycle",
+        "startedUtc": "2026-10-23T06:37:53.3023306Z",
+        "finishedUtc": "2026-10-23T06:37:53.8349704Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "headless_",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "b1b2fc76855fdc4e76fb7aede6bf7726b5bda705c83f866ef8b04895f009aa19"
+      },
+      {
+        "label": "existing-read-only-tools",
+        "startedUtc": "2026-10-23T06:37:53.8456217Z",
+        "finishedUtc": "2026-10-23T06:37:54.8577783Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "read_only_tools",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "81b0c009505f3c97db637b7f4c8b366009df9fe44dc37b74336c90fdbc51e697"
+      },
+      {
+        "label": "strict-root-clippy",
+        "startedUtc": "2026-10-23T06:37:54.8678379Z",
+        "finishedUtc": "2026-10-23T06:38:09.5490753Z",
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "logSha256": "c27b3b4c29c7f636ceb5c4aff00912fe3bc96cbafcff91188bbcf0e1fbe5fa01"
+      },
+      {
+        "label": "root-format",
+        "startedUtc": "2026-10-23T06:38:09.5578435Z",
+        "finishedUtc": "2026-10-23T06:38:12.3878801Z",
+        "arguments": [
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "containment": {
+      "ExitCode": 0,
+      "TimedOut": false,
+      "TerminationFailed": false
+    },
+    "maximumSeconds": 600,
+    "nativeCases": [
+      "two-task-parallel-patch-and-verification",
+      "outside-native-peer-and-git-writes-refused",
+      "concurrent-native-equivalent-reader-and-writer-retained",
+      "timeout-started-command-tree-drained",
+      "recorded-command-restart-refusal",
+      "changed-command-authority-and-injected-argv-refused",
+      "private-receipt-project-call-digest-provenance"
+    ]
+  },
+  "nativeDependency": {
+    "cliVersion": "0.163.0",
+    "cliSha256": "2692c8c7bb2cf8b0aefe638741fc90236f4b824c59578ce84994f9de58200993",
+    "profile": "EXISTING_WINDOWS_SANDBOX_WITH_MANAGED_REQUIREMENTS",
+    "savedConfigChanged": false,
+    "setupRun": false,
+    "modelCalls": 0,
+    "nativeSessionActions": 0,
+    "documentation": [
+      "https://learn.chatgpt.com/docs/developer-commands?surface=cli",
+      "https://learn.chatgpt.com/docs/windows/windows-sandbox"
+    ]
+  },
+  "findings": [
+    "Installed CLI uses sandbox directly; no windows subcommand. CLI/image preparation is included in deadline.",
+    "Verbatim Windows script paths need ordinary local path spelling; execution policy is not bypassed.",
+    "Added read-deny ACLs disrupted a concurrent native-equivalent reader; removed before acceptance. Required cross-project write refusal and native continuity tests retained and passed.",
+    "Command processes retain native broad read posture; environment scrubbing is not filesystem confidentiality. Fixed operator profiles must be appropriate for that scope.",
+    "Native qualification tests require explicit opt-in and installed sandbox; ordinary CI ignores them."
+  ],
+  "external": {
+    "actualChatgptWebCalls": false,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "messagesSent": 0,
+    "selectedPackageChanged": false,
+    "recurringStarted": false,
+    "productionModified": false,
+    "nativeSessionsChanged": false,
+    "completedCanaryReplayed": false,
+    "connectorCallsThisStage": 0
+  },
+  "acceptance": {
+    "normalExecutable": "PENDING_BUILD_AND_LOCAL_HTTP_QUALIFICATION",
+    "selectedDevelopment": "C13_V50_STOPPED_DOES_NOT_INCLUDE_C14",
+    "actualWebB": "OPEN",
+    "browserGHI": "OPEN",
+    "protectedProduction": "OPEN",
+    "unattended": "NOT_ACTIVATED",
+    "ci": "UNVERIFIED"
+  }
+}

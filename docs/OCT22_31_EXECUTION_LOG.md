@@ -1,5 +1,32 @@
 # October 22–31 execution log
 
+## 2026-10-23 — assigned task command verification, C14
+
+At06:38:12 UTC,28 distinct source tests/29 executions, strict all-target/all-feature
+Clippy and formatting PASS under600s retained Job containment. Two real native
+sandbox commands verified concurrent patches in separate disposable linked
+worktrees. Writes to native/peer roots and Git metadata were refused; a concurrent
+native-equivalent sandbox reader retained its writer and continued reading.
+A command that actually started then timed out was drained with its owned tree;
+its receipt survived restart and could not replay. Changed authority/injected argv
+were refused. Receipts record project/task/call, request digest, exact workspace,
+Git witness, UTC times and image/profile hashes. Success does not complete a task.
+
+Commands are opt-in fixed local operator profiles through the existing task bridge,
+contract, journal and retained Windows process owner. No model/native session turn,
+raw-command fallback or saved sandbox configuration change. Generic commands stay
+disabled. The installed native sandbox retains broad read access; file tools stay
+scoped. This is a write boundary, not confidentiality from arbitrary approved
+programs. Extra read-deny ACLs disrupted the concurrent native reader during
+diagnosis and were removed; required write and continuity assertions remain.
+Earlier prelaunch image-size/path and fixture failures are retained privately.
+
+Normal executable build/HTTP qualification follows the source checkpoint. Selected
+C13 v50 remains STOPPED without C14; actual Web B and browser G/H/I remain OPEN.
+No browser/Wake/recurring/native owner/production action or completed-canary replay.
+Connector429 is a separate live dependency; no new call in this stage.
+See [C14 evidence](verification/C14_TASK_COMMAND_VERIFICATION_2026_10_23.json).
+
 ## 2026-10-23 — matched C9–C12 development release selected STOPPED
 
 C13 promotes reviewed source `d453f06b7fa469acaffd4dd35fea5cd09fb9dcfc` on
