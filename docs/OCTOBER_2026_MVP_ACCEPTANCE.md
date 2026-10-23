@@ -1,5 +1,20 @@
 # CatDesk October 2026 MVP acceptance
 
+### October 23 C21 — selected fixes, paired sources and actual context capture
+
+C18-C20 are included in matched v53 selected STOPPED. Normal app/default host and
+new-image owner-refusal gate PASS;139 records/two intended pointers changed,137
+exact, previous package/five pairs preserved. Selected bridge verifies two fresh
+source pairs; supported registry/guarded binding registers only their isolated Git
+roots and generation1 targets. Nine pairs total; all seven old entries/history
+exact. Actual supported captures record separate132/137 observed-token estimates,
+two messages each, history UNKNOWN_OR_INCOMPLETE; four new context records only.
+Fresh CLI readback recovers both and all nine registrations,143 records exact and
+zero owned processes. No new messages, native/recurring/Wake worker or production
+action. This advances A/E and registration/context restart evidence; actual B/C/G/H
+and pending-rollover I remain OPEN. No protected or unattended acceptance. See
+[C21 evidence](verification/C21_SELECTED_BROWSER_CONTEXT_2026_10_23.json).
+
 ### October 23 C20 — provisional URL source handling
 
 Creation waits for the observed client-only provisional route to become canonical
@@ -136,27 +151,28 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 
 | Gate | Existing evidence and exact scope | Remaining acceptance |
 | --- | --- | --- |
-| A. At least three registered project Web conversations | PASS, development: five original paired registrations read by the selected status view; registry/workspace binding and target/history stores exist. | Protected runtime acceptance remains separate. |
+| A. At least three registered project Web conversations | PASS, development: C21 selected status reads nine paired registrations, including two newly verified source conversations bound to isolated Git roots. Seven prior rows/history unchanged. | Protected runtime acceptance remains separate. |
 | B. Two Web conversations make tools calls in separate directories | PARTIAL SOURCE / NORMAL AND SELECTED DEVELOPMENT IMAGE LOCAL HTTP: C11 binds immutable roots/current paired witnesses. C12 editing reuses contracts/journals/writer locks. C15 selected image includes C14 and proves parallel fixture patch/command verification plus restart refusal, with outside writes refused. Native fixture roots preserved; provider-origin chat ID is not authenticated. | Actual concurrent Web coding and protected installed acceptance. Local fixtures, CLI threads and review reads do not close live B. |
 | C. Blocked project while sibling makes useful progress | PARTIAL: scheduler fixtures, C7 granted-reader and C8 timer-fault regressions demonstrate source isolation. Existing independent native owners were preserved. | Bounded real Web project blocking/progress proof on the intended runtime. Unreadable/unattributable shared state still fails closed. |
 | D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
-| E. Context pressure and durable handoff | PARTIAL: per-conversation saved estimates/policies and actual browser observations; completed canary has a durable handoff. C16 adds Git/decision fields; C17 selected image proves separate schema1/schema2 preparation and exact reopen,301/31 independent fixture observations. Coverage remains advisory/UNKNOWN when incomplete. | Actual schema2 handoff exchange plus coordinated automatic monitoring qualification; do not infer exact context from lifetime MCP counters or source Git reports. |
+| E. Context pressure and durable handoff | PARTIAL: completed canary has a durable handoff; schema2 Git/decision fields and preparation/reopen are qualified. C21 actual selected captures save two messages and independent132/137 observed-token ledgers for fresh projects; fresh CLI processes recover both. Coverage explicitly UNKNOWN_OR_INCOMPLETE. | Actual schema2 handoff exchange plus coordinated automatic monitoring qualification; do not infer exact context from lifetime MCP counters or source Git reports. |
 | F. Actual replacement URL and continuation | PASS, one controlled browser canary: issued replacement URL, paired generation update, predecessor preservation and continuation are already verified. | Preserve proof; no repeat required. This does not prove two simultaneous rollovers. |
 | G. Two simultaneous synthetic rollover requests | SOURCE / TESTED_LOCAL admission implemented in C10: durable eligible FIFO, retained creation owner, abandoned/ineligible quarantine, stable identity, timestamps and separate source-journal proof. Existing shared browser owner remains required. | Normal/selected qualification, then two fresh actual controlled project browser requests with isolated identities/bindings and no duplicate message. Source threads are not live browser acceptance. |
 | H. Interruption and ambiguous-submission recovery | PARTIAL: source recovery/draft/receipt tests and retained real ambiguous/quarantined state exist. No blind resend is allowed. | Bounded controlled interruption at specified transaction phases, with actual browser evidence and cleanup. Preserve historical ambiguity; never manufacture its missing receipt. |
-| I. Restart preserves registrations/history/pending rollovers | PARTIAL: fresh read-only CLI processes recover stored paired targets, saved continuation and quarantine; atomic durable stores exist. | Controlled restart during a pending transaction, verifying registry, predecessor/handoff and queue/journal recovery. No recurring service activation implied. |
+| I. Restart preserves registrations/history/pending rollovers | PARTIAL: C21 fresh CLI processes recover nine paired registrations and two separate live context ledgers; original history/saved continuation/quarantine remain.143 records exact. | Controlled restart during a pending transaction, verifying registry, predecessor/handoff and queue/journal recovery. No recurring service activation implied. |
 | J. No orphan browser/Wake processes | PASS for recorded bounded tests, including current stopped selection. Root/Job exits and zero owned processes are checked. | Normal unattended operation is NOT ACTIVATED or accepted. Each future bounded test needs its own cleanup proof. |
 
 **Current implementation versus gaps:** the existing registry, immutable project
 connections/assigned-task tools, durable fair browser admission, context store,
 schema2 Git/decision handoffs, browser ownership and rollover journals are already
-implemented and source-tested. Selected C17 includes these through C16; C18/C19
-browser guard/call fixes await matched qualification. Remaining gaps include actual
+implemented and source-tested. Selected C21 v53 includes C18-C20 browser guard/call/
+provisional-URL fixes and actual separate context captures. Remaining gaps include actual
 concurrent Web coding, live competing-rollover/recovery/restart acceptance,
 coordinated automatic monitoring, supported project removal and history archival
 beyond the64-predecessor inline limit. C9 refuses before Wake commit at that limit
-instead of evicting history. Two fresh source chats are verified but unregistered;
-they prepare G/H/I and do not themselves satisfy those transaction gates.
+instead of evicting history. Two fresh source chats are verified and paired to
+isolated test roots; their saved context prepares G/H/I without satisfying those
+transaction gates.
 Keep source/fixture, isolated browser, selected runtime, protected installation
 and unattended operation separate. Connector transport and protected deployment
 are specific live dependencies; neither blocks eligible source work. All other

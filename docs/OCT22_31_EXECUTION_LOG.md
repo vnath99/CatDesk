@@ -1,5 +1,51 @@
 # October 22–31 execution log
 
+## 2026-10-23 — C21 matched runtime, two source registrations and live context
+
+C20 source published09:00:05 UTC as `bf62b48945903e69ab02a7cf0e07f6a48b8feadb`,
+exact remote SHA/clean; zero workflow/check runs, CI UNVERIFIED. Normal locked
+offline release app build PASS09:07:52 UTC in6m31s under600s retained Job. Python
+bridge hashes are embedded in binaries, so both app and default-feature WakeHost
+were rebuilt. New exact host image passes owner-EOF refusal gate with no runtime
+state/worker created. Existing unchanged Rust proofs and C19/C20 Python gates are
+retained, not needlessly repeated. Matched artifact hashes are in the evidence.
+
+Supported development update selects v53 STOPPED09:09:08 UTC in4.03s.139 records
+checked: two expected package pointers changed,137 exact/no new state. Previous v52,
+all five original pairs/history and authenticated profile preserved. Production
+remains STOPPED/untouched. Selected bridge verifies exact canonical source URLs and
+USER/ASSISTANT pairs independently in13.89s alpha and13.43s beta read-only attempts.
+139 records exact/zero owned processes after each; no Send, Retry or draft clear.
+
+At09:12:49 UTC supported project registration/guarded initial target binding passes
+in2.08s for two dedicated controlled Git roots and independently verified source
+URLs. Nine total registrations, new generation1 pairs, no native thread assignment.
+Seven original registry rows, original Wake targets and history preserved exactly.
+Among139 records only registry and Wake config change; no unexpected changes or
+owned processes. These test roots have no task authority over other projects.
+
+Actual selected `operator web context capture` passes alpha09:15:04 UTC37.23s and
+beta09:16:34 UTC36.83s under separate180s outer limits. Each records two exact
+messages, no uncertain bodies, and creates only its two new context records.
+Observed estimates132/137 tokens remain advisory, with initial-history uncertainty,
+UNKNOWN_OR_INCOMPLETE assessment and automatic observation/rollover disabled. No
+claim of exact provider consumption. Fresh CLI processes at09:18:38 UTC recover both
+ledgers and nine paired registrations:143 records exact/zero owned processes.
+
+A test-audit pointer omitted role and initially caused fresh readback to stop
+before any product command. Both immutable successful capture receipts were still
+present; per-role pointers were reconstructed and validated, then fresh readback
+passed. No capture or message was repeated. All browser/test owners exited; both
+controls STOPPED, zero recurring/Wake workers/native actions/connector calls. No
+completed canary/review replay, production promotion or protected/unattended proof.
+
+Next freeze project-specific controlled handoffs/pressure policies and exercise two
+fresh simultaneous rollovers, critical-phase recovery and pending-transaction
+restart through existing admission/journals/paired commit. Actual Web coding B,
+blocked Web sibling C and G/H/pending-I remain open. Latest recorded connector429
+07:53 UTC stays separate; no new probe. No operator action needed. See
+[C21 evidence](verification/C21_SELECTED_BROWSER_CONTEXT_2026_10_23.json).
+
 ## 2026-10-23 — C20 pending provider URL before canonical issuance
 
 C19 published08:54:34 UTC as `7175ccc6803ef4859a7566a5a15d6bf5323b1111`,

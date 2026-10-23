@@ -1,5 +1,22 @@
 # CatDesk Project Handoff and Continuity Guide
 
+C21 selects matched v53 STOPPED from `bf62b48`, including C18-C20. Normal app/default
+host builds and new exact owner-refusal gate PASS.139 records: two pointers change,
+137 exact; previous package/five pairs/profile preserved. Selected read-only source
+proofs pass, then supported registration/guarded bind adds two isolated test Git
+roots/gen1 pairs, nine total. Seven old rows/targets/history exact; only registry/
+Wake config change. No native assignment or new message.
+
+Actual supported context captures pass37.23/36.83s: two messages each, independent
+132/137 observed-token ledgers with UNKNOWN_OR_INCOMPLETE history. Only four new
+context records. Fresh CLI readback recovers both and nine pairs;143 records exact/
+zero owned processes. Both controls STOPPED, no recurring/Wake worker/production/
+native actions. Two proof pointers reconstructed from retained role receipts after
+a harness naming error; no capture or message replay. Next controlled handoffs and
+pressure policies, simultaneous G and critical-phase H/pending-I via existing
+admission. B/C remain live gaps. No operator action needed; connector429 separate,
+zero new calls. [C21 evidence](../verification/C21_SELECTED_BROWSER_CONTEXT_2026_10_23.json).
+
 C20 source waits, within the existing receipt deadline, for the exact observed
 client-only New Chat route shape to become a canonical issued URL. Never latch or
 bind provisional identity; after destination latch it is drift. Other invalid URLs

@@ -1,3 +1,21 @@
+## 2026-10-23 — C21 selected fixes and live independent context ledgers
+
+Matched v53 includes C18-C20. Normal app release build PASS6m31s; default host
+build and exact new-image owner-refusal gate PASS. Guarded STOPPED selection checks
+139 records: two package pointers change,137 exact, previous package/five pairs
+preserved. Selected bridge independently verifies both exact source-chat pairs in
+13.89/13.43s read-only attempts. Existing commands then register two isolated Git
+roots and guarded generation1 pairs: nine total, all seven old entries/history
+preserved; only registry/Wake config change. No new messages/native assignments.
+
+Actual supported context captures PASS37.23/36.83s, two messages each, separate
+132/137-token observed estimates with UNKNOWN_OR_INCOMPLETE coverage. Each creates
+only its two context records. Fresh CLI processes recover both saved estimates and
+nine pairs;143 records exact/zero owned processes. Both controls STOPPED, no Wake
+worker/recurring/protected action. B/C/G/H and pending-transaction I remain open;
+next controlled handoffs and simultaneous rollover through existing admission.
+See [C21 evidence](docs/verification/C21_SELECTED_BROWSER_CONTEXT_2026_10_23.json).
+
 ## 2026-10-23 — C20 bounded provisional New Chat URL wait
 
 The retained beta trace showed a client-only route before its canonical issued

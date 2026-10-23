@@ -1,5 +1,20 @@
 # CatDesk — Important Command Reference
 
+## October 23 — C21 selected source registration and context
+
+Matched v53 contains C18-C20 and is selected STOPPED. Existing `operator web project
+register` plus guarded `operator web target bind` added only the two independently
+verified isolated test roots/gen1 targets; nine pairs total, seven old rows/history
+preserved. Actual `operator web context capture --project-id PROJECT` resolves its
+current paired target, records bounded browser observations and sends no message.
+Alpha/beta captures save separate132/137 observed-token estimates; unknown history
+stays UNKNOWN_OR_INCOMPLETE. `operator web context status --project-id PROJECT`
+recovers that project's ledger in a fresh process. Both automatic policies remain
+disabled.143 final records exact/zero owned processes, controls STOPPED. These
+commands do not authorize completed-event replay, native takeover or recurring
+activation. Next explicit controlled handoffs and pressure-policy setup for G/H/I.
+[C21 evidence](../verification/C21_SELECTED_BROWSER_CONTEXT_2026_10_23.json).
+
 ## October 23 — C20 provisional URL is pending, never authority
 
 Before destination latch only, the exact observed client-only New Chat route shape
