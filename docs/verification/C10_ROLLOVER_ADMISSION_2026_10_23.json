@@ -329,5 +329,17 @@
     "ownedBrowserWakeProcesses": 0,
     "followup": "SEPARATE_NARROWER_CENTRAL_FRONTEND_PASS_NOT_FULL_CLI_ACCEPTANCE",
     "cause": "NOT_PROVEN_NO_SOURCE_PERFORMANCE_FIX_CLAIMED"
+  },
+  "connectorObservation": {
+    "observedUtc": "2026-10-23T04:16:16Z",
+    "operation": "ONE_READ_ONLY_TRANSPORT_STATUS",
+    "httpStatus": 429,
+    "error": "MCP_SSE_PROBE_RATE_LIMITED",
+    "calls": 1,
+    "retries": 0,
+    "settingsChanged": false,
+    "alternateConnectorUsed": false,
+    "browserStarted": false,
+    "meaning": "EXTERNAL_CONNECTOR_VERIFICATION_DEPENDENCY_ONLY_NOT_SOURCE_FAILURE"
   }
 }

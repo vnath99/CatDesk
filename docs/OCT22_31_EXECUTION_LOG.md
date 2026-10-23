@@ -2,6 +2,12 @@
 
 ## 2026-10-23 early morning — durable fair New Chat admission
 
+- **Connector dependency at 04:16:16 UTC:** one read-only transport status after
+  cooldown returned an actual HTTP429 MCP SSE probe rate limit. No retry,
+  alternate connector, settings/tunnel change or browser action. This updates
+  the earlier no-HTTP backend failure observation; it does not invalidate local
+  source/normal frontend proof or justify stopping independent development.
+
 - **Source published at 04:06:20 UTC:** eleven reviewed, sanitized paths pushed
   normally as `2cba039f89f1bbe779567756871220a5edc5ed1c` on
   `codex/web-rollover-oct17`; full remote SHA matched. No credentials, actual
