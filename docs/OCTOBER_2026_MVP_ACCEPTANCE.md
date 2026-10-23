@@ -1,5 +1,18 @@
 # CatDesk October 2026 MVP acceptance
 
+### October 23 C17 — selected structured handoff runtime and home readiness
+
+C16 is included in v52 selected STOPPED through the existing updater:139 records,
+two package pointers changed/137 exact, previous package and five pairs preserved.
+Selected image passes6.03s schema1/schema2 preparation/fresh-process reopen in
+separate disposable projects,301/31 independently observed token estimates. A
+16.70s real supported read-only browser preflight reports EMPTY_HOME using the
+preserved profile; no typing/send/clear,139 records exact/no owned processes.
+These are selected fixture and browser-readiness proofs, not actual new schema2
+Web exchange, concurrent coding B or simultaneous rollover/recovery G/H/I. Existing
+completed rollover/Wake reviews and historical ambiguous state remain unchanged.
+See [C17 evidence](verification/C17_SELECTED_HANDOFF_PACKAGE_2026_10_23.json).
+
 ### October 23 C16 — structured handoff context source proof
 
 New automatic schema2 handoffs retain explicit Git basis/branch/HEAD/worktree
@@ -87,7 +100,7 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | B. Two Web conversations make tools calls in separate directories | PARTIAL SOURCE / NORMAL AND SELECTED DEVELOPMENT IMAGE LOCAL HTTP: C11 binds immutable roots/current paired witnesses. C12 editing reuses contracts/journals/writer locks. C15 selected image includes C14 and proves parallel fixture patch/command verification plus restart refusal, with outside writes refused. Native fixture roots preserved; provider-origin chat ID is not authenticated. | Actual concurrent Web coding and protected installed acceptance. Local fixtures, CLI threads and review reads do not close live B. |
 | C. Blocked project while sibling makes useful progress | PARTIAL: scheduler fixtures, C7 granted-reader and C8 timer-fault regressions demonstrate source isolation. Existing independent native owners were preserved. | Bounded real Web project blocking/progress proof on the intended runtime. Unreadable/unattributable shared state still fails closed. |
 | D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
-| E. Context pressure and durable handoff | PARTIAL: per-conversation saved estimates/policies and actual browser observations; completed canary has a durable handoff. C16 adds explicit Git/decision fields for new schema2 requests; source tests and normal read-only legacy status prove compatibility/recovery. Coverage remains advisory/UNKNOWN when incomplete. | Selected runtime and actual schema2 handoff exchange plus coordinated automatic monitoring qualification; do not infer exact context from lifetime MCP counters or source Git reports. |
+| E. Context pressure and durable handoff | PARTIAL: per-conversation saved estimates/policies and actual browser observations; completed canary has a durable handoff. C16 adds Git/decision fields; C17 selected image proves separate schema1/schema2 preparation and exact reopen,301/31 independent fixture observations. Coverage remains advisory/UNKNOWN when incomplete. | Actual schema2 handoff exchange plus coordinated automatic monitoring qualification; do not infer exact context from lifetime MCP counters or source Git reports. |
 | F. Actual replacement URL and continuation | PASS, one controlled browser canary: issued replacement URL, paired generation update, predecessor preservation and continuation are already verified. | Preserve proof; no repeat required. This does not prove two simultaneous rollovers. |
 | G. Two simultaneous synthetic rollover requests | SOURCE / TESTED_LOCAL admission implemented in C10: durable eligible FIFO, retained creation owner, abandoned/ineligible quarantine, stable identity, timestamps and separate source-journal proof. Existing shared browser owner remains required. | Normal/selected qualification, then two fresh actual controlled project browser requests with isolated identities/bindings and no duplicate message. Source threads are not live browser acceptance. |
 | H. Interruption and ambiguous-submission recovery | PARTIAL: source recovery/draft/receipt tests and retained real ambiguous/quarantined state exist. No blind resend is allowed. | Bounded controlled interruption at specified transaction phases, with actual browser evidence and cleanup. Preserve historical ambiguity; never manufacture its missing receipt. |

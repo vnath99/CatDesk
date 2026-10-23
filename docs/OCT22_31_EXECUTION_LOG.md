@@ -1,5 +1,41 @@
 # October 22–31 execution log
 
+## 2026-10-23 — C17 selected handoff runtime and browser readiness
+
+Normal locked offline release app build PASS07:27:47 UTC from clean
+`ecf1cc9f60154c3a887f78443ec06e882fdd4c2b` under600s retained Job.
+App SHA256 `3739c2a690c0e1a87d7a8852a29de8fb71007960f6f59e3bda835ef209b75620`.
+Default-feature WakeHost build PASS; unchanged host/adapter/bridge exact gate reused
+without host launch. C16 source73-test/strict checks and C15 unchanged command proof
+retained; no runtime source edits or unnecessary reruns this stage.
+
+Guarded development update at07:28:52 UTC selects v52 STOPPED in3.29s.139 records,
+exactly two intended package pointers changed,137 others exact/no new state. Previous
+v51, five original target pairs/history and authenticated profile preserved.
+Selected narrow status exits0 with saved continuation/quarantine visible.
+
+Selected executable qualification PASS07:29:04 UTC in6.03s under180s outer Job:
+disposable alpha/beta independently retain301/31 observed token estimates; CLI
+prepares schema2 Git/decision and legacy schema1 handoffs, then fresh CLI processes
+reopen the exact same intents/files. This is local fixture preparation, not actual
+Web handoff exchange or simultaneous browser G.139 real records exact/no new or
+owned processes. Inert fixture packages/Python are never executed or selected into
+the real runtime. Prior patch/command test was not repeated.
+
+At07:32:22 UTC, existing `rollover inspect-draft` performs a real read-only home
+preflight against the unfinished legacy canary under180s ownership containment.
+It reports EMPTY_HOME/zero composer bytes in16.70s using the preserved profile.
+No send, typing, clearing, binding change, recurring or WakeHost worker start.
+139 records exact/no new or owned processes; historical SUBMITTING ambiguity remains
+unresolved and preserved. Completed canary/reviews were not replayed. No sign-in
+was required. Connector latest06:42 UTC429 remains separate; zero calls this stage.
+
+Next freeze two fresh controlled source-chat seed payloads, create dedicated source
+conversations using existing owned automation, verify actual issued URLs and bind
+only isolated test projects. Then fresh simultaneous rollover/recovery G/H/I and
+actual schema2 exchange. Do not alias another project's workspace, URL or target.
+See [C17 evidence](verification/C17_SELECTED_HANDOFF_PACKAGE_2026_10_23.json).
+
 ## 2026-10-23 — C16 versioned Git/decision handoff context
 
 New automatic handoff requests and responses use schema2. Explicit `gitState`

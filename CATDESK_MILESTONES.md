@@ -1,3 +1,17 @@
+## 2026-10-23 — C17 structured handoff package selected STOPPED
+
+Matched v52 includes C16, built from `ecf1cc9` and selected by the existing guarded
+development updater.139 records checked: two package pointers changed,137 exact,
+previous v51 and five original pairs preserved. Selected image qualification PASS
+6.03s: separate disposable schema1/schema2 handoffs, independent301/31 observed-token
+estimates and fresh-process reopen with exact stored bytes. Existing source and
+unchanged command qualification reused, not rerun. A16.70s bounded real browser
+read then proves EMPTY_HOME in the preserved profile, without sending/clearing.
+139 records exact/no new or owned processes after each test. No Wake worker,
+recurring/native/production action. Actual schema2 Web exchange and B/G/H/I remain
+open; next prepare two dedicated source conversations for fresh live requests. See
+[C17 evidence](docs/verification/C17_SELECTED_HANDOFF_PACKAGE_2026_10_23.json).
+
 ## 2026-10-23 — C16 structured Git/decision handoffs
 
 New automatic handoff requests/responses use schema2 with explicit Git observations

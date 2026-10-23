@@ -1,5 +1,19 @@
 # CatDesk — Important Command Reference
 
+## October 23 — selected structured-handoff package C17
+
+Matched v52 includes C16 schema2 handoffs and is selected STOPPED through existing
+guarded development update-package. Selected local CLI preparation/reopen proof
+passes for separate schema1/schema2 projects; original five pairs/history/profile
+are preserved. The supported `operator web rollover inspect-draft --project-id PROJECT --expected-intent-id EXACT_PENDING_INTENT`
+can read the shared home composer only for a matching eligible unfinished intent.
+It never authorizes submission or clears unknown text. One bounded existing-canary
+read reports EMPTY_HOME with no state changes/processes left; historical ambiguity
+is still unresolved. Do not repurpose it as replay authority or repeat completed
+deliveries. Future browser operations must reacquire ownership and repeat draft
+checks; one empty observation does not reserve the composer. No recurring/WakeHost
+worker activation implied. [C17 evidence](../verification/C17_SELECTED_HANDOFF_PACKAGE_2026_10_23.json).
+
 ## October 23 — schema2 handoff context, C16 source
 
 Existing automatic handoff commands now issue version2 requests for a version2

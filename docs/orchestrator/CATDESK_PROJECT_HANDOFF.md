@@ -1,5 +1,18 @@
 # CatDesk Project Handoff and Continuity Guide
 
+C17 selects matched C16 v52 STOPPED from `ecf1cc9`. Normal release/default host
+builds PASS; exact unchanged host gate reused without launch.139 records: two
+package pointers changed,137 exact, previous v51/five pairs/profile preserved.
+Selected image passes6.03s local schema1/schema2 preparation and exact fresh-process
+reopen with independent301/31 observed token estimates. Then supported real browser
+inspect-draft preflight passes16.70s: EMPTY_HOME, no send/typing/clear.139 records
+exact/zero new or owned processes. Historical unknown outcome remains unknown;
+completed canary/reviews untouched. No Wake worker/recurring/native/production action.
+Next freeze two fresh source-chat seed payloads, create dedicated conversations and
+verify issued URLs before isolated test registration; then actual schema2/G/H/I.
+No current sign-in action required; connector429 is separate, no new call. See
+[C17 evidence](../verification/C17_SELECTED_HANDOFF_PACKAGE_2026_10_23.json).
+
 C16 source adds explicit Git observations and important decisions to new automatic
 schema2 handoffs. Schema1 serialized bytes/prompts and stored pending requests are
 preserved. Interrupted request-file/active-pointer recovery reuses exact old content;
