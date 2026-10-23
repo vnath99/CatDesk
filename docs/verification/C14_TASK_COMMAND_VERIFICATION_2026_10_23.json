@@ -215,15 +215,145 @@
     "productionModified": false,
     "nativeSessionsChanged": false,
     "completedCanaryReplayed": false,
-    "connectorCallsThisStage": 0
+    "connectorCallsThisStage": 1
   },
   "acceptance": {
-    "normalExecutable": "PENDING_BUILD_AND_LOCAL_HTTP_QUALIFICATION",
+    "normalExecutable": "PASS_NORMAL_BUILD_AND_76_61S_LOCAL_HTTP_NOT_WEB_ACCEPTANCE",
     "selectedDevelopment": "C13_V50_STOPPED_DOES_NOT_INCLUDE_C14",
     "actualWebB": "OPEN",
     "browserGHI": "OPEN",
     "protectedProduction": "OPEN",
     "unattended": "NOT_ACTIVATED",
     "ci": "UNVERIFIED"
+  },
+  "sourcePublication": {
+    "atUtc": "2026-10-23T06:41:11.9695775Z",
+    "action": "project-command-published-exact-match",
+    "sourceBase": "87e10b43dfc01f7034725af6cf6444c893a5a06f",
+    "sourceFiles": [
+      {
+        "path": "src/project_mcp.rs",
+        "sha256": "e663b71f3fa3efd1d31ae2a11474f7de0a97a0096682220c5df1cfb1e4069f63"
+      },
+      {
+        "path": "src/main.rs",
+        "sha256": "eecf0517779b50a01ce806cce06441f26dab0ea1cdf91ac9cac1311be2caa6c2"
+      },
+      {
+        "path": "src/project_mcp_task.rs",
+        "sha256": "5f6146e7f134d2eedf723f3c4423f29571166be7e7af2d7a4ecbeab57f8a04fe"
+      },
+      {
+        "path": "src/project_task_command.rs",
+        "sha256": "5a82b4eddf495098ef85d94cc8c2a192f33a3423e8200a21aaf1c37de1d16c2b"
+      }
+    ],
+    "head": "5f2a14fc811741e6b4bf0422a35f2f4a66013ca8",
+    "remoteSha": "5f2a14fc811741e6b4bf0422a35f2f4a66013ca8",
+    "branch": "codex/web-rollover-oct17",
+    "remote": "https://github.com/vnath99/CatDesk",
+    "tree": "CLEAN",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false,
+    "protectedProductionAccepted": false
+  },
+  "normalExecutableBuild": {
+    "startedUtc": "2026-10-23T06:41:19.9267298Z",
+    "finishedUtc": "2026-10-23T06:41:54.2674524Z",
+    "sourceCommit": "5f2a14fc811741e6b4bf0422a35f2f4a66013ca8",
+    "baseCommitTree": "bcef02a11e9ed576bc54b55a16710d8ddbf1218c",
+    "sourceState": "CLEAN_COMMITTED_SOURCE",
+    "sourceFiles": [
+      {
+        "path": "src/project_mcp.rs",
+        "sha256": "e663b71f3fa3efd1d31ae2a11474f7de0a97a0096682220c5df1cfb1e4069f63"
+      },
+      {
+        "path": "src/main.rs",
+        "sha256": "eecf0517779b50a01ce806cce06441f26dab0ea1cdf91ac9cac1311be2caa6c2"
+      },
+      {
+        "path": "src/project_mcp_task.rs",
+        "sha256": "5f6146e7f134d2eedf723f3c4423f29571166be7e7af2d7a4ecbeab57f8a04fe"
+      },
+      {
+        "path": "src/project_task_command.rs",
+        "sha256": "5a82b4eddf495098ef85d94cc8c2a192f33a3423e8200a21aaf1c37de1d16c2b"
+      }
+    ],
+    "profile": "NORMAL_DEBUG_APP_NO_DEV_DEPENDENCIES",
+    "exitCode": 0,
+    "maximumSeconds": 240,
+    "packageSelectionChanged": false,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "imageSha256": "b274a61aa1c70d02c259d33ac8bc0693144725690bcdc0630c0634662bae8891",
+    "imageBytes": 67948032,
+    "buildLogSha256": "8aa3359ed0c5cd98b9578290ce96d5b6ecd688ff5799fda730069fc0ca174f9e"
+  },
+  "normalExecutableHttp": {
+    "startedUtc": "2026-10-23T06:42:20.113068Z",
+    "finishedUtc": "2026-10-23T06:43:36.7218737Z",
+    "classification": "NORMAL_LOCAL_MCP_ASSIGNED_LINKED_WORKTREE_COMMAND_VERIFICATION",
+    "sourceCommit": "5f2a14fc811741e6b4bf0422a35f2f4a66013ca8",
+    "imageSha256": "b274a61aa1c70d02c259d33ac8bc0693144725690bcdc0630c0634662bae8891",
+    "maximumSeconds": 180,
+    "listenerMaximumSeconds": 60,
+    "checks": [
+      "two-normal-process-parallel-own-root-reads",
+      "two-normal-process-parallel-contract-patches-original-roots-unchanged",
+      "two-normal-process-parallel-native-sandbox-verification-with-outside-writes-refused",
+      "recorded-patch-call-refused-without-replay",
+      "wrong-bearer-401",
+      "wrong-project-witness-refused",
+      "sibling-path-write-and-command-refused",
+      "simulated-independent-writer-progress",
+      "both-listeners-natural-deadline-exit-zero",
+      "normal-process-restart-exact-contract-recorded-call-refused-exit-zero"
+    ],
+    "failure": null,
+    "cleanupProved": true,
+    "ownedProcesses": 0,
+    "liveControlProcesses": 0,
+    "protectedRecords": 139,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "actualWebCalls": false,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "messagesSent": 0,
+    "packageSelectionChanged": false,
+    "recurringStarted": false,
+    "nativeSessionsChanged": false,
+    "completedCanaryReplayed": false,
+    "elapsedSeconds": 76.61,
+    "naturalLifetimesSeconds": [
+      60,
+      60,
+      10
+    ],
+    "exitCodes": [
+      0,
+      0,
+      0
+    ],
+    "containment": {
+      "ExitCode": 0,
+      "TimedOut": false,
+      "TerminationFailed": false
+    }
+  },
+  "connectorObservation": {
+    "atUtc": "2026-10-23T06:42:18Z",
+    "readOnlyCalls": 1,
+    "priorReadUtc": "2026-10-23T05:23:01Z",
+    "httpStatus": 429,
+    "errorCode": "UNAVAILABLE",
+    "retry": false,
+    "settingsChanged": false,
+    "tunnelChanged": false
   }
 }

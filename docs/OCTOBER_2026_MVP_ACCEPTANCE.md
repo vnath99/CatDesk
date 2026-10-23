@@ -7,8 +7,9 @@ native sandbox/process owner.28 distinct tests/29 executions, strict Clippy/form
 PASS: parallel task verification, original/peer/Git writes refused, concurrent
 native-equivalent reader unaffected, timeout cleanup and durable restart refusal.
 Broad native read posture remains; no claim of command read confidentiality.
-Normal executable qualification is pending; selected C13 v50 remains STOPPED and
-does not include C14. These local fixtures do not satisfy actual Web B, simultaneous
+Normal build and76.61s HTTP parallel patch/verification/restart proof PASS; three
+processes exit0,139 runtime records exact, no owned processes. Selected C13 v50
+remains STOPPED without C14. These local fixtures do not satisfy actual Web B, simultaneous
 browser G, interruption H, pending-browser restart I, protected production or
 unattended operation. Existing completed rollover and Wake review remain preserved.
 See [C14 evidence](verification/C14_TASK_COMMAND_VERIFICATION_2026_10_23.json).
@@ -56,7 +57,7 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | Gate | Existing evidence and exact scope | Remaining acceptance |
 | --- | --- | --- |
 | A. At least three registered project Web conversations | PASS, development: five original paired registrations read by the selected status view; registry/workspace binding and target/history stores exist. | Protected runtime acceptance remains separate. |
-| B. Two Web conversations make tools calls in separate directories | PARTIAL SOURCE / SELECTED DEVELOPMENT IMAGE LOCAL HTTP: C11 binds immutable roots/current paired witnesses. C12 assigned editing reuses contracts/journals/writer locks. C13 selected release performs parallel fixture patches; a third process refuses replay after restart. Native fixture roots preserved; provider-origin chat ID is not authenticated. | Workspace-contained command execution, actual concurrent Web coding and protected installed acceptance. Selected image fixture patches, CLI threads and review reads do not close live B. |
+| B. Two Web conversations make tools calls in separate directories | PARTIAL SOURCE / NORMAL AND SELECTED DEVELOPMENT IMAGE LOCAL HTTP: C11 binds immutable roots/current paired witnesses. C12 editing reuses contracts/journals/writer locks. C13 selected image performs parallel fixture patches/restart refusal. C14 normal image also verifies both tasks using native command profiles with outside writes refused and restart no-replay. Native fixture roots preserved; provider-origin chat ID is not authenticated. | Select/qualify C14 matched development package, actual concurrent Web coding and protected installed acceptance. Local fixtures, CLI threads and review reads do not close live B. |
 | C. Blocked project while sibling makes useful progress | PARTIAL: scheduler fixtures, C7 granted-reader and C8 timer-fault regressions demonstrate source isolation. Existing independent native owners were preserved. | Bounded real Web project blocking/progress proof on the intended runtime. Unreadable/unattributable shared state still fails closed. |
 | D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
 | E. Context pressure and durable handoff | PARTIAL: per-conversation saved estimates/policies and actual browser observations; completed canary has a durable handoff. Coverage remains advisory/UNKNOWN when incomplete. | Full required handoff fields and coordinated automatic monitoring qualification; do not infer exact context from lifetime MCP counters. |

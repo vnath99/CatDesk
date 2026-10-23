@@ -5,8 +5,9 @@ through the existing native Windows sandbox, contract/journal and retained Job
 owner. Source/native fixture proof:28 distinct tests/29 executions, strict Clippy/
 format PASS. Concurrent verification, outside-write refusal, native reader
 continuity, timeout cleanup and restart no-replay passed. Broad native read posture
-is retained; this is not filesystem confidentiality. Normal executable qualification
-is pending; selected C13 v50 remains STOPPED without C14. Actual Web B/G/H/I,
+is retained; this is not filesystem confidentiality. Normal build and76.61s local
+HTTP parallel verification/restart proof PASS: all three processes exit0,139 runtime
+records exact/no owned processes. Selected C13 v50 remains STOPPED without C14. Actual Web B/G/H/I,
 protected installation and unattended acceptance remain OPEN. See
 [C14 evidence](docs/verification/C14_TASK_COMMAND_VERIFICATION_2026_10_23.json).
 

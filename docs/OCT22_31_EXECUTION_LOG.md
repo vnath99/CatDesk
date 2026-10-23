@@ -21,10 +21,20 @@ programs. Extra read-deny ACLs disrupted the concurrent native reader during
 diagnosis and were removed; required write and continuity assertions remain.
 Earlier prelaunch image-size/path and fixture failures are retained privately.
 
-Normal executable build/HTTP qualification follows the source checkpoint. Selected
-C13 v50 remains STOPPED without C14; actual Web B and browser G/H/I remain OPEN.
+Source published06:41:11 UTC as `5f2a14fc811741e6b4bf0422a35f2f4a66013ca8`,
+exact remote SHA/clean; zero workflow/check runs, CI UNVERIFIED. Normal locked
+offline build PASS06:41:54 UTC, image SHA256
+`b274a61aa1c70d02c259d33ac8bc0693144725690bcdc0630c0634662bae8891`.
+At06:43:36 UTC, normal HTTP proof PASS76.61s under180s containment: two
+parallel own-worktree patches and real native command verification, outside native/
+peer/Git writes refused, scrubbed process bearer absent, exact project/call receipts,
+then a third process refused completed patch and command replay after restart.
+Three natural60/60/10s exits0,139 runtime records exact, zero new/owned processes.
+No source tests were repeated for this executable test. Selected C13 v50 remains
+STOPPED without C14; actual Web B and browser G/H/I remain OPEN.
 No browser/Wake/recurring/native owner/production action or completed-canary replay.
-Connector429 is a separate live dependency; no new call in this stage.
+One read-only connector check06:42:18 UTC after cooldown stillHTTP429/UNAVAILABLE;
+no retry/settings/tunnel change. This remains a separate live dependency.
 See [C14 evidence](verification/C14_TASK_COMMAND_VERIFICATION_2026_10_23.json).
 
 ## 2026-10-23 — matched C9–C12 development release selected STOPPED

@@ -7,8 +7,12 @@ outside-write refusal, native-equivalent reader continuity, started-command time
 cleanup, receipt provenance and no replay after restart. Operator profiles retain
 the native broad read posture; generic file tools remain scoped. Extra read-deny
 rules proved disruptive and were removed without weakening write/continuity tests.
-Next build/qualify the normal executable; selected C13 v50 remains STOPPED without
-C14. Actual Web B and fresh browser G/H/I remain open, as do protected/unattended
+Source `5f2a14fc811741e6b4bf0422a35f2f4a66013ca8` published/exact remote;
+normal build and76.61s parallel HTTP command/restart qualification PASS. Three
+natural exits0,139 state records exact/no owned processes. CI remains unverified,
+zero runs/checks. Next qualify a matched release through the stopped development
+updater; selected C13 v50 remains STOPPED without C14. Actual Web B and fresh
+browser G/H/I remain open, as do protected/unattended
 acceptance. No native chat or binding changes and no browser/Wake/recurring start.
 See [C14 evidence](../verification/C14_TASK_COMMAND_VERIFICATION_2026_10_23.json).
 
