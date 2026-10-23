@@ -1,3 +1,36 @@
+### October 23 C47 — source and test-binary central HTTP qualification
+
+C47 adds `catdesk_web_task_tool` to the existing authenticated central HTTP
+route. A local `execution-grant` binds a private key to one exact archived task,
+original work/event and registered scope. Keys live in fixed per-user state;
+only their digest is stored beside the assignment. Generic workspace reads and
+MCP results do not disclose them. Default association/preparation grants no
+execution. Revocation, closed work and scope drift refuse future calls.
+
+Each call opens the existing bounded task service and drains/closes its writer.
+No global working-directory switch, new registry, tunnel, profile, recurring
+worker or worker map is added. The execution budget is 180 seconds; startup and
+checks add overhead. Only metadata checks retry briefly, never a mutation.
+
+39 focused tests/four added and strict workspace Clippy/format checks PASS;
+two existing native-sandbox tests remain ignored. Actual test-binary HTTP calls
+patch two separate worktrees through one route, reject wrong authority before
+task startup, and let beta progress while alpha is blocked. Cancelling a caller
+still completes its exact patch and releases ownership; the same call ID cannot
+execute again. Native originals remain unchanged. Failed contention and test
+compile attempts are retained in private evidence.
+
+This is source/test-binary local qualification. Normal release and installed/Web
+acceptance remain open. All 243 real records/nine pairs stay exact, zero runtime
+owners and both controls STOPPED; v61 remains C45. No completed browser canary
+was replayed. The one 20:37 UTC connector probe returned HTTP 429; three native
+chats were active and one completed/idle, with no native actions.
+
+Next: normal executable/central route qualification and automatic transfer of
+exact task/grant context through structured rollover handoffs.
+C47 closes no additional actual Web A–J gate; prior controlled evidence is preserved.
+[C47 evidence](verification/C47_CENTRAL_SCOPED_TASK_DISPATCH_2026_10_23.json).
+
 # CatDesk October 2026 MVP acceptance
 
 ### October 23 C46 — normal CLI qualifies opt-in association; preparation only
@@ -741,8 +774,8 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | Gate | Existing evidence and exact scope | Remaining acceptance |
 | --- | --- | --- |
 | A. At least three registered project Web conversations | PASS, development: C21 selected status reads nine paired registrations, including two newly verified source conversations bound to isolated Git roots. Seven prior rows/history unchanged. | Protected runtime acceptance remains separate. |
-| B. Two Web conversations make tools calls in separate directories | PARTIAL LOCAL QUALIFICATION: earlier C11–C15 isolated editing/restart proofs remain. C45's selected normal image proves simultaneous separate-workspace HTTP reads and all four argument/result meter parts. C46's unselected normal CLI proves durable assignment/cold preparation, with synthetic SENT transport only and no endpoint launch. Native workspaces/owners remain preserved; provider-origin chat identity is not authenticated. | OPEN: actual concurrent ChatGPT Web coding and protected installed acceptance. Local HTTP/CLI fixtures and review reads do not close live B. |
-| C. Blocked project while sibling makes useful progress | PARTIAL LOCAL QUALIFICATION: source scheduler/timer/reader isolation remains. C45's normal local HTTP fixture refuses stale alpha while beta continues reading and recording; C46 retains writer/unknown-journal refusals and prepare-only admission. Existing independent native sessions remain preserved. | OPEN: bounded actual Web project blocking/progress proof. Central dispatch needs explicit per-project execution authority; local fixture progress does not close live C. |
+| B. Two Web conversations make tools calls in separate directories | PARTIAL LOCAL: C45 selected normal HTTP reads and earlier isolated edits remain. C47 test-binary central HTTP now patches two separate assigned worktrees through one authenticated route with per-task keys, original native files preserved, wrong-key/path/witness refusal and durable replay prevention. | OPEN: actual concurrent ChatGPT Web coding, normal C47/selected runtime and protected installation. Provider conversation origin remains unverified. |
+| C. Blocked project while sibling makes useful progress | PARTIAL LOCAL: C47 central HTTP holds alpha project ownership while beta reads its useful patch. Metadata checks retry briefly, without replaying tool actions or globally holding the execution workspace. Earlier scheduler/timer evidence remains. | OPEN: bounded actual Web project blocking/progress proof. Automatic grant/task handoff transfer and installed qualification remain separate. |
 | D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
 | E. Context pressure and durable handoff | RECOVERED CONTROLLED CHAIN VERIFIED: C33/C38–C40 remain preserved. C43 resumes its existing source on v60: one handoff/new intent, fresh DRAFT_READY/SEND_ATTEMPTED, no repair, verified source snapshot, RECORDED context and completed generation 3-to-4 rollover/continuation. Estimates remain advisory with UNKNOWN_OR_INCOMPLETE coverage. | Fresh atomic entry qualifies within this new controlled intent. The original C43 attempt was interrupted; whole-original-chain uninterrupted and unattended operation remain unqualified. Preserve completed proof. |
 | F. Actual replacement URL and continuation | PASS, controlled selected scope: original canary, C23 and C40 remain preserved. C43 independently verifies another issued URL, paired generation 3-to-4 update and completed continuation. A separate event-bound read verifies its 858-character assistant body and all project/task/marker checks; 243 records remain exact. | C43 is a recovered chain after the original stop, with no repair or source replay. The body acknowledges continuity without executing commands/files/MCP work. Actual coding, protected production and unattended operation remain separate. |

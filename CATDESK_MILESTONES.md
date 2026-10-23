@@ -1,3 +1,35 @@
+## October 23 C47 — granted central project execution, source-qualified
+
+C47 adds `catdesk_web_task_tool` to the existing authenticated central HTTP
+route. A local `execution-grant` binds a private key to one exact archived task,
+original work/event and registered scope. Keys live in fixed per-user state;
+only their digest is stored beside the assignment. Generic workspace reads and
+MCP results do not disclose them. Default association/preparation grants no
+execution. Revocation, closed work and scope drift refuse future calls.
+
+Each call opens the existing bounded task service and drains/closes its writer.
+No global working-directory switch, new registry, tunnel, profile, recurring
+worker or worker map is added. The execution budget is 180 seconds; startup and
+checks add overhead. Only metadata checks retry briefly, never a mutation.
+
+39 focused tests/four added and strict workspace Clippy/format checks PASS;
+two existing native-sandbox tests remain ignored. Actual test-binary HTTP calls
+patch two separate worktrees through one route, reject wrong authority before
+task startup, and let beta progress while alpha is blocked. Cancelling a caller
+still completes its exact patch and releases ownership; the same call ID cannot
+execute again. Native originals remain unchanged. Failed contention and test
+compile attempts are retained in private evidence.
+
+This is source/test-binary local qualification. Normal release and installed/Web
+acceptance remain open. All 243 real records/nine pairs stay exact, zero runtime
+owners and both controls STOPPED; v61 remains C45. No completed browser canary
+was replayed. The one 20:37 UTC connector probe returned HTTP 429; three native
+chats were active and one completed/idle, with no native actions.
+
+Next: normal executable/central route qualification and automatic transfer of
+exact task/grant context through structured rollover handoffs.
+[C47 evidence](docs/verification/C47_CENTRAL_SCOPED_TASK_DISPATCH_2026_10_23.json).
+
 ## October 23 C46 — normal CLI qualifies durable association and preparation
 
 C46 adds explicit opt-in association between an existing work request and its

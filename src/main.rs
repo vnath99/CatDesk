@@ -92,6 +92,7 @@ mod web_context_control;
 mod web_conversation_context;
 #[cfg(all(test, windows))]
 mod web_development_tests;
+mod web_task_dispatch;
 mod web_work;
 mod web_work_state;
 mod windows_gui;

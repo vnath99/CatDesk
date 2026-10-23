@@ -1,3 +1,37 @@
+## October 23 C47 — central scoped task execution (source-qualified)
+
+```text
+<C47-qualified-catdesk.exe> operator web work execution-grant --project-id PROJECT --input-file pins.json
+<C47-qualified-catdesk.exe> operator web work execution-revoke --project-id PROJECT --input-file pins.json
+```
+
+Use the same six exact C46 association pins. Granting returns a private local
+executionKeyFile reference, never the key itself. Read that file locally only
+for the intended trusted project context. Keep it out of Git, public logs and
+unrelated chats. Revocation is permanent for this task assignment; new work uses
+a new explicit task identity. Neither command starts a worker.
+
+The existing central HTTP route exposes `catdesk_web_task_tool`. Each request
+requires projectId, requestId, sourceEventId, assignmentSha256, current
+expectedTargetGeneration/expectedTargetSha256, that task's executionKey, taskId,
+stable callId, tool and arguments. Caller workspace/assignment paths are rejected.
+The registry/archive selects the separate worktree. Only assigned patch/read/
+search/diff tools and existing fixed verification profiles are available. A
+private key is authorization, not proof of provider conversation origin.
+
+Each call drains and closes its existing task turn; cancellation never permits
+blind replay. Reuse the stable callId when inspecting uncertain outcomes and
+respect completed/unknown journal refusals. The execution budget is 180 seconds,
+with additional startup/check overhead; metadata-only contention retries are
+bounded to two seconds. Results carry project scope and lifecycle metadata,
+including writer release after confirmed close. Preparation stays inert by default.
+
+39 source tests and strict checks pass. Actual local test-binary HTTP patches and
+cancellation drain are qualified; normal/selected/Web qualification remains
+pending. Selected STOPPED v61 does not contain C47. Automatic task/key transfer
+into rollover handoffs remains to implement. Preserve completed canaries.
+[C47 evidence](../verification/C47_CENTRAL_SCOPED_TASK_DISPATCH_2026_10_23.json).
+
 # CatDesk — Important Command Reference
 
 ## October 23 C46 — opt-in assignment association and prepare-only resume

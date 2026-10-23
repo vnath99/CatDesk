@@ -57,17 +57,57 @@ pub(crate) fn associate(
     args: Value,
     assignment_file: &Path,
 ) -> Result<Value, String> {
-    assigned_action(workspace, args, Some(assignment_file))
+    assigned_action(
+        workspace,
+        args,
+        AssignmentAction::Associate(assignment_file),
+    )
 }
 
 pub(crate) fn resume_prepare(workspace: &Path, args: Value) -> Result<Value, String> {
-    assigned_action(workspace, args, None)
+    assigned_action(workspace, args, AssignmentAction::Prepare)
+}
+
+pub(crate) fn execution_permission(
+    workspace: &Path,
+    args: Value,
+    revoke: bool,
+) -> Result<Value, String> {
+    assigned_action(workspace, args, AssignmentAction::Permission(revoke))
+}
+
+pub(crate) fn authorized_assignment(
+    workspace: &Path,
+    args: Value,
+    key: &str,
+) -> Result<Value, String> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        let result = assigned_action(workspace, args.clone(), AssignmentAction::Authorize(key));
+        if matches!(
+            result.as_ref().map_err(String::as_str),
+            Err("WEB_CONTEXT_REGISTRATION_BUSY" | "WEB_TARGET_WAKE_CONFIG_BUSY")
+        ) && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        } else {
+            return result;
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum AssignmentAction<'a> {
+    Associate(&'a Path),
+    Prepare,
+    Permission(bool),
+    Authorize(&'a str),
 }
 
 fn assigned_action(
     workspace: &Path,
     args: Value,
-    assignment_file: Option<&Path>,
+    action: AssignmentAction<'_>,
 ) -> Result<Value, String> {
     let request = AssignmentRequest::parse(args)?;
     let workspace = workspace
@@ -98,9 +138,9 @@ fn assigned_action(
                 workspace,
                 &request.project_id,
                 &record,
-                assignment_file.is_none() && record.target == current,
+                !matches!(action, AssignmentAction::Associate(_)) && record.target == current,
             )?;
-            if let Some(path) = assignment_file {
+            if let AssignmentAction::Associate(path) = action {
                 let link = crate::project_mcp_task::archive_work_assignment(
                     &scope,
                     path,
@@ -120,7 +160,24 @@ fn assigned_action(
             {
                 return Err("WEB_WORK_ASSIGNMENT_CONFLICT".into());
             }
-            crate::project_mcp_task::prepare_work_resume(&scope, &record, &current)
+            match action {
+                AssignmentAction::Prepare => {
+                    crate::project_mcp_task::prepare_work_resume(&scope, &record, &current)
+                }
+                AssignmentAction::Permission(revoke) => {
+                    crate::project_mcp_task::grant_web_execution(&scope, &record, &current, revoke)
+                }
+                AssignmentAction::Authorize(key) => {
+                    let archive =
+                        crate::project_mcp_task::authorized_web_assignment(&scope, &record, key)?;
+                    // Do not acquire the task writer during authorization: stale or
+                    // mismatched caller identity must refuse before task startup.
+                    Ok(
+                        json!({"assignmentFile":archive,"taskId":record.task_assignment.as_ref().expect("checked").task_id}),
+                    )
+                }
+                AssignmentAction::Associate(_) => unreachable!(),
+            }
         },
     )
 }
@@ -413,11 +470,13 @@ pub(crate) fn resolve(workspace: &Path, args: Value) -> Result<Value, String> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[cfg(windows)]
-    fn assignment_fixture() -> (
+    pub(crate) fn assignment_fixture_for(
+        id: &str,
+    ) -> (
         std::path::PathBuf,
         std::path::PathBuf,
         catdesk_wake::store::Store,
@@ -428,7 +487,7 @@ mod tests {
             AutonomousProjectRegistryV1, AutonomousProjectV1,
         };
         use std::{fs, process::Command};
-        let (scope, _, assignment) = crate::project_mcp_task::tests::fixture("alpha");
+        let (scope, _, assignment) = crate::project_mcp_task::tests::fixture(id);
         let original_registry = fs::read(
             scope
                 .control_workspace
@@ -491,7 +550,7 @@ mod tests {
         )
         .unwrap();
         let target = wake
-            .set_target("alpha", 0, "https://chatgpt.com/c/assignment-alpha")
+            .set_target(id, 0, &format!("https://chatgpt.com/c/assignment-{id}"))
             .unwrap();
         let registry_path = control.join(".catdesk/projects/projects.json");
         fs::create_dir_all(registry_path.parent().unwrap()).unwrap();
@@ -510,21 +569,21 @@ mod tests {
             chatgpt_target_history: vec![],
         });
         fs::write(registry_path, serde_json::to_vec(&registry).unwrap()).unwrap();
-        let event_id = format!("web-work-{}", protocol::digest("alpha\0request-a"));
+        let event_id = format!("web-work-{}", protocol::digest(&format!("{id}\0request-a")));
         let mut value: Value = serde_json::from_slice(&fs::read(&assignment).unwrap()).unwrap();
         value["webWork"] = json!({"requestId":"request-a","eventId":event_id});
         fs::write(&assignment, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
         let event = protocol::Event {
             schema_version: 1,
             event_id: event_id.clone(),
-            project_id: "alpha".into(),
+            project_id: id.into(),
             event_type: "engineering_attention".into(),
             created_utc: now(),
             message: "Controlled assigned-work source".into(),
             target_generation: target.generation,
             audit_references: vec![],
         };
-        WorkLedger::open(&control, "alpha")
+        WorkLedger::open(&control, id)
             .unwrap()
             .prepare(
                 "request-a",
@@ -533,8 +592,19 @@ mod tests {
                 &target,
             )
             .unwrap();
-        let args = json!({"projectId":"alpha","requestId":"request-a","sourceEventId":event_id,"expectedTargetGeneration":target.generation,"expectedTargetSha256":target.digest,"assignmentSha256":protocol::digest(&fs::read_to_string(&assignment).unwrap())});
+        let args = json!({"projectId":id,"requestId":"request-a","sourceEventId":event_id,"expectedTargetGeneration":target.generation,"expectedTargetSha256":target.digest,"assignmentSha256":protocol::digest(&fs::read_to_string(&assignment).unwrap())});
         (control, assignment, wake, args, event)
+    }
+
+    #[cfg(windows)]
+    fn assignment_fixture() -> (
+        std::path::PathBuf,
+        std::path::PathBuf,
+        catdesk_wake::store::Store,
+        Value,
+        protocol::Event,
+    ) {
+        assignment_fixture_for("alpha")
     }
 
     #[cfg(windows)]

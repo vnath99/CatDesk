@@ -2155,6 +2155,23 @@ async fn post_mcp(
             ))
             .unwrap(),
         )
+    } else if req.method == "tools/call"
+        && req.params.get("name").and_then(Value::as_str) == Some(crate::web_task_dispatch::TOOL)
+    {
+        let response = if s
+            .mcp_auth_token
+            .as_deref()
+            .is_some_and(|token| token.len() >= 24)
+        {
+            crate::web_task_dispatch::handle(&workspace_root, &req).await
+        } else {
+            mcp::JsonRpcResponse::error(
+                req.id.clone(),
+                -32002,
+                "WEB_TASK_CENTRAL_AUTH_REQUIRED".into(),
+            )
+        };
+        Some(serde_json::to_value(response).unwrap())
     } else {
         None
     };
@@ -2172,6 +2189,15 @@ async fn post_mcp(
         .await
     {
         let mut resp = resp;
+        if req.method == "tools/list"
+            && let Some(tools) = resp
+                .result
+                .as_mut()
+                .and_then(|result| result.get_mut("tools"))
+                .and_then(Value::as_array_mut)
+        {
+            tools.push(crate::web_task_dispatch::schema());
+        }
         if req.method == "tools/call" {
             let turn_token_usage = extract_turn_token_usage(resp.result.as_ref());
             let usage_totals = {

@@ -13,7 +13,7 @@ use crate::delegated::{
     runtime::NormalizedToolCallV1,
 };
 use crate::project_task_command::{CommandProfile, CommandResult};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{
     fs,
@@ -400,7 +400,198 @@ fn check_record_assignment(
     Ok(())
 }
 
+#[derive(Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WebExecutionGrant {
+    schema_version: u32,
+    project_id: String,
+    request_id: String,
+    source_event_id: String,
+    assignment: crate::web_work_state::WorkTaskAssignment,
+    key_sha256: String,
+}
+
+/// Explicit local opt-in. This permission follows only C46-proved source
+/// continuations; it never replaces a contract, workspace or native owner.
+pub(crate) fn grant_web_execution(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    current: &catdesk_wake::protocol::Target,
+    revoke: bool,
+) -> Result<Value, String> {
+    let prepared = prepare_work_resume(project, record, current)?;
+    let link = record
+        .task_assignment
+        .as_ref()
+        .ok_or("WEB_TASK_GRANT_REQUIRED")?;
+    let directory = task_directory(project, &link.task_id, false)?;
+    let revoked = directory.join("execution-revoked.json");
+    if revoke {
+        exact_file(&revoked, b"{\"revoked\":true}")?;
+        return Ok(
+            json!({"status":"EXECUTION_REVOKED","projectId":project.project.project_id,
+            "taskId":link.task_id,"launchAuthorized":false,"nativeSessionAction":"NONE"}),
+        );
+    }
+    if revoked
+        .try_exists()
+        .map_err(|_| "WEB_TASK_GRANT_UNAVAILABLE")?
+    {
+        return Err("WEB_TASK_GRANT_REVOKED".into());
+    }
+    // A shared central read tool must not disclose a sibling task's key.
+    // Reuse the fixed OS user-state root, outside every registered workspace.
+    let key_directory = crate::delegated::autonomy_runtime::fixed_current_user_catdesk_state_root()
+        .map_err(|_| "WEB_TASK_KEY_STORE_UNAVAILABLE")?
+        .join("WebTaskKeys");
+    if !key_directory
+        .try_exists()
+        .map_err(|_| "WEB_TASK_KEY_STORE_UNAVAILABLE")?
+    {
+        fs::create_dir(&key_directory).map_err(|_| "WEB_TASK_KEY_STORE_UNAVAILABLE")?;
+    }
+    plain_directory(&key_directory)?;
+    let key_identity = catdesk_wake::protocol::digest(
+        &serde_json::to_string(&(
+            &project.control_workspace,
+            &project.project.project_id,
+            link,
+        ))
+        .map_err(|_| "WEB_TASK_GRANT_INVALID")?,
+    );
+    let key_path = key_directory.join(format!("{key_identity}.json"));
+    let key = if key_path
+        .try_exists()
+        .map_err(|_| "WEB_TASK_GRANT_UNAVAILABLE")?
+    {
+        let key: String = serde_json::from_slice(&read_assignment_bytes(&key_path)?)
+            .map_err(|_| "WEB_TASK_GRANT_INVALID")?;
+        if !valid_execution_key(&key) {
+            return Err("WEB_TASK_GRANT_INVALID".into());
+        }
+        key
+    } else {
+        let key = format!(
+            "{}{}",
+            uuid::Uuid::new_v4().simple(),
+            uuid::Uuid::new_v4().simple()
+        );
+        exact_file(
+            &key_path,
+            &serde_json::to_vec(&key).map_err(|_| "WEB_TASK_GRANT_INVALID")?,
+        )?;
+        key
+    };
+    let grant = WebExecutionGrant {
+        schema_version: 1,
+        project_id: project.project.project_id.clone(),
+        request_id: record.request_id.clone(),
+        source_event_id: record.event_id.clone(),
+        assignment: link.clone(),
+        key_sha256: catdesk_wake::protocol::digest(&key),
+    };
+    exact_file(
+        &directory.join("execution-grant.json"),
+        &serde_json::to_vec(&grant).map_err(|_| "WEB_TASK_GRANT_INVALID")?,
+    )?;
+    Ok(
+        json!({"status":"EXECUTION_GRANTED","projectId":project.project.project_id,
+        "requestId":record.request_id,"sourceEventId":record.event_id,"taskId":link.task_id,
+        "executionKeyFile":key_path,"executionKeyDisclosed":false,
+        "assignmentSha256":link.assignment_sha256,"scopeSha256":link.scope_sha256,
+        "targetGeneration":prepared["targetGeneration"],"targetSha256":prepared["targetSha256"],
+        "executionBudgetSeconds":180,"executionAuthorized":true,"workerStarted":false,"nativeSessionAction":"NONE"}),
+    )
+}
+
+fn valid_execution_key(key: &str) -> bool {
+    key.len() == 64
+        && key
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+}
+
+pub(crate) fn authorized_web_assignment(
+    project: &ResolvedProjectScopeV1,
+    record: &crate::web_work_state::WorkRecord,
+    key: &str,
+) -> Result<PathBuf, String> {
+    if !valid_execution_key(key) {
+        return Err("WEB_TASK_GRANT_REQUIRED".into());
+    }
+    let link = record
+        .task_assignment
+        .as_ref()
+        .ok_or("WEB_TASK_GRANT_REQUIRED")?;
+    let directory = task_directory(project, &link.task_id, false)?;
+    if directory
+        .join("execution-revoked.json")
+        .try_exists()
+        .map_err(|_| "WEB_TASK_GRANT_UNAVAILABLE")?
+    {
+        return Err("WEB_TASK_GRANT_REVOKED".into());
+    }
+    let grant: WebExecutionGrant = serde_json::from_slice(&read_assignment_bytes(
+        &directory.join("execution-grant.json"),
+    )?)
+    .map_err(|_| "WEB_TASK_GRANT_REQUIRED")?;
+    let expected = WebExecutionGrant {
+        schema_version: 1,
+        project_id: project.project.project_id.clone(),
+        request_id: record.request_id.clone(),
+        source_event_id: record.event_id.clone(),
+        assignment: link.clone(),
+        key_sha256: catdesk_wake::protocol::digest(key),
+    };
+    // Compare fixed-size digests without exposing the key in errors or status.
+    let key_matches = grant
+        .key_sha256
+        .as_bytes()
+        .iter()
+        .zip(expected.key_sha256.as_bytes())
+        .fold(
+            grant.key_sha256.len() ^ expected.key_sha256.len(),
+            |diff, (a, b)| diff | usize::from(a ^ b),
+        )
+        == 0;
+    if !key_matches || grant != expected || link.scope_sha256 != assignment_scope_sha256(project) {
+        return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
+    }
+    let archive = directory.join("assignment.json");
+    // Only bounded metadata under the paired/registry transaction. The exact
+    // archive was checked at grant time. ProjectTask::open and execute check
+    // Git/worktree state again under their own project lease before action.
+    let bytes = read_assignment_bytes(&archive)?;
+    let digest = catdesk_wake::protocol::digest(
+        std::str::from_utf8(&bytes).map_err(|_| "WEB_TASK_GRANT_INVALID")?,
+    );
+    if record.phase != "OPEN" || digest != link.assignment_sha256 {
+        return Err("WEB_TASK_GRANT_SCOPE_MISMATCH".into());
+    }
+    Ok(archive)
+}
+
 fn check_linked_assignment(
+    project: &ResolvedProjectScopeV1,
+    inspected: &AssignmentInspection,
+    lease: &crate::operator_facade::WebWorkLease,
+) -> Result<(), String> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        let result = check_linked_assignment_once(project, inspected, lease);
+        if matches!(
+            result.as_ref().map_err(String::as_str),
+            Err("WEB_CONTEXT_REGISTRATION_BUSY" | "WEB_TARGET_WAKE_CONFIG_BUSY")
+        ) && std::time::Instant::now() < deadline
+        {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        } else {
+            return result;
+        }
+    }
+}
+
+fn check_linked_assignment_once(
     project: &ResolvedProjectScopeV1,
     inspected: &AssignmentInspection,
     lease: &crate::operator_facade::WebWorkLease,

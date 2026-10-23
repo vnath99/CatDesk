@@ -1,0 +1,258 @@
+{
+  "schemaVersion": 1,
+  "recordedUtc": "2026-10-23T20:51:19.5903536Z",
+  "task": "C47-CENTRAL-SCOPED-TASK-DISPATCH",
+  "classification": "SOURCE_AND_TEST_BINARY_LOCAL_HTTP_ONLY",
+  "sourceBaseCommit": "94ee32beb0306294d4d836ea0a97c91b0d7faae5",
+  "sourceFiles": [
+    {
+      "sha256": "6e5959608081cf8f4a5c2100fd836c17c06ef48fa93e151188fec2b403157a52",
+      "path": "src/project_mcp_task.rs"
+    },
+    {
+      "sha256": "cc6ae8d940d575afb113cc8dfeed0ccaf5fefed866cf3b49086b7b5d8fbffa71",
+      "path": "src/project_mcp.rs"
+    },
+    {
+      "sha256": "2394c5f33983327ed6d112e8198ba8773a3314c31e99cacd391e9b6df1419e0c",
+      "path": "src/web_work.rs"
+    },
+    {
+      "sha256": "550b61d370a9d9ecf4f443d982cf68341db3423e8eda745e2190195d3aa9bba3",
+      "path": "src/operator_web_cli.rs"
+    },
+    {
+      "sha256": "3274ea2cd2ddbef53d851817327d7ded317f074824f680ee0db3dd3f0afc43a8",
+      "path": "src/web_task_dispatch.rs"
+    },
+    {
+      "sha256": "fd50b934b8075ed08aeca6d89d13a670fc81cb930044a8fae70540717ad142c8",
+      "path": "src/main.rs"
+    },
+    {
+      "sha256": "f03c888af7c351ccf30bf4ce42ff95cb482440711168671882f552e2ebfc69d3",
+      "path": "src/server.rs"
+    }
+  ],
+  "change": {
+    "existingCentralRouteReused": true,
+    "newRegistry": false,
+    "newTunnelOrBrowserProfile": false,
+    "mutableGlobalWorkingDirectory": false,
+    "localGrantRequired": true,
+    "privateAssignmentKeyRequired": true,
+    "keysInFixedUserStateOutsideControlWorkspace": true,
+    "keyReturnedByMcp": false,
+    "permissionMetadataContainsOnlyKeyDigest": true,
+    "exactIdentity": [
+      "control",
+      "project",
+      "original request/event",
+      "task",
+      "assignment digest",
+      "workspace/Git/profile/native owner",
+      "current paired target"
+    ],
+    "verifiedContinuationRequiredAcrossRollover": true,
+    "revokeSupported": true,
+    "revokeStopsFutureCalls": true,
+    "executionBudgetSeconds": 180,
+    "startupAndChecksAddOverhead": true,
+    "metadataOnlyRetryMaximumSeconds": 2,
+    "taskMutationRetried": false,
+    "persistentWorkerMap": false,
+    "cancelledAwaiterStillDrainsTurn": true,
+    "completedCallIdMayReplay": false,
+    "unknownJournalCleared": false,
+    "nativeCheckoutClaimed": false,
+    "originAuthenticated": false
+  },
+  "operator": {
+    "grant": "operator web work execution-grant --project-id PROJECT --input-file pins.json",
+    "revoke": "operator web work execution-revoke --project-id PROJECT --input-file pins.json",
+    "pins": "Same six C46 exact association fields",
+    "credentialOutput": "PRIVATE_LOCAL_KEY_FILE_REFERENCE_ONLY",
+    "remoteWorkspaceOrAssignmentPathAccepted": false
+  },
+  "sourceGate": {
+    "startedUtc": "2026-10-23T20:43:04.8967442Z",
+    "finishedUtc": "2026-10-23T20:45:16.0809898Z",
+    "distinctPassedTests": 39,
+    "addedTests": 4,
+    "ignoredExistingTests": 2,
+    "ignoredReason": "Existing native command-sandbox tests not run",
+    "maximumSecondsPerProcess": 600,
+    "allOwnersExited": true,
+    "allOutputDrained": true,
+    "suites": [
+      {
+        "timedOut": false,
+        "elapsedSeconds": 77.7837861,
+        "filter": "web_task_dispatch::tests",
+        "exitCode": 0,
+        "summary": "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 1667 filtered out; finished in 46.23s"
+      },
+      {
+        "timedOut": false,
+        "elapsedSeconds": 9.1427496,
+        "filter": "web_work::tests",
+        "exitCode": 0,
+        "summary": "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 1666 filtered out; finished in 8.65s"
+      },
+      {
+        "timedOut": false,
+        "elapsedSeconds": 14.8302786,
+        "filter": "project_mcp_task::tests",
+        "exitCode": 0,
+        "summary": "test result: ok. 9 passed; 0 failed; 2 ignored; 0 measured; 1659 filtered out; finished in 14.35s"
+      },
+      {
+        "timedOut": false,
+        "elapsedSeconds": 0.4894049,
+        "filter": "operator_facade::web::tests",
+        "exitCode": 0,
+        "summary": "test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 1653 filtered out; finished in 0.02s"
+      },
+      {
+        "timedOut": false,
+        "elapsedSeconds": 28.8841887,
+        "filter": "project_mcp::tests",
+        "exitCode": 0,
+        "summary": "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 1664 filtered out; finished in 28.39s"
+      }
+    ]
+  },
+  "strictChecks": {
+    "status": "PASS",
+    "startedUtc": "2026-10-23T20:45:16.0976881Z",
+    "finishedUtc": "2026-10-23T20:45:30.6308546Z",
+    "sourceFrozen": true,
+    "checks": [
+      {
+        "name": "strict-workspace-clippy",
+        "timedOut": false,
+        "elapsedSeconds": 11.8595243,
+        "ownerExited": true,
+        "exitCode": 0
+      },
+      {
+        "name": "workspace-format",
+        "timedOut": false,
+        "elapsedSeconds": 2.5845302,
+        "ownerExited": true,
+        "exitCode": 0
+      },
+      {
+        "name": "diff-whitespace",
+        "timedOut": false,
+        "elapsedSeconds": 0.0683338,
+        "ownerExited": true,
+        "exitCode": 0
+      }
+    ]
+  },
+  "actualLocalHttp": {
+    "centralRoutes": 1,
+    "syntheticProjects": 2,
+    "independentIsolatedWorktrees": 2,
+    "parallelPatchPreviewsAndApplications": true,
+    "originalNativeFilesUnchanged": true,
+    "missingBearerRefused": true,
+    "wrongProjectKeyRefusedBeforeTaskJournal": true,
+    "callerWorkspaceRejected": true,
+    "staleTargetAndWrongTaskRefusedBeforeWriter": true,
+    "alphaHeldWhileBetaReadUsefulPatch": true,
+    "completedApplyReplayRefused": true,
+    "catalogExposesCentralTool": true,
+    "providerWebCalls": 0,
+    "transportEvidence": "SYNTHETIC_LOCAL_SOURCE_SENT_RECORDS",
+    "normalReleaseExecutable": false,
+    "processRestartTested": false
+  },
+  "cancellation": {
+    "exactTurnPausedAfterWriterAcquisition": true,
+    "outerAwaiterAborted": true,
+    "innerPatchCompletedOnce": true,
+    "projectLeaseAndWriterReleased": true,
+    "stableApplyIdReplayRefused": true,
+    "nativeOriginalUnchanged": true
+  },
+  "retainedFailedGates": [
+    {
+      "status": "FAIL_RETAINED",
+      "ownersExited": true,
+      "finishedUtc": "2026-10-23T20:28:01.8154262Z",
+      "startedUtc": "2026-10-23T20:26:21.9980067Z",
+      "resultSha256": "f56a8856227cb2ffab490a3497185d89ec7a892a3b63f1696ffb798ec53aac84"
+    },
+    {
+      "status": "FAIL_RETAINED",
+      "ownersExited": true,
+      "finishedUtc": "2026-10-23T20:35:02.4455769Z",
+      "startedUtc": "2026-10-23T20:34:54.9228533Z",
+      "resultSha256": "1b0350fc90ad1d1c0f66258f5abc4e9ad9512d45810c09b2f040fccd8ab0eaaf"
+    }
+  ],
+  "failureCorrections": [
+    "Initial parallel registration contention: bounded metadata checks only, no operation replay",
+    "Cancellation test compile assertion needed no Debug implementation",
+    "Final scope metadata now reports writer released after confirmed close"
+  ],
+  "preservation": {
+    "observedUtc": "2026-10-23T20:44:50.5197963Z",
+    "protectedRecords": 243,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "pairedRegistrations": 9,
+    "realOwners": 0,
+    "controls": [
+      "STOPPED",
+      "STOPPED"
+    ],
+    "selectedRuntime": "V61_C45_STOPPED_UNCHANGED",
+    "selectedSourceCommit": "a55bcab4a460ea6645ffa1f33e4718b41ad2f180",
+    "containsC47": false,
+    "browserStarts": 0,
+    "wakeHostStarts": 0,
+    "nativeActions": 0,
+    "recurringStarts": 0,
+    "productionChanged": false,
+    "completedCanaryReplayed": false,
+    "syntheticCredentials": "Retained private disposable-fixture artifacts only; never published"
+  },
+  "externalDependency": {
+    "observedUtc": "2026-10-23T20:37:23.547Z",
+    "connectorHttpStatus": 429,
+    "requests": 1,
+    "immediateRetry": false,
+    "nativeChatsActive": 3,
+    "nativeChatsIdleCompleted": 1,
+    "nativeChatErrors": 0,
+    "nativeActions": 0,
+    "missingBatchObservation": "Exact single-target follow-up confirmed remaining active chat"
+  },
+  "review": "SELF_REVIEW_OF_EXACT_SOURCE_AND_TEST_EVIDENCE_NO_SUBAGENT_REVIEW_CLAIM",
+  "privateProofHashes": {
+    "sourceGate": "c7af257d31ea83babec09806fcae0445113bea75a130911eafb790f878fa3f4c",
+    "strictChecks": "4eefdf47d499800cdd6891eeba834a329b463fd882ffb4c052284222959813cd",
+    "preservation": "aee1cab0b38f6929a9819ffd01b4eb162e6987c70c519dce731d851d54acdf1d",
+    "dependencies": "6ba71908eee16a80b5384a5e0c5511f6415d57266b31ba9e70e2f409c5c2b2b2"
+  },
+  "acceptance": {
+    "source": "PASS",
+    "testBinaryLocalHttp": "PASS",
+    "normalRelease": "PENDING",
+    "selectedDevelopmentRuntime": "NOT_UPDATED",
+    "actualChatGptWebCoding": "OPEN_CONNECTOR_429",
+    "automaticKeyAndTaskHandoffTransfer": "NOT_IMPLEMENTED",
+    "protectedInstalled": "NOT_QUALIFIED",
+    "unattended": "NOT_ACTIVATED",
+    "fullMilestone": "OPEN"
+  },
+  "publication": {
+    "status": "PENDING_REVIEWED_PUBLICATION",
+    "force": false,
+    "visibilityChanged": false
+  },
+  "next": "Qualify the normal executable/central HTTP route, then transfer exact task/grant context through structured rollover handoffs. Preserve completed canaries and independent native sessions."
+}

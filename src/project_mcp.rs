@@ -392,6 +392,62 @@ impl ProjectContext {
         Ok(())
     }
 
+    pub(crate) async fn dispatch_task(
+        self: &Arc<Self>,
+        id: Option<Value>,
+        expected: &Selection,
+        arguments: Value,
+    ) -> JsonRpcResponse {
+        let current = match self.verify_dispatch_target().await {
+            Ok(current) if &current == expected => current,
+            _ => {
+                return JsonRpcResponse::error(
+                    id,
+                    -32002,
+                    "PROJECT_MCP_SCOPE_WITNESS_MISMATCH".into(),
+                );
+            }
+        };
+        let traffic = TrafficObservation::start(
+            self,
+            &current,
+            json!({"name":crate::project_mcp_task::TOOL,"arguments":arguments}),
+        )
+        .await;
+        let result = match &self.task {
+            Some(task) => task.execute(arguments).await,
+            None => Err("PROJECT_TASK_NOT_ASSIGNED".into()),
+        };
+        let mut response = match result {
+            Ok(result) => JsonRpcResponse::success(
+                id.clone(),
+                json!({"content":[{"type":"text","text":result["boundedText"]}],"structuredContent":result,"isError":false}),
+            ),
+            Err(reason) => JsonRpcResponse::error(id.clone(), -32002, reason),
+        };
+        if self.verify_dispatch_target().await.as_ref() != Ok(&current) {
+            response = JsonRpcResponse::error(id, -32002, "PROJECT_MCP_BINDING_CHANGED".into());
+        }
+        traffic.finish(&mut response).await;
+        response
+    }
+
+    async fn verify_dispatch_target(self: &Arc<Self>) -> Result<Selection, String> {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            let result = self.verify().await;
+            if matches!(
+                result.as_ref().map_err(String::as_str),
+                Err("PROJECT_MCP_TARGET_UNAVAILABLE")
+            ) && tokio::time::Instant::now() < deadline
+            {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            } else {
+                return result;
+            }
+        }
+    }
+
     fn metadata_for(&self, current: &Selection) -> Value {
         json!({"projectId":current.project_id,"targetGeneration":current.target_generation,
             "targetSha256":current.target_sha256,"executionWorkspace":self.registered.project.workspace,

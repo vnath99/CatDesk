@@ -101,6 +101,11 @@ pub(crate) enum WebAction {
         project_id: String,
         input_file: PathBuf,
     },
+    WorkExecutionPermission {
+        project_id: String,
+        input_file: PathBuf,
+        revoke: bool,
+    },
     ContextConfigure {
         project_id: String,
         input_file: PathBuf,
@@ -228,7 +233,11 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                 expected_digest,
             })
         }
-        ("work", "request" | "resolve" | "associate" | "resume-prepare") => {
+        (
+            "work",
+            "request" | "resolve" | "associate" | "resume-prepare" | "execution-grant"
+            | "execution-revoke",
+        ) => {
             let input_file = options
                 .remove("--input-file")
                 .filter(|path| !path.is_empty())
@@ -255,6 +264,12 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                 Ok(WebAction::WorkResolve {
                     project_id: project_id.into(),
                     input_file: input_file.into(),
+                })
+            } else if matches!(verb, "execution-grant" | "execution-revoke") {
+                Ok(WebAction::WorkExecutionPermission {
+                    project_id: project_id.into(),
+                    input_file: input_file.into(),
+                    revoke: verb == "execution-revoke",
                 })
             } else if let Some(assignment_file) = assignment_file {
                 Ok(WebAction::WorkAssociate {
@@ -1155,6 +1170,15 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
         } => {
             crate::web_work::resume_prepare(&workspace, read_work_input(&input_file, &project_id)?)
         }
+        WebAction::WorkExecutionPermission {
+            project_id,
+            input_file,
+            revoke,
+        } => crate::web_work::execution_permission(
+            &workspace,
+            read_work_input(&input_file, &project_id)?,
+            revoke,
+        ),
         WebAction::ContextConfigure {
             project_id,
             input_file,
@@ -1482,6 +1506,40 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn execution_permission_is_local_and_accepts_no_remote_key_or_path_options() {
+        for (verb, revoke) in [("execution-grant", false), ("execution-revoke", true)] {
+            let base = args(&[
+                "operator",
+                "web",
+                "work",
+                verb,
+                "--project-id",
+                "alpha",
+                "--input-file",
+                "pins.json",
+            ]);
+            assert_eq!(
+                parse(&base).unwrap(),
+                WebAction::WorkExecutionPermission {
+                    project_id: "alpha".into(),
+                    input_file: "pins.json".into(),
+                    revoke
+                }
+            );
+            for option in [
+                "--execution-key",
+                "--workspace",
+                "--assignment-file",
+                "--force",
+            ] {
+                let mut invalid = base.clone();
+                invalid.extend(args(&[option, "value"]));
+                assert!(parse(&invalid).is_err());
+            }
+        }
     }
 
     #[test]
