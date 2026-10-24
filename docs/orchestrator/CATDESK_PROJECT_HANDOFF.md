@@ -1,3 +1,36 @@
+## October 24 EDT C80 — archive an exact owned v2 unknown-submit draft
+
+The existing supported `operator web rollover archive-draft --project-id PROJECT
+--expected-intent-id INTENT` now accepts a SUBMITTING protocol-v2 SEND_ATTEMPTED
+record as well as legacy unknown state. A USER receipt, committed target or
+quarantine still refuses; TEXT_ENTRY_AUTHORIZED and DRAFT_READY retain their own
+recovery path. Existing source/target validation, private handoff handling, durable
+actual-text archive and exact composer CAS are reused. No browser protocol changed.
+Archival never proves submission and never authorizes resend. The original journal,
+source binding and SEND_ATTEMPTED boundary remain preserved and non-replayable.
+
+One new native regression fixtures a crash after the archive/empty-home receipt
+was committed but before the journal reason. With the browser lock held, cold
+completion and retry pass without browser access, six refusal cases preserve state,
+and execute still refuses the unknown outcome. Cached success explicitly does not
+claim a current composer observation. Alpha/Beta bindings and empty queues remain
+exact. This is a fixture receipt, not a newly observed live browser receipt.
+
+Causal RED reproduced the old guard rejection. Final affected-module suite passes
+54 tests, zero failures/ignored,33.88s test runtime; strict all-target/all-feature
+workspace Clippy and formatting pass on the same frozen source. The initial private
+helper compile error, empty-filter attempt, earlier state-fence assertion correction
+and Windows cleanup-path correction remain recorded. The zero-test attempt is not
+qualification; no production guard was bypassed to fix these test issues.
+
+All297 saved runtime records are unchanged. No browser/Wake/recurring/native or
+production action occurred. The selected C72 normal app still has the earlier
+archive guard: this change is SOURCE qualification, not selected/installed/live
+acceptance. Next: normal app build and guarded stopped package qualification, then
+a new bounded unknown-submit interruption/archival test. Reuse the unchanged host
+and authenticated profile with explicit provenance; do not resend completed canaries.
+Evidence: `docs/verification/C80_UNKNOWN_V2_DRAFT_ARCHIVE_2026_10_24.json`.
+
 ## October 24 EDT C79 — selected coordinator and independent Wake restart
 
 Two consecutive normal MCP lifetimes and two independent foreground Wake host

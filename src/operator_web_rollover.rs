@@ -3170,8 +3170,10 @@ pub(super) fn repair_draft(
     )
 }
 
-/// Release one legacy unknown-submit home draft only after preserving its
-/// actual text under the project lock and proving an empty home afterward.
+/// Release one unknown-submit home draft only after preserving its actual
+/// text under the project lock and proving an empty home afterward. Protocol-v2
+/// SEND_ATTEMPTED is uncertain, just like a legacy record without a boundary.
+/// Earlier v2 stages retain their exact-draft recovery path instead.
 /// The original SUBMITTING intent remains permanently non-replayable.
 pub(super) fn archive_draft(
     workspace: &Path,
@@ -3187,9 +3189,13 @@ pub(super) fn archive_draft(
         return Err("WEB_ROLLOVER_INTENT_CHANGED".into());
     }
     if record.phase != Phase::Submitting
-        || record.bootstrap_progress.is_some()
+        || !matches!(
+            record.bootstrap_progress,
+            None | Some(runtime::BootstrapProgress::SendAttempted)
+        )
         || record.receipt.is_some()
         || record.bound_target.is_some()
+        || record.quarantine.is_some()
     {
         return Err("WEB_DRAFT_ARCHIVE_LEGACY_UNKNOWN_REQUIRED".into());
     }
@@ -4671,6 +4677,162 @@ mod tests {
         );
         drop(store);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn unknown_v2_archive_receipt_recovers_cold_without_browser_or_resend() {
+        let (parent, control, dev_root, alpha, beta) = paired_handoff_fixture();
+        let mut saved = record();
+        saved.source = alpha.clone();
+        saved.phase = Phase::Submitting;
+        saved.bootstrap_progress = Some(runtime::BootstrapProgress::SendAttempted);
+        saved.message_digest = message_digest(
+            &saved.project_id,
+            &saved.intent_id,
+            &saved.source.url,
+            &saved.handoff,
+        )
+        .unwrap();
+        let store = ProjectStore::open(&control, "alpha").unwrap();
+        store.save(&saved).unwrap();
+        atomic(&store.root.join("active.json"), &saved.intent_id).unwrap();
+        let expected = runtime::compose_bootstrap_message(
+            &saved.project_id,
+            &saved.intent_id,
+            &saved.source,
+            &saved.handoff,
+        )
+        .unwrap();
+        save_draft_archive(&store, &saved, &expected, expected.len()).unwrap();
+        // Fixture a crash after durable archive/empty-home receipt but before
+        // the journal records the permanent no-resend reason. No browser runs.
+        create_private_once(
+            &draft_archive_receipt_path(&store, &saved).unwrap(),
+            &DraftArchiveReceipt {
+                schema_version: 1,
+                project_id: saved.project_id.clone(),
+                intent_id: saved.intent_id.clone(),
+                source_digest: saved.source.digest.clone(),
+                message_digest: saved.message_digest.clone(),
+                archived_utc: 11,
+                evidence: "ARCHIVE_RECORDED_HOME_EMPTY".into(),
+            },
+        )
+        .unwrap();
+        let archive_path = draft_archive_path(&store, &saved).unwrap();
+        let receipt_path = draft_archive_receipt_path(&store, &saved).unwrap();
+        let record_path = store.root.join(format!("{}.json", saved.intent_id));
+        let pins = [
+            control.join(".catdesk/projects/projects.json"),
+            dev_root.join("config.json"),
+            archive_path,
+            receipt_path,
+        ]
+        .map(|path| {
+            let bytes = fs::read(&path).unwrap();
+            (path, bytes)
+        });
+        drop(store);
+        let browser = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(dev_root.join("browser-session.lock"))
+            .unwrap();
+        browser.try_lock().unwrap();
+        // A cached archive must never bypass eligibility: known pre-send
+        // drafts, completed receipts/bindings and quarantined records stay
+        // fenced even while the exact archive text and receipt are available.
+        let mut rejected_records = Vec::new();
+        for stage in [
+            runtime::BootstrapProgress::TextEntryAuthorized,
+            runtime::BootstrapProgress::DraftReady,
+        ] {
+            let mut rejected = saved.clone();
+            rejected.bootstrap_progress = Some(stage);
+            rejected_records.push(rejected);
+        }
+        let mut rejected = saved.clone();
+        rejected.phase = Phase::Prepared;
+        rejected_records.push(rejected);
+        let mut rejected = saved.clone();
+        rejected.receipt = Some(receipt_for(&rejected));
+        rejected_records.push(rejected);
+        let mut rejected = saved.clone();
+        rejected.bound_target = Some(saved.source.clone());
+        rejected_records.push(rejected);
+        let mut rejected = saved.clone();
+        rejected.quarantine = Some(Quarantine {
+            observed_conversation_url: "https://chatgpt.com/c/unknown".into(),
+            recorded_utc: 11,
+        });
+        rejected_records.push(rejected);
+        for rejected in rejected_records {
+            let store = ProjectStore::open(&control, "alpha").unwrap();
+            store.save(&rejected).unwrap();
+            drop(store);
+            let before = fs::read(&record_path).unwrap();
+            let reason = archive_draft(&control, "alpha", &saved.intent_id).unwrap_err();
+            assert!(
+                matches!(
+                    reason.as_str(),
+                    "WEB_DRAFT_ARCHIVE_LEGACY_UNKNOWN_REQUIRED" | "WEB_ROLLOVER_STATE_INVALID"
+                ),
+                "unexpected refusal for {:?}/{:?}: {reason}",
+                rejected.phase,
+                rejected.bootstrap_progress
+            );
+            assert_eq!(fs::read(&record_path).unwrap(), before);
+        }
+        let store = ProjectStore::open(&control, "alpha").unwrap();
+        store.save(&saved).unwrap();
+        drop(store);
+        let reply = archive_draft(&control, "alpha", &saved.intent_id).unwrap();
+        assert_eq!(reply["status"], "ARCHIVED");
+        assert_eq!(reply["currentComposerObserved"], false);
+        assert_eq!(reply["submissionVerified"], false);
+        assert_eq!(reply["resendAuthorized"], false);
+        let reopened = ProjectStore::open(&control, "alpha").unwrap();
+        let archived = reopened.active().unwrap().unwrap();
+        assert_eq!(archived.phase, Phase::Submitting);
+        assert_eq!(archived.bootstrap_progress, saved.bootstrap_progress);
+        assert!(archived.receipt.is_none() && archived.bound_target.is_none());
+        assert_eq!(
+            archived.reconciliation_reason.as_deref(),
+            Some("WEB_BOOTSTRAP_DRAFT_ARCHIVED_NO_RESEND")
+        );
+        assert!(!resumable_bootstrap(&archived));
+        drop(reopened);
+        let journal_before = fs::read(&record_path).unwrap();
+        assert_eq!(
+            archive_draft(&control, "alpha", &saved.intent_id).unwrap(),
+            reply
+        );
+        assert_eq!(fs::read(&record_path).unwrap(), journal_before);
+        assert_eq!(
+            execute(&control, "alpha").unwrap_err(),
+            "WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND"
+        );
+        for (path, bytes) in pins {
+            assert_eq!(fs::read(path).unwrap(), bytes);
+        }
+        assert_eq!(paired(&control, "alpha").unwrap(), alpha);
+        assert_eq!(paired(&control, "beta").unwrap(), beta);
+        for directory in ["queue", "archive", "deliveries", "turns", "logs"] {
+            assert_eq!(fs::read_dir(dev_root.join(directory)).unwrap().count(), 0);
+        }
+        drop(browser);
+        assert!(
+            parent.canonicalize().unwrap().starts_with(
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("target")
+                    .canonicalize()
+                    .unwrap()
+            )
+        );
+        fs::remove_dir_all(parent).unwrap();
     }
 
     #[test]
