@@ -6,7 +6,7 @@
   "parentCommit": "a2fee74e1fc0c01669eb89153b12d77a7f762b66",
   "branch": "codex/web-rollover-oct17",
   "review": "ROOT_SELF_REVIEW",
-  "qualification": "SOURCE_REGRESSIONS_ONLY_NOT_NORMAL_RELEASE_SELECTED_RUNTIME_OR_LIVE",
+  "qualification": "SOURCE_PLUS_C54_NORMAL_READER_AND_STOPPED_SELECTION_NOT_NEW_COLLECTOR_OR_LIVE",
   "changes": [
     "Future already-granted task handoffs optionally include coordinatorReport from the existing work ledger.",
     "The snapshot preserves reported state, reason code, summary digest and observation time, labeled COORDINATOR_REPORTED_NOT_VERIFIED. No verbatim summary is added.",
@@ -115,16 +115,19 @@
     "runtimeRecordsChecked": 266,
     "productionChanged": false,
     "changedRuntimeRecords": 0,
-    "newBrowserWakeStarts": 0
+    "newBrowserWakeStarts": 0,
+    "scope": "AT_C53_SOURCE_QUALIFICATION_TIME_BEFORE_C54_SELECTION"
   },
   "acceptance": {
-    "normalExecutable": "NOT_QUALIFIED",
+    "normalExecutable": "PASS_C54_LEGACY_REAL_AND_SYNTHETIC_READER_ONLY",
     "actualBrowserTransfer": "NOT_QUALIFIED_FOR_C53",
     "reportedBlockerSnapshotSource": "PASS",
     "actualWebCoding": "BLOCKED_SCOPED_TOOL_UNAVAILABLE",
-    "selectedRuntime": "NOT_QUALIFIED_FOR_C53",
-    "fullOctoberMilestone": "OPEN"
+    "selectedRuntime": "SELECTED_STOPPED_C54_PACKAGE_AND_TARGET_READS",
+    "fullOctoberMilestone": "OPEN",
+    "normalNewReportCollector": "NOT_DEMONSTRATED"
   },
   "dependency": "Existing MCP/runtime startup owner information requested; source development continues. No connector retry or official runtime/auth action.",
-  "nextTask": "Build the published C53 normal image and qualify private payload compatibility on preserved/disposable state while awaiting the supported MCP startup path. Do not replay C50."
+  "nextTask": "Audit the remaining mandatory multi-project acceptance gaps against source and existing live records, then execute the next independently eligible gap. Resume backend/catalog qualification when the supported startup-owner path is known.",
+  "c54Evidence": "docs/verification/C54_NORMAL_PRIVATE_PAYLOAD_COMPATIBILITY_2026_10_23.json"
 }
