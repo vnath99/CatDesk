@@ -179,6 +179,38 @@ on current-image failure remains the next source integration. No legacy writer
 is retired before that composed startup/migration qualifies. Evidence:
 `docs/verification/C106_NORMAL_BACKEND_PREDECESSOR_RECOVERY_2026_10_24.json`.
 
+### C107 one bounded selected-backend command
+
+Source implementation adds:
+
+```text
+catdesk.exe operator web-dev-runtime run-backend --max-runtime-seconds 180
+```
+
+Run in the prepared isolated development workspace with its existing approved
+process-scoped `CATDESK_MCP_AUTH_TOKEN`. The default active runtime is 180 seconds;
+explicit bounds are 1–900. The owner includes bounded readiness/shutdown grace.
+It emits validated `DEV_BACKEND_READY` with the loopback MCP URL and redacted auth
+metadata while active, then `FOREGROUND_BACKEND_EXITED` after exact tree cleanup.
+No recurring activation, tunnel, browser, Wake startup or authentication change.
+
+Reuse existing selection/recovery and the existing suspended-child Job owner.
+The exact selected app runs, including the restored predecessor after failed
+current files. A local backend lease protects one workspace's selection during
+its foreground lifetime; it does not serialize project tools or other workspaces.
+Healthy startup can coexist with Wake/browser ownership. Actual recovery retains
+the existing STOPPED/exclusive requirements. Read-only image/pointer/authority
+pins remain until owned-tree drain. Current controllers must perform future
+package mutations; older controllers do not honor this new backend lease.
+
+159 source tests, strict root/Wake lint and formats pass. Source tests do not
+establish normal command, actual automatic startup fallback or parent-exit proof.
+These are the next normal-release tests. Fallback when current bytes hash correctly
+but the backend fails before readiness remains a further source requirement.
+Existing selected/protected runtime and
+all project bindings remain unchanged; no legacy writer is retired. Evidence:
+`docs/verification/C107_BOUNDED_SELECTED_DEV_BACKEND_2026_10_24.json`.
+
 # T-0476 — CatDesk fast development, safe Wake recovery and simple production releases
 
 ## CURRENT 2026-10-11 — Chat52 three-lane development and recovery status (supersedes history below)

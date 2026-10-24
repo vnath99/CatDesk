@@ -1131,6 +1131,7 @@ pub fn update_package(workspace: &Path, source_package: &Path) -> Result<Value> 
     let root = runtime_root(&workspace);
     plain(&dev, true)?;
     plain(&root, true)?;
+    let _backend = backend_lock(&workspace)?;
     plain(source_package, true)?;
     let source = fs::canonicalize(source_package).map_err(|_| "DEV_PACKAGE_UNAVAILABLE")?;
     if source.starts_with(&workspace) || workspace.starts_with(&source) {
@@ -1169,6 +1170,7 @@ pub fn recover_package(workspace: &Path) -> Result<Value> {
     let root = runtime_root(&workspace);
     plain(&dev, true)?;
     plain(&root, true)?;
+    let _backend = backend_lock(&workspace)?;
     let attempt_path = dev.join(PACKAGE_UPDATE_ATTEMPT);
     if !present(&attempt_path)? {
         validated_authority_options(&workspace, false, true)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
@@ -1488,6 +1490,87 @@ fn validated_authority_options(
 /// always refuses that fallback.
 pub fn root_for_workspace(workspace: &Path) -> Result<Option<PathBuf>> {
     Ok(validated_authority(workspace)?.map(|(root, _)| root))
+}
+
+fn backend_lock(workspace: &Path) -> Result<File> {
+    let dev = dev_dir(workspace);
+    plain(&dev, true)?;
+    let path = dev.join("backend.lock");
+    if present(&path)? {
+        plain(&path, false)?;
+    }
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)
+        .map_err(|_| "DEV_BACKEND_LEASE_UNAVAILABLE")?;
+    file.try_lock().map_err(|_| "DEV_BACKEND_ALREADY_RUNNING")?;
+    Ok(file)
+}
+
+/// Retains this workspace's backend lease and read-only image/selection pins.
+/// Healthy backend startup is independent of Wake/browser ownership. Only an
+/// actual package recovery uses the existing STOPPED/exclusive recovery gates.
+pub struct BackendSelection {
+    pub workspace: PathBuf,
+    pub executable: PathBuf,
+    pub package_id: String,
+    pub app_sha256: String,
+    pub recovery: String,
+    _lease: File,
+    _pins: Vec<File>,
+}
+
+pub fn select_backend(workspace: &Path) -> Result<BackendSelection> {
+    use std::os::windows::fs::OpenOptionsExt;
+    let workspace = canonical_workspace(workspace)?;
+    let recovery = match validated_authority(&workspace) {
+        Ok(Some(_)) => "CURRENT_PACKAGE_VERIFIED".to_owned(),
+        Ok(None) => return Err("DEV_RUNTIME_NOT_PREPARED".into()),
+        Err(_) => recover_package(&workspace)?["status"]
+            .as_str()
+            .ok_or("DEV_BACKEND_RECOVERY_STATUS_INVALID")?
+            .to_owned(),
+    };
+    let lease = backend_lock(&workspace)?;
+    let (root, authority) = validated_authority(&workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    let executable = root
+        .join("versions")
+        .join(&authority.package_id)
+        .join("CatDeskBinagotchy.exe");
+    let mut pins = Vec::new();
+    for path in [
+        &executable,
+        &root.join("current.json"),
+        &dev_dir(&workspace).join("authority.json"),
+    ] {
+        plain(path, false)?;
+        pins.push(
+            OpenOptions::new()
+                .read(true)
+                .share_mode(1)
+                .open(path)
+                .map_err(|_| "DEV_BACKEND_SELECTION_PIN_UNAVAILABLE")?,
+        );
+    }
+    if validated_authority(&workspace)?
+        .as_ref()
+        .map(|(_, value)| value)
+        != Some(&authority)
+    {
+        return Err("DEV_BACKEND_SELECTION_CHANGED".into());
+    }
+    Ok(BackendSelection {
+        workspace,
+        executable,
+        package_id: authority.package_id,
+        app_sha256: authority.artifacts["CatDeskBinagotchy.exe"].clone(),
+        recovery,
+        _lease: lease,
+        _pins: pins,
+    })
 }
 
 fn conversation_id(url: &str) -> Result<&str> {
@@ -3122,6 +3205,132 @@ mod tests {
             assert_eq!(fs::read(&journal).unwrap(), marker);
             cleanup(&parent);
         }
+    }
+
+    #[test]
+    fn healthy_backend_selection_is_independent_of_running_wake_and_browser() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let store = Store::open(&root).unwrap();
+        runtime::control(&store, "RUNNING").unwrap();
+        let host = store.host_lock().unwrap();
+        let browser = runtime::browser_session_lock(&root, Duration::ZERO).unwrap();
+        let pointer = fs::read(root.join("current.json")).unwrap();
+        let selection = select_backend(&workspace).unwrap();
+        assert_eq!(selection.recovery, "CURRENT_PACKAGE_VERIFIED");
+        assert_eq!(
+            selection.executable.file_name().unwrap(),
+            "CatDeskBinagotchy.exe"
+        );
+        assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+        assert_eq!(
+            read_json::<Value>(&root.join("control.json"), 4096).unwrap()["desired"],
+            "RUNNING"
+        );
+        assert_eq!(
+            select_backend(&workspace).err().unwrap(),
+            "DEV_BACKEND_ALREADY_RUNNING"
+        );
+        assert_eq!(
+            recover_package(&workspace).unwrap_err(),
+            "DEV_BACKEND_ALREADY_RUNNING"
+        );
+        drop(selection);
+        drop(browser);
+        drop(host);
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn selected_backend_pins_and_lease_prevent_selection_changes_until_release() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let selection = select_backend(&workspace).unwrap();
+        let pointer = fs::read(root.join("current.json")).unwrap();
+        for path in [
+            &selection.executable,
+            &root.join("current.json"),
+            &dev_dir(&workspace).join("authority.json"),
+        ] {
+            assert!(fs::write(path, b"forbidden change while selected").is_err());
+        }
+        assert_eq!(
+            update_package(&workspace, &package).unwrap_err(),
+            "DEV_BACKEND_ALREADY_RUNNING"
+        );
+        assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+        drop(selection);
+        update_fixture_host(&parent, &workspace, "after-backend-exit");
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn backend_selection_restores_failed_current_and_keeps_unknown_metadata_closed() {
+        let (parent, workspace, root, previous, _) = previous_recovery_fixture();
+        let selection = select_backend(&workspace).unwrap();
+        assert_eq!(selection.recovery, "PACKAGE_PREVIOUS_RESTORED_STOPPED");
+        assert_eq!(selection.package_id, previous.package_id);
+        assert_eq!(
+            selection.app_sha256,
+            previous.artifacts["CatDeskBinagotchy.exe"]
+        );
+        drop(selection);
+        fs::write(root.join("current.json"), b"unknown selection").unwrap();
+        assert!(select_backend(&workspace).is_err());
+        assert_eq!(
+            fs::read(root.join("current.json")).unwrap(),
+            b"unknown selection"
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn backend_selection_finishes_pending_update_and_refuses_unprepared_workspace() {
+        let (parent, workspace, _, _) = fixture();
+        assert_eq!(
+            select_backend(&workspace).err().unwrap(),
+            "DEV_RUNTIME_NOT_PREPARED"
+        );
+        assert!(!dev_dir(&workspace).exists());
+        cleanup(&parent);
+        let (parent, workspace, root, attempt) = package_recovery_fixture();
+        let selection = select_backend(&workspace).unwrap();
+        assert_eq!(selection.package_id, attempt.new_authority.package_id);
+        assert_eq!(selection.recovery, "PACKAGE_UPDATED_STOPPED");
+        assert!(!dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT).exists());
+        assert_eq!(
+            read_json::<Value>(&root.join("control.json"), 4096).unwrap()["desired"],
+            "STOPPED"
+        );
+        drop(selection);
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn backend_selection_leases_do_not_serialize_independent_workspaces() {
+        let (a_parent, a_workspace, a_package, a_python) = fixture();
+        let (b_parent, b_workspace, b_package, b_python) = fixture();
+        prepare_fixture(&a_workspace, &a_package, &a_python);
+        prepare_fixture(&b_workspace, &b_package, &b_python);
+        let a = select_backend(&a_workspace).unwrap();
+        let b = select_backend(&b_workspace).unwrap();
+        assert_ne!(a.workspace, b.workspace);
+        assert_eq!(
+            update_package(&a_workspace, &a_package).unwrap_err(),
+            "DEV_BACKEND_ALREADY_RUNNING"
+        );
+        drop(a);
+        update_fixture_host(&a_parent, &a_workspace, "independent-next-version");
+        assert_eq!(
+            select_backend(&b_workspace).err().unwrap(),
+            "DEV_BACKEND_ALREADY_RUNNING"
+        );
+        assert!(root_for_workspace(&b_workspace).unwrap().is_some());
+        drop(b);
+        cleanup(&a_parent);
+        cleanup(&b_parent);
     }
 
     #[test]

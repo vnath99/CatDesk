@@ -1,3 +1,38 @@
+## October 24 EDT C107 — bounded startup of the selected development backend
+
+Added `operator web-dev-runtime run-backend` (180 seconds by default, configurable
+1–900). It selects the exact development app, completes pending selection or
+restores a recorded predecessor using existing recovery, and runs the existing
+headless MCP entry on an ephemeral loopback port. Authentication comes from the
+existing process environment. Fixed development config, no tunnel, no browser,
+no Wake launch and no Web auto scheduler. Ready output is validated and redacted.
+
+Reuse the existing suspended-child kill-on-close Job owner. Keep selected image,
+pointer and authority pins until the exact owned tree drains. A workspace-local
+backend lease prevents duplicate startup and package mutation; a busy lease is
+ownership evidence, not independent process liveness. Healthy startup neither
+requires STOPPED Wake nor takes its browser lock. Independent workspaces remain
+independent; no global working-directory mutation is used.
+
+33 runtime tests and 126 operator-family tests pass, including five new runtime,
+one parser and three backend contract tests. The root filter includes existing
+Web guards. Strict root/Wake Clippy and format pass. This is source qualification;
+the new command has not yet been built or exercised as a normal executable.
+Normal startup/file-failure fallback and parent-exit cleanup are the next bounded tests.
+Fallback for a current image that hashes correctly but fails to start remains an
+additional implementation requirement.
+
+All 306 runtime records and 55 historical files remain exact; zero scoped owners,
+queue 0, both controls STOPPED, selected v76 unchanged. No protected lifecycle,
+binding/native-session, browser/Wake or completed-canary action occurred. Older
+readers remain compatible; use the current controller for package mutations so
+the new backend lease is honored. No legacy mechanism is retired.
+
+Prior published HEAD `d92f9158f7e16dd0d18f25bfd0efd460c9dc3279` was verified on
+`codex/web-rollover-oct17`; its normal product proof covers source `cb50162`.
+Remote CI remains unverified. Protected recovery and actual Web coding B/C are
+still open. Evidence: `docs/verification/C107_BOUNDED_SELECTED_DEV_BACKEND_2026_10_24.json`.
+
 ## October 24 EDT C106 — normal backend and interrupted predecessor recovery
 
 Exact published source `cb50162d5705830d4c1530ec3e0c351ccdac9041` built as normal
