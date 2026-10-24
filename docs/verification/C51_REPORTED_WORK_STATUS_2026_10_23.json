@@ -5,7 +5,7 @@
   "observedUtc": "2026-10-24T00:47:11.1202074+00:00",
   "predecessorCommit": "4cc44f5bbabe4d4bbb0499b222223be97f0545c8",
   "branch": "codex/web-rollover-oct17",
-  "qualification": "SOURCE_AND_DISPOSABLE_HTTP_MCP_REGRESSION_ONLY",
+  "qualification": "SOURCE_PLUS_NORMAL_RELEASE_CLI_DISPOSABLE_METADATA_ONLY",
   "review": "ROOT_SELF_REVIEW",
   "changes": [
     "Optional backward-compatible reportedStatus in the existing WorkLedger, not a second registry.",
@@ -127,7 +127,7 @@
     "officialStatusElapsedSeconds": 3.3440774,
     "fixedSignedImageStatus": "VERIFIED",
     "namedProcessesAtEarlierObservation": 0,
-    "officialRuntimeRunning": "NOT_ESTABLISHED_BY_REDACTED_STATUS_WRAPPER",
+    "officialRuntimeRunning": "CONFIRMED_STOPPED_PROFILE_PRESENT_NOT_STALE",
     "settingsChanges": 0,
     "observedUtc": "2026-10-24T00:30:54.7255321Z",
     "mutations": 0,
@@ -139,7 +139,25 @@
     "statusClientFound": true,
     "officialStatusExit": 0,
     "statusClientVersion": "0.0.14+0f870e50a973fa820d4c409000059e181e8d242b (git sha: 0f870e50a973fa820d4c409000059e181e8d242b)",
-    "installedImage": "DIFFERS_FROM_C49_NORMAL_DEVELOPMENT_IMAGE_CAPABILITY_PARITY_UNVERIFIED"
+    "installedImage": "DIFFERS_FROM_C49_NORMAL_DEVELOPMENT_IMAGE_CAPABILITY_PARITY_UNVERIFIED",
+    "directState": {
+      "connectStartStopRemoveInvoked": false,
+      "state": {
+        "runtimeState": "stopped",
+        "stale": false,
+        "healthy": false,
+        "processRunning": false,
+        "remoteLookupAttempted": true,
+        "ready": false,
+        "profileExists": true
+      },
+      "finishedUtc": "2026-10-24T00:52:30.9732541+00:00",
+      "startedUtc": "2026-10-24T00:52:29.7823434+00:00",
+      "settingsChanged": false,
+      "elapsedSeconds": 1.1921546,
+      "ownerExited": true,
+      "exitCode": 0
+    }
   },
   "cleanup": {
     "newBrowserWakeStarts": 0,
@@ -154,15 +172,68 @@
     "existingRuntimeRecordsChecked": 266
   },
   "acceptance": {
-    "reportedBlockerInstalled": "NOT_QUALIFIED",
+    "reportedBlockerInstalled": "NOT_QUALIFIED_SELECTED_DEVELOPMENT_STILL_C49_V65",
     "fullOctoberMilestone": "OPEN",
     "reportedBlockerSource": "PASS",
     "C50": "PRESERVED_COMPLETED_CONTROLLED_ROLLOVER_NOT_REPLAYED",
     "unattended": "NOT_ACTIVATED",
     "protectedProduction": "NOT_QUALIFIED",
     "actualParallelWebMcp": "OPEN",
-    "actualWebCoding": "BLOCKED_SCOPED_TOOL_UNAVAILABLE"
+    "actualWebCoding": "BLOCKED_SCOPED_TOOL_UNAVAILABLE",
+    "reportedBlockerNormalCli": "PASS_DISPOSABLE_SYNTHETIC_METADATA"
   },
-  "nextTask": "Qualify the report path in a normal executable using disposable state; prepare supported backend recovery/build/catalog qualification without changing the official tunnel or replaying the completed canary.",
-  "operatorActionRequiredForSourceWork": false
+  "nextTask": "Review selection of the qualified normal executable into stopped development using existing updater; prepare supported serving-backend recovery/catalog qualification while preserving official runtime ownership. No replay of completed C50 rollover.",
+  "operatorActionRequiredForSourceWork": false,
+  "publishedSource": {
+    "verifiedUtc": "2026-10-24T00:48:49.0278661+00:00",
+    "branch": "codex/web-rollover-oct17",
+    "commit": "6f85763dbd86b7ab11518332fdcd6e5576f06db2",
+    "verifiedRemoteSha": "6f85763dbd86b7ab11518332fdcd6e5576f06db2",
+    "privacyScan": "PASS"
+  },
+  "normalRelease": {
+    "sourceCommit": "6f85763dbd86b7ab11518332fdcd6e5576f06db2",
+    "ownedTreeExited": true,
+    "finishedUtc": "2026-10-24T00:55:53.3596497+00:00",
+    "startedUtc": "2026-10-24T00:49:48.9668320+00:00",
+    "elapsedSeconds": 364.3940762,
+    "sourceTree": "a2edcbe8128059ab9ed36e277b18a31f3b2ced10",
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "exitCode": 0,
+    "maximumSeconds": 600,
+    "imageSha256": "9f8f70d618c6eedc8cda7b4bd9ad10b5740b70adeecadb9b602749c9c5f7ed22",
+    "packageSelectionChanged": false,
+    "imageBytes": 34867712
+  },
+  "normalCli": {
+    "commandCount": 21,
+    "checks": [
+      "normal-cli-independent-blocked-and-progress-reports-retain-ownership",
+      "cold-normal-cli-retry-preserves-exact-bytes-and-observation-time",
+      "cold-central-status-exposes-independent-reports-and-rejects-wrong-target",
+      "legacy-pre-submit-retirement-preserved-and-closed-report-refused"
+    ],
+    "finishedUtc": "2026-10-24T00:56:10.4466891+00:00",
+    "startedUtc": "2026-10-24T00:56:04.4672280+00:00",
+    "runtimeRecords": 266,
+    "allCommandOwnersExited": true,
+    "imageSha256": "9f8f70d618c6eedc8cda7b4bd9ad10b5740b70adeecadb9b602749c9c5f7ed22",
+    "grantsCreated": 0,
+    "changedRuntimeRecords": 0,
+    "browserWakeStarts": 0,
+    "packageSelectionChanged": false,
+    "nativeActions": 0,
+    "actualMessages": 0,
+    "elapsedSeconds": 5.9808513,
+    "sourceCommit": "6f85763dbd86b7ab11518332fdcd6e5576f06db2",
+    "classification": "NORMAL_CLI_DISPOSABLE_SYNTHETIC_METADATA_NO_BROWSER_OR_SERVER",
+    "completedCanaryReplayed": false,
+    "postOwnerProcesses": 0,
+    "maximumSeconds": 180
+  },
+  "versionCompatibility": {
+    "realLedgersUpgraded": 0,
+    "newExecutableReadsLegacy": "PASS_NO_MIGRATION",
+    "olderExecutableReadsNewReports": "REFUSES_UNKNOWN_FIELD_USE_MATCHING_RELEASE"
+  }
 }

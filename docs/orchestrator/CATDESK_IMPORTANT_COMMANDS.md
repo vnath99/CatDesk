@@ -1,3 +1,34 @@
+## October 23 EDT C51 — normal CLI qualified; official MCP runtime confirmed stopped
+
+Source commit `6f85763dbd86b7ab11518332fdcd6e5576f06db2` was reviewed, privacy-audited and normally
+pushed to `codex/web-rollover-oct17`; exact GitHub SHA matched at
+2026-10-24T00:48:49.0278661+00:00. The existing repository remains PUBLIC; no visibility change.
+
+The normal release built in 364.39s inside a
+600-second owned process tree. Its exact image hash is recorded in C51 evidence.
+Four normal CLI checks passed in 5.98s using
+21 bounded commands: independent blocked/progress reports,
+cold exact retry persistence, cold central status and wrong-target refusal, and
+existing pre-submit retirement plus closed-report refusal. Only disposable local
+metadata was used, with inert Wake components and synthetic queued events.
+No browser, server, delivery, grant or native session was started. All command
+owners exited, no scoped processes remain and all 266 real runtime records match.
+
+A deeper existing-client read-only status at 2026-10-24T00:52:30.9732541+00:00 confirms
+`runtime_state=stopped`, `process_running=false`, `healthy=false` and
+`ready=false`; the saved profile exists and is not stale. The configured MCP
+port previously had no listener. No connect/start/stop/remove, tunnel/auth change
+or connector retry occurred. The cause of external HTTP429 and provider catalog
+parity remains unverified. C50's completed browser rollover remains preserved.
+
+This qualifies a normal executable, not installed serving behavior. The selected
+stopped development package remains C49/v65; protected production and recurring
+automation are unchanged. Actual Web MCP coding/parallel B/C, critical crash/full
+restart and unattended acceptance remain open. Next: existing guarded development
+selection and supported backend/catalog recovery qualification. No operator action
+is requested for continued source work. The goal remains ACTIVE.
+Evidence: `docs/verification/C51_REPORTED_WORK_STATUS_2026_10_23.json`.
+
 ## October 23 EDT C50 — completed granted-task live rollover; preserve its pending task
 
 C49/v65 completed a real controlled private-payload collection, new conversation,
@@ -873,8 +904,12 @@ not refresh the observation timestamp. Closed requests cannot be reopened.
 Reports can describe pre-delivery blockers without delivery receipts; they do
 not remove queue entries, publish events, run tasks or start processes. Preserve
 the original target witness from `workIntent`, including after rollover.
-Normal-executable and installed qualification of C51 remain pending; C49 remains
-the selected stopped development build. Evidence:
+C51 normal-executable qualification passed on disposable state as recorded above;
+installed qualification remains pending. C49 remains the selected stopped
+development build. New executables read legacy ledgers without migration. Older
+executables reject the new `reportedStatus` field, so use a matching executable
+with any profile that has recorded reports. No real ledger has been upgraded by
+this qualification. Evidence:
 `docs/verification/C51_REPORTED_WORK_STATUS_2026_10_23.json`.
 
 A new request uses the current paired target witness. Resolution uses the
