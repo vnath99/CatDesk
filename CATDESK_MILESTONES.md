@@ -1,3 +1,36 @@
+## October 23 EDT C56 — normal recovery qualified; stopped development selected
+
+Published source `90c2cc95e11bc132fc46571811655898e087cc76` built normally in 413.16s
+under an owned 600-second Job. Five normal-executable checks across 21 bounded
+commands passed in 4.48s. Explicitly injected synthetic CREATED/Wake-first
+state encountered a real Windows registry replacement fault. Its receipt,
+generation2 successor and old registry survived. A sibling target remained
+readable and queued its own work metadata while the registry write was blocked.
+A fresh process finished the same successor, preserved one predecessor, recorded
+the context transition and queued one continuation. Cold retry preserved exact
+record, registry, Wake and queue bytes; the continuation remains undelivered.
+This is local persistence qualification, not a browser crash, actual Web coding
+or full-runtime restart. Harness input/envelope/order corrections and partial
+attempts are audited; none changed real state or left owned processes.
+
+The existing guarded updater selected that image into stopped development v68 in
+6.44s. Nine exact paired reads and the redacted central view passed.
+Only the two permitted package pointers changed; 264 other records, all project
+bindings/history, the completed C50 task/grant and existing profile remain intact.
+The prior v67 package is retained. Qualified Wake/browser component bytes were
+reused after an unchanged Wake-subtree check. Both controls remain STOPPED;
+zero messages, browser/Wake/recurring starts, native session actions or production
+changes. All owned Jobs exited and cleanup found zero scoped processes.
+
+The full mandatory architecture remains in the existing master/project directives.
+Actual concurrent Web MCP coding B/C, critical browser crash/full restart,
+protected runtime and unattended acceptance remain open. The last separate
+connector observation was HTTP429; the actual replacement lacks the scoped tool.
+Supported local MCP/official-runtime startup ownership remains pending. No new
+connector attempt, external tunnel/auth change or full-stack restart was made.
+Source and disposable qualification continue independently. Evidence:
+`docs/verification/C56_NORMAL_REGISTRY_RECOVERY_2026_10_23.json`.
+
 ## October 23 EDT C55 — guarded registry-commit failure stays recoverable (source)
 
 The remaining-gap audit reproduced a native paired-commit bug. A Windows read
