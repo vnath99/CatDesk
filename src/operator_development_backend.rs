@@ -1,7 +1,7 @@
 //! Bounded foreground developer backend using the existing headless MCP entry
 //! and suspended-child Job owner. It never releases a persistent process.
 
-use crate::reviewed_candidate_owner::OwnedCandidateChild;
+use crate::reviewed_candidate_owner::{OwnedCandidateChild, SpawnFailure};
 use catdesk_wake::development_runtime::{self, BackendSelection};
 use serde_json::{Value, json};
 use std::{
@@ -177,6 +177,45 @@ mod tests {
         }
         assert_eq!(process_auth(Some("x".repeat(24))).unwrap(), "x".repeat(24));
     }
+
+    #[test]
+    fn startup_fallback_requires_known_exit_proof_and_no_published_readiness() {
+        for (code, proof) in [
+            ("DEV_BACKEND_START_FAILED", ExitProof::NoChildCreated),
+            ("DEV_BACKEND_READY_TIMEOUT", ExitProof::OwnedTreeDrained),
+            ("DEV_BACKEND_READY_EOF", ExitProof::OwnedTreeDrained),
+            (
+                "DEV_BACKEND_EXITED_BEFORE_READY",
+                ExitProof::OwnedTreeDrained,
+            ),
+        ] {
+            assert!(AttemptFailure::new(code, false, proof).may_restore());
+            assert!(!AttemptFailure::new(code, true, proof).may_restore());
+            assert!(!AttemptFailure::new(code, false, ExitProof::Unproven).may_restore());
+        }
+        for code in [
+            "DEV_BACKEND_CHILD_FAILED",
+            "DEV_BACKEND_READY_INVALID",
+            "DEV_BACKEND_OUTPUT_INVALID",
+            "DEV_BACKEND_READY_OUTPUT_FAILED",
+            "DEV_BACKEND_OWNED_TREE_EXIT_UNPROVEN",
+            "UNKNOWN",
+        ] {
+            assert!(!AttemptFailure::new(code, false, ExitProof::OwnedTreeDrained).may_restore());
+        }
+        assert!(
+            !AttemptFailure::new(
+                "DEV_BACKEND_START_FAILED",
+                false,
+                ExitProof::OwnedTreeDrained
+            )
+            .may_restore()
+        );
+        assert!(
+            !AttemptFailure::new("DEV_BACKEND_READY_EOF", false, ExitProof::NoChildCreated)
+                .may_restore()
+        );
+    }
 }
 
 fn backend_command(selection: &BackendSelection, maximum_seconds: u64, token: &str) -> Command {
@@ -276,20 +315,92 @@ fn ready_value(
 
 fn run_owned(workspace: &Path, maximum_seconds: u64, token: &str) -> Result<Value, String> {
     let selection = development_runtime::select_backend(workspace)?;
-    let mut command = backend_command(&selection, maximum_seconds, token);
+    match attempt_backend(&selection, maximum_seconds, token, None) {
+        Ok(result) => Ok(result),
+        Err(failure) if failure.may_restore() => {
+            let metadata = json!({"attempted":true,"maximumStartupAttempts":2,
+                "failedPackageId":selection.package_id,"failedAppSha256":selection.app_sha256,
+                "reason":failure.code,"failedProcessOutcome":failure.exit_proof.label()});
+            let previous = selection.restore_after_startup_failure()?;
+            // One fallback only. A failed predecessor is reported; it cannot
+            // resurrect the failed current release or recursively retry work.
+            attempt_backend(&previous, maximum_seconds, token, Some(&metadata))
+                .map_err(|failure| failure.code)
+        }
+        Err(failure) => Err(failure.code),
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ExitProof {
+    NoChildCreated,
+    OwnedTreeDrained,
+    Unproven,
+}
+
+impl ExitProof {
+    fn label(self) -> &'static str {
+        match self {
+            Self::NoChildCreated => "NO_CHILD_CREATED",
+            Self::OwnedTreeDrained => "OWNED_TREE_DRAINED",
+            Self::Unproven => "UNPROVEN",
+        }
+    }
+}
+
+struct AttemptFailure {
+    code: String,
+    ready_published: bool,
+    exit_proof: ExitProof,
+}
+
+impl AttemptFailure {
+    fn new(code: impl Into<String>, ready_published: bool, exit_proof: ExitProof) -> Self {
+        Self {
+            code: code.into(),
+            ready_published,
+            exit_proof,
+        }
+    }
+    fn may_restore(&self) -> bool {
+        !self.ready_published
+            && match self.exit_proof {
+                ExitProof::NoChildCreated => self.code == "DEV_BACKEND_START_FAILED",
+                ExitProof::OwnedTreeDrained => matches!(
+                    self.code.as_str(),
+                    "DEV_BACKEND_READY_TIMEOUT"
+                        | "DEV_BACKEND_READY_EOF"
+                        | "DEV_BACKEND_EXITED_BEFORE_READY"
+                ),
+                ExitProof::Unproven => false,
+            }
+    }
+}
+
+fn attempt_backend(
+    selection: &BackendSelection,
+    maximum_seconds: u64,
+    token: &str,
+    fallback: Option<&Value>,
+) -> Result<Value, AttemptFailure> {
+    let mut command = backend_command(selection, maximum_seconds, token);
     let started = Instant::now();
-    let mut owned =
-        OwnedCandidateChild::spawn(&mut command).map_err(|_| "DEV_BACKEND_START_FAILED")?;
-    let stdout = owned
-        .child_mut()
-        .stdout
-        .take()
-        .ok_or("DEV_BACKEND_OUTPUT_UNAVAILABLE")?;
-    let stderr = owned
-        .child_mut()
-        .stderr
-        .take()
-        .ok_or("DEV_BACKEND_OUTPUT_UNAVAILABLE")?;
+    let mut owned = OwnedCandidateChild::spawn_classified(&mut command).map_err(|failure| {
+        AttemptFailure::new(
+            "DEV_BACKEND_START_FAILED",
+            false,
+            match failure {
+                SpawnFailure::NoChildCreated => ExitProof::NoChildCreated,
+                SpawnFailure::Owner(_) => ExitProof::Unproven,
+            },
+        )
+    })?;
+    let stdout = owned.child_mut().stdout.take().ok_or_else(|| {
+        AttemptFailure::new("DEV_BACKEND_OUTPUT_UNAVAILABLE", false, ExitProof::Unproven)
+    })?;
+    let stderr = owned.child_mut().stderr.take().ok_or_else(|| {
+        AttemptFailure::new("DEV_BACKEND_OUTPUT_UNAVAILABLE", false, ExitProof::Unproven)
+    })?;
     let (sender, receiver) = mpsc::sync_channel(1);
     let output_reader = thread::spawn(move || {
         let mut reader = BufReader::new(stdout);
@@ -303,11 +414,19 @@ fn run_owned(workspace: &Path, maximum_seconds: u64, token: &str) -> Result<Valu
         super::bounded_reader(reader)
     });
     let error_reader = thread::spawn(move || super::bounded_reader(stderr));
+    let mut ready_published = false;
     let result: Result<std::process::ExitStatus, String> = (|| {
-        let bytes = receiver
-            .recv_timeout(Duration::from_secs(10))
-            .map_err(|_| "DEV_BACKEND_READY_TIMEOUT")??;
-        let mut ready = ready_value(&bytes, &selection, maximum_seconds, token)?;
+        let bytes =
+            receiver
+                .recv_timeout(Duration::from_secs(10))
+                .map_err(|error| match error {
+                    mpsc::RecvTimeoutError::Timeout => "DEV_BACKEND_READY_TIMEOUT",
+                    mpsc::RecvTimeoutError::Disconnected => "DEV_BACKEND_READY_UNAVAILABLE",
+                })??;
+        if bytes.is_empty() {
+            return Err("DEV_BACKEND_READY_EOF".into());
+        }
+        let mut ready = ready_value(&bytes, selection, maximum_seconds, token)?;
         if owned
             .child_mut()
             .try_wait()
@@ -317,6 +436,12 @@ fn run_owned(workspace: &Path, maximum_seconds: u64, token: &str) -> Result<Valu
             return Err("DEV_BACKEND_EXITED_BEFORE_READY".into());
         }
         ready["pid"] = json!(owned.pid());
+        if let Some(metadata) = fallback {
+            ready["startupFallback"] = metadata.clone();
+        }
+        // A partial/failed write may already have exposed readiness to a caller.
+        // From this point onward there is never automatic backend replacement.
+        ready_published = true;
         println!("{ready}");
         std::io::stdout()
             .flush()
@@ -342,17 +467,27 @@ fn run_owned(workspace: &Path, maximum_seconds: u64, token: &str) -> Result<Valu
     })();
     // Keep selection/image pins until exact Job accounting proves the complete
     // child tree empty, including descendants of a naturally exited backend.
-    let cleanup = owned
-        .terminate_tree_and_confirm_quiescent()
-        .map_err(|_| "DEV_BACKEND_OWNED_TREE_EXIT_UNPROVEN");
-    cleanup?;
-    let output = output_reader
-        .join()
-        .map_err(|_| "DEV_BACKEND_OUTPUT_UNAVAILABLE")?;
-    let error = error_reader
-        .join()
-        .map_err(|_| "DEV_BACKEND_OUTPUT_UNAVAILABLE")?;
-    let exit = result?;
+    owned.terminate_tree_and_confirm_quiescent().map_err(|_| {
+        AttemptFailure::new(
+            "DEV_BACKEND_OWNED_TREE_EXIT_UNPROVEN",
+            ready_published,
+            ExitProof::Unproven,
+        )
+    })?;
+    let output = output_reader.join().map_err(|_| {
+        AttemptFailure::new(
+            "DEV_BACKEND_OUTPUT_UNAVAILABLE",
+            ready_published,
+            ExitProof::OwnedTreeDrained,
+        )
+    })?;
+    let error = error_reader.join().map_err(|_| {
+        AttemptFailure::new(
+            "DEV_BACKEND_OUTPUT_UNAVAILABLE",
+            ready_published,
+            ExitProof::OwnedTreeDrained,
+        )
+    })?;
     if output.overflow
         || output.read_failed
         || error.overflow
@@ -360,12 +495,19 @@ fn run_owned(workspace: &Path, maximum_seconds: u64, token: &str) -> Result<Valu
         || output.text.contains(token)
         || error.text.contains(token)
     {
-        return Err("DEV_BACKEND_OUTPUT_INVALID".into());
+        return Err(AttemptFailure::new(
+            "DEV_BACKEND_OUTPUT_INVALID",
+            ready_published,
+            ExitProof::OwnedTreeDrained,
+        ));
     }
+    let exit = result
+        .map_err(|code| AttemptFailure::new(code, ready_published, ExitProof::OwnedTreeDrained))?;
     Ok(
         json!({"mode":"DEVELOPMENT_UNPROTECTED","status":"FOREGROUND_BACKEND_EXITED",
         "packageId":selection.package_id,"appSha256":selection.app_sha256,
         "recovery":selection.recovery,"exitCode":exit.code(),"ownedTreeExited":true,
-        "maximumRuntimeSeconds":maximum_seconds,"browserAction":"NONE","wakeAction":"NONE"}),
+        "maximumRuntimeSeconds":maximum_seconds,"browserAction":"NONE","wakeAction":"NONE",
+        "startupFallback":fallback}),
     )
 }

@@ -234,6 +234,30 @@ retired. Actual two-conversation Web coding remains the live priority after its
 approved serving dependencies return. Evidence:
 `docs/verification/C108_NORMAL_SELECTED_BACKEND_AUTORECOVERY_2026_10_24.json`.
 
+### C109 one bounded attempt after pre-ready startup failure
+
+Source now handles a selected package whose hashes validate but whose backend
+cannot start: after proven native spawn rejection with no child, or pre-ready
+timeout/EOF/exit and complete private-Job drain, restore only the exact recorded
+predecessor and attempt it once. The backend lease stays held across the same
+selection journal. A sealed private authority snapshot prevents display fields
+from retargeting rollback. Current metadata and all predecessor checks stay strict.
+
+After readiness or partial publication, never replace/retry the backend
+automatically. Unknown cleanup, scope/auth violations, unsafe output, busy Wake/
+browser ownership or absent/damaged predecessor also refuse. Failed bytes remain
+preserved, never a rollback target. Existing spawn API/messages and Job policy are
+retained; a typed failure result distinguishes no-child rejection from owner
+failures. Fallback metadata appears with the validated ready/result record.
+
+The old behavior was confirmed with the normal C107 executable. The new source
+passes 51 focused runtime/backend/owner tests, both strict lint gates and format.
+New normal fallback, failed-predecessor stop and after-ready refusal still need
+bounded executable qualification. C108 file-failure and owner-exit acceptance is
+preserved. Protected/unattended migration and real Web coding remain separate;
+no legacy mechanism is retired. Evidence:
+`docs/verification/C109_ONE_PRE_READY_BACKEND_FALLBACK_2026_10_24.json`.
+
 # T-0476 — CatDesk fast development, safe Wake recovery and simple production releases
 
 ## CURRENT 2026-10-11 — Chat52 three-lane development and recovery status (supersedes history below)

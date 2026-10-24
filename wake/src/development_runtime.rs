@@ -1521,10 +1521,10 @@ pub struct BackendSelection {
     pub recovery: String,
     _lease: File,
     _pins: Vec<File>,
+    authority: Authority,
 }
 
 pub fn select_backend(workspace: &Path) -> Result<BackendSelection> {
-    use std::os::windows::fs::OpenOptionsExt;
     let workspace = canonical_workspace(workspace)?;
     let recovery = match validated_authority(&workspace) {
         Ok(Some(_)) => "CURRENT_PACKAGE_VERIFIED".to_owned(),
@@ -1535,6 +1535,11 @@ pub fn select_backend(workspace: &Path) -> Result<BackendSelection> {
             .to_owned(),
     };
     let lease = backend_lock(&workspace)?;
+    pin_backend(workspace, lease, recovery)
+}
+
+fn pin_backend(workspace: PathBuf, lease: File, recovery: String) -> Result<BackendSelection> {
+    use std::os::windows::fs::OpenOptionsExt;
     let (root, authority) = validated_authority(&workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
     let executable = root
         .join("versions")
@@ -1565,12 +1570,51 @@ pub fn select_backend(workspace: &Path) -> Result<BackendSelection> {
     Ok(BackendSelection {
         workspace,
         executable,
-        package_id: authority.package_id,
+        package_id: authority.package_id.clone(),
         app_sha256: authority.artifacts["CatDeskBinagotchy.exe"].clone(),
         recovery,
         _lease: lease,
         _pins: pins,
+        authority,
     })
+}
+
+impl BackendSelection {
+    /// The caller must first prove that its failed pre-ready child tree is gone.
+    /// Retain the existing backend lease across rollback; display fields cannot
+    /// choose a different workspace/package or substitute an authority snapshot.
+    pub fn restore_after_startup_failure(mut self) -> Result<Self> {
+        let workspace = canonical_workspace(Path::new(&self.authority.workspace))?;
+        let (root, current) = validated_authority(&workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+        if current != self.authority {
+            return Err("DEV_BACKEND_SELECTION_CHANGED".into());
+        }
+        let store = Store::open(&root)?;
+        let _host = store.host_lock()?;
+        let _browser = runtime::browser_session_lock(&root, Duration::ZERO)?;
+        let control: runtime::Control = read(&root.join("control.json"))?;
+        if control.schema_version != 1 || control.desired != "STOPPED" {
+            return Err("DEV_PACKAGE_UPDATE_HOST_NOT_STOPPED".into());
+        }
+        let previous = read_retained_release(&root)
+            .map_err(|_| "DEV_RELEASE_RECONSTRUCTION_REQUIRED_PREDECESSOR_INVALID")?
+            .ok_or("DEV_RELEASE_RECONSTRUCTION_REQUIRED_NO_VERIFIED_PREDECESSOR")?;
+        // No mapped child remains. Release only the read pins, retaining the
+        // backend lease until the restored selection has its new pins.
+        self._pins.clear();
+        let attempt = stage_previous_package_attempt(&workspace, &root, &current, previous)?;
+        complete_package_update(
+            &workspace,
+            &root,
+            &attempt,
+            &attempt.new_authority.artifacts,
+        )?;
+        pin_backend(
+            workspace,
+            self._lease,
+            "PACKAGE_PREVIOUS_RESTORED_STOPPED".into(),
+        )
+    }
 }
 
 fn conversation_id(url: &str) -> Result<&str> {
@@ -3331,6 +3375,173 @@ mod tests {
         drop(b);
         cleanup(&a_parent);
         cleanup(&b_parent);
+    }
+
+    fn healthy_current_with_predecessor() -> (PathBuf, PathBuf, PathBuf, Authority, Authority) {
+        let (parent, workspace, root, previous, current) = previous_recovery_fixture();
+        fs::copy(
+            parent.join("failed-current/CatDeskWakeHost.exe"),
+            root.join("versions")
+                .join(&current.package_id)
+                .join("CatDeskWakeHost.exe"),
+        )
+        .unwrap();
+        assert_eq!(validated_authority(&workspace).unwrap().unwrap().1, current);
+        (parent, workspace, root, previous, current)
+    }
+
+    #[test]
+    fn startup_failure_restores_valid_current_using_sealed_snapshot_and_retains_lease() {
+        let (parent, workspace, root, previous, current) = healthy_current_with_predecessor();
+        let image = root
+            .join("versions")
+            .join(&current.package_id)
+            .join("CatDeskBinagotchy.exe");
+        let original = fs::read(&image).unwrap();
+        let mut selection = select_backend(&workspace).unwrap();
+        selection.workspace = parent.clone();
+        selection.package_id = "ignored-display-value".into();
+        selection.app_sha256 = "f".repeat(64);
+        let restored = selection.restore_after_startup_failure().unwrap();
+        assert_eq!(restored.workspace, fs::canonicalize(&workspace).unwrap());
+        assert_eq!(restored.package_id, previous.package_id);
+        assert_eq!(
+            restored.app_sha256,
+            previous.artifacts["CatDeskBinagotchy.exe"]
+        );
+        assert_eq!(restored.recovery, "PACKAGE_PREVIOUS_RESTORED_STOPPED");
+        assert_eq!(fs::read(&image).unwrap(), original);
+        assert_eq!(
+            select_backend(&workspace).err().unwrap(),
+            "DEV_BACKEND_ALREADY_RUNNING"
+        );
+        let pointer = fs::read(root.join("current.json")).unwrap();
+        assert_eq!(
+            restored.restore_after_startup_failure().err().unwrap(),
+            "DEV_RELEASE_RECONSTRUCTION_REQUIRED_NO_VERIFIED_PREDECESSOR"
+        );
+        assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn startup_failure_restoration_preserves_selection_on_busy_owner_or_stale_snapshot() {
+        for fault in 0..4 {
+            let (parent, workspace, root, previous, _) = healthy_current_with_predecessor();
+            let store = Store::open(&root).unwrap();
+            let mut selection = select_backend(&workspace).unwrap();
+            let host = if fault == 0 {
+                Some(store.host_lock().unwrap())
+            } else {
+                None
+            };
+            let browser = if fault == 1 {
+                Some(runtime::browser_session_lock(&root, Duration::ZERO).unwrap())
+            } else {
+                None
+            };
+            if fault == 2 {
+                runtime::control(&store, "RUNNING").unwrap();
+            }
+            if fault == 3 {
+                selection.authority.package_id = previous.package_id;
+            }
+            let pointer = fs::read(root.join("current.json")).unwrap();
+            let authority = fs::read(dev_dir(&workspace).join("authority.json")).unwrap();
+            assert!(selection.restore_after_startup_failure().is_err());
+            assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+            assert_eq!(
+                fs::read(dev_dir(&workspace).join("authority.json")).unwrap(),
+                authority
+            );
+            assert!(!dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT).exists());
+            drop(browser);
+            drop(host);
+            cleanup(&parent);
+        }
+    }
+
+    #[test]
+    fn startup_failure_without_eligible_predecessor_does_not_change_selection() {
+        for fault in 0..3 {
+            let (parent, workspace, package, python) = fixture();
+            prepare_fixture(&workspace, &package, &python);
+            let (root, previous) = validated_authority(&workspace).unwrap().unwrap();
+            if fault != 0 {
+                record_fixture_verification(&workspace);
+            }
+            update_fixture_host(&parent, &workspace, "valid-current");
+            let selection = select_backend(&workspace).unwrap();
+            if fault == 1 {
+                fs::write(
+                    root.join("versions")
+                        .join(&previous.package_id)
+                        .join("CatDeskWakeHost.exe"),
+                    b"damaged previous",
+                )
+                .unwrap();
+            }
+            if fault == 2 {
+                fs::remove_file(
+                    root.join("versions")
+                        .join(&previous.package_id)
+                        .join("manifest.json"),
+                )
+                .unwrap();
+            }
+            let pointer = fs::read(root.join("current.json")).unwrap();
+            let authority = fs::read(dev_dir(&workspace).join("authority.json")).unwrap();
+            assert!(
+                selection
+                    .restore_after_startup_failure()
+                    .err()
+                    .unwrap()
+                    .starts_with("DEV_RELEASE_RECONSTRUCTION_REQUIRED_")
+            );
+            assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+            assert_eq!(
+                fs::read(dev_dir(&workspace).join("authority.json")).unwrap(),
+                authority
+            );
+            assert!(!dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT).exists());
+            cleanup(&parent);
+        }
+    }
+
+    #[test]
+    fn interrupted_startup_failure_restoration_uses_existing_cold_recovery_journal() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let (parent, workspace, root, previous, _) = healthy_current_with_predecessor();
+        let selection = select_backend(&workspace).unwrap();
+        let authority_path = dev_dir(&workspace).join("authority.json");
+        let held = OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&authority_path)
+            .unwrap();
+        assert_eq!(
+            selection.restore_after_startup_failure().err().unwrap(),
+            "DEV_PACKAGE_UPDATE_REPLACE_FAILED"
+        );
+        assert_eq!(
+            root_for_workspace(&workspace).unwrap_err(),
+            "DEV_PACKAGE_UPDATE_INCOMPLETE"
+        );
+        drop(held);
+        assert_eq!(
+            recover_package(&workspace).unwrap()["status"],
+            "PACKAGE_PREVIOUS_RESTORED_STOPPED"
+        );
+        assert_eq!(
+            validated_authority(&workspace)
+                .unwrap()
+                .unwrap()
+                .1
+                .package_id,
+            previous.package_id
+        );
+        assert!(read_retained_release(&root).unwrap().is_none());
+        cleanup(&parent);
     }
 
     #[test]

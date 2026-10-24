@@ -1,3 +1,34 @@
+## October 24 EDT C109 — one predecessor attempt before backend readiness
+
+A normal C107 executable confirmed the remaining defect: an inert non-executable
+current package passed hash validation and had an eligible recorded predecessor,
+but startup returned `DEV_BACKEND_START_FAILED` without fallback. Five bounded
+control calls established that causal failure without starting a backend.
+
+New source permits one predecessor attempt after classified native spawn rejection
+with no child created, or pre-ready timeout/EOF/exit after exact owned-tree drain.
+It never retries after readiness or partial publication, unknown cleanup, scope/
+auth mismatch or unsafe output. The sealed selection snapshot and backend lease
+remain across rollback; existing journal and predecessor validators are reused.
+Failed bytes survive and never become a rollback candidate. Ready/result metadata
+records the failed package, reason and proven process outcome. The existing spawn
+API/messages and suspended-child Job policy remain unchanged; only its failure
+result is classified for the new caller.
+
+37 runtime, four backend-contract and ten process-owner tests pass, with strict
+root/Wake Clippy and formatting. Coverage includes sealed-snapshot scope, held
+lease, busy/stale/missing-predecessor refusal, interrupted restoration through the
+existing cold journal, and owner/descendant/crash regressions. These are source
+tests; the new normal fallback still needs its build and distinct bounded test.
+C108 normal file-failure recovery and parent-exit evidence remain preserved.
+
+All 306 runtime records and 55 historical files remain exact; zero scoped owners,
+queue 0, both controls STOPPED, selected v76 unchanged. No browser/Wake/official
+runtime activation, protected change, binding/native-session action, canary replay
+or legacy retirement occurred. Prior publication `2a32e26970ede57420e5047fe87a10c9ab999fc8`
+was exactly verified on `codex/web-rollover-oct17`; remote CI remains unverified.
+Evidence: `docs/verification/C109_ONE_PRE_READY_BACKEND_FALLBACK_2026_10_24.json`.
+
 ## October 24 EDT C108 — normal selected-backend startup and owner cleanup
 
 Exact source `bd8ddeb743639f11619b7917f1e67244f19d9e0c` built as normal app/host
