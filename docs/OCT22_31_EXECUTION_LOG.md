@@ -1,3 +1,37 @@
+## October 23 EDT C51 — durable reported blockers; local MCP endpoint unavailable
+
+The existing work ledger and work resolve tool/CLI now retain `blocked` and
+`in_progress` reports without closing the request. A bounded non-sensitive
+`reasonCode`, summary digest and UTC timestamp appear in central `workIntent`.
+Reports use the original request target pins, project registration and rollover
+leases. Identical retries preserve the recorded bytes/time. They neither retire
+queued delivery nor replace tasks, grants or native owners. A completed browser
+response still does not prove coding completion. Older ledgers need no migration.
+
+Seven focused source tests passed, including a disposable HTTP/MCP regression:
+one project reports a blocker while another reports progress; queues remain
+intact, wrong targets refuse, closed work cannot reopen, and cold reopen preserves
+the report. Strict workspace/all-target/all-feature Clippy, formatting and
+whitespace checks passed. Self-review only. This increment has not been qualified
+in a normal release, selected runtime or protected production.
+
+Read-only diagnosis at 00:30:54 UTC October 24 found no listener on configured
+local MCP port 3200. Existing official-runtime status and fixed signed-image
+readbacks exited successfully without mutations; the status wrapper redacts
+runtime state and does not establish that it is running. The protected image
+differs from C49 development; its tool capability parity remains unverified.
+Neither result establishes the cause of external HTTP429 or the missing scoped
+task tool. No connector retry, tunnel/auth change, server restart or browser test.
+
+All 266 saved runtime records remain exact, including bindings/history and the
+unfinished C50 task/grant. No test-owned browser/Wake processes remain; both
+controls stay stopped. C50's completed rollover is preserved, not repeated.
+Actual Web coding, parallel Web MCP B/C, critical live crash/full restart,
+protected installation and unattended acceptance remain open. Next: normal CLI
+qualification on disposable state and supported backend build/catalog recovery
+qualification. Source work requires no operator action; the goal remains ACTIVE.
+Evidence: `docs/verification/C51_REPORTED_WORK_STATUS_2026_10_23.json`.
+
 ## October 23 EDT C50 — live private task rollover passed; Web coding remains blocked
 
 The selected normal C49/v65 executable completed a fresh controlled source delivery,

@@ -1343,6 +1343,50 @@ async fn central_web_work_requests_are_independent_durable_and_generation_bound(
             "expectedTargetGeneration":1,"expectedTargetSha256":bindings[project].digest,
             "outcome":outcome,"summary":"Coordinator reports the controlled review is closed."})
     };
+    // Reporting one project's dependency cannot release its task or retire the
+    // queue, and another project can independently report useful progress.
+    let mut report = resolution("catdesk", "blocked");
+    let missing_reason = crate::web_work::resolve(&control, report.clone()).unwrap_err();
+    assert_eq!(missing_reason, "WEB_WORK_ARGUMENTS_INVALID");
+    report["reasonCode"] = json!("SCOPED_TOOL_UNAVAILABLE");
+    let mut wrong_report = report.clone();
+    wrong_report["expectedTargetSha256"] = json!("0".repeat(64));
+    assert_eq!(
+        crate::web_work::resolve(&control, wrong_report).unwrap_err(),
+        "WEB_WORK_TARGET_CHANGED"
+    );
+    let blocked = web_mcp_tool(
+        &client,
+        &url,
+        token,
+        "catdesk_web_work_resolve",
+        report.clone(),
+    )
+    .await;
+    assert_ne!(blocked["result"]["isError"], true);
+    assert_eq!(blocked["result"]["structuredContent"]["phase"], "OPEN");
+    assert_eq!(
+        blocked["result"]["structuredContent"]["ownershipReleased"],
+        false
+    );
+    let retry = crate::web_work::resolve(&control, report).unwrap();
+    assert_eq!(retry, blocked["result"]["structuredContent"]);
+    let mut progress = resolution("alpha", "in_progress");
+    progress["reasonCode"] = json!("ASSIGNED_REVIEW_ACTIVE");
+    assert_eq!(
+        crate::web_work::resolve(&control, progress).unwrap()["phase"],
+        "OPEN"
+    );
+    assert_eq!(wake.events().unwrap(), events);
+    for (project, state) in [("catdesk", "blocked"), ("alpha", "in_progress")] {
+        let intent = crate::web_work_state::WorkLedger::status(&control, project);
+        assert_eq!(intent["active"]["reportedStatus"]["state"], state);
+        assert_eq!(intent["active"]["taskCompletionVerified"], false);
+        assert_eq!(
+            crate::web_work::request(&control, arguments(project, "another-task")).unwrap_err(),
+            "WEB_WORK_ACTIVE_REQUEST"
+        );
+    }
     assert_eq!(
         crate::web_work::resolve(&control, resolution("catdesk", "completed")).unwrap_err(),
         "WEB_WORK_DELIVERY_REQUIRED"

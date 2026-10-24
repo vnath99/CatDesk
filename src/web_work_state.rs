@@ -22,6 +22,25 @@ pub(crate) struct WorkTaskAssignment {
     pub(crate) scope_sha256: String,
 }
 
+/// A coordinator report is not an execution receipt or artifact verification.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct WorkReport {
+    pub(crate) state: String,
+    pub(crate) reason_code: String,
+    pub(crate) summary_sha256: String,
+    pub(crate) reported_utc: u64,
+}
+
+impl WorkReport {
+    fn valid(&self) -> bool {
+        matches!(self.state.as_str(), "blocked" | "in_progress")
+            && valid_request(&self.reason_code)
+            && sha256(&self.summary_sha256)
+            && self.reported_utc > 0
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct WorkRecord {
@@ -34,6 +53,8 @@ pub(crate) struct WorkRecord {
     pub(crate) summary_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) task_assignment: Option<WorkTaskAssignment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) reported_status: Option<WorkReport>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -109,6 +130,10 @@ impl LedgerFile {
                 || record.event_id != expected_event(project_id, &record.request_id)
                 || !sha256(&record.message_sha256)
                 || record.target.validate().is_err()
+                || record
+                    .reported_status
+                    .as_ref()
+                    .is_some_and(|report| !report.valid())
                 || record.task_assignment.as_ref().is_some_and(|assignment| {
                     !valid_request(&assignment.task_id)
                         || !sha256(&assignment.assignment_sha256)
@@ -281,6 +306,7 @@ impl WorkLedger {
             outcome: None,
             summary_sha256: None,
             task_assignment: None,
+            reported_status: None,
         });
         self.save(&state)?;
         Ok("OPEN_NEW".into())
@@ -368,6 +394,63 @@ impl WorkLedger {
             "summarySha256":digest,"taskCompletionVerified":false}))
     }
 
+    /// Preserve the open request and its task/grant ownership, including on retry.
+    /// The caller holds the same registration/rollover leases as resolve.
+    pub(crate) fn report(
+        &self,
+        request_id: &str,
+        target: &Target,
+        state: &str,
+        reason_code: &str,
+        summary: &str,
+    ) -> Result<Value, String> {
+        let report = WorkReport {
+            state: state.into(),
+            reason_code: reason_code.into(),
+            summary_sha256: protocol::digest(summary),
+            reported_utc: catdesk_wake::store::now(),
+        };
+        if !valid_request(request_id)
+            || target.validate().is_err()
+            || !report.valid()
+            || summary.trim().is_empty()
+            || summary.len() > 1024
+            || summary
+                .chars()
+                .any(|value| value.is_control() && !matches!(value, '\n' | '\r' | '\t'))
+        {
+            return Err("WEB_WORK_LEDGER_ARGUMENTS_INVALID".into());
+        }
+        let mut ledger = self.load()?;
+        let record = ledger
+            .records
+            .iter_mut()
+            .find(|record| record.request_id == request_id)
+            .ok_or("WEB_WORK_REQUEST_NOT_FOUND")?;
+        if record.target != *target {
+            return Err("WEB_WORK_TARGET_CHANGED".into());
+        }
+        if record.phase != "OPEN" {
+            return Err("WEB_WORK_REQUEST_CLOSED".into());
+        }
+        // Retrying the same report preserves its first observation timestamp.
+        let unchanged = record.reported_status.as_ref().is_some_and(|saved| {
+            saved.state == report.state
+                && saved.reason_code == report.reason_code
+                && saved.summary_sha256 == report.summary_sha256
+        });
+        if !unchanged {
+            record.reported_status = Some(report);
+        }
+        let result = json!({"projectId":self.project_id,"requestId":request_id,
+            "eventId":record.event_id,"phase":"OPEN","reportedStatus":record.reported_status,
+            "taskCompletionVerified":false,"ownershipReleased":false,"browserAction":"NONE"});
+        if !unchanged {
+            self.save(&ledger)?;
+        }
+        Ok(result)
+    }
+
     /// A status refresh never creates a ledger directory or file.
     pub(crate) fn status(workspace: &Path, project_id: &str) -> Value {
         let result = (|| -> Result<Value, String> {
@@ -396,7 +479,8 @@ impl WorkLedger {
                 "active":active.map(|record| json!({"requestId":record.request_id,
                     "eventId":record.event_id,"targetGeneration":record.target.generation,
                     "targetSha256":record.target.digest,"messageSha256":record.message_sha256,
-                    "phase":record.phase,"taskAssignment":record.task_assignment}))}),
+                    "phase":record.phase,"taskAssignment":record.task_assignment,
+                    "reportedStatus":record.reported_status,"taskCompletionVerified":false}))}),
             )
         })();
         result.unwrap_or_else(
@@ -478,6 +562,93 @@ mod tests {
             WorkLedger::status(&workspace, "alpha")["active"]["requestId"],
             "one"
         );
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn reported_blocker_survives_reopen_without_releasing_or_reassigning_work() {
+        let (workspace, alpha, beta) = fixture();
+        prepare(&alpha, "one", "body").unwrap();
+        prepare(&beta, "one", "other body").unwrap();
+        let original = alpha.record("one").unwrap().unwrap();
+        let beta_before = fs::read(&beta.path).unwrap();
+        assert!(original.reported_status.is_none());
+        let blocked = alpha
+            .report(
+                "one",
+                &target(),
+                "blocked",
+                "SCOPED_TOOL_UNAVAILABLE",
+                "Tool not exposed",
+            )
+            .unwrap();
+        assert_eq!(blocked["ownershipReleased"], false);
+        assert_eq!(blocked["taskCompletionVerified"], false);
+        let before = fs::read(&alpha.path).unwrap();
+        let reopened = WorkLedger::open(&workspace, "alpha").unwrap();
+        assert_eq!(
+            reopened
+                .report(
+                    "one",
+                    &target(),
+                    "blocked",
+                    "SCOPED_TOOL_UNAVAILABLE",
+                    "Tool not exposed"
+                )
+                .unwrap(),
+            blocked
+        );
+        assert_eq!(fs::read(&alpha.path).unwrap(), before);
+        let mut saved = reopened.record("one").unwrap().unwrap();
+        assert_eq!(
+            WorkLedger::status(&workspace, "alpha")["active"]["reportedStatus"]["state"],
+            "blocked"
+        );
+        saved.reported_status = None;
+        assert_eq!(saved, original);
+        assert_eq!(
+            prepare(&alpha, "two", "duplicate work").unwrap_err(),
+            "WEB_WORK_ACTIVE_REQUEST"
+        );
+        let wrong_target = Target::new(2, "https://chatgpt.com/c/other-fixture".into()).unwrap();
+        assert_eq!(
+            alpha
+                .report("one", &wrong_target, "blocked", "WRONG", "wrong target")
+                .unwrap_err(),
+            "WEB_WORK_TARGET_CHANGED"
+        );
+        assert_eq!(
+            alpha
+                .report("one", &target(), "completed", "INVALID", "not a report")
+                .unwrap_err(),
+            "WEB_WORK_LEDGER_ARGUMENTS_INVALID"
+        );
+        assert_eq!(fs::read(&alpha.path).unwrap(), before);
+        alpha
+            .report(
+                "one",
+                &target(),
+                "in_progress",
+                "DEPENDENCY_RECOVERED",
+                "Resuming assigned work",
+            )
+            .unwrap();
+        assert_eq!(
+            WorkLedger::status(&workspace, "alpha")["active"]["reportedStatus"]["state"],
+            "in_progress"
+        );
+        assert_eq!(fs::read(&beta.path).unwrap(), beta_before);
+        alpha
+            .resolve("one", &target(), "retired", "explicit retirement")
+            .unwrap();
+        let closed_bytes = fs::read(&alpha.path).unwrap();
+        assert_eq!(
+            alpha
+                .report("one", &target(), "blocked", "LATE", "late report")
+                .unwrap_err(),
+            "WEB_WORK_REQUEST_CLOSED"
+        );
+        assert_eq!(fs::read(&alpha.path).unwrap(), closed_bytes);
         fs::remove_dir_all(workspace).unwrap();
     }
 

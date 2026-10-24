@@ -860,7 +860,22 @@ without the task or input path. Inputs use the same schema as the Web work tools
 | Action | Required JSON fields |
 | --- | --- |
 | request | `projectId`, `requestId`, `expectedTargetGeneration`, `expectedTargetSha256`, `taskText` |
-| resolve | Same intent scope, plus `outcome` (`completed` or `retired`) and `summary`; no `taskText` |
+| resolve | Same intent scope, plus `outcome` (`completed`, `retired`, `blocked`, or `in_progress`) and `summary`; no `taskText`. `reasonCode` is required only for `blocked`/`in_progress` and is rejected for closure. |
+
+October 23 C51 adds source-tested reported progress through this existing command.
+Use `blocked`/`in_progress` to retain the exact active request and its ownership.
+`reasonCode` is a non-sensitive ID of 1–128 ASCII letters, digits, underscores or
+hyphens (for example `SCOPED_TOOL_UNAVAILABLE`). The bounded summary is hashed,
+not stored verbatim. Central `workIntent.active.reportedStatus` contains the state,
+reason, summary digest and UTC timestamp. These are explicit coordinator reports,
+not verified assistant observations or artifact completion. Identical retries do
+not refresh the observation timestamp. Closed requests cannot be reopened.
+Reports can describe pre-delivery blockers without delivery receipts; they do
+not remove queue entries, publish events, run tasks or start processes. Preserve
+the original target witness from `workIntent`, including after rollover.
+Normal-executable and installed qualification of C51 remain pending; C49 remains
+the selected stopped development build. Evidence:
+`docs/verification/C51_REPORTED_WORK_STATUS_2026_10_23.json`.
 
 A new request uses the current paired target witness. Resolution uses the
 intent's original witness, including after a target changes. Request enqueues

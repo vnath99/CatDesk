@@ -841,8 +841,8 @@ async fn handle_tools_list(
             }));
             tools.push(json!({
                 "name": WEB_WORK_RESOLVE_TOOL,
-                "title": "Resolve one Web project work request",
-                "description": "Close the exact active Web work request using its original target witness. A completed outcome requires Wake delivery and assistant response proof; retiring a known pre-submit request may avoid browser delivery. The outcome remains caller-reported and does not independently verify project task completion or modify Codex sessions.",
+                "title": "Report or resolve one Web project work request",
+                "description": "Report blocked/in_progress status without releasing ownership, or close the exact request using its original target witness. Reports require reasonCode, keep only the summary digest, and may describe pre-delivery blockers without a browser receipt. Completed closure requires Wake delivery and assistant response proof; retiring a known pre-submit request may avoid browser delivery. All outcomes remain caller-reported, not independently verified task completion. Codex sessions are unchanged.",
                 "inputSchema": {
                     "type": "object",
                     "additionalProperties": false,
@@ -851,7 +851,8 @@ async fn handle_tools_list(
                         "requestId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$", "description": "Exact active request ID" },
                         "expectedTargetGeneration": { "type": "integer", "minimum": 1, "description": "Original request target generation from workIntent, which may precede a verified rollover" },
                         "expectedTargetSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Original request conversation URL SHA-256 from workIntent" },
-                        "outcome": { "type": "string", "enum": ["completed", "retired"], "description": "Caller-reported disposition; this is not independent task completion proof" },
+                        "outcome": { "type": "string", "enum": ["completed", "retired", "blocked", "in_progress"], "description": "blocked/in_progress retain the active request; completed/retired close it. Caller-reported only." },
+                        "reasonCode": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,128}$", "description": "Required only for blocked/in_progress; bounded non-sensitive status code, never credentials or conversation URLs" },
                         "summary": { "type": "string", "minLength": 1, "maxLength": 1024, "description": "Bounded disposition summary; UTF-8 bytes are also limited to 1024" }
                     },
                     "required": ["projectId", "requestId", "expectedTargetGeneration", "expectedTargetSha256", "outcome", "summary"]
@@ -17968,7 +17969,7 @@ hello world"
                     );
                     assert_eq!(
                         schema["properties"]["outcome"]["enum"],
-                        json!(["completed", "retired"])
+                        json!(["completed", "retired", "blocked", "in_progress"])
                     );
                     assert_eq!(schema["properties"]["summary"]["maxLength"], 1024);
                     assert!(schema["properties"].get("conversationUrl").is_none());

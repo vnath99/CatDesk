@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C51_DURABLE_REPORTED_WORK_STATUS",
+  "localDate": "2026-10-23_America_New_York",
+  "observedUtc": "2026-10-24T00:47:11.1202074+00:00",
+  "predecessorCommit": "4cc44f5bbabe4d4bbb0499b222223be97f0545c8",
+  "branch": "codex/web-rollover-oct17",
+  "qualification": "SOURCE_AND_DISPOSABLE_HTTP_MCP_REGRESSION_ONLY",
+  "review": "ROOT_SELF_REVIEW",
+  "changes": [
+    "Optional backward-compatible reportedStatus in the existing WorkLedger, not a second registry.",
+    "Existing work resolve tool/CLI accepts blocked/in_progress plus reasonCode and a bounded summary. Summary digest only is persisted.",
+    "Original request target pins and project leases remain required. Reports preserve OPEN ownership, assignment, grant, queues and native sessions.",
+    "Central workIntent exposes caller-reported state, reason, summary digest and UTC timestamp separately from transport and verified completion. Identical retries preserve bytes/time. Closed requests cannot reopen."
+  ],
+  "sourceTests": [
+    {
+      "filter": "web_work_state::tests",
+      "startedUtc": "2026-10-24T00:40:53.2299814+00:00",
+      "finishedUtc": "2026-10-24T00:42:03.3308661+00:00",
+      "elapsedSeconds": 70.100893,
+      "timedOut": false,
+      "exitCode": 0,
+      "ownerExited": true,
+      "summary": "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 1670 filtered out; finished in 0.10s"
+    },
+    {
+      "filter": "central_web_work_requests_are_independent_durable_and_generation_bound",
+      "startedUtc": "2026-10-24T00:42:03.3600029+00:00",
+      "finishedUtc": "2026-10-24T00:42:29.8397268+00:00",
+      "elapsedSeconds": 26.4797291,
+      "timedOut": false,
+      "exitCode": 0,
+      "ownerExited": true,
+      "summary": "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1674 filtered out; finished in 25.89s"
+    },
+    {
+      "filter": "web_work_resolve_follows_supervisor_modes_and_is_caller_reported",
+      "startedUtc": "2026-10-24T00:42:29.8420270+00:00",
+      "finishedUtc": "2026-10-24T00:42:30.9492421+00:00",
+      "elapsedSeconds": 1.1072186,
+      "timedOut": false,
+      "exitCode": 0,
+      "ownerExited": true,
+      "summary": "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1674 filtered out; finished in 0.53s"
+    }
+  ],
+  "checks": [
+    {
+      "name": "strict-workspace-clippy",
+      "arguments": [
+        "clippy",
+        "--locked",
+        "--offline",
+        "--workspace",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "startedUtc": "2026-10-24T00:43:09.4108154+00:00",
+      "finishedUtc": "2026-10-24T00:43:39.6229450+00:00",
+      "elapsedSeconds": 30.2121362,
+      "limitSeconds": 600,
+      "timedOut": false,
+      "exitCode": 0,
+      "ownerExited": true,
+      "stdoutSha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "stderrSha256": "55243284efede30c5d99c12f84961395590664391d483a6044792aff6806b123"
+    },
+    {
+      "name": "workspace-format",
+      "arguments": [
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "startedUtc": "2026-10-24T00:43:39.6359540+00:00",
+      "finishedUtc": "2026-10-24T00:43:42.4422665+00:00",
+      "elapsedSeconds": 2.8063176,
+      "limitSeconds": 120,
+      "timedOut": false,
+      "exitCode": 0,
+      "ownerExited": true,
+      "stdoutSha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "stderrSha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6"
+    },
+    {
+      "name": "diff-whitespace",
+      "arguments": [
+        "diff",
+        "--check"
+      ],
+      "startedUtc": "2026-10-24T00:43:42.4443689+00:00",
+      "finishedUtc": "2026-10-24T00:43:42.5232668+00:00",
+      "elapsedSeconds": 0.078902,
+      "limitSeconds": 60,
+      "timedOut": false,
+      "exitCode": 0,
+      "ownerExited": true,
+      "stdoutSha256": "7eb70257593da06f682a3ddda54a9d260d4fc514f645237f5ca74b08f8da61a6",
+      "stderrSha256": "e67e632a43e1aa9841164b6431b236ceaeacf90c2263fb6749ac0e394a58a6fa"
+    }
+  ],
+  "sourceHashes": [
+    {
+      "path": "src/web_work_state.rs",
+      "sha256": "df0d51fe0a78c8d943e58339079fd6091bea79585a993a5607152ca1e37eb0d6"
+    },
+    {
+      "path": "src/web_work.rs",
+      "sha256": "a103763f5b9624cd58ca274c3796c97274b70f6668bb3fee37ee450283dfffa3"
+    },
+    {
+      "path": "src/mcp.rs",
+      "sha256": "01eced4c5d84df387e1884589e34faa488d0d3c0ac8e17bf0f6f465206cf701a"
+    },
+    {
+      "path": "src/web_development_tests.rs",
+      "sha256": "cd5f6676ec4afd4c82d40a1d7249b5810e65f4a9ee99e373792f96c744307557"
+    }
+  ],
+  "readOnlyBackend": {
+    "starts": 0,
+    "officialStatusElapsedSeconds": 3.3440774,
+    "fixedSignedImageStatus": "VERIFIED",
+    "namedProcessesAtEarlierObservation": 0,
+    "officialRuntimeRunning": "NOT_ESTABLISHED_BY_REDACTED_STATUS_WRAPPER",
+    "settingsChanges": 0,
+    "observedUtc": "2026-10-24T00:30:54.7255321Z",
+    "mutations": 0,
+    "configuredPort": 3200,
+    "inferenceLimit": "No listener proves the configured local endpoint was unavailable then. It does not prove the cause of external HTTP429 or missing provider tools.",
+    "fixedImageStatusElapsedSeconds": 0.845203,
+    "connectorRetried": false,
+    "listenersAtObservation": 0,
+    "statusClientFound": true,
+    "officialStatusExit": 0,
+    "statusClientVersion": "0.0.14+0f870e50a973fa820d4c409000059e181e8d242b (git sha: 0f870e50a973fa820d4c409000059e181e8d242b)",
+    "installedImage": "DIFFERS_FROM_C49_NORMAL_DEVELOPMENT_IMAGE_CAPABILITY_PARITY_UNVERIFIED"
+  },
+  "cleanup": {
+    "newBrowserWakeStarts": 0,
+    "recurringStarts": 0,
+    "production": "STOPPED_UNCHANGED",
+    "development": "STOPPED_UNCHANGED",
+    "changedRecords": 0,
+    "completedCanaryReplays": 0,
+    "testOwnedBrowserWakeProcesses": 0,
+    "bindingsAndTaskGrant": "UNCHANGED",
+    "nativeActions": 0,
+    "existingRuntimeRecordsChecked": 266
+  },
+  "acceptance": {
+    "reportedBlockerInstalled": "NOT_QUALIFIED",
+    "fullOctoberMilestone": "OPEN",
+    "reportedBlockerSource": "PASS",
+    "C50": "PRESERVED_COMPLETED_CONTROLLED_ROLLOVER_NOT_REPLAYED",
+    "unattended": "NOT_ACTIVATED",
+    "protectedProduction": "NOT_QUALIFIED",
+    "actualParallelWebMcp": "OPEN",
+    "actualWebCoding": "BLOCKED_SCOPED_TOOL_UNAVAILABLE"
+  },
+  "nextTask": "Qualify the report path in a normal executable using disposable state; prepare supported backend recovery/build/catalog qualification without changing the official tunnel or replaying the completed canary.",
+  "operatorActionRequiredForSourceWork": false
+}

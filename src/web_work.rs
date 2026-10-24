@@ -371,6 +371,8 @@ struct Resolution {
     expected_target_sha256: String,
     outcome: String,
     summary: String,
+    #[serde(default)]
+    reason_code: Option<String>,
 }
 
 pub(crate) fn resolve(workspace: &Path, args: Value) -> Result<Value, String> {
@@ -381,7 +383,15 @@ pub(crate) fn resolve(workspace: &Path, args: Value) -> Result<Value, String> {
     let validated = WorkRequest::parse(json!({"projectId":resolution.project_id,
         "requestId":resolution.request_id,"expectedTargetGeneration":resolution.expected_target_generation,
         "expectedTargetSha256":resolution.expected_target_sha256,"taskText":resolution.summary}))?;
-    if !matches!(resolution.outcome.as_str(), "completed" | "retired") {
+    let report = matches!(resolution.outcome.as_str(), "blocked" | "in_progress");
+    if (!report && !matches!(resolution.outcome.as_str(), "completed" | "retired"))
+        || (report
+            && resolution
+                .reason_code
+                .as_deref()
+                .is_none_or(|code| code.len() > 128 || !protocol::valid_id(code)))
+        || (!report && resolution.reason_code.is_some())
+    {
         return Err("WEB_WORK_ARGUMENTS_INVALID".into());
     }
     let workspace = workspace
@@ -406,6 +416,9 @@ pub(crate) fn resolve(workspace: &Path, args: Value) -> Result<Value, String> {
         {
             return Err("WEB_WORK_TARGET_CHANGED".into());
         }
+        if report && record.phase == "CLOSED" {
+            return Err("WEB_WORK_REQUEST_CLOSED".into());
+        }
         // Replays of a durable closure never publish or reinterpret task state.
         if record.phase == "CLOSED" {
             return ledger.resolve(
@@ -416,13 +429,31 @@ pub(crate) fn resolve(workspace: &Path, args: Value) -> Result<Value, String> {
             );
         }
         let root = wake_protocol_client::wake_root_for_workspace(&workspace)?;
-        let wake = Store::open(&root)?;
+        let wake = if report {
+            Store::open_read_only(&root)?
+        } else {
+            Store::open(&root)?
+        };
         rollover_lease.check_target(
             wake.config()?
                 .targets
                 .get(&validated.project_id)
                 .ok_or("WEB_WORK_PAIRED_TARGET_REQUIRED")?,
         )?;
+        if report {
+            // Explicit coordinator metadata may describe a pre-delivery blocker.
+            // It cannot close ownership, retire a queue item, execute or send work.
+            return ledger.report(
+                &validated.request_id,
+                &record.target,
+                &resolution.outcome,
+                resolution
+                    .reason_code
+                    .as_deref()
+                    .expect("validated report reason"),
+                &validated.task_text,
+            );
+        }
         let delivery = wake.delivery(&record.event_id)?;
         if resolution.outcome == "retired"
             && delivery
