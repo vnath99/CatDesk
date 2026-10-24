@@ -1,3 +1,23 @@
+## October 24 EDT C90–C91 — normal nested-file tasks and stopped selection
+
+The published C89 source built normally in 375.65s. A 180s disposable central HTTP
+qualification passed: 16 local requests across two natural coordinator lifetimes,
+independent assigned nested-file creation, actual diffs, unassigned-file refusal,
+blocked-writer/sibling progress and cold no-replay. Both temporary grants were
+revoked and their exact owned keys removed. All 306 real records stayed exact;
+no browser, Wake worker or actual ChatGPT Web tool call was involved. Synthetic
+local receipt fixtures are explicitly distinct from provider delivery proof.
+
+The exact normal image was then selected through the guarded stopped development
+update in 6.79s. All 10 pair reads and the central view passed. Only two package
+pointers changed; 304 other records stayed exact. Previous package/profile,
+bindings/history, native assignments and held unknown journals are preserved.
+Zero owners, queue 0, controls STOPPED. Protected and unattended acceptance remain
+open. Actual ChatGPT Web coding B/C still requires the serving backend/catalog
+and connector path. Next: inspect cached-schema access to the existing scoped
+dispatcher while retaining its task/grant/target checks and private-key handling.
+Evidence: `docs/verification/C90_C91_NORMAL_NESTED_TASK_CREATION_2026_10_24.json`.
+
 ## October 24 EDT C89 — assigned task files in new directories
 
 Web task path admission rejected an explicitly assigned new file when its parent
