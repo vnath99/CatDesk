@@ -6829,6 +6829,27 @@ mod tests {
         atomic(&store.root.join("active.json"), &record.intent_id).unwrap();
         let destination = validate_receipt(&record, record.receipt.as_ref().unwrap()).unwrap();
         let source_digest = record.source.digest.clone();
+        let receipt_before = serde_json::to_value(&record.receipt).unwrap();
+        assert_eq!(
+            checkpoint_bound_with(
+                &store,
+                &mut record,
+                &destination,
+                || Err("registry and Wake differ".into()),
+                |_, _, _| Err("WEB_ROLLOVER_BINDING_REQUIRES_RECONCILIATION".into()),
+            )
+            .unwrap_err(),
+            "WEB_ROLLOVER_BINDING_REQUIRES_RECONCILIATION"
+        );
+        drop(store);
+        let store = ProjectStore::open_existing(&root, "alpha").unwrap();
+        let mut record = store.active().unwrap().unwrap();
+        assert_eq!(record.phase, Phase::Created);
+        assert_eq!(
+            serde_json::to_value(&record.receipt).unwrap(),
+            receipt_before
+        );
+        assert!(record.bound_target.is_none());
         let bound = checkpoint_bound_with(
             &store,
             &mut record,

@@ -1,3 +1,32 @@
+## October 23 EDT C55 — guarded registry-commit failure stays recoverable (source)
+
+The remaining-gap audit reproduced a native paired-commit bug. A Windows read
+handle allowed registry reads but refused its atomic replacement after Wake had
+committed the guarded successor. Old compensation advanced generation1 to2 and
+back to the source URL at3, losing the adjacent-successor recovery witness.
+
+After a successful guarded callback, a registry-save error now preserves that
+Wake-first successor and returns synchronization-required. Existing paired reads
+refuse until the matching registry commits; the existing recovery path can finish
+with the original source/receipt, without a browser resend or another generation.
+The unguarded operator compensation path is unchanged. No new authority store,
+force recovery, registry or generation reset was added.
+
+The new native filesystem regression failed before the fix and passed afterward.
+Sixty targeted regressions passed, including53 rollover tests and the three-project
+routing fixture. One existing checkpoint test now verifies receipt preservation
+across a failed bind and reopen. Strict workspace Clippy, fmt and whitespace passed.
+Self-review only. C55 is source-qualified; normal/installed/live crash proof is open.
+
+The mandatory A–J matrix now includes C50 actual collector/rollover/continuation,
+C52 controlled status and C54 normal/selected qualification without upgrading
+actual Web coding, critical browser crash, full restart or unattended acceptance.
+All266 v67 runtime records, nine bindings and C50 task/grant/history remain exact;
+both controls stay stopped, zero scoped owners, no message/browser/Wake/native
+activity. Next: normal C55 build and disposable guarded recovery qualification.
+Live startup-owner information remains a separate pending dependency.
+Evidence: `docs/verification/C55_GUARDED_REGISTRY_COMMIT_RECOVERY_2026_10_23.json`.
+
 ## October 23 EDT C54 — normal payload compatibility and stopped development selected
 
 Source `b08e68cf9e4e108137eae6baa8ad0b69403d2084` on `codex/web-rollover-oct17` was published

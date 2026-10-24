@@ -1,3 +1,32 @@
+## October 23 EDT C55 — guarded registry-commit failure stays recoverable (source)
+
+The remaining-gap audit reproduced a native paired-commit bug. A Windows read
+handle allowed registry reads but refused its atomic replacement after Wake had
+committed the guarded successor. Old compensation advanced generation1 to2 and
+back to the source URL at3, losing the adjacent-successor recovery witness.
+
+After a successful guarded callback, a registry-save error now preserves that
+Wake-first successor and returns synchronization-required. Existing paired reads
+refuse until the matching registry commits; the existing recovery path can finish
+with the original source/receipt, without a browser resend or another generation.
+The unguarded operator compensation path is unchanged. No new authority store,
+force recovery, registry or generation reset was added.
+
+The new native filesystem regression failed before the fix and passed afterward.
+Sixty targeted regressions passed, including53 rollover tests and the three-project
+routing fixture. One existing checkpoint test now verifies receipt preservation
+across a failed bind and reopen. Strict workspace Clippy, fmt and whitespace passed.
+Self-review only. C55 is source-qualified; normal/installed/live crash proof is open.
+
+The mandatory A–J matrix now includes C50 actual collector/rollover/continuation,
+C52 controlled status and C54 normal/selected qualification without upgrading
+actual Web coding, critical browser crash, full restart or unattended acceptance.
+All266 v67 runtime records, nine bindings and C50 task/grant/history remain exact;
+both controls stay stopped, zero scoped owners, no message/browser/Wake/native
+activity. Next: normal C55 build and disposable guarded recovery qualification.
+Live startup-owner information remains a separate pending dependency.
+Evidence: `docs/verification/C55_GUARDED_REGISTRY_COMMIT_RECOVERY_2026_10_23.json`.
+
 ## October 23 EDT C54 — normal payload compatibility and stopped development selected
 
 Source `b08e68cf9e4e108137eae6baa8ad0b69403d2084` on `codex/web-rollover-oct17` was published
@@ -1098,34 +1127,37 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 
 | Gate | Existing evidence and exact scope | Remaining acceptance |
 | --- | --- | --- |
-| A. At least three registered project Web conversations | PASS, development: C21 selected status reads nine paired registrations, including two newly verified source conversations bound to isolated Git roots. Seven prior rows/history unchanged. | Protected runtime acceptance remains separate. |
-| B. Two Web conversations make tools calls in separate directories | PARTIAL LOCAL: C45 selected normal HTTP reads and earlier isolated edits remain. C47 and C48 normal central HTTP patch two separate assigned worktrees through one authenticated route with per-task keys, original native files preserved, wrong-key/path/witness refusal and durable replay prevention. | OPEN: actual concurrent ChatGPT Web coding, normal collector/browser key transfer and protected installation. Stopped C48 development selection is qualified separately. Provider conversation origin remains unverified. |
-| C. Blocked project while sibling makes useful progress | PARTIAL LOCAL: C47 central HTTP holds alpha project ownership while beta reads its useful patch. Metadata checks retry briefly, without replaying tool actions or globally holding the execution workspace. Earlier scheduler/timer evidence remains. | OPEN: bounded actual Web project blocking/progress proof. C48 implements private granted-task handoff and post-acknowledgement resume in source, with a synthetic pending-patch continuation and durable event recovery; C48 normal local components and stopped development selection are qualified; actual collector/browser/Web/protected acceptance remain separate. |
-| D. Independent project Wake routing | PASS within prior isolated development proof: three-project approved routing and later approved historical-checkpoint review have exact receipts and completed responses. | Protected installed routing/normal operation remain open. Do not resend these events. |
-| E. Context pressure and durable handoff | RECOVERED CONTROLLED CHAIN VERIFIED: C33/C38–C40 remain preserved. C43 resumes its existing source on v60: one handoff/new intent, fresh DRAFT_READY/SEND_ATTEMPTED, no repair, verified source snapshot, RECORDED context and completed generation 3-to-4 rollover/continuation. Estimates remain advisory with UNKNOWN_OR_INCOMPLETE coverage. | Fresh atomic entry qualifies within this new controlled intent. The original C43 attempt was interrupted; whole-original-chain uninterrupted and unattended operation remain unqualified. Preserve completed proof. |
-| F. Actual replacement URL and continuation | PASS, controlled selected scope: original canary, C23 and C40 remain preserved. C43 independently verifies another issued URL, paired generation 3-to-4 update and completed continuation. A separate event-bound read verifies its 858-character assistant body and all project/task/marker checks; 243 records remain exact. | C43 is a recovered chain after the original stop, with no repair or source replay. The body acknowledges continuity without executing commands/files/MCP work. Actual coding, protected production and unattended operation remain separate. |
-| G. Two simultaneous synthetic rollover requests | PASS, SELECTED CONTROLLED LIVE C23:23.22ms request gap, alpha ACTIVE/beta WAITING, maximum sampled creator1; stable unsent waiting ticket survives process exit and completes next. Both issued URLs/pairs/continuations verified, seven prior pairs/history exact, no duplicate submissions. | Automatic recurring driver, critical crash H and protected/unattended qualification remain separate. Preserve these completed operations. |
-| H. Interruptions, recovery and ambiguous submission | PARTIAL LIVE: C24/C28 and recovered C38–C40 remain preserved. C43 resumes an already delivered source after its controlled stop, completing one new no-repair rollover with verified response and cleanup. C42's uncertain project journal stays fenced; existing owner acquisition quarantines its abandoned shared admission without replay. | Additional critical phases, including paired-commit crashes, remain open. Prefix evidence alone never grants repair/send authority. No unattended recovery acceptance. |
-| I. Restart preserves registrations/history/pending rollovers | PARTIAL: C23 WAITING/completed restart; C28 selected pending exact-draft recovery and fresh-process completed-state readback.197 records exact/nine pairs, two predecessors/three context generations. | Paired-commit crash phases remain open. No recurring activation. |
-| J. No orphan browser/Wake processes | PASS for recorded bounded tests, including C43 resume and its independent body read: natural listener/host/Job exits, exact policy restoration, both controls STOPPED, zero owned processes; 243 final records preserved. | Normal unattended operation is NOT ACTIVATED or accepted. Each future bounded test needs its own cleanup proof. |
+| A. At least three registered project Web conversations | PASS, development: prior C21 registration and C54 selected v67 readback retain nine paired projects with their distinct roots, current URLs and predecessor history. | Protected/runtime startup acceptance remains separate. |
+| B. Two Web conversations make tools calls in separate directories | PARTIAL: C47/C48 normal central HTTP tools edit isolated task worktrees with per-task scope and native originals preserved. C50 now qualifies the actual normal collector/private bootstrap transfer, verified replacement and original-task delivery. C54 reads that preserved payload with the normal C53 image. | OPEN: actual concurrent ChatGPT Web coding. The replacement reports missing scoped tool, with zero calls. Serving/backend/catalog qualification awaits its supported startup owner; do not classify HTTP fixtures or delivered context as Web execution. |
+| C. Blocked project while sibling makes useful progress | PARTIAL: normal HTTP writer-busy isolation and useful sibling results remain. C52 records the real controlled task blocker while retaining its ownership; C53 snapshots reports in future handoffs in source. C55 native binding-fault fixture keeps sibling target readable. | OPEN: actual Web-project blocking and useful sibling coding. Active native sessions are separate evidence. |
+| D. Independent project Wake routing | PASS within preserved isolated development proof: approved three-project routing and later checkpoint review have exact receipts and completed responses. | Protected installed routing and unattended operation remain open. Do not resend accepted events. |
+| E. Context pressure and durable handoff | PASS, controlled C50: actual source observation, controlled pressure policy, source handoff and normal private collector completed. Context was recorded for the replacement; the original policy was restored. C43 and recovered C38–C40 remain preserved. Estimates are advisory with unknown/incomplete coverage. | Continuous unattended monitoring is not activated or accepted. |
+| F. Actual replacement URL and continuation | PASS, controlled C50: actual issued URL independently verified, paired generation4-to5 transfer/history preserved, continuation and one original-task resume delivery complete. Correct task context survived; C54 confirms frozen-payload compatibility. Prior C23/C40/C43 evidence remains. | Actual coding remains blocked by the scoped tool dependency; receipt/body completion does not prove task completion. Protected and unattended acceptance remain open. |
+| G. Two simultaneous synthetic rollover requests | PASS, preserved C23 controlled live proof:23.22ms request gap, one active creator, one waiting ticket, both URLs/bindings/continuations isolated and no duplicate submission. | No replay needed. Critical crash H, protected and unattended acceptance remain separate. |
+| H. Interruptions, recovery and ambiguous submission | PARTIAL LIVE: C24/C28, C38–C40 recovery, C42 quarantined ambiguous operation and C43 resumption remain preserved. C55 adds a real native filesystem write-failure fixture: guarded Wake successor stays at generation2 instead of compensating to generation3, incomplete pair refuses, sibling read works, cold reopen finishes once. | C55 is source/fixture proof only. Normal executable and actual browser paired-commit crash phases remain open; uncertain submissions never authorize blind resend. |
+| I. Restart preserves registrations/history/pending rollovers | PARTIAL: preserved C23/C28 restarts and later normal cold CLI payload/task checks. C55 source reopen preserves the original CREATED receipt and exact Wake-first binding witness. | Normal/full-runtime restart and critical paired-commit recovery still need corresponding qualification; no recurring activation. |
+| J. No orphan browser/Wake processes | PASS for recorded bounded tests through C54 and current source-test cleanup. Both controls remain stopped, no scoped owners remain, and all266 current runtime records stay preserved outside the two permitted C54 package-pointer updates. | Normal unattended operation is not activated or accepted. Every future bounded test retains its own cleanup proof. |
 
 **Current implementation versus gaps:** the existing registry, immutable project
-connections/assigned-task tools, durable fair browser admission, context store,
-schema2 Git/decision handoffs, browser ownership and rollover journals are already
-implemented and source-tested. Selected C21 v53 includes C18-C20 browser guard/call/
-provisional-URL fixes and actual separate context captures. C23 now qualifies two
-competing selected browser creations/paired commits/continuations. Remaining gaps include actual
-concurrent Web coding and critical crash/recovery/restart acceptance,
-whole-original-chain uninterrupted automatic operation and history archival
-beyond the64-predecessor inline limit. C41 adds source/isolated-CLI retirement;
-installed retirement and prior-task recovery proof remain open. C9 refuses before Wake commit at that limit
-instead of evicting history. Two fresh source chats are verified and paired to
-isolated test roots; their completed C23 operations close controlled G while H and
-additional critical pending-phase I remain open.
-Keep source/fixture, isolated browser, selected runtime, protected installation
-and unattended operation separate. Connector transport and protected deployment
-are specific live dependencies; neither blocks eligible source work. All other
-projects continue through their existing native development owners.
+connections and assigned-task tools, fair browser admission, conservative context
+store, structured handoffs and durable rollover journals are implemented. C50
+completed actual normal collector/private bootstrap transfer, independently
+verified replacement, paired generation5 and continuation/task-resume delivery.
+The task remains blocked on the scoped tool, with no coding completion claimed.
+C54 qualifies the normal reader and selected stopped v67 package; C55 fixes the
+native registry-save failure in source. No completed canary needs replay.
+
+Primary live gaps remain actual parallel Web coding, critical browser transaction
+crashes/full runtime restart, protected deployment and unattended operation.
+C23's serialized two-creator proof remains accepted in its controlled scope.
+The64-predecessor inline capacity refuses before Wake mutation and never evicts
+history; unbounded archival remains outside the current implementation. C41's
+retirement source/isolated CLI evidence is retained without claiming a live
+retirement of a native-owned project. Connector/startup ownership is a specific
+live dependency; eligible source work continues and native owners remain intact.
+
+The following C9/C8/C13 milestone notes preserve their historical scope; current
+qualification is summarized above and in the latest dated C50–C55 records.
 
 Immediate C9 source fix removes silent predecessor eviction. At the existing
 64-entry inline capacity, another target change now refuses before the paired

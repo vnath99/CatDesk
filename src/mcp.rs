@@ -4266,6 +4266,7 @@ fn bind_project_web_target_locked_with_witness(
     };
     let mut staged = None;
     let mut source_progress = false;
+    let mut wake_commit_verified = false;
     let result = store.bind_project_chat_target_after(
         project_id,
         &target_url,
@@ -4302,10 +4303,19 @@ fn bind_project_web_target_locked_with_witness(
                     "independent Wake target changed before registry commit".into(),
                 ));
             }
+            wake_commit_verified = true;
             Ok(())
         },
     );
     if result.is_err() {
+        if source_witness.is_some() && wake_commit_verified {
+            // The guarded rollover already has a durable verified replacement
+            // receipt. Keep its exact Wake-first successor for the existing
+            // restart recovery path. Compensating here advances the source to
+            // another generation and destroys that adjacent-successor proof.
+            // Paired readers continue to refuse until the registry commits.
+            return Err(DesignatedChatTargetErrorV1::SynchronizationFailure);
+        }
         if let Some(updated) = staged {
             let Some(old) = previous else {
                 return Err(DesignatedChatTargetErrorV1::SynchronizationFailure);
@@ -12118,6 +12128,147 @@ mod tests {
             Err(DesignatedChatTargetErrorV1::Stale)
         );
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn project_web_pairing_guarded_registry_write_failure_keeps_exact_successor_recoverable() {
+        use catdesk_wake::store::{Phase, Receipt};
+        use std::os::windows::fs::OpenOptionsExt;
+        let (root, wake) = project_web_target_fixture("guarded-registry-write-failure");
+        let first = bind_project_web_target_locked(
+            &root,
+            &wake,
+            "alpha",
+            "https://chatgpt.com/c/guarded-alpha-first",
+            None,
+            0,
+        )
+        .unwrap();
+        let sibling = bind_project_web_target_locked(
+            &root,
+            &wake,
+            "beta",
+            "https://chatgpt.com/c/guarded-beta",
+            None,
+            0,
+        )
+        .unwrap();
+        let source =
+            catdesk_wake::protocol::Target::new(first.generation, first.url.clone()).unwrap();
+        let event = wake
+            .produce(
+                "guarded-source-handoff",
+                "alpha",
+                "engineering_attention",
+                "Synthetic completed source handoff",
+            )
+            .unwrap();
+        let lease = wake.host_lock().unwrap();
+        let claimed = wake.claim(&event, &lease).unwrap();
+        wake.transition(
+            &event.event_id,
+            &claimed.owner,
+            Phase::Submitting,
+            None,
+            None,
+        )
+        .unwrap();
+        let receipt = Receipt {
+            schema_version: 1,
+            event_id: event.event_id.clone(),
+            target_generation: source.generation,
+            target_digest: source.digest.clone(),
+            message_digest: catdesk_wake::protocol::digest(&event.message),
+            sent_utc: catdesk_wake::store::now(),
+            evidence: "EXACT_USER_MESSAGE_APPENDED".into(),
+        };
+        wake.record_exact_receipt_timer(&event.event_id, &receipt)
+            .unwrap();
+        wake.transition(
+            &event.event_id,
+            &claimed.owner,
+            Phase::Sent,
+            Some(receipt),
+            None,
+        )
+        .unwrap();
+        wake.complete_timer(&event.event_id).unwrap();
+        drop(lease);
+        let fingerprint = wake
+            .source_progress_fingerprint("alpha", &source, &event.event_id)
+            .unwrap();
+        let registry_path = root.join(".catdesk/projects/projects.json");
+        let original_registry = fs::read(&registry_path).unwrap();
+        // Permit reads, but force the real registry's atomic replacement to
+        // fail after the separately stored Wake successor has committed.
+        let held = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&registry_path)
+            .unwrap();
+        let next_url = "https://chatgpt.com/c/guarded-alpha-next";
+        let result = bind_project_web_target_locked_with_witness(
+            &root,
+            &wake,
+            "alpha",
+            next_url,
+            Some(&first.sha256),
+            first.generation,
+            Some((&source, &event.event_id, &fingerprint)),
+        );
+        let successor =
+            catdesk_wake::protocol::Target::new(first.generation + 1, next_url.into()).unwrap();
+        assert_eq!(
+            wake.config().unwrap().targets["alpha"],
+            successor,
+            "a guarded commit failure must not compensate into another source generation"
+        );
+        assert_eq!(
+            result,
+            Err(DesignatedChatTargetErrorV1::SynchronizationFailure)
+        );
+        assert_eq!(fs::read(&registry_path).unwrap(), original_registry);
+        assert!(paired_project_target_readback_locked(&root, &wake, "alpha").is_err());
+        assert_eq!(
+            paired_project_target_readback_locked(&root, &wake, "beta")
+                .unwrap()
+                .unwrap(),
+            sibling
+        );
+        drop(held);
+        drop(wake);
+        let reopened =
+            catdesk_wake::store::Store::open_scoped_for_test(&root.join("wake"), &root).unwrap();
+        let repaired = bind_project_web_target_locked_with_witness(
+            &root,
+            &reopened,
+            "alpha",
+            next_url,
+            Some(&first.sha256),
+            first.generation,
+            Some((&source, &event.event_id, &fingerprint)),
+        )
+        .unwrap();
+        assert_eq!(repaired.generation, successor.generation);
+        assert_eq!(repaired.historical_urls, vec![first.url]);
+        assert_eq!(
+            reopened
+                .config()
+                .unwrap()
+                .history
+                .iter()
+                .filter(|change| change.project_id == "alpha")
+                .count(),
+            2
+        );
+        assert_eq!(
+            paired_project_target_readback_locked(&root, &reopened, "beta")
+                .unwrap()
+                .unwrap(),
+            sibling
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
