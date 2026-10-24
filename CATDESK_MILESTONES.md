@@ -1,3 +1,40 @@
+## October 24 EDT C82–C84 — real unknown-send crash and owned-draft archival
+
+A new task/intent reused the completed controlled project's generation2 source;
+no project/profile was created and no old message was replayed. Its controlled
+pressure observation, one handoff delivery and actual3,869-character collection
+passed. The normal selected C80 app was then killed through its retained parent
+handle after durable SEND_ATTEMPTED. Native kill-on-close Jobs exited with it.
+The saved journal stayed SUBMITTING/SEND_ATTEMPTED without a provider USER receipt
+or new binding. Every existing registry/Wake binding remained unchanged.
+
+A cold normal execute refused OUTCOME_UNKNOWN_NO_RESEND with the browser locked.
+Read-only inspection verified the exact owned full draft. The actual normal
+archive command then preserved4,395 bytes before its guarded composer clear,
+reopened Home and verified it empty in23.97s. A real archive-completion receipt
+was saved; it is NOT a provider submission receipt. The unknown operation stays
+non-replayable and its original generation2 binding remains authoritative. No
+conclusion about whether the provider accepted the submission was invented.
+
+The original test policy was restored. With the browser locked, cached archive
+completion and another execute refusal changed zero bytes; cached success does
+not claim a current composer observation. Wake2 target metadata remained readable.
+This is local sibling metadata proof, not successful sibling Web coding.
+
+All bounded steps used180s Jobs and cleaned to zero owners. Both controls STOPPED,
+queue0,305 records,10 pairs/one retained archive, all original bindings/history and
+native sessions preserved. The controlled test project alone stays held for the
+unknown outcome; shared composer ownership was released. An early stale private
+manifest preflight refused before host/latch; event text/destination never changed.
+
+One primary connector health read at07:22:13UTC, over three hours after the previous
+probe, independently returned HTTP429 from OpenAI transport. No retry or service,
+tunnel, authentication or settings action. Three native chats are active, one idle,
+no errors/actions. Actual Web B/C, protected and unattended acceptance remain open.
+Next: inspect/qualify bounded independent observation-only scheduler work using
+existing ownership controls; do not replay these completed operations. Evidence:
+`docs/verification/C82_C84_UNKNOWN_SEND_LIVE_ARCHIVE_2026_10_24.json`.
+
 ## October 24 EDT C81 — normal archive app selected in stopped development
 
 The exact reviewed C80 source `bce0e1d9aea836948e7d791141bef0214def2cd0`

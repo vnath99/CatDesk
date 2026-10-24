@@ -1,3 +1,40 @@
+## October 24 EDT C82–C84 — real unknown-send crash and owned-draft archival
+
+A new task/intent reused the completed controlled project's generation2 source;
+no project/profile was created and no old message was replayed. Its controlled
+pressure observation, one handoff delivery and actual3,869-character collection
+passed. The normal selected C80 app was then killed through its retained parent
+handle after durable SEND_ATTEMPTED. Native kill-on-close Jobs exited with it.
+The saved journal stayed SUBMITTING/SEND_ATTEMPTED without a provider USER receipt
+or new binding. Every existing registry/Wake binding remained unchanged.
+
+A cold normal execute refused OUTCOME_UNKNOWN_NO_RESEND with the browser locked.
+Read-only inspection verified the exact owned full draft. The actual normal
+archive command then preserved4,395 bytes before its guarded composer clear,
+reopened Home and verified it empty in23.97s. A real archive-completion receipt
+was saved; it is NOT a provider submission receipt. The unknown operation stays
+non-replayable and its original generation2 binding remains authoritative. No
+conclusion about whether the provider accepted the submission was invented.
+
+The original test policy was restored. With the browser locked, cached archive
+completion and another execute refusal changed zero bytes; cached success does
+not claim a current composer observation. Wake2 target metadata remained readable.
+This is local sibling metadata proof, not successful sibling Web coding.
+
+All bounded steps used180s Jobs and cleaned to zero owners. Both controls STOPPED,
+queue0,305 records,10 pairs/one retained archive, all original bindings/history and
+native sessions preserved. The controlled test project alone stays held for the
+unknown outcome; shared composer ownership was released. An early stale private
+manifest preflight refused before host/latch; event text/destination never changed.
+
+One primary connector health read at07:22:13UTC, over three hours after the previous
+probe, independently returned HTTP429 from OpenAI transport. No retry or service,
+tunnel, authentication or settings action. Three native chats are active, one idle,
+no errors/actions. Actual Web B/C, protected and unattended acceptance remain open.
+Next: inspect/qualify bounded independent observation-only scheduler work using
+existing ownership controls; do not replay these completed operations. Evidence:
+`docs/verification/C82_C84_UNKNOWN_SEND_LIVE_ARCHIVE_2026_10_24.json`.
+
 ## October 24 EDT C81 — normal archive app selected in stopped development
 
 The exact reviewed C80 source `bce0e1d9aea836948e7d791141bef0214def2cd0`
@@ -1578,7 +1615,7 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | E. Context pressure and durable handoff | PASS, controlled C50: actual source observation, controlled pressure policy, source handoff and normal private collector completed. Context was recorded for the replacement; the original policy was restored. C43 and recovered C38–C40 remain preserved. Estimates are advisory with unknown/incomplete coverage. | Continuous unattended monitoring is not activated or accepted. |
 | F. Actual replacement URL and continuation | PASS, controlled C50: actual issued URL independently verified, paired generation4-to5 transfer/history preserved, continuation and one original-task resume delivery complete. Correct task context survived; C54 confirms frozen-payload compatibility. Prior C23/C40/C43 evidence remains. | Actual coding remains blocked by the scoped tool dependency; receipt/body completion does not prove task completion. Protected and unattended acceptance remain open. |
 | G. Two simultaneous synthetic rollover requests | PASS, preserved C23 controlled live proof:23.22ms request gap, one active creator, one waiting ticket, both URLs/bindings/continuations isolated and no duplicate submission. | No replay needed. Critical crash H, protected and unattended acceptance remain separate. |
-| H. Interruptions, recovery and ambiguous submission | PARTIAL LIVE: C24/C28, C38–C40 recovery, C42 quarantined ambiguous operation and C43 resumption remain preserved. C55 adds a real native filesystem write-failure fixture: guarded Wake successor stays at generation2 instead of compensating to generation3, incomplete pair refuses, sibling read works, cold reopen finishes once. | C56 normal executable recovers explicitly injected CREATED/Wake-first state after a real registry replacement fault; fresh-process retry preserves generation2 and queues one continuation. C61 now qualifies an actual verified browser/Wake commit followed by a real Windows registry replacement failure; a fresh normal process recovers under the browser lock without resend, and C62 continuation/body proof completes. C75 now kills an actual owned normal process tree at observed DRAFT_READY; C76 verifies the saved exact draft cold, C77 resumes it and commits generation2 once, and C78 verifies completed continuation/body. The post-success harness failure and local-only finalization are retained separately. Other process-kill phases, machine-crash and unattended operation remain open; uncertain submissions never authorize blind resend. |
+| H. Interruptions, recovery and ambiguous submission | PARTIAL LIVE: C24/C28, C38–C40 recovery, C42 quarantined ambiguous operation and C43 resumption remain preserved. C55 adds a real native filesystem write-failure fixture: guarded Wake successor stays at generation2 instead of compensating to generation3, incomplete pair refuses, sibling read works, cold reopen finishes once. | C56 normal executable recovers explicitly injected CREATED/Wake-first state after a real registry replacement fault; fresh-process retry preserves generation2 and queues one continuation. C61 now qualifies an actual verified browser/Wake commit followed by a real Windows registry replacement failure; a fresh normal process recovers under the browser lock without resend, and C62 continuation/body proof completes. C75 now kills an actual owned normal process tree at observed DRAFT_READY; C76 verifies the saved exact draft cold, C77 resumes it and commits generation2 once, and C78 verifies completed continuation/body. The post-success harness failure and local-only finalization are retained separately. C82–C84 additionally kill the actual normal parent at SEND_ATTEMPTED, preserve the unknown journal/old binding, verify cold no-resend under the browser lock, archive the exact4,395-byte owned draft and prove empty Home through native browser reread. The archive completion is real but is not a provider USER receipt; the operation remains held/non-replayable. Other crash phases and unattended operation remain separate; uncertain submission never permits blind resend. |
 | I. Restart preserves registrations/history/pending rollovers | PARTIAL: preserved C23/C28 restarts and later normal cold CLI payload/task checks. C55 source reopen preserves the original CREATED receipt and exact Wake-first binding witness. | C56 normal fresh-process recovery preserves the receipt, source handoff, predecessor and one continuation from injected state. C61 additionally recovers the actual cross-system write-failure state in a fresh normal process with the browser lock held. C63 cold guarded retirement retry preserves all282 records and retained history; C64 source MCP reads expose that archive without reactivation. C65 normal loopback MCP read now matches the full archived workspace/target/history/retirement metadata without writes. C68 additionally restarts two actual selected normal MCP processes on the same endpoint, compares their complete coordinator projection (bindings/history/context/queue/work/rollover), and preserves all282 records including retained SUBMITTING/quarantined journals. Both natural30s exits and cleanup pass. C75–C78 additionally qualify recovery from an actual pre-send process kill while retaining all prior bindings/history. C79 now restarts both selected normal coordinator and independent foreground Wake host twice with equal complete saved projections,296 other records exact and zero owners. Web scheduler restart, protected/unattended operation and other critical crash phases remain open; no recurring activation. |
 | J. No orphan browser/Wake processes | C73–C78 also pass all bounded-step cleanup including actual owned-tree kill, cold draft inspection/recovery and continuation:297 final records, queue0,10 active pairs/one archive, controls STOPPED. No native/production/recurring actions. The original post-success harness failure remains recorded separately. PASS for recorded bounded tests through C68 bounded selected-normal restart diagnostics, including two natural30s exits on the same endpoint with Web auto off. Both controls remain stopped, no scoped owners remain, and all prior project records remain preserved outside the documented own-canary/shared host changes;282 final records, queue0, nine active paired projects and one preserved retired canary. | Normal unattended operation is not activated or accepted. Every future bounded test retains its own cleanup proof. |
 
