@@ -1,3 +1,24 @@
+## October 24 EDT C68 — selected MCP process restarts with pending state intact
+
+Two real selected v69 CatDesk MCP processes ran consecutively against the existing
+development control, reusing the exact endpoint and ephemeral authentication.
+Each exited naturally0 at30s; the owned180s Job completed in61.47s. Four read-only
+HTTP requests verified79 tools and identical complete coordinator projections:
+nine active project workspaces/URLs/history, one retained archive, all nine Wake
+pairs, context, queues, work reports and rollover/admission status. Independent
+registry-file comparison also passed. The retained journals include two SUBMITTING,
+two quarantined and eight continuation-queued records; no recovery/send was invoked.
+
+All282 saved records stayed byte-exact with read leases across both lifetimes.
+Zero scoped owners; no browser/Wake/recurring, native, official-runtime or connector
+action, message, selected-package change or production modification. This advances
+I for the actual selected normal MCP process, not a whole-stack restart, process
+kill, interrupted write or unattended operation. The copied wrapper also printed
+an old C66 summary after the correct C68 result; dedicated C68 result/containment
+records establish the pass. That reporting tail was corrected without test replay.
+Actual Web B/C, remaining H/full-stack/protected gates remain open. Evidence:
+`docs/verification/C68_SELECTED_MCP_RESTART_2026_10_24.json`.
+
 ## October 24 EDT C67 — draft review current; local backend dependency narrowed
 
 The existing [draft PR #4](https://github.com/vnath99/CatDesk/pull/4) still had an
