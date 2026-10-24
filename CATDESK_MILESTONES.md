@@ -1,3 +1,31 @@
+## October 24 EDT C71–C72 — matching response-recovery package selected stopped
+
+The stopped package guard rejected the attempted old-binary/new-bridge mixture
+with `DEV_PACKAGE_SCRIPT_SOURCE_MISMATCH` before any runtime change. Its embedded
+script pins were retained. Both normal app and host were rebuilt from reviewed
+source `5e71ef8ef62b6306610a49fee26bd5de28206976`, with no test support enabled.
+The app build passed in411.08s; host tests/build/owner-EOF gate passed in34.42s,
+including12 focused runtime tests. The EOF probe refused startup and created no
+runtime state. This supersedes the earlier assumption that unchanged Rust text
+allowed binary reuse after a Python bridge change.
+
+The guarded stopped-development update then passed in7.07s. Four recovery methods
+ran against the exact selected Python module, all nine Wake pairs and central
+status passed, and the old package remained hash-exact. Only the authority/current
+package pointers changed:280 other saved records stayed exact,282 total, no new
+records. All project registrations, conversation histories and bindings survived.
+Both controls remained STOPPED and cleanup found zero scoped owners. No browser,
+Wake engine, recurring automation, message or native-session action occurred.
+
+The C70 real read-only browser proof is retained without replay. This qualifies
+the fixed component in selected stopped development; it does not prove protected
+installation or unattended operation. C69's source seed and read-only reconciliation
+remain complete and must not be resent; registration and the actual process-kill
+test remain pending. Actual parallel ChatGPT tool execution B/C remains blocked
+by connector429/catalog/backend ownership, separately from eligible development.
+No operator action is needed for the next bounded canary preparation. Evidence:
+`docs/verification/C71_C72_MATCHED_RESPONSE_PACKAGE_2026_10_24.json`.
+
 ## October 24 EDT C69–C70 — response query recovery with a real read-only canary
 
 A fresh controlled source for a future owned-process interruption sent one seed,
