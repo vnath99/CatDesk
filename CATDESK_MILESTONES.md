@@ -1,3 +1,29 @@
+## October 24 EDT C100 — historical recovery authority reconciled
+
+Read-only history now explains the known executable/fingerprint divergence:
+the October 7 UTC ordinary release build, exact 9a8 hash readback and native reload
+receipt are preserved, while the sidecar remains A264. This is evidence of a
+build/reload outside completion of the reviewed pair/LKG transaction; it is not
+evidence of tampering, clean-source provenance or reviewed promotion. The original
+later shutdown cause remains unknown and is not attributed to browser/Wake cleanup.
+
+The retained A264 slot is legacy operational health evidence, not current rollback
+authority. All 40 generation results plus one older result are failed/ambiguous;
+no attestation, promotion completion or alternate slot was found at the inspected
+authoritative locations. Existing signed-image authority remains separate. Reuse
+the already implemented October 18 release-pair procedure if its existing review
+and attested-candidate prerequisites can be satisfied; design no new mechanism.
+
+The October 27 plan specifies minimum operator inputs, public diagnose/recover,
+conditional existing CLI forms, exact post-recovery checks, and actual two-chat
+Web coding B/C as the next live priority. No recovery/build retry, connector,
+browser/Wake/recurring, native-session, signing or tunnel action was made.
+All 306 tracked records and 55 historical files remain exact. No product source
+changed or source test was repeated. Recovery and full MVP acceptance remain open.
+
+Plan: `docs/orchestrator/OCT27_EXISTING_RECOVERY_AUTHORITY_PLAN.md`.
+Evidence: `docs/verification/C100_HISTORICAL_RECOVERY_AUTHORITY_2026_10_24.json`.
+
 ## October 24 EDT C99 — supported backend owner identified; recovery deferred
 
 The existing canonical workspace's public `catdesk.ps1` facade owns local daemon
