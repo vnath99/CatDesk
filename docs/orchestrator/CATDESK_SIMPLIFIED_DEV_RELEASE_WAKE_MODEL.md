@@ -80,6 +80,16 @@ This advances command qualification only. Backend startup, independent working
 predecessor admission, automatic fallback and protected migration remain separate.
 See `docs/verification/C102_NORMAL_RELEASE_SELECTION_RECOVERY_2026_10_24.json`.
 
+### C103 existing versioned rollback correction
+
+The existing worker store no longer requires healthy current executable bytes
+before restoring its intact retained predecessor. Current manifest and predecessor
+validation, atomic selection, stale-request refusal and failed-image preservation
+remain. 18 source tests, strict Clippy and format pass. This corrects a storage
+primitive; working-health qualification and normal startup integration remain
+required. No protected release or automatic fallback was activated.
+See `docs/verification/C103_VERSIONED_ROLLBACK_CURRENT_IMAGE_FAILURE_2026_10_24.json`.
+
 # T-0476 — CatDesk fast development, safe Wake recovery and simple production releases
 
 ## CURRENT 2026-10-11 — Chat52 three-lane development and recovery status (supersedes history below)

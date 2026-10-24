@@ -1,3 +1,30 @@
+## October 24 EDT C103 — existing rollback survives current-image damage
+
+A causal regression confirmed that the existing versioned worker store required
+a healthy current executable before it would restore the intact predecessor.
+Rollback now retains strict current-manifest identity and full predecessor
+manifest/image validation while allowing the executable being retired to be
+damaged or absent. Existing atomic current/previous selection is reused; failed
+current bytes remain preserved and are not made a rollback predecessor.
+
+All 18 versioned-release tests pass, including two new regressions covering seven
+fault scenarios, cold store reopen, stale CAS, invalid metadata and absent/corrupt
+predecessors. Strict workspace Clippy and formatting pass. The expected old-code
+failure and an earlier formatting-only gate failure remain recorded. No new
+release registry, approval type or production mutator was introduced.
+
+This is a storage-primitive source fix. Synthetic review manifests do not create
+independent live release approval; automatic backend startup/fallback is not yet
+integrated or qualified. All 306 runtime records and 55 historical files remain
+exact, zero scoped owners, queue 0, both controls STOPPED. Protected installation,
+signed artifacts, bindings, native writers and completed canaries are unchanged.
+
+Next: connect qualified source/build/working-health evidence and this existing
+adapter to the normal isolated developer backend startup, then test the composed
+path before legacy retirement. Actual Web B/C and authorized production recovery
+remain open. Evidence:
+`docs/verification/C103_VERSIONED_ROLLBACK_CURRENT_IMAGE_FAILURE_2026_10_24.json`.
+
 ## October 24 EDT C102 — normal release selection recovery qualified
 
 Exact published C101 built as a normal release app and host in 422.79s and 21.47s.
