@@ -1,3 +1,26 @@
+## October 24 EDT C81 — normal archive app selected in stopped development
+
+The exact reviewed C80 source `bce0e1d9aea836948e7d791141bef0214def2cd0`
+built as a normal release app without dev dependencies in382.67s. The source and
+embedded bridge/adapter/test pins stayed frozen. The guarded stopped-development
+update passed in7.21s, with all10 paired target reads and central status correct.
+
+The unchanged C72 normal host and bridge were reused with their actual source
+`5e71ef8ef62b6306610a49fee26bd5de28206976`, exact hashes, unchanged Wake
+subtree/assets and retained owner-EOF/bridge proof. They were not rebuilt or
+retested. The old package remains intact. Only package authority/current pointers
+changed:295 other records byte-exact,297 total, no new records. Both controls
+STOPPED, zero scoped owners/messages, no browser/Wake/recurring/native/production
+action. All original project bindings, workspaces and predecessor history survived.
+
+This selects the v2 unknown-submit archive implementation in normal development;
+it does not prove fresh live archival, protected installation or unattended work.
+Next is a new bounded SEND_ATTEMPTED interruption/archival case on the existing
+completed controlled project, using a new task/intent and preserving its generation2
+source. Completed C69/C73–C78 messages and operations must not be replayed. Actual
+Web coding B/C remains a separate connector/backend/catalog dependency. Evidence:
+`docs/verification/C81_NORMAL_ARCHIVE_APP_SELECTION_2026_10_24.json`.
+
 ## October 24 EDT C80 — archive an exact owned v2 unknown-submit draft
 
 The existing supported `operator web rollover archive-draft --project-id PROJECT
