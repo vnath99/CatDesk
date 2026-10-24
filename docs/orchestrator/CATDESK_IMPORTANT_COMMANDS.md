@@ -1,3 +1,27 @@
+## October 24 EDT C86–C88 — normal automatic context observation
+
+The published C85 app built normally in 371.51s and was selected through the
+stopped development update. All 10 pairs passed; only two package pointers changed,
+303 other records stayed exact and the previous package/profile were preserved.
+
+C87 used the actual periodic scheduler with two explicitly enabled projects.
+The held source captured successfully without advancing SUBMISSION_UNKNOWN or
+changing its journal/binding. Its sibling remained AWAITING_BROWSER within the
+180s bound. This is a retained PARTIAL result, not two-observer acceptance.
+
+C88 then used both original policies: held observation disabled, sibling enabled.
+The sibling completed a fresh native context observation while the held project
+stayed non-replayable. No completed capture, message or rollover was replayed.
+This is independent context progress, not useful ChatGPT Web coding B/C.
+
+Both runs ended naturally in under 168s, with verified foreground host exits,
+zero scoped owners, queue 0 and controls STOPPED. Policies, all 10 bindings/history,
+native assignments and unknown journals were preserved; 306 final runtime records.
+No protected, official, recurring or unattended activation. Exact context usage
+remains advisory. Source and selected live scope are separate in the evidence:
+`docs/verification/C86_C88_NORMAL_AUTOMATIC_CONTEXT_OBSERVATION_2026_10_24.json`.
+Actual Web coding still needs the supported backend/catalog and connector path.
+
 ## October 24 EDT C85 — context observation while submission is held
 
 The existing observation-only quarantine path now also handles SUBMISSION_UNKNOWN.
