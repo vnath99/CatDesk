@@ -90,6 +90,49 @@ primitive; working-health qualification and normal startup integration remain
 required. No protected release or automatic fallback was activated.
 See `docs/verification/C103_VERSIONED_ROLLBACK_CURRENT_IMAGE_FAILURE_2026_10_24.json`.
 
+### C104 local development evidence and predecessor retention
+
+Reuse `versions/<packageId>/verification.json` for immutable local operator-provided
+references to source commit, build evidence, review evidence and observed working
+health. Bind them to the exact package ID, manifest hash and artifact hashes.
+Recording does not execute those checks or grant production review authority.
+An identical replay is harmless; conflicting or mismatched records are refused.
+
+Keep the qualified predecessor in optional `previousVerifiedRelease` metadata in
+the existing `current.json`; its bytes remain bound by the unchanged authority.
+Reuse the same update journal. Do not introduce another release selector/store.
+Keep the last qualified predecessor across unqualified updates, while treating
+invalid predecessor metadata as ineligible rather than blocking healthy current
+operation. The legacy authority/manifest format remains unchanged. Existing Wake
+pointer readers accept extra metadata (source inspection); old binary readback
+still requires normal executable qualification. Legacy pending journals recover.
+Use the current controller for new updates and new-format pending journals:
+older controllers may refuse the pending journal or discard optional predecessor
+metadata during a later update. They are not the migration writer.
+
+The supported source command is:
+
+```text
+catdesk.exe operator web-dev-runtime record-verification --input-file evidence.json
+```
+
+Run in the already prepared development workspace while host/browser ownership is
+free and control is STOPPED. Input must be a plain file inside that workspace.
+Schema 1 fields are `packageId`, `manifestSha256`, `artifacts` (the four immutable
+package hashes), `sourceCommit` (40 lowercase hex), `buildEvidenceSha256`,
+`reviewEvidenceSha256`, `workingHealthEvidenceSha256` (64 lowercase hex each),
+and `workingHealthObservedUtc` (nonfuture Unix seconds), plus `schemaVersion: 1`.
+Evidence digests reference actual retained operator-reviewed records; merely
+inventing digest strings is not release qualification. Status labels these
+references `OPERATOR_RECORDED`, not independent automatic attestation.
+
+23 runtime tests and 13 operator tests, strict root/Wake Clippy and formats pass.
+Source fixture receipts are synthetic; no real release is newly qualified.
+Automatic predecessor restoration and composed normal backend startup remain
+the next integration, before any legacy writer retirement. The existing selected
+package and protected installation remain unchanged. Evidence:
+`docs/verification/C104_DEV_RELEASE_EVIDENCE_PREDECESSOR_2026_10_24.json`.
+
 # T-0476 — CatDesk fast development, safe Wake recovery and simple production releases
 
 ## CURRENT 2026-10-11 — Chat52 three-lane development and recovery status (supersedes history below)

@@ -1,3 +1,31 @@
+## October 24 EDT C104 — retain one qualified development predecessor
+
+The existing development release selection now accepts write-once local
+source/build/review/working-health references bound to the exact selected package,
+manifest and four artifact hashes. Recording does not perform health checks,
+prove external review or create protected production authority. It requires
+STOPPED/exclusive ownership, refuses conflicting records and preserves selection
+bytes. Command: `operator web-dev-runtime record-verification --input-file <file>`.
+
+The existing `current.json` can retain one qualified predecessor through the
+existing package-update journal. Unqualified updates preserve that predecessor;
+damaged predecessor bytes do not block healthy current startup. No second
+selection registry or authority/manifest schema is introduced. Legacy pending
+journals recover. Use the current controller for future updates and pending new
+journals; older update controllers may drop optional predecessor metadata.
+
+23 development-runtime and 13 operator tests pass, with both strict Clippy and
+format checks. These are source/fixture results, not normal binary, independently
+verified release health, automatic fallback or installed acceptance. All 306
+runtime records and 55 historical files remain exact; zero scoped owners,
+queue 0, both controls STOPPED. No protected recovery, browser, Wake, connector,
+native-session or project-binding action occurred. No legacy writer is retired.
+
+Next: reuse the same journal for verified-predecessor restoration, then qualify
+normal bounded backend startup/recovery with genuine release evidence. Actual
+two-conversation Web coding and October 27 production restoration remain open.
+Evidence: `docs/verification/C104_DEV_RELEASE_EVIDENCE_PREDECESSOR_2026_10_24.json`.
+
 ## October 24 EDT C103 — existing rollback survives current-image damage
 
 A causal regression confirmed that the existing versioned worker store required

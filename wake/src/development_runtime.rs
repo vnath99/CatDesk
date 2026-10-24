@@ -35,6 +35,7 @@ const DEV_DIR: &str = "web-development";
 const ROOT_DIR: &str = "runtime";
 const PACKAGE_UPDATE_PURPOSE: &str = "CATDESK_WAKE_DEV_PACKAGE_UPDATE_V1";
 const PACKAGE_UPDATE_ATTEMPT: &str = "package-update-attempt.json";
+const RELEASE_VERIFICATION: &str = "verification.json";
 const PACKAGE_FILES: [&str; 4] = [
     "CatDeskWakeHost.exe",
     "CatDeskBinagotchy.exe",
@@ -111,6 +112,210 @@ struct PackageUpdateAttempt {
     pointer_stage_name: String,
     authority_stage_name: String,
     started_utc: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    old_pointer_json: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    retained_verification: Option<ReleaseVerification>,
+}
+
+/// Local operator-provided development evidence. This records the reviewed
+/// source/build/health references; it does not perform those reviews or confer
+/// protected production authority. Existing package/authority schemas stay intact.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReleaseVerification {
+    schema_version: u32,
+    package_id: String,
+    manifest_sha256: String,
+    artifacts: BTreeMap<String, String>,
+    source_commit: String,
+    build_evidence_sha256: String,
+    review_evidence_sha256: String,
+    working_health_evidence_sha256: String,
+    working_health_observed_utc: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RetainedRelease {
+    package_id: String,
+    artifacts: BTreeMap<String, String>,
+    manifest_identity: FullFileIdentityV2,
+    manifest_sha256: String,
+    verification: ReleaseVerification,
+}
+
+fn lowercase_hex(value: &str, length: usize) -> bool {
+    value.len() == length
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn validate_release_verification(
+    record: &ReleaseVerification,
+    authority: &Authority,
+) -> Result<()> {
+    validate_verification_binding(
+        record,
+        &authority.package_id,
+        &authority.manifest_sha256,
+        &authority.artifacts,
+    )
+}
+
+fn validate_verification_binding(
+    record: &ReleaseVerification,
+    package_id: &str,
+    manifest_sha256: &str,
+    artifacts: &BTreeMap<String, String>,
+) -> Result<()> {
+    if record.schema_version != 1
+        || record.package_id != package_id
+        || record.manifest_sha256 != manifest_sha256
+        || record.artifacts != *artifacts
+        || !lowercase_hex(&record.source_commit, 40)
+        || [
+            &record.build_evidence_sha256,
+            &record.review_evidence_sha256,
+            &record.working_health_evidence_sha256,
+        ]
+        .into_iter()
+        .any(|value| !lowercase_hex(value, 64))
+        || record.working_health_observed_utc == 0
+        || record.working_health_observed_utc > now()
+    {
+        return Err("DEV_RELEASE_VERIFICATION_INVALID".into());
+    }
+    Ok(())
+}
+
+fn read_release_verification(
+    root: &Path,
+    authority: &Authority,
+) -> Result<Option<ReleaseVerification>> {
+    let package = root.join("versions").join(&authority.package_id);
+    let path = package.join(RELEASE_VERIFICATION);
+    if !present(&path)? {
+        return Ok(None);
+    }
+    plain(&package, true)?;
+    let record: ReleaseVerification = read_json(&path, 16 * 1024)?;
+    validate_release_verification(&record, authority)?;
+    let manifest = package.join("manifest.json");
+    if identity(&manifest, false)? != authority.manifest_identity
+        || hash_file(&manifest, 16 * 1024)? != authority.manifest_sha256
+    {
+        return Err("DEV_RELEASE_VERIFICATION_PACKAGE_CHANGED".into());
+    }
+    for name in PACKAGE_FILES {
+        if authority.artifacts.get(name) != Some(&hash_file(&package.join(name), MAX_PACKAGE_FILE)?)
+        {
+            return Err("DEV_RELEASE_VERIFICATION_PACKAGE_CHANGED".into());
+        }
+    }
+    Ok(Some(record))
+}
+
+fn update_pointer(
+    old: &Authority,
+    new_id: &str,
+    hashes: &BTreeMap<String, String>,
+    old_pointer_json: Option<&str>,
+    retained_verification: Option<&ReleaseVerification>,
+) -> Result<Value> {
+    let mut pointer = package_pointer(new_id, hashes);
+    let old_pointer = match old_pointer_json {
+        Some(bytes) => {
+            if bytes.len() > 4096
+                || format!("{:x}", Sha256::digest(bytes.as_bytes())) != old.pointer_sha256
+            {
+                return Err("DEV_PACKAGE_UPDATE_OLD_POINTER_INVALID".into());
+            }
+            Some(
+                serde_json::from_str::<Value>(bytes)
+                    .map_err(|_| "DEV_PACKAGE_UPDATE_OLD_POINTER_INVALID")?,
+            )
+        }
+        None => None,
+    };
+    let previous = match retained_verification {
+        Some(verification) => {
+            if old_pointer.is_none() {
+                return Err("DEV_PACKAGE_UPDATE_OLD_POINTER_INVALID".into());
+            }
+            validate_release_verification(verification, old)?;
+            Some(
+                serde_json::to_value(RetainedRelease {
+                    package_id: old.package_id.clone(),
+                    artifacts: old.artifacts.clone(),
+                    manifest_identity: old.manifest_identity.clone(),
+                    manifest_sha256: old.manifest_sha256.clone(),
+                    verification: verification.clone(),
+                })
+                .map_err(|_| "DEV_RUNTIME_ENCODING_INVALID")?,
+            )
+        }
+        None => old_pointer
+            .as_ref()
+            .and_then(|value| value.get("previousVerifiedRelease"))
+            .cloned(),
+    };
+    if let Some(previous) = previous
+        && previous.get("packageId").and_then(Value::as_str) != Some(new_id)
+    {
+        pointer["previousVerifiedRelease"] = previous;
+    }
+    if serde_json::to_vec(&pointer)
+        .map_err(|_| "DEV_RUNTIME_ENCODING_INVALID")?
+        .len()
+        > 4096
+    {
+        return Err("DEV_PACKAGE_UPDATE_POINTER_CAPACITY".into());
+    }
+    Ok(pointer)
+}
+
+/// Record local operator-reviewed evidence for this exact selected development
+/// package. No health/CI claim is inferred by merely selecting or hashing bytes.
+pub fn record_release_verification(workspace: &Path, input_file: &Path) -> Result<Value> {
+    let workspace = canonical_workspace(workspace)?;
+    let (root, _) = validated_authority(&workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    let store = Store::open(&root)?;
+    let _host = store.host_lock()?;
+    let _browser = runtime::browser_session_lock(&root, Duration::ZERO)?;
+    let control: runtime::Control = read(&root.join("control.json"))?;
+    if control.schema_version != 1 || control.desired != "STOPPED" {
+        return Err("DEV_PACKAGE_UPDATE_HOST_NOT_STOPPED".into());
+    }
+    let (_, authority) = validated_authority(&workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    plain(input_file, false)?;
+    let input =
+        fs::canonicalize(input_file).map_err(|_| "DEV_RELEASE_VERIFICATION_INPUT_INVALID")?;
+    if !input.starts_with(&workspace) {
+        return Err("DEV_RELEASE_VERIFICATION_INPUT_SCOPE_INVALID".into());
+    }
+    let record: ReleaseVerification = read_json(&input, 16 * 1024)?;
+    validate_release_verification(&record, &authority)?;
+    let package = root.join("versions").join(&authority.package_id);
+    let path = package.join(RELEASE_VERIFICATION);
+    let state = match read_release_verification(&root, &authority)? {
+        Some(existing) if existing == record => "VERIFICATION_ALREADY_RECORDED",
+        Some(_) => return Err("DEV_RELEASE_VERIFICATION_CONFLICT".into()),
+        None => {
+            let stage = package.join(update_stage_name("verification", &authority.package_id)?);
+            write_json_new(&stage, &record)?;
+            fs::rename(&stage, &path).map_err(|_| "DEV_RELEASE_VERIFICATION_COMMIT_FAILED")?;
+            if read_release_verification(&root, &authority)?.as_ref() != Some(&record) {
+                return Err("DEV_RELEASE_VERIFICATION_READBACK_FAILED".into());
+            }
+            "VERIFICATION_RECORDED"
+        }
+    };
+    Ok(json!({"mode":"DEVELOPMENT_UNPROTECTED","status":state,
+        "evidenceAuthority":"LOCAL_OPERATOR_PROVIDED","packageId":authority.package_id,
+        "sourceCommit":record.source_commit,"healthChecksPerformed":false,
+        "productionAuthorityCreated":false,"hostStarted":false,"browserAction":"NONE"}))
 }
 
 fn wide(value: &OsStr) -> Vec<u16> {
@@ -766,6 +971,13 @@ fn validate_update_attempt(
     {
         return Err("DEV_PACKAGE_UPDATE_ATTEMPT_INVALID".into());
     }
+    update_pointer(
+        old,
+        &new.package_id,
+        source_hashes,
+        attempt.old_pointer_json.as_deref(),
+        attempt.retained_verification.as_ref(),
+    )?;
     let (manifest_identity, manifest_sha256) =
         verify_update_package(root, &new.package_id, source_hashes)?;
     if new.manifest_identity != manifest_identity || new.manifest_sha256 != manifest_sha256 {
@@ -817,7 +1029,13 @@ fn complete_package_update(
         if hash_file(&pointer_stage, 4096)? != attempt.new_authority.pointer_sha256
             || identity(&pointer_stage, false)? != attempt.new_authority.pointer_identity
             || read_json::<Value>(&pointer_stage, 4096)?
-                != package_pointer(&attempt.new_authority.package_id, source_hashes)
+                != update_pointer(
+                    &attempt.old_authority,
+                    &attempt.new_authority.package_id,
+                    source_hashes,
+                    attempt.old_pointer_json.as_deref(),
+                    attempt.retained_verification.as_ref(),
+                )?
         {
             return Err("DEV_PACKAGE_UPDATE_POINTER_STAGE_INVALID".into());
         }
@@ -956,7 +1174,19 @@ fn stage_package_update_attempt(
     let (manifest_identity, manifest_sha256) = stage_update_package(root, source, &id, hashes)?;
     let pointer_stage_name = update_stage_name("current-update", &id)?;
     let pointer_stage = root.join(&pointer_stage_name);
-    write_json_new(&pointer_stage, &package_pointer(&id, hashes))?;
+    let old_pointer_json = fs::read_to_string(root.join("current.json"))
+        .map_err(|_| "DEV_PACKAGE_UPDATE_OLD_POINTER_INVALID")?;
+    let retained_verification = read_release_verification(root, old).ok().flatten();
+    write_json_new(
+        &pointer_stage,
+        &update_pointer(
+            old,
+            &id,
+            hashes,
+            Some(&old_pointer_json),
+            retained_verification.as_ref(),
+        )?,
+    )?;
     let mut new = old.clone();
     new.package_id = id.clone();
     new.artifacts = hashes.clone();
@@ -979,6 +1209,8 @@ fn stage_package_update_attempt(
         pointer_stage_name,
         authority_stage_name,
         started_utc: now(),
+        old_pointer_json: Some(old_pointer_json),
+        retained_verification,
     };
     validate_update_attempt(workspace, root, &attempt, hashes)?;
     write_json_new(&attempt_path, &attempt)?;
@@ -1260,12 +1492,64 @@ pub fn status(workspace: &Path) -> Result<Value> {
     };
     let store = Store::open(&root)?;
     let live = runtime::status(&store)?;
+    let current_verification = match read_release_verification(&root, &authority) {
+        Ok(Some(record)) => json!({"status":"OPERATOR_RECORDED",
+            "sourceCommit":record.source_commit,
+            "workingHealthObservedUtc":record.working_health_observed_utc}),
+        Ok(None) => json!({"status":"NOT_RECORDED"}),
+        Err(_) => json!({"status":"INVALID_OR_PACKAGE_CHANGED"}),
+    };
+    let previous_verification = retained_predecessor_status(&root);
     Ok(
         json!({"mode":"DEVELOPMENT_UNPROTECTED","runtimeRoot":root,"packageId":authority.package_id,
         "hostObservation":live.host,"observedPid":live.pid,"liveOwnerVerified":false,
         "browser":live.browser,"queueDepth":live.queue_depth,
-        "targets":live.targets.keys().collect::<Vec<_>>(),"attention":live.attention}),
+        "targets":live.targets.keys().collect::<Vec<_>>(),"attention":live.attention,
+        "currentVerification":current_verification,"previousVerifiedRelease":previous_verification}),
     )
+}
+
+fn read_retained_release(root: &Path) -> Result<Option<RetainedRelease>> {
+    let pointer: Value = read_json(&root.join("current.json"), 4096)?;
+    let Some(value) = pointer.get("previousVerifiedRelease") else {
+        return Ok(None);
+    };
+    let previous: RetainedRelease = serde_json::from_value(value.clone())
+        .map_err(|_| "DEV_RELEASE_PREDECESSOR_RECORD_INVALID")?;
+    if !package_id_matches(&previous.artifacts, &previous.package_id)? {
+        return Err("DEV_RELEASE_PREDECESSOR_RECORD_INVALID".into());
+    }
+    validate_verification_binding(
+        &previous.verification,
+        &previous.package_id,
+        &previous.manifest_sha256,
+        &previous.artifacts,
+    )?;
+    let package = root.join("versions").join(&previous.package_id);
+    plain(&package, true)?;
+    let manifest = package.join("manifest.json");
+    if identity(&manifest, false)? != previous.manifest_identity
+        || hash_file(&manifest, 16 * 1024)? != previous.manifest_sha256
+    {
+        return Err("DEV_RELEASE_VERIFICATION_PACKAGE_CHANGED".into());
+    }
+    for name in PACKAGE_FILES {
+        if previous.artifacts.get(name) != Some(&hash_file(&package.join(name), MAX_PACKAGE_FILE)?)
+        {
+            return Err("DEV_RELEASE_VERIFICATION_PACKAGE_CHANGED".into());
+        }
+    }
+    Ok(Some(previous))
+}
+
+fn retained_predecessor_status(root: &Path) -> Value {
+    match read_retained_release(root) {
+        Ok(Some(previous)) => json!({"status":"OPERATOR_RECORDED_PACKAGE_RETAINED",
+            "packageId":previous.package_id,"sourceCommit":previous.verification.source_commit,
+            "workingHealthObservedUtc":previous.verification.working_health_observed_utc}),
+        Ok(None) => json!({"status":"NOT_RECORDED"}),
+        Err(_) => json!({"status":"INVALID_OR_PACKAGE_CHANGED"}),
+    }
 }
 
 fn validated_launch(workspace: &Path) -> Result<(Store, PathBuf)> {
@@ -2149,6 +2433,273 @@ mod tests {
             authority
         );
         assert!(!dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT).exists());
+        cleanup(&parent);
+    }
+
+    fn verification_fixture_record(authority: &Authority) -> ReleaseVerification {
+        ReleaseVerification {
+            schema_version: 1,
+            package_id: authority.package_id.clone(),
+            manifest_sha256: authority.manifest_sha256.clone(),
+            artifacts: authority.artifacts.clone(),
+            source_commit: "a".repeat(40),
+            build_evidence_sha256: "b".repeat(64),
+            review_evidence_sha256: "c".repeat(64),
+            working_health_evidence_sha256: "d".repeat(64),
+            working_health_observed_utc: now(),
+        }
+    }
+
+    fn record_fixture_verification(workspace: &Path) -> ReleaseVerification {
+        let authority = validated_authority(workspace).unwrap().unwrap().1;
+        let record = verification_fixture_record(&authority);
+        let input = workspace.join(format!("verification-{}.json", authority.package_id));
+        write_json_new(&input, &record).unwrap();
+        let result = record_release_verification(workspace, &input).unwrap();
+        assert_eq!(result["status"], "VERIFICATION_RECORDED");
+        assert_eq!(result["evidenceAuthority"], "LOCAL_OPERATOR_PROVIDED");
+        assert_eq!(result["healthChecksPerformed"], false);
+        assert_eq!(result["productionAuthorityCreated"], false);
+        record
+    }
+
+    fn update_fixture_host(parent: &Path, workspace: &Path, name: &str) {
+        let root = root_for_workspace(workspace).unwrap().unwrap();
+        let authority = validated_authority(workspace).unwrap().unwrap().1;
+        let package = root.join("versions").join(authority.package_id);
+        let source = parent.join(name);
+        fs::create_dir(&source).unwrap();
+        for file in PACKAGE_FILES {
+            fs::copy(package.join(file), source.join(file)).unwrap();
+        }
+        fs::write(source.join("CatDeskWakeHost.exe"), name.as_bytes()).unwrap();
+        assert_eq!(
+            update_package(workspace, &source).unwrap()["status"],
+            "PACKAGE_UPDATED_STOPPED"
+        );
+    }
+
+    #[test]
+    fn verification_is_immutable_local_and_preserves_legacy_selection_bytes() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let (root, authority) = validated_authority(&workspace).unwrap().unwrap();
+        let authority_before = fs::read(dev_dir(&workspace).join("authority.json")).unwrap();
+        let pointer_before = fs::read(root.join("current.json")).unwrap();
+        let manifest_path = root
+            .join("versions")
+            .join(&authority.package_id)
+            .join("manifest.json");
+        let manifest_before = fs::read(&manifest_path).unwrap();
+        let mut record = record_fixture_verification(&workspace);
+        let input = workspace.join(format!("verification-{}.json", authority.package_id));
+        assert_eq!(
+            record_release_verification(&workspace, &input).unwrap()["status"],
+            "VERIFICATION_ALREADY_RECORDED"
+        );
+        record.source_commit = "e".repeat(40);
+        fs::write(&input, serde_json::to_vec(&record).unwrap()).unwrap();
+        assert_eq!(
+            record_release_verification(&workspace, &input).unwrap_err(),
+            "DEV_RELEASE_VERIFICATION_CONFLICT"
+        );
+        assert_eq!(
+            fs::read(dev_dir(&workspace).join("authority.json")).unwrap(),
+            authority_before
+        );
+        assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer_before);
+        assert_eq!(fs::read(manifest_path).unwrap(), manifest_before);
+        assert_eq!(
+            status(&workspace).unwrap()["currentVerification"]["sourceCommit"],
+            "a".repeat(40)
+        );
+        assert_eq!(
+            status(&workspace).unwrap()["previousVerifiedRelease"]["status"],
+            "NOT_RECORDED"
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn qualified_predecessor_survives_unqualified_updates_in_existing_pointer() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let (root, original) = validated_authority(&workspace).unwrap().unwrap();
+        record_fixture_verification(&workspace);
+        update_fixture_host(&parent, &workspace, "version-b");
+        let first = read_retained_release(&root).unwrap().unwrap();
+        assert_eq!(first.package_id, original.package_id);
+        assert_eq!(first.artifacts, original.artifacts);
+        assert_eq!(
+            status(&workspace).unwrap()["currentVerification"]["status"],
+            "NOT_RECORDED"
+        );
+        let previous = read_json::<Value>(&root.join("current.json"), 4096).unwrap()["previousVerifiedRelease"].clone();
+        update_fixture_host(&parent, &workspace, "version-c");
+        assert_eq!(
+            read_json::<Value>(&root.join("current.json"), 4096).unwrap()["previousVerifiedRelease"],
+            previous
+        );
+        assert_eq!(
+            read_retained_release(&root).unwrap().unwrap().package_id,
+            original.package_id
+        );
+        let (_, current) = validated_authority(&workspace).unwrap().unwrap();
+        assert_ne!(current.package_id, original.package_id);
+        assert_eq!(
+            status(&workspace).unwrap()["previousVerifiedRelease"]["packageId"],
+            original.package_id
+        );
+        // No second selection registry or retained-transaction store is created.
+        assert!(
+            !dev_dir(&workspace)
+                .join("last-verified-package-update.json")
+                .exists()
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn damaged_predecessor_metadata_does_not_block_healthy_current_selection() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let (root, original) = validated_authority(&workspace).unwrap().unwrap();
+        record_fixture_verification(&workspace);
+        update_fixture_host(&parent, &workspace, "healthy-current");
+        fs::write(
+            root.join("versions")
+                .join(original.package_id)
+                .join("CatDeskWakeHost.exe"),
+            b"damaged predecessor",
+        )
+        .unwrap();
+        assert!(root_for_workspace(&workspace).unwrap().is_some());
+        assert_eq!(
+            status(&workspace).unwrap()["previousVerifiedRelease"]["status"],
+            "INVALID_OR_PACKAGE_CHANGED"
+        );
+        update_fixture_host(&parent, &workspace, "another-healthy-current");
+        assert!(root_for_workspace(&workspace).unwrap().is_some());
+        assert_eq!(
+            status(&workspace).unwrap()["previousVerifiedRelease"]["status"],
+            "INVALID_OR_PACKAGE_CHANGED"
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn verification_refuses_mismatched_evidence_and_outside_input_without_selection_writes() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let (root, authority) = validated_authority(&workspace).unwrap().unwrap();
+        let before = fs::read(root.join("current.json")).unwrap();
+        for fault in 0..4 {
+            let mut record = verification_fixture_record(&authority);
+            match fault {
+                0 => record.source_commit = "A".repeat(40),
+                1 => record
+                    .artifacts
+                    .insert("CatDeskWakeHost.exe".into(), "e".repeat(64))
+                    .map(|_| ())
+                    .unwrap(),
+                2 => record.manifest_sha256 = "f".repeat(64),
+                3 => record.working_health_observed_utc = now() + 3600,
+                _ => unreachable!(),
+            }
+            let input = workspace.join(format!("bad-verification-{fault}.json"));
+            write_json_new(&input, &record).unwrap();
+            assert_eq!(
+                record_release_verification(&workspace, &input).unwrap_err(),
+                "DEV_RELEASE_VERIFICATION_INVALID"
+            );
+            assert_eq!(fs::read(root.join("current.json")).unwrap(), before);
+        }
+        let input = parent.join("outside-verification.json");
+        write_json_new(&input, &verification_fixture_record(&authority)).unwrap();
+        assert_eq!(
+            record_release_verification(&workspace, &input).unwrap_err(),
+            "DEV_RELEASE_VERIFICATION_INPUT_SCOPE_INVALID"
+        );
+        assert!(
+            !root
+                .join("versions")
+                .join(authority.package_id)
+                .join(RELEASE_VERIFICATION)
+                .exists()
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn verification_requires_stopped_exclusive_ownership_and_pending_selection_stays_closed() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let (root, authority) = validated_authority(&workspace).unwrap().unwrap();
+        let input = workspace.join("verification-input.json");
+        write_json_new(&input, &verification_fixture_record(&authority)).unwrap();
+        let store = Store::open(&root).unwrap();
+        let host = store.host_lock().unwrap();
+        assert!(record_release_verification(&workspace, &input).is_err());
+        drop(host);
+        let browser = runtime::browser_session_lock(&root, Duration::ZERO).unwrap();
+        assert_eq!(
+            record_release_verification(&workspace, &input).unwrap_err(),
+            "BROWSER_SESSION_BUSY"
+        );
+        drop(browser);
+        runtime::control(&store, "RUNNING").unwrap();
+        assert_eq!(
+            record_release_verification(&workspace, &input).unwrap_err(),
+            "DEV_PACKAGE_UPDATE_HOST_NOT_STOPPED"
+        );
+        runtime::control(&store, "STOPPED").unwrap();
+        record_release_verification(&workspace, &input).unwrap();
+        let source = parent.join("pending-package");
+        fs::create_dir(&source).unwrap();
+        for file in PACKAGE_FILES {
+            fs::copy(package.join(file), source.join(file)).unwrap();
+        }
+        fs::write(source.join("CatDeskWakeHost.exe"), b"pending fixture host").unwrap();
+        let hashes = source_artifacts(&source).unwrap();
+        stage_package_update_attempt(
+            &fs::canonicalize(&workspace).unwrap(),
+            &root,
+            &source,
+            &authority,
+            &hashes,
+        )
+        .unwrap();
+        assert_eq!(
+            record_release_verification(&workspace, &input).unwrap_err(),
+            "DEV_PACKAGE_UPDATE_INCOMPLETE"
+        );
+        assert_eq!(
+            recover_package(&workspace).unwrap()["status"],
+            "PACKAGE_UPDATED_STOPPED"
+        );
+        assert_eq!(
+            read_retained_release(&root).unwrap().unwrap().package_id,
+            authority.package_id
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn legacy_package_update_journal_without_verification_fields_still_recovers() {
+        let (parent, workspace, root, _) = package_recovery_fixture();
+        let path = dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT);
+        let mut value: Value = read_json(&path, 32 * 1024).unwrap();
+        value.as_object_mut().unwrap().remove("oldPointerJson");
+        value
+            .as_object_mut()
+            .unwrap()
+            .remove("retainedVerification");
+        fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+        assert_eq!(
+            recover_package(&workspace).unwrap()["status"],
+            "PACKAGE_UPDATED_STOPPED"
+        );
+        assert!(read_retained_release(&root).unwrap().is_none());
         cleanup(&parent);
     }
 

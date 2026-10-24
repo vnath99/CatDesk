@@ -134,6 +134,9 @@ pub(crate) enum WebDevelopmentAction {
         package: PathBuf,
     },
     RecoverPackage,
+    RecordVerification {
+        input_file: PathBuf,
+    },
     Enqueue {
         project_id: String,
         event_id: String,
@@ -265,6 +268,12 @@ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction,
             }),
         Some("status") if args.len() == 3 => Ok(WebDevelopmentAction::Status),
         Some("recover-package") if args.len() == 3 => Ok(WebDevelopmentAction::RecoverPackage),
+        Some("record-verification") if args.len() == 5
+            && args[3] == "--input-file"
+            && !args[4].is_empty() && args[4].len() <= 4096
+            && !args[4].chars().any(char::is_control) => Ok(WebDevelopmentAction::RecordVerification {
+                input_file: PathBuf::from(&args[4]),
+            }),
         Some("start") if args.len() == 3 => Ok(WebDevelopmentAction::Start),
         Some("stop") if args.len() == 3 => Ok(WebDevelopmentAction::Stop),
         Some("run") if args.len() == 3 => Ok(WebDevelopmentAction::Run),
@@ -274,7 +283,7 @@ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction,
                 .ok_or("WEB_DEVELOPMENT_FOREGROUND_BUDGET_INVALID")?;
             Ok(WebDevelopmentAction::RunBounded { maximum_seconds })
         }
-        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, update-package --package <directory>, recover-package, login --project-id <id>, enqueue --project-id <id> --event-id <id> --message-file <file>, retry --project-id <id> --event-id dev-<id>, status, start, stop, or run".into()),
+        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, update-package --package <directory>, recover-package, record-verification --input-file <file>, login --project-id <id>, enqueue --project-id <id> --event-id <id> --message-file <file>, retry --project-id <id> --event-id dev-<id>, status, start, stop, or run".into()),
     }
 }
 
@@ -742,6 +751,9 @@ pub(crate) async fn execute_operator_action(
                 }
                 WebDevelopmentAction::RecoverPackage => {
                     development_runtime::recover_package(workspace)
+                }
+                WebDevelopmentAction::RecordVerification { input_file } => {
+                    development_runtime::record_release_verification(workspace, &input_file)
                 }
                 WebDevelopmentAction::Enqueue {
                     project_id,
@@ -1784,6 +1796,61 @@ mod tests {
                 "alpha",
                 "--project-id",
                 "beta",
+            ],
+        ] {
+            assert!(parse_operator_action(invalid.into_iter().map(str::to_string)).is_err());
+        }
+    }
+
+    #[test]
+    fn web_development_verification_requires_one_explicit_local_input() {
+        assert_eq!(
+            parse_operator_action(
+                [
+                    "operator",
+                    "web-dev-runtime",
+                    "record-verification",
+                    "--input-file",
+                    "evidence.json"
+                ]
+                .map(str::to_string)
+            ),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::RecordVerification {
+                    input_file: PathBuf::from("evidence.json"),
+                }
+            )))
+        );
+        for invalid in [
+            vec!["operator", "web-dev-runtime", "record-verification"],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "record-verification",
+                "--input-file",
+                "",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "record-verification",
+                "--input-file",
+                "bad\nfile",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "record-verification",
+                "--workspace",
+                "other",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "record-verification",
+                "--input-file",
+                "evidence.json",
+                "--force",
             ],
         ] {
             assert!(parse_operator_action(invalid.into_iter().map(str::to_string)).is_err());
