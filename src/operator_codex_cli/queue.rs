@@ -53,6 +53,7 @@ pub(crate) use review_invite::publish_for_mcp as publish_review_invitation_for_m
 pub(crate) use review_reader::read_for_mcp as read_review_package_for_mcp;
 
 const QUEUE_SCHEMA_VERSION: u32 = 1;
+const WINDOWS_SANDBOX_TASK_SCHEMA_VERSION: u32 = 2;
 const MAX_TASK_BYTES: usize = 24 * 1024;
 const MAX_JOB_BYTES: u64 = 64 * 1024;
 const MAX_JOBS: usize = 512;
@@ -85,6 +86,14 @@ const KILL_TIMEOUT: Duration = Duration::from_secs(20);
 const DEFAULT_TURN_TIMEOUT: Duration = Duration::from_secs(2 * 60 * 60);
 const SUPPORTED_CYBER_ACCESS_PROGRAM: &str = "standard";
 
+fn native_task_record_schema(windows_sandbox: Option<&str>) -> u32 {
+    if windows_sandbox.is_some() {
+        WINDOWS_SANDBOX_TASK_SCHEMA_VERSION
+    } else {
+        QUEUE_SCHEMA_VERSION
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum QueueAction {
     Preflight {
@@ -97,6 +106,7 @@ pub(crate) enum QueueAction {
         model: Option<String>,
         effort: Option<String>,
         cyber_access_program: Option<String>,
+        windows_sandbox: Option<String>,
     },
     Status,
     Receipt {
@@ -211,6 +221,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
                 | "--model"
                 | "--effort"
                 | "--cyber-access-program"
+                | "--windows-sandbox"
                 | "--receipt-id"
                 | "--expected-package-sha256"
                 | "--decision"
@@ -483,15 +494,19 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
     let model = values.remove("--model");
     let effort = values.remove("--effort");
     let cyber_access_program = values.remove("--cyber-access-program");
+    let windows_sandbox = values.remove("--windows-sandbox");
     if model.as_deref().is_some_and(|value| !valid_model(value))
         || effort.as_deref().is_some_and(|value| !valid_effort(value))
         || cyber_access_program
             .as_deref()
             .is_some_and(|value| value != SUPPORTED_CYBER_ACCESS_PROGRAM)
+        || windows_sandbox
+            .as_deref()
+            .is_some_and(|value| value != "mxc")
         || !values.is_empty()
     {
         return Err(
-            "CODEX_QUEUE_USAGE: invalid model, effort, cyber access program, or option".into(),
+            "CODEX_QUEUE_USAGE: invalid model, effort, cyber access program, Windows sandbox, or option".into(),
         );
     }
     Ok(QueueAction::Add {
@@ -501,6 +516,7 @@ pub(crate) fn parse_action(args: &[String]) -> Result<QueueAction, String> {
         model,
         effort,
         cyber_access_program,
+        windows_sandbox,
     })
 }
 
@@ -607,6 +623,9 @@ struct QueueJob {
     effort: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     cyber_access_program: Option<String>,
+    /// Explicit implementation override only; native managed policy still applies.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    windows_sandbox: Option<String>,
     state: QueueState,
     created_at_unix: u64,
     attempt: Option<QueueAttempt>,
@@ -639,6 +658,7 @@ impl QueueJob {
             model,
             effort,
             cyber_access_program: None,
+            windows_sandbox: None,
             state: QueueState::Ready,
             created_at_unix: unix_now()?,
             attempt: None,
@@ -656,6 +676,7 @@ impl QueueJob {
             && self.model == other.model
             && self.effort == other.effort
             && self.cyber_access_program == other.cyber_access_program
+            && self.windows_sandbox == other.windows_sandbox
     }
     fn summary(&self) -> Value {
         let mut summary = json!({
@@ -675,6 +696,9 @@ impl QueueJob {
         });
         if let Some(program) = &self.cyber_access_program {
             summary["cyberAccessProgram"] = json!(program);
+        }
+        if let Some(implementation) = &self.windows_sandbox {
+            summary["windowsSandbox"] = json!(implementation);
         }
         summary
     }
@@ -697,6 +721,9 @@ struct QueueReceipt {
     /// Requested CLI override only; the native rollout profile does not attest this program.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     requested_cyber_access_program: Option<String>,
+    /// Requested CLI implementation only, not native policy or runtime attestation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    requested_windows_sandbox: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     actual_profile: Option<CodexCliTurnProfileEvidenceV1>,
     /// Diagnostic facts only. The verifier still requires `actual_profile`.
@@ -756,6 +783,8 @@ struct QueueReviewCandidate {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     requested_cyber_access_program: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    requested_windows_sandbox: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     actual_profile: Option<CodexCliTurnProfileEvidenceV1>,
     before: GitReviewWitness,
     after: GitReviewWitness,
@@ -778,7 +807,7 @@ impl QueueReviewCandidate {
         let (baseline_dirty, head_changed, changed_during_turn) =
             derived_review_fields(&before, &after);
         Self {
-            schema_version: QUEUE_SCHEMA_VERSION,
+            schema_version: native_task_record_schema(job.windows_sandbox.as_deref()),
             receipt_id: receipt.receipt_id.clone(),
             receipt_sha256,
             project_id: job.binding.project_id.clone(),
@@ -789,6 +818,7 @@ impl QueueReviewCandidate {
             requested_model: job.model.clone(),
             requested_effort: job.effort.clone(),
             requested_cyber_access_program: job.cyber_access_program.clone(),
+            requested_windows_sandbox: job.windows_sandbox.clone(),
             actual_profile: receipt.actual_profile.clone(),
             baseline_dirty,
             head_changed,
@@ -966,7 +996,193 @@ struct QueueStore {
     root: PathBuf,
 }
 
+struct VerificationRuntime {
+    root: PathBuf,
+    uv_cache: PathBuf,
+}
+
+impl VerificationRuntime {
+    fn prepare(root: PathBuf, uv_cache: PathBuf, projects: &[PathBuf]) -> Result<Self, String> {
+        if !root.is_absolute() || !uv_cache.is_absolute() {
+            return Err("CODEX_QUEUE_VERIFY: runtime paths must be absolute".into());
+        }
+        for project in projects {
+            reject_overlap(&root, project)?;
+            reject_overlap(&uv_cache, project)?;
+        }
+        checked_dir(&root)?;
+        for name in [
+            "tmp",
+            "cache",
+            "ruff",
+            "mypy",
+            "pycache",
+            "pytest",
+            "hypothesis",
+        ] {
+            checked_dir(&root.join(name))?;
+        }
+        checked_dir(
+            uv_cache
+                .parent()
+                .ok_or("CODEX_QUEUE_VERIFY: cache parent is absent")?,
+        )?;
+        checked_dir(&uv_cache)?;
+        let root = root
+            .canonicalize()
+            .map_err(|_| "CODEX_QUEUE_VERIFY: runtime is unavailable")?;
+        let uv_cache = uv_cache
+            .canonicalize()
+            .map_err(|_| "CODEX_QUEUE_VERIFY: cache is unavailable")?;
+        for project in projects {
+            reject_overlap(&root, project)?;
+            reject_overlap(&uv_cache, project)?;
+        }
+        let runtime = Self { root, uv_cache };
+        runtime.revalidate()?;
+        Ok(runtime)
+    }
+
+    fn revalidate(&self) -> Result<(), String> {
+        for path in std::iter::once(self.root.clone())
+            .chain(
+                [
+                    "tmp",
+                    "cache",
+                    "ruff",
+                    "mypy",
+                    "pycache",
+                    "pytest",
+                    "hypothesis",
+                ]
+                .map(|name| self.root.join(name)),
+            )
+            .chain([
+                self.uv_cache
+                    .parent()
+                    .ok_or("CODEX_QUEUE_VERIFY: cache parent is absent")?
+                    .to_path_buf(),
+                self.uv_cache.clone(),
+            ])
+        {
+            let metadata = fs::symlink_metadata(&path)
+                .map_err(|_| "CODEX_QUEUE_VERIFY: runtime directory is unavailable")?;
+            if !metadata.is_dir() || redirected(&metadata) {
+                return Err("CODEX_QUEUE_VERIFY: runtime directory is redirected or unsafe".into());
+            }
+        }
+        match fs::symlink_metadata(self.root.join("venv")) {
+            Ok(metadata) if !metadata.is_dir() || redirected(&metadata) => {
+                return Err(
+                    "CODEX_QUEUE_VERIFY: virtual environment is redirected or unsafe".into(),
+                );
+            }
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                return Err("CODEX_QUEUE_VERIFY: virtual environment is unavailable".into());
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn environment(&self) -> Result<Vec<(OsString, OsString)>, String> {
+        // Canonical Windows paths retain a verbatim prefix internally, but
+        // Python consumers can classify \\?\C:\ as a UNC drive. Supply the
+        // existing normalized spelling only at the child environment boundary;
+        // revalidation and overlap checks keep the retained canonical paths.
+        let root = crate::command::normalize_windows_verbatim_path(self.root.clone());
+        let uv_cache = crate::command::normalize_windows_verbatim_path(self.uv_cache.clone());
+        let pytest_cache = root.join("pytest");
+        let cache_option = format!(
+            "cache_dir={}",
+            pytest_cache
+                .to_str()
+                .ok_or("CODEX_QUEUE_VERIFY: runtime path is not Unicode")?
+        );
+        // pytest parses PYTEST_ADDOPTS with shlex, not a Windows command line.
+        // Quote the entire internally derived option, including apostrophes.
+        let quoted_option = format!("'{}'", cache_option.replace('\'', "'\"'\"'"));
+        let mut variables = vec![
+            (
+                "UV_PROJECT_ENVIRONMENT".into(),
+                root.join("venv").into_os_string(),
+            ),
+            ("UV_CACHE_DIR".into(), uv_cache.into_os_string()),
+            ("RUFF_CACHE_DIR".into(), root.join("ruff").into_os_string()),
+            ("MYPY_CACHE_DIR".into(), root.join("mypy").into_os_string()),
+            (
+                "PYTHONPYCACHEPREFIX".into(),
+                root.join("pycache").into_os_string(),
+            ),
+            (
+                "PYTEST_ADDOPTS".into(),
+                format!("-o {quoted_option}").into(),
+            ),
+            (
+                "HYPOTHESIS_STORAGE_DIRECTORY".into(),
+                root.join("hypothesis").into_os_string(),
+            ),
+            ("XDG_CACHE_HOME".into(), root.join("cache").into_os_string()),
+        ];
+        for name in ["TEMP", "TMP", "TMPDIR"] {
+            variables.push((name.into(), root.join("tmp").into_os_string()));
+        }
+        Ok(variables)
+    }
+}
+
 impl QueueStore {
+    fn verification_runtime(
+        &self,
+        receipt_id: &str,
+        projects: &[PathBuf],
+    ) -> Result<VerificationRuntime, String> {
+        if !Uuid::parse_str(receipt_id).is_ok_and(|id| id.to_string() == receipt_id) {
+            return Err("CODEX_QUEUE_VERIFY: runtime receipt identity is invalid".into());
+        }
+        // Keep DLL paths below legacy native loader limits even when Windows
+        // redirects LocalAppData into an MSIX package. The full hash still
+        // binds both this queue namespace and the exact receipt, without
+        // repeating those long components in every site-packages path.
+        let state = if cfg!(test) {
+            self.root.join("fixture-user-state")
+        } else {
+            fixed_current_user_catdesk_state_root_path()
+                .map_err(|_| "CODEX_QUEUE_VERIFY: fixed runtime state root is unavailable")?
+        };
+        let parent = state.join("v");
+        for project in projects {
+            reject_overlap(&parent, project)?;
+        }
+        checked_dir(&state)?;
+        checked_dir(&parent)?;
+        let runtime_id = format!(
+            "{:x}",
+            Sha256::digest(
+                format!(
+                    "catdesk-verification-runtime-v2\0{}\0{receipt_id}",
+                    self.root.display()
+                )
+                .as_bytes()
+            )
+        );
+        // Production uses the OS-derived user location, never UV_/XDG_ caller
+        // settings. Unit fixtures must not create or populate the real cache.
+        let uv_cache = if cfg!(test) {
+            self.root.join("fixture-uv-cache")
+        } else {
+            let user = state
+                .parent()
+                .ok_or("CODEX_QUEUE_VERIFY: fixed cache parent is absent")?;
+            #[cfg(windows)]
+            let cache = user.join("uv").join("cache");
+            #[cfg(not(windows))]
+            let cache = user.join(".cache").join("uv");
+            cache
+        };
+        VerificationRuntime::prepare(parent.join(runtime_id), uv_cache, projects)
+    }
+
     fn namespaced_path(
         control: &AutonomousProjectV1,
         project_workspace: &Path,
@@ -1243,7 +1459,10 @@ impl QueueStore {
         let observed_sha = format!("{:x}", Sha256::digest(&bytes));
         let (baseline_dirty, head_changed, changed_during_turn) =
             derived_review_fields(&candidate.before, &candidate.after);
-        if candidate.schema_version != QUEUE_SCHEMA_VERSION
+        if candidate.schema_version
+            != native_task_record_schema(candidate.requested_windows_sandbox.as_deref())
+            || candidate.schema_version != job.schema_version
+            || candidate.schema_version != receipt.schema_version
             || job.review_candidate_sha256.as_deref() != Some(observed_sha.as_str())
             || candidate.receipt_id != receipt.receipt_id
             || candidate.receipt_sha256 != format!("{:x}", Sha256::digest(&receipt_bytes))
@@ -1255,6 +1474,8 @@ impl QueueStore {
             || candidate.requested_model != receipt.requested_model
             || candidate.requested_effort != receipt.requested_effort
             || candidate.requested_cyber_access_program != receipt.requested_cyber_access_program
+            || candidate.requested_windows_sandbox != receipt.requested_windows_sandbox
+            || candidate.requested_windows_sandbox != job.windows_sandbox
             || candidate.actual_profile != receipt.actual_profile
             || candidate.baseline_dirty != baseline_dirty
             || candidate.head_changed != head_changed
@@ -1493,7 +1714,8 @@ impl QueueStore {
             .ok_or("CODEX_QUEUE: receipt is unavailable")?;
         let receipt: QueueReceipt = serde_json::from_slice(&bytes)
             .map_err(|_| "CODEX_QUEUE: receipt is corrupt".to_string())?;
-        if receipt.schema_version != QUEUE_SCHEMA_VERSION
+        if receipt.schema_version
+            != native_task_record_schema(receipt.requested_windows_sandbox.as_deref())
             || receipt.receipt_id != receipt_id
             || !Uuid::parse_str(&receipt.attempt_id)
                 .is_ok_and(|id| id.to_string() == receipt.attempt_id)
@@ -1503,11 +1725,13 @@ impl QueueStore {
         let job = self
             .load_job(&receipt.project_id, &receipt.task_id)?
             .ok_or("CODEX_QUEUE: receipt task is unavailable")?;
-        if job.binding.workspace != receipt.workspace
+        if receipt.schema_version != job.schema_version
+            || job.binding.workspace != receipt.workspace
             || job.binding.thread_id != receipt.thread_id
             || job.binding.target_sha256 != receipt.target_sha256
             || job.prompt_sha256 != receipt.prompt_sha256
             || job.cyber_access_program != receipt.requested_cyber_access_program
+            || job.windows_sandbox != receipt.requested_windows_sandbox
         {
             return Err("CODEX_QUEUE: receipt task binding changed".into());
         }
@@ -1713,7 +1937,7 @@ fn create_new_record(path: &Path, bytes: &[u8]) -> Result<(), String> {
 fn validate_job(job: &QueueJob) -> Result<(), String> {
     valid_slug(&job.task_id)?;
     valid_slug(&job.binding.project_id)?;
-    if job.schema_version != QUEUE_SCHEMA_VERSION
+    if job.schema_version != native_task_record_schema(job.windows_sandbox.as_deref())
         || job.prompt.is_empty()
         || job.prompt.len() > MAX_TASK_BYTES
         || job.prompt.contains('\0')
@@ -1732,6 +1956,10 @@ fn validate_job(job: &QueueJob) -> Result<(), String> {
             .cyber_access_program
             .as_deref()
             .is_some_and(|value| value != SUPPORTED_CYBER_ACCESS_PROGRAM)
+        || job
+            .windows_sandbox
+            .as_deref()
+            .is_some_and(|value| value != "mxc")
         || job.binding.workspace.as_os_str().is_empty()
         || job
             .review_candidate_sha256
@@ -2067,12 +2295,16 @@ pub(crate) async fn execute_action(
             model,
             effort,
             cyber_access_program,
+            windows_sandbox,
         } => {
             let project = registered_project(&control.control_workspace, &scope)?;
             let store = QueueStore::open_for_operator(&control.project, &project.workspace)?;
             let _lock = store.lock()?;
             let mut proposed = QueueJob::new(task_id, &project, task, model, effort)?;
             proposed.cyber_access_program = cyber_access_program;
+            proposed.windows_sandbox = windows_sandbox;
+            proposed.schema_version =
+                native_task_record_schema(proposed.windows_sandbox.as_deref());
             if let Some(existing) =
                 store.load_job(&proposed.binding.project_id, &proposed.task_id)?
             {
@@ -3042,6 +3274,18 @@ async fn verify_receipt_in_store_with_executable(
         &job.binding.verification_profile,
         &candidate.after.changed_paths,
     )?;
+    let runtime = if profile.tool == VerificationTool::Uv {
+        let roots = scheduler(control_workspace)?
+            .load_registry()
+            .map_err(|_| "CODEX_QUEUE_VERIFY: registered runtime scope is unavailable")?
+            .projects
+            .into_iter()
+            .map(|project| project.workspace)
+            .collect::<Vec<_>>();
+        Some(store.verification_runtime(receipt_id, &roots)?)
+    } else {
+        None
+    };
     writer
         .begin_writer_turn()
         .map_err(|_| "CODEX_QUEUE_VERIFY: writer marker could not be persisted".to_string())?;
@@ -3052,6 +3296,7 @@ async fn verify_receipt_in_store_with_executable(
             &executable,
             profile.tool,
             &job.binding.verification_profile,
+            runtime.as_ref(),
             argv,
             verification_command_timeout(&job.binding.verification_profile, argv),
         )
@@ -3127,6 +3372,7 @@ async fn verify_receipt_in_store_with_executable(
         "action":"codex_queue_verify", "idempotent":false,
         "verification":artifact.summary(&digest),
         "artifactPath":store.verification_path(receipt_id),
+        "runtimeRoot":runtime.as_ref().map(|runtime| &runtime.root),
         "historicalReadback":false,
         "meaning":"Fixed local command exits and source recheck at recording time only; descendants, independent review, and Wake are not proven.",
     }))
@@ -3915,8 +4161,13 @@ fn verification_env_key_allowed(tool: VerificationTool, profile: &str, upper: &s
         }
         VerificationTool::Uv => {
             !upper.starts_with("UV_")
+                && !matches!(
+                    upper,
+                    "TEMP" | "TMP" | "TMPDIR" | "XDG_CACHE_HOME" | "MYPY_CACHE_DIR"
+                )
                 && !upper.starts_with("PYTHON")
                 && !upper.starts_with("PYTEST_")
+                && upper != "HYPOTHESIS_STORAGE_DIRECTORY"
                 && !upper.starts_with("PIP_")
                 && !upper.starts_with("RUFF_")
                 && !upper.starts_with("CONDA_")
@@ -3933,6 +4184,7 @@ fn verification_env_key_allowed(tool: VerificationTool, profile: &str, upper: &s
 fn verification_command_environment(
     tool: VerificationTool,
     profile: &str,
+    runtime: Option<&VerificationRuntime>,
 ) -> Result<(Vec<(OsString, OsString)>, String), String> {
     const MAX_ENV_BYTES: usize = 256 * 1024;
     const MAX_ENV_ENTRIES: usize = 512;
@@ -3942,6 +4194,11 @@ fn verification_command_environment(
             verification_env_key_allowed(tool, profile, &upper)
         })
         .collect::<Vec<_>>();
+    if tool == VerificationTool::Uv {
+        let runtime = runtime.ok_or("CODEX_QUEUE_VERIFY: Python runtime scope is absent")?;
+        runtime.revalidate()?;
+        variables.extend(runtime.environment()?);
+    }
     if variables.len() > MAX_ENV_ENTRIES {
         return Err("CODEX_QUEUE_VERIFY: command environment has too many entries".into());
     }
@@ -4040,6 +4297,7 @@ async fn execute_fixed_verification_command(
     executable: &TrustedVerificationExecutable,
     tool: VerificationTool,
     profile: &str,
+    runtime: Option<&VerificationRuntime>,
     argv: &[String],
     timeout: Duration,
 ) -> Result<QueueVerificationCommand, VerifyCommandError> {
@@ -4053,7 +4311,8 @@ async fn execute_fixed_verification_command(
         ));
     }
     let (environment, environment_sha256) =
-        verification_command_environment(tool, profile).map_err(VerifyCommandError::Safe)?;
+        verification_command_environment(tool, profile, runtime)
+            .map_err(VerifyCommandError::Safe)?;
     let mut command = Command::new(&executable.executable);
     command
         .args(&argv[1..])
@@ -4754,6 +5013,15 @@ fn queued_native_invocation_args(
         args.insert(resume_index + 2, "--cyber-access-program".into());
         args.insert(resume_index + 3, program.into());
     }
+    if let Some(implementation) = job.windows_sandbox.as_deref() {
+        if implementation != "mxc" || !cfg!(windows) {
+            return Err("CODEX_QUEUE: requested Windows sandbox is unsupported".into());
+        }
+        // Opt in only for this task. Keep both workspace-write assertions and
+        // approval policy intact; the native CLI still applies managed policy
+        // and refuses unsupported MXC without a legacy/full-access fallback.
+        args.splice(0..0, ["-c".into(), "windows.sandbox=\"mxc\"".into()]);
+    }
     Ok(args)
 }
 
@@ -4971,7 +5239,7 @@ fn complete_attempt(
     // receipt at the same ID, without replaying the native turn.
     let receipt_id = attempt.attempt_id.clone();
     let receipt = QueueReceipt {
-        schema_version: QUEUE_SCHEMA_VERSION,
+        schema_version: native_task_record_schema(job.windows_sandbox.as_deref()),
         receipt_id: receipt_id.clone(),
         attempt_id: attempt.attempt_id.clone(),
         project_id: job.binding.project_id.clone(),
@@ -4983,6 +5251,7 @@ fn complete_attempt(
         requested_model: job.model.clone(),
         requested_effort: job.effort.clone(),
         requested_cyber_access_program: job.cyber_access_program.clone(),
+        requested_windows_sandbox: job.windows_sandbox.clone(),
         actual_profile: turn.actual_profile.clone(),
         profile_readback_diagnostic: turn.profile_readback_diagnostic.clone(),
         native_executable: turn.native_executable.clone(),
@@ -6164,6 +6433,7 @@ mod tests {
             requested_model: None,
             requested_effort: None,
             requested_cyber_access_program: None,
+            requested_windows_sandbox: None,
             actual_profile: None,
             baseline_dirty: before.head_commit.is_none() || !before.changed_paths.is_empty(),
             head_changed: before.head_commit != after.head_commit,
@@ -6236,6 +6506,17 @@ mod tests {
                 if args.first().map(String::as_str) != Some("run") {
                     std::process::exit(41);
                 }
+                let cwd = std::env::current_dir().unwrap();
+                let environment = std::path::PathBuf::from(std::env::var_os("UV_PROJECT_ENVIRONMENT").expect("fixed environment"));
+                let runtime = environment.parent().unwrap();
+                assert!(environment.is_absolute() && !environment.starts_with(&cwd) && !cwd.starts_with(&environment));
+                for name in ["UV_CACHE_DIR", "RUFF_CACHE_DIR", "MYPY_CACHE_DIR", "PYTHONPYCACHEPREFIX", "HYPOTHESIS_STORAGE_DIRECTORY", "XDG_CACHE_HOME", "TEMP", "TMP", "TMPDIR"] {
+                    let path = std::path::PathBuf::from(std::env::var_os(name).expect("fixed external state"));
+                    assert!(path.is_absolute() && !path.starts_with(&cwd) && !cwd.starts_with(&path));
+                    if name != "UV_CACHE_DIR" { assert!(path.starts_with(runtime)); }
+                }
+                assert!(std::env::var("PYTEST_ADDOPTS").unwrap().starts_with("-o 'cache_dir="));
+                std::fs::write(runtime.join("fixture-child-observed-scope"), b"observed external runtime").unwrap();
                 for flag in ["--locked", "--offline", "--no-python-downloads", "--no-env-file", "--no-config"] {
                     if !args.iter().any(|arg| arg == flag) { std::process::exit(42); }
                 }
@@ -6401,6 +6682,7 @@ mod tests {
             requested_model: claimed.model.clone(),
             requested_effort: claimed.effort.clone(),
             requested_cyber_access_program: None,
+            requested_windows_sandbox: None,
             actual_profile: Some(CodexCliTurnProfileEvidenceV1 {
                 codex_thread_id: claimed.binding.thread_id.clone(),
                 codex_turn_id: Uuid::new_v4().to_string(),
@@ -8236,6 +8518,272 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn uv_verification_runtime_is_scoped_and_environment_bound() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let roots = projects
+            .iter()
+            .map(|project| project.workspace.clone())
+            .collect::<Vec<_>>();
+        let first = queue
+            .verification_runtime(&Uuid::new_v4().to_string(), &roots)
+            .unwrap();
+        let second = queue
+            .verification_runtime(&Uuid::new_v4().to_string(), &roots)
+            .unwrap();
+        assert_ne!(first.root, second.root);
+        assert_eq!(first.root.file_name().unwrap().to_str().unwrap().len(), 64);
+        assert_eq!(first.root.parent().unwrap().file_name().unwrap(), "v");
+        assert_eq!(first.uv_cache, second.uv_cache);
+        let (variables, first_hash) =
+            verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, Some(&first))
+                .unwrap();
+        let (_, second_hash) =
+            verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, Some(&second))
+                .unwrap();
+        assert_ne!(
+            first_hash, second_hash,
+            "receipt runtime must be bound into the command environment"
+        );
+        let environment = variables
+            .into_iter()
+            .collect::<std::collections::BTreeMap<_, _>>();
+        assert_eq!(
+            environment.get(std::ffi::OsStr::new("UV_PROJECT_ENVIRONMENT")),
+            Some(
+                &crate::command::normalize_windows_verbatim_path(first.root.join("venv"))
+                    .into_os_string()
+            )
+        );
+        for (name, value) in &first.environment().unwrap() {
+            if name == "PYTEST_ADDOPTS" {
+                continue;
+            }
+            let path = PathBuf::from(value);
+            assert!(path.is_absolute());
+            #[cfg(windows)]
+            assert!(matches!(
+                path.components().next(),
+                Some(std::path::Component::Prefix(prefix))
+                    if matches!(prefix.kind(), std::path::Prefix::Disk(_))
+            ));
+            let actual = if name == "UV_PROJECT_ENVIRONMENT" {
+                path.parent().unwrap().canonicalize().unwrap()
+            } else {
+                path.canonicalize().unwrap()
+            };
+            assert!(actual == first.uv_cache || actual.starts_with(&first.root));
+        }
+        for name in [
+            "UV_PROJECT_ENVIRONMENT",
+            "UV_CACHE_DIR",
+            "RUFF_CACHE_DIR",
+            "MYPY_CACHE_DIR",
+            "PYTHONPYCACHEPREFIX",
+            "XDG_CACHE_HOME",
+            "TEMP",
+            "TMP",
+            "TMPDIR",
+            "PYTEST_ADDOPTS",
+            "HYPOTHESIS_STORAGE_DIRECTORY",
+        ] {
+            assert!(!verification_env_key_allowed(
+                VerificationTool::Uv,
+                WAKE2_PROFILE,
+                name
+            ));
+        }
+        assert!(
+            verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, None).is_err()
+        );
+        assert!(
+            verification_command_environment(VerificationTool::Cargo, "rust_full", None).is_ok()
+        );
+        assert!(
+            queue
+                .verification_runtime("../not-a-receipt", &roots)
+                .is_err()
+        );
+        let forbidden = projects[1].workspace.join("runtime");
+        assert!(
+            VerificationRuntime::prepare(forbidden.clone(), first.uv_cache.clone(), &roots)
+                .is_err()
+        );
+        assert!(!forbidden.exists());
+        let hypothesis = environment
+            .get(std::ffi::OsStr::new("HYPOTHESIS_STORAGE_DIRECTORY"))
+            .unwrap();
+        assert_eq!(
+            hypothesis,
+            &crate::command::normalize_windows_verbatim_path(first.root.join("hypothesis"))
+                .into_os_string()
+        );
+        fs::remove_dir(first.root.join("hypothesis")).unwrap();
+        assert!(
+            verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, Some(&first))
+                .is_err()
+        );
+        fs::create_dir(first.root.join("hypothesis")).unwrap();
+        fs::write(first.root.join("venv"), b"not a virtual environment").unwrap();
+        assert!(
+            verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, Some(&first))
+                .is_err()
+        );
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    #[ignore = "opt-in bounded offline test requires approved existing Python with Hypothesis"]
+    async fn real_hypothesis_uses_external_verification_runtime() {
+        let python = PathBuf::from(
+            std::env::var_os("CATDESK_TEST_PYTHON").expect("approved existing Python path"),
+        );
+        assert!(python.is_absolute());
+        let fixture = std::env::temp_dir().join(format!("catdesk hypothesis {}", Uuid::new_v4()));
+        fs::create_dir(&fixture).unwrap();
+        let workspace = fixture.join("project");
+        fs::create_dir(&workspace).unwrap();
+        let queue = QueueStore::open_at(fixture.join("operator-state")).unwrap();
+        let runtime = queue
+            .verification_runtime(
+                &Uuid::new_v4().to_string(),
+                std::slice::from_ref(&workspace),
+            )
+            .unwrap();
+        let (variables, _) =
+            verification_command_environment(VerificationTool::Uv, WAKE2_PROFILE, Some(&runtime))
+                .unwrap();
+        let script = "import os,pathlib; from hypothesis.configuration import storage_directory; from hypothesis.database import DirectoryBasedExampleDatabase; expected=pathlib.Path(os.environ['HYPOTHESIS_STORAGE_DIRECTORY']); storage=storage_directory('examples'); assert storage.path==expected/'examples'; storage.create_if_missing(); db=DirectoryBasedExampleDatabase(storage.path); db.save(b'catdesk-placement',b'bounded-canary'); assert list(db.fetch(b'catdesk-placement'))==[b'bounded-canary']; assert not pathlib.Path('.hypothesis').exists(); print('EXTERNAL_HYPOTHESIS_STORAGE_OK')";
+        let output = tokio::time::timeout(
+            Duration::from_secs(60),
+            tokio::process::Command::new(&python)
+                .args(["-B", "-c", script])
+                .current_dir(&workspace)
+                .env_clear()
+                .envs(variables)
+                .kill_on_drop(true)
+                .output(),
+        )
+        .await
+        .expect("bounded Hypothesis probe")
+        .expect("Python starts");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("EXTERNAL_HYPOTHESIS_STORAGE_OK"));
+        assert!(!workspace.join(".hypothesis").exists());
+        assert!(runtime.root.join("hypothesis/examples").is_dir());
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
+    #[ignore = "opt-in bounded offline test requires approved existing UV and Python executables"]
+    async fn real_uv_uses_external_verification_runtime() {
+        let uv =
+            PathBuf::from(std::env::var_os("CATDESK_TEST_UV").expect("approved existing UV path"));
+        let python = PathBuf::from(
+            std::env::var_os("CATDESK_TEST_PYTHON").expect("approved existing Python path"),
+        );
+        assert!(uv.is_absolute() && python.is_absolute());
+        let fixture = std::env::temp_dir().join(format!("catdesk uv runtime's {}", Uuid::new_v4()));
+        fs::create_dir(&fixture).unwrap();
+        let workspace = fixture.join("project");
+        fs::create_dir(&workspace).unwrap();
+        fs::write(workspace.join("pyproject.toml"), "[project]\nname = \"catdesk-runtime-canary\"\nversion = \"0.0.0\"\nrequires-python = \">=3.12\"\ndependencies = []\n[tool.uv]\npackage = false\n").unwrap();
+        let queue = QueueStore::open_at(fixture.join("operator state")).unwrap();
+        let runtime = queue
+            .verification_runtime(
+                &Uuid::new_v4().to_string(),
+                std::slice::from_ref(&workspace),
+            )
+            .unwrap();
+        let executable = TrustedVerificationExecutable {
+            sha256: native_executable_sha256(&uv).unwrap(),
+            executable: uv,
+        };
+        let lock = [
+            "uv",
+            "lock",
+            "--offline",
+            "--no-python-downloads",
+            "--no-config",
+            "--python",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .chain([python.to_string_lossy().into_owned()])
+        .collect::<Vec<_>>();
+        let prepared = execute_fixed_verification_command(
+            &workspace,
+            &executable,
+            VerificationTool::Uv,
+            WAKE2_PROFILE,
+            Some(&runtime),
+            &lock,
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+        assert_eq!(prepared.exit_code, Some(0));
+        let script = "import os,sys,pathlib,shlex; root=pathlib.Path(os.environ['UV_PROJECT_ENVIRONMENT']).parent; assert os.path.samefile(sys.prefix,root/'venv'); assert os.path.samefile(pathlib.Path(os.environ['TEMP']).parent,root); assert not pathlib.Path(os.environ['TEMP']).drive.startswith(chr(92)*2); assert shlex.split(os.environ['PYTEST_ADDOPTS'])==['-o','cache_dir='+str(root/'pytest')]; assert not pathlib.Path('.venv').exists(); (root/'real-uv-observed-scope').write_text(sys.prefix); print('EXTERNAL_UV_RUNTIME_OK')";
+        let mut argv = [
+            "uv",
+            "run",
+            "--locked",
+            "--offline",
+            "--no-python-downloads",
+            "--no-env-file",
+            "--no-config",
+            "--python",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+        argv.extend([
+            python.to_string_lossy().into_owned(),
+            "--".into(),
+            "python".into(),
+            "-I".into(),
+            "-B".into(),
+            "-c".into(),
+            script.into(),
+        ]);
+        let result = execute_fixed_verification_command(
+            &workspace,
+            &executable,
+            VerificationTool::Uv,
+            WAKE2_PROFILE,
+            Some(&runtime),
+            &argv,
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.exit_code, Some(0));
+        let observed_prefix =
+            fs::read_to_string(runtime.root.join("real-uv-observed-scope")).unwrap();
+        assert_eq!(
+            PathBuf::from(observed_prefix).canonicalize().unwrap(),
+            runtime.root.join("venv").canonicalize().unwrap()
+        );
+        for path in [
+            ".venv",
+            ".ruff_cache",
+            ".mypy_cache",
+            ".pytest_cache",
+            "__pycache__",
+        ] {
+            assert!(!workspace.join(path).exists());
+        }
+        println!(
+            "REAL_UV_EXTERNAL_RUNTIME_PASS executableSha256={} environmentSha256={} sourceCachesAbsent=true",
+            executable.sha256, result.environment_sha256
+        );
+        cleanup(fixture);
+    }
+
+    #[tokio::test]
     async fn fixed_python_profiles_capture_source_command_exits_and_refuse_rebound_argv() {
         for profile in ["python_uv_group_dev_v1", "python_uv_extras_dev_lab_v1"] {
             let (fixture, projects, queue, receipt_id, uv) =
@@ -8258,6 +8806,9 @@ mod tests {
             );
             assert_eq!(result["verification"]["independentReview"], "PENDING");
             assert_eq!(result["verification"]["wakeReady"], false);
+            let runtime = PathBuf::from(result["runtimeRoot"].as_str().unwrap());
+            assert!(runtime.join("fixture-child-observed-scope").is_file());
+            assert!(!projects[1].workspace.join(".venv").exists());
             let receipt = queue.read_receipt(&receipt_id).unwrap();
             let candidate = queue.read_review_candidate(&receipt).unwrap();
             let (artifact, _) = queue
@@ -9095,6 +9646,7 @@ mod tests {
             requested_model: claimed.model.clone(),
             requested_effort: claimed.effort.clone(),
             requested_cyber_access_program: None,
+            requested_windows_sandbox: None,
             actual_profile: Some(actual_profile),
             profile_readback_diagnostic: None,
             native_executable: None,
@@ -9354,6 +9906,30 @@ mod tests {
             "edit a test",
         ];
         assert!(matches!(parse(&add), Ok(QueueAction::Add { .. })));
+        assert!(matches!(
+            parse(&[&add[..], &["--windows-sandbox", "mxc"]].concat()),
+            Ok(QueueAction::Add { windows_sandbox: Some(mode), .. }) if mode == "mxc"
+        ));
+        for unsupported in [
+            "MXC",
+            "elevated",
+            "unelevated",
+            "danger-full-access",
+            "mxc;evil",
+        ] {
+            assert!(parse(&[&add[..], &["--windows-sandbox", unsupported]].concat()).is_err());
+        }
+        assert!(
+            parse(&[
+                "operator",
+                "codex",
+                "queue",
+                "dispatch",
+                "--windows-sandbox",
+                "mxc"
+            ])
+            .is_err()
+        );
         assert!(matches!(
             parse(&[&add[..], &["--cyber-access-program", "standard"]].concat()),
             Ok(QueueAction::Add {
@@ -9952,6 +10528,100 @@ mod tests {
     }
 
     #[test]
+    fn queued_mxc_is_explicit_preserves_workspace_policy_and_changes_request_identity() {
+        let (fixture, projects, queue) = three_project_fixture(1);
+        let project = &projects[1];
+        let legacy = QueueJob::new(
+            "mxc-opt-in".into(),
+            project,
+            "fixture".into(),
+            Some("gpt-6.1-sol".into()),
+            Some("medium".into()),
+        )
+        .unwrap();
+        let old_wire = serde_json::to_value(&legacy).unwrap();
+        assert!(old_wire.get("windowsSandbox").is_none());
+        let reopened: QueueJob = serde_json::from_value(old_wire).unwrap();
+        assert!(reopened.windows_sandbox.is_none());
+        assert!(legacy.same_request(&reopened));
+        let default_args = queued_native_invocation_args(&legacy, project).unwrap();
+        assert!(
+            !default_args
+                .iter()
+                .any(|arg| arg.starts_with("windows.sandbox="))
+        );
+
+        let mut opted_in = legacy.clone();
+        opted_in.windows_sandbox = Some("mxc".into());
+        opted_in.schema_version = WINDOWS_SANDBOX_TASK_SCHEMA_VERSION;
+        opted_in.cyber_access_program = Some("standard".into());
+        assert!(!legacy.same_request(&opted_in));
+        queue.save_job(&opted_in).unwrap();
+        let loaded = queue
+            .load_job(&project.project_id, "mxc-opt-in")
+            .unwrap()
+            .unwrap();
+        assert_eq!(loaded.windows_sandbox.as_deref(), Some("mxc"));
+        assert_eq!(loaded.schema_version, WINDOWS_SANDBOX_TASK_SCHEMA_VERSION);
+        let mut field_lost = serde_json::to_value(&loaded).unwrap();
+        field_lost.as_object_mut().unwrap().remove("windowsSandbox");
+        let field_lost: QueueJob = serde_json::from_value(field_lost).unwrap();
+        assert!(
+            validate_job(&field_lost).is_err(),
+            "dropping the implementation request cannot produce a legacy task"
+        );
+        let mut legacy_schema = loaded.clone();
+        legacy_schema.schema_version = QUEUE_SCHEMA_VERSION;
+        assert!(
+            validate_job(&legacy_schema).is_err(),
+            "MXC must never be serialized as an old-reader executable task"
+        );
+        assert_eq!(loaded.summary()["windowsSandbox"], "mxc");
+        let invocation = queued_native_invocation_args(&loaded, project);
+        if cfg!(windows) {
+            let args = invocation.unwrap();
+            assert_eq!(&args[..2], &["-c", "windows.sandbox=\"mxc\""]);
+            assert!(
+                args.windows(2)
+                    .any(|pair| pair == ["--sandbox", "workspace-write"])
+            );
+            assert!(
+                args.windows(2)
+                    .any(|pair| pair == ["-c", "sandbox_mode=\"workspace-write\""])
+            );
+            assert!(
+                args.windows(2)
+                    .any(|pair| pair == ["--ask-for-approval", "never"])
+            );
+            assert!(
+                args.windows(2)
+                    .any(|pair| pair == ["--model", "gpt-6.1-sol"])
+            );
+            assert!(
+                args.windows(2)
+                    .any(|pair| pair == ["--cyber-access-program", "standard"])
+            );
+            assert!(args.contains(&"model_reasoning_effort=medium".to_string()));
+            assert_eq!(
+                &args[args.len() - 2..],
+                &[loaded.binding.thread_id.as_str(), "-"]
+            );
+            assert!(
+                !args
+                    .iter()
+                    .any(|arg| arg.contains("danger-full-access") || arg == "--yolo")
+            );
+        } else {
+            assert!(invocation.is_err());
+        }
+        let mut unsupported = opted_in;
+        unsupported.windows_sandbox = Some("unelevated".into());
+        assert!(queue.save_job(&unsupported).is_err());
+        assert!(queued_native_invocation_args(&unsupported, project).is_err());
+        cleanup(fixture);
+    }
+
+    #[test]
     fn opted_in_receipt_and_review_bind_requested_program_without_effective_claim() {
         let (fixture, projects, queue) = three_project_fixture(1);
         let mut job = QueueJob::new(
@@ -9963,6 +10633,8 @@ mod tests {
         )
         .expect("job");
         job.cyber_access_program = Some(SUPPORTED_CYBER_ACCESS_PROGRAM.into());
+        job.windows_sandbox = Some("mxc".into());
+        job.schema_version = WINDOWS_SANDBOX_TASK_SCHEMA_VERSION;
         queue.save_job(&job).expect("persist opted-in job");
         let claimed = claim_one(&projects[0].workspace, &queue)
             .expect("claim")
@@ -9996,6 +10668,9 @@ mod tests {
             "standard"
         );
         assert!(receipt.actual_profile.is_none());
+        assert_eq!(receipt.requested_windows_sandbox.as_deref(), Some("mxc"));
+        assert_eq!(receipt.schema_version, WINDOWS_SANDBOX_TASK_SCHEMA_VERSION);
+        assert_eq!(completed["receipt"]["requestedWindowsSandbox"], "mxc");
         let candidate = queue
             .read_review_candidate(&receipt)
             .expect("bound review candidate");
@@ -10003,9 +10678,25 @@ mod tests {
             candidate.requested_cyber_access_program.as_deref(),
             Some("standard")
         );
+        assert_eq!(candidate.requested_windows_sandbox.as_deref(), Some("mxc"));
+        assert_eq!(
+            candidate.schema_version,
+            WINDOWS_SANDBOX_TASK_SCHEMA_VERSION
+        );
         let mut unbound = receipt.clone();
         unbound.requested_cyber_access_program = None;
         assert!(queue.read_review_candidate(&unbound).is_err());
+        let mut missing_mode = receipt.clone();
+        missing_mode.requested_windows_sandbox = None;
+        assert!(queue.read_review_candidate(&missing_mode).is_err());
+        let mut changed_job = queue
+            .load_job(&projects[1].project_id, "standard_receipt")
+            .unwrap()
+            .unwrap();
+        changed_job.windows_sandbox = None;
+        changed_job.schema_version = QUEUE_SCHEMA_VERSION;
+        queue.save_job(&changed_job).unwrap();
+        assert!(queue.read_review_candidate(&receipt).is_err());
         cleanup(fixture);
     }
 
@@ -10682,6 +11373,7 @@ mod tests {
             requested_model: None,
             requested_effort: None,
             requested_cyber_access_program: None,
+            requested_windows_sandbox: None,
             actual_profile: None,
             native_executable: None,
             native_version: None,
@@ -10794,6 +11486,7 @@ mod tests {
             requested_model: None,
             requested_effort: None,
             requested_cyber_access_program: None,
+            requested_windows_sandbox: None,
             actual_profile: None,
             native_executable: None,
             native_version: None,

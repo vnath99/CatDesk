@@ -4,7 +4,6 @@ use std::collections::{HashMap, VecDeque};
 use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-#[cfg(not(test))]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 use tokio::sync::Mutex;
@@ -756,6 +755,8 @@ pub struct AppState {
     pub tool_mode: ToolMode,
     // Fixture-only state never opens or persists a pathname-based configuration.
     fixture_config_in_memory: bool,
+    // Headless launch overrides are process-local; accounting still persists.
+    headless_launch_settings_ephemeral: bool,
     pub mcp_slug: String,
     pub installation_id: String,
     #[allow(dead_code)]
@@ -767,6 +768,8 @@ pub struct AppState {
     pub transport_identity: TransportIdentityConfig,
     pub transport_health: TransportHealthSnapshot,
     pub server_running: bool,
+    pub web_auto_cancel: Option<Arc<AtomicBool>>,
+    pub web_auto_tasks: Vec<tokio::task::JoinHandle<()>>,
     pub ngrok_running: bool,
     pub ngrok_url: Option<String>,
     pub remote_connected: bool,
@@ -1117,6 +1120,13 @@ fn advance_bootstrap_progress(
 }
 
 impl AppState {
+    pub(crate) fn cancel_web_auto_scheduler(&mut self) -> Vec<tokio::task::JoinHandle<()>> {
+        if let Some(cancel) = self.web_auto_cancel.take() {
+            cancel.store(true, Ordering::Release);
+        }
+        std::mem::take(&mut self.web_auto_tasks)
+    }
+
     pub fn new(port: u16, workspace_root: String) -> std::io::Result<Self> {
         let config_path = app_config_path()?;
         Self::from_config_path_with_archive(port, workspace_root, config_path, true)
@@ -1148,7 +1158,10 @@ impl AppState {
         workspace_root: String,
         config_path: PathBuf,
     ) -> std::io::Result<Self> {
-        Self::from_config_path_with_archive(port, workspace_root, config_path, false)
+        let mut state =
+            Self::from_config_path_with_archive(port, workspace_root, config_path, false)?;
+        state.headless_launch_settings_ephemeral = true;
+        Ok(state)
     }
 
     #[cfg(test)]
@@ -1224,6 +1237,7 @@ impl AppState {
             mode: config.mode,
             tool_mode: config.tool_mode,
             fixture_config_in_memory: false,
+            headless_launch_settings_ephemeral: false,
             mcp_slug: config
                 .mcp
                 .route_id
@@ -1239,6 +1253,8 @@ impl AppState {
                 config.tunnel.remote_self_check,
             ),
             server_running: false,
+            web_auto_cancel: None,
+            web_auto_tasks: Vec::new(),
             ngrok_running: false,
             ngrok_url: None,
             remote_connected: false,
@@ -1313,13 +1329,15 @@ impl AppState {
         config.partner_binagotchy_seed = self.partner_binagotchy_seed.clone();
         config.set_catdesk_as_co_author = self.set_catdesk_as_co_author;
         config.theme = self.theme.clone();
-        config.mode = self.mode;
-        config.tool_mode = self.tool_mode;
+        if !self.headless_launch_settings_ephemeral {
+            config.mode = self.mode;
+            config.tool_mode = self.tool_mode;
+            config.mcp.bind_host = self.mcp_bind_host.clone();
+            config.mcp.port = self.port;
+        }
         config.usage_totals = self.usage_totals.clone().normalized();
         config.selected_browser = self.selected_browser.clone();
         config.tunnel = self.tunnel_config.clone();
-        config.mcp.bind_host = self.mcp_bind_host.clone();
-        config.mcp.port = self.port;
         config.openai_tunnel = self.openai_tunnel_config.clone();
         config.identity = self.transport_identity.clone();
         config.identity.installation_id = Some(self.installation_id.clone());
@@ -1935,6 +1953,32 @@ toolCallCount = 7
         .expect("reload app state");
         assert_eq!(reloaded.usage_totals.total_tokens, 20);
         assert_eq!(reloaded.session_usage_totals, UsageTotals::default());
+
+        // Accounting from a bounded headless invocation must not save its
+        // temporary listener or tool-mode overrides as the next launch defaults.
+        let mut headless = AppState::new_headless(
+            0,
+            workspace.to_string_lossy().into_owned(),
+            config_path.clone(),
+        )
+        .expect("headless app state");
+        headless.mode = Mode::Both;
+        headless.tool_mode = ToolMode::MultiTools;
+        headless.mcp_bind_host = "127.0.0.2".into();
+        headless.port = 49152;
+        headless.record_turn_usage(2, 3);
+        headless
+            .persist_state()
+            .expect("headless usage persistence");
+        let headless_saved =
+            AppConfig::load_from_path(&config_path).expect("headless saved config");
+        let mut expected = saved.clone();
+        expected.usage_totals.accumulate(2, 3, 1);
+        assert_eq!(
+            serde_json::to_value(headless_saved).unwrap(),
+            serde_json::to_value(expected).unwrap(),
+            "headless accounting preserves configured launch settings"
+        );
 
         let _ = std::fs::remove_file(config_path);
         let _ = std::fs::remove_dir(workspace);

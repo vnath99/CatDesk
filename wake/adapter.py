@@ -37,7 +37,9 @@ def read_job_request():
     if not line or len(line) > MAX_BOOTSTRAP_REQUEST_BYTES or not line.endswith(b"\n"):
         raise ValueError("invalid job request")
     request = json.loads(line)
-    if not isinstance(request, dict) or (request.get("bootstrap") is not True and len(line) > 8192):
+    if not isinstance(request, dict) or (not any(request.get(kind) is True for kind in
+            ("bootstrap", "bootstrapDraftInspect", "bootstrapDraftArchive",
+             "bootstrapDraftRepair", "bootstrapQuarantineInspect")) and len(line) > 8192):
         raise ValueError("invalid job request")
     return request
 
@@ -93,6 +95,7 @@ def attempt(bridge, sb, event, target, *, cooperative=False):
     if event["targetGeneration"] != target["generation"]:
         raise bridge.Attention("TARGET_GENERATION_STALE")
     record_id, message = event["eventId"], event["message"]
+    typed_message = bridge.keyboard_safe_message(message)
     sink = bridge.CdpSink(url, ROOT / "browser-profile", 30, 20)
     cdp = prepare_cdp_target(bridge, sb, url)
     emit({"stage": "TARGET_OPEN"})
@@ -110,14 +113,18 @@ def attempt(bridge, sb, event, target, *, cooperative=False):
     sink.best_effort_present_browser(cdp)
     sink.pre_typing_ready(cdp)
     emit({"stage": "PREWRITE_CONFIRMED"})
-    # ``pre_typing_ready`` has just proved one empty visible composer.  Carry
-    # that resolved fixed selector through both typing and the native-Enter
-    # fallback rather than reverting to the legacy first selector.  Current
-    # ChatGPT surfaces can expose only the fixed ProseMirror or lexical
-    # alternatives; using ``bridge.EDITOR`` here would then raise from CDP
-    # before the explicit submit authorization boundary.
+    # CDP text entry itself can synthesize Enter. The parent must persist its
+    # uncertain-submission boundary before the first possible browser write.
+    emit({"stage": "BEFORE_SUBMIT"})
+    if read_request() != {"submit": True}:
+        raise bridge.Attention("SUBMISSION_NOT_AUTHORIZED")
+    if not sink.exact(cdp.get_current_url()):
+        raise bridge.Attention("TARGET_IDENTITY_MISMATCH")
+    sink.pre_typing_ready(cdp)
+    # Carry the exact validated selector through typing and the native-Enter
+    # fallback; alternate ChatGPT composers need not expose bridge.EDITOR.
     editor_selector = sink.editor_selector(cdp, prevalidated=True)
-    cdp.press_keys(editor_selector, message, timeout=sink.ui_timeout)
+    cdp.send_keys(editor_selector, typed_message, timeout=sink.ui_timeout)
     if bridge.normalize_message(sink.text(cdp)) != bridge.normalize_message(message):
         raise bridge.Attention("TYPING_NOT_CONFIRMED")
     send_selector = sink.wait_for_send_control(cdp, 20)
@@ -125,9 +132,6 @@ def attempt(bridge, sb, event, target, *, cooperative=False):
         raise bridge.Attention("TARGET_IDENTITY_MISMATCH")
     if bridge.normalize_message(sink.text(cdp)) != bridge.normalize_message(message):
         raise bridge.Attention("TYPING_NOT_CONFIRMED")
-    emit({"stage": "BEFORE_SUBMIT"})
-    if read_request() != {"submit": True}:
-        raise bridge.Attention("SUBMISSION_NOT_AUTHORIZED")
     if not sink.exact(cdp.get_current_url()):
         raise bridge.Attention("TARGET_IDENTITY_MISMATCH")
     if bridge.normalize_message(sink.text(cdp)) != bridge.normalize_message(message):
@@ -167,8 +171,20 @@ def attempt(bridge, sb, event, target, *, cooperative=False):
 def bootstrap_attempt(bridge, sb, request):
     """Submit exactly one handoff from an empty native New Chat page."""
     cooperative = request.get("cooperative") is True
+    protocol_v2 = type(request.get("bootstrapProtocol")) is int and request["bootstrapProtocol"] == 2
+    resume_draft = request.get("resumeDraft") if protocol_v2 else False
+    resume_progress = request.get("resumeProgress") if protocol_v2 else None
     expected_fields = {"bootstrap", "projectId", "intentId", "source", "handoff"}
-    if cooperative:
+    if protocol_v2:
+        expected_fields.update({"cooperative", "bootstrapProtocol", "resumeDraft"})
+        if "resumeProgress" in request:
+            expected_fields.add("resumeProgress")
+        if (not cooperative or type(resume_draft) is not bool or
+                (resume_draft and (not isinstance(resume_progress, str) or
+                                   resume_progress not in {"TEXT_ENTRY_AUTHORIZED", "DRAFT_READY"})) or
+                (not resume_draft and resume_progress is not None)):
+            raise bridge.Attention("BOOTSTRAP_REQUEST_INVALID")
+    elif cooperative:
         expected_fields.add("cooperative")
     if set(request) != expected_fields or request["bootstrap"] is not True:
         raise bridge.Attention("BOOTSTRAP_REQUEST_INVALID")
@@ -183,41 +199,93 @@ def bootstrap_attempt(bridge, sb, request):
         raise bridge.Attention("BOOTSTRAP_SOURCE_INVALID")
     project_id, intent_id = request["projectId"], request["intentId"]
     message = bridge.compose_bootstrap_message(project_id, intent_id, source_url, request["handoff"])
+    typed_message = bridge.keyboard_safe_message(message)
     message_digest = bridge.digest(bridge.normalize_message(message))
     sink = bridge.NewConversationSink(source_url, ROOT / "browser-profile", 30, 20)
-    cdp = prepare_cdp_target(bridge, sb, source_url)
-    cdp = sink.wait_for_page_readiness(sb, cdp)
-    sink.wait_for_idle(cdp, sink.ui_timeout)
-    sink.pre_typing_ready(cdp)
-    if not sink.exact(cdp.get_current_url()):
-        raise bridge.Attention("BOOTSTRAP_SOURCE_DRIFT")
-    emit({"stage": "BOOTSTRAP_SOURCE_READY"})
-    sink.open_empty_home(cdp)
-    emit({"stage": "BOOTSTRAP_HOME_READY"})
-    sink.check_empty_home(cdp)
-    editor_selector = sink.editor_selector(cdp, prevalidated=True)
-    cdp.press_keys(editor_selector, message, timeout=sink.ui_timeout)
-    sink.check_typed_home(cdp, message)
-    send_selector = sink.wait_for_send_control(cdp, 20)
-    if send_selector is None:
-        raise bridge.Attention("BOOTSTRAP_SEND_CONTROL_MISSING")
-    sink.check_typed_home(cdp, message)
-    emit({
-        "stage": "BEFORE_BOOTSTRAP_SUBMIT",
-        "projectId": project_id,
-        "intentId": intent_id,
-        "sourceGeneration": source["generation"],
-        "messageDigest": message_digest,
-    })
-    if read_request() != {"submit": True}:
-        raise bridge.Attention("SUBMISSION_NOT_AUTHORIZED")
-    sink.check_typed_home(cdp, message)
-    send_selector = sink.wait_for_send_control(cdp, 5)
-    if send_selector is None:
-        raise bridge.Attention("BOOTSTRAP_SEND_CONTROL_MISSING")
-    # From this point even a click exception may have submitted the USER turn.
-    # Preserve unknown intent state; never send or create another chat here.
+    existing_draft = False
+    if protocol_v2 and resume_draft:
+        # A new adapter process opens the fixed home once to load this profile's
+        # saved composer. Never navigate to the source first or clear the draft.
+        cdp = prepare_cdp_target(bridge, sb, bridge.NEW_CONVERSATION_HOME)
+        observed = sink.wait_home_draft(cdp, message)
+        if observed["classification"] == "EMPTY_HOME":
+            raise bridge.Attention("BOOTSTRAP_DRAFT_MISSING")
+        if observed["classification"] != "EXACT_OWNED":
+            raise bridge.Attention("BOOTSTRAP_DRAFT_MISMATCH")
+        existing_draft = observed["classification"] == "EXACT_OWNED"
+        emit({"stage": "BOOTSTRAP_HOME_READY"})
+    else:
+        cdp = prepare_cdp_target(bridge, sb, source_url)
+        cdp = sink.wait_for_page_readiness(sb, cdp)
+        sink.wait_for_idle(cdp, sink.ui_timeout)
+        sink.pre_typing_ready(cdp)
+        if not sink.exact(cdp.get_current_url()):
+            raise bridge.Attention("BOOTSTRAP_SOURCE_DRIFT")
+        emit({"stage": "BOOTSTRAP_SOURCE_READY"})
+        sink.open_empty_home(cdp)
+        emit({"stage": "BOOTSTRAP_HOME_READY"})
+        sink.check_empty_home(cdp)
+    if protocol_v2:
+        emit({"stage": "TEXT_ENTRY_AUTHORIZED", "projectId": project_id,
+              "intentId": intent_id, "sourceGeneration": source["generation"],
+              "messageDigest": message_digest})
+        if read_request() != {"textEntry": True}:
+            raise bridge.Attention("TEXT_ENTRY_NOT_AUTHORIZED")
+    else:
+        # Legacy requests retain their old unknown-outcome behavior. They may
+        # never use the v2 draft-resume path after a prior submit checkpoint.
+        emit({
+            "stage": "BEFORE_BOOTSTRAP_SUBMIT",
+            "projectId": project_id,
+            "intentId": intent_id,
+            "sourceGeneration": source["generation"],
+            "messageDigest": message_digest,
+        })
+        if read_request() != {"submit": True}:
+            raise bridge.Attention("SUBMISSION_NOT_AUTHORIZED")
+    # After the checkpoint, even a typing exception may have submitted a USER
+    # turn. Preserve unknown intent state and reconcile without another send.
+    send_authorized = not protocol_v2
     try:
+        if not existing_draft:
+            sink.check_empty_home(cdp)
+        editor_selector = sink.editor_selector(cdp, prevalidated=True)
+        if not existing_draft:
+            if protocol_v2:
+                sink.insert_empty_home_draft(cdp, message)
+            else:
+                cdp.send_keys(editor_selector, typed_message, timeout=sink.ui_timeout)
+        sink.check_typed_home(cdp, message)
+        if protocol_v2:
+            # Only after the parent's durable text-entry ACK. This native
+            # formatting repair preserves text data, is idempotent, and uses
+            # no keyboard or send event.
+            sink.normalize_owned_home_draft(cdp, message)
+        sink.check_plain_home_draft(cdp)
+        if protocol_v2:
+            emit({"stage": "DRAFT_READY", "projectId": project_id,
+                  "intentId": intent_id, "sourceGeneration": source["generation"],
+                  "messageDigest": message_digest})
+            if read_request() != {"draftReady": True}:
+                raise bridge.Attention("DRAFT_NOT_AUTHORIZED")
+            sink.check_typed_home(cdp, message)
+        send_selector = sink.wait_for_send_control(cdp, 20)
+        if send_selector is None:
+            raise bridge.Attention("BOOTSTRAP_SEND_CONTROL_MISSING")
+        sink.check_typed_home(cdp, message)
+        sink.check_plain_home_draft(cdp)
+        send_selector = sink.wait_for_send_control(cdp, 5)
+        if send_selector is None:
+            raise bridge.Attention("BOOTSTRAP_SEND_CONTROL_MISSING")
+        if protocol_v2:
+            emit({"stage": "SEND_ATTEMPTED", "projectId": project_id,
+                  "intentId": intent_id, "sourceGeneration": source["generation"],
+                  "messageDigest": message_digest})
+            if read_request() != {"submit": True}:
+                raise bridge.Attention("SUBMISSION_NOT_AUTHORIZED")
+            send_authorized = True
+            sink.check_typed_home(cdp, message)
+            sink.check_plain_home_draft(cdp)
         sink.smoke_path_submit(cdp, send_selector, sink.ui_timeout, editor_selector)
         sink.latch_issued_url(cdp)
         accepted_at = sink.wait_for_submission_accepted(cdp, 0, message_digest, message)
@@ -243,7 +311,8 @@ def bootstrap_attempt(bridge, sb, request):
         if receipt.message_sha256 != message_digest or receipt.target_sha256 != bridge.digest(sink.url):
             raise bridge.PostSubmitUnknown("BOOTSTRAP_RECEIPT_MISMATCH")
     except Exception as error:
-        reason = "BOOTSTRAP_POST_SUBMIT_UNKNOWN"
+        error_class = "".join(c for c in type(error).__name__.upper() if c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789")[:40]
+        reason = ("BOOTSTRAP_POST_SUBMIT_" if send_authorized else "BOOTSTRAP_PRE_SEND_") + (error_class or "UNKNOWN")
         if isinstance(error, bridge.Attention):
             candidate = str(error)
             if candidate and len(candidate) <= 100 and all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789" for c in candidate):
@@ -266,6 +335,222 @@ def bootstrap_attempt(bridge, sb, request):
             "completion": "RESPONSE_PENDING" if cooperative else "RESPONSE_COMPLETED",
         },
     })
+
+
+def bootstrap_draft_inspect(bridge, sb, request):
+    """Classify one saved home draft without typing, clicking, or clearing it."""
+    if (set(request) != {"bootstrapDraftInspect", "bootstrapProtocol", "projectId", "intentId",
+                         "source", "handoff"} or
+            request["bootstrapDraftInspect"] is not True or
+            type(request["bootstrapProtocol"]) is not int or request["bootstrapProtocol"] != 2):
+        raise bridge.Attention("BOOTSTRAP_DRAFT_INSPECT_REQUEST_INVALID")
+    source = request["source"]
+    if not isinstance(source, dict) or set(source) != {"url", "digest", "generation"}:
+        raise bridge.Attention("BOOTSTRAP_DRAFT_INSPECT_REQUEST_INVALID")
+    source_url = bridge.canonical_conversation_url(source["url"])
+    if (source_url != source["url"] or bridge.digest(source_url) != source["digest"] or
+            type(source["generation"]) is not int or not 0 <= source["generation"] < 2**63):
+        raise bridge.Attention("BOOTSTRAP_DRAFT_INSPECT_SOURCE_INVALID")
+    project_id, intent_id = request["projectId"], request["intentId"]
+    message = bridge.compose_bootstrap_message(project_id, intent_id, source_url, request["handoff"])
+    expected_digest = bridge.digest(bridge.normalize_message(message))
+    sink = bridge.NewConversationSink(source_url, ROOT / "browser-profile", 30, 20)
+    controls = []
+    try:
+        # A fresh SeleniumBase process must activate the fixed home once to
+        # load this profile's saved draft. Never open the source or clear text.
+        cdp = prepare_cdp_target(bridge, sb, bridge.NEW_CONVERSATION_HOME)
+        observed = sink.wait_home_draft(cdp, message)
+        if observed["classification"] == "EXACT_OWNED":
+            try:
+                controls = bridge.CdpSink.cdp_value(cdp.evaluate("""(() => {
+                    const editor = document.querySelector('#prompt-textarea, div.ProseMirror[contenteditable="true"]');
+                    if (!editor) return [];
+                    const scope = editor.closest('form') || editor.parentElement?.parentElement?.parentElement || editor;
+                    return Array.from(scope.querySelectorAll('button, [role="button"], input[type="submit"]'))
+                        .filter(node => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none')
+                        .slice(-12).map(node => [node.tagName, node.id, node.getAttribute('data-testid') || '',
+                            node.getAttribute('aria-label') || '', node.getAttribute('type') || '',
+                            Boolean(node.disabled || node.getAttribute('aria-disabled') === 'true')])
+                        .map(row => row.map(value => typeof value === 'string' ? Array.from(value).slice(0,48).join('') : value));
+                })()"""))
+                if not isinstance(controls, list):
+                    controls = []
+                controls = [row for row in controls[:12] if isinstance(row, list) and len(row) == 6
+                            and all(isinstance(item, str) and len(item.encode('utf-8')) <= 192 for item in row[:5])
+                            and type(row[5]) is bool]
+            except Exception:
+                controls = []
+    except Exception:
+        observed = {"classification": "UNAVAILABLE", "actualDigest": None, "actualBytes": 0}
+    payload = {
+        "stage": "BOOTSTRAP_DRAFT_INSPECTED",
+        "projectId": project_id, "intentId": intent_id,
+        "sourceGeneration": source["generation"], "sourceDigest": source["digest"],
+        "expectedDigest": expected_digest,
+        "actualDigest": observed["actualDigest"], "actualBytes": observed["actualBytes"],
+        "classification": observed["classification"],
+        "controls": controls,
+    }
+    while controls and len((json.dumps(payload, separators=(",", ":")) + "\n").encode("utf-8")) > 8192:
+        controls.pop()
+    emit(payload)
+
+
+def bootstrap_draft_archive(bridge, sb, request):
+    """Archive then clear only a fully owned legacy bootstrap draft."""
+    expected_fields = {"bootstrapDraftArchive", "bootstrapProtocol", "archiveRecorded",
+                       "projectId", "intentId", "source", "handoff"}
+    if (set(request) != expected_fields or request["bootstrapDraftArchive"] is not True or
+            type(request["bootstrapProtocol"]) is not int or request["bootstrapProtocol"] != 2 or
+            type(request["archiveRecorded"]) is not bool):
+        raise bridge.Attention("BOOTSTRAP_DRAFT_ARCHIVE_REQUEST_INVALID")
+    source = request["source"]
+    if not isinstance(source, dict) or set(source) != {"url", "digest", "generation"}:
+        raise bridge.Attention("BOOTSTRAP_DRAFT_ARCHIVE_REQUEST_INVALID")
+    source_url = bridge.canonical_conversation_url(source["url"])
+    if (source_url != source["url"] or bridge.digest(source_url) != source["digest"] or
+            type(source["generation"]) is not int or not 0 <= source["generation"] < 2**63):
+        raise bridge.Attention("BOOTSTRAP_DRAFT_ARCHIVE_SOURCE_INVALID")
+    project_id, intent_id = request["projectId"], request["intentId"]
+    message = bridge.compose_bootstrap_message(project_id, intent_id, source_url, request["handoff"])
+    message_digest = bridge.digest(bridge.normalize_message(message))
+    scope = {"projectId": project_id, "intentId": intent_id,
+             "sourceGeneration": source["generation"], "sourceDigest": source["digest"],
+             "messageDigest": message_digest}
+    sink = bridge.NewConversationSink(source_url, ROOT / "browser-profile", 30, 20)
+    cdp = prepare_cdp_target(bridge, sb, bridge.NEW_CONVERSATION_HOME)
+    observed = sink.wait_home_draft(cdp, message)
+    if observed["classification"] == "EMPTY_HOME":
+        if not request["archiveRecorded"]:
+            raise bridge.Attention("BOOTSTRAP_DRAFT_MISSING")
+        emit({"stage": "BOOTSTRAP_DRAFT_ARCHIVED", **scope, "actualBytes": 0})
+        return
+    if observed["classification"] != "EXACT_OWNED":
+        raise bridge.Attention("BOOTSTRAP_DRAFT_MISMATCH")
+    actual_text = sink.raw_editor_text(cdp)
+    actual_bytes = len(actual_text.encode("utf-8"))
+    if (actual_bytes > bridge.MAX_USER_MESSAGE_CHARS or
+            bridge.normalize_message(actual_text) != bridge.normalize_message(message)):
+        raise bridge.Attention("BOOTSTRAP_DRAFT_MISMATCH")
+    sink.check_typed_home(cdp, message)
+    ready = {"stage": "BOOTSTRAP_DRAFT_ARCHIVE_READY", **scope,
+             "actualBytes": actual_bytes, "actualText": actual_text}
+    # The standard adapter protocol reader accepts at most 8 KiB per frame.
+    # Refuse a larger private witness before the parent could ACK or clear it.
+    if len((json.dumps(ready, separators=(",", ":")) + "\n").encode("utf-8")) > 8192:
+        raise bridge.Attention("BOOTSTRAP_ARCHIVE_FRAME_TOO_LARGE")
+    emit(ready)
+    if read_request() != {"archiveDraft": True}:
+        raise bridge.Attention("BOOTSTRAP_DRAFT_ARCHIVE_NOT_AUTHORIZED")
+    sink.check_typed_home(cdp, message)
+    if sink.raw_editor_text(cdp) != actual_text:
+        raise bridge.Attention("BOOTSTRAP_DRAFT_CHANGED")
+    sink.clear_archived_home_draft(cdp, message, actual_text)
+    emit({"stage": "BOOTSTRAP_DRAFT_ARCHIVED", **scope, "actualBytes": 0})
+
+
+def bootstrap_draft_repair(bridge, sb, request):
+    """Repair only a journal-authorized partial draft; never send or clear it."""
+    fields = {"bootstrapDraftRepair", "bootstrapProtocol", "projectId", "intentId",
+              "source", "handoff", "expectedRawDigest", "attemptRecorded"}
+    if (set(request) != fields or request["bootstrapDraftRepair"] is not True or
+            type(request["bootstrapProtocol"]) is not int or request["bootstrapProtocol"] != 2 or
+            type(request["attemptRecorded"]) is not bool or
+            not isinstance(request["expectedRawDigest"], str) or
+            not bridge.SHA256_HEX.fullmatch(request["expectedRawDigest"])):
+        raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_REQUEST_INVALID")
+    source = request["source"]
+    if not isinstance(source, dict) or set(source) != {"url", "digest", "generation"}:
+        raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_REQUEST_INVALID")
+    source_url = bridge.canonical_conversation_url(source["url"])
+    if (source_url != source["url"] or bridge.digest(source_url) != source["digest"] or
+            type(source["generation"]) is not int or not 0 <= source["generation"] < 2**63):
+        raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_SOURCE_INVALID")
+    project_id, intent_id = request["projectId"], request["intentId"]
+    message = bridge.compose_bootstrap_message(project_id, intent_id, source_url, request["handoff"])
+    scope = {"projectId": project_id, "intentId": intent_id,
+             "sourceGeneration": source["generation"], "sourceDigest": source["digest"],
+             "messageDigest": bridge.digest(bridge.normalize_message(message))}
+    sink = bridge.NewConversationSink(source_url, ROOT / "browser-profile", 30, 20)
+    cdp = prepare_cdp_target(bridge, sb, bridge.NEW_CONVERSATION_HOME)
+    observed = sink.wait_home_draft(cdp, message)
+    if request["attemptRecorded"]:
+        # A saved write attempt can only be reconciled by a complete readback.
+        # Never retry replacement, even when the partial draft still matches.
+        if observed["classification"] != "EXACT_OWNED":
+            raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_RECONCILIATION_UNVERIFIED")
+        sink.check_typed_home(cdp, message)
+        sink.check_plain_home_draft(cdp)
+        emit({"stage": "BOOTSTRAP_DRAFT_REPAIRED", **scope, "reconciled": True})
+        return
+    if observed["classification"] != "MISMATCH":
+        raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_PREFIX_INVALID")
+    actual = sink.raw_editor_text(cdp)
+    raw_digest = bridge.digest(actual)
+    partial, full = bridge.normalize_message(actual), bridge.normalize_message(message)
+    if raw_digest != request["expectedRawDigest"]:
+        raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_CAS_CHANGED")
+    if not partial or partial == full or not full.startswith(partial):
+        raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_PREFIX_INVALID")
+    sink.check_typed_home(cdp, actual)
+    ready = {"stage": "BOOTSTRAP_DRAFT_REPAIR_READY", **scope,
+             "actualBytes": len(actual.encode("utf-8")), "actualText": actual,
+             "actualRawDigest": raw_digest}
+    if len((json.dumps(ready, separators=(",", ":")) + "\n").encode("utf-8")) > 8192:
+        raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_FRAME_TOO_LARGE")
+    emit(ready)
+    acknowledgement = read_request()
+    if (not isinstance(acknowledgement, dict) or set(acknowledgement) != {"repairDraft"} or
+            acknowledgement["repairDraft"] is not True):
+        raise bridge.Attention("BOOTSTRAP_DRAFT_REPAIR_NOT_AUTHORIZED")
+    sink.repair_home_draft(cdp, message, actual)
+    sink.check_typed_home(cdp, message)
+    sink.check_plain_home_draft(cdp)
+    emit({"stage": "BOOTSTRAP_DRAFT_REPAIRED", **scope, "reconciled": False})
+
+
+def bounded_response_observation(bridge, sink, cdp, message, message_digest,
+                                 *, timeout=10, clock=None, sleep=None):
+    """Allow fresh-document hydration without opening another browser or sending.
+
+    Every sample retains the exact receipt/target/body checks. A completed
+    frame still needs a separated second proof; a remount returns pending.
+    """
+    clock = clock or time.monotonic
+    sleep = sleep or time.sleep
+    deadline = clock() + timeout
+    unmounted = object()
+
+    def sample():
+        try:
+            return sink.observe_cooperative_response(cdp, message, message_digest)
+        except bridge.Attention as error:
+            if str(error) != "RESPONSE_USER_DOCUMENT_NOT_HYDRATED":
+                raise
+            # This is not positive pending/receipt evidence. If the document
+            # never mounts, preserve the refusal at the original deadline.
+            if clock() >= deadline:
+                raise
+            return unmounted
+
+    while True:
+        stage = sample()
+        if stage not in {unmounted, "RESPONSE_PENDING", "RESPONSE_COMPLETE"}:
+            raise bridge.Attention("RESPONSE_PROBE_STATE_INVALID")
+        if stage == "RESPONSE_COMPLETE":
+            sleep(.25)
+            stage = sample()
+            if stage not in {unmounted, "RESPONSE_PENDING", "RESPONSE_COMPLETE"}:
+                raise bridge.Attention("RESPONSE_PROBE_STATE_INVALID")
+            if stage is not unmounted:
+                return stage
+        remaining = deadline - clock()
+        if remaining <= 0:
+            if stage is unmounted:
+                raise bridge.Attention("RESPONSE_USER_DOCUMENT_NOT_HYDRATED")
+            return stage
+        sleep(min(.5, remaining))
 
 
 def bootstrap_probe(bridge, sb, request):
@@ -297,10 +582,7 @@ def bootstrap_probe(bridge, sb, request):
         raise bridge.Attention("BOOTSTRAP_PROBE_RECEIPT_INVALID")
     sink = bridge.CdpSink(destination, ROOT / "browser-profile", 30, 20)
     cdp = prepare_cdp_target(bridge, sb, destination)
-    stage = sink.observe_cooperative_response(cdp, message, message_digest)
-    if stage == "RESPONSE_COMPLETE":
-        time.sleep(.25)
-        stage = sink.observe_cooperative_response(cdp, message, message_digest)
+    stage = bounded_response_observation(bridge, sink, cdp, message, message_digest)
     if stage == "RESPONSE_PENDING":
         emit({"stage": "BOOTSTRAP_RESPONSE_PENDING", "projectId": project_id,
               "intentId": intent_id, "destinationDigest": receipt["destinationDigest"]})
@@ -310,6 +592,84 @@ def bootstrap_probe(bridge, sb, request):
         emit({"stage": "BOOTSTRAP_COMPLETE", "receipt": completed})
     else:
         raise bridge.Attention("BOOTSTRAP_PROBE_STATE_INVALID")
+
+
+def bootstrap_quarantine_inspect(bridge, sb, request):
+    """Read a saved orphan candidate without creating a receipt or any write authority."""
+    if (set(request) != {"bootstrapQuarantineInspect", "projectId", "intentId",
+                         "source", "handoff", "candidateUrl"} or
+            request["bootstrapQuarantineInspect"] is not True):
+        raise bridge.Attention("BOOTSTRAP_QUARANTINE_REQUEST_INVALID")
+    source = request["source"]
+    if not isinstance(source, dict) or set(source) != {"url", "digest", "generation"}:
+        raise bridge.Attention("BOOTSTRAP_QUARANTINE_REQUEST_INVALID")
+    source_url = bridge.canonical_conversation_url(source["url"])
+    candidate = bridge.canonical_conversation_url(request["candidateUrl"])
+    if (source_url != source["url"] or bridge.digest(source_url) != source["digest"] or
+            type(source["generation"]) is not int or not 0 < source["generation"] < 2**63 or
+            candidate != request["candidateUrl"] or candidate == source_url):
+        raise bridge.Attention("BOOTSTRAP_QUARANTINE_SCOPE_INVALID")
+    message = bridge.compose_bootstrap_message(
+        request["projectId"], request["intentId"], source_url, request["handoff"])
+    expected = bridge.digest(bridge.normalize_message(message))
+    sink = bridge.CdpSink(candidate, ROOT / "browser-profile", 30, 20)
+    cdp = prepare_cdp_target(bridge, sb, candidate)
+    stage = bounded_response_observation(bridge, sink, cdp, message, expected)
+    # Pending can mean the document never hydrated. A historical probe has a
+    # receipt already, but this diagnostic must independently see the USER now.
+    if not sink.exact(cdp.get_current_url()) or sink.document_ready_state(cdp) != "complete":
+        raise bridge.Attention("BOOTSTRAP_QUARANTINE_USER_UNPROVEN")
+    users = sink.user_message_digests(cdp)
+    count, turns_after = sink.trusted_turn_anchor_state(cdp, message)
+    if (users.count(expected) != 1 or not users or users[-1] != expected or
+            count != 1 or turns_after > 1 or not sink.exact(cdp.get_current_url())):
+        raise bridge.Attention("BOOTSTRAP_QUARANTINE_USER_UNPROVEN")
+    emit({"stage": "BOOTSTRAP_QUARANTINE_INSPECTED", "projectId": request["projectId"],
+          "intentId": request["intentId"], "sourceGeneration": source["generation"],
+          "sourceDigest": source["digest"], "candidateDigest": bridge.digest(candidate),
+          "messageDigest": expected, "existingUserMessageVerified": True,
+          "responseState": stage, "observationOnly": True})
+
+
+def bounded_source_snapshot(bridge, sink, cdp, *, timeout=10, clock=None, sleep=None):
+    """Wait in one document for matching complete final message frames.
+
+    A still-incomplete snapshot remains explicitly incomplete at the deadline;
+    no reload, retry control, editor operation or submission is permitted.
+    """
+    clock = clock or time.monotonic
+    sleep = sleep or time.sleep
+    deadline = clock() + timeout
+    previous = None
+    while True:
+        if not sink.exact(cdp.get_current_url()):
+            raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
+        snapshot = sink.visible_message_snapshot(cdp)
+        if not sink.exact(cdp.get_current_url()):
+            raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
+        messages = snapshot["messages"]
+        ready = (messages and messages[-1]["role"] == "ASSISTANT" and
+                 all(item["textComplete"] and item["revisionComplete"] for item in messages[-2:]))
+        final = [(item["role"], item["text"]) for item in messages[-2:]] if ready else None
+        if final is not None and final == previous:
+            return snapshot
+        previous = final
+        remaining = deadline - clock()
+        if remaining <= 0:
+            if ready:
+                # One complete-looking final frame at the deadline has not
+                # earned the separated stability proof. Retain its text only
+                # as an explicitly incomplete private observation.
+                snapshot = dict(snapshot, messages=[dict(item) for item in messages],
+                                truncated=True, readinessReason="FINAL_FRAMES_NOT_STABLE")
+                for item in snapshot["messages"][-2:]:
+                    item.update(textComplete=False, revisionComplete=False, revisionHash=None)
+                if "coverage" in snapshot:
+                    snapshot["coverage"] = dict(snapshot["coverage"],
+                        textIncomplete=sum(not item["textComplete"] for item in snapshot["messages"]),
+                        revisionIncomplete=sum(not item["revisionComplete"] for item in snapshot["messages"]))
+            return snapshot
+        sleep(min(.25 if ready else .5, remaining))
 
 
 def source_snapshot(bridge, sb, request):
@@ -332,7 +692,12 @@ def source_snapshot(bridge, sb, request):
     sink.wait_for_idle(cdp, sink.ui_timeout)
     if not sink.exact(cdp.get_current_url()) or sink.readiness_reason(cdp) is not None:
         raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
-    snapshot = sink.visible_message_snapshot(cdp)
+    snapshot = bounded_source_snapshot(bridge, sink, cdp)
+    if (snapshot["messages"] and snapshot["messages"][-1]["role"] == "ASSISTANT" and
+            not snapshot["messages"][-1]["textComplete"]):
+        snapshot["bodyDiagnostics"] = sink.message_body_diagnostics(cdp)
+    if not sink.exact(cdp.get_current_url()):
+        raise bridge.Attention("SOURCE_SNAPSHOT_SOURCE_DRIFT")
     payload = {
         "stage": "SOURCE_SNAPSHOT",
         "projectId": request["projectId"],
@@ -442,12 +807,7 @@ def observe_response(bridge, sb, request):
         raise bridge.Attention("RESPONSE_PROBE_RECEIPT_INVALID")
     sink = bridge.CdpSink(url, ROOT / "browser-profile", 30, 20)
     cdp = prepare_cdp_target(bridge, sb, url)
-    stage = sink.observe_cooperative_response(cdp, message, expected)
-    if stage == "RESPONSE_COMPLETE":
-        # One completed-looking frame can be a transient DOM remount. A
-        # separated second read must still prove the same exact final turn.
-        time.sleep(.25)
-        stage = sink.observe_cooperative_response(cdp, message, expected)
+    stage = bounded_response_observation(bridge, sink, cdp, message, expected)
     if stage not in {"RESPONSE_PENDING", "RESPONSE_COMPLETE"}:
         raise bridge.Attention("RESPONSE_PROBE_STATE_INVALID")
     emit({"stage": stage, "eventId": event_id, "targetGeneration": generation,
@@ -490,7 +850,15 @@ def main():
                     emit({"stage": "READY"})
                     try:
                         request = read_job_request()
-                        if request.get("bootstrapProbe") is True:
+                        if request.get("bootstrapQuarantineInspect") is True:
+                            bootstrap_quarantine_inspect(bridge, sb, request)
+                        elif request.get("bootstrapDraftRepair") is True:
+                            bootstrap_draft_repair(bridge, sb, request)
+                        elif request.get("bootstrapDraftArchive") is True:
+                            bootstrap_draft_archive(bridge, sb, request)
+                        elif request.get("bootstrapDraftInspect") is True:
+                            bootstrap_draft_inspect(bridge, sb, request)
+                        elif request.get("bootstrapProbe") is True:
                             bootstrap_probe(bridge, sb, request)
                         elif request.get("observeResponse") is True:
                             observe_response(bridge, sb, request)

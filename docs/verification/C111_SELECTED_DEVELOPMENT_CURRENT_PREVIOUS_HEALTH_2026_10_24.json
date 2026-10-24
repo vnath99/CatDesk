@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C111_EXISTING_ISOLATED_DEVELOPMENT_CURRENT_PREVIOUS_AND_HEALTH",
+  "recordedUtc": "2026-10-24T17:20:17.8376961+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "sourceCommit": "9c81bc2a788d8621622381b3ccdbbdb0623da3ec",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "SELECTED_EXISTING_ISOLATED_DEVELOPMENT_RUNTIME_NOT_PROTECTED_INSTALLATION_OR_CHATGPT_WEB",
+  "current": {
+    "packageId": "1.0.0-dev.85-63322b54e7209a5ea77ebee2a61a1de3cef73e6c49ffc0e4260cbebdc2f1d20e",
+    "sourceCommit": "9c81bc2a788d8621622381b3ccdbbdb0623da3ec",
+    "appSha256": "4f9f881da0d7b2eed6946dd42c3820bc5d4eaa480f9edaeab05d8ebdc3031c47",
+    "hostSha256": "b41734f7ee6cc55a03e52384f32f250c23b2048d6599201dd351462a84896063",
+    "normalBuildEvidence": "C110",
+    "buildAndReviewEvidence": "C109_C110",
+    "health": {
+      "packageId": "1.0.0-dev.85-63322b54e7209a5ea77ebee2a61a1de3cef73e6c49ffc0e4260cbebdc2f1d20e",
+      "appSha256": "4f9f881da0d7b2eed6946dd42c3820bc5d4eaa480f9edaeab05d8ebdc3031c47",
+      "maximumRuntimeSeconds": 6,
+      "catalogTools": 79,
+      "browserWakeRecurringStarts": 0,
+      "scope": "EXISTING_APPROVED_ISOLATED_DEVELOPMENT_RUNTIME_LOOPBACK_MCP_ONLY",
+      "exactChildExit": true,
+      "normalParentExit": true,
+      "httpStatuses": [
+        401,
+        200
+      ],
+      "actualSelectedChildImageVerified": true,
+      "sourceCommit": "9c81bc2a788d8621622381b3ccdbbdb0623da3ec",
+      "observedUtc": "2026-10-24T16:59:57.1981851+00:00"
+    },
+    "verification": "LOCAL_OPERATOR_PROVIDED_NOT_PROTECTED_PRODUCTION",
+    "hostRuntimeStarted": false
+  },
+  "previous": {
+    "packageId": "1.0.0-dev.85-81fa32faee38b55935362ac8225e73a29504649e809aa861a50d9ad05f1b71d6",
+    "sourceCommit": "925ee01029b41c87f22ddbdf02ef47090836b9f1",
+    "appSha256": "1d906d7f8e8ab258889ddf0be64d757b0656e2cfe5d53335f0b097141cb8deaf",
+    "hostSourceCommit": "5e71ef8ef62b6306610a49fee26bd5de28206976",
+    "hostSha256": "bd8ef10570d79e5e4090b210a005ba8f4e0616a1a437309f5bfc847d4e4ea2cd",
+    "buildAndReviewEvidence": "C95_C96_C72",
+    "healthObservedUtc": "2026-10-24T16:52:33.0120742+00:00",
+    "normalOwnerExit": true,
+    "actualSelectedChildImageVerified": true,
+    "httpStatuses": [
+      401,
+      200
+    ],
+    "catalogTools": 79,
+    "allPackageArtifactsPreserved": true,
+    "verification": "LOCAL_OPERATOR_PROVIDED_NOT_PROTECTED_PRODUCTION"
+  },
+  "test": {
+    "jobs": [
+      {
+        "scope": "FRESH_PREVIOUS_MCP_HEALTH_BEFORE_RECORDING_VERIFICATION",
+        "startedUtc": "2026-10-24T16:52:25.7613508+00:00",
+        "finishedUtc": "2026-10-24T16:52:33.0120742+00:00",
+        "maximumSeconds": 180,
+        "backendMaximumSeconds": 6
+      },
+      {
+        "scope": "STOPPED_DEVELOPMENT_SELECTION_CURRENT_MCP_HEALTH_PAIRED_TARGET_READBACK",
+        "startedUtc": "2026-10-24T16:59:49.4697894+00:00",
+        "finishedUtc": "2026-10-24T17:00:03.6946291+00:00",
+        "maximumSeconds": 180,
+        "backendMaximumSeconds": 6
+      }
+    ],
+    "controlCliCommands": 16,
+    "allControlCliCommandsPassed": true,
+    "currentAndPreviousStatus": "BOTH_OPERATOR_RECORDED",
+    "currentHealth": "PASS_NORMAL_SELECTED_CHILD_AUTHENTICATED_MCP",
+    "newArtifactByteSource": "C110_NORMAL_BUILD_OF_EXACT_PUBLISHED_C109",
+    "companionScripts": "UNCHANGED",
+    "oldC96CliOnlyEvidenceRelabeledAsHealth": false,
+    "currentRecordedOnlyAfterObservedHealth": true,
+    "existingSelectionJournalReused": true,
+    "existingAuthorityAndManifestSchemaPreserved": true,
+    "priorFailureRecoveryEvidence": "C102_C106_C108_C110_PRESERVED_NOT_REPLAYED",
+    "fullUnattendedCycleClaim": false
+  },
+  "preservation": {
+    "runtimeRecords": 306,
+    "allowedSelectionRecordsChanged": 2,
+    "otherRuntimeRecordsExact": 304,
+    "historicalFilesExact": 55,
+    "newJsonStateRecords": 0,
+    "newMetadata": "TWO_WRITE_ONCE_PACKAGE_VERIFICATION_RECORDS_AND_WORKSPACE_LOCAL_INPUTS",
+    "pairedTargetReadsExact": 10,
+    "centralView": "FIVE_PROJECT_BINDINGS_PASS",
+    "projectBindingChanges": 0,
+    "scopedOwnersAfterJobClosure": 0,
+    "knownParentOrChildStillLive": false,
+    "queueCount": 0,
+    "controls": "BOTH_STOPPED",
+    "newBrowserProfiles": 0,
+    "browserWakeRecurringStarts": 0,
+    "protectedInstallationChanges": 0,
+    "officialRuntimeActions": 0,
+    "connectorCalls": 0,
+    "actualChatGptWebCalls": 0,
+    "nativeActions": 0,
+    "completedCanariesReplayed": 0,
+    "legacyMechanismsRetired": 0,
+    "originalV76BaselineRetained": true,
+    "newV77BaselineRetained": true
+  },
+  "acceptance": {
+    "existingIsolatedDevelopmentSelection": "PASS_CURRENT_AND_PREVIOUS_RECORDED",
+    "normalSelectedMcpHealth": "PASS",
+    "boundedCleanup": "PASS",
+    "protectedRecovery": "NOT_EXECUTED_OPERATOR_BOUNDARY_UNCHANGED",
+    "externalConnector": "PRIOR_429_NOT_REPROBED",
+    "actualWebCodingBC": "OPEN",
+    "unattended": "NOT_ACTIVATED",
+    "fullOctoberMilestone": "OPEN",
+    "remoteCi": "UNVERIFIED"
+  },
+  "nextTask": "Inspect the existing startup/migration compatibility boundary for a genuine source gap. Preserve the qualified development current/previous pair. Protected canonical restoration still needs independently approved existing release authority and its operator scope; once the official serving dependencies return, prioritize actual two-conversation project-bound Web coding and blocked-sibling progress. No synthetic replay or new launcher is required to claim this development result."
+}

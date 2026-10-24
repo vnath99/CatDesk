@@ -8,7 +8,7 @@ use crate::{
     install_broker_offline_pins::full_identity_of_handle,
     install_broker_offline_v2::FullFileIdentityV2,
     protocol, runtime,
-    store::{Config, Store, now},
+    store::{Config, Store, now, read},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -33,6 +33,9 @@ use std::{
 const PURPOSE: &str = "CATDESK_WAKE_DEVELOPMENT_UNPROTECTED_V1";
 const DEV_DIR: &str = "web-development";
 const ROOT_DIR: &str = "runtime";
+const PACKAGE_UPDATE_PURPOSE: &str = "CATDESK_WAKE_DEV_PACKAGE_UPDATE_V1";
+const PACKAGE_UPDATE_ATTEMPT: &str = "package-update-attempt.json";
+const RELEASE_VERIFICATION: &str = "verification.json";
 const PACKAGE_FILES: [&str; 4] = [
     "CatDeskWakeHost.exe",
     "CatDeskBinagotchy.exe",
@@ -50,6 +53,9 @@ const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
 const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
 const INVALID_HANDLE: *mut c_void = -1isize as *mut c_void;
 
+#[path = "development_foreground.rs"]
+mod foreground;
+
 #[link(name = "kernel32")]
 unsafe extern "system" {
     fn CreateFileW(
@@ -65,14 +71,14 @@ unsafe extern "system" {
     fn IsProcessInJob(process: *mut c_void, job: *mut c_void, result: *mut i32) -> i32;
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ProductionRoot {
     path: String,
     identity: Option<FullFileIdentityV2>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Authority {
     schema_version: u32,
@@ -90,6 +96,228 @@ struct Authority {
     python_sha256: String,
     production_roots: Vec<ProductionRoot>,
     prepared_utc: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PackageUpdateAttempt {
+    schema_version: u32,
+    purpose: String,
+    workspace: String,
+    runtime_identity: FullFileIdentityV2,
+    old_authority: Authority,
+    old_authority_sha256: String,
+    new_authority: Authority,
+    new_authority_sha256: String,
+    pointer_stage_name: String,
+    authority_stage_name: String,
+    started_utc: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    old_pointer_json: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    retained_verification: Option<ReleaseVerification>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    restoration: Option<RetainedRelease>,
+}
+
+/// Local operator-provided development evidence. This records the reviewed
+/// source/build/health references; it does not perform those reviews or confer
+/// protected production authority. Existing package/authority schemas stay intact.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReleaseVerification {
+    schema_version: u32,
+    package_id: String,
+    manifest_sha256: String,
+    artifacts: BTreeMap<String, String>,
+    source_commit: String,
+    build_evidence_sha256: String,
+    review_evidence_sha256: String,
+    working_health_evidence_sha256: String,
+    working_health_observed_utc: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RetainedRelease {
+    package_id: String,
+    artifacts: BTreeMap<String, String>,
+    manifest_identity: FullFileIdentityV2,
+    manifest_sha256: String,
+    verification: ReleaseVerification,
+}
+
+fn lowercase_hex(value: &str, length: usize) -> bool {
+    value.len() == length
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn validate_release_verification(
+    record: &ReleaseVerification,
+    authority: &Authority,
+) -> Result<()> {
+    validate_verification_binding(
+        record,
+        &authority.package_id,
+        &authority.manifest_sha256,
+        &authority.artifacts,
+    )
+}
+
+fn validate_verification_binding(
+    record: &ReleaseVerification,
+    package_id: &str,
+    manifest_sha256: &str,
+    artifacts: &BTreeMap<String, String>,
+) -> Result<()> {
+    if record.schema_version != 1
+        || record.package_id != package_id
+        || record.manifest_sha256 != manifest_sha256
+        || record.artifacts != *artifacts
+        || !lowercase_hex(&record.source_commit, 40)
+        || [
+            &record.build_evidence_sha256,
+            &record.review_evidence_sha256,
+            &record.working_health_evidence_sha256,
+        ]
+        .into_iter()
+        .any(|value| !lowercase_hex(value, 64))
+        || record.working_health_observed_utc == 0
+        || record.working_health_observed_utc > now()
+    {
+        return Err("DEV_RELEASE_VERIFICATION_INVALID".into());
+    }
+    Ok(())
+}
+
+fn read_release_verification(
+    root: &Path,
+    authority: &Authority,
+) -> Result<Option<ReleaseVerification>> {
+    let package = root.join("versions").join(&authority.package_id);
+    let path = package.join(RELEASE_VERIFICATION);
+    if !present(&path)? {
+        return Ok(None);
+    }
+    plain(&package, true)?;
+    let record: ReleaseVerification = read_json(&path, 16 * 1024)?;
+    validate_release_verification(&record, authority)?;
+    let manifest = package.join("manifest.json");
+    if identity(&manifest, false)? != authority.manifest_identity
+        || hash_file(&manifest, 16 * 1024)? != authority.manifest_sha256
+    {
+        return Err("DEV_RELEASE_VERIFICATION_PACKAGE_CHANGED".into());
+    }
+    for name in PACKAGE_FILES {
+        if authority.artifacts.get(name) != Some(&hash_file(&package.join(name), MAX_PACKAGE_FILE)?)
+        {
+            return Err("DEV_RELEASE_VERIFICATION_PACKAGE_CHANGED".into());
+        }
+    }
+    Ok(Some(record))
+}
+
+fn update_pointer(
+    old: &Authority,
+    new_id: &str,
+    hashes: &BTreeMap<String, String>,
+    old_pointer_json: Option<&str>,
+    retained_verification: Option<&ReleaseVerification>,
+) -> Result<Value> {
+    let mut pointer = package_pointer(new_id, hashes);
+    let old_pointer = match old_pointer_json {
+        Some(bytes) => {
+            if bytes.len() > 4096
+                || format!("{:x}", Sha256::digest(bytes.as_bytes())) != old.pointer_sha256
+            {
+                return Err("DEV_PACKAGE_UPDATE_OLD_POINTER_INVALID".into());
+            }
+            Some(
+                serde_json::from_str::<Value>(bytes)
+                    .map_err(|_| "DEV_PACKAGE_UPDATE_OLD_POINTER_INVALID")?,
+            )
+        }
+        None => None,
+    };
+    let previous = match retained_verification {
+        Some(verification) => {
+            if old_pointer.is_none() {
+                return Err("DEV_PACKAGE_UPDATE_OLD_POINTER_INVALID".into());
+            }
+            validate_release_verification(verification, old)?;
+            Some(
+                serde_json::to_value(RetainedRelease {
+                    package_id: old.package_id.clone(),
+                    artifacts: old.artifacts.clone(),
+                    manifest_identity: old.manifest_identity.clone(),
+                    manifest_sha256: old.manifest_sha256.clone(),
+                    verification: verification.clone(),
+                })
+                .map_err(|_| "DEV_RUNTIME_ENCODING_INVALID")?,
+            )
+        }
+        None => old_pointer
+            .as_ref()
+            .and_then(|value| value.get("previousVerifiedRelease"))
+            .cloned(),
+    };
+    if let Some(previous) = previous
+        && previous.get("packageId").and_then(Value::as_str) != Some(new_id)
+    {
+        pointer["previousVerifiedRelease"] = previous;
+    }
+    if serde_json::to_vec(&pointer)
+        .map_err(|_| "DEV_RUNTIME_ENCODING_INVALID")?
+        .len()
+        > 4096
+    {
+        return Err("DEV_PACKAGE_UPDATE_POINTER_CAPACITY".into());
+    }
+    Ok(pointer)
+}
+
+/// Record local operator-reviewed evidence for this exact selected development
+/// package. No health/CI claim is inferred by merely selecting or hashing bytes.
+pub fn record_release_verification(workspace: &Path, input_file: &Path) -> Result<Value> {
+    let workspace = canonical_workspace(workspace)?;
+    let (root, _) = validated_authority(&workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    let store = Store::open(&root)?;
+    let _host = store.host_lock()?;
+    let _browser = runtime::browser_session_lock(&root, Duration::ZERO)?;
+    let control: runtime::Control = read(&root.join("control.json"))?;
+    if control.schema_version != 1 || control.desired != "STOPPED" {
+        return Err("DEV_PACKAGE_UPDATE_HOST_NOT_STOPPED".into());
+    }
+    let (_, authority) = validated_authority(&workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    plain(input_file, false)?;
+    let input =
+        fs::canonicalize(input_file).map_err(|_| "DEV_RELEASE_VERIFICATION_INPUT_INVALID")?;
+    if !input.starts_with(&workspace) {
+        return Err("DEV_RELEASE_VERIFICATION_INPUT_SCOPE_INVALID".into());
+    }
+    let record: ReleaseVerification = read_json(&input, 16 * 1024)?;
+    validate_release_verification(&record, &authority)?;
+    let package = root.join("versions").join(&authority.package_id);
+    let path = package.join(RELEASE_VERIFICATION);
+    let state = match read_release_verification(&root, &authority)? {
+        Some(existing) if existing == record => "VERIFICATION_ALREADY_RECORDED",
+        Some(_) => return Err("DEV_RELEASE_VERIFICATION_CONFLICT".into()),
+        None => {
+            let stage = package.join(update_stage_name("verification", &authority.package_id)?);
+            write_json_new(&stage, &record)?;
+            fs::rename(&stage, &path).map_err(|_| "DEV_RELEASE_VERIFICATION_COMMIT_FAILED")?;
+            if read_release_verification(&root, &authority)?.as_ref() != Some(&record) {
+                return Err("DEV_RELEASE_VERIFICATION_READBACK_FAILED".into());
+            }
+            "VERIFICATION_RECORDED"
+        }
+    };
+    Ok(json!({"mode":"DEVELOPMENT_UNPROTECTED","status":state,
+        "evidenceAuthority":"LOCAL_OPERATOR_PROVIDED","packageId":authority.package_id,
+        "sourceCommit":record.source_commit,"healthChecksPerformed":false,
+        "productionAuthorityCreated":false,"hostStarted":false,"browserAction":"NONE"}))
 }
 
 fn wide(value: &OsStr) -> Vec<u16> {
@@ -397,6 +625,42 @@ fn package_id(hashes: &BTreeMap<String, String>) -> Result<String> {
     Ok(format!("{}-{}-{}", VERSION, &host[..12], &gui[..12]))
 }
 
+// The original development package ID used only the two executable hashes.
+// Keep accepting it for already prepared roots, while upgrades use every
+// immutable artifact so a bridge-only repair cannot collide with that root.
+fn updated_package_id(hashes: &BTreeMap<String, String>) -> Result<String> {
+    package_id(hashes)?;
+    let mut digest = Sha256::new();
+    for name in PACKAGE_FILES {
+        digest.update(name.as_bytes());
+        digest.update([0]);
+        digest.update(hashes[name].as_bytes());
+        digest.update([0]);
+    }
+    Ok(format!("{}-{:x}", VERSION, digest.finalize()))
+}
+
+pub(crate) fn updated_package_id_from_pointer(pointer: &Value) -> Result<String> {
+    let mut hashes = BTreeMap::new();
+    for (field, name) in [
+        ("hostSha256", "CatDeskWakeHost.exe"),
+        ("binagotchySha256", "CatDeskBinagotchy.exe"),
+        ("adapterSha256", "adapter.py"),
+        ("wakeBridgeSha256", "wake_bridge.py"),
+    ] {
+        let hash = pointer
+            .get(field)
+            .and_then(Value::as_str)
+            .ok_or("DEV_RUNTIME_POINTER_INVALID")?;
+        hashes.insert(name.to_owned(), hash.to_owned());
+    }
+    updated_package_id(&hashes)
+}
+
+fn package_id_matches(hashes: &BTreeMap<String, String>, id: &str) -> Result<bool> {
+    Ok(package_id(hashes)? == id || updated_package_id(hashes)? == id)
+}
+
 fn read_json<T: for<'de> Deserialize<'de>>(path: &Path, limit: u64) -> Result<T> {
     plain(path, false)?;
     let bytes = fs::read(path).map_err(|_| "DEV_RUNTIME_READ_FAILED")?;
@@ -409,6 +673,136 @@ fn read_json<T: for<'de> Deserialize<'de>>(path: &Path, limit: u64) -> Result<T>
 fn write_json_new(path: &Path, value: &impl Serialize) -> Result<()> {
     let bytes = serde_json::to_vec(value).map_err(|_| "DEV_RUNTIME_ENCODING_INVALID")?;
     write_new(path, &bytes)
+}
+
+fn package_manifest(hashes: &BTreeMap<String, String>) -> Value {
+    json!({
+        "schemaVersion":1,"version":VERSION,"protocolVersion":1,
+        "installedUtc":now().to_string(),"artifacts":hashes,
+        "acceptance":"DEVELOPMENT_NOT_ACTIVATED"
+    })
+}
+
+fn package_pointer(id: &str, hashes: &BTreeMap<String, String>) -> Value {
+    json!({
+        "schemaVersion":1,"directory":id,
+        "hostSha256":hashes["CatDeskWakeHost.exe"],
+        "binagotchySha256":hashes["CatDeskBinagotchy.exe"],
+        "adapterSha256":hashes["adapter.py"],
+        "wakeBridgeSha256":hashes["wake_bridge.py"]
+    })
+}
+
+fn verify_update_package(
+    root: &Path,
+    id: &str,
+    hashes: &BTreeMap<String, String>,
+) -> Result<(FullFileIdentityV2, String)> {
+    if !package_id_matches(hashes, id)? {
+        return Err("DEV_PACKAGE_UPDATE_IDENTITY_MISMATCH".into());
+    }
+    let package = root.join("versions").join(id);
+    plain(&package, true)?;
+    for name in PACKAGE_FILES {
+        if hash_file(&package.join(name), MAX_PACKAGE_FILE)? != hashes[name] {
+            return Err("DEV_PACKAGE_UPDATE_CONTENT_MISMATCH".into());
+        }
+    }
+    let manifest_path = package.join("manifest.json");
+    let manifest: Value = read_json(&manifest_path, 16 * 1024)?;
+    if manifest.get("schemaVersion").and_then(Value::as_u64) != Some(1)
+        || manifest.get("version").and_then(Value::as_str) != Some(VERSION)
+        || manifest.get("protocolVersion").and_then(Value::as_u64) != Some(1)
+        || manifest.get("acceptance").and_then(Value::as_str) != Some("DEVELOPMENT_NOT_ACTIVATED")
+        || manifest.get("artifacts")
+            != Some(&serde_json::to_value(hashes).map_err(|_| "DEV_RUNTIME_ENCODING_INVALID")?)
+    {
+        return Err("DEV_PACKAGE_UPDATE_MANIFEST_INVALID".into());
+    }
+    Ok((
+        identity(&manifest_path, false)?,
+        hash_file(&manifest_path, 16 * 1024)?,
+    ))
+}
+
+fn stage_update_package(
+    root: &Path,
+    source: &Path,
+    id: &str,
+    hashes: &BTreeMap<String, String>,
+) -> Result<(FullFileIdentityV2, String)> {
+    let final_dir = root.join("versions").join(id);
+    if present(&final_dir)? {
+        return verify_update_package(root, id, hashes);
+    }
+    let stage_name = format!(
+        ".update-{}-{}-{}",
+        std::process::id(),
+        now(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| "DEV_RUNTIME_CLOCK_UNAVAILABLE")?
+            .subsec_nanos()
+    );
+    let stage = root.join("versions").join(stage_name);
+    fs::create_dir(&stage).map_err(|_| "DEV_RUNTIME_CREATE_CONFLICT")?;
+    for name in PACKAGE_FILES {
+        if copy_new(&source.join(name), &stage.join(name), MAX_PACKAGE_FILE)? != hashes[name] {
+            return Err("DEV_RUNTIME_COPY_MISMATCH".into());
+        }
+    }
+    write_json_new(&stage.join("manifest.json"), &package_manifest(hashes))?;
+    for name in PACKAGE_FILES {
+        if hash_file(&stage.join(name), MAX_PACKAGE_FILE)? != hashes[name] {
+            return Err("DEV_RUNTIME_COPY_MISMATCH".into());
+        }
+    }
+    fs::rename(&stage, &final_dir).map_err(|_| "DEV_PACKAGE_UPDATE_PUBLISH_FAILED")?;
+    verify_update_package(root, id, hashes)
+}
+
+fn update_stage_name(prefix: &str, id: &str) -> Result<String> {
+    let suffix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| "DEV_RUNTIME_CLOCK_UNAVAILABLE")?
+        .as_nanos();
+    Ok(format!(
+        "{prefix}-{id}-{}-{suffix}.json",
+        std::process::id()
+    ))
+}
+
+fn valid_update_stage_name(name: &str, prefix: &str, id: &str) -> bool {
+    name.starts_with(&format!("{prefix}-{id}-"))
+        && name.ends_with(".json")
+        && name.len() <= 192
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-'))
+}
+
+fn replace_update_file(from: &Path, to: &Path) -> Result<()> {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn MoveFileExW(from: *const u16, to: *const u16, flags: u32) -> i32;
+        fn GetLastError() -> u32;
+    }
+    if from.parent() != to.parent() {
+        return Err("DEV_PACKAGE_UPDATE_PATH_INVALID".into());
+    }
+    let from_wide = wide(from.as_os_str());
+    let to_wide = wide(to.as_os_str());
+    for retry in 0..20 {
+        if unsafe { MoveFileExW(from_wide.as_ptr(), to_wide.as_ptr(), 1 | 8) } != 0 {
+            return Ok(());
+        }
+        let code = unsafe { GetLastError() };
+        if !matches!(code, 5 | 32 | 33) || retry == 19 {
+            return Err("DEV_PACKAGE_UPDATE_REPLACE_FAILED".into());
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    Err("DEV_PACKAGE_UPDATE_REPLACE_FAILED".into())
 }
 
 /// Create one fresh, user-writable development runtime. Partial preparation is
@@ -525,12 +919,425 @@ pub fn prepare(
     )
 }
 
+fn validate_update_attempt(
+    workspace: &Path,
+    root: &Path,
+    attempt: &PackageUpdateAttempt,
+    source_hashes: &BTreeMap<String, String>,
+) -> Result<()> {
+    let old = &attempt.old_authority;
+    let new = &attempt.new_authority;
+    if attempt.schema_version != 1
+        || attempt.purpose != PACKAGE_UPDATE_PURPOSE
+        || attempt.started_utc == 0
+        || attempt.workspace != workspace.to_string_lossy()
+        || attempt.runtime_identity != identity(root, true)?
+        || old.workspace != attempt.workspace
+        || old.runtime_identity != attempt.runtime_identity
+        || old.workspace_identity != identity(workspace, true)?
+        || !package_id_matches(&old.artifacts, &old.package_id)?
+        || (attempt.restoration.is_none() && new.package_id != updated_package_id(source_hashes)?)
+        || new.artifacts != *source_hashes
+        || new.workspace != old.workspace
+        || new.workspace_identity != old.workspace_identity
+        || new.runtime_identity != old.runtime_identity
+        || new.production_roots != old.production_roots
+        || new.python_identity != old.python_identity
+        || new.python_sha256 != old.python_sha256
+        || new.prepared_utc != old.prepared_utc
+        || new.purpose != old.purpose
+        || new.schema_version != old.schema_version
+        || !valid_update_stage_name(
+            &attempt.pointer_stage_name,
+            "current-update",
+            &new.package_id,
+        )
+        || !valid_update_stage_name(
+            &attempt.authority_stage_name,
+            "authority-update",
+            &new.package_id,
+        )
+        || [
+            &attempt.old_authority_sha256,
+            &attempt.new_authority_sha256,
+            &new.pointer_sha256,
+            &new.manifest_sha256,
+        ]
+        .into_iter()
+        .any(|hash| {
+            hash.len() != 64
+                || !hash
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        })
+    {
+        return Err("DEV_PACKAGE_UPDATE_ATTEMPT_INVALID".into());
+    }
+    attempt_pointer(root, attempt, source_hashes)?;
+    let (manifest_identity, manifest_sha256) =
+        verify_update_package(root, &new.package_id, source_hashes)?;
+    if new.manifest_identity != manifest_identity || new.manifest_sha256 != manifest_sha256 {
+        return Err("DEV_PACKAGE_UPDATE_MANIFEST_MISMATCH".into());
+    }
+    Ok(())
+}
+
+fn attempt_pointer(
+    root: &Path,
+    attempt: &PackageUpdateAttempt,
+    hashes: &BTreeMap<String, String>,
+) -> Result<Value> {
+    let Some(previous) = &attempt.restoration else {
+        return update_pointer(
+            &attempt.old_authority,
+            &attempt.new_authority.package_id,
+            hashes,
+            attempt.old_pointer_json.as_deref(),
+            attempt.retained_verification.as_ref(),
+        );
+    };
+    let old_json = attempt
+        .old_pointer_json
+        .as_deref()
+        .ok_or("DEV_RELEASE_RESTORE_BINDING_INVALID")?;
+    if old_json.len() > 4096
+        || format!("{:x}", Sha256::digest(old_json.as_bytes()))
+            != attempt.old_authority.pointer_sha256
+        || attempt.retained_verification.is_some()
+        || previous.package_id == attempt.old_authority.package_id
+        || attempt.new_authority.package_id != previous.package_id
+        || attempt.new_authority.artifacts != previous.artifacts
+        || attempt.new_authority.manifest_identity != previous.manifest_identity
+        || attempt.new_authority.manifest_sha256 != previous.manifest_sha256
+    {
+        return Err("DEV_RELEASE_RESTORE_BINDING_INVALID".into());
+    }
+    let old_pointer: Value =
+        serde_json::from_str(old_json).map_err(|_| "DEV_RELEASE_RESTORE_BINDING_INVALID")?;
+    if old_pointer.get("previousVerifiedRelease")
+        != Some(&serde_json::to_value(previous).map_err(|_| "DEV_RUNTIME_ENCODING_INVALID")?)
+    {
+        return Err("DEV_RELEASE_RESTORE_BINDING_INVALID".into());
+    }
+    validate_retained_release(root, previous)?;
+    // The failed current release must never become its own recovery fallback.
+    Ok(package_pointer(&previous.package_id, hashes))
+}
+
+fn package_update_result(old: &Authority, new: &Authority, status: &str) -> Value {
+    json!({"mode":"DEVELOPMENT_UNPROTECTED","status":status,
+        "oldPackageId":old.package_id,"packageId":new.package_id,
+        "browserProfilePreserved":true,"runtimeStatePreserved":true,
+        "hostStarted":false,"browserAction":"NONE"})
+}
+
+fn complete_package_update(
+    workspace: &Path,
+    root: &Path,
+    attempt: &PackageUpdateAttempt,
+    source_hashes: &BTreeMap<String, String>,
+) -> Result<Value> {
+    validate_update_attempt(workspace, root, attempt, source_hashes)?;
+    let dev = dev_dir(workspace);
+    let pointer_path = root.join("current.json");
+    let authority_path = dev.join("authority.json");
+    let pointer_stage = root.join(&attempt.pointer_stage_name);
+    let authority_stage = dev.join(&attempt.authority_stage_name);
+
+    let authority: Authority = read_json(&authority_path, 32 * 1024)?;
+    let authority_hash = hash_file(&authority_path, 32 * 1024)?;
+    let old_authority =
+        authority == attempt.old_authority && authority_hash == attempt.old_authority_sha256;
+    let new_authority =
+        authority == attempt.new_authority && authority_hash == attempt.new_authority_sha256;
+    if !old_authority && !new_authority {
+        return Err("DEV_PACKAGE_UPDATE_AUTHORITY_DIVERGED".into());
+    }
+    let pointer_hash = hash_file(&pointer_path, 4096)?;
+    let pointer_identity = identity(&pointer_path, false)?;
+    let old_pointer = pointer_hash == attempt.old_authority.pointer_sha256
+        && pointer_identity == attempt.old_authority.pointer_identity;
+    let new_pointer = pointer_hash == attempt.new_authority.pointer_sha256
+        && pointer_identity == attempt.new_authority.pointer_identity;
+    if !old_pointer && !new_pointer || new_authority && !new_pointer {
+        return Err("DEV_PACKAGE_UPDATE_POINTER_DIVERGED".into());
+    }
+
+    if old_authority && old_pointer {
+        if hash_file(&pointer_stage, 4096)? != attempt.new_authority.pointer_sha256
+            || identity(&pointer_stage, false)? != attempt.new_authority.pointer_identity
+            || read_json::<Value>(&pointer_stage, 4096)?
+                != attempt_pointer(root, attempt, source_hashes)?
+        {
+            return Err("DEV_PACKAGE_UPDATE_POINTER_STAGE_INVALID".into());
+        }
+        if validated_authority_options(workspace, true, attempt.restoration.is_some())?
+            .as_ref()
+            .map(|(_, value)| value)
+            != Some(&attempt.old_authority)
+        {
+            return Err("DEV_PACKAGE_UPDATE_OLD_AUTHORITY_INVALID".into());
+        }
+        replace_update_file(&pointer_stage, &pointer_path)?;
+    }
+    // The pointer-first window is intentional. A durable attempt keeps normal
+    // root selection closed until this exact authority catches up on retry.
+    if old_authority {
+        if hash_file(&authority_stage, 32 * 1024)? != attempt.new_authority_sha256
+            || read_json::<Authority>(&authority_stage, 32 * 1024)? != attempt.new_authority
+        {
+            return Err("DEV_PACKAGE_UPDATE_AUTHORITY_STAGE_INVALID".into());
+        }
+        if hash_file(&pointer_path, 4096)? != attempt.new_authority.pointer_sha256
+            || identity(&pointer_path, false)? != attempt.new_authority.pointer_identity
+        {
+            return Err("DEV_PACKAGE_UPDATE_POINTER_DIVERGED".into());
+        }
+        replace_update_file(&authority_stage, &authority_path)?;
+    }
+    if validated_authority_mode(workspace, true)?
+        .as_ref()
+        .map(|(_, value)| value)
+        != Some(&attempt.new_authority)
+    {
+        return Err("DEV_PACKAGE_UPDATE_READBACK_FAILED".into());
+    }
+    fs::remove_file(dev.join(PACKAGE_UPDATE_ATTEMPT))
+        .map_err(|_| "DEV_PACKAGE_UPDATE_MARKER_REMAINS")?;
+    if validated_authority(workspace)?
+        .as_ref()
+        .map(|(_, value)| value)
+        != Some(&attempt.new_authority)
+    {
+        return Err("DEV_PACKAGE_UPDATE_READBACK_FAILED".into());
+    }
+    Ok(package_update_result(
+        &attempt.old_authority,
+        &attempt.new_authority,
+        if attempt.restoration.is_some() {
+            "PACKAGE_PREVIOUS_RESTORED_STOPPED"
+        } else {
+            "PACKAGE_UPDATED_STOPPED"
+        },
+    ))
+}
+
+/// Replace only this isolated development runtime's immutable package. The
+/// browser profile, Python runtime, Wake queues and project registry are never
+/// copied, reset or selected from a different workspace.
+pub fn update_package(workspace: &Path, source_package: &Path) -> Result<Value> {
+    let workspace = canonical_workspace(workspace)?;
+    let dev = dev_dir(&workspace);
+    let root = runtime_root(&workspace);
+    plain(&dev, true)?;
+    plain(&root, true)?;
+    let _backend = backend_lock(&workspace)?;
+    plain(source_package, true)?;
+    let source = fs::canonicalize(source_package).map_err(|_| "DEV_PACKAGE_UNAVAILABLE")?;
+    if source.starts_with(&workspace) || workspace.starts_with(&source) {
+        return Err("DEV_SOURCE_OVERLAP".into());
+    }
+    let attempt_path = dev.join(PACKAGE_UPDATE_ATTEMPT);
+    if !present(&attempt_path)? {
+        validated_authority(&workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    }
+    let store = Store::open(&root)?;
+    let _host = store.host_lock()?;
+    let _browser = runtime::browser_session_lock(&root, Duration::ZERO)?;
+    let control: runtime::Control = read(&root.join("control.json"))?;
+    if control.schema_version != 1 || control.desired != "STOPPED" {
+        return Err("DEV_PACKAGE_UPDATE_HOST_NOT_STOPPED".into());
+    }
+    let hashes = source_artifacts(&source)?;
+    if present(&attempt_path)? {
+        let attempt: PackageUpdateAttempt = read_json(&attempt_path, 32 * 1024)?;
+        return complete_package_update(&workspace, &root, &attempt, &hashes);
+    }
+    let (_, old) = validated_authority(&workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    if old.artifacts == hashes {
+        return Ok(package_update_result(&old, &old, "PACKAGE_ALREADY_CURRENT"));
+    }
+    let attempt = stage_package_update_attempt(&workspace, &root, &source, &old, &hashes)?;
+    complete_package_update(&workspace, &root, &attempt, &hashes)
+}
+
+/// Finish a journaled selection, or restore the exact recorded working predecessor
+/// when current package files fail validation. Metadata, workspace ownership and
+/// all predecessor bytes remain strict. No host or browser is launched.
+pub fn recover_package(workspace: &Path) -> Result<Value> {
+    let workspace = canonical_workspace(workspace)?;
+    let dev = dev_dir(&workspace);
+    let root = runtime_root(&workspace);
+    plain(&dev, true)?;
+    plain(&root, true)?;
+    let _backend = backend_lock(&workspace)?;
+    let attempt_path = dev.join(PACKAGE_UPDATE_ATTEMPT);
+    if !present(&attempt_path)? {
+        validated_authority_options(&workspace, false, true)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    }
+    let store = Store::open(&root)?;
+    let _host = store.host_lock()?;
+    let _browser = runtime::browser_session_lock(&root, Duration::ZERO)?;
+    let control: runtime::Control = read(&root.join("control.json"))?;
+    if control.schema_version != 1 || control.desired != "STOPPED" {
+        return Err("DEV_PACKAGE_UPDATE_HOST_NOT_STOPPED".into());
+    }
+    if present(&attempt_path)? {
+        let attempt: PackageUpdateAttempt = read_json(&attempt_path, 32 * 1024)?;
+        return complete_package_update(
+            &workspace,
+            &root,
+            &attempt,
+            &attempt.new_authority.artifacts,
+        );
+    }
+    if let Ok(Some((_, current))) = validated_authority(&workspace) {
+        return Ok(package_update_result(
+            &current,
+            &current,
+            "PACKAGE_CURRENT_VERIFIED_STOPPED",
+        ));
+    }
+    let (_, old) =
+        validated_authority_options(&workspace, false, true)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    let previous = read_retained_release(&root)
+        .map_err(|_| "DEV_RELEASE_RECONSTRUCTION_REQUIRED_PREDECESSOR_INVALID")?
+        .ok_or("DEV_RELEASE_RECONSTRUCTION_REQUIRED_NO_VERIFIED_PREDECESSOR")?;
+    let attempt = stage_previous_package_attempt(&workspace, &root, &old, previous)?;
+    complete_package_update(
+        &workspace,
+        &root,
+        &attempt,
+        &attempt.new_authority.artifacts,
+    )
+}
+
+fn stage_previous_package_attempt(
+    workspace: &Path,
+    root: &Path,
+    old: &Authority,
+    previous: RetainedRelease,
+) -> Result<PackageUpdateAttempt> {
+    validate_retained_release(root, &previous)?;
+    let dev = dev_dir(workspace);
+    let id = &previous.package_id;
+    let pointer_stage_name = update_stage_name("current-update", id)?;
+    let pointer_stage = root.join(&pointer_stage_name);
+    write_json_new(&pointer_stage, &package_pointer(id, &previous.artifacts))?;
+    let mut new = old.clone();
+    new.package_id = id.clone();
+    new.artifacts = previous.artifacts.clone();
+    new.manifest_identity = previous.manifest_identity.clone();
+    new.manifest_sha256 = previous.manifest_sha256.clone();
+    new.pointer_identity = identity(&pointer_stage, false)?;
+    new.pointer_sha256 = hash_file(&pointer_stage, 4096)?;
+    let authority_stage_name = update_stage_name("authority-update", id)?;
+    let authority_stage = dev.join(&authority_stage_name);
+    write_json_new(&authority_stage, &new)?;
+    let attempt = PackageUpdateAttempt {
+        schema_version: 1,
+        purpose: PACKAGE_UPDATE_PURPOSE.into(),
+        workspace: workspace.to_string_lossy().into_owned(),
+        runtime_identity: identity(root, true)?,
+        old_authority: old.clone(),
+        old_authority_sha256: hash_file(&dev.join("authority.json"), 32 * 1024)?,
+        new_authority: new,
+        new_authority_sha256: hash_file(&authority_stage, 32 * 1024)?,
+        pointer_stage_name,
+        authority_stage_name,
+        started_utc: now(),
+        old_pointer_json: Some(
+            fs::read_to_string(root.join("current.json"))
+                .map_err(|_| "DEV_PACKAGE_UPDATE_OLD_POINTER_INVALID")?,
+        ),
+        retained_verification: None,
+        restoration: Some(previous),
+    };
+    validate_update_attempt(workspace, root, &attempt, &attempt.new_authority.artifacts)?;
+    write_json_new(&dev.join(PACKAGE_UPDATE_ATTEMPT), &attempt)?;
+    Ok(attempt)
+}
+
+fn stage_package_update_attempt(
+    workspace: &Path,
+    root: &Path,
+    source: &Path,
+    old: &Authority,
+    hashes: &BTreeMap<String, String>,
+) -> Result<PackageUpdateAttempt> {
+    let dev = dev_dir(workspace);
+    let attempt_path = dev.join(PACKAGE_UPDATE_ATTEMPT);
+    let id = updated_package_id(hashes)?;
+    let (manifest_identity, manifest_sha256) = stage_update_package(root, source, &id, hashes)?;
+    let pointer_stage_name = update_stage_name("current-update", &id)?;
+    let pointer_stage = root.join(&pointer_stage_name);
+    let old_pointer_json = fs::read_to_string(root.join("current.json"))
+        .map_err(|_| "DEV_PACKAGE_UPDATE_OLD_POINTER_INVALID")?;
+    let retained_verification = read_release_verification(root, old).ok().flatten();
+    write_json_new(
+        &pointer_stage,
+        &update_pointer(
+            old,
+            &id,
+            hashes,
+            Some(&old_pointer_json),
+            retained_verification.as_ref(),
+        )?,
+    )?;
+    let mut new = old.clone();
+    new.package_id = id.clone();
+    new.artifacts = hashes.clone();
+    new.manifest_identity = manifest_identity;
+    new.manifest_sha256 = manifest_sha256;
+    new.pointer_identity = identity(&pointer_stage, false)?;
+    new.pointer_sha256 = hash_file(&pointer_stage, 4096)?;
+    let authority_stage_name = update_stage_name("authority-update", &id)?;
+    let authority_stage = dev.join(&authority_stage_name);
+    write_json_new(&authority_stage, &new)?;
+    let attempt = PackageUpdateAttempt {
+        schema_version: 1,
+        purpose: PACKAGE_UPDATE_PURPOSE.into(),
+        workspace: workspace.to_string_lossy().into_owned(),
+        runtime_identity: identity(root, true)?,
+        old_authority: old.clone(),
+        old_authority_sha256: hash_file(&dev.join("authority.json"), 32 * 1024)?,
+        new_authority: new,
+        new_authority_sha256: hash_file(&authority_stage, 32 * 1024)?,
+        pointer_stage_name,
+        authority_stage_name,
+        started_utc: now(),
+        old_pointer_json: Some(old_pointer_json),
+        retained_verification,
+        restoration: None,
+    };
+    validate_update_attempt(workspace, root, &attempt, hashes)?;
+    write_json_new(&attempt_path, &attempt)?;
+    Ok(attempt)
+}
+
 fn present(path: &Path) -> Result<bool> {
     path.try_exists()
         .map_err(|_| "DEV_RUNTIME_AUTHORITY_UNAVAILABLE".into())
 }
 
 fn validated_authority(workspace: &Path) -> Result<Option<(PathBuf, Authority)>> {
+    validated_authority_mode(workspace, false)
+}
+
+fn validated_authority_mode(
+    workspace: &Path,
+    allow_package_update: bool,
+) -> Result<Option<(PathBuf, Authority)>> {
+    validated_authority_options(workspace, allow_package_update, false)
+}
+
+// Only predecessor restoration may retire unavailable package files. All current
+// metadata, root identities, Python and ownership checks are still required.
+fn validated_authority_options(
+    workspace: &Path,
+    allow_package_update: bool,
+    allow_retiring_package_files: bool,
+) -> Result<Option<(PathBuf, Authority)>> {
     let workspace = canonical_workspace(workspace)?;
     let dev = dev_dir(&workspace);
     if !present(&dev)? {
@@ -548,6 +1355,9 @@ fn validated_authority(workspace: &Path) -> Result<Option<(PathBuf, Authority)>>
     plain(&dev, true)?;
     if present(&dev.join("login-active.json"))? {
         return Err("DEV_LOGIN_CLEANUP_UNVERIFIED".into());
+    }
+    if !allow_package_update && present(&dev.join(PACKAGE_UPDATE_ATTEMPT))? {
+        return Err("DEV_PACKAGE_UPDATE_INCOMPLETE".into());
     }
     let attempt = dev.join("prepare-attempt.json");
     let authority_path = dev.join("authority.json");
@@ -583,13 +1393,14 @@ fn validated_authority(workspace: &Path) -> Result<Option<(PathBuf, Authority)>>
         return Err("DEV_RUNTIME_ROOT_MISMATCH".into());
     }
     let package = root.join("versions").join(&authority.package_id);
-    if package_id(&authority.artifacts)? != authority.package_id {
+    if !package_id_matches(&authority.artifacts, &authority.package_id)? {
         return Err("DEV_RUNTIME_PACKAGE_MISMATCH".into());
     }
     plain(&package, true)?;
     for name in PACKAGE_FILES {
-        if authority.artifacts.get(name).map(String::as_str)
-            != Some(hash_file(&package.join(name), MAX_PACKAGE_FILE)?.as_str())
+        if !allow_retiring_package_files
+            && authority.artifacts.get(name).map(String::as_str)
+                != Some(hash_file(&package.join(name), MAX_PACKAGE_FILE)?.as_str())
         {
             return Err("DEV_RUNTIME_PACKAGE_MISMATCH".into());
         }
@@ -681,6 +1492,131 @@ pub fn root_for_workspace(workspace: &Path) -> Result<Option<PathBuf>> {
     Ok(validated_authority(workspace)?.map(|(root, _)| root))
 }
 
+fn backend_lock(workspace: &Path) -> Result<File> {
+    let dev = dev_dir(workspace);
+    plain(&dev, true)?;
+    let path = dev.join("backend.lock");
+    if present(&path)? {
+        plain(&path, false)?;
+    }
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)
+        .map_err(|_| "DEV_BACKEND_LEASE_UNAVAILABLE")?;
+    file.try_lock().map_err(|_| "DEV_BACKEND_ALREADY_RUNNING")?;
+    Ok(file)
+}
+
+/// Retains this workspace's backend lease and read-only image/selection pins.
+/// Healthy backend startup is independent of Wake/browser ownership. Only an
+/// actual package recovery uses the existing STOPPED/exclusive recovery gates.
+pub struct BackendSelection {
+    pub workspace: PathBuf,
+    pub executable: PathBuf,
+    pub package_id: String,
+    pub app_sha256: String,
+    pub recovery: String,
+    _lease: File,
+    _pins: Vec<File>,
+    authority: Authority,
+}
+
+pub fn select_backend(workspace: &Path) -> Result<BackendSelection> {
+    let workspace = canonical_workspace(workspace)?;
+    let recovery = match validated_authority(&workspace) {
+        Ok(Some(_)) => "CURRENT_PACKAGE_VERIFIED".to_owned(),
+        Ok(None) => return Err("DEV_RUNTIME_NOT_PREPARED".into()),
+        Err(_) => recover_package(&workspace)?["status"]
+            .as_str()
+            .ok_or("DEV_BACKEND_RECOVERY_STATUS_INVALID")?
+            .to_owned(),
+    };
+    let lease = backend_lock(&workspace)?;
+    pin_backend(workspace, lease, recovery)
+}
+
+fn pin_backend(workspace: PathBuf, lease: File, recovery: String) -> Result<BackendSelection> {
+    use std::os::windows::fs::OpenOptionsExt;
+    let (root, authority) = validated_authority(&workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    let executable = root
+        .join("versions")
+        .join(&authority.package_id)
+        .join("CatDeskBinagotchy.exe");
+    let mut pins = Vec::new();
+    for path in [
+        &executable,
+        &root.join("current.json"),
+        &dev_dir(&workspace).join("authority.json"),
+    ] {
+        plain(path, false)?;
+        pins.push(
+            OpenOptions::new()
+                .read(true)
+                .share_mode(1)
+                .open(path)
+                .map_err(|_| "DEV_BACKEND_SELECTION_PIN_UNAVAILABLE")?,
+        );
+    }
+    if validated_authority(&workspace)?
+        .as_ref()
+        .map(|(_, value)| value)
+        != Some(&authority)
+    {
+        return Err("DEV_BACKEND_SELECTION_CHANGED".into());
+    }
+    Ok(BackendSelection {
+        workspace,
+        executable,
+        package_id: authority.package_id.clone(),
+        app_sha256: authority.artifacts["CatDeskBinagotchy.exe"].clone(),
+        recovery,
+        _lease: lease,
+        _pins: pins,
+        authority,
+    })
+}
+
+impl BackendSelection {
+    /// The caller must first prove that its failed pre-ready child tree is gone.
+    /// Retain the existing backend lease across rollback; display fields cannot
+    /// choose a different workspace/package or substitute an authority snapshot.
+    pub fn restore_after_startup_failure(mut self) -> Result<Self> {
+        let workspace = canonical_workspace(Path::new(&self.authority.workspace))?;
+        let (root, current) = validated_authority(&workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+        if current != self.authority {
+            return Err("DEV_BACKEND_SELECTION_CHANGED".into());
+        }
+        let store = Store::open(&root)?;
+        let _host = store.host_lock()?;
+        let _browser = runtime::browser_session_lock(&root, Duration::ZERO)?;
+        let control: runtime::Control = read(&root.join("control.json"))?;
+        if control.schema_version != 1 || control.desired != "STOPPED" {
+            return Err("DEV_PACKAGE_UPDATE_HOST_NOT_STOPPED".into());
+        }
+        let previous = read_retained_release(&root)
+            .map_err(|_| "DEV_RELEASE_RECONSTRUCTION_REQUIRED_PREDECESSOR_INVALID")?
+            .ok_or("DEV_RELEASE_RECONSTRUCTION_REQUIRED_NO_VERIFIED_PREDECESSOR")?;
+        // No mapped child remains. Release only the read pins, retaining the
+        // backend lease until the restored selection has its new pins.
+        self._pins.clear();
+        let attempt = stage_previous_package_attempt(&workspace, &root, &current, previous)?;
+        complete_package_update(
+            &workspace,
+            &root,
+            &attempt,
+            &attempt.new_authority.artifacts,
+        )?;
+        pin_backend(
+            workspace,
+            self._lease,
+            "PACKAGE_PREVIOUS_RESTORED_STOPPED".into(),
+        )
+    }
+}
+
 fn conversation_id(url: &str) -> Result<&str> {
     protocol::validate_target(url)?;
     Ok(url
@@ -708,13 +1644,19 @@ fn validate_against_production(authority: &Authority, target_url: &str) -> Resul
         }
         let config: Config = read_json(&root.join("config.json"), 1024 * 1024)
             .map_err(|_| "DEV_PRODUCTION_TARGETS_UNAVAILABLE")?;
-        if config.schema_version != 1 || config.targets.len() > 64 || config.history.len() > 128 {
-            return Err("DEV_PRODUCTION_TARGETS_INVALID".into());
-        }
+        config
+            .validate()
+            .map_err(|_| "DEV_PRODUCTION_TARGETS_INVALID")?;
         for target in config
             .targets
             .values()
             .chain(config.history.iter().map(|entry| &entry.target))
+            .chain(
+                config
+                    .retired_targets
+                    .values()
+                    .filter_map(|entry| entry.last_target.as_ref()),
+            )
         {
             target
                 .validate()
@@ -784,12 +1726,69 @@ pub fn status(workspace: &Path) -> Result<Value> {
     };
     let store = Store::open(&root)?;
     let live = runtime::status(&store)?;
+    let current_verification = match read_release_verification(&root, &authority) {
+        Ok(Some(record)) => json!({"status":"OPERATOR_RECORDED",
+            "sourceCommit":record.source_commit,
+            "workingHealthObservedUtc":record.working_health_observed_utc}),
+        Ok(None) => json!({"status":"NOT_RECORDED"}),
+        Err(_) => json!({"status":"INVALID_OR_PACKAGE_CHANGED"}),
+    };
+    let previous_verification = retained_predecessor_status(&root);
     Ok(
         json!({"mode":"DEVELOPMENT_UNPROTECTED","runtimeRoot":root,"packageId":authority.package_id,
         "hostObservation":live.host,"observedPid":live.pid,"liveOwnerVerified":false,
         "browser":live.browser,"queueDepth":live.queue_depth,
-        "targets":live.targets.keys().collect::<Vec<_>>(),"attention":live.attention}),
+        "targets":live.targets.keys().collect::<Vec<_>>(),"attention":live.attention,
+        "currentVerification":current_verification,"previousVerifiedRelease":previous_verification}),
     )
+}
+
+fn read_retained_release(root: &Path) -> Result<Option<RetainedRelease>> {
+    let pointer: Value = read_json(&root.join("current.json"), 4096)?;
+    let Some(value) = pointer.get("previousVerifiedRelease") else {
+        return Ok(None);
+    };
+    let previous: RetainedRelease = serde_json::from_value(value.clone())
+        .map_err(|_| "DEV_RELEASE_PREDECESSOR_RECORD_INVALID")?;
+    validate_retained_release(root, &previous)?;
+    Ok(Some(previous))
+}
+
+fn validate_retained_release(root: &Path, previous: &RetainedRelease) -> Result<()> {
+    if !package_id_matches(&previous.artifacts, &previous.package_id)? {
+        return Err("DEV_RELEASE_PREDECESSOR_RECORD_INVALID".into());
+    }
+    validate_verification_binding(
+        &previous.verification,
+        &previous.package_id,
+        &previous.manifest_sha256,
+        &previous.artifacts,
+    )?;
+    let package = root.join("versions").join(&previous.package_id);
+    plain(&package, true)?;
+    let manifest = package.join("manifest.json");
+    if identity(&manifest, false)? != previous.manifest_identity
+        || hash_file(&manifest, 16 * 1024)? != previous.manifest_sha256
+    {
+        return Err("DEV_RELEASE_VERIFICATION_PACKAGE_CHANGED".into());
+    }
+    for name in PACKAGE_FILES {
+        if previous.artifacts.get(name) != Some(&hash_file(&package.join(name), MAX_PACKAGE_FILE)?)
+        {
+            return Err("DEV_RELEASE_VERIFICATION_PACKAGE_CHANGED".into());
+        }
+    }
+    Ok(())
+}
+
+fn retained_predecessor_status(root: &Path) -> Value {
+    match read_retained_release(root) {
+        Ok(Some(previous)) => json!({"status":"OPERATOR_RECORDED_PACKAGE_RETAINED",
+            "packageId":previous.package_id,"sourceCommit":previous.verification.source_commit,
+            "workingHealthObservedUtc":previous.verification.working_health_observed_utc}),
+        Ok(None) => json!({"status":"NOT_RECORDED"}),
+        Err(_) => json!({"status":"INVALID_OR_PACKAGE_CHANGED"}),
+    }
 }
 
 fn validated_launch(workspace: &Path) -> Result<(Store, PathBuf)> {
@@ -879,8 +1878,27 @@ pub fn start(workspace: &Path) -> Result<Value> {
 /// Keep the exact WakeHost child attached to this operator invocation. This
 /// mode is usable from an outer Job without trying to break away from it;
 /// another session may issue stop, then this call returns the child exit.
+/// A private kill-on-close Job owns all descendants before runtime startup.
 pub fn run_foreground(workspace: &Path) -> Result<Value> {
+    run_foreground_inner(workspace, None)
+}
+
+pub fn run_foreground_bounded(workspace: &Path, maximum_seconds: u64) -> Result<Value> {
+    if !(1..=900).contains(&maximum_seconds) {
+        return Err("DEV_RUNTIME_FOREGROUND_BUDGET_INVALID".into());
+    }
+    run_foreground_inner(workspace, Some(maximum_seconds))
+}
+
+fn run_foreground_inner(workspace: &Path, maximum_seconds: Option<u64>) -> Result<Value> {
     let (store, executable) = validated_launch(workspace)?;
+    let host = fs::read(&executable).map_err(|_| "DEV_RUNTIME_EXECUTABLE_UNAVAILABLE")?;
+    if !host
+        .windows(foreground::OWNER_GATE.len())
+        .any(|part| part == foreground::OWNER_GATE)
+    {
+        return Err("DEV_RUNTIME_FOREGROUND_PACKAGE_REQUIRED".into());
+    }
     drop(store.host_lock()?);
     let previous: Value = read_json(&store.root().join("control.json"), 4096)?;
     let previous_desired = previous
@@ -892,28 +1910,41 @@ pub fn run_foreground(workspace: &Path) -> Result<Value> {
     runtime::control(&store, "RUNNING")?;
     let mut command = Command::new(&executable);
     command
-        .arg("--dev-host")
+        .arg("--dev-foreground-host")
         .arg(workspace)
-        .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    let mut child = match command.spawn() {
-        Ok(child) => child,
-        Err(_) => {
+    let (pid, exit, deadline_reached) = match foreground::run_with_deadline(
+        &mut command,
+        maximum_seconds.map(Duration::from_secs),
+        || runtime::control(&store, "STOPPED"),
+    ) {
+        Ok(result) => result,
+        Err(error) => {
             if let Ok(lease) = store.host_lock() {
                 drop(lease);
-                runtime::control(&store, &previous_desired)?;
+                let restore = if maximum_seconds.is_some() {
+                    "STOPPED"
+                } else {
+                    &previous_desired
+                };
+                runtime::control(&store, restore)?;
             }
-            return Err("DEV_RUNTIME_START_FAILED".into());
+            return Err(error);
         }
     };
-    let exit = child
-        .wait()
-        .map_err(|_| "DEV_RUNTIME_CHILD_WAIT_UNAVAILABLE")?;
     Ok(
         json!({"mode":"DEVELOPMENT_UNPROTECTED","status":"FOREGROUND_HOST_EXITED",
-        "pid":child.id(),"success":exit.success(),"exitCode":exit.code()}),
+        "pid":pid,"success":exit.success(),"exitCode":exit.code(),"ownedTreeExited":true,
+        "maximumRuntimeSeconds":maximum_seconds,"deadlineReached":deadline_reached}),
     )
+}
+
+/// Internal foreground entry: EOF or a mismatched owner gate exits before any
+/// runtime/control/browser action. Detached development start remains separate.
+pub fn run_foreground_host(workspace: &Path) -> Result<()> {
+    foreground::require_owner(std::io::stdin().lock())?;
+    run_host(workspace)
 }
 
 struct LoginPreflight {
@@ -1242,6 +2273,1278 @@ mod tests {
     }
 
     #[test]
+    fn foreground_requires_owned_startup_protocol_before_control_change() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let store = Store::open(&root).unwrap();
+        store
+            .set_target(
+                "canary-project",
+                0,
+                "https://chatgpt.com/c/foreground-fixture-only",
+            )
+            .unwrap();
+        let before = fs::read(root.join("control.json")).unwrap();
+        assert_eq!(
+            run_foreground(&workspace).unwrap_err(),
+            "DEV_RUNTIME_FOREGROUND_PACKAGE_REQUIRED"
+        );
+        assert_eq!(fs::read(root.join("control.json")).unwrap(), before);
+        for budget in [0, 901, u64::MAX] {
+            assert_eq!(
+                run_foreground_bounded(&workspace, budget).unwrap_err(),
+                "DEV_RUNTIME_FOREGROUND_BUDGET_INVALID"
+            );
+        }
+        assert_eq!(fs::read(root.join("control.json")).unwrap(), before);
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn package_update_preserves_profile_queue_targets_and_old_version() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let store = Store::open(&root).unwrap();
+        let target = "https://chatgpt.com/c/dev-update-preserved-project";
+        let bound = store.set_target("project-a", 0, target).unwrap();
+        store
+            .produce_expected(
+                "dev-update-preserved",
+                "project-a",
+                "test",
+                "Preserved queued test event",
+                &bound,
+            )
+            .unwrap();
+        let profile = root.join("browser-profile/preserved.txt");
+        fs::write(&profile, b"authenticated profile fixture sentinel").unwrap();
+        let old = validated_authority(&workspace).unwrap().unwrap().1;
+        let old_package = root.join("versions").join(&old.package_id);
+        let old_pointer = fs::read(root.join("current.json")).unwrap();
+        let old_config = fs::read(root.join("config.json")).unwrap();
+        let old_queue = store.events().unwrap();
+        let old_profile = fs::read(&profile).unwrap();
+        let updated_source = parent.join("updated-package");
+        fs::create_dir(&updated_source).unwrap();
+        for name in PACKAGE_FILES {
+            fs::copy(package.join(name), updated_source.join(name)).unwrap();
+        }
+        fs::write(
+            updated_source.join("CatDeskWakeHost.exe"),
+            b"updated fixture host",
+        )
+        .unwrap();
+        let result = update_package(&workspace, &updated_source).unwrap();
+        assert_eq!(result["status"], "PACKAGE_UPDATED_STOPPED");
+        let updated = validated_authority(&workspace).unwrap().unwrap().1;
+        assert_ne!(old.package_id, updated.package_id);
+        assert!(old_package.is_dir());
+        assert_eq!(
+            fs::read(old_package.join("CatDeskWakeHost.exe")).unwrap(),
+            b"isolated fixture host"
+        );
+        assert_ne!(fs::read(root.join("current.json")).unwrap(), old_pointer);
+        assert_eq!(fs::read(root.join("config.json")).unwrap(), old_config);
+        assert_eq!(store.events().unwrap(), old_queue);
+        assert_eq!(fs::read(&profile).unwrap(), old_profile);
+        assert_eq!(store.config().unwrap().targets["project-a"].url, target);
+        assert!(
+            !dev_dir(&fs::canonicalize(&workspace).unwrap())
+                .join(PACKAGE_UPDATE_ATTEMPT)
+                .exists()
+        );
+        assert_eq!(
+            update_package(&workspace, &updated_source).unwrap()["status"],
+            "PACKAGE_ALREADY_CURRENT"
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn package_update_busy_or_running_refuses_without_switch() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let updated_source = parent.join("updated-package");
+        fs::create_dir(&updated_source).unwrap();
+        for name in PACKAGE_FILES {
+            fs::copy(package.join(name), updated_source.join(name)).unwrap();
+        }
+        fs::write(
+            updated_source.join("CatDeskWakeHost.exe"),
+            b"updated fixture host",
+        )
+        .unwrap();
+        let original = fs::read(root.join("current.json")).unwrap();
+        let store = Store::open(&root).unwrap();
+        let host = store.host_lock().unwrap();
+        assert!(update_package(&workspace, &updated_source).is_err());
+        drop(host);
+        let browser = runtime::browser_session_lock(&root, Duration::ZERO).unwrap();
+        assert_eq!(
+            update_package(&workspace, &updated_source).unwrap_err(),
+            "BROWSER_SESSION_BUSY"
+        );
+        drop(browser);
+        runtime::control(&store, "RUNNING").unwrap();
+        assert_eq!(
+            update_package(&workspace, &updated_source).unwrap_err(),
+            "DEV_PACKAGE_UPDATE_HOST_NOT_STOPPED"
+        );
+        runtime::control(&store, "STOPPED").unwrap();
+        assert_eq!(fs::read(root.join("current.json")).unwrap(), original);
+        assert!(
+            !dev_dir(&fs::canonicalize(&workspace).unwrap())
+                .join(PACKAGE_UPDATE_ATTEMPT)
+                .exists()
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn package_update_marker_closes_normal_selection_and_resumes_pointer_first() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let workspace = fs::canonicalize(&workspace).unwrap();
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let updated_source = parent.join("updated-package");
+        fs::create_dir(&updated_source).unwrap();
+        for name in PACKAGE_FILES {
+            fs::copy(package.join(name), updated_source.join(name)).unwrap();
+        }
+        fs::write(
+            updated_source.join("CatDeskWakeHost.exe"),
+            b"updated fixture host",
+        )
+        .unwrap();
+        let source_hashes = source_artifacts(&updated_source).unwrap();
+        let old = validated_authority(&workspace).unwrap().unwrap().1;
+        let attempt =
+            stage_package_update_attempt(&workspace, &root, &updated_source, &old, &source_hashes)
+                .unwrap();
+        assert_eq!(
+            root_for_workspace(&workspace).unwrap_err(),
+            "DEV_PACKAGE_UPDATE_INCOMPLETE"
+        );
+        replace_update_file(
+            &root.join(&attempt.pointer_stage_name),
+            &root.join("current.json"),
+        )
+        .unwrap();
+        assert_eq!(
+            root_for_workspace(&workspace).unwrap_err(),
+            "DEV_PACKAGE_UPDATE_INCOMPLETE"
+        );
+        assert_eq!(
+            update_package(&workspace, &updated_source).unwrap()["status"],
+            "PACKAGE_UPDATED_STOPPED"
+        );
+        assert_eq!(
+            validated_authority(&workspace)
+                .unwrap()
+                .unwrap()
+                .1
+                .package_id,
+            attempt.new_authority.package_id
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn package_id_upgrade_distinguishes_bridge_only_changes() {
+        let (_, _, package, _) = fixture();
+        let old = source_artifacts(&package).unwrap();
+        let mut changed = old.clone();
+        changed.insert("wake_bridge.py".into(), "a".repeat(64));
+        assert_eq!(package_id(&old).unwrap(), package_id(&changed).unwrap());
+        assert_ne!(
+            updated_package_id(&old).unwrap(),
+            updated_package_id(&changed).unwrap()
+        );
+        cleanup(package.parent().unwrap());
+    }
+
+    fn package_recovery_fixture() -> (PathBuf, PathBuf, PathBuf, PackageUpdateAttempt) {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let workspace = fs::canonicalize(&workspace).unwrap();
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let store = Store::open(&root).unwrap();
+        let target = store
+            .set_target("project-a", 0, "https://chatgpt.com/c/recovery-fixture")
+            .unwrap();
+        store
+            .produce_expected(
+                "dev-recovery",
+                "project-a",
+                "test",
+                "Retain queued work",
+                &target,
+            )
+            .unwrap();
+        fs::write(
+            root.join("browser-profile/preserved.txt"),
+            b"profile sentinel",
+        )
+        .unwrap();
+        let source = parent.join("updated-package");
+        fs::create_dir(&source).unwrap();
+        for name in PACKAGE_FILES {
+            fs::copy(package.join(name), source.join(name)).unwrap();
+        }
+        fs::write(source.join("CatDeskWakeHost.exe"), b"updated fixture host").unwrap();
+        let hashes = source_artifacts(&source).unwrap();
+        let old = validated_authority(&workspace).unwrap().unwrap().1;
+        let attempt =
+            stage_package_update_attempt(&workspace, &root, &source, &old, &hashes).unwrap();
+        // Simulate expiration of the build directory, retaining its bytes for
+        // diagnosis. Recovery must use the already published immutable package.
+        fs::rename(&source, parent.join("retained-build-output")).unwrap();
+        assert!(update_package(&workspace, &source).is_err());
+        (parent, workspace, root, attempt)
+    }
+
+    #[test]
+    fn package_recovery_finishes_each_interrupted_selection_without_build_directory() {
+        for phase in 0..=2 {
+            let (parent, workspace, root, attempt) = package_recovery_fixture();
+            let store = Store::open(&root).unwrap();
+            let config = fs::read(root.join("config.json")).unwrap();
+            let profile = fs::read(root.join("browser-profile/preserved.txt")).unwrap();
+            let events = store.events().unwrap();
+            let old_image = root
+                .join("versions")
+                .join(&attempt.old_authority.package_id)
+                .join("CatDeskWakeHost.exe");
+            let old_bytes = fs::read(&old_image).unwrap();
+            if phase >= 1 {
+                replace_update_file(
+                    &root.join(&attempt.pointer_stage_name),
+                    &root.join("current.json"),
+                )
+                .unwrap();
+            }
+            if phase >= 2 {
+                replace_update_file(
+                    &dev_dir(&workspace).join(&attempt.authority_stage_name),
+                    &dev_dir(&workspace).join("authority.json"),
+                )
+                .unwrap();
+            }
+            assert_eq!(
+                root_for_workspace(&workspace).unwrap_err(),
+                "DEV_PACKAGE_UPDATE_INCOMPLETE"
+            );
+            let recovered = recover_package(&workspace).unwrap();
+            assert_eq!(recovered["status"], "PACKAGE_UPDATED_STOPPED");
+            assert_eq!(recovered["hostStarted"], false);
+            assert_eq!(recovered["browserAction"], "NONE");
+            assert_eq!(
+                validated_authority(&workspace).unwrap().unwrap().1,
+                attempt.new_authority
+            );
+            assert_eq!(fs::read(root.join("config.json")).unwrap(), config);
+            assert_eq!(
+                fs::read(root.join("browser-profile/preserved.txt")).unwrap(),
+                profile
+            );
+            assert_eq!(store.events().unwrap(), events);
+            assert_eq!(fs::read(old_image).unwrap(), old_bytes);
+            assert_eq!(
+                read_json::<Value>(&root.join("control.json"), 4096).unwrap()["desired"],
+                "STOPPED"
+            );
+            let pointer = fs::read(root.join("current.json")).unwrap();
+            let authority = fs::read(dev_dir(&workspace).join("authority.json")).unwrap();
+            assert_eq!(
+                recover_package(&workspace).unwrap()["status"],
+                "PACKAGE_CURRENT_VERIFIED_STOPPED"
+            );
+            assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+            assert_eq!(
+                fs::read(dev_dir(&workspace).join("authority.json")).unwrap(),
+                authority
+            );
+            cleanup(&parent);
+        }
+    }
+
+    #[test]
+    fn package_recovery_does_not_accept_changed_staged_artifacts() {
+        let (parent, workspace, root, attempt) = package_recovery_fixture();
+        let pointer = fs::read(root.join("current.json")).unwrap();
+        let authority = fs::read(dev_dir(&workspace).join("authority.json")).unwrap();
+        let marker = fs::read(dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT)).unwrap();
+        fs::write(
+            root.join("versions")
+                .join(attempt.new_authority.package_id)
+                .join("CatDeskWakeHost.exe"),
+            b"unexpected changed bytes",
+        )
+        .unwrap();
+        assert_eq!(
+            recover_package(&workspace).unwrap_err(),
+            "DEV_PACKAGE_UPDATE_CONTENT_MISMATCH"
+        );
+        assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+        assert_eq!(
+            fs::read(dev_dir(&workspace).join("authority.json")).unwrap(),
+            authority
+        );
+        assert_eq!(
+            fs::read(dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT)).unwrap(),
+            marker
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn package_recovery_does_not_overwrite_an_unknown_pointer() {
+        let (parent, workspace, root, _) = package_recovery_fixture();
+        fs::write(root.join("current.json"), b"unknown selection").unwrap();
+        let authority = fs::read(dev_dir(&workspace).join("authority.json")).unwrap();
+        let marker = fs::read(dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT)).unwrap();
+        assert_eq!(
+            recover_package(&workspace).unwrap_err(),
+            "DEV_PACKAGE_UPDATE_POINTER_DIVERGED"
+        );
+        assert_eq!(
+            fs::read(root.join("current.json")).unwrap(),
+            b"unknown selection"
+        );
+        assert_eq!(
+            fs::read(dev_dir(&workspace).join("authority.json")).unwrap(),
+            authority
+        );
+        assert_eq!(
+            fs::read(dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT)).unwrap(),
+            marker
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn package_recovery_requires_stopped_exclusive_host_and_browser() {
+        let (parent, workspace, root, _) = package_recovery_fixture();
+        let store = Store::open(&root).unwrap();
+        let pointer = fs::read(root.join("current.json")).unwrap();
+        let host = store.host_lock().unwrap();
+        assert!(recover_package(&workspace).is_err());
+        drop(host);
+        let browser = runtime::browser_session_lock(&root, Duration::ZERO).unwrap();
+        assert_eq!(
+            recover_package(&workspace).unwrap_err(),
+            "BROWSER_SESSION_BUSY"
+        );
+        drop(browser);
+        runtime::control(&store, "RUNNING").unwrap();
+        assert_eq!(
+            recover_package(&workspace).unwrap_err(),
+            "DEV_PACKAGE_UPDATE_HOST_NOT_STOPPED"
+        );
+        assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+        runtime::control(&store, "STOPPED").unwrap();
+        assert_eq!(
+            recover_package(&workspace).unwrap()["status"],
+            "PACKAGE_UPDATED_STOPPED"
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn package_recovery_of_healthy_selection_is_noncreating_and_idempotent() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let pointer = fs::read(root.join("current.json")).unwrap();
+        let authority = fs::read(dev_dir(&workspace).join("authority.json")).unwrap();
+        for _ in 0..2 {
+            assert_eq!(
+                recover_package(&workspace).unwrap()["status"],
+                "PACKAGE_CURRENT_VERIFIED_STOPPED"
+            );
+        }
+        assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+        assert_eq!(
+            fs::read(dev_dir(&workspace).join("authority.json")).unwrap(),
+            authority
+        );
+        assert!(!dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT).exists());
+        cleanup(&parent);
+    }
+
+    fn verification_fixture_record(authority: &Authority) -> ReleaseVerification {
+        ReleaseVerification {
+            schema_version: 1,
+            package_id: authority.package_id.clone(),
+            manifest_sha256: authority.manifest_sha256.clone(),
+            artifacts: authority.artifacts.clone(),
+            source_commit: "a".repeat(40),
+            build_evidence_sha256: "b".repeat(64),
+            review_evidence_sha256: "c".repeat(64),
+            working_health_evidence_sha256: "d".repeat(64),
+            working_health_observed_utc: now(),
+        }
+    }
+
+    fn record_fixture_verification(workspace: &Path) -> ReleaseVerification {
+        let authority = validated_authority(workspace).unwrap().unwrap().1;
+        let record = verification_fixture_record(&authority);
+        let input = workspace.join(format!("verification-{}.json", authority.package_id));
+        write_json_new(&input, &record).unwrap();
+        let result = record_release_verification(workspace, &input).unwrap();
+        assert_eq!(result["status"], "VERIFICATION_RECORDED");
+        assert_eq!(result["evidenceAuthority"], "LOCAL_OPERATOR_PROVIDED");
+        assert_eq!(result["healthChecksPerformed"], false);
+        assert_eq!(result["productionAuthorityCreated"], false);
+        record
+    }
+
+    fn update_fixture_host(parent: &Path, workspace: &Path, name: &str) {
+        let root = root_for_workspace(workspace).unwrap().unwrap();
+        let authority = validated_authority(workspace).unwrap().unwrap().1;
+        let package = root.join("versions").join(authority.package_id);
+        let source = parent.join(name);
+        fs::create_dir(&source).unwrap();
+        for file in PACKAGE_FILES {
+            fs::copy(package.join(file), source.join(file)).unwrap();
+        }
+        fs::write(source.join("CatDeskWakeHost.exe"), name.as_bytes()).unwrap();
+        assert_eq!(
+            update_package(workspace, &source).unwrap()["status"],
+            "PACKAGE_UPDATED_STOPPED"
+        );
+    }
+
+    #[test]
+    fn verification_is_immutable_local_and_preserves_legacy_selection_bytes() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let (root, authority) = validated_authority(&workspace).unwrap().unwrap();
+        let authority_before = fs::read(dev_dir(&workspace).join("authority.json")).unwrap();
+        let pointer_before = fs::read(root.join("current.json")).unwrap();
+        let manifest_path = root
+            .join("versions")
+            .join(&authority.package_id)
+            .join("manifest.json");
+        let manifest_before = fs::read(&manifest_path).unwrap();
+        let mut record = record_fixture_verification(&workspace);
+        let input = workspace.join(format!("verification-{}.json", authority.package_id));
+        assert_eq!(
+            record_release_verification(&workspace, &input).unwrap()["status"],
+            "VERIFICATION_ALREADY_RECORDED"
+        );
+        record.source_commit = "e".repeat(40);
+        fs::write(&input, serde_json::to_vec(&record).unwrap()).unwrap();
+        assert_eq!(
+            record_release_verification(&workspace, &input).unwrap_err(),
+            "DEV_RELEASE_VERIFICATION_CONFLICT"
+        );
+        assert_eq!(
+            fs::read(dev_dir(&workspace).join("authority.json")).unwrap(),
+            authority_before
+        );
+        assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer_before);
+        assert_eq!(fs::read(manifest_path).unwrap(), manifest_before);
+        assert_eq!(
+            status(&workspace).unwrap()["currentVerification"]["sourceCommit"],
+            "a".repeat(40)
+        );
+        assert_eq!(
+            status(&workspace).unwrap()["previousVerifiedRelease"]["status"],
+            "NOT_RECORDED"
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn qualified_predecessor_survives_unqualified_updates_in_existing_pointer() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let (root, original) = validated_authority(&workspace).unwrap().unwrap();
+        record_fixture_verification(&workspace);
+        update_fixture_host(&parent, &workspace, "version-b");
+        let first = read_retained_release(&root).unwrap().unwrap();
+        assert_eq!(first.package_id, original.package_id);
+        assert_eq!(first.artifacts, original.artifacts);
+        assert_eq!(
+            status(&workspace).unwrap()["currentVerification"]["status"],
+            "NOT_RECORDED"
+        );
+        let previous = read_json::<Value>(&root.join("current.json"), 4096).unwrap()["previousVerifiedRelease"].clone();
+        update_fixture_host(&parent, &workspace, "version-c");
+        assert_eq!(
+            read_json::<Value>(&root.join("current.json"), 4096).unwrap()["previousVerifiedRelease"],
+            previous
+        );
+        assert_eq!(
+            read_retained_release(&root).unwrap().unwrap().package_id,
+            original.package_id
+        );
+        let (_, current) = validated_authority(&workspace).unwrap().unwrap();
+        assert_ne!(current.package_id, original.package_id);
+        assert_eq!(
+            status(&workspace).unwrap()["previousVerifiedRelease"]["packageId"],
+            original.package_id
+        );
+        // No second selection registry or retained-transaction store is created.
+        assert!(
+            !dev_dir(&workspace)
+                .join("last-verified-package-update.json")
+                .exists()
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn damaged_predecessor_metadata_does_not_block_healthy_current_selection() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let (root, original) = validated_authority(&workspace).unwrap().unwrap();
+        record_fixture_verification(&workspace);
+        update_fixture_host(&parent, &workspace, "healthy-current");
+        fs::write(
+            root.join("versions")
+                .join(original.package_id)
+                .join("CatDeskWakeHost.exe"),
+            b"damaged predecessor",
+        )
+        .unwrap();
+        assert!(root_for_workspace(&workspace).unwrap().is_some());
+        assert_eq!(
+            status(&workspace).unwrap()["previousVerifiedRelease"]["status"],
+            "INVALID_OR_PACKAGE_CHANGED"
+        );
+        update_fixture_host(&parent, &workspace, "another-healthy-current");
+        assert!(root_for_workspace(&workspace).unwrap().is_some());
+        assert_eq!(
+            status(&workspace).unwrap()["previousVerifiedRelease"]["status"],
+            "INVALID_OR_PACKAGE_CHANGED"
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn verification_refuses_mismatched_evidence_and_outside_input_without_selection_writes() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let (root, authority) = validated_authority(&workspace).unwrap().unwrap();
+        let before = fs::read(root.join("current.json")).unwrap();
+        for fault in 0..4 {
+            let mut record = verification_fixture_record(&authority);
+            match fault {
+                0 => record.source_commit = "A".repeat(40),
+                1 => record
+                    .artifacts
+                    .insert("CatDeskWakeHost.exe".into(), "e".repeat(64))
+                    .map(|_| ())
+                    .unwrap(),
+                2 => record.manifest_sha256 = "f".repeat(64),
+                3 => record.working_health_observed_utc = now() + 3600,
+                _ => unreachable!(),
+            }
+            let input = workspace.join(format!("bad-verification-{fault}.json"));
+            write_json_new(&input, &record).unwrap();
+            assert_eq!(
+                record_release_verification(&workspace, &input).unwrap_err(),
+                "DEV_RELEASE_VERIFICATION_INVALID"
+            );
+            assert_eq!(fs::read(root.join("current.json")).unwrap(), before);
+        }
+        let input = parent.join("outside-verification.json");
+        write_json_new(&input, &verification_fixture_record(&authority)).unwrap();
+        assert_eq!(
+            record_release_verification(&workspace, &input).unwrap_err(),
+            "DEV_RELEASE_VERIFICATION_INPUT_SCOPE_INVALID"
+        );
+        assert!(
+            !root
+                .join("versions")
+                .join(authority.package_id)
+                .join(RELEASE_VERIFICATION)
+                .exists()
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn verification_requires_stopped_exclusive_ownership_and_pending_selection_stays_closed() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let (root, authority) = validated_authority(&workspace).unwrap().unwrap();
+        let input = workspace.join("verification-input.json");
+        write_json_new(&input, &verification_fixture_record(&authority)).unwrap();
+        let store = Store::open(&root).unwrap();
+        let host = store.host_lock().unwrap();
+        assert!(record_release_verification(&workspace, &input).is_err());
+        drop(host);
+        let browser = runtime::browser_session_lock(&root, Duration::ZERO).unwrap();
+        assert_eq!(
+            record_release_verification(&workspace, &input).unwrap_err(),
+            "BROWSER_SESSION_BUSY"
+        );
+        drop(browser);
+        runtime::control(&store, "RUNNING").unwrap();
+        assert_eq!(
+            record_release_verification(&workspace, &input).unwrap_err(),
+            "DEV_PACKAGE_UPDATE_HOST_NOT_STOPPED"
+        );
+        runtime::control(&store, "STOPPED").unwrap();
+        record_release_verification(&workspace, &input).unwrap();
+        let source = parent.join("pending-package");
+        fs::create_dir(&source).unwrap();
+        for file in PACKAGE_FILES {
+            fs::copy(package.join(file), source.join(file)).unwrap();
+        }
+        fs::write(source.join("CatDeskWakeHost.exe"), b"pending fixture host").unwrap();
+        let hashes = source_artifacts(&source).unwrap();
+        stage_package_update_attempt(
+            &fs::canonicalize(&workspace).unwrap(),
+            &root,
+            &source,
+            &authority,
+            &hashes,
+        )
+        .unwrap();
+        assert_eq!(
+            record_release_verification(&workspace, &input).unwrap_err(),
+            "DEV_PACKAGE_UPDATE_INCOMPLETE"
+        );
+        assert_eq!(
+            recover_package(&workspace).unwrap()["status"],
+            "PACKAGE_UPDATED_STOPPED"
+        );
+        assert_eq!(
+            read_retained_release(&root).unwrap().unwrap().package_id,
+            authority.package_id
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn legacy_package_update_journal_without_verification_fields_still_recovers() {
+        let (parent, workspace, root, _) = package_recovery_fixture();
+        let path = dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT);
+        let mut value: Value = read_json(&path, 32 * 1024).unwrap();
+        value.as_object_mut().unwrap().remove("oldPointerJson");
+        value
+            .as_object_mut()
+            .unwrap()
+            .remove("retainedVerification");
+        fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+        assert_eq!(
+            recover_package(&workspace).unwrap()["status"],
+            "PACKAGE_UPDATED_STOPPED"
+        );
+        assert!(read_retained_release(&root).unwrap().is_none());
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn recover_package_restores_recorded_predecessor_after_current_image_failure() {
+        for (name, missing) in PACKAGE_FILES
+            .into_iter()
+            .flat_map(|name| [(name, false), (name, true)])
+        {
+            let (parent, workspace, package, python) = fixture();
+            prepare_fixture(&workspace, &package, &python);
+            let (root, previous) = validated_authority(&workspace).unwrap().unwrap();
+            record_fixture_verification(&workspace);
+            update_fixture_host(&parent, &workspace, "failed-current");
+            let current = validated_authority(&workspace).unwrap().unwrap().1;
+            let image = root.join("versions").join(&current.package_id).join(name);
+            if missing {
+                fs::remove_file(&image).unwrap();
+            } else {
+                fs::write(&image, b"failed current bytes preserved").unwrap();
+            }
+            let result = recover_package(&workspace)
+                .expect("intact qualified predecessor must restore despite failed current image");
+            assert_eq!(result["status"], "PACKAGE_PREVIOUS_RESTORED_STOPPED");
+            assert_eq!(result["packageId"], previous.package_id);
+            assert_eq!(
+                validated_authority(&workspace)
+                    .unwrap()
+                    .unwrap()
+                    .1
+                    .manifest_identity,
+                previous.manifest_identity
+            );
+            if missing {
+                assert!(!image.exists());
+            } else {
+                assert_eq!(fs::read(&image).unwrap(), b"failed current bytes preserved");
+            }
+            assert!(read_retained_release(&root).unwrap().is_none());
+            let before = fs::read(root.join("current.json")).unwrap();
+            assert_eq!(
+                recover_package(&workspace).unwrap()["status"],
+                "PACKAGE_CURRENT_VERIFIED_STOPPED"
+            );
+            assert_eq!(fs::read(root.join("current.json")).unwrap(), before);
+            cleanup(&parent);
+        }
+    }
+
+    fn previous_recovery_fixture() -> (PathBuf, PathBuf, PathBuf, Authority, Authority) {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let (root, previous) = validated_authority(&workspace).unwrap().unwrap();
+        record_fixture_verification(&workspace);
+        update_fixture_host(&parent, &workspace, "failed-current");
+        let current = validated_authority(&workspace).unwrap().unwrap().1;
+        let store = Store::open(&root).unwrap();
+        let target = store
+            .set_target(
+                "project-a",
+                0,
+                "https://chatgpt.com/c/dev-previous-retained",
+            )
+            .unwrap();
+        store
+            .produce_expected(
+                "dev-previous-event",
+                "project-a",
+                "test",
+                "Preserved queued work",
+                &target,
+            )
+            .unwrap();
+        fs::write(
+            root.join("browser-profile").join("preserved.txt"),
+            b"profile sentinel",
+        )
+        .unwrap();
+        fs::write(
+            root.join("versions")
+                .join(&current.package_id)
+                .join("CatDeskWakeHost.exe"),
+            b"failed current preserved",
+        )
+        .unwrap();
+        (parent, workspace, root, previous, current)
+    }
+
+    #[test]
+    fn predecessor_restoration_recovers_every_journal_boundary_without_failed_version_oscillation()
+    {
+        for phase in 0..=2 {
+            let (parent, workspace, root, previous, current) = previous_recovery_fixture();
+            let store = Store::open(&root).unwrap();
+            let config = fs::read(root.join("config.json")).unwrap();
+            let events = store.events().unwrap();
+            let proof_path = root
+                .join("versions")
+                .join(&previous.package_id)
+                .join(RELEASE_VERIFICATION);
+            let proof = fs::read(&proof_path).unwrap();
+            let retained = read_retained_release(&root).unwrap().unwrap();
+            let attempt = stage_previous_package_attempt(
+                &fs::canonicalize(&workspace).unwrap(),
+                &root,
+                &current,
+                retained,
+            )
+            .unwrap();
+            if phase >= 1 {
+                replace_update_file(
+                    &root.join(&attempt.pointer_stage_name),
+                    &root.join("current.json"),
+                )
+                .unwrap();
+            }
+            if phase >= 2 {
+                replace_update_file(
+                    &dev_dir(&workspace).join(&attempt.authority_stage_name),
+                    &dev_dir(&workspace).join("authority.json"),
+                )
+                .unwrap();
+            }
+            assert_eq!(
+                root_for_workspace(&workspace).unwrap_err(),
+                "DEV_PACKAGE_UPDATE_INCOMPLETE"
+            );
+            assert_eq!(
+                recover_package(&workspace).unwrap()["status"],
+                "PACKAGE_PREVIOUS_RESTORED_STOPPED"
+            );
+            assert_eq!(
+                validated_authority(&workspace)
+                    .unwrap()
+                    .unwrap()
+                    .1
+                    .package_id,
+                previous.package_id
+            );
+            assert_eq!(fs::read(&proof_path).unwrap(), proof);
+            assert_eq!(fs::read(root.join("config.json")).unwrap(), config);
+            assert_eq!(store.events().unwrap(), events);
+            assert_eq!(
+                fs::read(root.join("browser-profile").join("preserved.txt")).unwrap(),
+                b"profile sentinel"
+            );
+            assert_eq!(
+                fs::read(
+                    root.join("versions")
+                        .join(&current.package_id)
+                        .join("CatDeskWakeHost.exe")
+                )
+                .unwrap(),
+                b"failed current preserved"
+            );
+            assert!(read_retained_release(&root).unwrap().is_none());
+            fs::write(
+                root.join("versions")
+                    .join(&previous.package_id)
+                    .join("CatDeskWakeHost.exe"),
+                b"also failed",
+            )
+            .unwrap();
+            assert_eq!(
+                recover_package(&workspace).unwrap_err(),
+                "DEV_RELEASE_RECONSTRUCTION_REQUIRED_NO_VERIFIED_PREDECESSOR"
+            );
+            cleanup(&parent);
+        }
+    }
+
+    #[test]
+    fn failed_current_without_trustworthy_predecessor_requires_reconstruction_without_selection_writes()
+     {
+        for fault in 0..3 {
+            let (parent, workspace, package, python) = fixture();
+            prepare_fixture(&workspace, &package, &python);
+            let (root, previous) = validated_authority(&workspace).unwrap().unwrap();
+            if fault != 0 {
+                record_fixture_verification(&workspace);
+            }
+            update_fixture_host(&parent, &workspace, "failed-current");
+            let current = validated_authority(&workspace).unwrap().unwrap().1;
+            fs::write(
+                root.join("versions")
+                    .join(&current.package_id)
+                    .join("CatDeskWakeHost.exe"),
+                b"failed current",
+            )
+            .unwrap();
+            if fault == 1 {
+                fs::write(
+                    root.join("versions")
+                        .join(&previous.package_id)
+                        .join("CatDeskWakeHost.exe"),
+                    b"failed previous",
+                )
+                .unwrap();
+            }
+            if fault == 2 {
+                fs::remove_file(
+                    root.join("versions")
+                        .join(&previous.package_id)
+                        .join("manifest.json"),
+                )
+                .unwrap();
+            }
+            let pointer = fs::read(root.join("current.json")).unwrap();
+            let authority = fs::read(dev_dir(&workspace).join("authority.json")).unwrap();
+            let error = recover_package(&workspace).unwrap_err();
+            assert!(error.starts_with("DEV_RELEASE_RECONSTRUCTION_REQUIRED_"));
+            assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+            assert_eq!(
+                fs::read(dev_dir(&workspace).join("authority.json")).unwrap(),
+                authority
+            );
+            assert!(!dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT).exists());
+            cleanup(&parent);
+        }
+    }
+
+    #[test]
+    fn predecessor_restoration_requires_intact_current_metadata_python_and_exclusive_ownership() {
+        for fault in 0..6 {
+            let (parent, workspace, root, _, current) = previous_recovery_fixture();
+            let store = Store::open(&root).unwrap();
+            let host = if fault == 0 {
+                Some(store.host_lock().unwrap())
+            } else {
+                None
+            };
+            let browser = if fault == 1 {
+                Some(runtime::browser_session_lock(&root, Duration::ZERO).unwrap())
+            } else {
+                None
+            };
+            match fault {
+                2 => runtime::control(&store, "RUNNING").unwrap(),
+                3 => fs::write(
+                    root.join("versions")
+                        .join(&current.package_id)
+                        .join("manifest.json"),
+                    b"unknown manifest",
+                )
+                .unwrap(),
+                4 => fs::write(root.join("runtime").join("python.exe"), b"unknown python").unwrap(),
+                5 => fs::write(root.join("current.json"), b"unknown pointer").unwrap(),
+                _ => (),
+            }
+            let pointer = fs::read(root.join("current.json")).unwrap();
+            let authority = fs::read(dev_dir(&workspace).join("authority.json")).unwrap();
+            assert!(recover_package(&workspace).is_err());
+            assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+            assert_eq!(
+                fs::read(dev_dir(&workspace).join("authority.json")).unwrap(),
+                authority
+            );
+            assert!(!dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT).exists());
+            drop(browser);
+            drop(host);
+            cleanup(&parent);
+        }
+    }
+
+    #[test]
+    fn interrupted_predecessor_restoration_refuses_changed_evidence_or_assets() {
+        for fault in 0..4 {
+            let (parent, workspace, root, previous, current) = previous_recovery_fixture();
+            let retained = read_retained_release(&root).unwrap().unwrap();
+            let mut attempt = stage_previous_package_attempt(
+                &fs::canonicalize(&workspace).unwrap(),
+                &root,
+                &current,
+                retained,
+            )
+            .unwrap();
+            match fault {
+                0 => fs::write(
+                    root.join("versions")
+                        .join(&previous.package_id)
+                        .join("CatDeskWakeHost.exe"),
+                    b"changed after staging",
+                )
+                .unwrap(),
+                1 => {
+                    attempt
+                        .restoration
+                        .as_mut()
+                        .unwrap()
+                        .verification
+                        .source_commit = "f".repeat(40)
+                }
+                2 => attempt.old_pointer_json.as_mut().unwrap().push(' '),
+                3 => attempt.retained_verification = Some(verification_fixture_record(&current)),
+                _ => unreachable!(),
+            }
+            let journal = dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT);
+            fs::write(&journal, serde_json::to_vec(&attempt).unwrap()).unwrap();
+            let marker = fs::read(&journal).unwrap();
+            let pointer = fs::read(root.join("current.json")).unwrap();
+            let authority = fs::read(dev_dir(&workspace).join("authority.json")).unwrap();
+            assert!(recover_package(&workspace).is_err());
+            assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+            assert_eq!(
+                fs::read(dev_dir(&workspace).join("authority.json")).unwrap(),
+                authority
+            );
+            assert_eq!(fs::read(&journal).unwrap(), marker);
+            cleanup(&parent);
+        }
+    }
+
+    #[test]
+    fn healthy_backend_selection_is_independent_of_running_wake_and_browser() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let store = Store::open(&root).unwrap();
+        runtime::control(&store, "RUNNING").unwrap();
+        let host = store.host_lock().unwrap();
+        let browser = runtime::browser_session_lock(&root, Duration::ZERO).unwrap();
+        let pointer = fs::read(root.join("current.json")).unwrap();
+        let selection = select_backend(&workspace).unwrap();
+        assert_eq!(selection.recovery, "CURRENT_PACKAGE_VERIFIED");
+        assert_eq!(
+            selection.executable.file_name().unwrap(),
+            "CatDeskBinagotchy.exe"
+        );
+        assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+        assert_eq!(
+            read_json::<Value>(&root.join("control.json"), 4096).unwrap()["desired"],
+            "RUNNING"
+        );
+        assert_eq!(
+            select_backend(&workspace).err().unwrap(),
+            "DEV_BACKEND_ALREADY_RUNNING"
+        );
+        assert_eq!(
+            recover_package(&workspace).unwrap_err(),
+            "DEV_BACKEND_ALREADY_RUNNING"
+        );
+        drop(selection);
+        drop(browser);
+        drop(host);
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn selected_backend_pins_and_lease_prevent_selection_changes_until_release() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let selection = select_backend(&workspace).unwrap();
+        let pointer = fs::read(root.join("current.json")).unwrap();
+        for path in [
+            &selection.executable,
+            &root.join("current.json"),
+            &dev_dir(&workspace).join("authority.json"),
+        ] {
+            assert!(fs::write(path, b"forbidden change while selected").is_err());
+        }
+        assert_eq!(
+            update_package(&workspace, &package).unwrap_err(),
+            "DEV_BACKEND_ALREADY_RUNNING"
+        );
+        assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+        drop(selection);
+        update_fixture_host(&parent, &workspace, "after-backend-exit");
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn backend_selection_restores_failed_current_and_keeps_unknown_metadata_closed() {
+        let (parent, workspace, root, previous, _) = previous_recovery_fixture();
+        let selection = select_backend(&workspace).unwrap();
+        assert_eq!(selection.recovery, "PACKAGE_PREVIOUS_RESTORED_STOPPED");
+        assert_eq!(selection.package_id, previous.package_id);
+        assert_eq!(
+            selection.app_sha256,
+            previous.artifacts["CatDeskBinagotchy.exe"]
+        );
+        drop(selection);
+        fs::write(root.join("current.json"), b"unknown selection").unwrap();
+        assert!(select_backend(&workspace).is_err());
+        assert_eq!(
+            fs::read(root.join("current.json")).unwrap(),
+            b"unknown selection"
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn backend_selection_finishes_pending_update_and_refuses_unprepared_workspace() {
+        let (parent, workspace, _, _) = fixture();
+        assert_eq!(
+            select_backend(&workspace).err().unwrap(),
+            "DEV_RUNTIME_NOT_PREPARED"
+        );
+        assert!(!dev_dir(&workspace).exists());
+        cleanup(&parent);
+        let (parent, workspace, root, attempt) = package_recovery_fixture();
+        let selection = select_backend(&workspace).unwrap();
+        assert_eq!(selection.package_id, attempt.new_authority.package_id);
+        assert_eq!(selection.recovery, "PACKAGE_UPDATED_STOPPED");
+        assert!(!dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT).exists());
+        assert_eq!(
+            read_json::<Value>(&root.join("control.json"), 4096).unwrap()["desired"],
+            "STOPPED"
+        );
+        drop(selection);
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn backend_selection_leases_do_not_serialize_independent_workspaces() {
+        let (a_parent, a_workspace, a_package, a_python) = fixture();
+        let (b_parent, b_workspace, b_package, b_python) = fixture();
+        prepare_fixture(&a_workspace, &a_package, &a_python);
+        prepare_fixture(&b_workspace, &b_package, &b_python);
+        let a = select_backend(&a_workspace).unwrap();
+        let b = select_backend(&b_workspace).unwrap();
+        assert_ne!(a.workspace, b.workspace);
+        assert_eq!(
+            update_package(&a_workspace, &a_package).unwrap_err(),
+            "DEV_BACKEND_ALREADY_RUNNING"
+        );
+        drop(a);
+        update_fixture_host(&a_parent, &a_workspace, "independent-next-version");
+        assert_eq!(
+            select_backend(&b_workspace).err().unwrap(),
+            "DEV_BACKEND_ALREADY_RUNNING"
+        );
+        assert!(root_for_workspace(&b_workspace).unwrap().is_some());
+        drop(b);
+        cleanup(&a_parent);
+        cleanup(&b_parent);
+    }
+
+    fn healthy_current_with_predecessor() -> (PathBuf, PathBuf, PathBuf, Authority, Authority) {
+        let (parent, workspace, root, previous, current) = previous_recovery_fixture();
+        fs::copy(
+            parent.join("failed-current/CatDeskWakeHost.exe"),
+            root.join("versions")
+                .join(&current.package_id)
+                .join("CatDeskWakeHost.exe"),
+        )
+        .unwrap();
+        assert_eq!(validated_authority(&workspace).unwrap().unwrap().1, current);
+        (parent, workspace, root, previous, current)
+    }
+
+    #[test]
+    fn startup_failure_restores_valid_current_using_sealed_snapshot_and_retains_lease() {
+        let (parent, workspace, root, previous, current) = healthy_current_with_predecessor();
+        let image = root
+            .join("versions")
+            .join(&current.package_id)
+            .join("CatDeskBinagotchy.exe");
+        let original = fs::read(&image).unwrap();
+        let mut selection = select_backend(&workspace).unwrap();
+        selection.workspace = parent.clone();
+        selection.package_id = "ignored-display-value".into();
+        selection.app_sha256 = "f".repeat(64);
+        let restored = selection.restore_after_startup_failure().unwrap();
+        assert_eq!(restored.workspace, fs::canonicalize(&workspace).unwrap());
+        assert_eq!(restored.package_id, previous.package_id);
+        assert_eq!(
+            restored.app_sha256,
+            previous.artifacts["CatDeskBinagotchy.exe"]
+        );
+        assert_eq!(restored.recovery, "PACKAGE_PREVIOUS_RESTORED_STOPPED");
+        assert_eq!(fs::read(&image).unwrap(), original);
+        assert_eq!(
+            select_backend(&workspace).err().unwrap(),
+            "DEV_BACKEND_ALREADY_RUNNING"
+        );
+        let pointer = fs::read(root.join("current.json")).unwrap();
+        assert_eq!(
+            restored.restore_after_startup_failure().err().unwrap(),
+            "DEV_RELEASE_RECONSTRUCTION_REQUIRED_NO_VERIFIED_PREDECESSOR"
+        );
+        assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn startup_failure_restoration_preserves_selection_on_busy_owner_or_stale_snapshot() {
+        for fault in 0..4 {
+            let (parent, workspace, root, previous, _) = healthy_current_with_predecessor();
+            let store = Store::open(&root).unwrap();
+            let mut selection = select_backend(&workspace).unwrap();
+            let host = if fault == 0 {
+                Some(store.host_lock().unwrap())
+            } else {
+                None
+            };
+            let browser = if fault == 1 {
+                Some(runtime::browser_session_lock(&root, Duration::ZERO).unwrap())
+            } else {
+                None
+            };
+            if fault == 2 {
+                runtime::control(&store, "RUNNING").unwrap();
+            }
+            if fault == 3 {
+                selection.authority.package_id = previous.package_id;
+            }
+            let pointer = fs::read(root.join("current.json")).unwrap();
+            let authority = fs::read(dev_dir(&workspace).join("authority.json")).unwrap();
+            assert!(selection.restore_after_startup_failure().is_err());
+            assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+            assert_eq!(
+                fs::read(dev_dir(&workspace).join("authority.json")).unwrap(),
+                authority
+            );
+            assert!(!dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT).exists());
+            drop(browser);
+            drop(host);
+            cleanup(&parent);
+        }
+    }
+
+    #[test]
+    fn startup_failure_without_eligible_predecessor_does_not_change_selection() {
+        for fault in 0..3 {
+            let (parent, workspace, package, python) = fixture();
+            prepare_fixture(&workspace, &package, &python);
+            let (root, previous) = validated_authority(&workspace).unwrap().unwrap();
+            if fault != 0 {
+                record_fixture_verification(&workspace);
+            }
+            update_fixture_host(&parent, &workspace, "valid-current");
+            let selection = select_backend(&workspace).unwrap();
+            if fault == 1 {
+                fs::write(
+                    root.join("versions")
+                        .join(&previous.package_id)
+                        .join("CatDeskWakeHost.exe"),
+                    b"damaged previous",
+                )
+                .unwrap();
+            }
+            if fault == 2 {
+                fs::remove_file(
+                    root.join("versions")
+                        .join(&previous.package_id)
+                        .join("manifest.json"),
+                )
+                .unwrap();
+            }
+            let pointer = fs::read(root.join("current.json")).unwrap();
+            let authority = fs::read(dev_dir(&workspace).join("authority.json")).unwrap();
+            assert!(
+                selection
+                    .restore_after_startup_failure()
+                    .err()
+                    .unwrap()
+                    .starts_with("DEV_RELEASE_RECONSTRUCTION_REQUIRED_")
+            );
+            assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+            assert_eq!(
+                fs::read(dev_dir(&workspace).join("authority.json")).unwrap(),
+                authority
+            );
+            assert!(!dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT).exists());
+            cleanup(&parent);
+        }
+    }
+
+    #[test]
+    fn interrupted_startup_failure_restoration_uses_existing_cold_recovery_journal() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let (parent, workspace, root, previous, _) = healthy_current_with_predecessor();
+        let selection = select_backend(&workspace).unwrap();
+        let authority_path = dev_dir(&workspace).join("authority.json");
+        let held = OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&authority_path)
+            .unwrap();
+        assert_eq!(
+            selection.restore_after_startup_failure().err().unwrap(),
+            "DEV_PACKAGE_UPDATE_REPLACE_FAILED"
+        );
+        assert_eq!(
+            root_for_workspace(&workspace).unwrap_err(),
+            "DEV_PACKAGE_UPDATE_INCOMPLETE"
+        );
+        drop(held);
+        assert_eq!(
+            recover_package(&workspace).unwrap()["status"],
+            "PACKAGE_PREVIOUS_RESTORED_STOPPED"
+        );
+        assert_eq!(
+            validated_authority(&workspace)
+                .unwrap()
+                .unwrap()
+                .1
+                .package_id,
+            previous.package_id
+        );
+        assert!(read_retained_release(&root).unwrap().is_none());
+        cleanup(&parent);
+    }
+
+    #[test]
     fn login_protocol_accepts_only_bounded_fixed_lines_with_windows_newlines() {
         for line in ["LOGIN_BROWSER_OPEN\n", "LOGIN_BROWSER_OPEN\r\n"] {
             assert_eq!(
@@ -1381,6 +3684,7 @@ mod tests {
         let config = Config {
             schema_version: 1,
             targets: BTreeMap::from([("project-a".into(), current)]),
+            retired_targets: BTreeMap::new(),
             history: vec![crate::store::TargetChange {
                 project_id: "project-a".into(),
                 target: historic,

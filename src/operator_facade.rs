@@ -16,12 +16,79 @@ use crate::mcp;
 #[path = "operator_web_cli.rs"]
 mod web;
 
+#[path = "operator_development_backend.rs"]
+mod development_backend;
+
+pub(crate) use web::WebWorkLease;
+
+#[cfg(test)]
+pub(crate) fn read_web_status(workspace: &Path) -> Result<serde_json::Value, String> {
+    web::read_status(workspace)
+}
+
+pub(crate) fn read_web_summary(workspace: &Path) -> Result<serde_json::Value, String> {
+    web::read_summary(workspace)
+}
+
 pub(crate) fn start_web_auto_scheduler(state: crate::state::SharedState) {
     web::start_auto_scheduler(state);
 }
 
+pub(crate) fn start_scoped_web_auto_scheduler(
+    state: crate::state::SharedState,
+    projects: std::collections::BTreeSet<String>,
+) {
+    web::start_scoped_auto_scheduler(state, projects);
+}
+
+pub(crate) async fn stop_web_auto_scheduler(state: crate::state::SharedState) {
+    web::stop_auto_scheduler(state).await;
+}
+
+pub(crate) async fn join_web_auto_schedulers(tasks: Vec<tokio::task::JoinHandle<()>>) {
+    web::join_auto_schedulers(tasks).await;
+}
+
 pub(crate) fn registry_rollover_status(workspace: &Path, project: &str) -> serde_json::Value {
     web::registry_rollover_status(workspace, project)
+}
+
+pub(crate) fn capture_web_context_expected_guarded(
+    workspace: &Path,
+    project: &str,
+    expected: (u64, &str),
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<serde_json::Value, String> {
+    web::capture_context_expected_guarded(workspace, project, expected, keep_running)
+}
+
+pub(crate) fn read_web_review_expected_guarded(
+    workspace: &Path,
+    project: &str,
+    event_id: &str,
+    expected: (u64, &str),
+    keep_running: &dyn Fn() -> Result<(), String>,
+) -> Result<serde_json::Value, String> {
+    web::read_review_guarded(workspace, project, event_id, Some(expected), keep_running)
+}
+
+#[cfg(test)]
+pub(crate) fn capture_web_context_with_snapshot<F>(
+    workspace: &Path,
+    project: &str,
+    expected: (u64, &str),
+    keep_running: &dyn Fn() -> Result<(), String>,
+    snapshot: F,
+) -> Result<serde_json::Value, String>
+where
+    F: FnOnce(
+        &catdesk_wake::store::Store,
+        &str,
+        &catdesk_wake::protocol::Target,
+        &dyn Fn() -> Result<(), String>,
+    ) -> Result<serde_json::Value, String>,
+{
+    web::capture_context_with_snapshot(workspace, project, Some(expected), keep_running, snapshot)
 }
 
 pub(crate) fn acquire_web_work_lease(
@@ -66,6 +133,13 @@ pub(crate) enum WebDevelopmentAction {
         package: PathBuf,
         python_runtime: PathBuf,
     },
+    UpdatePackage {
+        package: PathBuf,
+    },
+    RecoverPackage,
+    RecordVerification {
+        input_file: PathBuf,
+    },
     Enqueue {
         project_id: String,
         event_id: String,
@@ -82,6 +156,12 @@ pub(crate) enum WebDevelopmentAction {
     Start,
     Stop,
     Run,
+    RunBounded {
+        maximum_seconds: u64,
+    },
+    RunBackend {
+        maximum_seconds: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -186,11 +266,37 @@ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction,
                     package: PathBuf::from(&args[4]),
                     python_runtime: PathBuf::from(&args[6]),
                 }),
+        Some("update-package") if args.len() == 5
+            && args[3] == "--package"
+            && !args[4].is_empty() && args[4].len() <= 4096
+            && !args[4].chars().any(char::is_control) => Ok(WebDevelopmentAction::UpdatePackage {
+                package: PathBuf::from(&args[4]),
+            }),
         Some("status") if args.len() == 3 => Ok(WebDevelopmentAction::Status),
+        Some("recover-package") if args.len() == 3 => Ok(WebDevelopmentAction::RecoverPackage),
+        Some("record-verification") if args.len() == 5
+            && args[3] == "--input-file"
+            && !args[4].is_empty() && args[4].len() <= 4096
+            && !args[4].chars().any(char::is_control) => Ok(WebDevelopmentAction::RecordVerification {
+                input_file: PathBuf::from(&args[4]),
+            }),
         Some("start") if args.len() == 3 => Ok(WebDevelopmentAction::Start),
         Some("stop") if args.len() == 3 => Ok(WebDevelopmentAction::Stop),
         Some("run") if args.len() == 3 => Ok(WebDevelopmentAction::Run),
-        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, login --project-id <id>, enqueue --project-id <id> --event-id <id> --message-file <file>, retry --project-id <id> --event-id dev-<id>, status, start, stop, or run".into()),
+        Some("run-backend") if args.len() == 3 => Ok(WebDevelopmentAction::RunBackend { maximum_seconds: 180 }),
+        Some("run-backend") if args.len() == 5 && args[3] == "--max-runtime-seconds" => {
+            let maximum_seconds = args[4].parse::<u64>().ok()
+                .filter(|seconds| (1..=900).contains(seconds))
+                .ok_or("DEV_BACKEND_BUDGET_INVALID")?;
+            Ok(WebDevelopmentAction::RunBackend { maximum_seconds })
+        }
+        Some("run") if args.len() == 5 && args[3] == "--max-runtime-seconds" => {
+            let maximum_seconds = args[4].parse::<u64>().ok()
+                .filter(|seconds| (1..=900).contains(seconds))
+                .ok_or("WEB_DEVELOPMENT_FOREGROUND_BUDGET_INVALID")?;
+            Ok(WebDevelopmentAction::RunBounded { maximum_seconds })
+        }
+        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, update-package --package <directory>, recover-package, record-verification --input-file <file>, login --project-id <id>, enqueue --project-id <id> --event-id <id> --message-file <file>, retry --project-id <id> --event-id dev-<id>, status, start, stop, run, or run-backend [--max-runtime-seconds <1..900>]".into()),
     }
 }
 
@@ -653,6 +759,15 @@ pub(crate) async fn execute_operator_action(
                     package,
                     python_runtime,
                 } => development_runtime::prepare(workspace, &package, &python_runtime),
+                WebDevelopmentAction::UpdatePackage { package } => {
+                    development_runtime::update_package(workspace, &package)
+                }
+                WebDevelopmentAction::RecoverPackage => {
+                    development_runtime::recover_package(workspace)
+                }
+                WebDevelopmentAction::RecordVerification { input_file } => {
+                    development_runtime::record_release_verification(workspace, &input_file)
+                }
                 WebDevelopmentAction::Enqueue {
                     project_id,
                     event_id,
@@ -669,9 +784,15 @@ pub(crate) async fn execute_operator_action(
                 WebDevelopmentAction::Start => development_runtime::start(workspace),
                 WebDevelopmentAction::Stop => development_runtime::stop(workspace),
                 WebDevelopmentAction::Run => development_runtime::run_foreground(workspace),
+                WebDevelopmentAction::RunBounded { maximum_seconds } => {
+                    development_runtime::run_foreground_bounded(workspace, maximum_seconds)
+                }
+                WebDevelopmentAction::RunBackend { maximum_seconds } => {
+                    development_backend::run(workspace, maximum_seconds).await
+                }
             }
         }
-        OperatorAction::Web(action) => web::execute(action, workspace),
+        OperatorAction::Web(action) => web::execute(action, workspace).await,
         OperatorAction::Codex(action) => {
             crate::operator_codex_cli::execute_action(action, workspace).await
         }
@@ -1472,7 +1593,52 @@ mod tests {
                 WebDevelopmentAction::Prepare { .. }
             ))
         ));
-        for action in ["status", "start", "stop", "run"] {
+        assert!(matches!(
+            parse_operator_action(
+                ["operator", "web-dev-runtime", "update-package", "--package", "C:/dev/new-package"]
+                    .map(str::to_string)
+            ),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::UpdatePackage { package }
+            ))) if package == Path::new("C:/dev/new-package")
+        ));
+        for invalid in [
+            vec!["operator", "web-dev-runtime", "update-package"],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "update-package",
+                "--package",
+                "",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "update-package",
+                "--package",
+                "C:/dev/package",
+                "--root",
+                "C:/production",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "update-package",
+                "--python-runtime",
+                "C:/dev/python",
+            ],
+        ] {
+            assert!(parse_operator_action(invalid.into_iter().map(str::to_string)).is_err());
+        }
+        assert!(matches!(
+            parse_operator_action(
+                ["operator", "web-dev-runtime", "recover-package"].map(str::to_string)
+            ),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::RecoverPackage
+            )))
+        ));
+        for action in ["status", "start", "stop", "run", "recover-package"] {
             assert!(
                 parse_operator_action(["operator", "web-dev-runtime", action].map(str::to_string))
                     .expect("fixed action")
@@ -1486,6 +1652,39 @@ mod tests {
                         action,
                         "--root",
                         "C:/production"
+                    ]
+                    .map(str::to_string)
+                )
+                .is_err()
+            );
+        }
+        for value in ["1", "900"] {
+            assert!(matches!(
+                parse_operator_action(
+                    [
+                        "operator",
+                        "web-dev-runtime",
+                        "run",
+                        "--max-runtime-seconds",
+                        value
+                    ]
+                    .map(str::to_string)
+                )
+                .unwrap(),
+                Some(OperatorAction::WebDevelopment(
+                    WebDevelopmentAction::RunBounded { .. }
+                ))
+            ));
+        }
+        for value in ["0", "901", "-1", "abc", "18446744073709551616"] {
+            assert!(
+                parse_operator_action(
+                    [
+                        "operator",
+                        "web-dev-runtime",
+                        "run",
+                        "--max-runtime-seconds",
+                        value
                     ]
                     .map(str::to_string)
                 )
@@ -1616,6 +1815,148 @@ mod tests {
             ],
         ] {
             assert!(parse_operator_action(invalid.into_iter().map(str::to_string)).is_err());
+        }
+    }
+
+    #[test]
+    fn web_development_verification_requires_one_explicit_local_input() {
+        assert_eq!(
+            parse_operator_action(
+                [
+                    "operator",
+                    "web-dev-runtime",
+                    "record-verification",
+                    "--input-file",
+                    "evidence.json"
+                ]
+                .map(str::to_string)
+            ),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::RecordVerification {
+                    input_file: PathBuf::from("evidence.json"),
+                }
+            )))
+        );
+        for invalid in [
+            vec!["operator", "web-dev-runtime", "record-verification"],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "record-verification",
+                "--input-file",
+                "",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "record-verification",
+                "--input-file",
+                "bad\nfile",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "record-verification",
+                "--workspace",
+                "other",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "record-verification",
+                "--input-file",
+                "evidence.json",
+                "--force",
+            ],
+        ] {
+            assert!(parse_operator_action(invalid.into_iter().map(str::to_string)).is_err());
+        }
+    }
+
+    #[test]
+    fn development_backend_has_only_fixed_bounded_startup_options() {
+        assert_eq!(
+            parse_operator_action(
+                ["operator", "web-dev-runtime", "run-backend"].map(str::to_string)
+            ),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::RunBackend {
+                    maximum_seconds: 180
+                }
+            )))
+        );
+        for (budget, expected) in [("1", 1), ("900", 900)] {
+            assert_eq!(
+                parse_operator_action(
+                    [
+                        "operator",
+                        "web-dev-runtime",
+                        "run-backend",
+                        "--max-runtime-seconds",
+                        budget
+                    ]
+                    .map(str::to_string)
+                ),
+                Ok(Some(OperatorAction::WebDevelopment(
+                    WebDevelopmentAction::RunBackend {
+                        maximum_seconds: expected
+                    }
+                )))
+            );
+        }
+        for args in [
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-backend",
+                "--max-runtime-seconds",
+                "0",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-backend",
+                "--max-runtime-seconds",
+                "901",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-backend",
+                "--max-runtime-seconds",
+                "unbounded",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-backend",
+                "--port",
+                "3200",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-backend",
+                "--workspace",
+                "other",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-backend",
+                "--auth-token",
+                "caller-token",
+            ],
+            vec![
+                "operator",
+                "web-dev-runtime",
+                "run-backend",
+                "--max-runtime-seconds",
+                "1",
+                "--web-auto",
+            ],
+        ] {
+            assert!(parse_operator_action(args.into_iter().map(str::to_string)).is_err());
         }
     }
 

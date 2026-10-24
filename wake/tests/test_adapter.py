@@ -31,9 +31,11 @@ class FakeCdp:
         self.keys = []
     def get_current_url(self): return self.url
     def get(self, url): self.url = url
-    def press_keys(self, selector, text, timeout):
+    def send_keys(self, selector, text, timeout):
         self.keys.append((selector, text, timeout))
         self.draft = text
+    def press_keys(self, selector, text, timeout):
+        raise AssertionError("human-speed press_keys must not type a message")
 
 
 class FakeSink:
@@ -91,6 +93,187 @@ class FakeProbeSink:
 
 
 class AdapterTests(unittest.TestCase):
+    def test_source_snapshot_waits_for_complete_matching_frames_without_writes(self):
+        now = [0.0]
+        pauses = []
+        cdp = FakeCdp()
+        def frame(text, complete=True):
+            return {"messages": [
+                {"role":"USER", "text":"bounded wake", "textComplete":True, "revisionComplete":True},
+                {"role":"ASSISTANT", "text":text, "textComplete":complete, "revisionComplete":complete},
+            ]}
+        frames = [frame("mounting", False), frame("first render"), frame("final answer"), frame("final answer")]
+        class Sink:
+            def exact(self, url): return url == "https://chatgpt.com/c/exact"
+            def visible_message_snapshot(self, cdp):
+                cdp.timeline.append("snapshot")
+                return frames.pop(0)
+        def pause(seconds):
+            pauses.append(seconds)
+            now[0] += seconds
+        snapshot = adapter.bounded_source_snapshot(bridge, Sink(), cdp, clock=lambda:now[0], sleep=pause)
+        self.assertEqual(snapshot["messages"][-1]["text"], "final answer")
+        self.assertEqual(pauses, [.5, .25, .25])
+        self.assertEqual(len(cdp.timeline), 4)
+        self.assertFalse(cdp.sent)
+        self.assertEqual(cdp.keys, [])
+
+    def test_source_snapshot_deadline_preserves_incomplete_and_drift_never_retries(self):
+        now = [0.0]
+        cdp = FakeCdp()
+        partial = {"messages":[{"role":"ASSISTANT", "text":"partial", "textComplete":False, "revisionComplete":False}]}
+        class Sink:
+            def exact(self, url): return url == "https://chatgpt.com/c/exact"
+            def visible_message_snapshot(self, cdp):
+                cdp.timeline.append("snapshot")
+                return partial
+        def pause(seconds): now[0] += seconds
+        self.assertIs(adapter.bounded_source_snapshot(
+            bridge, Sink(), cdp, timeout=1, clock=lambda:now[0], sleep=pause), partial)
+        self.assertEqual(now[0], 1)
+        self.assertFalse(partial["messages"][-1]["textComplete"])
+        class Drift(Sink):
+            def visible_message_snapshot(self, cdp):
+                cdp.url = "https://chatgpt.com/c/foreign"
+                return partial
+        with self.assertRaisesRegex(bridge.Attention, "SOURCE_SNAPSHOT_SOURCE_DRIFT"):
+            adapter.bounded_source_snapshot(bridge, Drift(), cdp, clock=lambda:now[0], sleep=pause)
+        self.assertEqual(now[0], 1)
+        self.assertFalse(cdp.sent)
+
+    def test_single_complete_source_frame_at_deadline_is_not_verified(self):
+        cdp = FakeCdp()
+        original = {"messages":[{"role":"ASSISTANT", "text":"new frame", "textComplete":True,
+                                 "revisionComplete":True, "revisionHash":"prior-hash"}],
+                    "coverage":{"textIncomplete":0, "revisionIncomplete":0}}
+        class Sink:
+            def exact(self, url): return url == cdp.url
+            def visible_message_snapshot(self, cdp): return original
+        result = adapter.bounded_source_snapshot(bridge, Sink(), cdp, timeout=0, clock=lambda:0,
+                                                 sleep=lambda _:self.fail("expired probe must not sleep"))
+        self.assertEqual(result["readinessReason"], "FINAL_FRAMES_NOT_STABLE")
+        self.assertFalse(result["messages"][-1]["textComplete"])
+        self.assertFalse(result["messages"][-1]["revisionComplete"])
+        self.assertIsNone(result["messages"][-1]["revisionHash"])
+        self.assertEqual(result["coverage"]["textIncomplete"], 1)
+        self.assertTrue(original["messages"][-1]["textComplete"])
+        self.assertEqual(original["coverage"]["textIncomplete"], 0)
+        self.assertFalse(cdp.sent)
+
+    def test_fresh_document_probe_waits_within_one_browser_and_requires_stability(self):
+        now = [0.0]
+        sleeps = []
+        def pause(seconds):
+            sleeps.append(seconds)
+            now[0] += seconds
+        cdp = FakeCdp()
+        cdp.probe_stages = ["RESPONSE_PENDING", "RESPONSE_PENDING",
+                            "RESPONSE_COMPLETE", "RESPONSE_COMPLETE"]
+        result = adapter.bounded_response_observation(
+            bridge, FakeProbeSink(cdp.url, None, 0, 0), cdp, "bounded wake",
+            bridge.digest("bounded wake"), clock=lambda: now[0], sleep=pause,
+        )
+        self.assertEqual(result, "RESPONSE_COMPLETE")
+        self.assertEqual(sleeps, [.5, .5, .25])
+        self.assertEqual(len(cdp.timeline), 4)
+        self.assertFalse(cdp.sent)
+        self.assertEqual(cdp.keys, [])
+
+    def test_pending_probe_has_fixed_budget_and_errors_are_not_retried(self):
+        now = [0.0]
+        cdp = FakeCdp()
+        cdp.probe_stage = "RESPONSE_PENDING"
+        sink = FakeProbeSink(cdp.url, None, 0, 0)
+        def pause(seconds): now[0] += seconds
+        self.assertEqual(adapter.bounded_response_observation(
+            bridge, sink, cdp, "bounded wake", bridge.digest("bounded wake"),
+            timeout=1, clock=lambda: now[0], sleep=pause,
+        ), "RESPONSE_PENDING")
+        self.assertEqual(now[0], 1)
+        self.assertEqual(len(cdp.timeline), 3)
+        cdp.url = "https://chatgpt.com/c/foreign"
+        with self.assertRaisesRegex(bridge.Attention, "RESPONSE_TARGET_DRIFT"):
+            adapter.bounded_response_observation(
+                bridge, sink, cdp, "bounded wake", bridge.digest("bounded wake"),
+                clock=lambda: now[0], sleep=pause,
+            )
+        self.assertEqual(len(cdp.timeline), 4)
+        self.assertEqual(now[0], 1)
+
+    def test_empty_user_mount_wait_is_bounded_and_requires_new_complete_proof(self):
+        for frames, timeout, expected in (
+            ([None, "RESPONSE_COMPLETE", "RESPONSE_COMPLETE"], 1, "RESPONSE_COMPLETE"),
+            (["RESPONSE_COMPLETE", None, "RESPONSE_COMPLETE", "RESPONSE_COMPLETE"], 1, "RESPONSE_COMPLETE"),
+            ([None, None, None], 1, "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"),
+            ([None], 0, "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"),
+        ):
+            with self.subTest(frames=frames, timeout=timeout):
+                now = [0.0]
+                samples = list(frames)
+                cdp = FakeCdp()
+                class Sink:
+                    def observe_cooperative_response(self, cdp, message, digest):
+                        cdp.timeline.append("observe")
+                        stage = samples.pop(0)
+                        if stage is None:
+                            raise bridge.Attention("RESPONSE_USER_DOCUMENT_NOT_HYDRATED")
+                        return stage
+                def pause(seconds): now[0] += seconds
+                def observe():
+                    return adapter.bounded_response_observation(
+                        bridge, Sink(), cdp, "bounded wake", bridge.digest("bounded wake"),
+                        timeout=timeout, clock=lambda: now[0], sleep=pause)
+                if expected.startswith("RESPONSE_USER_"):
+                    with self.assertRaisesRegex(bridge.Attention, expected):
+                        observe()
+                else:
+                    self.assertEqual(observe(), expected)
+                self.assertEqual(samples, [])
+                self.assertLessEqual(now[0], timeout)
+                self.assertFalse(cdp.sent)
+                self.assertEqual(cdp.keys, [])
+
+    def test_response_wait_never_retries_scope_or_nonempty_user_failures(self):
+        for reason in ("RESPONSE_TARGET_DRIFT", "LOGIN_OR_PROFILE_REQUIRED",
+                       "RESPONSE_EXACT_USER_MISSING_OR_AMBIGUOUS", "RESPONSE_SEQUENCE_DRIFT",
+                       "RESPONSE_EXPECTED_USER_DUPLICATED", "RESPONSE_USER_REPRESENTATION_MISMATCH",
+                       "RESPONSE_EXPECTED_USER_NOT_FOUND", "RESPONSE_USER_VIEW_CHANGED",
+                       "RESPONSE_EXPECTED_USER_BODY_MISMATCH"):
+            with self.subTest(reason=reason):
+                sink = types.SimpleNamespace(observe_cooperative_response=lambda *args: None)
+                with patch.object(sink, "observe_cooperative_response", side_effect=bridge.Attention(reason)) as sample:
+                    with self.assertRaisesRegex(bridge.Attention, reason):
+                        adapter.bounded_response_observation(
+                            bridge, sink, FakeCdp(), "bounded wake", bridge.digest("bounded wake"),
+                            clock=lambda: 0, sleep=lambda _: self.fail("refusal must not wait"))
+                self.assertEqual(sample.call_count, 1)
+
+        with self.assertRaisesRegex(bridge.Attention, "RESPONSE_PROBE_STATE_INVALID"):
+            adapter.bounded_response_observation(
+                bridge, types.SimpleNamespace(observe_cooperative_response=lambda *args: None),
+                FakeCdp(), "bounded wake", bridge.digest("bounded wake"), clock=lambda: 0,
+                sleep=lambda _: self.fail("malformed state must not wait"))
+
+    def test_only_empty_user_and_empty_anchor_view_is_mount_pending(self):
+        cdp = FakeCdp()
+        expected = bridge.digest("bounded wake")
+        with tempfile.TemporaryDirectory() as profile:
+            sink = bridge.CdpSink(cdp.url, Path(profile), 1, 1)
+            for users, anchor, reason in (
+                ([], (0, 0), "RESPONSE_USER_DOCUMENT_NOT_HYDRATED"),
+                ([], (1, 0), "RESPONSE_USER_REPRESENTATION_MISMATCH"),
+                (["0" * 64], (0, 0), "RESPONSE_EXPECTED_USER_NOT_FOUND"),
+                (["0" * 64], (1, 0), "RESPONSE_USER_REPRESENTATION_MISMATCH"),
+                ([expected, expected], (2, 0), "RESPONSE_EXPECTED_USER_DUPLICATED"),
+            ):
+                with self.subTest(users=users, anchor=anchor), patch.object(
+                    bridge.CdpSink, "post_submit_visible_any", return_value=False
+                ), patch.object(bridge.CdpSink, "document_ready_state", return_value="complete"), patch.object(
+                    bridge.CdpSink, "user_message_digests", return_value=users
+                ), patch.object(bridge.CdpSink, "trusted_turn_anchor_state", return_value=anchor), \
+                        self.assertRaisesRegex(bridge.Attention, reason):
+                    sink.observe_cooperative_response(cdp, "bounded wake", expected)
+
     @staticmethod
     def probe_request(url="https://chatgpt.com/c/exact", event_id="review-1"):
         target = {"url": url, "digest": bridge.digest(url), "generation": 1}
@@ -102,6 +285,54 @@ class AdapterTests(unittest.TestCase):
             "sentUtc": 99, "evidence": "EXACT_USER_MESSAGE_APPENDED",
         }
         return {"observeResponse": True, "event": event, "target": target, "receipt": receipt}
+
+    def test_missing_user_scope_hint_is_bounded_read_only_and_not_positive_evidence(self):
+        header = "CatDesk bootstrap.\nProject: alpha\nIntent: owned-intent\nPredecessor: exact"
+        message = header + "\n\nPRIVATE_HANDOFF_EXPECTED"
+        for texts, reason in (
+            ([header + " changed body"], "RESPONSE_EXPECTED_USER_BODY_MISMATCH"),
+            ([header], "RESPONSE_EXPECTED_USER_BODY_MISMATCH"),
+            ([header.replace("owned-intent", "other-intent") + " changed body"], "RESPONSE_EXPECTED_USER_NOT_FOUND"),
+        ):
+            with self.subTest(reason=reason), tempfile.TemporaryDirectory() as profile:
+                cdp = FakeCdp()
+                sink = bridge.CdpSink(cdp.url, Path(profile), 1, 1)
+                observed = [bridge.digest(bridge.normalize_message(text)) for text in texts]
+                with patch.object(sink, "post_submit_visible_any", return_value=False), patch.object(
+                    sink, "document_ready_state", return_value="complete"
+                ), patch.object(sink, "user_message_digests", return_value=observed), patch.object(
+                    sink, "trusted_turn_anchor_state", return_value=(0, 0)
+                ), patch.object(sink, "_user_message_texts", return_value=texts) as reader, patch.object(
+                    sink, "response_snapshot", side_effect=AssertionError("scope hint must not read/promote assistant")
+                ), self.assertRaisesRegex(bridge.Attention, reason) as error:
+                    adapter.bounded_response_observation(
+                        bridge, sink, cdp, message, bridge.digest(bridge.normalize_message(message)),
+                        clock=lambda: 0, sleep=lambda _: self.fail("mismatch must not wait"))
+                self.assertEqual(reader.call_count, 1)
+                self.assertNotIn("PRIVATE_HANDOFF", str(error.exception))
+                self.assertFalse(cdp.sent)
+                self.assertEqual(cdp.keys, [])
+
+    def test_scope_hint_refuses_changed_view_drift_and_private_query_errors(self):
+        message = "exact header\n\nPRIVATE_HANDOFF_EXPECTED"
+        with tempfile.TemporaryDirectory() as profile:
+            cdp = FakeCdp()
+            sink = bridge.CdpSink(cdp.url, Path(profile), 1, 1)
+            texts = ["exact header changed body"]
+            with patch.object(sink, "_user_message_texts", return_value=texts):
+                self.assertEqual(sink.missing_user_reason(cdp, message, ["0" * 64]), "RESPONSE_USER_VIEW_CHANGED")
+            with patch.object(sink, "_user_message_texts", side_effect=RuntimeError("PRIVATE_HANDOFF error")):
+                self.assertEqual(sink.missing_user_reason(cdp, message, []), "RESPONSE_SEQUENCE_QUERY_FAILED")
+            def drift(_cdp):
+                cdp.url = "https://chatgpt.com/c/foreign"
+                return texts
+            with patch.object(sink, "_user_message_texts", side_effect=drift):
+                self.assertEqual(sink.missing_user_reason(cdp, message, []), "RESPONSE_TARGET_DRIFT")
+            cdp.url = sink.url
+            with patch.object(cdp, "get_current_url", side_effect=RuntimeError("PRIVATE_TARGET")):
+                self.assertEqual(sink.missing_user_reason(cdp, message, []), "RESPONSE_TARGET_QUERY_FAILED")
+            with patch.object(sink, "_user_message_texts", side_effect=AssertionError("single-line hint must not query")):
+                self.assertEqual(sink.missing_user_reason(cdp, "one line", []), "RESPONSE_EXPECTED_USER_NOT_FOUND")
 
     def test_initial_navigation_enters_cdp_directly_on_same_exact_url(self):
         cdp = FakeCdp()
@@ -124,11 +355,11 @@ class AdapterTests(unittest.TestCase):
             calls,
         )
 
-    def run_attempt(self, acknowledgement, *, cdp_type=FakeCdp, sink_type=FakeSink, cooperative=False):
+    def run_attempt(self, acknowledgement, *, cdp_type=FakeCdp, sink_type=FakeSink, cooperative=False, message="bounded wake"):
         cdp = cdp_type()
         sb = types.SimpleNamespace(cdp=cdp, activate_cdp_mode=lambda url: None)
         target = {"url": cdp.url, "digest": bridge.digest(cdp.url), "generation": 1}
-        event = {"eventId": "review-1", "message": "bounded wake", "targetGeneration": 1}
+        event = {"eventId": "review-1", "message": message, "targetGeneration": 1}
         emitted = []
         def ack():
             self.assertEqual(
@@ -147,6 +378,8 @@ class AdapterTests(unittest.TestCase):
                 ],
             )
             self.assertFalse(cdp.sent)
+            self.assertEqual(cdp.draft, "")
+            self.assertEqual(cdp.keys, [])
             return acknowledgement(cdp)
         with patch.object(bridge, "CdpSink", sink_type), patch.object(adapter, "read_request", ack), patch.object(adapter, "emit", emitted.append):
             try: adapter.attempt(bridge, sb, event, target, cooperative=cooperative)
@@ -212,18 +445,18 @@ class AdapterTests(unittest.TestCase):
         def edit(cdp): cdp.draft = "operator draft"; return {"submit": True}
         cdp, _, error = self.run_attempt(edit)
         self.assertFalse(cdp.sent)
-        self.assertEqual(error, "TYPING_NOT_CONFIRMED")
+        self.assertEqual(error, "EXISTING_DRAFT")
 
-    def test_alternate_editor_is_used_before_submission_authorization(self):
+    def test_alternate_editor_is_used_after_submission_authorization(self):
         alternate = bridge.EDITOR_SELECTORS[1]
         case = self
 
         class AlternateEditorCdp(FakeCdp):
-            def press_keys(self, selector, text, timeout):
+            def send_keys(self, selector, text, timeout):
                 if selector == bridge.EDITOR:
                     raise RuntimeError("legacy selector is unavailable")
                 case.assertEqual(alternate, selector)
-                super().press_keys(selector, text, timeout)
+                super().send_keys(selector, text, timeout)
 
         class AlternateEditorSink(FakeSink):
             def editor_selector(self, cdp, *, prevalidated=False):
@@ -231,13 +464,33 @@ class AdapterTests(unittest.TestCase):
                 return alternate
 
         cdp, _emitted, error = self.run_attempt(
-            lambda _cdp: {"submit": False},
+            lambda _cdp: {"submit": True},
             cdp_type=AlternateEditorCdp,
             sink_type=AlternateEditorSink,
         )
-        self.assertEqual("SUBMISSION_NOT_AUTHORIZED", error)
-        self.assertFalse(cdp.sent)
+        self.assertIsNone(error)
+        self.assertTrue(cdp.sent)
         self.assertEqual([(alternate, "bounded wake", 30)], cdp.keys)
+
+    def test_multiline_message_never_sends_enter_during_typing(self):
+        class EnterSensitiveCdp(FakeCdp):
+            def send_keys(self, selector, text, timeout):
+                if any(char in text for char in "\r\n\t"):
+                    self.sent = True
+                    raise AssertionError("CDP text entry submitted before guarded click")
+                super().send_keys(selector, text, timeout)
+
+        message = 'Review JSON: {"note":"two  spaces"}\r\nNext\tstep'
+        cdp, emitted, error = self.run_attempt(
+            lambda _cdp: {"submit": True}, cdp_type=EnterSensitiveCdp, message=message
+        )
+        self.assertIsNone(error)
+        self.assertTrue(cdp.sent)
+        self.assertEqual(cdp.keys[0][1], 'Review JSON: {"note":"two  spaces"}  Next step')
+        self.assertEqual(
+            emitted[-1]["receipt"]["messageDigest"],
+            bridge.digest(bridge.normalize_message(message)),
+        )
 
     def test_reconciliation_observes_only_and_never_submits(self):
         cdp = FakeCdp()
@@ -289,7 +542,9 @@ class AdapterTests(unittest.TestCase):
         emitted = []
         with patch.object(bridge, "CdpSink", FakeProbeSink), patch.object(
             adapter, "emit", emitted.append
-        ), patch.object(adapter.time, "sleep"):
+        ), patch.object(adapter.time, "sleep"), patch.object(
+            adapter.time, "monotonic", side_effect=range(100)
+        ):
             for event_id, stage in (("project-a", "RESPONSE_PENDING"),
                                     ("project-b", "RESPONSE_COMPLETE")):
                 cdp = FakeCdp()
@@ -298,8 +553,8 @@ class AdapterTests(unittest.TestCase):
                 adapter.observe_response(bridge, sb, self.probe_request(event_id=event_id))
                 self.assertFalse(cdp.sent)
                 self.assertEqual(cdp.keys, [])
-                self.assertEqual(cdp.timeline, ["observe"] if stage == "RESPONSE_PENDING" else
-                                 ["observe", "observe"])
+                self.assertTrue(all(item == "observe" for item in cdp.timeline))
+                self.assertGreaterEqual(len(cdp.timeline), 2)
         terminal = [item for item in emitted if item.get("stage", "").startswith("RESPONSE_")]
         self.assertEqual([(item["eventId"], item["stage"]) for item in terminal],
                          [("project-a", "RESPONSE_PENDING"), ("project-b", "RESPONSE_COMPLETE")])

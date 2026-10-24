@@ -1,0 +1,230 @@
+{
+  "recordedUtc": "2026-10-23T02:42:23.2860858Z",
+  "task": "C7-PROJECT-REVIEW-READ-INDEPENDENCE",
+  "classification": "SOURCE_TESTED_LOCAL",
+  "branch": "codex/web-rollover-oct17",
+  "baseHead": "b1481352f6c2d489e44b657abf961d434eea3e98",
+  "changedSourcePaths": [
+    "src/mcp.rs"
+  ],
+  "sourceFiles": [
+    {
+      "path": "src/mcp.rs",
+      "sha256": "37fcf81c22e70e78da119ebb4307b8db984eda71d2cc2de1beb9949cdf3db289"
+    },
+    {
+      "path": "src/operator_codex_cli/queue/review_reader.rs",
+      "sha256": "e8beea213b336af8c2be1665acce64182de204e294b0a8536d9593abc5158612"
+    },
+    {
+      "path": "src/operator_codex_cli/queue.rs",
+      "sha256": "28e3ded4c98fd3df91b9b221eb8fceb237cf03e73416fd0cb373a038ba5d30a5"
+    }
+  ],
+  "finding": "One process-wide heavy package read flag caused one waiting project to reject all siblings",
+  "reproduction": {
+    "test": "waiting_review_package_does_not_deny_another_project",
+    "beforeFixExit": 101,
+    "beforeFix": "FAIL_EXPECTED_BETA_NOT_ADMITTED",
+    "workerReleasedAndJoinedBeforeAssertion": true,
+    "logSha256": "228498a2359aa117852bff0c9722165ef1d3426b1d2f2a0489e832756100b6f3"
+  },
+  "implementation": {
+    "existingTool": "catdesk_codex_queue_review_package_read",
+    "newToolOrFileApi": false,
+    "scope": "CANONICAL_CONTROL_ROOT_AND_REGISTERED_PROJECT_ID",
+    "oneReaderPerProject": true,
+    "maximumHeavyReaders": 2,
+    "workerRetainsLeaseAfterRequestCancellation": true,
+    "leaseReleasedOnWorkerExit": true,
+    "existingDisclosureAndReceiptChecks": "UNCHANGED",
+    "callerWorkspaceOrTargetOverrideAdded": false,
+    "nativeExecutionAdded": false
+  },
+  "tests": {
+    "focusedTestsPassed": 10,
+    "checks": [
+      {
+        "label": "project-reader-and-disclosure-tests",
+        "startedUtc": "2026-10-23T02:37:41.4577096Z",
+        "finishedUtc": "2026-10-23T02:38:29.7338504Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "review_reader",
+          "--",
+          "--test-threads=1"
+        ],
+        "exitCode": 0,
+        "logSha256": "744b5db8d453cd46f681c88c9b18295a51a51e4accccde188c63b05f58d56f01"
+      },
+      {
+        "label": "waiting-project-sibling-read",
+        "startedUtc": "2026-10-23T02:38:29.765443Z",
+        "finishedUtc": "2026-10-23T02:38:30.9468619Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "mcp::tests::waiting_review_package_does_not_deny_another_project",
+          "--",
+          "--exact"
+        ],
+        "exitCode": 0,
+        "logSha256": "dab5b0165febae8c396fa2fcdd0e2e671c33e370b9d5d44baabc9c82ae3f97af"
+      },
+      {
+        "label": "cancelled-request-worker-ownership",
+        "startedUtc": "2026-10-23T02:38:30.9572836Z",
+        "finishedUtc": "2026-10-23T02:38:31.8918789Z",
+        "arguments": [
+          "test",
+          "--locked",
+          "--offline",
+          "--bin",
+          "catdesk",
+          "mcp::tests::cancelled_review_request_keeps_its_project_slot_until_worker_exit",
+          "--",
+          "--exact"
+        ],
+        "exitCode": 0,
+        "logSha256": "fa30b3c138b3363bdc057cd5fe84fb756ca879c742a41763e8bff5e2d43be22d"
+      },
+      {
+        "label": "strict-root-clippy",
+        "startedUtc": "2026-10-23T02:38:31.9029966Z",
+        "finishedUtc": "2026-10-23T02:38:50.3410172Z",
+        "arguments": [
+          "clippy",
+          "--locked",
+          "--offline",
+          "--all-targets",
+          "--all-features",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exitCode": 0,
+        "logSha256": "6431c0bf67a7af2bc47d33de2fb9382faadf03db4942233a80c44149d97d1782"
+      },
+      {
+        "label": "root-format",
+        "startedUtc": "2026-10-23T02:38:50.3519622Z",
+        "finishedUtc": "2026-10-23T02:38:52.9804307Z",
+        "arguments": [
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exitCode": 0,
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    ],
+    "scopeAndTotalLimit": "PASS",
+    "waitingProjectSiblingProgress": "PASS",
+    "cancelledRequestWorkerRetentionAndResumption": "PASS",
+    "sameRootPathAliasSameProjectRefusal": "PASS",
+    "grantReceiptChainAndRevocation": "PASS",
+    "redirectedPackageGrantRefusal": "PASS",
+    "boundedMultibytePages": "PASS",
+    "strictClippy": "PASS_ALL_TARGETS_ALL_FEATURES",
+    "format": "PASS",
+    "initialHarnessIssue": "Cancellation assertion required Debug on RPC response; changed only test assertion, no response Debug added"
+  },
+  "external": {
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "nativeSessionChanged": false,
+    "messagesSent": 0,
+    "bindingsChanged": false,
+    "disclosureGrantsChanged": false,
+    "selectedPackageChanged": false,
+    "recurringStarted": false,
+    "connectorCalled": false,
+    "protectedProductionChanged": false
+  },
+  "acceptance": {
+    "source": "PASS",
+    "normalExecutable": "PASS_NORMAL_DEBUG_BUILD",
+    "selectedPackage": "PRIOR_C6_V48_UNCHANGED",
+    "actualGrantedProjectConcurrentRead": "NOT_ATTEMPTED",
+    "externalConnector": "UNVERIFIED",
+    "protectedProduction": "OPEN",
+    "fullMvp": "PARTIAL"
+  },
+  "nextTask": "Use existing read-only canonical release-pair and broker status to prepare the exact supported operator handoff. Preserve pending signed rotation and all native writers; selected C6 package stays unchanged. No real disclosure grant or new live reviewer run is authorized by these fixture results.",
+  "sourcePublication": {
+    "sourceCommit": "ccdb6aee5c76de2b0f3293874c3f9e05f0024814",
+    "baseHead": "b1481352f6c2d489e44b657abf961d434eea3e98",
+    "remoteSha": "ccdb6aee5c76de2b0f3293874c3f9e05f0024814",
+    "branch": "codex/web-rollover-oct17",
+    "observedUtc": "2026-10-23T02:43:44.8629706Z",
+    "privacyScan": "PASS",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED"
+  },
+  "normalBuild": {
+    "sourceCommit": "ccdb6aee5c76de2b0f3293874c3f9e05f0024814",
+    "profile": "NORMAL_DEBUG_APP_NO_DEV_DEPENDENCIES",
+    "startedUtc": "2026-10-23T02:44:29.0873459Z",
+    "finishedUtc": "2026-10-23T02:44:54.7589686Z",
+    "imageSha256": "5de359c757f15fcbef9de5878d66111d28ce0d9fc559098915bb2578ee5c7533",
+    "imageBytes": 67097088,
+    "exitCode": 0,
+    "maximumSeconds": 240,
+    "sourceFiles": [
+      {
+        "path": "src/mcp.rs",
+        "sha256": "37fcf81c22e70e78da119ebb4307b8db984eda71d2cc2de1beb9949cdf3db289"
+      },
+      {
+        "path": "src/operator_codex_cli/queue/review_reader.rs",
+        "sha256": "e8beea213b336af8c2be1665acce64182de204e294b0a8536d9593abc5158612"
+      },
+      {
+        "path": "src/operator_codex_cli/queue.rs",
+        "sha256": "28e3ded4c98fd3df91b9b221eb8fceb237cf03e73416fd0cb373a038ba5d30a5"
+      }
+    ],
+    "selectedPackageChanged": false,
+    "browserStarted": false,
+    "wakeHostStarted": false
+  },
+  "existingInstalledImageReadback": {
+    "recordedUtc": "2026-10-23T02:46:55.8981683Z",
+    "classification": "INSTALLED_READ_ONLY_EXISTING_SIGNED_IMAGE",
+    "command": "--catdesk-reviewed-main-image-status-fixed-policy",
+    "normalReaderSource": "ccdb6aee5c76de2b0f3293874c3f9e05f0024814",
+    "exitCode": 0,
+    "timedOut": false,
+    "maximumSeconds": 15,
+    "signatureAndInstalledPayloadVerified": true,
+    "bootstrapEpoch": 1,
+    "installedRotationEpoch": 0,
+    "pendingRotationEpoch": 2,
+    "pendingImageInstalled": false,
+    "currentMvpBuildInstalled": false,
+    "rotationOrSigningAttempted": false,
+    "productionModified": false,
+    "browserOrWakeStarted": false,
+    "qualification": "Existing fixed installed-image trust only; does not qualify new build promotion, canonical release pair, supervisor startup or external MCP"
+  },
+  "normalAndInstalledReadbackPublication": {
+    "observedUtc": "2026-10-23T02:50:01.3000962Z",
+    "documentationCommit": "301994c93aa82aa5f8092db3dbfacccacd552605",
+    "remoteSha": "301994c93aa82aa5f8092db3dbfacccacd552605",
+    "branch": "codex/web-rollover-oct17",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ci": "UNVERIFIED",
+    "privacyScan": "PASS",
+    "protectedProductionAccepted": false
+  }
+}

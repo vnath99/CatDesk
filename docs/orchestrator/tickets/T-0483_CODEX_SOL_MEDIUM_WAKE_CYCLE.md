@@ -1,5 +1,201 @@
 # T-0483 — Opt-in Codex Sol/medium deliverable-to-Wake cycle
 
+## October 22 Web milestone scope clarification
+
+This native deliverable/review backend remains useful and existing native owners
+must keep progressing. Its multi-thread proofs do not satisfy the mandatory
+parallel ChatGPT Web workspace criterion. See the updated
+[A–J acceptance ledger](../../OCTOBER_2026_MVP_ACCEPTANCE.md#mandatory-web-architecture--operator-clarification-october-22).
+Project-aware Web execution and fair browser rollover transactions remain
+independent required gates; do not seize native writers or repeat accepted
+review/delivery events to simulate them.
+
+## 2026-10-21 real full-profile result and child path correction (PARTIAL)
+
+A fresh native report-isolation candidate preserves its captured source through
+all four fixed commands. Ruff format/lint and whole-source mypy pass; pytest
+exits 1. The complete LOCAL_COMMAND_FAILURE artifact remains immutable. One
+bounded first-failure diagnostic finds SYNCED_RUNTIME_ROOT because Python views
+the canonical local Windows drive spelling as UNC. The identified browser test
+passes with normal local-drive child temp selectors; no Wake2 safety policy is
+changed. This is a diagnostic, not complete qualification.
+
+The verifier now reuses the existing path normalizer only for generated child
+environment values. Canonical internal pins, overlap checks, fixed commands,
+environment hashing and historical artifacts stay intact. Actual UNC spelling
+remains UNC. The queue subtree passes 93 / two ignored; strict all-target/all-
+feature Clippy and formatting/diff pass. The explicit real UV/Python boundary
+probe passes, including physical runtime binding and the child-observed temp
+drive. Fresh full-profile acceptance, independent review and natural Wake/next-
+task continuation remain open. This source fix is not in selected stopped v35.
+Parent UTC evidence: checkpoints/verification-hypothesis-oct21.
+
+## 2026-10-21 actual-verifier DLL path incompatibility (source)
+
+The real isolated project verifier starts Python and passes Ruff lint and
+whole-src mypy. Its pytest collection fails loading pywintypes after another
+win32 module: the installed loader returns a nonexistent truncated path of
+259 characters for a DLL that exists at a 293-character path. Both import
+orders pass in the shorter existing environment. Formatter feedback on the
+new tests is a separate project-source correction; neither failure is accepted
+as qualification. The failed verification stays immutable.
+
+Fresh runtime paths are now fixed user-state v/SHA256(queue namespace, receipt),
+retaining all existing overlap/directory/environment checks and old artifacts.
+No global configuration, DLL search policy, import-order workaround or operator
+path selector is added. Full fresh-candidate qualification remains required.
+Parent UTC audit: checkpoints/verification-hypothesis-oct21.
+
+## 2026-10-21 Hypothesis storage placement (source)
+
+Fresh fixed UV verification now supplies HYPOTHESIS_STORAGE_DIRECTORY from its
+existing external receipt runtime. The directory is revalidated before commands,
+its inherited selector is filtered, and its value enters the environment digest.
+An actual installed Hypothesis example database write/read passes in 4.54 seconds
+with a 60-second child cap and no checkout cache. Queue regressions pass 78 / two
+ignored; this actual-library probe is explicitly run despite its opt-in marker.
+Historical artifacts are not rewritten or given new placement claims. This is
+not native launcher repair, full project qualification, review or Wake proof.
+Parent UTC audit: checkpoints/verification-hypothesis-oct21.
+
+## 2026-10-21 fixed UV verification runtime placement (source)
+
+Fresh verification uses a receipt-specific runtime under the existing external
+queue namespace. UV environment, standard tool-cache/temp settings are generated
+internally and hash-bound; the OS-derived shared UV cache is outside registered
+workspaces. Existing source environments, fixed command args, no-download/offline
+flags, writer/source checks and historical artifact bytes remain preserved.
+The fresh result reports `runtimeRoot`; historical readback makes no new placement
+claim. Runtime directories are checked before each command and are not implicitly
+deleted after a failure. Local code/plugins remain outside an OS confinement claim.
+
+The real installed UV/Python dependency-free probe passes with two 60-second
+command bounds and no source cache directories, including quoted paths. Source
+fixtures also bind per-receipt environments and make the child observe external
+paths. This is not a real project's complete fixed-profile verification, a fix
+for the resumed native launcher's 101, independent review or Wake delivery. No
+failed task is replayed. Parent audit: checkpoints/native-verification-runtime-oct21.
+
+Full source verification passes 1,545 / 29 ignored, enabled integrations/nested
+Wake, strict Clippy and format/diff. The real-UV ignored probe passes in its
+explicit opt-in run. Current default UV cache path readback matches the OS-derived
+path used by production code. No cache contents or operator settings are changed.
+
+Normal development v33 at `3d060f9` is selected stopped and passes the bounded
+20-second metadata/cleanup probe with v32/profile/state preserved. Two subsequent
+standalone read-only Web captures extend retained context observations to five
+projects while keeping WakeHost stopped, but emit no native review event. The
+earlier native qualification and natural deliverable-review-next-task cycle
+remain open. Dated two-reader evidence: checkpoints/web-five-project-context-oct21.
+
+## 2026-10-21 v31 fresh native qualification result (PARTIAL)
+
+Selected normal development v31 is built at `49f421a`; its bounded loopback
+metadata readback passes and leaves both controls stopped. Receipt
+`ce0fcf8b-497b-4e02-b2d6-2ff89e11916b` binds the requested MXC mode in schema 2
+and proves observed Sol/medium for exact existing-thread turn
+`01a15d3b-8ace-7fb3-bab3-bc831a3beccb`. Native exits zero in about 139 seconds
+and releases the lease. **All three qualification checks fail before Python
+starts (launcher 101)**. The report is reviewed/checkpointed in the isolated
+Wake2 branch; no source edit, formal verification, review publication, native
+target binding or Wake delivery is claimed. A separate bounded managed
+workspace probe starts the same base interpreter, with config/ACLs/state
+unchanged. That is diagnostic evidence, not a resumed-turn repair or effective
+mode attestation. Preserved old v30 actually refuses new records, exit 2.
+All five Web bindings/history and the production pointer remain preserved,
+scoped processes zero; no browser, host, recurrence or canary replay starts.
+Detailed UTC audit: parent `checkpoints/native-mxc-optin-oct21`.
+
+## 2026-10-21 isolated native resumption and per-task MXC (source)
+
+The existing isolated Wake2 thread resumes through the actual operator queue
+on observed `gpt-6.1-sol` / `medium`, with standard access requested. Two fresh
+turns exit zero and release their leases. The first delivers an honest failed
+qualification report: its checks never start because the existing venv cannot
+launch base Python. A bounded follow-up proves direct base Python fails with
+Win32 error 5 in that native execution context too. Native exit zero is not a
+passing qualification. Old/current receipts and their historical source remain
+separate; the original active Wake2 checkout/chat is untouched.
+
+The independently reviewed isolated helper is checkpointed with three mypy
+errors corrected. Operator-context focused tests pass (11 / 2 skipped), Ruff
+and mypy pass, and the historical JSON's exact bytes are preserved. Its
+provenance/sanitization remain UNKNOWN/UNVERIFIED; full regression is pending.
+
+Following the [official Windows sandbox guidance](https://learn.chatgpt.com/docs/windows/windows-sandbox),
+a one-command managed read-only MXC probe on installed CLI 0.163 starts the
+same Python 3.12.10 successfully. Codex configuration, Python ACLs and all
+project artifacts remain unchanged. This is separate from a queued turn.
+
+The local queue now accepts explicit `add --windows-sandbox mxc`. It binds this
+request in job identity, receipt and review candidate and passes the native
+configuration override for that task only. Defaults/old serialized records are
+preserved; unsupported values and non-Windows execution refuse. Workspace-write,
+approval, model/effort, owner and managed-policy checks remain. Requested mode
+is not effective-policy attestation. MXC compatibility/network behavior is
+native-platform dependent; no fallback or permission/setup change is performed.
+Source tests and selected-package/live qualification are recorded separately.
+Opted-in task/receipt/candidate records use schema 2 and older readers refuse
+them; default records remain schema 1. The final source gates pass: 77 focused
+queue tests, full main 1,541 / 28 ignored, integrations/nested Wake, strict
+all-target Clippy, formatting and diff checks. A compile error caught during
+the versioning increment was corrected before this final rerun.
+Private dated evidence: parent `checkpoints/native-cycle-readiness-oct21` and
+`checkpoints/native-mxc-optin-oct21`. Native Wake2's target remains unbound, so
+this does not establish review delivery or the natural next-task cycle.
+
+## 2026-10-21 sibling-project discovery implemented (source only)
+
+The independent inbox path no longer filters CatDesk records only. It observes
+each project's target/cutoff, verifies its registry URL/digest and repeats that
+check under the existing Wake queue lock before exact-target publication.
+Malformed, misbound, stale, duplicate and conflicting records cannot retarget a
+review or stop valid siblings. Completed-review artifact validation remains,
+and the missing-contract legacy exception is restricted to CatDesk. Whole
+invalid JSON/shared persistence failures remain a scan-wide refusal.
+
+The disposable fixture fails before both routing/row-isolation corrections and
+passes afterward, including three actual bound review fixtures, distinct target
+generations, independent cutoffs, registration ambiguity and late target drift.
+Main 1,539 / 28 ignored, Wake 295 library / 1 ignored plus integrations, both
+strict Clippy checks and format/diff pass. Dated private evidence: parent
+`checkpoints/web-review-discovery-oct21`. Matched normal app/Wake v29 at
+`8f8b456` is selected stopped and passes the bounded 20-second loopback metadata
+readback, preserving seven paired statuses, continuation proof, all original
+five bindings, profile, previous package and production. Zero owned processes
+remain, both controls STOPPED. This does not prove live producer/natural-cycle
+acceptance; no live native/Wake event or new native session was created.
+
+Read-only ordinary native queue status preserves all registrations: seven jobs,
+four native zero exits, two failed, one paused; one verified/package-bound job.
+Those historical receipts are not current natural-cycle acceptance, and no
+original native goal or paused queue job was resumed/replaced. The optional
+managed Sol isolation lane remains separate from the approved native CLI route.
+
+## 2026-10-20 natural producer trace and scoped notifications (source only)
+
+Both direct and independent inbox producers emitted an obsolete global-freeze
+instruction for CatDesk. They now share the project-scoped review Store entry.
+Standalone discovery carries the exact target observed with the cutoff into
+the existing atomic publication check; rollover during validation cannot move
+the review to a later conversation. Legacy queued/archived message bytes remain
+unchanged, exact retries are idempotent, changed content conflicts and archives
+are not requeued. Independent completed-review validation remains intact.
+
+The two existing producer regressions fail before and pass after. Main CatDesk
+passes 1,539 / 28 ignored; independent Wake passes 294 library / 1 ignored and
+enabled integrations (including 28 protocol-store cases); strict Clippy for both
+crates and format/diff pass. Private dated evidence: parent
+`checkpoints/web-review-routing-oct20`. Selected development v28 is unchanged;
+no installed/source-current natural cycle is claimed.
+
+Standalone discovery's CatDesk-only record filter remains the next multi-project
+source gap. The ordinary native queue path already binds verified package,
+active local disclosure and exact registered target to its prepared invitation.
+Publication/receipt alone is not independent review or next-task authorization.
+This work uses existing routing and does not make the optional isolated managed
+Sol account a prerequisite for the approved ordinary native Codex route.
+
 ## 2026-10-15 private burn-to-stage journal (source only)
 
 The host-only staging path now records an exact stage intent before nonce burn, binds the selected task/turn, output and stage identities, writes a create-once burn marker, and verifies a staged completion record. Reopen is diagnostic ATTENTION and never reissues the burned output. Focused staging 21/21 and nonce 11/11 tests, full local Rust and strict gates passed. See `T-0483_R36_PRIVATE_SOL_BURN_STAGE_JOURNAL_SOURCE.md`. Pushed source `da58c72634322d638291989fbca6465cabecbb6a` had zero exact GitHub runs/checks. No fixed worker account, lost-write proof, repository-use authority or real Sol/medium→review_ready→Wake cycle exists. This optional isolated worker lane does not block the separately approved ordinary Codex CLI route in the October directive.

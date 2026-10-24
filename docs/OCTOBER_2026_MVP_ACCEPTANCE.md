@@ -1,6 +1,4716 @@
+## October 24 EDT C111 — selected development current/previous and actual MCP health
+
+The existing isolated development runtime now selects the normal C109 package
+(source `9c81bc2a788d8621622381b3ccdbbdb0623da3ec`) and retains v76 as its
+recorded working predecessor. Both immutable packages now have write-once local
+verification records tied to their exact build, source/review and observed health.
+These operator-provided development records are not protected production authority.
+
+Before recording v76, a fresh bounded run verified its actual selected child image,
+unauthenticated rejection (401), authenticated MCP catalog (200; 79 tools), and
+natural parent/child exit. Its earlier C96 CLI-only result was not relabeled as
+backend health. The existing stopped selection journal then admitted v77. Another
+six-second backend run verified its actual image and the same MCP checks before
+its verification record was created. Its host image was built, not runtime-started.
+The two separately monitored jobs used 180-second limits and finished naturally
+in about 7.3 and 14.2 seconds; no recurring process was enabled.
+
+Sixteen control commands passed, including all ten exact paired URL/digest/
+generation reads and the five-project central view. Exactly two permitted selection
+records changed; 304 other runtime records and all 55 historical files stayed
+exact. The old baseline and complete previous package remain preserved, alongside
+a new current baseline. New evidence consists of two immutable verification records
+and workspace-local inputs. Zero scoped owners remained, queue 0, both controls
+STOPPED. Profiles, project bindings, conversations and native sessions were preserved.
+
+This qualifies the actual existing development selection and MCP backend. Prior
+interrupted-selection, fallback and owned-process exit results remain preserved.
+It does not qualify protected recovery, external Secure MCP, fresh Wake delivery,
+actual two-conversation Web coding or unattended operation. No completed canary was
+replayed and no legacy mechanism was retired. Production recovery remains conditional
+on the existing approved authority/operator boundary. Exact remote CI is unverified.
+Evidence: `docs/verification/C111_SELECTED_DEVELOPMENT_CURRENT_PREVIOUS_HEALTH_2026_10_24.json`.
+
+## October 24 EDT C110 — normal pre-ready fallback and after-ready refusal
+
+Exact source `9c81bc2a788d8621622381b3ccdbbdb0623da3ec` built as normal release
+app/host images. Three disposable cases qualify the new command: the exact inert,
+hash-valid package from C109 now falls back to the actual serving predecessor;
+blocking both valid images before readiness produces one restoration and bounded
+failure; terminating the exact owned child after ready produces an explicit error
+without changing the selection or publishing another ready record.
+
+The first job stopped on a harness assertion: it matched `DEV_BACKEND_READY` inside
+the expected error name `DEV_BACKEND_READY_EOF`. Parsed status/error and retained
+state confirmed the correct negative behavior. A second bounded job verified that
+retained result and ran only the remaining case. The passed fallback was not
+replayed. Active test time was about 15 seconds across two jobs, each bounded to
+180 seconds; this is not a claim of one continuous 180-second session. Both jobs
+were terminal with zero owners between them. The original partial record remains.
+
+Ready child image paths/hashes were checked through retained handles. The failed
+pre-ready pair's child launch count was not independently traced; the normal
+controller's bounded error and one committed restoration were observed. Profiles,
+history, failed bytes and package evidence survived. Prior C106 health and C108
+file-recovery/parent-exit evidence remain preserved. These are normal isolated
+runtime results, not protected installation, unattended or ChatGPT Web acceptance.
+
+All 306 runtime records and 55 historical files remain exact; zero live recorded
+parent handles/scoped owners, queue 0, both controls STOPPED, real selected v76
+unchanged. No browser/Wake/tunnel activation, binding/native-session action,
+protected recovery, canary replay or legacy retirement occurred. Exact source SHA
+was remotely verified on `codex/web-rollover-oct17`; CI remains unverified.
+Next: qualify the existing v76 evidence and supported stopped development-package
+selection, then install/test the qualified source only in the isolated dev runtime.
+Evidence: `docs/verification/C110_NORMAL_PRE_READY_FALLBACK_2026_10_24.json`.
+
+## October 24 EDT C109 — one predecessor attempt before backend readiness
+
+A normal C107 executable confirmed the remaining defect: an inert non-executable
+current package passed hash validation and had an eligible recorded predecessor,
+but startup returned `DEV_BACKEND_START_FAILED` without fallback. Five bounded
+control calls established that causal failure without starting a backend.
+
+New source permits one predecessor attempt after classified native spawn rejection
+with no child created, or pre-ready timeout/EOF/exit after exact owned-tree drain.
+It never retries after readiness or partial publication, unknown cleanup, scope/
+auth mismatch or unsafe output. The sealed selection snapshot and backend lease
+remain across rollback; existing journal and predecessor validators are reused.
+Failed bytes survive and never become a rollback candidate. Ready/result metadata
+records the failed package, reason and proven process outcome. The existing spawn
+API/messages and suspended-child Job policy remain unchanged; only its failure
+result is classified for the new caller.
+
+37 runtime, four backend-contract and ten process-owner tests pass, with strict
+root/Wake Clippy and formatting. Coverage includes sealed-snapshot scope, held
+lease, busy/stale/missing-predecessor refusal, interrupted restoration through the
+existing cold journal, and owner/descendant/crash regressions. These are source
+tests; the new normal fallback still needs its build and distinct bounded test.
+C108 normal file-failure recovery and parent-exit evidence remain preserved.
+
+All 306 runtime records and 55 historical files remain exact; zero scoped owners,
+queue 0, both controls STOPPED, selected v76 unchanged. No browser/Wake/official
+runtime activation, protected change, binding/native-session action, canary replay
+or legacy retirement occurred. Prior publication `2a32e26970ede57420e5047fe87a10c9ab999fc8`
+was exactly verified on `codex/web-rollover-oct17`; remote CI remains unverified.
+Evidence: `docs/verification/C109_ONE_PRE_READY_BACKEND_FALLBACK_2026_10_24.json`.
+
+## October 24 EDT C108 — normal selected-backend startup and owner cleanup
+
+Exact source `bd8ddeb743639f11619b7917f1e67244f19d9e0c` built as normal app/host
+release images under the 600-second bound. A 19-second disposable test under the
+180-second bound passed six control CLI calls, two natural bounded backend
+operators and one intentional parent-only termination. All three actual child
+image paths and hashes were verified through retained process handles.
+
+The normal `run-backend` command served authenticated loopback MCP, rejected
+unauthenticated access, and refused duplicate startup/package mutation while
+continuing to serve. After a controlled current-file failure, it automatically
+restored and executed the exact C105 predecessor. Profile/history/proof and failed
+bytes survived. Killing only the third operator parent ended its still-live child
+through the private Job; the listener closed and a cold command proved lease
+release without selection changes. No tree-kill was used to establish that proof.
+
+C106 predecessor-health evidence was reused. This qualifies normal command and
+file-failure fallback in an isolated runtime. Fallback when bytes hash correctly
+but the child fails before readiness remains the next source gap. Protected,
+unattended and actual independent ChatGPT Web coding acceptance remain open.
+
+After job closure all 306 runtime records and 55 historical files remain exact;
+zero known live parent handles or scoped owners, queue 0, both controls STOPPED,
+real selected v76 unchanged. No WakeHost/browser/scheduler/tunnel activation,
+binding/native-session action, protected recovery, canary replay or legacy
+retirement occurred. The exact source SHA was remotely verified on
+`codex/web-rollover-oct17`; CI remains unverified with zero matching runs/checks.
+Evidence: `docs/verification/C108_NORMAL_SELECTED_BACKEND_AUTORECOVERY_2026_10_24.json`.
+
+## October 24 EDT C107 — bounded startup of the selected development backend
+
+Added `operator web-dev-runtime run-backend` (180 seconds by default, configurable
+1–900). It selects the exact development app, completes pending selection or
+restores a recorded predecessor using existing recovery, and runs the existing
+headless MCP entry on an ephemeral loopback port. Authentication comes from the
+existing process environment. Fixed development config, no tunnel, no browser,
+no Wake launch and no Web auto scheduler. Ready output is validated and redacted.
+
+Reuse the existing suspended-child kill-on-close Job owner. Keep selected image,
+pointer and authority pins until the exact owned tree drains. A workspace-local
+backend lease prevents duplicate startup and package mutation; a busy lease is
+ownership evidence, not independent process liveness. Healthy startup neither
+requires STOPPED Wake nor takes its browser lock. Independent workspaces remain
+independent; no global working-directory mutation is used.
+
+33 runtime tests and 126 operator-family tests pass, including five new runtime,
+one parser and three backend contract tests. The root filter includes existing
+Web guards. Strict root/Wake Clippy and format pass. This is source qualification;
+the new command has not yet been built or exercised as a normal executable.
+Normal startup/file-failure fallback and parent-exit cleanup are the next bounded tests.
+Fallback for a current image that hashes correctly but fails to start remains an
+additional implementation requirement.
+
+All 306 runtime records and 55 historical files remain exact; zero scoped owners,
+queue 0, both controls STOPPED, selected v76 unchanged. No protected lifecycle,
+binding/native-session, browser/Wake or completed-canary action occurred. Older
+readers remain compatible; use the current controller for package mutations so
+the new backend lease is honored. No legacy mechanism is retired.
+
+Prior published HEAD `d92f9158f7e16dd0d18f25bfd0efd460c9dc3279` was verified on
+`codex/web-rollover-oct17`; its normal product proof covers source `cb50162`.
+Remote CI remains unverified. Protected recovery and actual Web coding B/C are
+still open. Evidence: `docs/verification/C107_BOUNDED_SELECTED_DEV_BACKEND_2026_10_24.json`.
+
+## October 24 EDT C106 — normal backend and interrupted predecessor recovery
+
+Exact published source `cb50162d5705830d4c1530ec3e0c351ccdac9041` built as normal
+app/host release images in 430 seconds under a 600-second job. A 22-second test
+under the 180-second limit passed 12 normal CLI commands and three six-second
+loopback backend processes. Both versions served authenticated tool catalogs,
+rejected unauthenticated calls, and exited naturally. Browser/Wake scheduling,
+tunnels and external connectors were disabled throughout.
+
+The recorded predecessor uses retained commit/build/review references and actual
+observed loopback MCP health. The old binary read the new pointer metadata. A real
+Windows sharing fault interrupted restoration after pointer switch; a fresh normal
+process completed it. The restored backend then started successfully. History,
+profile, proof, old package and failed current bytes survived. Healthy replay was
+byte-stable; another failure without a predecessor required reconstruction without
+changing selection. This is local backend health, not independent external review
+or WakeHost health and not protected/ChatGPT Web acceptance.
+
+Two earlier partial harness attempts are retained: the overly deep checkpoint
+path exceeded Windows process-launch limits, including with extended syntax.
+Each had six completed commands, one natural backend exit, no changed real state
+and zero owners. A shorter disposable checkpoint root fixed the harness. Across
+all attempts, five backend processes exited and no browser/Wake process started.
+
+After job closure, all 306 runtime records and 55 historical files remain exact;
+zero scoped owners, queue 0, both controls STOPPED, real selected v76 unchanged.
+No protected recovery, binding/native-session action, completed-canary replay or
+legacy retirement occurred. Source remote SHA equals the exact published commit;
+zero matching Actions/check runs means CI remains unverified.
+
+Next: one supported bounded developer-backend start using the selected image,
+including automatic failed-current restoration. That integration, protected
+recovery, unattended operation and actual two-conversation Web coding remain open.
+Evidence: `docs/verification/C106_NORMAL_BACKEND_PREDECESSOR_RECOVERY_2026_10_24.json`.
+
+## October 24 EDT C105 — existing recovery restores the recorded predecessor
+
+`operator web-dev-runtime recover-package` now restores the exact recorded
+predecessor when current package files fail validation. It revalidates the
+predecessor evidence, manifest identity/hash and all four artifact hashes, keeps
+current metadata/Python/workspace checks strict, and reuses the existing atomic
+selection journal. No candidate path, hash override or newest-folder guess is
+accepted. Failed bytes stay preserved and never become a rollback predecessor.
+If no trustworthy predecessor exists, recovery returns a bounded reconstruction
+requirement. No fingerprint rewrite, host/browser launch or protected action occurs.
+
+The causal test first failed on the old current-image requirement. All 28 runtime
+and 13 operator tests now pass, with strict root/Wake Clippy and formatting.
+Coverage includes all four damaged/missing current artifacts, three interrupted
+selection boundaries, byte-stable replay, absent/damaged predecessors, metadata
+and ownership refusals, and changed pending evidence/assets. These are source
+fixtures, not actual process-crash, normal binary or installed startup acceptance.
+
+All 306 runtime records and 55 historical files remain exact; zero scoped owners,
+queue 0, both controls STOPPED. No selected package, protected installation,
+bindings, native sessions, browser/Wake process or completed canary was changed.
+No legacy mechanism is retired. Next: normal release build and bounded CLI/backend
+qualification, followed by automatic startup integration. Real Web coding B/C and
+authorized October 27 production recovery remain open.
+
+Prior publication `c6943953e9f86c227e186a4d6ada94198b4a07df` was verified exactly
+on `codex/web-rollover-oct17`; remote CI had zero matching runs/checks and remains
+unverified. Evidence: `docs/verification/C105_DEV_PREDECESSOR_RESTORATION_2026_10_24.json`.
+
+## October 24 EDT C104 — retain one qualified development predecessor
+
+The existing development release selection now accepts write-once local
+source/build/review/working-health references bound to the exact selected package,
+manifest and four artifact hashes. Recording does not perform health checks,
+prove external review or create protected production authority. It requires
+STOPPED/exclusive ownership, refuses conflicting records and preserves selection
+bytes. Command: `operator web-dev-runtime record-verification --input-file <file>`.
+
+The existing `current.json` can retain one qualified predecessor through the
+existing package-update journal. Unqualified updates preserve that predecessor;
+damaged predecessor bytes do not block healthy current startup. No second
+selection registry or authority/manifest schema is introduced. Legacy pending
+journals recover. Use the current controller for future updates and pending new
+journals; older update controllers may drop optional predecessor metadata.
+
+23 development-runtime and 13 operator tests pass, with both strict Clippy and
+format checks. These are source/fixture results, not normal binary, independently
+verified release health, automatic fallback or installed acceptance. All 306
+runtime records and 55 historical files remain exact; zero scoped owners,
+queue 0, both controls STOPPED. No protected recovery, browser, Wake, connector,
+native-session or project-binding action occurred. No legacy writer is retired.
+
+Next: reuse the same journal for verified-predecessor restoration, then qualify
+normal bounded backend startup/recovery with genuine release evidence. Actual
+two-conversation Web coding and October 27 production restoration remain open.
+Evidence: `docs/verification/C104_DEV_RELEASE_EVIDENCE_PREDECESSOR_2026_10_24.json`.
+
+## October 24 EDT C103 — existing rollback survives current-image damage
+
+A causal regression confirmed that the existing versioned worker store required
+a healthy current executable before it would restore the intact predecessor.
+Rollback now retains strict current-manifest identity and full predecessor
+manifest/image validation while allowing the executable being retired to be
+damaged or absent. Existing atomic current/previous selection is reused; failed
+current bytes remain preserved and are not made a rollback predecessor.
+
+All 18 versioned-release tests pass, including two new regressions covering seven
+fault scenarios, cold store reopen, stale CAS, invalid metadata and absent/corrupt
+predecessors. Strict workspace Clippy and formatting pass. The expected old-code
+failure and an earlier formatting-only gate failure remain recorded. No new
+release registry, approval type or production mutator was introduced.
+
+This is a storage-primitive source fix. Synthetic review manifests do not create
+independent live release approval; automatic backend startup/fallback is not yet
+integrated or qualified. All 306 runtime records and 55 historical files remain
+exact, zero scoped owners, queue 0, both controls STOPPED. Protected installation,
+signed artifacts, bindings, native writers and completed canaries are unchanged.
+
+Next: connect qualified source/build/working-health evidence and this existing
+adapter to the normal isolated developer backend startup, then test the composed
+path before legacy retirement. Actual Web B/C and authorized production recovery
+remain open. Evidence:
+`docs/verification/C103_VERSIONED_ROLLBACK_CURRENT_IMAGE_FAILURE_2026_10_24.json`.
+
+## October 24 EDT C102 — normal release selection recovery qualified
+
+Exact published C101 built as a normal release app and host in 422.79s and 21.47s.
+Commit/tree, full image hashes, lockfiles, compiler versions and locked/offline
+build commands are recorded. Bit-for-bit rebuild reproducibility is not claimed.
+
+The normal app passed a 3.28s/180s disposable CLI test: nine natural command exits,
+healthy byte-stable recovery, a real Windows replacement failure from an owned
+file-sharing lease, pointer-first journal retention and cold refusal, then recovery
+after the original build directory was moved away. Final status and idempotent
+recovery selected the exact staged package. Profile/history and the old version
+were preserved. No host, Python fixture, browser or Wake process was launched.
+
+Two earlier test failures remain recorded: a PowerShell alias collision before
+any product command, and an altered-script fixture correctly refused by source
+pinning before selection. The passing test uses two genuine pinned package
+versions. All 306 real runtime records and 55 historical files remain exact;
+zero scoped owners. Current v76, production and native project sessions are unchanged.
+
+This qualifies the normal recovery command, not backend startup, automatic verified
+predecessor fallback, protected installation, Web coding or unattended operation.
+Continue release qualification/fallback in the existing model; retire no legacy
+mechanism before migration tests pass. Evidence:
+`docs/verification/C102_NORMAL_RELEASE_SELECTION_RECOVERY_2026_10_24.json`.
+
+## October 24 EDT C101 — T0476 simplification and local selection recovery
+
+The updated T0476 document maps existing mechanisms to keep, consolidate and
+eventually retire. Reuse immutable development packages and the existing atomic
+current/previous worker model. Preserve legacy readers/receipts and protected
+admission until startup, rollback, interruption and migration qualify. No new
+release store or security framework is introduced.
+
+First source increment: `operator web-dev-runtime recover-package` completes an
+already journaled selection using its retained immutable package, without the
+original build directory. It reuses the existing completion validator, requires
+STOPPED/exclusive ownership, refuses changed artifacts or unknown pointers, and
+starts no host/browser. With no pending selection, validation is byte-stable.
+
+17 development-runtime tests plus 12 operator tests pass, including five new
+recovery tests and three interruption boundaries. Both strict Clippy gates and
+format checks pass. These are source/fixture results, not installed recovery or
+actual process-crash acceptance. All 306 runtime records and 55 historical files
+remain exact; zero scoped owners, queue 0, both controls STOPPED. Native sessions,
+bindings, signed artifacts, official runtime and completed canaries are untouched.
+
+Next: exact commit/review/health admission and independently verified previous
+release fallback in the existing model; no legacy writer is retired yet. Normal
+release build/command qualification remains separate. Approved production recovery
+and real two-conversation Web coding remain open; recurring operation is not enabled.
+Evidence: `docs/verification/C101_T0476_DEV_SELECTION_RECOVERY_2026_10_24.json`.
+
+## October 24 EDT C100 — historical recovery authority reconciled
+
+Read-only history now explains the known executable/fingerprint divergence:
+the October 7 UTC ordinary release build, exact 9a8 hash readback and native reload
+receipt are preserved, while the sidecar remains A264. This is evidence of a
+build/reload outside completion of the reviewed pair/LKG transaction; it is not
+evidence of tampering, clean-source provenance or reviewed promotion. The original
+later shutdown cause remains unknown and is not attributed to browser/Wake cleanup.
+
+The retained A264 slot is legacy operational health evidence, not current rollback
+authority. All 40 generation results plus one older result are failed/ambiguous;
+no attestation, promotion completion or alternate slot was found at the inspected
+authoritative locations. Existing signed-image authority remains separate. Reuse
+the already implemented October 18 release-pair procedure if its existing review
+and attested-candidate prerequisites can be satisfied; design no new mechanism.
+
+The October 27 plan specifies minimum operator inputs, public diagnose/recover,
+conditional existing CLI forms, exact post-recovery checks, and actual two-chat
+Web coding B/C as the next live priority. No recovery/build retry, connector,
+browser/Wake/recurring, native-session, signing or tunnel action was made.
+All 306 tracked records and 55 historical files remain exact. No product source
+changed or source test was repeated. Recovery and full MVP acceptance remain open.
+
+Plan: `docs/orchestrator/OCT27_EXISTING_RECOVERY_AUTHORITY_PLAN.md`.
+Evidence: `docs/verification/C100_HISTORICAL_RECOVERY_AUTHORITY_2026_10_24.json`.
+
+## October 24 EDT C99 — supported backend owner identified; recovery deferred
+
+The existing canonical workspace's public `catdesk.ps1` facade owns local daemon
+startup through `scripts/start-catdesk-stack.ps1` and the fingerprinted release
+image. Its optional per-user supervisor invokes public status/recover; the official
+Secure MCP runtime remains separately owned. The selected development package is
+not canonical serving authority. No replacement launcher or tunnel was created.
+
+One bounded read-only diagnosis and autostart-status check passed process cleanup.
+The facade returned `ACTION_REQUIRED`, primary `RECOVERY_AUTHORITY`, and
+`LKG_AUTHORITY_MISSING`; its canonical gate was `CANONICAL_IDENTITY_INTERNAL`.
+Independent file hashing confirms the canonical executable and sidecar differ.
+Autostart reports enabled, but no existing supervisor mutex was observed. Registered
+autostart is not proof of a running supervisor or permission to activate it.
+
+The earlier stopped official runtime, absent port-3200 listener/daemon and HTTP 429
+remain distinct observations. No connector retry was made; restarting a daemon is
+not proven to repair HTTP 429. All 306 tracked records and seven canonical/config pins
+remain exact. Native sessions, bindings, histories and completed canaries were
+preserved. No browser, Wake, recurring, protected-service or authentication action.
+
+Operator restoration is deferred until October 27, with no automatic action
+scheduled. The documented command is `./catdesk.ps1 recover`, but it is **not
+currently eligible**: resolve reviewed release/LKG authority first and inspect a
+fresh `./catdesk.ps1 diagnose`. Recovery can also reach Wake/GUI startup; its scope
+must be allowed before execution. Do not edit the fingerprint, copy a development
+image into the canonical location, or use internal bootstrap as a bypass.
+
+Actual independent Web coding B/C and protected/unattended acceptance remain open.
+Continue concrete independently eligible development; do not repeat unchanged
+dependency probes or completed canaries. Evidence:
+`docs/verification/C99_SUPPORTED_BACKEND_OWNER_DIAGNOSIS_2026_10_24.json`.
+
+## October 24 EDT C96–C97 — normal context-limit status and stopped selection
+
+Published C95 built as a normal release app in 351.43s. A bounded disposable CLI
+qualification passed in 8.77s: 30 owned commands (24 app, six local Git), supported
+registrations/imports, the derived 4,096-event limit flag, independent sibling
+estimates, six cold status reads and an independent retained-metadata oracle.
+Rejected over-limit imports remain atomic; known revisions still update and exact
+replays preserve bytes. Low token pressure stays low. No raw transcript is stored
+in ledgers. This qualifies normal metadata behavior; C95 snapshot recovery remains
+source-tested and is not newly live-qualified by these CLI calls.
+
+The exact normal image was selected through the existing guarded stopped update
+in 6.66s. Ten paired reads and the central view passed. Only two package pointers
+changed; 304 other records remain exact. Previous package/profile, all bindings,
+histories, private handoffs and native assignments are preserved. Zero owners,
+queue 0, both controls STOPPED; no browser/Wake/recurring or production action.
+
+Actual parallel Web coding B/C still needs the supported serving backend and
+connector. Protected installation and unattended operation remain unqualified.
+Next: reconcile that live path and use the qualified cached scoped task transport
+when available; continue independently eligible development on concrete gaps.
+Evidence: `docs/verification/C96_C97_NORMAL_CONTEXT_LIMIT_STATUS_2026_10_24.json`.
+
+## October 24 EDT C95 — recover snapshot accounting at its event limit
+
+A full observation ledger could reject a fresh snapshot before an already-due
+context policy reached guarded handoff preparation. Snapshot ingestion now handles
+only that explicit event-limit refusal as an accounting gap: report uncounted
+complete/clipped messages, retain every old event, allow known revisions, and
+persist sticky coverage gaps. A derived per-conversation limit flag is exposed
+without a persisted schema migration; false is omitted for legacy status shapes.
+
+The causal old-code failure and seven snapshot-ingestion regressions pass, followed
+by the full Web operator/context-meter gates, strict Clippy and formatting. Tests
+exercise the real 4,096-event bound, cold stable intent, required quiescence, exact
+revision/replay counts, target refusal, low-pressure/no-forced-rollover and sibling
+capture. Existing fresh idle/source checks, thresholds, scheduler, handoffs, byte
+bounds and other errors are unchanged. Saturation is not token-pressure evidence;
+below-trigger saturation remains advisory and requires a policy decision.
+
+All 306 real records stay exact; queue 0, zero scoped/test owners, both controls
+STOPPED. No browser/Wake/connector/native actions or completed-canary replay.
+Source only: C94 remains selected, and actual Web coding B/C, protected installation
+and unattended acceptance remain open. Next: normal app build and disposable cold
+CLI status qualification. Evidence:
+`docs/verification/C95_CONTEXT_SNAPSHOT_LIMIT_RECOVERY_2026_10_24.json`.
+
+## October 24 EDT C93–C94 — normal cached task transport qualified
+
+The published C92 source built as a normal release app. The bounded disposable
+HTTP test passed through cached `run_command` envelopes in SupervisorOnly:
+17 requests, two natural coordinator lifetimes, independent assigned worktree
+patches/diffs, blocked-writer sibling progress and cold replay refusal across
+cached/direct transports. Both temporary grants were revoked and exact owned keys
+removed. All 306 real records remained exact during the test. These synthetic
+local receipt fixtures are not actual ChatGPT delivery or coding evidence.
+
+The exact qualified image was selected using the existing guarded stopped update.
+Ten paired reads and the central view passed. Only two package pointers changed;
+304 other records remained exact, with previous package/profile, histories,
+private handoffs and native assignments preserved. Zero owners, queue 0 and both
+controls STOPPED; no browser/Wake/recurring start or production change.
+
+Actual Web coding B/C still requires the supported serving backend/connector.
+Source, normal local HTTP and stopped development selection are separately proven;
+protected installation and unattended operation remain unqualified. Evidence:
+`docs/verification/C93_C94_NORMAL_CACHED_TASK_TRANSPORT_2026_10_24.json`.
+
+## October 24 EDT C92 — cached-schema scoped task transport
+
+The existing cached `run_command` schema now accepts a closed
+`CATDESK_WEB_TASK=` JSON envelope containing the same scoped task arguments.
+It uses the existing dispatcher, private assignment grant, exact project/target,
+writer ownership and call journal. Command text never reaches the shell. Both
+direct and cached task routes now require computer and supervisor capabilities;
+ordinary shell access remains disabled in SupervisorOnly. Existing bearer and
+plan checks remain, and shell options or malformed envelopes are refused.
+
+The causal old-route failure was reproduced. Six dispatch tests, 43 server-routing
+tests and three granted-handoff compatibility tests passed, with one existing
+server test ignored. Strict Clippy and formatting passed. Cached/direct replay
+shares one journal; private keys stay absent from responses and context-ledger
+JSON. Future private handoffs include transport metadata; existing payloads and
+continuation rendering remain unchanged. Source fixture key cleanup is not claimed.
+
+All 306 real runtime records remain exact, queue 0, zero scoped/test owners and
+both controls STOPPED. No browser, Wake, connector retry, native-session action,
+binding change or completed-canary replay occurred. The C91 normal image remains
+selected. Source qualification is distinct from normal app and actual Web proof.
+Next: normal build and bounded disposable HTTP qualification. Actual parallel Web
+coding B/C remains open at the serving-backend/connector path; unattended operation
+is not activated. Evidence:
+`docs/verification/C92_CACHED_SCHEMA_TASK_TRANSPORT_2026_10_24.json`.
+
+## October 24 EDT C90–C91 — normal nested-file tasks and stopped selection
+
+The published C89 source built normally in 375.65s. A 180s disposable central HTTP
+qualification passed: 16 local requests across two natural coordinator lifetimes,
+independent assigned nested-file creation, actual diffs, unassigned-file refusal,
+blocked-writer/sibling progress and cold no-replay. Both temporary grants were
+revoked and their exact owned keys removed. All 306 real records stayed exact;
+no browser, Wake worker or actual ChatGPT Web tool call was involved. Synthetic
+local receipt fixtures are explicitly distinct from provider delivery proof.
+
+The exact normal image was then selected through the guarded stopped development
+update in 6.79s. All 10 pair reads and the central view passed. Only two package
+pointers changed; 304 other records stayed exact. Previous package/profile,
+bindings/history, native assignments and held unknown journals are preserved.
+Zero owners, queue 0, controls STOPPED. Protected and unattended acceptance remain
+open. Actual ChatGPT Web coding B/C still requires the serving backend/catalog
+and connector path. Next: inspect cached-schema access to the existing scoped
+dispatcher while retaining its task/grant/target checks and private-key handling.
+Evidence: `docs/verification/C90_C91_NORMAL_NESTED_TASK_CREATION_2026_10_24.json`.
+
+## October 24 EDT C89 — assigned task files in new directories
+
+Web task path admission rejected an explicitly assigned new file when its parent
+directory did not exist. It now validates the nearest existing ancestor; only
+NotFound permits walking upward. Canonical workspace containment, directory-type
+checks and the existing contract path policy remain mandatory. The existing
+patch engine owns directory/file creation, preimages, apply and no-replay journals.
+
+The causal old-code failure and 18 affected tests passed. Two existing native-command
+tests remain excluded; this change does not qualify command execution. Central
+task HTTP regressions, strict workspace Clippy and formatting also pass. New tests
+create different nested files in independent assigned worktrees, preserve native
+checkouts, verify actual diffs/cold no-replay, and reject real outside/dangling
+junctions and invalid ancestors before writes. Fixture path/CRLF repairs and their
+failed attempts remain audited. Source qualification only; the selected C86 app
+is unchanged. All 306 real records match, zero owners, queue 0, controls STOPPED.
+
+Actual Web coding B/C still needs the supported serving backend/catalog path;
+no connector retry, tunnel/runtime action or completed live canary replay occurred.
+Next: normal app build and disposable central HTTP qualification. Evidence:
+`docs/verification/C89_ASSIGNED_NESTED_FILE_CREATION_2026_10_24.json`.
+
+## October 24 EDT C86–C88 — normal automatic context observation
+
+The published C85 app built normally in 371.51s and was selected through the
+stopped development update. All 10 pairs passed; only two package pointers changed,
+303 other records stayed exact and the previous package/profile were preserved.
+
+C87 used the actual periodic scheduler with two explicitly enabled projects.
+The held source captured successfully without advancing SUBMISSION_UNKNOWN or
+changing its journal/binding. Its sibling remained AWAITING_BROWSER within the
+180s bound. This is a retained PARTIAL result, not two-observer acceptance.
+
+C88 then used both original policies: held observation disabled, sibling enabled.
+The sibling completed a fresh native context observation while the held project
+stayed non-replayable. No completed capture, message or rollover was replayed.
+This is independent context progress, not useful ChatGPT Web coding B/C.
+
+Both runs ended naturally in under 168s, with verified foreground host exits,
+zero scoped owners, queue 0 and controls STOPPED. Policies, all 10 bindings/history,
+native assignments and unknown journals were preserved; 306 final runtime records.
+No protected, official, recurring or unattended activation. Exact context usage
+remains advisory. Source and selected live scope are separate in the evidence:
+`docs/verification/C86_C88_NORMAL_AUTOMATIC_CONTEXT_OBSERVATION_2026_10_24.json`.
+Actual Web coding still needs the supported backend/catalog and connector path.
+
+## October 24 EDT C85 — context observation while submission is held
+
+The existing observation-only quarantine path now also handles SUBMISSION_UNKNOWN.
+It requires explicit observation opt-in and the exact active project/source key;
+rollover opt-in alone is insufficient. High pressure cannot advance the held
+operation, request another handoff or authorize resend. Cancellation surrounds
+capture. The existing stage, journal and no-resend guards remain intact.
+
+Causal old-code failure, 107 affected Web tests, strict workspace Clippy and
+format checks passed. Real isolated registry/Wake bindings stayed byte-exact.
+This is source qualification with injected capture, not live browser acceptance.
+All 305 retained runtime records are unchanged; zero owners, queue 0, both controls
+STOPPED. No runtime, native developer or completed canary was restarted/replayed.
+Next: normal app build/guarded selection, then bounded independent observation.
+Actual Web coding B/C remains blocked on the recorded connector/catalog dependency;
+protected and unattended acceptance remain open. Evidence:
+`docs/verification/C85_HELD_SUBMISSION_CONTEXT_OBSERVATION_2026_10_24.json`.
+
+## October 24 EDT C82–C84 — real unknown-send crash and owned-draft archival
+
+A new task/intent reused the completed controlled project's generation2 source;
+no project/profile was created and no old message was replayed. Its controlled
+pressure observation, one handoff delivery and actual3,869-character collection
+passed. The normal selected C80 app was then killed through its retained parent
+handle after durable SEND_ATTEMPTED. Native kill-on-close Jobs exited with it.
+The saved journal stayed SUBMITTING/SEND_ATTEMPTED without a provider USER receipt
+or new binding. Every existing registry/Wake binding remained unchanged.
+
+A cold normal execute refused OUTCOME_UNKNOWN_NO_RESEND with the browser locked.
+Read-only inspection verified the exact owned full draft. The actual normal
+archive command then preserved4,395 bytes before its guarded composer clear,
+reopened Home and verified it empty in23.97s. A real archive-completion receipt
+was saved; it is NOT a provider submission receipt. The unknown operation stays
+non-replayable and its original generation2 binding remains authoritative. No
+conclusion about whether the provider accepted the submission was invented.
+
+The original test policy was restored. With the browser locked, cached archive
+completion and another execute refusal changed zero bytes; cached success does
+not claim a current composer observation. Wake2 target metadata remained readable.
+This is local sibling metadata proof, not successful sibling Web coding.
+
+All bounded steps used180s Jobs and cleaned to zero owners. Both controls STOPPED,
+queue0,305 records,10 pairs/one retained archive, all original bindings/history and
+native sessions preserved. The controlled test project alone stays held for the
+unknown outcome; shared composer ownership was released. An early stale private
+manifest preflight refused before host/latch; event text/destination never changed.
+
+One primary connector health read at07:22:13UTC, over three hours after the previous
+probe, independently returned HTTP429 from OpenAI transport. No retry or service,
+tunnel, authentication or settings action. Three native chats are active, one idle,
+no errors/actions. Actual Web B/C, protected and unattended acceptance remain open.
+Next: inspect/qualify bounded independent observation-only scheduler work using
+existing ownership controls; do not replay these completed operations. Evidence:
+`docs/verification/C82_C84_UNKNOWN_SEND_LIVE_ARCHIVE_2026_10_24.json`.
+
+## October 24 EDT C81 — normal archive app selected in stopped development
+
+The exact reviewed C80 source `bce0e1d9aea836948e7d791141bef0214def2cd0`
+built as a normal release app without dev dependencies in382.67s. The source and
+embedded bridge/adapter/test pins stayed frozen. The guarded stopped-development
+update passed in7.21s, with all10 paired target reads and central status correct.
+
+The unchanged C72 normal host and bridge were reused with their actual source
+`5e71ef8ef62b6306610a49fee26bd5de28206976`, exact hashes, unchanged Wake
+subtree/assets and retained owner-EOF/bridge proof. They were not rebuilt or
+retested. The old package remains intact. Only package authority/current pointers
+changed:295 other records byte-exact,297 total, no new records. Both controls
+STOPPED, zero scoped owners/messages, no browser/Wake/recurring/native/production
+action. All original project bindings, workspaces and predecessor history survived.
+
+This selects the v2 unknown-submit archive implementation in normal development;
+it does not prove fresh live archival, protected installation or unattended work.
+Next is a new bounded SEND_ATTEMPTED interruption/archival case on the existing
+completed controlled project, using a new task/intent and preserving its generation2
+source. Completed C69/C73–C78 messages and operations must not be replayed. Actual
+Web coding B/C remains a separate connector/backend/catalog dependency. Evidence:
+`docs/verification/C81_NORMAL_ARCHIVE_APP_SELECTION_2026_10_24.json`.
+
+## October 24 EDT C80 — archive an exact owned v2 unknown-submit draft
+
+The existing supported `operator web rollover archive-draft --project-id PROJECT
+--expected-intent-id INTENT` now accepts a SUBMITTING protocol-v2 SEND_ATTEMPTED
+record as well as legacy unknown state. A USER receipt, committed target or
+quarantine still refuses; TEXT_ENTRY_AUTHORIZED and DRAFT_READY retain their own
+recovery path. Existing source/target validation, private handoff handling, durable
+actual-text archive and exact composer CAS are reused. No browser protocol changed.
+Archival never proves submission and never authorizes resend. The original journal,
+source binding and SEND_ATTEMPTED boundary remain preserved and non-replayable.
+
+One new native regression fixtures a crash after the archive/empty-home receipt
+was committed but before the journal reason. With the browser lock held, cold
+completion and retry pass without browser access, six refusal cases preserve state,
+and execute still refuses the unknown outcome. Cached success explicitly does not
+claim a current composer observation. Alpha/Beta bindings and empty queues remain
+exact. This is a fixture receipt, not a newly observed live browser receipt.
+
+Causal RED reproduced the old guard rejection. Final affected-module suite passes
+54 tests, zero failures/ignored,33.88s test runtime; strict all-target/all-feature
+workspace Clippy and formatting pass on the same frozen source. The initial private
+helper compile error, empty-filter attempt, earlier state-fence assertion correction
+and Windows cleanup-path correction remain recorded. The zero-test attempt is not
+qualification; no production guard was bypassed to fix these test issues.
+
+All297 saved runtime records are unchanged. No browser/Wake/recurring/native or
+production action occurred. The selected C72 normal app still has the earlier
+archive guard: this change is SOURCE qualification, not selected/installed/live
+acceptance. Next: normal app build and guarded stopped package qualification, then
+a new bounded unknown-submit interruption/archival test. Reuse the unchanged host
+and authenticated profile with explicit provenance; do not resend completed canaries.
+Evidence: `docs/verification/C80_UNKNOWN_V2_DRAFT_ARCHIVE_2026_10_24.json`.
+
+## October 24 EDT C79 — selected coordinator and independent Wake restart
+
+Two consecutive normal MCP lifetimes and two independent foreground Wake host
+lifetimes passed against the actual selected development installation. Each MCP
+process exited0 at30s on the same endpoint/auth; each host reached its25s deadline,
+completed owned shutdown and exited0. Exit was sampled after the MCP lifetime,
+not recorded as an exact host exit timestamp. The180s outer Job finished in63.31s.
+
+Four read-only HTTP requests verified79 tools and equal complete coordinator
+projections across restart:10 active workspaces/current URLs, one archive/history,
+all10 Wake pairs, context, queues, work intents and rollovers. Two SUBMITTING,
+two quarantined and nine continuation-queued journals remained exact. The queues
+were empty and all turns complete before either host start. No event was replayed.
+
+Only development status telemetry changed;296 other records stayed byte-exact,
+297 total. Final host status is STOPPED/NOT_OBSERVED with no attention, last host
+error or recovery count. Both controls STOPPED, queue0, zero scoped owners. No
+browser owner was observed, Web scheduling stayed disabled, and there were no
+native, connector, official-runtime, production or recurring actions. This advances
+I for the actual selected coordinator plus independent host; scheduler restart,
+protected installation, unattended operation and actual Web coding remain separate.
+
+Next eligible source gap: exact-owned archival currently accepts only legacy
+unknown-submit records without a progress stage. Review a supported no-send
+archive path for protocol-v2 SEND_ATTEMPTED so an uncertain project can release its
+shared composer safely. Reuse the durable archive/CAS mechanism and preserve the
+original target/journal and permanent no-resend fence. No such live test has run.
+Evidence: `docs/verification/C79_SELECTED_COORDINATOR_WAKE_RESTART_2026_10_24.json`.
+
+## October 24 EDT C73–C78 — real process-kill rollover recovery and continuation
+
+The previously reconciled C69 source was registered through supported commands
+without resending its seed. A new project-specific pressure/handoff request was
+observed, delivered once and collected into a3,066-character durable handoff.
+All nine prior active pairs and the retained archive were preserved.
+
+The selected normal app then began that new rollover. The monitored test killed
+only its retained owned process tree after observing durable `DRAFT_READY`.
+The post-exit journal stayed `SUBMITTING / DRAFT_READY`, with no receipt or new
+binding. Registry/Wake stayed exact. A cold normal read-only inspection verified
+the exact owned draft, no send attempt and no metadata change. Supported recovery
+resumed this same draft/intent, verified the actual issued URL and completed reply,
+committed paired generation1-to2, retained the predecessor exactly once, recorded
+context and queued one continuation. No blind resend or lock removal was used.
+
+The recovery itself completed in84.73s. Its test harness then exited1 before the
+policy reset because its audit directory was unset. That failed record is retained;
+a separate0.84s local-only finalization restored this canary's policy and verified
+the paired result without executing rollover or opening a browser again.
+
+Continuation delivery passed in63.84s. A separate34.81s event-bound read verified
+the1,305-character completed body, correct source task and interruption/recovery
+context. The response reports connector429; it is not successful MCP coding proof.
+The copied delivery label also still says registry recovery; the actual injected
+failure was process-tree termination, and the original label is retained in audit.
+
+Every browser/foreground step stayed within its owned180s cap and cleaned up to
+zero scoped processes; both controls STOPPED, queue0,297 current records,10 active
+pairs and one retained archive. The original five projects/bindings and native
+sessions were unchanged. Native readback showed three active chats and PortfolioDesk
+idle with its own reported blocker; no messages or session actions were sent.
+No recurring or production activation. H advances for actual pre-send process kill
+and recovery; other crash phases, machine crash, full-stack restart, protected and
+unattended acceptance remain open. Actual Web coding B/C remains a separate backend
+dependency. Next: bounded empty-queue full-stack restart qualification. Evidence:
+`docs/verification/C73_C78_OWNED_PROCESS_ROLLOVER_RECOVERY_2026_10_24.json`.
+
+## October 24 EDT C71–C72 — matching response-recovery package selected stopped
+
+The stopped package guard rejected the attempted old-binary/new-bridge mixture
+with `DEV_PACKAGE_SCRIPT_SOURCE_MISMATCH` before any runtime change. Its embedded
+script pins were retained. Both normal app and host were rebuilt from reviewed
+source `5e71ef8ef62b6306610a49fee26bd5de28206976`, with no test support enabled.
+The app build passed in411.08s; host tests/build/owner-EOF gate passed in34.42s,
+including12 focused runtime tests. The EOF probe refused startup and created no
+runtime state. This supersedes the earlier assumption that unchanged Rust text
+allowed binary reuse after a Python bridge change.
+
+The guarded stopped-development update then passed in7.07s. Four recovery methods
+ran against the exact selected Python module, all nine Wake pairs and central
+status passed, and the old package remained hash-exact. Only the authority/current
+package pointers changed:280 other saved records stayed exact,282 total, no new
+records. All project registrations, conversation histories and bindings survived.
+Both controls remained STOPPED and cleanup found zero scoped owners. No browser,
+Wake engine, recurring automation, message or native-session action occurred.
+
+The C70 real read-only browser proof is retained without replay. This qualifies
+the fixed component in selected stopped development; it does not prove protected
+installation or unattended operation. C69's source seed and read-only reconciliation
+remain complete and must not be resent; registration and the actual process-kill
+test remain pending. Actual parallel ChatGPT tool execution B/C remains blocked
+by connector429/catalog/backend ownership, separately from eligible development.
+No operator action is needed for the next bounded canary preparation. Evidence:
+`docs/verification/C71_C72_MATCHED_RESPONSE_PACKAGE_2026_10_24.json`.
+
+## October 24 EDT C69–C70 — response query recovery with a real read-only canary
+
+A fresh controlled source for a future owned-process interruption sent one seed,
+then its helper stopped on `RESPONSE_STATE_QUERY_FAILED`. No resend or binding
+followed. A bounded read-only fresh-document reconciliation verified exactly one
+USER and the expected completed ASSISTANT reply, preserving the failed journal.
+All282 runtime records and prior nine active/one retired registrations stayed exact.
+The source remains unregistered; the actual process-interruption test has NOT run.
+
+C70 adds a three-failure pure-read budget to the existing response wait. Each
+retry restarts target/turn and idle checks inside the original generation/total
+deadlines. Recovery adds no typing, resend, reload or Retry click. Wrong-target,
+sequence and other semantic failures stay fenced. Four new regression methods
+cover transient reads, persistent failures, deadlines and drift. An old receipt
+fixture also now isolates readiness and spies on the real receipt guard.
+
+Causal RED failed before the fix. Final complete bridge/Wake Python suite passes
+225 tests/187 subtests in182.72s under owned600s containment; source hashes froze.
+Original180s timeouts and a20s diagnostic failure remain retained. The first
+identified unrelated readiness in the receipt fixture; its corrected isolated run
+passes. The second full run reached158 tests and exceeded its180s bound; no failed
+run is counted as acceptance. Ruff is unavailable; no dependency was installed.
+Rust main/host were not rebuilt for this Python-only change.
+
+One candidate-component browser read then passed in14.53s under180s containment:
+native response/body state valid, one injected CDP query failure recovered, exact
+USER/ASSISTANT body revalidated. Zero messages, typing, Retry clicks, draft writes,
+new profiles or binding changes. Every browser Job cleaned up to zero scoped
+owners; both controls STOPPED. No Wake/recurring/native/production or connector
+action. This is source plus candidate-component live evidence, not selected fixed
+package/protected/unattended acceptance. Next: guarded stopped bridge qualification,
+then the pending interruption operation. Evidence:
+`docs/verification/C69_C70_RESPONSE_READ_RECOVERY_2026_10_24.json`.
+
+## October 24 EDT C68 — selected MCP process restarts with pending state intact
+
+Two real selected v69 CatDesk MCP processes ran consecutively against the existing
+development control, reusing the exact endpoint and ephemeral authentication.
+Each exited naturally0 at30s; the owned180s Job completed in61.47s. Four read-only
+HTTP requests verified79 tools and identical complete coordinator projections:
+nine active project workspaces/URLs/history, one retained archive, all nine Wake
+pairs, context, queues, work reports and rollover/admission status. Independent
+registry-file comparison also passed. The retained journals include two SUBMITTING,
+two quarantined and eight continuation-queued records; no recovery/send was invoked.
+
+All282 saved records stayed byte-exact with read leases across both lifetimes.
+Zero scoped owners; no browser/Wake/recurring, native, official-runtime or connector
+action, message, selected-package change or production modification. This advances
+I for the actual selected normal MCP process, not a whole-stack restart, process
+kill, interrupted write or unattended operation. The copied wrapper also printed
+an old C66 summary after the correct C68 result; dedicated C68 result/containment
+records establish the pass. That reporting tail was corrected without test replay.
+Actual Web B/C, remaining H/full-stack/protected gates remain open. Evidence:
+`docs/verification/C68_SELECTED_MCP_RESTART_2026_10_24.json`.
+
+## October 24 EDT C67 — draft review current; local backend dependency narrowed
+
+The existing [draft PR #4](https://github.com/vnath99/CatDesk/pull/4) still had an
+October21 review summary. A sanitized current prefix now states the mandatory
+ChatGPT Web A–J criteria, C63–C66 source/normal/selected scope, preserved real
+rollover/recovery proof and open actual Web/production gates. Exact body-hash
+readback passed; old notes, draft/open state, head/base and visibility remain
+preserved. No merge. Remote readback confirms head3e9cd7d and base5cedbb7; the
+base is an ancestor (0 base-only/178 head-only commits at this checkpoint).
+
+Existing bounded Windows inventory helpers found no current listener at the saved
+official-runtime loopback target and no CatDesk daemon owner. Both helper owners
+exited0 within10s; no connector/network request or start/stop/configuration change.
+This narrows the local dependency but neither explains the provider429 nor grants
+startup authority. The supported backend owner/launcher answer is still pending.
+No new product defect was established; source tests/canaries were not repeated.
+Actual Web B/C, remaining crash/full-runtime restart, protected/unattended and CI
+acceptance remain open. Evidence: `docs/verification/C67_DRAFT_REVIEW_AND_LOCAL_BACKEND_2026_10_24.json`.
+
+## October 24 EDT C66 — reviewed normal app selected in stopped development
+
+The existing guarded package update selected the C64 normal app in the isolated
+development installation in6.61s. Its exact app image is C65-qualified. The existing
+Wake host/adapter/bridge were reused with unchanged source/pins and retained
+owner-EOF proof. The old package remains intact. Only authority/current package
+pointers changed;280 other records are exact,282 total, zero new state records.
+All9 active Wake pairs read back correctly and central status passed; the retired
+canary/history remains preserved. Both controls STOPPED, queue0, zero scoped
+owners. No browser, WakeHost, recurring process, message or native-session action.
+
+Source checkpoint `36b743aeaa9592bced1892caf06cfed0482cc803` and C65 evidence
+`af7857ca2a20ace25e3958a68fa5c1970ea2af23` were reviewed, sanitized and pushed
+normally to the existing PUBLIC development branch; exact remote SHA matches.
+This is stopped development selection, not protected installation or unattended
+acceptance. Actual parallel ChatGPT tools B/C still require recovery of the
+connector429 dependency, supported serving-backend ownership and scoped-tool
+catalog availability. No automatic runtime/tunnel restart or completed-event replay.
+Next: that supported backend/catalog qualification plus independently eligible
+source work. Evidence: `docs/verification/C66_STOPPED_DEVELOPMENT_SELECTION_2026_10_24.json`.
+
+## October 24 EDT C65 — normal archive reader and bounded listener pass
+
+Reviewed source `36b743aeaa9592bced1892caf06cfed0482cc803` built normally under
+an owned600s Job. A loopback-only ephemeral MCP listener with Web auto disabled
+advertised79 supervisor tools and returned9 active projects plus the preserved
+retired canary. Its exact workspace, current target/digest, predecessor history,
+retirement metadata and native-binding fields matched the saved registry. The
+listener exited naturally at its30s deadline; its outer180s Job exited cleanly.
+Two read-only HTTP requests, zero browser/Wake/recurring starts or messages,
+all282 saved records byte-exact and zero scoped owners. This qualifies the normal
+development image and real saved metadata, not external ChatGPT coding.
+
+One intermittent primary-connector transport-status read independently returned
+HTTP429 (`MCP SSE probe returned 429 from openai.org`); no retry or runtime/tunnel
+lifecycle change. This session's connector catalogs omit the scoped task tool
+that the normal local catalog advertises. Cause/backend identity remain unknown.
+Exact-source GitHub Actions/checks are0/0, so CI is unverified. No dispatch or
+settings change. Three other native chats are active; PortfolioDesk's idle/blocked
+state is reported by its own chat. None was paused, resumed or otherwise changed.
+
+Selected v68 remains the previous C55 image STOPPED; this normal image has not
+been selected or installed in protected production. Next: existing guarded stopped
+development package qualification. Actual parallel Web B/C, full-runtime restart,
+protected installation and unattended operation stay OPEN. Completed deliveries,
+rollovers and retirement are preserved and must not be replayed. Evidence:
+`docs/verification/C65_NORMAL_RETIRED_HISTORY_2026_10_24.json`.
+
+## October 23 EDT C63–C64 — preserve retired history in the coordinator
+
+C63 safely retired only the completed controlled registry-recovery canary via
+the existing guarded command (5.71s). Nine active projects remain unchanged; the
+retired record retains generation2, its predecessor, workspace and all journals.
+Cold repeat preserved every byte. Registry/config changed as expected and one
+retirement journal was added:282 retained runtime records, queue0, zero owners.
+No conversation was resent or deleted; no browser, Wake or recurring process
+started and no native development session changed.
+
+C64 found that the existing MCP registry reader omitted saved `retiredProjects`.
+It now returns nonempty archived rows, preserving the legacy response shape when
+none exist. One regression registers two projects, advances one conversation,
+retires it and reads through fresh MCP handlers twice: active sibling preserved,
+current/predecessor links retained, no reactivation or registry writes. The causal
+native-account RED failed on the missing row; GREEN passes3 focused tests.
+Strict workspace/all-target/all-feature Clippy, format and whitespace gates pass.
+An earlier sandbox ancestor-access refusal is retained as environment evidence.
+
+Pre-fix normal loopback diagnostics advertised79 supervisor tools, including the
+scoped task dispatcher, and returned9 active projects over HTTP200. Saved response
+inspection confirmed the archive omission. The harness then assumed an optional
+`isError` field and stopped its owned listener early; this is partial diagnostic
+evidence, not passing lifecycle qualification. All282 records stayed exact and
+zero scoped owners remained. The first read-only mode lacked the supervisor
+registry reader by design. Neither test used the external connector or browser.
+
+Fixed source is tested; its normal build/readback is NEXT, not installed/live
+acceptance. The official runtime status-only read reports stopped/unhealthy;
+its startup ownership remains unresolved. The assistant's reported429 is not an
+independently traced provider result or a proven effect of that runtime state.
+Actual Web tool execution B/C, full-runtime restart, protected installation and
+unattended acceptance remain OPEN. No automatic runtime/tunnel restart.
+Evidence: `docs/verification/C63_C64_RETAINED_HISTORY_2026_10_23.json`.
+
+## October 23 EDT C60–C62 — live paired registry failure recovered without resend
+
+The new C59 source's one queued handoff was delivered SENT/COMPLETE (61.03s),
+then the normal collector verified its actual fresh assistant body and saved the
+source fingerprint (36.75s). The selected C55 app then created a real replacement,
+independently verified its issued URL/receipt and rechecked the source. A real
+Windows registry read-share handle forced atomic replacement to fail after the
+guarded Wake successor committed (97.83s). No receipt/state was injected.
+The journal remained CREATED, Wake stayed generation2 and registry bytes stayed
+old. The incomplete pair refused reads; Wake2's target stayed readable. Previous
+admission entries, including quarantined operations, remained unchanged.
+
+A fresh normal process recovered locally with the real browser profile lock held
+(3.00s): same receipt/source witness, same generation2, predecessor retained once,
+context recorded and one continuation queued. Cold retry preserved all bytes.
+The canary's default context policy was restored. That continuation was delivered
+once SENT/COMPLETE (56.94s), and an event-bound fresh read verified its assistant
+body (34.55s), including the correct task and marker. The assistant reports HTTP429
+when inspecting project state, so actual Web tool execution remains unverified.
+Its statement that testing is pending is stale peer context, not authority over
+the locally verified test result. No successful coding execution is claimed.
+
+This qualifies the existing C55 fix against an actual controlled browser/Wake
+commit and native registry-write interruption. It does not simulate a killed
+process/machine or prove full-runtime/unattended recovery. Six owned Jobs, each
+bounded180s, exited; zero scoped owners and queue0. All nine prior projects and
+histories, native sessions, fixture, C50 grants/records and old canaries remain
+preserved. Ten projects are paired, C59 is at2 with one predecessor;281 current
+runtime records. Both controls STOPPED; no recurring/production changes. Next:
+close only this completed test-owned project via guarded retirement if eligible,
+preserving all history; never resend its completed events. Actual Web B/C and
+protected/full-runtime/unattended acceptance remain open. Evidence:
+`docs/verification/C60_C62_LIVE_REGISTRY_COMMIT_RECOVERY_2026_10_23.json`.
+
+## October 23 EDT C59 — fresh live source for commit-interruption qualification
+
+Existing controlled conversations were fenced by pending/quarantined operations
+or owned tasks. A distinct test source was created through the existing browser
+workflow and authenticated profile, with one submission and no predecessor.
+The legacy private seed helper then failed response verification because it
+passed a digest to a text-based observer; production adapter calls are correct.
+Read-only fresh-document reconciliation proved exactly one USER and the exact
+completed acknowledgement. The original journal/payload remain unchanged; no
+message was resent, no unknown draft was overwritten and no new profile created.
+
+Supported guarded commands registered the verified source as a tenth development
+project at paired generation1. All nine prior registrations, Wake targets and
+history were preserved. A fixture owner mismatch had refused before any shared
+state mutation; a fresh runtime-owned fixture fixed it without Git trust or owner
+changes. A bounded source read/controlled per-project pressure policy then queued
+one durable handoff request. It is NOT delivered or collected. Registry/config
+are the only two changed prior records;264 others are exact, with five new canary
+records (271 total). Both controls stay STOPPED; all five owned Jobs terminated,
+zero scoped processes, no recurring/native/production actions or accepted-canary
+replay. Actual paired-commit interruption/rollover/continuation is NOT RUN.
+
+Next: deliver that queued handoff once under bounded foreground ownership,
+verify its receipt/response and cleanup, then collect. Actual Web coding B/C and
+protected/full-runtime/unattended acceptance remain open; the connector/startup
+dependency was not retried or changed. Evidence:
+`docs/verification/C59_FRESH_LIVE_COMMIT_CANARY_SOURCE_2026_10_23.json`.
+
+## October 23 EDT C58 — normal activity readback on preserved project history
+
+Published C57 source `799b1e420dbc5372399a8475176d25539212b026` built normally in 378.45s
+under an owned 600-second Job. Three normal-reader checks /11 commands passed
+in 8.58s. Central and nine separate project readers matched independent
+event-metadata calculations for all16 retained conversation ledgers; nine Wake
+pairs remained exact. Current activity was qualified against its paired target;
+predecessor history stayed scoped. A cold central retry preserved timestamps.
+These read existing recorded context; they do not demonstrate new Web tool calls,
+worker liveness, actual clock accuracy or task completion.
+
+All266 runtime records remain exact, including C50 history/task/grant. Selected
+v68 remains the C55 image STOPPED; C57 is normally built/read-qualified, not newly
+selected or protected-installed. Both owned Jobs exited, zero scoped processes,
+no messages, browser/Wake/recurring starts, native actions or production changes.
+Actual parallel Web coding, critical browser crash/full restart and unattended
+acceptance remain open. Next: prepare a fresh isolated commit-interruption canary
+through existing bounded browser recovery, with a supported source and exact
+ownership proved before any browser action; never replay accepted canaries.
+Evidence: `docs/verification/C58_NORMAL_CONVERSATION_ACTIVITY_2026_10_23.json`.
+
+## October 23 EDT C57 — per-conversation observed activity (source)
+
+The required last-activity view now exposes `lastObservedEventAtUnix` alongside
+existing context estimates in `operator web context status --project-id ID` and
+the central registry's `context.currentPressure` / `recentConversations`.
+It is derived from retained event observations, not status polling, worker
+liveness, a verified clock or task completion. Empty/new conversations report
+null; predecessor activity stays historical. No persisted-state migration,
+second registry or timer was introduced. Exact-content retries keep their time.
+
+Twenty-four regressions passed, including two new cold-read/retry/isolation,
+rollover-history, legacy-status and central-projection checks. Strict workspace
+Clippy, format and whitespace passed. Self-review only. C57 is source-qualified;
+normal/selected/live qualification is separate. All266 v68 runtime records, nine
+bindings and C50 task/grant/history are unchanged. No messages, browser/Wake/
+recurring starts, native actions or production changes; zero scoped owners.
+Next: normal C57 build and disposable CLI qualification. Actual Web coding,
+browser critical-crash/full-runtime restart and unattended acceptance remain open.
+Evidence: `docs/verification/C57_CONVERSATION_EVENT_ACTIVITY_2026_10_23.json`.
+
+## October 23 EDT C56 — normal recovery qualified; stopped development selected
+
+Published source `90c2cc95e11bc132fc46571811655898e087cc76` built normally in 413.16s
+under an owned 600-second Job. Five normal-executable checks across 21 bounded
+commands passed in 4.48s. Explicitly injected synthetic CREATED/Wake-first
+state encountered a real Windows registry replacement fault. Its receipt,
+generation2 successor and old registry survived. A sibling target remained
+readable and queued its own work metadata while the registry write was blocked.
+A fresh process finished the same successor, preserved one predecessor, recorded
+the context transition and queued one continuation. Cold retry preserved exact
+record, registry, Wake and queue bytes; the continuation remains undelivered.
+This is local persistence qualification, not a browser crash, actual Web coding
+or full-runtime restart. Harness input/envelope/order corrections and partial
+attempts are audited; none changed real state or left owned processes.
+
+The existing guarded updater selected that image into stopped development v68 in
+6.44s. Nine exact paired reads and the redacted central view passed.
+Only the two permitted package pointers changed; 264 other records, all project
+bindings/history, the completed C50 task/grant and existing profile remain intact.
+The prior v67 package is retained. Qualified Wake/browser component bytes were
+reused after an unchanged Wake-subtree check. Both controls remain STOPPED;
+zero messages, browser/Wake/recurring starts, native session actions or production
+changes. All owned Jobs exited and cleanup found zero scoped processes.
+
+The full mandatory architecture remains in the existing master/project directives.
+Actual concurrent Web MCP coding B/C, critical browser crash/full restart,
+protected runtime and unattended acceptance remain open. The last separate
+connector observation was HTTP429; the actual replacement lacks the scoped tool.
+Supported local MCP/official-runtime startup ownership remains pending. No new
+connector attempt, external tunnel/auth change or full-stack restart was made.
+Source and disposable qualification continue independently. Evidence:
+`docs/verification/C56_NORMAL_REGISTRY_RECOVERY_2026_10_23.json`.
+
+## October 23 EDT C55 — guarded registry-commit failure stays recoverable (source)
+
+The remaining-gap audit reproduced a native paired-commit bug. A Windows read
+handle allowed registry reads but refused its atomic replacement after Wake had
+committed the guarded successor. Old compensation advanced generation1 to2 and
+back to the source URL at3, losing the adjacent-successor recovery witness.
+
+After a successful guarded callback, a registry-save error now preserves that
+Wake-first successor and returns synchronization-required. Existing paired reads
+refuse until the matching registry commits; the existing recovery path can finish
+with the original source/receipt, without a browser resend or another generation.
+The unguarded operator compensation path is unchanged. No new authority store,
+force recovery, registry or generation reset was added.
+
+The new native filesystem regression failed before the fix and passed afterward.
+Sixty targeted regressions passed, including53 rollover tests and the three-project
+routing fixture. One existing checkpoint test now verifies receipt preservation
+across a failed bind and reopen. Strict workspace Clippy, fmt and whitespace passed.
+Self-review only. C55 is source-qualified; normal/installed/live crash proof is open.
+
+The mandatory A–J matrix now includes C50 actual collector/rollover/continuation,
+C52 controlled status and C54 normal/selected qualification without upgrading
+actual Web coding, critical browser crash, full restart or unattended acceptance.
+All266 v67 runtime records, nine bindings and C50 task/grant/history remain exact;
+both controls stay stopped, zero scoped owners, no message/browser/Wake/native
+activity. Next: normal C55 build and disposable guarded recovery qualification.
+Live startup-owner information remains a separate pending dependency.
+Evidence: `docs/verification/C55_GUARDED_REGISTRY_COMMIT_RECOVERY_2026_10_23.json`.
+
+## October 23 EDT C54 — normal payload compatibility and stopped development selected
+
+Source `b08e68cf9e4e108137eae6baa8ad0b69403d2084` on `codex/web-rollover-oct17` was published
+and its exact remote SHA verified at 01:16:54 UTC October24. Its normal release
+built in 345.6s with a 600 second limit in an owned Job.
+The original C53 source gates are preserved; no completed source suite was rerun.
+
+Six normal CLI checks/seven bounded commands passed in
+2.36s. They read the actual C50 frozen
+payload without adding the newer report or changing its bytes; the original
+generation5 task remains PREPARED_ONLY with zero calls. Separately injected,
+explicitly synthetic report payloads test normal-reader compatibility, changed
+and missing payload refusal, no regeneration, cold exact bytes and no key
+disclosure. The owned synthetic private file/directory was removed. This does
+not demonstrate normal collector creation or actual C53 browser transfer.
+
+The existing updater selected the C53 image into STOPPED v67 development in
+6.4s. All nine paired reads and selected
+status passed. Only two package pointers changed; 264 other records are exact,
+no new runtime records appeared and v66 remains preserved. Host/adapter/bridge
+reuse exact qualified bytes; neither host nor browser was started. The current
+266-record baseline includes the unchanged controlled blocker/task/grant.
+
+All three build/test/selection Job trees exited, with zero scoped owners. No
+messages, recurring automation, native actions or production changes. Live MCP
+startup-owner information remains pending; there was no connector retry or tunnel
+change. Actual Web MCP B/C, critical browser crash/full restart, protected and
+unattended acceptance remain OPEN. Next: requirement-specific remaining-gap audit
+and the next independently eligible task; backend qualification resumes when its
+supported startup path is known. The goal stays ACTIVE.
+Evidence: `docs/verification/C54_NORMAL_PRIVATE_PAYLOAD_COMPATIBILITY_2026_10_23.json`.
+
+## October 23 EDT C53 — reported blockers preserved in future private handoffs (source)
+
+Future granted-task handoffs now include an optional `coordinatorReport` snapshot
+from the existing WorkLedger: state, reason code, summary digest and report time.
+It is labeled COORDINATOR_REPORTED_NOT_VERIFIED, retains ownership, and carries
+neither verbatim summary text nor new authority. Records without a report retain
+their previous context shape. Existing frozen payloads are not rewritten.
+
+Twelve focused regressions passed, with two existing native tests ignored. One
+enhanced automatic-preparation regression proves exact report transfer, omission
+for legacy context, no verbatim summary, and frozen payload equality after a later
+report changes. Existing call replay, journal, scope and revocation checks still
+pass. Strict workspace Clippy, formatting and whitespace checks passed. Self-review
+only. C53 is SOURCE-QUALIFIED; no normal/selected/live C53 claim is made.
+
+All 266 C52 runtime records remain exact. The selected v66 app still contains C51,
+both controls stay stopped, no new browser/Wake/native activity occurred, and C50
+is not replayed. MCP startup-owner information is pending; this does not block
+source work. Next: normal executable and preserved/disposable payload qualification.
+Evidence: `docs/verification/C53_REPORTED_STATUS_HANDOFF_2026_10_23.json`.
+
+## October 23 EDT C52 — selected development task reporting qualified
+
+The existing guarded updater selected the normal C51 executable into STOPPED,
+unprotected development in 7.03s. The
+previous package remains intact. Nine paired target reads and selected status
+passed; only two permitted package pointers changed, with 264 other records
+exact and no new records. Host, adapter and bridge are the exact previously
+qualified components; their Wake source subtree is unchanged. No host was started.
+
+The supported command recorded the independently verified missing-tool blocker
+on the existing controlled C50 task in 4.22s.
+A fresh selected-runtime process read the report in central status. The request
+stays OPEN, its original task/source/assignment identity is exact, ownership is
+retained and completion remains unverified. Only that ledger record changed;
+the task/grant was neither replaced nor executed. A subsequent cold preparation
+at the verified generation5 succeeded PREPARED_ONLY in
+1.03s, with all 266 records exact,
+zero journaled calls and both controlled files unchanged. No completed canary
+delivery, creation, binding or acknowledgement was replayed.
+
+Three bounded Job trees exited and no scoped process remains. Both Wake controls
+remain STOPPED, all nine bindings/predecessors and native sessions are preserved,
+and production is unchanged. This is actual selected-development metadata
+qualification, distinct from Web MCP execution or protected installation.
+
+Live coding remains blocked by the missing scoped tool and stopped MCP/runtime
+observed in C51. No connector retry or official runtime/auth change was made.
+Operator startup-owner information has been requested: the full bootstrap starts
+WakeHost and daemon startup starts Web automation, so neither should be invoked
+under the current stop instruction. This is a live dependency only; the goal stays
+ACTIVE and independent source work remains eligible. Parallel Web MCP B/C,
+critical crash/full restart, protected and unattended acceptance remain OPEN.
+Evidence: `docs/verification/C52_STOPPED_SELECTED_WORK_REPORTING_2026_10_23.json`.
+
+## October 23 EDT C51 — normal CLI qualified; official MCP runtime confirmed stopped
+
+Source commit `6f85763dbd86b7ab11518332fdcd6e5576f06db2` was reviewed, privacy-audited and normally
+pushed to `codex/web-rollover-oct17`; exact GitHub SHA matched at
+2026-10-24T00:48:49.0278661+00:00. The existing repository remains PUBLIC; no visibility change.
+
+The normal release built in 364.39s inside a
+600-second owned process tree. Its exact image hash is recorded in C51 evidence.
+Four normal CLI checks passed in 5.98s using
+21 bounded commands: independent blocked/progress reports,
+cold exact retry persistence, cold central status and wrong-target refusal, and
+existing pre-submit retirement plus closed-report refusal. Only disposable local
+metadata was used, with inert Wake components and synthetic queued events.
+No browser, server, delivery, grant or native session was started. All command
+owners exited, no scoped processes remain and all 266 real runtime records match.
+
+A deeper existing-client read-only status at 2026-10-24T00:52:30.9732541+00:00 confirms
+`runtime_state=stopped`, `process_running=false`, `healthy=false` and
+`ready=false`; the saved profile exists and is not stale. The configured MCP
+port previously had no listener. No connect/start/stop/remove, tunnel/auth change
+or connector retry occurred. The cause of external HTTP429 and provider catalog
+parity remains unverified. C50's completed browser rollover remains preserved.
+
+This qualifies a normal executable, not installed serving behavior. The selected
+stopped development package remains C49/v65; protected production and recurring
+automation are unchanged. Actual Web MCP coding/parallel B/C, critical crash/full
+restart and unattended acceptance remain open. Next: existing guarded development
+selection and supported backend/catalog recovery qualification. No operator action
+is requested for continued source work. The goal remains ACTIVE.
+Evidence: `docs/verification/C51_REPORTED_WORK_STATUS_2026_10_23.json`.
+
+## October 23 EDT C51 — durable reported blockers; local MCP endpoint unavailable
+
+The existing work ledger and work resolve tool/CLI now retain `blocked` and
+`in_progress` reports without closing the request. A bounded non-sensitive
+`reasonCode`, summary digest and UTC timestamp appear in central `workIntent`.
+Reports use the original request target pins, project registration and rollover
+leases. Identical retries preserve the recorded bytes/time. They neither retire
+queued delivery nor replace tasks, grants or native owners. A completed browser
+response still does not prove coding completion. Older ledgers need no migration.
+
+Seven focused source tests passed, including a disposable HTTP/MCP regression:
+one project reports a blocker while another reports progress; queues remain
+intact, wrong targets refuse, closed work cannot reopen, and cold reopen preserves
+the report. Strict workspace/all-target/all-feature Clippy, formatting and
+whitespace checks passed. Self-review only. This increment has not been qualified
+in a normal release, selected runtime or protected production.
+
+Read-only diagnosis at 00:30:54 UTC October 24 found no listener on configured
+local MCP port 3200. Existing official-runtime status and fixed signed-image
+readbacks exited successfully without mutations; the status wrapper redacts
+runtime state and does not establish that it is running. The protected image
+differs from C49 development; its tool capability parity remains unverified.
+Neither result establishes the cause of external HTTP429 or the missing scoped
+task tool. No connector retry, tunnel/auth change, server restart or browser test.
+
+All 266 saved runtime records remain exact, including bindings/history and the
+unfinished C50 task/grant. No test-owned browser/Wake processes remain; both
+controls stay stopped. C50's completed rollover is preserved, not repeated.
+Actual Web coding, parallel Web MCP B/C, critical live crash/full restart,
+protected installation and unattended acceptance remain open. Next: normal CLI
+qualification on disposable state and supported backend build/catalog recovery
+qualification. Source work requires no operator action; the goal remains ACTIVE.
+Evidence: `docs/verification/C51_REPORTED_WORK_STATUS_2026_10_23.json`.
+
+## October 23 EDT C50 — live private task rollover passed; Web coding remains blocked
+
+The selected normal C49/v65 executable completed a fresh controlled source delivery,
+live source handoff, private collector payload, actual replacement conversation and
+verified paired generation-4 to generation-5 binding. Its predecessor and the other
+eight bindings/history remain preserved. The new chat received the existing task's
+private context, completed continuation acknowledgement and received one stable
+post-ack task-resume event. No task or grant was replaced and no completed canary replayed.
+
+Source and handoff deliveries each took about 63 seconds, the actual normal collector 37.56s,
+replacement verification/binding 94.95s, acknowledgement 60.61s and task-resume 60.85s.
+Event-bound response inspection and cold generation-5 admission passed. This used
+bounded operator commands through the existing automatic transaction implementation;
+recurring scheduling and normal unattended operation were not activated.
+
+The replacement explicitly reports BLOCKED_SCOPED_TOOL_UNAVAILABLE and retains the
+correct unfinished task. Both canary files are unchanged and the journal has zero
+tool calls. A single independent connector probe remains HTTP429; serving build/root
+and tool-catalog parity are unverified. No actual Web coding or parallel B/C pass is
+claimed. These live passes are distinct from source tests and protected installation.
+
+Final cleanup: 266 checked runtime records, empty queue, zero test-owned processes,
+both hosts STOPPED, original context policy restored, native chats untouched. Three
+native chats were active and one idle/completed at read-only inspection. The pending
+task/private grant remain available for later recovery. Raw private URLs and credentials
+stay outside public evidence. UTC timestamps cross into October 24; local date is October 23.
+
+Next: inspect serving backend build/root and tool-catalog parity through supported
+read-only paths. Durable reported work blockers/progress in the existing ledger and
+status can continue independently if that dependency stays unavailable. No operator
+action is needed for source development. Full October 31 acceptance remains open.
+Evidence: `docs/verification/C50_CONTROLLED_GRANTED_TASK_LIVE_ROLLOVER_2026_10_23.json`.
+
+## October 23 C49 — task contract context, normal CLI and stopped development qualified
+
+Granted-task handoffs now carry the exact archived assignment objective, allowed
+and forbidden paths, ordered steps, acceptance criteria, expected artifacts,
+escalation conditions, verification profile and original contract limits. Effective
+tool names and configured verification profile IDs/timeouts are included; executable
+argv and absent profiles are omitted. The replacement chat can identify its assigned
+scope without guessing. Existing runtime checks remain authoritative.
+
+The prepare-only display adds `taskContract` after persisting the original admission
+bytes. Cold retries keep those bytes exact. No task, grant or registry is created by
+this display change; original contract limits are reported, not a fresh allowance.
+
+Source qualification passed 65 focused tests, with two enhanced existing regressions
+and two preexisting native tests ignored. Strict workspace Clippy, formatting and
+whitespace passed. The synthetic private rollover carries configured profile metadata,
+recovers the pending patch, applies it once through central dispatch, preserves the
+native original and refuses replay. This is source/fixture evidence.
+
+A fresh controlled canary's exact existing file was checkpointed without byte changes
+and a separate linked task worktree prepared. Supported metadata closed only the
+verified earlier continuity acknowledgement, preserving older coding verification.
+One frozen new event is queued with both hosts stopped; its assignment is associated
+without an execution grant. An initial local contract refusal was corrected using a
+declared label with no executable profile, preserving the refused input and exact
+queued message. Only association was resumed; publication was never repeated.
+The controlled work ledger changed and two expected state records were added.
+All bindings, unknown submissions and native development sessions stay preserved.
+No browser, host, recurring process or actual message was started/sent.
+
+Normal source `dfc3e2cd3152ac9a93ea46a303eee5d4f29e5773` built at
+23:03:21.507–23:09:46.151 UTC in 384.65 seconds. App SHA:
+`a1491526297ee86cea63f09451827149f612b9f71f02ffefb92ccde9ebe838e7`.
+At 23:10:06.681–23:10:10.161 UTC, two cold operator CLI reads passed three
+checks in 3.48 seconds. The preserved revoked synthetic fixture exposed exact
+contract context, omitted unavailable verification profiles and retained old
+admission bytes. All 45 fixture records and 243 real records stayed exact.
+No grant, source event or task execution was created by this narrow CLI check.
+
+At 23:12:14.791 UTC, guarded stopped development selection passed in 6.28
+seconds. Matched C49/v65 passed its redacted status view and all nine paired
+target readbacks. Only the two permitted package pointers changed; 241 protected
+records and all bindings/history stayed exact, with no new records or owners.
+The old package and authenticated profile remain preserved. Exact unchanged
+host/adapter/bridge qualification was reused; no new host was built or started.
+
+These are source, normal local CLI and stopped unprotected development passes.
+Actual collector/browser credential transfer, ChatGPT Web task execution,
+protected installation and unattended acceptance remain open. HTTP429 still
+blocks connector verification, and the current connector catalog does not
+advertise the new scoped task tool. No additional actual Web A–J gate is closed.
+Three native development chats remain active and one idle/completed at the
+read-only snapshot; no native session action was taken.
+
+Next: deliver the one already queued fresh source event under bounded ownership,
+verify its exact receipt/completion, then grant only that task and run a bounded
+automatic collector/browser test. Preserve ambiguous old submissions and pending
+C28 independent coding verification. No operator action is needed for staging;
+actual Web MCP execution requires connector/tool availability. Evidence:
+`docs/verification/C49_VERIFIED_TASK_CONTRACT_CONTINUATION_2026_10_23.json`.
+
+### October 23 C48 — normal task components and stopped development qualified; live still open
+
+C48 carries an existing local task grant into the replacement project's private
+bootstrap. The workspace rollover journal stores only an exact reference; the
+credential-bearing payload and draft-recovery artifacts use existing per-user
+storage outside control and assigned workspaces. Source/task/assignment/Git and
+native ownership stay pinned. Missing, tampered or wrong-scope data refuses
+without regeneration. Old ungranted records and continuation bytes stay valid.
+An automatic source-handoff witness is required for granted task rollover;
+manual preparation cannot strand a granted task behind an unproved continuation.
+
+After the exact continuation acknowledgement completes, the existing scheduler
+queues one stable task-resume event with the verified new generation/digest.
+Pending acknowledgements perform no browser action. Publication precedes the
+local marker, so restart in that window uses the same event ID/body. Keys never
+appear in that Wake event or status. No new registry, browser profile, global
+working directory switch or worker manager is added.
+
+86 focused tests/four added and strict workspace Clippy/format/whitespace PASS.
+The synthetic chain freezes a pre-rollover patch proposal, recovers the private
+handoff, updates the paired fixture target, completes the acknowledgement and
+applies that proposal once through the actual task dispatcher. It reads back the
+patch, preserves the native original and refuses replay. Proposal/application
+metadata and completed call IDs survive; unknown mutation outcomes and withdrawn
+grants refuse transfer. A transient shared-context read now retries for at most
+two seconds before task startup; mutations never retry. Failed attempts remain
+in private evidence, including the single-line Wake message correction.
+
+Published source `c16cab92faa1440404cf0593338241bda9024cae` also passes normal
+release qualification: build 22:16:57.662–22:23:04.161 UTC, 366.50 seconds;
+app SHA `d2a89eb04cb4c87ebe5ddd55f77ba33a2f9874e25e9d3760369d64d5a35f0708`.
+The normal executable passed eight checks/35 CLI-Git commands at
+22:26:24.655–22:27:36.609 UTC (71.95 seconds), under a 180-second owner.
+Two HTTP processes exited naturally. Parallel patches, sibling progress,
+authority/refusal checks, restart retention, cold private-payload reading,
+redacted status and missing-payload refusal passed. The private reader used
+explicit injected fixture metadata: normal collector creation and browser key
+transfer were not proved. Both fixture grants/keys and the private blob were
+cleaned up; all 243 real records were exact before package selection.
+
+At 22:35:20.391 UTC, the existing guarded updater selected matched v64/C48 in
+5.91 seconds with both hosts STOPPED. Nine exact paired readbacks and the
+selected executable's redacted status view passed. Of 243 existing records,
+only two allowed development package pointers changed; 241 protected records
+and all nine Wake pairs/history stayed exact, with zero new records or owners.
+The old package/profile is retained. The unchanged host's exact owner-EOF proof
+was reused without starting a host. Production remains unchanged.
+
+No browser, WakeHost, recurring/native action, live message or completed-canary
+replay. This qualifies source, normal local components and the selected stopped
+development package. Actual Web coding, normal collector/browser key transfer,
+protected installation and unattended acceptance remain open. C48 closes no
+additional actual Web A–J gate. The 22:10 UTC connector read remains HTTP 429;
+source CI showed zero runs/checks at 22:17 UTC and remains unverified.
+
+Next: prepare a fresh bounded granted-task Web integration using selected C48,
+without replaying completed canaries or enabling recurring automation. No
+operator action is required for safe preparation; Web MCP proof depends on
+connector recovery.
+[C48 evidence](verification/C48_PRIVATE_GRANTED_TASK_HANDOFF_2026_10_23.json).
+
+### October 23 C47 — source and unselected normal central HTTP qualification
+
+C47 adds `catdesk_web_task_tool` to the existing authenticated central HTTP
+route. A local `execution-grant` binds a private key to one exact archived task,
+original work/event and registered scope. Keys live in fixed per-user state;
+only their digest is stored beside the assignment. Generic workspace reads and
+MCP results do not disclose them. Default association/preparation grants no
+execution. Revocation, closed work and scope drift refuse future calls.
+
+Each call opens the existing bounded task service and drains/closes its writer.
+No global working-directory switch, new registry, tunnel, profile, recurring
+worker or worker map is added. The execution budget is 180 seconds; startup and
+checks add overhead. Only metadata checks retry briefly, never a mutation.
+
+39 focused tests/four added and strict workspace Clippy/format checks PASS;
+two existing native-sandbox tests remain ignored. Actual test-binary HTTP calls
+patch two separate worktrees through one route, reject wrong authority before
+task startup, and let beta progress while alpha is blocked. Cancelling a caller
+still completes its exact patch and releases ownership; the same call ID cannot
+execute again. Native originals remain unchanged. Failed contention and test
+compile attempts are retained in private evidence.
+
+Published source `3967cbaf348010d6b0b2703d72fead570b5ee713` also passes
+unselected normal release qualification. The 376.81-second app build produced
+image `7e4e19812939b9f141e33544691f9786e8627549e460faa13bdb185dc1acf7fa`.
+Normal central HTTP qualification ran 2026-10-23T21:15:46.3258729Z–2026-10-23T21:16:57.823551Z
+(71.50 seconds): seven checks, 32 CLI/Git commands, two natural
+process exits, parallel isolated patches, independent blocked-project progress,
+cold-process grant/journal retention and exact returned project file text.
+Both fixture grants were revoked and their exact private keys removed.
+
+Four controller failures are retained: an incomplete verb allowlist, packaged
+Windows user-state path validation, and two cold-read assertions that did not
+account for existing identical-read suppression. Direct response/journal review
+confirmed suppression; explicit line bounds qualify a fresh read. No product
+source change or duplicate-guard bypass was needed. All five grants from those
+failed attempts were separately revoked and their exact owned keys removed.
+
+All 243 real records/nine pairs stay exact, zero runtime owners and both controls
+STOPPED; selected v61 remains C45. No browser/Wake/recurring/native actions or
+completed-canary replay. This advances local normal-executable qualification,
+not actual Web A–J, selected/protected installation or unattended acceptance.
+The 20:37 UTC connector probe returned HTTP 429; three native chats were active
+and one completed/idle, with no native actions. CI remains unverified.
+
+Next: automatic transfer of exact task/grant context through structured rollover
+handoffs, matched stopped development qualification, and actual Web B/C testing
+when connector access permits. No operator action is required for source work.
+C47 closes no additional actual Web A–J gate; prior controlled evidence is preserved.
+[C47 evidence](verification/C47_CENTRAL_SCOPED_TASK_DISPATCH_2026_10_23.json).
+
 # CatDesk October 2026 MVP acceptance
 
-## October 18 HTTP work routing and five-project companion setup (PARTIAL)
+### October 23 C46 — normal CLI qualifies opt-in association; preparation only
+
+An existing work request may explicitly associate an exact archived assignment
+for its separate task worktree. Original request/event, assignment digest,
+canonical roots, Git identity, profile and native ownership are revalidated.
+Cross-generation admission requires that source task's verified continuation.
+PREPARED_ONLY/launchAuthorized:false metadata starts no endpoint or coding turn;
+unknown/incomplete calls remain blocked and completed calls cannot replay.
+
+The source gate passed 34 distinct tests at 19:50:54.193Z: seven added and one
+existing continuation proof enhanced; two existing native-sandbox tests ignored.
+Strict workspace Clippy, formatting and whitespace checks passed at
+19:51:36.771Z. Three earlier failed gates are retained and corrected: digest
+representation, fixture setup order and same-URL generation-test assumption.
+
+Published source `3403d855c603311b822c5b4cc59a19d20faefddc` has exact remote
+readback; CI remains unverified with zero runs/checks at 19:56:40.644Z. Normal app
+build passed in 366.56s; its image is unselected. The 20:09:14.667Z–20:09:23.022Z
+normal CLI fixture passed six checks/23 commands (two expected refusals) in
+8.354s. Archive/cold retry, queued-source refusal, byte conflict and cold
+PREPARED_ONLY admission passed with a synthetic local SENT receipt. All 243 real
+records and nine pairs stayed exact; outer cleanup verified zero owners and both
+controls STOPPED. The initial private-helper alias failure ran zero commands,
+remained preserved and was corrected without source change.
+
+Selected STOPPED v61 remains C45/`a55bcab4a460ea6645ffa1f33e4718b41ad2f180`.
+This normal CLI proof launches no endpoint and executes no Web coding task.
+Central dispatch/per-project execution authority, automatic task restoration,
+actual Web B/C, protected installation and unattended operation remain open.
+No completed browser canary was replayed. C46 closes no additional actual Web
+A–J gate; prior controlled evidence remains preserved.
+The 19:52:58.524Z read preserves all 243 records, with zero new records/runtime
+owners and both controls STOPPED. The one 19:52:22.250Z connector check still
+returned HTTP 429; four native chats were active without errors or actions at
+that observation.
+[C46 evidence](verification/C46_DURABLE_WORK_TASK_RESUMPTION_2026_10_23.json).
+
+### October 23 C45 — selected normal-image local HTTP qualification
+
+The fixed authenticated project connection meters observable request/result
+counts and hashes without persisting raw traffic. Direct HTTP fixtures verify
+scope attribution and late results staying on their original conversation key;
+they do not prove provider-origin chat identity or genuine Web MCP coding.
+Accounting failure does not replay a tool. Tokenization runs outside authority
+locks in 256-byte work units; exact legacy replay preserves stored estimates.
+
+All 28 distinct tests passed, including six added (six project and 22 context
+tests overall). Strict Clippy and formatting passed at 19:01:18Z. Separate stress
+qualification passed 2MiB initial-plus-replay in 5,512ms under 10s. Project-suite
+125.34s-to-33.46s timing is a different measurement. C43/C44 evidence is published
+as `98b562361186c5e5dd2686a528578546fc30a2df`. C45 source
+`a55bcab4a460ea6645ffa1f33e4718b41ad2f180` was published at 19:07:09Z with exact
+remote SHA readback; CI has zero runs/checks at 19:08Z and remains unverified.
+
+Normal app/host builds passed; unchanged host qualification was reused without
+starting a host. Stopped v61 selection passed at 19:19:28.772Z: 243 records,
+two pointer changes, 241 protected exact, nine pairs and zero owners. The
+19:20:43.760Z–19:21:48.237Z local HTTP test passed seven checks in 64.48s under
+60s/180s bounds. Both parallel project meters recorded arguments/results, and
+beta continued while alpha was refused. Wrong scope/credentials, outside writes
+and commands refused; durable counts/hash-only storage and cold-process retention
+passed. All 243 real records stayed exact with zero new records or owners.
+
+This qualifies the normal selected image in isolated local HTTP, adding no actual
+Web B/C acceptance. The fixture read data and completed no coding task. No Web
+conversation, browser, Wake, native or recurring action occurred. Actual multi-chat
+Web MCP remains blocked by the one 19:22:30Z HTTP 429 probe, without immediate
+retry; four native chats were active/in progress without errors in the same
+read-only snapshot. Protected/unattended gates remain open. C46 task-assignment
+association and resume preparation work is separate from selected v61.
+[C45 evidence](verification/C45_AUTOMATIC_MCP_CONTEXT_TRAFFIC_2026_10_23.json).
+
+### October 23 C44 — v60 qualified; recovered C43 chain verified
+
+Nested paired-target reads retain fixed diagnosed errors. Config-lock contention
+can use the existing bounded transient retry; mismatched targets still refuse.
+The real-lock and permanent-mismatch regressions, full rollover and automatic
+driver suites passed: 66 distinct tests, two added, strict root Clippy and format
+passed. The source gate performed no live actions. Reviewed source
+`7cc95489b85084adca643d8cf32ac11dfa613610` has an exact remote SHA readback.
+Matching normal app/host builds passed; the unchanged host reused its existing
+exact-image owner-EOF/no-state evidence without a new host process.
+
+At 18:31:22.597Z, development v60 passed stopped selection in 7.06s: nine paired
+reads, 232 records checked, two package pointer changes, 230 protected records
+exact, no new records and zero owned processes. This qualifies the selected
+development package. C43's subsequent controlled existing-source resume and
+independent assistant-body read passed; exact evidence and remaining limits are
+recorded below. C43's historical cause is still unconfirmed. Protected production,
+actual Web MCP coding and unattended acceptance remain open.
+[C44 evidence](verification/C44_NESTED_TARGET_DIAGNOSTICS_2026_10_23.json).
+
+### October 23 C43 — recovered controlled automatic chain accepted
+
+The initial selected-v59 beta test delivered its distinct source event with exact receipt
+and completed response. It stopped before handoff publication with the generic
+`WEB_ROLLOVER_PAIRED_TARGET_REQUIRED` error. No new intent, bootstrap, URL or binding
+was created by that first attempt. Observation progressed independently of C42's preserved uncertain operation,
+but this is not coding or rollover acceptance. The exact nested read failure was
+lost; config contention remains unconfirmed.
+A separate 18:15:16Z read verified the event-bound source-ready response. It
+preserved all 232 records with no new sends or owners; no handoff body existed at that checkpoint.
+
+The monitored test was deliberately stopped after 578.37 seconds, within its
+900-second outer limit. Cleanup, policy restoration, nine unchanged pairs,
+preserved histories and zero owners are verified; its 232-record checkpoint remains.
+The source request was preserved for the corrected-v60 resume; it was never resent.
+
+The 18:32:02.160Z–18:45:25.434Z resume passed in 803.27s under 800s/820s/900s
+bounds. One new handoff and intent, fresh DRAFT_READY/SEND_ATTEMPTED and zero
+repair records led to an independently verified replacement URL, source snapshot,
+RECORDED context, paired generation 3-to-4 update and SENT/COMPLETE continuation.
+All 232 baseline records were audited: ten expected changes, eleven new records,
+zero unexpected changes. Eight sibling pairs/history, native ownership, workspace,
+original attempt and prior completed rollover were exact. C42's project journal
+remains fenced; its abandoned shared admission alone was safely quarantined.
+Natural listener/host exit, exact original-policy restoration, zero owners and
+both controls STOPPED are verified.
+
+The separate 18:45:58.591Z–18:46:36.029Z assistant-body read passed: 858 characters,
+all four required markers, 243 records and ten evidence pins unchanged, no sends,
+zero owners and both controls STOPPED. The body acknowledges continuity and keeps
+C28 verification pending; it performs no commands, file or MCP actions. Four native
+chats were active during the test's 18:37:19Z read-only snapshot. This qualifies a
+recovered controlled chain with new atomic draft entry, without repair. It does
+not qualify the whole original attempt as uninterrupted, actual Web coding, full
+MVP, protected installation or unattended operation. B/C remains connector-specific
+HTTP 429 on the single 18:48:04Z check. Additional critical H/I phases remain open.
+[C43 evidence](verification/C43_PAIRED_READ_ATTEMPT_2026_10_23.json).
+
+### October 23 C42 — fresh entry is not yet accepted
+
+| Evidence class | Result |
+| --- | --- |
+| Selected development runtime | v59 selected STOPPED at 17:50:14Z after normal app/host builds and owner-EOF check; nine paired readbacks, 228 records checked, only two package pointers changed |
+| Published source | `524273f81130576601ba9b098bd5c728e71425d8`, exact remote SHA verified; eight-path privacy review passed; CI UNVERIFIED with zero runs/checks |
+| New automatic attempt | Source event and handoff completed; fresh entry failed at `TEXT_ENTRY_AUTHORIZED`; no verified bootstrap receipt, replacement URL or generation-4 binding |
+| Read-only diagnosis | Empty composer; observed `data-empty-paragraph` placeholder is rejected by the old guard; both inspections preserve 228 records with zero owned processes |
+| Source correction | Narrow empty-paragraph allowance and fixed pre/post-edit diagnostic codes; 246 distinct Python tests pass, including five added tests |
+| Live guard-only check | PASS at 17:35:08Z: old guard refuses, corrected guard accepts, exact active-element/selection identities and 228 records unchanged; zero owners; no insertion or send |
+| Preserved work | All five original bindings, eight sibling pairs, C38–C40 history and four active native development sessions |
+| External and installed gates | Connector HTTP 429 at 17:26:32Z; actual Web coding, protected installation and unattended operation remain open |
+
+The old attempt stays fenced without replay. An empty composer is not proof of
+an unattempted edit. Guard-only browser evidence cannot qualify insertion,
+submission or a complete rollover; earlier accepted F/G operations remain intact.
+[C42 evidence](verification/C42_FRESH_ENTRY_GUARD_2026_10_23.json).
+
+### October 23 C41 — project retirement acceptance boundary
+
+Historical C41 checkpoint: its v57/unselected-v58 statements precede the
+17:08:09Z C42 stopped selection recorded above.
+
+| Evidence class | Current result |
+| --- | --- |
+| Source implementation | **TESTED_LOCAL**: 160 distinct tests passed, including 24 added; two existing native sandbox tests ignored; strict root/Wake Clippy and formatting passed |
+| Published source | `cb52cf30d3307d729237622e178725b631da22a6`, exact remote SHA verified; 17-path privacy scan passed; remote CI **UNVERIFIED** (zero runs/checks) |
+| Normal release / isolated CLI | App and matching host build passed; owner-EOF/no-state gate passed; metadata-only 24-command CLI retirement/replay fixture passed |
+| Installed runtime | Retirement **NOT_RUN**; selected v57 and C40 evidence unchanged |
+| Live project state | Nine actual pairs read with all 218 records unchanged; original five projects and completed canaries preserved; no production retirement performed |
+| Normal unattended operation | **NOT_QUALIFIED** |
+
+The final gate ran 2026-10-23T16:45:35.305Z–16:47:27.950Z. Its suite totals are
+coordinator 6, CLI 15, registry 38, assigned tasks 6, rollover 47, Wake store 31
+and development isolation 17. An earlier 159-test pass failed strict Clippy on
+four redundant references; the corrected final gate supersedes that attempt.
+Source publication completed at 16:49:39Z. The release app built in 435.33 seconds
+and the host in 19.88 seconds. Inert v58 was prepared, not selected. The normal
+app read passed at 17:00:11.250Z–17:00:17.036Z. The isolated CLI test passed at
+17:01:50.255Z–17:01:55.226Z, preserving 13 protected inputs and ending with zero
+owners. Its real Python executable was fixture metadata only; no browser
+dependencies or Web delivery were exercised. A single 16:42:53Z connector read
+returned HTTP 429 without retry.
+
+The full-runtime Python copy exceeded 90 seconds; immediate exit was not proven
+within five seconds, then outer-job cleanup established zero owners. The partial
+fixture remains preserved. An earlier Git-before-prepare attempt was rejected
+without runtime action. Full-runtime preparation remains unqualified; this
+bounded-copy limitation and prior assigned-task close proof remain open.
+[C41 evidence](verification/C41_PROJECT_RETIREMENT_2026_10_23.json).
+
+Retirement uses the existing registry and a durable request with exact project,
+generation and target digest. The same request can resume a Wake-first
+interruption or read back a completed result without another mutation. Full
+project snapshots, predecessor URLs and workspace files remain preserved;
+retired identities and conversation URLs cannot be reassigned. The first
+retirement promotes existing stores to schema 2 so older schema-1-only writers
+cannot erase tombstones.
+
+Only an idle Web-only project with no native binding is eligible. Active work,
+the control project and unresolved ownership refuse. A prior assigned MCP task
+directory currently blocks retirement pending explicit durable clean-close or
+recovery proof, which is not implemented. This limit remains open and must not
+be reported as complete general-purpose project removal. Qualify source and an
+isolated installed-runtime retirement separately; do not modify the original
+five projects or replay the completed C40 chain for this demonstration.
+
+### October 23 C40 — recovered automatic rollover and continuation verified
+
+The selected v57 runtime resumed the same C38 transaction after C39's explicit,
+journaled no-send repair. The bounded automatic run lasted
+2026-10-23T16:13:53.590Z–16:18:57.158Z (303.57 seconds); limits were 300 seconds
+for the listener, 315 for the host and 360 for the outer job. No new source event,
+handoff request or rollover intent was created, and the sibling observation was
+not repeated.
+
+The first bootstrap submission for this intent succeeded. The actual issued
+replacement URL and source snapshot were verified; the project registry and Wake
+target advanced together from generation 2 to 3, retaining both predecessor
+histories. Context recording completed. The continuation has an exact SENT receipt
+and a COMPLETE response timer. A separate read at 16:19:24.936Z–16:20:00.560Z
+verified the 979-character assistant body against its event, project, task and
+continuation marker. Receipt and timer state alone were not used as body proof.
+
+The run checked 213 prior records: eight expected changes, five new records and
+zero unexpected changes. The other eight registrations/Wake targets, controlled
+workspace and native owner stayed exact. The policy was restored after the
+verified binding. Listener and host tree exited cleanly; both controls STOPPED,
+zero owned processes. The body read preserved all 218 records with no new records
+or owners. No native-session, recurring-automation or production changes occurred.
+A final 16:20:39.208Z checkpoint re-read all nine exact pairs and all 218 records,
+acquired the host/browser locks, and confirmed zero owners with both controls STOPPED.
+
+This qualifies a recovered automatic chain after explicit C39 draft repair. It
+does not qualify uninterrupted recovery or unattended operation. Fresh empty-home
+atomic insertion remains source/offline qualified only. Earlier F/G proofs remain
+intact; the completed C38–C40 operation must not be replayed.
+
+Source remains `b692ffbc14d3133a7fe5eabb5db68de5cb5ff3e7` on selected v57; this
+milestone adds no source-test counts. Actual concurrent Web MCP coding remains
+blocked by the connector's last observed HTTP 429. Further crash phases, protected
+production qualification and remote CI remain open. Continue independently
+eligible work, including fresh-entry qualification, without replaying this chain.
+[C40 evidence](verification/C40_RECOVERED_AUTOMATIC_ROLLOVER_2026_10_23.json).
+
+### October 23 C39 — selected atomic entry and live no-send draft repair
+
+C39 uses one native editor transaction for fresh bootstrap text and adds a
+separate repair-draft command. Repair requires exact project/intent/raw-digest
+scope, whole project and task identifier tokens, stopped controls and existing
+ownership locks. It archives the raw witness and records WRITE_ATTEMPTED before
+one edit acknowledgement. Uncertain attempts allow only read-only reconciliation;
+ordinary exact-owned resume and unknown-submit safeguards remain unchanged.
+
+The 16:01:05.438Z–16:02:01.605Z source gate passed 143 distinct tests:
+14 CLI, 47 rollover, 16 Wake bootstrap and 66 Python tests, including 27 new tests.
+Root/Wake strict Clippy and formatting passed. Two earlier fixture-setup failures
+(CONFIG_ROOT_UNAVAILABLE under restricted access) passed with required access;
+an interrupted optional broad suite contributes no passing evidence. Reviewed
+source was published at 16:02:56.477Z on codex/web-rollover-oct17:
+`b692ffbc14d3133a7fe5eabb5db68de5cb5ff3e7`, exact remote SHA verified. CI remains
+UNVERIFIED: zero workflow/check runs; privacy scan passed with no visibility change.
+
+Normal app build passed at 16:03:24.013Z–16:10:00.436Z (396.42 seconds).
+The matched default-feature host passed its owner-EOF/no-state gate. Guarded
+selection at 16:12:10.832Z took 4.32 seconds: two package pointers changed,
+208 of 210 records stayed exact, no new records or owners, previous package retained.
+
+The selected v57 no-send repair passed at 16:12:22.426Z–16:12:54.729Z (32.30 seconds),
+under a 180-second outer limit. It repaired the existing witnessed C38 draft once.
+Three immutable repair journals and one expected admission update were recorded;
+there were zero unexpected changes among 210 prior records. A second fresh browser
+read verified the complete 3,855-byte EXACT_OWNED draft and matching message digest.
+The original rollover journal remained exact at TEXT_ENTRY_AUTHORIZED. No bootstrap
+or continuation was sent, no conversation created and no binding changed. All
+owned processes exited; no WakeHost, native-session, recurring or production changes.
+
+This qualifies recovery of the existing controlled draft on the selected normal
+development package. Fresh empty-home atomic insertion remains source/offline
+qualified, not live-qualified. C38's full automatic chain remains PARTIAL; the next
+bounded test resumes this same intent through normal execution without recreating
+the handoff or replaying completed deliveries. Earlier F/G evidence remains intact.
+One connector read at 15:53Z returned HTTP 429; source work continued. A read-only
+native-session observation at 16:03:59Z found all four sibling sessions active.
+[C39 evidence](verification/C39_ATOMIC_DRAFT_REPAIR_2026_10_23.json).
+
+### October 23 C38 — automatic handoff complete; interrupted draft preserved
+
+The selected v56 core resumed the existing unfinished controlled task without
+resending its completed source event. The bounded run lasted
+2026-10-23T15:16:25.856Z–15:28:51.387Z (745.53 seconds), within limits of 740 seconds
+for the listener, 755 for the foreground host and 800 for the outer process job.
+The automatic driver requested and collected a new project-specific schema2
+handoff after its response observer recovered without another send. The handoff
+retained the objective, observed accomplishments, remaining task, next action,
+decisions and ownership restrictions; unverified Git state remained UNKNOWN.
+
+A new rollover record reached SUBMITTING/TEXT_ENTRY_AUTHORIZED, with no receipt,
+bound target or verified source snapshot. Read-only inspection at
+15:29:54.868Z–15:30:08.141Z found a mismatched unsent draft. A separate body read
+at 15:31:32.103Z–15:32:00.684Z found 2,765 actual bytes against 3,855 expected.
+The normalized text is a prefix, but raw equality and raw-prefix checks fail;
+the intent and predecessor are not reached in the truncated content. This is an
+incomplete preserved draft, not an exact-owned completed bootstrap. Neither
+read sent or cleared anything; both left all 210 records exact and zero owners.
+No replacement URL, new binding or completed continuation is established.
+
+An independent sibling received a fresh observation and its temporary policy
+was restored; the quarantined project stayed isolated. The main run compared
+204 baseline records: ten expected changes, six new records, zero unexpected
+changes. The other eight registry/Wake targets, predecessor history, previous
+completed rollover and controlled workspace file stayed exact. Original policies
+were restored. The listener exited naturally and its owned host tree drained.
+Cleanup at 15:28:52.687Z verified zero test-owned processes, the outer job closed
+and both controls STOPPED. No native-session, production or recurring action
+occurred, and no completed canary was replayed. The wrapper's exit 1 records
+incomplete acceptance, not a timeout or failed termination.
+
+Acceptance E and this automatic-chain attempt remain PARTIAL. Earlier completed
+rollover and simultaneous-creation F/G evidence remains intact. C37's projection
+fix is published source only; selected v56 still uses the C35 core. No new source
+tests were run for this milestone. Next: implement and qualify reliable interrupted
+text-entry recovery for the same preserved transaction. Do not infer ownership
+from a normalized prefix, clear unknown text or blindly resend a bootstrap.
+[C38 evidence](verification/C38_AUTOMATIC_HANDOFF_INTERRUPTION_2026_10_23.json).
+
+### October 23 C34–C37 — interrupted automatic chain and target-contention repair
+
+C34 remains PARTIAL. The bounded run lasted 2026-10-23T14:00:47.571Z–14:10:10.661Z
+(563.09 seconds); its listener exited naturally and the owned host tree drained.
+One fresh controlled source event was sent once and completed. The independent
+51.11-second read verified the event-bound response, marker and pending next action.
+No new handoff request, context intent, rollover record, conversation or binding
+was created. This is not another completed rollover or automatic-chain acceptance.
+The old target-unavailable result lost the original cause; lock contention is
+plausible but is not a retrospectively proven cause of C34 or C29.
+The 14:15:35.040Z checkpoint verified all nine paired targets, 204 saved records,
+original policy restoration, preserved old rollover/history/workspace state,
+empty delivery queue, both controls STOPPED and zero test-owned processes.
+
+C35 distinguishes WEB_TARGET_WAKE_CONFIG_BUSY from unavailable or invalid state.
+The automatic driver records AWAITING_TARGET and makes bounded local retries
+without entering writer-capable recovery; independent project slots remain intact.
+At 14:14:36.413Z, 85 distinct source tests, strict Clippy and formatting passed.
+This includes a real held-transaction-lock fixture and unchanged sibling authority.
+Reviewed source was published at 14:16:34.659Z on codex/web-rollover-oct17:
+`cdb39ba7d478841f54c271a3552dc1d9c1a6c1eb` (exact remote SHA readback).
+GitHub supplied no workflow runs or checks; remote CI acceptance remains UNVERIFIED.
+
+C36 built the normal release application from that exact source at
+14:17:29.550Z–14:24:08.242Z (398.69 seconds); the normal host rebuilt at
+15:06:19.705Z–15:06:21.681Z. Package preparation completed at 15:06:22.193Z.
+Stopped development selection passed at 15:07:13.169Z in 4.72 seconds: only two
+package pointers changed; 202 protected records and the previous package stayed exact.
+The 15:10:16.162Z–15:10:19.552Z normal selected read-only test returned the exact
+busy diagnostic under an actual held lock, then read all nine pairs after unlock.
+All 204 records stayed exact and no test-owned processes remained. No browser,
+Wake worker, message, native-session action or production change occurred.
+This qualifies selected target reads, not the automatic driver or protected runtime.
+
+C37 adds the missing AWAITING_TARGET central-status projection and safe-reason test.
+Thirteen projection/CLI source tests passed at 15:09:36.715Z. Published at
+15:10:51.652Z: `fac2e103b9458dd434b7118a5c92a621da63971c`, exact remote readback.
+These 13 tests overlap the C35 set; they are not 98 distinct tests in total.
+C37 remains source-tested/published only; selected v56 still contains C35.
+
+Acceptance E remains PARTIAL: C33 independently monitored two conversations while
+one stayed quarantined; C34 verified one source response but stopped before handoff.
+Next: continue the unfinished controlled task on the qualified core runtime
+without resending its source event; qualify C37 in the next normal image.
+Actual concurrent Web MCP coding, further paired-commit crash recovery, protected
+installed qualification and unattended operation remain open; preserve all bindings.
+[C34 partial chain](verification/C34_AUTOMATIC_CHAIN_PARTIAL_2026_10_23.json), [C35 source repair](verification/C35_TARGET_CONTENTION_RETRY_2026_10_23.json), [C36 selected reads](verification/C36_SELECTED_TARGET_CONTENTION_2026_10_23.json), [C37 projection](verification/C37_AWAITING_TARGET_PROJECTION_2026_10_23.json).
+
+### October 23 C33 — selected automatic context monitoring qualifies
+
+The existing automatic driver now passes one bounded scoped monitoring cycle on
+the selected normal v55 development image. Three projects are admitted independently:
+alpha remains QUARANTINED at generation2, while beta generation3 and fast generation2
+receive fresh browser observations. Their observed estimates remain 1,741 and 1,657
+tokens. Event counts remain4 and5: re-reading unchanged messages does not count them
+twice. Coverage remains UNKNOWN_OR_INCOMPLETE; these are not exact context totals.
+Shared-browser contention retries within the existing admission mechanism; both
+captures complete in the same bounded cycle. No new scheduler or registry is added.
+
+UTC13:42:06–13:46:04,238.20s total;120s interval,235s listener,245s foreground-host
+and270s outer Job limits. Listener exits naturally, owned host tree exits, temporary
+beta observation policy is restored, both controls STOPPED and zero owned processes.
+199 metadata records checked: six expected monitor/status updates,193 protected
+records exact, zero unexpected changes or new records. Nine exact paired targets
+read back afterward. All registry/Wake bindings, histories, prior rollover journals
+and native owners remain preserved. The old alpha auto-status was archived byte-exact
+before its normal QUARANTINED update; C29's original collapsed-error cause remains
+UNPROVEN and is not claimed repaired by this successful cycle.
+
+Zero messages, binding changes, rollover advances, connector calls, native-session
+actions or production changes. No recurring automation activated and no completed
+canary replayed. Source is unchanged from qualified5973f1437953ed57a591bc70927631e96c5f6016;
+84 distinct source tests are reused by exact file hashes, not rerun or counted anew.
+This advances bounded selected-development automatic context monitoring under E/J.
+It does not close actual Web MCP coding B/C, the full automatic monitoring-to-handoff-
+to-rollover chain, paired-commit crash phases, project removal/history archiving,
+protected installation, CI or unattended operation. Next: review controlled task/root
+ownership for a fresh automatic-chain test. No operator action for eligible work.
+[C33 evidence](verification/C33_SCOPED_AUTOMATIC_MONITOR_2026_10_23.json).
+
+### October 23 C31/C32 — selected diagnostic reads and advisory warnings
+
+C31 preserves precise sanitized target-read failures through the existing guarded
+read path and automatic status journal. Single-project target read adds
+diagnosticCode on refusal; legacy coarse error variants and pairing/ownership
+checks are preserved. No new registry or lock. An induced project Git-identity
+failure retains WEB_TARGET_PROJECT_GIT_UNAVAILABLE while its sibling stays paired.
+Malformed registry and real pairing mismatch remain distinguishable. Raw paths,
+Git output and URLs are excluded. 40 tests, 3 new, strict Clippy/format PASS; another
+44 rollover regressions PASS after the read-path change. Source commit
+`5973f1437953ed57a591bc70927631e96c5f6016` was pushed with exact remote SHA readback.
+The original C29 cause cannot be recovered from its collapsed log; it stays open.
+
+C32 normal app release PASS in 325.44s. Default WakeHost rebuild has the exact C27
+hash; its owner-EOF gate proof is reused without another gate process. Existing
+guarded updater selects v55 while STOPPED: 199 records, only two package pointers
+change, 197 protected records exact, previous package/profile/history preserved.
+New normal image reads all nine exact paired targets. A bounded saved-context test
+sets beta's warning to 1,000 against its observed 1,741-token estimate, renders the
+warning once, remains below the 72,000 rollover trigger, and restores the original
+policy byte-for-byte. Automatic flags remain OFF. Unknown history stays UNKNOWN.
+All 199 records exact afterward; old alpha attention/quarantine are preserved.
+
+This qualifies normal artifacts, selected diagnosed reads and saved-context warning
+controls. It is not a new browser observation or automatic monitoring-to-rollover
+proof. No browser/Wake worker/recurring start, message, binding/native-session or
+production change. Zero owned processes; both controls STOPPED. C28/C23/C26 remain
+completed and must not be replayed. Actual Web MCP coding, current coordinated
+monitor, paired-commit crash phases, removal/history archive, protected production,
+CI and unattended acceptance remain OPEN. Next eligible work is a scoped bounded
+monitor qualification on the new image, then remaining recovery phases. No operator
+action is required for independently eligible work; goal remains ACTIVE/PARTIAL.
+[C31 diagnostics](verification/C31_TARGET_AUTHORITY_DIAGNOSTICS_2026_10_23.json), [C32 controls](verification/C32_SELECTED_WARNING_CONTROLS_2026_10_23.json).
+
+### October 23 C29/C30 — actual automatic context captures and source warning policy
+
+C29 runs the existing scoped automatic driver on selected v54, one120s interval
+per200s listener (210s owned foreground host/240s outer Job). First three-project
+run preserves quarantine, observes one current conversation and cancels the
+second capture at the frozen deadline; listener exits normally and drains work.
+Second run targets only the pending conversation plus quarantine, preserving the
+completed browser read. It records a fresh independent observation. The two
+current conversations have1657/1741 observed-token estimates, distinct generations
+and durable coverage UNKNOWN_OR_INCOMPLETE; hidden context remains unbounded.
+
+Both run assertions are PARTIAL: the second records an unexpected generic
+WEB_AUTO_PAIRED_TARGET_REQUIRED for the quarantined project, target generation
+unavailable at that tick. Fresh normal status still verifies all9 pairs; registry,
+Wake config/history and old rollover journals are byte-exact. Underlying cause is
+unproved because the driver collapses the admission diagnostic. Do not rerun
+completed reads to obtain a greener result. Both policies restored, zero messages,
+binding/native/production changes; both controls STOPPED, zero owned processes.
+No recurring automation or connector probe. Actual Web MCP coding stays separate.
+
+C30 fills a source gap: optional per-project warningThresholdTokens, validated1
+through rollover trigger; omitted/null defaults to80% of trigger (57600 at default
+72000 rollover). Legacy omitted policy serialization is preserved. warningTokens/
+warningReached and the central paired-generation view remain advisory; unknown
+coverage and automatic rollover authorization are unchanged.92 distinct tests,
+including4 new cases, strict all-target/all-feature Clippy and format PASS. Warning
+feature is SOURCE ONLY: no new normal build, selected update or live threshold
+acceptance. The monitor tested the unchanged older selected image.
+
+NEXT: source/read-only diagnosis of the automatic tick authority discrepancy,
+then normal warning build/selected qualification and remaining paired-commit
+recovery phases. B/C connector429, full automatic rollover, removal/history archive,
+protected installation, CI and unattended remain open. No operator action required
+for this independently eligible work. The goal remains ACTIVE/PARTIAL.
+[C29 monitor](verification/C29_AUTOMATIC_CONTEXT_MONITOR_2026_10_23.json), [C30 warning](verification/C30_CONTEXT_WARNING_POLICY_2026_10_23.json).
+
+### October 23 C28 — registered exact-draft recovery, paired commit and continuation
+
+Selected v54 now completes a fresh registered escaped-handoff rollover after an
+actual process interruption at pinned DRAFT_READY. Fresh read-only inspection
+finds EXACT_OWNED:4,379 bytes/digest match;192 records unchanged/zero owned processes.
+Supported resume reuses that saved draft, sends once, verifies the actual issued
+URL, exact USER receipt/completed bootstrap and source snapshot, then performs the
+existing guarded paired2-to3 commit in71.05s. Other eight pairs/history and the old
+completed record remain exact. No unknown draft or legacy uncertain send adopted.
+
+Normal96k/72k test policy restored, both automatic flags OFF. One queued continuation
+SENT/COMPLETE in88.37s, owned host tree exited. Read-only event-bound body verifies
+project marker/intent/generation3 and pending checkpoint. It does not echo task ID;
+it reports three read-only MCP calls returning429 and stops without project work.
+This proves delivery and retained context, not useful Web coding. Fresh CLI proves
+continuation receipt, paired gen3, two predecessors/three context generations and
+all nine paired rows;197 records exact/zero owned processes/both controls STOPPED.
+
+H/I advance for actual selected registered pre-send recovery. Paired-commit crash
+phases, current automatic monitor, actual Web MCP coding B/C, removal/history archive,
+protected installed and unattended acceptance remain OPEN. One direct connector
+health read after cooldown still429; no retry/settings change. No recurring starts,
+production changes, native-session actions or replay. Runtime source unchanged;
+156-test proof reused by exact bytes. Full mandatory wording is already retained
+in both local master/project goals; existing registry/guarded mechanisms reused.
+Next: bounded scoped current context-monitor qualification, then remaining recovery.
+No operator action required for independently eligible work.
+[C28 evidence](verification/C28_REGISTERED_ROLLOVER_RECOVERY_2026_10_23.json).
+
+### October 23 C27 — matched normal artifacts and stopped development selection
+
+C26 source is now in matched v54. Normal app release PASS in404.29s; default
+WakeHost release PASS in18.74s without test support. New host image refuses owner
+EOF and exits without runtime-state creation; this gate proves no delivery.
+Existing guarded update selects only stopped unprotected development in4.13s:
+181 records checked, two intended package pointers changed,179 protected records
+exact, no new records/owned processes. All nine saved paired rows read back through
+the new normal image. Prior package, registry/Wake history, profile, native owners
+and production preserved. No browser/Wake worker/recurring start or message.
+
+This qualifies normal artifacts and stopped selection. It does not qualify a
+registered new-format browser rollover, automatic driver, protected installation
+or unattended operation. C26 source canary is complete; do not resend it. Next is
+a fresh registered beta task and critical DRAFT_READY recovery/paired continuation
+on selected v54. Keep C24 quarantined and all accepted C23 operations untouched.
+Source156-test/strict-check proof is reused by exact bytes. No operator action
+needed for the next controlled test; connector429 remains specific to Web B/C.
+[C27 evidence](verification/C27_SELECTED_ENVELOPE_RUNTIME_2026_10_23.json).
+
+### October 23 C26 — exact escaped handoff through a real browser restart
+
+Actual editor diagnosis found generated URL spans and layout newlines. Native
+plain-text repair recreated those spans and was refused before send. The exact
+unregistered test draft was durably archived/cleared, with reloaded EMPTY_HOME;
+no unknown draft or registered operation was cleared. Its old journal is retained.
+
+New preparations now mark their existing immutable handoff as JSON_ESCAPED_V1.
+Rust/Python produce matching JSON envelopes with Unicode-escaped URL slashes;
+decoding retains project/intent, predecessor and complete handoff content. Legacy
+records keep their exact composer/source-witness/context-dedup bytes. New context
+observations count actual encoded wire text. No new registry or relaxed receipt.
+156 affected tests and strict app/Wake Clippy/formats PASS. Native repair alone
+remains unqualified on the current UI; new envelopes do not require it.
+
+Escaped source canary:22.84s preparation, browser exit, then28.12s fresh-process
+resume; zero generated links/retyping, one send, actual issued URL, independent
+fresh-document exact USER receipt and completed expected assistant body. App
+inventory corroborates the issued ID. This unregistered canary uses a synthetic
+predecessor; it is not a paired runtime rollover.181 protected records/nine pairs
+exact, native owners untouched, zero owned processes/both controls STOPPED. C24
+uncertainty/C23 completed proof preserved; no recurring/Wake/production action.
+
+Code `6dab09fcfb0c2e1c51841dc087e0945c229c78d1` published on `codex/web-rollover-oct17`; exact remote SHA matches. CI zero runs/checks, UNVERIFIED. Next: matched normal release/stopped-development qualification, then a fresh registered rollover/continuation. Actual Web B/C, automatic monitoring, protected installation and unattended acceptance remain OPEN.
+[C26 evidence](verification/C26_ESCAPED_HANDOFF_2026_10_23.json).
+
+### October 23 C24 — real draft restart and unknown-submission isolation
+
+Fresh distinct recovery task: actual owned-root interruption at durable DRAFT_READY
+before send authorization; fresh read finds EXACT_OWNED digest, no typing or send.
+Supported resume reuses the draft without retyping, attempts its first send, then
+returns BOOTSTRAP_OUTCOME_UNKNOWN. Authenticated app independently shows the new
+candidate; browser diagnosis refuses RESPONSE_EXPECTED_USER_BODY_MISMATCH. One URL
+inside the JSON handoff changed to Markdown link syntax. Rich composer serialization
+is an inference from the observed text change, not captured pre-send DOM proof.
+Only this incident is quarantined; no receipt/binding/continuation is fabricated,
+no resend. Normal test policy restored. Fresh CLI:181 records exact, all nine pairs,
+full registry/Wake history byte-exact since C23, old completed record exact, beta
+continuationProved=true, zero owned processes/both controls STOPPED. H/I advance
+partially; successful automatic recovery, Web B/C and automatic monitoring remain
+OPEN. Source adds a read-only rich-link guard before resume authorization and send;
+21 DOM+71 adapter/bootstrap tests PASS. The guard is not selected/installed or live
+qualified; it refuses unproved rich drafts and does not yet recover them losslessly.
+[C24 evidence](verification/C24_DRAFT_RESTART_SERIALIZATION_2026_10_23.json).
+
+### October 23 C23 — live competing creation, paired updates and continuation
+
+Two requests start23.22ms apart and retain durable FIFO identities: alpha ACTIVE,
+beta WAITING; maximum sampled active creators1. Beta's queued process exits without
+submission, then a fresh process advances its unchanged unsent ticket. Two actual
+ChatGPT-issued replacement URLs, unique bootstrap USER receipts, completed answers
+and source snapshot rechecks precede paired1→2 commits. Both continuations deliver
+once, timers COMPLETE, and event-bound replies retain correct marker/task IDs.
+Fresh CLI continuationProved=true for both; authenticated app inventory corroborates
+the issued chats. Seven old pairs/history preserved, test policies restored,
+170 final records exact/zero owned processes. Live G passes in selected controlled
+scope. Operator-triggered tests do not qualify automatic monitoring, protected or
+unattended operation. H and remaining critical pending-restart phases stay open.
+See [C23 evidence](verification/C23_TWO_PROJECT_ROLLOVER_2026_10_23.json).
+
+### October 23 C22 — actual source-generated schema2 compaction
+
+Two real test source chats answer distinct stable handoff requests under explicit
+low test thresholds. Exact SENT receipts/COMPLETE timers and independently collected
+schema2 JSON preserve project markers, objectives, remaining tasks, Git state and
+decisions in separate PREPARED journals. One bounded run delivered each once; a
+separate empty-queue observation completed timers without resending. Both stopped
+with proven owner-tree exits/zero owned processes. Beta preparation progressed while
+alpha was queued; this does not close actual Web coding B/C. Original bindings and
+history remain unchanged; no replacement chat yet. E's actual schema2 exchange is
+proved, coordinated automatic monitoring and G/H/pending-I remain open. Low rollover
+policies stay enabled only for the two prepared test projects; no recurring start.
+See [C22 evidence](verification/C22_SCHEMA2_HANDOFF_EXCHANGE_2026_10_23.json).
+
+### October 23 C21 — selected fixes, paired sources and actual context capture
+
+C18-C20 are included in matched v53 selected STOPPED. Normal app/default host and
+new-image owner-refusal gate PASS;139 records/two intended pointers changed,137
+exact, previous package/five pairs preserved. Selected bridge verifies two fresh
+source pairs; supported registry/guarded binding registers only their isolated Git
+roots and generation1 targets. Nine pairs total; all seven old entries/history
+exact. Actual supported captures record separate132/137 observed-token estimates,
+two messages each, history UNKNOWN_OR_INCOMPLETE; four new context records only.
+Fresh CLI readback recovers both and all nine registrations,143 records exact and
+zero owned processes. No new messages, native/recurring/Wake worker or production
+action. This advances A/E and registration/context restart evidence; actual B/C/G/H
+and pending-rollover I remain OPEN. No protected or unattended acceptance. See
+[C21 evidence](verification/C21_SELECTED_BROWSER_CONTEXT_2026_10_23.json).
+
+### October 23 C20 — provisional URL source handling
+
+Creation waits for the observed client-only provisional route to become canonical
+within the existing deadline, without granting it identity/binding authority or
+changing durable URL validation. Unknown timeout still forbids blind resend.
+89 affected tests PASS; no new live/package/binding action. Actual pending-to-issued
+browser qualification remains open, as do B/G/H/I. Two fresh sources remain verified
+and unregistered; selected C17 v52 lacks C18-C20. Next matched package qualification.
+See [C20 evidence](verification/C20_PROVISIONAL_URL_2026_10_23.json).
+
+### October 23 C19 — two source conversations verified, affected suite passes
+
+Two fresh initial source conversations now have independently verified distinct
+canonical URLs and exact seed/reply pairs. One send each, no resend; no new source
+registered yet. Beta's response refusal revealed a fixture digest/text mismatch
+also present in ordinary Wake calls; both source call boundaries now pass message
+text while receipt digests remain checked.142 bridge/current-DOM plus66 adapter/
+bootstrap tests PASS within600s source containment. This resolves the affected
+suite's earlier180s timing gate; no whole-repository or CI pass is claimed.
+139 runtime records/five original pairs exact, both controls STOPPED/zero owned
+browser/Wake processes. Selected C17 v52 lacks C18/C19. Initial source recovery
+does not close B/G/H/I; matched qualification and supported test registration are
+next. Connector429 is separate. See
+[C19 evidence](verification/C19_MESSAGE_IDENTITY_2026_10_23.json).
+
+### October 23 C18 — initial source recovered, snapshot guards source-tested
+
+One new source seed submitted once, then strict URL uncertainty reconciled through
+provider search and an independent fresh read. Exact canonical URL, one USER and
+one completed expected ASSISTANT reply verified with proposed source; no resend.
+Nested role wrappers and empty assistant completeness guards fixed;86 affected
+tests PASS. Two broader suites timed out180s, so no full-suite/CI pass is claimed.
+139 runtime records/five pairs exact, controls STOPPED, zero owned processes after
+bounded attempts. No second source attempted or either source registered. This
+initial seed recovery does not satisfy actual rollover interruption H. Selected
+C17 v52 lacks C18; actual parallel Web coding B, two-rollover G, transaction H and
+pending-rollover restart I remain OPEN. Connector429 blocks connector verification
+only. No protected or unattended acceptance. See
+[C18 evidence](verification/C18_INITIAL_SOURCE_RECOVERY_2026_10_23.json).
+
+### October 23 C17 — selected structured handoff runtime and home readiness
+
+C16 is included in v52 selected STOPPED through the existing updater:139 records,
+two package pointers changed/137 exact, previous package and five pairs preserved.
+Selected image passes6.03s schema1/schema2 preparation/fresh-process reopen in
+separate disposable projects,301/31 independently observed token estimates. A
+16.70s real supported read-only browser preflight reports EMPTY_HOME using the
+preserved profile; no typing/send/clear,139 records exact/no owned processes.
+These are selected fixture and browser-readiness proofs, not actual new schema2
+Web exchange, concurrent coding B or simultaneous rollover/recovery G/H/I. Existing
+completed rollover/Wake reviews and historical ambiguous state remain unchanged.
+See [C17 evidence](verification/C17_SELECTED_HANDOFF_PACKAGE_2026_10_23.json).
+
+### October 23 C16 — structured handoff context source proof
+
+New automatic schema2 handoffs retain explicit Git basis/branch/HEAD/worktree
+observations/evidence and important decisions. UNKNOWN/partial state never implies
+native Git verification. Schema1 prompt/serialization and interrupted request-file
+recovery stay exact; unknown/conflicting data refuses overwrite.73 distinct tests/
+81 executions, strict Clippy/format PASS. Normal build and14.55s read-only legacy
+status proof PASS: five paired rows, saved continuation/quarantine,139 records
+exact/no new or owned processes. Selected C15 v51 remains STOPPED without C16.
+Actual schema2 Web exchange and coordinated
+monitoring remain open; the completed original rollover remains preserved. See
+[C16 evidence](verification/C16_STRUCTURED_HANDOFF_2026_10_23.json).
+
+### October 23 C15 — selected development command verification
+
+C14 is now included in matched v51, selected STOPPED through the existing guarded
+updater. Normal release/default host builds PASS; unchanged exact host gate reused
+without launch.139 records checked: two package pointers changed,137 exact, no new
+state; old package and five original pairs preserved. Selected image's76.25s local
+HTTP test proves parallel patch/command verification and third-process restart
+refusal for both completed operations, all natural exits0.139 records exact/zero
+new or owned processes. No actual Web/browser/Wake/native/recurring/production
+action. This is selected development qualification, not actual Web B/G/H/I,
+protected installation or unattended acceptance. Explicit Git/decision handoff
+fields remain the next eligible source task. See
+[C15 evidence](verification/C15_TASK_COMMAND_PACKAGE_2026_10_23.json).
+
+### October 23 C14 — task verification source and native fixture proof
+
+Fixed operator command profiles extend C12 assigned worktrees using the existing
+native sandbox/process owner.28 distinct tests/29 executions, strict Clippy/format
+PASS: parallel task verification, original/peer/Git writes refused, concurrent
+native-equivalent reader unaffected, timeout cleanup and durable restart refusal.
+Broad native read posture remains; no claim of command read confidentiality.
+Normal build and76.61s HTTP parallel patch/verification/restart proof PASS; three
+processes exit0,139 runtime records exact, no owned processes. Selected C13 v50
+remains STOPPED without C14. These local fixtures do not satisfy actual Web B, simultaneous
+browser G, interruption H, pending-browser restart I, protected production or
+unattended operation. Existing completed rollover and Wake review remain preserved.
+See [C14 evidence](verification/C14_TASK_COMMAND_VERIFICATION_2026_10_23.json).
+
+## October 22 acceptance reconciliation
+
+### Mandatory Web architecture — operator clarification October 22
+
+These are core October 31 criteria, not optional later enhancements. The complete
+operator wording is retained in the local project goal; this public record omits
+private workspace names, conversation URLs and runtime identifiers. This section
+supersedes earlier wording that defers compaction until after CLI scheduling.
+
+1. **One project registry.** Reuse the existing unique project ID and canonical
+   workspace registration. Track exact current Web URL, every predecessor and
+   durable handoff, paired Wake target/generation/digest, status/current task,
+   advisory context and last activity. Supported operator add/update/removal and
+   restart recovery are required. No implicit inheritance from another project.
+2. **Parallel Web work.** Independent ChatGPT conversations must make MCP calls
+   against their own immutable project workspace bindings, with reliable project
+   identity, scoped file writes/tasks and duplicate prevention. An unsafe mutable
+   process working directory is not a router. Shared-resource exclusion must not
+   serialize unrelated project tools or steal existing native Codex ownership.
+3. **Context continuation.** Estimate each conversation from observed messages,
+   tool traffic and known content, retaining uncertainty about hidden context and
+   attachments. Configurable warning/rollover safety margins, durable checkpoints
+   and structured handoffs must retain objective, verified work, Git state,
+   decisions, unfinished tasks, blockers and next actions. Reuse the authenticated
+   browser, verify the issued URL and continuation, update only that project's
+   paired authority and preserve predecessors. Never overwrite an unknown draft.
+4. **Recoverable browser transaction.** Use exclusive profile/composer ownership,
+   a durable fair queue of competing rollover IDs and journals, correct project/
+   handoff/state checks, no duplicate submission after uncertainty, independent
+   issued-URL proof and the existing guarded registry/Wake commit. Keep the old
+   binding until replacement checks pass. Recover every phase; release ownership
+   after completion or safe quarantine. Browser and filesystem are separate
+   systems. Unknown submission never permits blind resend. Exclude only the
+   genuinely shared browser step, not independent development or MCP calls.
+
+#### Required live demonstration ledger A–J
+
+No row below grants installed or unattended acceptance. Preserve completed proof;
+new gates do not authorize replaying accepted deliveries or rollover canaries.
+
+| Gate | Existing evidence and exact scope | Remaining acceptance |
+| --- | --- | --- |
+| A. At least three registered project Web conversations | PASS, development: prior C21/C56 registration/readback retain nine original pairs, and C59–C62 add a verified tenth controlled pair at generation2 with its predecessor. C63 safely retires only that completed canary. C73 registers another distinct controlled project; C86 verifies the current ten active pairs plus one retained archive. All prior distinct roots, URLs and histories stay preserved. | Protected/runtime startup acceptance remains separate. |
+| B. Two Web conversations make tools calls in separate directories | PARTIAL: C47/C48 normal central HTTP tools edit isolated task worktrees with per-task scope and native originals preserved. C50 now qualifies the actual normal collector/private bootstrap transfer, verified replacement and original-task delivery. C54 reads that preserved payload with the normal C53 image. C92/C93 also qualify the closed cached-schema transport through the same scoped dispatcher: 17 normal local HTTP requests, cold cross-transport no-replay and C94 stopped development selection. These are local fixtures with synthetic receipts and zero actual Web calls. | OPEN: actual concurrent ChatGPT Web coding. The replacement reports missing scoped tool, with zero calls. Serving/backend/catalog qualification awaits its supported startup owner; do not classify HTTP fixtures or delivered context as Web execution. |
+| C. Blocked project while sibling makes useful progress | PARTIAL: normal HTTP writer-busy isolation and useful sibling results remain. C52 records the real controlled task blocker while retaining its ownership; C53 snapshots reports in future handoffs in source. C55 native binding-fault fixture keeps sibling target readable. C56 normal executable also reads and queues sibling metadata during the write fault. C61 actual browser/registry failure preserves Wake2 target readability. Neither is actual sibling Web coding. C93 repeats writer-busy/useful-sibling proof through cached task envelopes in the normal binary, preserving both native originals; this remains local HTTP evidence. | OPEN: actual Web-project blocking and useful sibling coding. Active native sessions are separate evidence. |
+| D. Independent project Wake routing | PASS within preserved isolated development proof: approved three-project routing and later checkpoint review have exact receipts and completed responses. | Protected installed routing and unattended operation remain open. Do not resend accepted events. |
+| E. Context pressure and durable handoff | PASS, controlled C50: actual source observation, controlled pressure policy, source handoff and normal private collector completed. Context was recorded for the replacement; the original policy was restored. C43 and recovered C38–C40 remain preserved. Estimates are advisory with unknown/incomplete coverage. C85 source, normal C86 selection and actual C87/C88 periodic captures additionally prove observation of a held canonical source and independent sibling under separate opt-in policies. C87 two-enabled-observer completion within 180s is not proved; its partial result is retained. C95 source tests additionally preserve due readiness at the 4,096-event snapshot limit without inventing token pressure; C96 normal CLI qualifies the derived per-conversation flag, isolated estimates and cold metadata reads, and C97 selects that image stopped. Actual browser saturation recovery is not live-qualified by these CLI calls. | Continuous unattended monitoring is not activated or accepted. |
+| F. Actual replacement URL and continuation | PASS, controlled C50: actual issued URL independently verified, paired generation4-to5 transfer/history preserved, continuation and one original-task resume delivery complete. Correct task context survived; C54 confirms frozen-payload compatibility. Prior C23/C40/C43 evidence remains. | Actual coding remains blocked by the scoped tool dependency; receipt/body completion does not prove task completion. Protected and unattended acceptance remain open. |
+| G. Two simultaneous synthetic rollover requests | PASS, preserved C23 controlled live proof:23.22ms request gap, one active creator, one waiting ticket, both URLs/bindings/continuations isolated and no duplicate submission. | No replay needed. Critical crash H, protected and unattended acceptance remain separate. |
+| H. Interruptions, recovery and ambiguous submission | PARTIAL LIVE: C24/C28, C38–C40 recovery, C42 quarantined ambiguous operation and C43 resumption remain preserved. C55 adds a real native filesystem write-failure fixture: guarded Wake successor stays at generation2 instead of compensating to generation3, incomplete pair refuses, sibling read works, cold reopen finishes once. | C56 normal executable recovers explicitly injected CREATED/Wake-first state after a real registry replacement fault; fresh-process retry preserves generation2 and queues one continuation. C61 now qualifies an actual verified browser/Wake commit followed by a real Windows registry replacement failure; a fresh normal process recovers under the browser lock without resend, and C62 continuation/body proof completes. C75 now kills an actual owned normal process tree at observed DRAFT_READY; C76 verifies the saved exact draft cold, C77 resumes it and commits generation2 once, and C78 verifies completed continuation/body. The post-success harness failure and local-only finalization are retained separately. C82–C84 additionally kill the actual normal parent at SEND_ATTEMPTED, preserve the unknown journal/old binding, verify cold no-resend under the browser lock, archive the exact4,395-byte owned draft and prove empty Home through native browser reread. The archive completion is real but is not a provider USER receipt; the operation remains held/non-replayable. Other crash phases and unattended operation remain separate; uncertain submission never permits blind resend. |
+| I. Restart preserves registrations/history/pending rollovers | PARTIAL: preserved C23/C28 restarts and later normal cold CLI payload/task checks. C55 source reopen preserves the original CREATED receipt and exact Wake-first binding witness. | C56 normal fresh-process recovery preserves the receipt, source handoff, predecessor and one continuation from injected state. C61 additionally recovers the actual cross-system write-failure state in a fresh normal process with the browser lock held. C63 cold guarded retirement retry preserves all282 records and retained history; C64 source MCP reads expose that archive without reactivation. C65 normal loopback MCP read now matches the full archived workspace/target/history/retirement metadata without writes. C68 additionally restarts two actual selected normal MCP processes on the same endpoint, compares their complete coordinator projection (bindings/history/context/queue/work/rollover), and preserves all282 records including retained SUBMITTING/quarantined journals. Both natural30s exits and cleanup pass. C75–C78 additionally qualify recovery from an actual pre-send process kill while retaining all prior bindings/history. C79 now restarts both selected normal coordinator and independent foreground Wake host twice with equal complete saved projections,296 other records exact and zero owners. C87/C88 additionally run two distinct normal filtered schedulers and bounded foreground hosts, retaining the pending unknown journal and all bindings/history across natural shutdown/restart. Protected/unattended operation and other critical crash phases remain separate; no recurring activation. |
+| J. No orphan browser/Wake processes | C95 source gates, C96 bounded normal CLI metadata qualification and C97 stopped selection retain zero scoped/test owners, all bindings/history and both STOPPED controls; only two guarded package pointers changed. C92 source gates, C93 normal disposable HTTP and C94 stopped selection also verify zero scoped/test owners, all 306 real records preserved except the two guarded package pointers, unchanged bindings/history, and both controls STOPPED. C86 stopped selection and C87/C88 bounded periodic-observation runs retain zero scoped owners, natural coordinator/foreground-host exits, unchanged bindings/history and STOPPED controls. C87 is partial for two observations, while its cleanup passes; C88 sibling observation and cleanup pass. C73–C78 also pass all bounded-step cleanup including actual owned-tree kill, cold draft inspection/recovery and continuation:297 final records, queue0,10 active pairs/one archive, controls STOPPED. No native/production/recurring actions. The original post-success harness failure remains recorded separately. PASS for recorded bounded tests through C68 bounded selected-normal restart diagnostics, including two natural30s exits on the same endpoint with Web auto off. Both controls remain stopped, no scoped owners remain, and all prior project records remain preserved outside the documented own-canary/shared host changes;282 final records, queue0, nine active paired projects and one preserved retired canary. | Normal unattended operation is not activated or accepted. Every future bounded test retains its own cleanup proof. |
+
+**Current implementation versus gaps:** the existing registry, immutable project
+connections and assigned-task tools, fair browser admission, conservative context
+store, structured handoffs and durable rollover journals are implemented. C50
+completed actual normal collector/private bootstrap transfer, independently
+verified replacement, paired generation5 and continuation/task-resume delivery.
+The task remains blocked on the scoped tool, with no coding completion claimed.
+C54 qualifies the normal reader and selected stopped v67 package; C55 fixes the
+native registry-save failure in source. No completed canary needs replay.
+
+Primary live gaps remain actual parallel Web coding, critical browser transaction
+crashes/full runtime restart, protected deployment and unattended operation.
+C23's serialized two-creator proof remains accepted in its controlled scope.
+The64-predecessor inline capacity refuses before Wake mutation and never evicts
+history; unbounded archival remains outside the current implementation. C41's
+retirement source/isolated CLI evidence is retained without claiming a live
+retirement of a native-owned project. Connector/startup ownership is a specific
+live dependency; eligible source work continues and native owners remain intact.
+
+The following C9/C8/C13 milestone notes preserve their historical scope; current
+qualification is summarized above and in the latest dated C50–C55 records.
+
+Immediate C9 source fix removes silent predecessor eviction. At the existing
+64-entry inline capacity, another target change now refuses before the paired
+Wake callback, preserving every stored predecessor and registry bytes. Same-URL
+rebinding and another project's binding still work. Two focused tests, strict
+Clippy and format pass. No unlimited archive or live history-boundary acceptance
+is claimed. C9 is not selected; [C9 evidence](verification/C9_WEB_HISTORY_PRESERVATION_2026_10_22.json).
+The prior C8 source is now a normal release selected STOPPED; 139 records checked,
+only two package pointer changes, five original pairs and prior package preserved,
+zero owned processes. This is a development package/status qualification, not
+protected installation or the new simultaneous-rollover acceptance.
+
+### October 23 — matched release selected STOPPED
+
+C13 includes C9 history preservation, C10 fair creation admission, C11 fixed
+project connections and C12 assigned task patching. Normal release app/default
+host builds and supported stopped selection PASS.139 records checked; only two
+package pointers change,137 others exact, no new state, five original pairs and
+previous package preserved. Exact unchanged host gate proof reused with no launch.
+The selected image passes51.25s local MCP task editing/restart proof: two parallel
+patch tasks and a third process refusing completed-call replay, all natural exit0.
+139 records exact/zero new or owned processes during this test. Control/worktrees
+were disposable; no actual Web message, browser, WakeHost worker, native session,
+recurring or production action. This is selected development image qualification,
+not protected installation, live B/G/H/I or unattended acceptance. One05:23 UTC
+connector read remainsHTTP429; source work continues. Contained command execution
+is required next. See [C13 evidence](verification/C13_SELECTED_WEB_PACKAGE_2026_10_23.json).
+
+### October 23 — assigned task editing
+
+Explicit local task assignment plus multi-tools mode enables existing delegated
+patch tools in a separate linked Git worktree. Registered checkouts stay read-only
+and no native writer is claimed. Project, common repository, branch/base HEAD,
+unregistered task root, contract scope and stable call identity are checked.
+Existing journals and per-worktree writer authority are reused, without a global
+tool lock. Unknown calls retain their marker and cannot blindly replay. Graceful
+close drains the worker before marker/lock retirement. Shell, provider and
+verification commands are not enabled; workspace-contained execution remains core
+work. Actual Web B, selected/installed proof and unattended acceptance remain
+separate. See [C12 evidence](verification/C12_PROJECT_TASK_EDITING_2026_10_23.json).
+
+24 distinct tests/25 executions, strict Clippy/format and normal build PASS at
+source `f132657924cc498f7c5ca9b23c4a869a2816c165`, exact pushed remote match.
+Normal HTTP proof51.92s: parallel preview/apply in two assigned worktrees, native
+roots unchanged, recorded calls refused before/after normal process restart.
+All three exit0 at35/35/10s;139 records exact, zero new records/owned processes.
+No actual Web/browser/message/WakeHost/native/package/production change. Task
+journal restart does not close pending-browser H/I. Remote CI UNVERIFIED.
+
+### October 23 — project MCP connection SOURCE / LOCAL HTTP stage
+
+C11 uses explicit operator-selected connections, existing registry/Git identity
+and bearer auth. Remote requests cannot select a workspace; the context ignores
+mutable application working-directory state. Calls need project ID/current paired
+generation/digest, with before/after verification. Guarded rollover accepts a
+fresh witness without endpoint restart; stale witnesses/workspace drift refuse
+while a sibling progresses. Schemas keep project fixed but target values fresh
+across cached catalogs. Direct mutation/commands require ownership-backed follow-up
+and are denied now. 20 distinct tests, strict Clippy/format PASS. No actual Web
+chat, native owner or protected runtime changed. This is not completion of coding
+or live B. See [C11 evidence](verification/C11_PROJECT_MCP_SCOPE_2026_10_23.json).
+
+Normal debug build from published `74b2966a254e93cd9d384fadcf86a196500e7151`
+and two-process disposable-project qualification also PASS. Parallel own-root
+reads, wrong bearer/project witness refusal, sibling-path/write/command refusal
+and simulated sibling writer progress pass. Both35s deadlines exit0 within180s
+outer containment; no owned processes, all139 protected records exact. No actual
+ChatGPT calls, issued URLs or browser rollover in this test. Source remote SHA
+matched; zero GitHub workflow/check runs means CI UNVERIFIED. C8 v49 remains
+selected STOPPED; this does not close installed, coding or live B acceptance.
+
+### October 23 — fair creation admission SOURCE / TESTED_LOCAL
+
+C10 adds durable FIFO admission only around shared New Chat creation. Existing
+phase/policy/target checks, browser/profile ownership and ambiguous-submission
+refusals remain authoritative. An exact USER/issued-URL receipt must be validated
+and saved in the project journal before releasing creation admission. Later
+completion probes and binding use existing independent checkpoints. An abandoned
+lease or ineligible waiting source quarantines only its admission; unknown drafts
+and original project state remain intact. Independent tools/native development
+receive no global lock. Status is durable metadata, never liveness/delivery proof.
+72 distinct tests, strict Clippy/format PASS. Storage is bounded to 512 entries/
+256KiB with no eviction. No actual browser or protected installation was tested;
+live G/H/I, true project-bound MCP work B and unattended operation remain OPEN.
+See [C10 evidence](verification/C10_ROLLOVER_ADMISSION_2026_10_23.json).
+
+Normal executable build and existing central frontend qualification now PASS:
+five paired rows, all 139 checked records exact, zero new admission artifacts
+or owned processes; no browser/message/host/native changes. Full normal CLI
+status returned no output within its separate 15s probe; its root exited and
+state stayed exact. That path remains unqualified; the 14.33s narrower frontend
+pass under 30s is not a full CLI or actual-browser acceptance substitute.
+Selected v49 is unchanged, and no unattended or protected service was activated.
+
+### October 22 evening — timer fault isolation SOURCE / TESTED_LOCAL
+
+Automatic readiness, completed-task lookup and rollover source quiescence now
+use project-scoped timer reads. A reproduced attributable sibling timer error
+no longer denies another project's lookup. The affected project and global
+diagnostics still refuse; unreadable or unattributable state is not bypassed.
+28 tests, strict app/Wake Clippy and format pass. Normal app and default-feature
+WakeHost build from published `27b2ba0` passes. No installed or real-project
+timer fault injection, selected package update or Web proof replay is claimed.
+
+Read-only actual deployment checks returned canonical binary/sidecar mismatch,
+missing trusted rollback authority, no release-pair result and incomplete
+supervisor startup policy/task proof. Both commands exited within 15s; all 99
+checked records exact, no new records or owned processes; controls STOPPED.
+Existing installed signed-image trust is separate from current-MVP promotion.
+Normal executables are built; the existing release/development update path is next.
+Protected installation must use existing exact-build review/owner procedures;
+do not activate the pending historical image to satisfy new source acceptance.
+External connector availability remains an independent live dependency.
+See [C8 evidence](verification/C8_PROJECT_TIMER_ISOLATION_2026_10_22.json).
+
+### October 22 evening — reader independence normal build and installed readback
+
+Normal app build from clean `ccdb6aee5c76de2b0f3293874c3f9e05f0024814`
+passed at 02:44:54 UTC October 23 without development dependencies, under 240s.
+SHA256 `5de359c757f15fcbef9de5878d66111d28ce0d9fc559098915bb2578ee5c7533`.
+C7 remains source/normal-build qualification; actual granted-project concurrent
+reads and selected deployment are not claimed. The existing C6 release remains
+selected and its accepted live response-read proof is preserved.
+
+At 02:46:55 UTC, one existing zero-argument fixed signed-image status command
+exited 0 within 15s. It signature-verified the fixed installed payload with
+bootstrapEpoch 1, installedRotationEpoch 0, pendingRotationEpoch 2. The pending
+image is not installed. No signing, rotation, replacement, supervisor/browser/
+Wake start or protected state change occurred. This closes only current
+read-only installed-image identity proof, not new MVP promotion/startup,
+canonical release-pair recovery, external connector or production acceptance.
+Prepare the supported operator handoff from existing read-only status next;
+do not activate the pending image to satisfy an unrelated source milestone.
+See the [C7 receipt](verification/C7_REVIEW_READ_INDEPENDENCE_2026_10_22.json).
+
+### October 22 evening — independent granted review reads fixed
+
+The existing receipt-bound granted-package reader already supplies project
+source/patch inspection. No new file API was needed. A regression showed its
+process-wide heavy-reader flag made one waiting project reject every sibling.
+Admission now uses canonical control root plus project ID: one reader per
+project, at most two heavy reads overall. The worker owns its lease until exit,
+even if its awaiting MCP request is cancelled. Disclosure grants, receipt/package
+binding, revocation, byte/page limits and native ownership are unchanged.
+
+The original regression failed with exit 101 after releasing/joining its blocked
+worker; after the fix, ten focused tests passed at 02:38:52 UTC October 23
+(October 22 New York). These cover sibling progress, duplicate/alias rejection,
+total admission limit, cancelled-request worker retention and slot resumption,
+existing grant/receipt/revocation protections and bounded multibyte pages.
+Strict all-target/all-feature Clippy and formatting passed under 600s containment.
+An initial test-only cancellation assertion compile error was corrected without
+adding Debug to the RPC response type; all failed receipts remain private.
+
+This is SOURCE / TESTED_LOCAL, not actual granted-project concurrency or installed
+acceptance. No browser, WakeHost, native session, grant, message, binding,
+recurring process or selected package was changed. Prior C6 selected/live proof
+remains intact. Next qualify the normal executable and reuse the existing
+review/disclosure path; do not replace it or manufacture a real disclosure grant.
+See the [C7 receipt](verification/C7_REVIEW_READ_INDEPENDENCE_2026_10_22.json).
+
+### October 22 evening — selected release review reader LIVE PASS
+
+Normal release from clean `a33b631f2205cbec5aacf32e9203d51432d3b1cf`
+finished at 02:10:27 UTC October 23 in 5m58s, within its 600s cap. The matched
+normal default-feature WakeHost and owner-marker/EOF probe passed. The existing
+stopped updater selected all four verified artifacts in 3.13s. Only two package
+pointers changed among 139 records; the other 137, all five pairs, prior package,
+histories and existing authenticated profile were preserved. App SHA256:
+`11f12327264752cfdac007cf8ceb18c14c080162af34f1b1d0b0a664a28f75bf`.
+
+One new-tool MCP read of the already completed review passed at 02:13:37 UTC in
+34.77s. Verified exact project/event/target, complete assistant body and response
+digest; no raw diagnostic snapshot, send, event publication, timer replay or
+native task completion claim. The selected executable served one bounded
+loopback MCP process with Web scheduling disabled. Browser ownership used the
+existing authenticated profile; no WakeHost or recurring process was started.
+
+Cleanup at 02:15:04 UTC verified retained root exit, outer Job closure, zero
+owned processes and both controls STOPPED. Of 139 records, only numeric usage
+counters changed; launch settings and 138 other records remained exact, with no
+new state records. No private response text or target URL is published. This is
+selected development + actual local-MCP/browser proof; external connector and
+protected production acceptance stay OPEN. Do not repeat this completed read.
+
+Read-only native snapshots found three active owners with no turn errors and
+one terminal provider-capacity failure; no chat, model or ownership was changed.
+That provider dependency does not block eligible CatDesk source work. Next
+reconcile external coordinator availability and the remaining review-to-next-task
+ownership gate, preserving completed events. See the
+[C6 receipt](verification/C6_WEB_REVIEW_READ_2026_10_22.json).
+
+### October 22 evening — coordinator reader normal executable qualified
+
+Normal app build from clean `bb83aa95c2edfa438df3e07f3f9d0f18f35d172f`
+passed at 01:57:19 UTC October 23 without development dependencies. App SHA256:
+`4b798dc9069be15c741772ba749af706d524c052df7319cc2f00e568929c9afd`.
+One 45s loopback MCP process, with Web scheduling explicitly disabled, proved
+new-tool discovery, unauthenticated HTTP401, closed arguments, stale-generation,
+wrong-digest, missing-delivery and cross-project receipt refusals before browser
+access. Registered context estimates remained independently scoped for all five
+original projects; paired targets and accepted continuation were preserved.
+
+Root exit and outer Job cleanup passed. Of 139 state records, only the existing
+configuration's numeric usage counters changed; launch settings stayed exact,
+138 other records were unchanged and no records were added. Zero owned
+processes, both controls STOPPED, no browser, WakeHost, message, binding, native
+session or selected-package change. This qualifies normal executable/local MCP
+admission, not positive review-body retrieval or the external connector. The
+matched normal release/selected package and positive new-tool read remain next.
+No completed review/rollover was replayed. See the
+[C6 receipt](verification/C6_WEB_REVIEW_READ_2026_10_22.json).
+
+### October 22 evening — central review response reader implemented
+
+Source inspection found that the coordinator could queue work/read status but
+could read completed peer-review bodies only through the local operator CLI.
+Added `catdesk_web_review_read` in the existing supervisor modes, with exact
+project/event/generation/digest witnesses and no URL/workspace override. It
+reuses context capture's bounded worker/admission/cancellation and the existing
+browser reader. Only an event-verified latest complete response crosses MCP;
+local unverified diagnostic snapshots are withheld. Receipt/event/message
+consistency is checked, response text remains bounded and task completion false.
+The local diagnostic CLI remains available. No new coordination framework.
+
+At 01:52:51 UTC October 23 (October 22 New York), nine focused tests passed,
+including closed scope/privacy, mode/catalog, local response proof, three-project
+HTTP missing-delivery refusals with unchanged fixture trees, and cooperative
+cancellation before adapter creation. Strict all-target/all-feature Clippy for
+app and WakeHost and both format checks passed under 600s containment. The first
+catalog check caught an expected-order mismatch; corrected and passed, with the
+failed receipt preserved. No browser, WakeHost, recurring process, live message,
+binding, native session, selected package or protected production change.
+
+This is SOURCE / TESTED_LOCAL. Normal executable/local-MCP qualification,
+matched release selection and positive live use through the new tool remain
+OPEN; the external connector inventory/transport is not updated or recovered.
+Build and qualify the normal executable without Web scheduling next. Existing
+completed review/observation/rollover must not be replayed. See the
+[sanitized C6 receipt](verification/C6_WEB_REVIEW_READ_2026_10_22.json).
+
+### October 22 evening — selected positive observation path PASS
+
+At 01:35–01:36 UTC October 23 (October 22 New York), the current matched
+normal release package completed one `operator web auto tick` observation in
+60.79s. The existing project policy opted into observation and kept rollover
+disabled. Exact conversation binding, four visible messages and a 1,556-token
+proxy were recorded; full pressure remains UNKNOWN_OR_INCOMPLETE due unseen
+older history and truncation. No policy, message, binding or native-session
+change occurred. Only the selected context ledger and two status records
+changed among 139 compared records. No unexpected or new records appeared.
+Retained host exit, outer Job closure, zero scoped processes and both controls
+STOPPED passed. No scheduler loop, recurring service or rollover was activated.
+
+Reconciliation found an earlier successful three-project monitoring receipt,
+completed October 21 at 02:18 UTC: three independently observed conversations,
+policies restored, bindings preserved and clean exit. It was not rerun. That
+historical package proof and this current-package single-project test have
+different scopes; current concurrent monitoring and protected production
+acceptance remain open. No new source change was needed. See the
+[sanitized C5 receipt](verification/C5_POSITIVE_OBSERVATION_2026_10_22.json).
+
+### October 22 evening — bounded live checkpoint review PASS
+
+The matched normal app/host package passed the release marker/owner gate and
+was selected through the stopped updater. All 134 unrelated records stayed
+exact; only two package pointers changed. Five project pairs and the existing
+authenticated profile were preserved. This is a development package selection.
+
+At 01:21–01:24 UTC October 23 (October 22 New York), the already queued,
+unchanged approved historical-checkpoint review was delivered once. Continuation
+made zero publication calls. Receipt EXACT_USER_MESSAGE_APPENDED, SENT state,
+COMPLETE assistant turn and event-bound read-only response-body capture passed.
+Completion was observed at 137s within the 180s foreground limit. The host
+released its lease and proved its owned tree exited; the outer Job closed and
+cleanup found zero owned processes, empty queue and both controls STOPPED.
+No binding, native-session, production or recurring-automation changes occurred.
+
+The response identified no defect from the supplied selector excerpt and
+suggested one dynamic-state regression for the existing native owner. It also
+reported HTTP429 preventing live source/ownership queries: no independent
+source inspection or test rerun occurred. This advances actual project review
+transport acceptance, while the complete review-to-next-native-task cycle
+remains PARTIAL. The suggestion was not dispatched or duplicated. The supported
+metadata-only resolver closed only this completed review intent; native task
+completion remains unverified. Its first sandbox project-read refusal made no
+mutation; the owner-context call succeeded, with only the own ledger changed
+among 139 records. Full multi-project and protected production acceptance remain
+open, independently of this passing live test. See the
+[sanitized C4 receipt](verification/C4_FOREGROUND_RELEASE_MARKER_2026_10_22.json).
+
+### October 22 evening — approved review queued; release marker defect fixed
+
+The operator approved the frozen revised review. It was published once to its
+existing project queue, but the foreground launcher refused the selected normal
+host with `DEV_RUNTIME_FOREGROUND_PACKAGE_REQUIRED`. No delivery, turn or
+submission marker was created. Cleanup verified zero owned processes and both
+controls STOPPED; the same request remains queued, without payload or target edits.
+
+The release host's entry point correctly rejected missing owner input, while
+its raw protocol marker was absent from the optimized image. Owner validation
+now retains the contiguous marker through an optimization barrier. The exact
+owner handshake, image compatibility guard and runtime authority remain intact.
+Five owner/lifecycle tests, one package-refusal test, a normal default-feature
+release host build/probe, strict Wake Clippy and formatting pass. The release
+probe checks both marker presence and EOF refusal without creating runtime
+state. CI now includes that normal-release regression; remote CI is unverified.
+
+Matched app/fixed-package selection and actual review delivery remain OPEN.
+Next build and select the matched package through the stopped updater while
+preserving the queue, then resume only that already queued pre-submit event.
+Do not publish it again or replay completed canaries. See the
+[sanitized C4 evidence](verification/C4_FOREGROUND_RELEASE_MARKER_2026_10_22.json).
+
+### October 22 evening — selected context CLI and one live read qualified
+
+Normal release finished at 00:26:59 UTC October 23 (October 22 New York), within
+600s. App SHA256:
+`a35b6af645f00a57e8a36729f4070b2677ea825359420627541f8fb7e8f26c45`.
+The matched development package was selected stopped through the existing
+updater; previous package retained, five-project view passed, 132 unrelated
+records exact and only two package pointers changed. Selected context refusal
+checks passed in 2.06s, leaving all 134 records exact and zero new state/processes.
+
+One live read-only context capture passed in 52.90s using the existing
+authenticated profile, without WakeHost. It verified the paired destination
+and recorded an advisory text proxy; unseen older history remains UNKNOWN.
+Eighty-six protected files stayed exact, selected context history was preserved,
+no message was sent, and both controls stayed STOPPED. Root exit, outer Job exit
+and zero scoped browser processes were checked. A copied private helper's older
+manifest reference stopped its first preflight before browser startup; the
+corrected helper made one actual capture. This is selected development plus one
+live read, not active multi-project routing or protected production acceptance.
+
+The operator granted bounded actively monitored foreground tests. The prepared
+review's native checkout advanced during normal work, so its unsent candidate
+was preserved. A separately labelled historical-checkpoint candidate verifies
+immutable source and recorded tests from the existing owner handoff. Automatic
+approval review rejected sending that revised payload before process startup;
+exact revised-text approval is pending. No review event/attempt/host start exists.
+Native development continues uninterrupted. See the
+[sanitized C3 evidence](verification/C3_CONTEXT_CLI_BATCH_2026_10_22.json).
+
+### October 22 evening — context CLI independence and atomic imports
+
+Source inspection found the older CLI context path used a blocking ledger lock
+and wrote imported events one at a time. A regression reproduced a rejected
+batch changing state. Configure now reuses the guarded context control; observe
+retains the existing paired target during its bounded, nonblocking metadata
+operation. A batch validates and applies revisions in memory, then replaces one
+ledger once. Invalid/conflicting batches count no earlier events. Single-event
+revision rules and stored schema are unchanged; replay writes nothing.
+
+Eighteen context-store tests, twelve CLI tests, the three-project integration
+test, strict all-target Clippy and formatting pass. A normal executable's three
+refusal checks pass in 10.60s under 45s: configure/observe ledger contention and
+late invalid-event refusal. All 134 real metadata records stay exact; no new
+state, process, event, browser or host. Positive imports remain fixture evidence.
+The selected prior release is preserved and does not contain this fix. Normal
+release/selected qualification for this increment, live Web, connector and
+protected production acceptance remain OPEN. See the
+[sanitized C3 receipt](verification/C3_CONTEXT_CLI_BATCH_2026_10_22.json).
+
+### October 22 evening — selected release Web work CLI qualified locally
+
+At 00:01–00:03 UTC October 23 (October 22 in New York), the normal release
+build and matched four-artifact development package passed. App SHA256:
+`6fab0769e69e4a9503daf59cfbb5b072fce594036288713aff0e488b0b5e2650`.
+The existing guarded updater selected the package while both runtimes stayed
+STOPPED. Its five-project view passed; 130 unrelated records stayed exact and
+only the two permitted package pointers changed. The prior package remains.
+
+The new selected CLI then recorded one metadata-only work request and retired
+it before submission in 1.63 seconds, under a 120-second contained outer cap.
+Of 132 existing records, only its project ledger changed; old ledger entries
+were preserved. The only new records were its archive and STALE/OPERATOR_RETIRED
+delivery without a receipt. Queue empty; no listener, browser, host, recurring
+process, native writer or message send. Production and all five bindings/history
+were untouched. This qualifies **selected development local queue operations**;
+live Web delivery, natural review, connected tool exposure and protected
+production acceptance remain OPEN. No source code changed after its prior tests.
+The following earlier checkpoint records the qualification sequence, not the
+current package gate. See the [sanitized CLI receipt](verification/C2_WEB_WORK_OPERATOR_CLI_2026_10_22.json).
+
+### Web work operator CLI — SOURCE / local fixture and negative app proof
+
+`operator web work request/resolve --project-id ... --input-file ...` now call
+the existing guarded handlers directly. They require command/file project
+agreement and start no listener, browser, host or native writer. This allows
+local operator queue coordination without a temporary MCP server. Connector
+availability and actual ChatGPT tool exposure remain separate installed gates.
+
+Twelve CLI and three Web integration tests, strict Clippy and formatting pass.
+The integration fixture covers three independent CLI/direct/MCP routes and
+original-witness resolution after target rollover. A normal app's three real-root
+refusal checks pass in 3.06s with 132 records exact, no new state or processes:
+request/resolve scope mismatch and preserved primary quarantine. No real request
+is queued. Positive publication is fixture-only; normal release and selected
+package qualification for the new commands remain OPEN. Existing v44 is retained.
+See the [sanitized receipt](verification/C2_WEB_WORK_OPERATOR_CLI_2026_10_22.json).
+
+### Real-review controller — locally checked, live branch unexecuted
+
+The private bounded controller is prepared using the existing publisher and
+foreground owner, with one publication call and no automatic replay or work
+resolution. All three scripts parse and 47 local decision fixtures pass. These
+check scope/digest/receipt/timer/response handling without processes or browser
+activity. At 23:24:00Z its read-only preflight passes; 114 original records stay
+hash-exact, 18 historical timers are complete and no runtime owner is present.
+The live host budget is 180s; response reading and cleanup have separate bounds.
+No host, event, browser or native execution starts. The requested exception to
+the prior stop instruction remains pending, so live cleanup, natural review and
+next-task proof remain OPEN. See the [sanitized C4 evidence](verification/C4_NATURAL_REVIEW_PREFLIGHT_2026_10_22.json).
+
+
+### Natural review preparation — unqueued, not live acceptance
+
+Actual deliverable review candidates now exist privately: one for CatDesk's
+qualified source, and one from an independently owned sibling development
+checkpoint. Owner handoff, current source and recorded verification were
+checked without edits, new tests, native writer takeover or private-source
+publication. Both preparations preserve 114 CatDesk records and queue nothing.
+
+CatDesk's own request remains blocked by its older quarantine. The sibling
+snapshot has no pending rollover/open task; admission must be rechecked by the
+existing publisher. No native receipt is fabricated and a controlled test event
+cannot stand in for natural review. The earlier WakeHost stop instruction is
+preserved; one bounded foreground exception is requested, not assumed. Natural
+review/next-task and full automatic/live acceptance remain OPEN. See the
+[sanitized preflight](verification/C4_NATURAL_REVIEW_PREFLIGHT_2026_10_22.json).
+
+### Observation-age display — normal app and selected development release
+
+The later normal app check compares all five original projects' displayed ages
+against their exact saved browser timestamps; all match the observed time window.
+The bounded command completes in 13.91s with all 114 metadata records exact,
+no new state and zero owned processes. This is a metadata read, not fresh capture.
+The normal release then qualifies and the supported STOPPED updater selects its
+matched package. The selected release displays ages for all five original pairs;
+only its two package pointers change, previous version/profile are preserved,
+and no browser/WakeHost, event, recurring worker or native writer is started.
+
+This closes the display increment's normal-app/selected-development gate.
+Protected production, active automatic routing and natural review/next task
+remain OPEN. The earlier source-only boundary below is retained as history.
+See [release/view evidence](verification/C2_CONTEXT_AGE_RELEASE_2026_10_22.json).
+
+### Context observation age — SOURCE / TESTED_LOCAL
+
+The central Web view now shows how many seconds have elapsed since each exact
+paired conversation's last saved browser observation. It reads the existing
+timestamp; it performs no browser capture. Missing/legacy, zero, invalid, future
+or unavailable-clock timestamps show UNKNOWN. A generation mismatch suppresses
+both context and age. The saved snapshot label explicitly leaves monitoring
+unverified; UNKNOWN coverage still has no reliable percentage. This closes the
+source display gap where a target-current context estimate had no visible age.
+
+All 22 console regressions pass, including independent per-project ages and the
+invalid/legacy/generation cases. Strict all-target Clippy and formatting pass
+under a 600-second contained local gate. No browser, WakeHost, scheduler,
+message, binding, package, policy or original native writer changes occur.
+At that source-only checkpoint, normal app/package qualification was OPEN.
+The later normal/selected-release receipt above closes that display gate.
+See [sanitized source evidence](verification/C2_CONTEXT_OBSERVATION_AGE_2026_10_22.json).
+
+### Latest selected normal release and controlled local queue
+
+At 22:03:39Z the supported STOPPED updater selects the normal release from
+`6748e7139d99b65bafc0c2dbeb39d41f6c093530`, now including `--no-web-auto`.
+Build exit 0; selected view passes; previous version/profile and all five pairs
+remain preserved. Only two intended package pointers change. Selected 45-second
+MCP authentication/catalog/scope and independent advisory context checks pass;
+the listener exits naturally with zero owned processes. This closes normal
+release/selected-package qualification of the flag, not production activation.
+
+At 22:28:39Z a bounded 60-second selected-package test verifies three independent
+original-project local queues, project-specific quarantine isolation, wrong-target
+and conflicting-task refusals, idempotent replay and safe pre-submit retirement.
+All three controlled requests finish CLOSED/retired without receipts or sends;
+closed retry does not requeue. At 22:29:29Z cleanup proves natural exit, zero
+owned processes, no pending test queue/timer and no unexpected state change.
+Nine expected test ledger/delivery/archive records are preserved as evidence.
+This proves local queuing only. Productive concurrent browser work, automatic
+monitoring/routing and natural review/next-task acceptance remain OPEN. Both
+Wake controls stay STOPPED; no recurring automation or operational WakeHost starts.
+
+See the [sanitized receipt](verification/C2_SELECTED_LOCAL_QUEUE_2026_10_22.json)
+and [dated execution log](OCT22_31_EXECUTION_LOG.md). Exact publication and CI
+readback follow staged privacy review. The earlier evidence below is retained.
+
+### Selected development release and MCP diagnostic lifecycle
+
+The frontend's normal release qualification passes at 21:26:34Z in 3.14 seconds
+under a 45-second cap, retaining all 85 records. At 21:31:44Z the existing
+guarded development updater selects its immutable package while STOPPED. The
+selected frontend passes. Of 87 records, only the two package-authority pointers
+change; all 85 other records, previous package, existing profile, project pairs,
+history and production remain preserved. No browser/WakeHost starts or event
+is published. This is **INSTALLED_DEVELOPMENT_UNPROTECTED / READ_ONLY** evidence;
+protected production and active automatic operation remain unaccepted.
+
+Source also adds process-local `--no-web-auto` for headless MCP diagnostics.
+The normal headless path otherwise starts a scheduler; a short time budget alone
+is not a scheduling opt-out. The new flag creates no owner/tasks, preserves
+isolated-fixture suppression and rejects duplicate/conflicting project scopes.
+Fifteen headless tests, strict all-target Clippy and formatting pass. Normal-debug
+MCP ready reports `web_auto_scheduler_enabled=false`; catalog/auth checks,
+invalid-scope refusals, five exact advisory context scopes and retained saved
+continuation proof pass. The 45-second process exits naturally with zero scoped
+processes. Among 87 checked records only four numeric usage counters change;
+no new records, browser/WakeHost, sends, target or policy mutations occur.
+
+The initial probe's functional checks passed but its old outer wait killed the
+process about one second before the internal 45-second expiry. That lifecycle
+failure is retained. One rerun after fixing the monotonic remaining wait passes
+natural exit. These are local authenticated MCP reads, not acceptance of the
+external connector or fresh browser delivery. Normal release/selected-package
+qualification of the new flag was OPEN at this earlier checkpoint. The later
+selected normal release and controlled local queue results above supersede it.
+
+`WEB_WORK_ROLLOVER_PENDING` is a project-specific admission blocker for CatDesk
+while its older quarantine remains active. Sibling project stores are independent;
+the completed fast canary is preserved. No unquarantine or binding reset occurs.
+
+### Earlier normal-debug frontend follow-up (retained evidence)
+
+The new `--catdesk-binagotchy-web-status` command was exercised using a normal
+debug executable against the preserved development control state. It passes
+the positive view and both negative controls (extra mutation arguments refused;
+legacy full-console development guard preserved) in 15.03 seconds under a
+45-second total cap. All 85 protected metadata records remain exact; no new
+records, browser/Wake processes, sends, target changes or package selections.
+Output includes all five original projects and saved quarantine/continuation
+progress without exposing full URLs or native identifiers. No fresh browser
+observation, delivery or automatic scheduling is claimed.
+
+The first debug probe exceeded its 15-second command cap before output and was
+terminated cleanly. The summary path now skips unused legacy detail reads while
+retaining the existing paired authority checks and detailed JSON schema. The
+successful probe used the same per-command cap. Failed and successful receipts
+remain private and dated; this is not universal latency or installed proof.
+
+The prior source's normal release executable also verifies five paired context
+scopes and retained continuation metadata. Its optional supervisor check from
+the development root was refused by the existing scope guard, so that harness
+reported failure after its Web checks passed. A subsequent supported read from
+a non-development working directory returns `SUPERVISOR_ROOT_UNAVAILABLE`,
+`SUPERVISOR_STARTUP_POLICY_UNPROVEN`, `SUPERVISOR_STARTUP_TASK_LOOKUP_FAILED` and
+`SUPERVISOR_3201_PROBE_UNAVAILABLE`. These are reported gates, not proof of a
+missing task/root or authorization to activate/repair production.
+
+At this earlier checkpoint the selected development package and protected
+production installation were unchanged. The later normal-release selection
+above supersedes the frontend development-package gate; protected production
+acceptance remains OPEN; the later selected release closes the flag's gate.
+Scoped regression gates pass: 20 console tests, three Web integration tests,
+the changed exact test rerun, final strict all-target Clippy and formatting.
+The initial test-only Clippy failure and correction are retained in the
+execution log and sanitized verification record; no live probe was repeated
+for that test-only edit.
+
+| Capability | Evidence and current boundary |
+| --- | --- |
+| Central Web project controls | Frontend: 20 console and three Web integration tests pass; normal release and selected stopped development view pass above. Shared paired reader; current context scoped independently from native status. The scheduler-disable flag has 15 passing headless tests and selected normal-release MCP proof; active production remains separate. |
+| Five original Web bindings/history | Read-only October 22 readback passes all five, with stable registry/Wake bytes and exact baseline history. No binding mutation. |
+| Three-project local queue | Selected normal release passes independent admission while CatDesk is quarantined, exact-target/conflict guards, idempotent replay and retirement. Three controlled requests CLOSED/retired, no sends or native execution; browser routing/productive progress remains unproven. |
+| Multi-project stopped/opt-out behavior | Bounded development run passed, preserving 82 protected records and exiting with zero scoped processes. Three saved stages: two observation-disabled, one Wake-stopped. No positive monitoring or sends were exercised. |
+| Controlled rollover | Prior fast canary's replacement, pairing, history and continuation remain accepted in development. Preserve it; do not replay. |
+| Legacy CatDesk quarantine | BLOCKED for that project's new work admission: latest bounded inspection reports `RESPONSE_EXPECTED_USER_NOT_FOUND`; the lease refuses with `WEB_WORK_ROLLOVER_PENDING`. No original send/source proof, receipt or safe unquarantine established. Sibling work remains independent. |
+| External connector | WAITING: one read-only attempt at 2026-10-22T22:08:50Z after 95 minutes of cooldown still returned HTTP 429 from OpenAI tunnel MCP SSE. No browser-text workaround, service restart or tunnel change. |
+| Runtime cleanup | Selected 45-second MCP and 60-second controlled queue probes exit naturally, zero scoped processes; controls STOPPED and production unchanged. Queue cleanup checks 105 records, retains nine expected own test records and finds no unexpected changes. The ephemeral loopback check does not establish the official tunnel or fixed production endpoints. |
+| Production / natural review cycle | OPEN: protected provisioning/release acceptance, installed automatic monitoring/routing, productive sibling Web work during rollover and one natural independent deliverable → review → next task. Source tests and prior controlled sends do not close these gates. |
+
+The new aggregate view bounds output to 24 projects and omits conversation URLs,
+native session IDs, paths and raw messages. It shows observed tokens and the
+configured trigger, explicitly advisory. Missing coverage remains UNKNOWN;
+saved scheduler ticks, including same-generation ticks, are not live liveness.
+Existing detailed `operator web status` JSON remains available to the local
+operator and retains its existing schema. The new console shares that reader.
+
+Publication is authorized to the existing public CatDesk repository with an
+exact source/documentation allowlist and secret/privacy review. See the
+[execution log](OCT22_31_EXECUTION_LOG.md) for source, test and publication records.
+Overall multi-project acceptance remains PARTIAL; no recurring automation is
+activated by this increment.
+
+## October 21 current operator capabilities and USER representation fix
+
+`TESTED_LOCAL`: the qualified stopped development CLI can read the seven paired
+registrations, all five original projects' separate advisory context estimates,
+and the retained completed fast-canary continuation proof. Original bindings
+and history remain exact. Four existing native development chats remain usable;
+the separately owned Wake2 task passes its full fixed verification profile,
+has a private immutable review package and is checkpointed. No independent Web
+review or automatic next task is inferred from that local qualification.
+
+The subsequent bounded read of an older quarantined attempt still refuses
+exact USER verification and exits cleanly without sending or changing its 81
+protected records. Two new offline DOM tests reproduce a reader disagreement
+for class-based USER bubbles. Receipt/snapshot readers and HOME/atomic-clear
+guards now recognize that representation, matching the existing trusted anchor.
+All 14 DOM cases pass, including assistant echoes, duplicate turns, and refusal
+with zero editor mutations after a USER mounts between the earlier checks and
+the atomic clear. Complete offline Python discovery passes 64 Wake tests and
+233 root tests / one skip. This is `TESTED_LOCAL`, not corrected live verification.
+
+### Three-minute read-only operator demonstration
+
+Run these using the qualified **development** package from its existing control
+workspace; the historical production package is not assumed compatible:
+
+```text
+<qualified-development-CatDeskBinagotchy.exe> operator web status
+<qualified-development-CatDeskBinagotchy.exe> operator web context status --project-id byovd
+<qualified-development-CatDeskBinagotchy.exe> operator web context status --project-id bug-bounty
+<qualified-development-CatDeskBinagotchy.exe> operator web context status --project-id wake2
+<qualified-development-CatDeskBinagotchy.exe> operator web rollover status --project-id catdesk-rollover-fast-canary
+```
+
+These reads demonstrate central durable status without restarting the browser,
+WakeHost or recurring workers. Context estimates remain advisory and history
+coverage incomplete. No send, binding update or rollover is part of this demo.
+The exact package, commands, dated outputs and cleanup belong in the parent
+audit `checkpoints/web-user-units-oct21`; matched package/readback and demo
+execution are separate gates until their actual results are recorded there.
+
+Overall remains `PARTIAL`: protected production installation, productive sibling
+Web work through a rollover, and the natural independent review/next-task cycle
+are unaccepted. Connector access remains a separate HTTP 429 dependency. The
+older quarantine retains its hold; the successful canary is not replayed.
+
+## October 21 long-message context estimates (SOURCE; LIVE PENDING)
+
+The existing browser snapshot clips each body and bounds its total payload.
+Ingestion previously discarded every message whose body was clipped, including
+long real assistant replies. The adapter now separately reports whether the
+excerpt comes from the dedicated visible body, retaining the existing complete
+text/revision flags. Only a real body with an identified message can contribute
+an excerpt proxy. UI-only fallback, missing/uncertain identity, empty text and
+load-error placeholders remain excluded. No additional page text is collected.
+
+The ledger persists only hashes, byte/token counts and an excerpt-only flag.
+Each stable message retains the largest clipped proxy; replay and moving tail
+windows never sum together. A subsequently observed complete body replaces it,
+even when the answer was edited shorter. Existing complete records and old
+adapters remain readable; an old adapter cannot authorize counting a diagnostic
+fallback. Older binaries that deny unknown ledger fields may refuse new
+excerpt-only records, so an older package is not context-format rollback proof.
+No record is deleted or rewritten just to accommodate an older reader.
+
+The new Unicode probe also reproduces an existing snapshot failure: a UTF-16
+tail beginning halfway through an emoji raises Python UnicodeEncodeError.
+The DOM clip now omits that isolated low surrogate before UTF-8 encoding;
+the emoji-plus-ASCII boundary passes without changing payload bounds.
+
+Pressure exposes excerptOnlyMessages separately. Estimates stay advisory,
+coverage gaps stay sticky, and unobserved history has no finite bound. No token
+count is extrapolated from a clipped body's character length. Configured pressure
+can become due using actual observed excerpts, without changing the existing
+quiescence, handoff, binding, submission or continuation checks.
+
+Focused Rust ingestion tests pass five cases (three new). Main Rust passes
+1,548 tests / 29 ignored; all root integration targets, including nested Wake,
+pass. Strict root/Wake all-target/all-feature Clippy, formats and diff pass.
+Full offline Python unittest runs 231 tests with one skip (230 passed); the
+subsequent final DOM run passes eleven, including the corrected emoji boundary.
+The full Python run preceded that final clipping fix; the targeted run verifies
+the final DOM code. No pytest installation or parity claim is made. An initial
+test-only argument-type compile error and Unicode command
+line limit are corrected with their failed evidence retained. The initial Rust
+filter selected zero tests; the corrected filter executes all five. Full
+regression and package/live outcomes are recorded in the parent dated audit:
+checkpoints/web-context-excerpts-oct21. This source result is not installed
+acceptance. The five original project pairs/history and completed canary are
+preserved; no recurring scheduler or WakeHost is restarted.
+
+One read-only connector probe at 19:39:28–19:39:29 UTC still returns HTTP 429 at
+OpenAI's unified tunnel SSE probe, before local CatDesk access is proven. It is
+not retried. Exact remote CI, actual native full-profile qualification, the
+natural deliverable/review/next-task cycle and installed independent operation
+remain separate open gates. The preceding completed rollover is not repeated.
+
+## October 21 complete-pointer V2 recovery (SOURCE/FIXTURE ONLY)
+
+`resume_offline_v2` now reconstructs complete POINTER_SWITCHED state as a retained
+lease plus protected pointer/package reader. The five base records and the two
+pointer records remain exclusively pinned through signed-pair/current-role
+checks, independent admission, physical readback and final parent reflush. The
+existing canonical plan/attempt/completion builders and bounds are shared with
+fresh creation; their serialized bytes are unchanged. No new file, rename or
+journal rewrite occurs during recovery. A completed phase cannot re-enter the
+creation API, and a failed recovery flush can safely reopen the same exact
+complete history later.
+
+Production recovery derives the expected pointer owner/DACL from fixed
+protected policy, then verifies canonical pointer bytes, full physical ID and
+the exact published package through retained read pins. Fixture mode remains
+test-only and does not establish independently provisioned SYSTEM security.
+Missing completion, unknown/mixed history, a leftover pending file, wrong plan/
+attempt link/full ID, replaced/changed current.json or clock rollback refuses
+resumption. A marker or matching pointer without complete authorized history
+never grants a second write or owner/launch authority.
+
+Eight new tests pass. They compare bytes and physical file IDs across repeated
+reopening, finish a failed final completion flush without rewriting, preserve
+partial pre/post-rename attempts as attention, reject canonical record/identity/
+current-byte tampering and pending/unknown/clock conflicts, retry a failed
+recovery flush, and prove all seven journal pins reject competing writes during
+admission. Complete all-feature Wake passes 361 library tests / one ignored plus
+enabled binaries/integrations and adapter/response Python regressions. Strict
+all-target/all-feature root/Wake Clippy, formatting, diff and unchanged source
+hash checks pass. Root main runtime tests remain prior-checkpoint evidence.
+These are filesystem close/reopen fixtures, not installed service restart,
+process-kill/power-loss or independent predecessor/owner-quiescence acceptance.
+
+Normal launch-reader/new-owner integration, broker-owned observation/clock,
+independent closed inventory/quarantine, exact-source CI/provisioning and
+installed multi-project monitoring/routing/rollover/development-cycle acceptance
+remain open. Quarantine/installer/service holds remain; no package is selected
+or installed. The restored pointer proof still carries no launch authority.
+
+Five original registry/Wake pairs/history and stopped selected v33/production
+pointers remain exact; cleanup at 19:30:09 UTC finds zero scoped processes. Native
+app snapshots at 19:30:09/19:30:37 UTC show three original chats active and one
+idle, with no reported turn error. These are status reads only; no messaging,
+goal/model/configuration changes or interruptions occur. No operational browser/
+WakeHost/recurring worker, message send or completed canary replay starts. No
+connector probe is repeated; the last 19:03:49 UTC read returned HTTP 429 at the
+OpenAI tunnel SSE probe before local CatDesk access was proven. Source work
+continues independently. Next: launch-reader/new-owner integration from this
+completed retained proof while operational admission remains closed.
+Parent dated audit: checkpoints/offline-v2-pointer-recovery-oct21.
+
+## October 21 integrated V2 first-pointer writer/reader (SOURCE/FIXTURE ONLY)
+
+`create_first_protected_pointer_v2` now uses the checked plan and durable
+namespace admission to create the fixed generation-one pending file, write/
+flush/re-read its canonical bytes, and invoke the existing native no-replace
+rename to protected current.json. An existing pointer is never replaced by
+this API. Both temp-entry and post-rename parent entries flush through the
+retained writer. No predecessor file is opened for writing, and the separately
+pinned legacy runtime remains outside this target namespace.
+
+The new retained V2 reader checks the exact canonical plan, legacy plus full
+FileIdInfo identity, temp-creation owner/DACL, protected-policy security and
+the exact published package receipt. It reopens current.json and rehashes its
+bytes while pointer/package pins deny writes and deletes. Only that physical
+reader proof may create the distinct bounded V2 POINTER_SWITCHED record, which
+binds intent/PUBLISHED/attempt digests, full root/stage/pointer IDs and pointer
+hash. Earlier V1/V2 journal bytes stay unchanged. A failed or uncertain writer
+leaves its marker/pending/current/record residue intact and cannot replay on
+the same lease. No owner stop, launch or installation acceptance follows from
+this record or read-only snapshot.
+
+Seven new integrated cases pass. They cover actual canonical pointer creation,
+readback and completion with retained pins; all four flush-failure boundaries;
+a foreign-current race after the marker that exercises native no-replace;
+identity substitution, byte and DACL changes after temp creation; torn-marker
+veto before rename; missing policy on the public entry; and reader rejection
+under a different root. A separate legacy fixture's bytes and physical identity
+remain unchanged, but that fixture does not prove independent signed predecessor
+or owner-quiescence admission. All fixture bypasses remain test-only; normal
+code requires protected policy and the opaque admitted V2 lease.
+
+Complete all-feature Wake passes 353 library tests / one ignored plus enabled
+binary/integration and adapter/response Python regressions. Strict root/Wake
+all-target/all-feature Clippy, formatting, diff and unchanged source-under-test
+hash checks pass. Root main runtime tests remain prior-checkpoint evidence.
+These are real disposable filesystem operations, not installed migration,
+process-kill/power-loss acceptance or a production pointer change.
+
+Complete-pointer restart recovery is not implemented yet; later/mixed history
+still refuses entry and uncertain pointer attempts remain attention. Normal
+launch readers are not switched to this V2 proof by the new API. Protected
+new-owner integration, broker-owned observations/clock, independent closed
+inventory/quarantine, exact-source CI/provisioning and installed multi-project
+monitoring/routing/rollover/development-cycle acceptance remain open. Existing
+quarantine, installer and service holds remain; no selected release is updated.
+
+Five original registry/Wake pairs/history, stopped selected v33 and production
+pointers remain exact. Cleanup at 19:03:49 UTC finds zero scoped processes. No
+operational browser/WakeHost/recurring worker, message send or completed canary
+replay starts. One read-only connector probe at 19:03:49 UTC, about 45 minutes
+after its predecessor, still returns HTTP 429 at the OpenAI tunnel SSE probe
+before local CatDesk reachability is proven. This limits connector verification
+while safe source work continues. Next: complete-pointer recovery using retained
+reader proof without another rename or journal rewrite.
+Parent dated audit: checkpoints/offline-v2-pointer-cutover-oct21.
+
+## October 21 first-pointer namespace handoff (SOURCE/FIXTURE; CUTOVER PENDING)
+
+A real Windows fixture established a remaining compatibility issue: the strict
+retained root writer blocks the native pointer rename even through an owned
+write-capable duplicate. The retained writer now has a guarded namespace phase.
+It remains strict through publication; only a durable first-pointer attempt
+bound to exact signed intent/PUBLISHED/stage history, physical package receipt
+and canonical planned bytes can initiate the one-time handoff. The fixed policy
+and global guard keep the same root pinned against delete throughout, full root
+identity is rechecked, and DELETE sharing stays denied. Namespace WRITE sharing
+permits the filesystem's internal rename target open. This is an explicit phase
+exception to the earlier all-lifetime WRITE exclusion, not an installed policy
+change. Any failed handoff stays attention and cannot reacquire automatically.
+
+Transaction target-role checks now share the one owned writer capability, so
+they follow that handoff without retaining conflicting duplicate kernel opens.
+Read-only diagnostic target pins and all predecessor/config/lock/image/registry/
+policy/service pins retain their existing sharing. A policy fixture verifies
+readback and target identity after handoff, plus write denial for every non-root
+role. The first-generation plan carries full protected/predecessor/stage IDs,
+signed-origin intent linkage and manifest/package identity under an 8-KiB bound.
+Plan bytes are claims, not install authority. Existing protected current.json or
+the fixed pending file refuse before marker creation; neither is overwritten.
+
+Seven new cases pass: native strict-failure/handoff-success compatibility,
+sticky failed handoff after a conflicting test duplicate closes, typed durable
+admission, pre-existing current/pending preservation, failed marker flush that
+never changes sharing, changed plan/marker and cross-root receipt refusal. The
+complete all-feature Wake command passes 346 library tests / one ignored plus
+all enabled binary/integration and adapter/response Python regressions. Strict
+root/Wake all-target/all-feature Clippy, formatting, diff and final runtime-source
+hash checks pass. The first failed native probe is retained; the final test
+asserts both sides of that behavior. The first full candidate run passed before
+an explicit receipt-to-ledger comparison and cross-root case were added; a
+separate complete final run passes on the unchanged final source. Root main
+runtime tests remain prior-checkpoint evidence.
+
+The separate native compatibility probe uses noncanonical fixture canary bytes;
+it does not demonstrate the integrated V2 pointer writer/reader. The preparation
+API creates a durable marker and returns planned bytes; it does
+not create/select a protected pointer or establish owner-stop/launch authority.
+V2 current.json creation, protected reader/POINTER_SWITCHED binding and owner
+cutover remain incomplete. The original predecessor pointer remains separately
+pinned in the legacy runtime. Existing unimplemented quarantine and installer/
+service holds remain; no source fixture bypass can enable production admission.
+Independent exact-source CI, provisioning and installed multi-project context/
+routing/rollover/development-cycle acceptance remain open.
+
+Five original registry/Wake pairs/history, stopped selected v33 and production
+pointers remain exact. Cleanup at 18:41:31 UTC finds zero scoped processes. No
+operational browser/WakeHost/recurring worker, event send or completed canary
+replay starts. No connector probe is repeated in this increment; the last read
+at 18:18:18 UTC returned HTTP 429 at the OpenAI tunnel SSE probe before local
+CatDesk access was proven. Next: use the checked plan for the V2 no-replace
+pointer writer and protected reader while these operational holds remain.
+Parent dated audit: checkpoints/offline-v2-pointer-oct21.
+
+## October 21 exact V2 complete-phase recovery (SOURCE/FIXTURE ONLY)
+
+The dormant broker now supports exact STAGED/PUBLISHED recovery through
+`resume_offline_v2`. All canonical journal files stay exclusively pinned through
+pair validation, current role/store checks, package reconstruction and parent
+flush. Original acceptance time is used only to verify the matching signed pair;
+current observed roles, the retained root writer/global guard, independent
+quarantine and exact CI are still required. Missing quarantine continues to
+refuse before CI or any recovery flush. No record/hash flag bypass is added.
+
+A complete unattempted STAGED package reopens into a physical receipt and can
+publish once. The original untrusted intake directory is no longer required;
+provenance instead comes from admitted exact durable history, retained stage
+bytes, full identities and canonical protected security. A complete PUBLISHED
+package reopens into its retained moved-byte receipt without rename or record
+rewrite. The existing parent entry is flushed again before success is returned.
+An attempt marker without PUBLISHED remains attention-only at either namespace
+location, and a partial stage or mixed/unknown phase history cannot resume.
+V1 bytes and behavior stay unchanged; no V1 process-owner proof is fabricated.
+
+Eight new recovery tests pass. They cover continuation after intake relocation,
+repeated PUBLISHED reopening, the existing failed PUBLISHED parent flush,
+uncertain publication locations, changed bytes/full-ID aliases, broken chains,
+clock rollback/mixed generations, missing quarantine before CI, retained lock/
+receipt lifetime and retry after a recovery-flush failure. Complete all-feature
+Wake passes 339 library tests / one ignored plus enabled binaries/integrations
+and adapter/response Python regressions. Strict root/Wake all-target/all-feature
+Clippy, formatting, diff and unchanged source-under-test hashes pass. The first
+compile's unused-mut warning is retained and corrected; focused/full runtime
+runs pass. Root main runtime tests remain prior-checkpoint evidence. These tests
+close and reopen real fixture handles; they do not demonstrate an installed
+service restart, process-kill recovery or sudden-power-loss durability.
+
+Protected pointer/reader and new-owner cutover, broker-owned observations/clock,
+independent closed-inventory/quarantine and exact CI/provisioning remain open.
+Existing quarantine, installer and service holds remain. No new package is
+selected or installed. Installed independent multi-project context monitoring,
+Wake routing, rollover and the natural development/review cycle are unaccepted.
+
+Five original registry/Wake pairs/history and stopped selected v33/production
+pointers remain exact; cleanup at 18:19:31 UTC finds zero scoped processes. No
+operational browser/WakeHost/recurring worker, message send or completed canary
+replay starts. Existing native development chats are inspected read-only without
+messages or configuration changes; Bug Bounty's own missing Intigriti credential
+remains a separate project dependency. One connector read at 18:18:18 UTC, about
+30 minutes after its predecessor, still returns HTTP 429 at the OpenAI tunnel
+SSE probe before local CatDesk reachability is proven. Source work continues.
+Parent dated audit: checkpoints/offline-v2-recovery-oct21.
+
+## October 21 typed V2 physical publication (SOURCE/FIXTURE ONLY)
+
+V2 now publishes a freshly staged signed package through the existing native
+handle-relative no-replace rename and parent-flush primitives. A create-once
+PUBLICATION_ATTEMPT is hash-linked to exact STAGED history before any stage pin
+is released. The matching global lock, policy/role pins and retained root writer
+stay live. Reopened parent/candidate full FileIdInfo identities, exact ACLs,
+namespace location and attempt history are checked before rename. A moved-byte
+receipt retains the exact package, manifest and four artifacts through durable
+PUBLISHED recording, including rehashing and full-ID/security checks. Binding
+data alone cannot construct that receipt. Peer packages are preserved.
+
+The V2 record bound stays 8 KiB. V1 record bytes, owner fields and publication
+semantics stay unchanged. Shared manifest byte pins now also support the exact
+signed package name below the fixed packages role; original candidate intake
+still requires its exclusive fixed candidate slot. Shared component opens check
+the existing bounded single-component name grammar. No caller-selected trusted
+path, serialized receipt or install-admission bypass is introduced.
+
+Eight new Windows fixture tests pass. Coverage includes successful physical
+rename/full-ID history/receipt lifetime, four flush-failure points, cross-root
+receipt refusal, destination collisions before and after the attempt marker,
+candidate substitution, candidate ACL drift after pin release and torn marker
+refusal before rename. The complete all-feature Wake command passes: 331
+library tests / one ignored plus enabled binary/integration and adapter/response
+Python regressions. Strict all-target/all-feature root/Wake Clippy, formatting,
+diff checks and source-under-test hash comparison pass. Root main runtime tests
+remain prior-checkpoint evidence. Initial lifetime compile errors and the first
+fixture failure remain retained: that attack tried to create a root entry which
+the writer correctly denied; the corrected fixture substitutes within existing
+container roles and proves full-ID rejection. No sharing guard was weakened.
+
+Publication stops at PUBLISHED. Any uncertain attempt stays held; later-phase
+restart re-admission, protected reader/owner cutover and production admission
+remain incomplete. The quarantine gate still refuses before CI/INTENT, and
+broker-owned observation/clock, independent CI/quarantine/provisioning evidence
+and existing installer/service gates remain required. This source was not built
+into a selected release or installed. Installed multi-project monitoring,
+routing, rollover and the natural development/review cycle remain unaccepted.
+
+All five original registry/Wake pairs remain exact; stopped selected v33,
+production pointers and completed rollover stay preserved. Post-test cleanup
+at 18:05:08 UTC finds zero scoped processes. No operational browser, WakeHost,
+recurring job or event send is started; isolated fixture helpers are separate.
+No completed canary is replayed. No connector retry is made: the last recorded
+read at 17:48:44 UTC returned HTTP 429 at the OpenAI tunnel SSE probe, before
+local CatDesk access was proven. That dependency does not block source work.
+Parent dated audit: checkpoints/offline-v2-publication-oct21.
+
+## October 21 retained transaction root writer (SOURCE/FIXTURE ONLY)
+
+The diagnostic pin/metadata-flush conflict recorded below is resolved for the
+separate V2 transaction path. Fixed protected policy first verifies its matching
+global ledger guard, then constructs owned transaction role pins. Only the fresh
+auxiliary target-root readback is replaced; the fixed policy root stays pinned.
+The opaque writer checks legacy and full FileIdInfo identities, denies new
+root write/delete opens and flushes its own already granted handle. The lease
+owns the writer and other role pins through INTENT, STAGE_STARTED and STAGED.
+Read-only diagnostic construction and all other role sharing remain unchanged.
+
+Five new Windows tests cover direct flushing while competing writers are denied,
+duplicate-handle lifetime, full-ID/root mismatches, exact INTENT-flush recovery,
+matching policy/guard construction and complete physical staging with the writer
+retained. Complete all-feature Wake tests pass: 323 library / one ignored plus
+all enabled binary/integration and adapter/response Python regressions. Strict
+all-target/all-feature root and Wake Clippy, both formatting checks and diff
+checks pass. Source hashes remain identical to the full test run. Root main
+tests were not rerun for this Wake-only increment.
+
+This does not establish production admission or installed acceptance. The
+quarantine proof gate still refuses before independent CI or INTENT; broker-owned
+clock/observation integration, closed inventory/quarantine proof, later V2 phase
+recovery/publication, protected reader/owner cutover and independent provisioning
+evidence remain required. Existing installer and service holds stay in force.
+
+Five original project registry/Wake pairs and histories remain exact. Selected
+development v33 and production stay stopped and unchanged; no new package is
+selected, no operational browser/WakeHost/recurring worker starts, and no message
+or completed canary is resent. Source fixture helpers are distinct from those
+operational runtimes. One read-only connector probe at 17:48:44 UTC still returns
+HTTP 429 at the OpenAI tunnel SSE probe, before local CatDesk access is proven.
+This limits connector verification while safe source work continues. Installed
+multi-project operation and the natural development/review cycle remain open.
+Parent dated audit: checkpoints/offline-v2-root-writer-oct21.
+
+## October 21 V2 physical candidate staging (SOURCE/FIXTURE ONLY)
+
+V2 now materializes the fixed manifest/four-file package and records STAGED
+through an opaque fresh-create receipt. It reuses existing source hashing,
+fixed names, copy/create, protected ACL and parent-flush primitives. Shared
+intake accepts the signed manifest layout without constructing a V1 approval
+or owner PID. The receipt retains source/stage pins, strict candidate and leaf
+handles, policy context and full FileIdInfo identities for every staged role.
+Ledger admission compares those physical objects with the exact intent and
+signed manifest; serialized binding data cannot construct a receipt.
+
+STAGED persists full identities within a fixed 8-KiB V2 bound. V1 remains at
+4 KiB; optional binding omission preserves earlier V2 INTENT/marker bytes.
+Partial copies, unexpected ledger entries, receipt splicing and failed stage
+markers refuse progress. An exact retained receipt may complete only the
+STAGED parent flush after failure. Automatic re-admission of later V2 phases,
+publication, protected reader/owner cutover and production admission are still
+unfinished. No live package is created or installed by these fixture results.
+
+Nine new tests pass: seven materialization/recovery-boundary cases, full-ID
+alias handling and a real kernel compatibility check. The complete all-feature
+Wake crate suite passes: 318 library tests / one ignored plus enabled binary,
+integration and adapter/response Python regressions. Strict all-target,
+all-feature root/Wake Clippy passes. Root main-test results remain historical
+to the preceding checkpoint; they were not rerun for this Wake-only increment.
+The initial compile errors and successful corrected runs remain in the audit.
+
+The kernel check establishes a concrete remaining source blocker: holding
+the existing diagnostic read-only target-root pin denies the writer reopen
+needed by metadata flushing, returning WAKE_BROKER_PARENT_FLUSH_UNAVAILABLE.
+It changes no journal or data. A transaction-specific retained broker writer
+root and compatible flush path must be implemented before admission is enabled.
+Read-only diagnostic sharing, the unimplemented quarantine gate and existing
+installer/service holds are unchanged. Independent inventory/quarantine/CI and
+provisioned-machine evidence remain required after source integration.
+
+Selected stopped v33, production, project histories and completed rollover are
+preserved. No operational WakeHost, browser, recurring worker or message send
+is invoked; isolated source fixtures are separate. Installed multi-project
+operation and the natural development/review cycle remain unaccepted.
+Parent dated audit: checkpoints/offline-v2-stage-oct21.
+
+## October 21 V2 INTENT writer and pre-stage boundary (SOURCE/FIXTURE ONLY)
+
+The existing offline ledger now includes create-once INTENT writing, exact
+reopening at the original signature-checked time, an opaque retained lease and
+the hash-linked STAGE_STARTED write-ahead boundary. It reuses V1's global lock,
+root-relative creates, record bounds and directory-flush helpers. Full root IDs,
+signed bindings, retained policy/role/store validation and ledger inventory are
+checked at mutation boundaries. Failed stage-marker attempts cannot retry on
+the same lease; an existing marker requires attention after reopening. No
+physical candidate is created by this increment, and no V1 PID is fabricated.
+
+A V2 protected-policy wrapper reuses the existing fixed-origin independent-CI
+fetcher and bounded network-worker permit. Production admission remains held
+by an explicit, unimplemented quarantine proof gate:
+`WAKE_OFFLINE_LAUNCH_QUARANTINE_UNVERIFIED`, before any CI request or INTENT.
+Supplied hashes, matching diagnostic snapshots and configuration flags cannot
+enable it. The private fixture seam is not exposed in a production command.
+Broker-owned clock/observation admission, real closed inventory/quarantine,
+physical V2 stage/publish and owner/reader cutover remain incomplete. Existing
+service/installer holds are preserved.
+
+Verification covers 14 V2 ledger tests (eight new), 309 Wake unit tests / one
+ignored, strict root/Wake Clippy and formatting. Main tests pass 1,545 / 29
+ignored using a short isolated serial temp directory. Enabled integration
+coverage passes across recorded runs: the existing nested Wake integration
+passes separately with normal temp settings. Earlier broad commands failed
+on shared Temp-handle contention, overlong fixture Git paths and a custom-temp
+legacy lock-owner probe. Those logs and command exits are retained; there is
+no claim that one combined full command passed. Code hashes remained unchanged
+between these attempts, and no guard, global environment or Git setting was
+weakened to obtain the results.
+
+Operational v33 and production stay stopped and unchanged; no new package is
+selected. Source fixture helpers are distinct from those operational runtimes.
+Five development bindings and prior five-context/three-route/completed-rollover
+evidence remain separate and unreplayed. The connector's one new read still
+fails with HTTP 429 at the OpenAI tunnel SSE probe, before local CatDesk access
+is proven. No retry, transport change or recurring/browser worker is started.
+Installed multi-project acceptance and the natural development/review cycle
+remain open. Parent dated audit: checkpoints/offline-v2-transaction-oct21.
+
+## October 21 first-generation V2 intent readback (SOURCE ONLY)
+
+The offline signed-pair verifier now retains checked payloads for the existing
+protected-policy and ledger readers. A distinct schema-2 INTENT persists signed
+envelope/key digests, full protected/predecessor identities, package/source,
+paired target, desired state and inventory/quarantine digests. It occupies the
+existing generation-one ledger slot under the existing global lock. No V1 PID
+is fabricated or reinterpreted, and canonical V1 bytes remain unchanged.
+
+The production reader checks fixed policy and retained physical roles/selected
+locks, compares the exact signed pair at the persisted acceptance time, checks
+current full root identity and rechecks the retained record/inventory afterward.
+Expired envelopes are inspectable only as historical evidence. The output says
+`EXACT_OFFLINE_INTENT_READ_ONLY_NO_INSTALL_AUTHORITY`; it does not attest that
+original admission was authorized. Missing INTENT creates nothing. Later/mixed
+history, malformed records, clock rollback and changed bindings refuse.
+
+Only disposable fixtures write these new records. No production admission,
+INTENT creation, later phase writer, owner disposition, protected-reader cutover
+or service activation is implemented by this increment. Independent closed
+inventory/launcher quarantine, broker-fetched exact CI and provisioned-machine
+evidence remain separate gates. The existing installer/service holds, stopped
+v33/production state, five project bindings, completed rollover and independent
+native development sessions are preserved. Source checks are not installed
+acceptance. Dated private audit: parent checkpoints/offline-v2-ledger-oct21.
+
+Six new reader tests pass, including expired historical signatures, canonical
+encoding/schema separation, exact signed disposition, full-root/clock checks,
+mixed history, exclusive file pinning and late inventory change. Full root
+normal-access tests pass (1,545 main / 29 ignored, enabled integrations and
+nested Wake), with strict root/Wake all-target/all-feature Clippy and format/diff
+checks. An initial restricted-shell run failed on fixture filesystem access;
+its log is preserved and source guards were not weakened. Selected normal v33
+remains unchanged at its previous source; no new package or live migration
+acceptance is claimed.
+
+## October 21 five-project context readback (LIVE DEVELOPMENT; PARTIAL)
+
+The selected normal development v33 performs one standalone read-only browser
+capture each for BYOVD and Bug Bounty, using the existing authenticated profile.
+The existing host lease/private adapter Job provides ownership while WakeHost
+stays stopped. Each reader has a 240-second outer bound; observed durations are
+38.3 and 36.5 seconds with a 30-second gap. No message, rollover, target update,
+new login or recurring worker is invoked. Exact project/generation/URL-digest
+bookends and browser binding pass. Only hashes/counts are persisted.
+
+All five current generation-1 meters then read back independently:
+
+| Project | Observed excerpt token proxy | Evidence |
+| --- | ---: | --- |
+| CatDesk | 2,123 | Prior live capture retained |
+| Wake2 | 1,530 | Prior live capture retained |
+| PortfolioDesk | 1,556 | Prior live capture retained |
+| BYOVD | 1,446 | Fresh standalone capture |
+| Bug Bounty | 709 | Fresh standalone capture |
+
+These are advisory observed-content proxies, not provider context sizes.
+Every meter retains `UNKNOWN_OR_INCOMPLETE` coverage; BYOVD also reports an
+excerpt overflow. No complete-history or capacity claim is inferred. Existing
+context policies are preserved. The 75 protected files, all five registry/Wake
+records, other context/rollover histories, deliveries/timers and production
+pointer remain unchanged. Scoped processes are zero after each reader and at
+completion; both controls remain STOPPED. All four original native development
+chats are freshly observed active afterward without reported turn errors.
+
+This extends context capture/readback to five projects; it does not extend the
+previous three-project delivery proof to five sends, or prove installed
+production, automatic browser retry pacing or the natural review cycle.
+The completed rollover is preserved and not repeated. Connector read still
+returns 429; no retry or transport change occurs. Private dated evidence:
+parent `checkpoints/web-five-project-context-oct21/bounded-read-20261021T145504759Z`.
+
+## October 21 external Python verification runtime (SOURCE; LIVE PROFILE PENDING)
+
+Fixed UV verification previously stripped inherited UV overrides but supplied
+no internal environment path, leaving `.venv` creation in the checkout possible.
+Fresh verification now derives a receipt-specific runtime from the existing
+external queue namespace, keeps standard tool-cache/temp defaults there and
+reuses the fixed OS-derived UV download cache outside registered project roots.
+Caller selectors stay filtered; the generated settings join the existing
+environment digest. Fixed commands and historical artifact formats are unchanged.
+The fresh result exposes `runtimeRoot`; old artifacts remain historical without
+new placement claims. This is local coordination, not hostile-worker isolation.
+
+A bounded opt-in offline probe uses installed UV 0.12.23/Python 3.12 with a
+dependency-free disposable project. Lock preparation and execution each have a
+60-second cap; the test finishes in 2.33 seconds and proves the actual interpreter
+prefix is the external environment, quoting survives spaces/apostrophes, and
+source cache/environment directories are absent. No live project, model, browser,
+Wake, binding or authentication state is used. The earlier native launcher 101
+and full-project qualification remain unresolved; this probe does not repair or
+replace that evidence. Parent dated checkpoint:
+`checkpoints/native-verification-runtime-oct21`.
+
+Final source gates pass: 1,545 main tests / 29 ignored, enabled integrations
+and nested Wake, strict all-target/all-feature Clippy, formatting and diff.
+The ignored real-UV probe is explicitly run and passes separately. These
+results do not establish a real project's full fixed-profile qualification.
+
+Normal app/default-feature host builds at `3d060f9` form stopped development
+v33 (`1.0.0-dev.85-e74e956c0872cce4cb8e52604a538ed9b72dae4c22f5c48350cd833bb21d6b51`).
+Its 20-second loopback metadata/cleanup probe passes seven paired records,
+three retained estimates and completed continuation proof. V32, profile, all
+79 checked state files and production are preserved. Only four numeric usage
+counters change in the probe; its listener exits normally with zero scoped
+processes. This is package compatibility, separate from a real UV profile run.
+
+## October 21 repeated automatic browser failures (SOURCE; LIVE PENDING)
+
+Automatic Web context/rollover work previously became eligible every existing
+120-second scheduler interval after an attention failure. The driver now
+checks a persisted project/generation deadline before entering browser work or
+rewriting progress status. Repeated failures wait 5/10/20/30 minutes, capped at
+30; deferred and stopped ticks do not extend that deadline. Successful progress
+clears delay. Siblings, replacement generations and explicit guarded operator
+ticks remain eligible. Existing cancellation, quiescence and no-replay guards
+are unchanged. Schema-2 status reads schema 1 but requires an updated reader
+for new records. The external connector is not automatically retried.
+
+The installation audit still cannot promote supplied offline predecessor
+snapshots into independent migration/provisioning authority. Those existing
+holds remain. Retry pacing instead addresses repeated browser attempts in the
+core monitoring/rollover driver without adding a scheduler or security
+framework. All implementation tests use disposable fixtures. Selected-package
+and live background acceptance remain separately tracked; no browser/WakeHost
+or recurring job is started. Dated private evidence: parent
+`checkpoints/web-auto-backoff-oct21`.
+
+Final source gates pass: **1,544 main tests / 28 ignored**, all enabled
+integrations and nested Wake, strict all-target/all-feature Clippy, formatting
+and diff checks. The three new persisted/gated regressions are included. These
+results do not demonstrate a running installed scheduler or browser backoff.
+
+Normal app/default-feature host builds at `6bc057c` now form stopped
+development v32 (`1.0.0-dev.85-aeecc25cf53572bd14d4b0b0aa7c5c929ccfda6d3ac5c1733f9abba3d11f0408`).
+The 20-second loopback probe passes scope/authentication checks, seven paired
+records, three retained advisory context estimates and preserved continuation
+proof, with no fresh browser capture or event. V31/profile/state and production
+remain preserved. Listener exit and zero scoped processes pass; only four
+numeric usage counters change. Both controls remain STOPPED, and all five
+original bindings match exactly. This is package metadata acceptance; actual
+background backoff remains untested while browser/WakeHost remain stopped.
+Fresh compact reads show all four other native development chats active with
+no reported turn error; none was messaged or reconfigured. The single connector
+read still returns 429 and exact source has zero observed remote CI runs/checks.
+
+## October 21 selected v31 / bounded native qualification (PARTIAL)
+
+Normal app and default-feature WakeHost builds at `49f421a` form development
+v31 (`1.0.0-dev.85-ac50cb157a0b3fbb7d3e3374b4e3831a2aa534830b96e20a19eb1b15bd512585`).
+The stopped package update preserves v30, Python inputs, profile and all 79
+checked state files. Its 20-second loopback probe passes authentication/scope
+refusals, seven paired project records, three retained advisory estimates and
+the completed rollover proof. It publishes no event and captures no fresh
+browser context. Cleanup exits normally; only four usage counters change.
+
+One fresh task on the existing isolated Wake2 thread finishes in about 139
+seconds, below its 600-second native bound. Exact turn metadata proves
+Sol/medium and workspace-write/approval-never; schema-2 job, receipt and
+candidate preserve the requested MXC mode. Only the requested report changes,
+all five previous artifacts and the native registry are preserved, and the
+lease releases. **Qualification fails:** all three checks return launcher
+exit 101 before Python starts. Native exit zero is not qualification success.
+The source-bound candidate matched immediately after exit; checkpointing its
+reviewed report makes that candidate historical, with no formal verification.
+
+A separate 60-second managed `:workspace` Python startup probe exits zero in
+about one second, preserving config, ACLs, registry and source. It does not
+explain or repair the resumed-turn execution difference. No further task is
+replayed or permission changed. Preserved v30 actually refuses the schema-2
+record with `CODEX_QUEUE: job record is invalid`, exit 2.
+
+Final readback preserves all five original Web bindings, both STOPPED controls
+and the production pointer; scoped processes are zero. No recurring worker,
+browser, WakeHost or canary resend is started. Original Wake2/Portfolio chats
+remain active; Bug Bounty is idle. BYOVD's own latest turn reports a provider
+cybersecurity restriction, separate from CatDesk and left unchanged. Connector
+HTTP 429 and zero exact-source GitHub workflow/check runs remain separate
+dependencies. Full profile verification, native target/review cycle and
+protected production acceptance remain open. UTC audit and detailed results:
+parent `checkpoints/native-mxc-optin-oct21`.
+
+## October 21 fresh native task / Python runtime diagnosis (PARTIAL)
+
+The already isolated Wake2 worktree's three preserved corpus artifacts are
+reviewed and checkpointed after three concrete mypy errors are fixed. Focused
+operator tests pass (11 / 2 skipped), Ruff/mypy pass, and a read-only recompute
+matches the historical JSON without changing its UNKNOWN/UNVERIFIED labels.
+The original active checkout is preserved. A fresh preflight is clean with no
+recorded ownership/accounting blockers; the historical 35-claim issue does not
+apply to this isolated project.
+
+Two real native queue turns resume the existing isolated thread, with observed
+Sol/medium and released leases. Their reports honestly distinguish native exit
+zero from failed qualification: the first runs no checks because Python cannot
+start, and the second establishes direct base Python Win32 error 5. A separate
+managed read-only MXC probe starts the same interpreter, with config/ACLs/state
+unchanged. Per-task `--windows-sandbox mxc` is implemented in source and binds
+requested mode through queue/receipt/candidate, preserving workspace policy
+and defaults. Queued MXC qualification remains pending. Native Wake2 has no
+bound Web target. MXC task/receipt/candidate schema 2 prevents older readers
+from silently executing the request without its implementation option; default
+records retain schema 1. Source gates pass: 77 focused queue tests, 1,541 main
+tests / 28 ignored, enabled integrations and nested Wake, strict all-target
+Clippy, formatting and diff checks. These are separate from selected-package
+and actual native qualification.
+Full profile verification, review package, independent Web
+review and the natural cycle remain open. Private dated evidence: parent
+`checkpoints/native-cycle-readiness-oct21` and `checkpoints/native-mxc-optin-oct21`.
+
+## October 21 retained tool/worker context pressure (SOURCE; MVP PARTIAL)
+
+Tool arguments now contribute once to the retained conversation's observed
+pressure as well as its separate traffic breakdown. `WORKER_MESSAGE` supports
+explicit observations of model-visible worker deliveries through the existing
+paired, closed-scope MCP/CLI path. Revisions/shared dedup keys avoid repeated
+snapshot/surface counts; no global native traffic attribution or provider
+context measurement is inferred. Existing argument metadata is recomputed on
+read, with old history preserved. Automatic rollover remains an explicit opt-in.
+
+An existing regression reproduces the 5-versus-11 token undercount. All 17
+context-store tests and the extended authenticated three-project MCP fixture
+pass, covering pressure, opt-in, replay, revision, generation and sibling
+isolation. Source evidence is in parent `checkpoints/web-observed-context-oct21`.
+The final full main suite passes **1,540 / 28 ignored**, including enabled
+integrations and its nested independent Wake suite. Strict all-target/all-feature
+Clippy, formatting and diff checks pass. Wake source is unchanged in this increment.
+Development v29 and production remain unchanged at this source checkpoint;
+installed/live acceptance and the genuine natural cycle remain open.
+
+Normal optimized app/Wake images built at `aa7c60f` are subsequently selected
+through the supported stopped development **v30** update. The host has no
+test-support feature. Existing Python inputs, profile, v29 and all 79 checked
+non-selection files are preserved. A fresh internally bounded **20-second**
+loopback readback passes authentication, the five Web tool scope checks and
+the new worker schema. The seven registrations remain paired; current-generation
+retained estimates read back as CatDesk 2,123, Wake2 1,530 and PortfolioDesk 1,556,
+with the new observed-context proxy method. These are retained advisory estimates,
+not fresh browser captures. The completed canary continuation proof is preserved.
+
+The listener exits normally before the scheduler's first browser tick. Among
+81 checked files only numeric usage counters change; launch settings, original
+five pairs and production are unchanged. Zero owned browser/Wake processes remain
+and both controls are STOPPED. No browser, WakeHost or live event starts. Valid
+worker observation/deduplication remains source-fixture verified, separate from
+this selected-package metadata proof. Private evidence:
+`approved-context-package-readback-20261021T053318466Z` under the checkpoint above.
+
+## October 21 offline migration inventory comparison (SOURCE; MVP PARTIAL)
+
+The existing fixed-policy V2 diagnostic now compares its signed inventory
+digest with the canonical distinct physical store pairs actually retained
+and locked. Alias/order stability and extra/omitted-store, digest and role
+rejection use disposable fixtures. Matching this set still cannot establish
+historical completeness, launch quarantine or owner exit, and grants no
+installation authority. First-generation admission/service/reader integration,
+approved provisioning, exact remote CI and installed acceptance remain open.
+The selected development v29 and production remain unchanged and stopped;
+original project bindings, histories and native sessions are preserved.
+Private dated evidence: parent `checkpoints/offline-store-inventory-oct21`.
+Local gates pass: 15 focused offline tests, main 1,539 / 28 ignored, Wake
+295 library / 1 ignored and enabled integrations, both strict Clippy checks,
+formatting and diff checks. The main suite's nested Wake run also covers the
+final expanded inventory fixture. These results are source verification.
+
+## October 21 standalone multi-project discovery (SOURCE + MATCHED DEVELOPMENT READBACK; MVP PARTIAL)
+
+Independent Wake discovery now routes records from its configured CatDesk
+control inbox by each record's project. Each uses its own current Wake target,
+history/activation cutoff and matching fixed project-registry URL/digest.
+The registry pair is checked again under the existing Wake queue lock with
+the final target CAS and event write. No new scheduler or registration lock is
+introduced. Missing, ambiguous or drifted registrations hold that record.
+Fresh CatDesk discovery also requires its registry pair; existing queued and
+archived events remain preserved.
+
+Completed reviews still pass independent artifact/contract validation, twice
+around the scan. The historical missing-contract allowance stays CatDesk-only;
+it cannot authenticate a sibling project's completion. Malformed rows are
+isolated with bounded, redacted, per-project attention instead of rejecting the
+whole syntactically valid inbox. IDs are counted before row decoding so either
+ordering of a malformed duplicate holds the valid copy too. Unparseable shared
+JSON and shared persistence failures still refuse the scan. Inbox and registry
+reads are bounded; no raw malformed payload is persisted in attention.
+
+One disposable end-to-end fixture reproduces the old one-of-three routing
+failure and malformed-row global failure, then verifies three complete bound
+reviews, distinct generations/cutoffs, stale-record suppression, mapping drift,
+unregistered projects, unbound legacy siblings, queue conflicts, duplicate
+registrations, late registry/target changes and malformed duplicates in either
+order. Good siblings progress while rejected records remain held. Main CatDesk
+passes **1,539 / 28 ignored**; full Wake passes **295 library / 1 ignored** plus
+enabled integrations. Strict all-target/all-feature Clippy for both crates and
+format/diff checks pass. Private dated evidence:
+parent `checkpoints/web-review-discovery-oct21`.
+
+Source `8f8b456` is built into matched normal release app/Wake images and
+selected through the supported stopped development **v29** update. The host
+build excludes test support; Python inputs are unchanged. All 79 checked
+non-selection files, v28 and the authenticated profile are preserved. A fresh
+internally bounded **20-second** loopback readback passes authentication, five
+closed-scope Web tool checks, seven paired project statuses and the preserved
+continuation proof. Of 81 checked files only usage counters change; launch
+settings and project/history data remain unchanged. Normal listener exit,
+zero owned browser/Wake processes, both controls STOPPED and the independent
+original-five pair comparison pass. Production is unchanged. Private evidence:
+`approved-discovery-package-readback-20261021T044233418Z` under the checkpoint.
+
+This is selected development metadata/serving acceptance. Producer execution
+remains fixture-verified; no new live natural review cycle is claimed. No live review event,
+browser, recurring automation or Wake runtime was started. A separate read-only
+native queue status preserves its registry and shows seven historical jobs:
+four native zero exits, two failed and one paused; only one has verification
+and a review package. This does not prove a current native development/review/
+next-task cycle. Existing native chats are untouched. Production, exact remote
+CI, connector and genuine natural-cycle acceptance remain open. One intermittent
+connector read still returns HTTP 429; no retry or transport/settings change follows.
+
+## October 20 natural review producer trace (SOURCE; MVP PARTIAL)
+
+Both authentic producers still generated an outdated CatDesk message telling
+ChatGPT to freeze ordinary autonomy until Wake acceptance. Existing direct and
+standalone discovery regressions reproduce that instruction. They now use one
+project-scoped Store producer: new notifications request only that registered
+project's review, with no global freeze or obsolete GUI-repair plan. Other
+projects retain their existing notification wording.
+
+The new review entry uses the existing target CAS. Standalone discovery now
+passes the exact target sampled with its generation cutoff rather than
+silently selecting a later target after review validation. Wrong generation
+or digest refuses before publication. Exact legacy CatDesk queued/archive
+bodies remain immutable and idempotent through this narrow review entry;
+changed legacy content still conflicts, and an archived event is never requeued.
+Generic publication's duplicate-content rules remain unchanged.
+
+Both pre-fix producer regressions fail, then pass. Final full CatDesk main
+suite passes **1,539 / 28 ignored**. Full independent Wake passes **294 library /
+1 ignored** plus enabled integrations, including 28 protocol-store cases;
+strict all-target/all-feature Clippy for both crates and format/diff checks pass.
+Private dated evidence: parent `checkpoints/web-review-routing-oct20`.
+This source is not selected or installed: the last verified development package
+remains v28. No browser, live Wake runtime or old review/canary is replayed.
+
+The trace distinguishes two remaining paths. Direct CatDesk publication already
+accepts registered sibling projects, while standalone inbox discovery still
+filters CatDesk only. That recovery-path limitation is the next source task.
+Ordinary native queue review additionally requires its verified package and
+active disclosure before invitation publication; a notification does not prove
+ChatGPT review or authorize another task. Exact CI, connector, protected install
+and the genuine development/review/next-task cycle remain open.
+
+## October 20 Web tool serving parity (SOURCE + DEVELOPMENT LOOPBACK; MVP PARTIAL)
+
+The five existing `catdesk_web_work_request`, `catdesk_web_work_resolve` and
+`catdesk_web_context_{capture,configure,observe}` tools now use the existing
+supervisor-mode predicate for both catalog and dispatch. They are available
+in Computer/Both with Multi Tools or Supervisor Only. Read Only and Browser
+Only still refuse them. Exact project generation/digest witnesses, closed
+schemas, target CAS, per-project work ownership and disclosure/install guards
+are unchanged; queue package read/publication tools remain Supervisor Only.
+No caller identity or task completion is inferred from tool access.
+
+The three existing Web mode regressions fail before the fix and pass afterward,
+covering catalog/dispatch agreement, invalid scope refusal, no state creation
+and private-error redaction. The broader initial run passes 1,538 with one
+outdated exact-catalog expectation, which is updated for these five tools.
+The final full main suite passes **1,539 / 28 ignored**; strict all-target,
+all-feature Clippy, formatting and diff checks pass. Source `784c729` is
+built normally and selected into stopped development v27, preserving 77
+non-selection state files, the authentication profile and production.
+
+The first internally bounded 20-second loopback probe finishes its functional
+checks and exits normally with zero owned browser/Wake processes. Its final
+preservation gate is **PARTIAL**: only the isolated `catdesk.toml` changes.
+Usage accounting persists the process's temporary mode/listener settings.
+No exact pre-probe configuration backup is found, so defaults are not guessed
+or reconstructed. The post-probe file and first controller/exit evidence are
+preserved; all five bindings and project/canary history remain intact.
+
+The existing configuration regression now reproduces that headless side
+effect. Source keeps headless mode/tool mode/bind address/port overrides
+process-local while still persisting usage counters and explicit ordinary
+configuration updates. This correction requires its own matched package
+readback. Legitimate accounting changes must be distinguished from launch
+setting drift rather than silently exempting the whole configuration file.
+
+Source `742ede6` passes the full main suite **1,539 / 28 ignored**, strict
+all-target/all-feature Clippy, format and diff checks. Its normal optimized
+image is selected through the existing stopped development **v28** update;
+Wake/Python inputs, browser profile and all 77 non-selection files are preserved.
+The corrected **20-second** loopback probe passes: unauthorized access returns
+401, all five Web tools appear exactly once and reject private scope overrides,
+the separately gated queue tools remain absent, and a successful MCP registry
+read returns seven paired projects and the preserved continuation proof.
+
+The listener exits normally at its internal deadline with zero owned browser/
+Wake processes, no events, browser delivery or WakeHost start. Of 81 checked
+files only four numeric usage counters in the isolated configuration can change;
+all other configuration bytes/settings and project/history files are preserved.
+Independent original-five paired readback passes, both controls remain STOPPED,
+and protected production pointer/configuration are unchanged. Evidence:
+`approved-catalog-run-20261021T033800303Z` under the private checkpoint above.
+This verifies the selected development serving path, not provider connector
+catalog refresh, valid work delivery, protected installation or a natural cycle.
+Private dated evidence: parent `checkpoints/web-serving-parity-oct20`.
+Connector HTTP 429 and protected installation remain independent live gates.
+
+## October 20 optimized status verification (READ-ONLY; MVP PARTIAL)
+
+The existing release profile resolves the debug aggregate-reporting delay
+without changing source, authority checks or status contents. Built at source
+`e2cf222`, the first optimized image returns the same complete seven-project
+status in **3.49 seconds**, versus about 50 seconds for the debug candidate.
+After the fixture build, the restored normal image passes its own deadline
+fixture and reads the same status in 3.64 seconds. Its exact SHA-256 is
+`2db278a875cba1a924b442a3559241c195bfb5a18eb4c01d62385112b57b14e9`.
+The guarded update selects that image into stopped development **v26**;
+the other three package inputs are unchanged, and v25 remains preserved.
+Status through the selected path takes **3.00 seconds** (1.00 second CPU),
+the exact-target read takes 0.24 seconds, and invalid scope refuses with
+`WEB_USAGE`/exit 2 in 0.03 seconds. Each read preserves all 79
+checked state files and leaves zero owned browser/Wake processes. No runtime
+or browser starts. Both optimized native headless fixtures also pass; these
+use disposable local fixtures, not installed Wake or ChatGPT.
+
+The package selection itself preserves all 77 non-selection state files, the
+existing authenticated browser profile and the protected production pointer.
+An independent comparison of the five original paired registrations/Wake
+targets passes. Both controls remain STOPPED. This is verified development
+package selection/readback, not protected installed production acceptance.
+
+Private dated evidence: parent `checkpoints/web-status-performance-oct20`.
+The single subsequent connector registry read still returns HTTP 429 from the
+MCP SSE dependency. No retry, transport restart or account/settings change
+follows. The authenticated GitHub repository is active and not disabled;
+its latest visible run remains the historical October 14 push. A billing read
+returns HTTP 404, which does not establish an account restriction. No workflow
+was dispatched. Protected installation, exact-current CI, central connector
+acceptance and a genuine development/review/next-task cycle remain open.
+
+## October 20 automatic monitoring while rollover is quarantined (CONTROLLED LIVE; MVP PARTIAL)
+
+The corrected **v25** candidate at source `148debabdbe68b92d0de4a120bb66cad6e23fbd3`
+passes the fresh scoped periodic test: CatDesk, Wake2 and PortfolioDesk each
+recorded a new capture for their exact current URL/generation within the
+480-second scheduler window. There were no manual capture calls during that
+run. CatDesk remained quarantined, and no project advanced rollover or sent a
+message. Both canaries were excluded. The scheduler exited normally at its
+internal deadline; host tree exit is proved and owned process count is zero.
+All policies restored exactly, all five bindings and canary histories preserved,
+all existing deliveries/timers unchanged, both controls STOPPED, production
+pointer/configuration unchanged. Private evidence:
+`checkpoints/web-quarantine-monitor-oct20/approved-monitor-run-20261021T021001323Z`.
+
+This closes controlled periodic monitoring for the three projects, not protected
+installation or the central ChatGPT development loop. The earlier partial run
+and diagnostic probes below remain preserved. Intermittent target-read refusals
+also occurred but did not prevent this acceptance. A separate aggregate
+`operator web status` diagnostic hit its 30-second limit; its bounded follow-up
+completed successfully in about 50 seconds, with steadily increasing CPU time.
+It returned seven paired projects, the three fresh advisory estimates and the
+preserved fast-canary continuation proof. This is a CPU-heavy reporting path,
+not a deadlock or lost state. The optimized read-only result above resolves
+that reporting delay for the release image. No browser
+or runtime was started for the status profile.
+
+Inspection found that a preserved QUARANTINED attempt suppressed context reads
+even when independent observation was enabled. Its scheduler step now permits
+only that separately opted-in capture of the current paired conversation,
+retaining QUARANTINED and `rolloverAdvanced:false`. It never evaluates the
+rollover trigger afterward. The existing quarantine regression now traverses
+this step: opt-out performs no read; opt-in observes above the configured
+threshold without changing the journal, creating a handoff or lifting the
+project work lease. Unknown submission and missing source-witness paths remain
+blocked. This is continued monitoring, not recovery authorization.
+
+The existing headless MCP command gains optional `--max-runtime-seconds 1..900`
+and repeatable `--web-auto-project ID` scope. The deadline uses the existing
+scheduler cancellation/drain path; explicit scope filters scheduled projects
+before task creation. Default behavior remains unchanged. A disposable native
+listener exits on its internal one-second deadline without an external stop.
+Main CatDesk passes **1,539 / 28 ignored**, both native headless fixtures pass,
+strict all-target/all-feature Clippy, build, format and diff checks pass. Wake
+and Python source are unchanged and their preceding accepted source gates were
+not repeated. Private evidence: parent `checkpoints/web-quarantine-monitor-oct20`.
+The source-matched stopped development **v24** update preserved the authenticated
+profile and production pointer. Its actual scoped periodic test is **PARTIAL**:
+an internally bounded 480-second headless run captured Wake2, while CatDesk and
+PortfolioDesk encountered browser contention/attention and did not record fresh
+captures within the test. Native listener exit was normal, the foreground host
+proved its tree exited, owned process count was zero, both controls STOPPED,
+all policies restored exactly, all five bindings and canary history preserved,
+and no old delivery/timer changed. No messages were sent. Source success does
+not close this concurrent monitoring gap.
+
+Private periodic evidence:
+`approved-monitor-run-20261021T014418207Z` under the monitor checkpoint. A
+separate, single non-recurring CatDesk quarantine-step probe succeeds against
+the authenticated browser, retains QUARANTINED/`rolloverAdvanced:false`, leaves
+the journal byte-identical and cleans up. It narrows the problem to concurrent
+operation; it is not periodic-monitor acceptance. The first parallel CLI probe
+also erased browser errors because its code filter omitted `BROWSER_`. That
+omission is now corrected; scheduler status retains recognized code prefixes
+before private details. Existing privacy regressions verify paths stay excluded.
+The corrected source diagnostic confirms `BROWSER_SESSION_BUSY`, with normal
+exit and zero owned processes after cleanup.
+
+A cold capture can exceed the profile's 30-second admission wait. The scheduler
+now retains each project worker for at most two extra local admission retries,
+separated by cancellable 30-second waits. It retries only `BROWSER_SESSION_BUSY`,
+not metadata, authority or provider failures. Other projects retain independent
+worker slots. Cancellation is checked before attempts and during waits. The
+existing busy-browser regression covers success, exhaustion, other failures and
+cancellation; the existing worker-drain regression exercises the actual retry
+wait. The main suite passed 1,539 / 28 ignored after the error-code correction;
+then all 61 Web tests, strict Clippy and build passed after the retry change.
+Wake/Python and headless entry behavior are unchanged by that retry correction.
+The subsequent v25 periodic acceptance above is separate from these source gates.
+
+## October 20 approved three-project live test (CONTROLLED DEVELOPMENT)
+
+The operator explicitly approved bounded testing and dated audit records,
+superseding the preparation holds recorded below. The stopped v22 candidate
+ran with its internal 900-second ceiling from **01:07:08 to 01:10:40 UTC on
+October 21** (October 20 locally), completing early in 212 seconds. CatDesk,
+Wake2 and PortfolioDesk each received one exact prepared review request at
+their own generation-1 target. All three have `EXACT_USER_MESSAGE_APPENDED`
+receipts, COMPLETE timers and separately read, exact-event verified assistant
+bodies with the requested project markers. Recorded response windows overlap
+for 18 seconds. There were no unexpected deliveries or duplicate submissions.
+
+Foreground exit reports `ownedTreeExited:true`; process enumeration confirms
+zero owned browser/Wake processes after it and after each sequential read.
+Both controls remain STOPPED. All five original registry/Wake pairs, previous
+deliveries, completed canary journals and context histories are preserved. Of
+9,922 pre-existing non-profile files, only expected readiness-history and
+status files changed; three new event/receipt/timer records and exact review
+inputs are intentional additions. Production pointer SHA-256 remains
+`25b8430dc25fdb7cf2be3465d5f6c5431f6ff274d0dfcf3e09f9c2aa3cb50185`.
+No native task, hourly scheduler or recurring browser process was started.
+The completed rollover was not repeated.
+
+Private timestamped evidence is in parent
+`checkpoints/web-three-project-review-oct20/approved-run-20261021T010650920Z`:
+`audit.jsonl`, `acceptance-summary.json`, delivery/readback proofs and final
+preservation comparison. An earlier comparison encountered locks during an
+active one-shot read; the completed readable comparison supersedes it. The
+native app inventory read timed out without session mutations. Existing native
+sessions were not interrupted or replaced; this test does not independently
+qualify their current development tasks.
+
+One read-only connector request at 01:16:02 UTC still returned
+`MCP SSE probe returned 429 from openai.org`; no retry followed. This is a
+connector verification dependency. Local authenticated delivery/readback
+passed. Protected installation, an exact-source CI result, a genuine
+deliverable-to-review-to-next-task cycle and central connector operation remain
+OPEN. Review replies are advice on supplied checkpoints, not independent
+release approval. Overall October acceptance remains PARTIAL.
+
+### Continued source development: capture freshness
+
+Validated browser ingestion now records a monotonic, per-conversation
+`browserCoverage.lastObservedAtUnix`, including unchanged/deduplicated captures.
+New generations start without a timestamp; legacy ledgers retain unknown
+freshness. The timestamp commits after snapshot validation and the final
+target/cancellation check; rejected reads retain previous freshness.
+The timestamp reports observation time, not full-history coverage or provider
+context capacity. Regressions exercise replay, durable readback, project and
+generation isolation, legacy state, cancellation and context-lock contention.
+Full root regression passes **1,538 CatDesk tests / 28 ignored** and all other
+enabled targets, including the nested Wake suite. Strict all-target/all-feature
+Clippy, formatting and diff checks pass. The first run exposed a replay equality
+assertion that needed to permit advancing capture time; its failure and corrected
+rerun are retained in parent `checkpoints/web-context-freshness-oct20`.
+Source checkpoint `41a8c49e19a01e2f6b72142bf7652248dde0271a` was built and
+selected as stopped **development v23** through the supported package update.
+WakeHost and both Python inputs are unchanged. One bounded standalone capture
+then verified the exact CatDesk target and generation, current capture timestamp,
+2,123 advisory visible tokens and retained incomplete-history warnings. It sent
+no USER message, started no host/scheduler, and exited with zero owned processes
+remaining. All five pairs and existing policies are preserved. Both controls
+remain STOPPED; the protected production package/pointer is unchanged. Private
+`live-freshness-result.json` and timestamped audit in the freshness checkpoint
+record this controlled development evidence; it is not production acceptance.
+
+## October 20 acceptance audit and central context-wait reporting (SOURCE)
+
+Read-only central status confirms seven paired registrations (five original
+projects and two canaries), separate advisory context estimates, and the
+completed fast canary at generation 2 with `continuationProved:true`. No
+completed step was repeated. The ten requested live requirements and original
+P0–P4 scope are evaluated in parent
+`checkpoints/web-acceptance-audit-oct20/requirements-audit.json`. Controlled
+development proof remains separate from protected installed, fresh current
+source delivery, central connector and natural review-cycle acceptance.
+Native inventory reports Bug Bounty, Wake2 and PortfolioDesk active, BYOVD idle;
+no native messages, ownership changes or interruptions were issued.
+
+The audit found a real source reporting gap: the durable worker records
+`AWAITING_CONTEXT` / `WEB_CONTEXT_BUSY`, but the central registry projection
+omitted that stage and returned `UNKNOWN_STAGE`. The existing held-ledger
+worker regression was extended through the actual central reader; it reproduced
+the wrong stage, then passed after the projection correction, preserving the
+reason and null permanent failure. No duplicate stage-only test was added.
+Full CatDesk passes **1,537 tests / 28 ignored**, with strict all-target/
+all-feature Clippy, formatting and diff checks passing. Wake/Python product
+sources are unchanged; their preceding gates were not repeated.
+
+This source-only correction is not selected into another development package.
+The stopped v22 candidate, its prepared controller/payload hashes and all live
+project state remain unchanged. Fresh live execution still requires the
+existing exact three-review approval. Overall October MVP remains `PARTIAL`.
+
+## October 20 verified implementation-review read and installation audit
+
+One explicit `operator web review read` for
+`dev-oct18-catdesk-draft-recovery-review-1` succeeded with `eventVerified:true`,
+`readOnly:true` and `sendAttempted:false`, using the preserved authenticated
+profile and stopped v22 development package. The exact delivered USER digest
+and complete latest ASSISTANT pair matched the current CatDesk target. The
+1,363-character response is preserved privately in parent
+`checkpoints/web-install-audit-oct20`; it reviews the supplied contract only
+and is not independent release approval. This resolves retrieval of that
+implementation-review body without relying on the throttled connector.
+
+The review requests exact-draft recovery, guarded legacy clearing, and canary
+isolation evidence, specifically calling out a composer edit before deletion.
+The existing six archive/resume regressions pass at source `87c8ebd`, including
+that late-edit refusal and the adapter's post-archive-ACK drift refusal. No
+duplicate test or replay was added. The completed rollover/continuation remains
+preserved. Actual legacy-composer clearing is not established by this review
+read or offline fixtures. All 91 state files, five original bindings and the
+production pointer are unchanged, both controls stopped, owned process count
+zero. No recurring scheduler or WakeHost was started.
+
+The installation audit also corrects a material distinction:
+
+| Gate | Current authoritative result |
+| --- | --- |
+| Installed prerequisite | Last fixed preflight: `WAKE_BROKER_SERVICE_UNPROVISIONED`; no provisioning/start attempted. |
+| Service source wiring | `install_broker_service_runtime::run_one_service_submission` unconditionally returns `WAKE_BROKER_TRANSACTION_GATES_UNAVAILABLE` after an admitted frame. Provisioning alone cannot complete installation. |
+| First-generation admission | Offline V2 verification returns diagnostic readback, with no ledger/install consumer. Production ledger admission still requires unproved migration-anchor and old-owner evidence before exact CI and INTENT. |
+| Reusable components | Typed candidate staging/publication and protected pointer writer already exist. They require accepted typed leases; no replacement publisher is needed. |
+| Required next release work | Independently accepted closed store/launcher inventory and anchor, V2 admission/ledger/service integration, protected reader/bootstrap cutover, approved provisioning, exact remote CI and installed verification remain open. Matching paths, no-process snapshots or diagnostic signatures cannot supply these proofs. |
+
+The existing install guards remain intact. A large new security framework was
+not started during the audit. The prepared bounded three-project development
+test is separate from this installation work and still awaits explicit approval.
+
+## October 20 bounded review controller and internal deadline (SOURCE; LIVE HELD)
+
+The prepared external controller has 14 passing synthetic/native-helper checks
+for exact project, target, receipt, timer, message digest, sibling completion,
+literal argument handling and retained-process timeout cleanup. Default mode
+only performs read-only preflight; it does not copy inputs, enqueue or start a
+host. An approved run copies the exact payload bytes into the public control
+workspace as required by the existing enqueue command, verifies the actual
+wrapped queue message, then uses existing run/stop controls. The empty isolated
+discovery inbox is pinned read-only during that test to exclude extra work.
+Real project native sessions do not write this isolated inbox.
+
+Review found that controller death could otherwise discard its external
+deadline. The existing run command now accepts optional
+`--max-runtime-seconds 1..900`; the foreground owner enforces this independently,
+requests STOP once, permits 30 seconds of graceful exit and then drains its
+private Job. Bounded failure retains STOPPED intent. The default unbounded
+command is preserved. A disposable gated helper proves the internal stop
+without an external controller; invalid CLI/runtime budgets refuse before
+control changes. No actual WakeHost/browser was used for these checks.
+
+Final gates pass **1,537 CatDesk tests / 28 ignored**, **294 Wake library
+tests / 1 ignored** and enabled integrations, strict root/Wake Clippy, both
+builds, formatting and diff checks. The source-matched v22 development package
+was selected stopped. The controller's default read-only preflight passes;
+all 91 tracked state files, original five pairs and production pointer remain
+unchanged. Both controls are stopped and owned browser/Wake process count is
+zero. Exact prepared events remain absent from queue and delivery history.
+Evidence: parent `checkpoints/web-three-project-review-oct20`.
+
+This remains preparation for the exact three review payloads, not delivery,
+protected installation, connector or natural review acceptance. The explicit
+operator start hold remains in force and the bounded-test approval request is
+pending. Earlier completed canaries and all project histories remain preserved.
+
+## October 20 foreground development ownership (SOURCE; LIVE HELD)
+
+Inspection for the next independent-project test found that the foreground
+development launcher waited on an ordinary child without owning its process
+tree. It now assigns the existing private Windows kill-on-close Job before
+releasing an exact stdin startup gate. EOF or a wrong gate exits the internal
+child entry before runtime activity. The foreground launch refuses a package
+without that protocol before changing control state. Existing detached start,
+protected installation and ordinary host dispatch remain separate paths.
+
+Two native regressions use disposable PowerShell helpers, never WakeHost or a
+browser. Retained OS handles prove both helper and descendant were live before
+the launcher was abruptly killed, then prove their exit. Normal parent exit
+also drains a live descendant while preserving exit code 7. Exact gate and
+old-package refusal checks pass. Five finalized focused tests pass; the full
+Wake suite passed **293 library tests / 1 ignored** and all enabled integration
+targets, including the unchanged Python regression target. Full CatDesk passed
+**1,537 / 28 ignored**. Strict root/Wake Clippy, both builds, format and diff
+checks pass. The final fixture-only cleanup/live-handle refinements were
+rechecked with all five focused tests and strict Wake Clippy.
+
+The source-matched v21 development package was selected through the supported
+stopped update. Both Python inputs are unchanged; the new built host contains
+the owner protocol. All 91 project-state files, the five original paired
+bindings and production pointer remain unchanged. Both controls are stopped
+and the final owned browser/Wake process count is zero.
+
+Three exact review-only requests are prepared privately in parent
+`checkpoints/web-three-project-review-oct20`, with fresh event IDs, payload
+hashes and the current paired targets for CatDesk, Wake2 and PortfolioDesk.
+They preserve existing native ownership and distinguish focused/collected
+evidence from completed full qualification. Nothing is enqueued or sent.
+The execution plan limits a future approved development run to three events
+and 900 seconds, then supported stop and exact owned-tree exit checks. It
+excludes both canaries and never enables the MCP automatic scheduler.
+
+These source tests close a concrete launcher-loss orphan gap. They do not
+authorize or establish live WakeHost, recurring automation, protected installed,
+connector or natural review acceptance. The operator's start hold remains in
+force. The completed rollover remains preserved without repetition.
+
+## October 20 automatic worker context contention (SOURCE; LIVE HELD)
+
+A disposable held-ledger test reproduced another stop/drain stall: automatic
+policy and post-observation readiness checks opened the context store with a
+blocking lock. They now use its existing nonblocking read-only mode. Shared
+rollover mutation steps use the existing nonblocking writable mode, retaining
+policy rechecks, paired-target guards, submission fences and durable event
+deduplication. Metadata contention reports `AWAITING_CONTEXT` /
+`WEB_CONTEXT_BUSY`; it does not create a permanent failure or request a handoff.
+
+The regression holds the OS ledger lock while both workers exit and drain,
+verifies a sibling remains startable, checks unchanged context history and zero
+handoff callbacks, then verifies eligibility after release. A prepared-rollover
+test also checks confirmation refuses promptly without advancing its phase or
+changing history, then succeeds after release and still honors later opt-out.
+These are source fixtures, not browser or installed acceptance. The full root
+suite passed **1,537 tests / 28 ignored**, with strict all-target/all-feature
+Clippy, application build, formatting and diff checks passing. Evidence is in
+parent `checkpoints/web-auto-context-oct20`.
+
+The four-file v20 development package was selected through the supported
+`PACKAGE_UPDATED_STOPPED` path. Its unchanged Wake/Python inputs match v19.
+All 91 project-state files, the five original paired bindings and production
+pointer are unchanged. Both controls remain `STOPPED`; no owned browser or
+Wake process was present after verification. This is a stopped development
+candidate, not protected installed acceptance.
+
+No live capture, message, canary replay, binding change, WakeHost or recurring
+start was needed. The completed canary and three prior independent live context
+reads remain accepted within their documented development scope. Fresh
+multi-project delivery, connector verification and protected installation remain
+open. Inspection of `development_runtime::run_foreground` confirms it starts the
+shared host scheduler; it is not a scoped one-event alternative to the current
+operator start hold. No automatic restart is authorized by this checkpoint.
+
+## October 20 bounded standalone capture (SOURCE + DEVELOPMENT LIVE READS)
+
+The existing `operator web context capture` now selects the current paired
+target and uses the same bounded, cancellable worker as MCP capture. It retains
+the current-generation/digest checks, per-project capture slot, private adapter
+owner and nonblocking count/hash ingestion. It returns before TUI/MCP startup,
+and identifies its result as `STANDALONE_OPERATOR`; this is not proof that the
+central connector exposes the new tool.
+
+Initial explicit PortfolioDesk and BYOVD reads hit the 60-second outer deadline
+and exited after cleanup at roughly 65 seconds. The observed first reader tree
+contained 14 reader descendants; all had exited at post-check. Source inspection
+showed that the outer limit preempted the adapter's existing 90-second startup
+allowance. The fixed overall budget is now 180 seconds, covering the existing
+30-second profile-lock wait, startup and a bounded snapshot read. Internal limits,
+owner checks and cleanup are unchanged; callers cannot override the budget.
+
+BYOVD then succeeded in 70.1 seconds: five complete visible messages were
+recorded, producing a 1,446-token visible estimate. Wake2 succeeded in 64.3
+seconds: six complete visible messages and an independent 895-token estimate.
+Both matched their existing generation-1 paired targets and returned no raw text,
+no send and no host start. Unknown history/coverage gaps remain explicit; these
+are advisory visible estimates, not exact provider context usage. The preserved
+authenticated profile was reused without sign-in or cloning. No owned browser
+process remained after either successful read.
+
+PortfolioDesk then succeeded in 69.4 seconds, recording six visible messages and
+its separate 916-token estimate. All three outputs matched the exact preflight
+project/generation/URL digest. Only two expected context-ledger files changed;
+PortfolioDesk's observation deduplicated without a ledger rewrite. The other 89
+tracked state files, all five original bindings, every rollover journal and the
+production pointer remained unchanged. Both controls stayed `STOPPED`, and the
+final owned browser/Wake process count was zero. No recurring browser activity
+was started. These source-matched live reads used the stopped v19 development
+package; they do not constitute protected installed or connector acceptance.
+
+Final source gates pass 1,536 root tests / 28 ignored, strict all-target/all-feature
+Clippy, application build, formatting and diff checks. Tests cover current-target
+selection after rebind, preserved predecessor history, invalid/unregistered scope,
+cancellation, contention and duplicate exclusion. Low disk space caused an early
+test link failure; only inactive worktree incremental caches and the failed test
+PDB were removed. Source, executables, immutable packages, profiles and state were
+preserved, and the full gate passed after rebuilding. Failure evidence is retained
+in parent `checkpoints/web-operator-capture-oct20`.
+
+The completed canary is excluded from these reads. No message was sent, no
+binding changed, and no recurring scheduler or WakeHost was started. Source/live
+read verification does not establish fresh work/review delivery, central connector
+parity, protected installation or remote CI acceptance. **October MVP: `PARTIAL`.**
+
+## October 20 context ledger contention and install preflight (SOURCE; LIVE HELD)
+
+The existing zero-argument broker preflight returned exactly
+`WAKE_BROKER_SERVICE_UNPROVISIONED` (exit 1). Source inspection confirms the
+fixed service still refuses transaction admission, while the V2 offline path
+has no independently reviewed closed-store/launcher inventory or provisioned
+broker evidence. These remain protected-install gates; diagnostic signatures,
+the completed Web canary and a stopped development package do not replace them.
+No service, policy, trust key or protected installation was changed.
+
+The inspection also found a concrete cancellation/independence gap in context
+operations: the online meter used a blocking OS ledger lock. An authenticated
+disposable HTTP regression held that lock and released it from a separate
+thread after 1.5 seconds. The old request waited and then succeeded, reproducing
+a stalled reactor rather than a bounded refusal. Its failure log is retained.
+
+Online context policy/observation and browser excerpt ingestion now open the
+existing meter in nonblocking mode. Contention returns `WEB_CONTEXT_BUSY`; other
+I/O failures retain their existing error classification. Store layout, object
+checks, file locks, atomic writes, target guards and stable event/revision
+deduplication remain unchanged. A completed snapshot cannot wait indefinitely
+behind a metadata writer and strand its capture lease. Other maintenance uses
+retain their existing locking mode.
+
+The expanded HTTP fixture holds the lock through configuration, observation and
+registry status reads: both mutations refuse, while all three Wake pairs remain
+readable. A separate fake-snapshot fixture verifies busy ingestion, lease release
+and an exact deduplicated retry. The store regression verifies unchanged ledger
+and policy bytes plus successful use after release. Fixtures start no browser,
+WakeHost or recurring scheduler and do not modify real project state.
+
+A separate Codex app inventory reported all four existing native project chats
+active. This proves observed session availability, not project task completion.
+No messages, goal changes, native ownership changes or interruptions were issued.
+The app's CatDesk Web review read returned an opaque content reference for the
+assistant body, so that alternate transport did not establish new review text.
+The completed rollover and prior assistant-body proof remain preserved.
+
+Final verification: **1,536 root tests passed / 28 ignored**, strict root
+all-target/all-feature Clippy, all-feature application build, formatting and diff
+checks passed. The held-lock failure and corrected HTTP tests are retained.
+Wake/Python product sources are unchanged from the preceding full checkpoint.
+The supported v17 development update returned `PACKAGE_UPDATED_STOPPED` with
+profile/state preserved, `browserAction:NONE` and `hostStarted:false`.
+
+Evidence is in parent `checkpoints/web-context-locks-oct20`. Installed serving,
+connector catalog parity, exact-head remote CI and fresh multi-project live
+delivery remain separate open gates. **October MVP: `PARTIAL`.**
+
+## October 20 explicit bounded browser context capture (SOURCE; LIVE HELD)
+
+`catdesk_web_context_capture` now reuses the existing private snapshot owner and
+excerpt ingestion through Computer/Both + SupervisorOnly MCP. Its closed scope
+requires the current paired project generation and URL digest. The reader
+rechecks that witness before browser access and before ingesting each message.
+Results expose hashes/counts with `BOUND_BROWSER_SNAPSHOT` provenance, verified
+browser binding and unauthenticated caller identity. Unknown history remains
+explicit. No message, binding update or recurring worker start is performed.
+
+Blocking capture runs outside the server reactor with a 60-second cooperative
+deadline and existing adapter cleanup. A cancelled request retains its project
+slot until the blocking worker exits. Four process-local slots cap active reads;
+the existing shared browser owner still controls actual profile access. Target
+and registration locks are released before browser work so sibling status and
+metadata do not wait on the snapshot. Existing CLI/scheduler behavior is reused.
+
+Disposable mock tests exercise cancellation with the worker deliberately held,
+sibling capture, same-project refusal, release/unwind, deduplication and target
+changes both after preflight and during the read. The authenticated local HTTP
+fixture also refuses capture with a stale witness before reaching a reader.
+No new real browser read or canary delivery was needed. The first full-suite
+run exposed a two-second test deadline that included registration/Git and ledger
+I/O under parallel load; the bounded fixture deadline was corrected without
+changing production timing. The sandbox application build encountered LNK1318
+writing its PDB; the same build passed as the Windows user.
+
+A subsequent full run caught unrelated development controls contending on the
+global target mutex: one control's target read returned attention while another
+registered/bound projects. Target locks now follow the canonical Wake authority
+(or workspace for legacy local target files). Separate development stores no
+longer block one another; two controls selecting the same installed authority
+still share one mutex. The 250 ms status deadline and paired CAS/compensation
+checks are unchanged. Dead weak entries are discarded, and no lock is held
+while waiting for a browser. Regression tests cover aliases, separate roots and
+shared installed authority without opening the production store.
+
+Final root gate: **1,535 passed / 28 ignored**, including all three development
+control fixtures running together. Strict all-target/all-feature root Clippy,
+the all-feature application build, formatting and diff checks pass. Wake/Python
+product sources and the built WakeHost are unchanged from the preceding
+288-passed Wake library plus integration / 229-passed Python checkpoint.
+Evidence: parent `checkpoints/web-context-capture-oct20`, including both original
+failure logs and the final corrected gate. These are source/mock results.
+
+One read-only connector probe again returned exactly
+`McpServerError: MCP SSE probe returned 429 from openai.org`. This remains a
+connector verification dependency. The completed fast canary stays preserved
+at generation 2 with continuation and assistant response already verified.
+All five original bindings and independent native sessions remain untouched.
+Recurring browser automation and WakeHost remain stopped.
+
+The supported v16 development-package update returned
+`PACKAGE_UPDATED_STOPPED`, `browserAction:NONE`, `hostStarted:false`, with profile
+and runtime state preserved. One source-built local status read then reported
+all seven registered projects and the fast canary's paired generation-2
+`CONTINUATION_QUEUED` / verified continuation. Post-read comparison found all 91
+tracked project-state files and all five original bindings unchanged; production
+pointer bytes were unchanged, both runtimes were `STOPPED`, and no owned browser
+or Wake processes were observed. An overlapping hash attempt refused the status
+reader's held journal lock; the verification was completed after that reader
+exited. This confirms stopped candidate/readback behavior, not installed serving
+parity or a new live Web delivery.
+
+Protected first-generation install admission/provisioning, exact-head remote CI,
+connector catalog parity and fresh independent multi-project live delivery are
+still separate acceptance gates. No installation authority follows from these
+source tests or a stopped development package. Next executable local work is to
+inspect the existing protected-install admission evidence and remaining reader
+cutover gates, then verify the actual connector catalog and fresh independent
+project routing when their dependencies permit. Safe source/evidence work needs
+no operator action; existing independent release approval/bootstrap requirements
+remain prerequisites for protected installation. **October MVP: `PARTIAL`.**
+
+## October 20 central context controls (SOURCE + LOCAL HTTP VERIFIED)
+
+Source now exposes `catdesk_web_context_configure` and
+`catdesk_web_context_observe` in Computer/Both + SupervisorOnly mode. They reuse
+the existing per-project meter, policies, event IDs, revisions, deduplication
+and token estimator. Configuration requires all automatic flags explicitly;
+observation accepts one event up to 65,536 UTF-8 bytes and assigns server time.
+Only hashes/counts persist. Caller-reported text remains advisory with
+`originAuthenticated:false`; project scope does not identify the ChatGPT caller
+or automatically attribute shared HTTP traffic to a conversation.
+
+Both operations require the exact current paired generation/digest and retain
+the existing registration and Wake configuration guards during mutation. The
+full root regression initially exposed excessive process-wide mutex retention:
+a sibling status could return attention during context I/O. A deterministic
+same-control sibling-read regression reproduced it. Context I/O now runs after
+that mutex is released while registration and a shared Wake transaction read
+keep target writers out. Sibling readers remain available, including on errors.
+
+Authenticated ephemeral-loopback HTTP tests cover three independent budgets,
+same-ID replay, revision conflicts and replacement, tool-argument/result counts,
+unknown-attachment reserve, raw-text privacy, stale/cross-project witnesses and
+separate old/new ledgers after a rebind. Unauthorized calls and unsupported
+modes refuse. No context operation queues a Wake event or native work request.
+The current command reference includes the new schemas and corrects an older
+statement that the already-completed fast canary was still prepared.
+
+Final source gates: **1,532 root tests passed / 28 ignored**, **288 Wake library
+tests passed / one ignored**, all Wake integration targets, strict root/Wake
+Clippy and formatting. The main/Wake build logs and before/after contention
+evidence are in parent `checkpoints/web-context-mcp-oct20`. Python product sources
+are unchanged from their full 229-passed/one-skipped checkpoint; the bounded
+Python integration harness also passed in the full Wake run.
+
+These results establish source and disposable local HTTP behavior. The actual
+connector catalog, protected installed runtime, fresh independent project
+delivery and scheduler lifecycle still require live acceptance. No real project
+policy, target, browser profile, native session or completed canary was changed
+to run the fixtures. **Overall October MVP: `PARTIAL`.**
+
+## October 20 scheduler rollover eligibility (SOURCE VERIFIED)
+
+The context ledger already limited uncertainty-only rollover to one use in a
+project's history. The scheduler's separate coarse pressure check did not use
+that durable decision: after observing a replacement it could prepare another
+handoff, take another source snapshot, and then receive
+`WEB_ROLLOVER_NOT_DUE_OR_DISABLED` from the ledger. This produced unnecessary
+browser work and an attention state despite the guard behaving correctly.
+
+`rollover_readiness` now reads pressure and eligibility under the same meter
+lock. The scheduler uses that decision before entering handoff preparation;
+intent creation rechecks the same eligibility logic and retains its existing
+target, task, timestamp and quiescence checks. An ineligible observation remains
+`OBSERVED`. The ordinary opted-in observation cadence is unchanged.
+
+Local fixture tests verify no handoff callback for a spent guard, opted-out
+policy or stale generation; beta/gamma can still progress independently, and
+new observed pressure makes alpha's replacement eligible again. Readiness on a
+read-only meter preserves ledger bytes and returns busy without waiting for a
+writer. These are source tests with fake handoff callbacks, not live dispatch.
+
+Final verification: **1,530 root tests passed / 28 ignored**, strict root Clippy,
+main build, formatting and diff checks pass. Wake/Python sources are unchanged
+from the preceding full regression checkpoint. Evidence lives in parent
+`checkpoints/web-eligibility-oct20`. No browser, WakeHost, recurring scheduler,
+production pointer, project binding or native session was changed by the tests.
+Installed and remote CI acceptance remain open. **October MVP: `PARTIAL`.**
+
+## October 20 complete local regression gates (SOURCE VERIFIED)
+
+The full root suite passed **1,529 tests / 28 ignored** on `f9a4e83`.
+The full Wake run exposed a stale Rust-to-Python test selector referring to
+the old browser-write-boundary test name. The selector now invokes the existing
+submission-boundary test, extended to check both a network error at the durable
+checkpoint before typing and a network error after typing. Neither may relaunch
+the browser context or repeat the checkpoint.
+
+The required full Python CI command then exposed two stale cleanup fakes missing
+the exact-URL and text-entry operations used by the current bridge. Updated
+fixtures assert owned-tab closure before context exit after success and unknown
+receipt failure, plus no typing or receipt after target drift at the checkpoint.
+The shared browser's quit method remains forbidden. The draft/presentation
+fixture now runs the production readiness logic with its virtual clock.
+
+Final Wake verification passed **287 library tests / one ignored**, all binary
+and integration targets, and its Python bridge regression harness. Full offline
+pytest passed **229 tests / one skipped / 35 subtests**, using existing pytest
+9.1.1 with third-party plugin autoload disabled. Strict Wake Clippy, formatting
+and diff checks pass. These changes affect tests only; main runtime code and
+the stopped v13 development package remain the preceding verified build.
+Evidence: parent workspace `checkpoints/web-regression-oct20`.
+
+Migration remains held on independently reviewed closed-store/launcher evidence
+and protected bootstrap/admission. Task closure already preserves the original
+target witness after a rebind; no replacement implementation was needed.
+Next source task: make the scheduler consult the ledger's existing one-time
+incomplete-history eligibility before attempting another handoff, preserving
+ordinary observed-pressure rollover and independent projects. No recurring
+browser/Wake process or completed canary was started or replayed for these tests.
+Remote exact-commit CI and installed/live acceptance remain separate open gates.
+
+## October 20 central status and read-only access (SOURCE + STOPPED DEVELOPMENT READBACK)
+
+The central rollover report now qualifies saved automation ticks and failures
+independently against its paired target generation. Earlier generations are
+explicitly `HISTORICAL_GENERATION_SNAPSHOT`; matching generations remain
+observations, never proof of a live worker. Missing/invalid generations and
+unexpected future generations remain unverified or anomalous. Original stages,
+failure reasons and completed continuation proof remain preserved.
+
+The existing local `operator web status` now includes the same `webProjects`
+projection as `autonomy_project_registry_read`, allowing central status checks
+without the connector. Existing local fields remain available. Registry reads
+bypass unrelated autonomy-store initialization. Wake/context diagnostic handles
+open existing directories and lock files, refuse mutations, and use nonblocking
+shared file locks. Status target-lock acquisition is bounded to 250 ms; execution
+retains its existing control-lock behavior. Context status also requires its
+reported current pressure to match the sampled active conversation key.
+
+Final focused regression groups passed 42 Web/MCP/context tests, 59 Web runtime
+tests (overlapping groups), one missing-registry read test and 23 Wake store
+tests. Coverage includes absent roots/locks, busy writers, preserved file bytes,
+refused mutations/host ownership, historical failures, and three-project central
+status. Strict root/Wake Clippy, both builds, formatting and diff checks pass.
+
+One source-built local status invocation against the stopped development control
+completed in 26 seconds. All seven registered projects were reported; the fast
+canary remained generation 2, `CONTINUATION_QUEUED`, paired and continuation
+verified. Its saved generation-1 failure was explicitly historical. All 98
+compared state files and 12 directory entries were unchanged after that read,
+and all five original registrations/targets still matched their baseline.
+No browser, connector request, send, WakeHost or recurring automation was used.
+
+Evidence: `checkpoints/web-status-oct20` in the parent workspace. Production
+still selects stopped dev.84; installed parity, migration admission/provisioning,
+exact-source remote CI and fresh multi-project delivery remain open gates.
+The connector's last HTTP 429 is separate from these local source/readback
+results. **Overall October MVP: `PARTIAL`.**
+
+## October 20 scheduler ownership and shutdown (SOURCE VERIFIED)
+
+Inspection found that stopping the MCP server dropped blocking project task
+handles, and a quick stop/restart could escape a boolean-only lifecycle check.
+The scheduler now registers each run with an independent cancellation flag and
+retains its driver handle in application state. Normal server stop cancels and
+joins the drivers; each driver retains and drains its blocking project tasks.
+Finished listener handles are checked every 250 ms without browser requests.
+A retired run stays cancelled across restart and cannot overwrite new status.
+
+Cancellation reaches the existing browser lock wait, private adapter startup,
+snapshot/probe receive loops, handoff reads, bootstrap acknowledgements, paired
+binding and continuation publication. Adapter unwinding retains the existing
+private Windows Job cleanup. Already-authorized in-flight actions retain their
+durable checkpoints; SEND_ATTEMPTED is never replayed. Cancellation before
+binding preserves the receipt without falsely recording source corruption or
+requiring a new reconciliation. Independent WakeHost and native sessions are
+not stopped by the scheduler's cancellation flag.
+
+Offline verification passed 59 Web and 12 Wake runtime tests, including quick
+restart, listener exit, draining two blocking workers, pending channel/lock
+cancellation, no adapter/lock creation after cancellation, and durable receipt
+preservation. No browser, WakeHost or recurring automation ran in those tests.
+Strict root/Wake Clippy, both builds, formatting and diff checks also pass.
+These tests do not establish live browser shutdown or installed parity. The
+source-matched package must be promoted and a bounded live test authorised
+before recurring automation is restored; the user's current stop remains.
+
+The first-generation install gate remains separate: inventory hashes alone do
+not prove closed store/launcher coverage. No independent inventory or provisioned
+broker exists, so admission was not enabled from caller-supplied claims. Safe
+source work continues independently of that gate and the connector's last 429.
+**Overall October MVP: `PARTIAL`.**
+
+## October 20 first-generation migration target readback (SOURCE ONLY)
+
+Current source already has typed package publication and a protected pointer
+writer. The fixed service still refuses transaction admission; neither those
+writers nor the completed Web canary establish an installed dev.85 migration.
+The next source increment strengthens the existing V2 migration diagnostic:
+it pins the selected old root's fixed `config.json`, reads the retained registry
+file, verifies both exact raw-byte snapshot hashes, and proves the selected
+project's URL/digest/conversation ID and Wake generation match the signed
+observation. The registry has no separate stored generation; the matching
+Wake target supplies that paired readback's generation. Existing pointer and
+host-lock roles must also resolve as exact children of the pinned old root.
+
+Snapshots are bounded to 1 MiB, duplicate project targets/registrations refuse,
+and incomplete, split, changed or absent target evidence fails before signature
+inspection can succeed. Retained Windows handles block new writers and object
+replacement. Fifteen focused offline migration tests pass, including actual
+Windows pin/lock fixtures, wrong hashes/generations/conversations, duplicate
+fields/projects, missing targets, oversize files and replacement denial.
+Strict root/Wake Clippy, both builds, formatting and diff checks also pass.
+This is read-only source evidence, with no new ledger or installation authority.
+
+Remaining installed work: independently established closed old-store/launcher
+inventory and its reviewed offline approval, first-generation ledger admission,
+protected service provisioning and reader cutover, exact-source CI, then live
+installed acceptance. Source development can continue on those existing seams;
+connector HTTP 429 affects connector checks separately. No browser, WakeHost,
+recurring scheduler, production pointer or project binding was changed.
+**Overall October MVP: `PARTIAL`.**
+
+## October 20 assistant snapshot verified and three-project readback (DEVELOPMENT LIVE)
+
+One bounded read of the already-completed canary continuation returned
+`eventVerified:true`, with the exact inherited marker and task in the verified
+assistant response. No bootstrap, binding update or continuation was repeated.
+The earlier missing-body state was not reproduced, so a permanent selector
+mismatch is not established. The existing private snapshot path now includes
+bounded DOM-shape diagnostics when its final assistant body is incomplete;
+diagnostics never promote incomplete text or appear in public status.
+
+Checkpoint `43dd541` adds a ten-second, same-document readiness window requiring
+two matching complete final message frames, with target checks on each sample.
+A follow-up regression closes the deadline edge: a single complete-looking
+frame at expiry remains explicitly unverified. There is no reload, Retry click,
+typing or send. Source gates pass 23 adapter, 36 bootstrap and 10 executable DOM
+tests; main/Wake builds and strict root Clippy pass. The deadline edge is source
+verified; the live three-project reads used the preceding v10 package.
+
+Under the stopped v10 isolated development package, separate bounded reads of
+the latest saved completed events for Bug Bounty, BYOVD and Wake2 all returned
+`eventVerified:true`, exact generation 1, `sendAttempted:false` and owner exit 0.
+These are independent readback tests of existing delivery receipts and current
+responses, not new dispatch, parallel worker or natural-Wake acceptance. No
+WakeHost or recurring scheduler started. Native sessions and project targets
+were untouched. The same existing authenticated profile was reused.
+
+Installed parity is a separate open gate: the production pointer still selects
+`1.0.0-dev.84-02431feba5ed-1c6bcdfcedf0`. Its adapter/bridge hashes match the
+pointer, but it lacks source-snapshot and new-conversation helpers and remains
+`STOPPED`. No production package or authority was edited. The existing supported
+promotion/migration path must be completed and qualified before these source
+and isolated-development results can count as installed acceptance.
+
+The connector's last observed HTTP 429 still affects connector-based ownership
+and catalog verification; no connector retry was made in this cycle. One exact
+`43dd541` GitHub run lookup returned no runs, so remote CI is not accepted.
+Source/package preparation, offline regressions and bounded local readback can
+continue independently. Installed promotion, fresh multi-project dispatch and
+central request/resolve tool acceptance remain open. No new sign-in or native
+session change is needed. **Overall October MVP: `PARTIAL`.**
+
+## October 20 controlled rollover and continuation (DEVELOPMENT LIVE PARTIAL)
+
+Source checkpoint `673e853` adds bounded fresh-document response observation.
+Its v8b isolated package advanced the saved canary receipt without replay:
+`RESPONSE_PENDING` -> `CREATED` -> `CONTINUATION_QUEUED`. The source handoff
+was revalidated, registry and independent Wake agreed on generation 2 and its
+exact destination digest, both histories retained the generation-1 predecessor,
+and the new conversation's context meter was recorded. All five original
+project bindings still exactly matched their saved baseline after the change.
+The deliberately low canary threshold was restored to conservative settings.
+
+One foreground development WakeHost delivered the sole queued continuation
+event with an exact appended-USER receipt and a completed response timer.
+Its owner ran for 77 seconds, issued supported STOP in cleanup, exited normally
+and confirmed `HOST_LEASE_RELEASED`. No recurring scheduler started. The later
+bounded response read also exited normally; a final process check found no
+owned Chrome, driver, WakeHost or scheduler. Native project sessions were not
+modified, paused or replaced.
+
+The private DOM excerpt visibly contains `FAST_CANARY_CONTINUED` and the exact
+inherited marker/task. Its latest USER body matches the continuation event.
+However the assistant-body snapshot selector did not establish `textComplete`,
+so the local review reader correctly returned `UNVERIFIED_EVENT_SNAPSHOT`.
+Do not label that excerpt a fully verified review response. Durable delivery
+and response-completion proofs are separate and passed. The replacement chat
+reported its independent ownership/artifact lookup blocked by connector HTTP
+429. One transport-status call here independently returned the same 429; it
+was not retried. No further task execution was requested from that chat.
+
+Source status now computes `continuationProved` from the existing exact
+receipt, completed turn, current owner and paired target checks instead of
+returning a constant false. The source-local canary status reads `VERIFIED`.
+Missing Wake directories are not initialized by this status read. The central
+projection exposes only bounded proof codes. Regression gates: 32 rollover and
+11 Web CLI tests, 20 adapter and 35 bootstrap tests, strict root Clippy and
+both main/Wake builds passed. The earlier broad bridge suite remains partial.
+The new status-reader change is source-local, not yet in the v8b live package
+or protected installation. Historical automatic-driver failure fields remain
+preserved; use current generation and durable proof when interpreting them.
+
+Next executable work: diagnose the incomplete assistant-body snapshot against
+the observed DOM, then qualify the installed/central tool catalog and a bounded
+three-project Web work cycle when connector transport is available. No new
+login, target edit or native-session pause is needed. Do not keep retrying 429,
+restart hourly workers, or claim remote CI/installed/natural-Wake acceptance.
+Those gates and full cross-project Web execution remain open. **Overall: `PARTIAL`.**
+
+## October 20 replacement issued; completion observation (LIVE PARTIAL)
+
+Checkpoint `65480c5` supports the observed New Chat Send control. Under the
+updated isolated development package, the same saved canary draft was submitted
+once, and the actual newly issued conversation URL passed fresh exact-USER
+receipt verification. The journal is `RESPONSE_PENDING` / `SEND_ATTEMPTED`,
+with a saved destination receipt and no bound target. It must never replay.
+The server conversation record shows a completed assistant response, while two
+separated browser probes still reported pending. No production target changed.
+
+The next source change gives a fresh browser document a ten-second read-only
+observation window in the same visit. Every sample retains exact target,
+USER receipt, sequence and usable assistant-body checks; completion still needs
+two separated proofs. Errors terminate immediately. Fake-clock tests cover
+delayed hydration, a fixed pending budget, drift and transient completion;
+20 adapter and 35 bootstrap tests pass. Both binaries rebuild successfully.
+The next live action is one bounded probe of the saved receipt, followed by
+guarded paired binding and continuation only if completion is proven. No
+recurring scheduler or WakeHost is running. No operator action is required.
+This supersedes the earlier missing-Send and ready-draft checkpoints below.
+**Overall: `PARTIAL`.**
+
+## October 20 ready-draft retry and exact blocker (LIVE PARTIAL)
+
+The read-only composer probe subsequently confirmed the same exact owned draft
+and found an enabled `BUTTON` with `type=submit`, `aria-label=Send`, and no ID or
+test ID. The existing selectors did not cover it. Source adds only
+`button[type='submit'][aria-label='Send']`, retaining uniqueness, disabled-control
+and exact-draft checks. Executable offline DOM tests cover this observed shape,
+reject duplicate or disabled Send controls and unrelated buttons, and reproduce
+the Show more extraction regression. Eight current-DOM tests pass. A further
+bounded retry under the updated test package remains pending.
+Four focused bridge control/smoke tests and 35 bootstrap tests also pass.
+The optional broad bridge suite is not a passing gate: its initial run was
+stopped at a 174-second budget after 28 completed cases. The identified
+network-error fixture now uses an injected clock and passes in 0.023 seconds;
+broader real-time fixtures remain subject to the bounded test budget.
+
+Checkpoint `b3d2a43` is pushed. The corrected USER-body extraction passed a
+fresh one-shot read of the previously delivered review with
+`eventVerified:true`; the expected review marker and all three acceptance
+checks were read. No second review message was sent. The rebuilt v5b isolated
+package applied through `PACKAGE_UPDATED_STOPPED`, preserving the existing
+authenticated profile and runtime state. The first v5 candidate had correctly
+refused with `DEV_PACKAGE_SCRIPT_SOURCE_MISMATCH` because the main image
+predated the final script edit; no authority guard was bypassed.
+
+One bounded canary retry revalidated the complete saved draft, retained the
+same intent, skipped typing and cleared the overly broad ready-draft fence.
+It then refused with the concrete reason `BOOTSTRAP_SEND_CONTROL_MISSING`.
+The record remains `SUBMITTING` / `DRAFT_READY`, with null reconciliation
+reason, receipt and bound target. No `SEND_ATTEMPTED` checkpoint was reached.
+The owner exited 2 before its four-minute cap; neither WakeHost nor a recurring
+scheduler was started. This is recovery progress, not completed rollover.
+
+The next executable task is a read-only inspection of visible composer control
+attributes on that exact owned home draft. Source inspection now includes a
+bounded optional `controls` array, accepts legacy inspection frames, and
+validates field types, lengths, scope and wire budget. It reads only rendered
+control attributes, with no typing, clicking, clearing or send authorization.
+The draft and all project histories remain preserved. No operator action is
+currently required for the diagnostic. **Overall: `PARTIAL`.**
+
+## October 20 bounded recovery resumed (SOURCE VERIFIED; LIVE PARTIAL)
+
+The approved implementation-review request reached exact `SENT` on October 20.
+Its temporary worker stopped normally with `HOST_LEASE_RELEASED`; subsequent
+inspection found no owned automation process or development scheduler. The
+review response requests exact-draft/idempotency checks, archive-before-clear
+and composer-race checks, and canary continuation with project isolation. It
+explicitly reviews the supplied contract only, without independent live proof.
+
+The preserved canary remains `SUBMITTING` / `DRAFT_READY`, with no send-attempt
+checkpoint, receipt or replacement binding. The v2 code had classified every
+pre-send exception as ambiguous, including read-only checks after full draft
+readiness. Source now permits that specific ready-draft case to recover only
+through the full existing exact-draft checks. It clears the old broad fence only
+after a new verified DRAFT_READY checkpoint. Ambiguous typing, unrelated
+reconciliation reasons, legacy unknown sends and SEND_ATTEMPTED remain blocked.
+Bounded helper reasons and exception classes are retained for diagnosis.
+
+An explicit local `operator web review read --project-id P --event-id E` reads
+one already delivered review using the existing browser owner and private Job.
+It does not run WakeHost, send a message or complete a timer. Only that exact
+delivery's passive response timer may be pending; another pending turn or
+queued task still refuses. A digest-matching complete latest pair sets
+`eventVerified:true`; otherwise a bounded private diagnostic snapshot is
+labelled `UNVERIFIED_EVENT_SNAPSHOT`. Such snapshots are not public status.
+
+The first live read exposed a DOM extraction defect: the complete USER body
+had an appended ellipsis and Show more control. Source now selects the same
+dedicated USER body as exact delivery receipts and treats missing bodies as
+incomplete. The captured assistant response contains the expected review marker,
+but that earlier snapshot did not establish an exact event pair. Qualification
+of this extraction fix and the canary retry remains pending.
+
+Focused checks pass: 35 Python bootstrap tests, 18 adapter tests, 6 current-DOM
+tests, 11 Rust Web operator tests, 9 Wake bootstrap tests, the persisted rollover
+restart regression, and the Windows private-Job termination/accounting test.
+These filters overlap. Strict root and Wake Clippy and both builds passed.
+All five original bindings passed another exact comparison. No native Codex
+project was paused or edited. Recurring schedulers and WakeHost remain stopped;
+further live checks must be one-shot and observed through cleanup. **Overall:
+`PARTIAL`.**
+
+## October 18 owned-draft recovery (TESTED_LOCAL_SOURCE; LIVE PENDING)
+
+The user identified the preserved composer as a CatDesk rollover bootstrap.
+The old journal records `SUBMITTING` without a send boundary or receipt. Its
+predecessor, intent and full expected-message digest are retained. The former
+slow typing path could exceed the 180-second progress watchdog after that
+combined checkpoint, leaving a saved draft. An exact draft match establishes
+ownership, but does not establish that an earlier send never happened.
+
+Protocol 2 now journals text-entry authorization, full-draft readiness and
+send-attempt authorization separately before each browser ACK. A pre-send
+restart resumes only its exact complete saved draft and skips typing. Empty,
+partial or foreign drafts refuse. Explicitly observed pre-send ambiguity is
+durably fenced; legacy unknown and send-attempted records never replay.
+
+The supported `inspect-draft` command reads a bounded full-draft comparison.
+The separate `archive-draft` command applies only to a legacy unknown intent:
+it saves actual DOM text and expected journal text privately before authorizing
+an atomic exact-draft clear, then reloads HOME and verifies empty. Its old
+intent, source pair and history remain preserved and non-replayable. Completed
+archive receipts identify historical observations rather than claiming a new
+browser read. Oversized archive protocol witnesses refuse before clear.
+
+Verification: 34 Python new-conversation tests, 18 adapter tests, 6 current-DOM
+tests, and 10 Rust Web CLI tests pass. The Web rollover suite passed 31 cases
+in the sandbox; its sole existing Windows metadata fixture failed with
+`CONFIG_ROOT_UNAVAILABLE` and passed on the normal-user rerun. The final
+restart case and Wake protocol case each passed. Strict all-target/all-feature
+Clippy passed for root and Wake. Independent static review found no remaining
+blocking issue after corrections to ambiguity handling, frame limits, raw-text
+preservation and the clear boundary. These checks are not live acceptance.
+
+The manual login browser closed normally; no new sign-in was requested. A fresh
+read-only comparison found the five original registry/Wake pairs exactly
+unchanged. The next live steps are: compare the old canary draft; archive it
+only on exact ownership; verify the separate PREPARED canary has a clean HOME;
+then run normal scheduling and verify the actual replacement URL, paired
+generation, history and continuation while another project receives a review
+event. Production Wake targets and native project sessions are outside this
+canary. Installed release, central connector acceptance and exact-source CI
+remain separate gates. **Overall: `PARTIAL`.**
+
+## October 18 completed continuation with advisory meter retry (TESTED_LOCAL_SOURCE; LIVE PARTIAL)
+
+Source `9102b9e` allows new work after a proved completed continuation when
+the context meter is still `RetryRequired`. It requires the exact paired
+destination, bootstrap receipt, continuation delivery and completed timer,
+unchanged native owner, verified saved source witness and no reconciliation
+reason. A single locked meter read must show either the exact predecessor
+intent or the destination without a new intent. Missing, corrupt, unrelated
+or pending current-generation state still refuses work.
+
+The real work-lease fixture uses a prepared development root, Git registrations
+and inert package files. It verifies the retry path, incomplete continuation
+refusal, corrupt-meter refusal and another project's independent lease. No
+browser or service starts. The Web operator filter passed 47/47, context ledger
+12/12 and Web work 13/13; these filters overlap. Final strict all-target/all-feature
+Clippy passed after correcting one redundant borrow, and the integrated
+continuation fixture passed again on that final source. Scoped formatting and
+diff checks passed. Private logs are in `checkpoints/web-advisory-retry-oct18`.
+The initial sandbox fixture attempt hit `CONFIG_ROOT_UNAVAILABLE`; its scoped
+normal-user rerun passed.
+
+The running manual-login executable and existing authenticated test profile
+were preserved. This source is not yet built into the live runtime. Draft
+inspection, actual replacement URL, paired binding and continuation remain
+live acceptance gates; other native project chats remain usable. **Overall:
+`PARTIAL`.**
+
+## October 18 retained rollover diagnosis (TESTED_LOCAL_SOURCE; LIVE PARTIAL)
+
+Pushed source `6c8c0b1` retains the last concrete automatic rollover failure
+through subsequent in-progress, stopped and policy-disabled ticks. Central
+status exposes bounded diagnostic metadata and requests draft inspection only
+when the saved PREPARED rollover still matches the current paired target.
+Legacy records remain readable; corrupt advisory status does not prevent a
+new truthful status write or disclose raw private data. Four focused tests,
+strict all-target/all-feature Clippy, scoped formatting and diff checks passed.
+The checkpoint includes one mechanical allocation lint fix in an existing
+operator parser test.
+
+This is source verification. The isolated development runtime still uses the
+earlier `bce01e9` package, with its existing authenticated profile open for the
+pending user draft inspection. No draft was cleared, replacement conversation
+accepted, target rebound or native project goal paused by this change.
+Installed release, exact-source remote CI and central connector acceptance
+remain separate and unproved. **Overall: `PARTIAL`.**
+
+## October 18 seven-project live Web checkpoint (DEVELOPMENT_LIVE_PARTIAL; MVP PARTIAL)
+
+**Final live checkpoint: `PARTIAL`.** Registry and Wake contain seven guarded pairs: five original projects and two controlled canaries. Pushed source `bce01e974054646006520a598ed83d449d30afaa` passed main/Wake builds, 49 focused Python tests, three focused Rust STOP/recovery regressions (two STOP, one recovery) and strict Clippy. Exact-commit CI lookup returned `[]`; remote acceptance is missing. The v3 isolated development package was applied through supported update with authenticated profile and state preserved. Independent raw-file comparison against the original five-project snapshot found all five registry records and Wake targets exactly unchanged with stable read hashes (private `current-binding-comparison.json`, SHA-256 `83EF59A1DDC68F37C0E5E145DA20ED879545826B7D95086CA4248C99EAE6546F`).
+
+The normal scheduler observed 254 visible canary tokens against the deliberate 200-token threshold. Its 800-character handoff request entered `SUBMITTING` at Unix 1792326933, reached exact `SENT` at 1792326965 (32 seconds later) and response `COMPLETE` at 1792326982. A 2,227-character handoff was collected with its marker preserved; later visible context was estimated at 782 tokens. The fresh rollover intent reached `PREPARED` but ended `ATTENTION` / `EXISTING_DRAFT` at Unix 1792327111 with no bootstrap ACK, receipt or guarded binding change. The home-composer guard establishes only nonempty text; its owner is unknown. Automatic rollover was disabled only for this canary through context configuration. Supported STOP released the host with exit 0; scheduler session 20297 later terminated exit 1 after Ctrl+C drain. Guarded login opened the preserved test profile (`LOGIN_BROWSER_OPEN`) without new sign-in. The user was asked for manual inspection of the New chat draft and clearing only if recognizable old canary text; otherwise leave it. No inspection result or clearing is verified, and no automated safe inspect/clear route is accepted. Preserve both uncertain attempts without replay.
+
+During this cycle an independent real BYOVD checkpoint review reached exact `SENT` at 1792326761 and `COMPLETE` at 1792326811; Wake2 native work remained active. BYOVD commits `f184038`/`536690d` passed 118 tests with three skips. Bug Bounty public-pilot gates remain open, and Portfolio's separate external-window block is unchanged. Protected production profile, installed release, remote CI and central connector catalog remain open. Earlier paragraphs below record prior checkpoint states. **Overall: `PARTIAL`.**
+
+Earlier live checkpoint: the first separate scheduled canary rollover attempt (intent prefix `5a92897b`) ended `ATTENTION` / `BOOTSTRAP_OUTCOME_UNKNOWN`, with durable phase `SUBMITTING`, null receipt and unchanged generation-1 source pair. A supported `STOP` succeeded, but in-flight `CollectHandoff` continued into browser bootstrap after STOP; timeout and no-replay preserved the uncertain outcome. At that earlier checkpoint, the development host and scheduler were stopped. A distinct browser source-canary conversation was created but is not registered or accepted as a replacement. Uncommitted source changes replace delayed Python `press_keys` with `send_keys` (49 focused tests pass) and recheck Rust STOP after collection, before bootstrap, before ACK and before probe while retaining Wake-first recovery (three focused tests and strict Clippy pass). Source files are frozen for packaging; live retest is pending. The earlier checkpoint details below describe prior running-service and pre-attempt states. No guarded pair update, completed rollover, installed proof or remote CI acceptance follows from this attempt. **Overall: `PARTIAL`.**
+
+Earlier source checkpoints `1c4295bab2210e539674c6600ac67a5476bcb2c2` and `304dcdfeb1a17285971ea9b73a563bed11b302ba` were pushed to `codex/web-rollover-oct17`. Under the first updated package, the canary's ordinary event and a Wake2 event reached `SENT`/`COMPLETE`; the scheduler then reported `WAKE_STORE_AUTHORITY_POINTER_INVALID` from a legacy development package-ID parser. Commit `304dcdf` adds development-only full-hash authority validation (137 lines). Its native fixture passed 1/1, strict Wake and root Clippy passed, and both builds passed. A second supported package update succeeded with the same authenticated profile, and the updated host and loopback scheduler restarted. Actual scheduled canary rollover remains pending; no manual auto tick was used. Authenticated repository readback found Actions permission enabled and the workflow active, yet no run for exact `1c4295b` after push. The workflow has push/PR triggers and no `workflow_dispatch`; this is not remote CI acceptance. Central `web_work` request/resolve remain hidden in the current Computer + Multi Tools surface, while source exposes Computer + Supervisor Only. Reviewed serving parity, supported UI mode selection and existing connector catalog refresh are needed; the earlier v4 HTTP 429 is a separate limit. No authentication or tunnel change was made. **Overall: `PARTIAL`.**
+
+Exact development source `5cedbb78ea5e6af90fd8aa1f2b3282aebd551548` (tree `64ff6686c661d4e93ee0809a485d43fe35a234e3`) built the earlier all-features CatDesk binary, SHA-256 `DB0F5600C19D42721BBB147C7A0052861B25C463644661132074F5D646821C7D`. Original login session 94778 ended normally, exit 0, as `LOGIN_WINDOW_CLOSED_UNVERIFIED`; window closure alone did not prove authentication. Subsequent browser work reused that same isolated profile and observed authenticated access. It did not touch the protected production browser profile or installed Wake. Foreground development Wake PID 55012 and headless scheduler session ID 82583 were observed live at the earlier checkpoint, with the latter serving `http://127.0.0.1:53354/catdesk-web-dev/mcp`. Both stopped normally for a supported `PACKAGE_UPDATED_STOPPED` package update, preserving the authenticated profile, configuration, queue and old version; no native project goal was paused. The updated Wake host and loopback scheduler then ran. These transient process and loopback observations are not installed-service proof.
+
+At that earlier checkpoint, six independent project conversations were guarded-paired between the development registry and Wake. The original CatDesk, Wake2 and Portfolio pairs were unchanged; BYOVD and Bug Bounty were added with matching generation-1 readbacks, followed by the controlled `catdesk-rollover-canary` at initial generation 1. Their native Codex sessions and project checkouts were not taken over (`nativeSessionAction:NONE`). The five original project events each reached durable `SENT`, `EXACT_USER_MESSAGE_APPENDED` and response timer `COMPLETE`. The CatDesk, Wake2 and Portfolio markers/answers plus Bug Bounty's answer were observed through the browser UI. BYOVD has the durable receipt/timer, but its UI content was not separately verified because that refresh failed to render. Portfolio's transient `ATTENTION` cleared through the existing read-only probe without resend or a source change. The canary's ordinary initial event separately reached verified exact `SENT`; its multiline input file was normalized by enqueue, so this is not raw multiline browser-entry proof. These are delivery and response observations, not independent verification that all requested project work was completed.
+
+Read-only context estimates recorded CatDesk 247 initially and 1,007 after handoff, Wake2 238, BYOVD 565, Portfolio 526 and Bug Bounty 709 visible tokens across four messages, each with incomplete history coverage. CatDesk's prior explicit test policy (32,768-token budget, 32,568-token headroom, 8,000-token unknown-history reserve) deliberately made a 200-token test trigger `nearCapacity:true`; its automatic rollover trigger is now disabled. The low 200-token automatic policy is enabled only for the controlled canary. Neither signal proves natural capacity pressure or complete transcript capture.
+
+The CatDesk autonomous handoff event reached durable `SENT`/`COMPLETE`, and the collected handoff reached rollover `PREPARED`. The first live attempt ended `ATTENTION` / `BOOTSTRAP_HOME_DRIFT` at Unix time 1792323858 before the parent's `SUBMITTING` checkpoint, with a null receipt. Read-only browser inspection then found an unpaired orphan chat with multiple USER turns containing fragments of the multiline handoff: `cdp.press_keys` treated newlines as Enter during text entry. `PREPARED` and a null receipt did not establish that no browser effect occurred. The supported exact-intent/observed-URL quarantine has now been applied to the old CatDesk intent: its current phase is `QUARANTINED`, preserving the orphan, source target and collected handoff and preventing replay without changing the original guarded pair. No complete bootstrap, guarded pair update or continuation is verified. CatDesk's automatic rollover trigger remains disabled, while the separate canary uses the low test threshold; no native project goal was paused. The update-package command succeeded with the same isolated profile and requires the same four source files for an interrupted retry. Source verification passed 42 focused root Web tests, four quarantine tests, five development CLI tests, strict root Clippy/build, 45 focused Python text-entry tests, and four Wake package update tests with strict Clippy. Earlier sandbox fixture failures passed when rerun outside the sandbox. A genuine replacement rollover remains pending. Portfolio later reached observer `OBSERVED`, so read-side observation still progressed. Do not retry the quarantined bootstrap or infer full rollover from the earlier completed handoff. Central provider tool routing remains unaccepted after the prior 429/catalog limit; installed release/Wake, exact-source remote CI and the full October MVP remain open. **Overall: `PARTIAL`.**
+
+The following October 18 sections preserve earlier checkpoint wording. Their login-pending, three-paired, build-pending and no-delivery statements were superseded by this live checkpoint; their source-only and safety limits still apply.
+
+## Earlier October 18 HTTP work routing and five-project companion setup (historical checkpoint; PARTIAL)
 
 The existing three-project fixture now exercises an actual authenticated
 loopback MCP listener. One project's request, exact retry, conflict refusal,

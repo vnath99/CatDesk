@@ -53,6 +53,9 @@ pub mod development_runtime {
     pub fn prepare(_: &Path, _: &Path, _: &Path) -> Result<Value> {
         Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
     }
+    pub fn update_package(_: &Path, _: &Path) -> Result<Value> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
     pub fn root_for_workspace(_: &Path) -> Result<Option<PathBuf>> {
         Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
     }
@@ -66,6 +69,12 @@ pub mod development_runtime {
         Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
     }
     pub fn run_foreground(_: &Path) -> Result<Value> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
+    pub fn run_foreground_bounded(_: &Path, _: u64) -> Result<Value> {
+        Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
+    }
+    pub fn run_foreground_host(_: &Path) -> Result<()> {
         Err("DEV_RUNTIME_PLATFORM_UNSUPPORTED".into())
     }
     pub fn login(_: &Path, _: &str) -> Result<Value> {

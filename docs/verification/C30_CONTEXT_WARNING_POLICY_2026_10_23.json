@@ -1,0 +1,95 @@
+{
+  "recordedUtc": "2026-10-23T13:14:28.9740451Z",
+  "localDate": "2026-10-23",
+  "task": "C30-INDEPENDENT-PROJECT-CONTEXT-WARNING",
+  "classification": "SOURCE_TESTED_LOCAL_NOT_SELECTED_OR_INSTALLED",
+  "baseCommit": "164cd2ebe673c6e472f195c95d121efc39b15e21",
+  "sourceFiles": [
+    {
+      "path": "src/web_conversation_context.rs",
+      "sha256": "b460fad74a528629a511b0616d4d62648eb775cbe71d9ac7b35226319989665c"
+    },
+    {
+      "path": "src/web_context_control.rs",
+      "sha256": "dadce083e8fd2ac5d2e8d391faa5c287d04a41e1c7582ed94ab7bf86f9688870"
+    },
+    {
+      "path": "src/binagotchy_cli.rs",
+      "sha256": "50e3312989fa6aac3a6e698795bb42c8255ae8c2e5289a9a4ccfee0aa726196f"
+    },
+    {
+      "path": "src/operator_web_auto.rs",
+      "sha256": "ad06ef867b1dc2919c89df91b88e621353529e42d6809888e7c5e975b8293d43"
+    },
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "6192fb00021a83b603b4fab88883f8cabffdec114f48ba201eaa1fc927618550"
+    }
+  ],
+  "implementation": {
+    "statusFields": [
+      "warningTokens",
+      "warningReached"
+    ],
+    "existingAutomaticFlagsUnchanged": true,
+    "centralView": "CURRENT_PAIRED_GENERATION_ONLY_ADVISORY",
+    "warningDoesNotAuthorizeRollover": true,
+    "omittedOrNullDefault": "MAX_ONE_OR_FLOOR_80_PERCENT_OF_ROLLOVER_TRIGGER",
+    "allowedRange": "1_THROUGH_ROLLOVER_TRIGGER",
+    "policyField": "warningThresholdTokens",
+    "defaultRolloverTriggerTokens": 72000,
+    "optional": true,
+    "unknownCoveragePreserved": true,
+    "rolloverTrigger": "CONFIGURED_BUDGET_MINUS_SAFETY_HEADROOM",
+    "defaultWarningTokens": 57600,
+    "legacyOmissionPreserved": true
+  },
+  "tests": {
+    "browserActions": 0,
+    "finishedUtc": "2026-10-23T13:09:28.8893857Z",
+    "newTests": 4,
+    "startedUtc": "2026-10-23T13:08:09.7334796Z",
+    "suites": [
+      {
+        "passed": 20,
+        "logSha256": "b4341d42ae657d15ec18ce493cee72228b897c97d95e73e19eb360c44a388061",
+        "label": "context-policy-warning-and-ledger"
+      },
+      {
+        "passed": 5,
+        "logSha256": "0f143dee82fb2f04ca69b5120bb8fe589d045a92342edbfca81af2e95abc9f3d",
+        "label": "context-controls"
+      },
+      {
+        "passed": 7,
+        "logSha256": "fd609a2b0687e8ce92639ea61c7391ed74f7bcfaa3cee33515cf6d754e14ec3f",
+        "label": "central-web-status"
+      },
+      {
+        "passed": 16,
+        "logSha256": "50e25a52cab73360f46dde35acb78e9667a110bab61ba963112f15e590ad3fb9",
+        "label": "automatic-driver-regression"
+      },
+      {
+        "passed": 44,
+        "logSha256": "f8a6312deffeb72ffbbf6636d8cf5b75d63d4ed917aaac3c3e56a51ef9a3cd34",
+        "label": "rollover-policy-regression"
+      }
+    ],
+    "runtimeChanges": 0,
+    "strictRootAllTargetsAllFeaturesClippy": "PASS",
+    "distinctTests": 92,
+    "format": "PASS",
+    "maximumSeconds": 600
+  },
+  "acceptance": {
+    "protectedInstalled": "NOT_ACCEPTED",
+    "selectedDevelopment": "NOT_UPDATED",
+    "source": "PASS",
+    "normalExecutable": "NOT_BUILT_THIS_STAGE",
+    "unattended": "NOT_ACTIVATED",
+    "liveWarningThreshold": "NOT_QUALIFIED",
+    "milestone": "PARTIAL"
+  },
+  "nextExecutableTask": "Qualify normal artifacts and selected development warning controls after resolving the bounded monitor authority diagnostic; preserve current selected v54 until reviewed update."
+}

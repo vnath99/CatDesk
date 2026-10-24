@@ -1,0 +1,70 @@
+{
+  "recordedUtc": "2026-10-23T08:59:42.9239300Z",
+  "localDate": "2026-10-23",
+  "task": "C20-PROVISIONAL-NEW-CHAT-URL",
+  "classification": "SOURCE_TESTED_LOCAL_NO_NEW_BROWSER",
+  "baseCommit": "7175ccc6803ef4859a7566a5a15d6bf5323b1111",
+  "branch": "codex/web-rollover-oct17",
+  "sourceFiles": [
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256": "c41e5d2eb1c697fdd6d820725e3899edc2a11dba4e28dfe34f74b8cf47c0a255"
+    },
+    {
+      "path": "wake/tests/test_new_conversation.py",
+      "sha256": "c544b9b2370c840d9b56726c47d8432be2c5a84d4fa6de7eac82a60ef09cdae3"
+    }
+  ],
+  "implementation": {
+    "latchedDestinationCanRevertToProvisional": false,
+    "noBlindResend": true,
+    "provisionalUrlAcceptedAsAuthority": false,
+    "observedProvisionalRouteWaitOnly": true,
+    "canonicalValidatorChanged": false,
+    "allOtherInvalidUrlsRefuse": true,
+    "existingDeadlinePreserved": true
+  },
+  "tests": {
+    "currentDom": 20,
+    "newCases": 3,
+    "adapterAndBootstrap": 69,
+    "affectedTestsPassed": 89,
+    "maximumSeconds": 180,
+    "ci": "UNVERIFIED",
+    "checks": [
+      {
+        "finishedUtc": "2026-10-23T08:58:31.4533061Z",
+        "exitCode": 0,
+        "startedUtc": "2026-10-23T08:58:27.8934234Z",
+        "logSha256": "63bbeafad9a1e3e057f440b8bbb905bba43af6cb5135f1e633e39ee7cf01bbdf",
+        "label": "affected-current-dom"
+      },
+      {
+        "finishedUtc": "2026-10-23T08:58:32.7680945Z",
+        "exitCode": 0,
+        "startedUtc": "2026-10-23T08:58:31.4707077Z",
+        "logSha256": "17c7bb0816a502be693532aeaf63763113c75507348387e4224a9566d5420723",
+        "label": "independent-wake-adapter-bootstrap"
+      }
+    ],
+    "priorC19BridgeSuite208": "RETAINED_UNCHANGED_ORDINARY_WAKE_CALLS"
+  },
+  "external": {
+    "newBrowserActions": 0,
+    "newConnectorCalls": 0,
+    "bindingsChanged": false,
+    "wakeHostWorkerStarts": 0,
+    "selectedPackageChanged": false,
+    "newSendCalls": 0,
+    "recurringStarts": 0,
+    "productionChanged": false,
+    "nativeChatActions": 0
+  },
+  "acceptance": {
+    "actualGHI": "OPEN_TWO_SOURCE_CHATS_VERIFIED_NOT_REGISTERED",
+    "selectedRuntime": "C17_V52_STOPPED_WITHOUT_C18_C19_C20",
+    "liveProvisionalWait": "NOT_YET_QUALIFIED",
+    "milestone": "PARTIAL"
+  },
+  "nextTask": "Build and qualify one matched development package containing C18-C20; reuse exact unchanged host proof. Register isolated verified sources using supported paired operations before fresh simultaneous rollover/recovery."
+}

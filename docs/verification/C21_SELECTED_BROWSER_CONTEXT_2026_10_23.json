@@ -1,0 +1,235 @@
+{
+  "recordedUtc": "2026-10-23T09:20:06.8020941Z",
+  "localDate": "2026-10-23",
+  "task": "C21-SELECTED-BROWSER-FIXES-AND-PAIRED-SOURCE-CONTEXT",
+  "classification": "SELECTED_DEVELOPMENT_AND_ACTUAL_BOUNDED_BROWSER_CONTEXT",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "bf62b48945903e69ab02a7cf0e07f6a48b8feadb",
+  "sourceTree": "9c0492f23aaf6e945e18d88f7534c7228d75414e",
+  "sourceFiles": [
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "48e2720401bcd462b59c5d8969870faefae958d4b97c3e8f67a37c3aa82a0087"
+    },
+    {
+      "path": "src/project_mcp.rs",
+      "sha256": "e663b71f3fa3efd1d31ae2a11474f7de0a97a0096682220c5df1cfb1e4069f63"
+    },
+    {
+      "path": "src/main.rs",
+      "sha256": "eecf0517779b50a01ce806cce06441f26dab0ea1cdf91ac9cac1311be2caa6c2"
+    },
+    {
+      "path": "src/project_mcp_task.rs",
+      "sha256": "5f6146e7f134d2eedf723f3c4423f29571166be7e7af2d7a4ecbeab57f8a04fe"
+    },
+    {
+      "path": "src/project_task_command.rs",
+      "sha256": "5a82b4eddf495098ef85d94cc8c2a192f33a3423e8200a21aaf1c37de1d16c2b"
+    },
+    {
+      "path": "scripts/wake_bridge.py",
+      "sha256": "c41e5d2eb1c697fdd6d820725e3899edc2a11dba4e28dfe34f74b8cf47c0a255"
+    },
+    {
+      "path": "wake/tests/test_new_conversation.py",
+      "sha256": "c544b9b2370c840d9b56726c47d8432be2c5a84d4fa6de7eac82a60ef09cdae3"
+    },
+    {
+      "path": "tests/test_wake_bridge.py",
+      "sha256": "bebd6d8fb4b6a6e3ea2a17944c82e6dfdc967dfa6c5b0d8683375abb4cc8b02c"
+    },
+    {
+      "path": "tests/test_wake_bridge_current_dom.py",
+      "sha256": "6e730dfc30ed0ff73a5913f372369d77540db9c4759a54ba6b767a7e96fd973e"
+    }
+  ],
+  "build": {
+    "normalHost": "PASS_DEFAULT_FEATURES_NO_TEST_SUPPORT",
+    "hostGate": "NEW_EXACT_IMAGE_REFUSES_WITHOUT_OWNER_NO_RUNTIME_STATE",
+    "priorRustSourceProof": "RETAINED_UNCHANGED_C14_C16",
+    "hostGateExitCode": 1,
+    "hostWorkerStarted": false,
+    "maximumAppSeconds": 600,
+    "finishedUtc": "2026-10-23T09:07:52.6776926Z",
+    "startedUtc": "2026-10-23T09:01:21.2919843Z",
+    "normalApp": "PASS_RELEASE_NO_DEV_DEPENDENCIES",
+    "files": [
+      {
+        "name": "CatDeskBinagotchy.exe",
+        "sha256": "62d9c21208fe99f6965548326e70a92c2eb0a3f614a5812250daf7f343c149e5",
+        "bytes": 34001920
+      },
+      {
+        "name": "CatDeskWakeHost.exe",
+        "sha256": "7a6fc23e62c4187f6a5888cc2459a246f592d77c711797d393fb5da345ded99b",
+        "bytes": 2036224
+      },
+      {
+        "name": "adapter.py",
+        "sha256": "f742b36270dc10f34c47982d3f9fe811386f29d92b3eeb20ffb4d21cc551bdfb",
+        "bytes": 46664
+      },
+      {
+        "name": "wake_bridge.py",
+        "sha256": "c41e5d2eb1c697fdd6d820725e3899edc2a11dba4e28dfe34f74b8cf47c0a255",
+        "bytes": 159893
+      }
+    ],
+    "priorPythonProof": "C19_208_AND_C20_89_RETAINED_NOT_RERUN"
+  },
+  "selection": {
+    "atUtc": "2026-10-23T09:09:08.9344432Z",
+    "elapsedSeconds": 4.034995,
+    "oldPackagePreserved": true,
+    "statusViewPassed": true,
+    "selectedPackage": "1.0.0-dev.85-69e6ba62417255411269b645ea7b55afdc6451795c99b4414b21eddeb1206a69",
+    "productionChanged": false,
+    "newStateRecords": 0,
+    "controls": "BOTH_STOPPED",
+    "previousPackage": "1.0.0-dev.85-f963455250991eadf64fd62ec5ade08d56c0fab36bf452c6d9f93c5802539e93",
+    "originalFivePairsPreserved": true,
+    "recordsChecked": 139,
+    "unchangedOtherRecords": 137,
+    "intendedPointerChanges": 2
+  },
+  "sourceReads": [
+    {
+      "changedRecords": 0,
+      "independentFreshDocument": true,
+      "role": "alpha",
+      "recordsChecked": 139,
+      "exactUserAndAssistant": true,
+      "messagesSent": 0,
+      "startedUtc": "2026-10-23T09:09:20.1963871Z",
+      "finishedUtc": "2026-10-23T09:09:34.0849012Z"
+    },
+    {
+      "changedRecords": 0,
+      "independentFreshDocument": true,
+      "role": "beta",
+      "recordsChecked": 139,
+      "exactUserAndAssistant": true,
+      "messagesSent": 0,
+      "startedUtc": "2026-10-23T09:10:22.1306003Z",
+      "finishedUtc": "2026-10-23T09:10:35.5605198Z"
+    }
+  ],
+  "registration": {
+    "distinctVerifiedConversationUrls": true,
+    "newTargetGeneration": 1,
+    "nativeThreadAssigned": false,
+    "recordsChecked": 139,
+    "totalProjects": 9,
+    "method": "SUPPORTED_PROJECT_REGISTER_AND_GUARDED_PAIRED_BIND",
+    "distinctWorkspaces": true,
+    "originalSevenEntriesAndWakeHistoryPreserved": true,
+    "ownedProcesses": 0,
+    "messagesSent": 0,
+    "startedUtc": "2026-10-23T09:12:47.8474689Z",
+    "unexpectedChanges": 0,
+    "newProjects": 2,
+    "intendedRegistryAndWakeConfigChanges": 2,
+    "finishedUtc": "2026-10-23T09:12:49.9306295Z"
+  },
+  "contextCaptures": [
+    {
+      "role": "alpha",
+      "targetGeneration": 1,
+      "browserBindingVerified": true,
+      "ownedProcesses": 0,
+      "assessment": "UNKNOWN_OR_INCOMPLETE",
+      "recordedMessages": 2,
+      "startedUtc": "2026-10-23T09:14:27.3103098Z",
+      "initialHistoryGap": true,
+      "coverageKnown": false,
+      "newContextRecords": 2,
+      "observedEstimateTokens": 132,
+      "advisory": true,
+      "automaticObservationEnabled": false,
+      "messagesSent": 0,
+      "recordedEvents": 2,
+      "finishedUtc": "2026-10-23T09:15:04.5405925Z",
+      "changedExistingRecords": 0,
+      "maximumSeconds": 180,
+      "uncertainMessages": 0,
+      "automaticRolloverEnabled": false
+    },
+    {
+      "role": "beta",
+      "targetGeneration": 1,
+      "browserBindingVerified": true,
+      "ownedProcesses": 0,
+      "assessment": "UNKNOWN_OR_INCOMPLETE",
+      "recordedMessages": 2,
+      "startedUtc": "2026-10-23T09:15:58.0001093Z",
+      "initialHistoryGap": true,
+      "coverageKnown": false,
+      "newContextRecords": 2,
+      "observedEstimateTokens": 137,
+      "advisory": true,
+      "automaticObservationEnabled": false,
+      "messagesSent": 0,
+      "recordedEvents": 2,
+      "finishedUtc": "2026-10-23T09:16:34.8340825Z",
+      "changedExistingRecords": 0,
+      "maximumSeconds": 180,
+      "uncertainMessages": 0,
+      "automaticRolloverEnabled": false
+    }
+  ],
+  "freshProcessReadback": {
+    "changedRecords": 0,
+    "independentObservedTokens": [
+      132,
+      137
+    ],
+    "recordsChecked": 143,
+    "pendingRolloverRestartProved": false,
+    "ownedProcesses": 0,
+    "pairedProjects": 9,
+    "startedUtc": "2026-10-23T09:18:35.4669335Z",
+    "finishedUtc": "2026-10-23T09:18:38.1902054Z"
+  },
+  "auditHarness": {
+    "recovery": "PER_ROLE_POINTERS_RECONSTRUCTED_FROM_UNIQUE_SUCCESSFUL_IMMUTABLE_RECEIPTS",
+    "laterFreshReadback": "PASS",
+    "captureOrMessageReplayed": false,
+    "firstReadback": "ROLE_POINTER_OMITTED_NO_PRODUCT_COMMAND_ATTEMPTED"
+  },
+  "cleanup": {
+    "nativeChatActions": 0,
+    "sourceResends": 0,
+    "completedCanaryReplayed": false,
+    "originalFiveBindingsChanged": false,
+    "controls": "BOTH_STOPPED",
+    "wakeHostWorkerStarts": 0,
+    "newSendCalls": 0,
+    "ownedBrowserAndWakeProcesses": 0,
+    "recurringStarts": 0,
+    "productionChanged": false,
+    "allHandlesTerminal": true,
+    "unknownJournalsPreserved": true
+  },
+  "dependencies": {
+    "ci": "UNVERIFIED",
+    "latestRecordedConnectorUtc": "2026-10-23T07:53:32Z",
+    "latestRecordedConnectorHttpStatus": 429,
+    "tunnelOrSettingsChanged": false,
+    "connectorCallsThisStage": 0
+  },
+  "acceptance": {
+    "B": "OPEN_ACTUAL_WEB_MCP_CODING",
+    "unattended": "NOT_ACTIVATED",
+    "I": "REGISTRATION_CONTEXT_FRESH_PROCESS_PASS_PENDING_TRANSACTION_RESTART_OPEN",
+    "milestone": "PARTIAL",
+    "G": "OPEN_FRESH_SOURCES_NOW_REGISTERED",
+    "protectedInstalled": "NOT_ACCEPTED",
+    "C": "OPEN_ACTUAL_BLOCKED_WEB_SIBLING_PROGRESS",
+    "E": "TWO_NEW_ACTUAL_BOUND_BROWSER_CAPTURES_DURABLE_ADVISORY_ESTIMATES",
+    "J": "PASS_FOR_THIS_BOUNDED_STAGE",
+    "H": "OPEN_CRITICAL_ROLLOVER_PHASE_INTERRUPTION",
+    "A": "NINE_PAIRED_REGISTRATIONS_SELECTED_STATUS"
+  },
+  "nextTask": "Freeze two controlled project-specific handoffs and pressure policies, then exercise fresh simultaneous rollover requests through existing admission, guarded browser and paired commit. Use bounded monitored operations, preserve old targets until verification, and never replay unknown submissions."
+}

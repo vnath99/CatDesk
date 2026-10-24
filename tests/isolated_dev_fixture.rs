@@ -12,6 +12,71 @@ use tokio::{
 };
 
 #[tokio::test]
+async fn fixture_headless_deadline_exits_without_external_stop() {
+    let root = std::env::temp_dir().join(format!(
+        "catdesk-dev-fixture-deadline-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir(&root).unwrap();
+    let config = root.join("config.toml");
+    let child = Command::new(env!("CARGO_BIN_EXE_catdesk"))
+        .args([
+            "--headless-mcp",
+            "--isolated-dev-fixture",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "0",
+            "--workspace",
+            root.to_str().unwrap(),
+            "--config-path",
+            config.to_str().unwrap(),
+            "--mcp-path",
+            "/dev/mcp",
+            "--mode",
+            "computer",
+            "--tool-mode",
+            "read-only",
+            "--auth-token",
+            "catdesk-test-deadline-token-123456",
+            "--max-runtime-seconds",
+            "1",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let output = timeout(Duration::from_secs(15), child.wait_with_output())
+        .await
+        .expect("internal deadline must terminate this owner")
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let ready: Value = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .find(|value| value["status"] == "ready")
+        .expect("ready before deadline");
+    assert_eq!(ready["maximum_runtime_seconds"], 1);
+    assert!(!config.exists());
+    assert!(
+        reqwest::Client::new()
+            .get(ready["mcp_url"].as_str().unwrap())
+            .timeout(Duration::from_secs(2))
+            .send()
+            .await
+            .is_err(),
+        "listener must be gone"
+    );
+    std::fs::remove_dir(&root).unwrap();
+}
+
+#[tokio::test]
 async fn fixture_headless_mcp_has_only_authenticated_local_read_and_search() {
     let root = std::env::temp_dir().join(format!(
         "catdesk-dev-fixture-{}",

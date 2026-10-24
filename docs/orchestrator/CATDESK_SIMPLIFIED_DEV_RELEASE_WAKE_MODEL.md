@@ -1,3 +1,313 @@
+## October 24, 2026 — focused simplification and compatibility proposal
+
+This section supersedes the historical deployment plan below. The operator has
+requested a smaller release model. Protected installation and recovery actions
+remain separately authorized; this proposal grants no runtime activation.
+
+### Consolidate existing components incrementally
+
+| Existing component | Proposed disposition | Required compatibility condition |
+| --- | --- | --- |
+| Git branch history, exact source/build/test/review evidence | Keep GitHub as the source and development record. Bind immutable artifact manifests to exact commits and full hashes. | A commit or CI result alone does not authenticate unknown executable bytes. Preserve unverified CI labels. |
+| Development `versions/`, package manifests, `current.json`, workspace authority | Reuse this functioning nonprivileged runtime. Consolidate package-selection metadata behind its existing transaction, with current/previous verified release as the target model. | Existing schema-1 selections, profile, Python runtime, targets and journals must remain readable. No production root or tunnel access. |
+| `package-update-attempt.json` and staged immutable package | Reuse one selection/recovery journal. Remove dependence on the original build directory when completing an already validated staged update. | Revalidate exact workspace, package, pointer, authority and exclusive STOPPED ownership; unknown state remains held. First implementation below. |
+| `user_worker_release.rs` current/previous immutable manifests and atomic active state | Reuse this existing current/previous representation for the eventual stable worker cutover; do not create another competing version registry. | Keep existing protected admission intact until the composed startup, rollback and migration tests pass. |
+| Legacy canonical executable/sidecar and alternating LKG slots | Retain as compatibility inputs; stop treating them as the development runtime's release store. Retire their mutating role only after migration to a verified versioned release passes. | Preserve legacy bytes and receipts. `operational_verified` must not be relabeled as independently reviewed. |
+| Reviewed build, promotion and October 18 release-pair procedure | Consolidate operator presentation into one admitted-release transaction. Reuse existing review/build validators and the bounded reconstruction route where needed. | Do not introduce a parallel trust framework or bypass existing protected policy. The current divergent production pair still needs approved authority. |
+| Product-root signed installation / pending rotation | Keep only for the protected launcher/install boundary where required. Exclude it from ordinary source work, Wake URL updates and development-package selection. | Preserve existing signed artifacts and receipts; no rotation or protected cutover is authorized here. |
+| Independent Wake, guarded paired URL binding, native Codex and external Secure MCP | Keep their existing independent ownership and lifecycle. | No implicit Wake launch, native writer takeover, tunnel replacement or chat replay during release selection. |
+
+### Minimal end state and staged migration
+
+A release manifest should identify exact source commit, artifact hashes, tests,
+independent review and (separately) observed working health. Keep immutable current
+and one independently verified working predecessor. Reuse the existing atomic
+selection and journal; a folder's presence, newest timestamp or prior selection
+alone must not make it trusted rollback material. Public startup should choose a
+verified current release, or restore the verified predecessor after a bounded
+failure. If neither is eligible, return one clear reconstruction-required result.
+
+Reconstruction must bind one explicit operator-approved source/build candidate
+and preserve the divergent old pair and escrow. Use the existing reviewed-build /
+release-pair procedures; do not rewrite a fingerprint or require a newly invented
+signing/authority mechanism. Existing protected requirements apply only where the
+chosen production admission actually requires them.
+
+Migration order:
+
+1. Make the existing development selection recoverable from local immutable
+   artifacts without any privileged promotion or retained build-output directory.
+2. Add commit/review/health qualification and explicit current/previous selection
+   to the existing versioned model. Preserve older schema readers. Verify corrupt
+   current, valid predecessor, absent/corrupt predecessor, interrupted selection,
+   cold restart and normal startup before automatic fallback is enabled.
+3. Qualify the composed normal developer backend startup and rollback independently
+   of protected production. Retain bounded ownership and approved-resource scope.
+4. On an authorized production maintenance turn, admit a qualified version through
+   the existing reconstruction/cutover route. Prove process identity, protocol,
+   bindings and recovery. Only then retire redundant legacy writers; retain
+   historical readers and evidence for compatibility.
+
+No legacy mechanism is retired by the first increment. The October 27 historical
+plan remains the production compatibility path until a migration is qualified.
+No recurring process is enabled. Actual two-conversation Web coding remains the
+next live priority once the approved serving path is restored.
+
+### First independently eligible implementation
+
+`operator web-dev-runtime recover-package` takes no path, version or hash input.
+It finishes only an existing package-update journal against the already staged
+immutable package, using the same completion validator as `update-package`.
+This removes the unnecessary original-build-directory dependency and creates no
+second LKG store, new approval type or production authority. It never starts a
+host or browser. With no pending update, it validates the current stopped
+selection without changing its bytes. Unknown pointers, changed package bytes,
+active owners or incompatible state remain explicit refusals.
+
+This increment passed 17 development-runtime and 12 operator tests, both strict lint
+gates and formatting. It is source/fixture qualification, not current/previous
+health fallback, installed recovery or normal unattended acceptance. The existing
+selected development package and protected runtime are unchanged.
+
+### C102 normal executable qualification
+
+The exact C101 source also built as normal app/host release images. A bounded
+normal CLI test passed a real Windows pointer-first replacement failure and cold
+recovery with the build directory unavailable, using two genuine pinned packages.
+Nine commands exited naturally; profile/history and old package survived, with
+all real runtime/historical records unchanged and no browser/host launch.
+This advances command qualification only. Backend startup, independent working
+predecessor admission, automatic fallback and protected migration remain separate.
+See `docs/verification/C102_NORMAL_RELEASE_SELECTION_RECOVERY_2026_10_24.json`.
+
+### C103 existing versioned rollback correction
+
+The existing worker store no longer requires healthy current executable bytes
+before restoring its intact retained predecessor. Current manifest and predecessor
+validation, atomic selection, stale-request refusal and failed-image preservation
+remain. 18 source tests, strict Clippy and format pass. This corrects a storage
+primitive; working-health qualification and normal startup integration remain
+required. No protected release or automatic fallback was activated.
+See `docs/verification/C103_VERSIONED_ROLLBACK_CURRENT_IMAGE_FAILURE_2026_10_24.json`.
+
+### C104 local development evidence and predecessor retention
+
+Reuse `versions/<packageId>/verification.json` for immutable local operator-provided
+references to source commit, build evidence, review evidence and observed working
+health. Bind them to the exact package ID, manifest hash and artifact hashes.
+Recording does not execute those checks or grant production review authority.
+An identical replay is harmless; conflicting or mismatched records are refused.
+
+Keep the qualified predecessor in optional `previousVerifiedRelease` metadata in
+the existing `current.json`; its bytes remain bound by the unchanged authority.
+Reuse the same update journal. Do not introduce another release selector/store.
+Keep the last qualified predecessor across unqualified updates, while treating
+invalid predecessor metadata as ineligible rather than blocking healthy current
+operation. The legacy authority/manifest format remains unchanged. Existing Wake
+pointer readers accept extra metadata (source inspection); old binary readback
+still requires normal executable qualification. Legacy pending journals recover.
+Use the current controller for new updates and new-format pending journals:
+older controllers may refuse the pending journal or discard optional predecessor
+metadata during a later update. They are not the migration writer.
+
+The supported source command is:
+
+```text
+catdesk.exe operator web-dev-runtime record-verification --input-file evidence.json
+```
+
+Run in the already prepared development workspace while host/browser ownership is
+free and control is STOPPED. Input must be a plain file inside that workspace.
+Schema 1 fields are `packageId`, `manifestSha256`, `artifacts` (the four immutable
+package hashes), `sourceCommit` (40 lowercase hex), `buildEvidenceSha256`,
+`reviewEvidenceSha256`, `workingHealthEvidenceSha256` (64 lowercase hex each),
+and `workingHealthObservedUtc` (nonfuture Unix seconds), plus `schemaVersion: 1`.
+Evidence digests reference actual retained operator-reviewed records; merely
+inventing digest strings is not release qualification. Status labels these
+references `OPERATOR_RECORDED`, not independent automatic attestation.
+
+23 runtime tests and 13 operator tests, strict root/Wake Clippy and formats pass.
+Source fixture receipts are synthetic; no real release is newly qualified.
+Automatic predecessor restoration and composed normal backend startup remain
+the next integration, before any legacy writer retirement. The existing selected
+package and protected installation remain unchanged. Evidence:
+`docs/verification/C104_DEV_RELEASE_EVIDENCE_PREDECESSOR_2026_10_24.json`.
+
+### C105 predecessor restoration through the same selection journal
+
+The existing `recover-package` command now restores only the exact recorded
+predecessor when current package files are damaged or missing. Current manifest,
+pointer, Python and workspace identity remain strict. Predecessor evidence,
+manifest identity/hash and every artifact are revalidated. The optional restoration
+record lives in the same update journal; the authority and manifest formats stay
+unchanged. Legacy prepared package IDs are restored in place without repackaging.
+Failed current bytes/history are preserved and are not eligible for oscillation.
+
+With no valid predecessor, return `DEV_RELEASE_RECONSTRUCTION_REQUIRED_...` and
+preserve the selection. Use the existing operator-approved source reconstruction
+path; never invent a fingerprint. Recovery requires STOPPED/exclusive ownership
+and starts no host, browser or external transport. Older source descriptions that
+say this command only completes pending updates are superseded by this section.
+
+An expected old-code failure and 28 runtime plus 13 operator tests establish source
+behavior, including all four damaged/missing artifacts, three journal boundaries,
+ownership/metadata refusal, changed pending evidence/assets and no failed-version
+oscillation. Strict root/Wake lint and formats pass. Normal binary, actual process
+interruption, automatic backend startup and production migration remain separate
+qualification. No legacy writer is retired. Evidence:
+`docs/verification/C105_DEV_PREDECESSOR_RESTORATION_2026_10_24.json`.
+
+### C106 normal executable startup and recovery qualification
+
+The exact C105 source built as normal app/host release images. In a bounded
+22-second disposable test, both current and previous images served authenticated
+loopback MCP catalogs and exited naturally. The old normal binary read new pointer
+metadata. A real Windows sharing failure interrupted predecessor restoration;
+a fresh normal process completed it and the restored backend started. Profile,
+history, evidence and failed bytes were retained. Healthy replay was byte-stable;
+no predecessor produced reconstruction-required without selection mutation.
+
+Two harness path-limit failures remain recorded. A shorter disposable checkpoint
+root permits normal Windows process launch; the real selected app path is already
+below that limit and was not changed. All test-owned processes exited. Real state,
+bindings, protected artifacts and selected v76 remain unchanged. Health here is
+loopback MCP only, not independent external review, Wake or production acceptance.
+
+The explicit recovery command is normal-binary qualified. One supported bounded
+developer-backend start that executes the selected image and automatically restores
+on current-image failure remains the next source integration. No legacy writer
+is retired before that composed startup/migration qualifies. Evidence:
+`docs/verification/C106_NORMAL_BACKEND_PREDECESSOR_RECOVERY_2026_10_24.json`.
+
+### C107 one bounded selected-backend command
+
+Source implementation adds:
+
+```text
+catdesk.exe operator web-dev-runtime run-backend --max-runtime-seconds 180
+```
+
+Run in the prepared isolated development workspace with its existing approved
+process-scoped `CATDESK_MCP_AUTH_TOKEN`. The default active runtime is 180 seconds;
+explicit bounds are 1–900. The owner includes bounded readiness/shutdown grace.
+It emits validated `DEV_BACKEND_READY` with the loopback MCP URL and redacted auth
+metadata while active, then `FOREGROUND_BACKEND_EXITED` after exact tree cleanup.
+No recurring activation, tunnel, browser, Wake startup or authentication change.
+
+Reuse existing selection/recovery and the existing suspended-child Job owner.
+The exact selected app runs, including the restored predecessor after failed
+current files. A local backend lease protects one workspace's selection during
+its foreground lifetime; it does not serialize project tools or other workspaces.
+Healthy startup can coexist with Wake/browser ownership. Actual recovery retains
+the existing STOPPED/exclusive requirements. Read-only image/pointer/authority
+pins remain until owned-tree drain. Current controllers must perform future
+package mutations; older controllers do not honor this new backend lease.
+
+159 source tests, strict root/Wake lint and formats pass. Source tests do not
+establish normal command, actual automatic startup fallback or parent-exit proof.
+These are the next normal-release tests. Fallback when current bytes hash correctly
+but the backend fails before readiness remains a further source requirement.
+Existing selected/protected runtime and
+all project bindings remain unchanged; no legacy writer is retired. Evidence:
+`docs/verification/C107_BOUNDED_SELECTED_DEV_BACKEND_2026_10_24.json`.
+
+### C108 normal startup, file-failure fallback and parent-exit proof
+
+The C107 command is now built and normal-executable qualified in a disposable
+runtime. It started the exact selected app, served authenticated loopback MCP,
+rejected unauthorized requests and refused duplicate startup/package mutation
+without interrupting service. A current-file failure caused automatic restoration
+and actual execution of the exact recorded C105 predecessor. Existing C106 health
+evidence was reused; no redundant prior health experiment was needed.
+
+Two operators exited naturally. A third, still serving, was killed by exact parent
+handle without a tree-kill. Its retained child handle reached exit, the listener
+closed, and a cold command verified lease release with unchanged selection. All
+three child image paths/content hashes were independently checked. The monitored
+test took 19 seconds inside its 180-second bound. All real runtime/history records,
+bindings, selected v76 and protected artifacts remain unchanged, with no orphans.
+
+Normal file-failure fallback is qualified; valid-hash pre-ready startup failure
+fallback still needs one bounded source implementation and distinct test. No
+production or unattended operation is qualified, and no legacy mechanism is
+retired. Actual two-conversation Web coding remains the live priority after its
+approved serving dependencies return. Evidence:
+`docs/verification/C108_NORMAL_SELECTED_BACKEND_AUTORECOVERY_2026_10_24.json`.
+
+### C109 one bounded attempt after pre-ready startup failure
+
+Source now handles a selected package whose hashes validate but whose backend
+cannot start: after proven native spawn rejection with no child, or pre-ready
+timeout/EOF/exit and complete private-Job drain, restore only the exact recorded
+predecessor and attempt it once. The backend lease stays held across the same
+selection journal. A sealed private authority snapshot prevents display fields
+from retargeting rollback. Current metadata and all predecessor checks stay strict.
+
+After readiness or partial publication, never replace/retry the backend
+automatically. Unknown cleanup, scope/auth violations, unsafe output, busy Wake/
+browser ownership or absent/damaged predecessor also refuse. Failed bytes remain
+preserved, never a rollback target. Existing spawn API/messages and Job policy are
+retained; a typed failure result distinguishes no-child rejection from owner
+failures. Fallback metadata appears with the validated ready/result record.
+
+The old behavior was confirmed with the normal C107 executable. The new source
+passes 51 focused runtime/backend/owner tests, both strict lint gates and format.
+New normal fallback, failed-predecessor stop and after-ready refusal still need
+bounded executable qualification. C108 file-failure and owner-exit acceptance is
+preserved. Protected/unattended migration and real Web coding remain separate;
+no legacy mechanism is retired. Evidence:
+`docs/verification/C109_ONE_PRE_READY_BACKEND_FALLBACK_2026_10_24.json`.
+
+### C110 normal one-fallback qualification
+
+The C109 source is normal-release built and exercised in three disposable cases.
+The exact former failing package now restores and executes the recorded trusted
+predecessor. When a controlled shared configuration blocks both valid images
+before ready, one restoration occurs and the command exits with bounded failure.
+After a verified ready record, killing the exact owned child produces an error
+without replacement, replay or selector mutation. Ready image paths/hashes were
+verified by retained process handles; the failed pair's exact spawn count was not
+independently traced beyond source control flow and observed single restoration.
+
+A harness prefix-matching assertion stopped the first job despite correct negative
+behavior. Its record was retained; a bounded continuation parsed the real status,
+verified unchanged state and performed only the unfinished case. The successful
+fallback was not replayed. About 15 active seconds spanned two separately bounded
+jobs; no process remained during the diagnostic gap. Real v76, every paired target,
+profile/task journal, historical artifact and protected installation stayed intact.
+
+Next, inspect existing v76 evidence and the supported stopped-development selector.
+If qualification is exact, retain that package as the local working predecessor,
+select the new qualified source in the isolated dev runtime and perform one bounded
+normal MCP qualification. This is independent of protected production admission or
+external Secure MCP ownership. No legacy mechanism is retired or recurring process
+enabled. Actual two-conversation Web coding remains the live priority once its
+approved serving dependencies return. Evidence:
+`docs/verification/C110_NORMAL_PRE_READY_FALLBACK_2026_10_24.json`.
+
+### C111 existing development migration completed
+
+The current/previous model now operates in the existing isolated development root.
+The normal C109 package is selected, and v76 is retained with exact build/review
+and freshly observed MCP health references. Current v77 received its own write-once
+record only after actual selected-image MCP health passed. Both used the existing
+selection journal and schema-compatible metadata; no competing registry or launcher
+was introduced. The actual normal backend exited naturally in each bounded test.
+
+Ten paired target tuples, the five-project central view, 304 unmodified runtime
+records and 55 historical files were verified. Only the authority/selection pair
+changed, with both baseline generations preserved. Browser/Wake stayed stopped,
+profiles and native sessions were untouched. These local development records do
+not create production review authority or retire the legacy canonical writers.
+The worker release store remains a storage primitive for the separate worker role;
+it must not be presented as an already composed canonical daemon startup mechanism.
+
+The next production boundary remains the October 27 existing-authority plan.
+Admission must preserve existing signed/legacy artifacts and pass actual composed
+startup/recovery before any old writer is retired. Once the serving dependencies
+return, actual two-conversation Web coding takes priority over more synthetic demos.
+Evidence: `docs/verification/C111_SELECTED_DEVELOPMENT_CURRENT_PREVIOUS_HEALTH_2026_10_24.json`.
+
 # T-0476 — CatDesk fast development, safe Wake recovery and simple production releases
 
 ## CURRENT 2026-10-11 — Chat52 three-lane development and recovery status (supersedes history below)

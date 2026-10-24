@@ -247,6 +247,22 @@ mod windows {
         }
     }
 
+    pub(crate) enum SpawnFailure {
+        /// Command::spawn returned an error: no Child was handed to the owner.
+        NoChildCreated,
+        /// Ownership/setup failure is not authority to launch another image.
+        Owner(String),
+    }
+
+    impl SpawnFailure {
+        fn message(self) -> String {
+            match self {
+                Self::NoChildCreated => "reviewed candidate child spawn failed".into(),
+                Self::Owner(message) => message,
+            }
+        }
+    }
+
     pub(crate) struct OwnedCandidateChild {
         child: Option<Child>,
         // Initially kill-on-close; after disarm, explicit termination remains
@@ -258,28 +274,32 @@ mod windows {
 
     impl OwnedCandidateChild {
         pub(crate) fn spawn(command: &mut Command) -> Result<Self, String> {
-            let job = KillOnCloseJob::create()?;
+            Self::spawn_classified(command).map_err(SpawnFailure::message)
+        }
+
+        pub(crate) fn spawn_classified(command: &mut Command) -> Result<Self, SpawnFailure> {
+            let job = KillOnCloseJob::create().map_err(SpawnFailure::Owner)?;
             // Keep console Ctrl+C on the parent so its bounded stdin stop
             // controls the child's graceful journal/root retirement.
             command.creation_flags(CREATE_SUSPENDED | CREATE_NEW_PROCESS_GROUP);
-            let mut child = command
-                .spawn()
-                .map_err(|_| "reviewed candidate child spawn failed")?;
+            let mut child = command.spawn().map_err(|_| SpawnFailure::NoChildCreated)?;
             if let Err(error) = job.assign(&child) {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err(error);
+                return Err(SpawnFailure::Owner(error));
             }
             if unsafe { NtResumeProcess(child.as_raw_handle().cast()) } < 0 {
                 drop(job);
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err("reviewed candidate child resume failed".into());
+                return Err(SpawnFailure::Owner(
+                    "reviewed candidate child resume failed".into(),
+                ));
             }
             if let Err(error) = job.contains(&child) {
                 let _ = job.terminate();
                 let _ = child.wait();
-                return Err(error);
+                return Err(SpawnFailure::Owner(error));
             }
             Ok(Self {
                 child: Some(child),
@@ -471,6 +491,23 @@ mod windows {
             fn WaitForSingleObject(handle: *mut std::ffi::c_void, timeout_ms: u32) -> u32;
             fn TerminateProcess(handle: *mut std::ffi::c_void, exit_code: u32) -> i32;
             fn CloseHandle(handle: *mut std::ffi::c_void) -> i32;
+        }
+
+        #[test]
+        fn classified_spawn_rejection_preserves_legacy_error_without_child() {
+            let missing =
+                std::env::temp_dir().join(format!("catdesk-missing-{}.exe", uuid::Uuid::new_v4()));
+            assert!(!missing.exists());
+            assert!(matches!(
+                OwnedCandidateChild::spawn_classified(&mut Command::new(&missing)),
+                Err(super::SpawnFailure::NoChildCreated)
+            ));
+            assert_eq!(
+                OwnedCandidateChild::spawn(&mut Command::new(&missing))
+                    .err()
+                    .unwrap(),
+                "reviewed candidate child spawn failed"
+            );
         }
 
         #[test]
@@ -757,4 +794,4 @@ mod windows {
 }
 
 #[cfg(windows)]
-pub(crate) use windows::OwnedCandidateChild;
+pub(crate) use windows::{OwnedCandidateChild, SpawnFailure};

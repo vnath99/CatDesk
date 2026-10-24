@@ -402,6 +402,9 @@ pub fn handle_tool(name: &str, args: Value, workspace: &Path) -> Result<Value, S
     if name == "autonomy_contract_validate" && is_capability_query(&args)? {
         return Ok(runtime_capability_manifest());
     }
+    if name == "autonomy_project_registry_read" {
+        return AutonomousSupervisorV1::project_registry_read(&workspace);
+    }
     let supervisor = AutonomousSupervisorV1::open(&workspace)?;
     match name {
         "autonomy_contract_create" => {
@@ -518,7 +521,6 @@ pub fn handle_tool(name: &str, args: Value, workspace: &Path) -> Result<Value, S
         "autonomy_review_inbox_ack" => {
             supervisor.ack_review_inbox(required_str(&args, "recordId")?)
         }
-        "autonomy_project_registry_read" => supervisor.project_registry_read(),
         "autonomy_project_registry_bind" => supervisor.project_registry_bind(&args),
         "autonomy_project_registry_preflight" => supervisor.project_registry_preflight(
             required_str(&args, "projectId")?,
@@ -670,17 +672,25 @@ impl AutonomousSupervisorV1 {
         GithubBootstrapStore::open(self.workspace.join(".catdesk").join("github-bootstrap"))
     }
 
-    fn project_registry_read(&self) -> Result<Value, String> {
-        let registry = self
-            .project_registry()?
-            .load_registry()
-            .map_err(|_| "project registry is unavailable".to_string())?;
-        Ok(json!({
+    fn project_registry_read(workspace: &Path) -> Result<Value, String> {
+        let registry =
+            AutonomousProjectRegistryStoreV1::open_read_only(workspace.join(".catdesk/projects"))
+                .map_err(|_| "project registry is unavailable".to_string())?
+                .load_registry()
+                .map_err(|_| "project registry is unavailable".to_string())?;
+        let mut response = json!({
             "schemaVersion": registry.schema_version,
             "maximumCodexWorkers": registry.maximum_codex_workers,
             "maximumQwenWorkers": registry.maximum_qwen_workers,
             "projects": registry.projects,
-        }))
+        });
+        // Keep completed registrations and predecessor links visible to the
+        // coordinator without reactivating them. Preserve the legacy shape
+        // when there is no archived project history.
+        if !registry.retired_projects.is_empty() {
+            response["retiredProjects"] = json!(registry.retired_projects);
+        }
+        Ok(response)
     }
 
     /// The app-server resolver remains the authority for observing a thread.
@@ -732,7 +742,11 @@ impl AutonomousSupervisorV1 {
         let registry = store
             .load_registry()
             .map_err(|_| "project registry is unavailable".to_string())?;
-        if registry.schema_version != PROJECT_REGISTRY_SCHEMA_VERSION {
+        if !matches!(
+            registry.schema_version,
+            PROJECT_REGISTRY_SCHEMA_VERSION
+                | super::autonomy_projects::PROJECT_REGISTRY_RETIREMENT_SCHEMA_VERSION
+        ) {
             return Err("project registry schema is unsupported".into());
         }
         if let Some(existing) = registry
@@ -3756,6 +3770,36 @@ pub(super) fn verified_external_git_workspace(
     Ok(workspace)
 }
 
+/// Fixed, bounded metadata for an operator-assigned Web task worktree. Reuses
+/// registration's trusted Git probe and environment policy, without Git writes.
+pub(crate) fn web_task_worktree_witness(
+    workspace: &Path,
+) -> Result<(PathBuf, PathBuf, String, String), String> {
+    let probe = |args| {
+        bounded_git_metadata(workspace, GitMetadataStage::TopLevel, args)
+            .map_err(|_| "PROJECT_TASK_GIT_UNAVAILABLE".to_string())
+    };
+    let common = workspace.join(probe(["rev-parse", "--git-common-dir"])?);
+    let directory = workspace.join(probe(["rev-parse", "--absolute-git-dir"])?);
+    let head = probe(["rev-parse", "HEAD"])?;
+    let branch = bounded_git_metadata(
+        workspace,
+        GitMetadataStage::TopLevel,
+        ["symbolic-ref", "--short", "HEAD"],
+    )
+    .map_err(|_| "PROJECT_TASK_BRANCH_UNAVAILABLE")?;
+    Ok((
+        common
+            .canonicalize()
+            .map_err(|_| "PROJECT_TASK_GIT_UNAVAILABLE")?,
+        directory
+            .canonicalize()
+            .map_err(|_| "PROJECT_TASK_GIT_UNAVAILABLE")?,
+        head,
+        branch,
+    ))
+}
+
 /// Shared, bounded Git-only metadata probe. It accepts only an absolute,
 /// non-reparse exact repository root and never writes registry or repository
 /// state. Registration reuses this exact root/origin observation before it
@@ -5115,6 +5159,81 @@ mod tests {
             "the exact typed artifact must remain a current reviewed completion output"
         );
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn project_registry_read_does_not_initialize_missing_state() {
+        let root = std::env::temp_dir().join(format!("catdesk-project-read-{}", Uuid::new_v4()));
+        std::fs::create_dir(&root).expect("workspace");
+        assert!(handle_tool("autonomy_project_registry_read", json!({}), &root).is_err());
+        assert!(!root.join(".catdesk").exists());
+        std::fs::remove_dir_all(&root).expect("fixture cleanup");
+    }
+
+    #[test]
+    fn project_registry_read_retains_completed_project_history_after_retirement() {
+        let root =
+            std::env::temp_dir().join(format!("registry-archive-read-{}", uuid::Uuid::new_v4()));
+        let store = AutonomousProjectRegistryStoreV1::open(root.join(".catdesk/projects")).unwrap();
+        store.initialize(1, 1).unwrap();
+        let mut rows = Vec::new();
+        for id in ["alpha", "beta"] {
+            let workspace = root.join(id);
+            fs::create_dir_all(&workspace).unwrap();
+            let project = AutonomousProjectV1 {
+                project_id: id.into(),
+                workspace: workspace.canonicalize().unwrap(),
+                git_identity: format!("https://example.test/{id}.git"),
+                verification_profile: "web_only_v1".into(),
+                codex_thread_id: None,
+                chatgpt_target_url: None,
+                chatgpt_target_sha256: None,
+                chatgpt_target_history: Vec::new(),
+            };
+            store.register_project(project.clone()).unwrap();
+            rows.push(project);
+        }
+        let legacy = handle_tool("autonomy_project_registry_read", json!({}), &root).unwrap();
+        assert_eq!(legacy["projects"].as_array().unwrap().len(), 2);
+        assert!(legacy.get("retiredProjects").is_none());
+        let current = "https://chatgpt.com/c/fixture-alpha-current";
+        store
+            .bind_project_chat_target("alpha", current, None)
+            .unwrap();
+        let successor = "https://chatgpt.com/c/fixture-alpha-successor";
+        let first = store.load_registry().unwrap().projects[0].clone();
+        store
+            .bind_project_chat_target("alpha", successor, first.chatgpt_target_sha256.as_deref())
+            .unwrap();
+        let observed = store.load_registry().unwrap().projects[0].clone();
+        let (retired, _) = store
+            .retire_web_project_after(&observed, "completed-alpha", 100, || Ok(()))
+            .unwrap();
+        assert_eq!(
+            retired.project.chatgpt_target_history,
+            vec![current.to_string()]
+        );
+        let registry_path = root.join(".catdesk/projects/projects.json");
+        let before = fs::read(&registry_path).unwrap();
+        drop(store);
+        // Each MCP read reopens the existing store, without recreating or
+        // reactivating the completed project's registration.
+        for _ in 0..2 {
+            let value = handle_tool("autonomy_project_registry_read", json!({}), &root).unwrap();
+            assert_eq!(value["schemaVersion"], 2);
+            assert_eq!(value["projects"], json!([rows[1]]));
+            assert_eq!(value["retiredProjects"], json!([retired]));
+            assert_eq!(
+                value["retiredProjects"][0]["project"]["chatgptTargetUrl"],
+                successor
+            );
+            assert_eq!(
+                value["retiredProjects"][0]["project"]["chatgptTargetHistory"],
+                json!([current])
+            );
+            assert_eq!(fs::read(&registry_path).unwrap(), before);
+        }
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

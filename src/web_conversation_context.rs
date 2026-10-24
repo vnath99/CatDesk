@@ -35,6 +35,10 @@ pub struct ContextPressurePolicy {
     pub configured_budget_tokens: u64,
     pub safety_headroom_tokens: u64,
     pub unknown_source_reserve_tokens: u64,
+    /// Early advisory warning, independently configurable below the rollover
+    /// trigger. Omission preserves legacy policy bytes and uses 80% of trigger.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning_threshold_tokens: Option<u64>,
     pub automatic_rollover_enabled: bool,
     /// Explicit consent for periodic browser reads when rollover is disabled.
     #[serde(default)]
@@ -51,6 +55,7 @@ impl Default for ContextPressurePolicy {
             configured_budget_tokens: 96_000,
             safety_headroom_tokens: 24_000,
             unknown_source_reserve_tokens: 8_000,
+            warning_threshold_tokens: None,
             automatic_rollover_enabled: false,
             automatic_observation_enabled: false,
             incomplete_history_rollover: false,
@@ -59,11 +64,14 @@ impl Default for ContextPressurePolicy {
 }
 
 impl ContextPressurePolicy {
-    fn validate(&self) -> Result<(), String> {
+    pub(crate) fn validate(&self) -> Result<(), String> {
         if self.configured_budget_tokens == 0
             || self.configured_budget_tokens > 2_000_000
             || self.safety_headroom_tokens >= self.configured_budget_tokens
             || self.unknown_source_reserve_tokens > self.configured_budget_tokens
+            || self
+                .warning_threshold_tokens
+                .is_some_and(|tokens| tokens == 0 || tokens > self.trigger_tokens())
         {
             return Err("WEB_CONTEXT_POLICY_INVALID".into());
         }
@@ -72,6 +80,11 @@ impl ContextPressurePolicy {
 
     pub fn trigger_tokens(&self) -> u64 {
         self.configured_budget_tokens - self.safety_headroom_tokens
+    }
+
+    pub fn warning_tokens(&self) -> u64 {
+        self.warning_threshold_tokens
+            .unwrap_or_else(|| (self.trigger_tokens() * 4 / 5).max(1))
     }
 }
 
@@ -109,15 +122,21 @@ pub enum VisibleSourceKind {
     AssistantMessage,
     ToolResult,
     ToolArguments,
+    WorkerMessage,
     Handoff,
     UnknownAttachment,
 }
 
 impl VisibleSourceKind {
-    fn counts_in_visible_pressure(self) -> bool {
+    fn counts_in_context_pressure(self) -> bool {
         matches!(
             self,
-            Self::UserMessage | Self::AssistantMessage | Self::ToolResult | Self::Handoff
+            Self::UserMessage
+                | Self::AssistantMessage
+                | Self::ToolResult
+                | Self::ToolArguments
+                | Self::WorkerMessage
+                | Self::Handoff
         )
     }
 }
@@ -146,6 +165,14 @@ struct EventMetadata {
     visible_bytes: Option<u64>,
     estimated_tokens: Option<u64>,
     observed_at_unix: u64,
+    /// Only the counted excerpt was observed, not the full message body.
+    /// Missing on older complete-text records; false stays byte-compatible.
+    #[serde(default, skip_serializing_if = "is_false")]
+    excerpt_only: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -177,6 +204,10 @@ fn observed_pressure_reason() -> String {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BrowserCoverageState {
     pub observed: bool,
+    /// Latest validated browser capture, even when deduplication adds no tokens.
+    /// This timestamp does not prove complete history or provider context size.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_observed_at_unix: Option<u64>,
     pub initial_history_gap: bool,
     pub identity_gap: bool,
     pub text_gap: bool,
@@ -185,6 +216,7 @@ pub struct BrowserCoverageState {
 
 #[derive(Clone, Copy, Debug)]
 pub struct BrowserCoverageObservation {
+    pub observed_at_unix: u64,
     pub initial_history_gap: bool,
     pub identity_gap: bool,
     pub text_gap: bool,
@@ -219,8 +251,21 @@ pub struct PressureStatus {
     pub target_sha256: String,
     pub is_current: bool,
     pub recorded_events: usize,
+    /// Local metadata capacity, not evidence of provider token consumption.
+    /// Derived from retained events; older/unsaturated status shapes stay valid.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub observation_limit_reached: bool,
+    /// Latest retained event observation timestamp, not a poll time, worker
+    /// heartbeat or verified wall clock. Exact-content retries keep their
+    /// original timestamp; each conversation is derived independently.
+    #[serde(default)]
+    pub last_observed_event_at_unix: Option<u64>,
+    #[serde(default)]
+    pub excerpt_only_messages: usize,
+    /// Deduplicated observed model-visible content, including structured tool
+    /// arguments and worker messages. The field name remains wire-compatible.
     pub visible_unique_tokens: u64,
-    /// Measured visible text only. Older unseen history has no finite bound.
+    /// Observed content only. Older unseen history has no finite bound.
     #[serde(default)]
     pub observed_estimate_tokens: u64,
     pub unknown_source_count: usize,
@@ -231,6 +276,11 @@ pub struct PressureStatus {
     pub safety_headroom_tokens: u64,
     pub trigger_tokens: u64,
     pub near_capacity: bool,
+    #[serde(default)]
+    pub warning_tokens: u64,
+    /// A threshold on observed content, not a claim about hidden context.
+    #[serde(default)]
+    pub warning_reached: bool,
     #[serde(default)]
     pub coverage_known: bool,
     #[serde(default)]
@@ -251,6 +301,8 @@ pub struct PressureStatus {
 #[derive(Clone, Debug)]
 pub struct WebContextStore {
     root: PathBuf,
+    read_only: bool,
+    nonblocking: bool,
 }
 
 impl WebContextStore {
@@ -262,7 +314,34 @@ impl WebContextStore {
             let path = root.join(child);
             checked_directory(&path, true)?;
         }
-        Ok(Self { root })
+        Ok(Self {
+            root,
+            read_only: false,
+            nonblocking: false,
+        })
+    }
+
+    /// Online requests and cancellable workers must not wait for a separate
+    /// ledger writer. Refuse contention so the caller can retry its stable
+    /// event later and the worker can unwind without abandoning its lease.
+    pub fn open_nonblocking(root: impl AsRef<Path>) -> Result<Self, String> {
+        let mut store = Self::open(root)?;
+        store.nonblocking = true;
+        Ok(store)
+    }
+
+    pub fn open_read_only(root: impl AsRef<Path>) -> Result<Self, String> {
+        let root = root.as_ref();
+        checked_directory(root, false)?;
+        let root = root.canonicalize().map_err(io_error)?;
+        for child in ["projects", "conversations"] {
+            checked_directory(&root.join(child), false)?;
+        }
+        Ok(Self {
+            root,
+            read_only: true,
+            nonblocking: true,
+        })
     }
 
     pub fn configure_policy(
@@ -325,8 +404,8 @@ impl WebContextStore {
         self.write_project(&project)
     }
 
-    /// Records only model-visible text supplied by the caller. Tool arguments
-    /// are retained as traffic metadata but excluded from context occupancy.
+    /// Records only model-visible text supplied by the caller, including
+    /// observed tool arguments. Transport totals are not silently attributed.
     pub fn record_observation(
         &self,
         key: &ConversationKey,
@@ -343,6 +422,62 @@ impl WebContextStore {
         self.record_event_locked(&project, &mut ledger, event)
     }
 
+    /// Validate and apply a bounded import in memory, then replace its one
+    /// conversation ledger once. A late invalid or conflicting revision cannot
+    /// leave an earlier event counted in a rejected batch.
+    pub(crate) fn record_observation_batch<'a>(
+        &self,
+        key: &ConversationKey,
+        observations: impl IntoIterator<Item = Observation<'a>>,
+    ) -> Result<PressureStatus, String> {
+        self.record_batch(key, observations, false)
+    }
+
+    /// Finish accounting for an already admitted project-connection call on
+    /// its original conversation, even if rollover completed during the call.
+    /// This cannot create, bind or reactivate a conversation. Ordinary caller
+    /// observations still require the active generation above.
+    pub(crate) fn record_existing_conversation_batch<'a>(
+        &self,
+        key: &ConversationKey,
+        observations: impl IntoIterator<Item = Observation<'a>>,
+    ) -> Result<PressureStatus, String> {
+        self.record_batch(key, observations, true)
+    }
+
+    fn record_batch<'a>(
+        &self,
+        key: &ConversationKey,
+        observations: impl IntoIterator<Item = Observation<'a>>,
+        allow_known_history: bool,
+    ) -> Result<PressureStatus, String> {
+        key.validate()?;
+        let events = observations
+            .into_iter()
+            .take(513)
+            .map(observation_metadata)
+            .collect::<Result<Vec<_>, _>>()?;
+        if events.is_empty() || events.len() > 512 {
+            return Err("WEB_CONTEXT_INPUT_SCOPE_INVALID".into());
+        }
+        let _lock = self.lock()?;
+        let project = self.read_project(&key.project_id)?;
+        if project.active.as_ref() != Some(key)
+            && !(allow_known_history && project.history.contains(key))
+        {
+            return Err("WEB_CONTEXT_OLD_GENERATION".into());
+        }
+        let mut ledger = self.read_ledger(key)?;
+        let mut changed = false;
+        for event in events {
+            changed |= apply_event(&mut ledger, event)?;
+        }
+        if changed {
+            self.write_ledger(&ledger)?;
+        }
+        Ok(pressure_status(&project, &ledger))
+    }
+
     /// Ingests a browser-visible snapshot with a stable event identity. The
     /// content hash determines whether the existing revision is replayed or
     /// advanced. This remains an advisory estimate; the caller must separately
@@ -355,6 +490,53 @@ impl WebContextStore {
         visible_text: Option<&str>,
         observed_at_unix: u64,
     ) -> Result<PressureStatus, String> {
+        self.record_browser_text(
+            key,
+            event_id,
+            source_kind,
+            visible_text,
+            observed_at_unix,
+            false,
+        )
+    }
+
+    /// Count actual text from a clipped, identified message body. The largest
+    /// excerpt proxy replaces smaller clipped samples of that same message;
+    /// samples are never added together. A later complete body supersedes it.
+    pub(crate) fn record_browser_excerpt_observation(
+        &self,
+        key: &ConversationKey,
+        event_id: &str,
+        source_kind: VisibleSourceKind,
+        visible_text: &str,
+        observed_at_unix: u64,
+    ) -> Result<PressureStatus, String> {
+        if !matches!(
+            source_kind,
+            VisibleSourceKind::UserMessage | VisibleSourceKind::AssistantMessage
+        ) || visible_text.trim().is_empty()
+        {
+            return Err("WEB_CONTEXT_EVENT_CONTENT_INVALID".into());
+        }
+        self.record_browser_text(
+            key,
+            event_id,
+            source_kind,
+            Some(visible_text),
+            observed_at_unix,
+            true,
+        )
+    }
+
+    fn record_browser_text(
+        &self,
+        key: &ConversationKey,
+        event_id: &str,
+        source_kind: VisibleSourceKind,
+        visible_text: Option<&str>,
+        observed_at_unix: u64,
+        excerpt_only: bool,
+    ) -> Result<PressureStatus, String> {
         key.validate()?;
         let mut event = observation_metadata(Observation {
             event_id,
@@ -364,6 +546,7 @@ impl WebContextStore {
             visible_text,
             observed_at_unix,
         })?;
+        event.excerpt_only = excerpt_only;
         let _lock = self.lock()?;
         let project = self.read_project(&key.project_id)?;
         if project.active.as_ref() != Some(key) {
@@ -378,9 +561,12 @@ impl WebContextStore {
             if previous.source_kind != source_kind || previous.dedup_key != event_id {
                 return Err("WEB_CONTEXT_EVENT_REVISION_CONFLICT".into());
             }
+            if excerpt_only && event.estimated_tokens <= previous.estimated_tokens {
+                return Ok(pressure_status(&project, &ledger));
+            }
             event.revision = if previous.content_sha256 == event.content_sha256
                 && previous.visible_bytes == event.visible_bytes
-                && previous.estimated_tokens == event.estimated_tokens
+                && previous.excerpt_only == event.excerpt_only
             {
                 previous.revision
             } else {
@@ -402,7 +588,7 @@ impl WebContextStore {
         observation: BrowserCoverageObservation,
     ) -> Result<PressureStatus, String> {
         key.validate()?;
-        if !observation.initial_history_gap {
+        if !observation.initial_history_gap || observation.observed_at_unix == 0 {
             return Err("WEB_CONTEXT_COVERAGE_UNPROVEN".into());
         }
         let _lock = self.lock()?;
@@ -414,6 +600,12 @@ impl WebContextStore {
         let coverage = &mut ledger.browser_coverage;
         let previous = coverage.clone();
         coverage.observed = true;
+        coverage.last_observed_at_unix = Some(
+            coverage
+                .last_observed_at_unix
+                .unwrap_or(0)
+                .max(observation.observed_at_unix),
+        );
         coverage.initial_history_gap = true;
         coverage.identity_gap |= observation.identity_gap;
         coverage.text_gap |= observation.text_gap;
@@ -432,33 +624,7 @@ impl WebContextStore {
         ledger: &mut ConversationLedger,
         event: EventMetadata,
     ) -> Result<PressureStatus, String> {
-        if let Some(previous) = ledger
-            .events
-            .iter_mut()
-            .find(|previous| previous.event_id == event.event_id)
-        {
-            if event.revision < previous.revision
-                || event.source_kind != previous.source_kind
-                || event.dedup_key != previous.dedup_key
-            {
-                return Err("WEB_CONTEXT_EVENT_REVISION_CONFLICT".into());
-            }
-            if event.revision == previous.revision {
-                if event.content_sha256 != previous.content_sha256
-                    || event.visible_bytes != previous.visible_bytes
-                    || event.estimated_tokens != previous.estimated_tokens
-                {
-                    return Err("WEB_CONTEXT_EVENT_REVISION_CONFLICT".into());
-                }
-            } else {
-                *previous = event;
-                self.write_ledger(ledger)?;
-            }
-        } else {
-            if ledger.events.len() >= MAX_EVENTS {
-                return Err("WEB_CONTEXT_EVENT_LIMIT".into());
-            }
-            ledger.events.push(event);
+        if apply_event(ledger, event)? {
             self.write_ledger(ledger)?;
         }
         Ok(pressure_status(project, ledger))
@@ -466,7 +632,7 @@ impl WebContextStore {
 
     pub fn pressure(&self, key: &ConversationKey) -> Result<PressureStatus, String> {
         key.validate()?;
-        let _lock = self.lock()?;
+        let _lock = self.read_lock()?;
         let project = self.read_project(&key.project_id)?;
         if !project.history.contains(key) {
             return Err("WEB_CONTEXT_TARGET_NOT_RECORDED".into());
@@ -474,9 +640,27 @@ impl WebContextStore {
         Ok(pressure_status(&project, &self.read_ledger(key)?))
     }
 
+    /// Read pressure and the durable one-time history guard together. This
+    /// advisory decision neither creates an intent nor proves quiescence;
+    /// request_rollover_if_due rechecks it before recording a request.
+    pub fn rollover_readiness(
+        &self,
+        key: &ConversationKey,
+    ) -> Result<(PressureStatus, bool), String> {
+        key.validate()?;
+        let _lock = self.read_lock()?;
+        let project = self.read_project(&key.project_id)?;
+        if !project.history.contains(key) {
+            return Err("WEB_CONTEXT_TARGET_NOT_RECORDED".into());
+        }
+        let status = pressure_status(&project, &self.read_ledger(key)?);
+        let due = self.rollover_due_locked(&project, &status)?;
+        Ok((status, due))
+    }
+
     pub fn project_history(&self, project_id: &str) -> Result<Vec<PressureStatus>, String> {
         valid_identifier(project_id)?;
-        let _lock = self.lock()?;
+        let _lock = self.read_lock()?;
         let project = self.read_project(project_id)?;
         project
             .history
@@ -492,8 +676,21 @@ impl WebContextStore {
     /// readback. `None` means the meter has no target, not that Wake is absent.
     pub fn active_key(&self, project_id: &str) -> Result<Option<ConversationKey>, String> {
         valid_identifier(project_id)?;
-        let _lock = self.lock()?;
+        let _lock = self.read_lock()?;
         Ok(self.read_project_or_default(project_id)?.active)
+    }
+
+    /// Read the active key and its pressure under one meter lock. A caller
+    /// deciding whether a rollover intent reserves the current conversation
+    /// must not combine two independently sampled generations.
+    pub fn active_pressure(&self, project_id: &str) -> Result<Option<PressureStatus>, String> {
+        valid_identifier(project_id)?;
+        let _lock = self.read_lock()?;
+        let project = self.read_project_or_default(project_id)?;
+        let Some(key) = project.active.as_ref() else {
+            return Ok(None);
+        };
+        Ok(Some(pressure_status(&project, &self.read_ledger(key)?)))
     }
 
     /// Creates at most one advisory request for this exact conversation. The
@@ -518,18 +715,7 @@ impl WebContextStore {
         }
         let mut ledger = self.read_ledger(key)?;
         let status = pressure_status(&project, &ledger);
-        let incomplete_history_guard_candidate = project.policy.incomplete_history_rollover
-            && status.browser_coverage.observed
-            && status.pressure_assessment == "UNKNOWN_OR_INCOMPLETE";
-        // One uncertainty-only rollover is enough to put the project on a
-        // fresh conversation. Repeating it on that fresh chat's first bounded
-        // excerpt would otherwise create an automatic rollover loop.
-        let incomplete_history_guard = incomplete_history_guard_candidate
-            && !self.predecessor_used_incomplete_history_guard(&project, key)?;
-        if !project.policy.automatic_rollover_enabled
-            || !(status.near_capacity || incomplete_history_guard)
-            || !quiescent
-        {
+        if !self.rollover_due_locked(&project, &status)? || !quiescent {
             return Ok(None);
         }
         if let Some(existing) = &ledger.rollover_intent {
@@ -562,6 +748,26 @@ impl WebContextStore {
         Ok(Some(intent))
     }
 
+    fn rollover_due_locked(
+        &self,
+        project: &ProjectState,
+        status: &PressureStatus,
+    ) -> Result<bool, String> {
+        if !status.is_current {
+            return Ok(false);
+        }
+        let incomplete_history_guard_candidate = project.policy.incomplete_history_rollover
+            && status.browser_coverage.observed
+            && status.pressure_assessment == "UNKNOWN_OR_INCOMPLETE";
+        // One uncertainty-only rollover is enough to put the project on a
+        // fresh conversation. Repeating it on that fresh chat's first bounded
+        // excerpt would otherwise create an automatic rollover loop.
+        let incomplete_history_guard = incomplete_history_guard_candidate
+            && !self.predecessor_used_incomplete_history_guard(project, &status.key)?;
+        Ok(project.policy.automatic_rollover_enabled
+            && (status.near_capacity || incomplete_history_guard))
+    }
+
     fn predecessor_used_incomplete_history_guard(
         &self,
         project: &ProjectState,
@@ -581,6 +787,9 @@ impl WebContextStore {
     }
 
     fn lock(&self) -> Result<File, String> {
+        if self.read_only {
+            return Err("WEB_CONTEXT_READ_ONLY".into());
+        }
         let path = self.root.join("ledger.lock");
         if let Ok(metadata) = fs::symlink_metadata(&path) {
             if !metadata.is_file() || redirected(&metadata) {
@@ -598,7 +807,32 @@ impl WebContextStore {
         if !metadata.is_file() || redirected(&metadata) {
             return Err("WEB_CONTEXT_LOCK_UNSAFE".into());
         }
-        file.lock().map_err(io_error)?;
+        if self.nonblocking {
+            file.try_lock().map_err(|error| match error {
+                std::fs::TryLockError::WouldBlock => "WEB_CONTEXT_BUSY".to_string(),
+                std::fs::TryLockError::Error(error) => io_error(error),
+            })?;
+        } else {
+            file.lock().map_err(io_error)?;
+        }
+        Ok(file)
+    }
+
+    fn read_lock(&self) -> Result<File, String> {
+        if !self.read_only {
+            return self.lock();
+        }
+        let path = self.root.join("ledger.lock");
+        let metadata = fs::symlink_metadata(&path).map_err(io_error)?;
+        if !metadata.is_file() || redirected(&metadata) {
+            return Err("WEB_CONTEXT_LOCK_UNSAFE".into());
+        }
+        let file = File::open(&path).map_err(io_error)?;
+        let metadata = fs::symlink_metadata(&path).map_err(io_error)?;
+        if !metadata.is_file() || redirected(&metadata) {
+            return Err("WEB_CONTEXT_LOCK_UNSAFE".into());
+        }
+        file.try_lock_shared().map_err(|_| "WEB_CONTEXT_BUSY")?;
         Ok(file)
     }
 
@@ -682,8 +916,10 @@ impl WebContextStore {
                 .iter()
                 .any(|event| !valid_event_metadata(event))
             || (ledger.browser_coverage.observed && !ledger.browser_coverage.initial_history_gap)
+            || ledger.browser_coverage.last_observed_at_unix == Some(0)
             || (!ledger.browser_coverage.observed
                 && (ledger.browser_coverage.initial_history_gap
+                    || ledger.browser_coverage.last_observed_at_unix.is_some()
                     || ledger.browser_coverage.identity_gap
                     || ledger.browser_coverage.text_gap
                     || ledger.browser_coverage.overflow_gap))
@@ -730,6 +966,44 @@ impl WebContextStore {
     }
 }
 
+pub(crate) fn validate_observation(observation: Observation<'_>) -> Result<(), String> {
+    observation_metadata(observation).map(|_| ())
+}
+
+fn apply_event(ledger: &mut ConversationLedger, event: EventMetadata) -> Result<bool, String> {
+    if let Some(previous) = ledger
+        .events
+        .iter_mut()
+        .find(|previous| previous.event_id == event.event_id)
+    {
+        if event.revision < previous.revision
+            || event.source_kind != previous.source_kind
+            || event.dedup_key != previous.dedup_key
+        {
+            return Err("WEB_CONTEXT_EVENT_REVISION_CONFLICT".into());
+        }
+        if event.revision == previous.revision {
+            if event.content_sha256 != previous.content_sha256
+                || event.visible_bytes != previous.visible_bytes
+                || event.excerpt_only != previous.excerpt_only
+            {
+                return Err("WEB_CONTEXT_EVENT_REVISION_CONFLICT".into());
+            }
+            // Tokenizer implementation changes must not turn an exact-content
+            // replay into a conflicting revision or rewrite legacy counts.
+            // The content digest/bytes and all identity fields still match.
+            return Ok(false);
+        }
+        *previous = event;
+    } else {
+        if ledger.events.len() >= MAX_EVENTS {
+            return Err("WEB_CONTEXT_EVENT_LIMIT".into());
+        }
+        ledger.events.push(event);
+    }
+    Ok(true)
+}
+
 fn observation_metadata(observation: Observation<'_>) -> Result<EventMetadata, String> {
     valid_identifier(observation.event_id)?;
     valid_identifier(observation.dedup_key)?;
@@ -758,6 +1032,7 @@ fn observation_metadata(observation: Observation<'_>) -> Result<EventMetadata, S
         visible_bytes,
         estimated_tokens,
         observed_at_unix: observation.observed_at_unix,
+        excerpt_only: false,
     })
 }
 
@@ -772,7 +1047,7 @@ fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> Press
             continue;
         }
         let tokens = event.estimated_tokens.unwrap_or(0);
-        if event.source_kind.counts_in_visible_pressure() {
+        if event.source_kind.counts_in_context_pressure() {
             let entry = visible.entry(&event.dedup_key).or_default();
             *entry = (*entry).max(tokens);
         }
@@ -809,6 +1084,17 @@ fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> Press
         target_sha256: ledger.key.target_sha256(),
         is_current: project.active.as_ref() == Some(&ledger.key),
         recorded_events: ledger.events.len(),
+        observation_limit_reached: ledger.events.len() >= MAX_EVENTS,
+        last_observed_event_at_unix: ledger
+            .events
+            .iter()
+            .map(|event| event.observed_at_unix)
+            .max(),
+        excerpt_only_messages: ledger
+            .events
+            .iter()
+            .filter(|event| event.excerpt_only)
+            .count(),
         visible_unique_tokens,
         observed_estimate_tokens: visible_unique_tokens,
         unknown_source_count: unknown.len(),
@@ -824,6 +1110,8 @@ fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> Press
         trigger_tokens: project.policy.trigger_tokens(),
         // A configured reserve is a proxy, not a bound on unseen history.
         near_capacity: visible_unique_tokens >= project.policy.trigger_tokens(),
+        warning_tokens: project.policy.warning_tokens(),
+        warning_reached: visible_unique_tokens >= project.policy.warning_tokens(),
         coverage_known,
         browser_coverage: ledger.browser_coverage.clone(),
         pressure_assessment: pressure_assessment.into(),
@@ -831,7 +1119,7 @@ fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> Press
         automatic_observation_enabled: project.policy.automatic_observation_enabled,
         incomplete_history_rollover: project.policy.incomplete_history_rollover,
         rollover_intent: ledger.rollover_intent.clone(),
-        estimate_method: "O200K_VISIBLE_TEXT_PROXY_WITH_CONFIGURED_UNKNOWN_RESERVE".into(),
+        estimate_method: "O200K_OBSERVED_CONTEXT_PROXY_WITH_CONFIGURED_UNKNOWN_RESERVE".into(),
         advisory: true,
         origin_authenticated: false,
     }
@@ -854,6 +1142,11 @@ fn valid_event_metadata(event: &EventMetadata) -> bool {
         && valid_identifier(&event.dedup_key).is_ok()
         && event.revision > 0
         && event.observed_at_unix > 0
+        && (!event.excerpt_only
+            || matches!(
+                event.source_kind,
+                VisibleSourceKind::UserMessage | VisibleSourceKind::AssistantMessage
+            ))
         && match event.source_kind {
             VisibleSourceKind::UnknownAttachment => {
                 event.content_sha256.is_none()
@@ -872,11 +1165,28 @@ fn valid_event_metadata(event: &EventMetadata) -> bool {
 }
 
 fn estimate_tokens(text: &str) -> u64 {
-    o200k_base_singleton()
-        .encode_with_special_tokens(text)
-        .len()
-        .try_into()
-        .unwrap_or(u64::MAX)
+    // BPE on a long, unbroken run can be quadratic. Keep each work unit small
+    // independently of the persisted event size. Summed pieces are an advisory
+    // proxy, not an exact provider count or a bound on hidden context.
+    const WORK_BYTES: usize = 256;
+    let tokenizer = o200k_base_singleton();
+    let mut remaining = text;
+    let mut tokens = 0u64;
+    while !remaining.is_empty() {
+        let mut length = remaining.len().min(WORK_BYTES);
+        while !remaining.is_char_boundary(length) {
+            length -= 1;
+        }
+        tokens = tokens.saturating_add(
+            tokenizer
+                .encode_with_special_tokens(&remaining[..length])
+                .len()
+                .try_into()
+                .unwrap_or(u64::MAX),
+        );
+        remaining = &remaining[length..];
+    }
+    tokens
 }
 
 fn sha256(bytes: &[u8]) -> String {
@@ -981,6 +1291,86 @@ fn write_atomic<T: Serialize>(path: &Path, value: &T, maximum: usize) -> Result<
 mod tests {
     use super::*;
 
+    #[test]
+    fn browser_capture_freshness_is_durable_scoped_and_legacy_unknown() {
+        let root = std::env::temp_dir().join(format!("web-freshness-{}", Uuid::new_v4()));
+        let store = WebContextStore::open(&root).unwrap();
+        let key = |project: &str, generation| ConversationKey {
+            project_id: project.into(),
+            conversation_url: format!("https://chatgpt.com/c/{project}-{generation}"),
+            target_generation: generation,
+        };
+        let alpha = key("alpha", 1);
+        let beta = key("beta", 1);
+        store.bind_observed_target(alpha.clone(), None).unwrap();
+        store.bind_observed_target(beta.clone(), None).unwrap();
+        let capture = |observed_at_unix| BrowserCoverageObservation {
+            observed_at_unix,
+            initial_history_gap: true,
+            identity_gap: false,
+            text_gap: false,
+            overflow_gap: false,
+        };
+        store.record_browser_coverage(&alpha, capture(20)).unwrap();
+        store.record_browser_coverage(&alpha, capture(10)).unwrap();
+        let reader = WebContextStore::open_read_only(&root).unwrap();
+        assert_eq!(
+            reader
+                .pressure(&alpha)
+                .unwrap()
+                .browser_coverage
+                .last_observed_at_unix,
+            Some(20)
+        );
+        assert_eq!(
+            reader
+                .pressure(&beta)
+                .unwrap()
+                .browser_coverage
+                .last_observed_at_unix,
+            None
+        );
+        let next = key("alpha", 2);
+        store
+            .bind_observed_target(next.clone(), Some(&alpha))
+            .unwrap();
+        assert_eq!(
+            reader
+                .pressure(&next)
+                .unwrap()
+                .browser_coverage
+                .last_observed_at_unix,
+            None
+        );
+        assert_eq!(
+            store
+                .record_browser_coverage(&alpha, capture(99))
+                .unwrap_err(),
+            "WEB_CONTEXT_OLD_GENERATION"
+        );
+        assert_eq!(
+            reader
+                .pressure(&alpha)
+                .unwrap()
+                .browser_coverage
+                .last_observed_at_unix,
+            Some(20)
+        );
+        // A pre-upgrade ledger retains unknown freshness; no timestamp is invented.
+        let path = store.ledger_path(&alpha);
+        let mut legacy: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        legacy["browserCoverage"]
+            .as_object_mut()
+            .unwrap()
+            .remove("lastObservedAtUnix");
+        fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+        let historical = reader.pressure(&alpha).unwrap();
+        assert_eq!(historical.browser_coverage.last_observed_at_unix, None);
+        assert!(!historical.coverage_known);
+        assert!(historical.browser_coverage.observed);
+    }
+
     struct Fixture {
         root: PathBuf,
         store: WebContextStore,
@@ -1041,6 +1431,326 @@ mod tests {
     }
 
     #[test]
+    fn event_activity_survives_cold_reads_without_poll_retry_or_cross_conversation_refresh() {
+        let fixture = Fixture::new("event-activity");
+        let alpha = Fixture::key("alpha", "activity-alpha", 1);
+        let beta = Fixture::key("beta", "activity-beta", 1);
+        for key in [&alpha, &beta] {
+            fixture
+                .store
+                .bind_observed_target(key.clone(), None)
+                .unwrap();
+        }
+        let observe = |key: &ConversationKey, id: &str, revision, text: &str, timestamp| {
+            fixture
+                .store
+                .record_observation(
+                    key,
+                    Observation {
+                        event_id: id,
+                        revision,
+                        dedup_key: id,
+                        source_kind: VisibleSourceKind::ToolArguments,
+                        visible_text: Some(text),
+                        observed_at_unix: timestamp,
+                    },
+                )
+                .unwrap()
+        };
+        assert_eq!(
+            fixture
+                .store
+                .pressure(&alpha)
+                .unwrap()
+                .last_observed_event_at_unix,
+            None
+        );
+        observe(&alpha, "newer-event", 1, "alpha original", 20);
+        observe(&alpha, "older-event", 1, "out of order", 10);
+        observe(&beta, "beta-event", 1, "beta only", 30);
+        let alpha_path = fixture.store.ledger_path(&alpha);
+        let before = fs::read(&alpha_path).unwrap();
+        // A later receipt of identical content is not fresh project activity.
+        assert_eq!(
+            observe(&alpha, "newer-event", 1, "alpha original", 99).last_observed_event_at_unix,
+            Some(20)
+        );
+        let reader = WebContextStore::open_read_only(&fixture.root).unwrap();
+        for _ in 0..2 {
+            assert_eq!(
+                reader.pressure(&alpha).unwrap().last_observed_event_at_unix,
+                Some(20)
+            );
+            assert_eq!(
+                reader.pressure(&beta).unwrap().last_observed_event_at_unix,
+                Some(30)
+            );
+        }
+        assert_eq!(fs::read(&alpha_path).unwrap(), before);
+        assert_eq!(
+            observe(&alpha, "newer-event", 2, "alpha changed", 40).last_observed_event_at_unix,
+            Some(40)
+        );
+        let next = Fixture::key("alpha", "activity-alpha-next", 2);
+        fixture
+            .store
+            .bind_observed_target(next.clone(), Some(&alpha))
+            .unwrap();
+        assert_eq!(
+            reader.pressure(&next).unwrap().last_observed_event_at_unix,
+            None
+        );
+        let historical = reader.pressure(&alpha).unwrap();
+        assert!(!historical.is_current);
+        assert_eq!(historical.last_observed_event_at_unix, Some(40));
+        assert_eq!(
+            reader.pressure(&beta).unwrap().last_observed_event_at_unix,
+            Some(30)
+        );
+        // Older serialized status snapshots remain readable with unknown activity.
+        let mut legacy = serde_json::to_value(&historical).unwrap();
+        legacy
+            .as_object_mut()
+            .unwrap()
+            .remove("lastObservedEventAtUnix");
+        assert_eq!(
+            serde_json::from_value::<PressureStatus>(legacy)
+                .unwrap()
+                .last_observed_event_at_unix,
+            None
+        );
+    }
+
+    #[test]
+    fn batch_import_refuses_empty_oversized_and_internal_conflict_without_writes() {
+        let fixture = Fixture::new("batch-import");
+        let key = Fixture::key("alpha", "batch-import", 1);
+        fixture
+            .store
+            .bind_observed_target(key.clone(), None)
+            .unwrap();
+        let before = fs::read(fixture.store.ledger_path(&key)).unwrap();
+        let event = |text| Observation {
+            event_id: "same-event",
+            revision: 1,
+            dedup_key: "same-event",
+            source_kind: VisibleSourceKind::UserMessage,
+            visible_text: Some(text),
+            observed_at_unix: 1,
+        };
+        assert_eq!(
+            fixture
+                .store
+                .record_observation_batch(&key, [])
+                .unwrap_err(),
+            "WEB_CONTEXT_INPUT_SCOPE_INVALID"
+        );
+        assert_eq!(
+            fixture
+                .store
+                .record_observation_batch(&key, (0..513).map(|_| event("text")))
+                .unwrap_err(),
+            "WEB_CONTEXT_INPUT_SCOPE_INVALID"
+        );
+        assert_eq!(
+            fixture
+                .store
+                .record_observation_batch(&key, [event("first"), event("different")])
+                .unwrap_err(),
+            "WEB_CONTEXT_EVENT_REVISION_CONFLICT"
+        );
+        assert_eq!(fs::read(fixture.store.ledger_path(&key)).unwrap(), before);
+        let reader = WebContextStore::open_read_only(&fixture.root).unwrap();
+        assert_eq!(
+            reader
+                .record_observation_batch(&key, [event("text")])
+                .unwrap_err(),
+            "WEB_CONTEXT_READ_ONLY"
+        );
+        assert_eq!(fs::read(fixture.store.ledger_path(&key)).unwrap(), before);
+    }
+
+    #[test]
+    fn admitted_traffic_finishes_only_on_exact_known_history_without_reactivating_it() {
+        let fixture = Fixture::new("traffic-history");
+        let old = Fixture::key("alpha", "traffic-old", 1);
+        let next = Fixture::key("alpha", "traffic-next", 2);
+        let beta = Fixture::key("beta", "traffic-beta", 1);
+        fixture
+            .store
+            .bind_observed_target(old.clone(), None)
+            .unwrap();
+        fixture
+            .store
+            .bind_observed_target(beta.clone(), None)
+            .unwrap();
+        fixture
+            .store
+            .bind_observed_target(next.clone(), Some(&old))
+            .unwrap();
+        let project_before = fs::read(fixture.store.project_path("alpha")).unwrap();
+        let next_before = fs::read(fixture.store.ledger_path(&next)).unwrap();
+        let beta_before = fs::read(fixture.store.ledger_path(&beta)).unwrap();
+        let event = || Observation {
+            event_id: "mcp-invocation:result:0",
+            revision: 1,
+            dedup_key: "mcp-invocation:result:0",
+            source_kind: VisibleSourceKind::ToolResult,
+            visible_text: Some("known final result"),
+            observed_at_unix: 1,
+        };
+        assert_eq!(
+            fixture
+                .store
+                .record_observation_batch(&old, [event()])
+                .unwrap_err(),
+            "WEB_CONTEXT_OLD_GENERATION"
+        );
+        let result = fixture
+            .store
+            .record_existing_conversation_batch(&old, [event()])
+            .unwrap();
+        assert!(!result.is_current);
+        assert_eq!(
+            result.observed_tool_result_tokens,
+            estimate_tokens("known final result")
+        );
+        assert_eq!(
+            fixture
+                .store
+                .record_existing_conversation_batch(&old, [event()])
+                .unwrap(),
+            result
+        );
+        assert_eq!(
+            fs::read(fixture.store.project_path("alpha")).unwrap(),
+            project_before
+        );
+        assert_eq!(
+            fs::read(fixture.store.ledger_path(&next)).unwrap(),
+            next_before
+        );
+        assert_eq!(
+            fs::read(fixture.store.ledger_path(&beta)).unwrap(),
+            beta_before
+        );
+        let unrecorded = Fixture::key("alpha", "unrecorded", 3);
+        assert_eq!(
+            fixture
+                .store
+                .record_existing_conversation_batch(&unrecorded, [event()])
+                .unwrap_err(),
+            "WEB_CONTEXT_OLD_GENERATION"
+        );
+        assert!(!fixture.store.ledger_path(&unrecorded).exists());
+        assert_eq!(fixture.store.active_key("alpha").unwrap(), Some(next));
+        assert!(!result.coverage_known);
+        assert!(!result.automatic_rollover_enabled);
+    }
+
+    #[test]
+    fn read_only_context_never_creates_state_and_refuses_mutation() {
+        let fixture = Fixture::new("read-only");
+        assert!(WebContextStore::open_read_only(fixture.root.join("absent")).is_err());
+        assert!(!fixture.root.join("absent").exists());
+        let reader = WebContextStore::open_read_only(&fixture.root).unwrap();
+        assert!(reader.active_key("alpha").is_err());
+        assert!(!fixture.root.join("ledger.lock").exists());
+        let key = Fixture::key("alpha", "read-only-chat", 1);
+        fixture
+            .store
+            .bind_observed_target(key.clone(), None)
+            .unwrap();
+        let before = fs::read(fixture.store.project_path("alpha")).unwrap();
+        assert_eq!(reader.active_key("alpha").unwrap(), Some(key.clone()));
+        assert!(reader.pressure(&key).is_ok());
+        assert_eq!(reader.project_history("alpha").unwrap().len(), 1);
+        assert!(reader.active_pressure("alpha").unwrap().is_some());
+        let ledger_before = fs::read(fixture.store.ledger_path(&key)).unwrap();
+        let (pressure, due) = reader.rollover_readiness(&key).unwrap();
+        assert_eq!(pressure.key, key);
+        assert!(!due);
+        assert_eq!(
+            fs::read(fixture.store.ledger_path(&key)).unwrap(),
+            ledger_before
+        );
+        assert_eq!(
+            reader
+                .configure_policy("alpha", ContextPressurePolicy::default())
+                .unwrap_err(),
+            "WEB_CONTEXT_READ_ONLY"
+        );
+        assert_eq!(
+            fs::read(fixture.store.project_path("alpha")).unwrap(),
+            before
+        );
+    }
+
+    #[test]
+    fn read_only_context_returns_busy_without_disturbing_the_writer() {
+        let fixture = Fixture::new("read-only-busy");
+        let key = Fixture::key("alpha", "read-only-busy-chat", 1);
+        fixture
+            .store
+            .bind_observed_target(key.clone(), None)
+            .unwrap();
+        let reader = WebContextStore::open_read_only(&fixture.root).unwrap();
+        let held = fixture.store.lock().unwrap();
+        assert_eq!(reader.active_key("alpha").unwrap_err(), "WEB_CONTEXT_BUSY");
+        assert_eq!(
+            reader.project_history("alpha").unwrap_err(),
+            "WEB_CONTEXT_BUSY"
+        );
+        assert_eq!(
+            reader.rollover_readiness(&key).unwrap_err(),
+            "WEB_CONTEXT_BUSY"
+        );
+        drop(held);
+        assert!(reader.pressure(&key).is_ok());
+    }
+
+    #[test]
+    fn online_context_refuses_contended_reads_and_writes_without_changing_state() {
+        let fixture = Fixture::new("online-busy");
+        let key = Fixture::key("alpha", "online-busy-chat", 1);
+        fixture
+            .store
+            .bind_observed_target(key.clone(), None)
+            .unwrap();
+        let online = WebContextStore::open_nonblocking(&fixture.root).unwrap();
+        let project_before = fs::read(fixture.store.project_path("alpha")).unwrap();
+        let ledger_before = fs::read(fixture.store.ledger_path(&key)).unwrap();
+        let held = fixture.store.lock().unwrap();
+        assert_eq!(online.active_key("alpha").unwrap_err(), "WEB_CONTEXT_BUSY");
+        assert_eq!(online.pressure(&key).unwrap_err(), "WEB_CONTEXT_BUSY");
+        assert_eq!(
+            online
+                .configure_policy("alpha", ContextPressurePolicy::default())
+                .unwrap_err(),
+            "WEB_CONTEXT_BUSY"
+        );
+        assert_eq!(
+            online
+                .bind_observed_target(key.clone(), Some(&key))
+                .unwrap_err(),
+            "WEB_CONTEXT_BUSY"
+        );
+        drop(held);
+        assert_eq!(
+            fs::read(fixture.store.project_path("alpha")).unwrap(),
+            project_before
+        );
+        assert_eq!(
+            fs::read(fixture.store.ledger_path(&key)).unwrap(),
+            ledger_before
+        );
+        online
+            .configure_policy("alpha", ContextPressurePolicy::default())
+            .unwrap();
+        assert_eq!(online.pressure(&key).unwrap().key, key);
+    }
+
+    #[test]
     fn default_policy_is_conservative_and_not_provider_authoritative() {
         let fixture = Fixture::new("default");
         let key = Fixture::key("alpha", "alpha-1", 1);
@@ -1051,6 +1761,8 @@ mod tests {
         let status = fixture.store.pressure(&key).unwrap();
         assert_eq!(status.configured_budget_tokens, 96_000);
         assert_eq!(status.trigger_tokens, 72_000);
+        assert_eq!(status.warning_tokens, 57_600);
+        assert!(!status.warning_reached);
         assert!(!status.automatic_rollover_enabled);
         assert!(status.advisory);
         assert!(!status.origin_authenticated);
@@ -1058,6 +1770,105 @@ mod tests {
             status.target_sha256,
             sha256(key.conversation_url.as_bytes())
         );
+    }
+
+    #[test]
+    fn warning_policy_is_legacy_compatible_and_validates_before_writes() {
+        let fixture = Fixture::new("warning-policy");
+        let legacy = serde_json::json!({
+            "configuredBudgetTokens":96000,"safetyHeadroomTokens":24000,
+            "unknownSourceReserveTokens":8000,"automaticRolloverEnabled":false,
+            "automaticObservationEnabled":false,"incompleteHistoryRollover":false
+        });
+        let policy: ContextPressurePolicy = serde_json::from_value(legacy.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&policy).unwrap(), legacy);
+        assert_eq!(policy.warning_tokens(), 57_600);
+        fixture
+            .store
+            .configure_policy("alpha", policy.clone())
+            .unwrap();
+        let before = fs::read(fixture.store.project_path("alpha")).unwrap();
+        for warning in [0, 72_001, u64::MAX] {
+            let mut invalid = policy.clone();
+            invalid.warning_threshold_tokens = Some(warning);
+            assert_eq!(
+                fixture
+                    .store
+                    .configure_policy("alpha", invalid)
+                    .unwrap_err(),
+                "WEB_CONTEXT_POLICY_INVALID"
+            );
+            assert_eq!(
+                fs::read(fixture.store.project_path("alpha")).unwrap(),
+                before
+            );
+        }
+        let minimal = ContextPressurePolicy {
+            configured_budget_tokens: 1,
+            safety_headroom_tokens: 0,
+            unknown_source_reserve_tokens: 0,
+            ..Default::default()
+        };
+        minimal.validate().unwrap();
+        assert_eq!(minimal.warning_tokens(), 1);
+    }
+
+    #[test]
+    fn warning_is_scoped_durable_observed_only_and_does_not_trigger_rollover() {
+        let fixture = Fixture::new("warning-boundary");
+        let alpha = Fixture::key("alpha", "warning-alpha", 1);
+        let beta = Fixture::key("beta", "warning-beta", 1);
+        for key in [&alpha, &beta] {
+            fixture
+                .store
+                .bind_observed_target(key.clone(), None)
+                .unwrap();
+        }
+        let observed = fixture.observe(
+            &alpha,
+            "observed",
+            1,
+            "observed",
+            VisibleSourceKind::UserMessage,
+            Some("hello context"),
+        );
+        let tokens = observed.observed_estimate_tokens;
+        assert!(tokens > 0);
+        let mut policy = ContextPressurePolicy {
+            configured_budget_tokens: tokens + 100,
+            safety_headroom_tokens: 50,
+            unknown_source_reserve_tokens: 0,
+            warning_threshold_tokens: Some(tokens + 1),
+            automatic_rollover_enabled: true,
+            ..Default::default()
+        };
+        fixture
+            .store
+            .configure_policy("alpha", policy.clone())
+            .unwrap();
+        assert!(!fixture.store.pressure(&alpha).unwrap().warning_reached);
+        policy.warning_threshold_tokens = Some(tokens);
+        fixture.store.configure_policy("alpha", policy).unwrap();
+        let warning = fixture.store.pressure(&alpha).unwrap();
+        assert!(warning.warning_reached && !warning.near_capacity);
+        assert!(!warning.coverage_known);
+        assert_eq!(warning.pressure_assessment, "UNKNOWN_OR_INCOMPLETE");
+        assert!(
+            fixture
+                .store
+                .request_rollover_if_due(&alpha, &alpha.target_sha256(), "task-one", true, 101)
+                .unwrap()
+                .is_none()
+        );
+        assert!(!fixture.store.pressure(&beta).unwrap().warning_reached);
+        assert_eq!(
+            fixture.store.pressure(&beta).unwrap().warning_tokens,
+            57_600
+        );
+        let reopened = WebContextStore::open_read_only(&fixture.root).unwrap();
+        assert!(reopened.pressure(&alpha).unwrap().warning_reached);
+        assert_eq!(reopened.pressure(&alpha).unwrap().warning_tokens, tokens);
+        assert!(!reopened.pressure(&beta).unwrap().warning_reached);
     }
 
     #[test]
@@ -1119,7 +1930,7 @@ mod tests {
         );
         assert_eq!(
             arguments.visible_unique_tokens,
-            duplicate.visible_unique_tokens
+            duplicate.visible_unique_tokens + estimate_tokens("a large model-to-tool argument")
         );
         assert_eq!(
             arguments.observed_tool_argument_tokens,
@@ -1141,6 +1952,208 @@ mod tests {
                 )
                 .is_err()
         );
+    }
+
+    #[test]
+    fn exact_legacy_content_replay_preserves_stored_token_estimate() {
+        let fixture = Fixture::new("legacy-estimate-replay");
+        let key = Fixture::key("alpha", "legacy-estimate", 1);
+        fixture
+            .store
+            .bind_observed_target(key.clone(), None)
+            .unwrap();
+        // Simulate an older tokenizer's persisted count without changing the
+        // content/identity. A normal observation cannot supply token metadata.
+        let text = "known unchanged text ".repeat(30);
+        fixture.observe(
+            &key,
+            "legacy",
+            1,
+            "legacy",
+            VisibleSourceKind::ToolResult,
+            Some(&text),
+        );
+        let mut ledger = fixture.store.read_ledger(&key).unwrap();
+        ledger.events[0].estimated_tokens = Some(17);
+        fixture.store.write_ledger(&ledger).unwrap();
+        let before = fs::read(fixture.store.ledger_path(&key)).unwrap();
+        let replay = fixture.observe(
+            &key,
+            "legacy",
+            1,
+            "legacy",
+            VisibleSourceKind::ToolResult,
+            Some(&text),
+        );
+        assert_eq!(replay.observed_tool_result_tokens, 17);
+        assert_eq!(fs::read(fixture.store.ledger_path(&key)).unwrap(), before);
+        for (id, excerpt) in [("browser-complete", false), ("browser-excerpt", true)] {
+            let record = || {
+                if excerpt {
+                    fixture.store.record_browser_excerpt_observation(
+                        &key,
+                        id,
+                        VisibleSourceKind::AssistantMessage,
+                        &text,
+                        100,
+                    )
+                } else {
+                    fixture.store.record_browser_observation(
+                        &key,
+                        id,
+                        VisibleSourceKind::UserMessage,
+                        Some(&text),
+                        100,
+                    )
+                }
+            };
+            record().unwrap();
+            let mut ledger = fixture.store.read_ledger(&key).unwrap();
+            let event = ledger
+                .events
+                .iter_mut()
+                .find(|event| event.event_id == id)
+                .unwrap();
+            event.estimated_tokens = Some(17);
+            fixture.store.write_ledger(&ledger).unwrap();
+            let before = fs::read(fixture.store.ledger_path(&key)).unwrap();
+            record().unwrap();
+            assert_eq!(
+                fs::read(fixture.store.ledger_path(&key)).unwrap(),
+                before,
+                "same browser content cannot invent a revision after an estimator change"
+            );
+        }
+        let before = fs::read(fixture.store.ledger_path(&key)).unwrap();
+        assert!(
+            fixture
+                .store
+                .record_observation(
+                    &key,
+                    Observation {
+                        event_id: "legacy",
+                        revision: 1,
+                        dedup_key: "legacy",
+                        source_kind: VisibleSourceKind::ToolResult,
+                        visible_text: Some("different content"),
+                        observed_at_unix: 100,
+                    }
+                )
+                .is_err()
+        );
+        assert_eq!(fs::read(fixture.store.ledger_path(&key)).unwrap(), before);
+    }
+
+    #[test]
+    fn retained_arguments_and_worker_messages_trigger_only_their_conversation() {
+        let fixture = Fixture::new("retained-tool-worker-pressure");
+        let alpha = Fixture::key("alpha", "tool-worker-alpha", 1);
+        let beta = Fixture::key("beta", "tool-worker-beta", 1);
+        for key in [&alpha, &beta] {
+            fixture
+                .store
+                .bind_observed_target(key.clone(), None)
+                .unwrap();
+        }
+        let arguments = "retained model-to-tool arguments ".repeat(30);
+        let worker = "model-visible worker delivery ".repeat(30);
+        let total = estimate_tokens(&arguments) + estimate_tokens(&worker);
+        let mut policy = ContextPressurePolicy {
+            configured_budget_tokens: total,
+            safety_headroom_tokens: 1,
+            unknown_source_reserve_tokens: 0,
+            ..ContextPressurePolicy::default()
+        };
+        fixture
+            .store
+            .configure_policy("alpha", policy.clone())
+            .unwrap();
+        let sibling = fixture.observe(
+            &beta,
+            "same-event",
+            1,
+            "same-content",
+            VisibleSourceKind::UserMessage,
+            Some("beta"),
+        );
+        let first = fixture.observe(
+            &alpha,
+            "same-event",
+            1,
+            "same-content",
+            VisibleSourceKind::ToolArguments,
+            Some(&arguments),
+        );
+        assert_eq!(first.observed_estimate_tokens, estimate_tokens(&arguments));
+        assert!(!first.near_capacity);
+        let pressured = fixture.observe(
+            &alpha,
+            "worker",
+            1,
+            "worker-content",
+            VisibleSourceKind::WorkerMessage,
+            Some(&worker),
+        );
+        assert_eq!(pressured.observed_estimate_tokens, total);
+        assert!(pressured.near_capacity);
+        assert!(
+            fixture
+                .store
+                .request_rollover_if_due(&alpha, &alpha.target_sha256(), "task", true, 200,)
+                .unwrap()
+                .is_none(),
+            "pressure alone cannot enable automatic rollover"
+        );
+        let duplicate = fixture.observe(
+            &alpha,
+            "worker-copy",
+            1,
+            "worker-content",
+            VisibleSourceKind::ToolResult,
+            Some(&worker),
+        );
+        assert_eq!(duplicate.observed_estimate_tokens, total);
+        assert_eq!(
+            duplicate.observed_tool_result_tokens,
+            estimate_tokens(&worker)
+        );
+        let revised_text = format!("{worker}more retained worker context");
+        let revised = fixture.observe(
+            &alpha,
+            "worker",
+            2,
+            "worker-content",
+            VisibleSourceKind::WorkerMessage,
+            Some(&revised_text),
+        );
+        assert_eq!(
+            revised.observed_estimate_tokens,
+            estimate_tokens(&arguments) + estimate_tokens(&revised_text)
+        );
+        let reopened = WebContextStore::open(&fixture.root).unwrap();
+        assert_eq!(reopened.pressure(&alpha).unwrap(), revised);
+        assert_eq!(reopened.pressure(&beta).unwrap(), sibling);
+        policy.automatic_rollover_enabled = true;
+        reopened.configure_policy("alpha", policy).unwrap();
+        let intent = reopened
+            .request_rollover_if_due(&alpha, &alpha.target_sha256(), "task", true, 201)
+            .unwrap()
+            .expect("retained observed content reaches configured pressure");
+        assert_eq!(intent.trigger_reason, "OBSERVED_PRESSURE");
+        assert_eq!(
+            intent.estimated_upper_tokens,
+            revised.observed_estimate_tokens
+        );
+        let next = Fixture::key("alpha", "tool-worker-alpha-next", 2);
+        reopened
+            .bind_observed_target(next.clone(), Some(&alpha))
+            .unwrap();
+        assert_eq!(
+            reopened.pressure(&next).unwrap().observed_estimate_tokens,
+            0
+        );
+        assert!(!reopened.pressure(&alpha).unwrap().is_current);
+        assert_eq!(reopened.pressure(&beta).unwrap(), sibling);
     }
 
     #[test]
@@ -1367,6 +2380,7 @@ mod tests {
             .record_browser_coverage(
                 &alpha,
                 BrowserCoverageObservation {
+                    observed_at_unix: 1,
                     initial_history_gap: true,
                     identity_gap: true,
                     text_gap: false,
@@ -1384,6 +2398,7 @@ mod tests {
             .record_browser_coverage(
                 &alpha,
                 BrowserCoverageObservation {
+                    observed_at_unix: 1,
                     initial_history_gap: true,
                     identity_gap: false,
                     text_gap: false,
@@ -1403,6 +2418,7 @@ mod tests {
                 .record_browser_coverage(
                     &alpha,
                     BrowserCoverageObservation {
+                        observed_at_unix: 1,
                         initial_history_gap: false,
                         identity_gap: false,
                         text_gap: false,
@@ -1421,6 +2437,7 @@ mod tests {
                 .record_browser_coverage(
                     &alpha,
                     BrowserCoverageObservation {
+                        observed_at_unix: 1,
                         initial_history_gap: true,
                         identity_gap: false,
                         text_gap: false,
@@ -1455,6 +2472,7 @@ mod tests {
             automatic_rollover_enabled: true,
             automatic_observation_enabled: false,
             incomplete_history_rollover: false,
+            ..Default::default()
         };
         fixture
             .store
@@ -1472,6 +2490,7 @@ mod tests {
             .record_browser_coverage(
                 &key,
                 BrowserCoverageObservation {
+                    observed_at_unix: 1,
                     initial_history_gap: true,
                     identity_gap: false,
                     text_gap: false,
@@ -1510,6 +2529,7 @@ mod tests {
         assert_eq!(intent.trigger_reason, "INCOMPLETE_HISTORY_GUARD");
         assert_eq!(intent.estimated_upper_tokens, 0);
         assert!(!fixture.store.pressure(&key).unwrap().near_capacity);
+        assert!(fixture.store.rollover_readiness(&key).unwrap().1);
         let replacement = Fixture::key("alpha", "coverage-guard-next", 2);
         fixture
             .store
@@ -1520,6 +2540,7 @@ mod tests {
             .record_browser_coverage(
                 &replacement,
                 BrowserCoverageObservation {
+                    observed_at_unix: 1,
                     initial_history_gap: true,
                     identity_gap: false,
                     text_gap: false,
@@ -1527,6 +2548,8 @@ mod tests {
                 },
             )
             .unwrap();
+        assert!(!fixture.store.rollover_readiness(&replacement).unwrap().1);
+        assert!(!fixture.store.rollover_readiness(&key).unwrap().1);
         assert!(
             fixture
                 .store
@@ -1654,6 +2677,7 @@ mod tests {
             automatic_rollover_enabled: false,
             automatic_observation_enabled: false,
             incomplete_history_rollover: false,
+            ..Default::default()
         };
         fixture
             .store

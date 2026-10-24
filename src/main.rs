@@ -60,7 +60,10 @@ mod ordinary_worker_artifact_provider;
 #[allow(dead_code)] // T-0387 typed review authority; pair provisioning remains separate.
 mod ordinary_worker_pair_approval;
 mod planning;
+mod project_mcp;
+mod project_mcp_task;
 mod project_memory;
+mod project_task_command;
 mod prompt_templates;
 mod repo_map;
 mod reviewed_build;
@@ -84,10 +87,12 @@ mod tunnel;
 mod user_worker_release;
 mod verification;
 mod wake_protocol_client;
+mod web_context_control;
 #[allow(dead_code)] // Advisory Web conversation meter; operator/browser integration follows.
 mod web_conversation_context;
 #[cfg(all(test, windows))]
 mod web_development_tests;
+mod web_task_dispatch;
 mod web_work;
 mod web_work_state;
 mod windows_gui;
@@ -913,6 +918,23 @@ struct HeadlessMcpOptions {
     config_path: PathBuf,
     auth_token: String,
     isolated_dev_fixture: bool,
+    maximum_runtime_seconds: Option<u64>,
+    web_auto_projects: std::collections::BTreeSet<String>,
+    no_web_auto: bool,
+    project_scope: Option<project_mcp::Selection>,
+    project_task_contract: Option<PathBuf>,
+}
+
+fn start_headless_web_auto(options: &HeadlessMcpOptions, state: SharedState) -> bool {
+    if options.isolated_dev_fixture || options.no_web_auto {
+        return false;
+    }
+    if options.web_auto_projects.is_empty() {
+        operator_facade::start_web_auto_scheduler(state);
+    } else {
+        operator_facade::start_scoped_web_auto_scheduler(state, options.web_auto_projects.clone());
+    }
+    true
 }
 
 struct ReviewedCandidateMcpOptions {
@@ -1126,6 +1148,13 @@ fn parse_headless_mcp_options(
     let mut config_path: Option<PathBuf> = None;
     let mut auth_token = std::env::var("CATDESK_MCP_AUTH_TOKEN").ok();
     let mut isolated_dev_fixture = false;
+    let mut maximum_runtime_seconds = None;
+    let mut web_auto_projects = std::collections::BTreeSet::new();
+    let mut no_web_auto = false;
+    let mut project_id = None;
+    let mut project_generation = None;
+    let mut project_digest = None;
+    let mut project_task_contract = None;
 
     let mut index = 0;
     while index < args.len() {
@@ -1134,12 +1163,71 @@ fn parse_headless_mcp_options(
             "--headless-mcp" | "--no-ngrok" => {
                 index += 1;
             }
+            "--project-id" => {
+                let value = next_arg(&args, &mut index, "--project-id")?;
+                if !catdesk_wake::protocol::valid_id(&value) || project_id.replace(value).is_some()
+                {
+                    return Err("invalid or duplicate --project-id".into());
+                }
+            }
+            "--project-task-contract" => {
+                let path = next_arg(&args, &mut index, "--project-task-contract")?;
+                if path.is_empty() || project_task_contract.replace(PathBuf::from(path)).is_some() {
+                    return Err("invalid or duplicate project task contract".into());
+                }
+            }
+            "--project-target-generation" => {
+                let value = next_arg(&args, &mut index, "--project-target-generation")?
+                    .parse::<u64>()
+                    .ok()
+                    .filter(|value| *value > 0)
+                    .ok_or("invalid project target generation")?;
+                if project_generation.replace(value).is_some() {
+                    return Err("duplicate project target generation".into());
+                }
+            }
+            "--project-target-sha256" => {
+                let value = next_arg(&args, &mut index, "--project-target-sha256")?;
+                if value.len() != 64
+                    || !value
+                        .bytes()
+                        .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+                    || project_digest.replace(value).is_some()
+                {
+                    return Err("invalid or duplicate project target digest".into());
+                }
+            }
             "--isolated-dev-fixture" => {
                 if isolated_dev_fixture {
                     return Err("duplicate --isolated-dev-fixture".into());
                 }
                 isolated_dev_fixture = true;
                 index += 1;
+            }
+            "--no-web-auto" => {
+                if no_web_auto {
+                    return Err("duplicate --no-web-auto".into());
+                }
+                no_web_auto = true;
+                index += 1;
+            }
+            "--max-runtime-seconds" => {
+                let value = next_arg(&args, &mut index, "--max-runtime-seconds")?;
+                let seconds = value
+                    .parse::<u64>()
+                    .ok()
+                    .filter(|seconds| (1..=900).contains(seconds))
+                    .ok_or("--max-runtime-seconds requires 1..900")?;
+                if maximum_runtime_seconds.replace(seconds).is_some() {
+                    return Err("duplicate --max-runtime-seconds".into());
+                }
+            }
+            "--web-auto-project" => {
+                let project = next_arg(&args, &mut index, "--web-auto-project")?;
+                if !catdesk_wake::protocol::valid_id(&project) || !web_auto_projects.insert(project)
+                {
+                    return Err("invalid or duplicate --web-auto-project".into());
+                }
             }
             "--host" => {
                 host = next_arg(&args, &mut index, "--host")?;
@@ -1178,7 +1266,35 @@ fn parse_headless_mcp_options(
         }
     }
 
+    if no_web_auto && !web_auto_projects.is_empty() {
+        return Err("--no-web-auto cannot be combined with --web-auto-project".into());
+    }
+    let project_scope = match (project_id, project_generation, project_digest) {
+        (None, None, None) => None,
+        (Some(project_id), Some(target_generation), Some(target_sha256)) => {
+            if isolated_dev_fixture
+                || !no_web_auto
+                || if project_task_contract.is_some() {
+                    !matches!(tool_mode, ToolMode::MultiTools)
+                } else {
+                    !matches!(tool_mode, ToolMode::ReadOnly)
+                }
+                || !maximum_runtime_seconds.is_some_and(|seconds| seconds <= 180)
+            {
+                return Err("project MCP requires --no-web-auto, 1..180 seconds and read-only mode; an explicit project task contract requires multi-tools mode".into());
+            }
+            Some(project_mcp::Selection {
+                project_id,
+                target_generation,
+                target_sha256,
+            })
+        }
+        _ => return Err("project MCP requires project ID, generation and digest together".into()),
+    };
     validate_loopback_host(&host)?;
+    if project_task_contract.is_some() && project_scope.is_none() {
+        return Err("project task contract requires a fixed project MCP connection".into());
+    }
     if mode.browser_enabled() {
         return Err("headless MCP currently supports --mode computer only".into());
     }
@@ -1194,7 +1310,8 @@ fn parse_headless_mcp_options(
         })?;
 
     if isolated_dev_fixture
-        && (host != "127.0.0.1"
+        && (!web_auto_projects.is_empty()
+            || host != "127.0.0.1"
             || port != 0
             || !matches!(tool_mode, ToolMode::ReadOnly)
             || !matches!(mode, Mode::Computer)
@@ -1213,6 +1330,11 @@ fn parse_headless_mcp_options(
         return Err("isolated fixture requires explicit workspace, config, /dev/mcp, loopback port 0 and read-only computer mode".into());
     }
     Ok(Some(HeadlessMcpOptions {
+        project_task_contract,
+        project_scope,
+        maximum_runtime_seconds,
+        web_auto_projects,
+        no_web_auto,
         isolated_dev_fixture,
         host,
         port,
@@ -1400,6 +1522,18 @@ fn validate_isolated_fixture_scope(
 
 async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std::error::Error>> {
     let workspace_root = resolve_headless_workspace(&options.workspace)?;
+    let project_context = match options.project_scope.clone() {
+        Some(selection) => Some(
+            project_mcp::ProjectContext::bind_with_task(
+                std::path::Path::new(&workspace_root),
+                selection,
+                options.project_task_contract.as_deref(),
+                options.maximum_runtime_seconds.unwrap_or(180),
+            )
+            .await?,
+        ),
+        None => None,
+    };
     if catdesk_wake::development_runtime::root_for_workspace(std::path::Path::new(&workspace_root))?
         .is_some()
     {
@@ -1482,7 +1616,9 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
     };
 
     let (ui_event_tx, mut ui_event_rx) = unbounded_channel();
-    let router = if options.isolated_dev_fixture {
+    let router = if let Some(context) = &project_context {
+        project_mcp::router(context.clone(), &mcp_path, options.auth_token.clone())?
+    } else if options.isolated_dev_fixture {
         server::isolated_fixture_router(
             state.clone(),
             mcp_path.clone(),
@@ -1532,6 +1668,7 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
         }
     });
     let mut serve_handle = tokio::spawn(async move { axum::serve(listener, router).await });
+    let web_auto_scheduler_enabled = start_headless_web_auto(&options, state.clone());
 
     println!(
         "{}",
@@ -1540,7 +1677,11 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
             "mode": options.mode.label(),
             "tool_mode": options.tool_mode.label(),
             "workspace": workspace_root,
+            "project_scope": project_context.as_ref().map(|context| context.metadata()),
             "config_path": options.config_path,
+            "maximum_runtime_seconds": options.maximum_runtime_seconds,
+            "web_auto_projects": options.web_auto_projects,
+            "web_auto_scheduler_enabled": web_auto_scheduler_enabled,
             "mcp_url": format!("http://{local_addr}{mcp_path}"),
             "auth": {
                 "scheme": "bearer",
@@ -1550,20 +1691,21 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
         })
     );
 
-    if !options.isolated_dev_fixture {
-        operator_facade::start_web_auto_scheduler(state.clone());
-    }
-
+    let deadline = async {
+        if let Some(seconds) = options.maximum_runtime_seconds {
+            tokio::time::sleep(Duration::from_secs(seconds)).await;
+        } else {
+            std::future::pending::<()>().await;
+        }
+    };
     tokio::select! {
+        _ = deadline => {}
         signal = tokio::signal::ctrl_c() => {
             signal?;
         }
         result = &mut serve_handle => {
             drain_handle.abort();
-            {
-                let mut app = state.lock().await;
-                app.server_running = false;
-            }
+            operator_facade::stop_web_auto_scheduler(state.clone()).await;
             match result {
                 Ok(Ok(())) => return Err(std::io::Error::other("headless MCP server exited unexpectedly").into()),
                 Ok(Err(error)) => return Err(std::io::Error::other(format!("headless MCP server failed: {error}")).into()),
@@ -1573,9 +1715,9 @@ async fn run_headless_mcp(options: HeadlessMcpOptions) -> Result<(), Box<dyn std
     }
     serve_handle.abort();
     drain_handle.abort();
-    {
-        let mut app = state.lock().await;
-        app.server_running = false;
+    operator_facade::stop_web_auto_scheduler(state.clone()).await;
+    if let Some(context) = project_context {
+        context.close_task().await?;
     }
     Ok(())
 }
@@ -2435,7 +2577,7 @@ async fn run_reviewed_candidate_mcp(
             .into());
         }
     }
-    state.lock().await.server_running = false;
+    operator_facade::stop_web_auto_scheduler(state.clone()).await;
     let staged = match Arc::try_unwrap(snapshot) {
         Ok(staged) => staged,
         Err(snapshot) => {
@@ -2523,7 +2665,12 @@ fn operator_web_error_code(error: &str) -> &str {
             "SOURCE_",
             "QUEUE_",
             "BOOTSTRAP_",
+            "BROWSER_",
             "REGISTRY_",
+            "RESPONSE_",
+            "LOGIN_",
+            "COOPERATIVE_",
+            "HOST_",
         ]
         .iter()
         .any(|prefix| code.starts_with(prefix))
@@ -2584,6 +2731,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 println!("{{\"status\":\"attention\"}}");
             }
+            std::process::exit(2);
+        }
+    }
+    // This one-shot view uses only the paired Web reader. It cannot enter the
+    // interactive console, initialize legacy Wake state or start services.
+    match binagotchy_cli::parse_binagotchy_web_status_mode(&args) {
+        Ok(true) => {
+            if binagotchy_cli::run_web_status(&std::env::current_dir()?).is_err() {
+                eprintln!("CatDesk Web status unavailable.");
+                std::process::exit(2);
+            }
+            return Ok(());
+        }
+        Ok(false) => {}
+        Err(error) => {
+            eprintln!("{error}");
             std::process::exit(2);
         }
     }
@@ -2947,11 +3110,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         let openai_tunnel_child = app.openai_tunnel_child.take();
         app.server_running = false;
+        let web_auto_tasks = app.cancel_web_auto_scheduler();
         app.ngrok_running = false;
         app.ngrok_url = None;
         app.remote_connected = false;
         app.last_remote_activity_ms = None;
         drop(app);
+        operator_facade::join_web_auto_schedulers(web_auto_tasks).await;
         if let Some(mut child) = openai_tunnel_child {
             let _ = child.start_kill();
             let _ = child.wait_with_timeout(Duration::from_secs(3)).await;
@@ -3499,6 +3664,14 @@ mod tests {
     #[test]
     fn operator_web_attention_exposes_only_bounded_stable_codes() {
         assert_eq!(
+            operator_web_error_code("BROWSER_SESSION_BUSY"),
+            "BROWSER_SESSION_BUSY"
+        );
+        assert_eq!(
+            operator_web_error_code("BROWSER_SESSION_BUSY: C:\\private\\profile"),
+            "BROWSER_SESSION_BUSY"
+        );
+        assert_eq!(
             operator_web_error_code("DEV_LOGIN_CLEANUP_UNVERIFIED"),
             "DEV_LOGIN_CLEANUP_UNVERIFIED"
         );
@@ -3510,6 +3683,18 @@ mod tests {
             operator_web_error_code("WEB_TARGET: C:\\private\\target.json"),
             "WEB_TARGET"
         );
+        for code in [
+            "RESPONSE_EXACT_USER_MISSING_OR_AMBIGUOUS",
+            "LOGIN_OR_PROFILE_REQUIRED",
+            "COOPERATIVE_HOST_PROTOCOL_REQUIRED",
+            "HOST_EXECUTABLE_HASH_MISMATCH",
+        ] {
+            assert_eq!(operator_web_error_code(code), code);
+            assert_eq!(
+                operator_web_error_code(&format!("{code}: C:\\private\\profile")),
+                code
+            );
+        }
         for untrusted in [
             "C:\\private\\token.txt",
             "raw task text with a secret",
@@ -3517,6 +3702,8 @@ mod tests {
             "WEB_USAGE raw task text",
             "web_scope: private path",
             "WEB_SCOPE\nprivate path",
+            "RESPONSE_PRIVATE\nsecret",
+            "LOGIN_OR_PROFILE_REQUIRED private profile text",
         ] {
             assert_eq!(operator_web_error_code(untrusted), "WEB_OPERATION_REFUSED");
         }
@@ -4308,6 +4495,12 @@ mod tests {
             "--auth-token".to_string(),
             "catdesk-test-token-1234567890".to_string(),
             "--no-ngrok".to_string(),
+            "--max-runtime-seconds".to_string(),
+            "300".to_string(),
+            "--web-auto-project".to_string(),
+            "catdesk".to_string(),
+            "--web-auto-project".to_string(),
+            "wake2".to_string(),
         ])
         .expect("parse headless options")
         .expect("headless options present");
@@ -4317,6 +4510,112 @@ mod tests {
         assert_eq!(options.mcp_path.as_deref(), Some("/t0012/mcp"));
         assert!(matches!(options.tool_mode, ToolMode::ReadOnly));
         assert_eq!(options.auth_token, "catdesk-test-token-1234567890");
+        assert_eq!(options.maximum_runtime_seconds, Some(300));
+        assert_eq!(
+            options.web_auto_projects.into_iter().collect::<Vec<_>>(),
+            ["catdesk", "wake2"]
+        );
+    }
+
+    #[test]
+    fn project_mcp_headless_requires_complete_scope_read_only_and_bounded_no_auto() {
+        let mut args: Vec<String> = [
+            "--headless-mcp",
+            "--config-path",
+            "fixture.toml",
+            "--auth-token",
+            "fixture-project-auth-token-000000",
+            "--no-web-auto",
+            "--max-runtime-seconds",
+            "60",
+            "--project-id",
+            "alpha",
+            "--project-target-generation",
+            "1",
+            "--project-target-sha256",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+        args.push("a".repeat(64));
+        let parsed = parse_headless_mcp_options(args.clone()).unwrap().unwrap();
+        assert_eq!(parsed.project_scope.unwrap().project_id, "alpha");
+        let mut task_args = args.clone();
+        task_args.extend(["--tool-mode".into(), "multi-tools".into()]);
+        task_args.extend(["--project-task-contract".into(), "fixture-task.json".into()]);
+        assert_eq!(
+            parse_headless_mcp_options(task_args.clone())
+                .unwrap()
+                .unwrap()
+                .project_task_contract,
+            Some(std::path::PathBuf::from("fixture-task.json"))
+        );
+        task_args.extend(["--project-task-contract".into(), "other-task.json".into()]);
+        assert!(parse_headless_mcp_options(task_args).is_err());
+        let mut unexpected_write = args.clone();
+        unexpected_write.extend(["--project-task-contract".into(), "fixture-task.json".into()]);
+        assert!(parse_headless_mcp_options(unexpected_write).is_err());
+        assert!(
+            parse_headless_mcp_options(
+                [
+                    "--headless-mcp",
+                    "--project-task-contract",
+                    "fixture-task.json"
+                ]
+                .into_iter()
+                .map(str::to_owned)
+            )
+            .is_err()
+        );
+        for (flag, value) in [
+            ("--tool-mode", "multi-tools"),
+            ("--max-runtime-seconds", "181"),
+            ("--project-target-generation", "0"),
+            ("--project-id", "../beta"),
+        ] {
+            let mut bad = args.clone();
+            if let Some(index) = bad.iter().position(|arg| arg == flag) {
+                bad[index + 1] = value.into();
+            } else {
+                bad.extend([flag.into(), value.into()]);
+            }
+            assert!(parse_headless_mcp_options(bad).is_err());
+        }
+        let mut automatic = args.clone();
+        automatic.retain(|arg| arg != "--no-web-auto");
+        assert!(parse_headless_mcp_options(automatic).is_err());
+        let mut partial = args;
+        let index = partial
+            .iter()
+            .position(|arg| arg == "--project-target-generation")
+            .unwrap();
+        partial.drain(index..index + 2);
+        assert!(parse_headless_mcp_options(partial).is_err());
+    }
+
+    #[test]
+    fn headless_budget_and_project_scope_refuse_invalid_or_duplicate_options() {
+        for tail in [
+            vec!["--max-runtime-seconds", "0"],
+            vec!["--max-runtime-seconds", "901"],
+            vec!["--max-runtime-seconds", "-1"],
+            vec!["--max-runtime-seconds", "1", "--max-runtime-seconds", "2"],
+            vec!["--web-auto-project", "../other"],
+            vec!["--web-auto-project", "alpha", "--web-auto-project", "alpha"],
+            vec!["--no-web-auto", "--no-web-auto"],
+            vec!["--no-web-auto", "--web-auto-project", "alpha"],
+            vec!["--web-auto-project", "alpha", "--no-web-auto"],
+        ] {
+            let mut args = vec![
+                "--headless-mcp",
+                "--config-path",
+                "unused.toml",
+                "--auth-token",
+                "catdesk-test-token-1234567890",
+            ];
+            args.extend(tail);
+            assert!(parse_headless_mcp_options(args.into_iter().map(str::to_owned)).is_err());
+        }
     }
 
     #[test]
@@ -4332,6 +4631,68 @@ mod tests {
         .expect("headless options present");
 
         assert!(matches!(options.tool_mode, ToolMode::ReadOnly));
+        assert_eq!(options.maximum_runtime_seconds, None);
+        assert!(options.web_auto_projects.is_empty());
+        assert!(!options.no_web_auto);
+    }
+
+    #[tokio::test]
+    async fn headless_no_web_auto_creates_no_scheduler_owner_or_tasks() {
+        use super::{AppState, start_headless_web_auto};
+
+        let root = std::env::temp_dir().join(format!(
+            "catdesk-headless-auto-disabled-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let mut app = AppState::new_isolated_fixture(
+            0,
+            root.to_string_lossy().into_owned(),
+            root.join("config.toml"),
+        )
+        .unwrap();
+        app.server_running = true;
+        let state = std::sync::Arc::new(tokio::sync::Mutex::new(app));
+        let mut options = parse_headless_mcp_options(
+            [
+                "--headless-mcp",
+                "--no-web-auto",
+                "--config-path",
+                "unused.toml",
+                "--auth-token",
+                "catdesk-test-token-1234567890",
+            ]
+            .into_iter()
+            .map(str::to_owned),
+        )
+        .unwrap()
+        .unwrap();
+        assert!(!start_headless_web_auto(&options, state.clone()));
+        // Fixture mode must still suppress automatic work independently of
+        // the new operator flag.
+        options.no_web_auto = false;
+        options.isolated_dev_fixture = true;
+        assert!(!start_headless_web_auto(&options, state.clone()));
+        tokio::task::yield_now().await;
+        {
+            let app = state.lock().await;
+            assert!(app.web_auto_cancel.is_none());
+            assert!(app.web_auto_tasks.is_empty());
+            assert!(app.server_running);
+        }
+        drop(state);
+        let canonical = root.canonicalize().unwrap();
+        let temporary = std::env::temp_dir().canonicalize().unwrap();
+        assert!(canonical.starts_with(&temporary) && canonical != temporary);
+        assert!(
+            canonical
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with("catdesk-headless-auto-disabled-")
+        );
+        std::fs::remove_dir_all(canonical).unwrap();
     }
 
     #[test]

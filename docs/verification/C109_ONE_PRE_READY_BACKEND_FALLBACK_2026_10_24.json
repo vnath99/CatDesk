@@ -1,0 +1,244 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C109_ONE_PRE_READY_DEVELOPMENT_BACKEND_FALLBACK",
+  "observedUtc": "2026-10-24T16:09:25.4250579+00:00",
+  "recordedUtc": "2026-10-24T16:11:58.3778266+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "2a32e26970ede57420e5047fe87a10c9ab999fc8",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "SOURCE_TESTS_WITH_NORMAL_OLD_BEHAVIOR_CAUSAL_FAILURE_NEW_NORMAL_ACCEPTANCE_PENDING",
+  "implementation": {
+    "command": "operator web-dev-runtime run-backend",
+    "sourcePins": [
+      {
+        "path": "src/operator_development_backend.rs",
+        "sha256": "94dbfc3e6d30a7e38bfdbe3edfe6fb773ac322bba2aaf11777878822918c98f0"
+      },
+      {
+        "path": "src/reviewed_candidate_owner.rs",
+        "sha256": "cd948b0e68429e2f9065449e6430d3834fabc0ef39444ff1fd14c33db0f70960"
+      },
+      {
+        "path": "wake/src/development_runtime.rs",
+        "sha256": "79ca4e7428212cee18d5bc21dc4ec3ec2f134214a08673e5c93f90bf3161658f"
+      }
+    ],
+    "maximumStartupAttempts": 2,
+    "firstAttempt": "EXACT_SELECTED_DEVELOPMENT_APP",
+    "fallbackCandidate": "ONLY_EXACT_RECORDED_VERIFIED_PREDECESSOR",
+    "fallbackAdmission": [
+      "NO_CHILD_CREATED_FROM_CLASSIFIED_NATIVE_SPAWN_REJECTION",
+      "PRE_READY_TIMEOUT_EOF_OR_EXIT_AND_ENTIRE_OWNED_JOB_DRAINED"
+    ],
+    "fallbackRefused": [
+      "READINESS_PUBLICATION_OR_PARTIAL_PUBLICATION",
+      "UNKNOWN_JOB_OWNERSHIP_OR_EXIT",
+      "READY_SCOPE_OR_AUTH_REDACTION_VIOLATION",
+      "OUTPUT_SECRET_OR_OVERFLOW_FAILURE",
+      "UNKNOWN_OR_CHANGED_AUTHORITY",
+      "NO_INTACT_RECORDED_PREDECESSOR"
+    ],
+    "existingProcessOwner": "reviewed_candidate_owner::OwnedCandidateChild",
+    "existingSpawnSignatureAndMessagesPreserved": true,
+    "existingJobPolicyChanged": false,
+    "spawnFailureClassification": "TYPED_RESULT_NOT_STRING_MATCH",
+    "backendLeaseRetainedAcrossRollback": true,
+    "authoritySnapshot": "SEALED_PRIVATE_CURRENT_SNAPSHOT",
+    "publicDisplayFieldsCannotRetargetRestore": true,
+    "existingJournal": "package-update-attempt.json",
+    "newJournalRegistryOrProductionAuthority": false,
+    "failedCurrentBytesPreserved": true,
+    "failedCurrentNotMadePredecessor": true,
+    "fallbackReadyAndResultMetadata": "REASON_FAILED_PACKAGE_HASH_AND_PROVEN_PROCESS_OUTCOME",
+    "afterReadyAutomaticReplacement": false,
+    "nativeOwnershipChanged": false
+  },
+  "causalNormalRed": {
+    "controllerSource": "bd8ddeb743639f11619b7917f1e67244f19d9e0c",
+    "controllerSha256": "5ca293c9757c9d7ff7d608e87befc8fd43b2276105dfdab855972c851dfd5c96",
+    "startedUtc": "2026-10-24T16:01:32.0270658+00:00",
+    "finishedUtc": "2026-10-24T16:01:34.0815593+00:00",
+    "maximumSeconds": 180,
+    "commands": [
+      {
+        "expectedError": "",
+        "timedOut": false,
+        "label": "prepare",
+        "exitCode": 0,
+        "ownerExited": true,
+        "action": "prepare"
+      },
+      {
+        "expectedError": "",
+        "timedOut": false,
+        "label": "record-previous",
+        "exitCode": 0,
+        "ownerExited": true,
+        "action": "record-verification"
+      },
+      {
+        "expectedError": "",
+        "timedOut": false,
+        "label": "select-inert-current",
+        "exitCode": 0,
+        "ownerExited": true,
+        "action": "update-package"
+      },
+      {
+        "expectedError": "",
+        "timedOut": false,
+        "label": "current-bytes-valid-predecessor-available",
+        "exitCode": 0,
+        "ownerExited": true,
+        "action": "status"
+      },
+      {
+        "expectedError": "DEV_BACKEND_START_FAILED",
+        "timedOut": false,
+        "label": "old-command-does-not-fallback",
+        "exitCode": 2,
+        "ownerExited": true,
+        "action": "run-backend"
+      }
+    ],
+    "currentFixture": "INERT_NON_PE_APP_HASHED_IN_EXACT_DEVELOPMENT_PACKAGE_NEVER_PRODUCTION",
+    "currentNormalStatus": "PASSED_FULL_PACKAGE_VALIDATION_WITH_RECORDED_PREDECESSOR_AVAILABLE",
+    "oldFailure": "DEV_BACKEND_START_FAILED_WITHOUT_FALLBACK",
+    "expectedOldFailureVerified": true,
+    "actualBackendStarts": 0,
+    "originalSelectionPreserved": true,
+    "realStateChanged": 0,
+    "scopedOwners": 0
+  },
+  "tests": {
+    "runtimeModulePassed": 37,
+    "backendContractPassed": 4,
+    "existingOwnerRegressionPassed": 10,
+    "total": 51,
+    "newRuntimeTests": 4,
+    "newFallbackPolicyTests": 1,
+    "newOwnerCompatibilityTests": 1,
+    "failed": 0,
+    "ignored": 0,
+    "actualFilters": [
+      "development_runtime::tests",
+      "operator_facade::development_backend::tests",
+      "reviewed_candidate_owner::windows::tests"
+    ],
+    "steps": [
+      {
+        "summaries": [
+          "test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 361 filtered out; finished in 19.03s"
+        ],
+        "logSha256": "806e778f7a9bcda01cb718d7a27559e5384e8ed0337d107c7ada96362628d23a",
+        "name": "wake-development-recovery",
+        "seconds": 26.0184311,
+        "exitCode": 0
+      },
+      {
+        "summaries": [
+          "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 1694 filtered out; finished in 0.28s"
+        ],
+        "logSha256": "f7b1298322330a42acecd33df27c3b161b5a3ecf1f18a40c3f328d32f326f052",
+        "name": "operator-contract",
+        "seconds": 74.1941735,
+        "exitCode": 0
+      },
+      {
+        "summaries": [
+          "test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 1688 filtered out; finished in 0.76s"
+        ],
+        "logSha256": "5de0ad76b5deee2f4f11fe7e7194b8bac709fa5c62c091a093afb4cabb981c06",
+        "name": "existing-owner-regressions",
+        "seconds": 4.5852667,
+        "exitCode": 0
+      },
+      {
+        "summaries": [],
+        "logSha256": "c8ed0862c217e6debe7aeec4040db18fbd22b7a9c0faca969dcb3a41a0de8175",
+        "name": "strict-root-clippy",
+        "seconds": 31.4776597,
+        "exitCode": 0
+      },
+      {
+        "summaries": [],
+        "logSha256": "fe7d19b8250af426f53c63919daf298c19ee2bd474f30fdbebe48fd303a8ed40",
+        "name": "strict-wake-clippy",
+        "seconds": 6.7393047,
+        "exitCode": 0
+      },
+      {
+        "summaries": [],
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "name": "root-format",
+        "seconds": 2.6860681,
+        "exitCode": 0
+      },
+      {
+        "summaries": [],
+        "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "name": "wake-format",
+        "seconds": 0.6901249,
+        "exitCode": 0
+      }
+    ],
+    "strictRootAndWakeClippy": "PASS",
+    "rootAndWakeFormat": "PASS",
+    "sourceFrozen": true,
+    "outerBudgetSeconds": 600,
+    "outerExitCode": 0,
+    "outerTimedOut": false,
+    "outerTerminationFailed": false,
+    "coverage": [
+      "SEALED_SNAPSHOT_IGNORES_DISPLAY_FIELD_RETARGETING",
+      "BACKEND_LEASE_RETAINED_THROUGH_EXACT_PREDECESSOR_RESTORE",
+      "NO_FAILED_VERSION_OSCILLATION",
+      "WAKE_BROWSER_RUNNING_CONTROL_OR_STALE_SNAPSHOT_REFUSAL",
+      "ABSENT_OR_DAMAGED_PREDECESSOR_NO_SELECTION_MUTATION",
+      "REAL_WINDOWS_AUTHORITY_REPLACEMENT_FAILURE_AND_EXISTING_COLD_JOURNAL_RECOVERY",
+      "KNOWN_EXIT_PROOF_AND_PRE_READY_ONLY_FALLBACK_POLICY",
+      "LEGACY_SPAWN_ERROR_SIGNATURE_AND_JOB_POLICY",
+      "EXISTING_OWNER_HARD_CRASH_DESCENDANT_HANDOFF_AND_CLEANUP_REGRESSIONS"
+    ],
+    "newNormalBackendProcesses": 0,
+    "sourceFixtureProcessOwnerChildren": "TEST_ONLY",
+    "normalNewFallback": "NOT_YET_BUILT_OR_QUALIFIED"
+  },
+  "preservation": {
+    "runtimeRecords": 306,
+    "runtimeRecordsChanged": 0,
+    "historicalFiles": 55,
+    "historicalFilesChanged": 0,
+    "scopedOwners": 0,
+    "controls": "BOTH_STOPPED",
+    "queueCount": 0,
+    "selectedDevelopment": "V76_UNCHANGED",
+    "browserWakeRecurringStarts": 0,
+    "officialRuntimeActions": 0,
+    "connectorCalls": 0,
+    "nativeActions": 0,
+    "projectBindingChanges": 0,
+    "protectedInstallationChanges": 0,
+    "completedCanariesReplayed": 0,
+    "legacyMechanismsRetired": 0
+  },
+  "acceptance": {
+    "source": "PASS_FOCUSED_51_TESTS_STRICT_LINT_FORMAT",
+    "oldNormalFailure": "CAUSALLY_CONFIRMED",
+    "newNormalPreReadyFallback": "NEXT_QUALIFICATION",
+    "normalFileFailureFallbackAndParentExit": "C108_PRESERVED",
+    "protectedRecovery": "NOT_EXECUTED",
+    "actualWebCodingBC": "OPEN",
+    "unattended": "NOT_ACTIVATED",
+    "fullOctoberMilestone": "OPEN",
+    "remoteSourceCi": "PENDING_EXACT_SHA_PUBLICATION_READBACK"
+  },
+  "priorPublication": {
+    "head": "2a32e26970ede57420e5047fe87a10c9ab999fc8",
+    "remoteSha": "2a32e26970ede57420e5047fe87a10c9ab999fc8",
+    "qualifiedProductSource": "bd8ddeb743639f11619b7917f1e67244f19d9e0c",
+    "sourceRemoteCi": "UNVERIFIED_ZERO_EXACT_SHA_ACTIONS_AND_CHECKS"
+  },
+  "nextTask": "Build the exact reviewed C109 source as normal release images. In one monitored disposable test verify valid-hash non-executable current fallback to the actual trusted predecessor, bounded stop when a valid-image predecessor also fails before readiness, and no automatic replacement after verified ready publication followed by an exact owned-child failure. Verify all owned trees drained, task/profile/history preserved and no real bindings or protected services changed. Continue toward approved production migration and actual independent ChatGPT Web coding without replaying completed canaries."
+}

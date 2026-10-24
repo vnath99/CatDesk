@@ -1,11 +1,282 @@
 # T-0484 — Per-conversation context pressure, token accounting and safe automatic rollover
+
+## Mandatory October 22 acceptance clarification
+
+October 23 source increment C10 implements durable fair creation admission
+around the existing bootstrap/journal path. Stable scope, timestamps, retained
+lease and quarantine preserve unknown outcomes; receipt persistence releases
+creation before later probes/binding. 72 distinct tests and strict Clippy/format
+pass. This is not the required two-request actual-browser or interruption/restart
+demonstration; those live gates remain open. No existing canary is repeated.
+See [C10 evidence](../../verification/C10_ROLLOVER_ADMISSION_2026_10_23.json).
+
+Context monitoring/compaction and rollover remain core October 31 acceptance,
+alongside true parallel project-bound Web MCP operations. Shared authenticated
+browser creation must use durable fair exclusive admission, stable rollover IDs,
+journaled multi-stage recovery, issued-URL/continuation proof and guarded paired
+commit. Unknown submission never permits blind resend. Preserve predecessor
+history and unknown drafts; serialize only shared browser operations. The updated
+[A–J ledger](../../OCTOBER_2026_MVP_ACCEPTANCE.md#mandatory-web-architecture--operator-clarification-october-22)
+records simultaneous-rollover, interruption and restart demonstrations as open.
+The accepted single rollover is preserved and must not be replayed. C9 source
+prevents silent predecessor eviction at inline capacity; it does not supply an
+unlimited archive or complete the new live gates.
+
 **Priority:** October 31 combined P3/P4 user milestone. The operator's October 17 revision supersedes the earlier deferral below. Independent ChatGPT Web project continuation and a demonstrated project rollover are required for overall acceptance.
-**Date:** 2026-10-14; priority revised 2026-10-17 | **Status:** Implementation in progress; no live rollover accepted.
+**Date:** 2026-10-14; priority revised 2026-10-17; acceptance updated 2026-10-21 | **Status:** Controlled rollover, continuation and three-project delivery verified; five independent context meters observed; retry pacing source and stopped package readback pass; live background, installed, central connector and natural-cycle acceptance pending.
 **Owner:** Codex Desktop, alongside continued development in each project's existing Codex conversation.
 **Dependencies:** accepted project-bound sessions and fair Wake dispatch, versioned WakeHost/owned SeleniumBase, durable event/receipt identity, one authoritative target generation per project, source/trust boundary acceptance.  
 **Read with:** `docs/orchestrator/CATDESK_CODEX_DESKTOP_HANDOFF_2026-10-14.md`; `docs/orchestrator/CATDESK_COMPETITOR_BROWSER_CONTINUITY_2026-10-14.md`; `CATDESK_MILESTONES.md`.
 
 ## Operator requirements
+
+### October 21 five-project context observations (live development)
+
+Existing standalone capture passes once for BYOVD and Bug Bounty with no
+WakeHost start, message, binding/policy change or new authentication. Actual
+reader durations are 38.3/36.5 seconds, with 240-second outer bounds and a
+30-second gap. The reused profile remains authenticated. Both readers exit
+with zero scoped processes; 75 protected files and all original five pairs
+remain unchanged. Fresh post-test snapshots show all four other native chats
+active without turn errors, with no messages or interruptions from this test.
+
+All five generation-1 meters read back with matching pair digests: retained
+CatDesk/Wake2/PortfolioDesk excerpt proxies 2,123/1,530/1,556; fresh BYOVD/Bug
+Bounty 1,446/709. Coverage remains unknown/incomplete, with BYOVD overflow;
+these are not complete context-window measurements. Automatic policies stay
+unchanged and both runtime controls remain STOPPED. This is not five-project
+send/natural-cycle or production acceptance. Existing rollover is not repeated.
+Parent dated evidence: checkpoints/web-five-project-context-oct21.
+
+### October 21 durable retry pacing for automatic browser failures (source)
+
+The existing automatic context/rollover driver now reads a project/generation
+retry deadline before browser work. Attention failures back off 5/10/20/30
+minutes with a 30-minute cap, retaining the count/deadline in `automation.retry`.
+Deferred ticks preserve diagnostic/state bytes; stopped/disabled ticks retain
+the deadline without extending it. Successful observation or handoff progress
+clears pacing. Siblings and replacement generations remain independent;
+explicit operator ticks bypass pacing while keeping existing execution guards.
+
+New auto-status schema 2 reads legacy schema 1 without rewriting it; legacy
+attention receives a conservative initial delay. Old readers refuse schema 2.
+Fixtures cover durable reopen, cross-project/generation isolation, deadline
+expiry, recovery, malformed deadlines/counts and browser callback exclusion.
+The existing bounded shared-browser busy retries and cancellation remain.
+This starts no browser/WakeHost/recurring job, and does not retry the external
+connector's 429. Source, selected-package metadata and actual background
+browser behavior remain separately verified. Parent dated checkpoint:
+`checkpoints/web-auto-backoff-oct21`.
+
+The final source suite passes 1,544 / 28 ignored, enabled integrations/nested
+Wake, strict all-target/all-feature Clippy, formatting and diff checks. No
+installed background backoff claim follows from these fixture tests.
+
+Normal development v32 built at `6bc057c` passes stopped selection and its
+20-second loopback metadata/cleanup probe. Seven pairs, three retained context
+estimates, continuation proof, old package/profile and all five original
+bindings remain preserved, with both controls STOPPED and zero scoped
+processes. Only four numeric usage counters change. This is metadata
+compatibility; no live background retry/rollover or browser send is performed.
+
+### October 21 retained tool and worker content accounting (source)
+
+Recorded model-to-tool arguments previously appeared only in the advisory
+traffic counter, so retained arguments could never contribute to rollover
+pressure. The existing streaming regression reproduces 5 tokens instead of
+11. Arguments now join the same deduplicated observed-context estimate as
+messages/results. A `WORKER_MESSAGE` observation explicitly records worker
+content that was delivered into that conversation's model context; it does
+not attribute arbitrary native stdout or identify a trusted caller.
+
+The existing `visibleUniqueTokens` field remains compatible in name and now
+includes these structured/worker sources. `observedEstimateTokens` reports
+the same total, and `estimateMethod` identifies the observed-context proxy.
+Argument/result traffic counters remain separate breakdowns and are not added
+again. Revisions and shared dedup keys prevent repeated surfaces from summing.
+Existing stored argument metadata contributes on read without rewriting it;
+new worker records need this source's reader. No transcript is persisted.
+
+Unit fixtures cover the pressure trigger, explicit rollover opt-in, dedup,
+streaming revision, reopen, sibling isolation and a fresh generation's empty
+estimate. The authenticated three-project MCP fixture checks schema/dispatch,
+argument/worker deltas, worker replay, duplicate rendering and sibling state.
+This is source verification; selected development/installed and live acceptance
+must be recorded separately. Private dated evidence: parent
+`checkpoints/web-observed-context-oct21`.
+
+Matched normal v30 at `aa7c60f` is subsequently selected stopped. Its bounded
+20-second metadata readback verifies the schema and retained three-project
+estimates through the new method, with seven paired projects and the existing
+continuation proof preserved. Normal exit, original-five comparison, unchanged
+production, zero owned processes and both STOPPED controls pass. Valid worker
+payloads remain fixture-verified; this starts no browser, WakeHost or live event.
+
+### October 20 guarded Web serving parity verified locally
+
+Source `784c729` exposes the five existing work/context tools in both Computer
+supervisor modes, retaining read-only/browser-only refusal and the separate
+queue disclosure gates. Three existing Web matrices fail before and pass after
+the correction. The v27 loopback test exits cleanly but remains PARTIAL because
+usage accounting also saves temporary headless launch settings. The first
+evidence/configuration are retained rather than reconstructed.
+
+Source `742ede6` fixes that persistence and passes full main 1,539 / 28 ignored
+and strict Clippy. Matched normal optimized v28 passes a fresh internally
+bounded 20-second MCP test: authentication and five-tool catalog/closed-scope
+dispatch pass, seven paired statuses and existing continuation proof read back,
+no events/browser/WakeHost starts. Only four numeric usage counters can change
+among 81 checked files; launch settings and project/history state are preserved.
+Normal listener exit, zero owned processes, both controls STOPPED, original-five
+pair comparison and unchanged production pass. Private dated evidence:
+parent `checkpoints/web-serving-parity-oct20/approved-catalog-run-20261021T033800303Z`.
+External connector, protected installation, exact CI and natural-cycle gates
+remain separate; this local serving result does not close them.
+
+### October 20 optimized reporting verified in stopped development
+
+The existing normal release profile resolves debug status latency without
+source/authority changes. Restored exact-image deadline proof passes, and
+guarded stopped development v26 preserves all project state, auth profile and
+production. Its selected aggregate read returns the same seven-project status
+in 3.00 seconds; target read and invalid-scope refusal pass, all 79 checked
+files are unchanged and no owned processes remain. Original five pairs pass
+independent readback. Wake/Python inputs remain unchanged and no recurring
+task starts. Parent `checkpoints/web-status-performance-oct20` retains dated
+evidence. One connector read still returns HTTP 429; authenticated GitHub shows
+no current-source CI evidence, and its billing read is unavailable (HTTP 404).
+Installed, central connector and natural development-cycle acceptance remain
+open; development measurements do not replace those gates.
+
+### October 20 periodic three-project observation verified
+
+Corrected development v25 (`148deba`) passes the 480-second scoped periodic run:
+three fresh exact-target captures without manual capture calls, no sends or
+rollover, CatDesk quarantine retained and canaries excluded. Scheduler exits
+normally on its internal deadline, host tree drains, owned process count is
+zero; all policies restore exactly, five bindings/history and old deliveries/
+timers are preserved, both controls stopped, production unchanged. Evidence:
+parent `checkpoints/web-quarantine-monitor-oct20/approved-monitor-run-20261021T021001323Z`.
+The earlier partial run remains retained. Source fixes include independent
+quarantine observation, bounded/project-scoped headless operation, browser code
+reporting and two cancellable local contention retries. Final 61 Web regressions,
+strict Clippy and build pass; main 1,539 / 28 ignored and two native headless
+fixtures passed before the last retry change. Aggregate status completed in
+about 50 CPU-heavy seconds after exceeding its initial 30-second diagnostic
+limit; the optimized candidate above resolves that delay. Connector,
+installation and natural-cycle gates remain open. This is controlled
+development acceptance only.
+
+### October 20 approved bounded live result and capture freshness
+
+The explicit operator test approval supersedes earlier holds below. Source-built
+v22 delivered one review each to CatDesk, Wake2 and PortfolioDesk, with exact
+receipts, completed timers and separately verified assistant bodies/markers.
+The internal maximum was 900 seconds; completion and owned-tree cleanup took
+212 seconds. All five bindings/history and the production pointer are preserved;
+owned process count is zero, both controls STOPPED, no recurring scheduler or
+completed canary replay. Dated audit: parent
+`checkpoints/web-three-project-review-oct20/approved-run-20261021T010650920Z`.
+One connector read remains HTTP 429; no retries. Installed and natural development
+cycle acceptance remain open. Native owners received no tasks or interruptions.
+
+Source browser ingestion now exposes monotonic per-conversation capture time as
+`browserCoverage.lastObservedAtUnix`. Deduplicated snapshots refresh observation
+time without increasing tokens; legacy/new-generation freshness remains unknown.
+Freshness commits after snapshot validation and the final target/cancellation
+check; rejected reads retain previous freshness.
+Full root regression passes 1,538 CatDesk tests / 28 ignored and all enabled
+integrations, strict Clippy, formatting and diff checks. Source `41a8c49` was
+built into stopped development v23; one bounded authenticated CatDesk capture
+verifies its current timestamp and exact target without sending or starting a
+host/scheduler. Cleanup proves zero owned processes observed, both controls
+stopped and all five pairs preserved. Production is unchanged. Private evidence:
+parent `checkpoints/web-context-freshness-oct20/live-freshness-result.json`.
+
+### October 20 current acceptance and contention correction
+
+Central registry status now preserves `AWAITING_CONTEXT` and its
+`WEB_CONTEXT_BUSY` reason instead of projecting `UNKNOWN_STAGE`. The existing
+held-writer stop/drain regression exercises this production readback, fails
+before the fix and passes afterward without a sticky failure. This correction
+is source-only; stopped v22, live targets and the approval-pending three-review
+controller are unchanged. The ten user acceptance requirements remain audited
+as controlled development evidence with installed/central live gates open.
+
+One read-only fetch now verifies the actual already delivered implementation
+review against its exact sent event and complete assistant body. Six existing
+archive/resume regressions pass, including late composer change before deletion.
+Actual legacy clearing remains unproven; no old draft or completed canary was
+changed. All original state/bindings are preserved with no owned reader process
+left. Connector verification remains separate from this successful local read.
+Protected installation also has unfinished admission/service/reader source
+wiring, in addition to independent approval and provisioning; see T-0485.
+
+The external three-review controller has 14 passing checks and a read-only
+default preflight. Optional `run --max-runtime-seconds 1..900` now enforces the
+deadline inside the existing foreground owner, requests STOP once and retains
+the private Job for bounded cleanup. A disposable helper verifies stop without
+the external controller; invalid budgets change no control state. Prepared
+payloads remain unpublished and the explicit live-start approval is pending.
+Final source gates: CatDesk 1,537 / 28 ignored, Wake 294 library / 1 ignored
+plus integrations, strict Clippy and both builds pass. Stopped v22 and its
+read-only controller preflight preserve all original state/pairs, with no owned
+browser/Wake process afterward.
+
+Preparing the next three-project test exposed a foreground launcher-loss orphan
+gap. The existing run command now assigns the private kill-on-close Job before
+an exact child startup gate; missing protocol refuses before control changes.
+Five native/gate tests verify live helpers and descendants exit on caller death
+and normal parent exit, without real host/browser work. Root 1,537 / 28 ignored,
+Wake 293 library / 1 ignored plus integrations, strict Clippy and both builds
+pass. Three exact review requests are prepared with independent paired targets;
+none is enqueued/sent. The shared runner still requires explicit authorization
+lifting the current host-start hold and an external test deadline.
+
+Automatic policy/readiness checks now use nonblocking read-only context access;
+shared rollover mutations also refuse a busy ledger. The status is transient
+`AWAITING_CONTEXT` / `WEB_CONTEXT_BUSY`. The held-lock worker regression checks
+prompt stop/drain, sibling startability, no handoff request and recovery after
+release. Rollover confirmation retains phase/history and policy opt-out guards.
+Latest full root gate: **1,537 passed / 28 ignored**, strict Clippy/build/format
+pass. These are source fixtures; no live capture, resend or recurring start.
+The v20 development package was selected stopped, preserving all 91 state
+files, five original paired bindings and the production pointer, with no owned
+browser/Wake process afterward. Current native-session inventory is distinct
+from task progress: Wake2 and
+PortfolioDesk were active at the preceding checkpoint; BYOVD and Bug Bounty
+were idle at their own operator authorization gates. CatDesk did not pause,
+resume, message or alter them.
+
+Current standalone capture uses the same witnessed bounded worker as MCP.
+Three real non-canary reads verified existing BYOVD, Wake2 and PortfolioDesk
+targets, independent visible estimates and normal reader cleanup. An earlier
+60-second outer limit cancelled startup prematurely; the fixed total budget is
+180 seconds, retaining the existing internal timeouts and cancellation. Timeout
+cleanup was also observed with all 14 recorded reader descendants gone.
+The v19 development package remains stopped; only two expected context ledgers
+changed. No message, target change, repeated canary or recurring start occurred.
+These reads do not establish fresh delivery or central connector parity.
+
+The controlled fast canary completed replacement creation, paired binding,
+history preservation and continuation with assistant response proof. Preserve
+that completed operation. Earlier failure descriptions below are historical.
+The central MCP context family exposes policy, observations and bounded capture.
+Online mutations and snapshot ingestion now refuse a held ledger lock with
+`WEB_CONTEXT_BUSY`, retaining exact target guards and idempotent event/revision
+accounting. HTTP and fake-reader tests verify sibling status, capture-slot
+release and unchanged state after refusal. Final root gate: 1,536 passed / 28
+ignored, strict Clippy/build/format pass. No browser, WakeHost, recurring worker
+or native conversation was started or changed to run these fixtures.
+
+The stopped development candidate is now v22, with the bounded foreground owner
+protocol and all original state/bindings preserved; this is not protected installed
+acceptance. Fixed broker preflight reports `WAKE_BROKER_SERVICE_UNPROVISIONED`.
+Independent release approval, closed old-store/launcher evidence, protected
+bootstrap/reader cutover, remote CI, connector serving parity (last 429) and
+fresh independent project delivery remain separate gates. All four native
+project chats remain preserved and independently usable, subject to their own
+operator gates. See `docs/OCTOBER_2026_MVP_ACCEPTANCE.md` for evidence.
 
 ### October 17 running-host implementation update
 

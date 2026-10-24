@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C89_ASSIGNED_NESTED_FILE_CREATION",
+  "observedUtc": "2026-10-24T08:42:03.6222304+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "b7cea0e4c0d16715f6320ed40ccc435bc4decd6e",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "SOURCE_AND_ISOLATED_NATIVE_TASK_HTTP_FIXTURES_NOT_SELECTED_RUNTIME_OR_CHATGPT_WEB",
+  "sourceHashes": {
+    "src/project_mcp_task.rs": "a076247968c99ee402ef22628bb7b8238b0939fd864f92c3c218403bf00a9eaf"
+  },
+  "change": {
+    "nearestExistingAncestorValidated": true,
+    "newCommands": 0,
+    "newRegistries": 0,
+    "existingPatchPreimageJournalAndCreateOnlyRulesReused": true,
+    "pathValidationCreatesNoDirectories": true,
+    "onlyNotFoundPermitsAncestorWalk": true,
+    "existingAncestorMustBeDirectoryForNestedTarget": true,
+    "globalWorkspaceVariableAdded": false,
+    "existingPatchEngineUnchanged": true,
+    "defect": "Existing task path admission rejected new assigned files whose parent directories did not exist",
+    "canonicalContainmentRequired": true,
+    "contractAllowAndDenyPathsRetained": true
+  },
+  "regression": {
+    "recordedCallsUnchangedAfterRefusal": true,
+    "twoIndependentAssignedWorktreesCreateSameNestedPathWithDifferentContent": true,
+    "nativeWriterAvailable": true,
+    "newFileActualDiffVerified": true,
+    "traversalGitAndCatdeskComponentsRefused": true,
+    "outsideAndDanglingJunctionsRefusedBeforeWrites": true,
+    "newMethods": 2,
+    "actualDirectoryJunctionTargetIndependentlyVerified": true,
+    "exactFileContractScopeEnforced": true,
+    "nativeCheckoutBytesPreserved": true,
+    "newFileAbsentUntilApply": true,
+    "coldCompletedCallRefusesReplay": true,
+    "danglingTargetNotRecreated": true,
+    "nonDirectoryAncestorRefused": true,
+    "invalidPathsNeverEnterTaskJournal": true
+  },
+  "causalRed": {
+    "exitCode": 101,
+    "elapsedSeconds": 49.2549528,
+    "status": "PASS_EXPECTED_OLD_NESTED_FILE_REJECTION",
+    "reason": "PROJECT_TASK_PATH_UNAVAILABLE"
+  },
+  "green": {
+    "exitCode": 0,
+    "ownedGateSeconds": 81.5438347,
+    "existingNativeCommandTestsIgnored": 2,
+    "failed": 0,
+    "affectedTestsPassed": 18,
+    "sourceFrozen": true,
+    "nativeCommandQualificationClaimed": false
+  },
+  "finalGates": {
+    "strictClippy": "PASS_LOCKED_OFFLINE_WORKSPACE_ALL_TARGETS_ALL_FEATURES_DENY_WARNINGS",
+    "ownedGateSeconds": 69.334644,
+    "centralHttpTaskDispatchTestsPassed": 3,
+    "sourceFrozen": true,
+    "format": "PASS_CARGO_FMT_ALL_CHECK",
+    "centralDispatchSeconds": 50.8164847,
+    "exitCodes": [
+      0,
+      0,
+      0
+    ]
+  },
+  "retainedUnqualifiedAttempts": [
+    "First green:17 passed,1 failed,2 existing native-command tests ignored. The Windows junction helper received extended paths; normalize only the fixture arguments and verify the actual junction target before testing refusal.",
+    "Second green:17 passed,1 failed,2 ignored. All path fences passed; the unchanged-file assertion incorrectly assumed LF in a Windows Git checkout. Replaced it with stronger exact before/after byte comparisons. Production guard unchanged by either fixture repair."
+  ],
+  "dependency": {
+    "supportedLifecycleFacadeLocated": "catdesk.ps1",
+    "officialTunnelOwner": "OPERATOR_EXTERNAL",
+    "connectorCalls": 0,
+    "startupOrRecoveryInvoked": false,
+    "priorHttp429NotReprobed": true,
+    "actualParallelWebCodingBC": "OPEN_SERVING_BACKEND_AND_CATALOG_DEPENDENCY",
+    "freshOfficialStateClaimed": false
+  },
+  "preservation": {
+    "queueCount": 0,
+    "heldUnknownJournalTouched": false,
+    "changedRecords": 0,
+    "scopedOwners": 0,
+    "selectedPackageChanged": false,
+    "testProcesses": 0,
+    "controls": "BOTH_STOPPED",
+    "runtimeRecords": 306,
+    "nativeActions": 0,
+    "completedCanariesReplayed": 0,
+    "browserWakeRecurringStarts": 0,
+    "productionChanged": false
+  },
+  "acceptance": {
+    "actualChatgptWebTaskExecution": "NOT_QUALIFIED_CONNECTOR_BACKEND_GATE",
+    "normalApp": "NOT_BUILT_FOR_C89",
+    "source": "PASS",
+    "fullOctoberMilestone": "OPEN",
+    "unattended": "NOT_ACTIVATED",
+    "protectedInstalled": "NOT_QUALIFIED",
+    "selectedRuntime": "RETAINS_C86_C85_APP"
+  },
+  "nextTask": "Build the reviewed normal C89 app and qualify assigned nested-file creation through the existing disposable central HTTP task harness. Keep normal local HTTP evidence separate from actual ChatGPT Web coding. Preserve selected runtime/bindings and completed canaries until the existing guarded stopped selection is eligible."
+}

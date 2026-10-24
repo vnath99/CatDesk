@@ -1,0 +1,247 @@
+{
+  "recordedUtc": "2026-10-23T07:36:10.7947821Z",
+  "localDate": "2026-10-23",
+  "task": "C17-SELECTED-STRUCTURED-HANDOFF-PACKAGE",
+  "classification": "SELECTED_STOPPED_DEVELOPMENT_IMAGE_AND_BOUNDED_BROWSER_READINESS",
+  "branch": "codex/web-rollover-oct17",
+  "sourceCommit": "ecf1cc9f60154c3a887f78443ec06e882fdd4c2b",
+  "sourceTree": "cacf109f9369735e57e3fd4addbce32e7b68f049",
+  "sourceFiles": [
+    {
+      "path": "src/operator_web_rollover.rs",
+      "sha256": "48e2720401bcd462b59c5d8969870faefae958d4b97c3e8f67a37c3aa82a0087"
+    },
+    {
+      "path": "src/project_mcp.rs",
+      "sha256": "e663b71f3fa3efd1d31ae2a11474f7de0a97a0096682220c5df1cfb1e4069f63"
+    },
+    {
+      "path": "src/main.rs",
+      "sha256": "eecf0517779b50a01ce806cce06441f26dab0ea1cdf91ac9cac1311be2caa6c2"
+    },
+    {
+      "path": "src/project_mcp_task.rs",
+      "sha256": "5f6146e7f134d2eedf723f3c4423f29571166be7e7af2d7a4ecbeab57f8a04fe"
+    },
+    {
+      "path": "src/project_task_command.rs",
+      "sha256": "5a82b4eddf495098ef85d94cc8c2a192f33a3423e8200a21aaf1c37de1d16c2b"
+    }
+  ],
+  "newRuntimeSourceChanges": [],
+  "includedStages": [
+    "C9_HISTORY_NO_EVICTION",
+    "C10_FAIR_CREATION_ADMISSION",
+    "C11_IMMUTABLE_PROJECT_MCP",
+    "C12_ASSIGNED_LINKED_WORKTREE_PATCH_TOOLS",
+    "C14_FIXED_NATIVE_SANDBOX_COMMAND_PROFILES",
+    "C16_STRUCTURED_HANDOFF_AND_INTERRUPTED_POINTER_RECOVERY"
+  ],
+  "releaseBuild": {
+    "startedUtc": "2026-10-23T07:21:47.7331758Z",
+    "finishedUtc": "2026-10-23T07:27:47.5523664Z",
+    "sourceCommit": "ecf1cc9f60154c3a887f78443ec06e882fdd4c2b",
+    "sourceTree": "cacf109f9369735e57e3fd4addbce32e7b68f049",
+    "sourceFiles": [
+      {
+        "path": "src/operator_web_rollover.rs",
+        "sha256": "48e2720401bcd462b59c5d8969870faefae958d4b97c3e8f67a37c3aa82a0087"
+      },
+      {
+        "path": "src/project_mcp.rs",
+        "sha256": "e663b71f3fa3efd1d31ae2a11474f7de0a97a0096682220c5df1cfb1e4069f63"
+      },
+      {
+        "path": "src/main.rs",
+        "sha256": "eecf0517779b50a01ce806cce06441f26dab0ea1cdf91ac9cac1311be2caa6c2"
+      },
+      {
+        "path": "src/project_mcp_task.rs",
+        "sha256": "5f6146e7f134d2eedf723f3c4423f29571166be7e7af2d7a4ecbeab57f8a04fe"
+      },
+      {
+        "path": "src/project_task_command.rs",
+        "sha256": "5a82b4eddf495098ef85d94cc8c2a192f33a3423e8200a21aaf1c37de1d16c2b"
+      }
+    ],
+    "profile": "NORMAL_RELEASE_APP_NO_DEV_DEPENDENCIES",
+    "exitCode": 0,
+    "maximumSeconds": 600,
+    "packageSelectionChanged": false,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "imageSha256": "3739c2a690c0e1a87d7a8852a29de8fb71007960f6f59e3bda835ef209b75620",
+    "imageBytes": 33997824,
+    "buildLogSha256": "907b61e13e97f4614c2a322589a66786a092b5de5b0ee27d5dcd24bf90510fdc"
+  },
+  "hostBuild": {
+    "startedUtc": "2026-10-23T07:28:38.5961187Z",
+    "finishedUtc": "2026-10-23T07:28:39.6280028Z",
+    "sourceCommit": "ecf1cc9f60154c3a887f78443ec06e882fdd4c2b",
+    "profile": "NORMAL_RELEASE_WAKE_DEFAULT_FEATURES_NO_TEST_SUPPORT",
+    "exitCode": 0,
+    "imageSha256": "75c49dc855baf5aeb272fbffc4a25ada5e91786e1dd3888bbd41388d4a33fa84",
+    "imageBytes": 2034176
+  },
+  "artifacts": [
+    {
+      "name": "CatDeskBinagotchy.exe",
+      "sha256": "3739c2a690c0e1a87d7a8852a29de8fb71007960f6f59e3bda835ef209b75620",
+      "bytes": 33997824
+    },
+    {
+      "name": "CatDeskWakeHost.exe",
+      "sha256": "75c49dc855baf5aeb272fbffc4a25ada5e91786e1dd3888bbd41388d4a33fa84",
+      "bytes": 2034176
+    },
+    {
+      "name": "adapter.py",
+      "sha256": "f742b36270dc10f34c47982d3f9fe811386f29d92b3eeb20ffb4d21cc551bdfb",
+      "bytes": 46664
+    },
+    {
+      "name": "wake_bridge.py",
+      "sha256": "7c519de51c29b1a530fb5541f7d2367edb23c8e864271115384d6e3d50dfed7e",
+      "bytes": 157819
+    }
+  ],
+  "foregroundGate": {
+    "classification": "REUSED_EXACT_IMAGE_FOREGROUND_GATE",
+    "imageSha256": "75c49dc855baf5aeb272fbffc4a25ada5e91786e1dd3888bbd41388d4a33fa84",
+    "priorExactImageGateReused": true,
+    "newHostProcessStarted": false
+  },
+  "selection": {
+    "finishedUtc": "2026-10-23T07:28:52.9003982Z",
+    "profile": "GUARDED_UNPROTECTED_DEVELOPMENT_UPDATE_PACKAGE",
+    "previousPackage": "1.0.0-dev.85-e6471182556f20d49604edfe7dec99f24b34c8e324ccac58437666c730402d3d",
+    "selectedPackage": "1.0.0-dev.85-f963455250991eadf64fd62ec5ade08d56c0fab36bf452c6d9f93c5802539e93",
+    "elapsedSeconds": 3.291586,
+    "fiveOriginalRowsPaired": true,
+    "recordsChecked": 139,
+    "allowedPackagePointerChanges": 2,
+    "unchangedOtherRecords": 137,
+    "unexpectedChanges": 0,
+    "newStateRecords": 0,
+    "priorPackagePreserved": true,
+    "browserProfileTouched": false,
+    "wakeTargetsChanged": false,
+    "productionModified": false,
+    "ownedProcesses": 0,
+    "desired": "STOPPED"
+  },
+  "selectedImageQualification": {
+    "startedUtc": "2026-10-23T07:28:58.5136647Z",
+    "finishedUtc": "2026-10-23T07:29:04.5459685Z",
+    "classification": "SELECTED_EXECUTABLE_LEGACY_STATUS_AND_DISPOSABLE_HANDOFF_PREPARATION",
+    "sourceCommit": "ecf1cc9f60154c3a887f78443ec06e882fdd4c2b",
+    "imageSha256": "3739c2a690c0e1a87d7a8852a29de8fb71007960f6f59e3bda835ef209b75620",
+    "maximumSeconds": 180,
+    "commandMaximumSeconds": 30,
+    "exitCode": 0,
+    "viewPassed": true,
+    "fixturePassed": true,
+    "fixtureProofs": [
+      {
+        "intentPreservedAfterFreshProcess": true,
+        "project": "alpha",
+        "observedEstimateTokens": 301,
+        "handoffContextStored": true,
+        "handoffSchema": 2
+      },
+      {
+        "intentPreservedAfterFreshProcess": true,
+        "project": "beta",
+        "observedEstimateTokens": 31,
+        "handoffContextStored": true,
+        "handoffSchema": 1
+      }
+    ],
+    "fiveOriginalPairsVisible": true,
+    "legacyContinuationAndQuarantineVisible": true,
+    "recordsChecked": 139,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "ownedProcesses": 0,
+    "failure": null,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "connectorCalls": 0,
+    "messagesSent": 0,
+    "nativeSessionsChanged": false,
+    "selectedPackageChanged": false,
+    "recurringStarted": false,
+    "productionModified": false,
+    "completedCanaryReplayed": false,
+    "elapsedSeconds": 6.03,
+    "containment": {
+      "ExitCode": 0,
+      "TimedOut": false,
+      "TerminationFailed": false
+    }
+  },
+  "reusedSourceVerification": {
+    "evidence": "C16_STRUCTURED_HANDOFF_2026_10_23.json",
+    "distinctTests": 73,
+    "executions": 81,
+    "strictClippy": "PASS",
+    "format": "PASS",
+    "rerunThisStage": false,
+    "priorCommandQualification": "C15_TASK_COMMAND_PACKAGE_2026_10_23.json",
+    "commandSourceHashesUnchanged": true,
+    "priorCommandTestRepeated": false
+  },
+  "browserReadiness": {
+    "startedUtc": "2026-10-23T07:32:05.3648497Z",
+    "finishedUtc": "2026-10-23T07:32:22.0672244Z",
+    "elapsedSeconds": 16.7,
+    "maximumSeconds": 180,
+    "profile": "EXISTING_PRESERVED_DEVELOPMENT_BROWSER_PROFILE",
+    "operatorAction": "EXISTING_INSPECT_DRAFT_READ_ONLY",
+    "classification": "EMPTY_HOME",
+    "actualComposerBytes": 0,
+    "messagesSent": 0,
+    "draftCleared": false,
+    "bindingChanged": false,
+    "recordsChecked": 139,
+    "changedRecords": 0,
+    "newRecords": 0,
+    "ownedProcesses": 0,
+    "containment": {
+      "ExitCode": 0,
+      "TimedOut": false,
+      "TerminationFailed": false
+    },
+    "completedCanaryReplayed": false,
+    "historicalUnknownOutcomeResolved": false
+  },
+  "external": {
+    "connectorLatestObservationUtc": "2026-10-23T06:42:18Z",
+    "connectorLatestHttpStatus": 429,
+    "connectorCallsThisStage": 0,
+    "retry": false,
+    "tunnelChanged": false,
+    "settingsChanged": false,
+    "browserStarted": true,
+    "browserReadOnly": true,
+    "wakeHostWorkerStarted": false,
+    "recurringStarted": false,
+    "messagesSent": 0,
+    "nativeSessionsChanged": false,
+    "completedCanaryReplayed": false,
+    "protectedProductionChanged": false
+  },
+  "acceptance": {
+    "matchedDevelopmentPackage": "SELECTED_STOPPED_V52",
+    "selectedImageSchema1Schema2AndRestart": "PASS_DISPOSABLE_LOCAL_PREPARATION",
+    "existingProfileHomeReadiness": "EMPTY_HOME_READ_ONLY_PROVED",
+    "actualNewSchema2WebExchange": "OPEN",
+    "actualWebB": "OPEN",
+    "actualBrowserGHI": "OPEN",
+    "protectedProduction": "OPEN",
+    "unattended": "NOT_ACTIVATED",
+    "fullMilestone": "PARTIAL"
+  },
+  "commandScope": "Operator fixed profiles retain existing native broad read posture; writes limited to assigned worktree except control metadata. File tools remain project scoped. Exit0 is not task completion.",
+  "nextTask": "Freeze two fresh controlled source-chat seed payloads, create dedicated source conversations through existing owned browser automation, verify actual issued URLs, register only those isolated projects, then exercise fresh simultaneous rollover/recovery G/H/I. Do not alias existing project bindings or resend historical canaries."
+}

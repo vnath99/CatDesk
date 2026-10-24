@@ -1,0 +1,143 @@
+{
+  "recordedUtc": "2026-10-22T21:10:51.8303332Z",
+  "task": "C2-STANDALONE-WEB-STATUS",
+  "baseHead": "f5e2458c666546b733ab4bf38544504e29c83f51",
+  "branch": "codex/web-rollover-oct17",
+  "evidenceType": "TESTED_LOCAL_EXECUTABLE_ON_REAL_DEVELOPMENT_METADATA",
+  "sourceFiles": [
+    {
+      "path": "src/binagotchy_cli.rs",
+      "sha256": "3c62ca2da6ec597ad730640207b7387c9dcdf1ecc880ab62566026843bd2a720"
+    },
+    {
+      "path": "src/main.rs",
+      "sha256": "ec5847ba997a7e25c09288c9a01af4867aaadbcb747c4ae6782fd2804d770c5f"
+    },
+    {
+      "path": "src/operator_facade.rs",
+      "sha256": "b2d5e5284309ab6ddab38a2c9e4f4d07976f733487a8d76e5c1310a2038f9264"
+    },
+    {
+      "path": "src/operator_web_cli.rs",
+      "sha256": "ff7708349b65432a82689b1e4f67a26dfa20f1445437adc3e5235a19e2f152a9"
+    },
+    {
+      "path": "src/web_development_tests.rs",
+      "sha256": "183da0891b9f82776774d10ba6287a754a65149cbd3662375db990b4bfbcbaaa"
+    }
+  ],
+  "normalDebugImage": {
+    "sha256": "0fb88284fb79464eae150a1a8389e4c9bb3ca269365d3e09cfa88830f7ad4012",
+    "bytes": 66962944,
+    "profile": "NORMAL_DEBUG_APP_NO_DEV_DEPENDENCIES",
+    "finishedUtc": "2026-10-22T21:02:36.4657844Z",
+    "postBuildEdit": "One test-only clone-to-reference fix; reconstructing prior source bytes matches exact build witness; production code unchanged"
+  },
+  "checks": [
+    {
+      "label": "frontend-console-tests",
+      "arguments": [
+        "test",
+        "--bin",
+        "catdesk",
+        "binagotchy_cli::tests",
+        "--",
+        "--test-threads=1"
+      ],
+      "exitCode": 0,
+      "finishedUtc": "2026-10-22T21:05:12.1929965Z",
+      "logSha256": "d84c865dcaf397d400f3dff6b92a2c4d8102371d721827dc005487161b3d01e6"
+    },
+    {
+      "label": "frontend-web-integration-tests",
+      "arguments": [
+        "test",
+        "--bin",
+        "catdesk",
+        "web_development_tests::",
+        "--",
+        "--test-threads=1"
+      ],
+      "exitCode": 0,
+      "finishedUtc": "2026-10-22T21:06:05.6129034Z",
+      "logSha256": "f227c8fc650f0be21018291af0c724866408e11b57c3366afc65418118133383"
+    },
+    {
+      "label": "frontend-changed-exact-test",
+      "arguments": [
+        "test",
+        "--bin",
+        "catdesk",
+        "binagotchy_cli::tests::standalone_web_status_cannot_be_combined_with_runtime_controls",
+        "--",
+        "--exact"
+      ],
+      "exitCode": 0,
+      "finishedUtc": "2026-10-22T21:09:11.9889838Z",
+      "logSha256": "7ca2eed465217456f00293b9b3a6f4e1c54b13a7e75f716c5edf1af49fac9e93"
+    },
+    {
+      "label": "frontend-clippy-fixed",
+      "arguments": [
+        "clippy",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exitCode": 0,
+      "finishedUtc": "2026-10-22T21:09:33.3169413Z",
+      "logSha256": "1772624455a396bdec6d7af28db07378bd57d1c1a0b13041bcb08929c9cd3843"
+    },
+    {
+      "label": "frontend-format-final",
+      "arguments": [
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exitCode": 0,
+      "finishedUtc": "2026-10-22T21:09:36.4852813Z",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "executableQualification": {
+    "observedUtc": "2026-10-22T21:03:25.0549548Z",
+    "elapsedSeconds": 15.0297753,
+    "totalCapSeconds": 45,
+    "perCommandCapSeconds": 15,
+    "positiveViewPassed": true,
+    "mixedMutationRefused": true,
+    "legacyDevelopmentGuardPreserved": true,
+    "protectedRecordsChecked": 85,
+    "stateChanges": 0,
+    "newStateRecords": 0,
+    "scopedProcesses": 0,
+    "browserStarted": false,
+    "wakeHostStarted": false,
+    "messagesSent": 0,
+    "packageSelectionChanged": false
+  },
+  "retainedFailures": [
+    "Initial debug view exceeded 15-second command cap; unused legacy detail reads removed before successful qualification",
+    "Initial supervisor-in-development expectation failed; installed-operation scope guard held; supported status read separately completed",
+    "Initial Clippy exit 101 for test-only cloned_ref_to_slice_refs; exact test and strict Clippy pass after fix"
+  ],
+  "installedAcceptance": "UNVERIFIED",
+  "newFrontendNormalReleaseQualification": "OPEN",
+  "connector": "Last single read HTTP429; no new probe this increment",
+  "remote": "https://github.com/vnath99/CatDesk",
+  "publication": {
+    "observedUtc": "2026-10-22T21:12:51.6466647Z",
+    "status": "PUSHED_EXACT_REMOTE_MATCH",
+    "sourceCommit": "2e9ebe83f4fcefa6994e362d6cade1f96bab323b",
+    "remoteSha": "2e9ebe83f4fcefa6994e362d6cade1f96bab323b",
+    "branch": "codex/web-rollover-oct17",
+    "workflowRuns": 0,
+    "checkRuns": 0,
+    "ciAcceptance": "UNVERIFIED",
+    "force": false,
+    "visibilityChange": false
+  }
+}
