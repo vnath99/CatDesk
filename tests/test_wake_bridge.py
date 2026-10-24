@@ -1720,6 +1720,8 @@ class WakeBridgeTests(unittest.TestCase):
 
         sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
         with patch.dict(sys.modules, {"seleniumbase": types.SimpleNamespace(SB=SB)}), patch.object(
+            sink, "wait_for_page_readiness", return_value=cdp
+        ), patch.object(
             sink, "wait_for_submission_accepted", return_value=99.0
         ), patch.object(
             sink, "post_submit_visible_any", return_value=False
@@ -1727,9 +1729,12 @@ class WakeBridgeTests(unittest.TestCase):
             sink, "post_submit_composer_text", return_value=""
         ), patch.object(
             sink, "wait_for_response_completion", return_value=None
-        ):
+        ), patch.object(
+            sink, "durable_receipt_round_trip", wraps=sink.durable_receipt_round_trip
+        ) as receipt_probe:
             with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "SUBMIT_RECEIPT_ROUND_TRIP_FAILED"):
                 sink.wake(self.record_id, message, lambda: True, lambda: boundary.append("submitted"))
+        receipt_probe.assert_called_once_with(cdp)
         self.assertEqual(["submitted"], boundary)
         self.assertEqual(message, cdp.messages[-1])
 
@@ -1928,6 +1933,138 @@ class WakeBridgeTests(unittest.TestCase):
             stages,
         )
         self.assertGreaterEqual(clock.now, 1.5)
+
+    def test_response_observer_recovers_transient_read_failures_without_ui_actions(self):
+        class Clock:
+            now = 0.0
+            def monotonic(self): return self.now
+            def sleep(self, seconds):
+                self.assert_positive(seconds)
+                self.now += seconds
+            @staticmethod
+            def assert_positive(seconds):
+                if seconds <= 0: raise AssertionError("observation must not busy-spin")
+
+        for location in ("url", "visibility", "editor", "snapshot"):
+            with self.subTest(location=location):
+                clock, failures, stages = Clock(), [], []
+                sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
+                def fail_once(at):
+                    if at == location and not failures:
+                        failures.append(at)
+                        if at == "url": raise RuntimeError("CDP context remounted")
+                        raise wake_bridge.PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
+                class Cdp:
+                    def get_current_url(self):
+                        fail_once("url")
+                        return sink.url
+                def visible(_cdp, _selectors):
+                    fail_once("visibility")
+                    return False
+                def editor(_cdp):
+                    fail_once("editor")
+                    return "ready", True
+                def snapshot(_cdp, _message):
+                    fail_once("snapshot")
+                    return 0, 0, True, True
+                with patch.object(sink, "post_submit_visible_any", side_effect=visible), patch.object(
+                    sink, "editor_state", side_effect=editor
+                ), patch.object(sink, "trusted_turn_anchor_state", return_value=(1, 1)), patch.object(
+                    sink, "response_snapshot", side_effect=snapshot
+                ), patch.object(sink, "click_response_timeout_retry") as retry, patch.object(
+                    sink, "refresh_response_observer"
+                ) as refresh:
+                    sink.wait_for_response_completion(
+                        Cdp(), "exact", allow_retry=False, observer=stages.append,
+                        monotonic=clock.monotonic, sleeper=clock.sleep,
+                    )
+                self.assertEqual([location], failures)
+                self.assertEqual("RESPONSE_COMPLETED", stages[-1])
+                self.assertLessEqual(clock.now, 2)
+                retry.assert_not_called()
+                refresh.assert_not_called()
+
+    def test_response_observer_read_failure_budget_is_bounded_and_preserves_other_errors(self):
+        class Clock:
+            now = 0.0
+            def monotonic(self): return self.now
+            def sleep(self, seconds): self.now += seconds
+        class Cdp:
+            def get_current_url(self): return "https://chatgpt.com/c/review-one"
+        for reason, attempts in (("RESPONSE_STATE_QUERY_FAILED", 3),
+                                 ("RESPONSE_COMPLETION_UNPROVEN", 1),
+                                 ("RESPONSE_SEQUENCE_DRIFT", 1)):
+            with self.subTest(reason=reason):
+                sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
+                clock = Clock()
+                with patch.object(sink, "post_submit_visible_any", return_value=False), patch.object(
+                    sink, "editor_state", return_value=("ready", True)
+                ), patch.object(sink, "trusted_turn_anchor_state", return_value=(1, 1)), patch.object(
+                    sink, "response_snapshot", side_effect=wake_bridge.PostSubmitUnknown(reason)
+                ) as snapshot, patch.object(sink, "click_response_timeout_retry") as retry:
+                    with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, reason):
+                        sink.wait_for_response_completion(
+                            Cdp(), "exact", allow_retry=False,
+                            monotonic=clock.monotonic, sleeper=clock.sleep,
+                        )
+                self.assertEqual(attempts, snapshot.call_count)
+                self.assertLessEqual(clock.now, 3)
+                retry.assert_not_called()
+
+    def test_response_observer_read_recovery_keeps_original_deadlines(self):
+        class Clock:
+            now = 0.0
+            def monotonic(self): return self.now
+            def sleep(self, seconds): self.now += seconds
+        class Cdp:
+            def get_current_url(self): return "https://chatgpt.com/c/review-one"
+        for generation, total, reason in ((1.0, 2.0, "RESPONSE_COMPLETION_UNPROVEN"),
+                                          (2.0, 1.0, "RESPONSE_TOTAL_TIMEOUT")):
+            with self.subTest(reason=reason):
+                clock = Clock()
+                sink = wake_bridge.CdpSink("https://chatgpt.com/c/review-one", self.profile, 1, 1)
+                with patch.object(wake_bridge, "RESPONSE_GENERATION_WINDOW_SECONDS", generation), patch.object(
+                    wake_bridge, "RESPONSE_TOTAL_WINDOW_SECONDS", total
+                ), patch.object(sink, "post_submit_visible_any", return_value=False), patch.object(
+                    sink, "editor_state", return_value=("ready", True)
+                ), patch.object(sink, "trusted_turn_anchor_state", return_value=(1, 1)), patch.object(
+                    sink, "response_snapshot",
+                    side_effect=wake_bridge.PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED"),
+                ) as snapshot, patch.object(sink, "click_response_timeout_retry") as retry:
+                    with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, reason):
+                        sink.wait_for_response_completion(
+                            Cdp(), "exact", allow_retry=False,
+                            monotonic=clock.monotonic, sleeper=clock.sleep,
+                        )
+                self.assertEqual(1, snapshot.call_count)
+                self.assertEqual(1.0, clock.now)
+                retry.assert_not_called()
+
+    def test_response_observer_rechecks_target_after_failed_read(self):
+        class Clock:
+            now = 0.0
+            def monotonic(self): return self.now
+            def sleep(self, seconds): self.now += seconds
+        class Cdp:
+            url = "https://chatgpt.com/c/review-one"
+            def get_current_url(self): return self.url
+        cdp, clock = Cdp(), Clock()
+        sink = wake_bridge.CdpSink(cdp.url, self.profile, 1, 1)
+        def failed_snapshot(_cdp, _message):
+            cdp.url = "https://chatgpt.com/c/other"
+            raise wake_bridge.PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED")
+        with patch.object(sink, "post_submit_visible_any", return_value=False), patch.object(
+            sink, "editor_state", return_value=("ready", True)
+        ), patch.object(sink, "trusted_turn_anchor_state", return_value=(1, 1)), patch.object(
+            sink, "response_snapshot", side_effect=failed_snapshot
+        ) as snapshot, patch.object(sink, "click_response_timeout_retry") as retry:
+            with self.assertRaisesRegex(wake_bridge.PostSubmitUnknown, "RESPONSE_TARGET_DRIFT"):
+                sink.wait_for_response_completion(
+                    cdp, "exact", allow_retry=False,
+                    monotonic=clock.monotonic, sleeper=clock.sleep,
+                )
+        self.assertEqual(1, snapshot.call_count)
+        retry.assert_not_called()
 
     def test_active_generation_periodically_refreshes_same_target_until_pause_clears(self):
         class Clock:

@@ -81,6 +81,7 @@ RESPONSE_POLL_SECONDS = 0.5
 RESPONSE_HEARTBEAT_SECONDS = 10.0
 RESPONSE_ACTIVE_REFRESH_SECONDS = 2.0 * 60.0
 RESPONSE_STABLE_POLLS = 2
+RESPONSE_STATE_QUERY_MAX_FAILURES = 3
 RESPONSE_RETRY_START_WINDOW_SECONDS = 15.0
 RESPONSE_GENERATION_WINDOW_SECONDS = 35.0 * 60.0
 RESPONSE_TOTAL_WINDOW_SECONDS = 90.0 * 60.0
@@ -1559,6 +1560,24 @@ class CdpSink:
         next_active_refresh = None
         stable_idle_polls = 0
         retries = 0
+        state_query_failures = 0
+
+        def defer_state_query_failure(error: Exception) -> None:
+            nonlocal state_query_failures, stable_idle_polls
+            state_query_failures += 1
+            stable_idle_polls = 0
+            if state_query_failures >= RESPONSE_STATE_QUERY_MAX_FAILURES:
+                raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED") from error
+            now = monotonic()
+            if now >= total_deadline:
+                raise PostSubmitUnknown("RESPONSE_TOTAL_TIMEOUT") from error
+            if now >= generation_deadline:
+                raise PostSubmitUnknown("RESPONSE_COMPLETION_UNPROVEN") from error
+            # A remounted CDP/DOM read can fail after the USER is accepted.
+            # Restart observation from target/turn checks, retaining the same
+            # browser and deadlines. Recovery performs no UI action.
+            sleeper(min(RESPONSE_POLL_SECONDS, total_deadline - now,
+                        generation_deadline - now))
 
         def emit_stage(stage: str) -> None:
             if observer is not None:
@@ -1593,14 +1612,16 @@ class CdpSink:
             try:
                 current_url = str(cdp.get_current_url())
             except Exception as error:
-                raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED") from error
+                defer_state_query_failure(error)
+                continue
             if not self.exact(current_url):
                 raise PostSubmitUnknown("RESPONSE_TARGET_DRIFT")
             try:
                 network_error = self.post_submit_visible_any(cdp, NETWORK)
                 stop_active = self.post_submit_visible_any(cdp, STOP)
             except Attention as error:
-                raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED") from error
+                defer_state_query_failure(error)
+                continue
             if network_error:
                 raise PostSubmitUnknown("RESPONSE_NETWORK_ERROR")
             # The per-generation bound also applies while the composer is
@@ -1634,7 +1655,8 @@ class CdpSink:
             try:
                 editor_status, _editor_empty = self.editor_state(cdp)
             except Attention as error:
-                raise PostSubmitUnknown("RESPONSE_STATE_QUERY_FAILED") from error
+                defer_state_query_failure(error)
+                continue
             if editor_status != "ready":
                 stable_idle_polls = 0
                 sleeper(RESPONSE_POLL_SECONDS)
@@ -1645,7 +1667,13 @@ class CdpSink:
                 continue
 
             require_expected_turn_sequence()
-            timeout_count, retry_count, assistant_after_user, completion_action_ready = self.response_snapshot(cdp, expected_message)
+            try:
+                timeout_count, retry_count, assistant_after_user, completion_action_ready = self.response_snapshot(cdp, expected_message)
+            except PostSubmitUnknown as error:
+                if str(error) != "RESPONSE_STATE_QUERY_FAILED":
+                    raise
+                defer_state_query_failure(error)
+                continue
             if timeout_count == 0:
                 if assistant_after_user and completion_action_ready:
                     emit_stage("RESPONSE_COMPLETED")

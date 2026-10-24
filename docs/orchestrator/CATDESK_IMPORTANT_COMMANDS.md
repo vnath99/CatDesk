@@ -1,3 +1,37 @@
+## October 24 EDT C69–C70 — response query recovery with a real read-only canary
+
+A fresh controlled source for a future owned-process interruption sent one seed,
+then its helper stopped on `RESPONSE_STATE_QUERY_FAILED`. No resend or binding
+followed. A bounded read-only fresh-document reconciliation verified exactly one
+USER and the expected completed ASSISTANT reply, preserving the failed journal.
+All282 runtime records and prior nine active/one retired registrations stayed exact.
+The source remains unregistered; the actual process-interruption test has NOT run.
+
+C70 adds a three-failure pure-read budget to the existing response wait. Each
+retry restarts target/turn and idle checks inside the original generation/total
+deadlines. Recovery adds no typing, resend, reload or Retry click. Wrong-target,
+sequence and other semantic failures stay fenced. Four new regression methods
+cover transient reads, persistent failures, deadlines and drift. An old receipt
+fixture also now isolates readiness and spies on the real receipt guard.
+
+Causal RED failed before the fix. Final complete bridge/Wake Python suite passes
+225 tests/187 subtests in182.72s under owned600s containment; source hashes froze.
+Original180s timeouts and a20s diagnostic failure remain retained. The first
+identified unrelated readiness in the receipt fixture; its corrected isolated run
+passes. The second full run reached158 tests and exceeded its180s bound; no failed
+run is counted as acceptance. Ruff is unavailable; no dependency was installed.
+Rust main/host were not rebuilt for this Python-only change.
+
+One candidate-component browser read then passed in14.53s under180s containment:
+native response/body state valid, one injected CDP query failure recovered, exact
+USER/ASSISTANT body revalidated. Zero messages, typing, Retry clicks, draft writes,
+new profiles or binding changes. Every browser Job cleaned up to zero scoped
+owners; both controls STOPPED. No Wake/recurring/native/production or connector
+action. This is source plus candidate-component live evidence, not selected fixed
+package/protected/unattended acceptance. Next: guarded stopped bridge qualification,
+then the pending interruption operation. Evidence:
+`docs/verification/C69_C70_RESPONSE_READ_RECOVERY_2026_10_24.json`.
+
 ## October 24 EDT C68 — selected MCP process restarts with pending state intact
 
 Two real selected v69 CatDesk MCP processes ran consecutively against the existing
