@@ -1,3 +1,24 @@
+## October 24 EDT C93–C94 — normal cached task transport qualified
+
+The published C92 source built as a normal release app. The bounded disposable
+HTTP test passed through cached `run_command` envelopes in SupervisorOnly:
+17 requests, two natural coordinator lifetimes, independent assigned worktree
+patches/diffs, blocked-writer sibling progress and cold replay refusal across
+cached/direct transports. Both temporary grants were revoked and exact owned keys
+removed. All 306 real records remained exact during the test. These synthetic
+local receipt fixtures are not actual ChatGPT delivery or coding evidence.
+
+The exact qualified image was selected using the existing guarded stopped update.
+Ten paired reads and the central view passed. Only two package pointers changed;
+304 other records remained exact, with previous package/profile, histories,
+private handoffs and native assignments preserved. Zero owners, queue 0 and both
+controls STOPPED; no browser/Wake/recurring start or production change.
+
+Actual Web coding B/C still requires the supported serving backend/connector.
+Source, normal local HTTP and stopped development selection are separately proven;
+protected installation and unattended operation remain unqualified. Evidence:
+`docs/verification/C93_C94_NORMAL_CACHED_TASK_TRANSPORT_2026_10_24.json`.
+
 ## October 24 EDT C92 — cached-schema scoped task transport
 
 The existing cached `run_command` schema now accepts a closed
