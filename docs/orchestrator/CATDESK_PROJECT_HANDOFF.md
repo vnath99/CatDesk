@@ -1,3 +1,26 @@
+## October 24 EDT C96–C97 — normal context-limit status and stopped selection
+
+Published C95 built as a normal release app in 351.43s. A bounded disposable CLI
+qualification passed in 8.77s: 30 owned commands (24 app, six local Git), supported
+registrations/imports, the derived 4,096-event limit flag, independent sibling
+estimates, six cold status reads and an independent retained-metadata oracle.
+Rejected over-limit imports remain atomic; known revisions still update and exact
+replays preserve bytes. Low token pressure stays low. No raw transcript is stored
+in ledgers. This qualifies normal metadata behavior; C95 snapshot recovery remains
+source-tested and is not newly live-qualified by these CLI calls.
+
+The exact normal image was selected through the existing guarded stopped update
+in 6.66s. Ten paired reads and the central view passed. Only two package pointers
+changed; 304 other records remain exact. Previous package/profile, all bindings,
+histories, private handoffs and native assignments are preserved. Zero owners,
+queue 0, both controls STOPPED; no browser/Wake/recurring or production action.
+
+Actual parallel Web coding B/C still needs the supported serving backend and
+connector. Protected installation and unattended operation remain unqualified.
+Next: reconcile that live path and use the qualified cached scoped task transport
+when available; continue independently eligible development on concrete gaps.
+Evidence: `docs/verification/C96_C97_NORMAL_CONTEXT_LIMIT_STATUS_2026_10_24.json`.
+
 ## October 24 EDT C95 — recover snapshot accounting at its event limit
 
 A full observation ledger could reject a fresh snapshot before an already-due
