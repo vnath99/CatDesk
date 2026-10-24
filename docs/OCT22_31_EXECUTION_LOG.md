@@ -1,3 +1,23 @@
+## October 23 EDT C57 — per-conversation observed activity (source)
+
+The required last-activity view now exposes `lastObservedEventAtUnix` alongside
+existing context estimates in `operator web context status --project-id ID` and
+the central registry's `context.currentPressure` / `recentConversations`.
+It is derived from retained event observations, not status polling, worker
+liveness, a verified clock or task completion. Empty/new conversations report
+null; predecessor activity stays historical. No persisted-state migration,
+second registry or timer was introduced. Exact-content retries keep their time.
+
+Twenty-four regressions passed, including two new cold-read/retry/isolation,
+rollover-history, legacy-status and central-projection checks. Strict workspace
+Clippy, format and whitespace passed. Self-review only. C57 is source-qualified;
+normal/selected/live qualification is separate. All266 v68 runtime records, nine
+bindings and C50 task/grant/history are unchanged. No messages, browser/Wake/
+recurring starts, native actions or production changes; zero scoped owners.
+Next: normal C57 build and disposable CLI qualification. Actual Web coding,
+browser critical-crash/full-runtime restart and unattended acceptance remain open.
+Evidence: `docs/verification/C57_CONVERSATION_EVENT_ACTIVITY_2026_10_23.json`.
+
 ## October 23 EDT C56 — normal recovery qualified; stopped development selected
 
 Published source `90c2cc95e11bc132fc46571811655898e087cc76` built normally in 413.16s

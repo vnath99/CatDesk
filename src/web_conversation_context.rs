@@ -251,6 +251,11 @@ pub struct PressureStatus {
     pub target_sha256: String,
     pub is_current: bool,
     pub recorded_events: usize,
+    /// Latest retained event observation timestamp, not a poll time, worker
+    /// heartbeat or verified wall clock. Exact-content retries keep their
+    /// original timestamp; each conversation is derived independently.
+    #[serde(default)]
+    pub last_observed_event_at_unix: Option<u64>,
     #[serde(default)]
     pub excerpt_only_messages: usize,
     /// Deduplicated observed model-visible content, including structured tool
@@ -1075,6 +1080,11 @@ fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> Press
         target_sha256: ledger.key.target_sha256(),
         is_current: project.active.as_ref() == Some(&ledger.key),
         recorded_events: ledger.events.len(),
+        last_observed_event_at_unix: ledger
+            .events
+            .iter()
+            .map(|event| event.observed_at_unix)
+            .max(),
         excerpt_only_messages: ledger
             .events
             .iter()
@@ -1413,6 +1423,97 @@ mod tests {
                 let _ = fs::remove_dir_all(&self.root);
             }
         }
+    }
+
+    #[test]
+    fn event_activity_survives_cold_reads_without_poll_retry_or_cross_conversation_refresh() {
+        let fixture = Fixture::new("event-activity");
+        let alpha = Fixture::key("alpha", "activity-alpha", 1);
+        let beta = Fixture::key("beta", "activity-beta", 1);
+        for key in [&alpha, &beta] {
+            fixture
+                .store
+                .bind_observed_target(key.clone(), None)
+                .unwrap();
+        }
+        let observe = |key: &ConversationKey, id: &str, revision, text: &str, timestamp| {
+            fixture
+                .store
+                .record_observation(
+                    key,
+                    Observation {
+                        event_id: id,
+                        revision,
+                        dedup_key: id,
+                        source_kind: VisibleSourceKind::ToolArguments,
+                        visible_text: Some(text),
+                        observed_at_unix: timestamp,
+                    },
+                )
+                .unwrap()
+        };
+        assert_eq!(
+            fixture
+                .store
+                .pressure(&alpha)
+                .unwrap()
+                .last_observed_event_at_unix,
+            None
+        );
+        observe(&alpha, "newer-event", 1, "alpha original", 20);
+        observe(&alpha, "older-event", 1, "out of order", 10);
+        observe(&beta, "beta-event", 1, "beta only", 30);
+        let alpha_path = fixture.store.ledger_path(&alpha);
+        let before = fs::read(&alpha_path).unwrap();
+        // A later receipt of identical content is not fresh project activity.
+        assert_eq!(
+            observe(&alpha, "newer-event", 1, "alpha original", 99).last_observed_event_at_unix,
+            Some(20)
+        );
+        let reader = WebContextStore::open_read_only(&fixture.root).unwrap();
+        for _ in 0..2 {
+            assert_eq!(
+                reader.pressure(&alpha).unwrap().last_observed_event_at_unix,
+                Some(20)
+            );
+            assert_eq!(
+                reader.pressure(&beta).unwrap().last_observed_event_at_unix,
+                Some(30)
+            );
+        }
+        assert_eq!(fs::read(&alpha_path).unwrap(), before);
+        assert_eq!(
+            observe(&alpha, "newer-event", 2, "alpha changed", 40).last_observed_event_at_unix,
+            Some(40)
+        );
+        let next = Fixture::key("alpha", "activity-alpha-next", 2);
+        fixture
+            .store
+            .bind_observed_target(next.clone(), Some(&alpha))
+            .unwrap();
+        assert_eq!(
+            reader.pressure(&next).unwrap().last_observed_event_at_unix,
+            None
+        );
+        let historical = reader.pressure(&alpha).unwrap();
+        assert!(!historical.is_current);
+        assert_eq!(historical.last_observed_event_at_unix, Some(40));
+        assert_eq!(
+            reader.pressure(&beta).unwrap().last_observed_event_at_unix,
+            Some(30)
+        );
+        // Older serialized status snapshots remain readable with unknown activity.
+        let mut legacy = serde_json::to_value(&historical).unwrap();
+        legacy
+            .as_object_mut()
+            .unwrap()
+            .remove("lastObservedEventAtUnix");
+        assert_eq!(
+            serde_json::from_value::<PressureStatus>(legacy)
+                .unwrap()
+                .last_observed_event_at_unix,
+            None
+        );
     }
 
     #[test]

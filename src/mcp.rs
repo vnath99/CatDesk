@@ -10869,6 +10869,81 @@ mod tests {
     }
 
     #[test]
+    fn web_registry_context_activity_is_scoped_to_the_paired_conversation() {
+        use crate::web_conversation_context::{
+            ConversationKey, Observation, VisibleSourceKind, WebContextStore,
+        };
+        let workspace = std::env::temp_dir().join(format!("web-activity-{}", Uuid::new_v4()));
+        let root = workspace.join(".catdesk/web-context");
+        let store = WebContextStore::open(&root).unwrap();
+        let key = |project: &str, generation| ConversationKey {
+            project_id: project.into(),
+            conversation_url: format!("https://chatgpt.com/c/{project}-{generation}"),
+            target_generation: generation,
+        };
+        let target = |key: &ConversationKey| ProjectWebTargetV1 {
+            project_id: key.project_id.clone(),
+            url: key.conversation_url.clone(),
+            sha256: key.target_sha256(),
+            generation: key.target_generation,
+            historical_urls: Vec::new(),
+        };
+        let alpha = key("alpha", 1);
+        let beta = key("beta", 1);
+        for (key, observed_at_unix) in [(&alpha, 20), (&beta, 30)] {
+            store.bind_observed_target(key.clone(), None).unwrap();
+            store
+                .record_observation(
+                    key,
+                    Observation {
+                        event_id: "task-arguments",
+                        revision: 1,
+                        dedup_key: "task-arguments",
+                        source_kind: VisibleSourceKind::ToolArguments,
+                        visible_text: Some("PRIVATE_ACTIVITY_SENTINEL"),
+                        observed_at_unix,
+                    },
+                )
+                .unwrap();
+        }
+        let alpha_status = web_project_context_status(&workspace, "alpha", Some(&target(&alpha)));
+        let beta_status = web_project_context_status(&workspace, "beta", Some(&target(&beta)));
+        assert_eq!(
+            alpha_status["currentPressure"]["lastObservedEventAtUnix"],
+            20
+        );
+        assert_eq!(
+            beta_status["currentPressure"]["lastObservedEventAtUnix"],
+            30
+        );
+        assert_eq!(alpha_status["currentPressure"]["advisory"], true);
+        assert_eq!(
+            alpha_status["currentPressure"]["originAuthenticated"],
+            false
+        );
+        assert!(
+            !alpha_status
+                .to_string()
+                .contains("PRIVATE_ACTIVITY_SENTINEL")
+        );
+        let next = key("alpha", 2);
+        store
+            .bind_observed_target(next.clone(), Some(&alpha))
+            .unwrap();
+        let stale = web_project_context_status(&workspace, "alpha", Some(&target(&alpha)));
+        assert!(stale["currentPressure"].is_null());
+        let current = web_project_context_status(&workspace, "alpha", Some(&target(&next)));
+        assert_eq!(current["status"], "CURRENT_ADVISORY");
+        assert!(current["currentPressure"]["lastObservedEventAtUnix"].is_null());
+        assert_eq!(
+            current["recentConversations"][1]["lastObservedEventAtUnix"],
+            20
+        );
+        drop(store);
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
     fn web_rollover_status_marks_historical_automation_after_rebind() {
         let target = ProjectWebTargetV1 {
             project_id: "alpha".into(),
