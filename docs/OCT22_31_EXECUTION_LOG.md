@@ -1,3 +1,21 @@
+## October 24 EDT C85 — context observation while submission is held
+
+The existing observation-only quarantine path now also handles SUBMISSION_UNKNOWN.
+It requires explicit observation opt-in and the exact active project/source key;
+rollover opt-in alone is insufficient. High pressure cannot advance the held
+operation, request another handoff or authorize resend. Cancellation surrounds
+capture. The existing stage, journal and no-resend guards remain intact.
+
+Causal old-code failure, 107 affected Web tests, strict workspace Clippy and
+format checks passed. Real isolated registry/Wake bindings stayed byte-exact.
+This is source qualification with injected capture, not live browser acceptance.
+All 305 retained runtime records are unchanged; zero owners, queue 0, both controls
+STOPPED. No runtime, native developer or completed canary was restarted/replayed.
+Next: normal app build/guarded selection, then bounded independent observation.
+Actual Web coding B/C remains blocked on the recorded connector/catalog dependency;
+protected and unattended acceptance remain open. Evidence:
+`docs/verification/C85_HELD_SUBMISSION_CONTEXT_OBSERVATION_2026_10_24.json`.
+
 ## October 24 EDT C82–C84 — real unknown-send crash and owned-draft archival
 
 A new task/intent reused the completed controlled project's generation2 source;

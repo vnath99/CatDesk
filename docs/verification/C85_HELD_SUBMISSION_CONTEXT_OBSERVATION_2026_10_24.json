@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C85_HELD_SUBMISSION_CONTEXT_OBSERVATION",
+  "observedUtc": "2026-10-24T07:55:50.3907336+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "d0103df25b7c70651240fe9ab9d80375fd6b1e7d",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "SOURCE_AND_ISOLATED_NATIVE_FIXTURES_NOT_SELECTED_OR_LIVE_BROWSER",
+  "sourceHashes": {
+    "src/operator_web_auto.rs": "9a5ca33f7513ef8298c1bb0af436a0c8db606987544b5cbb915aa68f0f363c1c",
+    "src/operator_web_rollover.rs": "2d93b8a52696d83e5900f4eba42562ceb15a3fb951a4bcfe763b00d7f1da4bfa"
+  },
+  "change": {
+    "existingQuarantineObservationPathReused": true,
+    "activeContextKeyAndSourceIdentityRequired": true,
+    "noNewCommandOrScheduler": true,
+    "separateObservationOptInRequired": true,
+    "noAfterObservationOrHandoff": true,
+    "newStage": "SUBMISSION_UNKNOWN",
+    "beforeAndAfterCaptureCancellation": true,
+    "rolloverOptInAloneInsufficient": true,
+    "stageAndNoResendReasonPreserved": true
+  },
+  "regression": {
+    "policyCombinations": 4,
+    "unknownJournalAndActivePointerByteExact": true,
+    "wakeQueuesReceiptsTurnsEmpty": true,
+    "alphaAndBetaRegistryWakeBindingsByteExact": true,
+    "newMethods": 2,
+    "unknownCases": [
+      "SEND_ATTEMPTED",
+      "LEGACY_UNKNOWN",
+      "PRE_SEND_AMBIGUOUS"
+    ],
+    "fixtureContextCapture": "INJECTED_CALLBACK_WITH_REAL_CONTEXT_LEDGER_NOT_A_BROWSER_CAPTURE",
+    "highPressureDoesNotAdvance": true,
+    "siblingWorkLeaseAvailable": true,
+    "mismatchedProjectSourceAndInactiveKeyRefused": true,
+    "betaContextUnchanged": true,
+    "captureErrorPropagated": true,
+    "cancelChecks": 3
+  },
+  "causalRed": {
+    "status": "PASS_EXPECTED_OLD_CAPTURE_SKIPPED_AND_CANCELLATION_FAILURES",
+    "elapsedSeconds": 19.2737354,
+    "exitCode": 101
+  },
+  "green": {
+    "ownedGateSeconds": 62.5452024,
+    "sourceFrozen": true,
+    "tests": 107,
+    "exitCode": 0,
+    "testRuntimeSeconds": 36.01,
+    "filter": "operator_facade::web",
+    "failed": 0,
+    "ignored": 0
+  },
+  "finalGates": {
+    "strictClippy": "PASS_LOCKED_OFFLINE_WORKSPACE_ALL_TARGETS_ALL_FEATURES_DENY_WARNINGS",
+    "format": "PASS_CARGO_FMT_ALL_CHECK",
+    "sourceFrozen": true,
+    "elapsedSeconds": 19.7204676,
+    "exitCodes": [
+      0,
+      0
+    ]
+  },
+  "retainedUnqualifiedAttempts": [
+    "Initial red failed first on missing output shape. The assertion order was corrected; the qualified red proves explicit observation was skipped.",
+    "First green had 106 pass and one test expectation failure: pre-send ambiguity keeps its distinct existing refusal code. Only the regression expectation changed; production refusal guards were retained."
+  ],
+  "preservation": {
+    "canaryMessagesReplayed": 0,
+    "changedRecords": 0,
+    "browserWakeRecurringStarts": 0,
+    "selectedPackageChanged": false,
+    "testProcesses": 0,
+    "queueCount": 0,
+    "controls": "BOTH_STOPPED",
+    "productionChanged": false,
+    "runtimeRecords": 305,
+    "nativeActions": 0,
+    "existingUnknownOperationTouched": false,
+    "scopedOwners": 0
+  },
+  "acceptance": {
+    "selectedRuntime": "NOT_UPDATED_RETAINS_C81_NORMAL_APP",
+    "boundedObservationScheduler": "NOT_RUN_FOR_C85",
+    "unattended": "NOT_ACTIVATED",
+    "source": "PASS",
+    "actualParallelWebCodingBC": "OPEN_CONNECTOR_HTTP429_AND_SCOPED_TOOL_CATALOG",
+    "fullOctoberMilestone": "OPEN",
+    "protectedInstalled": "NOT_QUALIFIED"
+  },
+  "nextTask": "Build and select the normal reviewed app through the existing guarded stopped development path. Qualify bounded project-filtered observation of the held canonical source and an independent sibling, restoring test-only policies and checking cleanup. Preserve unknown no-resend and all bindings; do not activate unattended automation or replay completed canaries."
+}

@@ -334,18 +334,18 @@ pub(super) fn run_step_with_capture(
             "SOURCE_WITNESS_REQUIRED",
             json!({"reason":"WEB_AUTO_SOURCE_WITNESS_REQUIRED"}),
         )),
-        rollover::AutoStage::SubmissionUnknown => Ok((
-            "SUBMISSION_UNKNOWN",
-            json!({"reason":"WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND"}),
-        )),
-        rollover::AutoStage::Quarantined => {
-            // Quarantine blocks writes and rollover advancement, not a separately
-            // opted-in observation of the still-paired canonical conversation.
+        stage @ (rollover::AutoStage::SubmissionUnknown | rollover::AutoStage::Quarantined) => {
+            // Held submissions and quarantine block writes and rollover advancement,
+            // not separately opted-in observation of the canonical conversation.
             // Never run after_observation here, even if pressure exceeds its trigger.
             let root = workspace.join(".catdesk/web-context");
             let enabled = if root.exists() {
                 let meter = WebContextStore::open_read_only(root)?;
-                meter.active_key(project)?.as_ref() == Some(key)
+                key.project_id == project
+                    && key.target_generation == source.generation
+                    && key.conversation_url == source.url
+                    && key.target_sha256() == source.digest
+                    && meter.active_key(project)?.as_ref() == Some(key)
                     && meter.pressure(key)?.automatic_observation_enabled
             } else {
                 false
@@ -358,10 +358,18 @@ pub(super) fn run_step_with_capture(
             } else {
                 None
             };
+            let (stage, reason) = if stage == rollover::AutoStage::SubmissionUnknown {
+                (
+                    "SUBMISSION_UNKNOWN",
+                    "WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND",
+                )
+            } else {
+                ("QUARANTINED", "WEB_ROLLOVER_QUARANTINED_NO_REPLAY")
+            };
             Ok((
-                "QUARANTINED",
+                stage,
                 json!({
-                    "reason":"WEB_ROLLOVER_QUARANTINED_NO_REPLAY",
+                    "reason":reason,
                     "contextObservation":observation,"rolloverAdvanced":false
                 }),
             ))

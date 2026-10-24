@@ -5371,6 +5371,234 @@ mod tests {
         fs::remove_dir_all(cleanup).unwrap();
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn unknown_submission_observes_only_explicit_canonical_opt_in_without_advancing() {
+        use crate::web_conversation_context::ContextPressurePolicy;
+        let (parent, control, dev_root, alpha, beta) = paired_handoff_fixture();
+        let registry_path = control.join(".catdesk/projects/projects.json");
+        let config_path = dev_root.join("config.json");
+        let registry_before = fs::read(&registry_path).unwrap();
+        let config_before = fs::read(&config_path).unwrap();
+        let meter = WebContextStore::open(control.join(".catdesk/web-context")).unwrap();
+        let source_key = key("alpha", &alpha);
+        meter
+            .bind_observed_target(source_key.clone(), None)
+            .unwrap();
+        let beta_key = key("beta", &beta);
+        meter.bind_observed_target(beta_key.clone(), None).unwrap();
+        let beta_before = meter.project_history("beta").unwrap();
+        let store = ProjectStore::open(&control, "alpha").unwrap();
+        let mut pending = record();
+        pending.source = alpha.clone();
+        pending.message_digest =
+            message_digest("alpha", &pending.intent_id, &alpha.url, &pending.handoff).unwrap();
+        pending.phase = Phase::Submitting;
+        atomic(&store.root.join("active.json"), &pending.intent_id).unwrap();
+        let active_before = fs::read(store.root.join("active.json")).unwrap();
+        drop(store);
+        for (progress, reason) in [
+            (Some(runtime::BootstrapProgress::SendAttempted), None),
+            (None, None),
+            (
+                Some(runtime::BootstrapProgress::TextEntryAuthorized),
+                Some("WEB_BOOTSTRAP_PRE_SEND_AMBIGUOUS_NO_RESEND"),
+            ),
+        ] {
+            pending.bootstrap_progress = progress;
+            pending.reconciliation_reason = reason.map(str::to_owned);
+            let store = ProjectStore::open(&control, "alpha").unwrap();
+            store.save(&pending).unwrap();
+            let journal_before = fs::read(store.root.join("intent-a.json")).unwrap();
+            drop(store);
+            for (observe, rollover) in [(false, false), (false, true), (true, false), (true, true)]
+            {
+                meter
+                    .configure_policy(
+                        "alpha",
+                        ContextPressurePolicy {
+                            configured_budget_tokens: 10,
+                            safety_headroom_tokens: 8,
+                            unknown_source_reserve_tokens: 0,
+                            automatic_observation_enabled: observe,
+                            automatic_rollover_enabled: rollover,
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
+                let calls = std::cell::Cell::new(0);
+                let (stage, result) = super::super::auto::run_step_with_capture(
+                    &control,
+                    "alpha",
+                    &source_key,
+                    &alpha,
+                    &|| Ok(()),
+                    || {
+                        calls.set(calls.get() + 1);
+                        let pressure = meter.record_observation(
+                            &source_key,
+                            Observation {
+                                event_id: "unknown-held-observation",
+                                revision: 1,
+                                dedup_key: "unknown-held-observation",
+                                source_kind: VisibleSourceKind::AssistantMessage,
+                                visible_text: Some("observed pressure above the rollover trigger"),
+                                observed_at_unix: 20,
+                            },
+                        )?;
+                        assert!(pressure.near_capacity);
+                        Ok(json!({"captured":true,"userMessageSent":false}))
+                    },
+                )
+                .unwrap();
+                assert_eq!(stage, "SUBMISSION_UNKNOWN");
+                assert_eq!(result["reason"], "WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND");
+                assert_eq!(
+                    calls.get(),
+                    usize::from(observe),
+                    "explicit observation opt-in"
+                );
+                assert_eq!(result["contextObservation"].is_null(), !observe);
+                if observe {
+                    assert_eq!(result["rolloverAdvanced"], false);
+                    assert_eq!(result["contextObservation"]["captured"], true);
+                    assert!(meter.pressure(&source_key).unwrap().near_capacity);
+                }
+            }
+            // Neither another conversation nor another source generation may
+            // borrow the enabled observation policy for this held project.
+            let stale = Target::new(alpha.generation + 1, alpha.url.clone()).unwrap();
+            let stale_key = key("alpha", &stale);
+            for (capture_key, source) in [
+                (&beta_key, &alpha),
+                (&source_key, &stale),
+                (&stale_key, &stale),
+            ] {
+                let (stage, result) = super::super::auto::run_step_with_capture(
+                    &control,
+                    "alpha",
+                    capture_key,
+                    source,
+                    &|| Ok(()),
+                    || panic!("mismatched identity must not enter the browser"),
+                )
+                .unwrap();
+                assert_eq!(stage, "SUBMISSION_UNKNOWN");
+                assert!(result["contextObservation"].is_null());
+            }
+            assert_eq!(
+                execute(&control, "alpha").unwrap_err(),
+                reason.unwrap_or("WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND")
+            );
+            let store = ProjectStore::open(&control, "alpha").unwrap();
+            assert_eq!(
+                journal_before,
+                fs::read(store.root.join("intent-a.json")).unwrap()
+            );
+            assert_eq!(
+                active_before,
+                fs::read(store.root.join("active.json")).unwrap()
+            );
+            assert!(store.handoff_request().unwrap().is_none());
+            drop(store);
+        }
+        assert_eq!(registry_before, fs::read(registry_path).unwrap());
+        assert_eq!(config_before, fs::read(config_path).unwrap());
+        assert_eq!(paired(&control, "alpha").unwrap(), alpha);
+        assert_eq!(paired(&control, "beta").unwrap(), beta);
+        assert_eq!(meter.active_key("alpha").unwrap(), Some(source_key));
+        assert_eq!(beta_before, meter.project_history("beta").unwrap());
+        for directory in ["queue", "archive", "deliveries", "turns", "logs"] {
+            assert_eq!(fs::read_dir(dev_root.join(directory)).unwrap().count(), 0);
+        }
+        drop(acquire_web_work_lease(&control, "beta").unwrap());
+        let cleanup = parent.canonicalize().unwrap();
+        let target = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .canonicalize()
+            .unwrap();
+        assert_eq!(cleanup.parent(), Some(target.as_path()));
+        fs::remove_dir_all(cleanup).unwrap();
+    }
+
+    #[test]
+    fn unknown_submission_observation_honors_cancellation_and_capture_failure() {
+        use crate::web_conversation_context::ContextPressurePolicy;
+        let root = fixture();
+        let store = ProjectStore::open(&root, "alpha").unwrap();
+        let mut pending = record();
+        pending.phase = Phase::Submitting;
+        pending.bootstrap_progress = Some(runtime::BootstrapProgress::SendAttempted);
+        store.save(&pending).unwrap();
+        atomic(&store.root.join("active.json"), &pending.intent_id).unwrap();
+        let journal_before = fs::read(store.root.join("intent-a.json")).unwrap();
+        drop(store);
+        let meter = WebContextStore::open(root.join(".catdesk/web-context")).unwrap();
+        let source_key = key("alpha", &pending.source);
+        meter
+            .bind_observed_target(source_key.clone(), None)
+            .unwrap();
+        meter
+            .configure_policy(
+                "alpha",
+                ContextPressurePolicy {
+                    automatic_observation_enabled: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        for stop_at in [1, 2, 3] {
+            let checks = std::cell::Cell::new(0);
+            let captured = std::cell::Cell::new(false);
+            let result = super::super::auto::run_step_with_capture(
+                &root,
+                "alpha",
+                &source_key,
+                &pending.source,
+                &|| {
+                    checks.set(checks.get() + 1);
+                    if checks.get() == stop_at {
+                        Err("WEB_AUTO_OWNER_STOPPED".into())
+                    } else {
+                        Ok(())
+                    }
+                },
+                || {
+                    captured.set(true);
+                    Ok(json!({"captured":true}))
+                },
+            );
+            assert_eq!(result.unwrap_err(), "WEB_AUTO_OWNER_STOPPED");
+            assert_eq!(captured.get(), stop_at == 3);
+        }
+        assert_eq!(
+            super::super::auto::run_step_with_capture(
+                &root,
+                "alpha",
+                &source_key,
+                &pending.source,
+                &|| Ok(()),
+                || Err("BOUNDED_CAPTURE_FAILED".into()),
+            )
+            .unwrap_err(),
+            "BOUNDED_CAPTURE_FAILED"
+        );
+        assert_eq!(
+            journal_before,
+            fs::read(root.join(".catdesk/web-rollovers/alpha/intent-a.json")).unwrap()
+        );
+        assert_eq!(
+            execute(&root, "alpha").unwrap_err(),
+            "WEB_BOOTSTRAP_OUTCOME_UNKNOWN_NO_RESEND"
+        );
+        let cleanup = root.canonicalize().unwrap();
+        assert_eq!(
+            cleanup.parent(),
+            Some(std::env::temp_dir().canonicalize().unwrap().as_path())
+        );
+        fs::remove_dir_all(cleanup).unwrap();
+    }
+
     #[test]
     fn quarantine_preserves_uncertain_attempt_and_prevents_replay_after_reopen() {
         use crate::web_conversation_context::ContextPressurePolicy;
