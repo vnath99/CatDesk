@@ -1,3 +1,27 @@
+## October 24 EDT C95 — recover snapshot accounting at its event limit
+
+A full observation ledger could reject a fresh snapshot before an already-due
+context policy reached guarded handoff preparation. Snapshot ingestion now handles
+only that explicit event-limit refusal as an accounting gap: report uncounted
+complete/clipped messages, retain every old event, allow known revisions, and
+persist sticky coverage gaps. A derived per-conversation limit flag is exposed
+without a persisted schema migration; false is omitted for legacy status shapes.
+
+The causal old-code failure and seven snapshot-ingestion regressions pass, followed
+by the full Web operator/context-meter gates, strict Clippy and formatting. Tests
+exercise the real 4,096-event bound, cold stable intent, required quiescence, exact
+revision/replay counts, target refusal, low-pressure/no-forced-rollover and sibling
+capture. Existing fresh idle/source checks, thresholds, scheduler, handoffs, byte
+bounds and other errors are unchanged. Saturation is not token-pressure evidence;
+below-trigger saturation remains advisory and requires a policy decision.
+
+All 306 real records stay exact; queue 0, zero scoped/test owners, both controls
+STOPPED. No browser/Wake/connector/native actions or completed-canary replay.
+Source only: C94 remains selected, and actual Web coding B/C, protected installation
+and unattended acceptance remain open. Next: normal app build and disposable cold
+CLI status qualification. Evidence:
+`docs/verification/C95_CONTEXT_SNAPSHOT_LIMIT_RECOVERY_2026_10_24.json`.
+
 ## October 24 EDT C93–C94 — normal cached task transport qualified
 
 The published C92 source built as a normal release app. The bounded disposable

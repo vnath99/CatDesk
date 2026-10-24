@@ -1,6 +1,6 @@
 //! Private browser excerpt ingestion. Public output contains counts only.
 use crate::web_conversation_context::{
-    BrowserCoverageObservation, ConversationKey, VisibleSourceKind, WebContextStore,
+    BrowserCoverageObservation, ConversationKey, PressureStatus, VisibleSourceKind, WebContextStore,
 };
 use catdesk_wake::protocol::digest;
 use serde::Deserialize;
@@ -56,6 +56,23 @@ fn sha(value: &str) -> bool {
         && value
             .bytes()
             .all(|v| v.is_ascii_hexdigit() && !v.is_ascii_uppercase())
+}
+
+fn recorded_or_at_limit(
+    result: Result<PressureStatus, String>,
+    uncounted: &mut usize,
+) -> Result<bool, String> {
+    match result {
+        Ok(_) => Ok(true),
+        Err(reason) if reason == "WEB_CONTEXT_EVENT_LIMIT" => {
+            // Retain every existing event/revision and disclose the accounting
+            // gap. An already-due policy can still request a guarded handoff;
+            // saturation itself is never treated as token-pressure evidence.
+            *uncounted += 1;
+            Ok(false)
+        }
+        Err(reason) => Err(reason),
+    }
 }
 
 pub(super) fn ingest(
@@ -157,6 +174,7 @@ pub(super) fn ingest(
     let mut recorded = 0;
     let mut excerpts = 0;
     let mut uncertain = 0;
+    let mut uncounted_at_limit = 0;
     confirm_target()?;
     for message in &snapshot.messages {
         confirm_target()?;
@@ -179,14 +197,18 @@ pub(super) fn ingest(
             } else {
                 VisibleSourceKind::AssistantMessage
             };
-            store.record_browser_observation(
-                key,
-                &format!("browser-{id}"),
-                role,
-                Some(&message.text),
-                observed_at,
-            )?;
-            recorded += 1;
+            if recorded_or_at_limit(
+                store.record_browser_observation(
+                    key,
+                    &format!("browser-{id}"),
+                    role,
+                    Some(&message.text),
+                    observed_at,
+                ),
+                &mut uncounted_at_limit,
+            )? {
+                recorded += 1;
+            }
         } else {
             uncertain += 1;
             if message.body_text_observed
@@ -199,14 +221,18 @@ pub(super) fn ingest(
                 } else {
                     VisibleSourceKind::AssistantMessage
                 };
-                store.record_browser_excerpt_observation(
-                    key,
-                    &format!("browser-{id}"),
-                    role,
-                    &message.text,
-                    observed_at,
-                )?;
-                excerpts += 1;
+                if recorded_or_at_limit(
+                    store.record_browser_excerpt_observation(
+                        key,
+                        &format!("browser-{id}"),
+                        role,
+                        &message.text,
+                        observed_at,
+                    ),
+                    &mut uncounted_at_limit,
+                )? {
+                    excerpts += 1;
+                }
             }
             // Coverage stays uncertain. Missing/ambiguous identity, UI-only
             // fallback and load errors never count as message body content.
@@ -222,15 +248,20 @@ pub(super) fn ingest(
                 || identity_uncertain > 0
                 || coverage.nested_collapsed > 0
                 || coverage.keyed_collapsed > 0,
-            text_gap: text_incomplete > 0 || revision_incomplete > 0 || uncertain > 0,
+            text_gap: text_incomplete > 0
+                || revision_incomplete > 0
+                || uncertain > 0
+                || uncounted_at_limit > 0,
             overflow_gap: snapshot.truncated
                 || coverage.count_overflow
-                || coverage.omitted_before_window > 0,
+                || coverage.omitted_before_window > 0
+                || uncounted_at_limit > 0,
         },
     )?;
     Ok(
         json!({"action":"web_context_capture","projectId":key.project_id,
         "recordedMessages":recorded,"excerptMessages":excerpts,"uncertainMessages":uncertain,
+        "uncountedMessagesAtLimit":uncounted_at_limit,"observationLimitReached":uncounted_at_limit>0,
         "excerptTruncated":snapshot.truncated,"anchorStability":"UNVERIFIED",
         "coverage":"RECENT_VISIBLE_EXCERPT_WITH_UNKNOWN_HISTORY",
         "pressure":pressure,"advisory":true,"originAuthenticated":false,
@@ -267,6 +298,223 @@ mod tests {
         value["messages"][0]["revisionHash"] = Value::Null;
         value["coverage"]["revisionIncomplete"] = json!(1);
         value
+    }
+
+    fn fill_observation_ledger(store: &WebContextStore, key: &ConversationKey, count: usize) {
+        use crate::web_conversation_context::Observation;
+        let ids: Vec<_> = (0..count).map(|n| format!("bounded-event-{n}")).collect();
+        for batch in ids.chunks(512) {
+            store
+                .record_observation_batch(
+                    key,
+                    batch.iter().map(|id| Observation {
+                        event_id: id,
+                        revision: 1,
+                        dedup_key: id,
+                        source_kind: VisibleSourceKind::ToolResult,
+                        visible_text: Some("x"),
+                        observed_at_unix: 1,
+                    }),
+                )
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn saturated_snapshot_preserves_known_revisions_and_due_handoff_readiness() {
+        use crate::web_conversation_context::ContextPressurePolicy;
+        let root = std::env::temp_dir().join(format!("web-observe-limit-{}", uuid::Uuid::new_v4()));
+        let store = WebContextStore::open(&root).unwrap();
+        let key = ConversationKey {
+            project_id: "alpha".into(),
+            conversation_url: "https://chatgpt.com/c/limit-alpha".into(),
+            target_generation: 1,
+        };
+        store.bind_observed_target(key.clone(), None).unwrap();
+        store
+            .configure_policy(
+                "alpha",
+                ContextPressurePolicy {
+                    configured_budget_tokens: 6000,
+                    safety_headroom_tokens: 2000,
+                    unknown_source_reserve_tokens: 8,
+                    automatic_rollover_enabled: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        ingest(&store, &key, input(&key, "original body", true), 1, || {
+            Ok(())
+        })
+        .unwrap();
+        fill_observation_ledger(&store, &key, 4095);
+        let before = store.pressure(&key).unwrap();
+        assert_eq!(before.recorded_events, 4096);
+        assert!(before.near_capacity && store.rollover_readiness(&key).unwrap().1);
+        let mut capture = input(&key, "known body updated at the limit", true);
+        let known = capture["messages"][0].clone();
+        let mut new = input(
+            &key,
+            "unrecorded new body must remain explicitly unknown",
+            true,
+        )["messages"][0]
+            .clone();
+        new["messageHash"] = json!(digest("new-message-at-limit"));
+        capture["messages"] = json!([new, known]);
+        capture["coverage"]["returned"] = json!(2);
+        capture["coverage"]["visibleRoleCount"] = json!(2);
+        let result = ingest(&store, &key, capture.clone(), 2, || Ok(()))
+            .expect("saturated capture must retain due handoff readiness");
+        assert_eq!(result["recordedMessages"], 1);
+        assert_eq!(result["uncountedMessagesAtLimit"], 1);
+        assert_eq!(result["observationLimitReached"], true);
+        assert_eq!(result["pressure"]["recordedEvents"], 4096);
+        assert_eq!(result["pressure"]["observationLimitReached"], true);
+        assert_eq!(result["pressure"]["browserCoverage"]["overflowGap"], true);
+        assert_eq!(result["pressure"]["browserCoverage"]["textGap"], true);
+        assert_eq!(
+            result["pressure"]["pressureAssessment"],
+            "UNKNOWN_OR_INCOMPLETE"
+        );
+        let retained = store.pressure(&key).unwrap();
+        assert!(retained.visible_unique_tokens > before.visible_unique_tokens);
+        let replay = ingest(&store, &key, capture.clone(), 3, || Ok(())).unwrap();
+        assert_eq!(
+            replay["pressure"]["visibleUniqueTokens"],
+            result["pressure"]["visibleUniqueTokens"]
+        );
+        assert_eq!(
+            store.pressure(&key).unwrap().last_observed_event_at_unix,
+            Some(2)
+        );
+        assert_eq!(
+            ingest(&store, &key, capture, 4, || Err("TARGET_CHANGED".into())).unwrap_err(),
+            "TARGET_CHANGED"
+        );
+        assert_eq!(
+            store
+                .pressure(&key)
+                .unwrap()
+                .browser_coverage
+                .last_observed_at_unix,
+            Some(3)
+        );
+        assert!(
+            store
+                .request_rollover_if_due(&key, &key.target_sha256(), "source-task", false, 4)
+                .unwrap()
+                .is_none()
+        );
+        let mut clipped = excerpt(&key, "unrecorded clipped body at the metadata limit");
+        clipped["messages"][0]["messageHash"] = json!(digest("new-excerpt-at-limit"));
+        let uncounted_excerpt = ingest(&store, &key, clipped, 4, || Ok(())).unwrap();
+        assert_eq!(uncounted_excerpt["excerptMessages"], 0);
+        assert_eq!(uncounted_excerpt["uncountedMessagesAtLimit"], 1);
+        assert_eq!(
+            uncounted_excerpt["pressure"]["visibleUniqueTokens"],
+            result["pressure"]["visibleUniqueTokens"]
+        );
+        let intent = store
+            .request_rollover_if_due(&key, &key.target_sha256(), "source-task", true, 4)
+            .unwrap()
+            .unwrap();
+        assert_eq!(intent.trigger_reason, "OBSERVED_PRESSURE");
+        let reader = WebContextStore::open_read_only(&root).unwrap();
+        assert_eq!(
+            reader.pressure(&key).unwrap().rollover_intent,
+            Some(intent.clone())
+        );
+        assert_eq!(
+            store
+                .request_rollover_if_due(&key, &key.target_sha256(), "source-task", true, 5)
+                .unwrap(),
+            Some(intent)
+        );
+    }
+
+    #[test]
+    fn saturated_low_pressure_never_invents_tokens_or_blocks_sibling_capture() {
+        use crate::web_conversation_context::ContextPressurePolicy;
+        let root = std::env::temp_dir().join(format!(
+            "web-observe-limit-sibling-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let store = WebContextStore::open(&root).unwrap();
+        let alpha = ConversationKey {
+            project_id: "alpha".into(),
+            conversation_url: "https://chatgpt.com/c/limit-low-alpha".into(),
+            target_generation: 1,
+        };
+        let beta = ConversationKey {
+            project_id: "beta".into(),
+            conversation_url: "https://chatgpt.com/c/limit-low-beta".into(),
+            target_generation: 1,
+        };
+        for key in [&alpha, &beta] {
+            store.bind_observed_target(key.clone(), None).unwrap();
+            store
+                .configure_policy(
+                    &key.project_id,
+                    ContextPressurePolicy {
+                        automatic_rollover_enabled: true,
+                        incomplete_history_rollover: false,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+        }
+        fill_observation_ledger(&store, &alpha, 4096);
+        let before = store.pressure(&alpha).unwrap();
+        assert!(!before.near_capacity);
+        assert!(before.observation_limit_reached);
+        let result = ingest(
+            &store,
+            &alpha,
+            input(&alpha, "not recorded due to metadata limit", true),
+            2,
+            || Ok(()),
+        )
+        .unwrap();
+        assert_eq!(result["recordedMessages"], 0);
+        assert_eq!(result["uncountedMessagesAtLimit"], 1);
+        assert_eq!(
+            result["pressure"]["visibleUniqueTokens"],
+            before.visible_unique_tokens
+        );
+        assert_eq!(
+            result["pressure"]["estimatedUpperTokens"],
+            before.estimated_upper_tokens
+        );
+        assert!(!store.rollover_readiness(&alpha).unwrap().1);
+        assert!(
+            store
+                .request_rollover_if_due(&alpha, &alpha.target_sha256(), "source-task", true, 3)
+                .unwrap()
+                .is_none()
+        );
+        let sibling = ingest(
+            &store,
+            &beta,
+            input(&beta, "sibling independently makes progress", true),
+            3,
+            || Ok(()),
+        )
+        .unwrap();
+        assert_eq!(sibling["recordedMessages"], 1);
+        assert_eq!(sibling["uncountedMessagesAtLimit"], 0);
+        assert_eq!(sibling["observationLimitReached"], false);
+        assert_eq!(sibling["pressure"]["recordedEvents"], 1);
+        assert!(sibling["pressure"].get("observationLimitReached").is_none());
+        assert_eq!(sibling["pressure"]["browserCoverage"]["overflowGap"], false);
+        assert_eq!(store.pressure(&alpha).unwrap().recorded_events, 4096);
+        assert!(
+            WebContextStore::open_read_only(&root)
+                .unwrap()
+                .pressure(&beta)
+                .unwrap()
+                .visible_unique_tokens
+                > 0
+        );
     }
 
     #[test]

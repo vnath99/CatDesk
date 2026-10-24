@@ -251,6 +251,10 @@ pub struct PressureStatus {
     pub target_sha256: String,
     pub is_current: bool,
     pub recorded_events: usize,
+    /// Local metadata capacity, not evidence of provider token consumption.
+    /// Derived from retained events; older/unsaturated status shapes stay valid.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub observation_limit_reached: bool,
     /// Latest retained event observation timestamp, not a poll time, worker
     /// heartbeat or verified wall clock. Exact-content retries keep their
     /// original timestamp; each conversation is derived independently.
@@ -1080,6 +1084,7 @@ fn pressure_status(project: &ProjectState, ledger: &ConversationLedger) -> Press
         target_sha256: ledger.key.target_sha256(),
         is_current: project.active.as_ref() == Some(&ledger.key),
         recorded_events: ledger.events.len(),
+        observation_limit_reached: ledger.events.len() >= MAX_EVENTS,
         last_observed_event_at_unix: ledger
             .events
             .iter()
