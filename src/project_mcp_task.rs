@@ -599,8 +599,7 @@ pub(crate) fn granted_handoff_context(
         "status":call.status,"argumentsSha256":call.arguments_hash,"outcome":call.outcome_summary})
         })
         .collect();
-    Ok(Some(
-        json!({"schemaVersion":1,"mcpTool":"catdesk_web_task_tool","projectId":project.project.project_id,
+    let mut context = json!({"schemaVersion":1,"mcpTool":"catdesk_web_task_tool","projectId":project.project.project_id,
         "requestId":record.request_id,"sourceEventId":record.event_id,"taskId":link.task_id,
         "assignmentSha256":link.assignment_sha256,"scopeSha256":link.scope_sha256,"executionKey":key,
         "executionWorkspace":prepared["executionWorkspace"],"registeredWorkspace":project.project.workspace,
@@ -611,8 +610,17 @@ pub(crate) fn granted_handoff_context(
             "targetPaths":proposal.target_paths,"proposedDiffSha256":proposal.proposed_diff_hash})).collect::<Vec<_>>(),
         "patchApplications":applications.iter().map(|application|json!({"patchId":application.patch_id,
             "callId":application.tool_call_id,"status":application.status,"pathsChanged":application.actual_paths_changed})).collect::<Vec<_>>(),
-        "completedCallReplayAllowed":false,"unknownCallReplayAllowed":false,"nativeSessionAction":"NONE"}),
-    ))
+        "completedCallReplayAllowed":false,"unknownCallReplayAllowed":false,"nativeSessionAction":"NONE"});
+    if let Some(report) = &record.reported_status {
+        // Snapshot metadata only; it cannot replace execution evidence, scope or
+        // grant checks. Omit the field for legacy records to retain their shape.
+        context["coordinatorReport"] = json!({
+            "basis":"COORDINATOR_REPORTED_NOT_VERIFIED",
+            "snapshot":report,"taskCompletionVerified":false,"ownershipReleased":false,
+            "refreshPolicy":"FROZEN_AT_HANDOFF_PREPARATION_CHECK_CURRENT_DEPENDENCIES_BEFORE_WORK"
+        });
+    }
+    Ok(Some(context))
 }
 
 fn valid_execution_key(key: &str) -> bool {

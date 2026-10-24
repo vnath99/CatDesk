@@ -1,3 +1,24 @@
+## October 23 EDT C53 — reported blockers preserved in future private handoffs (source)
+
+Future granted-task handoffs now include an optional `coordinatorReport` snapshot
+from the existing WorkLedger: state, reason code, summary digest and report time.
+It is labeled COORDINATOR_REPORTED_NOT_VERIFIED, retains ownership, and carries
+neither verbatim summary text nor new authority. Records without a report retain
+their previous context shape. Existing frozen payloads are not rewritten.
+
+Twelve focused regressions passed, with two existing native tests ignored. One
+enhanced automatic-preparation regression proves exact report transfer, omission
+for legacy context, no verbatim summary, and frozen payload equality after a later
+report changes. Existing call replay, journal, scope and revocation checks still
+pass. Strict workspace Clippy, formatting and whitespace checks passed. Self-review
+only. C53 is SOURCE-QUALIFIED; no normal/selected/live C53 claim is made.
+
+All 266 C52 runtime records remain exact. The selected v66 app still contains C51,
+both controls stay stopped, no new browser/Wake/native activity occurred, and C50
+is not replayed. MCP startup-owner information is pending; this does not block
+source work. Next: normal executable and preserved/disposable payload qualification.
+Evidence: `docs/verification/C53_REPORTED_STATUS_HANDOFF_2026_10_23.json`.
+
 ## October 23 EDT C52 — selected development task reporting qualified
 
 The existing guarded updater selected the normal C51 executable into STOPPED,

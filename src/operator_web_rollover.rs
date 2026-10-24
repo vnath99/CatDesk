@@ -4045,6 +4045,29 @@ mod tests {
         task.execute(json!({"taskId":task_id,"callId":"before-rollover-read","tool":"read","arguments":{"path":"src/lib.rs"}})).await.unwrap();
         task.close().await.unwrap();
         drop(task);
+        let before_report_store = ProjectStore::open(&control, "alpha").unwrap();
+        let legacy_context = locally_granted_task_context(
+            &control,
+            "alpha",
+            &event.event_id,
+            &target,
+            &before_report_store,
+        )
+        .unwrap()
+        .unwrap();
+        assert!(legacy_context.get("coordinatorReport").is_none());
+        drop(before_report_store);
+        let reported = crate::web_work::resolve(
+            &control,
+            json!({
+                "projectId":"alpha","requestId":pins["requestId"],
+                "expectedTargetGeneration":target.generation,"expectedTargetSha256":target.digest,
+                "outcome":"blocked","reasonCode":"REVIEW_DEPENDENCY",
+                "summary":"Private fixture blocker details that must not enter the handoff verbatim"
+            }),
+        )
+        .unwrap();
+        assert_eq!(reported["phase"], "OPEN");
         let meter = WebContextStore::open(control.join(".catdesk/web-context")).unwrap();
         let source_key = key("alpha", &target);
         meter
@@ -4132,6 +4155,15 @@ mod tests {
         .unwrap();
         let pending_patch = capsule["context"]["patchProposals"][0]["patchId"].clone();
         assert_eq!(pending_patch, "rollover-patch");
+        let report_snapshot = &capsule["context"]["coordinatorReport"];
+        assert_eq!(
+            report_snapshot["basis"],
+            "COORDINATOR_REPORTED_NOT_VERIFIED"
+        );
+        assert_eq!(report_snapshot["snapshot"], reported["reportedStatus"]);
+        assert_eq!(report_snapshot["taskCompletionVerified"], false);
+        assert_eq!(report_snapshot["ownershipReleased"], false);
+        assert!(!text.contains("Private fixture blocker details"));
         let contract = &capsule["context"]["taskContract"];
         for field in [
             "objective",
@@ -4395,10 +4427,27 @@ mod tests {
         );
         let store = ProjectStore::open(&control, "alpha").unwrap();
         let recovered = store.active().unwrap().unwrap();
+        // A later report may be included in a future handoff, but must never
+        // regenerate an already prepared private payload or change its digest.
+        let ledger = WorkLedger::open(&control, "alpha").unwrap();
+        ledger
+            .report(
+                pins["requestId"].as_str().unwrap(),
+                &target,
+                "in_progress",
+                "DEPENDENCY_RECOVERED",
+                "Fixture dependency is now available",
+            )
+            .unwrap();
         let next = locally_granted_task_context(&control, "alpha", &event.event_id, &bound, &store)
             .unwrap()
             .unwrap();
         assert_eq!(next["journaledCalls"].as_array().unwrap().len(), 4);
+        assert_eq!(
+            next["coordinatorReport"]["snapshot"]["state"],
+            "in_progress"
+        );
+        assert_eq!(task_handoff::content(&recovered).unwrap(), text);
         assert_eq!(next["patchApplications"][0]["status"], "APPLIED");
         let journal_root = control.join(format!(
             ".catdesk/project-mcp-tasks/alpha/{task_id}/journal"
