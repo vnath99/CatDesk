@@ -1,3 +1,24 @@
+## October 23 EDT C58 — normal activity readback on preserved project history
+
+Published C57 source `799b1e420dbc5372399a8475176d25539212b026` built normally in 378.45s
+under an owned 600-second Job. Three normal-reader checks /11 commands passed
+in 8.58s. Central and nine separate project readers matched independent
+event-metadata calculations for all16 retained conversation ledgers; nine Wake
+pairs remained exact. Current activity was qualified against its paired target;
+predecessor history stayed scoped. A cold central retry preserved timestamps.
+These read existing recorded context; they do not demonstrate new Web tool calls,
+worker liveness, actual clock accuracy or task completion.
+
+All266 runtime records remain exact, including C50 history/task/grant. Selected
+v68 remains the C55 image STOPPED; C57 is normally built/read-qualified, not newly
+selected or protected-installed. Both owned Jobs exited, zero scoped processes,
+no messages, browser/Wake/recurring starts, native actions or production changes.
+Actual parallel Web coding, critical browser crash/full restart and unattended
+acceptance remain open. Next: prepare a fresh isolated commit-interruption canary
+through existing bounded browser recovery, with a supported source and exact
+ownership proved before any browser action; never replay accepted canaries.
+Evidence: `docs/verification/C58_NORMAL_CONVERSATION_ACTIVITY_2026_10_23.json`.
+
 ## October 23 EDT C57 — per-conversation observed activity (source)
 
 The required last-activity view now exposes `lastObservedEventAtUnix` alongside
