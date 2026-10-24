@@ -1,3 +1,37 @@
+## October 23 EDT C60–C62 — live paired registry failure recovered without resend
+
+The new C59 source's one queued handoff was delivered SENT/COMPLETE (61.03s),
+then the normal collector verified its actual fresh assistant body and saved the
+source fingerprint (36.75s). The selected C55 app then created a real replacement,
+independently verified its issued URL/receipt and rechecked the source. A real
+Windows registry read-share handle forced atomic replacement to fail after the
+guarded Wake successor committed (97.83s). No receipt/state was injected.
+The journal remained CREATED, Wake stayed generation2 and registry bytes stayed
+old. The incomplete pair refused reads; Wake2's target stayed readable. Previous
+admission entries, including quarantined operations, remained unchanged.
+
+A fresh normal process recovered locally with the real browser profile lock held
+(3.00s): same receipt/source witness, same generation2, predecessor retained once,
+context recorded and one continuation queued. Cold retry preserved all bytes.
+The canary's default context policy was restored. That continuation was delivered
+once SENT/COMPLETE (56.94s), and an event-bound fresh read verified its assistant
+body (34.55s), including the correct task and marker. The assistant reports HTTP429
+when inspecting project state, so actual Web tool execution remains unverified.
+Its statement that testing is pending is stale peer context, not authority over
+the locally verified test result. No successful coding execution is claimed.
+
+This qualifies the existing C55 fix against an actual controlled browser/Wake
+commit and native registry-write interruption. It does not simulate a killed
+process/machine or prove full-runtime/unattended recovery. Six owned Jobs, each
+bounded180s, exited; zero scoped owners and queue0. All nine prior projects and
+histories, native sessions, fixture, C50 grants/records and old canaries remain
+preserved. Ten projects are paired, C59 is at2 with one predecessor;281 current
+runtime records. Both controls STOPPED; no recurring/production changes. Next:
+close only this completed test-owned project via guarded retirement if eligible,
+preserving all history; never resend its completed events. Actual Web B/C and
+protected/full-runtime/unattended acceptance remain open. Evidence:
+`docs/verification/C60_C62_LIVE_REGISTRY_COMMIT_RECOVERY_2026_10_23.json`.
+
 ## October 23 EDT C59 — fresh live source for commit-interruption qualification
 
 Existing controlled conversations were fenced by pending/quarantined operations
