@@ -1025,19 +1025,27 @@ impl ProjectTask {
                 return Err("PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT".into());
             }
             let target = self.root.join(path);
-            let existing = if target.exists() {
-                target.as_path()
-            } else {
-                target
-                    .parent()
-                    .ok_or("PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT")?
-            };
-            if !existing
+            let mut existing = target.as_path();
+            loop {
+                match fs::symlink_metadata(existing) {
+                    Ok(_) => break,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                        // New assigned files may need several parent directories.
+                        // Stop at any existing entry, including a dangling link;
+                        // only true absence permits walking to another ancestor.
+                        existing = existing.parent().ok_or("PROJECT_TASK_PATH_UNAVAILABLE")?;
+                    }
+                    Err(_) => return Err("PROJECT_TASK_PATH_UNAVAILABLE".into()),
+                }
+            }
+            let canonical = existing
                 .canonicalize()
-                .map_err(|_| "PROJECT_TASK_PATH_UNAVAILABLE")?
-                .starts_with(&self.root)
-            {
+                .map_err(|_| "PROJECT_TASK_PATH_UNAVAILABLE")?;
+            if !canonical.starts_with(&self.root) {
                 return Err("PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT".into());
+            }
+            if existing != target && !canonical.is_dir() {
+                return Err("PROJECT_TASK_PATH_UNAVAILABLE".into());
             }
             Ok(())
         };
@@ -1708,6 +1716,197 @@ pub(crate) mod tests {
             "patch.preview",
             json!({"patchId":"patch-fixture","operations":[{"path":"src/lib.rs","old":"{ 1 }","new":"{ 2 }"}]}),
         )
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn project_task_creates_assigned_nested_files_independently_without_replay() {
+        let (a_scope, a_root, a_assignment) = fixture("alpha");
+        let (b_scope, b_root, b_assignment) = fixture("beta");
+        let path = "src/components/nested/feature.rs";
+        for assignment in [&a_assignment, &b_assignment] {
+            let mut value: Value = serde_json::from_slice(&fs::read(assignment).unwrap()).unwrap();
+            value["contract"]["allowedPaths"] = json!([path]);
+            fs::write(assignment, serde_json::to_vec(&value).unwrap()).unwrap();
+        }
+        let a = ProjectTask::open(&a_scope, &a_assignment).unwrap();
+        let b = ProjectTask::open(&b_scope, &b_assignment).unwrap();
+        let create = |id: &str, text: &str| {
+            call(
+                id,
+                "patch.preview",
+                json!({"patchId":"nested-create","operations":[{"path":path,"old":"","new":text}]}),
+            )
+        };
+        assert!(!a_root.join("src/components").exists());
+        assert!(!b_root.join("src/components").exists());
+        let (pa, pb) = tokio::join!(
+            a.execute(create(
+                "preview-a",
+                "pub const PROJECT: &str = \"alpha\";\n"
+            )),
+            b.execute(create("preview-b", "pub const PROJECT: &str = \"beta\";\n")),
+        );
+        if pa.is_err() || pb.is_err() {
+            a.close().await.unwrap();
+            b.close().await.unwrap();
+        }
+        pa.expect("assigned nested file must reach patch preview");
+        pb.expect("sibling assigned nested file must reach patch preview");
+        assert!(!a_root.join(path).exists());
+        assert!(!b_root.join(path).exists());
+        let apply = call("apply-a", "patch.apply", json!({"patchId":"nested-create"}));
+        let (aa, ab) = tokio::join!(
+            a.execute(apply.clone()),
+            b.execute(call(
+                "apply-b",
+                "patch.apply",
+                json!({"patchId":"nested-create"})
+            )),
+        );
+        aa.unwrap();
+        ab.unwrap();
+        for (task, root, scope, name) in [
+            (&a, &a_root, &a_scope, "alpha"),
+            (&b, &b_root, &b_scope, "beta"),
+        ] {
+            let expected = format!("pub const PROJECT: &str = \"{name}\";\n");
+            assert_eq!(fs::read_to_string(root.join(path)).unwrap(), expected);
+            let diff = task
+                .execute(call("diff", "diff.actual", json!({"paths":[path]})))
+                .await
+                .unwrap();
+            assert!(
+                diff.to_string()
+                    .contains("+++ b/src/components/nested/feature.rs")
+            );
+            assert!(!scope.project.workspace.join("src/components").exists());
+            drop(acquire_project_writer_lock(&scope.project.workspace).unwrap());
+            assert_eq!(task.execute(call("other-file", "patch.preview", json!({
+                "patchId":"unassigned","operations":[{"path":"src/components/nested/other.rs","old":"","new":"denied"}]
+            }))).await.unwrap_err(), "PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT");
+            assert!(!root.join("src/components/nested/other.rs").exists());
+        }
+        a.close().await.unwrap();
+        b.close().await.unwrap();
+        drop(a);
+        drop(b);
+        let cold = ProjectTask::open(&a_scope, &a_assignment).unwrap();
+        let run = RunId::new("task-fixture").unwrap();
+        let calls_before = cold.journal.load_tool_calls(&run).unwrap();
+        assert_eq!(
+            cold.execute(apply).await.unwrap_err(),
+            "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+        );
+        assert_eq!(calls_before, cold.journal.load_tool_calls(&run).unwrap());
+        assert_eq!(
+            fs::read_to_string(a_root.join(path)).unwrap(),
+            "pub const PROJECT: &str = \"alpha\";\n"
+        );
+        cold.close().await.unwrap();
+        drop(cold);
+        for scope in [a_scope, b_scope] {
+            let parent = scope
+                .control_workspace
+                .parent()
+                .unwrap()
+                .canonicalize()
+                .unwrap();
+            assert_eq!(
+                parent.parent(),
+                Some(std::env::temp_dir().canonicalize().unwrap().as_path())
+            );
+            fs::remove_dir_all(parent).unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn project_task_nested_paths_refuse_redirected_and_invalid_ancestors_before_writes() {
+        let (scope, root, assignment) = fixture("alpha");
+        let isolated_before = fs::read(root.join("src/lib.rs")).unwrap();
+        let native_before = fs::read(scope.project.workspace.join("src/lib.rs")).unwrap();
+        let task = ProjectTask::open(&scope, &assignment).unwrap();
+        let parent = root.parent().unwrap();
+        let outside = parent.join("outside");
+        fs::create_dir(&outside).unwrap();
+        let link = root.join("src/redirect");
+        let output = std::process::Command::new("powershell.exe")
+            .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+                "New-Item -ItemType Junction -Path $env:CATDESK_TEST_LINK -Target $env:CATDESK_TEST_TARGET -ErrorAction Stop | Out-Null"])
+            .env("CATDESK_TEST_LINK", crate::command::normalize_windows_verbatim_path(link.clone()))
+            .env("CATDESK_TEST_TARGET", crate::command::normalize_windows_verbatim_path(outside.clone()))
+            .output().unwrap();
+        assert!(
+            output.status.success(),
+            "isolated directory junction fixture required"
+        );
+        assert_eq!(
+            link.canonicalize().unwrap(),
+            outside.canonicalize().unwrap()
+        );
+        let invalid = |id: &str, path: &str| {
+            call(
+                id,
+                "patch.preview",
+                json!({
+                    "patchId":"denied-nested","operations":[{"path":path,"old":"","new":"denied"}]
+                }),
+            )
+        };
+        assert_eq!(
+            task.execute(invalid("outside", "src/redirect/new/deep/file.rs"))
+                .await
+                .unwrap_err(),
+            "PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT"
+        );
+        assert!(!outside.join("new").exists());
+        fs::remove_dir(&outside).unwrap();
+        assert_eq!(
+            task.execute(invalid("dangling", "src/redirect/new/deep/file.rs"))
+                .await
+                .unwrap_err(),
+            "PROJECT_TASK_PATH_UNAVAILABLE"
+        );
+        assert!(
+            !outside.exists(),
+            "dangling redirect must not recreate its target"
+        );
+        assert_eq!(
+            task.execute(invalid("not-directory", "src/lib.rs/new/file.rs"))
+                .await
+                .unwrap_err(),
+            "PROJECT_TASK_PATH_UNAVAILABLE"
+        );
+        for path in [
+            "../source/new/file.rs",
+            "src/.git/new/file.rs",
+            "src/.catdesk/new/file.rs",
+            "src/new/../file.rs",
+        ] {
+            assert_eq!(
+                task.execute(invalid("invalid", path)).await.unwrap_err(),
+                "PROJECT_TASK_PATH_OUTSIDE_ASSIGNMENT"
+            );
+        }
+        assert!(
+            task.journal
+                .load_tool_calls(&RunId::new("task-fixture").unwrap())
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(fs::read(root.join("src/lib.rs")).unwrap(), isolated_before);
+        assert_eq!(
+            fs::read(scope.project.workspace.join("src/lib.rs")).unwrap(),
+            native_before
+        );
+        task.close().await.unwrap();
+        drop(task);
+        fs::remove_dir(link).unwrap();
+        let cleanup = parent.canonicalize().unwrap();
+        assert_eq!(
+            cleanup.parent(),
+            Some(std::env::temp_dir().canonicalize().unwrap().as_path())
+        );
+        fs::remove_dir_all(cleanup).unwrap();
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

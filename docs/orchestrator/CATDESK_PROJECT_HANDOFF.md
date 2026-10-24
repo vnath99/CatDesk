@@ -1,3 +1,25 @@
+## October 24 EDT C89 — assigned task files in new directories
+
+Web task path admission rejected an explicitly assigned new file when its parent
+directory did not exist. It now validates the nearest existing ancestor; only
+NotFound permits walking upward. Canonical workspace containment, directory-type
+checks and the existing contract path policy remain mandatory. The existing
+patch engine owns directory/file creation, preimages, apply and no-replay journals.
+
+The causal old-code failure and 18 affected tests passed. Two existing native-command
+tests remain excluded; this change does not qualify command execution. Central
+task HTTP regressions, strict workspace Clippy and formatting also pass. New tests
+create different nested files in independent assigned worktrees, preserve native
+checkouts, verify actual diffs/cold no-replay, and reject real outside/dangling
+junctions and invalid ancestors before writes. Fixture path/CRLF repairs and their
+failed attempts remain audited. Source qualification only; the selected C86 app
+is unchanged. All 306 real records match, zero owners, queue 0, controls STOPPED.
+
+Actual Web coding B/C still needs the supported serving backend/catalog path;
+no connector retry, tunnel/runtime action or completed live canary replay occurred.
+Next: normal app build and disposable central HTTP qualification. Evidence:
+`docs/verification/C89_ASSIGNED_NESTED_FILE_CREATION_2026_10_24.json`.
+
 ## October 24 EDT C86–C88 — normal automatic context observation
 
 The published C85 app built normally in 371.51s and was selected through the
