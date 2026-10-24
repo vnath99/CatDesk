@@ -285,6 +285,29 @@ enabled. Actual two-conversation Web coding remains the live priority once its
 approved serving dependencies return. Evidence:
 `docs/verification/C110_NORMAL_PRE_READY_FALLBACK_2026_10_24.json`.
 
+### C111 existing development migration completed
+
+The current/previous model now operates in the existing isolated development root.
+The normal C109 package is selected, and v76 is retained with exact build/review
+and freshly observed MCP health references. Current v77 received its own write-once
+record only after actual selected-image MCP health passed. Both used the existing
+selection journal and schema-compatible metadata; no competing registry or launcher
+was introduced. The actual normal backend exited naturally in each bounded test.
+
+Ten paired target tuples, the five-project central view, 304 unmodified runtime
+records and 55 historical files were verified. Only the authority/selection pair
+changed, with both baseline generations preserved. Browser/Wake stayed stopped,
+profiles and native sessions were untouched. These local development records do
+not create production review authority or retire the legacy canonical writers.
+The worker release store remains a storage primitive for the separate worker role;
+it must not be presented as an already composed canonical daemon startup mechanism.
+
+The next production boundary remains the October 27 existing-authority plan.
+Admission must preserve existing signed/legacy artifacts and pass actual composed
+startup/recovery before any old writer is retired. Once the serving dependencies
+return, actual two-conversation Web coding takes priority over more synthetic demos.
+Evidence: `docs/verification/C111_SELECTED_DEVELOPMENT_CURRENT_PREVIOUS_HEALTH_2026_10_24.json`.
+
 # T-0476 — CatDesk fast development, safe Wake recovery and simple production releases
 
 ## CURRENT 2026-10-11 — Chat52 three-lane development and recovery status (supersedes history below)

@@ -1,3 +1,36 @@
+## October 24 EDT C111 — selected development current/previous and actual MCP health
+
+The existing isolated development runtime now selects the normal C109 package
+(source `9c81bc2a788d8621622381b3ccdbbdb0623da3ec`) and retains v76 as its
+recorded working predecessor. Both immutable packages now have write-once local
+verification records tied to their exact build, source/review and observed health.
+These operator-provided development records are not protected production authority.
+
+Before recording v76, a fresh bounded run verified its actual selected child image,
+unauthenticated rejection (401), authenticated MCP catalog (200; 79 tools), and
+natural parent/child exit. Its earlier C96 CLI-only result was not relabeled as
+backend health. The existing stopped selection journal then admitted v77. Another
+six-second backend run verified its actual image and the same MCP checks before
+its verification record was created. Its host image was built, not runtime-started.
+The two separately monitored jobs used 180-second limits and finished naturally
+in about 7.3 and 14.2 seconds; no recurring process was enabled.
+
+Sixteen control commands passed, including all ten exact paired URL/digest/
+generation reads and the five-project central view. Exactly two permitted selection
+records changed; 304 other runtime records and all 55 historical files stayed
+exact. The old baseline and complete previous package remain preserved, alongside
+a new current baseline. New evidence consists of two immutable verification records
+and workspace-local inputs. Zero scoped owners remained, queue 0, both controls
+STOPPED. Profiles, project bindings, conversations and native sessions were preserved.
+
+This qualifies the actual existing development selection and MCP backend. Prior
+interrupted-selection, fallback and owned-process exit results remain preserved.
+It does not qualify protected recovery, external Secure MCP, fresh Wake delivery,
+actual two-conversation Web coding or unattended operation. No completed canary was
+replayed and no legacy mechanism was retired. Production recovery remains conditional
+on the existing approved authority/operator boundary. Exact remote CI is unverified.
+Evidence: `docs/verification/C111_SELECTED_DEVELOPMENT_CURRENT_PREVIOUS_HEALTH_2026_10_24.json`.
+
 ## October 24 EDT C110 — normal pre-ready fallback and after-ready refusal
 
 Exact source `9c81bc2a788d8621622381b3ccdbbdb0623da3ec` built as normal release

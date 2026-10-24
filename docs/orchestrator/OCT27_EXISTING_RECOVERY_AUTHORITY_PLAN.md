@@ -4,6 +4,22 @@ Observed October 24, 2026. Classification: **READ_ONLY_HOST_HISTORY**.
 Recovery, protected deployment and actual parallel Web coding remain unaccepted.
 This plan uses the existing procedures; it adds no recovery mechanism or authority.
 
+## October 24 C111 development snapshot — separate from production admission
+
+The existing isolated development runtime now selects the normal C109 v77 package
+and retains the normal v76 working predecessor. Both have exact source/build/review
+references and freshly observed actual selected-image MCP health (401/200; 79 tools),
+recorded through the existing write-once development verification command. Ten paired
+targets and all five project bindings remain unchanged. No protected install, official
+runtime, browser/Wake activation or legacy retirement occurred.
+
+This proves development can run independently while protected restoration waits.
+It supplies no missing canonical attestation, review ID, confirmation token or LKG
+authority. Do not copy either development executable into the canonical installation
+or use these local verification records as protected admission. The minimum operator
+boundary and exact post-recovery checks below remain unchanged. Evidence:
+`docs/verification/C111_SELECTED_DEVELOPMENT_CURRENT_PREVIOUS_HEALTH_2026_10_24.json`.
+
 ## Findings
 
 ### The executable/fingerprint divergence has a recorded build/reload sequence
