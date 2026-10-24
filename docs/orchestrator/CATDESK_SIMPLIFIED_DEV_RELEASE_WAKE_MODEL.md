@@ -258,6 +258,33 @@ preserved. Protected/unattended migration and real Web coding remain separate;
 no legacy mechanism is retired. Evidence:
 `docs/verification/C109_ONE_PRE_READY_BACKEND_FALLBACK_2026_10_24.json`.
 
+### C110 normal one-fallback qualification
+
+The C109 source is normal-release built and exercised in three disposable cases.
+The exact former failing package now restores and executes the recorded trusted
+predecessor. When a controlled shared configuration blocks both valid images
+before ready, one restoration occurs and the command exits with bounded failure.
+After a verified ready record, killing the exact owned child produces an error
+without replacement, replay or selector mutation. Ready image paths/hashes were
+verified by retained process handles; the failed pair's exact spawn count was not
+independently traced beyond source control flow and observed single restoration.
+
+A harness prefix-matching assertion stopped the first job despite correct negative
+behavior. Its record was retained; a bounded continuation parsed the real status,
+verified unchanged state and performed only the unfinished case. The successful
+fallback was not replayed. About 15 active seconds spanned two separately bounded
+jobs; no process remained during the diagnostic gap. Real v76, every paired target,
+profile/task journal, historical artifact and protected installation stayed intact.
+
+Next, inspect existing v76 evidence and the supported stopped-development selector.
+If qualification is exact, retain that package as the local working predecessor,
+select the new qualified source in the isolated dev runtime and perform one bounded
+normal MCP qualification. This is independent of protected production admission or
+external Secure MCP ownership. No legacy mechanism is retired or recurring process
+enabled. Actual two-conversation Web coding remains the live priority once its
+approved serving dependencies return. Evidence:
+`docs/verification/C110_NORMAL_PRE_READY_FALLBACK_2026_10_24.json`.
+
 # T-0476 — CatDesk fast development, safe Wake recovery and simple production releases
 
 ## CURRENT 2026-10-11 — Chat52 three-lane development and recovery status (supersedes history below)

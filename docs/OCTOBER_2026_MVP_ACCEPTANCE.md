@@ -1,3 +1,36 @@
+## October 24 EDT C110 — normal pre-ready fallback and after-ready refusal
+
+Exact source `9c81bc2a788d8621622381b3ccdbbdb0623da3ec` built as normal release
+app/host images. Three disposable cases qualify the new command: the exact inert,
+hash-valid package from C109 now falls back to the actual serving predecessor;
+blocking both valid images before readiness produces one restoration and bounded
+failure; terminating the exact owned child after ready produces an explicit error
+without changing the selection or publishing another ready record.
+
+The first job stopped on a harness assertion: it matched `DEV_BACKEND_READY` inside
+the expected error name `DEV_BACKEND_READY_EOF`. Parsed status/error and retained
+state confirmed the correct negative behavior. A second bounded job verified that
+retained result and ran only the remaining case. The passed fallback was not
+replayed. Active test time was about 15 seconds across two jobs, each bounded to
+180 seconds; this is not a claim of one continuous 180-second session. Both jobs
+were terminal with zero owners between them. The original partial record remains.
+
+Ready child image paths/hashes were checked through retained handles. The failed
+pre-ready pair's child launch count was not independently traced; the normal
+controller's bounded error and one committed restoration were observed. Profiles,
+history, failed bytes and package evidence survived. Prior C106 health and C108
+file-recovery/parent-exit evidence remain preserved. These are normal isolated
+runtime results, not protected installation, unattended or ChatGPT Web acceptance.
+
+All 306 runtime records and 55 historical files remain exact; zero live recorded
+parent handles/scoped owners, queue 0, both controls STOPPED, real selected v76
+unchanged. No browser/Wake/tunnel activation, binding/native-session action,
+protected recovery, canary replay or legacy retirement occurred. Exact source SHA
+was remotely verified on `codex/web-rollover-oct17`; CI remains unverified.
+Next: qualify the existing v76 evidence and supported stopped development-package
+selection, then install/test the qualified source only in the isolated dev runtime.
+Evidence: `docs/verification/C110_NORMAL_PRE_READY_FALLBACK_2026_10_24.json`.
+
 ## October 24 EDT C109 — one predecessor attempt before backend readiness
 
 A normal C107 executable confirmed the remaining defect: an inert non-executable
