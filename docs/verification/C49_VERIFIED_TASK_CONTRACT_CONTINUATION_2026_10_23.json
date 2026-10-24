@@ -95,11 +95,11 @@
     "fullMilestone": "OPEN",
     "source": "PASS",
     "selectedDevelopment": "C49_V65_STOPPED_QUALIFIED",
-    "actualC49BrowserHandoff": "NOT_RUN",
+    "actualC49BrowserHandoff": "PASS_C50_CONTROLLED_NORMAL_PIPELINE",
     "unattended": "NOT_ACTIVATED",
     "normalC49Executable": "PASS_LOCAL_CLI_DISPLAY_ONLY",
     "additionalActualWebAGatesClosed": 0,
-    "actualWebCoding": "OPEN_CONNECTOR_HTTP429"
+    "actualWebCoding": "BLOCKED_SCOPED_TOOL_UNAVAILABLE"
   },
   "dependency": {
     "requests": 1,
@@ -187,5 +187,14 @@
     "unexpectedChanges": 0,
     "elapsedSeconds": 6.2789656,
     "bothControlsStopped": true
+  },
+  "liveQualification": {
+    "actualToolCalls": 0,
+    "actualBrowserTransfer": true,
+    "pendingTaskPreserved": true,
+    "evidence": "C50_CONTROLLED_GRANTED_TASK_LIVE_ROLLOVER_2026_10_23.json",
+    "normalCollectorCreatedRealPrivatePayload": true,
+    "pairedGeneration": 5,
+    "taskContextDelivered": true
   }
 }

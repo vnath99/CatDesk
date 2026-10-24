@@ -1,3 +1,16 @@
+## October 23 EDT C50 — completed granted-task live rollover; preserve its pending task
+
+C49/v65 completed a real controlled private-payload collection, new conversation,
+verified generation5 paired binding, acknowledgement and post-ack task-context delivery.
+Do not repeat those deliveries, collect/create operations or the completed source.
+The task is still open: its new conversation reports the scoped task tool unavailable,
+with zero journal calls and unchanged native/assigned files. Its private grant is retained.
+
+Both hosts are STOPPED, the queue is empty and the original context policy is restored.
+No recurring scheduling was enabled. Connected backend/catalog qualification, actual
+Web coding and protected/unattended acceptance remain open; do not equate these passes.
+See `../verification/C50_CONTROLLED_GRANTED_TASK_LIVE_ROLLOVER_2026_10_23.json`.
+
 ## October 23 C49 — exact task-contract context (selected stopped development)
 
 The existing `operator web work resume-prepare` display and private automatic granted

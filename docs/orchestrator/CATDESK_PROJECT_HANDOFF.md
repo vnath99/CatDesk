@@ -1,3 +1,36 @@
+## October 23 EDT C50 — live private task rollover passed; Web coding remains blocked
+
+The selected normal C49/v65 executable completed a fresh controlled source delivery,
+live source handoff, private collector payload, actual replacement conversation and
+verified paired generation-4 to generation-5 binding. Its predecessor and the other
+eight bindings/history remain preserved. The new chat received the existing task's
+private context, completed continuation acknowledgement and received one stable
+post-ack task-resume event. No task or grant was replaced and no completed canary replayed.
+
+Source and handoff deliveries each took about 63 seconds, the actual normal collector 37.56s,
+replacement verification/binding 94.95s, acknowledgement 60.61s and task-resume 60.85s.
+Event-bound response inspection and cold generation-5 admission passed. This used
+bounded operator commands through the existing automatic transaction implementation;
+recurring scheduling and normal unattended operation were not activated.
+
+The replacement explicitly reports BLOCKED_SCOPED_TOOL_UNAVAILABLE and retains the
+correct unfinished task. Both canary files are unchanged and the journal has zero
+tool calls. A single independent connector probe remains HTTP429; serving build/root
+and tool-catalog parity are unverified. No actual Web coding or parallel B/C pass is
+claimed. These live passes are distinct from source tests and protected installation.
+
+Final cleanup: 266 checked runtime records, empty queue, zero test-owned processes,
+both hosts STOPPED, original context policy restored, native chats untouched. Three
+native chats were active and one idle/completed at read-only inspection. The pending
+task/private grant remain available for later recovery. Raw private URLs and credentials
+stay outside public evidence. UTC timestamps cross into October 24; local date is October 23.
+
+Next: inspect serving backend build/root and tool-catalog parity through supported
+read-only paths. Durable reported work blockers/progress in the existing ledger and
+status can continue independently if that dependency stays unavailable. No operator
+action is needed for source development. Full October 31 acceptance remains open.
+Evidence: `docs/verification/C50_CONTROLLED_GRANTED_TASK_LIVE_ROLLOVER_2026_10_23.json`.
+
 ## October 23 C49 — task contract context, normal CLI and stopped development qualified
 
 Granted-task handoffs now carry the exact archived assignment objective, allowed
