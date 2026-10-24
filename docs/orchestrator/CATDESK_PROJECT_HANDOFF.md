@@ -1,3 +1,41 @@
+## October 24 EDT C73–C78 — real process-kill rollover recovery and continuation
+
+The previously reconciled C69 source was registered through supported commands
+without resending its seed. A new project-specific pressure/handoff request was
+observed, delivered once and collected into a3,066-character durable handoff.
+All nine prior active pairs and the retained archive were preserved.
+
+The selected normal app then began that new rollover. The monitored test killed
+only its retained owned process tree after observing durable `DRAFT_READY`.
+The post-exit journal stayed `SUBMITTING / DRAFT_READY`, with no receipt or new
+binding. Registry/Wake stayed exact. A cold normal read-only inspection verified
+the exact owned draft, no send attempt and no metadata change. Supported recovery
+resumed this same draft/intent, verified the actual issued URL and completed reply,
+committed paired generation1-to2, retained the predecessor exactly once, recorded
+context and queued one continuation. No blind resend or lock removal was used.
+
+The recovery itself completed in84.73s. Its test harness then exited1 before the
+policy reset because its audit directory was unset. That failed record is retained;
+a separate0.84s local-only finalization restored this canary's policy and verified
+the paired result without executing rollover or opening a browser again.
+
+Continuation delivery passed in63.84s. A separate34.81s event-bound read verified
+the1,305-character completed body, correct source task and interruption/recovery
+context. The response reports connector429; it is not successful MCP coding proof.
+The copied delivery label also still says registry recovery; the actual injected
+failure was process-tree termination, and the original label is retained in audit.
+
+Every browser/foreground step stayed within its owned180s cap and cleaned up to
+zero scoped processes; both controls STOPPED, queue0,297 current records,10 active
+pairs and one retained archive. The original five projects/bindings and native
+sessions were unchanged. Native readback showed three active chats and PortfolioDesk
+idle with its own reported blocker; no messages or session actions were sent.
+No recurring or production activation. H advances for actual pre-send process kill
+and recovery; other crash phases, machine crash, full-stack restart, protected and
+unattended acceptance remain open. Actual Web coding B/C remains a separate backend
+dependency. Next: bounded empty-queue full-stack restart qualification. Evidence:
+`docs/verification/C73_C78_OWNED_PROCESS_ROLLOVER_RECOVERY_2026_10_24.json`.
+
 ## October 24 EDT C71–C72 — matching response-recovery package selected stopped
 
 The stopped package guard rejected the attempted old-binary/new-bridge mixture
