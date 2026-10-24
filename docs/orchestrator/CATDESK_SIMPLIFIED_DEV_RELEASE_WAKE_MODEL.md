@@ -1,3 +1,74 @@
+## October 24, 2026 — focused simplification and compatibility proposal
+
+This section supersedes the historical deployment plan below. The operator has
+requested a smaller release model. Protected installation and recovery actions
+remain separately authorized; this proposal grants no runtime activation.
+
+### Consolidate existing components incrementally
+
+| Existing component | Proposed disposition | Required compatibility condition |
+| --- | --- | --- |
+| Git branch history, exact source/build/test/review evidence | Keep GitHub as the source and development record. Bind immutable artifact manifests to exact commits and full hashes. | A commit or CI result alone does not authenticate unknown executable bytes. Preserve unverified CI labels. |
+| Development `versions/`, package manifests, `current.json`, workspace authority | Reuse this functioning nonprivileged runtime. Consolidate package-selection metadata behind its existing transaction, with current/previous verified release as the target model. | Existing schema-1 selections, profile, Python runtime, targets and journals must remain readable. No production root or tunnel access. |
+| `package-update-attempt.json` and staged immutable package | Reuse one selection/recovery journal. Remove dependence on the original build directory when completing an already validated staged update. | Revalidate exact workspace, package, pointer, authority and exclusive STOPPED ownership; unknown state remains held. First implementation below. |
+| `user_worker_release.rs` current/previous immutable manifests and atomic active state | Reuse this existing current/previous representation for the eventual stable worker cutover; do not create another competing version registry. | Keep existing protected admission intact until the composed startup, rollback and migration tests pass. |
+| Legacy canonical executable/sidecar and alternating LKG slots | Retain as compatibility inputs; stop treating them as the development runtime's release store. Retire their mutating role only after migration to a verified versioned release passes. | Preserve legacy bytes and receipts. `operational_verified` must not be relabeled as independently reviewed. |
+| Reviewed build, promotion and October 18 release-pair procedure | Consolidate operator presentation into one admitted-release transaction. Reuse existing review/build validators and the bounded reconstruction route where needed. | Do not introduce a parallel trust framework or bypass existing protected policy. The current divergent production pair still needs approved authority. |
+| Product-root signed installation / pending rotation | Keep only for the protected launcher/install boundary where required. Exclude it from ordinary source work, Wake URL updates and development-package selection. | Preserve existing signed artifacts and receipts; no rotation or protected cutover is authorized here. |
+| Independent Wake, guarded paired URL binding, native Codex and external Secure MCP | Keep their existing independent ownership and lifecycle. | No implicit Wake launch, native writer takeover, tunnel replacement or chat replay during release selection. |
+
+### Minimal end state and staged migration
+
+A release manifest should identify exact source commit, artifact hashes, tests,
+independent review and (separately) observed working health. Keep immutable current
+and one independently verified working predecessor. Reuse the existing atomic
+selection and journal; a folder's presence, newest timestamp or prior selection
+alone must not make it trusted rollback material. Public startup should choose a
+verified current release, or restore the verified predecessor after a bounded
+failure. If neither is eligible, return one clear reconstruction-required result.
+
+Reconstruction must bind one explicit operator-approved source/build candidate
+and preserve the divergent old pair and escrow. Use the existing reviewed-build /
+release-pair procedures; do not rewrite a fingerprint or require a newly invented
+signing/authority mechanism. Existing protected requirements apply only where the
+chosen production admission actually requires them.
+
+Migration order:
+
+1. Make the existing development selection recoverable from local immutable
+   artifacts without any privileged promotion or retained build-output directory.
+2. Add commit/review/health qualification and explicit current/previous selection
+   to the existing versioned model. Preserve older schema readers. Verify corrupt
+   current, valid predecessor, absent/corrupt predecessor, interrupted selection,
+   cold restart and normal startup before automatic fallback is enabled.
+3. Qualify the composed normal developer backend startup and rollback independently
+   of protected production. Retain bounded ownership and approved-resource scope.
+4. On an authorized production maintenance turn, admit a qualified version through
+   the existing reconstruction/cutover route. Prove process identity, protocol,
+   bindings and recovery. Only then retire redundant legacy writers; retain
+   historical readers and evidence for compatibility.
+
+No legacy mechanism is retired by the first increment. The October 27 historical
+plan remains the production compatibility path until a migration is qualified.
+No recurring process is enabled. Actual two-conversation Web coding remains the
+next live priority once the approved serving path is restored.
+
+### First independently eligible implementation
+
+`operator web-dev-runtime recover-package` takes no path, version or hash input.
+It finishes only an existing package-update journal against the already staged
+immutable package, using the same completion validator as `update-package`.
+This removes the unnecessary original-build-directory dependency and creates no
+second LKG store, new approval type or production authority. It never starts a
+host or browser. With no pending update, it validates the current stopped
+selection without changing its bytes. Unknown pointers, changed package bytes,
+active owners or incompatible state remain explicit refusals.
+
+This increment passed 17 development-runtime and 12 operator tests, both strict lint
+gates and formatting. It is source/fixture qualification, not current/previous
+health fallback, installed recovery or normal unattended acceptance. The existing
+selected development package and protected runtime are unchanged.
+
 # T-0476 — CatDesk fast development, safe Wake recovery and simple production releases
 
 ## CURRENT 2026-10-11 — Chat52 three-lane development and recovery status (supersedes history below)

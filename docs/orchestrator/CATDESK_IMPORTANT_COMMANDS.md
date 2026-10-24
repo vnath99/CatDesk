@@ -1,3 +1,30 @@
+## October 24 EDT C101 — T0476 simplification and local selection recovery
+
+The updated T0476 document maps existing mechanisms to keep, consolidate and
+eventually retire. Reuse immutable development packages and the existing atomic
+current/previous worker model. Preserve legacy readers/receipts and protected
+admission until startup, rollback, interruption and migration qualify. No new
+release store or security framework is introduced.
+
+First source increment: `operator web-dev-runtime recover-package` completes an
+already journaled selection using its retained immutable package, without the
+original build directory. It reuses the existing completion validator, requires
+STOPPED/exclusive ownership, refuses changed artifacts or unknown pointers, and
+starts no host/browser. With no pending selection, validation is byte-stable.
+
+17 development-runtime tests plus 12 operator tests pass, including five new
+recovery tests and three interruption boundaries. Both strict Clippy gates and
+format checks pass. These are source/fixture results, not installed recovery or
+actual process-crash acceptance. All 306 runtime records and 55 historical files
+remain exact; zero scoped owners, queue 0, both controls STOPPED. Native sessions,
+bindings, signed artifacts, official runtime and completed canaries are untouched.
+
+Next: exact commit/review/health admission and independently verified previous
+release fallback in the existing model; no legacy writer is retired yet. Normal
+release build/command qualification remains separate. Approved production recovery
+and real two-conversation Web coding remain open; recurring operation is not enabled.
+Evidence: `docs/verification/C101_T0476_DEV_SELECTION_RECOVERY_2026_10_24.json`.
+
 ## October 24 EDT C100 — historical recovery authority reconciled
 
 Read-only history now explains the known executable/fingerprint divergence:

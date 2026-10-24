@@ -133,6 +133,7 @@ pub(crate) enum WebDevelopmentAction {
     UpdatePackage {
         package: PathBuf,
     },
+    RecoverPackage,
     Enqueue {
         project_id: String,
         event_id: String,
@@ -263,6 +264,7 @@ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction,
                 package: PathBuf::from(&args[4]),
             }),
         Some("status") if args.len() == 3 => Ok(WebDevelopmentAction::Status),
+        Some("recover-package") if args.len() == 3 => Ok(WebDevelopmentAction::RecoverPackage),
         Some("start") if args.len() == 3 => Ok(WebDevelopmentAction::Start),
         Some("stop") if args.len() == 3 => Ok(WebDevelopmentAction::Stop),
         Some("run") if args.len() == 3 => Ok(WebDevelopmentAction::Run),
@@ -272,7 +274,7 @@ fn parse_web_development_action(args: &[String]) -> Result<WebDevelopmentAction,
                 .ok_or("WEB_DEVELOPMENT_FOREGROUND_BUDGET_INVALID")?;
             Ok(WebDevelopmentAction::RunBounded { maximum_seconds })
         }
-        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, update-package --package <directory>, login --project-id <id>, enqueue --project-id <id> --event-id <id> --message-file <file>, retry --project-id <id> --event-id dev-<id>, status, start, stop, or run".into()),
+        _ => Err("WEB_DEVELOPMENT_ARGUMENTS_INVALID: use prepare --package <directory> --python-runtime <directory>, update-package --package <directory>, recover-package, login --project-id <id>, enqueue --project-id <id> --event-id <id> --message-file <file>, retry --project-id <id> --event-id dev-<id>, status, start, stop, or run".into()),
     }
 }
 
@@ -737,6 +739,9 @@ pub(crate) async fn execute_operator_action(
                 } => development_runtime::prepare(workspace, &package, &python_runtime),
                 WebDevelopmentAction::UpdatePackage { package } => {
                     development_runtime::update_package(workspace, &package)
+                }
+                WebDevelopmentAction::RecoverPackage => {
+                    development_runtime::recover_package(workspace)
                 }
                 WebDevelopmentAction::Enqueue {
                     project_id,
@@ -1597,7 +1602,15 @@ mod tests {
         ] {
             assert!(parse_operator_action(invalid.into_iter().map(str::to_string)).is_err());
         }
-        for action in ["status", "start", "stop", "run"] {
+        assert!(matches!(
+            parse_operator_action(
+                ["operator", "web-dev-runtime", "recover-package"].map(str::to_string)
+            ),
+            Ok(Some(OperatorAction::WebDevelopment(
+                WebDevelopmentAction::RecoverPackage
+            )))
+        ));
+        for action in ["status", "start", "stop", "run", "recover-package"] {
             assert!(
                 parse_operator_action(["operator", "web-dev-runtime", action].map(str::to_string))
                     .expect("fixed action")

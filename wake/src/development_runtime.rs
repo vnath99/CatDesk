@@ -906,6 +906,43 @@ pub fn update_package(workspace: &Path, source_package: &Path) -> Result<Value> 
     complete_package_update(&workspace, &root, &attempt, &hashes)
 }
 
+/// Finish the already journaled development selection using its immutable local
+/// package, even when the original build/staging directory no longer exists.
+/// This neither chooses a different release nor launches a host or browser.
+pub fn recover_package(workspace: &Path) -> Result<Value> {
+    let workspace = canonical_workspace(workspace)?;
+    let dev = dev_dir(&workspace);
+    let root = runtime_root(&workspace);
+    plain(&dev, true)?;
+    plain(&root, true)?;
+    let attempt_path = dev.join(PACKAGE_UPDATE_ATTEMPT);
+    if !present(&attempt_path)? {
+        validated_authority(&workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    }
+    let store = Store::open(&root)?;
+    let _host = store.host_lock()?;
+    let _browser = runtime::browser_session_lock(&root, Duration::ZERO)?;
+    let control: runtime::Control = read(&root.join("control.json"))?;
+    if control.schema_version != 1 || control.desired != "STOPPED" {
+        return Err("DEV_PACKAGE_UPDATE_HOST_NOT_STOPPED".into());
+    }
+    if present(&attempt_path)? {
+        let attempt: PackageUpdateAttempt = read_json(&attempt_path, 32 * 1024)?;
+        return complete_package_update(
+            &workspace,
+            &root,
+            &attempt,
+            &attempt.new_authority.artifacts,
+        );
+    }
+    let (_, current) = validated_authority(&workspace)?.ok_or("DEV_RUNTIME_NOT_PREPARED")?;
+    Ok(package_update_result(
+        &current,
+        &current,
+        "PACKAGE_CURRENT_VERIFIED_STOPPED",
+    ))
+}
+
 fn stage_package_update_attempt(
     workspace: &Path,
     root: &Path,
@@ -1904,6 +1941,215 @@ mod tests {
             updated_package_id(&changed).unwrap()
         );
         cleanup(package.parent().unwrap());
+    }
+
+    fn package_recovery_fixture() -> (PathBuf, PathBuf, PathBuf, PackageUpdateAttempt) {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let workspace = fs::canonicalize(&workspace).unwrap();
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let store = Store::open(&root).unwrap();
+        let target = store
+            .set_target("project-a", 0, "https://chatgpt.com/c/recovery-fixture")
+            .unwrap();
+        store
+            .produce_expected(
+                "dev-recovery",
+                "project-a",
+                "test",
+                "Retain queued work",
+                &target,
+            )
+            .unwrap();
+        fs::write(
+            root.join("browser-profile/preserved.txt"),
+            b"profile sentinel",
+        )
+        .unwrap();
+        let source = parent.join("updated-package");
+        fs::create_dir(&source).unwrap();
+        for name in PACKAGE_FILES {
+            fs::copy(package.join(name), source.join(name)).unwrap();
+        }
+        fs::write(source.join("CatDeskWakeHost.exe"), b"updated fixture host").unwrap();
+        let hashes = source_artifacts(&source).unwrap();
+        let old = validated_authority(&workspace).unwrap().unwrap().1;
+        let attempt =
+            stage_package_update_attempt(&workspace, &root, &source, &old, &hashes).unwrap();
+        // Simulate expiration of the build directory, retaining its bytes for
+        // diagnosis. Recovery must use the already published immutable package.
+        fs::rename(&source, parent.join("retained-build-output")).unwrap();
+        assert!(update_package(&workspace, &source).is_err());
+        (parent, workspace, root, attempt)
+    }
+
+    #[test]
+    fn package_recovery_finishes_each_interrupted_selection_without_build_directory() {
+        for phase in 0..=2 {
+            let (parent, workspace, root, attempt) = package_recovery_fixture();
+            let store = Store::open(&root).unwrap();
+            let config = fs::read(root.join("config.json")).unwrap();
+            let profile = fs::read(root.join("browser-profile/preserved.txt")).unwrap();
+            let events = store.events().unwrap();
+            let old_image = root
+                .join("versions")
+                .join(&attempt.old_authority.package_id)
+                .join("CatDeskWakeHost.exe");
+            let old_bytes = fs::read(&old_image).unwrap();
+            if phase >= 1 {
+                replace_update_file(
+                    &root.join(&attempt.pointer_stage_name),
+                    &root.join("current.json"),
+                )
+                .unwrap();
+            }
+            if phase >= 2 {
+                replace_update_file(
+                    &dev_dir(&workspace).join(&attempt.authority_stage_name),
+                    &dev_dir(&workspace).join("authority.json"),
+                )
+                .unwrap();
+            }
+            assert_eq!(
+                root_for_workspace(&workspace).unwrap_err(),
+                "DEV_PACKAGE_UPDATE_INCOMPLETE"
+            );
+            let recovered = recover_package(&workspace).unwrap();
+            assert_eq!(recovered["status"], "PACKAGE_UPDATED_STOPPED");
+            assert_eq!(recovered["hostStarted"], false);
+            assert_eq!(recovered["browserAction"], "NONE");
+            assert_eq!(
+                validated_authority(&workspace).unwrap().unwrap().1,
+                attempt.new_authority
+            );
+            assert_eq!(fs::read(root.join("config.json")).unwrap(), config);
+            assert_eq!(
+                fs::read(root.join("browser-profile/preserved.txt")).unwrap(),
+                profile
+            );
+            assert_eq!(store.events().unwrap(), events);
+            assert_eq!(fs::read(old_image).unwrap(), old_bytes);
+            assert_eq!(
+                read_json::<Value>(&root.join("control.json"), 4096).unwrap()["desired"],
+                "STOPPED"
+            );
+            let pointer = fs::read(root.join("current.json")).unwrap();
+            let authority = fs::read(dev_dir(&workspace).join("authority.json")).unwrap();
+            assert_eq!(
+                recover_package(&workspace).unwrap()["status"],
+                "PACKAGE_CURRENT_VERIFIED_STOPPED"
+            );
+            assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+            assert_eq!(
+                fs::read(dev_dir(&workspace).join("authority.json")).unwrap(),
+                authority
+            );
+            cleanup(&parent);
+        }
+    }
+
+    #[test]
+    fn package_recovery_does_not_accept_changed_staged_artifacts() {
+        let (parent, workspace, root, attempt) = package_recovery_fixture();
+        let pointer = fs::read(root.join("current.json")).unwrap();
+        let authority = fs::read(dev_dir(&workspace).join("authority.json")).unwrap();
+        let marker = fs::read(dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT)).unwrap();
+        fs::write(
+            root.join("versions")
+                .join(attempt.new_authority.package_id)
+                .join("CatDeskWakeHost.exe"),
+            b"unexpected changed bytes",
+        )
+        .unwrap();
+        assert_eq!(
+            recover_package(&workspace).unwrap_err(),
+            "DEV_PACKAGE_UPDATE_CONTENT_MISMATCH"
+        );
+        assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+        assert_eq!(
+            fs::read(dev_dir(&workspace).join("authority.json")).unwrap(),
+            authority
+        );
+        assert_eq!(
+            fs::read(dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT)).unwrap(),
+            marker
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn package_recovery_does_not_overwrite_an_unknown_pointer() {
+        let (parent, workspace, root, _) = package_recovery_fixture();
+        fs::write(root.join("current.json"), b"unknown selection").unwrap();
+        let authority = fs::read(dev_dir(&workspace).join("authority.json")).unwrap();
+        let marker = fs::read(dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT)).unwrap();
+        assert_eq!(
+            recover_package(&workspace).unwrap_err(),
+            "DEV_PACKAGE_UPDATE_POINTER_DIVERGED"
+        );
+        assert_eq!(
+            fs::read(root.join("current.json")).unwrap(),
+            b"unknown selection"
+        );
+        assert_eq!(
+            fs::read(dev_dir(&workspace).join("authority.json")).unwrap(),
+            authority
+        );
+        assert_eq!(
+            fs::read(dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT)).unwrap(),
+            marker
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn package_recovery_requires_stopped_exclusive_host_and_browser() {
+        let (parent, workspace, root, _) = package_recovery_fixture();
+        let store = Store::open(&root).unwrap();
+        let pointer = fs::read(root.join("current.json")).unwrap();
+        let host = store.host_lock().unwrap();
+        assert!(recover_package(&workspace).is_err());
+        drop(host);
+        let browser = runtime::browser_session_lock(&root, Duration::ZERO).unwrap();
+        assert_eq!(
+            recover_package(&workspace).unwrap_err(),
+            "BROWSER_SESSION_BUSY"
+        );
+        drop(browser);
+        runtime::control(&store, "RUNNING").unwrap();
+        assert_eq!(
+            recover_package(&workspace).unwrap_err(),
+            "DEV_PACKAGE_UPDATE_HOST_NOT_STOPPED"
+        );
+        assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+        runtime::control(&store, "STOPPED").unwrap();
+        assert_eq!(
+            recover_package(&workspace).unwrap()["status"],
+            "PACKAGE_UPDATED_STOPPED"
+        );
+        cleanup(&parent);
+    }
+
+    #[test]
+    fn package_recovery_of_healthy_selection_is_noncreating_and_idempotent() {
+        let (parent, workspace, package, python) = fixture();
+        prepare_fixture(&workspace, &package, &python);
+        let root = root_for_workspace(&workspace).unwrap().unwrap();
+        let pointer = fs::read(root.join("current.json")).unwrap();
+        let authority = fs::read(dev_dir(&workspace).join("authority.json")).unwrap();
+        for _ in 0..2 {
+            assert_eq!(
+                recover_package(&workspace).unwrap()["status"],
+                "PACKAGE_CURRENT_VERIFIED_STOPPED"
+            );
+        }
+        assert_eq!(fs::read(root.join("current.json")).unwrap(), pointer);
+        assert_eq!(
+            fs::read(dev_dir(&workspace).join("authority.json")).unwrap(),
+            authority
+        );
+        assert!(!dev_dir(&workspace).join(PACKAGE_UPDATE_ATTEMPT).exists());
+        cleanup(&parent);
     }
 
     #[test]
