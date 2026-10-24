@@ -157,6 +157,28 @@ interruption, automatic backend startup and production migration remain separate
 qualification. No legacy writer is retired. Evidence:
 `docs/verification/C105_DEV_PREDECESSOR_RESTORATION_2026_10_24.json`.
 
+### C106 normal executable startup and recovery qualification
+
+The exact C105 source built as normal app/host release images. In a bounded
+22-second disposable test, both current and previous images served authenticated
+loopback MCP catalogs and exited naturally. The old normal binary read new pointer
+metadata. A real Windows sharing failure interrupted predecessor restoration;
+a fresh normal process completed it and the restored backend started. Profile,
+history, evidence and failed bytes were retained. Healthy replay was byte-stable;
+no predecessor produced reconstruction-required without selection mutation.
+
+Two harness path-limit failures remain recorded. A shorter disposable checkpoint
+root permits normal Windows process launch; the real selected app path is already
+below that limit and was not changed. All test-owned processes exited. Real state,
+bindings, protected artifacts and selected v76 remain unchanged. Health here is
+loopback MCP only, not independent external review, Wake or production acceptance.
+
+The explicit recovery command is normal-binary qualified. One supported bounded
+developer-backend start that executes the selected image and automatically restores
+on current-image failure remains the next source integration. No legacy writer
+is retired before that composed startup/migration qualifies. Evidence:
+`docs/verification/C106_NORMAL_BACKEND_PREDECESSOR_RECOVERY_2026_10_24.json`.
+
 # T-0476 — CatDesk fast development, safe Wake recovery and simple production releases
 
 ## CURRENT 2026-10-11 — Chat52 three-lane development and recovery status (supersedes history below)

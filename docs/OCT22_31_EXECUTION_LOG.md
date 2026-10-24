@@ -1,3 +1,38 @@
+## October 24 EDT C106 — normal backend and interrupted predecessor recovery
+
+Exact published source `cb50162d5705830d4c1530ec3e0c351ccdac9041` built as normal
+app/host release images in 430 seconds under a 600-second job. A 22-second test
+under the 180-second limit passed 12 normal CLI commands and three six-second
+loopback backend processes. Both versions served authenticated tool catalogs,
+rejected unauthenticated calls, and exited naturally. Browser/Wake scheduling,
+tunnels and external connectors were disabled throughout.
+
+The recorded predecessor uses retained commit/build/review references and actual
+observed loopback MCP health. The old binary read the new pointer metadata. A real
+Windows sharing fault interrupted restoration after pointer switch; a fresh normal
+process completed it. The restored backend then started successfully. History,
+profile, proof, old package and failed current bytes survived. Healthy replay was
+byte-stable; another failure without a predecessor required reconstruction without
+changing selection. This is local backend health, not independent external review
+or WakeHost health and not protected/ChatGPT Web acceptance.
+
+Two earlier partial harness attempts are retained: the overly deep checkpoint
+path exceeded Windows process-launch limits, including with extended syntax.
+Each had six completed commands, one natural backend exit, no changed real state
+and zero owners. A shorter disposable checkpoint root fixed the harness. Across
+all attempts, five backend processes exited and no browser/Wake process started.
+
+After job closure, all 306 runtime records and 55 historical files remain exact;
+zero scoped owners, queue 0, both controls STOPPED, real selected v76 unchanged.
+No protected recovery, binding/native-session action, completed-canary replay or
+legacy retirement occurred. Source remote SHA equals the exact published commit;
+zero matching Actions/check runs means CI remains unverified.
+
+Next: one supported bounded developer-backend start using the selected image,
+including automatic failed-current restoration. That integration, protected
+recovery, unattended operation and actual two-conversation Web coding remain open.
+Evidence: `docs/verification/C106_NORMAL_BACKEND_PREDECESSOR_RECOVERY_2026_10_24.json`.
+
 ## October 24 EDT C105 — existing recovery restores the recorded predecessor
 
 `operator web-dev-runtime recover-package` now restores the exact recorded
