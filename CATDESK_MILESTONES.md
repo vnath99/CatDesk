@@ -1,3 +1,32 @@
+## October 24 EDT C79 — selected coordinator and independent Wake restart
+
+Two consecutive normal MCP lifetimes and two independent foreground Wake host
+lifetimes passed against the actual selected development installation. Each MCP
+process exited0 at30s on the same endpoint/auth; each host reached its25s deadline,
+completed owned shutdown and exited0. Exit was sampled after the MCP lifetime,
+not recorded as an exact host exit timestamp. The180s outer Job finished in63.31s.
+
+Four read-only HTTP requests verified79 tools and equal complete coordinator
+projections across restart:10 active workspaces/current URLs, one archive/history,
+all10 Wake pairs, context, queues, work intents and rollovers. Two SUBMITTING,
+two quarantined and nine continuation-queued journals remained exact. The queues
+were empty and all turns complete before either host start. No event was replayed.
+
+Only development status telemetry changed;296 other records stayed byte-exact,
+297 total. Final host status is STOPPED/NOT_OBSERVED with no attention, last host
+error or recovery count. Both controls STOPPED, queue0, zero scoped owners. No
+browser owner was observed, Web scheduling stayed disabled, and there were no
+native, connector, official-runtime, production or recurring actions. This advances
+I for the actual selected coordinator plus independent host; scheduler restart,
+protected installation, unattended operation and actual Web coding remain separate.
+
+Next eligible source gap: exact-owned archival currently accepts only legacy
+unknown-submit records without a progress stage. Review a supported no-send
+archive path for protocol-v2 SEND_ATTEMPTED so an uncertain project can release its
+shared composer safely. Reuse the durable archive/CAS mechanism and preserve the
+original target/journal and permanent no-resend fence. No such live test has run.
+Evidence: `docs/verification/C79_SELECTED_COORDINATOR_WAKE_RESTART_2026_10_24.json`.
+
 ## October 24 EDT C73–C78 — real process-kill rollover recovery and continuation
 
 The previously reconciled C69 source was registered through supported commands
