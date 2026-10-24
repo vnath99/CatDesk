@@ -1,3 +1,36 @@
+## October 24 EDT C99 — supported backend owner identified; recovery deferred
+
+The existing canonical workspace's public `catdesk.ps1` facade owns local daemon
+startup through `scripts/start-catdesk-stack.ps1` and the fingerprinted release
+image. Its optional per-user supervisor invokes public status/recover; the official
+Secure MCP runtime remains separately owned. The selected development package is
+not canonical serving authority. No replacement launcher or tunnel was created.
+
+One bounded read-only diagnosis and autostart-status check passed process cleanup.
+The facade returned `ACTION_REQUIRED`, primary `RECOVERY_AUTHORITY`, and
+`LKG_AUTHORITY_MISSING`; its canonical gate was `CANONICAL_IDENTITY_INTERNAL`.
+Independent file hashing confirms the canonical executable and sidecar differ.
+Autostart reports enabled, but no existing supervisor mutex was observed. Registered
+autostart is not proof of a running supervisor or permission to activate it.
+
+The earlier stopped official runtime, absent port-3200 listener/daemon and HTTP 429
+remain distinct observations. No connector retry was made; restarting a daemon is
+not proven to repair HTTP 429. All 306 tracked records and seven canonical/config pins
+remain exact. Native sessions, bindings, histories and completed canaries were
+preserved. No browser, Wake, recurring, protected-service or authentication action.
+
+Operator restoration is deferred until October 27, with no automatic action
+scheduled. The documented command is `./catdesk.ps1 recover`, but it is **not
+currently eligible**: resolve reviewed release/LKG authority first and inspect a
+fresh `./catdesk.ps1 diagnose`. Recovery can also reach Wake/GUI startup; its scope
+must be allowed before execution. Do not edit the fingerprint, copy a development
+image into the canonical location, or use internal bootstrap as a bypass.
+
+Actual independent Web coding B/C and protected/unattended acceptance remain open.
+Continue concrete independently eligible development; do not repeat unchanged
+dependency probes or completed canaries. Evidence:
+`docs/verification/C99_SUPPORTED_BACKEND_OWNER_DIAGNOSIS_2026_10_24.json`.
+
 ## October 24 EDT C96–C97 — normal context-limit status and stopped selection
 
 Published C95 built as a normal release app in 351.43s. A bounded disposable CLI
