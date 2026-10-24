@@ -1,3 +1,30 @@
+## October 24 EDT C65 — normal archive reader and bounded listener pass
+
+Reviewed source `36b743aeaa9592bced1892caf06cfed0482cc803` built normally under
+an owned600s Job. A loopback-only ephemeral MCP listener with Web auto disabled
+advertised79 supervisor tools and returned9 active projects plus the preserved
+retired canary. Its exact workspace, current target/digest, predecessor history,
+retirement metadata and native-binding fields matched the saved registry. The
+listener exited naturally at its30s deadline; its outer180s Job exited cleanly.
+Two read-only HTTP requests, zero browser/Wake/recurring starts or messages,
+all282 saved records byte-exact and zero scoped owners. This qualifies the normal
+development image and real saved metadata, not external ChatGPT coding.
+
+One intermittent primary-connector transport-status read independently returned
+HTTP429 (`MCP SSE probe returned 429 from openai.org`); no retry or runtime/tunnel
+lifecycle change. This session's connector catalogs omit the scoped task tool
+that the normal local catalog advertises. Cause/backend identity remain unknown.
+Exact-source GitHub Actions/checks are0/0, so CI is unverified. No dispatch or
+settings change. Three other native chats are active; PortfolioDesk's idle/blocked
+state is reported by its own chat. None was paused, resumed or otherwise changed.
+
+Selected v68 remains the previous C55 image STOPPED; this normal image has not
+been selected or installed in protected production. Next: existing guarded stopped
+development package qualification. Actual parallel Web B/C, full-runtime restart,
+protected installation and unattended operation stay OPEN. Completed deliveries,
+rollovers and retirement are preserved and must not be replayed. Evidence:
+`docs/verification/C65_NORMAL_RETIRED_HISTORY_2026_10_24.json`.
+
 ## October 23 EDT C63–C64 — preserve retired history in the coordinator
 
 C63 safely retired only the completed controlled registry-recovery canary via

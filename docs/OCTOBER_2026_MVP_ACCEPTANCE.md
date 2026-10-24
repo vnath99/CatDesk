@@ -1,3 +1,30 @@
+## October 24 EDT C65 — normal archive reader and bounded listener pass
+
+Reviewed source `36b743aeaa9592bced1892caf06cfed0482cc803` built normally under
+an owned600s Job. A loopback-only ephemeral MCP listener with Web auto disabled
+advertised79 supervisor tools and returned9 active projects plus the preserved
+retired canary. Its exact workspace, current target/digest, predecessor history,
+retirement metadata and native-binding fields matched the saved registry. The
+listener exited naturally at its30s deadline; its outer180s Job exited cleanly.
+Two read-only HTTP requests, zero browser/Wake/recurring starts or messages,
+all282 saved records byte-exact and zero scoped owners. This qualifies the normal
+development image and real saved metadata, not external ChatGPT coding.
+
+One intermittent primary-connector transport-status read independently returned
+HTTP429 (`MCP SSE probe returned 429 from openai.org`); no retry or runtime/tunnel
+lifecycle change. This session's connector catalogs omit the scoped task tool
+that the normal local catalog advertises. Cause/backend identity remain unknown.
+Exact-source GitHub Actions/checks are0/0, so CI is unverified. No dispatch or
+settings change. Three other native chats are active; PortfolioDesk's idle/blocked
+state is reported by its own chat. None was paused, resumed or otherwise changed.
+
+Selected v68 remains the previous C55 image STOPPED; this normal image has not
+been selected or installed in protected production. Next: existing guarded stopped
+development package qualification. Actual parallel Web B/C, full-runtime restart,
+protected installation and unattended operation stay OPEN. Completed deliveries,
+rollovers and retirement are preserved and must not be replayed. Evidence:
+`docs/verification/C65_NORMAL_RETIRED_HISTORY_2026_10_24.json`.
+
 ## October 23 EDT C63–C64 — preserve retired history in the coordinator
 
 C63 safely retired only the completed controlled registry-recovery canary via
@@ -1306,8 +1333,8 @@ new gates do not authorize replaying accepted deliveries or rollover canaries.
 | F. Actual replacement URL and continuation | PASS, controlled C50: actual issued URL independently verified, paired generation4-to5 transfer/history preserved, continuation and one original-task resume delivery complete. Correct task context survived; C54 confirms frozen-payload compatibility. Prior C23/C40/C43 evidence remains. | Actual coding remains blocked by the scoped tool dependency; receipt/body completion does not prove task completion. Protected and unattended acceptance remain open. |
 | G. Two simultaneous synthetic rollover requests | PASS, preserved C23 controlled live proof:23.22ms request gap, one active creator, one waiting ticket, both URLs/bindings/continuations isolated and no duplicate submission. | No replay needed. Critical crash H, protected and unattended acceptance remain separate. |
 | H. Interruptions, recovery and ambiguous submission | PARTIAL LIVE: C24/C28, C38–C40 recovery, C42 quarantined ambiguous operation and C43 resumption remain preserved. C55 adds a real native filesystem write-failure fixture: guarded Wake successor stays at generation2 instead of compensating to generation3, incomplete pair refuses, sibling read works, cold reopen finishes once. | C56 normal executable recovers explicitly injected CREATED/Wake-first state after a real registry replacement fault; fresh-process retry preserves generation2 and queues one continuation. C61 now qualifies an actual verified browser/Wake commit followed by a real Windows registry replacement failure; a fresh normal process recovers under the browser lock without resend, and C62 continuation/body proof completes. Process-kill/machine-crash and other phases remain open; uncertain submissions never authorize blind resend. |
-| I. Restart preserves registrations/history/pending rollovers | PARTIAL: preserved C23/C28 restarts and later normal cold CLI payload/task checks. C55 source reopen preserves the original CREATED receipt and exact Wake-first binding witness. | C56 normal fresh-process recovery preserves the receipt, source handoff, predecessor and one continuation from injected state. C61 additionally recovers the actual cross-system write-failure state in a fresh normal process with the browser lock held. C63 cold guarded retirement retry preserves all282 records and retained history; C64 source MCP reads expose that archive without reactivation. Fixed normal reader qualification is pending. Full-runtime restart and process/machine crashes remain open; no recurring activation. |
-| J. No orphan browser/Wake processes | PASS for recorded bounded tests through C64 bounded live/normal diagnostics and source-test cleanup. Both controls remain stopped, no scoped owners remain, and all prior project records remain preserved outside the documented own-canary/shared host changes;282 final records, queue0, nine active paired projects and one preserved retired canary. | Normal unattended operation is not activated or accepted. Every future bounded test retains its own cleanup proof. |
+| I. Restart preserves registrations/history/pending rollovers | PARTIAL: preserved C23/C28 restarts and later normal cold CLI payload/task checks. C55 source reopen preserves the original CREATED receipt and exact Wake-first binding witness. | C56 normal fresh-process recovery preserves the receipt, source handoff, predecessor and one continuation from injected state. C61 additionally recovers the actual cross-system write-failure state in a fresh normal process with the browser lock held. C63 cold guarded retirement retry preserves all282 records and retained history; C64 source MCP reads expose that archive without reactivation. C65 normal loopback MCP read now matches the full archived workspace/target/history/retirement metadata without writes. Full-runtime restart and process/machine crashes remain open; no recurring activation. |
+| J. No orphan browser/Wake processes | PASS for recorded bounded tests through C65 bounded normal/source diagnostics, including natural30s listener exit with Web auto off. Both controls remain stopped, no scoped owners remain, and all prior project records remain preserved outside the documented own-canary/shared host changes;282 final records, queue0, nine active paired projects and one preserved retired canary. | Normal unattended operation is not activated or accepted. Every future bounded test retains its own cleanup proof. |
 
 **Current implementation versus gaps:** the existing registry, immutable project
 connections and assigned-task tools, fair browser admission, conservative context
