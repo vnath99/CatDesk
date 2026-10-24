@@ -1,3 +1,38 @@
+## October 23 EDT C63–C64 — preserve retired history in the coordinator
+
+C63 safely retired only the completed controlled registry-recovery canary via
+the existing guarded command (5.71s). Nine active projects remain unchanged; the
+retired record retains generation2, its predecessor, workspace and all journals.
+Cold repeat preserved every byte. Registry/config changed as expected and one
+retirement journal was added:282 retained runtime records, queue0, zero owners.
+No conversation was resent or deleted; no browser, Wake or recurring process
+started and no native development session changed.
+
+C64 found that the existing MCP registry reader omitted saved `retiredProjects`.
+It now returns nonempty archived rows, preserving the legacy response shape when
+none exist. One regression registers two projects, advances one conversation,
+retires it and reads through fresh MCP handlers twice: active sibling preserved,
+current/predecessor links retained, no reactivation or registry writes. The causal
+native-account RED failed on the missing row; GREEN passes3 focused tests.
+Strict workspace/all-target/all-feature Clippy, format and whitespace gates pass.
+An earlier sandbox ancestor-access refusal is retained as environment evidence.
+
+Pre-fix normal loopback diagnostics advertised79 supervisor tools, including the
+scoped task dispatcher, and returned9 active projects over HTTP200. Saved response
+inspection confirmed the archive omission. The harness then assumed an optional
+`isError` field and stopped its owned listener early; this is partial diagnostic
+evidence, not passing lifecycle qualification. All282 records stayed exact and
+zero scoped owners remained. The first read-only mode lacked the supervisor
+registry reader by design. Neither test used the external connector or browser.
+
+Fixed source is tested; its normal build/readback is NEXT, not installed/live
+acceptance. The official runtime status-only read reports stopped/unhealthy;
+its startup ownership remains unresolved. The assistant's reported429 is not an
+independently traced provider result or a proven effect of that runtime state.
+Actual Web tool execution B/C, full-runtime restart, protected installation and
+unattended acceptance remain OPEN. No automatic runtime/tunnel restart.
+Evidence: `docs/verification/C63_C64_RETAINED_HISTORY_2026_10_23.json`.
+
 ## October 23 EDT C60–C62 — live paired registry failure recovered without resend
 
 The new C59 source's one queued handoff was delivered SENT/COMPLETE (61.03s),
