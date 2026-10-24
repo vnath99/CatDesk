@@ -2156,14 +2156,25 @@ async fn post_mcp(
             .unwrap(),
         )
     } else if req.method == "tools/call"
-        && req.params.get("name").and_then(Value::as_str) == Some(crate::web_task_dispatch::TOOL)
+        && (req.params.get("name").and_then(Value::as_str) == Some(crate::web_task_dispatch::TOOL)
+            || crate::web_task_dispatch::is_cached_call(&req))
     {
         let response = if s
             .mcp_auth_token
             .as_deref()
             .is_some_and(|token| token.len() >= 24)
         {
-            crate::web_task_dispatch::handle(&workspace_root, &req).await
+            if !mode.computer_enabled() || !tool_mode.supervisor_tools_enabled() {
+                mcp::JsonRpcResponse::error(
+                    req.id.clone(),
+                    -32002,
+                    "WEB_TASK_CENTRAL_MODE_REQUIRED".into(),
+                )
+            } else if crate::web_task_dispatch::is_cached_call(&req) {
+                crate::web_task_dispatch::handle_cached(&workspace_root, &req).await
+            } else {
+                crate::web_task_dispatch::handle(&workspace_root, &req).await
+            }
         } else {
             mcp::JsonRpcResponse::error(
                 req.id.clone(),
@@ -2190,6 +2201,8 @@ async fn post_mcp(
     {
         let mut resp = resp;
         if req.method == "tools/list"
+            && mode.computer_enabled()
+            && tool_mode.supervisor_tools_enabled()
             && let Some(tools) = resp
                 .result
                 .as_mut()

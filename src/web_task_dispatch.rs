@@ -11,6 +11,84 @@ use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
 pub(crate) const TOOL: &str = "catdesk_web_task_tool";
+pub(crate) const CACHED_COMMAND_PREFIX: &str = "CATDESK_WEB_TASK=";
+
+/// A reserved task envelope must never fall through to the shell handler,
+/// including malformed/incorrectly cased versions of the reserved namespace.
+pub(crate) fn is_cached_call(request: &JsonRpcRequest) -> bool {
+    request.method == "tools/call"
+        && request.params["name"] == "run_command"
+        && request.params["arguments"]["command"]
+            .as_str()
+            .is_some_and(|command| {
+                command
+                    .trim_start()
+                    .get(.."CATDESK_WEB_TASK".len())
+                    .is_some_and(|prefix| prefix.eq_ignore_ascii_case("CATDESK_WEB_TASK"))
+            })
+}
+
+pub(crate) fn cached_transport_metadata() -> Value {
+    json!({"mcpTool":"run_command","commandPrefix":CACHED_COMMAND_PREFIX,
+        "payload":"JSON_SERIALIZE_THE_SAME_SCOPED_TASK_ARGUMENTS",
+        "requiredArguments":schema()["inputSchema"]["required"],
+        "shellExecuted":false,"cwdOverrideAllowed":false,"timeoutOverrideAllowed":false,
+        "sameCallIdAndJournal":true,"centralPlanPolicyRetained":true})
+}
+
+fn cached_request(request: &JsonRpcRequest) -> Result<JsonRpcRequest, String> {
+    let invalid = || "WEB_TASK_CACHED_ARGUMENTS_INVALID".to_owned();
+    let arguments = request.params["arguments"]
+        .as_object()
+        .ok_or_else(invalid)?;
+    for (name, value) in arguments {
+        match name.as_str() {
+            "command" if value.is_string() => {}
+            "allow_without_plan" if value.is_boolean() => {}
+            "dry_run" | "include_full_output" if value == &Value::Bool(false) => {}
+            _ => return Err(invalid()),
+        }
+    }
+    let command = arguments
+        .get("command")
+        .and_then(Value::as_str)
+        .ok_or_else(invalid)?;
+    if command.len() > 2 * 1024 * 1024 {
+        return Err(invalid());
+    }
+    let payload = command
+        .trim_start()
+        .strip_prefix(CACHED_COMMAND_PREFIX)
+        .ok_or_else(invalid)?;
+    let task: Value = serde_json::from_str(payload).map_err(|_| invalid())?;
+    if !task.is_object() {
+        return Err(invalid());
+    }
+    Ok(JsonRpcRequest {
+        jsonrpc: request.jsonrpc.clone(),
+        id: request.id.clone(),
+        method: "tools/call".into(),
+        params: json!({"name":TOOL,"arguments":task}),
+    })
+}
+
+/// The central HTTP layer must apply the same bearer/capability checks as TOOL.
+/// Only this closed JSON adapter runs; the command text is never shell input.
+pub(crate) async fn handle_cached(control: &str, request: &JsonRpcRequest) -> JsonRpcResponse {
+    let adapted = match cached_request(request) {
+        Ok(adapted) => adapted,
+        Err(reason) => return JsonRpcResponse::error(request.id.clone(), -32602, reason),
+    };
+    if let Err(response) = crate::mcp::enforce_cached_web_task_plan(request, control) {
+        return response;
+    }
+    let mut response = handle(control, &adapted).await;
+    if let Some(result) = response.result.as_mut() {
+        result["_meta"]["catdeskTaskTransport"] = json!({"invokedTool":"run_command",
+            "dispatcher":TOOL,"shellExecuted":false,"sameCallIdAndJournal":true});
+    }
+    response
+}
 
 #[cfg(all(test, windows))]
 type TestGate = (
@@ -388,6 +466,202 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn one_central_http_route_patches_two_projects_and_busy_alpha_does_not_stall_beta() {
+        central_http_route_fixture(false).await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn cached_schema_route_uses_same_scoped_dispatcher_and_no_replay_journal() {
+        central_http_route_fixture(true).await;
+    }
+
+    #[test]
+    fn cached_envelope_is_closed_bounded_and_never_accepts_shell_options() {
+        let wrap = |command: &str| {
+            serde_json::from_value::<JsonRpcRequest>(json!({
+                "jsonrpc":"2.0","id":7,"method":"tools/call",
+                "params":{"name":"run_command","arguments":{"command":command}}
+            }))
+            .unwrap()
+        };
+        for command in [
+            "CATDESK_WEB_TASK",
+            "CATDESK_WEB_TASK ={}",
+            "catdesk_web_task={}",
+            "CATDESK_WEB_TASK_EXTRA={}",
+            "CATDESK_WEB_TASK=[]",
+            "CATDESK_WEB_TASK={}; echo should-not-run",
+            "CATDESK_WEB_TASK={invalid",
+        ] {
+            let request = wrap(command);
+            assert!(is_cached_call(&request));
+            assert!(cached_request(&request).is_err());
+        }
+        assert!(!is_cached_call(&wrap("git status --short")));
+        let request = wrap("  CATDESK_WEB_TASK={\"callId\":\"stable-call\"}");
+        let adapted = cached_request(&request).unwrap();
+        assert_eq!(adapted.id, Some(json!(7)));
+        assert_eq!(adapted.params["name"], TOOL);
+        assert_eq!(adapted.params["arguments"]["callId"], "stable-call");
+        for (name, value) in [
+            ("cwd", json!(".")),
+            ("timeout", json!(1000)),
+            ("dry_run", json!(true)),
+            ("include_full_output", json!(true)),
+            ("allow_without_plan", json!("true")),
+            ("other", Value::Null),
+        ] {
+            let mut invalid = wrap("CATDESK_WEB_TASK={}");
+            invalid.params["arguments"][name] = value;
+            assert!(cached_request(&invalid).is_err());
+        }
+        let mut accepted = wrap("CATDESK_WEB_TASK={}");
+        accepted.params["arguments"]["dry_run"] = json!(false);
+        accepted.params["arguments"]["include_full_output"] = json!(false);
+        accepted.params["arguments"]["allow_without_plan"] = json!(true);
+        assert!(cached_request(&accepted).is_ok());
+        let too_large = format!(
+            "CATDESK_WEB_TASK={{\"text\":\"{}\"}}",
+            "x".repeat(2 * 1024 * 1024)
+        );
+        assert!(cached_request(&wrap(&too_large)).is_err());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn cached_http_retains_auth_mode_plan_and_non_disclosure_guards() {
+        use crate::state::{Mode, ToolMode};
+        let f = fixture("alpha");
+        let mut app = crate::state::AppState::new_isolated_fixture(
+            0,
+            f.control.to_str().unwrap().into(),
+            f.control.join("inert-config.toml"),
+        )
+        .unwrap();
+        app.mode = Mode::Computer;
+        app.tool_mode = ToolMode::SupervisorOnly;
+        let state = Arc::new(tokio::sync::Mutex::new(app));
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
+        let token = "c92-cached-http-fixture-token-000000";
+        let router = crate::server::router(
+            state.clone(),
+            None,
+            "/cached/mcp".into(),
+            tx,
+            Some(token.into()),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/cached/mcp", listener.local_addr().unwrap());
+        let (stop, stopped) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router)
+                .with_graceful_shutdown(async {
+                    let _ = stopped.await;
+                })
+                .await
+                .unwrap();
+        });
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .build()
+            .unwrap();
+        let direct = request(&f, "guarded-read", "read", json!({"path":"src/lib.rs"}));
+        let cached = json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
+            "name":"run_command","arguments":{"command":format!("CATDESK_WEB_TASK={}", direct["params"]["arguments"])}}});
+        let rpc = |body: Value| client.post(&url).bearer_auth(token).json(&body).send();
+        let unauthorized = client.post(&url).json(&cached).send().await.unwrap();
+        assert_eq!(unauthorized.status(), reqwest::StatusCode::UNAUTHORIZED);
+        let journal = f
+            .control
+            .join(".catdesk/project-mcp-tasks/alpha/task-fixture/journal");
+        for (name, value) in [
+            ("cwd", json!(f.native)),
+            ("timeout", json!(1)),
+            ("dry_run", json!(true)),
+            ("include_full_output", json!(true)),
+        ] {
+            let mut invalid = cached.clone();
+            invalid["params"]["arguments"][name] = value;
+            let denied: Value = rpc(invalid).await.unwrap().json().await.unwrap();
+            assert_eq!(
+                denied["error"]["message"],
+                "WEB_TASK_CACHED_ARGUMENTS_INVALID"
+            );
+            assert!(!denied.to_string().contains(&f.key));
+            assert!(!journal.exists());
+        }
+        for (mode, tools) in [
+            (Mode::Computer, ToolMode::ReadOnly),
+            (Mode::Browser, ToolMode::MultiTools),
+            (Mode::Both, ToolMode::ReadOnly),
+        ] {
+            {
+                let mut app = state.lock().await;
+                app.mode = mode;
+                app.tool_mode = tools;
+            }
+            let catalog: Value = rpc(json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}))
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            assert!(
+                !catalog["result"]["tools"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|tool| tool["name"] == TOOL)
+            );
+            for body in [&direct, &cached] {
+                let denied: Value = rpc(body.clone()).await.unwrap().json().await.unwrap();
+                assert_eq!(denied["error"]["message"], "WEB_TASK_CENTRAL_MODE_REQUIRED");
+                assert!(!denied.to_string().contains(&f.key));
+                assert!(!journal.exists());
+            }
+        }
+        {
+            let mut app = state.lock().await;
+            app.mode = Mode::Computer;
+            app.tool_mode = ToolMode::SupervisorOnly;
+        }
+        fs::write(
+            f.control.join(".catdesk/current_plan.md"),
+            "# Current Plan\n\nplan_required: true\n\n## Plan\n\n",
+        )
+        .unwrap();
+        let policy = crate::planning::policy_status(f.control.to_str().unwrap()).unwrap();
+        assert!(policy.plan_required && !policy.has_plan);
+        let denied: Value = rpc(cached.clone()).await.unwrap().json().await.unwrap();
+        assert_eq!(denied["result"]["isError"], true);
+        assert!(denied.to_string().contains("PLAN_REQUIRED"));
+        assert!(!denied.to_string().contains(&f.key));
+        assert!(!journal.exists());
+        let mut allowed = cached;
+        allowed["params"]["arguments"]["allow_without_plan"] = json!(true);
+        let result: Value = rpc(allowed).await.unwrap().json().await.unwrap();
+        assert!(result.get("error").is_none(), "{result}");
+        assert_eq!(
+            result["result"]["_meta"]["catdeskTaskLifecycle"]["status"],
+            "CLOSED"
+        );
+        assert_eq!(
+            result["result"]["_meta"]["catdeskTaskTransport"]["shellExecuted"],
+            false
+        );
+        assert!(!result.to_string().contains(&f.key));
+        // The reserved task adapter grants no ordinary shell command permission.
+        let ordinary: Value = rpc(json!({"jsonrpc":"2.0","id":3,"method":"tools/call",
+            "params":{"name":"run_command","arguments":{"command":"echo should-not-run","allow_without_plan":true}}})).await.unwrap().json().await.unwrap();
+        assert_eq!(ordinary["result"]["isError"], true);
+        stop.send(()).unwrap();
+        tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
+        drop(crate::delegated::autonomy_runtime::acquire_project_writer_lock(&f.task).unwrap());
+        drop(crate::delegated::autonomy_runtime::acquire_project_writer_lock(&f.native).unwrap());
+    }
+
+    async fn central_http_route_fixture(cached: bool) {
         let alpha = fixture("alpha");
         let mut beta = fixture("beta");
         let path = alpha.control.join(".catdesk/projects/projects.json");
@@ -442,12 +716,13 @@ mod tests {
             serde_json::from_slice(&fs::read(grant["executionKeyFile"].as_str().unwrap()).unwrap())
                 .unwrap();
 
-        let app = crate::state::AppState::new_isolated_fixture(
+        let mut app = crate::state::AppState::new_isolated_fixture(
             0,
             alpha.control.to_str().unwrap().into(),
             alpha.control.join("inert-config.toml"),
         )
         .unwrap();
+        app.tool_mode = crate::state::ToolMode::SupervisorOnly;
         let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
         let token = "c47-central-http-fixture-token-000000";
         let router = crate::server::router(
@@ -472,15 +747,28 @@ mod tests {
             .timeout(Duration::from_secs(30))
             .build()
             .unwrap();
-        let rpc = |body: Value| client.post(&url).bearer_auth(token).json(&body).send();
+        let transport = |mut body: Value| {
+            if cached && body["params"]["name"] == TOOL {
+                let command = format!("CATDESK_WEB_TASK={}", body["params"]["arguments"]);
+                body["params"] = json!({"name":"run_command","arguments":{"command":command}});
+            }
+            body
+        };
+        let rpc = |body: Value| {
+            client
+                .post(&url)
+                .bearer_auth(token)
+                .json(&transport(body))
+                .send()
+        };
         let unauthorized = client
             .post(&url)
-            .json(&request(
+            .json(&transport(request(
                 &alpha,
                 "unauthorized",
                 "read",
                 json!({"path":"src/lib.rs"}),
-            ))
+            )))
             .send()
             .await
             .unwrap();
@@ -509,7 +797,10 @@ mod tests {
         let mut mixed = request(&beta, "cross-key", "read", json!({"path":"src/lib.rs"}));
         mixed["params"]["arguments"]["executionKey"] = json!(alpha.key);
         let denied: Value = rpc(mixed).await.unwrap().json().await.unwrap();
-        assert_eq!(denied["error"]["message"], "WEB_TASK_GRANT_SCOPE_MISMATCH");
+        assert_eq!(
+            denied["error"]["message"], "WEB_TASK_GRANT_SCOPE_MISMATCH",
+            "cached task route requires exact grant admission"
+        );
         assert!(
             !beta
                 .control
@@ -588,6 +879,22 @@ mod tests {
             replay["error"]["message"],
             "PROJECT_TASK_CALL_ALREADY_COMPLETED"
         );
+        if cached {
+            let direct: Value = client
+                .post(&url)
+                .bearer_auth(token)
+                .json(&apply(&beta))
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap();
+            assert_eq!(
+                direct["error"]["message"],
+                "PROJECT_TASK_CALL_ALREADY_COMPLETED"
+            );
+        }
         stop.send(()).unwrap();
         tokio::time::timeout(Duration::from_secs(5), server)
             .await

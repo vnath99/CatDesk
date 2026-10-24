@@ -5574,6 +5574,13 @@ fn plan_guard_applies(tool_name: &str) -> bool {
     )
 }
 
+pub(crate) fn enforce_cached_web_task_plan(
+    req: &JsonRpcRequest,
+    workspace_root: &str,
+) -> Result<(), JsonRpcResponse> {
+    enforce_plan_guard(req, workspace_root, "run_command")
+}
+
 fn enforce_plan_guard(
     req: &JsonRpcRequest,
     workspace_root: &str,

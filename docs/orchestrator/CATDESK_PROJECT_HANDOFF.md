@@ -1,3 +1,29 @@
+## October 24 EDT C92 — cached-schema scoped task transport
+
+The existing cached `run_command` schema now accepts a closed
+`CATDESK_WEB_TASK=` JSON envelope containing the same scoped task arguments.
+It uses the existing dispatcher, private assignment grant, exact project/target,
+writer ownership and call journal. Command text never reaches the shell. Both
+direct and cached task routes now require computer and supervisor capabilities;
+ordinary shell access remains disabled in SupervisorOnly. Existing bearer and
+plan checks remain, and shell options or malformed envelopes are refused.
+
+The causal old-route failure was reproduced. Six dispatch tests, 43 server-routing
+tests and three granted-handoff compatibility tests passed, with one existing
+server test ignored. Strict Clippy and formatting passed. Cached/direct replay
+shares one journal; private keys stay absent from responses and context-ledger
+JSON. Future private handoffs include transport metadata; existing payloads and
+continuation rendering remain unchanged. Source fixture key cleanup is not claimed.
+
+All 306 real runtime records remain exact, queue 0, zero scoped/test owners and
+both controls STOPPED. No browser, Wake, connector retry, native-session action,
+binding change or completed-canary replay occurred. The C91 normal image remains
+selected. Source qualification is distinct from normal app and actual Web proof.
+Next: normal build and bounded disposable HTTP qualification. Actual parallel Web
+coding B/C remains open at the serving-backend/connector path; unattended operation
+is not activated. Evidence:
+`docs/verification/C92_CACHED_SCHEMA_TASK_TRANSPORT_2026_10_24.json`.
+
 ## October 24 EDT C90–C91 — normal nested-file tasks and stopped selection
 
 The published C89 source built normally in 375.65s. A 180s disposable central HTTP

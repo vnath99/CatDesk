@@ -611,6 +611,7 @@ pub(crate) fn granted_handoff_context(
         "patchApplications":applications.iter().map(|application|json!({"patchId":application.patch_id,
             "callId":application.tool_call_id,"status":application.status,"pathsChanged":application.actual_paths_changed})).collect::<Vec<_>>(),
         "completedCallReplayAllowed":false,"unknownCallReplayAllowed":false,"nativeSessionAction":"NONE"});
+    context["cachedSchemaTransport"] = crate::web_task_dispatch::cached_transport_metadata();
     if let Some(report) = &record.reported_status {
         // Snapshot metadata only; it cannot replace execution evidence, scope or
         // grant checks. Omit the field for legacy records to retain their shape.
