@@ -133,6 +133,30 @@ the next integration, before any legacy writer retirement. The existing selected
 package and protected installation remain unchanged. Evidence:
 `docs/verification/C104_DEV_RELEASE_EVIDENCE_PREDECESSOR_2026_10_24.json`.
 
+### C105 predecessor restoration through the same selection journal
+
+The existing `recover-package` command now restores only the exact recorded
+predecessor when current package files are damaged or missing. Current manifest,
+pointer, Python and workspace identity remain strict. Predecessor evidence,
+manifest identity/hash and every artifact are revalidated. The optional restoration
+record lives in the same update journal; the authority and manifest formats stay
+unchanged. Legacy prepared package IDs are restored in place without repackaging.
+Failed current bytes/history are preserved and are not eligible for oscillation.
+
+With no valid predecessor, return `DEV_RELEASE_RECONSTRUCTION_REQUIRED_...` and
+preserve the selection. Use the existing operator-approved source reconstruction
+path; never invent a fingerprint. Recovery requires STOPPED/exclusive ownership
+and starts no host, browser or external transport. Older source descriptions that
+say this command only completes pending updates are superseded by this section.
+
+An expected old-code failure and 28 runtime plus 13 operator tests establish source
+behavior, including all four damaged/missing artifacts, three journal boundaries,
+ownership/metadata refusal, changed pending evidence/assets and no failed-version
+oscillation. Strict root/Wake lint and formats pass. Normal binary, actual process
+interruption, automatic backend startup and production migration remain separate
+qualification. No legacy writer is retired. Evidence:
+`docs/verification/C105_DEV_PREDECESSOR_RESTORATION_2026_10_24.json`.
+
 # T-0476 — CatDesk fast development, safe Wake recovery and simple production releases
 
 ## CURRENT 2026-10-11 — Chat52 three-lane development and recovery status (supersedes history below)

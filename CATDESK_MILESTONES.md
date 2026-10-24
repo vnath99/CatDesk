@@ -1,3 +1,32 @@
+## October 24 EDT C105 — existing recovery restores the recorded predecessor
+
+`operator web-dev-runtime recover-package` now restores the exact recorded
+predecessor when current package files fail validation. It revalidates the
+predecessor evidence, manifest identity/hash and all four artifact hashes, keeps
+current metadata/Python/workspace checks strict, and reuses the existing atomic
+selection journal. No candidate path, hash override or newest-folder guess is
+accepted. Failed bytes stay preserved and never become a rollback predecessor.
+If no trustworthy predecessor exists, recovery returns a bounded reconstruction
+requirement. No fingerprint rewrite, host/browser launch or protected action occurs.
+
+The causal test first failed on the old current-image requirement. All 28 runtime
+and 13 operator tests now pass, with strict root/Wake Clippy and formatting.
+Coverage includes all four damaged/missing current artifacts, three interrupted
+selection boundaries, byte-stable replay, absent/damaged predecessors, metadata
+and ownership refusals, and changed pending evidence/assets. These are source
+fixtures, not actual process-crash, normal binary or installed startup acceptance.
+
+All 306 runtime records and 55 historical files remain exact; zero scoped owners,
+queue 0, both controls STOPPED. No selected package, protected installation,
+bindings, native sessions, browser/Wake process or completed canary was changed.
+No legacy mechanism is retired. Next: normal release build and bounded CLI/backend
+qualification, followed by automatic startup integration. Real Web coding B/C and
+authorized October 27 production recovery remain open.
+
+Prior publication `c6943953e9f86c227e186a4d6ada94198b4a07df` was verified exactly
+on `codex/web-rollover-oct17`; remote CI had zero matching runs/checks and remains
+unverified. Evidence: `docs/verification/C105_DEV_PREDECESSOR_RESTORATION_2026_10_24.json`.
+
 ## October 24 EDT C104 — retain one qualified development predecessor
 
 The existing development release selection now accepts write-once local
