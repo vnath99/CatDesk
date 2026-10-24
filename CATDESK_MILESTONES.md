@@ -1,3 +1,37 @@
+## October 23 EDT C52 — selected development task reporting qualified
+
+The existing guarded updater selected the normal C51 executable into STOPPED,
+unprotected development in 7.03s. The
+previous package remains intact. Nine paired target reads and selected status
+passed; only two permitted package pointers changed, with 264 other records
+exact and no new records. Host, adapter and bridge are the exact previously
+qualified components; their Wake source subtree is unchanged. No host was started.
+
+The supported command recorded the independently verified missing-tool blocker
+on the existing controlled C50 task in 4.22s.
+A fresh selected-runtime process read the report in central status. The request
+stays OPEN, its original task/source/assignment identity is exact, ownership is
+retained and completion remains unverified. Only that ledger record changed;
+the task/grant was neither replaced nor executed. A subsequent cold preparation
+at the verified generation5 succeeded PREPARED_ONLY in
+1.03s, with all 266 records exact,
+zero journaled calls and both controlled files unchanged. No completed canary
+delivery, creation, binding or acknowledgement was replayed.
+
+Three bounded Job trees exited and no scoped process remains. Both Wake controls
+remain STOPPED, all nine bindings/predecessors and native sessions are preserved,
+and production is unchanged. This is actual selected-development metadata
+qualification, distinct from Web MCP execution or protected installation.
+
+Live coding remains blocked by the missing scoped tool and stopped MCP/runtime
+observed in C51. No connector retry or official runtime/auth change was made.
+Operator startup-owner information has been requested: the full bootstrap starts
+WakeHost and daemon startup starts Web automation, so neither should be invoked
+under the current stop instruction. This is a live dependency only; the goal stays
+ACTIVE and independent source work remains eligible. Parallel Web MCP B/C,
+critical crash/full restart, protected and unattended acceptance remain OPEN.
+Evidence: `docs/verification/C52_STOPPED_SELECTED_WORK_REPORTING_2026_10_23.json`.
+
 ## October 23 EDT C51 — normal CLI qualified; official MCP runtime confirmed stopped
 
 Source commit `6f85763dbd86b7ab11518332fdcd6e5576f06db2` was reviewed, privacy-audited and normally

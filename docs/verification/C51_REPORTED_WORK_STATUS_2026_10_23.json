@@ -172,7 +172,7 @@
     "existingRuntimeRecordsChecked": 266
   },
   "acceptance": {
-    "reportedBlockerInstalled": "NOT_QUALIFIED_SELECTED_DEVELOPMENT_STILL_C49_V65",
+    "reportedBlockerInstalled": "PASS_SELECTED_STOPPED_DEVELOPMENT_METADATA_ONLY_C52",
     "fullOctoberMilestone": "OPEN",
     "reportedBlockerSource": "PASS",
     "C50": "PRESERVED_COMPLETED_CONTROLLED_ROLLOVER_NOT_REPLAYED",
@@ -182,7 +182,7 @@
     "actualWebCoding": "BLOCKED_SCOPED_TOOL_UNAVAILABLE",
     "reportedBlockerNormalCli": "PASS_DISPOSABLE_SYNTHETIC_METADATA"
   },
-  "nextTask": "Review selection of the qualified normal executable into stopped development using existing updater; prepare supported serving-backend recovery/catalog qualification while preserving official runtime ownership. No replay of completed C50 rollover.",
+  "nextTask": "Use the existing runtime owner/startup information to qualify MCP reconnection without Wake or recurring automation; continue independently eligible source work while that dependency waits.",
   "operatorActionRequiredForSourceWork": false,
   "publishedSource": {
     "verifiedUtc": "2026-10-24T00:48:49.0278661+00:00",
@@ -232,8 +232,10 @@
     "maximumSeconds": 180
   },
   "versionCompatibility": {
-    "realLedgersUpgraded": 0,
+    "realLedgersUpgraded": 1,
     "newExecutableReadsLegacy": "PASS_NO_MIGRATION",
-    "olderExecutableReadsNewReports": "REFUSES_UNKNOWN_FIELD_USE_MATCHING_RELEASE"
-  }
+    "olderExecutableReadsNewReports": "REFUSES_UNKNOWN_FIELD_USE_MATCHING_RELEASE",
+    "upgradeScope": "CONTROLLED_EXISTING_TASK_ONLY_C52_SELECTED_MATCHING_RELEASE"
+  },
+  "c52Evidence": "docs/verification/C52_STOPPED_SELECTED_WORK_REPORTING_2026_10_23.json"
 }
