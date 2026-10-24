@@ -1,3 +1,28 @@
+## October 24 EDT C102 — normal release selection recovery qualified
+
+Exact published C101 built as a normal release app and host in 422.79s and 21.47s.
+Commit/tree, full image hashes, lockfiles, compiler versions and locked/offline
+build commands are recorded. Bit-for-bit rebuild reproducibility is not claimed.
+
+The normal app passed a 3.28s/180s disposable CLI test: nine natural command exits,
+healthy byte-stable recovery, a real Windows replacement failure from an owned
+file-sharing lease, pointer-first journal retention and cold refusal, then recovery
+after the original build directory was moved away. Final status and idempotent
+recovery selected the exact staged package. Profile/history and the old version
+were preserved. No host, Python fixture, browser or Wake process was launched.
+
+Two earlier test failures remain recorded: a PowerShell alias collision before
+any product command, and an altered-script fixture correctly refused by source
+pinning before selection. The passing test uses two genuine pinned package
+versions. All 306 real runtime records and 55 historical files remain exact;
+zero scoped owners. Current v76, production and native project sessions are unchanged.
+
+This qualifies the normal recovery command, not backend startup, automatic verified
+predecessor fallback, protected installation, Web coding or unattended operation.
+Continue release qualification/fallback in the existing model; retire no legacy
+mechanism before migration tests pass. Evidence:
+`docs/verification/C102_NORMAL_RELEASE_SELECTION_RECOVERY_2026_10_24.json`.
+
 ## October 24 EDT C101 — T0476 simplification and local selection recovery
 
 The updated T0476 document maps existing mechanisms to keep, consolidate and

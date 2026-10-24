@@ -69,6 +69,17 @@ gates and formatting. It is source/fixture qualification, not current/previous
 health fallback, installed recovery or normal unattended acceptance. The existing
 selected development package and protected runtime are unchanged.
 
+### C102 normal executable qualification
+
+The exact C101 source also built as normal app/host release images. A bounded
+normal CLI test passed a real Windows pointer-first replacement failure and cold
+recovery with the build directory unavailable, using two genuine pinned packages.
+Nine commands exited naturally; profile/history and old package survived, with
+all real runtime/historical records unchanged and no browser/host launch.
+This advances command qualification only. Backend startup, independent working
+predecessor admission, automatic fallback and protected migration remain separate.
+See `docs/verification/C102_NORMAL_RELEASE_SELECTION_RECOVERY_2026_10_24.json`.
+
 # T-0476 — CatDesk fast development, safe Wake recovery and simple production releases
 
 ## CURRENT 2026-10-11 — Chat52 three-lane development and recovery status (supersedes history below)
