@@ -1,3 +1,32 @@
+## October 24 EDT C108 — normal selected-backend startup and owner cleanup
+
+Exact source `bd8ddeb743639f11619b7917f1e67244f19d9e0c` built as normal app/host
+release images under the 600-second bound. A 19-second disposable test under the
+180-second bound passed six control CLI calls, two natural bounded backend
+operators and one intentional parent-only termination. All three actual child
+image paths and hashes were verified through retained process handles.
+
+The normal `run-backend` command served authenticated loopback MCP, rejected
+unauthenticated access, and refused duplicate startup/package mutation while
+continuing to serve. After a controlled current-file failure, it automatically
+restored and executed the exact C105 predecessor. Profile/history/proof and failed
+bytes survived. Killing only the third operator parent ended its still-live child
+through the private Job; the listener closed and a cold command proved lease
+release without selection changes. No tree-kill was used to establish that proof.
+
+C106 predecessor-health evidence was reused. This qualifies normal command and
+file-failure fallback in an isolated runtime. Fallback when bytes hash correctly
+but the child fails before readiness remains the next source gap. Protected,
+unattended and actual independent ChatGPT Web coding acceptance remain open.
+
+After job closure all 306 runtime records and 55 historical files remain exact;
+zero known live parent handles or scoped owners, queue 0, both controls STOPPED,
+real selected v76 unchanged. No WakeHost/browser/scheduler/tunnel activation,
+binding/native-session action, protected recovery, canary replay or legacy
+retirement occurred. The exact source SHA was remotely verified on
+`codex/web-rollover-oct17`; CI remains unverified with zero matching runs/checks.
+Evidence: `docs/verification/C108_NORMAL_SELECTED_BACKEND_AUTORECOVERY_2026_10_24.json`.
+
 ## October 24 EDT C107 — bounded startup of the selected development backend
 
 Added `operator web-dev-runtime run-backend` (180 seconds by default, configurable

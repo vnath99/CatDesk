@@ -211,6 +211,29 @@ Existing selected/protected runtime and
 all project bindings remain unchanged; no legacy writer is retired. Evidence:
 `docs/verification/C107_BOUNDED_SELECTED_DEV_BACKEND_2026_10_24.json`.
 
+### C108 normal startup, file-failure fallback and parent-exit proof
+
+The C107 command is now built and normal-executable qualified in a disposable
+runtime. It started the exact selected app, served authenticated loopback MCP,
+rejected unauthorized requests and refused duplicate startup/package mutation
+without interrupting service. A current-file failure caused automatic restoration
+and actual execution of the exact recorded C105 predecessor. Existing C106 health
+evidence was reused; no redundant prior health experiment was needed.
+
+Two operators exited naturally. A third, still serving, was killed by exact parent
+handle without a tree-kill. Its retained child handle reached exit, the listener
+closed, and a cold command verified lease release with unchanged selection. All
+three child image paths/content hashes were independently checked. The monitored
+test took 19 seconds inside its 180-second bound. All real runtime/history records,
+bindings, selected v76 and protected artifacts remain unchanged, with no orphans.
+
+Normal file-failure fallback is qualified; valid-hash pre-ready startup failure
+fallback still needs one bounded source implementation and distinct test. No
+production or unattended operation is qualified, and no legacy mechanism is
+retired. Actual two-conversation Web coding remains the live priority after its
+approved serving dependencies return. Evidence:
+`docs/verification/C108_NORMAL_SELECTED_BACKEND_AUTORECOVERY_2026_10_24.json`.
+
 # T-0476 — CatDesk fast development, safe Wake recovery and simple production releases
 
 ## CURRENT 2026-10-11 — Chat52 three-lane development and recovery status (supersedes history below)
