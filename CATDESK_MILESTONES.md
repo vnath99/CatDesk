@@ -1,3 +1,24 @@
+## October 24 EDT C66 — reviewed normal app selected in stopped development
+
+The existing guarded package update selected the C64 normal app in the isolated
+development installation in6.61s. Its exact app image is C65-qualified. The existing
+Wake host/adapter/bridge were reused with unchanged source/pins and retained
+owner-EOF proof. The old package remains intact. Only authority/current package
+pointers changed;280 other records are exact,282 total, zero new state records.
+All9 active Wake pairs read back correctly and central status passed; the retired
+canary/history remains preserved. Both controls STOPPED, queue0, zero scoped
+owners. No browser, WakeHost, recurring process, message or native-session action.
+
+Source checkpoint `36b743aeaa9592bced1892caf06cfed0482cc803` and C65 evidence
+`af7857ca2a20ace25e3958a68fa5c1970ea2af23` were reviewed, sanitized and pushed
+normally to the existing PUBLIC development branch; exact remote SHA matches.
+This is stopped development selection, not protected installation or unattended
+acceptance. Actual parallel ChatGPT tools B/C still require recovery of the
+connector429 dependency, supported serving-backend ownership and scoped-tool
+catalog availability. No automatic runtime/tunnel restart or completed-event replay.
+Next: that supported backend/catalog qualification plus independently eligible
+source work. Evidence: `docs/verification/C66_STOPPED_DEVELOPMENT_SELECTION_2026_10_24.json`.
+
 ## October 24 EDT C65 — normal archive reader and bounded listener pass
 
 Reviewed source `36b743aeaa9592bced1892caf06cfed0482cc803` built normally under

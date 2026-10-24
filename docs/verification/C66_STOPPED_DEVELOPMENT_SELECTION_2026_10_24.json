@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "milestone": "C66_REVIEWED_NORMAL_APP_SELECTED_STOPPED_IN_DEVELOPMENT",
+  "observedUtc": "2026-10-24T04:11:22.6924598+00:00",
+  "localDate": "2026-10-24_America_New_York",
+  "parentCommit": "af7857ca2a20ace25e3958a68fa5c1970ea2af23",
+  "sourceCommit": "36b743aeaa9592bced1892caf06cfed0482cc803",
+  "sourceTree": "2ae8fb72d6d49a9c9b90e58de4cccf6a658d4b6a",
+  "branch": "codex/web-rollover-oct17",
+  "review": "ROOT_SELF_REVIEW",
+  "qualification": "SELECTED_STOPPED_UNPROTECTED_DEVELOPMENT_PACKAGE_NOT_PROTECTED_INSTALLATION",
+  "selected": {
+    "previousPackage": "1.0.0-dev.85-db6749033837a831998b64ae61dce4daf16923fc5029404e78fd46c713f3c67e",
+    "controls": [
+      "STOPPED",
+      "STOPPED"
+    ],
+    "failure": null,
+    "elapsedSeconds": 6.6101488,
+    "browserStarted": false,
+    "unchangedProtectedRecords": 280,
+    "protectedInstalledAcceptance": false,
+    "unexpectedChanges": 0,
+    "atUtc": "2026-10-24T04:10:02.3996299Z",
+    "browserProfileAction": "NONE",
+    "productionModified": false,
+    "scopedProcessCount": 0,
+    "selectedPackage": "1.0.0-dev.85-771a222cc620cbed9171324efddbac80cce79dcf84509e4dd500f901f53bf6ed",
+    "classification": "SELECTED_STOPPED_UNPROTECTED_DEVELOPMENT_PACKAGE",
+    "newStateRecords": 0,
+    "nativeSessionsChanged": false,
+    "exactPairedReads": 9,
+    "allowedPackagePointerChanges": 2,
+    "recurringStarted": false,
+    "stateRecordsChecked": 282,
+    "wakeHostStarted": false,
+    "previousPackagePreserved": true,
+    "sourceCommit": "36b743aeaa9592bced1892caf06cfed0482cc803",
+    "selectedViewPassed": true,
+    "messagesSent": 0
+  },
+  "packageFiles": [
+    {
+      "sha256": "0686ae77d3f4ed7ff6fc1dcfcffe07c212f8e4aea515ed069c73e11993782b97",
+      "name": "adapter.py",
+      "bytes": 51207
+    },
+    {
+      "sha256": "950b87051a43bbc96728e8477ad8bd4d7fea1826b55576378f6c2df16652c995",
+      "name": "CatDeskBinagotchy.exe",
+      "bytes": 34875904
+    },
+    {
+      "sha256": "2c7367ebc9687037f6f0d813ec5e09018fcfbae3b1ff9aff60761f1bd13a6c83",
+      "name": "CatDeskWakeHost.exe",
+      "bytes": 2081792
+    },
+    {
+      "sha256": "a3d6bd20fd017c32dd8917a5f06e0c30c2e7aba547fe09ae9877066fa1d84498",
+      "name": "wake_bridge.py",
+      "bytes": 179201
+    }
+  ],
+  "hostQualification": "REUSED_EXACT_V64_NORMAL_IMAGE_AND_OWNER_EOF_PROOF",
+  "wakeSubtreeUnchanged": true,
+  "newHostBuildOrStart": false,
+  "outerContainment": {
+    "timedOut": false,
+    "maximumSeconds": 180,
+    "terminationFailed": false,
+    "exitCode": 0
+  },
+  "registry": {
+    "runtimeRecords": 282,
+    "retiredProjects": 1,
+    "queueCount": 0,
+    "activeProjects": 9,
+    "archivedHistoryPreserved": true,
+    "permanentRetiredIdentityPreserved": true
+  },
+  "normalGetter": "C65 verified this exact app image through bounded loopback HTTP, including the full archived binding/history and natural listener exit; no extra replay.",
+  "publishedCheckpoints": {
+    "privacyAudit": "PASS",
+    "ci": "UNVERIFIED_NO_EXACT_SOURCE_RUNS_OR_CHECKS",
+    "sourceAndC63C64": "36b743aeaa9592bced1892caf06cfed0482cc803",
+    "normalC65": "af7857ca2a20ace25e3958a68fa5c1970ea2af23",
+    "remoteReadback": "EXACT_FULL_SHA_MATCH_FOR_BOTH",
+    "visibility": "PUBLIC_UNCHANGED"
+  },
+  "acceptance": {
+    "normalRegistryRead": "PASS_REAL_SAVED_METADATA_OVER_LOOPBACK",
+    "unattended": "NOT_ACTIVATED",
+    "actualChatGptToolExecutionBC": "OPEN_PRIMARY_CONNECTOR_HTTP429_AND_SCOPED_TOOL_CATALOG",
+    "normalSource": "PASS_3_FOCUSED_STRICT_CLIPPY_FMT",
+    "fullOctoberMilestone": "OPEN",
+    "fullRuntimeRestart": "OPEN",
+    "selectedDevelopment": "PASS_STOPPED_GUARDED_UPDATE_AND_9_PAIR_READBACKS",
+    "protectedInstalled": "NOT_QUALIFIED"
+  },
+  "nextTask": "Resolve supported serving-backend ownership and primary connector/catalog access for actual project Web tool tests. Continue independently eligible source work; do not reactivate recurring automation, resend completed canaries or modify native owners."
+}
