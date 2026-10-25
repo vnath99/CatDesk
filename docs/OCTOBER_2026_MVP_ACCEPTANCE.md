@@ -1,3 +1,15 @@
+## October 25 C211 — explicit live review recovery passed
+
+| Capability | Actual result and limit |
+| --- | --- |
+| Existing review observation | LIVE PASS: one approximately 41-second reobservation using selected v77 produced a fresh matching witness and timer `COMPLETE`, with zero sends. |
+| Preservation / cleanup | Delivery, ledger, 461 state pins, five authority pins and profile identity preserved; exactly two new immutable observation logs and zero remaining test-owned processes. |
+| Review-coordinator closure | Separate supported resolver returned `CLOSED` / `completed`, with `taskCompletionVerified: false`. Only the record's phase, outcome and summary digest changed; this does not prove a coding task completed. |
+| Post-resolution preservation | Other 460 original pins plus timer/delivery/proof files unchanged. Derived 461-file manifest records the authorized ledger transition; original baseline retained. |
+| Automatic observer / production | Original observer failure remains unknown and observer code is unchanged. No production promotion or two-project Web coding acceptance is established. |
+
+Evidence: `docs/verification/C211_LIVE_REOBSERVATION_2026_10_25.json`.
+
 ## October 25 C210 — reobservation is not completed review acceptance
 
 | Capability | Current evidence and limit |

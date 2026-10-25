@@ -1,3 +1,30 @@
+## October 25 C211 — preserve completed observation and review-record closure
+
+C196's explicit live reobservation succeeded in about 41 seconds. The controller
+used the retained selected v77 browser runtime and obtained fresh matching
+evidence for timer `COMPLETE`. No message was sent. Delivery/ledger bytes, all
+461 state pins, five authority pins and profile identity were preserved; two
+immutable observation logs were added and test-owned cleanup passed.
+
+Do not repeat the observation or resolution. The supported resolver closed the
+review coordinator record as `CLOSED` / `completed`, while explicitly reporting
+`taskCompletionVerified: false`. Only phase, outcome and summary digest changed;
+460 other original pins and timer/delivery/proof files remain exact. Use the
+explicitly derived 461-file manifest for subsequent preservation checks, keeping
+the original baseline intact. This is review closure, not coding-task completion.
+Do not infer an automatic-observer fix; the original failure remains unknown.
+C208's candidate remains distinct from newer source; production promotion and
+real independent Web coding remain open. Evidence:
+`docs/verification/C211_LIVE_REOBSERVATION_2026_10_25.json`.
+
+The current private promotion wrapper is independently reviewed at SHA-256
+`25f2f5d18cd2fef8f729d0d2d9ffc05d32eddd2d398d39fa3ffef2ee03791a1a`.
+Only its preservation check accepts the explicitly derived 461-file manifest
+after proving the single authorized ledger transition. All release/candidate,
+authority, outside-Job owner and lifecycle gates remain unchanged. The original
+wrapper is preserved and correctly refuses its old ledger pin. Actual promotion
+remains pending; this wrapper does not supply a new launch mechanism.
+
 ## October 25 C210 — qualify one-shot review observation before live use
 
 Current source adds `operator web review reobserve --project-id <id> --event-id

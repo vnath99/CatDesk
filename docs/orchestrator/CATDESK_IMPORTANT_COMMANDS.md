@@ -1,3 +1,31 @@
+## October 25 C211 — reobservation and separate review closure completed
+
+The supported `operator web review reobserve` command recovered the existing
+C196 timer to `COMPLETE` in one approximately 41-second live run with selected
+v77. No message was sent, and the reviewed private harness is single-use; do not
+replay it. Delivery and work-ledger bytes, all 461 state pins and five authority
+pins were preserved, with exactly two new immutable logs and clean process exit.
+The command accepts `ATTENTION` or `OBSERVING` timers; `COMPLETE` is a no-op,
+and a `RETRYING` timer is refused.
+
+The separate `operator web work resolve` operation also completed using exact
+request pins and fresh observation evidence. It returned `CLOSED` / `completed`
+with `taskCompletionVerified: false`: transport/source-review coordinator closure,
+not coding-task completion. Do not replay either operation. Only the ledger
+record's phase, outcome and summary digest changed; the derived 461-file manifest
+records that authorized transition and preserves the original baseline. This
+does not establish an automatic-observer fix, production promotion or whole-MVP
+acceptance. Evidence:
+`docs/verification/C211_LIVE_REOBSERVATION_2026_10_25.json`.
+
+For the still-pending promotion, use the independently reviewed private
+`promote-c208-after-c211.ps1` wrapper, SHA-256
+`25f2f5d18cd2fef8f729d0d2d9ffc05d32eddd2d398d39fa3ffef2ee03791a1a`.
+It verifies the pinned original and derived manifests have the same 461 paths
+and only the authorized ledger hash differs. Candidate, authority, review,
+outside-Job owner and lifecycle gates are unchanged. The original wrapper remains
+untouched and correctly refuses the now-obsolete ledger hash. No promotion has run.
+
 ## October 25 C210 — explicit bounded review reobservation
 
 New source command; Source tests and independent review passed; live qualification is pending. Use a qualified controller from the matching revision:

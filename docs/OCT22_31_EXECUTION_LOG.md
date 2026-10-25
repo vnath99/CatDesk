@@ -1,3 +1,26 @@
+## October 25 C211 — bounded observation and review-record closure succeeded
+
+At 17:40:08–17:40:49 UTC, the reviewed C210 harness performed one explicit
+reobservation of C196's existing delivery. The new controller used the selected
+v77 adapter, bridge and Python runtime; fresh evidence advanced the timer to
+`COMPLETE`. The command exited 0 within its 90-second observation and 180-second
+outer bounds. No message, scheduler, WakeHost or binding operation occurred.
+
+The independent post-check preserved delivery/ledger bytes, all 461 state pins,
+five release-authority pins and profile identity. Exactly two immutable
+observation records were added, adapter-log append was zero bytes and no
+test-owned process remained.
+
+At 17:42:48–17:42:50 UTC, the separate supported resolver returned `CLOSED` /
+`completed`, explicitly `taskCompletionVerified: false`. This closes the review
+coordinator record, not a coding task. Only one ledger record's phase, outcome
+and summary digest changed; the other 460 original pins and timer/delivery/proof
+files were unchanged. The derived 461-file preservation manifest retains the
+original baseline and records only that transition. No browser, host, message
+or production action occurred. The original observer failure remains unknown;
+production and two-conversation coding acceptance remain open.
+Evidence: `docs/verification/C211_LIVE_REOBSERVATION_2026_10_25.json`.
+
 ## October 25 C210 — explicit review reobservation prepared
 
 The new source command `operator web review reobserve --project-id <id>

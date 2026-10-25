@@ -1,3 +1,21 @@
+## October 25 C211 — review observation and coordinator closure recovered
+
+One supported C196 reobservation completed in about 41 seconds using the retained
+selected v77 browser runtime. Fresh matching evidence advanced its timer to
+`COMPLETE`; no message was sent. The delivery, work ledger, all 461 protected
+state files and five release-authority files stayed unchanged. Two immutable
+observation logs were added; profile identity was preserved and no test-owned
+process remained.
+
+The separate supported resolver then closed the review coordinator record as
+`CLOSED` / `completed`, with `taskCompletionVerified: false`. Only its phase,
+outcome and summary digest changed; the other 460 original pins, timer, delivery
+and observation proof stayed exact. A derived 461-file manifest records that
+authorized change while the original baseline is preserved. This proves review
+recovery, not coding-task completion or an automatic-observer fix. Production
+and two-project coding remain open. Evidence:
+`docs/verification/C211_LIVE_REOBSERVATION_2026_10_25.json`.
+
 ## October 25 C210 — bounded observation of an already-sent review
 
 Current source adds `operator web review reobserve --project-id <id> --event-id
