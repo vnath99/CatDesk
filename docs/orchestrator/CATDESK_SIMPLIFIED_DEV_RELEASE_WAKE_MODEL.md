@@ -1,3 +1,14 @@
+## October 25 C215 — review consent stays separate from release evidence
+
+Routine read-only review sends can use the user's standing scoped authorization
+through the existing project WebWork ledger; see the
+[operator contract](CATDESK_ROUTINE_REVIEW_AUTHORIZATION.md). This does not require
+production promotion, new browser authentication or a Wake binding change.
+A real independent review and the existing acknowledged contract/snapshot/build
+chain remain necessary where the release procedure requires them. The chain does
+not inherently require another ChatGPT Web message; never relabel a local verifier,
+queue advisory, grant or delivery receipt as independent review authority.
+
 ## October 25 C209 — keep authentication and cleanup within existing owners
 
 Current source gives the native MCP listener an optional process-only bearer.

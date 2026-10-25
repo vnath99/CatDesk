@@ -127,6 +127,155 @@ fn cleanup(parent: &Path) {
     fs::remove_dir_all(canonical).unwrap();
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn scoped_review_preflight_preserves_runtime_and_keeps_projects_independent() {
+    use serde_json::json;
+    let production_before = production_snapshot();
+    let parent = fixture_parent();
+    let control = parent.join("control");
+    fs::create_dir(&control).unwrap();
+    let (package, python) = package_and_python(&parent);
+    development_runtime::prepare(&control, &package, &python).unwrap();
+    for (id, workspace) in [
+        ("catdesk", control.clone()),
+        ("alpha", parent.join("alpha")),
+        ("beta", parent.join("beta")),
+    ] {
+        let origin = format!("https://example.test/{id}.git");
+        git_root(&workspace, &origin);
+        web_action(
+            &control,
+            &[
+                "operator",
+                "web",
+                "project",
+                "register",
+                "--project-id",
+                id,
+                "--workspace",
+                workspace.to_str().unwrap(),
+                "--git-identity",
+                &origin,
+            ],
+        )
+        .await;
+    }
+    for id in ["alpha", "beta"] {
+        web_action(
+            &control,
+            &[
+                "operator",
+                "web",
+                "target",
+                "bind",
+                "--project-id",
+                id,
+                "--conversation-url",
+                &format!("https://chatgpt.com/c/review-{id}"),
+                "--expected-current-target-sha256",
+                "none",
+                "--expected-wake-generation",
+                "0",
+            ],
+        )
+        .await;
+    }
+    // Move the fixture's activation cutoff into the past without sleeping.
+    let wake_root = wake_protocol_client::wake_root_for_workspace(&control).unwrap();
+    let mut config: serde_json::Value =
+        serde_json::from_slice(&fs::read(wake_root.join("config.json")).unwrap()).unwrap();
+    for entry in config["history"].as_array_mut().unwrap() {
+        entry["changedUtc"] = json!(1);
+    }
+    fs::write(
+        wake_root.join("config.json"),
+        serde_json::to_vec(&config).unwrap(),
+    )
+    .unwrap();
+    let mut activation: serde_json::Value =
+        serde_json::from_slice(&fs::read(wake_root.join("activation.json")).unwrap()).unwrap();
+    activation["acceptAfterUtc"] = json!(1);
+    fs::write(
+        wake_root.join("activation.json"),
+        serde_json::to_vec(&activation).unwrap(),
+    )
+    .unwrap();
+    let before_config = fs::read(wake_root.join("config.json")).unwrap();
+    let before_control = fs::read(wake_root.join("control.json")).unwrap();
+    let before_registry = fs::read(control.join(".catdesk/projects/projects.json")).unwrap();
+    let mut inputs = Vec::new();
+    for id in ["alpha", "beta"] {
+        let target = Store::open(&wake_root).unwrap().config().unwrap().targets[id].clone();
+        let request = json!({"projectId":id,"requestId":"routine-review",
+            "expectedTargetGeneration":target.generation,"expectedTargetSha256":target.digest,
+            "taskText":"Review the public fixture source without editing or executing it."});
+        let wire = format!(
+            "CatDesk central work request routine-review for project {id}. Requested task: Review the public fixture source without editing or executing it. Review current project state and existing task ownership first. Continue only work assigned to this conversation; preserve ongoing Codex sessions and avoid duplicate execution. Report completed artifacts, verification, and remaining blockers. Browser response completion alone is not project task completion."
+        );
+        let key = catdesk_wake::protocol::digest(&format!("public-fixture-review-{id}"));
+        let authorization = json!({"projectId":id,"authorization":{"grantId":"routine-batch",
+            "category":"READ_ONLY_SOURCE_REVIEW","target":target,"expiresUtc":catdesk_wake::store::now()+3600,
+            "maxMessages":2,"maxExecutionSeconds":180,"approvalEvidenceSha256":"a".repeat(64),
+            "messages":[{"requestId":"routine-review",
+                "eventId":format!("web-work-{}",catdesk_wake::protocol::digest(&format!("{id}\0routine-review"))),
+                "messageSha256":catdesk_wake::protocol::digest(&wire),"reviewKey":key}]}});
+        crate::web_work::review_action(&control, "authorize", authorization).unwrap();
+        let input =
+            json!({"projectId":id,"grantId":"routine-batch","reviewKey":key,"request":request});
+        assert_eq!(
+            crate::web_work::review_action(&control, "preflight", input.clone()).unwrap()["status"],
+            "ELIGIBLE"
+        );
+        assert_eq!(
+            crate::web_work::request(&control, input["request"].clone()).unwrap_err(),
+            "WEB_REVIEW_SCOPED_WORKFLOW_REQUIRED"
+        );
+        inputs.push(input);
+    }
+    // A denied project does not reserve the browser or another project's queue.
+    crate::web_work::review_action(
+        &control,
+        "revoke",
+        json!({"projectId":"alpha","grantId":"routine-batch"}),
+    )
+    .unwrap();
+    assert_eq!(
+        crate::web_work::review_action(&control, "preflight", inputs[0].clone()).unwrap_err(),
+        "WEB_REVIEW_GRANT_REVOKED"
+    );
+    assert_eq!(
+        crate::web_work::review_action(&control, "preflight", inputs[1].clone()).unwrap()["status"],
+        "ELIGIBLE"
+    );
+    let mut changed = inputs[1].clone();
+    changed["request"]["taskText"] = json!("Publish private data instead");
+    assert_eq!(
+        crate::web_work::review_action(&control, "preflight", changed).unwrap_err(),
+        "WEB_REVIEW_GRANT_SCOPE_CHANGED"
+    );
+    assert!(
+        Store::open(&wake_root)
+            .unwrap()
+            .events()
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        fs::read(wake_root.join("config.json")).unwrap(),
+        before_config
+    );
+    assert_eq!(
+        fs::read(wake_root.join("control.json")).unwrap(),
+        before_control
+    );
+    assert_eq!(
+        fs::read(control.join(".catdesk/projects/projects.json")).unwrap(),
+        before_registry
+    );
+    assert_eq!(production_snapshot(), production_before);
+    cleanup(&parent);
+}
+
 async fn web_mcp_request(
     client: &reqwest::Client,
     url: &str,

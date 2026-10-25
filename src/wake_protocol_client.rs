@@ -232,6 +232,49 @@ fn registered_publication_context(
     Ok((store, activation, registered_url, registered_sha256))
 }
 
+/// Apply the same activation, target and history admission used by publication
+/// before a scoped review consumes its one-shot reservation. No event is sent.
+pub(crate) fn preflight_registered_invitation(
+    control_workspace: &Path,
+    project: &str,
+    expected: &Target,
+) -> Result<(), String> {
+    let (store, activation, url, digest) =
+        registered_publication_context(control_workspace, project)?;
+    if publication_target(
+        &store,
+        &activation,
+        project,
+        &url,
+        &digest,
+        catdesk_wake::store::now(),
+    )? != *expected
+    {
+        return Err("WAKE_PROJECT_TARGET_CHANGED".into());
+    }
+    Ok(())
+}
+
+pub(crate) fn publish_registered_scoped_review(
+    control_workspace: &Path,
+    project: &str,
+    event_id: &str,
+    message: &str,
+    expected: &Target,
+    grant_id: &str,
+) -> Result<Event, String> {
+    preflight_registered_invitation(control_workspace, project, expected)?;
+    let store = Store::open(&wake_root_for_workspace(control_workspace)?)?;
+    store.produce_expected_with_audit(
+        event_id,
+        project,
+        "source_review",
+        message,
+        expected,
+        &[format!("catdesk-review-v1:{grant_id}")],
+    )
+}
+
 fn publication_target(
     store: &Store,
     activation: &Activation,

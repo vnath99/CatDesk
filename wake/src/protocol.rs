@@ -86,7 +86,7 @@ impl Event {
             || !valid_id(&self.project_id)
             || !matches!(
                 self.event_type.as_str(),
-                "review_ready" | "engineering_attention" | "test"
+                "review_ready" | "engineering_attention" | "source_review" | "test"
             )
             || self.created_utc == 0
             || self.target_generation == 0

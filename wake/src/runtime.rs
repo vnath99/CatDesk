@@ -21,7 +21,10 @@ mod reobserve;
 #[path = "runtime_response.rs"]
 mod response;
 pub use reobserve::reobserve_sent_response_guarded;
+#[path = "runtime_scoped_review.rs"]
+mod scoped_review;
 pub(crate) use response::validate_observation as validate_response_observation;
+pub use scoped_review::run_scoped_review;
 #[path = "runtime_scheduler.rs"]
 mod scheduler;
 use response::observe_sent_response;
@@ -6413,6 +6416,16 @@ fn run_with_lease(store: &Store, lease: &HostLease) -> Result<()> {
                     now(),
                 )? {
                     let mut existing = store.delivery(&event.event_id)?;
+                    // Grant-scoped reviews are delivered only by the explicit
+                    // bounded runner. A later SENT response may still receive
+                    // the ordinary read-only observation; never claim/retry it.
+                    if is_scoped_review_event(&event)
+                        && existing
+                            .as_ref()
+                            .is_none_or(|delivery| delivery.phase != Phase::Sent)
+                    {
+                        continue;
+                    }
                     if live
                         .targets
                         .get(&event.project_id)
@@ -6866,28 +6879,113 @@ fn attempt(
     d: &crate::store::Delivery,
     status: &mut Status,
 ) -> Result<()> {
+    attempt_inner(store, lease, adapter, d, status, None)
+}
+
+trait SubmissionAdapter {
+    fn send(&mut self, value: serde_json::Value) -> Result<()>;
+    fn receive(
+        &mut self,
+        timeout: Duration,
+    ) -> std::result::Result<Result<serde_json::Value>, mpsc::RecvTimeoutError>;
+    fn finish(&mut self, _grace: Duration) {}
+}
+
+impl SubmissionAdapter for Adapter {
+    fn send(&mut self, value: serde_json::Value) -> Result<()> {
+        Adapter::send(self, value)
+    }
+    fn receive(
+        &mut self,
+        timeout: Duration,
+    ) -> std::result::Result<Result<serde_json::Value>, mpsc::RecvTimeoutError> {
+        self.output.recv_timeout(timeout)
+    }
+    fn finish(&mut self, grace: Duration) {
+        let _ = self.allow_graceful_exit(grace);
+    }
+}
+
+struct ScopedReviewGuard<'a> {
+    deadline: Instant,
+    before_submit: &'a mut dyn FnMut(&crate::protocol::Event, &Target) -> Result<()>,
+    keep_running: &'a dyn Fn() -> Result<()>,
+}
+
+impl ScopedReviewGuard<'_> {
+    fn check(&self) -> Result<()> {
+        if Instant::now() >= self.deadline {
+            return Err("SCOPED_REVIEW_TIMEOUT".into());
+        }
+        (self.keep_running)()
+    }
+}
+
+fn is_scoped_review_event(event: &crate::protocol::Event) -> bool {
+    event.event_type == "source_review"
+        || event
+            .audit_references
+            .iter()
+            .any(|value| value.starts_with("catdesk-review-v1:"))
+}
+
+fn attempt_inner<A: SubmissionAdapter>(
+    store: &Store,
+    lease: &HostLease,
+    adapter: &mut A,
+    d: &crate::store::Delivery,
+    status: &mut Status,
+    mut scoped: Option<&mut ScopedReviewGuard<'_>>,
+) -> Result<()> {
+    if is_scoped_review_event(&d.event) != scoped.is_some() {
+        return Err("SCOPED_REVIEW_EXPLICIT_GUARD_REQUIRED".into());
+    }
+    if let Some(guard) = scoped.as_ref() {
+        guard.check()?;
+    }
     adapter.send(serde_json::json!({"event": d.event, "target": d.target, "cooperative":true}))?;
-    let mut deadline = Instant::now() + Duration::from_secs(180);
+    let mut deadline = scoped.as_ref().map_or_else(
+        || Instant::now() + Duration::from_secs(180),
+        |guard| guard.deadline,
+    );
     let mut submit_dispatched = false;
     let mut receipt_recorded = false;
     loop {
-        persist_live_status(store, status)?;
-        if let Some(reason) =
-            submission_control_reason(&desired(store)?, submit_dispatched, receipt_recorded)
-        {
-            if receipt_recorded {
-                let _ = store.set_timer_response_state(&d.event.event_id, ResponseState::Attention);
+        if let Some(guard) = scoped.as_ref() {
+            // Once submit crossed the boundary, retain the existing bounded
+            // receipt drain. Cancellation never starts another submit.
+            if Instant::now() >= guard.deadline {
+                return Err("SCOPED_REVIEW_TIMEOUT".into());
             }
-            return Err(reason.into());
+            if !submit_dispatched {
+                guard.check()?;
+            }
+        } else {
+            persist_live_status(store, status)?;
+            if let Some(reason) =
+                submission_control_reason(&desired(store)?, submit_dispatched, receipt_recorded)
+            {
+                if receipt_recorded {
+                    let _ =
+                        store.set_timer_response_state(&d.event.event_id, ResponseState::Attention);
+                }
+                return Err(reason.into());
+            }
         }
         if Instant::now() >= deadline {
             return Err("BROWSER_ATTEMPT_TIMEOUT".into());
         }
-        match adapter.output.recv_timeout(Duration::from_millis(250)) {
+        match adapter.receive(Duration::from_millis(250)) {
             Ok(Ok(value)) => match value.get("stage").and_then(|v| v.as_str()) {
                 Some("READINESS_OBSERVED") => {
-                    let (route, reason) = record_readiness_observation(store, status, &value)?;
-                    deadline = Instant::now() + Duration::from_secs(180);
+                    let (route, reason) = if scoped.is_some() {
+                        readiness_observation(&value)?
+                    } else {
+                        record_readiness_observation(store, status, &value)?
+                    };
+                    if scoped.is_none() {
+                        deadline = Instant::now() + Duration::from_secs(180);
+                    }
                     status.browser = format!("READINESS_{route}_{reason}");
                     if route == "SAME_CONVERSATION" && reason == "READY" {
                         status.login = "READY".into();
@@ -6914,7 +7012,9 @@ fn attempt(
                     | "RESPONSE_COMPLETED"
                     | "RESPONSE_COMPLETED_AFTER_REOPEN"),
                 ) => {
-                    deadline = Instant::now() + Duration::from_secs(180);
+                    if scoped.is_none() {
+                        deadline = Instant::now() + Duration::from_secs(180);
+                    }
                     status.browser = stage.into();
                     if matches!(
                         stage,
@@ -6940,14 +7040,23 @@ fn attempt(
                     }
                 }
                 Some("BEFORE_SUBMIT") => {
-                    deadline = Instant::now() + Duration::from_secs(180);
-                    if desired(store)? != "RUNNING" {
-                        return Err("HOST_PAUSED_BEFORE_SUBMIT".into());
-                    }
                     crate::development_runtime::validate_target_isolation_for_store(
                         store.root(),
                         &d.target.url,
                     )?;
+                    if let Some(guard) = scoped.as_deref_mut() {
+                        if submit_dispatched {
+                            return Err("SCOPED_REVIEW_DUPLICATE_SUBMIT".into());
+                        }
+                        guard.check()?;
+                        (guard.before_submit)(&d.event, &d.target)?;
+                        guard.check()?;
+                    } else {
+                        deadline = Instant::now() + Duration::from_secs(180);
+                        if desired(store)? != "RUNNING" {
+                            return Err("HOST_PAUSED_BEFORE_SUBMIT".into());
+                        }
+                    }
                     store.transition(
                         &d.event.event_id,
                         lease.owner(),
@@ -6960,14 +7069,18 @@ fn attempt(
                     submit_dispatched = true;
                 }
                 Some("SUBMISSION_ACCEPTED") => {
-                    deadline = Instant::now() + Duration::from_secs(180);
+                    if scoped.is_none() {
+                        deadline = Instant::now() + Duration::from_secs(180);
+                    }
                     store.start_submission_timer(&d.event.event_id)?;
                     status.submission = "SUBMISSION_ACCEPTED".into();
                     status.browser = "GENERATION_WAIT".into();
                     status.login = "READY".into();
                 }
                 Some("USER_MESSAGE_APPENDED") => {
-                    deadline = Instant::now() + Duration::from_secs(180);
+                    if scoped.is_none() {
+                        deadline = Instant::now() + Duration::from_secs(180);
+                    }
                     let receipt: Receipt = serde_json::from_value(
                         value.get("receipt").ok_or("RECEIPT_MISSING")?.clone(),
                     )

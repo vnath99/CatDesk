@@ -1,3 +1,17 @@
+## October 25 C215 — reusable review scope, MVP still incomplete
+
+C215 source qualification passed 449 tests (one ignored) and strict root/Wake
+Clippy. The one C212 live review was delivered; its assistant body remains
+unverified after bounded reads. All 477 final state pins and cleanup passed.
+This does not qualify installed grant execution or production. Evidence:
+[scoped review qualification](docs/verification/C215_SCOPED_REVIEW_AUTHORIZATION_2026_10_25.json).
+The standing user authorization permits bounded routine source reviews for
+registered project conversations. Source implementation reuses WebWork state
+for frozen batches, revocation, expiry, quota and no-replay; protected production
+and platform approvals remain separate. This is an enabling workflow change,
+not proof of installed production or simultaneous Web coding. See
+[review operator contract](docs/orchestrator/CATDESK_ROUTINE_REVIEW_AUTHORIZATION.md).
+
 ## October 25 C211 — review observation and coordinator closure recovered
 
 One supported C196 reobservation completed in about 41 seconds using the retained

@@ -1,3 +1,24 @@
+## October 25 C215 — apply the standing read-only review instruction
+
+C215 source is verified: 449 tests/one ignored and strict Clippy passed. C212 has
+one exact delivery receipt but no verified assistant body; both bounded reads
+have finished and cleanup preserved 477 records. Do not resend it. Continue
+with a shared snapshot deadline and redacted stage diagnostics before another
+live read. The new grant workflow still needs installed/live qualification.
+The refreshed private promotion wrapper is `promote-c208-after-c215.ps1`, SHA-256
+`ee20dfd56c5a382a13a4d60002f3edf92be3f82d1173ddb74439e86ac434ca7b`.
+Only preservation evidence changed; every release gate and the outside-Job
+requirement remain. It has not executed. Evidence:
+[C215](../verification/C215_SCOPED_REVIEW_AUTHORIZATION_2026_10_25.json).
+Do not request another discretionary approval for equivalent routine public-source
+reviews that fit the user's standing scope. Freeze each allowed payload and exact
+registered destination, record the grant, and use bounded monitored execution.
+Mandatory platform approvals still apply. Do not route around quarantine, replay
+completed C196/C212 work, or treat a review send as build/promotion evidence.
+The incremental operator contract is [documented here](CATDESK_ROUTINE_REVIEW_AUTHORIZATION.md).
+C208 promotion already has separate authorization; its outside-Job owner barrier
+is independent of whether another Web review is sent.
+
 ## October 25 C211 — preserve completed observation and review-record closure
 
 C196's explicit live reobservation succeeded in about 41 seconds. The controller

@@ -1,3 +1,12 @@
+## October 25 C215 — bounded routine-review commands
+
+See [routine source review authorization](CATDESK_ROUTINE_REVIEW_AUTHORIZATION.md)
+for the new local `operator web review authorize|preflight|run|resume|revoke` contract,
+exact frozen batch schema, expiry/revocation and no-replay rules. Qualify matching
+source/controller/host support before live use; do not assume selected v77 or the
+protected canonical executable contains these commands. Standing consent does
+not override platform policy or production promotion authority.
+
 ## October 25 C211 — reobservation and separate review closure completed
 
 The supported `operator web review reobserve` command recovered the existing

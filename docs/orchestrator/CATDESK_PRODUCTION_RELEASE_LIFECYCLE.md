@@ -7,6 +7,18 @@ ownership, independent review and producer gates remain in force. No recurring
 automation, external tunnel replacement or browser-profile change follows from
 this authorization.
 
+## October 25 C215 — routine consent does not require another release review
+
+Standing routine-review authorization governs sending an approved source-review
+request; it neither grants a PASS verdict nor replaces producer authority. The
+existing promotion validator requires an acknowledged `COMPLETED_VERIFIED`
+review, exact approved contract, attributable artifacts, remeasured source and
+matching attestation. It does not require the reviewer to be a ChatGPT Web
+conversation. Use genuine qualified independent evidence through that existing
+path; ordinary local verifier output and advisory rows remain insufficient.
+The already attested C208 candidate does not need C212 to be sent again. Its
+outside-Job owner requirement and all production integrity checks are unchanged.
+See [routine review operator contract](CATDESK_ROUTINE_REVIEW_AUTHORIZATION.md).
 ## October 25 C209 — new source requires its own qualification and release
 
 Independent static review passed for optional process-only native MCP bearer

@@ -90,6 +90,11 @@ pub(crate) enum WebAction {
         project_id: String,
         event_id: String,
     },
+    ReviewAuthorization {
+        project_id: String,
+        operation: String,
+        input_file: PathBuf,
+    },
     WorkRequest {
         project_id: String,
         input_file: PathBuf,
@@ -302,6 +307,19 @@ pub(crate) fn parse(args: &[String]) -> Result<WebAction, String> {
                     input_file: input_file.into(),
                 })
             }
+        }
+        ("review", "authorize" | "revoke" | "preflight" | "run" | "resume") => {
+            let input_file = options
+                .remove("--input-file")
+                .ok_or("WEB_USAGE: --input-file is required")?;
+            if input_file.is_empty() || !options.is_empty() {
+                return Err("WEB_USAGE: unexpected review authorization option".into());
+            }
+            Ok(WebAction::ReviewAuthorization {
+                project_id: project_id.into(),
+                operation: verb.into(),
+                input_file: input_file.into(),
+            })
         }
         ("project", "register") => {
             let candidate = options
@@ -1244,6 +1262,15 @@ pub(crate) async fn execute(action: WebAction, workspace: &Path) -> Result<Value
             project_id,
             event_id,
         } => review::reobserve(&workspace, &project_id, &event_id),
+        WebAction::ReviewAuthorization {
+            project_id,
+            operation,
+            input_file,
+        } => crate::web_work::review_action(
+            &workspace,
+            &operation,
+            read_work_input(&input_file, &project_id)?,
+        ),
         WebAction::WorkRequest {
             project_id,
             input_file,
@@ -1637,6 +1664,38 @@ mod tests {
         let mut invalid = valid;
         *invalid.last_mut().unwrap() = "../event".into();
         assert!(parse(&invalid).is_err());
+    }
+
+    #[test]
+    fn scoped_review_commands_never_accept_destination_or_execution_overrides() {
+        for verb in ["authorize", "revoke", "preflight", "run", "resume"] {
+            let valid = args(&[
+                "operator",
+                "web",
+                "review",
+                verb,
+                "--project-id",
+                "alpha",
+                "--input-file",
+                "frozen.json",
+            ]);
+            assert!(matches!(
+                parse(&valid),
+                Ok(WebAction::ReviewAuthorization { .. })
+            ));
+            for override_flag in [
+                "--url",
+                "--workspace",
+                "--message",
+                "--force",
+                "--max-runtime-seconds",
+            ] {
+                let mut invalid = valid.clone();
+                invalid.extend(args(&[override_flag, "override"]));
+                assert!(parse(&invalid).is_err());
+            }
+            assert!(parse(&valid[..6]).is_err());
+        }
     }
 
     #[test]

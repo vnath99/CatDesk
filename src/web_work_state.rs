@@ -14,6 +14,12 @@ use uuid::Uuid;
 const MAX_RECORDS: usize = 128;
 const MAX_BYTES: usize = 256 * 1024;
 
+#[path = "web_review_authorization.rs"]
+mod review_authorization;
+pub(crate) use review_authorization::{
+    ReviewDispatchPermit, ReviewGrantRequest, ReviewMessageIdentity,
+};
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct WorkTaskAssignment {
@@ -63,6 +69,8 @@ struct LedgerFile {
     schema_version: u32,
     project_id: String,
     records: Vec<WorkRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    review_authorizations: Vec<review_authorization::ReviewGrant>,
 }
 
 pub(crate) struct WorkLedger {
@@ -112,6 +120,7 @@ impl LedgerFile {
             schema_version: 1,
             project_id: project_id.into(),
             records: Vec::new(),
+            review_authorizations: Vec::new(),
         }
     }
 
@@ -122,6 +131,7 @@ impl LedgerFile {
         {
             return Err("WEB_WORK_LEDGER_INVALID".into());
         }
+        review_authorization::validate_grants(&self.review_authorizations, project_id)?;
         let mut ids = std::collections::BTreeSet::new();
         let mut open = 0;
         for record in &self.records {

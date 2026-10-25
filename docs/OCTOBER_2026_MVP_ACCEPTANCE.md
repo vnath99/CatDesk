@@ -1,3 +1,19 @@
+## October 25 C215 — routine review consent acceptance
+
+C215 result: **SOURCE PASS**, 449 tests/one ignored and both strict Clippy checks.
+**LIVE PARTIAL:** one exact C212 delivery and clean exit; no verified assistant
+body after 25-second and 90-second reads. All 477 final state pins preserved.
+Multiple live grant-authorized reviews, installed qualification, production
+promotion and two independent coding conversations remain open. The next eligible
+source task is a single snapshot deadline with redacted progress diagnostics.
+Evidence: [C215](verification/C215_SCOPED_REVIEW_AUTHORIZATION_2026_10_25.json).
+Reusable review consent is being qualified in the existing project work ledger.
+Required evidence includes frozen batch reuse, changed scope/destination refusal,
+expiry/revocation, durable no-replay, interruption recovery, independent project
+progress and cleanup. Source fixtures, one-message browser evidence and installed
+operation remain distinct. No new production or two-project coding acceptance
+follows from consent alone. See [operator contract](orchestrator/CATDESK_ROUTINE_REVIEW_AUTHORIZATION.md).
+
 ## October 25 C211 — explicit live review recovery passed
 
 | Capability | Actual result and limit |

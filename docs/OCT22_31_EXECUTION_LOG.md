@@ -1,3 +1,26 @@
+## October 25 C215 — standing routine-review authorization
+
+The user's standing authorization replaces repeated discretionary review-send
+questions within its stated scope. The implementation extends the existing
+per-project WebWork ledger with exact frozen batches, material review keys,
+expiry/revocation, count limits and bounded one-shot dispatch. It does not create
+a second project registry, alter protected approval mechanisms or grant release
+authority. See [operator contract](orchestrator/CATDESK_ROUTINE_REVIEW_AUTHORIZATION.md).
+Final source qualification: 449 tests passed, one manual test ignored, strict
+root/Wake Clippy and the 600-second Job cleanup passed. The legacy-host gap found
+in review was fixed with a new event type; explicit pre-submit recovery preserves
+its original reservation and cannot bypass a dispatched/unknown result.
+
+C212 was sent exactly once under the standing user instruction at
+18:05:52–18:08:10 UTC. Its exact receipt and clean host exit were verified. The
+25-second response read timed out. A separate 90-second read at 18:12:22–18:13:53
+also timed out without a body; all 477 state pins, bindings and histories remained
+unchanged, with zero test owners. No review verdict, ACK, claim, build or promotion
+was fabricated. No further resend/read is scheduled. Next source work is a shared
+snapshot deadline and redacted phase diagnostics. Installed qualification and
+multiple live reviews under a durable grant remain open. See
+[C215 evidence](verification/C215_SCOPED_REVIEW_AUTHORIZATION_2026_10_25.json).
+
 ## October 25 C211 — bounded observation and review-record closure succeeded
 
 At 17:40:08–17:40:49 UTC, the reviewed C210 harness performed one explicit

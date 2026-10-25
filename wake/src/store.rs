@@ -229,7 +229,10 @@ fn require_expected_retirement_event(
     message_sha256: &str,
 ) -> Result<()> {
     if event.project_id != project
-        || event.event_type != "engineering_attention"
+        || !matches!(
+            event.event_type.as_str(),
+            "engineering_attention" | "source_review"
+        )
         || event.target_generation != target.generation
         || digest(&event.message) != message_sha256
     {
@@ -1150,6 +1153,33 @@ impl Store {
         self.produce_bound(id, project, event_type, message, Some(expected), None)
     }
 
+    /// Preserve typed admission references in the same immutable event/target
+    /// transaction. A replay cannot add, remove, or replace its references.
+    #[allow(clippy::too_many_arguments)]
+    pub fn produce_expected_with_audit(
+        &self,
+        id: &str,
+        project: &str,
+        event_type: &str,
+        message: &str,
+        expected: &Target,
+        audit_references: &[String],
+    ) -> Result<Event> {
+        if !valid_id(id) || !valid_id(project) {
+            return Err("QUEUE_EVENT_INVALID".into());
+        }
+        let _lock = self.lock()?;
+        self.produce_bound_locked_with_audit(
+            id,
+            project,
+            event_type,
+            message,
+            Some(expected),
+            None,
+            audit_references,
+        )
+    }
+
     /// Both authentic review producers use the same project-scoped message
     /// and target CAS. An exact legacy CatDesk message may be returned only
     /// from an existing event; new events always use the current message.
@@ -1237,6 +1267,28 @@ impl Store {
         expected: Option<&Target>,
         legacy_message: Option<&str>,
     ) -> Result<Event> {
+        self.produce_bound_locked_with_audit(
+            id,
+            project,
+            event_type,
+            message,
+            expected,
+            legacy_message,
+            &[],
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn produce_bound_locked_with_audit(
+        &self,
+        id: &str,
+        project: &str,
+        event_type: &str,
+        message: &str,
+        expected: Option<&Target>,
+        legacy_message: Option<&str>,
+        audit_references: &[String],
+    ) -> Result<Event> {
         let config = self.read_config()?;
         if config.retired_targets.contains_key(project) {
             return Err("CONFIG_PROJECT_RETIRED".into());
@@ -1257,6 +1309,7 @@ impl Store {
             if prior.event_id == id
                 && prior.project_id == project
                 && prior.event_type == event_type
+                && prior.audit_references == audit_references
                 && (prior.message == message || legacy_message == Some(prior.message.as_str()))
             {
                 return Ok(prior);
@@ -1272,6 +1325,7 @@ impl Store {
             if prior.event_id != id
                 || prior.project_id != project
                 || prior.event_type != event_type
+                || prior.audit_references != audit_references
                 || (prior.message != message && legacy_message != Some(prior.message.as_str()))
             {
                 return Err("QUEUE_EVENT_ID_CONFLICT".into());
@@ -1287,7 +1341,7 @@ impl Store {
             created_utc: now(),
             message: message.into(),
             target_generation: target.generation,
-            audit_references: vec![],
+            audit_references: audit_references.to_vec(),
         };
         event.validate()?;
         self.check_capacity()?;

@@ -13,6 +13,10 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::path::Path;
 
+#[path = "web_review_work.rs"]
+mod review;
+pub(crate) use review::action as review_action;
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct AssignmentRequest {
@@ -331,6 +335,7 @@ pub(crate) fn request(workspace: &Path, args: Value) -> Result<Value, String> {
         }
         rollover_lease.check_target(&expected)?;
         let ledger = WorkLedger::open(&workspace, &request.project_id)?;
+        ledger.require_ordinary_request(&request.request_id)?;
         let phase = ledger.prepare(&request.request_id, &event_id, &protocol::digest(&message), &expected)?;
         if phase == "IDEMPOTENT_CLOSED" {
             return Ok(json!({"action":"web_work_request","status":"REQUEST_ALREADY_CLOSED",
@@ -477,7 +482,10 @@ pub(crate) fn resolve(workspace: &Path, args: Value) -> Result<Value, String> {
                 || delivery.receipt.is_none()
                 || delivery.target != record.target
                 || delivery.event.project_id != validated.project_id
-                || delivery.event.event_type != "engineering_attention"
+                || !(delivery.event.event_type == "engineering_attention"
+                    || (delivery.event.event_type == "source_review"
+                        && ledger
+                            .review_dispatch_recorded(&record, &delivery.event.audit_references)?))
                 || delivery.message_digest != record.message_sha256
                 || timer.event_id != record.event_id
                 || timer.project_id != validated.project_id
